@@ -11766,6 +11766,11 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
         runId,
         symbols,
       })
+      if (!sentNext?.ok) {
+        throw new Error(
+          `Iconoplasm sync finalization Queue self-reschedule failed: ${sentNext?.detail || sentNext?.error || sentNext?.code || "unknown Queue send failure"}`,
+        )
+      }
     }
     return {
       ok: true,

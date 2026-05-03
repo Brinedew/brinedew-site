@@ -821,6 +821,62 @@ test("queue drain message processes durable ledger batches without per-symbol ph
   ])
 })
 
+test("queue drain consumer retries instead of acking when self-reschedule fails", async () => {
+  const queue = buildFakeQueue({ failMessage: "Cloudflare API error: 429: daily Queue operations limit exceeded" })
+  const symbols = ["TP53", "BRCA1"]
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: symbols.map((symbol) => ({
+        gene_symbol: symbol,
+        status: "queued",
+        phase: "reconcile",
+        keep_assets_json: JSON.stringify([{ symbol, asset_sha256: "a".repeat(64) }]),
+        legacy_assets_json: JSON.stringify([]),
+        vision_ids_json: JSON.stringify(["anima-v1-1"]),
+        requested_at: "2026-04-16T00:00:00.000Z",
+        next_attempt_at: "2026-04-16T00:00:00.000Z",
+      })),
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+  }
+  let acknowledged = false
+  const retries = []
+
+  const result = await handleIconoplasmSyncFinalizationQueue(
+    {
+      messages: [
+        {
+          body: {
+            kind: "drain_finalization_ledger",
+            run_id: "sync-test",
+            symbols,
+          },
+          ack() {
+            acknowledged = true
+          },
+          retry(options) {
+            retries.push(options)
+          },
+        },
+      ],
+    },
+    env,
+    { waitUntil() {} },
+  )
+
+  assert.equal(result.ok, false)
+  assert.equal(result.failed, 1)
+  assert.equal(result.retrying, 1)
+  assert.equal(acknowledged, false)
+  assert.deepEqual(retries, [{ delaySeconds: 30 }])
+  assert.deepEqual(queue.sent, [])
+  assert.deepEqual(
+    symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase),
+    ["vote_summaries", "vote_summaries"],
+  )
+})
+
 test("queue drain consumer honors message permits while processing bounded ledger batches", async () => {
   const queue = buildFakeQueue()
   const symbols = ["TP53", "BRCA1", "EGFR"]

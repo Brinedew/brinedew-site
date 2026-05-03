@@ -146,6 +146,22 @@ What **not** to do:
 
 This guard is intentional. The problem to fix is telemetry/auth availability, not the existence of the guardrail.
 
+### finalization has one production path
+
+Website Ops sync finalization has one path only:
+
+`GUI Sync button -> workstation run-sync preflight -> durable D1 finalization ledger -> Cloudflare Queue drain_finalization_ledger -> geneguessr-api queue consumer -> /finalization/pending reaches zero`
+
+Forbidden recovery paths:
+
+- no workstation-side finalization processing
+- no `/api/iconoplasm/admin/finalization/process`
+- no direct Cloudflare Queue sends outside the worker
+- no GitHub Actions Queue kick
+- no compatibility shim that marks the run done without `/finalization/pending` reaching zero
+
+If Queue send returns `429` or `QUEUE_SEND_FAILED`, the correct behavior is to fail loud before or during sync, preserve the durable ledger, and fix Cloudflare Queue allowance/account state. Re-running the GUI button without Queue headroom is not progress.
+
 ## when to leave this repo
 
 Leave this repo and inspect `d:\Coding\Datasets\iconoplasm` when the problem is about:
