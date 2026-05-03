@@ -234,6 +234,55 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       })
   }
 
+  function normalizePublicInventoryStats(data) {
+    var geneCount = Math.max(0, Number((data && data.gene_count) || 0) || 0)
+    var candidateCount = Math.max(
+      0,
+      Number((data && data.generated_candidate_blot_count) || 0) || 0,
+    )
+    var canonicalCount = Math.max(0, Number((data && data.canonical_blot_count) || 0) || 0)
+    if (!geneCount || !candidateCount || !canonicalCount) return null
+    return {
+      geneCount: geneCount,
+      generatedCandidateBlotCount: candidateCount,
+      canonicalBlotCount: canonicalCount,
+      updatedAt: String((data && data.updated_at) || "").trim(),
+    }
+  }
+
+  function publicInventoryStatsCopy(stats) {
+    if (!stats) return ""
+    return (
+      stats.geneCount.toLocaleString() +
+      " genes · " +
+      stats.generatedCandidateBlotCount.toLocaleString() +
+      " generated candidate blots"
+    )
+  }
+
+  function fetchPublicInventoryStats() {
+    return fetchJSON("/api/public/v1/stats")
+      .then(normalizePublicInventoryStats)
+      .catch(function () {
+        return null
+      })
+  }
+
+  function syncPublicInventoryStat() {
+    var statEl = document.getElementById("icono-public-inventory-stat")
+    if (!statEl) return
+    fetchPublicInventoryStats().then(function (stats) {
+      var copy = publicInventoryStatsCopy(stats)
+      if (!copy) {
+        statEl.hidden = true
+        statEl.textContent = ""
+        return
+      }
+      statEl.textContent = copy
+      statEl.hidden = false
+    })
+  }
+
   function accountGalleryWindowOrderSupported(order) {
     var resolved = normalizeHomeCollectionOrder(order || HOME_COLLECTION_DEFAULT_ORDER)
     return resolved === "newest" || resolved === "symbol"
@@ -1142,54 +1191,56 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (!symbols.length) return Promise.resolve({ cards: [], failures: [] })
     var knownVersion = lastMobileCardVMVersion()
     var cachedBySymbol = new Map()
-    return mobileCardCacheGetMany(knownVersion, symbols).then(function (cached) {
-      cachedBySymbol = cached
-      var missingSymbols = symbols.filter(function (symbol) {
-        return !cached.has(symbol)
-      })
-      if (!missingSymbols.length) {
-        var cachedCards = symbols.map(function (symbol) {
-          return mobileCardPayloadFromVM(cached.get(symbol))
+    return mobileCardCacheGetMany(knownVersion, symbols)
+      .then(function (cached) {
+        cachedBySymbol = cached
+        var missingSymbols = symbols.filter(function (symbol) {
+          return !cached.has(symbol)
         })
-        return { __mobileCardPageResult: true, cards: cachedCards, failures: [] }
-      }
-      return fetchAuthedJSON("/api/iconoplasm/mobile-card-manifest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          version: knownVersion || undefined,
-          layout: "mobile-dossier-v1",
-          symbols: missingSymbols,
-        }),
-      })
-    }).then(function (manifest) {
-      if (manifest && manifest.__mobileCardPageResult === true) {
-        return manifest
-      }
-      if (!manifest || manifest.schema !== "iconoplasm.mobileCardManifest.v1") {
-        throw new Error("Mobile card manifest schema mismatch")
-      }
-      rememberMobileCardVMVersion(manifest.snapshot_version)
-      var bySymbol = Object.create(null)
-      var cards = Array.isArray(manifest.cards) ? manifest.cards : []
-      for (var i = 0; i < cards.length; i++) {
-        var vm = assertCompleteMobileCardVM(cards[i])
-        bySymbol[normalizedSymbol(vm.symbol)] = vm
-      }
-      void mobileCardCacheSetMany(manifest.snapshot_version, cards)
-      var ordered = []
-      var failures = Array.isArray(manifest.missing)
-        ? manifest.missing.map(function (symbol) {
-            return { symbol: normalizedSymbol(symbol), reason: "snapshot_missing" }
+        if (!missingSymbols.length) {
+          var cachedCards = symbols.map(function (symbol) {
+            return mobileCardPayloadFromVM(cached.get(symbol))
           })
-        : []
-      for (var j = 0; j < symbols.length; j++) {
-        var card = bySymbol[symbols[j]] || cachedBySymbol.get(symbols[j])
-        if (card) ordered.push(mobileCardPayloadFromVM(card))
-        else failures.push({ symbol: symbols[j], reason: "manifest_missing" })
-      }
-      return { cards: ordered, failures: failures }
-    })
+          return { __mobileCardPageResult: true, cards: cachedCards, failures: [] }
+        }
+        return fetchAuthedJSON("/api/iconoplasm/mobile-card-manifest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            version: knownVersion || undefined,
+            layout: "mobile-dossier-v1",
+            symbols: missingSymbols,
+          }),
+        })
+      })
+      .then(function (manifest) {
+        if (manifest && manifest.__mobileCardPageResult === true) {
+          return manifest
+        }
+        if (!manifest || manifest.schema !== "iconoplasm.mobileCardManifest.v1") {
+          throw new Error("Mobile card manifest schema mismatch")
+        }
+        rememberMobileCardVMVersion(manifest.snapshot_version)
+        var bySymbol = Object.create(null)
+        var cards = Array.isArray(manifest.cards) ? manifest.cards : []
+        for (var i = 0; i < cards.length; i++) {
+          var vm = assertCompleteMobileCardVM(cards[i])
+          bySymbol[normalizedSymbol(vm.symbol)] = vm
+        }
+        void mobileCardCacheSetMany(manifest.snapshot_version, cards)
+        var ordered = []
+        var failures = Array.isArray(manifest.missing)
+          ? manifest.missing.map(function (symbol) {
+              return { symbol: normalizedSymbol(symbol), reason: "snapshot_missing" }
+            })
+          : []
+        for (var j = 0; j < symbols.length; j++) {
+          var card = bySymbol[symbols[j]] || cachedBySymbol.get(symbols[j])
+          if (card) ordered.push(mobileCardPayloadFromVM(card))
+          else failures.push({ symbol: symbols[j], reason: "manifest_missing" })
+        }
+        return { cards: ordered, failures: failures }
+      })
   }
 
   function prewarmMobileCardPageVM(pageEntries) {
@@ -1362,6 +1413,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-hero">' +
       '<div class="icono-hero-title">Iconoplasm</div>' +
       '<p class="tagline">Mnemonics for genes - <a class="internal" href="https://brinedew.bio/posts/Iconoplasm-FAQ.html">read FAQ</a></p>' +
+      '<p class="stat" id="icono-public-inventory-stat" hidden aria-live="polite"></p>' +
       "</div>" +
       '<div class="icono-gallery-toolbar">' +
       '<div class="icono-search icono-search--toolbar">' +
@@ -2182,7 +2234,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       : isArchivalVariant
         ? '<div class="' +
           portraitStateClass +
-          ' icono-label-mobile-portrait-card' +
+          " icono-label-mobile-portrait-card" +
           (portraitUrl ? '" data-icono-lightbox>' : '">') +
           IconoCardShared.renderLabLabelSpecimenRailHtml(labelPortraitHtml, detail || g) +
           "</div>"
@@ -2412,7 +2464,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         "</div>" +
         "</div>" +
         mobileRowsHtml
-    var heroInfoMarkup = '<div class="iconoplasm-tooltip-body' +
+    var heroInfoMarkup =
+      '<div class="iconoplasm-tooltip-body' +
       (isArchivalVariant ? " icono-label-mobile-info-card" : "") +
       '">' +
       bodyHtml +
@@ -2424,7 +2477,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       // don't want to expand; the hero is the page, so it should expand.
       '<article class="icono-card icono-card--brick' +
       (heroMobileReview ? "" : " icono-card--brick-static") +
-      ' icono-gene-lead-card' +
+      " icono-gene-lead-card" +
       archivalVariantClass(cardVariant) +
       '" style="--width:' +
       dims.width +
@@ -2549,7 +2602,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         )
         card.style.setProperty("--width", String(dims.width))
         card.style.setProperty("--height", String(dims.height))
-        card.style.setProperty("--icono-card-accent", String((genePayload && genePayload.color) || "#888"))
+        card.style.setProperty(
+          "--icono-card-accent",
+          String((genePayload && genePayload.color) || "#888"),
+        )
         if (portraitUrl) {
           portraitShell.classList.remove("iconoplasm-tooltip-portrait-missing")
           portraitShell.classList.add("iconoplasm-tooltip-portrait--ready")
@@ -2720,7 +2776,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function syncMobileLabelViewportGeometry(card) {
     if (!card || typeof window === "undefined" || !isMobileLabelReviewEnabled()) return
     var cardParent = card.parentElement
-    var computedCard = typeof window.getComputedStyle === "function" ? window.getComputedStyle(card) : null
+    var computedCard =
+      typeof window.getComputedStyle === "function" ? window.getComputedStyle(card) : null
     var rootFontSize =
       typeof document !== "undefined" && document.documentElement
         ? parseFloat(window.getComputedStyle(document.documentElement).fontSize || "16")
@@ -2743,7 +2800,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       cardParent && typeof cardParent.getBoundingClientRect === "function"
         ? cardParent.getBoundingClientRect()
         : null
-    var parentInset = parentRect ? Math.max(0, parentRect.left, viewportWidth - parentRect.right) : 0
+    var parentInset = parentRect
+      ? Math.max(0, parentRect.left, viewportWidth - parentRect.right)
+      : 0
     var availableWidth =
       Math.min(
         cardParent && cardParent.clientWidth ? cardParent.clientWidth : Number.POSITIVE_INFINITY,
@@ -2758,8 +2817,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       typeof fitScale === "number" && fitScale > 0
         ? fitScale
         : computedCard && computedCard.getPropertyValue("--icono-label-mobile-fit-scale")
-        ? parseFloat(computedCard.getPropertyValue("--icono-label-mobile-fit-scale"))
-        : 1
+          ? parseFloat(computedCard.getPropertyValue("--icono-label-mobile-fit-scale"))
+          : 1
     if (!(activeFitScale > 0)) activeFitScale = 1
     var toPhysicalCardPx = function (value) {
       return value / activeFitScale
@@ -2768,7 +2827,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var portrait = card.querySelector(".iconoplasm-tooltip-portrait")
     var infoCard = card.querySelector(".iconoplasm-tooltip-body")
     var peek = card.querySelector(".icono-label-mobile-peek")
-    var voteBox = card.querySelector(".icono-label-mobile-peek-swipe [data-icono-vote-box], .icono-label-mobile-peek-swipe .icono-vote-box--label")
+    var voteBox = card.querySelector(
+      ".icono-label-mobile-peek-swipe [data-icono-vote-box], .icono-label-mobile-peek-swipe .icono-vote-box--label",
+    )
     if (
       !portrait ||
       !infoCard ||
@@ -2812,7 +2873,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var measuredNode = measuredContent[i]
       if (!measuredNode || typeof measuredNode.getBoundingClientRect !== "function") continue
       var measuredRect = measuredNode.getBoundingClientRect()
-      fullInfoHeight = Math.max(fullInfoHeight, toPhysicalCardPx(measuredRect.bottom - infoRect.top))
+      fullInfoHeight = Math.max(
+        fullInfoHeight,
+        toPhysicalCardPx(measuredRect.bottom - infoRect.top),
+      )
     }
     var openBottom = dossierTop + fullInfoHeight + 8
     var viewportHeight = Math.ceil(isExpanded ? openBottom : closedBottom)
@@ -3041,7 +3105,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       if (
         event.target &&
         event.target.closest &&
-        event.target.closest("[data-icono-vote-box], [data-icono-brick-vote-box], [data-icono-gene-vote-box]")
+        event.target.closest(
+          "[data-icono-vote-box], [data-icono-brick-vote-box], [data-icono-gene-vote-box]",
+        )
       ) {
         return
       }
@@ -3060,7 +3126,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       if (
         event.target &&
         event.target.closest &&
-        event.target.closest("[data-icono-vote-box], [data-icono-brick-vote-box], [data-icono-gene-vote-box]")
+        event.target.closest(
+          "[data-icono-vote-box], [data-icono-brick-vote-box], [data-icono-gene-vote-box]",
+        )
       ) {
         return
       }
@@ -3270,7 +3338,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       ;(function (form) {
         if (!form || form.getAttribute("data-icono-copy-wired") === "true") return
         form.setAttribute("data-icono-copy-wired", "true")
-        var sourceSymbol = normalizedSymbol(form.getAttribute("data-icono-source-symbol") || genePayload.symbol)
+        var sourceSymbol = normalizedSymbol(
+          form.getAttribute("data-icono-source-symbol") || genePayload.symbol,
+        )
         var assetSha = String(form.getAttribute("data-icono-asset-sha256") || "")
           .trim()
           .toLowerCase()
@@ -3285,7 +3355,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           if (!note) return
           note.textContent = String(message || "").trim()
           note.hidden = !note.textContent
-          note.style.color = tone === "error" ? "#b42318" : tone === "success" ? "#0f766e" : "inherit"
+          note.style.color =
+            tone === "error" ? "#b42318" : tone === "success" ? "#0f766e" : "inherit"
         }
 
         function renderCopyResults(genes) {
@@ -3314,7 +3385,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               "</span>" +
               "</button>"
           }
-          results.innerHTML = html || '<div class="icono-request-results-empty">Only the source gene matched.</div>'
+          results.innerHTML =
+            html || '<div class="icono-request-results-empty">Only the source gene matched.</div>'
           results.hidden = false
         }
 
@@ -3327,8 +3399,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             return
           }
           fetchJSON(
-            "/api/public/v1/genes/search?scope=catalog&limit=8&q=" +
-              encodeURIComponent(query),
+            "/api/public/v1/genes/search?scope=catalog&limit=8&q=" + encodeURIComponent(query),
             { credentials: "include" },
           )
             .then(function (payload) {
@@ -3350,7 +3421,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         results.addEventListener("click", function (event) {
           var button = event.target.closest("[data-icono-candidate-copy-option]")
           if (!button) return
-          var target = normalizedSymbol(button.getAttribute("data-icono-candidate-copy-option") || "")
+          var target = normalizedSymbol(
+            button.getAttribute("data-icono-candidate-copy-option") || "",
+          )
           if (!target) return
           hidden.value = target
           input.value = target
@@ -3373,8 +3446,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           if (submit) {
             submit.disabled = true
             submit.innerHTML =
-              ICONO_SEND_ICON +
-              '<span class="icono-candidate-copy-submit-label">Copying...</span>'
+              ICONO_SEND_ICON + '<span class="icono-candidate-copy-submit-label">Copying...</span>'
           }
           setCopyStatus("", "")
           fetchJSON("/api/iconoplasm/candidates/copy", {
@@ -3404,7 +3476,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             })
             .catch(function (error) {
               var message = String((error && error.message) || "Could not copy candidate blot.")
-              if (/log in|auth/i.test(message)) message += " Use Discord Login first, then try again."
+              if (/log in|auth/i.test(message))
+                message += " Use Discord Login first, then try again."
               setCopyStatus(message, "error")
             })
             .finally(function () {
@@ -3680,7 +3753,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       esc(symbol) +
       '">' +
       '<span class="icono-request-option-title">Small correction prompt</span>' +
-      '<span>Describe the fix: anatomy, anchor traits, background, or style drift.</span>' +
+      "<span>Describe the fix: anatomy, anchor traits, background, or style drift.</span>" +
       "</label>" +
       '<textarea id="icono-edit-image-prompt-' +
       esc(symbol) +
@@ -3754,7 +3827,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           promptInput.value = ""
           form.hidden = true
           toggle.setAttribute("aria-expanded", "false")
-          setEditStatus("Edit queued. The corrected blot will land in the candidate pool after workstation review.", "success")
+          setEditStatus(
+            "Edit queued. The corrected blot will land in the candidate pool after workstation review.",
+            "success",
+          )
         })
         .catch(function (error) {
           var message = String((error && error.message) || "Could not queue edit.")
@@ -4164,6 +4240,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
     renderHomeToolbarAuth()
     renderHomeInstallCta()
+    syncPublicInventoryStat()
     probeForIconoplasmExtensionPresence()
 
     var grid = document.getElementById("icono-grid")
@@ -4671,7 +4748,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             if (!renderDisposed && requestId === activeGalleryRequest) {
               galleryState.loading = false
             }
-        })
+          })
         return
       }
       if (accountGalleryWindowOrderSupported(galleryState.order)) {
@@ -5758,7 +5835,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (e.defaultPrevented) return
     if (e.button != null && e.button !== 0) return
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
-    var card = e.target && e.target.closest ? e.target.closest(".icono-card[data-icono-symbol]") : null
+    var card =
+      e.target && e.target.closest ? e.target.closest(".icono-card[data-icono-symbol]") : null
     if (!card) return
     if (!card.closest(".icono-grid")) return
     if (

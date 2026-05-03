@@ -60,10 +60,7 @@ test("Iconoplasm archive progress summary is one compact status rail", async () 
 
   const archiveBlock = cssBlockFor(css, ".icono-collection-card--archive")
   assert.match(archiveBlock, /display:\s*grid;/)
-  assert.match(
-    archiveBlock,
-    /grid-template-columns:\s*minmax\(0, 1fr\);/,
-  )
+  assert.match(archiveBlock, /grid-template-columns:\s*minmax\(0, 1fr\);/)
   assert.match(archiveBlock, /align-items:\s*stretch;/)
   assert.match(archiveBlock, /max-inline-size:\s*100%;/)
   assert.match(archiveBlock, /overflow:\s*hidden;/)
@@ -102,6 +99,30 @@ test("Iconoplasm collection summary has no duplicate hero count plaque", async (
     /renderIconoplasmSidebar\(\)[\s\S]{0,80}if \(!countEl\) return/,
     "removing the hero count must not remove sidebar state updates",
   )
-  assert.match(app, /genes found out of/, "the archive rail remains the single visible collection counter")
-  assert.doesNotMatch(app, /the catalog/, "the archive rail must use the fixed library size, not vague catalog copy")
+  assert.match(
+    app,
+    /genes found out of/,
+    "the archive rail remains the single visible collection counter",
+  )
+  assert.doesNotMatch(
+    app,
+    /the catalog/,
+    "the archive rail must use the fixed library size, not vague catalog copy",
+  )
+})
+
+test("Iconoplasm hero inventory stat uses explicit public stats, not portrait hash counts", async () => {
+  const app = await sourceText(appPath)
+  const css = await sourceText(cssPath)
+
+  assert.match(app, /id="icono-public-inventory-stat"/)
+  assert.match(app, /function fetchPublicInventoryStats\(\)/)
+  assert.match(app, /\/api\/public\/v1\/stats/)
+  assert.match(app, /generated_candidate_blot_count/)
+  assert.match(app, /canonical_blot_count/)
+  assert.doesNotMatch(app, /portrait_hash[\s\S]{0,160}generated_candidate_blot_count/)
+  assert.doesNotMatch(app, /generated_candidate_blot_count[\s\S]{0,160}portrait_hash/)
+
+  const statBlock = cssBlockFor(css, ".icono-hero .stat")
+  assert.match(statBlock, /font-variant-numeric:\s*tabular-nums;/)
 })

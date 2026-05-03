@@ -111,10 +111,15 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   padding: 0.25rem 0.75rem;
   font-family: var(--codeFont, monospace);
   font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
   color: var(--darkgray);
   border: 1px solid var(--ui-border);
   border-radius: var(--icono-radius-sm);
   background: var(--ui-bg);
+}
+
+.icono-hero .stat[hidden] {
+  display: none;
 }
 
 .icono-home-auth {

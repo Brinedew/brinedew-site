@@ -272,6 +272,7 @@ function isPathHandledAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotD
   const requestMethod = String(method || "GET").toUpperCase()
   if (!["GET", "HEAD", "POST"].includes(requestMethod)) return false
   if (path === publicApiPath("/metadata")) return true
+  if (path === publicApiPath("/stats")) return true
   if (path === publicApiPath("/catalog/manifest")) return true
   if (isPublicCatalogArtifactPath(path)) return true
   if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) return true
@@ -295,7 +296,8 @@ function isPathHandledAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotD
 function missingTheOnlyAllowedStatefulWorkerResponse() {
   return json(
     {
-      error: "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE binding missing for a fail-closed public route",
+      error:
+        "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE binding missing for a fail-closed public route",
       code: "THE_ONLY_ALLOWED_STATEFUL_WORKER_REQUIRED",
     },
     503,
@@ -310,24 +312,29 @@ async function proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicat
   // put raw database access back on hot traffic.
   const theOnlyAllowedStatefulWorker = env?.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE
   const url = new URL(request.url)
-  if (!isPathHandledAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(url.pathname, request.method)) {
+  if (
+    !isPathHandledAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      url.pathname,
+      request.method,
+    )
+  ) {
     return null
   }
   if (!theOnlyAllowedStatefulWorker || typeof theOnlyAllowedStatefulWorker.fetch !== "function") {
     return missingTheOnlyAllowedStatefulWorkerResponse()
   }
-    // Hard-path rationale:
-    // Website sync ingest batches can carry base64 payloads for three portrait
-    // renditions per item. Re-buffering those POST bodies as text here doubles
-    // memory pressure in the public edge worker and can turn a perfectly valid
-    // internal request into a fake "stateful worker unavailable" 503 before the
-    // real worker ever sees it. Forward the original request stream directly so
-    // the public shell stays a thin transport boundary instead of becoming the
-    // upload bottleneck.
-    const upstreamRequest = new Request(
-      `https://the-only-allowed-internal-stateful-worker-do-not-duplicate${url.pathname}${url.search}`,
-      request,
-    )
+  // Hard-path rationale:
+  // Website sync ingest batches can carry base64 payloads for three portrait
+  // renditions per item. Re-buffering those POST bodies as text here doubles
+  // memory pressure in the public edge worker and can turn a perfectly valid
+  // internal request into a fake "stateful worker unavailable" 503 before the
+  // real worker ever sees it. Forward the original request stream directly so
+  // the public shell stays a thin transport boundary instead of becoming the
+  // upload bottleneck.
+  const upstreamRequest = new Request(
+    `https://the-only-allowed-internal-stateful-worker-do-not-duplicate${url.pathname}${url.search}`,
+    request,
+  )
   try {
     const response = await theOnlyAllowedStatefulWorker.fetch(upstreamRequest)
     if (request.method === "HEAD") return response
@@ -385,7 +392,9 @@ export async function runIconoplasmCanonMaintenanceThroughTheOnlyAllowedStateful
 ) {
   const theOnlyAllowedStatefulWorker = env?.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE
   if (!theOnlyAllowedStatefulWorker || typeof theOnlyAllowedStatefulWorker.fetch !== "function") {
-    throw new Error("THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE binding missing for canon maintenance")
+    throw new Error(
+      "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE binding missing for canon maintenance",
+    )
   }
   const response = await theOnlyAllowedStatefulWorker.fetch(
     new Request(
@@ -411,7 +420,11 @@ export async function runIconoplasmCanonMaintenanceThroughTheOnlyAllowedStateful
   return response.json()
 }
 
-export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env, ctx = { waitUntil() {} }) {
+export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+  request,
+  env,
+  ctx = { waitUntil() {} },
+) {
   const url = new URL(request.url)
   const path = url.pathname
 
@@ -470,7 +483,10 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
 
     if (path.startsWith("/portraits/")) {
       if (!env.ICONOPLASM_PORTRAITS) {
-        const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
+        const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+          request,
+          env,
+        )
         if (response) {
           return done(
             request,
@@ -541,7 +557,9 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
     if (path === "/api/iconoplasm/admin/me" && request.method === "GET") {
       const sessionUser = await sessionUserFromAuth(request, env)
       const authenticated = !!sessionUser?.user_id
-      const admin = authenticated ? (await isAdmin(request, env)) || hasAdminToken(request, env) : false
+      const admin = authenticated
+        ? (await isAdmin(request, env)) || hasAdminToken(request, env)
+        : false
       return done(
         request,
         json(
@@ -571,7 +589,9 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
     if (path === "/blocklist") {
       const artistStylesHtml = normalizeArtistStylesPageHtml(
         renderIconoplasmArtistStylesHtml({
-          turnstileSiteKey: String(env.ICONOPLASM_TURNSTILE_SITE_KEY || "").trim().slice(0, 255),
+          turnstileSiteKey: String(env.ICONOPLASM_TURNSTILE_SITE_KEY || "")
+            .trim()
+            .slice(0, 255),
         }),
       )
       return done(request, html(artistStylesHtml, 200, { "Cache-Control": "no-store" }))
@@ -581,13 +601,15 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
       if (!(await isAdmin(request, env))) {
         return done(request, html("<h1>403 Unauthorized</h1>", 403))
       }
-      return done(
-        request,
-        html(ICONOPLASM_ADMIN_HTML, 200, { "Cache-Control": "no-store" }),
-      )
+      return done(request, html(ICONOPLASM_ADMIN_HTML, 200, { "Cache-Control": "no-store" }))
     }
 
-    if (isPathHandledAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(path, request.method)) {
+    if (
+      isPathHandledAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        path,
+        request.method,
+      )
+    ) {
       if (path === publicApiPath("/genes/batch") && !canAccessRichBatchRoute(request, env)) {
         return done(
           request,
@@ -617,7 +639,10 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
           )
         }
       }
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+      )
       return done(
         request,
         new Response(response.body, { status: response.status, headers: response.headers }),

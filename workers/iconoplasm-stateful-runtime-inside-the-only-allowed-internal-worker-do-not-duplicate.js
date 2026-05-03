@@ -43,6 +43,7 @@ const KV_PUBLISHED_PORTRAIT_REFS_PREFIX = "iconoplasm:published-portrait-refs:"
 const KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX = "iconoplasm:published-portrait-fingerprint:"
 const KV_GALLERY_PUBLISHED_ROWS_PREFIX = "iconoplasm:gallery-published-rows:"
 const KV_GALLERY_UNIQUENESS_ROWS_PREFIX = "iconoplasm:gallery-uniqueness-rows:"
+const KV_PUBLIC_STATS = "iconoplasm:public-stats:v1"
 const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = "iconoplasm:hydrated-catalog-artifact:"
 const KV_MOBILE_CARD_VM_PREFIX = "iconoplasm:mobile-card-vm:"
 const MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT = 25000
@@ -55,6 +56,7 @@ const PUBLIC_DUMP_PREFIX = "public-dumps"
 const PUBLIC_DEFAULT_GENE_BATCH_LIMIT = 100
 const PUBLIC_MAX_GENE_BATCH_LIMIT = 250
 const PUBLIC_MAX_RESOLVE_BATCH_LIMIT = 250
+const PUBLIC_STATS_SCHEMA_VERSION = "iconoplasm.publicStats.v1"
 const DISCOVERY_SOURCE_EXTENSION_HOVER = "extension_hover"
 const DISCOVERY_SOURCE_EXTENSION_GUEST_MERGE = "extension_guest_merge"
 const DISCOVERY_SOURCE_STARTER_SEED = "starter_seed"
@@ -223,7 +225,9 @@ function iconoplasmBudgetCycleInfo(now = new Date(), cycleDayOfMonth = 7) {
   const month = asDate.getUTCMonth()
   const day = asDate.getUTCDate()
   const cycleStartMonthOffset = day >= safeCycleDay ? 0 : -1
-  const cycleStart = new Date(Date.UTC(year, month + cycleStartMonthOffset, safeCycleDay, 0, 0, 0, 0))
+  const cycleStart = new Date(
+    Date.UTC(year, month + cycleStartMonthOffset, safeCycleDay, 0, 0, 0, 0),
+  )
   const nextCycleStart = new Date(
     Date.UTC(cycleStart.getUTCFullYear(), cycleStart.getUTCMonth() + 1, safeCycleDay, 0, 0, 0, 0),
   )
@@ -232,7 +236,10 @@ function iconoplasmBudgetCycleInfo(now = new Date(), cycleDayOfMonth = 7) {
     cycleKey: cycleStart.toISOString().slice(0, 10),
     cycleStartIso: cycleStart.toISOString(),
     nextCycleStartIso: nextCycleStart.toISOString(),
-    daysRemainingInCycle: Math.max(1, Math.ceil((nextCycleStart.getTime() - asDate.getTime()) / 86400000)),
+    daysRemainingInCycle: Math.max(
+      1,
+      Math.ceil((nextCycleStart.getTime() - asDate.getTime()) / 86400000),
+    ),
   }
 }
 
@@ -329,7 +336,9 @@ function iconoplasmMutationLimiterPolicyFromEnv(env, now = new Date()) {
 
 function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === publicApiPath("/metadata")) return "public_metadata"
-  if (path === publicApiPath("/catalog/manifest") || isPublicCatalogArtifactPath(path)) return "public_catalog"
+  if (path === publicApiPath("/stats")) return "public_stats"
+  if (path === publicApiPath("/catalog/manifest") || isPublicCatalogArtifactPath(path))
+    return "public_catalog"
   if (path.startsWith(publicApiPath("/dumps/catalog."))) return "public_catalog_dump"
   if (path === publicApiPath("/gallery")) return "public_gallery"
   if (path === publicApiPath("/genes/search")) return "public_gene_search"
@@ -346,7 +355,8 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/discoveries/merge") return "discoveries_merge"
   if (path === "/api/iconoplasm/requests") return "gene_request_submit"
   if (path === "/api/iconoplasm/requests/options") return "gene_request_options"
-  if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(path)) return "gene_request_summary"
+  if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(path))
+    return "gene_request_summary"
   if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+$/.test(path)) return "gene_request_state_gone"
   if (path === "/api/iconoplasm/candidates/copy") return "candidate_copy"
   if (path === "/api/iconoplasm/votes/me") return "votes_me"
@@ -358,7 +368,8 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/admin/ingest") return "admin_ingest"
   if (path === "/api/iconoplasm/admin/reconcile") return "admin_reconcile"
   if (path === "/api/iconoplasm/admin/overview") return "admin_overview"
-  if (path === "/api/iconoplasm/admin/mutation-limiter/policy") return "admin_mutation_limiter_policy"
+  if (path === "/api/iconoplasm/admin/mutation-limiter/policy")
+    return "admin_mutation_limiter_policy"
   if (path === "/api/iconoplasm/admin/coverage") return "admin_coverage"
   if (path === "/api/iconoplasm/admin/canon-audit") return "admin_canon_audit"
   if (path === "/api/iconoplasm/admin/read-models/bootstrap") return "admin_read_models_bootstrap"
@@ -409,7 +420,8 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
     return "admin_gene_request_diagnostics"
   if (path === "/api/iconoplasm/admin/cost/usage" || path === "/api/iconoplasm/admin/cost/snapshot")
     return "admin_cost_usage"
-  if (path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER) return "internal_repair"
+  if (path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
+    return "internal_repair"
   if (path === ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
     return "internal_vote_projection_refresh"
   if (path.startsWith("/api/iconoplasm/admin/")) {
@@ -431,12 +443,19 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (family.startsWith("discoveries_")) return "first_party_write"
   if (family.startsWith("gene_request_")) return "first_party_request"
   if (family === "candidate_copy") return "first_party_write"
-  if (family.startsWith("votes_")) return family === "votes_me" ? "first_party_read" : "first_party_write"
+  if (family.startsWith("votes_"))
+    return family === "votes_me" ? "first_party_read" : "first_party_write"
   if (family === "artist_styles_search") return "public_read"
   if (family === "artist_blacklist_submission") return "public_submission"
   if (family === "internal_repair") return "internal_maintenance"
   if (family === "internal_vote_projection_refresh") return "internal_maintenance"
-  if (family === "admin_overview" || family === "admin_coverage" || family === "admin_cost_usage" || family === "admin_mutation_limiter_policy" || family === "admin_me")
+  if (
+    family === "admin_overview" ||
+    family === "admin_coverage" ||
+    family === "admin_cost_usage" ||
+    family === "admin_mutation_limiter_policy" ||
+    family === "admin_me"
+  )
     return "admin_dashboard"
   if (
     family === "admin_ingest" ||
@@ -451,9 +470,9 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_catalog_upsert" ||
     family === "admin_catalog_reconcile" ||
     family === "admin_catalog_publish" ||
-    family === "admin_essence"
-    || family === "admin_essence_upsert"
-    || family === "admin_essence_state"
+    family === "admin_essence" ||
+    family === "admin_essence_upsert" ||
+    family === "admin_essence_state"
   ) {
     return "admin_sync"
   }
@@ -585,11 +604,11 @@ function iconoplasmMutationLimiterTargetRowsWrittenCeiling(snapshot, env) {
 }
 
 function iconoplasmMutationLimiterBudgetStatus(state, snapshot = null) {
-  const currentSnapshot = snapshot || iconoplasmD1DailyBudgetProjectedSnapshot(state) || state?.lastSnapshot || null
-  const targetDailyPercent = Math.max(
-    1,
-    Math.min(100, Number(state?.mutationLimiter?.targetDailyPercent || 0) || 0),
-  ) || iconoplasmMutationLimiterTargetDailyPercent(state?.rawEnv)
+  const currentSnapshot =
+    snapshot || iconoplasmD1DailyBudgetProjectedSnapshot(state) || state?.lastSnapshot || null
+  const targetDailyPercent =
+    Math.max(1, Math.min(100, Number(state?.mutationLimiter?.targetDailyPercent || 0) || 0)) ||
+    iconoplasmMutationLimiterTargetDailyPercent(state?.rawEnv)
   const targetRowsWrittenCeiling =
     state?.mutationLimiter?.targetRowsWrittenCeiling === null ||
     state?.mutationLimiter?.targetRowsWrittenCeiling === undefined
@@ -633,8 +652,10 @@ function iconoplasmMutationLimiterSuggestedChunkUnits(
   // measured chunk cost, shrink admission so we learn on smaller bites instead
   // of gambling the whole remaining day on one blind chunk.
   if (targetRemaining <= slowZone) return 1
-  if (targetRemaining <= slowZone * 2) return Math.max(1, Math.min(safeRequestedUnits, Math.ceil(safeRequestedUnits / 4)))
-  if (targetRemaining <= slowZone * 4) return Math.max(1, Math.min(safeRequestedUnits, Math.ceil(safeRequestedUnits / 2)))
+  if (targetRemaining <= slowZone * 2)
+    return Math.max(1, Math.min(safeRequestedUnits, Math.ceil(safeRequestedUnits / 4)))
+  if (targetRemaining <= slowZone * 4)
+    return Math.max(1, Math.min(safeRequestedUnits, Math.ceil(safeRequestedUnits / 2)))
   return safeRequestedUnits
 }
 
@@ -648,11 +669,13 @@ function iconoplasmD1DailyBudgetProjectedSnapshot(state) {
   const rowsRead = Math.max(0, Number(base.rows_read || 0) || 0) + pendingRowsRead
   const rowsWritten = Math.max(0, Number(base.rows_written || 0) || 0) + pendingRowsWritten
   const cycleRowsRead = Math.max(0, Number(base.cycle_rows_read || 0) || 0) + pendingRowsRead
-  const cycleRowsWritten = Math.max(0, Number(base.cycle_rows_written || 0) || 0) + pendingRowsWritten
+  const cycleRowsWritten =
+    Math.max(0, Number(base.cycle_rows_written || 0) || 0) + pendingRowsWritten
   const queryCount = Math.max(0, Number(base.query_count || 0) || 0) + pendingQueryCount
   const requestCount = Math.max(0, Number(base.request_count || 0) || 0) + pendingRequestCount
   const cycleQueryCount = Math.max(0, Number(base.cycle_query_count || 0) || 0) + pendingQueryCount
-  const cycleRequestCount = Math.max(0, Number(base.cycle_request_count || 0) || 0) + pendingRequestCount
+  const cycleRequestCount =
+    Math.max(0, Number(base.cycle_request_count || 0) || 0) + pendingRequestCount
   const rowsReadMonthlyLimit = Number(base.rows_read_monthly_limit || 0) || 0
   const rowsWrittenMonthlyLimit = Number(base.rows_written_monthly_limit || 0) || 0
   const rowsReadDailySmartLimit =
@@ -660,7 +683,8 @@ function iconoplasmD1DailyBudgetProjectedSnapshot(state) {
       ? null
       : Math.max(0, Number(base.rows_read_daily_smart_limit || 0) || 0)
   const rowsWrittenDailySmartLimit =
-    base.rows_written_daily_smart_limit === null || base.rows_written_daily_smart_limit === undefined
+    base.rows_written_daily_smart_limit === null ||
+    base.rows_written_daily_smart_limit === undefined
       ? null
       : Math.max(0, Number(base.rows_written_daily_smart_limit || 0) || 0)
   const rowsReadMonthlyRemaining =
@@ -670,7 +694,9 @@ function iconoplasmD1DailyBudgetProjectedSnapshot(state) {
   const rowsReadDailyRemaining =
     rowsReadDailySmartLimit !== null ? Math.max(0, rowsReadDailySmartLimit - rowsRead) : null
   const rowsWrittenDailyRemaining =
-    rowsWrittenDailySmartLimit !== null ? Math.max(0, rowsWrittenDailySmartLimit - rowsWritten) : null
+    rowsWrittenDailySmartLimit !== null
+      ? Math.max(0, rowsWrittenDailySmartLimit - rowsWritten)
+      : null
   const exhaustedBy =
     rowsReadMonthlyLimit > 0 && cycleRowsRead >= rowsReadMonthlyLimit
       ? "rows_read_monthly"
@@ -766,7 +792,11 @@ function iconoplasmAdminMutationLimiterActivePayload(detail) {
 
 function iconoplasmD1DailyBudgetKillSwitchStub(env) {
   const namespace = env?.[ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_BINDING_DO_NOT_DUPLICATE]
-  if (!namespace || typeof namespace.idFromName !== "function" || typeof namespace.get !== "function") {
+  if (
+    !namespace ||
+    typeof namespace.idFromName !== "function" ||
+    typeof namespace.get !== "function"
+  ) {
     return null
   }
   return namespace.get(
@@ -812,7 +842,9 @@ function iconoplasmAdminMutationLimiterDetail(
     rows_written_target_remaining: budgetStatus.rows_written_target_remaining,
     target_cap_reached: budgetStatus.target_cap_reached,
     telemetry_locked: Boolean(telemetryLocked),
-    telemetry_locked_reason: telemetryLocked ? String(telemetryLockedReason || "").trim() || null : null,
+    telemetry_locked_reason: telemetryLocked
+      ? String(telemetryLockedReason || "").trim() || null
+      : null,
     budget_snapshot: budgetStatus.snapshot || state?.lastSnapshot || null,
   }
 }
@@ -869,15 +901,15 @@ function emitIconoplasmBudgetAttributionTelemetryForLimiterRejection(
   const fallbackBudgets = iconoplasmD1BudgetConfigFromEnv(env)
   const fallbackAttribution = iconoplasmD1BudgetAttributionFromRequest(request)
   return writeIconoplasmBudgetAttributionDataPoint(env, {
-    cycleKey:
-      detail?.budget_snapshot?.cycle_key ||
-      fallbackBudgets?.cycleInfo?.cycleKey ||
-      "",
+    cycleKey: detail?.budget_snapshot?.cycle_key || fallbackBudgets?.cycleInfo?.cycleKey || "",
     routeFamily: detail?.route_family || fallbackAttribution?.route_family || null,
     budgetClass: detail?.budget_class || fallbackAttribution?.budget_class || null,
     actorClass: detail?.actor_class || fallbackAttribution?.actor_class || null,
     sourceClass: detail?.source_class || fallbackAttribution?.source_class || null,
-    outcomeClass: iconoplasmBudgetAttributionOutcomeClass(responseStatus, "ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE"),
+    outcomeClass: iconoplasmBudgetAttributionOutcomeClass(
+      responseStatus,
+      "ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE",
+    ),
     errorCode: "ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE",
     requestMethod: request.method,
     limiterStage: detail?.stage || "preflight",
@@ -914,7 +946,8 @@ async function flushIconoplasmD1DailyBudgetPendingUsage(state) {
       request_count: safeRequestCount,
       query_count: safeQueryCount,
     })
-    state.requestUsage.requestCountRecorded = state.requestUsage.requestCountRecorded || safeRequestCount > 0
+    state.requestUsage.requestCountRecorded =
+      state.requestUsage.requestCountRecorded || safeRequestCount > 0
     state.pendingUsage = {
       rowsRead: 0,
       rowsWritten: 0,
@@ -928,7 +961,9 @@ async function flushIconoplasmD1DailyBudgetPendingUsage(state) {
     if (!isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error)) {
       throw error
     }
-    const saturatedReport = iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(state?.budgets)
+    const saturatedReport = iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(
+      state?.budgets,
+    )
     state.pendingUsage = {
       rowsRead: 0,
       rowsWritten: 0,
@@ -1023,7 +1058,7 @@ function wrapIconoplasmD1PreparedStatementWithDailyBudgetKillSwitch(statement, s
         rowsWritten: iconoplasmD1BudgetRowsWrittenFromMeta(response?.meta),
       })
       const row = Array.isArray(response?.results) ? response.results[0] || null : null
-      if (columnName) return row ? row[columnName] ?? null : null
+      if (columnName) return row ? (row[columnName] ?? null) : null
       return row
     },
     async all() {
@@ -1171,7 +1206,8 @@ async function iconoplasmAdminMutationLimiterPolicyWithSnapshotFromEnv(env) {
     const saturated = iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(budgets)
     snapshot = saturated?.snapshot || null
     telemetryLocked = true
-    telemetryLockedReason = saturated?.telemetry_locked_reason || iconoplasmBudgetTelemetryLockedReason()
+    telemetryLockedReason =
+      saturated?.telemetry_locked_reason || iconoplasmBudgetTelemetryLockedReason()
   }
 
   const state = {
@@ -1200,7 +1236,10 @@ async function iconoplasmAdminMutationLimiterPolicyWithSnapshotFromEnv(env) {
 function iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(budgets) {
   const dayKey = String(budgets?.cycleInfo?.dayKey || "")
   const cycleKey = String(budgets?.cycleInfo?.cycleKey || dayKey)
-  const daysRemainingInCycle = Math.max(1, Number(budgets?.cycleInfo?.daysRemainingInCycle || 1) || 1)
+  const daysRemainingInCycle = Math.max(
+    1,
+    Number(budgets?.cycleInfo?.daysRemainingInCycle || 1) || 1,
+  )
   const knownRowsWrittenFloor = 100000
   return {
     snapshot: {
@@ -1215,7 +1254,8 @@ function iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(budgets) {
       cycle_query_count: 0,
       cycle_request_count: 0,
       rows_read_monthly_limit: Math.max(0, Number(budgets?.rowsReadMonthlyLimit || 0) || 0) || null,
-      rows_written_monthly_limit: Math.max(0, Number(budgets?.rowsWrittenMonthlyLimit || 0) || 0) || null,
+      rows_written_monthly_limit:
+        Math.max(0, Number(budgets?.rowsWrittenMonthlyLimit || 0) || 0) || null,
       rows_read_monthly_remaining: null,
       rows_written_monthly_remaining: null,
       rows_read_daily_smart_limit: null,
@@ -1309,7 +1349,8 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request) {
           rawEnv: env,
           budgets,
           attribution,
-          lastSnapshot: iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(budgets)?.snapshot || null,
+          lastSnapshot:
+            iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(budgets)?.snapshot || null,
           mutationLimiter: {
             active: true,
             chunkSlowZoneRows: iconoplasmMutationLimiterChunkSlowZoneRows(
@@ -1503,12 +1544,24 @@ function normalizeArtistStylesPageHtml(html) {
   return source
     .replaceAll("Blacklist artist style", "Blocklist artist tag")
     .replaceAll("Blacklist an artist style.", "Blocklist an artist tag.")
-    .replaceAll("If an Iconoplasm image looks like your style, enter your name or @tag and send it.", "If an Iconoplasm image matches your style, send the artist tag exactly as shown on the site.")
+    .replaceAll(
+      "If an Iconoplasm image looks like your style, enter your name or @tag and send it.",
+      "If an Iconoplasm image matches your style, send the artist tag exactly as shown on the site.",
+    )
     .replaceAll("Artist name or @tag", "Artist tag")
     .replaceAll("Loish or @loish", "@artist_(name)")
-    .replaceAll("Use the name or @tag from the style list.", "Use the exact @tag as shown on the site. Spaces are not allowed.")
-    .replaceAll("Use the exact tag from the emulsion or style list. Spaces are not allowed.", "Use the exact @tag as shown on the site. Spaces are not allowed.")
-    .replaceAll("Enter the artist name or @tag first.", "Enter the artist tag first. Example: @artist_(name)")
+    .replaceAll(
+      "Use the name or @tag from the style list.",
+      "Use the exact @tag as shown on the site. Spaces are not allowed.",
+    )
+    .replaceAll(
+      "Use the exact tag from the emulsion or style list. Spaces are not allowed.",
+      "Use the exact @tag as shown on the site. Spaces are not allowed.",
+    )
+    .replaceAll(
+      "Enter the artist name or @tag first.",
+      "Enter the artist tag first. Example: @artist_(name)",
+    )
     .replace(
       "setStatus(data && data.duplicate ? 'That name was already submitted.' : 'Thanks. We got it.', 'ok');",
       "setStatus('Thanks. We got it.', 'ok');",
@@ -1547,16 +1600,16 @@ function workflowStem(raw) {
   const value = String(raw || "").trim()
   if (!value) return ""
   const filename = value.split(/[\\/]/).pop() || value
-  return filename.replace(/\.json$/i, "").replace(WORKFLOW_SUFFIX_RE, "").trim()
+  return filename
+    .replace(/\.json$/i, "")
+    .replace(WORKFLOW_SUFFIX_RE, "")
+    .trim()
 }
 
 function workflowLabelFromPath(raw) {
   const stem = workflowStem(raw)
   if (!stem) return ""
-  const parts = stem
-    .replace(/[_-]+/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)
+  const parts = stem.replace(/[_-]+/g, " ").split(/\s+/).filter(Boolean)
   if (!parts.length) return ""
   return parts
     .map(function (part) {
@@ -1617,7 +1670,8 @@ function publicEmulsionIdForRow(row) {
   const variantSlot =
     sanitizeText(row?.requested_variant_slot || row?.variant_slot || "", 32) ||
     variantSlotFromVisionId(row?.requested_vision_id || row?.vision_id || "")
-  if (workflowId && promptVersion && variantSlot) return `${workflowId}${promptVersion}-${variantSlot}`
+  if (workflowId && promptVersion && variantSlot)
+    return `${workflowId}${promptVersion}-${variantSlot}`
   return ""
 }
 
@@ -1656,7 +1710,15 @@ function voteAssetIdentity(symbol, assetSha256) {
 
 async function appendVoteEvent(
   env,
-  { symbol, assetSha256, visionId = "", candidateRef = "", candidateImageId = null, userId, voteValue },
+  {
+    symbol,
+    assetSha256,
+    visionId = "",
+    candidateRef = "",
+    candidateImageId = null,
+    userId,
+    voteValue,
+  },
 ) {
   if (!env?.ICONOPLASM_DB) return
   const safeSymbol = normalizeSymbol(symbol)
@@ -1665,7 +1727,8 @@ async function appendVoteEvent(
   const safeVoteValue = normalizeVoteValue(voteValue)
   if (!safeSymbol || !safeAssetSha || !safeUserId || safeVoteValue === null) return
   const safeCandidateRef =
-    normalizeCandidateRef(candidateRef, safeSymbol, safeAssetSha) || voteAssetIdentity(safeSymbol, safeAssetSha)
+    normalizeCandidateRef(candidateRef, safeSymbol, safeAssetSha) ||
+    voteAssetIdentity(safeSymbol, safeAssetSha)
   const safeVisionId = sanitizeVoteVisionId(visionId || "")
   const safeCandidateImageId = optionalInt(candidateImageId)
   await env.ICONOPLASM_DB.prepare(
@@ -1734,8 +1797,8 @@ function canReadExternalPortraitStorage(env) {
 function canWriteExternalPortraitStorage(env) {
   return Boolean(
     externalPortraitStorageZone(env) &&
-      externalPortraitStorageHost(env) &&
-      externalPortraitStoragePassword(env),
+    externalPortraitStorageHost(env) &&
+    externalPortraitStoragePassword(env),
   )
 }
 
@@ -1875,7 +1938,10 @@ export function buildPortraitAwareManifestHash(baseHash, portraitFingerprint) {
   if (!portraitFingerprint) return base
   const count = Number(portraitFingerprint.published_count ?? portraitFingerprint.count ?? 0)
   const latest = portraitHashToken(
-    portraitFingerprint.latest_updated_at ?? portraitFingerprint.latest ?? portraitFingerprint.content_hash ?? "",
+    portraitFingerprint.latest_updated_at ??
+      portraitFingerprint.latest ??
+      portraitFingerprint.content_hash ??
+      "",
   )
   if (!count && !latest) return base
   return latest
@@ -1884,7 +1950,11 @@ export function buildPortraitAwareManifestHash(baseHash, portraitFingerprint) {
 }
 
 function catalogBaseHash(rawHash) {
-  return String(rawHash || "").trim().split("-")[0] || null
+  return (
+    String(rawHash || "")
+      .trim()
+      .split("-")[0] || null
+  )
 }
 
 function portraitSnapshotVersion(rawFingerprint) {
@@ -1904,12 +1974,12 @@ export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortra
   for (const row of publishedPortraits) {
     const symbol = normalizeSymbol(row?.symbol || row?.gene_symbol)
     if (!symbol) continue
-      // Chesterton's fence: the hydrated catalog is the public read contract for
-      // search, resolve, and extension refreshes. Keep it fed by the canonical
-      // portrait refs (`ph`/`pt`) we own now instead of quietly accepting old
-      // `r2_key_*` cargo from legacy snapshot shapes.
-      const heroRef = String(row?.ph || "").trim()
-      const thumbRef = String(row?.pt || "").trim()
+    // Chesterton's fence: the hydrated catalog is the public read contract for
+    // search, resolve, and extension refreshes. Keep it fed by the canonical
+    // portrait refs (`ph`/`pt`) we own now instead of quietly accepting old
+    // `r2_key_*` cargo from legacy snapshot shapes.
+    const heroRef = String(row?.ph || "").trim()
+    const thumbRef = String(row?.pt || "").trim()
     if (!heroRef && !thumbRef) continue
     publishedBySymbol.set(symbol, { ph: heroRef || null, pt: thumbRef || null })
   }
@@ -1990,7 +2060,8 @@ async function sharedPublishedPortraitFingerprint(env, { fresh = false } = {}) {
   const now = Date.now()
   if (
     sharedPublishedPortraitFingerprintCache.loadedAt > 0 &&
-    now - sharedPublishedPortraitFingerprintCache.loadedAt < PUBLISHED_PORTRAIT_FINGERPRINT_CACHE_TTL_MS
+    now - sharedPublishedPortraitFingerprintCache.loadedAt <
+      PUBLISHED_PORTRAIT_FINGERPRINT_CACHE_TTL_MS
   ) {
     return sharedPublishedPortraitFingerprintCache.value || null
   }
@@ -2072,7 +2143,10 @@ async function publishedPortraitRefs(env, { fresh = false } = {}) {
   if (!env.ICONOPLASM_DB) return []
   if (fresh) return queryPublishedPortraitRefs(env)
   const version = portraitSnapshotVersion(await publishedPortraitFingerprint(env))
-  if (publishedPortraitRefsCache.key === version && Array.isArray(publishedPortraitRefsCache.value)) {
+  if (
+    publishedPortraitRefsCache.key === version &&
+    Array.isArray(publishedPortraitRefsCache.value)
+  ) {
     return publishedPortraitRefsCache.value
   }
   const cached = await readVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_REFS_PREFIX, version)
@@ -2240,11 +2314,9 @@ function buildGenerationRequestLaneKey({
 function generationRequestVisionLabel(row) {
   const emulsionId = publicEmulsionIdForRow(row)
   if (emulsionId) return emulsionId
-  const artistTag =
-    sanitizeText(row?.requested_artist_tag || row?.artist_tag || "", 255) || ""
+  const artistTag = sanitizeText(row?.requested_artist_tag || row?.artist_tag || "", 255) || ""
   if (artistTag) return artistTag
-  const artistName =
-    sanitizeText(row?.requested_artist_name || row?.artist_name || "", 255) || ""
+  const artistName = sanitizeText(row?.requested_artist_name || row?.artist_name || "", 255) || ""
   if (artistName) return artistName
   return sanitizeVoteVisionId(row?.requested_vision_id || row?.vision_id || "") || ""
 }
@@ -2270,8 +2342,7 @@ function mapGenerationRequestRow(row) {
     source_asset_sha256: sourceAssetSha,
     request_mode: requestMode,
     requested_vision_id: requestedVisionId,
-    requested_emulsion_id:
-      requestMode === "specific" ? publicEmulsionIdForRow(row) : "",
+    requested_emulsion_id: requestMode === "specific" ? publicEmulsionIdForRow(row) : "",
     requested_emulsion_label:
       requestMode === "specific" ? generationRequestVisionLabel(row) : "Random default",
     status: sanitizeText(row?.status || "", 64) || "open",
@@ -2355,8 +2426,10 @@ function summarizeGenerationRequestRows(rows, { requesterUserId = "" } = {}) {
     })
   }
   return Array.from(laneMap.values()).sort(function (a, b) {
-    return String(a.created_at || "").localeCompare(String(b.created_at || "")) ||
+    return (
+      String(a.created_at || "").localeCompare(String(b.created_at || "")) ||
       String(a.lane_key || "").localeCompare(String(b.lane_key || ""))
+    )
   })
 }
 
@@ -2369,7 +2442,10 @@ async function listOpenGenerationRequests(
   { limit = 500, geneSymbol = "", requesterUserId = "" } = {},
 ) {
   if (!env.ICONOPLASM_DB) return []
-  const cleanedLimit = Math.max(1, Math.min(2000, Number.parseInt(String(limit || "500"), 10) || 500))
+  const cleanedLimit = Math.max(
+    1,
+    Math.min(2000, Number.parseInt(String(limit || "500"), 10) || 500),
+  )
   const symbolNorm = normalizeSymbol(geneSymbol || "") || ""
   const requesterNorm = normalizeUserId(requesterUserId || "")
   const whereParts = ["gr.status = 'open'"]
@@ -2619,8 +2695,10 @@ function generationRequestVisionOptionLabels(row) {
   const primaryLabel = emulsionId || artistTag || artistName || artistId || visionId
   const secondaryParts = []
   if (artistTag && artistTag !== primaryLabel) secondaryParts.push(artistTag)
-  if (artistName && artistName !== primaryLabel && artistName !== artistTag) secondaryParts.push(artistName)
-  if (artistId && artistId !== primaryLabel && artistId !== artistTag) secondaryParts.push(`artist ${artistId}`)
+  if (artistName && artistName !== primaryLabel && artistName !== artistTag)
+    secondaryParts.push(artistName)
+  if (artistId && artistId !== primaryLabel && artistId !== artistTag)
+    secondaryParts.push(`artist ${artistId}`)
   if (workflowLabel && workflowLabel !== primaryLabel) secondaryParts.push(workflowLabel)
   if (visionId && visionId !== primaryLabel) secondaryParts.push(visionId)
   return {
@@ -3068,7 +3146,9 @@ async function generationRequestDiagnostics(env, url, request, symbol) {
     result.ok = false
     result.request_options = {
       ok: false,
-      error: sanitizeText(error?.message || "Request option hydration failed", 500) || "Request option hydration failed",
+      error:
+        sanitizeText(error?.message || "Request option hydration failed", 500) ||
+        "Request option hydration failed",
       count: 0,
       sample: [],
     }
@@ -3078,12 +3158,10 @@ async function generationRequestDiagnostics(env, url, request, symbol) {
 
 async function fulfillGenerationRequests(
   env,
-  {
-    items = [],
-    resolvedBy = "workstation_sync",
-  } = {},
+  { items = [], resolvedBy = "workstation_sync" } = {},
 ) {
-  if (!env.ICONOPLASM_DB) return { ok: false, fulfilled: 0, request_ids: [], error: "ICONOPLASM_DB binding missing" }
+  if (!env.ICONOPLASM_DB)
+    return { ok: false, fulfilled: 0, request_ids: [], error: "ICONOPLASM_DB binding missing" }
   const actorNorm = normalizeUserId(resolvedBy || "workstation_sync")
   const fulfilledIds = new Set()
   let skipped = 0
@@ -3124,8 +3202,11 @@ async function fulfillGenerationRequests(
       skipped += 1
       continue
     }
-    const fulfilledVisionId = sanitizeVoteVisionId(rawItem.fulfilled_vision_id || rawItem.vision_id || "")
-    const fulfilledAssetSha = normalizeSha256(rawItem.fulfilled_asset_sha256 || rawItem.asset_sha256 || "") || ""
+    const fulfilledVisionId = sanitizeVoteVisionId(
+      rawItem.fulfilled_vision_id || rawItem.vision_id || "",
+    )
+    const fulfilledAssetSha =
+      normalizeSha256(rawItem.fulfilled_asset_sha256 || rawItem.asset_sha256 || "") || ""
     const note = sanitizeText(rawItem.note || rawItem.fulfillment_note || "", 2000) || ""
     for (const requestId of requestIds) {
       const updateResp = await env.ICONOPLASM_DB.prepare(
@@ -3175,7 +3256,8 @@ async function recordGeneDiscoveryEncounter(
   const triggerNorm = normalizeDiscoveryTrigger(trigger)
   const dwellMsNorm = normalizeDiscoveryDwellMs(dwellMs)
   if (!geneSymbolNorm) return { ok: false, error: "Missing or invalid gene symbol" }
-  if (!userIdNorm || isGuestUserId(userIdNorm)) return { ok: false, error: "Authentication required" }
+  if (!userIdNorm || isGuestUserId(userIdNorm))
+    return { ok: false, error: "Authentication required" }
   if (!sourceNorm) return { ok: false, error: "Missing or invalid discovery source" }
   if (!triggerNorm) return { ok: false, error: "Missing or invalid discovery trigger" }
   if (triggerNorm === DISCOVERY_TRIGGER_HOVER_DWELL && dwellMsNorm == null) {
@@ -3290,11 +3372,17 @@ async function ensureStarterGeneDiscoveries(env, { userId } = {}) {
   }
 }
 
-async function listUserGeneDiscoveries(env, { userId, limit = 5000, order = "newest", seed = null } = {}) {
+async function listUserGeneDiscoveries(
+  env,
+  { userId, limit = 5000, order = "newest", seed = null } = {},
+) {
   if (!env.ICONOPLASM_DB) return []
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) return []
-  const cleanedLimit = Math.max(1, Math.min(10000, Number.parseInt(String(limit || "5000"), 10) || 5000))
+  const cleanedLimit = Math.max(
+    1,
+    Math.min(10000, Number.parseInt(String(limit || "5000"), 10) || 5000),
+  )
   // These runtime tables already store canonical gene_symbol primary keys.
   // Keep the joins/order on the raw key so SQLite can use the indexes instead
   // of scanning and temp-sorting the whole shelf query.
@@ -3350,10 +3438,10 @@ function decodeAccountGalleryCursor(raw) {
   const value = sanitizeText(raw || "", 2048)
   if (!value) return null
   try {
-    const padded = value.replaceAll("-", "+").replaceAll("_", "/").padEnd(
-      Math.ceil(value.length / 4) * 4,
-      "=",
-    )
+    const padded = value
+      .replaceAll("-", "+")
+      .replaceAll("_", "/")
+      .padEnd(Math.ceil(value.length / 4) * 4, "=")
     const parsed = JSON.parse(atob(padded))
     return parsed && typeof parsed === "object" ? parsed : null
   } catch {
@@ -3372,7 +3460,8 @@ function accountGalleryWindowCursorForRow(row, order) {
   }
   return {
     order: "newest",
-    last_encountered_at: sanitizeText(row?.last_encountered_at || row?.first_discovered_at || "", 64) || "",
+    last_encountered_at:
+      sanitizeText(row?.last_encountered_at || row?.first_discovered_at || "", 64) || "",
     symbol,
   }
 }
@@ -3465,7 +3554,9 @@ async function listUserGeneDiscoveryWindow(
   return {
     rows: pageRows,
     hasMore,
-    nextCursor: hasMore ? encodeAccountGalleryCursor(accountGalleryWindowCursorForRow(lastRow, resolvedOrder)) : "",
+    nextCursor: hasMore
+      ? encodeAccountGalleryCursor(accountGalleryWindowCursorForRow(lastRow, resolvedOrder))
+      : "",
     unsupportedOrder: "",
   }
 }
@@ -3484,11 +3575,17 @@ async function countUserGeneDiscoveries(env, { userId } = {}) {
   return Math.max(0, Number(row?.discovered_count || 0) || 0)
 }
 
-async function listAllCatalogGeneDiscoveriesForAdmin(env, { userId, limit = 5000, order = "newest", seed = null } = {}) {
+async function listAllCatalogGeneDiscoveriesForAdmin(
+  env,
+  { userId, limit = 5000, order = "newest", seed = null } = {},
+) {
   if (!env.ICONOPLASM_DB) return []
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) return []
-  const cleanedLimit = Math.max(1, Math.min(10000, Number.parseInt(String(limit || "5000"), 10) || 5000))
+  const cleanedLimit = Math.max(
+    1,
+    Math.min(10000, Number.parseInt(String(limit || "5000"), 10) || 5000),
+  )
   // The admin show-all shelf sits on the homepage critical path. Wrapping these
   // key joins in upper(...) forced full scans and a temp B-tree sort in prod,
   // which is why Pokedex mode got stuck on "Loading your collection...".
@@ -3533,13 +3630,7 @@ async function listAllCatalogGeneDiscoveriesForAdmin(env, { userId, limit = 5000
   )
 }
 
-async function mergeGuestGeneDiscoveries(
-  env,
-  {
-    userId,
-    symbols = [],
-  } = {},
-) {
+async function mergeGuestGeneDiscoveries(env, { userId, symbols = [] } = {}) {
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) {
     return { ok: false, error: "Authentication required" }
@@ -3765,13 +3856,7 @@ async function listPendingArtistBlacklistSubmissions(env, { limit = 200 } = {}) 
   return (Array.isArray(resp?.results) ? resp.results : []).map(mapArtistBlacklistSubmissionRow)
 }
 
-async function resolveArtistBlacklistSubmissions(
-  env,
-  {
-    results = [],
-    resolvedBy = "",
-  } = {},
-) {
+async function resolveArtistBlacklistSubmissions(env, { results = [], resolvedBy = "" } = {}) {
   if (!env.ICONOPLASM_DB) return { resolved: 0, requests: [] }
   const actorNorm = normalizeUserId(resolvedBy || "workstation_sync")
   const cleanedResults = Array.from(
@@ -3839,13 +3924,7 @@ async function listPendingLocalRemovalRequests(env, { limit = 200 } = {}) {
   return (Array.isArray(resp?.results) ? resp.results : []).map(mapLocalRemovalRequestRow)
 }
 
-async function resolveLocalRemovalRequests(
-  env,
-  {
-    results = [],
-    resolvedBy = "",
-  } = {},
-) {
+async function resolveLocalRemovalRequests(env, { results = [], resolvedBy = "" } = {}) {
   if (!env.ICONOPLASM_DB) return { resolved: 0, requests: [] }
   const actorNorm = normalizeUserId(resolvedBy || "workstation_sync")
   const cleanedResults = Array.from(
@@ -3928,7 +4007,10 @@ function normalizeCatalogAliases(raw, { maxItems = 48, maxLen = 64 } = {}) {
   const pushValue = (value) => {
     let cleaned = sanitizeText(value, maxLen)
     if (!cleaned) return
-    cleaned = cleaned.replace(/[\u2010-\u2015\u2212]/g, "-").replace(/\s+/g, " ").trim()
+    cleaned = cleaned
+      .replace(/[\u2010-\u2015\u2212]/g, "-")
+      .replace(/\s+/g, " ")
+      .trim()
     if (!cleaned || cleaned.includes(" ")) return
     const key = cleaned.toUpperCase()
     if (seen.has(key)) return
@@ -4395,6 +4477,7 @@ function publicRichRouteDeniedPayload(url, routeKey) {
     faq_url: "https://brinedew.bio/posts/Iconoplasm-FAQ.html",
     recommended_public_api: {
       metadata: publicUrl(url, "/metadata"),
+      stats: publicUrl(url, "/stats"),
       catalog_manifest: publicUrl(url, "/catalog/manifest"),
       changes: publicUrl(url, "/changes"),
       resolve: publicUrl(url, "/resolve"),
@@ -4560,7 +4643,8 @@ const ICONOPLASM_SYNC_FINALIZATION_PROCESS_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WOR
 function isInternalRequestForTheOnlyAllowedStatefulWorker(request) {
   return (
     String(
-      request?.headers?.get(ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE) || "",
+      request?.headers?.get(ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE) ||
+        "",
     ) === "1"
   )
 }
@@ -4602,6 +4686,7 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
     return requestMethod === "GET" || requestMethod === "HEAD"
   }
   if (path === publicApiPath("/metadata")) return true
+  if (path === publicApiPath("/stats")) return true
   if (path === publicApiPath("/catalog/manifest")) return true
   if (isPublicCatalogArtifactPath(path)) return true
   if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) return true
@@ -4615,19 +4700,25 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path.startsWith(publicApiPath("/media/"))) return true
   if (path.startsWith("/portraits/")) return true
   if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) return true
-  if (path === "/api/iconoplasm/votes/me") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/votes/me")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/discoveries/encounter") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/discoveries/me") return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/account-gallery-window") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/discoveries/me")
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/account-gallery-window")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/discoveries/merge") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/me") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/me")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(path))
     return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/requests/options") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/requests/options")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+$/.test(path))
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/requests") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/requests/open") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/requests/open")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/requests/fulfill") return requestMethod === "POST"
   if (path === "/api/iconoplasm/candidates/copy") return requestMethod === "POST"
   if (path === "/api/iconoplasm/votes/set") return requestMethod === "POST"
@@ -4636,13 +4727,16 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/admin/votes/set") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/votes/snapshot") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/votes/snapshots") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/votes/ledger") return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/votes/events") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/votes/ledger")
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/votes/events")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/votes/vision-stats")
     return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/votes/vision-previews")
     return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/votes/vision-detail") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/votes/vision-detail")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/votes/projection-refresh/pending")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
@@ -4654,29 +4748,37 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/admin/finalization/process") return requestMethod === "POST"
   if (path === ICONOPLASM_SYNC_FINALIZATION_PROCESS_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
     return requestMethod === "POST"
-  if (path === "/api/iconoplasm/artist-styles/search") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/artist-styles/search")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/artist-blacklist-submissions") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/artist-styles/remove") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/pending")
     return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/ack") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/ack")
+    return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/read-models/sync") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/card-vms/warm") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/read-models/bootstrap") return true
   if (path === "/api/iconoplasm/admin/mutation-limiter/policy")
     return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/overview") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/overview")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/cost/usage" || path === "/api/iconoplasm/admin/cost/snapshot")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (/^\/api\/iconoplasm\/admin\/requests\/gene\/[^/]+\/diagnostics$/.test(path))
     return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/coverage") return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/gallery") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/coverage")
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/gallery")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (/^\/api\/iconoplasm\/admin\/gene\/[^/]+$/.test(path))
     return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/canon-audit") return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/assets") return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/assets/summary") return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/canon-audit")
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/assets")
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/assets/summary")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/assets/storage-audit") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/assets/repair-scope") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/assets/state")
@@ -4714,7 +4816,8 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
 function missingTheOnlyAllowedStatefulWorkerResponse() {
   return json(
     {
-      error: "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE binding missing for a fail-closed public route",
+      error:
+        "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE binding missing for a fail-closed public route",
       code: "THE_ONLY_ALLOWED_STATEFUL_WORKER_REQUIRED",
     },
     503,
@@ -4729,7 +4832,8 @@ async function proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicat
   // cost-barrier tests first.
   const theOnlyAllowedStatefulWorker = env?.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE
   const url = new URL(request.url)
-  if (!isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(url.pathname, request.method)) return null
+  if (!isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(url.pathname, request.method))
+    return null
   if (!theOnlyAllowedStatefulWorker || typeof theOnlyAllowedStatefulWorker.fetch !== "function") {
     return missingTheOnlyAllowedStatefulWorkerResponse()
   }
@@ -4768,7 +4872,9 @@ export async function runIconoplasmCanonMaintenanceThroughTheOnlyAllowedStateful
 ) {
   const theOnlyAllowedStatefulWorker = env?.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE
   if (!theOnlyAllowedStatefulWorker || typeof theOnlyAllowedStatefulWorker.fetch !== "function") {
-    throw new Error("THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE binding missing for canon maintenance")
+    throw new Error(
+      "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE binding missing for canon maintenance",
+    )
   }
   const response = await theOnlyAllowedStatefulWorker.fetch(
     new Request(
@@ -4839,15 +4945,17 @@ async function publicMetadataObj(url, env) {
     released_at: manifest.generated_at || null,
     gene_count: manifest.gene_count || null,
     artifact_schema_version: manifest.artifact_schema_version || manifest.schema_version || 1,
-    min_extension_version: manifest.min_extension_version || env.ICONOPLASM_MIN_EXTENSION_VERSION || MIN_EXTENSION_VERSION,
+    min_extension_version:
+      manifest.min_extension_version ||
+      env.ICONOPLASM_MIN_EXTENSION_VERSION ||
+      MIN_EXTENSION_VERSION,
     portrait_base_url: manifest.portrait_base_url || portraitBase(url, env),
     urls: {
       metadata: publicUrl(url, "/metadata"),
+      stats: publicUrl(url, "/stats"),
       schema: publicUrl(url, "/schema"),
       catalog_manifest: publicUrl(url, "/catalog/manifest"),
-      catalog_artifact: buildHash
-        ? `${url.origin}${publicCatalogArtifactPath(buildHash)}`
-        : null,
+      catalog_artifact: buildHash ? `${url.origin}${publicCatalogArtifactPath(buildHash)}` : null,
       catalog_jsonl: catalogHash ? `${url.origin}${publicCatalogJsonlDumpPath(catalogHash)}` : null,
       changes: publicUrl(url, "/changes"),
       batch: publicUrl(url, "/genes/batch"),
@@ -5288,7 +5396,11 @@ function parseAdminAssetMissingRenditions(rawValue) {
       ? Array.from(
           new Set(
             parsed
-              .map((value) => String(value || "").trim().toLowerCase())
+              .map((value) =>
+                String(value || "")
+                  .trim()
+                  .toLowerCase(),
+              )
               .filter((value) => ["full", "medium", "thumb"].includes(value)),
           ),
         )
@@ -5308,6 +5420,7 @@ function mapWebsiteTruthSummaryRow(row) {
     candidate_assets: Math.max(0, Number(row?.candidate_assets || 0)),
     stale_assets: Math.max(0, Number(row?.stale_assets || 0)),
     legacy_assets: Math.max(0, Number(row?.legacy_assets || 0)),
+    auditable_assets: Math.max(0, Number(row?.auditable_assets || 0)),
     published_live_portraits: Math.max(0, Number(row?.published_live_portraits || 0)),
     audited_assets: Math.max(0, Number(row?.audited_assets || 0)),
     verified_renderable_images: Math.max(0, Number(row?.verified_renderable_images || 0)),
@@ -5329,6 +5442,75 @@ function mapWebsiteTruthSummaryRow(row) {
       "Website storage truth has not been computed yet.",
     updated_at: sanitizeText(row?.updated_at || "", 64) || "",
   }
+}
+
+function formatPublicStatsNumber(value) {
+  return Math.max(0, Number(value || 0)).toLocaleString("en-US")
+}
+
+function publicStatsCopy(payload) {
+  const genes = Math.max(0, Number(payload?.gene_count || 0))
+  const candidates = Math.max(0, Number(payload?.generated_candidate_blot_count || 0))
+  if (!genes || !candidates) return ""
+  return `${formatPublicStatsNumber(genes)} genes · ${formatPublicStatsNumber(candidates)} generated candidate blots`
+}
+
+async function publicStatsPayloadFromSummary(env, summary) {
+  const row = mapWebsiteTruthSummaryRow(summary || {})
+  const manifest = await catalogManifestObj(env)
+  const geneCount = Math.max(0, Number(manifest?.gene_count || 0))
+  const payload = {
+    schema_version: PUBLIC_STATS_SCHEMA_VERSION,
+    gene_count: geneCount,
+    canonical_blot_count: row.published_live_portraits,
+    generated_candidate_blot_count: row.candidate_assets,
+    auditable_candidate_blot_count: row.auditable_assets,
+    storage_verified_candidate_blot_count: row.verified_renderable_images,
+    storage_audit_coverage_percent: row.storage_audit_coverage_percent,
+    storage_audit_complete: Boolean(row.renderable_live_exact_known),
+    updated_at: row.updated_at || new Date().toISOString(),
+  }
+  return {
+    ...payload,
+    public_copy: publicStatsCopy(payload),
+  }
+}
+
+function normalizePublicStatsPayload(rawPayload) {
+  if (!rawPayload || typeof rawPayload !== "object") return null
+  const payload = {
+    schema_version: String(rawPayload.schema_version || PUBLIC_STATS_SCHEMA_VERSION),
+    gene_count: Math.max(0, Number(rawPayload.gene_count || 0)),
+    canonical_blot_count: Math.max(0, Number(rawPayload.canonical_blot_count || 0)),
+    generated_candidate_blot_count: Math.max(
+      0,
+      Number(rawPayload.generated_candidate_blot_count || 0),
+    ),
+    auditable_candidate_blot_count: Math.max(
+      0,
+      Number(rawPayload.auditable_candidate_blot_count || 0),
+    ),
+    storage_verified_candidate_blot_count: Math.max(
+      0,
+      Number(rawPayload.storage_verified_candidate_blot_count || 0),
+    ),
+    storage_audit_coverage_percent: Number(rawPayload.storage_audit_coverage_percent || 0),
+    storage_audit_complete: Boolean(rawPayload.storage_audit_complete),
+    updated_at: sanitizeText(rawPayload.updated_at || "", 64) || "",
+  }
+  if (!payload.gene_count || !payload.generated_candidate_blot_count) return null
+  return {
+    ...payload,
+    public_copy: publicStatsCopy(payload),
+  }
+}
+
+async function writePublicStatsProjection(env, summary) {
+  if (!env?.KV) return null
+  const payload = await publicStatsPayloadFromSummary(env, summary)
+  if (!payload.gene_count || !payload.generated_candidate_blot_count) return null
+  await env.KV.put(KV_PUBLIC_STATS, JSON.stringify(payload))
+  return payload
 }
 
 function mapStorageAuditQueueStateRow(row) {
@@ -5434,10 +5616,18 @@ async function writeStorageAuditQueueState(env, patch = {}) {
   return fetchStorageAuditQueueState(env)
 }
 
-async function listStorageAuditSeedSymbolsAfter(env, rawAfterSymbol = "", limit = ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH) {
+async function listStorageAuditSeedSymbolsAfter(
+  env,
+  rawAfterSymbol = "",
+  limit = ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH,
+) {
   if (!env.ICONOPLASM_DB) return []
   const afterSymbol = normalizeSymbol(rawAfterSymbol) || ""
-  const cleanedLimit = normalizeAdminAssetMaintenanceLimit(limit, ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH, 500)
+  const cleanedLimit = normalizeAdminAssetMaintenanceLimit(
+    limit,
+    ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH,
+    500,
+  )
   const response = await env.ICONOPLASM_DB.prepare(
     `SELECT gene_symbol
      FROM icono_admin_gene_rollup
@@ -5681,7 +5871,11 @@ async function seedStorageAuditQueueStep(
     }
   }
 
-  const symbols = await listStorageAuditSeedSymbolsAfter(env, state?.last_seeded_symbol || "", symbolBatch)
+  const symbols = await listStorageAuditSeedSymbolsAfter(
+    env,
+    state?.last_seeded_symbol || "",
+    symbolBatch,
+  )
   if (!symbols.length) {
     await writeStorageAuditQueueState(env, {
       ...state,
@@ -5706,7 +5900,9 @@ async function seedStorageAuditQueueStep(
     last_error: "",
   })
   const upserted = await upsertStorageAuditQueueRowsForSymbols(env, symbols)
-  const seededComplete = symbols.length < normalizeAdminAssetMaintenanceLimit(symbolBatch, ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH, 500)
+  const seededComplete =
+    symbols.length <
+    normalizeAdminAssetMaintenanceLimit(symbolBatch, ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH, 500)
   const nextState = await writeStorageAuditQueueState(env, {
     ...state,
     seed_status: seededComplete ? "complete" : "running",
@@ -5794,7 +5990,8 @@ async function computeWebsiteTruthSummary(env) {
       last_exact_audit_at: previous?.last_exact_audit_at || "",
       storage_queue_backlog_assets: 0,
       storage_queue_seeded_complete: 0,
-      storage_audit_status_note: "Website storage truth is unavailable because ICONOPLASM_DB is missing.",
+      storage_audit_status_note:
+        "Website storage truth is unavailable because ICONOPLASM_DB is missing.",
       updated_at: "",
     })
   }
@@ -5827,14 +6024,17 @@ async function computeWebsiteTruthSummary(env) {
   const brokenLiveImages = Math.max(0, Number(queueRow?.broken_live_images || 0))
   const renderableLiveConfirmed = Math.max(0, Number(queueRow?.renderable_live_confirmed || 0))
   const storageQueueBacklogAssets = Math.max(0, Number(queueRow?.storage_queue_backlog_assets || 0))
-  const coveragePercent = auditableAssets > 0 ? Number(((auditedAssets / auditableAssets) * 100).toFixed(1)) : 100.0
+  const coveragePercent =
+    auditableAssets > 0 ? Number(((auditedAssets / auditableAssets) * 100).toFixed(1)) : 100.0
   const exactKnown =
     auditableAssets === 0 ||
-    (Boolean(queueState?.seeded_complete) && auditedAssets >= auditableAssets && storageQueueBacklogAssets <= 0)
+    (Boolean(queueState?.seeded_complete) &&
+      auditedAssets >= auditableAssets &&
+      storageQueueBacklogAssets <= 0)
   const updatedAt = new Date().toISOString()
   const lastExactAuditTotal = exactKnown
     ? verifiedRenderableImages
-    : previous?.last_exact_audit_total ?? null
+    : (previous?.last_exact_audit_total ?? null)
   const lastExactAuditAt = exactKnown ? updatedAt : previous?.last_exact_audit_at || ""
   const publishedLivePortraits = Math.max(0, Number(baseline?.published_live_portraits || 0))
   const unverifiedLivePortraits = Math.max(
@@ -5849,6 +6049,7 @@ async function computeWebsiteTruthSummary(env) {
 
   return mapWebsiteTruthSummaryRow({
     candidate_assets: candidateAssets,
+    auditable_assets: auditableAssets,
     stale_assets: baseline?.stale_assets || 0,
     legacy_assets: baseline?.legacy_assets || 0,
     published_live_portraits: publishedLivePortraits,
@@ -5935,6 +6136,7 @@ async function writeWebsiteTruthSummary(env, summary) {
       row.storage_audit_status_note,
     )
     .run()
+  await writePublicStatsProjection(env, row)
   return fetchPersistedWebsiteTruthSummary(env)
 }
 
@@ -5951,7 +6153,10 @@ async function fetchAdminAssetSummaryCounts(env, { refresh = false } = {}) {
   return refreshWebsiteTruthSummaryRow(env)
 }
 
-async function selectStorageAuditQueueRowsToProcess(env, { requestedSymbols = null, limit = 100 } = {}) {
+async function selectStorageAuditQueueRowsToProcess(
+  env,
+  { requestedSymbols = null, limit = 100 } = {},
+) {
   if (!env.ICONOPLASM_DB) return []
   const wantedSymbols = Array.isArray(requestedSymbols)
     ? normalizeAdminAssetMaintenanceSymbols(requestedSymbols, 5000)
@@ -5994,7 +6199,11 @@ async function selectStorageAuditQueueRowsToProcess(env, { requestedSymbols = nu
   return Array.isArray(response?.results) ? response.results : []
 }
 
-async function inspectAdminAssetStorageRows(env, rawRows, { concurrency = ICONO_STORAGE_AUDIT_INSPECT_CONCURRENCY } = {}) {
+async function inspectAdminAssetStorageRows(
+  env,
+  rawRows,
+  { concurrency = ICONO_STORAGE_AUDIT_INSPECT_CONCURRENCY } = {},
+) {
   const rows = Array.isArray(rawRows) ? rawRows : []
   const safeConcurrency = Math.max(
     1,
@@ -6052,7 +6261,9 @@ async function inspectAdminAssetStorageRows(env, rawRows, { concurrency = ICONO_
         is_current: Number(rawRow?.is_current || 0) > 0,
         created_at: sanitizeText(rawRow?.created_at || "", 64) || "",
         attempts: Math.max(0, Number(rawRow?.attempts || 0)),
-        error: sanitizeText(String(error?.message || error || "storage audit failed"), 2000) || "storage audit failed",
+        error:
+          sanitizeText(String(error?.message || error || "storage audit failed"), 2000) ||
+          "storage audit failed",
       }
     }
   }
@@ -6400,7 +6611,15 @@ async function writeStorageAuditQueueInspectionResults(env, rows) {
 
 async function recordStorageAuditRenderableAsset(
   env,
-  { symbol, assetSha256, status = "draft", isStale = false, isLegacy = false, isCurrent = false, createdAt = "" } = {},
+  {
+    symbol,
+    assetSha256,
+    status = "draft",
+    isStale = false,
+    isLegacy = false,
+    isCurrent = false,
+    createdAt = "",
+  } = {},
 ) {
   if (!env.ICONOPLASM_DB) return false
   const safeSymbol = normalizeSymbol(symbol)
@@ -6917,8 +7136,12 @@ async function geneRecord(env, url, rawId, { fields = null } = {}) {
           : {}),
       }
     : null
-  const uniprot = needsUniprot ? normalizeUniprot(r?.catalog?.uniprot || r?.protein?.uniprot || null) : null
-  const fullName = needsFullName ? sanitizeText(r?.catalog?.full_name, 255) || identityFullName : null
+  const uniprot = needsUniprot
+    ? normalizeUniprot(r?.catalog?.uniprot || r?.protein?.uniprot || null)
+    : null
+  const fullName = needsFullName
+    ? sanitizeText(r?.catalog?.full_name, 255) || identityFullName
+    : null
   const weightKgValue = Number(tooltipEssence?.weight_kg)
   const weightKg = Number.isFinite(weightKgValue) && weightKgValue > 0 ? weightKgValue : null
   const proteinLengthAa = optionalInt(r?.protein?.length)
@@ -6951,7 +7174,9 @@ async function geneRecord(env, url, rawId, { fields = null } = {}) {
     ...(needsColor ? { color: r?.catalog?.color_hex || null } : {}),
     ...(uniprot ? { uniprot } : {}),
     ...(wantsWeightKg && weightKg != null ? { weight_kg: weightKg } : {}),
-    ...(wantsProteinLengthAa && proteinLengthAa != null ? { protein_length_aa: proteinLengthAa } : {}),
+    ...(wantsProteinLengthAa && proteinLengthAa != null
+      ? { protein_length_aa: proteinLengthAa }
+      : {}),
     ...(wantsMolecularWeightKda && molecularWeightKda != null
       ? { molecular_weight_kda: molecularWeightKda }
       : {}),
@@ -7317,7 +7542,9 @@ export class IconoplasmVoteCoordinator {
        WHERE asset_sha256 = ?`,
       safeAssetSha,
     )
-    return row ? mapCoordinatorAssetSummaryRow({ ...row, gene_symbol: this.getMeta("symbol") }) : null
+    return row
+      ? mapCoordinatorAssetSummaryRow({ ...row, gene_symbol: this.getMeta("symbol") })
+      : null
   }
 
   getExistingAssetSummary(assetSha256) {
@@ -7329,10 +7556,17 @@ export class IconoplasmVoteCoordinator {
        WHERE asset_sha256 = ?`,
       safeAssetSha,
     )
-    return row ? mapCoordinatorAssetSummaryRow({ ...row, gene_symbol: this.getMeta("symbol") }) : null
+    return row
+      ? mapCoordinatorAssetSummaryRow({ ...row, gene_symbol: this.getMeta("symbol") })
+      : null
   }
 
-  async ensureAssetSummaryFromMetadata(symbol, assetSha256, visionId = "", candidateImageId = null) {
+  async ensureAssetSummaryFromMetadata(
+    symbol,
+    assetSha256,
+    visionId = "",
+    candidateImageId = null,
+  ) {
     const existing = this.getExistingAssetSummary(assetSha256)
     if (existing) {
       return this.ensureAssetSummaryRow(assetSha256, {
@@ -7347,17 +7581,15 @@ export class IconoplasmVoteCoordinator {
     })
   }
 
-  applyVoteMutation(
-    {
-      assetSha256,
-      userId,
-      requestedVoteValue,
-      visionId = "",
-      candidateImageId = null,
-      ensuredAsset = null,
-      toggleOffWhenSame = true,
-    } = {},
-  ) {
+  applyVoteMutation({
+    assetSha256,
+    userId,
+    requestedVoteValue,
+    visionId = "",
+    candidateImageId = null,
+    ensuredAsset = null,
+    toggleOffWhenSame = true,
+  } = {}) {
     const safeAssetSha = normalizeSha256(assetSha256)
     const safeUserId = normalizeUserId(userId || "")
     const safeRequestedVoteValue = normalizeVoteValue(requestedVoteValue)
@@ -7501,15 +7733,14 @@ export class IconoplasmVoteCoordinator {
         safeAssetSha,
       ) || null
     const resolvedVisionId = sanitizeVoteVisionId(requestedVisionId || assetRow?.vision_id || "")
-    const visionRow =
-      resolvedVisionId
-        ? this.sqlFirst(
-            `SELECT upvotes, downvotes, score, vote_count
+    const visionRow = resolvedVisionId
+      ? this.sqlFirst(
+          `SELECT upvotes, downvotes, score, vote_count
              FROM vision_summary
              WHERE vision_id = ?`,
-            resolvedVisionId,
-          ) || null
-        : null
+          resolvedVisionId,
+        ) || null
+      : null
     return {
       image_upvotes: Number(assetRow?.upvotes || 0),
       image_downvotes: Number(assetRow?.downvotes || 0),
@@ -7593,17 +7824,17 @@ export class IconoplasmVoteCoordinator {
         const userId = normalizeUserId(rawVote?.user_id || "")
         const voteValue = normalizeVoteValue(rawVote?.vote_value)
         if (!assetSha || !userId || voteValue == null || voteValue === 0) continue
-        const current =
-          assetMap.get(assetSha) || {
-            asset_sha256: assetSha,
-            vision_id: sanitizeVoteVisionId(rawVote?.vision_id || "") || "",
-            candidate_image_id: optionalInt(rawVote?.candidate_image_id),
-            upvotes: 0,
-            downvotes: 0,
-            score: 0,
-            vote_count: 0,
-          }
-        current.vision_id = sanitizeVoteVisionId(current.vision_id || rawVote?.vision_id || "") || ""
+        const current = assetMap.get(assetSha) || {
+          asset_sha256: assetSha,
+          vision_id: sanitizeVoteVisionId(rawVote?.vision_id || "") || "",
+          candidate_image_id: optionalInt(rawVote?.candidate_image_id),
+          upvotes: 0,
+          downvotes: 0,
+          score: 0,
+          vote_count: 0,
+        }
+        current.vision_id =
+          sanitizeVoteVisionId(current.vision_id || rawVote?.vision_id || "") || ""
         current.candidate_image_id = optionalInt(
           current.candidate_image_id ?? rawVote?.candidate_image_id,
         )
@@ -7889,10 +8120,14 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
           );
         `)
-        const usageColumns = this.state.storage.sql.exec(`PRAGMA table_info(daily_budget_usage)`).toArray()
+        const usageColumns = this.state.storage.sql
+          .exec(`PRAGMA table_info(daily_budget_usage)`)
+          .toArray()
         const usageColumnNames = new Set(usageColumns.map((column) => String(column?.name || "")))
         if (!usageColumnNames.has("cycle_key")) {
-          this.state.storage.sql.exec(`ALTER TABLE daily_budget_usage ADD COLUMN cycle_key TEXT NOT NULL DEFAULT ''`)
+          this.state.storage.sql.exec(
+            `ALTER TABLE daily_budget_usage ADD COLUMN cycle_key TEXT NOT NULL DEFAULT ''`,
+          )
         }
         if (!usageColumnNames.has("request_count")) {
           this.state.storage.sql.exec(
@@ -7914,17 +8149,29 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
             PRIMARY KEY (day_key, cycle_key, route_family, actor_class, source_class)
           );
         `)
-        const attributionColumns = this.state.storage.sql.exec(`PRAGMA table_info(daily_budget_usage_attribution)`).toArray()
-        const attributionColumnNames = new Set(attributionColumns.map((column) => String(column?.name || "")))
+        const attributionColumns = this.state.storage.sql
+          .exec(`PRAGMA table_info(daily_budget_usage_attribution)`)
+          .toArray()
+        const attributionColumnNames = new Set(
+          attributionColumns.map((column) => String(column?.name || "")),
+        )
         const attributionPrimaryKey = attributionColumns
           .filter((column) => Number(column?.pk || 0) > 0)
           .sort((left, right) => Number(left?.pk || 0) - Number(right?.pk || 0))
           .map((column) => String(column?.name || ""))
-        const expectedAttributionPrimaryKey = ["day_key", "cycle_key", "route_family", "actor_class", "source_class"]
+        const expectedAttributionPrimaryKey = [
+          "day_key",
+          "cycle_key",
+          "route_family",
+          "actor_class",
+          "source_class",
+        ]
         const attributionNeedsRebuild =
           !expectedAttributionPrimaryKey.every((name) => attributionColumnNames.has(name)) ||
           attributionPrimaryKey.length !== expectedAttributionPrimaryKey.length ||
-          expectedAttributionPrimaryKey.some((name, index) => attributionPrimaryKey[index] !== name) ||
+          expectedAttributionPrimaryKey.some(
+            (name, index) => attributionPrimaryKey[index] !== name,
+          ) ||
           !attributionColumnNames.has("request_count")
         if (attributionNeedsRebuild) {
           // Chesterton's fence: `/api/iconoplasm/admin/cost/usage` is supposed to
@@ -7955,14 +8202,30 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
             : attributionColumnNames.has("day_key")
               ? "day_key"
               : "''"
-          const attributionRouteFamilyExpr = attributionColumnNames.has("route_family") ? "route_family" : "'unknown'"
-          const attributionActorClassExpr = attributionColumnNames.has("actor_class") ? "actor_class" : "'unknown'"
-          const attributionSourceClassExpr = attributionColumnNames.has("source_class") ? "source_class" : "'unknown'"
-          const attributionRowsReadExpr = attributionColumnNames.has("rows_read") ? "COALESCE(SUM(rows_read), 0)" : "0"
-          const attributionRowsWrittenExpr = attributionColumnNames.has("rows_written") ? "COALESCE(SUM(rows_written), 0)" : "0"
-          const attributionQueryCountExpr = attributionColumnNames.has("query_count") ? "COALESCE(SUM(query_count), 0)" : "0"
-          const attributionRequestCountExpr = attributionColumnNames.has("request_count") ? "COALESCE(SUM(request_count), 0)" : "0"
-          const attributionUpdatedAtExpr = attributionColumnNames.has("updated_at") ? "COALESCE(MAX(updated_at), CURRENT_TIMESTAMP)" : "CURRENT_TIMESTAMP"
+          const attributionRouteFamilyExpr = attributionColumnNames.has("route_family")
+            ? "route_family"
+            : "'unknown'"
+          const attributionActorClassExpr = attributionColumnNames.has("actor_class")
+            ? "actor_class"
+            : "'unknown'"
+          const attributionSourceClassExpr = attributionColumnNames.has("source_class")
+            ? "source_class"
+            : "'unknown'"
+          const attributionRowsReadExpr = attributionColumnNames.has("rows_read")
+            ? "COALESCE(SUM(rows_read), 0)"
+            : "0"
+          const attributionRowsWrittenExpr = attributionColumnNames.has("rows_written")
+            ? "COALESCE(SUM(rows_written), 0)"
+            : "0"
+          const attributionQueryCountExpr = attributionColumnNames.has("query_count")
+            ? "COALESCE(SUM(query_count), 0)"
+            : "0"
+          const attributionRequestCountExpr = attributionColumnNames.has("request_count")
+            ? "COALESCE(SUM(request_count), 0)"
+            : "0"
+          const attributionUpdatedAtExpr = attributionColumnNames.has("updated_at")
+            ? "COALESCE(MAX(updated_at), CURRENT_TIMESTAMP)"
+            : "CURRENT_TIMESTAMP"
           this.state.storage.sql.exec(
             `INSERT INTO daily_budget_usage_attribution_v2_do_not_delete (
                day_key,
@@ -8080,7 +8343,9 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       .toArray()
       .map((row) => ({
         ...row,
-        budget_class: iconoplasmBudgetClassFromHistoricalRouteFamilyForReport(row?.route_family || ""),
+        budget_class: iconoplasmBudgetClassFromHistoricalRouteFamilyForReport(
+          row?.route_family || "",
+        ),
       }))
   }
 
@@ -8178,12 +8443,17 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     const burstMultiplier = Math.max(1, Number(budgets?.dailyBurstMultiplier || 1) || 1)
     const cycleRowsReadBeforeToday = Math.max(0, cycleRowsRead - rowsRead)
     const cycleRowsWrittenBeforeToday = Math.max(0, cycleRowsWritten - rowsWritten)
-    const rowsReadMonthlyRemaining = rowsReadMonthlyLimit > 0 ? Math.max(0, rowsReadMonthlyLimit - cycleRowsRead) : null
+    const rowsReadMonthlyRemaining =
+      rowsReadMonthlyLimit > 0 ? Math.max(0, rowsReadMonthlyLimit - cycleRowsRead) : null
     const rowsWrittenMonthlyRemaining =
       rowsWrittenMonthlyLimit > 0 ? Math.max(0, rowsWrittenMonthlyLimit - cycleRowsWritten) : null
     const rowsReadDailySmartLimit =
       rowsReadMonthlyLimit > 0
-        ? this.smartDailyLimit(rowsReadMonthlyLimit - cycleRowsReadBeforeToday, daysRemainingInCycle, burstMultiplier)
+        ? this.smartDailyLimit(
+            rowsReadMonthlyLimit - cycleRowsReadBeforeToday,
+            daysRemainingInCycle,
+            burstMultiplier,
+          )
         : null
     const rowsWrittenDailySmartLimit =
       rowsWrittenMonthlyLimit > 0
@@ -8193,11 +8463,14 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
             burstMultiplier,
           )
         : null
-    const rowsReadDailyExceeded = rowsReadDailySmartLimit !== null && rowsRead >= rowsReadDailySmartLimit
+    const rowsReadDailyExceeded =
+      rowsReadDailySmartLimit !== null && rowsRead >= rowsReadDailySmartLimit
     const rowsWrittenDailyExceeded =
       rowsWrittenDailySmartLimit !== null && rowsWritten >= rowsWrittenDailySmartLimit
-    const rowsReadMonthlyExceeded = rowsReadMonthlyLimit > 0 && cycleRowsRead >= rowsReadMonthlyLimit
-    const rowsWrittenMonthlyExceeded = rowsWrittenMonthlyLimit > 0 && cycleRowsWritten >= rowsWrittenMonthlyLimit
+    const rowsReadMonthlyExceeded =
+      rowsReadMonthlyLimit > 0 && cycleRowsRead >= rowsReadMonthlyLimit
+    const rowsWrittenMonthlyExceeded =
+      rowsWrittenMonthlyLimit > 0 && cycleRowsWritten >= rowsWrittenMonthlyLimit
     return {
       day_key: dayKey,
       cycle_key: cycleKey,
@@ -8218,7 +8491,9 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       rows_read_daily_remaining:
         rowsReadDailySmartLimit !== null ? Math.max(0, rowsReadDailySmartLimit - rowsRead) : null,
       rows_written_daily_remaining:
-        rowsWrittenDailySmartLimit !== null ? Math.max(0, rowsWrittenDailySmartLimit - rowsWritten) : null,
+        rowsWrittenDailySmartLimit !== null
+          ? Math.max(0, rowsWrittenDailySmartLimit - rowsWritten)
+          : null,
       days_remaining_in_cycle: Math.max(1, Number(daysRemainingInCycle || 1) || 1),
       daily_burst_multiplier: burstMultiplier,
       exhausted:
@@ -8344,7 +8619,8 @@ function iconoplasmSyncGovernorStateFromRaw(raw) {
     ...base,
     ...raw,
     batch_permits: clampIconoplasmSyncGovernorPermits(raw.batch_permits ?? base.batch_permits),
-    target_utilization: Number(raw.target_utilization || base.target_utilization) || base.target_utilization,
+    target_utilization:
+      Number(raw.target_utilization || base.target_utilization) || base.target_utilization,
     observed_utilization: Math.max(0, Math.min(1, Number(raw.observed_utilization || 0) || 0)),
     active_consumers: Math.max(0, Number.parseInt(String(raw.active_consumers || 0), 10) || 0),
     updated_at: String(raw.updated_at || base.updated_at),
@@ -8378,7 +8654,9 @@ export class IconoplasmSyncGovernor {
       const requestedRaw = Number(url.searchParams.get("requested") || "1") || 1
       const requested = Math.max(1, Math.min(100, Math.floor(requestedRaw)))
       const updatedAtMs = Date.parse(String(stored.updated_at || ""))
-      const staleMs = Number.isFinite(updatedAtMs) ? Date.now() - updatedAtMs : Number.POSITIVE_INFINITY
+      const staleMs = Number.isFinite(updatedAtMs)
+        ? Date.now() - updatedAtMs
+        : Number.POSITIVE_INFINITY
       const stalePublicBrake = stored.public_health !== "healthy" && staleMs > 60_000
       const state = stalePublicBrake
         ? {
@@ -8392,7 +8670,10 @@ export class IconoplasmSyncGovernor {
       const next = await this.persistState({
         ...state,
         active_consumers: Math.max(0, Number(state.active_consumers || 0) + 1),
-        observed_utilization: Math.min(1, Math.max(state.observed_utilization || 0, granted / Math.max(1, requested))),
+        observed_utilization: Math.min(
+          1,
+          Math.max(state.observed_utilization || 0, granted / Math.max(1, requested)),
+        ),
       })
       return Response.json({ ok: true, granted, governor: next })
     }
@@ -10285,9 +10566,8 @@ async function bulkRebuildAdminReadModels(env) {
      WHERE COALESCE(vision_id, '') <> ''
      ORDER BY vision_id ASC`,
   ).all()
-  const requestPickerVisionIds = (Array.isArray(requestPickerVisionIdRows?.results)
-    ? requestPickerVisionIdRows.results
-    : []
+  const requestPickerVisionIds = (
+    Array.isArray(requestPickerVisionIdRows?.results) ? requestPickerVisionIdRows.results : []
   )
     .map((row) => validAdminRollupVisionId(row?.vision_id || ""))
     .filter(Boolean)
@@ -10388,12 +10668,15 @@ async function syncAdminReadModels(
       const chunkRowsWritten = Math.max(0, afterRowsWritten - beforeRowsWritten)
       if (chunkRowsWritten > 0) {
         observedRowsWrittenPerSymbol =
-          ((observedRowsWrittenPerSymbol * sampledSymbolUnits) + chunkRowsWritten) /
+          (observedRowsWrittenPerSymbol * sampledSymbolUnits + chunkRowsWritten) /
           (sampledSymbolUnits + symbolChunk.length)
         sampledSymbolUnits += symbolChunk.length
       }
       const budgetStatus = iconoplasmMutationLimiterBudgetStatus(budgetState, flushedSnapshot)
-      if (budgetStatus.rows_written_target_remaining !== null && budgetStatus.rows_written_target_remaining <= 0) {
+      if (
+        budgetStatus.rows_written_target_remaining !== null &&
+        budgetStatus.rows_written_target_remaining <= 0
+      ) {
         if (symbolIndex < symbolList.length) {
           partial = true
           stopReason = "rows_written_target_cap_reached_after_symbol_chunk"
@@ -10432,7 +10715,10 @@ async function syncAdminReadModels(
         }
         const visionChunk = finalVisionIds.slice(visionIndex, visionIndex + allowedVisionUnits)
         if (!visionChunk.length) break
-        const beforeRowsWritten = Math.max(0, Number(budgetState?.lastSnapshot?.rows_written || 0) || 0)
+        const beforeRowsWritten = Math.max(
+          0,
+          Number(budgetState?.lastSnapshot?.rows_written || 0) || 0,
+        )
         await rebuildVisionRollupsBatch(env, visionChunk)
         processedVisions += visionChunk.length
         visionIndex += visionChunk.length
@@ -10442,7 +10728,7 @@ async function syncAdminReadModels(
           const chunkRowsWritten = Math.max(0, afterRowsWritten - beforeRowsWritten)
           if (chunkRowsWritten > 0) {
             observedRowsWrittenPerVision =
-              ((observedRowsWrittenPerVision * sampledVisionUnits) + chunkRowsWritten) /
+              (observedRowsWrittenPerVision * sampledVisionUnits + chunkRowsWritten) /
               (sampledVisionUnits + visionChunk.length)
             sampledVisionUnits += visionChunk.length
           }
@@ -10705,7 +10991,10 @@ async function recordVoteProjectionRefreshFailure(
   const safeSymbol = normalizeSymbol(symbol)
   if (!safeSymbol) return false
   await ensureVoteProjectionRefreshJobsTable(env)
-  const delayMinutes = Math.max(1, Math.min(60, Math.pow(2, Math.max(0, Number(attemptCount || 0)))))
+  const delayMinutes = Math.max(
+    1,
+    Math.min(60, Math.pow(2, Math.max(0, Number(attemptCount || 0)))),
+  )
   const nextAttemptAt = new Date(Date.now() + delayMinutes * 60 * 1000).toISOString()
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_vote_projection_refresh_jobs (
@@ -10769,7 +11058,8 @@ async function processVoteProjectionRefreshForSymbol(
 }
 
 async function processPendingVoteProjectionRefreshJobs(env, { limit = 100 } = {}) {
-  if (!env?.ICONOPLASM_DB) return { ok: false, code: "NO_DB", processed: 0, failed: 0, remaining: 0 }
+  if (!env?.ICONOPLASM_DB)
+    return { ok: false, code: "NO_DB", processed: 0, failed: 0, remaining: 0 }
   await ensureVoteProjectionRefreshJobsTable(env)
   const safeLimit = Math.max(1, Math.min(500, Number.parseInt(String(limit || 100), 10) || 100))
   const nowIso = new Date().toISOString()
@@ -10810,7 +11100,8 @@ async function processPendingVoteProjectionRefreshJobs(env, { limit = 100 } = {}
       results.push({
         ok: false,
         symbol,
-        error: sanitizeText(String(error?.message || error || "vote projection refresh failed"), 2000) ||
+        error:
+          sanitizeText(String(error?.message || error || "vote projection refresh failed"), 2000) ||
           "vote projection refresh failed",
       })
     }
@@ -11006,7 +11297,11 @@ function iconoplasmSyncFinalizationQueueDisabled(env) {
 
 function iconoplasmSyncGovernorStub(env) {
   const namespace = env?.[ICONOPLASM_SYNC_GOVERNOR_BINDING]
-  if (!namespace || typeof namespace.idFromName !== "function" || typeof namespace.get !== "function") {
+  if (
+    !namespace ||
+    typeof namespace.idFromName !== "function" ||
+    typeof namespace.get !== "function"
+  ) {
     return null
   }
   return namespace.get(namespace.idFromName(ICONOPLASM_SYNC_GOVERNOR_ID))
@@ -11066,11 +11361,14 @@ async function sendSyncFinalizationDrainQueueMessage(env, message) {
     return { ok: true, message: safeMessage }
   } catch (error) {
     const detail = String(error?.message || error || "").slice(0, 2000)
-    console.warn("Iconoplasm sync finalization drain queue send failed; durable ledger remains authoritative", {
-      run_id: safeMessage.run_id,
-      symbols: safeMessage.symbols.length,
-      error: detail,
-    })
+    console.warn(
+      "Iconoplasm sync finalization drain queue send failed; durable ledger remains authoritative",
+      {
+        run_id: safeMessage.run_id,
+        symbols: safeMessage.symbols.length,
+        error: detail,
+      },
+    )
     return {
       ok: false,
       code: "QUEUE_SEND_FAILED",
@@ -11142,9 +11440,12 @@ async function enqueueSyncFinalizationJobs(
     const keepAssets = normalizeSyncFinalizationAssetPairs(rawRow?.keep || rawRow?.keep_assets, {
       maxItems: 5000,
     }).filter((item) => item.symbol === symbol)
-    const legacyAssets = normalizeSyncFinalizationAssetPairs(rawRow?.legacy || rawRow?.legacy_assets, {
-      maxItems: 5000,
-    }).filter((item) => item.symbol === symbol)
+    const legacyAssets = normalizeSyncFinalizationAssetPairs(
+      rawRow?.legacy || rawRow?.legacy_assets,
+      {
+        maxItems: 5000,
+      },
+    ).filter((item) => item.symbol === symbol)
     const visionIds = normalizeSyncFinalizationVisionIds(rawRow?.vision_ids || rawRow?.visionIds, {
       maxItems: 5000,
     })
@@ -11215,7 +11516,8 @@ async function enqueueSyncFinalizationJobs(
     return {
       ok: false,
       code: queueSendError?.code || "QUEUE_MESSAGE_REQUIRED",
-      error: queueSendError?.error ||
+      error:
+        queueSendError?.error ||
         "Iconoplasm finalization requires the Cloudflare Queue path; queued D1 ledger rows without a Queue message are not a valid sync path.",
       queue_send_error: queueSendError || null,
       queued,
@@ -11344,7 +11646,10 @@ async function recordSyncFinalizationJobFailure(
   if (!env?.ICONOPLASM_DB) return false
   const safeSymbol = normalizeSymbol(symbol)
   if (!safeSymbol) return false
-  const delayMinutes = Math.max(1, Math.min(60, Math.pow(2, Math.max(0, Number(attemptCount || 0)))))
+  const delayMinutes = Math.max(
+    1,
+    Math.min(60, Math.pow(2, Math.max(0, Number(attemptCount || 0)))),
+  )
   const nextAttemptAt = new Date(Date.now() + delayMinutes * 60 * 1000).toISOString()
   await writeSyncFinalizationJobState(env, {
     symbol: safeSymbol,
@@ -11408,8 +11713,7 @@ async function recoverStaleRunningSyncFinalizationJobs(
   const runningRows = Array.isArray(runningRowsResp?.results) ? runningRowsResp.results : []
   let recovered = 0
   for (const row of runningRows) {
-    const leaseAt =
-      sanitizeText(String(row?.last_attempt_at || row?.requested_at || ""), 64) || ""
+    const leaseAt = sanitizeText(String(row?.last_attempt_at || row?.requested_at || ""), 64) || ""
     if (!leaseAt || leaseAt > cutoffIso) continue
     const symbol = normalizeSymbol(row?.gene_symbol || "")
     if (!symbol) continue
@@ -11487,15 +11791,15 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
     next_phase: phase,
     partial: true,
     stop_reason:
-      sanitizeText(result?.stop_reason || stopReasonFallback || "rows_written_target_cap_reached", 255) ||
-      "rows_written_target_cap_reached",
+      sanitizeText(
+        result?.stop_reason || stopReasonFallback || "rows_written_target_cap_reached",
+        255,
+      ) || "rows_written_target_cap_reached",
     result,
   })
   if (phase === ICONOPLASM_SYNC_FINALIZATION_PHASE_RECONCILE) {
-    const reconcile = await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      env,
-      ctx,
-      {
+    const reconcile =
+      await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(env, ctx, {
         path: "/api/iconoplasm/admin/reconcile",
         payload: {
           dry_run: false,
@@ -11505,8 +11809,7 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
           keep: normalizeSyncFinalizationAssetPairs(job?.keep_assets || [], { maxItems: 5000 }),
           legacy: normalizeSyncFinalizationAssetPairs(job?.legacy_assets || [], { maxItems: 5000 }),
         },
-      },
-    )
+      })
     if (reconcile?.partial) {
       return pauseCurrentPhase({ reconcile }, "rows_written_target_cap_reached_during_reconcile")
     }
@@ -11518,10 +11821,8 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
     }
   }
   if (phase === ICONOPLASM_SYNC_FINALIZATION_PHASE_VOTE_SUMMARIES) {
-    const voteSummaries = await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      env,
-      ctx,
-      {
+    const voteSummaries =
+      await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(env, ctx, {
         path: "/api/iconoplasm/admin/read-models/sync",
         payload: {
           symbols: [symbol],
@@ -11530,8 +11831,7 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
           skip_vision_rollups: true,
           skip_dashboard: true,
         },
-      },
-    )
+      })
     if (voteSummaries?.partial) {
       return pauseCurrentPhase(
         { vote_summaries: voteSummaries },
@@ -11546,10 +11846,8 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
     }
   }
   if (phase === ICONOPLASM_SYNC_FINALIZATION_PHASE_GENE_ROLLUPS) {
-    const geneRollups = await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      env,
-      ctx,
-      {
+    const geneRollups =
+      await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(env, ctx, {
         path: "/api/iconoplasm/admin/read-models/sync",
         payload: {
           symbols: [symbol],
@@ -11558,8 +11856,7 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
           skip_vision_rollups: true,
           skip_dashboard: true,
         },
-      },
-    )
+      })
     if (geneRollups?.partial) {
       return pauseCurrentPhase(
         { gene_rollups: geneRollups },
@@ -11569,27 +11866,25 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
     return {
       symbol,
       phase,
-      next_phase: Array.isArray(job?.vision_ids) && job.vision_ids.length
-        ? ICONOPLASM_SYNC_FINALIZATION_PHASE_VISION_ROLLUPS
-        : ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+      next_phase:
+        Array.isArray(job?.vision_ids) && job.vision_ids.length
+          ? ICONOPLASM_SYNC_FINALIZATION_PHASE_VISION_ROLLUPS
+          : ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
       result: { gene_rollups: geneRollups },
     }
   }
   if (phase === ICONOPLASM_SYNC_FINALIZATION_PHASE_VISION_ROLLUPS) {
     const visionIds = normalizeSyncFinalizationVisionIds(job?.vision_ids || [], { maxItems: 5000 })
     if (visionIds.length) {
-      const visionRollups = await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        env,
-        ctx,
-        {
+      const visionRollups =
+        await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(env, ctx, {
           path: "/api/iconoplasm/admin/read-models/sync",
           payload: {
             vision_ids: visionIds,
             invalidate_gallery: false,
             skip_dashboard: true,
           },
-        },
-      )
+        })
       if (visionRollups?.partial) {
         return pauseCurrentPhase(
           { vision_rollups: visionRollups },
@@ -11666,7 +11961,9 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
       scopedSymbolsJson,
     )
     .all()
-  const pendingFinalizeRows = Array.isArray(pendingFinalizeRowsResp?.results) ? pendingFinalizeRowsResp.results : []
+  const pendingFinalizeRows = Array.isArray(pendingFinalizeRowsResp?.results)
+    ? pendingFinalizeRowsResp.results
+    : []
   const uniqueVisionIds = normalizeSyncFinalizationVisionIds(
     pendingFinalizeRows.flatMap((row) => {
       try {
@@ -11685,8 +11982,15 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
   // same global work until the worker falls over near the finish line. Vision
   // rollups follow the same rule: dedupe them across the whole scoped drain
   // instead of recomputing the same shared vision IDs once per symbol.
-  for (let start = 0; start < uniqueVisionIds.length; start += ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX) {
-    const visionChunk = uniqueVisionIds.slice(start, start + ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX)
+  for (
+    let start = 0;
+    start < uniqueVisionIds.length;
+    start += ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX
+  ) {
+    const visionChunk = uniqueVisionIds.slice(
+      start,
+      start + ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX,
+    )
     await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(env, ctx, {
       path: "/api/iconoplasm/admin/read-models/sync",
       payload: {
@@ -11825,7 +12129,10 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
     `/permit?requested=${encodeURIComponent(String(messages.length || 1))}`,
     { requested: messages.length || 1 },
   )
-  const permitGranted = Math.max(0, Math.min(messages.length || 0, Number(permit?.granted || 0) || 0))
+  const permitGranted = Math.max(
+    0,
+    Math.min(messages.length || 0, Number(permit?.granted || 0) || 0),
+  )
   let retrying = 0
   const permittedMessages = messages.slice(0, permitGranted)
   const delayedMessages = messages.slice(permitGranted)
@@ -11871,7 +12178,9 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
     }
   }
   if (processed > 0) {
-    const finalizeResult = await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbols: null })
+    const finalizeResult = await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, {
+      symbols: null,
+    })
     finalized += Math.max(0, Number(finalizeResult?.finalized || 0) || 0)
   }
   await iconoplasmSyncGovernorJson(env, "/release", {
@@ -11885,7 +12194,15 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
     // routes are responding normally.
     public_health: "healthy",
   })
-  return { ok: failed <= 0, processed, failed, retrying, finalized, granted: permitGranted, permit_granted: permitGranted }
+  return {
+    ok: failed <= 0,
+    processed,
+    failed,
+    retrying,
+    finalized,
+    granted: permitGranted,
+    permit_granted: permitGranted,
+  }
 }
 
 async function processPendingSyncFinalizationJobs(
@@ -12044,22 +12361,20 @@ async function processPendingSyncFinalizationJobs(
         ok: false,
         symbol: job.symbol,
         phase: job.phase,
-        error: sanitizeText(String(error?.message || error || "sync finalization failed"), 2000) ||
+        error:
+          sanitizeText(String(error?.message || error || "sync finalization failed"), 2000) ||
           "sync finalization failed",
       })
     }
   }
-  const finalizeResult = !partial && finalizeIfDrained
-    ? await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbols: scopedSymbols })
-    : { ok: true, finalized: 0, remaining: 0 }
+  const finalizeResult =
+    !partial && finalizeIfDrained
+      ? await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbols: scopedSymbols })
+      : { ok: true, finalized: 0, remaining: 0 }
   const remaining = await countSyncFinalizationJobs(env, {
     whereSql: `status <> ?
       AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-    bindArgs: [
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-      scopedEnabled,
-      scopedSymbolsJson,
-    ],
+    bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED, scopedEnabled, scopedSymbolsJson],
   })
   return {
     ok: true,
@@ -12215,7 +12530,10 @@ async function autoPromoteTopVotedPortraitFromCoordinatorState(
       }
     })
     .filter((row) => row.asset_sha256)
-    .filter((row) => row.autopick_eligible && row.status !== "rejected" && assetHasRenderablePortrait(row))
+    .filter(
+      (row) =>
+        row.autopick_eligible && row.status !== "rejected" && assetHasRenderablePortrait(row),
+    )
 
   candidateAssets.sort((left, right) => compareAdminLeaderRows(left, right, currentAssetSha))
   const topAsset = candidateAssets[0] || null
@@ -13704,8 +14022,7 @@ async function removePortraitAssetAndQueueLocalRemoval(
     code: "REMOVED",
     symbol: symbolNorm,
     asset_sha256: assetShaNorm,
-    candidate_image_id:
-      optionalInt(candidateImageId ?? existing?.candidate_image_id) ?? null,
+    candidate_image_id: optionalInt(candidateImageId ?? existing?.candidate_image_id) ?? null,
     unpublished_current: isCurrent,
     deleted_r2_keys: keys.length,
     queued_local_removal: queuedRemoval || null,
@@ -13937,7 +14254,8 @@ function sortDiscoveryRowsForOrder(rows, order, seed = null) {
     }
     if (order === "random") {
       return (
-        discoveryRandomRank(seed, left.gene_symbol) - discoveryRandomRank(seed, right.gene_symbol) ||
+        discoveryRandomRank(seed, left.gene_symbol) -
+          discoveryRandomRank(seed, right.gene_symbol) ||
         compareNullableTextAsc(left.gene_symbol, right.gene_symbol)
       )
     }
@@ -14018,7 +14336,11 @@ async function hydratedCatalogArtifact(env, hash, { fresh = false } = {}) {
         baseHash,
         await sharedPublishedPortraitFingerprint(env, fresh ? { fresh: true } : undefined),
       ) || baseHash
-  if (!fresh && hydratedCatalogArtifactCache.key === cacheKey && hydratedCatalogArtifactCache.value) {
+  if (
+    !fresh &&
+    hydratedCatalogArtifactCache.key === cacheKey &&
+    hydratedCatalogArtifactCache.value
+  ) {
     return hydratedCatalogArtifactCache.value
   }
   if (!fresh) {
@@ -14091,7 +14413,8 @@ async function currentGalleryVersionBarrier(env) {
     } catch {
       value = null
     }
-    galleryVersionCache.value = value && typeof value === "object" ? value : String(raw || "0").trim() || "0"
+    galleryVersionCache.value =
+      value && typeof value === "object" ? value : String(raw || "0").trim() || "0"
   } catch {
     galleryVersionCache.value = galleryVersionCache.value || "0"
   }
@@ -14320,8 +14643,7 @@ function sortGalleryItems(items, order, seed = null) {
         compareNullableNumberDescWithNullBottom(
           gallerySortablePositiveMetric(left.weight_kg),
           gallerySortablePositiveMetric(right.weight_kg),
-        ) ||
-        compareGalleryPopularityFallback(left, right)
+        ) || compareGalleryPopularityFallback(left, right)
       )
     }
     if (order === "lightest") {
@@ -14329,8 +14651,7 @@ function sortGalleryItems(items, order, seed = null) {
         compareNullableNumberAscWithNullBottom(
           gallerySortablePositiveMetric(left.weight_kg),
           gallerySortablePositiveMetric(right.weight_kg),
-        ) ||
-        compareGalleryPopularityFallback(left, right)
+        ) || compareGalleryPopularityFallback(left, right)
       )
     }
     if (order === "oldest") {
@@ -14338,8 +14659,7 @@ function sortGalleryItems(items, order, seed = null) {
         compareNullableNumberDescWithNullBottom(
           gallerySortablePositiveMetric(left.age_years),
           gallerySortablePositiveMetric(right.age_years),
-        ) ||
-        compareGalleryPopularityFallback(left, right)
+        ) || compareGalleryPopularityFallback(left, right)
       )
     }
     if (order === "youngest") {
@@ -14347,8 +14667,7 @@ function sortGalleryItems(items, order, seed = null) {
         compareNullableNumberAscWithNullBottom(
           gallerySortablePositiveMetric(left.age_years),
           gallerySortablePositiveMetric(right.age_years),
-        ) ||
-        compareGalleryPopularityFallback(left, right)
+        ) || compareGalleryPopularityFallback(left, right)
       )
     }
     if (order === "newest") {
@@ -14444,7 +14763,10 @@ async function galleryPublishedRows(env, { fresh = false } = {}) {
   if (!env.ICONOPLASM_DB) return []
   if (fresh) return queryGalleryPublishedRows(env)
   const version = await currentGalleryVersion(env)
-  if (galleryPublishedRowsCache.version === version && Array.isArray(galleryPublishedRowsCache.value)) {
+  if (
+    galleryPublishedRowsCache.version === version &&
+    Array.isArray(galleryPublishedRowsCache.value)
+  ) {
     return galleryPublishedRowsCache.value
   }
   const cached = await readVersionedSharedJson(env, KV_GALLERY_PUBLISHED_ROWS_PREFIX, version)
@@ -14473,7 +14795,10 @@ async function galleryUniquenessRows(env, { fresh = false } = {}) {
   if (!env.ICONOPLASM_DB) return []
   if (fresh) return queryGalleryUniquenessRows(env)
   const version = await currentGalleryVersion(env)
-  if (galleryUniquenessRowsCache.version === version && Array.isArray(galleryUniquenessRowsCache.value)) {
+  if (
+    galleryUniquenessRowsCache.version === version &&
+    Array.isArray(galleryUniquenessRowsCache.value)
+  ) {
     return galleryUniquenessRowsCache.value
   }
   const cached = await readVersionedSharedJson(env, KV_GALLERY_UNIQUENESS_ROWS_PREFIX, version)
@@ -15111,6 +15436,41 @@ async function handlePublicMetadata(request, env) {
   return json(metadata, 200, { ETag: etag, "Cache-Control": "public, max-age=300" })
 }
 
+async function handlePublicStats(request, env) {
+  if (!env?.KV) {
+    return json({ error: "Public stats not available" }, 404, {
+      "Cache-Control": "public, max-age=300",
+    })
+  }
+  let payload = null
+  try {
+    const raw = await env.KV.get(KV_PUBLIC_STATS)
+    payload = normalizePublicStatsPayload(raw ? JSON.parse(raw) : null)
+  } catch {
+    payload = null
+  }
+  if (!payload) {
+    return json({ error: "Public stats not published yet" }, 404, {
+      "Cache-Control": "public, max-age=300",
+    })
+  }
+  const etag = await etagFor(payload)
+  if (etagMatches(request.headers.get("If-None-Match"), etag)) {
+    return new Response(null, {
+      status: 304,
+      headers: {
+        ...corsHeaders(),
+        ETag: etag,
+        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+      },
+    })
+  }
+  return json(payload, 200, {
+    ETag: etag,
+    "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+  })
+}
+
 function handlePublicSchema() {
   return json(publicSchemaDoc(), 200, { "Cache-Control": "public, max-age=3600" })
 }
@@ -15143,7 +15503,9 @@ async function handlePublicCatalogManifest(request, env) {
     gene_count: manifest.gene_count || null,
     artifact_schema_version: manifest.artifact_schema_version || manifest.schema_version || 1,
     min_extension_version:
-      manifest.min_extension_version || env.ICONOPLASM_MIN_EXTENSION_VERSION || MIN_EXTENSION_VERSION,
+      manifest.min_extension_version ||
+      env.ICONOPLASM_MIN_EXTENSION_VERSION ||
+      MIN_EXTENSION_VERSION,
     portrait_base_url: manifest.portrait_base_url || portraitBase(url, env),
     artifact_url: buildHash
       ? publicUrl(url, `/catalog/${publicCatalogArtifactFilename(buildHash)}`)
@@ -15246,13 +15608,28 @@ function mobileCardFieldStatusForGeneRecord(record) {
         : "known_absent",
     family: essence.family_surname ? "present" : "known_absent",
     family_feature: essence.family_feature ? "present" : "known_absent",
-    category: record?.protein_length_aa != null || record?.molecular_weight_kda != null ? "present" : "known_absent",
-    age: record?.first_publication_year != null || essence.age_years != null || essence.age ? "present" : "known_absent",
-    weight: record?.molecular_weight_kda != null || record?.weight_kg != null ? "present" : "known_absent",
-    pfam_clans: Array.isArray(essence.aesthetics_origin) && essence.aesthetics_origin.length ? "present" : "known_absent",
-    style_notes: Array.isArray(essence.aesthetics) && essence.aesthetics.length ? "present" : "known_absent",
+    category:
+      record?.protein_length_aa != null || record?.molecular_weight_kda != null
+        ? "present"
+        : "known_absent",
+    age:
+      record?.first_publication_year != null || essence.age_years != null || essence.age
+        ? "present"
+        : "known_absent",
+    weight:
+      record?.molecular_weight_kda != null || record?.weight_kg != null
+        ? "present"
+        : "known_absent",
+    pfam_clans:
+      Array.isArray(essence.aesthetics_origin) && essence.aesthetics_origin.length
+        ? "present"
+        : "known_absent",
+    style_notes:
+      Array.isArray(essence.aesthetics) && essence.aesthetics.length ? "present" : "known_absent",
     alignment:
-      Array.isArray(essence.politics_origin) && essence.politics_origin.length ? "present" : "known_absent",
+      Array.isArray(essence.politics_origin) && essence.politics_origin.length
+        ? "present"
+        : "known_absent",
     political_note: essence.politics || essence.faction ? "present" : "known_absent",
     color_breakdown:
       record?.tissue_tau != null || record?.loeuf != null || record?.constraint_percentile != null
@@ -15262,7 +15639,10 @@ function mobileCardFieldStatusForGeneRecord(record) {
   return status
 }
 
-function buildMobileCardVMFromGeneRecord(record, { snapshotVersion = "0", source = "request_composed" } = {}) {
+function buildMobileCardVMFromGeneRecord(
+  record,
+  { snapshotVersion = "0", source = "request_composed" } = {},
+) {
   const symbol = normalizeSymbol(record?.symbol || record?.canonical_symbol || "")
   if (!symbol) return null
   const fullName = sanitizeText(record?.full_name || "", 255) || symbol
@@ -15317,7 +15697,11 @@ async function readMobileCardVMFromSharedSnapshot(env, snapshotVersion, symbol) 
   if (!key) return null
   const memory = mobileCardVMCache.get(key)
   if (assertCompleteMobileCardVM(memory)) return memory
-  const cached = await readVersionedSharedJson(env, `${KV_MOBILE_CARD_VM_PREFIX}${snapshotVersion}:`, normalizeSymbol(symbol || ""))
+  const cached = await readVersionedSharedJson(
+    env,
+    `${KV_MOBILE_CARD_VM_PREFIX}${snapshotVersion}:`,
+    normalizeSymbol(symbol || ""),
+  )
   if (!assertCompleteMobileCardVM(cached)) return null
   mobileCardVMCache.set(key, cached)
   return cached
@@ -15346,12 +15730,15 @@ async function handleMobileCardManifest(request, env) {
   const symbols = normalizeRequestedSymbols(body.symbols || [], 100)
   const layout = sanitizeText(body.layout || MOBILE_CARD_LAYOUT, 64) || MOBILE_CARD_LAYOUT
   if (layout !== MOBILE_CARD_LAYOUT) {
-    return json({ error: "Unsupported mobile card layout", layout }, 400, { "Cache-Control": "no-store" })
+    return json({ error: "Unsupported mobile card layout", layout }, 400, {
+      "Cache-Control": "no-store",
+    })
   }
   const versionInfo = await currentMobileCardSnapshotVersion(env)
   const requestedVersion = sanitizeText(body.version || "", 128)
   const snapshotVersion =
-    requestedVersion && (requestedVersion === versionInfo.current || requestedVersion === versionInfo.previous)
+    requestedVersion &&
+    (requestedVersion === versionInfo.current || requestedVersion === versionInfo.previous)
       ? requestedVersion
       : versionInfo.current
   if (!symbols.length) {
@@ -15420,7 +15807,9 @@ async function handleMobileCardManifest(request, env) {
       schema: MOBILE_CARD_MANIFEST_SCHEMA,
       snapshot_version: snapshotVersion,
       data_source: dataSource,
-      cards: cards.sort((left, right) => symbols.indexOf(left.symbol) - symbols.indexOf(right.symbol)),
+      cards: cards.sort(
+        (left, right) => symbols.indexOf(left.symbol) - symbols.indexOf(right.symbol),
+      ),
       missing,
       diagnostics: {
         fallback_version_used: fallbackVersionUsed,
@@ -15692,14 +16081,9 @@ async function handlePublicGeneSearch(request, env) {
   const qUpper = rawQuery.toUpperCase()
   const qLower = rawQuery.toLowerCase()
   if (!rawQuery)
-    return json(
-      { genes: [], query: "", scope_applied: requestedScope },
-      200,
-      {
-        "Cache-Control":
-          requestedScope === "catalog" ? "public, max-age=30" : "no-store",
-      },
-    )
+    return json({ genes: [], query: "", scope_applied: requestedScope }, 200, {
+      "Cache-Control": requestedScope === "catalog" ? "public, max-age=30" : "no-store",
+    })
   await warmCatalogCache(env)
   const limit = Math.max(
     1,
@@ -15743,11 +16127,9 @@ async function handlePublicGeneSearch(request, env) {
 
   const genes = matches.slice(0, limit)
   const cacheControl = requestedScope === "catalog" ? "public, max-age=30" : "no-store"
-  return json(
-    { genes, query: qUpper, scope_applied: appliedScope },
-    200,
-    { "Cache-Control": cacheControl },
-  )
+  return json({ genes, query: qUpper, scope_applied: appliedScope }, 200, {
+    "Cache-Control": cacheControl,
+  })
 }
 
 async function handlePublicGallery(request, env, ctx) {
@@ -15777,7 +16159,11 @@ async function handlePublicGallery(request, env, ctx) {
   return response
 }
 
-export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, env, ctx = { waitUntil() {} }) {
+export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+  request,
+  env,
+  ctx = { waitUntil() {} },
+) {
   const url = new URL(request.url)
   const path = url.pathname
   let meteredEnv = env
@@ -15804,11 +16190,12 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       path === "/artist-styles" ||
       path === "/artist-styles/"
     ) {
-      const response = await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        meteredEnv,
-        ctx,
-      )
+      const response =
+        await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+          request,
+          meteredEnv,
+          ctx,
+        )
       responseStatus = response.status
       return response
     }
@@ -15828,7 +16215,9 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       return response
     }
 
-    if (isIconoplasmVoteProjectionRefreshRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
+    if (
+      isIconoplasmVoteProjectionRefreshRequestForTheOnlyAllowedStatefulWorker(path, request.method)
+    ) {
       const payload = await parseJsonBody(request)
       const response = json(
         await processPendingVoteProjectionRefreshJobs(meteredEnv, {
@@ -15841,7 +16230,12 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       return response
     }
 
-    if (isIconoplasmSyncFinalizationProcessRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
+    if (
+      isIconoplasmSyncFinalizationProcessRequestForTheOnlyAllowedStatefulWorker(
+        path,
+        request.method,
+      )
+    ) {
       const payload = await parseJsonBody(request)
       const response = json(
         await processPendingSyncFinalizationJobs(meteredEnv, ctx, {
@@ -15864,6 +16258,11 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       responseStatus = response.status
       return response
     }
+    if (path === publicApiPath("/stats")) {
+      const response = await handlePublicStats(request, meteredEnv)
+      responseStatus = response.status
+      return response
+    }
     if (path === publicApiPath("/catalog/manifest")) {
       const response = await handlePublicCatalogManifest(request, meteredEnv)
       responseStatus = response.status
@@ -15875,20 +16274,22 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       return response
     }
     if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) {
-      const response = await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        meteredEnv,
-        ctx,
-      )
+      const response =
+        await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+          request,
+          meteredEnv,
+          ctx,
+        )
       responseStatus = response.status
       return response
     }
     if (path.startsWith("/portraits/")) {
-      const response = await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        meteredEnv,
-        ctx,
-      )
+      const response =
+        await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+          request,
+          meteredEnv,
+          ctx,
+        )
       responseStatus = response.status
       return response
     }
@@ -15914,7 +16315,9 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
     }
     if (path.startsWith(publicApiPath("/genes/"))) {
       const deniedUrl = new URL(request.url)
-      const response = json(publicRichRouteDeniedPayload(deniedUrl, "gene_detail"), 403, { "Cache-Control": "no-store" })
+      const response = json(publicRichRouteDeniedPayload(deniedUrl, "gene_detail"), 403, {
+        "Cache-Control": "no-store",
+      })
       responseStatus = response.status
       return response
     }
@@ -15943,11 +16346,12 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       const headers = new Headers(request.headers)
       headers.set(ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE, "1")
       const internalRequest = new Request(request, { headers })
-      const response = await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        internalRequest,
-        meteredEnv,
-        ctx,
-      )
+      const response =
+        await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+          internalRequest,
+          meteredEnv,
+          ctx,
+        )
       responseStatus = response.status
       return response
     }
@@ -16004,12 +16408,20 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
                 : handledError instanceof IconoplasmUnclassifiedHandledRouteError
                   ? "ICONOPLASM_ROUTE_CLASSIFICATION_MISSING"
                   : "",
-        limiterDetail: handledError instanceof IconoplasmAdminMutationLimiterActiveError ? handledError.detail : null,
+        limiterDetail:
+          handledError instanceof IconoplasmAdminMutationLimiterActiveError
+            ? handledError.detail
+            : null,
       })
     } else if (handledError instanceof IconoplasmAdminMutationLimiterActiveError) {
-      emitIconoplasmBudgetAttributionTelemetryForLimiterRejection(meteredEnv, request, handledError.detail, {
-        responseStatus,
-      })
+      emitIconoplasmBudgetAttributionTelemetryForLimiterRejection(
+        meteredEnv,
+        request,
+        handledError.detail,
+        {
+          responseStatus,
+        },
+      )
     }
   }
 }
@@ -16175,7 +16587,14 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
   const internalGatewayRequest = isInternalRequestForTheOnlyAllowedStatefulWorker(request)
   const done = async (route, res, schema = null) => {
     const out = asHead(request, res)
-    await logReq(route, request, out.status, started, schema, iconoplasmD1DailyBudgetUsageSnapshotFromEnv(env))
+    await logReq(
+      route,
+      request,
+      out.status,
+      started,
+      schema,
+      iconoplasmD1DailyBudgetUsageSnapshotFromEnv(env),
+    )
     return out
   }
 
@@ -16197,7 +16616,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       !internalGatewayRequest &&
       isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, request.method)
     ) {
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+      )
       return done(
         "iconoplasm_api_only_allowed_stateful_worker",
         new Response(response.body, { status: response.status, headers: response.headers }),
@@ -16217,11 +16639,40 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+      )
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
         "public_metadata",
+        new Response(response.body, { status: response.status, headers }),
+        API_SCHEMA_VERSION,
+      )
+    }
+
+    if (path === publicApiPath("/stats")) {
+      const rl = rateLimit(request, "public_stats", 60)
+      if (rl.retryAfterSeconds) {
+        return done(
+          "public_stats_rl",
+          json(
+            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
+            429,
+            rl.headers,
+          ),
+          API_SCHEMA_VERSION,
+        )
+      }
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+      )
+      const headers = new Headers(response.headers)
+      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
+      return done(
+        "public_stats",
         new Response(response.body, { status: response.status, headers }),
         API_SCHEMA_VERSION,
       )
@@ -16263,7 +16714,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+      )
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -16286,7 +16740,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+      )
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -16332,7 +16789,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+      )
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -16355,7 +16815,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+      )
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -16385,7 +16848,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+      )
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -16408,7 +16874,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+      )
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -16431,7 +16900,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+      )
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -16455,7 +16927,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
       }
       const rawSymbol = path.slice(publicApiPath("/media/").length)
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+      )
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -16485,7 +16960,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           API_SCHEMA_VERSION,
         )
       }
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
+      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+      )
       const headers = new Headers(response.headers)
       for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
@@ -16656,10 +17134,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
     if (path === "/api/iconoplasm/discoveries/me" && request.method === "GET") {
       if (!env.ICONOPLASM_DB) {
-        return done(
-          "discoveries_me_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
+        return done("discoveries_me_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
       }
       const requestedOrder = normalizeIconoplasmHomeOrder(url.searchParams.get("order"), "newest")
       const requestedSeed =
@@ -16801,7 +17276,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const discoveredCount = await countUserGeneDiscoveries(env, { userId })
       const versionInfo = await currentMobileCardSnapshotVersion(env)
       const snapshotVersion = versionInfo.current
-      const symbols = windowData.rows.map((row) => normalizeSymbol(row.gene_symbol || "")).filter(Boolean)
+      const symbols = windowData.rows
+        .map((row) => normalizeSymbol(row.gene_symbol || ""))
+        .filter(Boolean)
       const vmResults = await Promise.all(
         symbols.map(async (symbol) => {
           const current = await readMobileCardVMFromSharedSnapshot(env, snapshotVersion, symbol)
@@ -16891,17 +17368,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
     if (path === "/api/iconoplasm/discoveries/merge" && request.method === "POST") {
       if (!env.ICONOPLASM_DB) {
-        return done(
-          "discoveries_merge_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
+        return done("discoveries_merge_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
       }
       const sessionUser = await iconoplasmSessionUser(request, env)
       if (!sessionUser?.user_id) {
         return done(
           "discoveries_merge_401",
           json(
-            { ok: false, code: "AUTH_REQUIRED", error: "Please log in first to merge guest discoveries." },
+            {
+              ok: false,
+              code: "AUTH_REQUIRED",
+              error: "Please log in first to merge guest discoveries.",
+            },
             401,
             { "Cache-Control": "no-store" },
           ),
@@ -16915,9 +17393,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!result.ok) {
         return done(
           "discoveries_merge_400",
-          json({ ok: false, error: String(result.error || "Could not merge guest discoveries") }, 400, {
-            "Cache-Control": "no-store",
-          }),
+          json(
+            { ok: false, error: String(result.error || "Could not merge guest discoveries") },
+            400,
+            {
+              "Cache-Control": "no-store",
+            },
+          ),
         )
       }
       return done(
@@ -16961,10 +17443,15 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    const geneRequestSummaryMatch = path.match(/^\/api\/iconoplasm\/requests\/gene\/([^/]+)\/summary$/)
+    const geneRequestSummaryMatch = path.match(
+      /^\/api\/iconoplasm\/requests\/gene\/([^/]+)\/summary$/,
+    )
     if (geneRequestSummaryMatch && request.method === "GET") {
       if (!env.ICONOPLASM_DB)
-        return done("gene_request_summary_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+        return done(
+          "gene_request_summary_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
       const symbol = normalizeSymbol(geneRequestSummaryMatch[1])
       if (!symbol) return done("gene_request_summary_400", json({ error: "Invalid symbol" }, 400))
       return done(
@@ -16977,14 +17464,25 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
     if (path === "/api/iconoplasm/requests/options" && request.method === "GET") {
       if (!env.ICONOPLASM_DB)
-        return done("gene_request_options_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+        return done(
+          "gene_request_options_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
       const payload = await generationRequestOptionsPayload(env, url, request)
       if (!payload.ok) {
         return done(
           "gene_request_options_401",
-          json({ ok: false, code: payload.code || "AUTH_REQUIRED", error: payload.error || "Unauthorized" }, payload.status || 401, {
-            "Cache-Control": "no-store",
-          }),
+          json(
+            {
+              ok: false,
+              code: payload.code || "AUTH_REQUIRED",
+              error: payload.error || "Unauthorized",
+            },
+            payload.status || 401,
+            {
+              "Cache-Control": "no-store",
+            },
+          ),
         )
       }
       return done(
@@ -17022,14 +17520,25 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
     if (path === "/api/iconoplasm/requests" && request.method === "POST") {
       if (!env.ICONOPLASM_DB)
-        return done("create_generation_request_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+        return done(
+          "create_generation_request_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
       const sessionUser = await iconoplasmSessionUser(request, env)
       if (!sessionUser?.user_id) {
         return done(
           "create_generation_request_401",
-          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log in first to request new candidates." }, 401, {
-            "Cache-Control": "no-store",
-          }),
+          json(
+            {
+              ok: false,
+              code: "AUTH_REQUIRED",
+              error: "Please log in first to request new candidates.",
+            },
+            401,
+            {
+              "Cache-Control": "no-store",
+            },
+          ),
         )
       }
       let p
@@ -17046,7 +17555,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         requestedVisionId: p?.requested_vision_id || p?.vision_id || "",
         requestKind: p?.request_kind || p?.kind || "new_candidate",
         requestPrompt: p?.request_prompt || p?.prompt || "",
-        sourceGeneSymbol: p?.source_gene_symbol || p?.source_symbol || p?.symbol || p?.gene_symbol || "",
+        sourceGeneSymbol:
+          p?.source_gene_symbol || p?.source_symbol || p?.symbol || p?.gene_symbol || "",
         sourceAssetSha256: p?.source_asset_sha256 || p?.asset_sha256 || "",
       })
       if (!result.ok) {
@@ -17075,7 +17585,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_requests_open_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
-        return done("admin_requests_open_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+        return done(
+          "admin_requests_open_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
       const limit = Math.max(
         1,
         Math.min(2000, Number.parseInt(url.searchParams.get("limit") || "500", 10) || 500),
@@ -17101,7 +17614,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_requests_fulfill_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
-        return done("admin_requests_fulfill_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+        return done(
+          "admin_requests_fulfill_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
       let p = {}
       try {
         p = await request.json()
@@ -17112,10 +17628,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         items: Array.isArray(p?.items) ? p.items : [],
         resolvedBy: await actor(request, env),
       })
-      return done(
-        "admin_requests_fulfill",
-        json(result, 200, { "Cache-Control": "no-store" }),
-      )
+      return done("admin_requests_fulfill", json(result, 200, { "Cache-Control": "no-store" }))
     }
 
     if (path === "/api/iconoplasm/candidates/copy" && request.method === "POST") {
@@ -17130,9 +17643,17 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!sessionUser?.user_id) {
         return done(
           "candidate_copy_401",
-          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log in first to copy a candidate blot." }, 401, {
-            "Cache-Control": "no-store",
-          }),
+          json(
+            {
+              ok: false,
+              code: "AUTH_REQUIRED",
+              error: "Please log in first to copy a candidate blot.",
+            },
+            401,
+            {
+              "Cache-Control": "no-store",
+            },
+          ),
         )
       }
       let p
@@ -17143,7 +17664,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
       const userId = normalizeUserId(sessionUser.user_id)
       const copyResult = await copyPortraitCandidateToGene(env, {
-        sourceGeneSymbol: p?.source_gene_symbol || p?.source_symbol || p?.symbol || p?.gene_symbol || "",
+        sourceGeneSymbol:
+          p?.source_gene_symbol || p?.source_symbol || p?.symbol || p?.gene_symbol || "",
         targetGeneSymbol: p?.target_gene_symbol || p?.target_symbol || "",
         assetSha256: p?.asset_sha256 || p?.sha256 || "",
         actorId: userId,
@@ -17151,9 +17673,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!copyResult.ok) {
         return done(
           "candidate_copy_400",
-          json({ ok: false, error: String(copyResult.error || "Could not copy candidate blot") }, 400, {
-            "Cache-Control": "no-store",
-          }),
+          json(
+            { ok: false, error: String(copyResult.error || "Could not copy candidate blot") },
+            400,
+            {
+              "Cache-Control": "no-store",
+            },
+          ),
         )
       }
       const coordinatorWrite = await iconoplasmVoteCoordinatorSetVote(env, {
@@ -17167,7 +17693,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!coordinatorWrite?.ok) {
         return done("candidate_copy_502", json({ error: "Vote coordinator write failed" }, 502))
       }
-      const assetCandidateRef = voteAssetIdentity(copyResult.target_gene_symbol, copyResult.asset_sha256)
+      const assetCandidateRef = voteAssetIdentity(
+        copyResult.target_gene_symbol,
+        copyResult.asset_sha256,
+      )
       await projectVoteCoordinatorLedgerRow(env, {
         symbol: copyResult.target_gene_symbol,
         assetSha256: copyResult.asset_sha256,
@@ -17476,7 +18005,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         upserted += Math.max(0, Number(coordinatorImport?.upserted || 0) || 0)
         deleted += Math.max(0, Number(coordinatorImport?.deleted || 0) || 0)
         invalid += Math.max(0, Number(coordinatorImport?.invalid || 0) || 0)
-        for (const row of Array.isArray(coordinatorImport?.results) ? coordinatorImport.results : []) {
+        for (const row of Array.isArray(coordinatorImport?.results)
+          ? coordinatorImport.results
+          : []) {
           await projectVoteCoordinatorLedgerRow(env, {
             symbol,
             assetSha256: row?.asset_sha256,
@@ -17904,9 +18435,15 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    if (path === "/api/iconoplasm/admin/votes/projection-refresh/pending" && request.method === "GET") {
+    if (
+      path === "/api/iconoplasm/admin/votes/projection-refresh/pending" &&
+      request.method === "GET"
+    ) {
       if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_votes_projection_refresh_pending_403", json({ error: "Unauthorized" }, 403))
+        return done(
+          "admin_votes_projection_refresh_pending_403",
+          json({ error: "Unauthorized" }, 403),
+        )
       if (!env.ICONOPLASM_DB)
         return done(
           "admin_votes_projection_refresh_pending_500",
@@ -18124,11 +18661,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (rl.retryAfterSeconds !== null) {
         return done(
           "artist_blacklist_submission_429",
-          json(
-            { error: "Too many submissions. Try again in a minute." },
-            429,
-            { "Cache-Control": "no-store", ...rl.headers },
-          ),
+          json({ error: "Too many submissions. Try again in a minute." }, 429, {
+            "Cache-Control": "no-store",
+            ...rl.headers,
+          }),
         )
       }
       if (!env.ICONOPLASM_DB)
@@ -18151,11 +18687,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (honeypot) {
         return done(
           "artist_blacklist_submission_bot",
-          json(
-            { ok: true, queued: false, ignored: true },
-            200,
-            { "Cache-Control": "no-store", ...rl.headers },
-          ),
+          json({ ok: true, queued: false, ignored: true }, 200, {
+            "Cache-Control": "no-store",
+            ...rl.headers,
+          }),
         )
       }
 
@@ -18171,14 +18706,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (/\s/.test(artistNameInput)) {
         return done(
           "artist_blacklist_submission_400",
-          json({ error: "Artist tags cannot contain spaces. Example: @artist_(name)" }, 400, { ...rl.headers }),
+          json({ error: "Artist tags cannot contain spaces. Example: @artist_(name)" }, 400, {
+            ...rl.headers,
+          }),
         )
       }
       const artistTagInput = normalizeArtistTag(artistNameInput)
       if (!artistTagInput || artistTagInput !== artistNameInput) {
         return done(
           "artist_blacklist_submission_400",
-          json({ error: "Use the exact artist tag. Example: @artist_(name)" }, 400, { ...rl.headers }),
+          json({ error: "Use the exact artist tag. Example: @artist_(name)" }, 400, {
+            ...rl.headers,
+          }),
         )
       }
 
@@ -18248,10 +18787,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     if (path === "/artist-styles" || path === "/artist-styles/" || path === "/blocklist/") {
       const redirectUrl = new URL("/blocklist", url)
       redirectUrl.search = url.search
-      return done(
-        "blocklist_redirect",
-        Response.redirect(redirectUrl.toString(), 308),
-      )
+      return done("blocklist_redirect", Response.redirect(redirectUrl.toString(), 308))
     }
 
     if (path === "/blocklist") {
@@ -18260,10 +18796,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           turnstileSiteKey: sanitizeText(env.ICONOPLASM_TURNSTILE_SITE_KEY || "", 255) || "",
         }),
       )
-      return done(
-        "blocklist_page",
-        html(artistStylesHtml, 200, { "Cache-Control": "no-store" }),
-      )
+      return done("blocklist_page", html(artistStylesHtml, 200, { "Cache-Control": "no-store" }))
     }
 
     if (path === "/admin") {
@@ -18311,12 +18844,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       } catch (error) {
         return done(
           "artist_styles_remove_400",
-          json({ error: String(error?.message || error || "Artist tag blocklist update failed") }, 400),
+          json(
+            { error: String(error?.message || error || "Artist tag blocklist update failed") },
+            400,
+          ),
         )
       }
     }
 
-    if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/pending" && request.method === "GET") {
+    if (
+      path === "/api/iconoplasm/admin/artist-blacklist-submissions/pending" &&
+      request.method === "GET"
+    ) {
       if (!(await isIconoplasmAdmin(request, env)))
         return done(
           "artist_blacklist_submissions_pending_403",
@@ -18346,12 +18885,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/ack" && request.method === "POST") {
+    if (
+      path === "/api/iconoplasm/admin/artist-blacklist-submissions/ack" &&
+      request.method === "POST"
+    ) {
       if (!(await isIconoplasmAdmin(request, env)))
-        return done(
-          "artist_blacklist_submissions_ack_403",
-          json({ error: "Unauthorized" }, 403),
-        )
+        return done("artist_blacklist_submissions_ack_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
         return done(
           "artist_blacklist_submissions_ack_500",
@@ -18361,10 +18900,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       try {
         p = await request.json()
       } catch {
-        return done(
-          "artist_blacklist_submissions_ack_400",
-          json({ error: "Invalid JSON" }, 400),
-        )
+        return done("artist_blacklist_submissions_ack_400", json({ error: "Invalid JSON" }, 400))
       }
       const actorId = await actor(request, env)
       const resolved = await resolveArtistBlacklistSubmissions(env, {
@@ -18414,53 +18950,72 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const scopedSymbolsJson = JSON.stringify(scopedSymbols)
       const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
       const jobs = await listPendingSyncFinalizationJobs(env, { limit, symbols: scopedSymbols })
-      const [queuedCount, runningCount, retryingCount, pendingFinalizeCount, unfinishedCount, completedCount, latestCompletedRow] =
-        await Promise.all([
-          countSyncFinalizationJobs(env, {
-            whereSql: `status = ?
+      const [
+        queuedCount,
+        runningCount,
+        retryingCount,
+        pendingFinalizeCount,
+        unfinishedCount,
+        completedCount,
+        latestCompletedRow,
+      ] = await Promise.all([
+        countSyncFinalizationJobs(env, {
+          whereSql: `status = ?
               AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-            bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED, scopedEnabled, scopedSymbolsJson],
-          }),
-          countSyncFinalizationJobs(env, {
-            whereSql: `status = ?
+          bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED, scopedEnabled, scopedSymbolsJson],
+        }),
+        countSyncFinalizationJobs(env, {
+          whereSql: `status = ?
               AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-            bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_RUNNING, scopedEnabled, scopedSymbolsJson],
-          }),
-          countSyncFinalizationJobs(env, {
-            whereSql: `status = ?
+          bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_RUNNING, scopedEnabled, scopedSymbolsJson],
+        }),
+        countSyncFinalizationJobs(env, {
+          whereSql: `status = ?
               AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-            bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING, scopedEnabled, scopedSymbolsJson],
-          }),
-          countSyncFinalizationJobs(env, {
-            whereSql: `phase = ? AND status <> ?
+          bindArgs: [
+            ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
+            scopedEnabled,
+            scopedSymbolsJson,
+          ],
+        }),
+        countSyncFinalizationJobs(env, {
+          whereSql: `phase = ? AND status <> ?
               AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-            bindArgs: [
-              ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-              ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-              scopedEnabled,
-              scopedSymbolsJson,
-            ],
-          }),
-          countSyncFinalizationJobs(env, {
-            whereSql: `status <> ?
+          bindArgs: [
+            ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+            ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+            scopedEnabled,
+            scopedSymbolsJson,
+          ],
+        }),
+        countSyncFinalizationJobs(env, {
+          whereSql: `status <> ?
               AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-            bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED, scopedEnabled, scopedSymbolsJson],
-          }),
-          countSyncFinalizationJobs(env, {
-            whereSql: `status = ?
+          bindArgs: [
+            ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+            scopedEnabled,
+            scopedSymbolsJson,
+          ],
+        }),
+        countSyncFinalizationJobs(env, {
+          whereSql: `status = ?
               AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-            bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED, scopedEnabled, scopedSymbolsJson],
-          }),
-          env.ICONOPLASM_DB.prepare(
-            `SELECT MAX(completed_at) AS completed_at
+          bindArgs: [
+            ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+            scopedEnabled,
+            scopedSymbolsJson,
+          ],
+        }),
+        env.ICONOPLASM_DB.prepare(
+          `SELECT MAX(completed_at) AS completed_at
              FROM icono_sync_finalization_jobs
              WHERE status = ?
                AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))
                AND completed_at <> ''`,
-          )
-            .bind(ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED, scopedEnabled, scopedSymbolsJson)
-            .first(),
-        ])
+        )
+          .bind(ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED, scopedEnabled, scopedSymbolsJson)
+          .first(),
+      ])
       const latestCompletedAt = sanitizeText(latestCompletedRow?.completed_at || "", 64) || ""
       const governorStatus = await iconoplasmSyncGovernorJson(env, "/status", {})
 
@@ -18486,8 +19041,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               dlq: null,
               active_consumers: Number(governorStatus?.governor?.active_consumers || 0) || 0,
               current_bottleneck: String(governorStatus?.governor?.current_bottleneck || "unknown"),
-              target_utilization: Number(governorStatus?.governor?.target_utilization || ICONOPLASM_SYNC_GOVERNOR_TARGET_UTILIZATION),
-              observed_utilization: Number(governorStatus?.governor?.observed_utilization || 0) || 0,
+              target_utilization: Number(
+                governorStatus?.governor?.target_utilization ||
+                  ICONOPLASM_SYNC_GOVERNOR_TARGET_UTILIZATION,
+              ),
+              observed_utilization:
+                Number(governorStatus?.governor?.observed_utilization || 0) || 0,
               public_health: String(governorStatus?.governor?.public_health || "unknown"),
             },
             summary: {
@@ -18523,11 +19082,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         return done("admin_finalization_enqueue_400", json({ error: "Invalid JSON" }, 400))
       }
 
-      const rows = Array.isArray(p?.rows)
-        ? p.rows
-        : Array.isArray(p?.jobs)
-          ? p.jobs
-          : []
+      const rows = Array.isArray(p?.rows) ? p.rows : Array.isArray(p?.jobs) ? p.jobs : []
       if (!rows.length)
         return done(
           "admin_finalization_enqueue_400",
@@ -18540,7 +19095,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
 
       const actorId = await actor(request, env)
-      const reason = sanitizeText(p?.reason || "workstation_sync_finalization", 2000) ||
+      const reason =
+        sanitizeText(p?.reason || "workstation_sync_finalization", 2000) ||
         "workstation_sync_finalization"
       const enqueueResult = await enqueueSyncFinalizationJobs(env, {
         rows,
@@ -18556,7 +19112,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             {
               ok: false,
               code: "QUEUE_PATH_REQUIRED",
-              error: "process_now is no longer supported. Iconoplasm finalization must run through the Cloudflare Queue drain path.",
+              error:
+                "process_now is no longer supported. Iconoplasm finalization must run through the Cloudflare Queue drain path.",
             },
             410,
             { "Cache-Control": "no-store" },
@@ -18633,7 +19190,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             {
               ok: false,
               code: sentQueueMessage?.code || "QUEUE_MESSAGE_REQUIRED",
-              error: sentQueueMessage?.error ||
+              error:
+                sentQueueMessage?.error ||
                 "Iconoplasm finalization has one processing path: Cloudflare Queue drain messages. The worker could not enqueue a drain message.",
               queue_send_error: sentQueueMessage || null,
             },
@@ -18668,7 +19226,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           {
             ok: false,
             code: "QUEUE_PATH_REQUIRED",
-            error: "Direct finalization processing is no longer supported. Iconoplasm finalization must run through the Cloudflare Queue drain path.",
+            error:
+              "Direct finalization processing is no longer supported. Iconoplasm finalization must run through the Cloudflare Queue drain path.",
           },
           410,
           { "Cache-Control": "no-store" },
@@ -18694,7 +19253,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
       const rawSymbols = Array.isArray(p?.symbols) ? p.symbols : []
       const rawVisionIds = Array.isArray(p?.vision_ids ?? p?.visionIds)
-        ? p.vision_ids ?? p.visionIds
+        ? (p.vision_ids ?? p.visionIds)
         : []
       if (rawSymbols.length > ADMIN_READ_MODEL_SYNC_REQUEST_SYMBOL_MAX)
         return done(
@@ -18725,26 +19284,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
       const fullVision = coerceBoolean(p?.full_vision ?? p?.fullVision, false)
       const fullRebuild = coerceBoolean(p?.full_rebuild ?? p?.fullRebuild, false)
-      const skipVoteSummaries = coerceBoolean(
-        p?.skip_vote_summaries ?? p?.skipVoteSummaries,
-        false,
-      )
-      const skipGeneRollups = coerceBoolean(
-        p?.skip_gene_rollups ?? p?.skipGeneRollups,
-        false,
-      )
-      const skipVisionRollups = coerceBoolean(
-        p?.skip_vision_rollups ?? p?.skipVisionRollups,
-        false,
-      )
-      const skipDashboard = coerceBoolean(
-        p?.skip_dashboard ?? p?.skipDashboard,
-        false,
-      )
-      const invalidateGallery = coerceBoolean(
-        p?.invalidate_gallery ?? p?.invalidateGallery,
-        true,
-      )
+      const skipVoteSummaries = coerceBoolean(p?.skip_vote_summaries ?? p?.skipVoteSummaries, false)
+      const skipGeneRollups = coerceBoolean(p?.skip_gene_rollups ?? p?.skipGeneRollups, false)
+      const skipVisionRollups = coerceBoolean(p?.skip_vision_rollups ?? p?.skipVisionRollups, false)
+      const skipDashboard = coerceBoolean(p?.skip_dashboard ?? p?.skipDashboard, false)
+      const invalidateGallery = coerceBoolean(p?.invalidate_gallery ?? p?.invalidateGallery, true)
 
       // Bulk workstation sync now pushes the slow derived read-model refresh
       // into this dedicated endpoint after reconcile chunks land. That keeps a
@@ -18839,7 +19383,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         sanitizeText(p?.version || "", 128) === versionInfo.previous
           ? versionInfo.previous
           : versionInfo.current
-      const scope = String(p?.scope || "").trim().toLowerCase()
+      const scope = String(p?.scope || "")
+        .trim()
+        .toLowerCase()
       const requestedLimit = Math.max(
         1,
         Math.min(
@@ -18859,7 +19405,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
             )
       const warmResult = await warmMobileCardSnapshotSymbols(env, symbols, snapshotVersion)
-      const nextCursor = symbols.length ? symbols[symbols.length - 1] : sanitizeText(p?.after || p?.cursor || "", 64)
+      const nextCursor = symbols.length
+        ? symbols[symbols.length - 1]
+        : sanitizeText(p?.after || p?.cursor || "", 64)
       return done(
         "admin_card_vms_warm",
         json(
@@ -19069,7 +19617,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    const geneRequestDiagnosticsMatch = path.match(/^\/api\/iconoplasm\/admin\/requests\/gene\/([^/]+)\/diagnostics$/)
+    const geneRequestDiagnosticsMatch = path.match(
+      /^\/api\/iconoplasm\/admin\/requests\/gene\/([^/]+)\/diagnostics$/,
+    )
     if (geneRequestDiagnosticsMatch && request.method === "GET") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_gene_request_diagnostics_403", json({ error: "Unauthorized" }, 403))
@@ -19400,7 +19950,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             unverified_live_portraits: Number(summaryRow?.unverified_live_portraits || 0),
             renderable_live_exact_known: Boolean(summaryRow?.renderable_live_exact_known),
             last_exact_audit_total:
-              summaryRow?.last_exact_audit_total === null || summaryRow?.last_exact_audit_total === undefined
+              summaryRow?.last_exact_audit_total === null ||
+              summaryRow?.last_exact_audit_total === undefined
                 ? null
                 : Number(summaryRow?.last_exact_audit_total || 0),
             last_exact_audit_at: sanitizeText(summaryRow?.last_exact_audit_at || "", 64) || null,
@@ -19521,7 +20072,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    if (path === "/api/iconoplasm/admin/assets/state" && (request.method === "GET" || request.method === "POST")) {
+    if (
+      path === "/api/iconoplasm/admin/assets/state" &&
+      (request.method === "GET" || request.method === "POST")
+    ) {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_assets_state_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
@@ -19536,7 +20090,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         }
         const rawSymbols = Array.isArray(p?.symbols) ? p.symbols : []
         if (rawSymbols.length > 25000)
-          return done("admin_assets_state_400", json({ error: "Too many symbols (max 25000)" }, 400))
+          return done(
+            "admin_assets_state_400",
+            json({ error: "Too many symbols (max 25000)" }, 400),
+          )
         requestedSymbols = rawSymbols
       }
       const assets = (await fetchAssetStateRows(env, requestedSymbols))
@@ -19626,7 +20183,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    if (path === "/api/iconoplasm/admin/catalog/state" && (request.method === "GET" || request.method === "POST")) {
+    if (
+      path === "/api/iconoplasm/admin/catalog/state" &&
+      (request.method === "GET" || request.method === "POST")
+    ) {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_catalog_state_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
@@ -19643,7 +20203,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         }
         const rawSymbols = Array.isArray(p?.symbols) ? p.symbols : []
         if (rawSymbols.length > 25000)
-          return done("admin_catalog_state_400", json({ error: "Too many symbols (max 25000)" }, 400))
+          return done(
+            "admin_catalog_state_400",
+            json({ error: "Too many symbols (max 25000)" }, 400),
+          )
         const rows = await fetchCatalogStateRows(env, rawSymbols.length ? rawSymbols : null)
         return done(
           "admin_catalog_state",
@@ -19690,10 +20253,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
 
       const items = Array.isArray(p?.items) ? p.items : []
-      const deferReadModels = coerceBoolean(
-        p?.defer_read_models ?? p?.deferReadModels,
-        false,
-      )
+      const deferReadModels = coerceBoolean(p?.defer_read_models ?? p?.deferReadModels, false)
       if (!items.length)
         return done("admin_catalog_upsert_400", json({ error: "No items provided" }, 400))
       if (items.length > 1000)
@@ -19788,10 +20348,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
       const keepSymbolsRaw = Array.isArray(p?.keep_symbols) ? p.keep_symbols : []
       const deleteSymbolsRaw = Array.isArray(p?.delete_symbols) ? p.delete_symbols : []
-      const deferReadModels = coerceBoolean(
-        p?.defer_read_models ?? p?.deferReadModels,
-        false,
-      )
+      const deferReadModels = coerceBoolean(p?.defer_read_models ?? p?.deferReadModels, false)
       if (keepSymbolsRaw.length > 25000)
         return done(
           "admin_catalog_reconcile_400",
@@ -20025,18 +20582,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
       const actorId = await actor(request, env)
       const dryRun = coerceBoolean(p?.dry_run ?? p?.dryRun, false)
-      const deferReadModels = coerceBoolean(
-        p?.defer_read_models ?? p?.deferReadModels,
-        false,
-      )
-      const verifyStorageDefault = coerceBoolean(
-        p?.verify_storage ?? p?.verifyStorage,
-        false,
-      )
-      const forceUploadDefault = coerceBoolean(
-        p?.force_upload ?? p?.forceUpload,
-        false,
-      )
+      const deferReadModels = coerceBoolean(p?.defer_read_models ?? p?.deferReadModels, false)
+      const verifyStorageDefault = coerceBoolean(p?.verify_storage ?? p?.verifyStorage, false)
+      const forceUploadDefault = coerceBoolean(p?.force_upload ?? p?.forceUpload, false)
       const reasonDefault = String(p?.reason || "").slice(0, 2000) || null
       const createdByDefault = String(p?.created_by || p?.createdBy || actorId || "unknown").slice(
         0,
@@ -20479,7 +21027,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const keepRaw = Array.isArray(p?.keep) ? p.keep : []
       const legacyRaw = Array.isArray(p?.legacy) ? p.legacy : []
       const scopeSymbolsRaw = Array.isArray(p?.scope_symbols ?? p?.scopeSymbols)
-        ? p.scope_symbols ?? p.scopeSymbols
+        ? (p.scope_symbols ?? p.scopeSymbols)
         : []
       if (keepRaw.length > 50000)
         return done(
@@ -20528,10 +21076,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
 
       const dryRun = coerceBoolean(p?.dry_run ?? p?.dryRun, false)
-      const deferReadModels = coerceBoolean(
-        p?.defer_read_models ?? p?.deferReadModels,
-        false,
-      )
+      const deferReadModels = coerceBoolean(p?.defer_read_models ?? p?.deferReadModels, false)
       const unpublishMissing = coerceBoolean(p?.unpublish_missing ?? p?.unpublishMissing, false)
       const actorId = await actor(request, env)
       const reason = String(p?.reason || "").slice(0, 2000) || "local_sync_reconcile"
@@ -20568,7 +21113,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           admin_override: Number(row?.admin_override || 0) > 0,
         })
       }
-      const touchedSymbols = new Set(scopeSymbols.length ? scopeSymbols : keep.map((row) => row.symbol))
+      const touchedSymbols = new Set(
+        scopeSymbols.length ? scopeSymbols : keep.map((row) => row.symbol),
+      )
 
       let rejected = 0
       let restoredKeep = 0
@@ -20589,7 +21136,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         if (keepSet.has(key)) {
           const status = String(row?.status || "").toLowerCase()
           const restoreRejectedKeep =
-            status === "rejected" || Number(row?.is_stale || 0) > 0 || Number(row?.is_legacy || 0) > 0
+            status === "rejected" ||
+            Number(row?.is_stale || 0) > 0 ||
+            Number(row?.is_legacy || 0) > 0
           if (!restoreRejectedKeep) continue
           touchedSymbols.add(symbol)
           restoredKeep += 1
@@ -20765,7 +21314,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         if (!staleRows.length) {
           return done(
             "unstale_batch",
-            json({ ok: true, action: "unstale_batch", touched_symbols: 0, unstaled_assets: 0, symbols }),
+            json({
+              ok: true,
+              action: "unstale_batch",
+              touched_symbols: 0,
+              unstaled_assets: 0,
+              symbols,
+            }),
           )
         }
 
@@ -20787,7 +21342,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             const assetValue = String(row?.asset_sha256 || "").trim()
             return env.ICONOPLASM_DB.prepare(
               "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'unstale', ?, ?, CURRENT_TIMESTAMP)",
-            ).bind(symbolValue, assetValue, assetValue, actorId, String(p?.reason || "").slice(0, 2000) || null)
+            ).bind(
+              symbolValue,
+              assetValue,
+              assetValue,
+              actorId,
+              String(p?.reason || "").slice(0, 2000) || null,
+            )
           }),
         )
 
@@ -20944,7 +21505,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
         return done(
           "reject",
-          json({ ok: true, action: "reject", symbol, asset_sha256: asset, auto_promote: autoPromote }),
+          json({
+            ok: true,
+            action: "reject",
+            symbol,
+            asset_sha256: asset,
+            auto_promote: autoPromote,
+          }),
         )
       }
 
@@ -21000,7 +21567,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
         return done(
           "unstale",
-          json({ ok: true, action: "unstale", symbol, asset_sha256: asset, auto_promote: autoPromote }),
+          json({
+            ok: true,
+            action: "unstale",
+            symbol,
+            asset_sha256: asset,
+            auto_promote: autoPromote,
+          }),
         )
       }
 
@@ -21093,10 +21666,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           source: "admin_remove",
         })
         if (!removal?.ok || removal?.code === "NOT_FOUND") {
-          return done(
-            "remove_candidate_404",
-            json({ error: "Asset not found" }, 404),
-          )
+          return done("remove_candidate_404", json({ error: "Asset not found" }, 404))
         }
         return done(
           "remove_candidate",
