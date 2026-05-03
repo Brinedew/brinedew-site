@@ -80,6 +80,10 @@ test("admin asset summary refresh writes public stats projection to KV", async (
         },
         async first() {
           if (text.includes("COUNT(*) AS candidate_assets")) {
+            assert.match(
+              text,
+              /AS published_live_portraits,\s*\(\s*SELECT COUNT\(\*\)[\s\S]*AS catalog_published_live_portraits/,
+            )
             return {
               candidate_assets: 39548,
               catalog_candidate_assets: 39481,

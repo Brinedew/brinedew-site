@@ -6068,7 +6068,7 @@ async function fetchAdminAssetSummaryBaseline(env) {
          SELECT COUNT(*)
          FROM icono_publish_state
          WHERE COALESCE(current_asset_sha256, '') <> ''
-       ) AS published_live_portraits
+       ) AS published_live_portraits,
        (
          SELECT COUNT(*)
          FROM icono_publish_state ps
