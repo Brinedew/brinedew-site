@@ -27,6 +27,8 @@ they're either pure or heavily damaged, those are the only two attractors.
 
 this system is good because a little damaged is the best ground for evolving into cancer. pure or heavily dna damaged cells can't form cancers. 
 
+there's a goldilocks zone of DNA damage where the risk of forming a hyperfit cell is maximal. 
+
 for the same reasons heavy radiation is used to treat cancers, namely taking advantage of their repair addiction, and causing them to easily fall into mitotic catastrophe. 
 
 so senescence is like an endougenous irradiated-like state designed to be hard to escape by mitosis due to mitotic catastrophe. 
