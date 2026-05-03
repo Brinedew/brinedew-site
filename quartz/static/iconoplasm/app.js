@@ -261,7 +261,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   }
 
   function fetchPublicInventoryStats() {
-    return fetchJSON("/api/public/v1/stats")
+    var today = new Date().toISOString().slice(0, 10)
+    return fetchJSON("/api/public/v1/stats?day=" + encodeURIComponent(today))
       .then(normalizePublicInventoryStats)
       .catch(function () {
         return null

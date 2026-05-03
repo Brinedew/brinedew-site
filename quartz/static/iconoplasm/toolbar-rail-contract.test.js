@@ -118,6 +118,7 @@ test("Iconoplasm hero inventory stat uses explicit public stats, not portrait ha
   assert.match(app, /id="icono-public-inventory-stat"/)
   assert.match(app, /function fetchPublicInventoryStats\(\)/)
   assert.match(app, /\/api\/public\/v1\/stats/)
+  assert.match(app, /toISOString\(\)\.slice\(0,\s*10\)/)
   assert.match(app, /generated_candidate_blot_count/)
   assert.match(app, /canonical_blot_count/)
   assert.doesNotMatch(app, /portrait_hash[\s\S]{0,160}generated_candidate_blot_count/)
