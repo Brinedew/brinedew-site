@@ -5422,9 +5422,15 @@ function normalizeStorageAuditInspectionLimit(rawLimit, fallback = 100) {
 function mapWebsiteTruthSummaryRow(row) {
   return {
     candidate_assets: Math.max(0, Number(row?.candidate_assets || 0)),
+    catalog_candidate_assets: Math.max(0, Number(row?.catalog_candidate_assets || 0)),
     stale_assets: Math.max(0, Number(row?.stale_assets || 0)),
     legacy_assets: Math.max(0, Number(row?.legacy_assets || 0)),
     auditable_assets: Math.max(0, Number(row?.auditable_assets || 0)),
+    catalog_auditable_assets: Math.max(0, Number(row?.catalog_auditable_assets || 0)),
+    catalog_published_live_portraits: Math.max(
+      0,
+      Number(row?.catalog_published_live_portraits || 0),
+    ),
     published_live_portraits: Math.max(0, Number(row?.published_live_portraits || 0)),
     audited_assets: Math.max(0, Number(row?.audited_assets || 0)),
     verified_renderable_images: Math.max(0, Number(row?.verified_renderable_images || 0)),
@@ -5466,9 +5472,9 @@ async function publicStatsPayloadFromSummary(env, summary) {
   const payload = {
     schema_version: PUBLIC_STATS_SCHEMA_VERSION,
     gene_count: geneCount,
-    canonical_blot_count: row.published_live_portraits,
-    generated_candidate_blot_count: row.candidate_assets,
-    auditable_candidate_blot_count: row.auditable_assets,
+    canonical_blot_count: row.catalog_published_live_portraits,
+    generated_candidate_blot_count: row.catalog_candidate_assets,
+    auditable_candidate_blot_count: row.catalog_auditable_assets,
     storage_verified_candidate_blot_count: row.verified_renderable_images,
     storage_audit_coverage_percent: row.storage_audit_coverage_percent,
     storage_audit_complete: Boolean(row.renderable_live_exact_known),
@@ -5538,6 +5544,16 @@ async function fetchAdminPublicStatsAudit(env, { sampleLimit = 25 } = {}) {
             ON ps.gene_symbol = gc.gene_symbol
          WHERE COALESCE(ps.current_asset_sha256, '') <> '') AS catalog_genes_with_canonical,
        (SELECT COUNT(*)
+          FROM icono_portrait_assets pa
+          JOIN icono_gene_catalog gc
+            ON gc.gene_symbol = pa.gene_symbol) AS catalog_candidate_assets,
+       (SELECT COUNT(*)
+          FROM icono_portrait_assets pa
+          JOIN icono_gene_catalog gc
+            ON gc.gene_symbol = pa.gene_symbol
+         WHERE COALESCE(pa.is_legacy, 0) = 0
+           AND lower(COALESCE(pa.status, 'draft')) <> 'rejected') AS catalog_auditable_assets,
+       (SELECT COUNT(*)
           FROM icono_gene_catalog gc
           LEFT JOIN icono_publish_state ps
             ON ps.gene_symbol = gc.gene_symbol
@@ -5582,6 +5598,8 @@ async function fetchAdminPublicStatsAudit(env, { sampleLimit = 25 } = {}) {
     canonical_blot_rows: Math.max(0, Number(counts?.canonical_blot_rows || 0)),
     canonical_distinct_symbols: Math.max(0, Number(counts?.canonical_distinct_symbols || 0)),
     catalog_genes_with_canonical: Math.max(0, Number(counts?.catalog_genes_with_canonical || 0)),
+    catalog_candidate_assets: Math.max(0, Number(counts?.catalog_candidate_assets || 0)),
+    catalog_auditable_assets: Math.max(0, Number(counts?.catalog_auditable_assets || 0)),
     catalog_genes_without_canonical: Math.max(
       0,
       Number(counts?.catalog_genes_without_canonical || 0),
@@ -5610,8 +5628,7 @@ async function fetchAdminPublicStatsAudit(env, { sampleLimit = 25 } = {}) {
   }
   payload.expected_public_gene_count =
     payload.catalog_genes_with_canonical + payload.catalog_genes_without_canonical
-  payload.canonical_minus_catalog_delta =
-    payload.canonical_blot_rows - payload.catalog_gene_rows
+  payload.canonical_minus_catalog_delta = payload.canonical_blot_rows - payload.catalog_gene_rows
   return payload
 }
 
@@ -6029,9 +6046,12 @@ async function fetchAdminAssetSummaryBaseline(env) {
   if (!env.ICONOPLASM_DB) {
     return {
       candidate_assets: 0,
+      catalog_candidate_assets: 0,
       auditable_assets: 0,
+      catalog_auditable_assets: 0,
       stale_assets: 0,
       legacy_assets: 0,
+      catalog_published_live_portraits: 0,
       published_live_portraits: 0,
     }
   }
@@ -6039,7 +6059,9 @@ async function fetchAdminAssetSummaryBaseline(env) {
   const row = await env.ICONOPLASM_DB.prepare(
     `SELECT
        COUNT(*) AS candidate_assets,
+       SUM(CASE WHEN gc.gene_symbol IS NOT NULL THEN 1 ELSE 0 END) AS catalog_candidate_assets,
        SUM(CASE WHEN COALESCE(pa.is_legacy, 0) = 0 AND lower(COALESCE(pa.status, 'draft')) <> 'rejected' THEN 1 ELSE 0 END) AS auditable_assets,
+       SUM(CASE WHEN gc.gene_symbol IS NOT NULL AND COALESCE(pa.is_legacy, 0) = 0 AND lower(COALESCE(pa.status, 'draft')) <> 'rejected' THEN 1 ELSE 0 END) AS catalog_auditable_assets,
        SUM(CASE WHEN COALESCE(pa.is_stale, 0) = 1 THEN 1 ELSE 0 END) AS stale_assets,
        SUM(CASE WHEN COALESCE(pa.is_legacy, 0) = 1 THEN 1 ELSE 0 END) AS legacy_assets,
        (
@@ -6047,14 +6069,29 @@ async function fetchAdminAssetSummaryBaseline(env) {
          FROM icono_publish_state
          WHERE COALESCE(current_asset_sha256, '') <> ''
        ) AS published_live_portraits
-     FROM icono_portrait_assets pa`,
+       (
+         SELECT COUNT(*)
+         FROM icono_publish_state ps
+         JOIN icono_gene_catalog gc2
+           ON gc2.gene_symbol = ps.gene_symbol
+         WHERE COALESCE(ps.current_asset_sha256, '') <> ''
+       ) AS catalog_published_live_portraits
+     FROM icono_portrait_assets pa
+     LEFT JOIN icono_gene_catalog gc
+       ON gc.gene_symbol = pa.gene_symbol`,
   ).first()
 
   return {
     candidate_assets: Math.max(0, Number(row?.candidate_assets || 0)),
+    catalog_candidate_assets: Math.max(0, Number(row?.catalog_candidate_assets || 0)),
     auditable_assets: Math.max(0, Number(row?.auditable_assets || 0)),
+    catalog_auditable_assets: Math.max(0, Number(row?.catalog_auditable_assets || 0)),
     stale_assets: Math.max(0, Number(row?.stale_assets || 0)),
     legacy_assets: Math.max(0, Number(row?.legacy_assets || 0)),
+    catalog_published_live_portraits: Math.max(
+      0,
+      Number(row?.catalog_published_live_portraits || 0),
+    ),
     published_live_portraits: Math.max(0, Number(row?.published_live_portraits || 0)),
   }
 }
@@ -6119,7 +6156,9 @@ async function computeWebsiteTruthSummary(env) {
   ).first()
 
   const auditableAssets = Math.max(0, Number(baseline?.auditable_assets || 0))
+  const catalogAuditableAssets = Math.max(0, Number(baseline?.catalog_auditable_assets || 0))
   const candidateAssets = Math.max(0, Number(baseline?.candidate_assets || 0))
+  const catalogCandidateAssets = Math.max(0, Number(baseline?.catalog_candidate_assets || 0))
   const auditedAssets = Math.max(0, Number(queueRow?.audited_assets || 0))
   const verifiedRenderableImages = Math.max(0, Number(queueRow?.verified_renderable_images || 0))
   const storageIncompleteAssets = Math.max(0, Number(queueRow?.storage_incomplete_assets || 0))
@@ -6139,6 +6178,10 @@ async function computeWebsiteTruthSummary(env) {
     : (previous?.last_exact_audit_total ?? null)
   const lastExactAuditAt = exactKnown ? updatedAt : previous?.last_exact_audit_at || ""
   const publishedLivePortraits = Math.max(0, Number(baseline?.published_live_portraits || 0))
+  const catalogPublishedLivePortraits = Math.max(
+    0,
+    Number(baseline?.catalog_published_live_portraits || 0),
+  )
   const unverifiedLivePortraits = Math.max(
     0,
     publishedLivePortraits - renderableLiveConfirmed - brokenLiveImages,
@@ -6151,9 +6194,12 @@ async function computeWebsiteTruthSummary(env) {
 
   return mapWebsiteTruthSummaryRow({
     candidate_assets: candidateAssets,
+    catalog_candidate_assets: catalogCandidateAssets,
     auditable_assets: auditableAssets,
+    catalog_auditable_assets: catalogAuditableAssets,
     stale_assets: baseline?.stale_assets || 0,
     legacy_assets: baseline?.legacy_assets || 0,
+    catalog_published_live_portraits: catalogPublishedLivePortraits,
     published_live_portraits: publishedLivePortraits,
     audited_assets: auditedAssets,
     verified_renderable_images: verifiedRenderableImages,
@@ -19763,10 +19809,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
       const sampleLimit = Number.parseInt(url.searchParams.get("sample_limit") || "25", 10)
       const audit = await fetchAdminPublicStatsAudit(env, { sampleLimit })
-      return done(
-        "admin_public_stats_audit",
-        json(audit, 200, { "Cache-Control": "no-store" }),
-      )
+      return done("admin_public_stats_audit", json(audit, 200, { "Cache-Control": "no-store" }))
     }
 
     if (path === "/api/iconoplasm/admin/gallery" && request.method === "GET") {
