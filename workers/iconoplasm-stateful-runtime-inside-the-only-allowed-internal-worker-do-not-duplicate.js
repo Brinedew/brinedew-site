@@ -11840,6 +11840,7 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
       if (result?.kind === "drain_finalization_ledger") {
         processed += Math.max(0, Number(result?.processed || 0) || 0)
         failed += Math.max(0, Number(result?.failed || 0) || 0)
+        finalized += Math.max(0, Number(result?.finalized || 0) || 0)
       } else if (!result?.skipped) {
         processed += 1
       }
@@ -11856,7 +11857,7 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
   }
   if (processed > 0) {
     const finalizeResult = await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbols: null })
-    finalized = Math.max(0, Number(finalizeResult?.finalized || 0) || 0)
+    finalized += Math.max(0, Number(finalizeResult?.finalized || 0) || 0)
   }
   await iconoplasmSyncGovernorJson(env, "/release", {
     processed,

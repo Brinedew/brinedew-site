@@ -242,6 +242,57 @@ class FakeStatement {
       return { success: true }
     }
     if (this.sql.includes("UPDATE icono_sync_finalization_jobs")) {
+      if (this.sql.includes("gene_symbol IN (SELECT value FROM json_each(?))")) {
+        const setClause = this.sql.split("SET")[1]?.split("WHERE")[0] || ""
+        const assignments = setClause
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean)
+        const wherePhase = this.args[4]
+        const scopedSymbolsJson = this.args[5]
+        let scopedSymbols = null
+        try {
+          scopedSymbols = new Set(
+            (JSON.parse(String(scopedSymbolsJson || "[]")) || [])
+              .map((item) => String(item || "").trim().toUpperCase())
+              .filter(Boolean),
+          )
+        } catch {
+          scopedSymbols = new Set()
+        }
+        for (const [symbol, current] of this.db.jobs.entries()) {
+          if (current.phase !== wherePhase || !scopedSymbols.has(symbol)) continue
+          let index = 0
+          for (const assignment of assignments) {
+            const [field, rawValue] = assignment.split("=").map((item) => item.trim())
+            if (!field || String(rawValue || "").includes("CURRENT_TIMESTAMP")) continue
+            current[field] = this.args[index]
+            index += 1
+          }
+          this.db.jobs.set(symbol, current)
+        }
+        return { success: true }
+      }
+      if (this.sql.includes("WHERE status <> ?") && this.sql.includes("AND phase = ?")) {
+        const setClause = this.sql.split("SET")[1]?.split("WHERE")[0] || ""
+        const assignments = setClause
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean)
+        const wherePhase = this.args[4]
+        for (const [symbol, current] of this.db.jobs.entries()) {
+          if (current.phase !== wherePhase) continue
+          let index = 0
+          for (const assignment of assignments) {
+            const [field, rawValue] = assignment.split("=").map((item) => item.trim())
+            if (!field || String(rawValue || "").includes("CURRENT_TIMESTAMP")) continue
+            current[field] = this.args[index]
+            index += 1
+          }
+          this.db.jobs.set(symbol, current)
+        }
+        return { success: true }
+      }
       const symbol = String(this.args[this.args.length - 1] || "")
       const current = this.db.jobs.get(symbol)
       if (current) {
@@ -874,6 +925,65 @@ test("queue drain consumer retries instead of acking when self-reschedule fails"
   assert.deepEqual(
     symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase),
     ["vote_summaries", "vote_summaries"],
+  )
+})
+
+test("queue drain message finalizes when only pending-finalize rows remain", async () => {
+  const queue = buildFakeQueue()
+  const symbols = ["TP53", "BRCA1"]
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: symbols.map((symbol) => ({
+        gene_symbol: symbol,
+        status: "queued",
+        phase: "completed_pending_finalize",
+        keep_assets_json: JSON.stringify([{ symbol, asset_sha256: "a".repeat(64) }]),
+        legacy_assets_json: JSON.stringify([]),
+        vision_ids_json: JSON.stringify(["anima-v1-1"]),
+        requested_at: "2026-04-16T00:00:00.000Z",
+        next_attempt_at: "2026-04-16T00:00:00.000Z",
+      })),
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+  }
+  let acknowledged = false
+  const retries = []
+
+  const result = await handleIconoplasmSyncFinalizationQueue(
+    {
+      messages: [
+        {
+          body: {
+            kind: "drain_finalization_ledger",
+            run_id: "sync-test",
+            symbols: [],
+          },
+          ack() {
+            acknowledged = true
+          },
+          retry(options) {
+            retries.push(options)
+          },
+        },
+      ],
+    },
+    env,
+    { waitUntil() {} },
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(result.finalized, 2)
+  assert.equal(acknowledged, true)
+  assert.deepEqual(retries, [])
+  assert.deepEqual(queue.sent, [])
+  assert.deepEqual(
+    symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.status),
+    ["completed", "completed"],
+  )
+  assert.deepEqual(
+    symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase),
+    ["completed", "completed"],
   )
 })
 
