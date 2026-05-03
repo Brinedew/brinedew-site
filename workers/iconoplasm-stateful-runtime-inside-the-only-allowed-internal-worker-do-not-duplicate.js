@@ -371,6 +371,7 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/admin/mutation-limiter/policy")
     return "admin_mutation_limiter_policy"
   if (path === "/api/iconoplasm/admin/coverage") return "admin_coverage"
+  if (path === "/api/iconoplasm/admin/public-stats/audit") return "admin_public_stats_audit"
   if (path === "/api/iconoplasm/admin/canon-audit") return "admin_canon_audit"
   if (path === "/api/iconoplasm/admin/read-models/bootstrap") return "admin_read_models_bootstrap"
   if (path === "/api/iconoplasm/admin/card-vms/warm") return "admin_card_vms_warm"
@@ -485,6 +486,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_assets_state" ||
     family === "admin_gene_detail" ||
     family === "admin_canon_audit" ||
+    family === "admin_public_stats_audit" ||
     family === "admin_finalization_pending" ||
     family === "admin_requests_open" ||
     family === "admin_requests_fulfill" ||
@@ -4769,6 +4771,8 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/coverage")
     return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/public-stats/audit")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/gallery")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (/^\/api\/iconoplasm\/admin\/gene\/[^/]+$/.test(path))
@@ -5510,6 +5514,104 @@ async function writePublicStatsProjection(env, summary) {
   const payload = await publicStatsPayloadFromSummary(env, summary)
   if (!payload.gene_count || !payload.generated_candidate_blot_count) return null
   await env.KV.put(KV_PUBLIC_STATS, JSON.stringify(payload))
+  return payload
+}
+
+async function fetchAdminPublicStatsAudit(env, { sampleLimit = 25 } = {}) {
+  if (!env?.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
+  const cleanedSampleLimit = Math.max(
+    1,
+    Math.min(100, Number.parseInt(String(sampleLimit || "25"), 10) || 25),
+  )
+  const counts = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM icono_gene_catalog) AS catalog_gene_rows,
+       (SELECT COUNT(*)
+          FROM icono_publish_state
+         WHERE COALESCE(current_asset_sha256, '') <> '') AS canonical_blot_rows,
+       (SELECT COUNT(DISTINCT gene_symbol)
+          FROM icono_publish_state
+         WHERE COALESCE(current_asset_sha256, '') <> '') AS canonical_distinct_symbols,
+       (SELECT COUNT(*)
+          FROM icono_gene_catalog gc
+          JOIN icono_publish_state ps
+            ON ps.gene_symbol = gc.gene_symbol
+         WHERE COALESCE(ps.current_asset_sha256, '') <> '') AS catalog_genes_with_canonical,
+       (SELECT COUNT(*)
+          FROM icono_gene_catalog gc
+          LEFT JOIN icono_publish_state ps
+            ON ps.gene_symbol = gc.gene_symbol
+           AND COALESCE(ps.current_asset_sha256, '') <> ''
+         WHERE ps.gene_symbol IS NULL) AS catalog_genes_without_canonical,
+       (SELECT COUNT(*)
+          FROM icono_publish_state ps
+          LEFT JOIN icono_gene_catalog gc
+            ON gc.gene_symbol = ps.gene_symbol
+         WHERE COALESCE(ps.current_asset_sha256, '') <> ''
+           AND gc.gene_symbol IS NULL) AS canonical_symbols_missing_from_catalog`,
+  ).first()
+
+  const missingResp = await env.ICONOPLASM_DB.prepare(
+    `SELECT ps.gene_symbol, ps.current_asset_sha256, ps.updated_at, ps.updated_by
+       FROM icono_publish_state ps
+       LEFT JOIN icono_gene_catalog gc
+         ON gc.gene_symbol = ps.gene_symbol
+      WHERE COALESCE(ps.current_asset_sha256, '') <> ''
+        AND gc.gene_symbol IS NULL
+      ORDER BY ps.gene_symbol ASC
+      LIMIT ?`,
+  )
+    .bind(cleanedSampleLimit)
+    .all()
+
+  const duplicateCaseResp = await env.ICONOPLASM_DB.prepare(
+    `SELECT upper(gene_symbol) AS normalized_symbol, COUNT(*) AS rows
+       FROM icono_publish_state
+      WHERE COALESCE(current_asset_sha256, '') <> ''
+      GROUP BY upper(gene_symbol)
+     HAVING COUNT(*) > 1
+      ORDER BY rows DESC, normalized_symbol ASC
+      LIMIT ?`,
+  )
+    .bind(cleanedSampleLimit)
+    .all()
+
+  const payload = {
+    ok: true,
+    catalog_gene_rows: Math.max(0, Number(counts?.catalog_gene_rows || 0)),
+    canonical_blot_rows: Math.max(0, Number(counts?.canonical_blot_rows || 0)),
+    canonical_distinct_symbols: Math.max(0, Number(counts?.canonical_distinct_symbols || 0)),
+    catalog_genes_with_canonical: Math.max(0, Number(counts?.catalog_genes_with_canonical || 0)),
+    catalog_genes_without_canonical: Math.max(
+      0,
+      Number(counts?.catalog_genes_without_canonical || 0),
+    ),
+    canonical_symbols_missing_from_catalog: Math.max(
+      0,
+      Number(counts?.canonical_symbols_missing_from_catalog || 0),
+    ),
+    sample_limit: cleanedSampleLimit,
+    missing_from_catalog_sample: (Array.isArray(missingResp?.results)
+      ? missingResp.results
+      : []
+    ).map((row) => ({
+      gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
+      current_asset_sha256: normalizeSha256(row?.current_asset_sha256 || "") || "",
+      updated_at: sanitizeText(row?.updated_at || "", 64) || "",
+      updated_by: sanitizeText(row?.updated_by || "", 255) || "",
+    })),
+    duplicate_normalized_publish_symbols_sample: (Array.isArray(duplicateCaseResp?.results)
+      ? duplicateCaseResp.results
+      : []
+    ).map((row) => ({
+      normalized_symbol: normalizeSymbol(row?.normalized_symbol || "") || "",
+      rows: Math.max(0, Number(row?.rows || 0)),
+    })),
+  }
+  payload.expected_public_gene_count =
+    payload.catalog_genes_with_canonical + payload.catalog_genes_without_canonical
+  payload.canonical_minus_catalog_delta =
+    payload.canonical_blot_rows - payload.catalog_gene_rows
   return payload
 }
 
@@ -19648,6 +19750,22 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       return done(
         "admin_coverage",
         json({ ok: true, ...coverage }, 200, { "Cache-Control": "no-store" }),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/public-stats/audit" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_public_stats_audit_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_public_stats_audit_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      const sampleLimit = Number.parseInt(url.searchParams.get("sample_limit") || "25", 10)
+      const audit = await fetchAdminPublicStatsAudit(env, { sampleLimit })
+      return done(
+        "admin_public_stats_audit",
+        json(audit, 200, { "Cache-Control": "no-store" }),
       )
     }
 
