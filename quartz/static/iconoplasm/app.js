@@ -70,8 +70,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var HOME_SKELETON_CARD_COUNT = 4
   var ICONO_EXTENSION_PRESENCE_EVENT = "iconoplasm-extension-presence"
   var ICONO_EXTENSION_PRESENCE_PING_EVENT = "iconoplasm-extension-presence-ping"
+  var ICONO_EXTENSION_RELEASE_METADATA_URL = "/static/iconoplasm/extension-release.json"
   var ICONO_EXTENSION_SOURCE_URL =
     "https://github.com/Brinedew/brinedew-site/tree/main/iconoplasm-extension"
+  var ICONO_EXTENSION_FIREFOX_LISTING_URL =
+    "https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/"
   var PREFETCH_BATCH_SIZE = 20
   var PREFETCH_TRIGGER_OFFSET = 10
   var PREFETCH_DETAIL_CONCURRENCY = 4
@@ -114,6 +117,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     installed: false,
     version: "",
     installTab: "",
+    release: {
+      version: "0.4.1",
+      chromeDeveloperPackageUrl:
+        "/static/iconoplasm/downloads/iconoplasm-extension-v0.4.1.zip",
+      firefoxListingUrl: ICONO_EXTENSION_FIREFOX_LISTING_URL,
+      edgeListingStatus: "pending",
+    },
+    releaseLoaded: false,
   }
 
   /* ─── API helpers ─── */
@@ -1744,45 +1755,104 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }, 120)
   }
 
+  function loadInstallReleaseMetadata() {
+    if (iconoInstallState.releaseLoaded) return
+    iconoInstallState.releaseLoaded = true
+    fetch(ICONO_EXTENSION_RELEASE_METADATA_URL, {
+      cache: "no-store",
+    })
+      .then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status)
+        return response.json()
+      })
+      .then(function (metadata) {
+        if (!metadata || typeof metadata !== "object") return
+        var chromeDeveloperPackageUrl = String(metadata.chromeDeveloperPackageUrl || "").trim()
+        var firefoxListingUrl = String(metadata.firefoxListingUrl || "").trim()
+        iconoInstallState.release = {
+          version: String(metadata.version || iconoInstallState.release.version || "").trim(),
+          chromeDeveloperPackageUrl:
+            chromeDeveloperPackageUrl || iconoInstallState.release.chromeDeveloperPackageUrl,
+          firefoxListingUrl: firefoxListingUrl || iconoInstallState.release.firefoxListingUrl,
+          edgeListingStatus: String(metadata.edgeListingStatus || "pending").trim() || "pending",
+        }
+        renderHomeInstallCta()
+      })
+      .catch(function () {
+        // The inline fallback above keeps install instructions usable if the static
+        // metadata file misses a deploy or is cached badly.
+      })
+  }
+
   function resolveInstallTab(browser) {
     var requested = String(iconoInstallState.installTab || "")
       .trim()
       .toLowerCase()
-    if (requested === "chrome" || requested === "firefox") return requested
+    if (requested === "chrome" || requested === "edge" || requested === "firefox") return requested
+    if (browser && browser.label === "Edge") return "edge"
     return browser && browser.family === "firefox" ? "firefox" : "chrome"
   }
 
   function buildInstallBrowserPanels(browser, faqUrl) {
-    var chromeManagerUrl =
-      browser && browser.family === "chromium" && browser.managerUrl
-        ? browser.managerUrl
-        : "chrome://extensions"
-    var chromeNote =
-      browser && browser.label === "Edge"
-        ? "Works in Edge right now. Chrome uses the same path."
-        : "Works in Chrome and Edge right now."
+    var release = iconoInstallState.release || {}
+    var chromePackageUrl =
+      String(release.chromeDeveloperPackageUrl || "").trim() || ICONO_EXTENSION_SOURCE_URL
+    var firefoxListingUrl =
+      String(release.firefoxListingUrl || "").trim() || ICONO_EXTENSION_FIREFOX_LISTING_URL
     return {
       chrome: {
         id: "chrome",
         label: "Chrome",
         tone: "manual",
-        title: "Chrome and Edge",
-        note: chromeNote,
-        managerUrl: chromeManagerUrl,
+        title: "Chrome",
+        note: "Use the developer package while Chrome Web Store publishing is handled manually.",
+        managerUrl: "chrome://extensions",
         steps: [
-          "Open " + chromeManagerUrl + ".",
+          "Download and unzip the Chrome developer package.",
+          "Open chrome://extensions.",
           "Turn on Developer mode.",
-          "Choose Load unpacked, then select the iconoplasm-extension folder.",
+          "Choose Load unpacked, then select the unzipped package folder.",
         ],
         actions: [
           {
+            href: chromePackageUrl,
+            label: "Download package",
+            subtle: false,
+          },
+          {
             href: ICONO_EXTENSION_SOURCE_URL,
-            label: "Source folder",
+            label: "Source",
+            subtle: true,
+          },
+          {
+            href: faqUrl,
+            label: "FAQ",
+            subtle: true,
+          },
+        ],
+      },
+      edge: {
+        id: "edge",
+        label: "Edge",
+        tone: "manual",
+        title: "Edge",
+        note: "Use the Chrome-compatible developer package until the Edge Add-ons listing is approved.",
+        managerUrl: "edge://extensions",
+        steps: [
+          "Download and unzip the Chrome developer package.",
+          "Open edge://extensions.",
+          "Turn on Developer mode.",
+          "Choose Load unpacked, then select the unzipped package folder.",
+        ],
+        actions: [
+          {
+            href: chromePackageUrl,
+            label: "Download package",
             subtle: false,
           },
           {
             href: faqUrl,
-            label: "Read FAQ",
+            label: "FAQ",
             subtle: true,
           },
         ],
@@ -1790,23 +1860,23 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       firefox: {
         id: "firefox",
         label: "Firefox",
-        tone: "pending",
+        tone: "store",
         title: "Firefox",
-        note: "Store listing is not live yet.",
+        note: "Install the signed Firefox release from Mozilla Add-ons.",
         managerUrl: "",
         steps: [
-          "Firefox needs the signed AMO release before the install link can go live.",
-          "Use Chrome or Edge for now.",
+          "Open the Firefox Add-ons listing.",
+          "Choose Add to Firefox.",
         ],
         actions: [
           {
-            href: faqUrl,
-            label: "Read FAQ",
+            href: firefoxListingUrl,
+            label: "Firefox Add-ons",
             subtle: false,
           },
           {
-            href: ICONO_EXTENSION_SOURCE_URL,
-            label: "Track source",
+            href: faqUrl,
+            label: "FAQ",
             subtle: true,
           },
         ],
@@ -1851,6 +1921,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           id: "chrome",
           label: "Chrome",
           selected: activeTab === "chrome",
+        },
+        {
+          id: "edge",
+          label: "Edge",
+          selected: activeTab === "edge",
         },
         {
           id: "firefox",
@@ -4212,7 +4287,15 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function getRoute() {
     var path = window.location.pathname
-    if (path === "/" || path === "") return { page: "home" }
+    if (
+      path === "/" ||
+      path === "" ||
+      path === "/apps/iconoplasm" ||
+      path === "/apps/iconoplasm/" ||
+      path === "/Iconoplasm" ||
+      path === "/Iconoplasm.html"
+    )
+      return { page: "home" }
     var m = path.match(/^\/gene\/(.+)$/)
     if (m) return { page: "gene", symbol: decodeURIComponent(m[1]) }
     return { page: "404" }
@@ -4240,6 +4323,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       root.innerHTML = buildHomeShellMarkup(homeLayout)
     }
     renderHomeToolbarAuth()
+    loadInstallReleaseMetadata()
     renderHomeInstallCta()
     syncPublicInventoryStat()
     probeForIconoplasmExtensionPresence()

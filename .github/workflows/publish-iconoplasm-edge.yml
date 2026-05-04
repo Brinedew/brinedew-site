@@ -1,5 +1,11 @@
 name: Publish Iconoplasm Edge extension
 
+# Public-repo hygiene: keep private Partner Center / AMO / Chrome dashboard
+# investigation notes out of this workflow. Detailed store handoff belongs in
+# the private tracker and local workstation code, not in public release automation.
+# Never write secret values into this workflow, docs, logs, Linear, commits, or
+# artifacts.
+
 # Store publish is deliberately workflow_dispatch-only. The supported trigger
 # surface is the local Iconoplasm GUI's human release gate, not pushes, cron, or
 # unattended LLM/CLI automation.

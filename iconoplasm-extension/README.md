@@ -50,6 +50,8 @@ That writes:
 
 ## Store publishing
 
+Detailed store status handoff lives in the private tracker and local Iconoplasm workstation code. Keep this public repo documentation limited to packaging and release mechanics; do not paste private dashboard notes, review status details, or secret values here.
+
 The local Iconoplasm GUI owns the human release trigger. GitHub Actions workflows are the execution targets after a person confirms the publish from Website Ops.
 
 Canonical path:
