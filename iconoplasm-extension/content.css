@@ -429,31 +429,27 @@ body.iconoplasm-highlight-on-hover .iconoplasm-gene--pill:not(:hover) {
   flex: 0 0 auto;
 }
 
-/* Gene symbol -- monospace, prominent. Color set dynamically by JS. */
+/* Gene symbol -- match the printed card title instead of per-gene monospace coloring. */
 .iconoplasm-tooltip-symbol {
   font-size: 32px;
   font-weight: 800;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
   line-height: 1.05;
-  font-family: "Monaspace Xenon Web", "SF Mono", "Cascadia Code", "Consolas", monospace;
+  font-family: "Special Elite", "Georgia", serif;
   text-align: left;
-  color: color-mix(
-    in srgb,
-    var(--iconoplasm-gene-color, #6b6b78) 42%,
-    var(--iconoplasm-tooltip-ink)
-  );
+  color: var(--iconoplasm-tooltip-ink);
 }
 
-/* Full gene name -- serif body font, like GeneGuessr cards. Color set dynamically by JS. */
+/* Full gene name -- stable typed caption color, not the linked gene accent. */
 .iconoplasm-tooltip-name {
   font-size: 14px;
-  font-weight: 400;
+  font-weight: 500;
   line-height: 1.4;
   margin-top: 2px;
-  font-family: "Crimson Pro", "Georgia", serif;
+  font-family: "IBM Plex Mono", "Monaspace Xenon Web", "SF Mono", "Consolas", monospace;
   overflow: visible;
   text-align: left;
-  color: var(--iconoplasm-tooltip-muted);
+  color: color-mix(in srgb, var(--iconoplasm-tooltip-ink) 78%, transparent);
 }
 
 /* -- Tooltip metadata: 2-column character | origin ------------------- */

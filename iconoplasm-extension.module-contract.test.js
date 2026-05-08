@@ -289,6 +289,31 @@ test("DO NOT DELETE: default blocklist keeps alias-only pruning outcome", () => 
   }
 })
 
+test("DO NOT DELETE: simple card title uses stable label typography and ink", () => {
+  const contentCss = readUtf8("./iconoplasm-extension/content.css")
+
+  assert.match(
+    contentCss,
+    /\.iconoplasm-tooltip-symbol\s*\{[\s\S]*font-family:\s*"Special Elite"/,
+    "simple card symbol should use the same printed-card title face as the other Iconoplasm cards",
+  )
+  assert.match(
+    contentCss,
+    /\.iconoplasm-tooltip-symbol\s*\{[\s\S]*color:\s*var\(--iconoplasm-tooltip-ink\)/,
+    "simple card symbol should stay stable ink instead of inheriting each gene accent color",
+  )
+  assert.match(
+    contentCss,
+    /\.iconoplasm-tooltip-name\s*\{[\s\S]*font-family:\s*"IBM Plex Mono"/,
+    "simple card subtitle should use the typed label face used by the other card metadata",
+  )
+  assert.doesNotMatch(
+    contentCss,
+    /\.iconoplasm-tooltip-symbol\s*\{[\s\S]*--iconoplasm-gene-color/,
+    "simple card title should not mix in per-gene colors",
+  )
+})
+
 test("DO NOT DELETE: highlight timing setting is wired through popup, shared settings, and content script", () => {
   const settingsSource = readUtf8("./iconoplasm-extension/content-settings.js")
   const popupHtml = readUtf8("./iconoplasm-extension/popup.html")
