@@ -14659,6 +14659,14 @@ async function mobileCardSnapshotWarmSymbolsForInvalidation(
   env,
   { symbols = [], fullRebuild = false } = {},
 ) {
+  if (fullRebuild) {
+    return catalogSymbolsForMobileCardSnapshotWarm(env, {
+      limit: Math.min(
+        MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_BATCH,
+        MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
+      ),
+    })
+  }
   const warmSet = new Set()
   for (const symbol of ICONOPLASM_STARTER_GENE_SYMBOLS) {
     const normalized = normalizeSymbol(symbol)
@@ -14668,11 +14676,6 @@ async function mobileCardSnapshotWarmSymbolsForInvalidation(
     const normalized = normalizeSymbol(symbol)
     if (normalized) warmSet.add(normalized)
   }
-  // Full-catalog VM warming is intentionally chunked through the authenticated
-  // admin warm endpoint below. Doing 10k+ gene VM builds synchronously inside
-  // read-model sync can overrun the service-binding request and publish no
-  // useful operator result.
-  void fullRebuild
   return Array.from(warmSet)
 }
 

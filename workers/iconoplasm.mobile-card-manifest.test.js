@@ -406,6 +406,8 @@ test("gallery invalidation warms a real shared card VM snapshot instead of an em
   assert.match(source, /await warmCatalogCache\(env\)/)
   assert.match(source, /Array\.from\(catalogCache\.bySymbol\.keys\(\)\)/)
   assert.match(source, /const warmedSymbols = await mobileCardSnapshotWarmSymbolsForInvalidation/)
+  assert.match(source, /if \(fullRebuild\) \{[\s\S]*catalogSymbolsForMobileCardSnapshotWarm/)
+  assert.doesNotMatch(source, /void fullRebuild/)
   assert.match(source, /scope === "catalog"/)
   assert.match(source, /mobile_card_vms:/)
   assert.doesNotMatch(
