@@ -524,12 +524,67 @@
   const PORTRAIT_WARM_BATCH_SIZE = 6
   const GENE_DETAIL_VIEWPORT_ABOVE_PX = 160
   const GENE_DETAIL_VIEWPORT_BELOW_PX = 960
+  const TOOLTIP_VIEWPORT_MARGIN_PX = 8
+  const TOOLTIP_TARGET_GAP_PX = 8
+  const decodedPortraitSrcCache = new Set()
+  const decodedPortraitSrcPromises = new Map()
+  const DECODED_PORTRAIT_CACHE_LIMIT = 96
+
+  function rememberDecodedPortraitSrc(src) {
+    decodedPortraitSrcCache.delete(src)
+    decodedPortraitSrcCache.add(src)
+    while (decodedPortraitSrcCache.size > DECODED_PORTRAIT_CACHE_LIMIT) {
+      const oldest = decodedPortraitSrcCache.values().next().value
+      decodedPortraitSrcCache.delete(oldest)
+    }
+  }
+
+  async function decodePortraitSrc(src) {
+    const usableSrc = String(src || "").trim()
+    if (!usableSrc) return ""
+    if (decodedPortraitSrcCache.has(usableSrc)) return usableSrc
+    if (decodedPortraitSrcPromises.has(usableSrc)) return decodedPortraitSrcPromises.get(usableSrc)
+
+    const decodePromise = new Promise((resolve, reject) => {
+      const img = new Image()
+      img.decoding = "async"
+      img.onload = async () => {
+        try {
+          if (typeof img.decode === "function") await img.decode()
+        } catch (_) {
+          // onload means the browser accepted the image; decode() may reject for SVG/data URL edge cases.
+        }
+        rememberDecodedPortraitSrc(usableSrc)
+        resolve(usableSrc)
+      }
+      img.onerror = () => reject(new Error("Portrait image failed to load"))
+      img.src = usableSrc
+    }).finally(() => {
+      decodedPortraitSrcPromises.delete(usableSrc)
+    })
+
+    decodedPortraitSrcPromises.set(usableSrc, decodePromise)
+    return decodePromise
+  }
+
+  function warmDecodedPortraitSources(usableSources) {
+    for (const src of Array.isArray(usableSources) ? usableSources : []) {
+      if (!src) continue
+      decodePortraitSrc(src).catch(() => null)
+    }
+  }
+
+  function onPortraitWarmBatch(usableSources) {
+    prewarmLitArchivalFramePortraitSrcs(usableSources)
+    warmDecodedPortraitSources(usableSources)
+  }
+
   const portraitCache = IconoContentPortraitCache.createPortraitCache({
     windowRef: window,
     chromeApi: chrome,
     batchSize: PORTRAIT_WARM_BATCH_SIZE,
     delayMs: 20,
-    onWarmBatch: prewarmLitArchivalFramePortraitSrcs,
+    onWarmBatch: onPortraitWarmBatch,
   })
   const portraitDataUrlCache = portraitCache.dataUrlCache
   const geneDetailStore = IconoContentDetailCache.createGeneDetailStore({
@@ -1212,6 +1267,8 @@
     const loadToken = ++portraitLoadToken
     const cachedSrc = portraitDataUrlCache.get(portraitSrc)
     if (cachedSrc) {
+      await decodePortraitSrc(cachedSrc).catch(() => cachedSrc)
+      if (loadToken !== portraitLoadToken || activeSymbol !== symbol) return
       applyPortraitImage(
         portrait,
         portraitImg,
@@ -1236,20 +1293,8 @@
       )
       return
     }
-    if (usableSrc.startsWith("data:")) {
-      applyPortraitImage(
-        portrait,
-        portraitImg,
-        portraitFallback,
-        portraitStatus,
-        usableSrc,
-        symbol + " portrait",
-      )
-      return
-    }
-
-    const img = new Image()
-    img.onload = () => {
+    try {
+      await decodePortraitSrc(usableSrc)
       if (loadToken !== portraitLoadToken || activeSymbol !== symbol) return
       applyPortraitImage(
         portrait,
@@ -1259,8 +1304,7 @@
         usableSrc,
         symbol + " portrait",
       )
-    }
-    img.onerror = () => {
+    } catch (_) {
       if (loadToken !== portraitLoadToken || activeSymbol !== symbol) return
       setPortraitFallback(
         portrait,
@@ -1270,7 +1314,6 @@
         "Portrait unavailable",
       )
     }
-    img.src = usableSrc
   }
 
   // -- Font injection ------------------------------------------------
@@ -1702,6 +1745,34 @@
     openGenePage(activeSymbol)
   }
 
+  function chooseTooltipViewportPosition(rect, tooltipWidth, tooltipHeight) {
+    const maxLeft = Math.max(
+      TOOLTIP_VIEWPORT_MARGIN_PX,
+      window.innerWidth - tooltipWidth - TOOLTIP_VIEWPORT_MARGIN_PX,
+    )
+    let left = rect.left + rect.width / 2 - tooltipWidth / 2
+    left = Math.max(TOOLTIP_VIEWPORT_MARGIN_PX, Math.min(left, maxLeft))
+
+    const availableAbove = Math.max(0, rect.top - TOOLTIP_VIEWPORT_MARGIN_PX)
+    const availableBelow = Math.max(
+      0,
+      window.innerHeight - rect.bottom - TOOLTIP_VIEWPORT_MARGIN_PX,
+    )
+    const belowFits = availableBelow >= tooltipHeight + TOOLTIP_TARGET_GAP_PX
+    const aboveFits = availableAbove >= tooltipHeight + TOOLTIP_TARGET_GAP_PX
+    const showBelow = belowFits || (!aboveFits && availableBelow >= availableAbove)
+    const rawTop = showBelow
+      ? rect.bottom + TOOLTIP_TARGET_GAP_PX
+      : rect.top - tooltipHeight - TOOLTIP_TARGET_GAP_PX
+    const maxTop = Math.max(
+      TOOLTIP_VIEWPORT_MARGIN_PX,
+      window.innerHeight - tooltipHeight - TOOLTIP_VIEWPORT_MARGIN_PX,
+    )
+    const top = Math.max(TOOLTIP_VIEWPORT_MARGIN_PX, Math.min(rawTop, maxTop))
+
+    return { left, top, showBelow }
+  }
+
   function onMouseOver(e) {
     const target = e.target.closest(".iconoplasm-gene")
     if (!target) return
@@ -1779,17 +1850,11 @@
     const tooltipWidth = tooltip.offsetWidth || 500
     const tooltipHeight = tooltip.offsetHeight || 248
 
-    let left = rect.left + rect.width / 2 - tooltipWidth / 2
-    left = Math.max(8, Math.min(left, window.innerWidth - tooltipWidth - 8))
+    const tooltipPosition = chooseTooltipViewportPosition(rect, tooltipWidth, tooltipHeight)
 
-    const showBelow = rect.top < tooltipHeight + 16
-
-    tooltip.style.left = left + window.scrollX + "px"
-    if (showBelow) {
-      tooltip.style.top = rect.bottom + window.scrollY + 8 + "px"
-    } else {
-      tooltip.style.top = rect.top + window.scrollY - tooltipHeight - 8 + "px"
-    }
+    tooltip.style.left = tooltipPosition.left + window.scrollX + "px"
+    tooltip.style.top = tooltipPosition.top + window.scrollY + "px"
+    tooltip.dataset.placement = tooltipPosition.showBelow ? "below" : "above"
 
     tooltip.classList.add("iconoplasm-tooltip-visible")
     scheduleDiscoveryEncounter(symbol)

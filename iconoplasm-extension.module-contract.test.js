@@ -339,6 +339,54 @@ test("DO NOT DELETE: simple card title uses stable label typography and ink", ()
   )
 })
 
+test("DO NOT DELETE: simple card portrait warmup decodes hover-neighbor images", () => {
+  const source = readUtf8("./iconoplasm-extension/content.js")
+  assert.match(
+    source,
+    /const decodedPortraitSrcCache = new Set\(\)/,
+    "content.js should keep a decoded portrait cache, not only a data-url byte cache",
+  )
+  assert.match(
+    source,
+    /function decodePortraitSrc\(src\)[\s\S]*new Image\(\)[\s\S]*img\.decode/,
+    "simple hover portraits should be decoded before the card switches to them",
+  )
+  assert.match(
+    source,
+    /function onPortraitWarmBatch\(usableSources\)[\s\S]*prewarmLitArchivalFramePortraitSrcs\(usableSources\)[\s\S]*warmDecodedPortraitSources\(usableSources\)/,
+    "neighbor portrait warming should serve both the frame renderer and the simple-card renderer",
+  )
+})
+
+test("DO NOT DELETE: hover tooltip placement compares viewport space above and below", () => {
+  const source = readUtf8("./iconoplasm-extension/content.js")
+  assert.match(
+    source,
+    /function chooseTooltipViewportPosition\(rect, tooltipWidth, tooltipHeight\)/,
+    "tooltip placement should live in one auditable placement helper",
+  )
+  assert.match(
+    source,
+    /const availableAbove = Math\.max\(0, rect\.top - TOOLTIP_VIEWPORT_MARGIN_PX\)/,
+    "placement should measure available space above the hovered symbol",
+  )
+  assert.match(
+    source,
+    /const availableBelow = Math\.max\([\s\S]*window\.innerHeight - rect\.bottom - TOOLTIP_VIEWPORT_MARGIN_PX/,
+    "placement should measure available space below the hovered symbol",
+  )
+  assert.match(
+    source,
+    /tooltip\.dataset\.placement = tooltipPosition\.showBelow \? "below" : "above"/,
+    "placement should expose the chosen side for visual regression checks",
+  )
+  assert.doesNotMatch(
+    source,
+    /const showBelow = rect\.top < tooltipHeight \+ 16/,
+    "the old one-sided rule reopened downward even when downward overflowed",
+  )
+})
+
 test("DO NOT DELETE: highlight timing setting is wired through popup, shared settings, and content script", () => {
   const settingsSource = readUtf8("./iconoplasm-extension/content-settings.js")
   const popupHtml = readUtf8("./iconoplasm-extension/popup.html")
