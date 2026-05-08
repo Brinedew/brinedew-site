@@ -14464,12 +14464,14 @@ async function readVersionedSharedJson(env, prefix, version) {
 }
 
 async function writeVersionedSharedJson(env, prefix, version, value) {
-  if (!env?.KV || !version) return
+  if (!env?.KV || !version) return false
   try {
     await env.KV.put(`${prefix}${version}`, JSON.stringify(value))
+    return true
   } catch {
     // Shared-cache writes are an optimization barrier, not the source of truth.
     // If KV write-through fails we can still fall back to the raw D1 result.
+    return false
   }
 }
 
@@ -15860,19 +15862,21 @@ async function readMobileCardVMFromSharedSnapshot(env, snapshotVersion, symbol) 
 
 async function writeMobileCardVMToSharedSnapshot(env, snapshotVersion, vm) {
   const key = mobileCardVMSharedCacheKey(snapshotVersion, vm?.symbol)
-  if (!key || !assertCompleteMobileCardVM(vm)) return
+  if (!key || !assertCompleteMobileCardVM(vm)) return false
   const snapshotVM = {
     ...vm,
     snapshot_version: String(snapshotVersion || vm.snapshot_version || "0"),
     data_source: "kv_snapshot",
   }
-  mobileCardVMCache.set(key, snapshotVM)
-  await writeVersionedSharedJson(
+  const wrote = await writeVersionedSharedJson(
     env,
     `${KV_MOBILE_CARD_VM_PREFIX}${snapshotVersion}:`,
     normalizeSymbol(vm.symbol || ""),
     snapshotVM,
   )
+  if (!wrote) return false
+  mobileCardVMCache.set(key, snapshotVM)
+  return true
 }
 
 async function handleMobileCardManifest(request, env) {
@@ -16012,7 +16016,11 @@ async function composeAndCacheMobileCardVMs(env, requestUrl, symbols, snapshotVe
       missing.push(symbol)
       continue
     }
-    await writeMobileCardVMToSharedSnapshot(env, snapshotVersion, vm)
+    const wrote = await writeMobileCardVMToSharedSnapshot(env, snapshotVersion, vm)
+    if (!wrote) {
+      missing.push(symbol)
+      continue
+    }
     cards.push(vm)
   }
   return { cards, missing }

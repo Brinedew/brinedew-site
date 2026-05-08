@@ -2,7 +2,10 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { readFileSync } from "node:fs"
 
-import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  resetIconoplasmRuntimeCachesForTest,
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const source = readFileSync(
   new URL("./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js", import.meta.url),
@@ -186,6 +189,7 @@ function buildEnv({ kvStore = new Map(), db = new FakeIconoplasmDb(), version = 
       },
       async put(key, value) {
         kvStore.set(key, value)
+        return true
       },
     },
     ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
@@ -322,7 +326,8 @@ test("mobile card manifest falls back to previous version without D1", async () 
   assert.equal(payload.cards[0].data_source, "kv_previous")
 })
 
-test("admin card VM warm endpoint fills bounded symbol chunks", async () => {
+test("admin card VM warm endpoint reports unwritable VM snapshots as missing", async () => {
+  resetIconoplasmRuntimeCachesForTest()
   const kvStore = new Map()
   const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
@@ -340,24 +345,42 @@ test("admin card VM warm endpoint fills bounded symbol chunks", async () => {
   assert.equal(payload.ok, true)
   assert.equal(payload.scope, "symbols")
   assert.equal(payload.requested, 1)
-  assert.equal(payload.warmed, 1)
-  assert.equal(payload.missing, 0)
+  assert.equal(payload.warmed, 0)
+  assert.equal(payload.missing, 1)
   assert.equal(payload.next_cursor, "ERBB2")
-  const manifestResponse = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
+  assert.equal(kvStore.size, 0)
+})
+
+test("admin card VM warm endpoint does not count failed KV writes as warmed cards", async () => {
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["ERBB2"] }),
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ symbols: ["ERBB2"] }),
     }),
-    buildEnv({ kvStore }),
+    {
+      ...buildEnv(),
+      KV: {
+        async get(key) {
+          if (key === "iconoplasm:gallery-version") return "test-vm-version"
+          return null
+        },
+        async put() {
+          throw new Error("KV write failed")
+        },
+      },
+    },
   )
-  const manifest = await manifestResponse.json()
-  assert.deepEqual(manifest.missing, [])
-  assert.equal(manifest.cards.length, 1)
-  assert.deepEqual(
-    manifest.cards.map((card) => card.symbol),
-    ["ERBB2"],
-  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.ok, true)
+  assert.equal(payload.requested, 1)
+  assert.equal(payload.warmed, 0)
+  assert.equal(payload.missing, 1)
 })
 
 test("admin card VM warm endpoint keeps catalog warming behind admin auth", async () => {
