@@ -151,6 +151,60 @@ test("DO NOT DELETE: content.js delegates split responsibilities to extension mo
   }
 })
 
+test("DO NOT DELETE: simple card batch request includes fields consumed by its metadata rows", () => {
+  const source = readUtf8("./iconoplasm-extension/content.js")
+  const fieldsMatch = source.match(/const GENE_DETAIL_BATCH_FIELDS = Object\.freeze\(\[([\s\S]*?)\]\)/)
+  assert.ok(fieldsMatch, "content.js should define the projected batch fields for hover details")
+  const fields = [...fieldsMatch[1].matchAll(/"([^"]+)"/g)].map((match) => match[1])
+
+  for (const field of [
+    "essence",
+    "first_publication_year",
+    "molecular_weight_kda",
+    "primary_tissue",
+    "portrait",
+  ]) {
+    assert.ok(
+      fields.includes(field),
+      `${field} should be requested because the simple card metadata renderer consumes it`,
+    )
+  }
+})
+
+test("DO NOT DELETE: simple card metadata renders mass, age, and tissue when projected fields exist", async () => {
+  const vm = await import("node:vm")
+  const sandbox = { console }
+  sandbox.globalThis = sandbox
+  vm.runInNewContext(readUtf8("./iconoplasm-extension/generated/shared-card-runtime.js"), sandbox)
+  const shared = sandbox.IconoplasmCardShared
+  assert.equal(typeof shared?.collectTooltipMetaRows, "function")
+
+  const rows = shared.collectTooltipMetaRows({
+    symbol: "TP53",
+    first_publication_year: 1979,
+    molecular_weight_kda: 43.7,
+    primary_tissue: "bone marrow",
+    essence: {
+      age_years: 47,
+      weight_kg: 68,
+      skin_name: "pale rose",
+    },
+  })
+
+  assert.ok(
+    rows.some((row) => row.character === "68 kg" && row.molecular === "44 kDa"),
+    "mass row should survive the simple metadata projection",
+  )
+  assert.ok(
+    rows.some((row) => row.character === "47 years old" && row.molecular === "discovered in 1979"),
+    "age row should survive the simple metadata projection",
+  )
+  assert.ok(
+    rows.some((row) => row.molecular === "bone marrow"),
+    "skin/tissue row should survive the simple metadata projection",
+  )
+})
+
 test("DO NOT DELETE: split content modules expose stable globals", () => {
   const moduleGlobals = new Map([
     ["content-api.js", "IconoplasmContentApi"],

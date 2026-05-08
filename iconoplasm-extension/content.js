@@ -110,6 +110,9 @@
     "full_name",
     "color",
     "essence",
+    "first_publication_year",
+    "molecular_weight_kda",
+    "primary_tissue",
     "portrait",
   ])
   const escapeHtml = IconoCardShared.escapeHtml
