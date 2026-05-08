@@ -429,27 +429,29 @@ body.iconoplasm-highlight-on-hover .iconoplasm-gene--pill:not(:hover) {
   flex: 0 0 auto;
 }
 
-/* Gene symbol -- match the printed card symbol face instead of per-gene monospace coloring. */
+/* Gene symbol -- match the blot-only title treatment without inheriting per-gene accent color. */
 .iconoplasm-tooltip-symbol {
-  font-size: 32px;
+  font-size: 38px;
   font-weight: 800;
-  letter-spacing: 0.04em;
-  line-height: 0.95;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
   font-family: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
   text-align: left;
   color: var(--iconoplasm-tooltip-ink);
 }
 
-/* Full gene name -- match the printed card name face, not the typed metadata face. */
+/* Full gene name -- match the blot-only name treatment, adapted to the light simple card. */
 .iconoplasm-tooltip-name {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 400;
-  line-height: 1.2;
+  line-height: 1.22;
   margin-top: 2px;
   font-family: "Special Elite", "Georgia", serif;
-  letter-spacing: 0.03em;
+  letter-spacing: 0;
+  max-inline-size: 20ch;
   overflow: visible;
   text-align: left;
+  text-wrap: pretty;
   color: color-mix(in srgb, var(--iconoplasm-tooltip-ink) 92%, transparent);
 }
 

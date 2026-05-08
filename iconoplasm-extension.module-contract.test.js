@@ -295,7 +295,17 @@ test("DO NOT DELETE: simple card title uses stable label typography and ink", ()
   assert.match(
     contentCss,
     /\.iconoplasm-tooltip-symbol\s*\{[\s\S]*font-family:\s*"League Spartan"/,
-    "simple card symbol should use the same printed-card gene symbol face as the other Iconoplasm cards",
+    "simple card symbol should use the same face as the blot-only symbol",
+  )
+  assert.match(
+    contentCss,
+    /\.iconoplasm-tooltip-symbol\s*\{[\s\S]*letter-spacing:\s*-0\.05em/,
+    "simple card symbol should use the blot-only symbol tracking, not lab-label tracking",
+  )
+  assert.match(
+    contentCss,
+    /\.iconoplasm-tooltip-symbol\s*\{[\s\S]*line-height:\s*0\.9/,
+    "simple card symbol should use the blot-only symbol line height",
   )
   assert.match(
     contentCss,
@@ -305,7 +315,22 @@ test("DO NOT DELETE: simple card title uses stable label typography and ink", ()
   assert.match(
     contentCss,
     /\.iconoplasm-tooltip-name\s*\{[\s\S]*font-family:\s*"Special Elite"/,
-    "simple card subtitle should use the same printed-card full-name face as the other Iconoplasm cards",
+    "simple card subtitle should use the same face as the blot-only full name",
+  )
+  assert.match(
+    contentCss,
+    /\.iconoplasm-tooltip-name\s*\{[\s\S]*line-height:\s*1\.22/,
+    "simple card subtitle should use the blot-only full-name line height",
+  )
+  assert.match(
+    contentCss,
+    /\.iconoplasm-tooltip-name\s*\{[\s\S]*max-inline-size:\s*20ch/,
+    "simple card subtitle should keep the blot-only full-name measure",
+  )
+  assert.match(
+    contentCss,
+    /\.iconoplasm-tooltip-name\s*\{[\s\S]*text-wrap:\s*pretty/,
+    "simple card subtitle should keep the blot-only full-name wrapping behavior",
   )
   assert.doesNotMatch(
     contentCss,
