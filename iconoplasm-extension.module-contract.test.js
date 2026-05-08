@@ -294,8 +294,8 @@ test("DO NOT DELETE: simple card title uses stable label typography and ink", ()
 
   assert.match(
     contentCss,
-    /\.iconoplasm-tooltip-symbol\s*\{[\s\S]*font-family:\s*"Special Elite"/,
-    "simple card symbol should use the same printed-card title face as the other Iconoplasm cards",
+    /\.iconoplasm-tooltip-symbol\s*\{[\s\S]*font-family:\s*"League Spartan"/,
+    "simple card symbol should use the same printed-card gene symbol face as the other Iconoplasm cards",
   )
   assert.match(
     contentCss,
@@ -304,8 +304,8 @@ test("DO NOT DELETE: simple card title uses stable label typography and ink", ()
   )
   assert.match(
     contentCss,
-    /\.iconoplasm-tooltip-name\s*\{[\s\S]*font-family:\s*"IBM Plex Mono"/,
-    "simple card subtitle should use the typed label face used by the other card metadata",
+    /\.iconoplasm-tooltip-name\s*\{[\s\S]*font-family:\s*"Special Elite"/,
+    "simple card subtitle should use the same printed-card full-name face as the other Iconoplasm cards",
   )
   assert.doesNotMatch(
     contentCss,
