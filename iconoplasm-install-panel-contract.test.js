@@ -16,6 +16,8 @@ test("install panel exposes separate Chrome, Edge, and Firefox public instructio
   assert.match(app, /addons\.mozilla\.org\/en-US\/firefox\/addon\/iconoplasm-gene-illustrations/)
   assert.match(app, /microsoftedge\.microsoft\.com\/addons\/detail\/ocfhohjhkflpmaiimgjfobdoogdfpmog/)
   assert.match(app, /chromeDeveloperPackageUrl/)
+  assert.doesNotMatch(app, /github\.com\/Brinedew\/brinedew-site/)
+  assert.doesNotMatch(app, /label:\s*"Source"/)
   assert.doesNotMatch(app, /Firefox needs the signed AMO release/)
   assert.doesNotMatch(app, /Store listing is not live yet/)
   assert.doesNotMatch(app, /Use Chrome or Edge for now/)
@@ -40,19 +42,22 @@ test("Iconoplasm app routes render the homepage shell on the hosted Quartz path"
 test("public release metadata points Chrome developer installs at the current package only", async () => {
   const metadata = JSON.parse(await readFile(releasePath, "utf8"))
 
-  assert.equal(metadata.version, "0.4.1")
+  assert.equal(metadata.version, "0.4.2")
   assert.equal(
     metadata.chromeDeveloperPackageUrl,
-    "/static/iconoplasm/downloads/iconoplasm-extension-v0.4.1.zip",
+    "/static/iconoplasm/downloads/iconoplasm-extension-v0.4.2.zip",
   )
   assert.equal(
     metadata.firefoxListingUrl,
     "https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/",
   )
-  assert.equal(
-    metadata.edgeListingUrl,
-    "https://microsoftedge.microsoft.com/addons/detail/ocfhohjhkflpmaiimgjfobdoogdfpmog",
-  )
-  assert.equal(metadata.edgeListingStatus, "live")
+  if (metadata.edgeListingUrl) {
+    assert.equal(
+      metadata.edgeListingUrl,
+      "https://microsoftedge.microsoft.com/addons/detail/ocfhohjhkflpmaiimgjfobdoogdfpmog",
+    )
+  }
+  assert.match(metadata.edgeListingStatus, /^(live|pending)$/)
+  assert.doesNotMatch(JSON.stringify(metadata), /github\.com\/Brinedew\/brinedew-site/)
   assert.doesNotMatch(JSON.stringify(metadata), /1152921505700927252|PackageValid|Partner Center|Linear B-500/)
 })

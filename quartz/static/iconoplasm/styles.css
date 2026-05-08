@@ -1060,6 +1060,22 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   line-height: 1.38;
 }
 
+.icono-install-step-action {
+  display: inline-flex;
+  max-width: 100%;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+}
+
+.icono-install-step-action .icono-install-link {
+  flex: 0 1 auto;
+  width: min(100%, 13rem);
+  max-width: 100%;
+  min-height: 2.35rem;
+  white-space: normal;
+  text-align: center;
+}
+
 .icono-install-code {
   padding: 0.08rem 0.38rem;
   border-radius: var(--icono-radius-sm);

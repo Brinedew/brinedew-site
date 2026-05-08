@@ -71,8 +71,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var ICONO_EXTENSION_PRESENCE_EVENT = "iconoplasm-extension-presence"
   var ICONO_EXTENSION_PRESENCE_PING_EVENT = "iconoplasm-extension-presence-ping"
   var ICONO_EXTENSION_RELEASE_METADATA_URL = "/static/iconoplasm/extension-release.json"
-  var ICONO_EXTENSION_SOURCE_URL =
-    "https://github.com/Brinedew/brinedew-site/tree/main/iconoplasm-extension"
   var ICONO_EXTENSION_FIREFOX_LISTING_URL =
     "https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/"
   var ICONO_EXTENSION_EDGE_LISTING_URL =
@@ -1801,7 +1799,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function buildInstallBrowserPanels(browser, faqUrl) {
     var release = iconoInstallState.release || {}
     var chromePackageUrl =
-      String(release.chromeDeveloperPackageUrl || "").trim() || ICONO_EXTENSION_SOURCE_URL
+      String(release.chromeDeveloperPackageUrl || "").trim() ||
+      "/static/iconoplasm/downloads/iconoplasm-extension-v0.4.2.zip"
     var firefoxListingUrl =
       String(release.firefoxListingUrl || "").trim() || ICONO_EXTENSION_FIREFOX_LISTING_URL
     var edgeListingUrl =
@@ -1815,24 +1814,21 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         note: "Chrome uses a developer package until the Chrome Web Store listing is live.",
         managerUrl: "chrome://extensions",
         steps: [
-          'Click "Download Chrome developer package".',
-          'In your Downloads folder, extract the downloaded .zip file.',
+          {
+            text: "Click this button to download the extension file:",
+            action: {
+              href: chromePackageUrl,
+              label: "Download extension file",
+              subtle: false,
+            },
+          },
+          'In your Downloads folder, extract "iconoplasm-extension-v0.4.2.zip".',
           "In Chrome, click the address bar, type chrome://extensions, and press Enter.",
           'In the top-right corner of chrome://extensions, click the "Developer mode" switch so it is on.',
           'Click the "Load unpacked" button.',
-          'In the folder picker, select the extracted extension folder, then click "Select Folder".',
+          'In the folder picker, select the extracted "iconoplasm-extension-v0.4.2" folder, then click "Select Folder".',
         ],
         actions: [
-          {
-            href: chromePackageUrl,
-            label: "Download Chrome developer package",
-            subtle: false,
-          },
-          {
-            href: ICONO_EXTENSION_SOURCE_URL,
-            label: "Source",
-            subtle: true,
-          },
           {
             href: faqUrl,
             label: "FAQ",
@@ -1848,16 +1844,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         note: "Install the signed Edge release from Microsoft Edge Add-ons.",
         managerUrl: "edge://extensions",
         steps: [
-          'Click "Get extension for Edge".',
+          {
+            text: "Click this button to visit the Edge Add-ons page:",
+            action: {
+              href: edgeListingUrl,
+              label: "Get extension for Edge",
+              subtle: false,
+            },
+          },
           'On the Microsoft Edge Add-ons page, click the "Get" button.',
           'In the Edge confirmation dialog, click "Add extension".',
         ],
         actions: [
-          {
-            href: edgeListingUrl,
-            label: "Get extension for Edge",
-            subtle: false,
-          },
           {
             href: faqUrl,
             label: "FAQ",
@@ -1873,16 +1871,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         note: "Install the signed Firefox release from Mozilla Add-ons.",
         managerUrl: "",
         steps: [
-          'Click "Get extension for Firefox".',
+          {
+            text: "Click this button to visit the Firefox Add-ons page:",
+            action: {
+              href: firefoxListingUrl,
+              label: "Get extension for Firefox",
+              subtle: false,
+            },
+          },
           'On the Firefox Add-ons page, click the "Add to Firefox" button.',
           'In the Firefox confirmation dialog, click "Add".',
         ],
         actions: [
-          {
-            href: firefoxListingUrl,
-            label: "Get extension for Firefox",
-            subtle: false,
-          },
           {
             href: faqUrl,
             label: "FAQ",
@@ -2001,29 +2001,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var actions = Array.isArray(model.actions) ? model.actions : []
     var managerUrl = String(model.managerUrl || "").trim()
     var activeTab = String(model.activeTab || "").trim()
-    var stepsHtml = ""
-    for (var i = 0; i < steps.length; i++) {
-      var step = String(steps[i] || "").trim()
-      if (!step) continue
-      if (managerUrl && step.indexOf(managerUrl) !== -1) {
-        var escapedUrl = esc(managerUrl)
-        var escapedStep = esc(step)
-        stepsHtml +=
-          "<li>" +
-          escapedStep.replace(
-            escapedUrl,
-            '<code class="icono-install-code">' + escapedUrl + "</code>",
-          ) +
-          "</li>"
-        continue
-      }
-      stepsHtml += "<li>" + esc(step) + "</li>"
-    }
-    var actionsHtml = ""
-    for (var j = 0; j < actions.length; j++) {
-      var action = actions[j]
-      if (!action || !action.href) continue
-      actionsHtml +=
+    function buildInstallActionMarkup(action) {
+      if (!action || !action.href) return ""
+      return (
         '<a class="' +
         (action.subtle
           ? "icono-toolbar-link icono-install-link icono-install-link--subtle"
@@ -2033,6 +2013,40 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         '" target="_blank" rel="noopener noreferrer">' +
         esc(action.label || "Open") +
         "</a>"
+      )
+    }
+    var stepsHtml = ""
+    for (var i = 0; i < steps.length; i++) {
+      var rawStep = steps[i]
+      var step = String(
+        rawStep && typeof rawStep === "object" ? rawStep.text || "" : rawStep || "",
+      ).trim()
+      if (!step) continue
+      var stepActionHtml =
+        rawStep && typeof rawStep === "object" ? buildInstallActionMarkup(rawStep.action) : ""
+      if (managerUrl && step.indexOf(managerUrl) !== -1) {
+        var escapedUrl = esc(managerUrl)
+        var escapedStep = esc(step)
+        stepsHtml +=
+          "<li>" +
+          escapedStep.replace(
+            escapedUrl,
+            '<code class="icono-install-code">' + escapedUrl + "</code>",
+          ) +
+          (stepActionHtml ? ' <span class="icono-install-step-action">' + stepActionHtml + "</span>" : "") +
+          "</li>"
+        continue
+      }
+      stepsHtml +=
+        "<li>" +
+        esc(step) +
+        (stepActionHtml ? ' <span class="icono-install-step-action">' + stepActionHtml + "</span>" : "") +
+        "</li>"
+    }
+    var actionsHtml = ""
+    for (var j = 0; j < actions.length; j++) {
+      var action = actions[j]
+      actionsHtml += buildInstallActionMarkup(action)
     }
     var panelBodyAttrs = activeTab
       ? ' class="icono-install-panel-body" id="icono-install-tabpanel-' +
