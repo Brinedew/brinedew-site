@@ -206,6 +206,38 @@ test("DO NOT DELETE: highlight timing setting is wired through popup, shared set
   )
 })
 
+test("DO NOT DELETE: blocklist changes live-unhighlight already wrapped page text", () => {
+  const settingsSource = readUtf8("./iconoplasm-extension/content-settings.js")
+  const popupSource = readUtf8("./iconoplasm-extension/popup.js")
+  const contentSource = readUtf8("./iconoplasm-extension/content.js")
+
+  assert.match(
+    settingsSource,
+    /userBlocklist:\s*"iconoplasm_user_blocklist"/,
+    "content-settings.js should publish the shared user blocklist storage key",
+  )
+  assert.match(
+    popupSource,
+    /await chrome\.storage\.local\.set\(\{ \[USER_BLOCKLIST_KEY\]: list \}\)/,
+    "popup.js should persist blocklist edits through chrome.storage so content tabs receive onChanged",
+  )
+  assert.match(
+    contentSource,
+    /function unwrapBlockedGeneHighlights\(blocklist\)[\s\S]*querySelectorAll\("\.iconoplasm-gene"\)[\s\S]*unwrapGeneElement\(el\)/,
+    "content.js should remove existing highlights for symbols that become blocklisted",
+  )
+  assert.match(
+    contentSource,
+    /changes\[USER_BLOCKLIST_KEY\] \|\| changes\[REMOVED_DEFAULTS_KEY\][\s\S]*refreshBlocklistFromStorage\(\)/,
+    "content.js should react live to blocklist storage changes instead of waiting for a reload",
+  )
+  assert.match(
+    contentSource,
+    /rebuildGeneMatcher\(nextBlocklist\)[\s\S]*unwrapBlockedGeneHighlights\(nextBlocklist\)/,
+    "content.js should rebuild the matcher before rescanning so blocked words are not immediately rewrapped",
+  )
+})
+
 test("DO NOT DELETE: user-facing card style copy calls the blot-only card a blot, not an image", () => {
   const popupHtml = readUtf8("./iconoplasm-extension/popup.html")
   const siteSettings = readUtf8("./quartz/static/site-settings/app.js")

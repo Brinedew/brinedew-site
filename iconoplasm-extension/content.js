@@ -508,6 +508,7 @@
   const mutationScanRoots = new Set()
   let mutationScanScheduled = false
   let pageScanner = null
+  let effectiveBlocklist = new Set()
   let highlightMode = highlightRuntime.setMode("pill")
   let highlightVisibility = "always"
   let cardVariant = "image-only"
@@ -550,6 +551,66 @@
   function openGenePage(symbol) {
     if (!symbol || !geneMap || !geneMap[symbol]) return
     window.open(buildGenePageUrl(symbol), "_blank", "noopener")
+  }
+
+  function unwrapGeneElement(el) {
+    if (!el || !el.parentNode) return false
+    const label = String((el.dataset && el.dataset.geneLabel) || el.textContent || "")
+    const textNode = document.createTextNode(label)
+    const parent = el.parentNode
+    parent.replaceChild(textNode, el)
+    parent.normalize()
+    return true
+  }
+
+  function unwrapBlockedGeneHighlights(blocklist) {
+    if (!(blocklist instanceof Set) || blocklist.size === 0) return 0
+    const genes = Array.from(document.querySelectorAll(".iconoplasm-gene"))
+    let removed = 0
+    for (const el of genes) {
+      const symbol = String((el.dataset && el.dataset.gene) || "")
+        .trim()
+        .toUpperCase()
+      const label = String((el.dataset && el.dataset.geneLabel) || el.textContent || "")
+        .trim()
+        .toUpperCase()
+      if (!symbol && !label) continue
+      if (!blocklist.has(symbol) && !blocklist.has(label)) continue
+      if (activeSymbol === symbol) hideTooltip()
+      if (unwrapGeneElement(el)) removed += 1
+    }
+    if (removed > 0) scheduleHighlightGeometryRefresh()
+    return removed
+  }
+
+  async function loadEffectiveBlocklist() {
+    const blocklistStorage = await new Promise((resolve) => {
+      chrome.storage.local.get([USER_BLOCKLIST_KEY, REMOVED_DEFAULTS_KEY], (result) => {
+        resolve(result || {})
+      })
+    })
+    return IconoContentSettings.buildEffectiveBlocklist(
+      ICONOPLASM_DEFAULT_BLOCKLIST,
+      blocklistStorage[USER_BLOCKLIST_KEY],
+      blocklistStorage[REMOVED_DEFAULTS_KEY],
+    )
+  }
+
+  function rebuildGeneMatcher(blocklist) {
+    effectiveBlocklist = blocklist instanceof Set ? blocklist : new Set()
+    geneMatcher = IconoContentMatcher.createGeneMatcher(geneMap, { blocklist: effectiveBlocklist })
+  }
+
+  async function refreshBlocklistFromStorage({ rescan = true } = {}) {
+    const nextBlocklist = await loadEffectiveBlocklist()
+    rebuildGeneMatcher(nextBlocklist)
+    unwrapBlockedGeneHighlights(nextBlocklist)
+    if (rescan) {
+      scanPage(document.body)
+      refreshHighlightStyles()
+      scheduleWarmVisibleGeneDetails()
+      scheduleWarmVisiblePortraits()
+    }
   }
 
   function showVoteLoginPopup() {
@@ -1254,16 +1315,7 @@
 
     // Effective blocklist = (defaults - user-removed) + user-added extras.
     // Both lists live in chrome.storage; defaults come from blocklist-defaults.js.
-    const blocklistStorage = await new Promise((resolve) => {
-      chrome.storage.local.get([USER_BLOCKLIST_KEY, REMOVED_DEFAULTS_KEY], (result) => {
-        resolve(result)
-      })
-    })
-    const effectiveBlocklist = IconoContentSettings.buildEffectiveBlocklist(
-      ICONOPLASM_DEFAULT_BLOCKLIST,
-      blocklistStorage[USER_BLOCKLIST_KEY],
-      blocklistStorage[REMOVED_DEFAULTS_KEY],
-    )
+    effectiveBlocklist = await loadEffectiveBlocklist()
 
     const payload = await new Promise((resolve) => {
       chrome.runtime.sendMessage({ type: "GET_GENE_DATA" }, resolve)
@@ -1281,7 +1333,7 @@
     }
     // Fence: candidate generation now lives in a dedicated matcher module. Keep content.js acting
     // as the page adapter that applies matches, not the place where lexical rules accrete forever.
-    geneMatcher = IconoContentMatcher.createGeneMatcher(geneMap, { blocklist: effectiveBlocklist })
+    rebuildGeneMatcher(effectiveBlocklist)
     pageScanner = IconoContentScanner.createPageScanner({
       documentRef: document,
       nodeFilter: NodeFilter,
@@ -1379,6 +1431,11 @@
         geneDetailCache.get(activeSymbol) || null,
         Boolean(activeSymbol),
       )
+    }
+    if (changes[USER_BLOCKLIST_KEY] || changes[REMOVED_DEFAULTS_KEY]) {
+      refreshBlocklistFromStorage().catch((err) => {
+        console.error("[Iconoplasm] blocklist refresh failed:", err)
+      })
     }
   })
 
