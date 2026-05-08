@@ -75,6 +75,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     "https://github.com/Brinedew/brinedew-site/tree/main/iconoplasm-extension"
   var ICONO_EXTENSION_FIREFOX_LISTING_URL =
     "https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/"
+  var ICONO_EXTENSION_EDGE_LISTING_URL =
+    "https://microsoftedge.microsoft.com/addons/detail/ocfhohjhkflpmaiimgjfobdoogdfpmog"
   var PREFETCH_BATCH_SIZE = 20
   var PREFETCH_TRIGGER_OFFSET = 10
   var PREFETCH_DETAIL_CONCURRENCY = 4
@@ -122,7 +124,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       chromeDeveloperPackageUrl:
         "/static/iconoplasm/downloads/iconoplasm-extension-v0.4.1.zip",
       firefoxListingUrl: ICONO_EXTENSION_FIREFOX_LISTING_URL,
-      edgeListingStatus: "pending",
+      edgeListingUrl: ICONO_EXTENSION_EDGE_LISTING_URL,
+      edgeListingStatus: "live",
     },
     releaseLoaded: false,
   }
@@ -1769,12 +1772,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         if (!metadata || typeof metadata !== "object") return
         var chromeDeveloperPackageUrl = String(metadata.chromeDeveloperPackageUrl || "").trim()
         var firefoxListingUrl = String(metadata.firefoxListingUrl || "").trim()
+        var edgeListingUrl = String(metadata.edgeListingUrl || "").trim()
         iconoInstallState.release = {
           version: String(metadata.version || iconoInstallState.release.version || "").trim(),
           chromeDeveloperPackageUrl:
             chromeDeveloperPackageUrl || iconoInstallState.release.chromeDeveloperPackageUrl,
           firefoxListingUrl: firefoxListingUrl || iconoInstallState.release.firefoxListingUrl,
-          edgeListingStatus: String(metadata.edgeListingStatus || "pending").trim() || "pending",
+          edgeListingUrl: edgeListingUrl || iconoInstallState.release.edgeListingUrl,
+          edgeListingStatus: String(metadata.edgeListingStatus || "live").trim() || "live",
         }
         renderHomeInstallCta()
       })
@@ -1799,6 +1804,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       String(release.chromeDeveloperPackageUrl || "").trim() || ICONO_EXTENSION_SOURCE_URL
     var firefoxListingUrl =
       String(release.firefoxListingUrl || "").trim() || ICONO_EXTENSION_FIREFOX_LISTING_URL
+    var edgeListingUrl =
+      String(release.edgeListingUrl || "").trim() || ICONO_EXTENSION_EDGE_LISTING_URL
     return {
       chrome: {
         id: "chrome",
@@ -1834,20 +1841,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       edge: {
         id: "edge",
         label: "Edge",
-        tone: "manual",
+        tone: "store",
         title: "Edge",
-        note: "Use the Chrome-compatible developer package until the Edge Add-ons listing is approved.",
+        note: "Install the signed Edge release from Microsoft Edge Add-ons.",
         managerUrl: "edge://extensions",
         steps: [
-          "Download and unzip the Chrome developer package.",
-          "Open edge://extensions.",
-          "Turn on Developer mode.",
-          "Choose Load unpacked, then select the unzipped package folder.",
+          "Open the Microsoft Edge Add-ons listing.",
+          "Choose Get.",
         ],
         actions: [
           {
-            href: chromePackageUrl,
-            label: "Download package",
+            href: edgeListingUrl,
+            label: "Edge Add-ons",
             subtle: false,
           },
           {

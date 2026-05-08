@@ -14,10 +14,12 @@ test("install panel exposes separate Chrome, Edge, and Firefox public instructio
   assert.match(app, /label:\s*"Edge"/)
   assert.match(app, /edge:\/\/extensions/)
   assert.match(app, /addons\.mozilla\.org\/en-US\/firefox\/addon\/iconoplasm-gene-illustrations/)
+  assert.match(app, /microsoftedge\.microsoft\.com\/addons\/detail\/ocfhohjhkflpmaiimgjfobdoogdfpmog/)
   assert.match(app, /chromeDeveloperPackageUrl/)
   assert.doesNotMatch(app, /Firefox needs the signed AMO release/)
   assert.doesNotMatch(app, /Store listing is not live yet/)
   assert.doesNotMatch(app, /Use Chrome or Edge for now/)
+  assert.doesNotMatch(app, /Edge Add-ons listing is approved/)
   assert.doesNotMatch(app, /1152921505700927252|PackageValid|Partner Center|Linear B-500/)
 })
 
@@ -47,6 +49,10 @@ test("public release metadata points Chrome developer installs at the current pa
     metadata.firefoxListingUrl,
     "https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/",
   )
-  assert.equal(metadata.edgeListingStatus, "pending")
+  assert.equal(
+    metadata.edgeListingUrl,
+    "https://microsoftedge.microsoft.com/addons/detail/ocfhohjhkflpmaiimgjfobdoogdfpmog",
+  )
+  assert.equal(metadata.edgeListingStatus, "live")
   assert.doesNotMatch(JSON.stringify(metadata), /1152921505700927252|PackageValid|Partner Center|Linear B-500/)
 })
