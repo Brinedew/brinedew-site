@@ -27,6 +27,39 @@ test("Edge store publish workflow stays behind the human GUI gate", () => {
   assert.doesNotMatch(edgeWorkflowText, /^on:\s*\n\s*push:/m)
 })
 
+test("Edge store publish workflow expands operation IDs into documented polling URLs", () => {
+  assert.match(
+    edgeWorkflowText,
+    /"operation_id=\$operationLocation" >> \$env:GITHUB_OUTPUT/,
+    "Edge Add-ons Location headers are operation IDs, not absolute URLs",
+  )
+  assert.match(
+    edgeWorkflowText,
+    /OPERATION_ID:\s*\$\{\{ steps\.edge_upload\.outputs\.operation_id \}\}/,
+    "package validation should consume the package-upload operation ID",
+  )
+  assert.match(
+    edgeWorkflowText,
+    /submissions\/draft\/package\/operations\/\$operationId/,
+    "package validation must poll the documented package operation endpoint",
+  )
+  assert.match(
+    edgeWorkflowText,
+    /OPERATION_ID:\s*\$\{\{ steps\.edge_publish\.outputs\.operation_id \}\}/,
+    "publish wait should consume the publish operation ID",
+  )
+  assert.match(
+    edgeWorkflowText,
+    /submissions\/operations\/\$operationId/,
+    "publish wait must poll the documented publish operation endpoint",
+  )
+  assert.doesNotMatch(
+    edgeWorkflowText,
+    /Invoke-RestMethod -Uri \$env:OPERATION_LOCATION/,
+    "the workflow must not try to request a bare GUID as a hostname",
+  )
+})
+
 test("extension release docs point store publish at the Iconoplasm GUI", () => {
   assert.match(readmeText, /Website Ops -> Store publish/)
   assert.match(readmeText, /Firefox \+ Edge/)

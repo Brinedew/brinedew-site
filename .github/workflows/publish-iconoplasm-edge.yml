@@ -116,20 +116,25 @@ jobs:
           if (-not $operationLocation) {
             throw "Edge package upload did not return an operation Location header."
           }
-          "operation_location=$operationLocation" >> $env:GITHUB_OUTPUT
+          "operation_id=$operationLocation" >> $env:GITHUB_OUTPUT
 
       - name: Wait for Edge package validation
         env:
           EDGE_CLIENT_ID: ${{ secrets.EDGE_ADDONS_CLIENT_ID }}
           EDGE_API_KEY: ${{ secrets.EDGE_ADDONS_API_KEY }}
-          OPERATION_LOCATION: ${{ steps.edge_upload.outputs.operation_location }}
+          OPERATION_ID: ${{ steps.edge_upload.outputs.operation_id }}
         run: |
           $headers = @{
             Authorization = "ApiKey $env:EDGE_API_KEY"
             'X-ClientID' = $env:EDGE_CLIENT_ID
           }
+          $operationId = [string]$env:OPERATION_ID
+          if (-not $operationId) {
+            throw "Edge package validation is missing the operation ID returned by the package upload."
+          }
+          $operationUri = "$env:EDGE_API_ROOT/v1/products/$env:EDGE_PRODUCT_ID/submissions/draft/package/operations/$operationId"
           for ($i = 0; $i -lt 60; $i++) {
-            $status = Invoke-RestMethod -Uri $env:OPERATION_LOCATION -Headers $headers -Method Get
+            $status = Invoke-RestMethod -Uri $operationUri -Headers $headers -Method Get
             $state = [string]($status.status ?? $status.Status ?? $status.operationStatus ?? '')
             $json = $status | ConvertTo-Json -Depth 20
             Write-Host $json
@@ -163,20 +168,25 @@ jobs:
           if (-not $operationLocation) {
             throw "Edge publish did not return an operation Location header."
           }
-          "operation_location=$operationLocation" >> $env:GITHUB_OUTPUT
+          "operation_id=$operationLocation" >> $env:GITHUB_OUTPUT
 
       - name: Wait for Edge publish operation
         env:
           EDGE_CLIENT_ID: ${{ secrets.EDGE_ADDONS_CLIENT_ID }}
           EDGE_API_KEY: ${{ secrets.EDGE_ADDONS_API_KEY }}
-          OPERATION_LOCATION: ${{ steps.edge_publish.outputs.operation_location }}
+          OPERATION_ID: ${{ steps.edge_publish.outputs.operation_id }}
         run: |
           $headers = @{
             Authorization = "ApiKey $env:EDGE_API_KEY"
             'X-ClientID' = $env:EDGE_CLIENT_ID
           }
+          $operationId = [string]$env:OPERATION_ID
+          if (-not $operationId) {
+            throw "Edge publish wait is missing the operation ID returned by the publish request."
+          }
+          $operationUri = "$env:EDGE_API_ROOT/v1/products/$env:EDGE_PRODUCT_ID/submissions/operations/$operationId"
           for ($i = 0; $i -lt 60; $i++) {
-            $status = Invoke-RestMethod -Uri $env:OPERATION_LOCATION -Headers $headers -Method Get
+            $status = Invoke-RestMethod -Uri $operationUri -Headers $headers -Method Get
             $state = [string]($status.status ?? $status.Status ?? $status.operationStatus ?? '')
             $json = $status | ConvertTo-Json -Depth 20
             Write-Host $json
