@@ -358,6 +358,48 @@ test("DO NOT DELETE: simple card portrait warmup decodes hover-neighbor images",
   )
 })
 
+test("DO NOT DELETE: blot-only frame waits for portrait decode before first paint", () => {
+  const frameSource = readUtf8("./iconoplasm-extension/lit-archival-frame.js")
+  assert.match(
+    frameSource,
+    /let renderSerial = 0/,
+    "frame rendering should fence async first-paint decode work against stale hover payloads",
+  )
+  assert.match(
+    frameSource,
+    /const portraitSrc = String\(\(payload && payload\.portraitSrc\) \|\| ""\)\.trim\(\)[\s\S]*await prewarmPortraitSource\(portraitSrc\)/,
+    "blot-only should not replace the frame contents until the first portrait source has decoded",
+  )
+  assert.match(
+    frameSource,
+    /if \(serial !== renderSerial\) return[\s\S]*replaceTrustedChildren/,
+    "a slow first decode should not overwrite a newer neighbor hover card",
+  )
+})
+
+test("DO NOT DELETE: frame portrait prewarm queues until the iframe is ready", () => {
+  const source = readUtf8("./iconoplasm-extension/content.js")
+  assert.match(
+    source,
+    /iframe\.__iconoPendingPrewarmSources \|\| new Set\(\)/,
+    "neighbor blot prewarm should not be dropped when it races the first iframe ready event",
+  )
+  assert.match(
+    source,
+    /iframe\.__iconoPendingPrewarmSources && iframe\.__iconoPendingPrewarmSources\.size[\s\S]*prewarmLitArchivalFramePortraitSrcs\(pendingSources\)/,
+    "queued neighbor prewarms should flush as soon as the frame is ready",
+  )
+})
+
+test("DO NOT DELETE: first tooltip creation applies frame-card classes after assignment", () => {
+  const source = readUtf8("./iconoplasm-extension/content.js")
+  assert.match(
+    source,
+    /tooltip = IconoContentTooltip\.createTooltipShell\([\s\S]*?\)\s*\n\s*\/\/ createTooltipShell invokes the callback before this module's tooltip variable is assigned\.[\s\S]*?applyTooltipTheme\(\)/,
+    "the first hover should not miss image-only/frame-card classes until a later settings change",
+  )
+})
+
 test("DO NOT DELETE: hover tooltip placement compares viewport space above and below", () => {
   const source = readUtf8("./iconoplasm-extension/content.js")
   assert.match(

@@ -14,6 +14,7 @@
   const siteStyleEl = document.getElementById("iconoplasm-site-brick-style")
   let currentPayload = null
   let siteStylesPromise = null
+  let renderSerial = 0
   const portraitDecodePromiseCache = new Map()
 
   function prewarmPortraitSource(src) {
@@ -405,13 +406,15 @@
     })
   }
 
-  async function renderCard(payload) {
+  async function renderCard(payload, serial) {
     if (!slot || !shared) return
     await ensureSiteStylesLoaded()
+    if (serial !== renderSerial) return
     const portraitSrc = String((payload && payload.portraitSrc) || "").trim()
-    if (portraitSrc && portraitDecodePromiseCache.has(portraitSrc)) {
-      await portraitDecodePromiseCache.get(portraitSrc).catch(() => null)
+    if (portraitSrc) {
+      await prewarmPortraitSource(portraitSrc).catch(() => null)
     }
+    if (serial !== renderSerial) return
     replaceTrustedChildren(slot, isImageOnlyVariant(payload) ? imageOnlyCardMarkup(payload) : cardMarkup(payload))
     if (shared && typeof shared.hydrateRoughLoops === "function") {
       shared.hydrateRoughLoops(slot, true)
@@ -432,7 +435,8 @@
     if (data.type !== FRAME_RENDER_TYPE) return
     currentPayload = data
     applyTheme(String(data.theme || "light").trim().toLowerCase() === "dark" ? "dark" : "light")
-    void renderCard(data)
+    const serial = ++renderSerial
+    void renderCard(data, serial)
   })
 
   document.addEventListener("click", (event) => {

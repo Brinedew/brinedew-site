@@ -1453,6 +1453,10 @@
       cancelHideTimer,
       onTooltipMouseLeave,
     })
+    // createTooltipShell invokes the callback before this module's tooltip variable is assigned.
+    // Reapply after assignment so the first hover gets the same frame-card classes as later
+    // layout switches.
+    applyTooltipTheme()
   }
 
   function createAuthToast() {
@@ -1612,8 +1616,6 @@
   function prewarmLitArchivalFramePortraitSrcs(sources) {
     if (!tooltip || !usesTooltipFrameRenderer()) return
     const iframe = tooltip.querySelector(".iconoplasm-tooltip-lit-frame")
-    if (!iframe || !iframe.isConnected || !iframe.contentWindow) return
-    if (!iframe.dataset || iframe.dataset.iconoFrameReady !== "true") return
     const usableSources = Array.from(
       new Set(
         (Array.isArray(sources) ? sources : [])
@@ -1622,6 +1624,13 @@
       ),
     )
     if (!usableSources.length) return
+    if (!iframe || !iframe.isConnected || !iframe.contentWindow) return
+    if (!iframe.dataset || iframe.dataset.iconoFrameReady !== "true") {
+      const pending = iframe.__iconoPendingPrewarmSources || new Set()
+      for (const source of usableSources) pending.add(source)
+      iframe.__iconoPendingPrewarmSources = pending
+      return
+    }
     try {
       iframe.contentWindow.postMessage(
         {
@@ -1889,6 +1898,11 @@
         const pendingPayload = iframe.__iconoPendingPayload
         iframe.__iconoPendingPayload = null
         postLitArchivalFramePayload(iframe, pendingPayload)
+      }
+      if (iframe.__iconoPendingPrewarmSources && iframe.__iconoPendingPrewarmSources.size) {
+        const pendingSources = Array.from(iframe.__iconoPendingPrewarmSources)
+        iframe.__iconoPendingPrewarmSources.clear()
+        prewarmLitArchivalFramePortraitSrcs(pendingSources)
       }
       return
     }
