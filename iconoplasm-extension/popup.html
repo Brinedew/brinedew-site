@@ -108,9 +108,13 @@
       <section class="popup-panel popup-panel--hidden" id="panel-account" role="tabpanel" aria-labelledby="tab-account">
         <div class="popup-section">
           <p class="popup-section-kicker">Account</p>
-          <a href="https://iconoplasm.brinedew.bio/api/auth/login?return_to=https://iconoplasm.brinedew.bio/" target="_blank" rel="noopener" class="popup-btn popup-btn--primary popup-btn--full">Sign in with Discord</a>
+          <a href="https://iconoplasm.brinedew.bio/api/auth/login?return_to=https://iconoplasm.brinedew.bio/" target="_blank" rel="noopener" class="popup-btn popup-btn--primary popup-btn--full" id="account-sign-in-link">Sign in with Discord</a>
           <div class="popup-account-status" id="account-status">
             <p class="popup-account-status-text" id="account-status-text">Checking...</p>
+            <button class="popup-account-sign-out popup-account-sign-out--hidden" id="account-sign-out-btn" type="button" aria-label="Sign out" title="Sign out">
+              <span aria-hidden="true">×</span>
+              <span>Sign out</span>
+            </button>
           </div>
         </div>
       </section>

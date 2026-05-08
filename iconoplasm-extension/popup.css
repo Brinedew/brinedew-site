@@ -473,7 +473,15 @@ input {
 /* ---- Account ---- */
 
 .popup-account-status {
-  padding: 0.5rem 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--secondary) 16%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--paper) 76%, var(--muted) 24%);
 }
 
 .popup-account-status-text {
@@ -481,4 +489,43 @@ input {
   font-size: 0.88rem;
   color: var(--secondary);
   line-height: 1.4;
+}
+
+.popup-account-status--signed-in .popup-account-status-text {
+  font-weight: 700;
+  color: color-mix(in srgb, var(--dark) 72%, var(--secondary));
+}
+
+.popup-account-sign-out {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.22rem;
+  min-width: 0;
+  height: 1.55rem;
+  padding: 0 0.42rem;
+  border: 1px solid color-mix(in srgb, oklch(45% 0.16 25) 42%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, oklch(60% 0.18 25) 12%, var(--paper));
+  font-family: "Monaspace Xenon Web", monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  color: oklch(42% 0.16 25);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.popup-account-sign-out:hover {
+  background: color-mix(in srgb, oklch(60% 0.18 25) 22%, var(--paper));
+  border-color: color-mix(in srgb, oklch(42% 0.16 25) 66%, transparent);
+}
+
+.popup-account-sign-out:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.popup-account-sign-out--hidden {
+  display: none;
 }

@@ -377,3 +377,45 @@ test("DO NOT DELETE: new-user extension defaults stay pill, always-on, and blot-
     "shared extension settings should treat an absent card style as Blot only without breaking stored Simple users",
   )
 })
+
+test("extension popup account tab replaces sign-in with signed-in notice and compact sign-out control", () => {
+  const popupHtml = readUtf8("./iconoplasm-extension/popup.html")
+  const popupSource = readUtf8("./iconoplasm-extension/popup.js")
+  const popupCss = readUtf8("./iconoplasm-extension/popup.css")
+
+  assert.match(
+    popupHtml,
+    /id="account-sign-in-link"[\s\S]*Sign in with Discord/,
+    "the sign-in CTA should stay addressable so authenticated state can hide it",
+  )
+  assert.match(
+    popupHtml,
+    /id="account-sign-out-btn"[\s\S]*aria-label="Sign out"[\s\S]*>×</,
+    "the account tab should expose a compact cross sign-out button",
+  )
+  assert.match(
+    popupSource,
+    /function renderAccountState\(state\)[\s\S]*"Signed in!"[\s\S]*popup-account-status--signed-in/,
+    "authenticated state should render the terse signed-in notice and signed-in styling",
+  )
+  assert.match(
+    popupSource,
+    /accountSignInLink\?\.classList\.toggle\("popup-btn--hidden", isSignedIn\)/,
+    "authenticated state should remove the Discord sign-in CTA from the visible account tab",
+  )
+  assert.match(
+    popupSource,
+    /accountSignOutBtn\?\.classList\.toggle\("popup-account-sign-out--hidden", !isSignedIn\)/,
+    "authenticated state should reveal the compact sign-out button",
+  )
+  assert.match(
+    popupSource,
+    /url:\s*"\/api\/auth\/logout", method:\s*"POST"/,
+    "sign out should call the existing logout endpoint through the extension API bridge",
+  )
+  assert.match(
+    popupCss,
+    /\.popup-account-status--signed-in[\s\S]*\.popup-account-sign-out[\s\S]*oklch\(42% 0\.16 25\)/,
+    "the signed-in account state should keep the muted popup style with a small red sign-out control",
+  )
+})

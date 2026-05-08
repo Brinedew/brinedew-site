@@ -258,32 +258,66 @@ renderBlocklist().catch(() => null)
 // ---- Account status ----
 
 const accountStatusText = document.getElementById("account-status-text")
+const accountStatus = document.getElementById("account-status")
+const accountSignInLink = document.getElementById("account-sign-in-link")
+const accountSignOutBtn = document.getElementById("account-sign-out-btn")
+
+function renderAccountState(state) {
+  if (!accountStatusText) return
+  const isSignedIn = state === "signed-in"
+  accountStatusText.textContent =
+    state === "checking"
+      ? "Checking..."
+      : isSignedIn
+        ? "Signed in!"
+        : state === "offline"
+          ? "Could not reach Iconoplasm. Discoveries are stored locally."
+          : "Not signed in. Discoveries are stored locally."
+  accountStatus?.classList.toggle("popup-account-status--signed-in", isSignedIn)
+  accountSignInLink?.classList.toggle("popup-btn--hidden", isSignedIn)
+  accountSignOutBtn?.classList.toggle("popup-account-sign-out--hidden", !isSignedIn)
+}
+
+async function sendIconoplasmApiMessage({ url, method = "GET" }) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      { type: "ICONOPLASM_API_FETCH", url, method, credentials: "include", headers: {} },
+      (result) => {
+        if (chrome.runtime.lastError) return reject(chrome.runtime.lastError)
+        resolve(result)
+      },
+    )
+  })
+}
 
 async function checkAccountStatus() {
   if (!accountStatusText) return
+  renderAccountState("checking")
   try {
-    const resp = await new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage(
-        { type: "ICONOPLASM_API_FETCH", url: "/api/iconoplasm/discoveries/me", method: "GET", credentials: "include", headers: {} },
-        (result) => {
-          if (chrome.runtime.lastError) return reject(chrome.runtime.lastError)
-          resolve(result)
-        },
-      )
-    })
+    const resp = await sendIconoplasmApiMessage({ url: "/api/iconoplasm/discoveries/me" })
     if (resp && resp.ok) {
       const data = JSON.parse(resp.text || "{}")
       if (data.authenticated) {
-        accountStatusText.textContent = "Signed in. Discoveries sync automatically."
+        renderAccountState("signed-in")
       } else {
-        accountStatusText.textContent = "Not signed in. Discoveries are stored locally."
+        renderAccountState("signed-out")
       }
     } else {
-      accountStatusText.textContent = "Could not reach Iconoplasm. Discoveries are stored locally."
+      renderAccountState("offline")
     }
   } catch (_err) {
-    accountStatusText.textContent = "Could not reach Iconoplasm. Discoveries are stored locally."
+    renderAccountState("offline")
   }
 }
+
+accountSignOutBtn?.addEventListener("click", async () => {
+  accountSignOutBtn.disabled = true
+  try {
+    await sendIconoplasmApiMessage({ url: "/api/auth/logout", method: "POST" })
+  } finally {
+    accountSignOutBtn.disabled = false
+    checkAccountStatus()
+  }
+})
 
 checkAccountStatus()
