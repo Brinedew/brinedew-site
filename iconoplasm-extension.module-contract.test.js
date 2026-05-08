@@ -226,6 +226,26 @@ test("DO NOT DELETE: split content modules expose stable globals", () => {
   }
 })
 
+test("DO NOT DELETE: custom entries promoted into defaults behave like defaults", async () => {
+  const vm = await import("node:vm")
+  const sandbox = {}
+  sandbox.globalThis = sandbox
+  vm.runInNewContext(readUtf8("./iconoplasm-extension/content-settings.js"), sandbox)
+  const settings = sandbox.IconoplasmContentSettings
+  assert.equal(typeof settings?.buildEffectiveBlocklist, "function")
+
+  assert.deepEqual(
+    [...settings.buildEffectiveBlocklist(["GPT"], ["GPT"], [])],
+    ["GPT"],
+    "a stale custom GPT should collapse into the shipped default GPT",
+  )
+  assert.deepEqual(
+    [...settings.buildEffectiveBlocklist(["GPT"], ["GPT"], ["GPT"])],
+    [],
+    "removing the default GPT should not be defeated by the stale custom GPT entry",
+  )
+})
+
 test("DO NOT DELETE: highlight timing setting is wired through popup, shared settings, and content script", () => {
   const settingsSource = readUtf8("./iconoplasm-extension/content-settings.js")
   const popupHtml = readUtf8("./iconoplasm-extension/popup.html")

@@ -19,18 +19,21 @@
   }
 
   function buildEffectiveBlocklist(defaults, userEntries, removedDefaults) {
+    const defaultSet = new Set()
     const removed = new Set(Array.isArray(removedDefaults) ? removedDefaults : [])
     const effective = new Set()
     for (const rawSymbol of Array.isArray(defaults) ? defaults : []) {
       const symbol = String(rawSymbol || "")
         .trim()
         .toUpperCase()
+      if (symbol) defaultSet.add(symbol)
       if (symbol && !removed.has(symbol)) effective.add(symbol)
     }
     for (const rawSymbol of Array.isArray(userEntries) ? userEntries : []) {
       const symbol = String(rawSymbol || "")
         .trim()
         .toUpperCase()
+      if (defaultSet.has(symbol)) continue
       if (symbol) effective.add(symbol)
     }
     return effective
