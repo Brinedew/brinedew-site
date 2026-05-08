@@ -1,7 +1,7 @@
 // Default disambiguation blocklist — shared between content.js and popup.js.
 // Data-driven: every entry BOTH (a) exists in the gene catalog as a symbol/alias
 // AND (b) is a common English word that users probably don't want highlighted.
-// Pruned 2026-04-06 from 1,162 ad-hoc entries to 99 catalog-verified entries.
+// Pruned 2026-05-09 from 99 entries to 73 alias-only catalog-verified entries.
 //
 // Users see these pre-populated in the Blocklist tab and can un-block any of them.
 // Stored in chrome.storage as the "removed defaults" set so new defaults in future
@@ -9,23 +9,7 @@
 
 // eslint-disable-next-line no-unused-vars
 const ICONOPLASM_DEFAULT_BLOCKLIST = [
-  // 3-letter gene symbols that are common English words
-  "ACE",  // angiotensin I converting enzyme
-  "ARC",  // activity regulated cytoskeleton associated protein
-  "BAD",  // BCL2 associated agonist of cell death
-  "CAT",  // catalase
-  "KIT",  // KIT proto-oncogene, receptor tyrosine kinase
-  "MET",  // MET proto-oncogene, receptor tyrosine kinase
-  "OAT",  // ornithine aminotransferase
-  "RAN",  // RAN, member RAS oncogene family
-  "SET",  // SET nuclear proto-oncogene
-  "SHE",  // Src homology 2 domain containing E
-  "SKI",  // SKI proto-oncogene
-  "SON",  // SON DNA and RNA binding protein
-  "TUB",  // TUB bipartite transcription factor
-  "WAS",  // WASP actin nucleation promoting factor
-  // 4-letter gene symbols / aliases that are common English words
-  "ACHE", // acetylcholinesterase
+  // Additional gene symbols / aliases that are common English words
   "AMID", // alias of AIFM2
   "ARCH", // alias of ZBTB8OS
   "ARTS", // alias of SEPTIN4
@@ -37,17 +21,12 @@ const ICONOPLASM_DEFAULT_BLOCKLIST = [
   "BOMB", // alias of WWC2
   "CAGE", // alias of DDX53
   "CALL", // alias of CHL1
-  "CAMP", // cathelicidin antimicrobial peptide
   "CART", // alias of CARTPT
   "CASH", // alias of CFLAR
-  "CAST", // calpastatin
-  "CHAT", // choline O-acetyltransferase
   "CHIP", // alias of STUB1
   "CHOP", // alias of DDIT3
   "CLAN", // alias of NLRC4
   "CLAP", // alias of BCL10
-  "COIL", // coilin
-  "COPE", // coat protein complex I subunit epsilon
   "CROP", // alias of LUC7L3
   "FACE", // alias of FANCE
   "FACT", // alias of SUPT16H
@@ -60,33 +39,29 @@ const ICONOPLASM_DEFAULT_BLOCKLIST = [
   "FISH", // alias of SH3PXD2A
   "FLAP", // alias of ALOX5AP
   "FLIP", // alias of CFLAR
+  "FLOWER", // alias of CACFD1
   "GALA", // alias of GLA
-  "GALE", // UDP-galactose-4-epimerase
   "GOAT", // alias of MBOAT4
   "GRAB", // alias of RAB3IL1
   "GRIT", // alias of ARHGAP32
   "HEED", // alias of EED
   "HINT", // alias of HINT1
+  "JERKY", // alias of JRK
   "LIME", // alias of LIME1
   "LORD", // alias of C1QTNF5
   "MAIL", // alias of NFKBIZ
-  "MALL", // mal, T cell differentiation protein like
   "MARK", // alias of MARK1
   "MARS", // alias of MARS1
   "MASS", // alias of FBN1
   "MEMO", // alias of MEMO1
   "NAIL", // alias of CD244
   "PACE", // alias of FURIN
-  "PALM", // paralemmin
   "POEM", // alias of NPNT
-  "POLL", // DNA polymerase lambda
   "PREY", // alias of PYURF
   "RACE", // alias of AMACR
   "RAIN", // alias of RASIP1
   "RANK", // alias of TNFRSF11A
-  "REST", // RE1 silencing transcription factor
   "SAGE", // alias of SAGE1
-  "SELL", // selectin L
   "SHIP", // alias of INPP5D
   "SHOT", // alias of SHOX2
   "SINK", // alias of TRIB3
@@ -94,11 +69,9 @@ const ICONOPLASM_DEFAULT_BLOCKLIST = [
   "SNAP", // alias of SNAP25
   "SOUL", // alias of HEBP2
   "SPAR", // alias of SPAAR
-  "STAR", // steroidogenic acute regulatory protein
   "STEP", // alias of PTPN5
   "STOP", // alias of MAP6
   "STUD", // alias of TBPL1
-  "TANK", // TRAF family member associated NFKB activator
   "TAPE", // alias of CC2D1A
   "TASK", // alias of KCNK3
   "TAUT", // alias of SLC6A6

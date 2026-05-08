@@ -246,6 +246,49 @@ test("DO NOT DELETE: custom entries promoted into defaults behave like defaults"
   )
 })
 
+test("DO NOT DELETE: default blocklist keeps alias-only pruning outcome", () => {
+  const source = readUtf8("./iconoplasm-extension/blocklist-defaults.js")
+  const defaults = [...source.matchAll(/"([A-Z0-9-]+)"/g)].map((match) => match[1])
+  const defaultSet = new Set(defaults)
+
+  assert.equal(defaults.length, 73, "default blocklist should stay at the alias-only pruned size")
+  for (const term of ["FLOWER", "JERKY"]) {
+    assert.ok(defaultSet.has(term), `${term} should be kept because it is an alias-only term`)
+  }
+  for (const term of [
+    "ACE",
+    "ACHE",
+    "ARC",
+    "BAD",
+    "CAMP",
+    "CAST",
+    "CAT",
+    "CHAT",
+    "COIL",
+    "COPE",
+    "GALE",
+    "KIT",
+    "MALL",
+    "MET",
+    "OAT",
+    "PALM",
+    "POLL",
+    "RAN",
+    "REST",
+    "SELL",
+    "SET",
+    "SHE",
+    "SKI",
+    "SON",
+    "STAR",
+    "TANK",
+    "TUB",
+    "WAS",
+  ]) {
+    assert.ok(!defaultSet.has(term), `${term} should not be default-blocked as a main symbol`)
+  }
+})
+
 test("DO NOT DELETE: highlight timing setting is wired through popup, shared settings, and content script", () => {
   const settingsSource = readUtf8("./iconoplasm-extension/content-settings.js")
   const popupHtml = readUtf8("./iconoplasm-extension/popup.html")
