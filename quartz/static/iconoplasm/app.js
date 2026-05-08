@@ -1812,18 +1812,20 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         label: "Chrome",
         tone: "manual",
         title: "Chrome",
-        note: "Use the developer package while Chrome Web Store publishing is handled manually.",
+        note: "Chrome uses a developer package until the Chrome Web Store listing is live.",
         managerUrl: "chrome://extensions",
         steps: [
-          "Download and unzip the Chrome developer package.",
-          "Open chrome://extensions.",
-          "Turn on Developer mode.",
-          "Choose Load unpacked, then select the unzipped package folder.",
+          'Click "Download Chrome developer package".',
+          'In your Downloads folder, extract the downloaded .zip file.',
+          "In Chrome, click the address bar, type chrome://extensions, and press Enter.",
+          'In the top-right corner of chrome://extensions, click the "Developer mode" switch so it is on.',
+          'Click the "Load unpacked" button.',
+          'In the folder picker, select the extracted extension folder, then click "Select Folder".',
         ],
         actions: [
           {
             href: chromePackageUrl,
-            label: "Download package",
+            label: "Download Chrome developer package",
             subtle: false,
           },
           {
@@ -1846,13 +1848,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         note: "Install the signed Edge release from Microsoft Edge Add-ons.",
         managerUrl: "edge://extensions",
         steps: [
-          "Open the Microsoft Edge Add-ons listing.",
-          "Choose Get.",
+          'Click "Get extension for Edge".',
+          'On the Microsoft Edge Add-ons page, click the "Get" button.',
+          'In the Edge confirmation dialog, click "Add extension".',
         ],
         actions: [
           {
             href: edgeListingUrl,
-            label: "Edge Add-ons",
+            label: "Get extension for Edge",
             subtle: false,
           },
           {
@@ -1870,13 +1873,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         note: "Install the signed Firefox release from Mozilla Add-ons.",
         managerUrl: "",
         steps: [
-          "Open the Firefox Add-ons listing.",
-          "Choose Add to Firefox.",
+          'Click "Get extension for Firefox".',
+          'On the Firefox Add-ons page, click the "Add to Firefox" button.',
+          'In the Firefox confirmation dialog, click "Add".',
         ],
         actions: [
           {
             href: firefoxListingUrl,
-            label: "Firefox Add-ons",
+            label: "Get extension for Firefox",
             subtle: false,
           },
           {
@@ -2037,6 +2041,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         esc(activeTab) +
         '"'
       : ' class="icono-install-panel-body"'
+    var headerHtml = activeTab
+      ? ""
+      : '<div class="icono-install-header">' +
+        "<h2>" +
+        esc(model.title || "Install Iconoplasm") +
+        "</h2>" +
+        (model.note ? '<p class="icono-install-note">' + esc(model.note) + "</p>" : "") +
+        "</div>"
     return (
       '<section class="icono-install-panel icono-install-panel--' +
       esc(model.tone || "info") +
@@ -2045,13 +2057,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       "<div" +
       panelBodyAttrs +
       ">" +
-      '<div class="icono-install-header">' +
-      "<h2>" +
-      esc(model.title || "Install Iconoplasm") +
-      "</h2>" +
-      (model.note ? '<p class="icono-install-note">' + esc(model.note) + "</p>" : "") +
-      "</div>" +
-      (stepsHtml ? '<ul class="icono-install-steps">' + stepsHtml + "</ul>" : "") +
+      headerHtml +
+      (stepsHtml ? '<ol class="icono-install-steps">' + stepsHtml + "</ol>" : "") +
       (actionsHtml ? '<div class="icono-install-actions">' + actionsHtml + "</div>" : "") +
       (model.footnote ? '<p class="icono-install-footnote">' + esc(model.footnote) + "</p>" : "") +
       "</div>" +

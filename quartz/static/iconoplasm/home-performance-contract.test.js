@@ -135,6 +135,31 @@ test("mobile home collection infocards wait for rich detail instead of fallback 
   )
 })
 
+test("extension install panel gives numbered click-by-click browser install instructions", async () => {
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("function buildInstallBrowserPanels(browser, faqUrl)")
+  const end = app.indexOf("function currentInstallExperience()", start)
+  assert.notEqual(start, -1, "missing install browser panel builder")
+  assert.notEqual(end, -1, "missing install browser panel boundary")
+  const panelsBlock = app.slice(start, end)
+
+  assert.match(app, /<ol class="icono-install-steps">/)
+  assert.doesNotMatch(app, /<ul class="icono-install-steps">/)
+  assert.match(
+    app,
+    /var headerHtml = activeTab[\s\S]*\? ""[\s\S]*: '<div class="icono-install-header">/,
+    "browser-tab install panels should not repeat the selected browser as a title/subtitle pair",
+  )
+  assert.match(panelsBlock, /Click "Download Chrome developer package"/)
+  assert.match(panelsBlock, /click the "Developer mode" switch so it is on/)
+  assert.match(panelsBlock, /Click the "Load unpacked" button/)
+  assert.match(panelsBlock, /click "Select Folder"/)
+  assert.match(panelsBlock, /label: "Get extension for Edge"/)
+  assert.match(panelsBlock, /label: "Get extension for Firefox"/)
+  assert.doesNotMatch(panelsBlock, /label: "Edge Add-ons"/)
+  assert.doesNotMatch(panelsBlock, /label: "Firefox Add-ons"/)
+})
+
 test("mobile home collection renders manifest failures as visible data failure cards", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function loadNextGalleryPage()")
@@ -198,7 +223,7 @@ test("archival fallback cards clear missing portrait state during hydration", as
   )
   assert.match(
     block,
-    /card\.style\.setProperty\("--icono-card-accent", String\(\(genePayload && genePayload\.color\) \|\| "#888"\)\)/,
+    /card\.style\.setProperty\(\s*"--icono-card-accent",\s*String\(\(genePayload && genePayload\.color\) \|\| "#888"\),\s*\)/,
     "archival hydration must restore the card accent from rich gene data",
   )
   assert.doesNotMatch(
