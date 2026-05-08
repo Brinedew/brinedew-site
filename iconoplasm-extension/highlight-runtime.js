@@ -372,6 +372,27 @@
       }
     }
 
+    function highlightSceneRenderKey(mode, scene, context) {
+      const fragments = Array.isArray(scene && scene.fragments) ? scene.fragments : []
+      const geometry = fragments
+        .map((rect) =>
+          [
+            Math.round(Number(rect.left || 0) * 10) / 10,
+            Math.round(Number(rect.top || 0) * 10) / 10,
+            Math.round(Number(rect.width || 0) * 10) / 10,
+            Math.round(Number(rect.height || 0) * 10) / 10,
+          ].join(","),
+        )
+        .join("|")
+      return [
+        String(mode || ""),
+        String((context && context.symbol) || ""),
+        String((context && context.color) || ""),
+        Math.round(Number((scene && scene.fontSizePx) || 0) * 10) / 10,
+        geometry,
+      ].join("::")
+    }
+
     const HIGHLIGHT_RENDERERS = Object.freeze({
       underline: Object.freeze({
         className: "iconoplasm-gene--underline",
@@ -418,10 +439,19 @@
       for (const [mode, renderer] of Object.entries(HIGHLIGHT_RENDERERS)) {
         el.classList.toggle(renderer.className, highlightMode === mode)
       }
-      const sceneLayer = clearHighlightPaintLayer(el, "active") || ensureHighlightPaintLayer(el, "active")
-      if (!sceneLayer || activeRenderer.substrate !== "anchored-scene") return
+      const sceneLayer = ensureHighlightPaintLayer(el, "active")
+      if (!sceneLayer) return
+      if (activeRenderer.substrate !== "anchored-scene") {
+        if (sceneLayer.dataset.iconoRenderKey) delete sceneLayer.dataset.iconoRenderKey
+        sceneLayer.replaceChildren()
+        return
+      }
       const scene = measureHighlightScene(el)
       if (!scene || !scene.fragments.length) return
+      const renderKey = highlightSceneRenderKey(highlightMode, scene, rendererContext)
+      if (sceneLayer.dataset.iconoRenderKey === renderKey) return
+      sceneLayer.dataset.iconoRenderKey = renderKey
+      sceneLayer.replaceChildren()
       activeRenderer.render(sceneLayer, scene, rendererContext)
     }
 

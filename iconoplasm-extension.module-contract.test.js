@@ -43,6 +43,31 @@ test("DO NOT DELETE: extension content modules load before the content adapter",
   }
 })
 
+test("DO NOT DELETE: rough ellipse highlights do not repaint when geometry is unchanged", () => {
+  const source = readUtf8("./iconoplasm-extension/highlight-runtime.js")
+
+  assert.match(
+    source,
+    /function highlightSceneRenderKey\(mode, scene, context\)/,
+    "highlight-runtime should compute a stable render key from visual inputs",
+  )
+  assert.match(
+    source,
+    /if \(sceneLayer\.dataset\.iconoRenderKey === renderKey\) return/,
+    "existing rough ellipse geometry should survive unrelated mutation rescans",
+  )
+  assert.match(
+    source,
+    /sceneLayer\.dataset\.iconoRenderKey = renderKey[\s\S]*sceneLayer\.replaceChildren\(\)/,
+    "the renderer should only clear and redraw the paint layer after the visual key changes",
+  )
+  assert.match(
+    source,
+    /activeRenderer\.substrate !== "anchored-scene"[\s\S]*sceneLayer\.replaceChildren\(\)/,
+    "switching back to non-scene highlight modes should still clear old ellipse or pill paint",
+  )
+})
+
 test("DO NOT DELETE: extension package script ships the content modules", () => {
   const packageScript = readUtf8("./scripts/package-iconoplasm-extension.mjs")
   const contentIndex = packageScript.indexOf('"content.js"')
