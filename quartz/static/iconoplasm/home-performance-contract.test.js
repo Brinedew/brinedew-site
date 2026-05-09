@@ -234,6 +234,24 @@ test("extension install panel gives numbered click-by-click browser install inst
   assert.doesNotMatch(panelsBlock, /label: "Firefox Add-ons"/)
 })
 
+test("mobile extension install card is device-specific and does not reuse desktop sideload steps", async () => {
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("function buildMobileInstallExperience(browser, faqUrl)")
+  const end = app.indexOf("function buildInstallBrowserPanels(browser, faqUrl)", start)
+  assert.notEqual(start, -1, "missing mobile install experience builder")
+  assert.notEqual(end, -1, "missing mobile install experience boundary")
+  const mobileBlock = app.slice(start, end)
+
+  assert.match(app, /if \(browser && browser\.isMobile\) \{\s*return buildMobileInstallExperience\(browser, faqUrl\)/)
+  assert.match(mobileBlock, /Firefox Android is the right first mobile target/)
+  assert.match(mobileBlock, /Safari mobile extensions ship through an App Store app/)
+  assert.match(mobileBlock, /Edge Android has mobile extension support/)
+  assert.doesNotMatch(mobileBlock, /chrome:\/\/extensions/)
+  assert.doesNotMatch(mobileBlock, /Developer mode/)
+  assert.doesNotMatch(mobileBlock, /Load unpacked/)
+  assert.doesNotMatch(mobileBlock, /Download extension file/)
+})
+
 test("mobile home collection renders manifest failures as visible data failure cards", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function loadNextGalleryPage()")

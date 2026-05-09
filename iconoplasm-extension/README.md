@@ -97,6 +97,14 @@ Notes:
 
 Chrome Web Store publishing remains human-dashboard only. Package with `npm run package:iconoplasm-extension`, then use the Chrome Web Store dashboard as a person; there is no automated Chrome publish runner here.
 
+Mobile publishing is a separate release track, not a rename of the desktop cards:
+
+- Firefox Android is the first viable mobile target. AMO has a Firefox Android catalog, but Iconoplasm is currently marked and described as desktop-only, so the next store step is Android compatibility testing plus AMO listing support for Android.
+- Safari on iPhone and iPad needs a Safari Web Extension wrapper inside an iOS app and App Store Connect review. The current WebExtension zip is not enough.
+- Samsung Internet for Android has its own extension program and needs separate compatibility and submission work.
+- Edge Android advertises mobile extensions, but Iconoplasm still needs a real install-path verification before the site should promise a live mobile Edge install.
+- Chrome Android does not have the normal Chrome Web Store extension install path. Do not show Chrome Android users desktop sideload instructions.
+
 AMO-specific listing copy lives in:
 
 - `iconoplasm-extension/store-assets/AMO-LISTING-COPY.md`

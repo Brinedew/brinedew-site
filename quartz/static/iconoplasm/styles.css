@@ -1007,6 +1007,10 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   background: color-mix(in srgb, #f7f1e8 78%, white 22%);
 }
 
+.icono-install-panel--mobile {
+  border-color: color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
+}
+
 .icono-install-tablist {
   display: flex;
   align-items: center;
@@ -1060,8 +1064,9 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   gap: 0.22rem;
 }
 
-.icono-install-header h2 {
+#iconoplasm-root .icono-install-panel .icono-install-header h2 {
   margin: 0;
+  font-family: "IBM Plex Mono", var(--codeFont, monospace);
   font-size: 1rem;
   line-height: 1.18;
   font-weight: 600;
@@ -1094,7 +1099,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 
 .icono-install-card-title {
   max-width: 38ch;
-  font-family: var(--codeFont, monospace);
+  font-family: "IBM Plex Mono", var(--codeFont, monospace);
   font-size: 1.12rem;
   font-weight: 600;
   line-height: 1.22;

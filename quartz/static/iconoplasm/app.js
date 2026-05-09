@@ -1675,20 +1675,23 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function detectInstallBrowser() {
     var ua = String((window.navigator && window.navigator.userAgent) || "").toLowerCase()
     var isMobile = /android|iphone|ipad|ipod|mobile/.test(ua)
+    var platform = ua.indexOf("android") !== -1 ? "android" : /iphone|ipad|ipod/.test(ua) ? "ios" : "desktop"
     if (ua.indexOf("firefox") !== -1) {
       return {
         family: "firefox",
         label: isMobile ? "Firefox mobile" : "Firefox",
         managerUrl: "about:addons",
         isMobile: isMobile,
+        platform: platform,
       }
     }
     if (ua.indexOf("edg/") !== -1) {
       return {
-        family: "chromium",
-        label: "Edge",
+        family: "edge",
+        label: isMobile ? "Edge mobile" : "Edge",
         managerUrl: "edge://extensions",
         isMobile: isMobile,
+        platform: platform,
       }
     }
     if (
@@ -1703,14 +1706,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         label: isMobile ? "Chromium mobile" : "Chrome",
         managerUrl: "chrome://extensions",
         isMobile: isMobile,
+        platform: platform,
       }
     }
     if (ua.indexOf("safari") !== -1) {
       return {
-        family: "unsupported",
+        family: "safari",
         label: isMobile ? "Safari mobile" : "Safari",
         managerUrl: "",
         isMobile: isMobile,
+        platform: platform,
       }
     }
     return {
@@ -1718,6 +1723,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       label: isMobile ? "this mobile browser" : "this browser",
       managerUrl: "",
       isMobile: isMobile,
+      platform: platform,
     }
   }
 
@@ -1788,8 +1794,66 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       .trim()
       .toLowerCase()
     if (requested === "chrome" || requested === "edge" || requested === "firefox") return requested
-    if (browser && browser.label === "Edge") return "edge"
+    if (browser && browser.family === "edge") return "edge"
     return browser && browser.family === "firefox" ? "firefox" : "chrome"
+  }
+
+  function buildMobileInstallExperience(browser, faqUrl) {
+    var family = String((browser && browser.family) || "unknown")
+    var platform = String((browser && browser.platform) || "mobile")
+    var title = "Install Iconoplasm on mobile"
+    var note =
+      "Mobile add-ons are not published yet. Use desktop Firefox or Edge for one-click install today."
+    var steps = [
+      "Iconoplasm already has desktop Firefox and Edge publishing.",
+      "Firefox Android is the first mobile publishing target to validate because AMO has an Android extension catalog.",
+      "Safari on iPhone and iPad needs a separate App Store package, not the current extension zip.",
+    ]
+    if (family === "firefox" && platform === "android") {
+      title = "Install Iconoplasm on Firefox Android"
+      note =
+        "Firefox Android is the right first mobile target, but this add-on is not published there yet."
+      steps = [
+        "We need to mark and test the AMO listing for Android compatibility.",
+        "Once it passes review, this card should link directly to the Android-ready Firefox Add-ons page.",
+        "For now, use desktop Firefox or Edge for one-click install.",
+      ]
+    } else if (family === "edge" && platform === "android") {
+      title = "Install Iconoplasm on Edge Android"
+      note =
+        "Edge Android has mobile extension support, but Iconoplasm is not verified or published there yet."
+      steps = [
+        "Verify Microsoft Partner Center exposes Iconoplasm to Edge Android installs.",
+        "Run a real Android Edge install test before showing a live install button here.",
+        "For now, use desktop Edge for one-click install.",
+      ]
+    } else if (family === "safari" && platform === "ios") {
+      title = "Install Iconoplasm on iPhone or iPad"
+      note =
+        "Safari mobile extensions ship through an App Store app, so this needs a separate package."
+      steps = [
+        "Create the Safari Web Extension wrapper in Xcode.",
+        "Publish the containing iOS app through App Store Connect.",
+        "Replace this card with the App Store install link after review.",
+      ]
+    }
+    return {
+      tone: "mobile",
+      toggleLabel: "Install",
+      toggleMeta: "Mobile",
+      title: title,
+      note: note,
+      cardTitle: title,
+      mobile: true,
+      steps: steps,
+      actions: [
+        {
+          href: faqUrl,
+          label: "Read FAQ",
+          subtle: true,
+        },
+      ],
+    }
   }
 
   function buildInstallBrowserPanels(browser, faqUrl) {
@@ -1912,6 +1976,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           },
         ],
       }
+    }
+    if (browser && browser.isMobile) {
+      return buildMobileInstallExperience(browser, faqUrl)
     }
     var panels = buildInstallBrowserPanels(browser, faqUrl)
     var activeTab = resolveInstallTab(browser)
@@ -2069,9 +2136,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var headerHtml = activeTab
       ? ""
       : '<div class="icono-install-header">' +
-        "<h2>" +
+        '<div class="icono-home-auth-title icono-guest-login-card-title icono-install-card-title" role="heading" aria-level="2">' +
         esc(model.title || "Install Iconoplasm") +
-        "</h2>" +
+        "</div>" +
         (model.note ? '<p class="icono-install-note">' + esc(model.note) + "</p>" : "") +
         "</div>"
     var tabTitle = String(model.cardTitle || model.title || "Install Iconoplasm").trim()
