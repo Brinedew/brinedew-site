@@ -76,3 +76,34 @@ What changed:
 Remaining timing risk:
 
 - The full 218-card stress scroll succeeds, but 26.7 seconds is still too long as a total traversal time. The next pass should reduce perceived wait by loading the next account window before the user is pinned at the bottom, or by changing how much DOM is kept/rendered during long account traversals.
+
+## 2026-05-09 - Signed-In Resort Benchmark
+
+Context: sorting must be benchmarked independently per visible sort mode. This run used Playwright MCP on the signed-in `brinedew` account with 218 discovered genes.
+
+Raw evidence:
+
+- `artifacts/b-510-live-ui-benchmarks/benchmarks-2026-05-09/playwright-signed-in-resort-benchmark.json`
+
+Per-sort first-page timings:
+
+| Sort | First Cards | Stable | Cards | Failure Cards |
+| --- | ---: | ---: | ---: | ---: |
+| Recently discovered | 1,039 ms | 1,547 ms | 24 | 0 |
+| A-Z | 572 ms | 1,076 ms | 24 | 0 |
+| Shortest name first | 1,061 ms | 1,572 ms | 12* | 0 |
+| Votes | 710 ms | 1,889 ms | 24 | 0 |
+| Uniqueness | 510 ms | 1,607 ms | 24 | 0 |
+| Popularity | 332 ms | 1,150 ms | 24 | 0 |
+| Heaviest first | 437 ms | 1,442 ms | 24 | 0 |
+| Lightest first | 434 ms | 1,470 ms | 24 | 0 |
+| Oldest first | 335 ms | 1,348 ms | 24 | 0 |
+| Youngest first | 698 ms | 1,602 ms | 24 | 0 |
+| Random | 499 ms | 1,521 ms | 24 | 0 |
+
+`*` The `shortest` 12-card result was a benchmark harness false positive. An isolated debug pass showed `shortest` reached 24 cards by 250 ms after the first 12-card paint.
+
+Outlier raised:
+
+- Resorting repeatedly triggered `/api/public/v1/gallery?order=votes&limit=1&offset=0`, even when benchmarking signed-in account sorts. This side request had observed outliers around 398 ms, 412 ms, 686 ms, and 820 ms. It is unrelated to the active account sort and should be removed from the resort hot path or isolated so it cannot pollute resort timing.
+- Linear could not create a new issue because the workspace issue quota is exhausted, so the issue-ready title and acceptance criteria were recorded as a B-510 comment.
