@@ -430,7 +430,7 @@ test("mobile card manifest does not fall back to a previous card catalog version
   assert.equal(payload.artifact_version, "current-vm-version")
 })
 
-test("admin card catalog publish refuses to report success when required cards are incomplete", async () => {
+test("admin card catalog publish refuses symbol-scoped artifacts", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const kvStore = new Map()
   const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -447,9 +447,8 @@ test("admin card catalog publish refuses to report success when required cards a
   assert.equal(response.status, 409)
   const payload = await response.json()
   assert.equal(payload.ok, false)
-  assert.equal(payload.code, "CARD_ARTIFACT_UNAVAILABLE")
-  assert.equal(payload.scope, "symbols")
-  assert.match(payload.error, /refused to publish|version missing/)
+  assert.equal(payload.code, "CARD_ARTIFACT_REQUIRES_FULL_CATALOG")
+  assert.equal(payload.supported_scope, "catalog")
   assert.equal(kvStore.size, 0)
 })
 
@@ -462,7 +461,7 @@ test("admin card catalog publish does not count failed KV writes as published ca
         Authorization: "Bearer secret-admin-token",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ symbols: ["ERBB2"] }),
+      body: JSON.stringify({ scope: "catalog" }),
     }),
     {
       ...buildEnv(),
@@ -506,12 +505,13 @@ test("mobile manifest route is wired before the generic /api/iconoplasm proxy", 
 
 test("mobile manifest runtime block does not call per-gene KV or D1 composition", () => {
   const start = source.indexOf("async function handleMobileCardManifest")
-  const end = source.indexOf("async function composeAndCacheMobileCardVMs", start)
+  const end = source.indexOf("async function handlePublicResolve", start)
   assert.notEqual(start, -1)
   assert.notEqual(end, -1)
   const block = source.slice(start, end)
   assert.doesNotMatch(block, /readMobileCardVMFromSharedSnapshot/)
   assert.doesNotMatch(block, /writeMobileCardVMToSharedSnapshot/)
+  assert.doesNotMatch(block, /composeAndCacheMobileCardVMs/)
   assert.doesNotMatch(block, /geneRecord\(/)
   assert.match(block, /readPublishedCardCatalogArtifact/)
 })
@@ -520,9 +520,12 @@ test("frontend mobile path uses the card catalog manifest and rejects fallback r
   assert.match(appSource, /function assertCompleteMobileCardVM\(card\)/)
   assert.match(appSource, /\/api\/iconoplasm\/mobile-card-manifest/)
   assert.match(appSource, /card\.__complete !== true/)
-  assert.match(source, /KV_MOBILE_CARD_VM_PREFIX/)
   assert.match(source, /KV_CARD_CATALOG_ARTIFACT_PREFIX/)
   assert.match(source, /readPublishedCardCatalogArtifact/)
+  assert.doesNotMatch(source, /KV_MOBILE_CARD_VM_PREFIX/)
+  assert.doesNotMatch(source, /composeAndCacheMobileCardVMs/)
+  assert.doesNotMatch(source, /readMobileCardVMFromSharedSnapshot/)
+  assert.doesNotMatch(source, /writeMobileCardVMToSharedSnapshot/)
   const mobileBranch = appSource.slice(
     appSource.indexOf("return loadMobileCardPageVM(pageEntries)"),
     appSource.indexOf("if (orderEl)", appSource.indexOf("return loadMobileCardPageVM(pageEntries)")),
@@ -545,7 +548,7 @@ test("gallery invalidation publishes a validated card catalog before flipping th
     source,
     /const cardCatalog = await publishCardCatalogArtifact\(env,[\s\S]*publishGalleryVersionBarrier\(env, barrier\)/,
   )
-  assert.match(source, /scope === "catalog"/)
+  assert.match(source, /CARD_ARTIFACT_REQUIRES_FULL_CATALOG/)
   assert.match(source, /published_card_catalog/)
   assert.doesNotMatch(
     source,

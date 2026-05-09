@@ -1050,14 +1050,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
   }
 
-  function loadDiscoveredGeneCardData(entry) {
-    var symbol = normalizedSymbol(entry && entry.gene_symbol)
-    if (!symbol) return Promise.resolve(null)
-    return fetchGeneDetail(symbol).then(function (detail) {
-      return detail || fallbackDiscoveredGene(entry)
-    })
-  }
-
   function assertCompleteMobileCardVM(card) {
     if (!card || card.__complete !== true) {
       throw new Error("Attempted to render mobile dossier from an incomplete card VM")

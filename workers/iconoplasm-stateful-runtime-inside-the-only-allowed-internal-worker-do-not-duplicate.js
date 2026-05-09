@@ -46,13 +46,10 @@ const KV_GALLERY_UNIQUENESS_ROWS_PREFIX = "iconoplasm:gallery-uniqueness-rows:"
 const KV_PUBLIC_STATS = "iconoplasm:public-stats:v1"
 const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = "iconoplasm:hydrated-catalog-artifact:"
 const KV_CARD_CATALOG_ARTIFACT_PREFIX = "iconoplasm:card-catalog:"
-const KV_MOBILE_CARD_VM_PREFIX = "iconoplasm:mobile-card-vm:"
 const CARD_CATALOG_ARTIFACT_SCHEMA = "iconoplasm.cardCatalog.v1"
 const CARD_CATALOG_ARTIFACT_SHARD_SIZE = 750
 const CARD_ARTIFACT_UNAVAILABLE = "CARD_ARTIFACT_UNAVAILABLE"
 const MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT = 25000
-const MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_BATCH = 1000
-const MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX = 500
 const MOBILE_CARD_MANIFEST_SCHEMA = "iconoplasm.mobileCardManifest.v1"
 const MOBILE_CARD_VM_SCHEMA = "iconoplasm.mobileCard.v1"
 const MOBILE_CARD_LAYOUT = "mobile-dossier-v1"
@@ -170,7 +167,6 @@ const cardCatalogArtifactCache = {
   version: null,
   value: null,
 }
-const mobileCardVMCache = new Map()
 const ADMIN_DASHBOARD_SUMMARY_KEY = "default"
 const ADMIN_READ_MODEL_BOOTSTRAP_KEY = "default"
 const ADMIN_READ_MODEL_BOOTSTRAP_PHASE_SYMBOLS = "symbols"
@@ -14537,7 +14533,6 @@ export function resetIconoplasmRuntimeCachesForTest() {
   clearSharedD1CostCaches()
   cardCatalogArtifactCache.version = null
   cardCatalogArtifactCache.value = null
-  mobileCardVMCache.clear()
   galleryVersionCache.value = "0"
   galleryVersionCache.loadedAt = 0
 }
@@ -14735,28 +14730,6 @@ async function syncAdminReadModelsAndInvalidateGallery(
   return { ...result, card_catalog: invalidation.card_catalog }
 }
 
-async function catalogSymbolsForMobileCardSnapshotWarm(env, { after = "", limit = 500 } = {}) {
-  const cleanedLimit = Math.max(
-    1,
-    Math.min(
-      MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
-      Number.parseInt(String(limit || MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX), 10) ||
-        MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
-    ),
-  )
-  await warmCatalogCache(env)
-  const cursor = normalizeSymbol(after || "")
-  return Array.from(catalogCache.bySymbol.keys())
-    .filter((symbol) => !cursor || symbol > cursor)
-    .sort()
-    .slice(0, cleanedLimit)
-}
-
-async function allCatalogSymbolsForCardCatalogArtifact(env) {
-  await warmCatalogCache(env)
-  return Array.from(catalogCache.bySymbol.keys()).sort()
-}
-
 function parseJsonTextList(raw) {
   try {
     const parsed = JSON.parse(String(raw || "[]"))
@@ -14923,51 +14896,6 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
   return rows
     .map((row) => cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }))
     .filter(Boolean)
-}
-
-async function mobileCardSnapshotWarmSymbolsForInvalidation(
-  env,
-  { symbols = [], fullRebuild = false } = {},
-) {
-  if (fullRebuild) {
-    return catalogSymbolsForMobileCardSnapshotWarm(env, {
-      limit: Math.min(
-        MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_BATCH,
-        MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
-      ),
-    })
-  }
-  const warmSet = new Set()
-  for (const symbol of ICONOPLASM_STARTER_GENE_SYMBOLS) {
-    const normalized = normalizeSymbol(symbol)
-    if (normalized) warmSet.add(normalized)
-  }
-  for (const symbol of symbols) {
-    const normalized = normalizeSymbol(symbol)
-    if (normalized) warmSet.add(normalized)
-  }
-  return Array.from(warmSet)
-}
-
-async function warmMobileCardSnapshotSymbols(env, symbols, snapshotVersion) {
-  const warmedSymbols = normalizeRequestedSymbols(
-    symbols,
-    MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
-  )
-  let warmed = 0
-  let missing = 0
-  for (let index = 0; index < warmedSymbols.length; index += 100) {
-    const chunk = warmedSymbols.slice(index, index + 100)
-    const prewarm = await composeAndCacheMobileCardVMs(
-      env,
-      "https://iconoplasm.brinedew.bio/",
-      chunk,
-      snapshotVersion,
-    )
-    warmed += prewarm.cards.length
-    missing += prewarm.missing.length
-  }
-  return { warmed, missing, requested: warmedSymbols.length, version: snapshotVersion }
 }
 
 function galleryCanUseEdgeCache(url) {
@@ -16109,47 +16037,6 @@ function assertCompleteMobileCardVM(vm) {
   return true
 }
 
-function mobileCardVMSharedCacheKey(snapshotVersion, symbol) {
-  const version = String(snapshotVersion || "").trim()
-  const normalized = normalizeSymbol(symbol || "")
-  if (!version || !normalized) return ""
-  return `${KV_MOBILE_CARD_VM_PREFIX}${version}:${normalized}`
-}
-
-async function readMobileCardVMFromSharedSnapshot(env, snapshotVersion, symbol) {
-  const key = mobileCardVMSharedCacheKey(snapshotVersion, symbol)
-  if (!key) return null
-  const memory = mobileCardVMCache.get(key)
-  if (assertCompleteMobileCardVM(memory)) return memory
-  const cached = await readVersionedSharedJson(
-    env,
-    `${KV_MOBILE_CARD_VM_PREFIX}${snapshotVersion}:`,
-    normalizeSymbol(symbol || ""),
-  )
-  if (!assertCompleteMobileCardVM(cached)) return null
-  mobileCardVMCache.set(key, cached)
-  return cached
-}
-
-async function writeMobileCardVMToSharedSnapshot(env, snapshotVersion, vm) {
-  const key = mobileCardVMSharedCacheKey(snapshotVersion, vm?.symbol)
-  if (!key || !assertCompleteMobileCardVM(vm)) return false
-  const snapshotVM = {
-    ...vm,
-    snapshot_version: String(snapshotVersion || vm.snapshot_version || "0"),
-    data_source: "kv_snapshot",
-  }
-  const wrote = await writeVersionedSharedJson(
-    env,
-    `${KV_MOBILE_CARD_VM_PREFIX}${snapshotVersion}:`,
-    normalizeSymbol(vm.symbol || ""),
-    snapshotVM,
-  )
-  if (!wrote) return false
-  mobileCardVMCache.set(key, snapshotVM)
-  return true
-}
-
 function normalizeCardCatalogArtifact(raw) {
   if (!raw || typeof raw !== "object") return null
   if (raw.schema !== CARD_CATALOG_ARTIFACT_SCHEMA) return null
@@ -16463,46 +16350,6 @@ async function handleMobileCardManifest(request, env) {
       "X-Iconoplasm-Snapshot-State": "published-card-catalog",
     },
   )
-}
-
-async function composeAndCacheMobileCardVMs(env, requestUrl, symbols, snapshotVersion) {
-  const url = new URL(requestUrl || "https://iconoplasm.brinedew.bio/")
-  const fields = [
-    "symbol",
-    "full_name",
-    "color",
-    "portrait",
-    "essence",
-    "manifestation",
-    "weight_kg",
-    "protein_length_aa",
-    "molecular_weight_kda",
-    "first_publication_year",
-    "tissue_tau",
-    "loeuf",
-    "constraint_percentile",
-  ].join(",")
-  const cards = []
-  const missing = []
-  for (const symbol of normalizeRequestedSymbols(symbols, 100)) {
-    const record = await geneRecord(env, url, symbol, { fields })
-    const projected = projectGeneRecord(record, fields)
-    const vm = buildMobileCardVMFromGeneRecord(projected, {
-      snapshotVersion,
-      source: "request_composed",
-    })
-    if (!assertCompleteMobileCardVM(vm)) {
-      missing.push(symbol)
-      continue
-    }
-    const wrote = await writeMobileCardVMToSharedSnapshot(env, snapshotVersion, vm)
-    if (!wrote) {
-      missing.push(symbol)
-      continue
-    }
-    cards.push(vm)
-  }
-  return { cards, missing }
 }
 
 async function handlePublicResolve(request, env) {
@@ -20023,30 +19870,44 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const scope = String(p?.scope || "")
         .trim()
         .toLowerCase()
-      const requestedLimit = Math.max(
-        1,
-        Math.min(
-          MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
-          Number.parseInt(String(p?.limit || MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX), 10) ||
-            MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
-        ),
-      )
-      const symbols =
-        scope === "catalog"
-          ? await catalogSymbolsForMobileCardSnapshotWarm(env, {
-              after: p?.after || p?.cursor || "",
-              limit: requestedLimit,
-            })
-          : normalizeRequestedSymbols(
-              Array.isArray(p?.symbols) ? p.symbols : [],
-              MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
-            )
+      if (scope && scope !== "catalog") {
+        return done(
+          "admin_card_vms_warm_scope_409",
+          json(
+            {
+              ok: false,
+              code: "CARD_ARTIFACT_REQUIRES_FULL_CATALOG",
+              error:
+                "Card artifact publication has one valid scope: the full catalog. Symbol-scoped artifacts are not allowed because they make unrelated catalog genes look missing.",
+              supported_scope: "catalog",
+            },
+            409,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
+      if (Array.isArray(p?.symbols) && p.symbols.length) {
+        return done(
+          "admin_card_vms_warm_symbols_409",
+          json(
+            {
+              ok: false,
+              code: "CARD_ARTIFACT_REQUIRES_FULL_CATALOG",
+              error:
+                "Card artifact publication has one valid scope: the full catalog. Symbol-scoped artifacts are not allowed because they make unrelated catalog genes look missing.",
+              supported_scope: "catalog",
+            },
+            409,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
       let publishResult
       try {
         publishResult = await publishCardCatalogArtifact(env, {
           version: snapshotVersion,
           requestUrl: request.url,
-          symbols: scope === "catalog" ? null : symbols,
+          symbols: null,
         })
       } catch (error) {
         return done(
@@ -20064,18 +19925,15 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           ),
         )
       }
-      const nextCursor = symbols.length
-        ? symbols[symbols.length - 1]
-        : sanitizeText(p?.after || p?.cursor || "", 64)
       return done(
         "admin_card_vms_warm",
         json(
           {
             ok: true,
-            scope: scope === "catalog" ? "catalog" : "symbols",
+            scope: "catalog",
             version: snapshotVersion,
             after: sanitizeText(p?.after || p?.cursor || "", 64) || "",
-            next_cursor: nextCursor || "",
+            next_cursor: "",
             done: true,
             requested: publishResult.catalog_gene_count,
             warmed: publishResult.artifact_gene_count,
