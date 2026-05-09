@@ -7,7 +7,7 @@ var ICONOPLASM_LAYOUT_COOKIE_KEY = "brinedew_icono_layout"
 var ICONOPLASM_CARD_VARIANT_COOKIE_KEY = "brinedew_icono_card_variant"
 var ICONOPLASM_SHOW_ALL_GENES_COOKIE_KEY = "brinedew_icono_show_all_genes"
 var ICONOPLASM_SHARED_BRIDGE_CHANNEL = "brinedew-site-preferences-bridge"
-var ICONOPLASM_SHARED_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260425a"
+var ICONOPLASM_SHARED_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260509a"
 var ICONOPLASM_SHARED_REQUEST_TIMEOUT_MS = 4000
 var ICONOPLASM_SETTINGS_CHANGE_EVENT = "iconoplasmsettingschange"
 var GENERATION_PROVIDER_DEFAULT = "openai-compatible"
@@ -41,7 +41,7 @@ function normalizeCardVariant(variant) {
     .trim()
     .toLowerCase()
   if (value === "image-only") return "image-only"
-  if (value === "neo-drab") return "neo-drab"
+  if (value === "neo-drab") return "lit-archival"
   if (value === "lab-label" || value === "lit-archival") return "lit-archival"
   if (value === "classic" || value === "simple") return "simple"
   return ICONOPLASM_DEFAULT_SETTINGS.cardVariant

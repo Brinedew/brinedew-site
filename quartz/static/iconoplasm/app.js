@@ -2,7 +2,7 @@ import {
   readIconoplasmSettings,
   startSharedIconoplasmSettingsAutoSync,
   syncSharedIconoplasmSettings,
-} from "../site-preferences.js?v=20260425a"
+} from "../site-preferences.js?v=20260509a"
 import {
   HOME_COLLECTION_ORDERS,
   normalizeDiscoveryEntries,
@@ -81,7 +81,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var ICONO_ARROW_LEFT =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" style="width:14px;height:14px;vertical-align:-2px;margin-right:3px"><path d="M12.5 4 6.5 10l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
   // Icon set used by the candidate action rail. Kept inline as `currentColor` SVGs so the rail
-  // can adopt cream/lab-label, neo-drab, or default theming without a separate icon font load.
+  // can adopt cream/lab-label or default theming without a separate icon font load.
   // Source: B-467 (compact action rail for candidate blots) — replace earlier text buttons
   // ("Remove", "Copy to gene") with consistent circular icon controls.
   var ICONO_TRASH_ICON =

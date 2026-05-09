@@ -699,6 +699,8 @@ test("DO NOT DELETE: blocklist changes live-unhighlight already wrapped page tex
 test("DO NOT DELETE: user-facing card style copy calls the blot-only card a blot, not an image", () => {
   const popupHtml = readUtf8("./iconoplasm-extension/popup.html")
   const siteSettings = readUtf8("./quartz/static/site-settings/app.js")
+  const sitePreferences = readUtf8("./quartz/static/site-preferences.js")
+  const preferencesBridge = readUtf8("./quartz/static/site-preferences/bridge.html")
   const storeListingCopy = readUtf8("./iconoplasm-extension/store-assets/STORE-LISTING-COPY.md")
 
   assert.match(
@@ -715,6 +717,26 @@ test("DO NOT DELETE: user-facing card style copy calls the blot-only card a blot
     siteSettings,
     /\{ value: "image-only", label: "Blot only" \}/,
     "site settings should show Blot only for the same stored card variant",
+  )
+  assert.match(
+    siteSettings,
+    /CARD_VARIANT_OPTIONS = \[\s*\{ value: "simple", label: "Simple" \},\s*\{ value: "lit-archival", label: "Vintage lab label" \},\s*\{ value: "image-only", label: "Blot only" \},\s*\]/,
+    "site settings card style options should match the three labels exposed by the extension popup",
+  )
+  assert.doesNotMatch(
+    siteSettings,
+    /neo-drab|Neo-drab|drab/i,
+    "site settings should not expose the removed drab card style",
+  )
+  assert.match(
+    sitePreferences,
+    /if \(value === "neo-drab"\) return "lit-archival"/,
+    "old website neo-drab settings should migrate to the remaining lab label style",
+  )
+  assert.match(
+    preferencesBridge,
+    /if \(value === "neo-drab"\) return "lit-archival"/,
+    "the cross-host preferences bridge should migrate old neo-drab values the same way",
   )
   assert.match(
     storeListingCopy,
