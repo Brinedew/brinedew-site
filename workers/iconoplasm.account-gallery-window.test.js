@@ -243,6 +243,7 @@ test("account gallery window returns strict rich cards for newest without full s
   assert.equal(payload.diagnostics.source, "published_card_catalog")
   assert.equal(payload.diagnostics.artifact_version, "test-vm-version")
   assert.equal(payload.missing.length, 0)
+  assert.equal(payload.items[0]?.card, undefined)
   assert.ok(
     db.calls.some(
       (call) =>

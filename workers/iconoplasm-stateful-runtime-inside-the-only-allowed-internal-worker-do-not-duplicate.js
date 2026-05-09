@@ -16203,14 +16203,19 @@ async function readPublishedCardCatalogArtifact(env, version, symbols = null) {
           requestedSymbols.some((symbol) => cardCatalogShardMayContainSymbol(shard, symbol)),
         )
       : parsed.shards
-    for (const shard of shards) {
-      const shardRaw = await env.KV.get(String(shard?.key || ""))
-      let shardParsed = null
-      try {
-        shardParsed = shardRaw ? JSON.parse(shardRaw) : null
-      } catch {
-        shardParsed = null
-      }
+    const shardPayloads = await Promise.all(
+      shards.map(async (shard) => {
+        const shardRaw = await env.KV.get(String(shard?.key || ""))
+        let shardParsed = null
+        try {
+          shardParsed = shardRaw ? JSON.parse(shardRaw) : null
+        } catch {
+          shardParsed = null
+        }
+        return { shard, shardParsed }
+      }),
+    )
+    for (const { shard, shardParsed } of shardPayloads) {
       if (
         shardParsed?.schema !== CARD_CATALOG_ARTIFACT_SCHEMA ||
         String(shardParsed.artifact_version || "") !== artifactVersion ||
@@ -17852,7 +17857,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         items.push({
           symbol,
           discovery: row,
-          card: vm || null,
         })
       }
       return done(

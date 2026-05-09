@@ -4428,7 +4428,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     syncHomeModeChrome()
 
     function currentAccountGalleryWindowLimit() {
-      return window.matchMedia && window.matchMedia("(max-width: 700px)").matches ? 12 : 24
+      return window.matchMedia && window.matchMedia("(max-width: 700px)").matches ? 24 : 48
     }
 
     function currentGalleryLimit() {
