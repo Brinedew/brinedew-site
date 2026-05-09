@@ -243,6 +243,24 @@ test("extension install panel gives numbered click-by-click browser install inst
   assert.match(app, /id: "safari",\s*label: "Safari",\s*selected: activeTab === "safari"/)
 })
 
+test("home extension install surface is a gallery card after starter genes, not a detached toolbar panel", async () => {
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("var appendResolvedItems = function (resolvedItems)")
+  const end = app.indexOf("if (homeLayout === \"masonry\")", start)
+  assert.notEqual(start, -1, "missing home page append block")
+  assert.notEqual(end, -1, "missing masonry branch after append block")
+  const appendBlock = app.slice(start, end)
+
+  assert.doesNotMatch(app, /id="icono-install-panel-host"/)
+  assert.match(app, /data-icono-home-install-card/)
+  assert.match(appendBlock, /galleryState\.offset >= GUEST_STARTER_GENES\.length[\s\S]*appendHomeInstallCard\(grid\)/)
+  assert.match(
+    appendBlock,
+    /appendHomeInstallCard\(grid\)[\s\S]*appendGuestDiscoveryLoginCard\(grid\)/,
+    "install card should be inserted before the Discord login card in the starter grid flow",
+  )
+})
+
 test("mobile extension install card is device-specific and does not reuse desktop sideload steps", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function buildMobileInstallExperience(browser, faqUrl)")

@@ -1443,7 +1443,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-gallery-install" id="icono-gallery-install"></div>' +
       "</div>" +
       "</div>" +
-      '<div class="icono-install-panel-host" id="icono-install-panel-host" hidden></div>' +
       '<div class="icono-collection-shell" id="icono-collection-shell">' +
       '<div class="icono-collection-summary-host" id="icono-collection-summary" hidden></div>' +
       '<div class="icono-empty" id="icono-empty" hidden></div>' +
@@ -2240,7 +2239,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return (
       '<section class="icono-card icono-guest-login-card icono-install-panel icono-install-panel--' +
       esc(model.tone || "info") +
-      '" id="icono-install-panel" aria-live="polite">' +
+      '" id="icono-install-panel" data-icono-home-install-card aria-live="polite">' +
       buildInstallTabsMarkup(model) +
       "<div" +
       panelBodyAttrs +
@@ -2256,11 +2255,39 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
+  function wireInstallPanelTabs(scope) {
+    if (!scope) return
+    var tabButtons = scope.querySelectorAll("[data-icono-install-tab]")
+    for (var i = 0; i < tabButtons.length; i++) {
+      ;(function (button) {
+        button.addEventListener("click", function () {
+          var nextTab = String(button.getAttribute("data-icono-install-tab") || "")
+            .trim()
+            .toLowerCase()
+          if (!nextTab) return
+          iconoInstallState.installTab = nextTab
+          renderHomeInstallCta()
+        })
+      })(tabButtons[i])
+    }
+  }
+
   function renderHomeInstallCta() {
     var toggleHost = document.getElementById("icono-gallery-install")
     var panelHost = document.getElementById("icono-install-panel-host")
-    if (!toggleHost || !panelHost) return
+    var existingCard = document.querySelector("[data-icono-home-install-card]")
     var model = currentInstallExperience()
+    if (!panelHost) {
+      if (toggleHost) {
+        toggleHost.hidden = true
+        toggleHost.innerHTML = ""
+      }
+      if (existingCard) {
+        existingCard.outerHTML = buildInstallPanelMarkup(model)
+        wireInstallPanelTabs(document)
+      }
+      return
+    }
     var showInstallCard = !iconoInstallState.installed
     toggleHost.hidden = showInstallCard
     toggleHost.innerHTML = showInstallCard ? "" : buildInstallToggleMarkup(model)
@@ -2276,19 +2303,20 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         })
       }
     }
-    var tabButtons = panelHost.querySelectorAll("[data-icono-install-tab]")
-    for (var i = 0; i < tabButtons.length; i++) {
-      ;(function (button) {
-        button.addEventListener("click", function () {
-          var nextTab = String(button.getAttribute("data-icono-install-tab") || "")
-            .trim()
-            .toLowerCase()
-          if (!nextTab) return
-          iconoInstallState.installTab = nextTab
-          renderHomeInstallCta()
-        })
-      })(tabButtons[i])
+    wireInstallPanelTabs(panelHost)
+  }
+
+  function appendHomeInstallCard(container) {
+    if (!container || container.querySelector("[data-icono-home-install-card]")) {
+      return null
     }
+    var wrapper = document.createElement("div")
+    wrapper.innerHTML = buildInstallPanelMarkup(currentInstallExperience())
+    var card = wrapper.firstElementChild
+    if (!card) return null
+    container.appendChild(card)
+    wireInstallPanelTabs(card)
+    return card
   }
 
   function buildGuestDiscoveryLoginCardMarkup() {
@@ -5180,24 +5208,28 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               var newCards = appendGrid(grid, resolvedItems, galleryState.items.length, homeLayout)
               galleryState.items = galleryState.items.concat(resolvedItems)
               galleryState.offset += pageEntries.length
+              var installCard = null
               var guestLoginCard = null
-              if (
-                !galleryState.authenticated &&
-                galleryState.offset >= GUEST_STARTER_GENES.length
-              ) {
+              if (galleryState.offset >= GUEST_STARTER_GENES.length) {
+                installCard = appendHomeInstallCard(grid)
+              }
+              if (!galleryState.authenticated && galleryState.offset >= GUEST_STARTER_GENES.length) {
                 guestLoginCard = appendGuestDiscoveryLoginCard(grid)
               }
+              var auxiliaryCards = []
+              if (installCard) auxiliaryCards.push(installCard)
+              if (guestLoginCard) auxiliaryCards.push(guestLoginCard)
               if (homeLayout === "masonry") {
                 applyHomeMasonry(
                   grid,
-                  guestLoginCard ? newCards.concat([guestLoginCard]) : newCards,
+                  auxiliaryCards.length ? newCards.concat(auxiliaryCards) : newCards,
                 )
                 setupOrderedPortraitPrefetch(grid, galleryState.items)
                 void hydrateBrickCards(newCards).then(function () {
                   warmBrickCardImages(galleryState.items)
                   applyHomeMasonry(
                     grid,
-                    guestLoginCard ? newCards.concat([guestLoginCard]) : newCards,
+                    auxiliaryCards.length ? newCards.concat(auxiliaryCards) : newCards,
                   )
                 })
               } else {
