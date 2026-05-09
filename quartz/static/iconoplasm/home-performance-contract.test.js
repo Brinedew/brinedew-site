@@ -4,16 +4,24 @@ import assert from "node:assert/strict"
 
 const appPath = new URL("./app.js", import.meta.url)
 const homeOrdersPath = new URL("./home-orders.js", import.meta.url)
+const headPath = new URL("../../components/Head.tsx", import.meta.url)
 
 test("public gallery default order is newly discovered genes first", async () => {
   const homeOrders = await readFile(homeOrdersPath, "utf8")
+  const head = await readFile(headPath, "utf8")
 
   assert.match(homeOrders, /ICONOPLASM_DISCOVERY_DEFAULT_ORDER = "newest"/)
   assert.match(homeOrders, /ICONOPLASM_GALLERY_DEFAULT_ORDER = "newest"/)
+  assert.match(head, /\/api\/public\/v1\/gallery\?order=newest&limit=4&offset=0/)
   assert.doesNotMatch(
-    homeOrders,
+    homeOrders + "\n" + head,
     /ICONOPLASM_GALLERY_DEFAULT_ORDER = "votes"/,
     "public gallery default must not silently become vote order",
+  )
+  assert.doesNotMatch(
+    head,
+    /\/api\/public\/v1\/gallery\?order=votes&limit=4&offset=0/,
+    "HTML head bootstrap must match the public gallery default order",
   )
 })
 
