@@ -205,6 +205,53 @@ test("DO NOT DELETE: simple card metadata renders mass, age, and tissue when pro
   )
 })
 
+test("DO NOT DELETE: card sex marks are composed from existing font characters", async () => {
+  const vm = await import("node:vm")
+  const sandbox = { console }
+  sandbox.globalThis = sandbox
+  vm.runInNewContext(readUtf8("./iconoplasm-extension/generated/shared-card-runtime.js"), sandbox)
+  const shared = sandbox.IconoplasmCardShared
+  assert.equal(typeof shared?.collectTooltipMetaRows, "function")
+  assert.equal(typeof shared?.renderLabLabelCardHtml, "function")
+
+  const maleRows = shared.collectTooltipMetaRows({ essence: { sex: "male" } })
+  assert.ok(
+    maleRows.some(
+      (row) =>
+        row.characterIsHtml &&
+        /data-icono-sex-mark="mars"[\s\S]*>o<[\s\S]*>\/<[\s\S]*>-</.test(
+          String(row.character || ""),
+        ),
+    ),
+    "simple card metadata should compose Mars from existing font characters",
+  )
+
+  const femaleHtml = shared.renderLabLabelCardHtml({
+    symbol: "BRCA1",
+    color: "#b24a5b",
+    essence: { sex: "female", sex_origin: "soluble" },
+  })
+  assert.match(
+    femaleHtml,
+    /icono-label-hand-note--sex[\s\S]*data-icono-sex-mark="venus"[\s\S]*>o<[\s\S]*>\|<[\s\S]*>-</,
+    "lab-label card should compose Venus from existing handwritten-font characters",
+  )
+
+  const stylesSource = readUtf8("./shared/iconoplasm-card/shared-card-label.css")
+  assert.match(
+    stylesSource,
+    /\.icono-sex-mark[\s\S]*font-family: inherit/,
+    "sex marks should inherit the active card font instead of switching to fallback glyphs",
+  )
+  assert.doesNotMatch(
+    readUtf8("./iconoplasm-extension/generated/shared-card-runtime.js").match(
+      /function sexMarkHtml\(value, extraClass\)[\s\S]*?function collectTooltipMetaRows/,
+    )?.[0] || "",
+    /♂|♀|\\u2642|\\u2640|<svg viewBox/,
+    "sex marks should not use missing Unicode symbols or SVG drawings",
+  )
+})
+
 test("DO NOT DELETE: split content modules expose stable globals", () => {
   const moduleGlobals = new Map([
     ["content-api.js", "IconoplasmContentApi"],

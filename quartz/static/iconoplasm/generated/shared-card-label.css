@@ -1027,6 +1027,62 @@
   letter-spacing: 0.01em;
 }
 
+.icono-sex-mark {
+  --icono-sex-mark-size: 1em;
+  position: relative;
+  display: inline-block;
+  inline-size: var(--icono-sex-mark-size);
+  block-size: var(--icono-sex-mark-size);
+  color: currentColor;
+  font-family: inherit;
+  font-size: 1em;
+  line-height: 1;
+  vertical-align: -0.12em;
+}
+
+.icono-sex-mark-part {
+  position: absolute;
+  display: block;
+  font-family: inherit;
+  font-size: 1em;
+  font-weight: inherit;
+  line-height: 1;
+}
+
+.icono-sex-mark-part--circle {
+  inset-inline-start: 0.06em;
+  inset-block-start: 0;
+  transform: scaleX(1.08);
+}
+
+.icono-sex-mark--mars .icono-sex-mark-part--slash {
+  inset-inline-start: 0.57em;
+  inset-block-start: -0.16em;
+  transform: rotate(12deg) scaleY(0.88);
+}
+
+.icono-sex-mark--mars .icono-sex-mark-part--head {
+  inset-inline-start: 0.79em;
+  inset-block-start: -0.24em;
+  transform: rotate(-34deg) scaleX(0.72);
+}
+
+.icono-sex-mark--venus .icono-sex-mark-part--stem {
+  inset-inline-start: 0.43em;
+  inset-block-start: 0.5em;
+  transform: scaleY(0.68);
+}
+
+.icono-sex-mark--venus .icono-sex-mark-part--cross {
+  inset-inline-start: 0.29em;
+  inset-block-start: 0.77em;
+  transform: scaleX(0.82);
+}
+
+.icono-label-hand-note--sex .icono-sex-mark {
+  --icono-sex-mark-size: 1.08em;
+}
+
 .icono-label-hand-note--sex,
 .icono-label-hand-note--age,
 .icono-label-hand-note--unit,
