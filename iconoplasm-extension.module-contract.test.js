@@ -908,6 +908,11 @@ test("Iconoplasm home keeps guest Discord login in the starter-card flow", () =>
   )?.[0]
   assert.ok(guestCardBuilder, "home guest login card builder should exist")
 
+  assert.match(
+    appSource,
+    /from "\.\.\/shared\/sidebar-shell\.js\?v=20260509a"/,
+    "Iconoplasm should request a fresh sidebar module version when it imports newly exported sidebar values",
+  )
   assert.doesNotMatch(
     appSource,
     /id="icono-gallery-auth"/,
