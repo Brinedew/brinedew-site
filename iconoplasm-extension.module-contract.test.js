@@ -746,3 +746,18 @@ test("Iconoplasm home keeps guest Discord login in the starter-card flow", () =>
     "guest login button should reuse the auth link style with compact, deliberate IBM Plex text",
   )
 })
+
+test("DO NOT DELETE: lab-label row labels do not collapse into character stacks", () => {
+  const stylesSource = readUtf8("./shared/iconoplasm-card/shared-card-label.css")
+
+  assert.match(
+    stylesSource,
+    /--icono-label-row-label-fr: clamp\(3\.15rem, 9\.2%, 7rem\)/,
+    "desktop lab-label row labels need a real minimum column width, not a collapsing percentage",
+  )
+  assert.match(
+    stylesSource,
+    /\.icono-label-row-label \{[\s\S]*overflow-wrap: normal[\s\S]*word-break: normal[\s\S]*hyphens: none/,
+    "lab-label row labels should not break into one-letter stacks",
+  )
+})

@@ -79,8 +79,8 @@
   --icono-label-header-title-fr: 56.2%;
   --icono-label-header-meta-fr: 29.8%;
   --icono-label-header-qc-fr: 14%;
-  --icono-label-row-label-fr: 9.2%;
-  --icono-label-row-body-fr: 90.8%;
+  --icono-label-row-label-fr: clamp(3.15rem, 9.2%, 7rem);
+  --icono-label-row-body-fr: minmax(0, 1fr);
   --icono-label-band-category-fr: 50%;
   --icono-label-band-noted-fr: 21%;
   --icono-label-band-mass-fr: 29%;
@@ -666,8 +666,9 @@
   letter-spacing: 0.18em;
   line-height: 1.08;
   text-transform: uppercase;
-  overflow-wrap: break-word;
-  hyphens: auto;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
 }
 
 .icono-label-title-block,
