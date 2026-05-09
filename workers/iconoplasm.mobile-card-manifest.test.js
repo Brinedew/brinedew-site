@@ -270,12 +270,14 @@ function buildEnv({
   db = new FakeIconoplasmDb(),
   version = "test-vm-version",
   cardArtifact = completeCardCatalogArtifact(["ERBB2", "INS"], version),
+  onKvGet = null,
 } = {}) {
   return {
     ICONOPLASM_DB: db,
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     KV: {
       async get(key) {
+        if (typeof onKvGet === "function") onKvGet(key)
         if (key === "iconoplasm:gallery-version") return version
         if (key === `iconoplasm:card-catalog:${version}` && cardArtifact) {
           return JSON.stringify(cardArtifact)
@@ -364,26 +366,34 @@ test("mobile card manifest returns complete VMs from the published card catalog 
   assert.equal(card.payload.essence.faction, "pro-growth")
 })
 
-test("mobile card manifest reads all shards from the one published card catalog artifact path", async () => {
+test("mobile card manifest reads only needed shards from the one published card catalog artifact path", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const kvStore = new Map()
-  putShardedCardCatalogArtifact(kvStore, ["ERBB2", "INS"], "test-vm-version")
+  const kvGets = []
+  putShardedCardCatalogArtifact(kvStore, ["BRCA1", "ERBB2", "INS", "TP53"], "test-vm-version")
   const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS", "ERBB2"] }),
     }),
-    buildEnv({ kvStore, db: null, cardArtifact: null }),
+    buildEnv({ kvStore, db: null, cardArtifact: null, onKvGet: (key) => kvGets.push(key) }),
   )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
   assert.equal(payload.data_source, "published_card_catalog")
-  assert.equal(payload.diagnostics.artifact_gene_count, 2)
+  assert.equal(payload.diagnostics.artifact_gene_count, 4)
   assert.deepEqual(
     payload.cards.map((card) => card.symbol),
     ["INS", "ERBB2"],
+  )
+  assert.deepEqual(
+    kvGets.filter((key) => key.includes(":shard:")).sort(),
+    [
+      "iconoplasm:card-catalog:test-vm-version:shard:1",
+      "iconoplasm:card-catalog:test-vm-version:shard:2",
+    ],
   )
 })
 

@@ -16071,6 +16071,37 @@ function cardCatalogArtifactShardKey(artifactVersion, index) {
   return `${cardCatalogArtifactStoreKey(artifactVersion)}:shard:${index}`
 }
 
+function cardCatalogShardMayContainSymbol(shard, symbol) {
+  const normalized = normalizeSymbol(symbol || "")
+  if (!normalized) return false
+  const first = normalizeSymbol(shard?.first_symbol || "")
+  const last = normalizeSymbol(shard?.last_symbol || "")
+  if (!first || !last) return true
+  return normalized >= first && normalized <= last
+}
+
+function normalizePartialCardCatalogArtifact(raw, cards) {
+  if (!raw || typeof raw !== "object") return null
+  const artifactVersion = String(raw.artifact_version || raw.snapshot_version || "").trim()
+  if (!artifactVersion || raw.schema !== CARD_CATALOG_ARTIFACT_SCHEMA) return null
+  const bySymbol = new Map()
+  for (const card of Array.isArray(cards) ? cards : []) {
+    if (!assertCompleteMobileCardVM(card)) return null
+    const symbol = normalizeSymbol(card.symbol || "")
+    if (!symbol || bySymbol.has(symbol)) return null
+    bySymbol.set(symbol, card)
+  }
+  return {
+    ...raw,
+    artifact_version: artifactVersion,
+    snapshot_version: artifactVersion,
+    catalog_gene_count: Math.max(0, Number(raw.catalog_gene_count || 0) || 0),
+    card_count: Math.max(0, Number(raw.card_count || 0) || 0),
+    cards,
+    bySymbol,
+  }
+}
+
 function cardCatalogArtifactManifestFromCards({
   artifactVersion,
   artifactValidatedAt,
@@ -16133,12 +16164,24 @@ async function writeCardCatalogArtifactToKV(env, artifact) {
   await env.KV.put(cardCatalogArtifactStoreKey(artifactVersion), JSON.stringify(manifest))
 }
 
-async function readPublishedCardCatalogArtifact(env, version) {
+async function readPublishedCardCatalogArtifact(env, version, symbols = null) {
   const artifactVersion = String(version || "").trim()
   if (!artifactVersion || !env?.KV?.get) return null
+  const requestedSymbols = Array.isArray(symbols)
+    ? normalizeRequestedSymbols(symbols, MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT)
+    : null
   if (
+    !requestedSymbols &&
     cardCatalogArtifactCache.version === artifactVersion &&
     normalizeCardCatalogArtifact(cardCatalogArtifactCache.value)
+  ) {
+    return cardCatalogArtifactCache.value
+  }
+  if (
+    requestedSymbols &&
+    cardCatalogArtifactCache.version === artifactVersion &&
+    normalizeCardCatalogArtifact(cardCatalogArtifactCache.value) &&
+    requestedSymbols.every((symbol) => cardCatalogArtifactCache.value.bySymbol.has(symbol))
   ) {
     return cardCatalogArtifactCache.value
   }
@@ -16155,7 +16198,12 @@ async function readPublishedCardCatalogArtifact(env, version) {
     Array.isArray(parsed.shards)
   ) {
     const cards = []
-    for (const shard of parsed.shards) {
+    const shards = requestedSymbols
+      ? parsed.shards.filter((shard) =>
+          requestedSymbols.some((symbol) => cardCatalogShardMayContainSymbol(shard, symbol)),
+        )
+      : parsed.shards
+    for (const shard of shards) {
       const shardRaw = await env.KV.get(String(shard?.key || ""))
       let shardParsed = null
       try {
@@ -16173,6 +16221,14 @@ async function readPublishedCardCatalogArtifact(env, version) {
         return null
       }
       cards.push(...shardParsed.cards)
+    }
+    if (requestedSymbols) {
+      const requestedSet = new Set(requestedSymbols)
+      const artifact = normalizePartialCardCatalogArtifact(
+        parsed,
+        cards.filter((card) => requestedSet.has(normalizeSymbol(card?.symbol || ""))),
+      )
+      return artifact
     }
     parsed = { ...parsed, cards }
   }
@@ -16307,7 +16363,7 @@ async function handleMobileCardManifest(request, env) {
     )
   }
 
-  const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion)
+  const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, symbols)
   if (!artifact) {
     return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
       "Cache-Control": "no-store",
@@ -17766,7 +17822,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const symbols = windowData.rows
         .map((row) => normalizeSymbol(row.gene_symbol || ""))
         .filter(Boolean)
-      const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion)
+      const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, symbols)
       if (!artifact) {
         return done(
           "account_gallery_window_card_artifact_unavailable",
