@@ -3,6 +3,40 @@ import test from "node:test"
 import assert from "node:assert/strict"
 
 const appPath = new URL("./app.js", import.meta.url)
+const homeOrdersPath = new URL("./home-orders.js", import.meta.url)
+
+test("public gallery default order is newly discovered genes first", async () => {
+  const homeOrders = await readFile(homeOrdersPath, "utf8")
+
+  assert.match(homeOrders, /ICONOPLASM_DISCOVERY_DEFAULT_ORDER = "newest"/)
+  assert.match(homeOrders, /ICONOPLASM_GALLERY_DEFAULT_ORDER = "newest"/)
+  assert.doesNotMatch(
+    homeOrders,
+    /ICONOPLASM_GALLERY_DEFAULT_ORDER = "votes"/,
+    "public gallery default must not silently become vote order",
+  )
+})
+
+test("home collection counts use inventory stats, not a gallery-order probe", async () => {
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("function fetchHomeCollectionCounts()")
+  const end = app.indexOf("function normalizePublicInventoryStats", start)
+  assert.notEqual(start, -1, "missing fetchHomeCollectionCounts")
+  assert.notEqual(end, -1, "missing fetchHomeCollectionCounts boundary")
+  const block = app.slice(start, end)
+
+  assert.match(block, /fetchPublicInventoryStats\(\)/)
+  assert.doesNotMatch(
+    block,
+    /\/api\/public\/v1\/gallery\?order=/,
+    "signed-in resorting must not trigger a public gallery count probe",
+  )
+  assert.doesNotMatch(
+    block,
+    /consumeBootstrapGallery\(/,
+    "collection counts should not consume or race the initial gallery bootstrap payload",
+  )
+})
 
 test("home collection cards do not wait for public gallery counts before loading discoveries", async () => {
   const app = await readFile(appPath, "utf8")

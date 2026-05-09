@@ -1,5 +1,5 @@
 export var ICONOPLASM_DISCOVERY_DEFAULT_ORDER = "newest"
-export var ICONOPLASM_GALLERY_DEFAULT_ORDER = "votes"
+export var ICONOPLASM_GALLERY_DEFAULT_ORDER = "newest"
 
 export var ICONOPLASM_HOME_ORDERS = [
   { value: "newest", label: "Recently discovered" },

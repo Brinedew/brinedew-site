@@ -213,32 +213,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   }
 
   function fetchHomeCollectionCounts() {
-    var bootstrapPromise = consumeBootstrapGallery(
-      GALLERY_DEFAULT_ORDER,
-      GALLERY_INITIAL_PAGE_SIZE,
-      0,
-    )
-    if (bootstrapPromise) {
-      return bootstrapPromise
-        .then(function (data) {
-          return {
-            total: Number((data && data.total) || 0),
-            publishedTotal: Number((data && data.published_total) || 0),
-          }
-        })
-        .catch(function () {
-          return { total: 0, publishedTotal: 0 }
-        })
-    }
-    return fetchJSON(
-      "/api/public/v1/gallery?order=" +
-        encodeURIComponent(GALLERY_DEFAULT_ORDER) +
-        "&limit=1&offset=0",
-    )
-      .then(function (data) {
+    return fetchPublicInventoryStats()
+      .then(function (stats) {
         return {
-          total: Number((data && data.total) || 0),
-          publishedTotal: Number((data && data.published_total) || 0),
+          total: Number((stats && stats.geneCount) || 0),
+          publishedTotal: Number((stats && stats.canonicalBlotCount) || 0),
         }
       })
       .catch(function () {
@@ -272,13 +251,22 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
+  var publicInventoryStatsDay = ""
+  var publicInventoryStatsPromise = null
+
   function fetchPublicInventoryStats() {
     var today = new Date().toISOString().slice(0, 10)
-    return fetchJSON("/api/public/v1/stats?day=" + encodeURIComponent(today))
+    if (publicInventoryStatsPromise && publicInventoryStatsDay === today) {
+      return publicInventoryStatsPromise
+    }
+    publicInventoryStatsDay = today
+    publicInventoryStatsPromise = fetchJSON("/api/public/v1/stats?day=" + encodeURIComponent(today))
       .then(normalizePublicInventoryStats)
       .catch(function () {
+        publicInventoryStatsPromise = null
         return null
       })
+    return publicInventoryStatsPromise
   }
 
   function syncPublicInventoryStat() {
