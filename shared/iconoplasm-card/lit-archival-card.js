@@ -27,38 +27,6 @@ function normalizeHandwrittenText(value) {
   }
 }
 
-function sexMarkKind(value) {
-  var text = String(value || "")
-    .trim()
-    .toLowerCase()
-  if (text === "male") return "mars"
-  if (text === "female") return "venus"
-  return ""
-}
-
-function sexMarkHtml(value, extraClass) {
-  var kind = sexMarkKind(value)
-  if (!kind) return ""
-  var label = kind === "mars" ? "male" : "female"
-  var classes = "icono-sex-mark icono-sex-mark--" + kind
-  if (extraClass) classes += " " + extraClass
-  var parts =
-    kind === "mars"
-      ? '<span class="icono-sex-mark-part icono-sex-mark-part--circle">o</span><span class="icono-sex-mark-part icono-sex-mark-part--slash">/</span><span class="icono-sex-mark-part icono-sex-mark-part--head">-</span>'
-      : '<span class="icono-sex-mark-part icono-sex-mark-part--circle">o</span><span class="icono-sex-mark-part icono-sex-mark-part--stem">|</span><span class="icono-sex-mark-part icono-sex-mark-part--cross">-</span>'
-  return (
-    '<span class="' +
-    classes +
-    '" data-icono-sex-mark="' +
-    kind +
-    '" role="img" aria-label="' +
-    label +
-    '">' +
-    parts +
-    "</span>"
-  )
-}
-
 function normalizeCardModelHandwriting(payload) {
   var safePayload = asObject(payload)
   var normalized = Object.assign({}, safePayload)
@@ -166,7 +134,9 @@ function categoryFieldTemplate(selectedCategory) {
 }
 
 function sexNoteTemplate(sexNote, selectedCategory) {
-  var note = sexMarkKind(sexNote) ? sexMarkHtml(sexNote, "icono-sex-mark--hand") : normalizeHandwrittenText(sexNote)
+  var note = String(sexNote || "")
+    .trim()
+    .toLowerCase()
   if (!note) return nothing
   var categoryKey = String(selectedCategory || "")
     .trim()
@@ -174,7 +144,7 @@ function sexNoteTemplate(sexNote, selectedCategory) {
   var noteClass =
     "icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-" +
     (categoryKey || "unselected")
-  return html`<div class=${noteClass}>${unsafeHTML(note)}</div>`
+  return html`<div class=${noteClass}>${note}</div>`
 }
 
 function alignmentFieldTemplate(molecularAlignment, politicalNote) {

@@ -226,38 +226,6 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     }
   }
 
-  function sexMarkKind(value) {
-    var text = String(value || "")
-      .trim()
-      .toLowerCase()
-    if (text === "male") return "mars"
-    if (text === "female") return "venus"
-    return ""
-  }
-
-  function sexMarkHtml(value, extraClass) {
-    var kind = sexMarkKind(value)
-    if (!kind) return ""
-    var label = kind === "mars" ? "male" : "female"
-    var classes = "icono-sex-mark icono-sex-mark--" + kind
-    if (extraClass) classes += " " + extraClass
-    var parts =
-      kind === "mars"
-        ? '<span class="icono-sex-mark-part icono-sex-mark-part--circle">o</span><span class="icono-sex-mark-part icono-sex-mark-part--slash">/</span><span class="icono-sex-mark-part icono-sex-mark-part--head">-</span>'
-        : '<span class="icono-sex-mark-part icono-sex-mark-part--circle">o</span><span class="icono-sex-mark-part icono-sex-mark-part--stem">|</span><span class="icono-sex-mark-part icono-sex-mark-part--cross">-</span>'
-    return (
-      '<span class="' +
-      classes +
-      '" data-icono-sex-mark="' +
-      kind +
-      '" role="img" aria-label="' +
-      label +
-      '">' +
-      parts +
-      "</span>"
-    )
-  }
-
   function startRoughLoopObserver() {
     if (!global || !global.document) return
     if (typeof MutationObserver !== "function") {
@@ -550,7 +518,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
         : {}
     var rows = []
 
-    var sexText = sexMarkKind(essence.sex) ? sexMarkHtml(essence.sex) : String(essence.sex || "").trim()
+    var sexText = String(essence.sex || "").trim()
     var sexOrigin = uniqueDisplayValues(
       essence.sex_origin ||
         essence.gender_origin ||
@@ -561,7 +529,6 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     if (sexText) {
       rows.push({
         character: sexText,
-        characterIsHtml: Boolean(sexMarkKind(essence.sex)),
         molecular: sexOrigin.length ? sexOrigin.join(", ") : "unknown",
       })
     }
@@ -726,13 +693,9 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
   }
 
   function renderLabLabelSexNoteHtml(sexNote, selectedCategory) {
-    var note = sexMarkKind(sexNote)
-      ? sexMarkHtml(sexNote, "icono-sex-mark--hand")
-      : escapeHtml(
-          String(sexNote || "")
-            .trim()
-            .toLowerCase(),
-        )
+    var note = String(sexNote || "")
+      .trim()
+      .toLowerCase()
     if (!note) return ""
     var categoryKey = String(selectedCategory || "")
       .trim()
@@ -741,7 +704,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '<div class="icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-' +
       escapeHtml(categoryKey || "unselected") +
       '">' +
-      note +
+      escapeHtml(note) +
       "</div>"
     )
   }

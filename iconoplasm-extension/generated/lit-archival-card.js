@@ -602,21 +602,6 @@ function normalizeHandwrittenText(value) {
     return text;
   }
 }
-function sexMarkKind(value) {
-  var text = String(value || "").trim().toLowerCase();
-  if (text === "male") return "mars";
-  if (text === "female") return "venus";
-  return "";
-}
-function sexMarkHtml(value, extraClass) {
-  var kind = sexMarkKind(value);
-  if (!kind) return "";
-  var label = kind === "mars" ? "male" : "female";
-  var classes = "icono-sex-mark icono-sex-mark--" + kind;
-  if (extraClass) classes += " " + extraClass;
-  var parts = kind === "mars" ? '<span class="icono-sex-mark-part icono-sex-mark-part--circle">o</span><span class="icono-sex-mark-part icono-sex-mark-part--slash">/</span><span class="icono-sex-mark-part icono-sex-mark-part--head">-</span>' : '<span class="icono-sex-mark-part icono-sex-mark-part--circle">o</span><span class="icono-sex-mark-part icono-sex-mark-part--stem">|</span><span class="icono-sex-mark-part icono-sex-mark-part--cross">-</span>';
-  return '<span class="' + classes + '" data-icono-sex-mark="' + kind + '" role="img" aria-label="' + label + '">' + parts + "</span>";
-}
 function normalizeCardModelHandwriting(payload) {
   var safePayload = asObject(payload);
   var normalized = Object.assign({}, safePayload);
@@ -698,11 +683,11 @@ function categoryFieldTemplate(selectedCategory) {
   </div>`;
 }
 function sexNoteTemplate(sexNote, selectedCategory) {
-  var note = sexMarkKind(sexNote) ? sexMarkHtml(sexNote, "icono-sex-mark--hand") : normalizeHandwrittenText(sexNote);
+  var note = String(sexNote || "").trim().toLowerCase();
   if (!note) return A;
   var categoryKey = String(selectedCategory || "").trim().toLowerCase();
   var noteClass = "icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-" + (categoryKey || "unselected");
-  return b2`<div class=${noteClass}>${o5(note)}</div>`;
+  return b2`<div class=${noteClass}>${note}</div>`;
 }
 function alignmentFieldTemplate(molecularAlignment, politicalNote) {
   var molecularKey = String(molecularAlignment || "").trim().toLowerCase();

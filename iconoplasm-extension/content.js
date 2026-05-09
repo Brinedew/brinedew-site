@@ -292,37 +292,6 @@
 
   function applySupportedTooltipInlineMarkup(container, markup) {
     const text = String(markup || "")
-    const sexMarkMatch = text.match(
-      /^<span class="icono-sex-mark icono-sex-mark--(mars|venus)" data-icono-sex-mark="(mars|venus)" role="img" aria-label="(male|female)">([\s\S]*)<\/span>$/,
-    )
-    if (sexMarkMatch && sexMarkMatch[1] === sexMarkMatch[2]) {
-      const kind = sexMarkMatch[1]
-      const mark = document.createElement("span")
-      mark.className = `icono-sex-mark icono-sex-mark--${kind}`
-      mark.dataset.iconoSexMark = kind
-      mark.setAttribute("role", "img")
-      mark.setAttribute("aria-label", sexMarkMatch[3])
-      const parts =
-        kind === "mars"
-          ? [
-              ["icono-sex-mark-part icono-sex-mark-part--circle", "o"],
-              ["icono-sex-mark-part icono-sex-mark-part--slash", "/"],
-              ["icono-sex-mark-part icono-sex-mark-part--head", "-"],
-            ]
-          : [
-              ["icono-sex-mark-part icono-sex-mark-part--circle", "o"],
-              ["icono-sex-mark-part icono-sex-mark-part--stem", "|"],
-              ["icono-sex-mark-part icono-sex-mark-part--cross", "-"],
-            ]
-      for (const [className, value] of parts) {
-        const part = document.createElement("span")
-        part.className = className
-        part.textContent = value
-        mark.appendChild(part)
-      }
-      container.appendChild(mark)
-      return
-    }
     const skinDotMatch = text.match(
       /^<span class="iconoplasm-tooltip-skin-dot" style="background:([^"]+)"><\/span>(.*)$/,
     )

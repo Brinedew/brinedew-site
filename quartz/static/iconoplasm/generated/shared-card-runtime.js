@@ -9490,21 +9490,6 @@
         return text;
       }
     }
-    function sexMarkKind(value) {
-      var text = String(value || "").trim().toLowerCase();
-      if (text === "male") return "mars";
-      if (text === "female") return "venus";
-      return "";
-    }
-    function sexMarkHtml(value, extraClass) {
-      var kind = sexMarkKind(value);
-      if (!kind) return "";
-      var label = kind === "mars" ? "male" : "female";
-      var classes = "icono-sex-mark icono-sex-mark--" + kind;
-      if (extraClass) classes += " " + extraClass;
-      var parts = kind === "mars" ? '<span class="icono-sex-mark-part icono-sex-mark-part--circle">o</span><span class="icono-sex-mark-part icono-sex-mark-part--slash">/</span><span class="icono-sex-mark-part icono-sex-mark-part--head">-</span>' : '<span class="icono-sex-mark-part icono-sex-mark-part--circle">o</span><span class="icono-sex-mark-part icono-sex-mark-part--stem">|</span><span class="icono-sex-mark-part icono-sex-mark-part--cross">-</span>';
-      return '<span class="' + classes + '" data-icono-sex-mark="' + kind + '" role="img" aria-label="' + label + '">' + parts + "</span>";
-    }
     function startRoughLoopObserver() {
       if (!global || !global.document) return;
       if (typeof MutationObserver !== "function") {
@@ -9732,7 +9717,7 @@
       var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {};
       var essence = safeGeneDetail.essence && typeof safeGeneDetail.essence === "object" ? safeGeneDetail.essence : {};
       var rows = [];
-      var sexText = sexMarkKind(essence.sex) ? sexMarkHtml(essence.sex) : String(essence.sex || "").trim();
+      var sexText = String(essence.sex || "").trim();
       var sexOrigin = uniqueDisplayValues(
         essence.sex_origin || essence.gender_origin || safeGeneDetail.sex_origin || safeGeneDetail.gender_origin,
         2
@@ -9740,7 +9725,6 @@
       if (sexText) {
         rows.push({
           character: sexText,
-          characterIsHtml: Boolean(sexMarkKind(essence.sex)),
           molecular: sexOrigin.length ? sexOrigin.join(", ") : "unknown"
         });
       }
@@ -9852,12 +9836,10 @@
       ) + '</div><div class="icono-label-category-option icono-label-category-option--soluble">' + renderLabLabelOptionHtml("SOLUBLE", categoryKey === "soluble", "", "category-soluble") + "</div></div>";
     }
     function renderLabLabelSexNoteHtml(sexNote, selectedCategory) {
-      var note = sexMarkKind(sexNote) ? sexMarkHtml(sexNote, "icono-sex-mark--hand") : escapeHtml(
-        String(sexNote || "").trim().toLowerCase()
-      );
+      var note = String(sexNote || "").trim().toLowerCase();
       if (!note) return "";
       var categoryKey = String(selectedCategory || "").trim().toLowerCase();
-      return '<div class="icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-' + escapeHtml(categoryKey || "unselected") + '">' + note + "</div>";
+      return '<div class="icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-' + escapeHtml(categoryKey || "unselected") + '">' + escapeHtml(note) + "</div>";
     }
     function renderLabLabelAlignmentFieldHtml(molecularAlignment, politicalNote) {
       var molecularKey = String(molecularAlignment || "").trim().toLowerCase();
