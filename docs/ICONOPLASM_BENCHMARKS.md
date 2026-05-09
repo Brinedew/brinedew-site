@@ -107,3 +107,13 @@ Outlier raised:
 
 - Resorting repeatedly triggered `/api/public/v1/gallery?order=votes&limit=1&offset=0`, even when benchmarking signed-in account sorts. This side request had observed outliers around 398 ms, 412 ms, 686 ms, and 820 ms. It is unrelated to the active account sort and should be removed from the resort hot path or isolated so it cannot pollute resort timing.
 - Linear could not create a new issue because the workspace issue quota is exhausted, so the issue-ready title and acceptance criteria were recorded as a B-510 comment.
+
+Post-fix validation after commits `fdf5fe29` and `0c9df4a0`:
+
+- Fresh signed-in load selected `Recently discovered` (`newest`) and requested `/api/public/v1/gallery?order=newest&limit=4&offset=0` for the head bootstrap.
+- Fresh signed-in load made 0 `order=votes&limit=4` bootstrap requests and 0 public gallery `limit=1` count probes.
+- Signed-in resort pass across all 11 sort orders made 0 public gallery `limit=1` probes.
+- Count work used one `/api/public/v1/stats?day=2026-05-09` request on fresh load and 0 stats requests during the resort pass.
+- The slow resources left in the pass were the intended account-window/newest request at 717 ms and the random mobile-card manifest request at 871 ms.
+
+Raw artifact: `artifacts/b-510-live-ui-benchmarks/benchmarks-2026-05-09/playwright-signed-in-resort-benchmark-after-default-newest-count-fix.json`
