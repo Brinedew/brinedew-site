@@ -925,8 +925,23 @@ test("Iconoplasm home keeps guest Discord login in the starter-card flow", () =>
   )
   assert.match(
     appSource,
-    /galleryState\.offset >= GUEST_STARTER_GENES\.length[\s\S]*appendGuestDiscoveryLoginCard\(grid\)/,
-    "guest login card should be appended after the three starter gene cards render",
+    /galleryState\.offset >= GUEST_STARTER_GENES\.length[\s\S]*appendDiscordActionCard\(grid\)/,
+    "Discord action card should be appended after the three starter gene cards render",
+  )
+  assert.match(
+    appSource,
+    /function buildDiscordInviteCardMarkup\(\)/,
+    "logged-in users should get a Discord server invite card instead of another login card",
+  )
+  assert.match(
+    appSource,
+    /data-icono-discord-invite-card[\s\S]*Join the Discord server[\s\S]*>Join Discord<\/a>/,
+    "logged-in Discord card should invite users to the server",
+  )
+  assert.match(
+    appSource,
+    /renderCandidateGallery\(g\)[\s\S]*buildDiscordActionCardMarkup\(\)/,
+    "gene pages should end with the same Discord action card",
   )
   assert.match(
     stylesSource,

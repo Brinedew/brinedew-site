@@ -256,8 +256,8 @@ test("home extension install surface is a gallery card after starter genes, not 
   assert.match(appendBlock, /galleryState\.offset >= GUEST_STARTER_GENES\.length[\s\S]*appendHomeInstallCard\(grid\)/)
   assert.match(
     appendBlock,
-    /appendHomeInstallCard\(grid\)[\s\S]*appendGuestDiscoveryLoginCard\(grid\)/,
-    "install card should be inserted before the Discord login card in the starter grid flow",
+    /appendHomeInstallCard\(grid\)[\s\S]*appendDiscordActionCard\(grid\)/,
+    "install card should be inserted before the Discord action card in the starter grid flow",
   )
 })
 

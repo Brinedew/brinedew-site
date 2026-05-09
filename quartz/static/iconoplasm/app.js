@@ -15,6 +15,7 @@ import {
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
+  COMMUNITY_URL,
   fetchAuthenticatedUser,
   mountSidebarStack,
   wireSharedUserPanel,
@@ -2315,7 +2316,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function buildGuestDiscoveryLoginCardMarkup() {
     return (
-      '<article class="icono-card icono-guest-login-card" data-icono-guest-login-card>' +
+      '<article class="icono-card icono-guest-login-card" data-icono-discord-action-card data-icono-guest-login-card>' +
       '<div class="icono-home-auth-copy">' +
       '<div class="icono-home-auth-title icono-guest-login-card-title">Log in with Discord to track discovered genes</div>' +
       "</div>" +
@@ -2326,12 +2327,29 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
-  function appendGuestDiscoveryLoginCard(container) {
-    if (!container || currentUser || container.querySelector("[data-icono-guest-login-card]")) {
+  function buildDiscordInviteCardMarkup() {
+    return (
+      '<article class="icono-card icono-guest-login-card" data-icono-discord-action-card data-icono-discord-invite-card>' +
+      '<div class="icono-home-auth-copy">' +
+      '<div class="icono-home-auth-title icono-guest-login-card-title">Join the Discord server</div>' +
+      "</div>" +
+      '<a class="icono-home-auth-link icono-guest-login-card-button" href="' +
+      esc(COMMUNITY_URL) +
+      '" target="_blank" rel="noopener noreferrer">Join Discord</a>' +
+      "</article>"
+    )
+  }
+
+  function buildDiscordActionCardMarkup() {
+    return currentUser ? buildDiscordInviteCardMarkup() : buildGuestDiscoveryLoginCardMarkup()
+  }
+
+  function appendDiscordActionCard(container) {
+    if (!container || container.querySelector("[data-icono-discord-action-card]")) {
       return null
     }
     var wrapper = document.createElement("div")
-    wrapper.innerHTML = buildGuestDiscoveryLoginCardMarkup()
+    wrapper.innerHTML = buildDiscordActionCardMarkup()
     var card = wrapper.firstElementChild
     if (!card) return null
     container.appendChild(card)
@@ -5203,16 +5221,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               galleryState.items = galleryState.items.concat(resolvedItems)
               galleryState.offset += pageEntries.length
               var installCard = null
-              var guestLoginCard = null
+              var discordActionCard = null
               if (galleryState.offset >= GUEST_STARTER_GENES.length) {
                 installCard = appendHomeInstallCard(grid)
               }
-              if (!galleryState.authenticated && galleryState.offset >= GUEST_STARTER_GENES.length) {
-                guestLoginCard = appendGuestDiscoveryLoginCard(grid)
+              if (galleryState.offset >= GUEST_STARTER_GENES.length) {
+                discordActionCard = appendDiscordActionCard(grid)
               }
               var auxiliaryCards = []
               if (installCard) auxiliaryCards.push(installCard)
-              if (guestLoginCard) auxiliaryCards.push(guestLoginCard)
+              if (discordActionCard) auxiliaryCards.push(discordActionCard)
               if (homeLayout === "masonry") {
                 applyHomeMasonry(
                   grid,
@@ -5802,6 +5820,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     html += "</section>"
 
     html += renderCandidateGallery(g)
+    html += '<section class="icono-gene-discord-card">' + buildDiscordActionCardMarkup() + "</section>"
 
     container.innerHTML = html
     wireGeneVoteBox(container, g)

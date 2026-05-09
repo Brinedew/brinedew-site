@@ -1,6 +1,6 @@
 import { siteSettingsUrl } from "../site-preferences.js?v=20260309e"
 
-var COMMUNITY_URL = "https://discord.com/invite/kx8FVzUrpf"
+export var COMMUNITY_URL = "https://discord.com/invite/kx8FVzUrpf"
 var AUTH_BRIDGE_CHANNEL = "brinedew-shared-auth-bridge"
 var AUTH_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260309e"
 var AUTH_BRIDGE_TIMEOUT_MS = 4000
