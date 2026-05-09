@@ -320,7 +320,22 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return singleFlightQuery(
       ["account-gallery-window", resolvedOrder, resolvedCursor, resolvedLimit].join(":"),
       function () {
-        return fetchAuthedJSON(path)
+        var requestInit = {
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        }
+        return fetchAuthedJSON(path, requestInit).catch(function (err) {
+          if (!err || (err.status !== 503 && err.status !== 502 && err.status !== 504)) {
+            throw err
+          }
+          return new Promise(function (resolve) {
+            window.setTimeout(resolve, 450)
+          }).then(function () {
+            return fetchAuthedJSON(path, requestInit)
+          })
+        })
       },
     )
   }
