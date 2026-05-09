@@ -119,8 +119,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     installTab: "",
     release: {
       version: "0.4.1",
-      chromeDeveloperPackageUrl:
-        "/static/iconoplasm/downloads/iconoplasm-extension-v0.4.1.zip",
+      chromeDeveloperPackageUrl: "/static/iconoplasm/downloads/iconoplasm-extension-v0.4.1.zip",
       firefoxListingUrl: ICONO_EXTENSION_FIREFOX_LISTING_URL,
       edgeListingUrl: ICONO_EXTENSION_EDGE_LISTING_URL,
       edgeListingStatus: "live",
@@ -1940,6 +1939,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         },
       ],
       title: activePanel.title,
+      cardTitle: "Install Iconoplasm for " + activePanel.label,
       note: activePanel.note,
       managerUrl: activePanel.managerUrl,
       steps: activePanel.steps,
@@ -1998,13 +1998,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var actions = Array.isArray(model.actions) ? model.actions : []
     var managerUrl = String(model.managerUrl || "").trim()
     var activeTab = String(model.activeTab || "").trim()
+    var primaryAction = null
+    var firstStep = steps[0]
+    if (firstStep && typeof firstStep === "object" && firstStep.action) {
+      primaryAction = firstStep.action
+      steps = steps.slice(1)
+    }
     function buildInstallActionMarkup(action) {
       if (!action || !action.href) return ""
       return (
         '<a class="' +
         (action.subtle
           ? "icono-toolbar-link icono-install-link icono-install-link--subtle"
-          : "icono-home-auth-link icono-install-link") +
+          : "icono-home-auth-link icono-guest-login-card-button icono-install-link") +
         '" href="' +
         esc(action.href) +
         '" target="_blank" rel="noopener noreferrer">' +
@@ -2026,18 +2032,26 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         var escapedStep = esc(step)
         stepsHtml +=
           "<li>" +
+          '<span class="icono-install-step-copy">' +
           escapedStep.replace(
             escapedUrl,
             '<code class="icono-install-code">' + escapedUrl + "</code>",
           ) +
-          (stepActionHtml ? ' <span class="icono-install-step-action">' + stepActionHtml + "</span>" : "") +
+          (stepActionHtml
+            ? ' <span class="icono-install-step-action">' + stepActionHtml + "</span>"
+            : "") +
+          "</span>" +
           "</li>"
         continue
       }
       stepsHtml +=
         "<li>" +
+        '<span class="icono-install-step-copy">' +
         esc(step) +
-        (stepActionHtml ? ' <span class="icono-install-step-action">' + stepActionHtml + "</span>" : "") +
+        (stepActionHtml
+          ? ' <span class="icono-install-step-action">' + stepActionHtml + "</span>"
+          : "") +
+        "</span>" +
         "</li>"
     }
     var actionsHtml = ""
@@ -2060,8 +2074,25 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         "</h2>" +
         (model.note ? '<p class="icono-install-note">' + esc(model.note) + "</p>" : "") +
         "</div>"
+    var tabTitle = String(model.cardTitle || model.title || "Install Iconoplasm").trim()
+    var tabNoteHtml =
+      activeTab && model.note
+        ? '<div class="icono-install-card-copy">' +
+          '<div class="icono-home-auth-title icono-guest-login-card-title icono-install-card-title">' +
+          esc(tabTitle) +
+          "</div>" +
+          '<p class="icono-install-tab-note">' +
+          esc(model.note) +
+          "</p>" +
+          "</div>"
+        : ""
+    var primaryActionHtml = primaryAction
+      ? '<div class="icono-install-primary-action">' +
+        buildInstallActionMarkup(primaryAction) +
+        "</div>"
+      : ""
     return (
-      '<section class="icono-install-panel icono-install-panel--' +
+      '<section class="icono-card icono-guest-login-card icono-install-panel icono-install-panel--' +
       esc(model.tone || "info") +
       '" id="icono-install-panel" aria-live="polite">' +
       buildInstallTabsMarkup(model) +
@@ -2069,6 +2100,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       panelBodyAttrs +
       ">" +
       headerHtml +
+      tabNoteHtml +
+      primaryActionHtml +
       (stepsHtml ? '<ol class="icono-install-steps">' + stepsHtml + "</ol>" : "") +
       (actionsHtml ? '<div class="icono-install-actions">' + actionsHtml + "</div>" : "") +
       (model.footnote ? '<p class="icono-install-footnote">' + esc(model.footnote) + "</p>" : "") +
@@ -5002,11 +5035,17 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               galleryState.items = galleryState.items.concat(resolvedItems)
               galleryState.offset += pageEntries.length
               var guestLoginCard = null
-              if (!galleryState.authenticated && galleryState.offset >= GUEST_STARTER_GENES.length) {
+              if (
+                !galleryState.authenticated &&
+                galleryState.offset >= GUEST_STARTER_GENES.length
+              ) {
                 guestLoginCard = appendGuestDiscoveryLoginCard(grid)
               }
               if (homeLayout === "masonry") {
-                applyHomeMasonry(grid, guestLoginCard ? newCards.concat([guestLoginCard]) : newCards)
+                applyHomeMasonry(
+                  grid,
+                  guestLoginCard ? newCards.concat([guestLoginCard]) : newCards,
+                )
                 setupOrderedPortraitPrefetch(grid, galleryState.items)
                 void hydrateBrickCards(newCards).then(function () {
                   warmBrickCardImages(galleryState.items)

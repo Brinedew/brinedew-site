@@ -194,12 +194,11 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   padding: 1.05rem 1.1rem;
   border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
   border-radius: var(--icono-radius-lg);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--light) 95%, #e9dfcf 5%) 0%,
-      color-mix(in srgb, var(--light) 98%, #d9cbb8 2%) 100%
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--light) 95%, #e9dfcf 5%) 0%,
+    color-mix(in srgb, var(--light) 98%, #d9cbb8 2%) 100%
+  );
   box-shadow:
     0 0 0 1px color-mix(in srgb, white 60%, transparent),
     0 10px 24px rgba(45, 33, 20, 0.08);
@@ -993,13 +992,9 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 }
 
 .icono-install-panel {
-  display: grid;
-  gap: 0;
   margin: 0 0 1rem;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
-  border-radius: var(--icono-radius-lg);
-  background: color-mix(in srgb, var(--light) 96%, white 4%);
-  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .icono-install-panel--installed {
@@ -1014,11 +1009,9 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 
 .icono-install-tablist {
   display: flex;
-  align-items: flex-end;
-  gap: 0.35rem;
-  padding: 0.5rem 0.55rem 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
-  background: color-mix(in srgb, var(--ui-bg) 76%, white 24%);
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.9rem;
 }
 
 .icono-install-tab {
@@ -1027,16 +1020,17 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   align-items: center;
   justify-content: center;
   margin: 0;
-  padding: 0.58rem 0.82rem 0.62rem;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: 10px 10px 0 0;
+  min-height: 1.5rem;
+  padding: 0 0 0.12rem;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: var(--secondary, var(--darkgray));
-  font: inherit;
-  font-size: 0.88rem;
-  font-weight: 500;
-  line-height: 1;
+  font-family: "IBM Plex Mono", var(--codeFont, monospace);
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.05;
   white-space: nowrap;
   cursor: pointer;
   transition:
@@ -1051,17 +1045,14 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 }
 
 .icono-install-tab[aria-selected="true"] {
-  position: relative;
-  top: 1px;
   color: var(--dark);
-  border-color: color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
-  background: color-mix(in srgb, var(--light) 98%, white 2%);
+  border-bottom-color: color-mix(in srgb, var(--dark) 70%, var(--accent) 30%);
 }
 
 .icono-install-panel-body {
   display: grid;
-  gap: 0.7rem;
-  padding: 0.95rem 1rem 1rem;
+  gap: 0.75rem;
+  padding: 0;
 }
 
 .icono-install-header {
@@ -1079,24 +1070,57 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 }
 
 .icono-install-note,
+.icono-install-tab-note,
 .icono-install-footnote {
   margin: 0;
-  font-size: 0.88rem;
-  line-height: 1.42;
+  max-width: 56rem;
+  font-size: 0.9rem;
+  line-height: 1.36;
   color: var(--secondary, var(--darkgray));
   text-wrap: pretty;
 }
 
+.icono-install-tab-note {
+  max-width: 48rem;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.36;
+}
+
+.icono-install-card-copy {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.icono-install-card-title {
+  max-width: 38ch;
+  font-family: var(--codeFont, monospace);
+  font-size: 1.12rem;
+  font-weight: 600;
+  line-height: 1.22;
+  color: var(--dark);
+}
+
+.icono-install-primary-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
 .icono-install-steps {
   margin: 0;
-  padding-left: 1.1rem;
+  padding-left: 1.35rem;
   display: grid;
-  gap: 0.3rem;
+  gap: 0.36rem;
   color: var(--dark);
 }
 
 .icono-install-steps li {
-  line-height: 1.38;
+  line-height: 1.36;
+}
+
+.icono-install-step-copy {
+  min-width: 0;
 }
 
 .icono-install-step-action {
@@ -1108,20 +1132,23 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 
 .icono-install-step-action .icono-install-link {
   flex: 0 1 auto;
-  width: min(100%, 13rem);
+  width: auto;
   max-width: 100%;
-  min-height: 2.35rem;
-  white-space: normal;
+  min-height: 1.9rem;
+  padding: 0.32rem 0.9rem;
+  white-space: nowrap;
   text-align: center;
+  font-family: var(--codeFont, monospace);
+  font-size: 0.88rem;
 }
 
 .icono-install-code {
-  padding: 0.08rem 0.38rem;
-  border-radius: var(--icono-radius-sm);
-  background: color-mix(in srgb, var(--ui-bg) 86%, white 14%);
-  border: 1px solid color-mix(in srgb, var(--ui-border) 88%, transparent);
+  padding: 0 0.24rem;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ui-bg) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ui-border) 64%, transparent);
   font-family: var(--codeFont, monospace);
-  font-size: 0.86rem;
+  font-size: 0.84rem;
   color: var(--dark);
 }
 
@@ -1129,7 +1156,8 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.8rem;
+  gap: 0.7rem;
+  padding-top: 0.08rem;
 }
 
 .icono-install-link {
@@ -2804,15 +2832,15 @@ html[data-theme="dark"] .icono-card--brick {
   }
 
   .icono-install-tablist {
-    gap: 0.25rem;
-    padding-left: 0.45rem;
-    padding-right: 0.45rem;
+    gap: 0.45rem;
   }
 
   .icono-install-tab {
-    flex: 1 1 0;
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
+    min-width: 0;
+  }
+
+  .icono-install-steps li {
+    line-height: 1.34;
   }
 
   .icono-install-actions {

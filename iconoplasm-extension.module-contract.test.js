@@ -921,6 +921,16 @@ test("Iconoplasm home keeps guest Discord login in the starter-card flow", () =>
     /\.icono-guest-login-card-button[\s\S]*box-sizing: border-box[\s\S]*min-height: 2\.15rem[\s\S]*background: color-mix\(in srgb, var\(--dark\) 88%, var\(--accent\) 12%\)[\s\S]*font-family: "IBM Plex Mono"/,
     "guest login button should reuse the auth link style with compact, deliberate IBM Plex text",
   )
+  assert.match(
+    appSource,
+    /icono-card icono-guest-login-card icono-install-panel/,
+    "extension install instructions should reuse the working guest-login card visual template",
+  )
+  assert.match(
+    appSource,
+    /icono-home-auth-link icono-guest-login-card-button icono-install-link/,
+    "extension install primary actions should reuse the working guest-login button template",
+  )
 })
 
 test("DO NOT DELETE: lab-label row labels do not collapse into character stacks", () => {
