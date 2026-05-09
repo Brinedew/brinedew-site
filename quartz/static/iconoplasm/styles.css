@@ -211,7 +211,21 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 }
 
 .icono-guest-login-card-button {
+  box-sizing: border-box;
   border-radius: var(--icono-radius-pill);
+  min-height: 2.2rem;
+  padding: 0.25rem 0.78rem;
+  font-family: "IBM Plex Mono", var(--codeFont, monospace);
+  font-size: 0.88rem;
+  line-height: 1;
+}
+
+.icono-guest-login-card-title {
+  font-family: "IBM Plex Mono", var(--codeFont, monospace);
+  font-size: 1.2rem;
+  font-weight: 600;
+  line-height: 1.18;
+  letter-spacing: 0;
 }
 
 .icono-emulsion-meta {

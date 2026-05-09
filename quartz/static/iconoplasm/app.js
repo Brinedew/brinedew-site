@@ -2116,13 +2116,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return (
       '<article class="icono-card icono-guest-login-card" data-icono-guest-login-card>' +
       '<div class="icono-home-auth-copy">' +
-      '<div class="icono-home-auth-kicker">guest mode</div>' +
-      '<div class="icono-home-auth-title">Log in with Discord to track discovered genes</div>' +
-      '<div class="icono-home-auth-note">Your starter cards stay visible; login turns future finds into a synced collection.</div>' +
+      '<div class="icono-home-auth-title icono-guest-login-card-title">Log in with Discord to track discovered genes</div>' +
       "</div>" +
       '<a class="icono-home-auth-link icono-guest-login-card-button" href="' +
       esc(voteLoginUrl()) +
-      '">Log in</a>' +
+      '">Log in with Discord</a>' +
       "</article>"
     )
   }

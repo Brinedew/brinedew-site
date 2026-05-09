@@ -705,6 +705,10 @@ test("extension popup account tab replaces sign-in with signed-in notice and com
 test("Iconoplasm home keeps guest Discord login in the starter-card flow", () => {
   const appSource = readUtf8("./quartz/static/iconoplasm/app.js")
   const stylesSource = readUtf8("./quartz/static/iconoplasm/styles.css")
+  const guestCardBuilder = appSource.match(
+    /function buildGuestDiscoveryLoginCardMarkup\(\) \{[\s\S]*?\n  \}/,
+  )?.[0]
+  assert.ok(guestCardBuilder, "home guest login card builder should exist")
 
   assert.doesNotMatch(
     appSource,
@@ -712,9 +716,14 @@ test("Iconoplasm home keeps guest Discord login in the starter-card flow", () =>
     "home toolbar should not reserve an out-of-place Discord login slot",
   )
   assert.match(
-    appSource,
-    /function buildGuestDiscoveryLoginCardMarkup\(\)[\s\S]*Log in with Discord to track discovered genes[\s\S]*>Log in<\/a>/,
-    "guest login card should use the requested short copy and a direct Log in button",
+    guestCardBuilder,
+    /Log in with Discord to track discovered genes[\s\S]*>Log in with Discord<\/a>/,
+    "guest login card should use the requested short copy and a direct Discord login button",
+  )
+  assert.doesNotMatch(
+    guestCardBuilder,
+    /guest mode|Your starter cards stay visible/,
+    "guest login card should stay terse, without a kicker or explanatory note",
   )
   assert.match(
     appSource,
@@ -725,5 +734,15 @@ test("Iconoplasm home keeps guest Discord login in the starter-card flow", () =>
     stylesSource,
     /\.icono-guest-login-card[\s\S]*display: flex/,
     "guest login prompt should be styled as an inline card in the home gene-card flow",
+  )
+  assert.match(
+    stylesSource,
+    /\.icono-guest-login-card-title[\s\S]*font-family: "IBM Plex Mono"/,
+    "guest login headline should use the same IBM Plex face as the card UI",
+  )
+  assert.match(
+    stylesSource,
+    /\.icono-guest-login-card-button[\s\S]*box-sizing: border-box[\s\S]*min-height: 2\.2rem[\s\S]*font-family: "IBM Plex Mono"/,
+    "guest login button should reuse the auth link style with compact IBM Plex text",
   )
 })
