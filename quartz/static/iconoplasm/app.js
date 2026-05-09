@@ -1676,6 +1676,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var ua = String((window.navigator && window.navigator.userAgent) || "").toLowerCase()
     var isMobile = /android|iphone|ipad|ipod|mobile/.test(ua)
     var platform = ua.indexOf("android") !== -1 ? "android" : /iphone|ipad|ipod/.test(ua) ? "ios" : "desktop"
+    var hasBraveMarker = !!(window.navigator && window.navigator.brave)
     if (ua.indexOf("firefox") !== -1) {
       return {
         family: "firefox",
@@ -1695,12 +1696,22 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
     }
     if (
+      hasBraveMarker ||
       ua.indexOf("chrome") !== -1 ||
       ua.indexOf("chromium") !== -1 ||
       ua.indexOf("brave") !== -1 ||
       ua.indexOf("opr/") !== -1 ||
       ua.indexOf("opera") !== -1
     ) {
+      if (hasBraveMarker || ua.indexOf("brave") !== -1) {
+        return {
+          family: "brave",
+          label: isMobile ? "Brave mobile" : "Brave",
+          managerUrl: "brave://extensions",
+          isMobile: isMobile,
+          platform: platform,
+        }
+      }
       return {
         family: "chromium",
         label: isMobile ? "Chromium mobile" : "Chrome",
@@ -1793,8 +1804,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var requested = String(iconoInstallState.installTab || "")
       .trim()
       .toLowerCase()
-    if (requested === "chrome" || requested === "edge" || requested === "firefox") return requested
+    if (
+      requested === "chrome" ||
+      requested === "brave" ||
+      requested === "edge" ||
+      requested === "firefox" ||
+      requested === "safari"
+    ) return requested
+    if (browser && browser.family === "brave") return "brave"
     if (browser && browser.family === "edge") return "edge"
+    if (browser && browser.family === "safari") return "safari"
     return browser && browser.family === "firefox" ? "firefox" : "chrome"
   }
 
@@ -1923,6 +1942,36 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           },
         ],
       },
+      brave: {
+        id: "brave",
+        label: "Brave",
+        tone: "manual",
+        title: "Brave",
+        note: "Manual installation for the moment. For one-click install, visit this page on Edge or Firefox browsers.",
+        managerUrl: "brave://extensions",
+        steps: [
+          {
+            text: "Click this button to download the extension file:",
+            action: {
+              href: chromePackageUrl,
+              label: "Download extension file",
+              subtle: false,
+            },
+          },
+          'In your Downloads folder, extract "iconoplasm-extension-v0.4.2.zip".',
+          "In Brave, click the address bar, type brave://extensions, and press Enter.",
+          'In the top-right corner of brave://extensions, click the "Developer mode" switch so it is on.',
+          'Click the "Load unpacked" button.',
+          'In the folder picker, select the extracted "iconoplasm-extension-v0.4.2" folder, then click "Select Folder".',
+        ],
+        actions: [
+          {
+            href: faqUrl,
+            label: "FAQ",
+            subtle: true,
+          },
+        ],
+      },
       firefox: {
         id: "firefox",
         label: "Firefox",
@@ -1941,6 +1990,26 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           },
           'On the Firefox Add-ons page, click the "Add to Firefox" button.',
           'In the Firefox confirmation dialog, click "Add".',
+        ],
+        actions: [
+          {
+            href: faqUrl,
+            label: "FAQ",
+            subtle: true,
+          },
+        ],
+      },
+      safari: {
+        id: "safari",
+        label: "Safari",
+        tone: "pending",
+        title: "Safari",
+        note: "Safari support needs a separate App Store package, not the current extension zip.",
+        managerUrl: "",
+        steps: [
+          "Create a Safari Web Extension wrapper in Xcode.",
+          "Publish the containing macOS app through App Store Connect.",
+          "Replace this tab with the App Store install link after review.",
         ],
         actions: [
           {
@@ -1995,6 +2064,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           selected: activeTab === "chrome",
         },
         {
+          id: "brave",
+          label: "Brave",
+          selected: activeTab === "brave",
+        },
+        {
           id: "edge",
           label: "Edge",
           selected: activeTab === "edge",
@@ -2003,6 +2077,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           id: "firefox",
           label: "Firefox",
           selected: activeTab === "firefox",
+        },
+        {
+          id: "safari",
+          label: "Safari",
+          selected: activeTab === "safari",
         },
       ],
       title: activePanel.title,
