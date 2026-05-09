@@ -9490,12 +9490,6 @@
         return text;
       }
     }
-    function displaySexSymbol(value) {
-      var text = String(value || "").trim().toLowerCase();
-      if (text === "male") return "\u2642";
-      if (text === "female") return "\u2640";
-      return String(value || "").trim();
-    }
     function startRoughLoopObserver() {
       if (!global || !global.document) return;
       if (typeof MutationObserver !== "function") {
@@ -9723,7 +9717,7 @@
       var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {};
       var essence = safeGeneDetail.essence && typeof safeGeneDetail.essence === "object" ? safeGeneDetail.essence : {};
       var rows = [];
-      var sexText = displaySexSymbol(essence.sex);
+      var sexText = String(essence.sex || "").trim();
       var sexOrigin = uniqueDisplayValues(
         essence.sex_origin || essence.gender_origin || safeGeneDetail.sex_origin || safeGeneDetail.gender_origin,
         2
@@ -10117,7 +10111,7 @@
         2
       );
       var selectedCategory = String(sexOriginValues[0] || "").trim().toLowerCase();
-      var sexNote = displaySexSymbol(safeEssence.sex);
+      var sexNote = String(safeEssence.sex || "").trim().toLowerCase();
       var firstPublicationYear = Number(safeGeneDetail.first_publication_year);
       var firstNoted = Number.isFinite(firstPublicationYear) && firstPublicationYear > 0 ? String(Math.round(firstPublicationYear)) : "";
       var ageNote = "";

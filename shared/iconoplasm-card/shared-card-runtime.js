@@ -226,15 +226,6 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     }
   }
 
-  function displaySexSymbol(value) {
-    var text = String(value || "")
-      .trim()
-      .toLowerCase()
-    if (text === "male") return "♂"
-    if (text === "female") return "♀"
-    return String(value || "").trim()
-  }
-
   function startRoughLoopObserver() {
     if (!global || !global.document) return
     if (typeof MutationObserver !== "function") {
@@ -527,7 +518,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
         : {}
     var rows = []
 
-    var sexText = displaySexSymbol(essence.sex)
+    var sexText = String(essence.sex || "").trim()
     var sexOrigin = uniqueDisplayValues(
       essence.sex_origin ||
         essence.gender_origin ||
@@ -1189,7 +1180,9 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     var selectedCategory = String(sexOriginValues[0] || "")
       .trim()
       .toLowerCase()
-    var sexNote = displaySexSymbol(safeEssence.sex)
+    var sexNote = String(safeEssence.sex || "")
+      .trim()
+      .toLowerCase()
     var firstPublicationYear = Number(safeGeneDetail.first_publication_year)
     var firstNoted =
       Number.isFinite(firstPublicationYear) && firstPublicationYear > 0

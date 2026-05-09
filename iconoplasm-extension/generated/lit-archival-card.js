@@ -602,12 +602,6 @@ function normalizeHandwrittenText(value) {
     return text;
   }
 }
-function displaySexSymbol(value) {
-  var text = String(value || "").trim().toLowerCase();
-  if (text === "male") return "\u2642";
-  if (text === "female") return "\u2640";
-  return String(value || "").trim();
-}
 function normalizeCardModelHandwriting(payload) {
   var safePayload = asObject(payload);
   var normalized = Object.assign({}, safePayload);
@@ -615,7 +609,7 @@ function normalizeCardModelHandwriting(payload) {
   normalized.displayedFamilyFeature = normalizeHandwrittenText(safePayload.displayedFamilyFeature);
   normalized.handwrittenWeight = normalizeHandwrittenText(safePayload.handwrittenWeight);
   normalized.politicalNote = normalizeHandwrittenText(safePayload.politicalNote);
-  normalized.sexNote = normalizeHandwrittenText(displaySexSymbol(safePayload.sexNote));
+  normalized.sexNote = normalizeHandwrittenText(safePayload.sexNote);
   var rawStylePairs = Array.isArray(safePayload.stylePairs) ? safePayload.stylePairs : [];
   normalized.stylePairs = [0, 1, 2, 3, 4].map(function(index) {
     var safePair = asObject(rawStylePairs[index]);
@@ -689,7 +683,7 @@ function categoryFieldTemplate(selectedCategory) {
   </div>`;
 }
 function sexNoteTemplate(sexNote, selectedCategory) {
-  var note = displaySexSymbol(sexNote);
+  var note = String(sexNote || "").trim().toLowerCase();
   if (!note) return A;
   var categoryKey = String(selectedCategory || "").trim().toLowerCase();
   var noteClass = "icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-" + (categoryKey || "unselected");

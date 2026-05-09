@@ -205,40 +205,6 @@ test("DO NOT DELETE: simple card metadata renders mass, age, and tissue when pro
   )
 })
 
-test("DO NOT DELETE: card sex labels use Mars and Venus symbols", async () => {
-  const vm = await import("node:vm")
-  const sandbox = { console }
-  sandbox.globalThis = sandbox
-  vm.runInNewContext(readUtf8("./iconoplasm-extension/generated/shared-card-runtime.js"), sandbox)
-  const shared = sandbox.IconoplasmCardShared
-  assert.equal(typeof shared?.collectTooltipMetaRows, "function")
-  assert.equal(typeof shared?.renderLabLabelCardHtml, "function")
-
-  const maleRows = shared.collectTooltipMetaRows({ essence: { sex: "male" } })
-  assert.ok(
-    maleRows.some((row) => row.character === "♂"),
-    "simple card metadata should render male as the Mars symbol",
-  )
-
-  const femaleHtml = shared.renderLabLabelCardHtml({
-    symbol: "BRCA1",
-    color: "#b24a5b",
-    essence: { sex: "female", sex_origin: "soluble" },
-  })
-  assert.match(
-    femaleHtml,
-    /icono-label-hand-note--sex[\s\S]*♀/,
-    "lab-label card should render female as the Venus symbol",
-  )
-
-  const litSource = readUtf8("./iconoplasm-extension/generated/lit-archival-card.js")
-  assert.match(
-    litSource,
-    /function displaySexSymbol\(value\)[\s\S]*male[\s\S]*(♂|\\u2642)[\s\S]*female[\s\S]*(♀|\\u2640)/,
-    "lit archival card should preserve the same direct payload sex-symbol mapping",
-  )
-})
-
 test("DO NOT DELETE: split content modules expose stable globals", () => {
   const moduleGlobals = new Map([
     ["content-api.js", "IconoplasmContentApi"],
