@@ -45,7 +45,10 @@ const KV_GALLERY_PUBLISHED_ROWS_PREFIX = "iconoplasm:gallery-published-rows:"
 const KV_GALLERY_UNIQUENESS_ROWS_PREFIX = "iconoplasm:gallery-uniqueness-rows:"
 const KV_PUBLIC_STATS = "iconoplasm:public-stats:v1"
 const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = "iconoplasm:hydrated-catalog-artifact:"
+const KV_CARD_CATALOG_ARTIFACT_PREFIX = "iconoplasm:card-catalog:"
 const KV_MOBILE_CARD_VM_PREFIX = "iconoplasm:mobile-card-vm:"
+const CARD_CATALOG_ARTIFACT_SCHEMA = "iconoplasm.cardCatalog.v1"
+const CARD_ARTIFACT_UNAVAILABLE = "CARD_ARTIFACT_UNAVAILABLE"
 const MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT = 25000
 const MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_BATCH = 1000
 const MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX = 500
@@ -160,6 +163,10 @@ const galleryUniquenessRowsCache = {
 }
 const hydratedCatalogArtifactCache = {
   key: null,
+  value: null,
+}
+const cardCatalogArtifactCache = {
+  version: null,
   value: null,
 }
 const mobileCardVMCache = new Map()
@@ -331,6 +338,81 @@ function iconoplasmMutationLimiterPolicyFromEnv(env, now = new Date()) {
       explanation:
         "This worker derives mutation ceilings from the shared Iconoplasm D1 budget policy when that policy is enabled.",
     }
+  )
+}
+
+function numberOrInfinity(value) {
+  if (value === null || value === undefined || value === "") return Number.POSITIVE_INFINITY
+  const n = Number(value)
+  return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY
+}
+
+function readIconoplasmLiveBudgetSnapshot(env) {
+  const raw =
+    env?.ICONOPLASM_LIVE_BUDGET_SNAPSHOT_FOR_TEST ||
+    env?.ICONOPLASM_LIVE_BUDGET_SNAPSHOT ||
+    null
+  if (!raw) return null
+  if (typeof raw === "object") return raw
+  try {
+    return JSON.parse(String(raw || ""))
+  } catch {
+    return null
+  }
+}
+
+export function iconoplasmCardCatalogBudgetPreflightStatus(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") {
+    return {
+      ok: false,
+      code: "LIVE_BUDGET_TELEMETRY_MISSING",
+      failures: ["live_budget_telemetry_missing"],
+      checks: [],
+    }
+  }
+  const checks = [
+    ["kv_reads", numberOrInfinity(snapshot?.kv?.reads_remaining), 1],
+    ["kv_writes", numberOrInfinity(snapshot?.kv?.writes_remaining), 2],
+    ["kv_lists", numberOrInfinity(snapshot?.kv?.lists_remaining), 0],
+    ["d1_rows_read", numberOrInfinity(snapshot?.d1?.rows_read_remaining), 1],
+    ["d1_rows_written", numberOrInfinity(snapshot?.d1?.rows_written_remaining), 1],
+    ["queue_operations", numberOrInfinity(snapshot?.queues?.operations_remaining), 1],
+    ["worker_requests", numberOrInfinity(snapshot?.workers?.requests_remaining), 1],
+    ["worker_cpu_ms", numberOrInfinity(snapshot?.workers?.cpu_ms_remaining), 1],
+    ["durable_object_requests", numberOrInfinity(snapshot?.durable_objects?.requests_remaining), 0],
+    ["durable_object_rows_written", numberOrInfinity(snapshot?.durable_objects?.rows_written_remaining), 0],
+    ["logs_events", numberOrInfinity(snapshot?.logs?.events_remaining), 1],
+  ].map(([name, remaining, required]) => ({
+    name,
+    remaining,
+    required,
+    ok: remaining >= required,
+  }))
+  const r2Required = Boolean(snapshot?.r2?.required)
+  checks.push({
+    name: "r2_available",
+    remaining: snapshot?.r2?.available === true ? 1 : 0,
+    required: r2Required ? 1 : 0,
+    ok: !r2Required || snapshot?.r2?.available === true,
+  })
+  const failures = checks.filter((check) => !check.ok).map((check) => check.name)
+  return {
+    ok: failures.length === 0,
+    code: failures.length ? "CARD_CATALOG_BUDGET_PREFLIGHT_FAILED" : "OK",
+    failures,
+    checks,
+  }
+}
+
+function assertIconoplasmCardCatalogBudgetPreflight(env) {
+  const required = String(env?.ICONOPLASM_CARD_CATALOG_BUDGET_PREFLIGHT_REQUIRED || "")
+    .trim()
+    .toLowerCase()
+  if (required !== "1" && required !== "true") return
+  const status = iconoplasmCardCatalogBudgetPreflightStatus(readIconoplasmLiveBudgetSnapshot(env))
+  if (status.ok) return
+  throw new Error(
+    `Iconoplasm card catalog budget preflight failed: ${status.failures.join(", ")}`,
   )
 }
 
@@ -3424,6 +3506,10 @@ const ACCOUNT_GALLERY_WINDOW_SCHEMA = "iconoplasm.accountGalleryWindow.v1"
 const ACCOUNT_GALLERY_WINDOW_LIMIT_MAX = 48
 const ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS = new Set(["newest", "symbol"])
 
+// Account windows are one signed-in shelf path, not the global gallery model.
+// Only these supported orders can use this cursor shape. Other personal-shelf
+// orders are loaded from discovery rows and ordered elsewhere, so card caches
+// must not assume a single universal sequence.
 function encodeAccountGalleryCursor(cursor) {
   if (!cursor || typeof cursor !== "object") return ""
   try {
@@ -14448,6 +14534,9 @@ export function resetIconoplasmRuntimeCachesForTest() {
   catalogCache.loadedAt = 0
   clearGallerySnapshotCache()
   clearSharedD1CostCaches()
+  cardCatalogArtifactCache.version = null
+  cardCatalogArtifactCache.value = null
+  mobileCardVMCache.clear()
   galleryVersionCache.value = "0"
   galleryVersionCache.loadedAt = 0
 }
@@ -14576,29 +14665,42 @@ async function currentMobileCardSnapshotVersion(env) {
   return currentGalleryVersionBarrier(env)
 }
 
-async function bumpGalleryVersion(env) {
-  const previousBarrier = await currentGalleryVersionBarrier(env)
+function nextGalleryVersionBarrier(previousBarrier) {
   const previous = String(previousBarrier.current || "").trim()
   const next = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`
-  const barrier = {
+  return {
     current: next,
     previous: previous && previous !== next && previous !== "0" ? previous : null,
     schema: MOBILE_CARD_VM_SCHEMA,
     published_at: new Date().toISOString(),
     status: "active",
   }
+}
+
+async function publishGalleryVersionBarrier(env, barrier) {
   galleryVersionCache.value = barrier
   galleryVersionCache.loadedAt = Date.now()
   if (env.KV) {
     await env.KV.put(KV_GALLERY_VERSION, JSON.stringify(barrier))
   }
-  return next
+  return String(barrier?.current || "")
+}
+
+async function bumpGalleryVersion(env) {
+  const barrier = nextGalleryVersionBarrier(await currentGalleryVersionBarrier(env))
+  return publishGalleryVersionBarrier(env, barrier)
 }
 
 async function invalidateGalleryCache(env) {
   clearGallerySnapshotCache()
   clearSharedD1CostCaches()
-  return bumpGalleryVersion(env)
+  const barrier = nextGalleryVersionBarrier(await currentGalleryVersionBarrier(env))
+  const cardCatalog = await publishCardCatalogArtifact(env, {
+    version: barrier.current,
+    requestUrl: "https://iconoplasm.brinedew.bio/",
+  })
+  const version = await publishGalleryVersionBarrier(env, barrier)
+  return { version, card_catalog: cardCatalog }
 }
 
 async function syncAdminReadModelsAndInvalidateGallery(
@@ -14628,16 +14730,8 @@ async function syncAdminReadModelsAndInvalidateGallery(
     skipVisionRollups,
     skipDashboard,
   })
-  const nextVersion = await invalidateGalleryCache(env)
-  const warmedSymbols = await mobileCardSnapshotWarmSymbolsForInvalidation(env, {
-    symbols,
-    fullRebuild,
-  })
-  let mobileCardVMs = { warmed: 0, missing: 0, version: nextVersion }
-  if (!result?.partial && warmedSymbols.length) {
-    mobileCardVMs = await warmMobileCardSnapshotSymbols(env, warmedSymbols, nextVersion)
-  }
-  return { ...result, mobile_card_vms: mobileCardVMs }
+  const invalidation = await invalidateGalleryCache(env)
+  return { ...result, card_catalog: invalidation.card_catalog }
 }
 
 async function catalogSymbolsForMobileCardSnapshotWarm(env, { after = "", limit = 500 } = {}) {
@@ -14655,6 +14749,11 @@ async function catalogSymbolsForMobileCardSnapshotWarm(env, { after = "", limit 
     .filter((symbol) => !cursor || symbol > cursor)
     .sort()
     .slice(0, cleanedLimit)
+}
+
+async function allCatalogSymbolsForCardCatalogArtifact(env) {
+  await warmCatalogCache(env)
+  return Array.from(catalogCache.bySymbol.keys()).sort()
 }
 
 async function mobileCardSnapshotWarmSymbolsForInvalidation(
@@ -15314,6 +15413,9 @@ async function galleryMetricFeed(env, url, order, rawLimit, rawOffset) {
 }
 
 async function galleryFeed(env, url, rawOrder, rawLimit, rawOffset, rawSeed) {
+  // Classic public gallery mode has its own order machinery. It is separate
+  // from signed-in shelves and account gallery windows, so no cache should infer
+  // "the next genes a user will see" from this path alone.
   const order = normalizeGalleryOrder(rawOrder)
   const limit = normalizeGalleryLimit(rawLimit)
   const offset = normalizeGalleryOffset(rawOffset)
@@ -15879,7 +15981,162 @@ async function writeMobileCardVMToSharedSnapshot(env, snapshotVersion, vm) {
   return true
 }
 
+function normalizeCardCatalogArtifact(raw) {
+  if (!raw || typeof raw !== "object") return null
+  if (raw.schema !== CARD_CATALOG_ARTIFACT_SCHEMA) return null
+  const artifactVersion = String(raw.artifact_version || raw.snapshot_version || "").trim()
+  const cards = Array.isArray(raw.cards) ? raw.cards : []
+  const bySymbol = new Map()
+  for (const card of cards) {
+    if (!assertCompleteMobileCardVM(card)) return null
+    const symbol = normalizeSymbol(card.symbol || "")
+    if (!symbol || bySymbol.has(symbol)) return null
+    bySymbol.set(symbol, card)
+  }
+  const catalogGeneCount = Math.max(0, Number(raw.catalog_gene_count || 0) || 0)
+  if (catalogGeneCount > 0 && bySymbol.size !== catalogGeneCount) return null
+  if (Math.max(0, Number(raw.card_count || 0) || 0) !== bySymbol.size) return null
+  return {
+    ...raw,
+    artifact_version: artifactVersion,
+    snapshot_version: artifactVersion,
+    catalog_gene_count: catalogGeneCount || bySymbol.size,
+    card_count: bySymbol.size,
+    cards,
+    bySymbol,
+  }
+}
+
+async function readPublishedCardCatalogArtifact(env, version) {
+  const artifactVersion = String(version || "").trim()
+  if (!artifactVersion || !env?.KV?.get) return null
+  if (
+    cardCatalogArtifactCache.version === artifactVersion &&
+    normalizeCardCatalogArtifact(cardCatalogArtifactCache.value)
+  ) {
+    return cardCatalogArtifactCache.value
+  }
+  const raw = await env.KV.get(`${KV_CARD_CATALOG_ARTIFACT_PREFIX}${artifactVersion}`)
+  let parsed = null
+  try {
+    parsed = raw ? JSON.parse(raw) : null
+  } catch {
+    parsed = null
+  }
+  const artifact = normalizeCardCatalogArtifact(parsed)
+  if (!artifact) return null
+  cardCatalogArtifactCache.version = artifactVersion
+  cardCatalogArtifactCache.value = artifact
+  return artifact
+}
+
+function cardArtifactUnavailablePayload(version, detail = "") {
+  return {
+    ok: false,
+    code: CARD_ARTIFACT_UNAVAILABLE,
+    error:
+      "The published Iconoplasm card catalog artifact is unavailable or invalid. Runtime browsing has one card data path and will not compose per-gene fallback cards.",
+    artifact_version: String(version || ""),
+    detail: sanitizeText(detail || "", 500) || null,
+  }
+}
+
+async function publishCardCatalogArtifact(
+  env,
+  { version, requestUrl = "https://iconoplasm.brinedew.bio/", symbols = null } = {},
+) {
+  if (!env?.KV?.put) throw new Error("KV binding missing")
+  if (!env?.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
+  assertIconoplasmCardCatalogBudgetPreflight(env)
+  const artifactVersion = String(version || "").trim()
+  if (!artifactVersion) throw new Error("Card catalog artifact version missing")
+  const catalogSymbols = Array.isArray(symbols)
+    ? normalizeRequestedSymbols(symbols, MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT)
+    : await allCatalogSymbolsForCardCatalogArtifact(env)
+  if (!catalogSymbols.length && !Array.isArray(symbols)) {
+    const catalogRows = await loadCatalogRowsForPublish(env)
+    for (const gene of catalogRows) {
+      const symbol = normalizeSymbol(gene?.s || "")
+      if (symbol) catalogSymbols.push(symbol)
+    }
+  }
+  if (!catalogSymbols.length) throw new Error("Card catalog has no catalog symbols")
+
+  const url = new URL(requestUrl || "https://iconoplasm.brinedew.bio/")
+  const fields = [
+    "symbol",
+    "full_name",
+    "color",
+    "portrait",
+    "essence",
+    "manifestation",
+    "weight_kg",
+    "protein_length_aa",
+    "molecular_weight_kda",
+    "first_publication_year",
+    "tissue_tau",
+    "loeuf",
+    "constraint_percentile",
+  ].join(",")
+  const cards = []
+  const missing = []
+  const seen = new Set()
+  for (const symbol of catalogSymbols) {
+    const record = await geneRecord(env, url, symbol, { fields })
+    const projected = projectGeneRecord(record, fields)
+    const vm = buildMobileCardVMFromGeneRecord(projected, {
+      snapshotVersion: artifactVersion,
+      source: "published_card_catalog",
+    })
+    if (!assertCompleteMobileCardVM(vm)) {
+      missing.push(symbol)
+      continue
+    }
+    const normalized = normalizeSymbol(vm.symbol || "")
+    if (!normalized || seen.has(normalized)) {
+      missing.push(symbol)
+      continue
+    }
+    seen.add(normalized)
+    cards.push({ ...vm, snapshot_version: artifactVersion, data_source: "published_card_catalog" })
+  }
+  if (missing.length || cards.length !== catalogSymbols.length) {
+    throw new Error(
+      `Card catalog artifact refused to publish: ${missing.length} missing/invalid card(s)`,
+    )
+  }
+  const artifact = normalizeCardCatalogArtifact({
+    schema: CARD_CATALOG_ARTIFACT_SCHEMA,
+    artifact_version: artifactVersion,
+    snapshot_version: artifactVersion,
+    artifact_validated_at: new Date().toISOString(),
+    source: "published_card_catalog",
+    catalog_gene_count: catalogSymbols.length,
+    card_count: cards.length,
+    cards,
+  })
+  if (!artifact) throw new Error("Card catalog artifact failed validation")
+  const artifactForStore = { ...artifact }
+  delete artifactForStore.bySymbol
+  await env.KV.put(
+    `${KV_CARD_CATALOG_ARTIFACT_PREFIX}${artifactVersion}`,
+    JSON.stringify(artifactForStore),
+  )
+  cardCatalogArtifactCache.version = artifactVersion
+  cardCatalogArtifactCache.value = artifact
+  return {
+    artifact_version: artifactVersion,
+    artifact_gene_count: artifact.card_count,
+    catalog_gene_count: artifact.catalog_gene_count,
+    artifact_validated_at: artifact.artifact_validated_at,
+    source: "published_card_catalog",
+  }
+}
+
 async function handleMobileCardManifest(request, env) {
+  // Card payloads have one runtime path: the published card-catalog artifact.
+  // No per-gene KV probing and no previous-version fallback belongs here. The
+  // release gate keeps the old live artifact active until the new one validates.
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405)
   const body = await parseJsonBody(request)
   const symbols = normalizeRequestedSymbols(body.symbols || [], 100)
@@ -15891,22 +16148,23 @@ async function handleMobileCardManifest(request, env) {
   }
   const versionInfo = await currentMobileCardSnapshotVersion(env)
   const requestedVersion = sanitizeText(body.version || "", 128)
-  const snapshotVersion =
-    requestedVersion &&
-    (requestedVersion === versionInfo.current || requestedVersion === versionInfo.previous)
-      ? requestedVersion
-      : versionInfo.current
+  const snapshotVersion = requestedVersion && requestedVersion === versionInfo.current
+    ? requestedVersion
+    : versionInfo.current
   if (!symbols.length) {
     return json(
       {
         schema: MOBILE_CARD_MANIFEST_SCHEMA,
         snapshot_version: snapshotVersion,
-        data_source: "request_composed",
+        data_source: "published_card_catalog",
         cards: [],
         missing: [],
         diagnostics: {
-          fallback_version_used: null,
-          kv_keys_missing: 0,
+          artifact_version: snapshotVersion,
+          artifact_gene_count: 0,
+          catalog_gene_count: 0,
+          artifact_validated_at: null,
+          source: "published_card_catalog",
           layout,
         },
       },
@@ -15915,62 +16173,37 @@ async function handleMobileCardManifest(request, env) {
     )
   }
 
+  const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion)
+  if (!artifact) {
+    return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+      "Cache-Control": "no-store",
+      "X-Iconoplasm-Data-Source": "artifact-unavailable",
+      "X-Iconoplasm-Snapshot-State": "card-artifact-unavailable",
+    })
+  }
   const cards = []
   const missing = []
-  let kvKeysMissing = 0
-  let kvSnapshotHits = 0
-  let previousSnapshotHits = 0
-  const currentMissing = []
   for (const symbol of symbols) {
-    const cachedVM = await readMobileCardVMFromSharedSnapshot(env, snapshotVersion, symbol)
-    if (cachedVM) {
-      kvSnapshotHits += 1
-      cards.push(cachedVM)
-      continue
-    }
-    kvKeysMissing += 1
-    currentMissing.push(symbol)
+    const card = artifact.bySymbol.get(symbol)
+    if (card) cards.push(card)
+    else missing.push(symbol)
   }
-  if (currentMissing.length && versionInfo.previous) {
-    for (const symbol of currentMissing) {
-      const previousVM = await readMobileCardVMFromSharedSnapshot(env, versionInfo.previous, symbol)
-      if (previousVM) {
-        previousSnapshotHits += 1
-        cards.push({
-          ...previousVM,
-          data_source: "kv_previous",
-        })
-      } else {
-        missing.push(symbol)
-      }
-    }
-  } else {
-    for (const symbol of currentMissing) {
-      missing.push(symbol)
-    }
-  }
-  let dataSource = "snapshot_missing"
-  if (cards.length > 0) {
-    if (kvSnapshotHits === cards.length) dataSource = "kv_snapshot"
-    else if (previousSnapshotHits === cards.length) dataSource = "kv_previous"
-    else dataSource = "mixed"
-  }
-  const fallbackVersionUsed = previousSnapshotHits > 0 ? versionInfo.previous : null
 
   return json(
     {
       schema: MOBILE_CARD_MANIFEST_SCHEMA,
       snapshot_version: snapshotVersion,
-      data_source: dataSource,
+      data_source: "published_card_catalog",
       cards: cards.sort(
         (left, right) => symbols.indexOf(left.symbol) - symbols.indexOf(right.symbol),
       ),
       missing,
       diagnostics: {
-        fallback_version_used: fallbackVersionUsed,
-        kv_keys_missing: kvKeysMissing,
-        kv_snapshot_hits: kvSnapshotHits,
-        kv_previous_hits: previousSnapshotHits,
+        artifact_version: artifact.artifact_version,
+        artifact_gene_count: artifact.card_count,
+        catalog_gene_count: artifact.catalog_gene_count,
+        artifact_validated_at: artifact.artifact_validated_at,
+        source: "published_card_catalog",
         d1_composed: 0,
         layout,
       },
@@ -15979,9 +16212,8 @@ async function handleMobileCardManifest(request, env) {
     {
       "Cache-Control": "no-store",
       "X-Iconoplasm-VM-Version": snapshotVersion,
-      "X-Iconoplasm-Data-Source": dataSource.replaceAll("_", "-"),
-      "X-Iconoplasm-Snapshot-State":
-        dataSource === "snapshot_missing" ? "snapshot-missing" : "versioned-kv",
+      "X-Iconoplasm-Data-Source": "published-card-catalog",
+      "X-Iconoplasm-Snapshot-State": "published-card-catalog",
     },
   )
 }
@@ -17407,9 +17639,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               diagnostics: {
                 d1_composed: 0,
                 d1_window_rows: 0,
-                kv_snapshot_hits: 0,
-                kv_previous_hits: 0,
-                kv_keys_missing: 0,
+                artifact_version: "",
+                artifact_gene_count: 0,
+                catalog_gene_count: 0,
+                artifact_validated_at: null,
+                source: "published_card_catalog",
               },
             },
             200,
@@ -17438,40 +17672,25 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const symbols = windowData.rows
         .map((row) => normalizeSymbol(row.gene_symbol || ""))
         .filter(Boolean)
-      const vmResults = await Promise.all(
-        symbols.map(async (symbol) => {
-          const current = await readMobileCardVMFromSharedSnapshot(env, snapshotVersion, symbol)
-          if (current) return { symbol, vm: current, source: "kv_snapshot" }
-          const previousVersion = versionInfo.previous
-          if (previousVersion) {
-            const previous = await readMobileCardVMFromSharedSnapshot(env, previousVersion, symbol)
-            if (previous) {
-              return {
-                symbol,
-                vm: {
-                  ...previous,
-                  data_source: "kv_previous",
-                },
-                source: "kv_previous",
-              }
-            }
-          }
-          return { symbol, vm: null, source: "missing" }
-        }),
-      )
+      const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion)
+      if (!artifact) {
+        return done(
+          "account_gallery_window_card_artifact_unavailable",
+          json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+            "Cache-Control": "no-store",
+            "X-Iconoplasm-Data-Source": "artifact-unavailable",
+            "X-Iconoplasm-Snapshot-State": "card-artifact-unavailable",
+          }),
+        )
+      }
       const vmBySymbol = new Map()
-      let kvSnapshotHits = 0
-      let kvPreviousHits = 0
-      let kvKeysMissing = 0
       const missing = []
-      for (const result of vmResults) {
-        if (result.vm) {
-          vmBySymbol.set(result.symbol, result.vm)
-          if (result.source === "kv_previous") kvPreviousHits += 1
-          else kvSnapshotHits += 1
+      for (const symbol of symbols) {
+        const vm = artifact.bySymbol.get(symbol)
+        if (vm) {
+          vmBySymbol.set(symbol, vm)
         } else {
-          kvKeysMissing += 1
-          missing.push(result.symbol)
+          missing.push(symbol)
         }
       }
       const cards = []
@@ -17509,9 +17728,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               d1_composed: 0,
               d1_window_rows: windowData.rows.length,
               requested_limit: cleanedLimit,
-              kv_snapshot_hits: kvSnapshotHits,
-              kv_previous_hits: kvPreviousHits,
-              kv_keys_missing: kvKeysMissing,
+              artifact_version: artifact.artifact_version,
+              artifact_gene_count: artifact.card_count,
+              catalog_gene_count: artifact.catalog_gene_count,
+              artifact_validated_at: artifact.artifact_validated_at,
+              source: "published_card_catalog",
               supported_orders: Array.from(ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS),
             },
           },
@@ -19506,12 +19727,22 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             skip_gene_rollups: skipGeneRollups,
             skip_vision_rollups: skipVisionRollups,
             skip_dashboard: skipDashboard,
-            mobile_card_vms:
-              result?.mobile_card_vms && typeof result.mobile_card_vms === "object"
+            card_catalog:
+              result?.card_catalog && typeof result.card_catalog === "object"
                 ? {
-                    warmed: Math.max(0, Number(result.mobile_card_vms.warmed || 0) || 0),
-                    missing: Math.max(0, Number(result.mobile_card_vms.missing || 0) || 0),
-                    version: sanitizeText(result.mobile_card_vms.version || "", 128) || null,
+                    artifact_version:
+                      sanitizeText(result.card_catalog.artifact_version || "", 128) || null,
+                    artifact_gene_count: Math.max(
+                      0,
+                      Number(result.card_catalog.artifact_gene_count || 0) || 0,
+                    ),
+                    catalog_gene_count: Math.max(
+                      0,
+                      Number(result.card_catalog.catalog_gene_count || 0) || 0,
+                    ),
+                    artifact_validated_at:
+                      sanitizeText(result.card_catalog.artifact_validated_at || "", 64) || null,
+                    source: "published_card_catalog",
                   }
                 : null,
           },
@@ -19563,7 +19794,29 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               Array.isArray(p?.symbols) ? p.symbols : [],
               MOBILE_CARD_VM_ADMIN_WARM_REQUEST_SYMBOL_MAX,
             )
-      const warmResult = await warmMobileCardSnapshotSymbols(env, symbols, snapshotVersion)
+      let publishResult
+      try {
+        publishResult = await publishCardCatalogArtifact(env, {
+          version: snapshotVersion,
+          requestUrl: request.url,
+          symbols: scope === "catalog" ? null : symbols,
+        })
+      } catch (error) {
+        return done(
+          "admin_card_vms_warm_card_artifact_refused",
+          json(
+            {
+              ok: false,
+              code: CARD_ARTIFACT_UNAVAILABLE,
+              error: sanitizeText(String(error?.message || error), 1000),
+              version: snapshotVersion,
+              scope: scope === "catalog" ? "catalog" : "symbols",
+            },
+            409,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
       const nextCursor = symbols.length
         ? symbols[symbols.length - 1]
         : sanitizeText(p?.after || p?.cursor || "", 64)
@@ -19576,10 +19829,15 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             version: snapshotVersion,
             after: sanitizeText(p?.after || p?.cursor || "", 64) || "",
             next_cursor: nextCursor || "",
-            done: scope === "catalog" ? symbols.length < requestedLimit : true,
-            requested: warmResult.requested,
-            warmed: warmResult.warmed,
-            missing: warmResult.missing,
+            done: true,
+            requested: publishResult.catalog_gene_count,
+            warmed: publishResult.artifact_gene_count,
+            missing: 0,
+            artifact_version: publishResult.artifact_version,
+            artifact_gene_count: publishResult.artifact_gene_count,
+            catalog_gene_count: publishResult.catalog_gene_count,
+            artifact_validated_at: publishResult.artifact_validated_at,
+            source: "published_card_catalog",
           },
           200,
           { "Cache-Control": "no-store" },

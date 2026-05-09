@@ -1,5 +1,4 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
-import { execFileSync } from "node:child_process"
 import path from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
@@ -144,60 +143,6 @@ function requireEnv(name) {
     throw new Error(`${name} is required`)
   }
   return value
-}
-
-function runWranglerCli(rootDir, args = []) {
-  const safeArgs = Array.isArray(args) ? args.map((value) => String(value || "")) : []
-  if (process.platform === "win32") {
-    // Windows detail that bit us in real use:
-    // `execFileSync` does not reliably execute the `.cmd` shim the way an
-    // interactive shell does, so the OAuth reuse path silently looked like
-    // "no token available" even though `npx wrangler ...` worked fine in the
-    // terminal. Route the command through `cmd.exe /c` on Windows so the same
-    // Wrangler lane works in the snapshot generator and in operator shells.
-    const command = ["npx", "wrangler", ...safeArgs].join(" ")
-    return execFileSync("cmd.exe", ["/d", "/s", "/c", command], {
-      cwd: rootDir,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-    })
-  }
-  return execFileSync("npx", ["wrangler", ...safeArgs], {
-    cwd: rootDir,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  })
-}
-
-function readWranglerOAuthTokenFromCli(rootDir) {
-  try {
-    const stdout = runWranglerCli(rootDir, ["auth", "token", "--json"])
-    const payload = JSON.parse(String(stdout || "{}"))
-    return payload?.type === "oauth" && String(payload?.token || "").trim()
-      ? String(payload.token).trim()
-      : ""
-  } catch {
-    return ""
-  }
-}
-
-async function readWranglerAccountId(rootDir) {
-  const cachePath = path.join(rootDir, "node_modules", ".cache", "wrangler", "wrangler-account.json")
-  try {
-    const parsed = JSON.parse(await readFile(cachePath, "utf8"))
-    const accountId = String(parsed?.id || parsed?.account?.id || "").trim()
-    if (accountId) return accountId
-  } catch {
-    // Fall through to the CLI parse below.
-  }
-  try {
-    const stdout = runWranglerCli(rootDir, ["whoami"])
-    const match = String(stdout || "").match(/[a-f0-9]{32}/i)
-    return match ? match[0] : ""
-  } catch {
-    return ""
-  }
 }
 
 function asNumber(value) {
@@ -964,16 +909,16 @@ async function writeSnapshotFiles(rootDir, snapshot) {
 async function main() {
   const { envName } = parseArgs(process.argv)
   const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-  const apiToken = optionalEnv("CLOUDFLARE_API_TOKEN") || readWranglerOAuthTokenFromCli(rootDir)
+  const apiToken = optionalEnv("CLOUDFLARE_API_TOKEN")
   if (!apiToken) {
     throw new Error(
-      "CLOUDFLARE_API_TOKEN is required, or Wrangler must already be logged in so the snapshot generator can reuse its OAuth token.",
+      "CLOUDFLARE_API_TOKEN is required. It must be the account-owned iconoplasm-admin token; the observability snapshot generator does not fall back to Wrangler OAuth.",
     )
   }
-  const accountId = optionalEnv("CLOUDFLARE_ACCOUNT_ID") || (await readWranglerAccountId(rootDir))
+  const accountId = optionalEnv("CLOUDFLARE_ACCOUNT_ID")
   if (!accountId) {
     throw new Error(
-      "CLOUDFLARE_ACCOUNT_ID is required, or Wrangler must already know the active account so the snapshot generator can recover it.",
+      "CLOUDFLARE_ACCOUNT_ID is required. The observability snapshot generator does not recover an account from Wrangler login.",
     )
   }
   const config = await loadWranglerConfig(rootDir, envName)

@@ -108,6 +108,21 @@ So if an authenticated user appears to have zero discoveries, do not assume the 
 
 Admin classic gallery mode is different. That mode should use the classic public gallery path, not a giant fake discoveries payload.
 
+## card/gallery path warning
+
+Before debugging a card or gallery bug, identify the active data path. Do not infer it from visible page text.
+
+The common paths are:
+
+- `/api/public/v1/gallery` for classic public gallery mode
+- `/api/iconoplasm/discoveries/me` for the signed-in personal shelf state
+- `/api/iconoplasm/account-gallery-window` for supported signed-in order windows
+- client-side discovery slicing plus `/api/iconoplasm/mobile-card-manifest`, which must read the live published card-catalog artifact rather than per-gene KV objects or D1-composed fallback cards
+
+There is no universal "next genes the user will see" order across these paths. Do not design cache warming, preloading, or pagination as if one global gallery sequence exists.
+
+Missing rich card data must not make a catalog gene unreachable. Treat per-gene mobile-card VM data as enrichment, not as proof that the gene exists.
+
 ## sanity checks
 
 - If a result looks wrong, confirm you used `--remote`.
@@ -134,7 +149,8 @@ What to do next:
 
 1. fix Cloudflare telemetry/auth first
   - check the Website Ops Cloudflare diagnostic in the GUI
-  - verify the workstation can reuse `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` or Wrangler-auth cache successfully
+  - verify `CLOUDFLARE_API_TOKEN` is the account-owned `iconoplasm-admin` token and can read `CLOUDFLARE_ACCOUNT_ID`
+  - do not use Wrangler OAuth or `cloudflare_auth_cache.json` as a recovery path
 2. confirm the DO usage panel is green again
 3. only then rerun Website Ops sync
 

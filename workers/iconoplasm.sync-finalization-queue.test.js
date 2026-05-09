@@ -29,6 +29,19 @@ class FakeStatement {
 
   async all() {
     this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
+    if (this.sql.includes("FROM icono_gene_catalog")) {
+      const symbols = this.db.jobs.size ? [...this.db.jobs.keys()] : ["TP53"]
+      return {
+        results: symbols.map((symbol) => ({
+          gene_symbol: symbol,
+          full_name: `${symbol} full name`,
+          uniprot: "",
+          color_hex: "#423D37",
+          tmh: 0,
+          aliases_json: "[]",
+        })),
+      }
+    }
     if (this.sql.includes("FROM icono_sync_finalization_jobs") && this.sql.includes("WHERE status = ?") && this.sql.includes("phase <> ?")) {
       const [scopedSymbolsJson, runningStatus, excludedPhase, scopedEnabled, limit] = this.args
       let scopedSymbols = null
@@ -123,6 +136,51 @@ class FakeStatement {
 
   async first() {
     this.db.calls.push({ method: "first", sql: this.sql, args: this.args })
+    if (this.sql.includes("FROM icono_gene_catalog")) {
+      const symbol = String(this.args[0] || "TP53").trim().toUpperCase()
+      return {
+        gene_symbol: symbol,
+        full_name: `${symbol} full name`,
+        uniprot: "",
+        color_hex: "#423D37",
+        tmh: 0,
+        aliases_json: "[]",
+      }
+    }
+    if (
+      this.sql.includes("FROM icono_publish_state ps") &&
+      this.sql.includes("LEFT JOIN icono_portrait_assets pa")
+    ) {
+      const symbol = String(this.args[0] || "TP53").trim().toUpperCase()
+      return {
+        asset_sha256: "7b".repeat(32),
+        width: 768,
+        height: 1024,
+        vision_id: "artist-random-v1",
+        candidate_image_id: 1,
+        emulsion_id: `A1-${symbol}`,
+      }
+    }
+    if (this.sql.includes("FROM icono_gene_essence")) {
+      const symbol = String(this.args[0] || "TP53").trim().toUpperCase()
+      return {
+        full_name: `${symbol} full name`,
+        sex: "male",
+        age_years: 42,
+        faction: "test",
+        skin_hex: "#423D37",
+        skin_name: "Mocha Black",
+        tissue_tau: 0.2,
+        loeuf: 0.5,
+        aesthetics_json: "[]",
+        aesthetics_origin_json: "[]",
+        politics_origin_json: "[]",
+        family_surname: symbol,
+        family_members: 1,
+        family_feature: "",
+        manifestation: "",
+      }
+    }
     if (this.sql.includes("SELECT *") && this.sql.includes("FROM icono_sync_finalization_jobs") && this.sql.includes("WHERE gene_symbol = ?")) {
       const symbol = String(this.args[0] || "").trim().toUpperCase()
       const row = this.db.jobs.get(symbol)
@@ -348,6 +406,18 @@ class FakeIconoplasmDb {
   }
 }
 
+function testKv() {
+  return {
+    store: new Map([["iconoplasm:gallery-version", "test-version"]]),
+    async get(key) {
+      return this.store.get(key) || null
+    },
+    async put(key, value) {
+      this.store.set(key, value)
+    },
+  }
+}
+
 function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
   if (!env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE) {
     env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
@@ -364,6 +434,8 @@ function buildEnv({ jobs = [] } = {}, { bindGateway = true } = {}) {
   const gatewayEnv = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_DB: gatewayDb,
+    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    KV: testKv(),
   }
   const env = {
     ...gatewayEnv,
@@ -775,6 +847,8 @@ test("queue finalization consumer rejects the old per-symbol message path", asyn
       ],
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    KV: testKv(),
   }
   let acknowledged = false
   let retried = false
@@ -830,6 +904,8 @@ test("queue drain message processes durable ledger batches without per-symbol ph
       })),
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    KV: testKv(),
   }
   let acknowledged = false
   const retries = []
@@ -892,6 +968,8 @@ test("queue drain consumer retries instead of acking when self-reschedule fails"
       })),
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    KV: testKv(),
   }
   let acknowledged = false
   const retries = []
@@ -948,6 +1026,8 @@ test("queue drain message finalizes when only pending-finalize rows remain", asy
       })),
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    KV: testKv(),
   }
   let acknowledged = false
   const retries = []
@@ -1006,6 +1086,8 @@ test("queue drain finalizer chunks more than the read-model vision limit", async
       })),
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: buildFakeQueue(),
+    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    KV: testKv(),
   }
 
   const result = await handleIconoplasmSyncFinalizationQueue(

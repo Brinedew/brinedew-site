@@ -18,11 +18,67 @@ class FakeStatement {
 
   async all() {
     this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
+    if (this.sql.includes("FROM icono_gene_catalog")) {
+      return {
+        results: [
+          {
+            gene_symbol: "TP53",
+            full_name: "tumor protein p53",
+            uniprot: "",
+            color_hex: "#423D37",
+            tmh: 0,
+            aliases_json: "[]",
+          },
+        ],
+      }
+    }
     return { results: [] }
   }
 
   async first() {
     this.db.calls.push({ method: "first", sql: this.sql, args: this.args })
+    if (this.sql.includes("FROM icono_gene_catalog")) {
+      return {
+        gene_symbol: "TP53",
+        full_name: "tumor protein p53",
+        uniprot: "",
+        color_hex: "#423D37",
+        tmh: 0,
+        aliases_json: "[]",
+      }
+    }
+    if (
+      this.sql.includes("FROM icono_publish_state ps") &&
+      this.sql.includes("LEFT JOIN icono_portrait_assets pa")
+    ) {
+      return {
+        asset_sha256: "7b".repeat(32),
+        width: 768,
+        height: 1024,
+        vision_id: "artist-random-v1",
+        candidate_image_id: 1,
+        emulsion_id: "A1-TP53",
+      }
+    }
+    if (this.sql.includes("FROM icono_gene_essence")) {
+      return {
+        full_name: "tumor protein p53",
+        sex: "male",
+        age_years: 53,
+        faction: "guardian",
+        skin_hex: "#423D37",
+        skin_name: "Mocha Black",
+        tissue_tau: 0.2,
+        loeuf: 0.5,
+        aesthetics_json: "[]",
+        aesthetics_origin_json: "[]",
+        politics_origin_json: "[]",
+        family_surname: "TP53",
+        family_members: 1,
+        family_feature: "",
+        manifestation: "",
+      }
+    }
     return null
   }
 
@@ -58,6 +114,16 @@ function buildEnv({ bindGateway = true } = {}) {
   const gatewayEnv = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_DB: gatewayDb,
+    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    KV: {
+      store: new Map([["iconoplasm:gallery-version", "test-version"]]),
+      async get(key) {
+        return this.store.get(key) || null
+      },
+      async put(key, value) {
+        this.store.set(key, value)
+      },
+    },
   }
   const env = {
     ...gatewayEnv,
@@ -94,9 +160,9 @@ test("admin read-model sync with invalidate_gallery still honors skip flags", as
 
   assert.equal(response.status, 200)
   assert.equal(payload?.ok, true)
-  assert.equal(payload?.mobile_card_vms?.warmed, 0)
-  assert.equal(payload?.mobile_card_vms?.missing >= 1, true)
-  assert.equal(typeof payload?.mobile_card_vms?.version, "string")
+  assert.equal(payload?.card_catalog?.artifact_gene_count, 1)
+  assert.equal(payload?.card_catalog?.catalog_gene_count, 1)
+  assert.equal(payload?.card_catalog?.source, "published_card_catalog")
 
   // This regression matters because the workstation uses skip flags to split a
   // 1,000-item Website sync into smaller durable phases. If the invalidate-

@@ -2,7 +2,10 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { readFileSync } from "node:fs"
 
-import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  resetIconoplasmRuntimeCachesForTest,
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const source = readFileSync(
   new URL("./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js", import.meta.url),
@@ -152,7 +155,7 @@ function completeMobileCardVM(symbol, version = "test-vm-version") {
     __complete: true,
     schema_version: "iconoplasm.mobileCard.v1",
     snapshot_version: version,
-    data_source: "kv_snapshot",
+    data_source: "published_card_catalog",
     symbol: normalized,
     full_name: `${normalized} full name`,
     display_color: "#423D37",
@@ -181,14 +184,23 @@ function completeMobileCardVM(symbol, version = "test-vm-version") {
   }
 }
 
+function completeCardCatalogArtifact(symbols, version = "test-vm-version") {
+  const cards = symbols.map((symbol) => completeMobileCardVM(symbol, version))
+  return {
+    schema: "iconoplasm.cardCatalog.v1",
+    artifact_version: version,
+    snapshot_version: version,
+    artifact_validated_at: "2026-05-09T00:00:00.000Z",
+    source: "published_card_catalog",
+    catalog_gene_count: cards.length,
+    card_count: cards.length,
+    cards,
+  }
+}
+
 function buildEnv({ db = new FakeDb(), version = "test-vm-version" } = {}) {
   const symbols = ["INS", "PRL", "RHO", "TP53", "BRCA1"]
-  const kvStore = new Map(
-    symbols.map((symbol) => [
-      `iconoplasm:mobile-card-vm:${version}:${symbol}`,
-      JSON.stringify(completeMobileCardVM(symbol, version)),
-    ]),
-  )
+  const kvStore = new Map([[`iconoplasm:card-catalog:${version}`, JSON.stringify(completeCardCatalogArtifact(symbols, version))]])
   return {
     ICONOPLASM_DB: db,
     GAME_SESSIONS: new FakeGameSessions({
@@ -228,7 +240,8 @@ test("account gallery window returns strict rich cards for newest without full s
   assert.ok(payload.next_cursor)
   assert.equal(payload.diagnostics.d1_composed, 0)
   assert.equal(payload.diagnostics.d1_window_rows, 2)
-  assert.equal(payload.diagnostics.kv_snapshot_hits, 2)
+  assert.equal(payload.diagnostics.source, "published_card_catalog")
+  assert.equal(payload.diagnostics.artifact_version, "test-vm-version")
   assert.equal(payload.missing.length, 0)
   assert.ok(
     db.calls.some(
@@ -250,18 +263,13 @@ test("account gallery newest window puts the newly discovered 101st gene first",
     return db.row("user-123", `G${number}`, `2026-04-29T00:${number.slice(1)}:00Z`, index)
   }))
   db.rows.push(db.row("user-123", "NEW101", "2026-04-30T00:00:00Z", 0))
-  const env = buildEnv({ db })
+  resetIconoplasmRuntimeCachesForTest()
+  const env = buildEnv({ db, version: "test-vm-version-101" })
+  const allSymbols = db.rows.map((row) => row.gene_symbol)
   env.KV.put(
-    "iconoplasm:mobile-card-vm:test-vm-version:NEW101",
-    JSON.stringify(completeMobileCardVM("NEW101")),
+    "iconoplasm:card-catalog:test-vm-version-101",
+    JSON.stringify(completeCardCatalogArtifact(allSymbols, "test-vm-version-101")),
   )
-  for (let i = 1; i <= 100; i += 1) {
-    const symbol = `G${String(i).padStart(3, "0")}`
-    env.KV.put(
-      `iconoplasm:mobile-card-vm:test-vm-version:${symbol}`,
-      JSON.stringify(completeMobileCardVM(symbol)),
-    )
-  }
 
   const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3", {
@@ -329,6 +337,18 @@ test("account gallery endpoint block does not sort a bounded discovery slice for
   assert.doesNotMatch(block, /sortDiscoveryRowsForOrder/)
   assert.match(block, /ORDER_INDEX_NOT_READY/)
   assert.match(block, /ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS/)
+})
+
+test("account gallery endpoint block reads cards from the published artifact, not per-gene KV", () => {
+  const start = source.lastIndexOf('if (path === "/api/iconoplasm/account-gallery-window"')
+  const end = source.indexOf('if (path === "/api/iconoplasm/discoveries/merge"', start)
+  assert.notEqual(start, -1)
+  assert.notEqual(end, -1)
+  const block = source.slice(start, end)
+
+  assert.match(block, /readPublishedCardCatalogArtifact/)
+  assert.doesNotMatch(block, /readMobileCardVMFromSharedSnapshot/)
+  assert.doesNotMatch(block, /versionInfo\.previous/)
 })
 
 test("account gallery endpoint has an explicit budget class", () => {

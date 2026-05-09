@@ -178,13 +178,37 @@ class FakeIconoplasmDb {
   }
 }
 
-function buildEnv({ kvStore = new Map(), db = new FakeIconoplasmDb(), version = "test-vm-version" } = {}) {
+function completeCardCatalogArtifact(symbols = ["ERBB2", "INS"], version = "test-vm-version") {
+  const cards = symbols.map((symbol) =>
+    completeMobileCardVM(symbol, version, "published_card_catalog"),
+  )
+  return {
+    schema: "iconoplasm.cardCatalog.v1",
+    artifact_version: version,
+    snapshot_version: version,
+    artifact_validated_at: "2026-05-09T00:00:00.000Z",
+    source: "published_card_catalog",
+    catalog_gene_count: cards.length,
+    card_count: cards.length,
+    cards,
+  }
+}
+
+function buildEnv({
+  kvStore = new Map(),
+  db = new FakeIconoplasmDb(),
+  version = "test-vm-version",
+  cardArtifact = completeCardCatalogArtifact(["ERBB2", "INS"], version),
+} = {}) {
   return {
     ICONOPLASM_DB: db,
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     KV: {
       async get(key) {
         if (key === "iconoplasm:gallery-version") return version
+        if (key === `iconoplasm:card-catalog:${version}` && cardArtifact) {
+          return JSON.stringify(cardArtifact)
+        }
         return kvStore.get(key) || null
       },
       async put(key, value) {
@@ -237,28 +261,25 @@ function completeMobileCardVM(symbol = "ERBB2", version = "test-vm-version", dat
   }
 }
 
-test("mobile card manifest returns complete VMs from KV without pending portrait placeholders", async () => {
-  const kvStore = new Map([
-    [
-      "iconoplasm:mobile-card-vm:test-vm-version:ERBB2",
-      JSON.stringify(completeMobileCardVM("ERBB2")),
-    ],
-  ])
+test("mobile card manifest returns complete VMs from the published card catalog artifact", async () => {
   const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["ERBB2"] }),
     }),
-    buildEnv({ kvStore, db: null }),
+    buildEnv({ db: null }),
   )
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "kv-snapshot")
+  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "published-card-catalog")
   const payload = await response.json()
   assert.equal(payload.schema, "iconoplasm.mobileCardManifest.v1")
   assert.equal(payload.snapshot_version, "test-vm-version")
+  assert.equal(payload.data_source, "published_card_catalog")
   assert.deepEqual(payload.missing, [])
+  assert.equal(payload.diagnostics.artifact_version, "test-vm-version")
+  assert.equal(payload.diagnostics.source, "published_card_catalog")
   assert.equal(payload.cards.length, 1)
   const card = payload.cards[0]
   assert.equal(card.__complete, true)
@@ -272,32 +293,25 @@ test("mobile card manifest returns complete VMs from KV without pending portrait
   assert.equal(card.payload.essence.faction, "pro-growth")
 })
 
-test("mobile card manifest never composes missing public cards from D1", async () => {
+test("mobile card manifest fails loud when the published card catalog artifact is unavailable", async () => {
+  resetIconoplasmRuntimeCachesForTest()
   const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS"] }),
     }),
-    buildEnv({ kvStore: new Map(), db: new FakeIconoplasmDb() }),
+    buildEnv({ kvStore: new Map(), db: new FakeIconoplasmDb(), cardArtifact: null }),
   )
-  assert.equal(response.status, 200)
-  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "snapshot-missing")
-  assert.equal(response.headers.get("X-Iconoplasm-Snapshot-State"), "snapshot-missing")
+  assert.equal(response.status, 503)
+  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "artifact-unavailable")
+  assert.equal(response.headers.get("X-Iconoplasm-Snapshot-State"), "card-artifact-unavailable")
   const payload = await response.json()
-  assert.equal(payload.data_source, "snapshot_missing")
-  assert.deepEqual(payload.missing, ["INS"])
-  assert.equal(payload.cards.length, 0)
-  assert.equal(payload.diagnostics.d1_composed, 0)
+  assert.equal(payload.code, "CARD_ARTIFACT_UNAVAILABLE")
+  assert.equal(payload.artifact_version, "test-vm-version")
 })
 
-test("mobile card manifest falls back to previous version without D1", async () => {
-  const kvStore = new Map([
-    [
-      "iconoplasm:mobile-card-vm:previous-vm-version:INS",
-      JSON.stringify(completeMobileCardVM("INS", "previous-vm-version")),
-    ],
-  ])
+test("mobile card manifest does not fall back to a previous card catalog version", async () => {
   const barrier = JSON.stringify({
     current: "current-vm-version",
     previous: "previous-vm-version",
@@ -310,23 +324,19 @@ test("mobile card manifest falls back to previous version without D1", async () 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS"] }),
     }),
-    buildEnv({ kvStore, db: null, version: barrier }),
+    buildEnv({
+      db: null,
+      version: barrier,
+      cardArtifact: completeCardCatalogArtifact(["INS"], "previous-vm-version"),
+    }),
   )
-  assert.equal(response.status, 200)
-  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "kv-previous")
+  assert.equal(response.status, 503)
   const payload = await response.json()
-  assert.equal(payload.snapshot_version, "current-vm-version")
-  assert.equal(payload.data_source, "kv_previous")
-  assert.equal(payload.diagnostics.fallback_version_used, "previous-vm-version")
-  assert.equal(payload.diagnostics.kv_keys_missing, 1)
-  assert.equal(payload.diagnostics.kv_previous_hits, 1)
-  assert.equal(payload.diagnostics.d1_composed, 0)
-  assert.deepEqual(payload.missing, [])
-  assert.equal(payload.cards[0].symbol, "INS")
-  assert.equal(payload.cards[0].data_source, "kv_previous")
+  assert.equal(payload.code, "CARD_ARTIFACT_UNAVAILABLE")
+  assert.equal(payload.artifact_version, "current-vm-version")
 })
 
-test("admin card VM warm endpoint reports unwritable VM snapshots as missing", async () => {
+test("admin card catalog publish refuses to report success when required cards are incomplete", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const kvStore = new Map()
   const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -340,18 +350,17 @@ test("admin card VM warm endpoint reports unwritable VM snapshots as missing", a
     }),
     buildEnv({ kvStore }),
   )
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 409)
   const payload = await response.json()
-  assert.equal(payload.ok, true)
+  assert.equal(payload.ok, false)
+  assert.equal(payload.code, "CARD_ARTIFACT_UNAVAILABLE")
   assert.equal(payload.scope, "symbols")
-  assert.equal(payload.requested, 1)
-  assert.equal(payload.warmed, 0)
-  assert.equal(payload.missing, 1)
-  assert.equal(payload.next_cursor, "ERBB2")
+  assert.match(payload.error, /refused to publish|version missing/)
   assert.equal(kvStore.size, 0)
 })
 
-test("admin card VM warm endpoint does not count failed KV writes as warmed cards", async () => {
+test("admin card catalog publish does not count failed KV writes as published cards", async () => {
+  resetIconoplasmRuntimeCachesForTest()
   const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
       method: "POST",
@@ -376,11 +385,9 @@ test("admin card VM warm endpoint does not count failed KV writes as warmed card
   )
   const payload = await response.json()
 
-  assert.equal(response.status, 200)
-  assert.equal(payload.ok, true)
-  assert.equal(payload.requested, 1)
-  assert.equal(payload.warmed, 0)
-  assert.equal(payload.missing, 1)
+  assert.equal(response.status, 409)
+  assert.equal(payload.ok, false)
+  assert.equal(payload.code, "CARD_ARTIFACT_UNAVAILABLE")
 })
 
 test("admin card VM warm endpoint keeps catalog warming behind admin auth", async () => {
@@ -403,13 +410,25 @@ test("mobile manifest route is wired before the generic /api/iconoplasm proxy", 
   assert.ok(start < generic, "mobile manifest must not fall through to the legacy generic handler")
 })
 
-test("frontend mobile path uses card VM manifest and rejects fallback records", () => {
+test("mobile manifest runtime block does not call per-gene KV or D1 composition", () => {
+  const start = source.indexOf("async function handleMobileCardManifest")
+  const end = source.indexOf("async function composeAndCacheMobileCardVMs", start)
+  assert.notEqual(start, -1)
+  assert.notEqual(end, -1)
+  const block = source.slice(start, end)
+  assert.doesNotMatch(block, /readMobileCardVMFromSharedSnapshot/)
+  assert.doesNotMatch(block, /writeMobileCardVMToSharedSnapshot/)
+  assert.doesNotMatch(block, /geneRecord\(/)
+  assert.match(block, /readPublishedCardCatalogArtifact/)
+})
+
+test("frontend mobile path uses the card catalog manifest and rejects fallback records", () => {
   assert.match(appSource, /function assertCompleteMobileCardVM\(card\)/)
   assert.match(appSource, /\/api\/iconoplasm\/mobile-card-manifest/)
   assert.match(appSource, /card\.__complete !== true/)
   assert.match(source, /KV_MOBILE_CARD_VM_PREFIX/)
-  assert.match(source, /readMobileCardVMFromSharedSnapshot/)
-  assert.match(source, /writeMobileCardVMToSharedSnapshot/)
+  assert.match(source, /KV_CARD_CATALOG_ARTIFACT_PREFIX/)
+  assert.match(source, /readPublishedCardCatalogArtifact/)
   const mobileBranch = appSource.slice(
     appSource.indexOf("return loadMobileCardPageVM(pageEntries)"),
     appSource.indexOf("if (orderEl)", appSource.indexOf("return loadMobileCardPageVM(pageEntries)")),
@@ -421,21 +440,27 @@ test("frontend mobile path uses card VM manifest and rejects fallback records", 
   )
 })
 
-test("gallery invalidation warms a real shared card VM snapshot instead of an empty version", () => {
-  assert.match(source, /async function mobileCardSnapshotWarmSymbolsForInvalidation/)
-  assert.match(source, /async function warmMobileCardSnapshotSymbols/)
+test("gallery invalidation publishes a validated card catalog before flipping the live version", () => {
+  assert.match(source, /async function publishCardCatalogArtifact/)
+  assert.match(source, /CARD_CATALOG_ARTIFACT_SCHEMA/)
   assert.match(source, /ICONOPLASM_STARTER_GENE_SYMBOLS/)
   assert.match(source, /\/api\/iconoplasm\/admin\/card-vms\/warm/)
   assert.match(source, /await warmCatalogCache\(env\)/)
   assert.match(source, /Array\.from\(catalogCache\.bySymbol\.keys\(\)\)/)
-  assert.match(source, /const warmedSymbols = await mobileCardSnapshotWarmSymbolsForInvalidation/)
-  assert.match(source, /if \(fullRebuild\) \{[\s\S]*catalogSymbolsForMobileCardSnapshotWarm/)
-  assert.doesNotMatch(source, /void fullRebuild/)
+  assert.match(
+    source,
+    /const cardCatalog = await publishCardCatalogArtifact\(env,[\s\S]*publishGalleryVersionBarrier\(env, barrier\)/,
+  )
   assert.match(source, /scope === "catalog"/)
-  assert.match(source, /mobile_card_vms:/)
+  assert.match(source, /published_card_catalog/)
   assert.doesNotMatch(
     source,
-    /const warmedSymbols = Array\.from\(new Set\(symbols\.map/,
-    "snapshot warm set must not be only the narrow touched-symbol array",
+    /const warmedSymbols = await mobileCardSnapshotWarmSymbolsForInvalidation/,
+    "gallery invalidation must not warm per-gene mobile-card KV after publishing the card catalog",
+  )
+  assert.doesNotMatch(
+    source,
+    /readMobileCardVMFromSharedSnapshot\(env, versionInfo\.previous/,
+    "runtime card loading must not probe a previous version fallback",
   )
 })

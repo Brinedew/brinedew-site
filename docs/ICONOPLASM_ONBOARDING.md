@@ -50,6 +50,30 @@ Important consequence: if discovery behavior looks wrong on the site, do not ass
 
 This is the architectural rule that caused the biggest confusion.
 
+## there is no single gallery order
+
+Do not model Iconoplasm as one long gallery feed with one obvious "next group of genes."
+
+That is not the product. Users can see gene cards through several different paths, and those paths do not share one universal order:
+
+- signed-in personal shelf, driven by the user's discovered genes
+- admin classic full gallery, driven by the public catalog
+- account gallery window, used only for signed-in orders that have a bounded server-side index
+- client-side ordering of already loaded discovered genes
+- classic public gallery orders like votes, random, uniqueness, heaviest, lightest, youngest, oldest, newest, shortest, and A-Z
+
+The forbidden assumption is:
+
+> "We can know the next genes the user will see, so cache warming, pagination, or preloading can be designed around that one future sequence."
+
+That assumption is false. A user can switch mode, switch sort, arrive from restored scroll state, use a personal discovery shelf, or use admin classic gallery mode. A cache design that depends on a single predicted next sequence will break one of those paths.
+
+The product rule is simpler:
+
+**A catalog gene must remain reachable even when rich card data is missing.**
+
+Precomputed rich card data is allowed to make cards faster or nicer. It is not allowed to decide whether a gene exists. The runtime card path is one published card-catalog artifact for the live gallery version. Publication must fail before the live version flips if that artifact does not cover every catalog gene; runtime browsing must not probe per-gene KV objects or compose ad hoc fallback cards.
+
 ### personal shelf / pokedex mode
 
 Who gets it:

@@ -10,20 +10,21 @@ Production deploys go through GitHub Actions in `Brinedew/brinedew-site`:
 - Workflow name: `Deploy Production (Cloudflare Pages + Worker)`
 - Trigger: push to `main`, or manual `workflow_dispatch`
 - Required GitHub repository secrets:
-  - `CLOUDFLARE_API_TOKEN`
+  - `CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN`
   - `CLOUDFLARE_ACCOUNT_ID`
 
-The repository secrets are the durable source of truth for Cloudflare deploy credentials. Local shell credentials are useful for diagnostics, but they are not the authority.
+The one true Cloudflare credential is the account-owned token named `iconoplasm-admin`. In GitHub it lives as `CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN`. Workflows may export it as `CLOUDFLARE_API_TOKEN` because Wrangler and Cloudflare tools use that variable name, but the secret source must stay `CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN`.
 
-## Local Diagnostic Credentials
+Do not use Wrangler OAuth, local auth caches, old personal tokens, or second-choice repository secrets for Iconoplasm deploy, budget, telemetry, D1, Queue, or artifact publication work.
 
-The local workstation may expose:
+## Local Cloudflare Credential
 
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
-- `D:\Coding\Datasets\iconoplasm\logs\cloudflare_auth_cache.json`
+The local workstation has the same one path:
 
-These are diagnostic credentials for Website Ops telemetry. If local Wrangler or the Cloudflare API returns Cloudflare code `10000` for account Queue, billing, token, or permission work, do not build a GitHub Actions workaround and do not add another sync path. Fix the real Cloudflare account credential from the Cloudflare dashboard.
+- `CLOUDFLARE_API_TOKEN` contains the `iconoplasm-admin` token value.
+- `CLOUDFLARE_ACCOUNT_ID` contains `c2f308188824cbf1651a0e999e3ec931`.
+
+`D:\Coding\Datasets\iconoplasm\logs\cloudflare_auth_cache.json` is retired. Do not read it, refresh it, or treat it as a recovery path. If `CLOUDFLARE_API_TOKEN` cannot see the account, D1, Queues, and GraphQL analytics, the environment is broken and the fix is to replace the `iconoplasm-admin` token itself.
 
 ## Cloudflare Account Admin Path
 
@@ -31,11 +32,11 @@ Cloudflare account permission fixes must be done in the Cloudflare dashboard, th
 
 - Dashboard: `https://dash.cloudflare.com/`
 - Account: Brinedew / `c2f308188824cbf1651a0e999e3ec931`
-- User/account area: Profile or Account API Tokens, billing, Workers Queues, and account members as needed.
+- User/account area: Account API Tokens, billing, Workers Queues, and account members as needed.
 
-Do not replace this with a GitHub Actions diagnostic workflow, a repository-secret control plane, or a direct Cloudflare API connector call that bypasses the dashboard. Those are crutches: they hide the broken admin credential path and make the next worker repeat the same mistake.
+Do not replace this with a GitHub Actions diagnostic workflow, a repository-secret control plane, or a direct Cloudflare API connector call that bypasses the dashboard. Do not replace it with Wrangler OAuth, a local cache, or a second Cloudflare token either. Those are crutches: they hide the broken `iconoplasm-admin` credential and make the next worker repeat the same mistake.
 
-If a dashboard step creates, updates, or deletes a persistent Cloudflare API token, pause at the final create/update/delete action for explicit user confirmation. After the dashboard action is complete, record only where the credential lives and what scopes it has. Never commit raw token values.
+The desired token is simple: account-owned, named `iconoplasm-admin`, no expiration, broad account access for Iconoplasm operations. After a token replacement, update the local `CLOUDFLARE_API_TOKEN` value and the GitHub `CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN` repository secret. Never commit raw token values.
 
 For Iconoplasm sync specifically:
 
@@ -45,18 +46,19 @@ For Iconoplasm sync specifically:
 
 ## Required Cloudflare Permissions
 
-The production deploy token must be able to:
+The `iconoplasm-admin` token must be able to:
 
 - deploy Workers scripts for `geneguessr-api` and `the-only-allowed-public-edge-worker-that-must-not-touch-state`
 - deploy Cloudflare Pages project `brinedew-bio`
 - apply D1 migrations for `geneguessr` and `iconoplasm`
 - update worker routes for `brinedew.bio`, including `iconoplasm.brinedew.bio/*`
+- read Cloudflare GraphQL analytics, D1 usage, Workers usage, Durable Objects usage, Queues state, and observability data used by B-507 budget gates
 
-If a token refresh is needed, update the GitHub repository secrets first, then rerun the production workflow. Do not commit raw Cloudflare tokens.
+If the token needs replacement, replace `iconoplasm-admin`, update `CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN`, update local `CLOUDFLARE_API_TOKEN`, then rerun the production workflow. Do not create a parallel token and do not commit raw Cloudflare tokens.
 
 ## Current Sync Credential Lesson
 
-The local shell token on 2026-05-02 could read the `geneguessr-api` worker settings but failed worker deploy/settings writes with Cloudflare auth code `10000`. The Cloudflare API connector also produced `Error: Cloudflare API error: 10000: Authentication error` for the Brinedew account. That is a broken admin credential path, not a sync code problem.
+The local shell token on 2026-05-02 could read the `geneguessr-api` worker settings but failed worker deploy/settings writes with Cloudflare auth code `10000`. The Cloudflare API connector also produced `Error: Cloudflare API error: 10000: Authentication error` for the Brinedew account. That is a broken `iconoplasm-admin` credential path, not a sync code problem.
 
 The correct deploy recovery is:
 
@@ -65,4 +67,4 @@ The correct deploy recovery is:
 3. Confirm the workflow reaches `Deploy the only allowed internal stateful worker (production)`.
 4. Verify live Website Ops from the GUI.
 
-The correct Cloudflare account-admin recovery is different: use the Cloudflare dashboard GUI, fix the token/scopes/billing/Queue allowance there, then document the resulting credential location and scopes without exposing secrets.
+The correct Cloudflare account-admin recovery is different: use the Cloudflare dashboard GUI, replace `iconoplasm-admin` if needed, update the two secret locations, and verify the one token can read the account, D1, Queues, and analytics without falling back to anything else.

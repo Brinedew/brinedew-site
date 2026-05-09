@@ -4761,6 +4761,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       loadNextGalleryPage()
     }
 
+    // This is not a generic infinite-feed loader. Iconoplasm has several real
+    // card paths: admin classic gallery, bounded account windows, and local
+    // discovery slices that may ask for mobile rich-card VMs. Do not design
+    // preloading or cache warming around one universal "next genes" order.
     function loadNextGalleryPage() {
       if (renderDisposed) return
       if (galleryState.loading || (galleryState.ready && !galleryState.hasMore)) return
