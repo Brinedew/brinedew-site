@@ -39,7 +39,7 @@ test("account collection first-card path uses a bounded gallery window for suppo
 
   assert.match(app, /function fetchAccountGalleryWindow\(order, cursor, limit\)/)
   assert.match(app, /\/api\/iconoplasm\/account-gallery-window\?order=/)
-  assert.match(firstWindowBlock, /accountGalleryWindowOrderSupported\(galleryState\.order\)/)
+  assert.match(firstWindowBlock, /accountGalleryWindowAvailable\(galleryState\.order\)/)
   assert.match(firstWindowBlock, /fetchAccountGalleryWindow\(/)
   assert.doesNotMatch(
     firstWindowBlock,
@@ -51,6 +51,30 @@ test("account collection first-card path uses a bounded gallery window for suppo
     /fetchDiscoveryState\(galleryState\.order, galleryState\.seed\)/,
     "supported account-window orders should not fetch the whole discovery shelf before first cards",
   )
+})
+
+test("guest collection does not call the signed-in account window before auth resolves", async () => {
+  const app = await readFile(appPath, "utf8")
+  const helperStart = app.indexOf("function accountGalleryWindowAvailable(order)")
+  const helperEnd = app.indexOf("function fetchAccountGalleryWindow", helperStart)
+  assert.notEqual(helperStart, -1, "missing account window availability helper")
+  assert.notEqual(helperEnd, -1, "missing account window availability boundary")
+  const helperBlock = app.slice(helperStart, helperEnd)
+
+  assert.match(helperBlock, /!!currentUser/)
+  assert.match(helperBlock, /accountGalleryWindowOrderSupported\(order\)/)
+
+  const loaderStart = app.indexOf("function loadNextGalleryPage()")
+  const loaderEnd = app.indexOf("ensureCollectionReady()", loaderStart)
+  assert.notEqual(loaderStart, -1, "missing loadNextGalleryPage")
+  assert.notEqual(loaderEnd, -1, "missing collection branch boundary")
+  const firstWindowBlock = app.slice(loaderStart, loaderEnd)
+  assert.doesNotMatch(
+    firstWindowBlock,
+    /accountGalleryWindowOrderSupported\(galleryState\.order\)/,
+    "guest/unknown auth state must not enter the signed-in account window path",
+  )
+  assert.match(firstWindowBlock, /accountGalleryWindowAvailable\(galleryState\.order\)/)
 })
 
 test("account collection single-flights duplicate window requests", async () => {

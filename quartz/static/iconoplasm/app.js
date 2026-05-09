@@ -301,6 +301,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return resolved === "newest" || resolved === "symbol"
   }
 
+  function accountGalleryWindowAvailable(order) {
+    return !!currentUser && accountGalleryWindowOrderSupported(order)
+  }
+
   function fetchAccountGalleryWindow(order, cursor, limit) {
     var resolvedOrder = normalizeHomeCollectionOrder(order || HOME_COLLECTION_DEFAULT_ORDER)
     var resolvedCursor = String(cursor || "").trim()
@@ -4435,7 +4439,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         }
         return GALLERY_PAGE_SIZE
       }
-      if (accountGalleryWindowOrderSupported(galleryState.order)) {
+      if (accountGalleryWindowAvailable(galleryState.order)) {
         return currentAccountGalleryWindowLimit()
       }
       if (galleryState.offset === 0) return HOME_COLLECTION_INITIAL_PAGE_SIZE
@@ -4719,7 +4723,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       galleryState.prefillTarget = Math.max(
         useClassicGallery
           ? GALLERY_PAGE_SIZE
-          : accountGalleryWindowOrderSupported(resolvedOrder)
+          : accountGalleryWindowAvailable(resolvedOrder)
             ? currentAccountGalleryWindowLimit()
             : HOME_COLLECTION_PAGE_SIZE,
         Number((restoreConfig && restoreConfig.loadedCount) || 0) || 0,
@@ -4858,7 +4862,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           })
         return
       }
-      if (accountGalleryWindowOrderSupported(galleryState.order)) {
+      if (accountGalleryWindowAvailable(galleryState.order)) {
         initialSharedSettingsPromise
           .then(function () {
             if (renderDisposed || requestId !== activeGalleryRequest) return null
