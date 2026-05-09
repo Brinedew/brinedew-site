@@ -701,3 +701,29 @@ test("extension popup account tab replaces sign-in with signed-in notice and com
     "the signed-in account state should keep the muted popup style with a small red sign-out control",
   )
 })
+
+test("Iconoplasm home keeps guest Discord login in the starter-card flow", () => {
+  const appSource = readUtf8("./quartz/static/iconoplasm/app.js")
+  const stylesSource = readUtf8("./quartz/static/iconoplasm/styles.css")
+
+  assert.doesNotMatch(
+    appSource,
+    /id="icono-gallery-auth"/,
+    "home toolbar should not reserve an out-of-place Discord login slot",
+  )
+  assert.match(
+    appSource,
+    /function buildGuestDiscoveryLoginCardMarkup\(\)[\s\S]*Log in with Discord to track discovered genes[\s\S]*>Log in<\/a>/,
+    "guest login card should use the requested short copy and a direct Log in button",
+  )
+  assert.match(
+    appSource,
+    /galleryState\.offset >= GUEST_STARTER_GENES\.length[\s\S]*appendGuestDiscoveryLoginCard\(grid\)/,
+    "guest login card should be appended after the three starter gene cards render",
+  )
+  assert.match(
+    stylesSource,
+    /\.icono-guest-login-card[\s\S]*display: flex/,
+    "guest login prompt should be styled as an inline card in the home gene-card flow",
+  )
+})

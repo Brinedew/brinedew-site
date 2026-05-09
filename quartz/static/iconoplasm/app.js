@@ -1441,7 +1441,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       homeCollectionOptionsMarkup() +
       "</select>" +
       "</label>" +
-      '<div class="icono-gallery-auth" id="icono-gallery-auth" hidden></div>' +
       '<div class="icono-gallery-install" id="icono-gallery-install"></div>' +
       "</div>" +
       "</div>" +
@@ -1609,7 +1608,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         void updateSharedUserState(user)
       },
     })
-    renderHomeToolbarAuth()
     renderHomeInstallCta()
   }
 
@@ -2114,23 +2112,31 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
   }
 
-  function buildHomeToolbarAuthMarkup() {
-    if (!hasResolvedAuthState || currentUser) return ""
+  function buildGuestDiscoveryLoginCardMarkup() {
     return (
-      '<a class="icono-home-auth-link icono-toolbar-login" href="' +
+      '<article class="icono-card icono-guest-login-card" data-icono-guest-login-card>' +
+      '<div class="icono-home-auth-copy">' +
+      '<div class="icono-home-auth-kicker">guest mode</div>' +
+      '<div class="icono-home-auth-title">Log in with Discord to track discovered genes</div>' +
+      '<div class="icono-home-auth-note">Your starter cards stay visible; login turns future finds into a synced collection.</div>' +
+      "</div>" +
+      '<a class="icono-home-auth-link icono-guest-login-card-button" href="' +
       esc(voteLoginUrl()) +
-      // Keep vocabulary unified with vote buttons ("Approve blot" / "Reject blot")
-      // and the candidate-blots header. "gene bricks" was an orphan jargon term.
-      '" aria-label="Discord login to rate blots">Discord Login</a>'
+      '">Log in</a>' +
+      "</article>"
     )
   }
 
-  function renderHomeToolbarAuth() {
-    var slot = document.getElementById("icono-gallery-auth")
-    if (!slot) return
-    var markup = buildHomeToolbarAuthMarkup()
-    slot.hidden = !markup
-    slot.innerHTML = markup
+  function appendGuestDiscoveryLoginCard(container) {
+    if (!container || currentUser || container.querySelector("[data-icono-guest-login-card]")) {
+      return null
+    }
+    var wrapper = document.createElement("div")
+    wrapper.innerHTML = buildGuestDiscoveryLoginCardMarkup()
+    var card = wrapper.firstElementChild
+    if (!card) return null
+    container.appendChild(card)
+    return card
   }
 
   function renderTooltipMetaSkeletonHtml() {
@@ -4347,7 +4353,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (!hasExistingShell) {
       root.innerHTML = buildHomeShellMarkup(homeLayout)
     }
-    renderHomeToolbarAuth()
     loadInstallReleaseMetadata()
     renderHomeInstallCta()
     syncPublicInventoryStat()
@@ -4998,12 +5003,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               var newCards = appendGrid(grid, resolvedItems, galleryState.items.length, homeLayout)
               galleryState.items = galleryState.items.concat(resolvedItems)
               galleryState.offset += pageEntries.length
+              var guestLoginCard = null
+              if (!galleryState.authenticated && galleryState.offset >= GUEST_STARTER_GENES.length) {
+                guestLoginCard = appendGuestDiscoveryLoginCard(grid)
+              }
               if (homeLayout === "masonry") {
-                applyHomeMasonry(grid, newCards)
+                applyHomeMasonry(grid, guestLoginCard ? newCards.concat([guestLoginCard]) : newCards)
                 setupOrderedPortraitPrefetch(grid, galleryState.items)
                 void hydrateBrickCards(newCards).then(function () {
                   warmBrickCardImages(galleryState.items)
-                  applyHomeMasonry(grid, newCards)
+                  applyHomeMasonry(
+                    grid,
+                    guestLoginCard ? newCards.concat([guestLoginCard]) : newCards,
+                  )
                 })
               } else {
                 destroyHomeMasonry()
