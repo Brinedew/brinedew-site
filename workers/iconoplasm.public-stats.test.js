@@ -60,7 +60,7 @@ test("public stats expose named candidate and canonical counts without D1", asyn
   assert.equal(payload.gene_count, 19023)
   assert.equal(payload.canonical_blot_count, 19090)
   assert.equal(payload.generated_candidate_blot_count, 39548)
-  assert.equal(payload.public_copy, "19,023 genes · 39,548 generated candidate blots")
+  assert.equal(payload.public_copy, "19,023 genes · 39,548 AI blots")
   assert.equal(payload.published_live_portraits, undefined)
   assert.equal(payload.portrait_hash, undefined)
 })

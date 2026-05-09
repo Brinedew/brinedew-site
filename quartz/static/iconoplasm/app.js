@@ -246,7 +246,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       stats.geneCount.toLocaleString() +
       " genes · " +
       stats.generatedCandidateBlotCount.toLocaleString() +
-      " generated candidate blots"
+      " AI blots"
     )
   }
 

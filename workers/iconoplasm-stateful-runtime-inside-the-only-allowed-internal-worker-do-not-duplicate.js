@@ -346,9 +346,7 @@ function numberOrInfinity(value) {
 
 function readIconoplasmLiveBudgetSnapshot(env) {
   const raw =
-    env?.ICONOPLASM_LIVE_BUDGET_SNAPSHOT_FOR_TEST ||
-    env?.ICONOPLASM_LIVE_BUDGET_SNAPSHOT ||
-    null
+    env?.ICONOPLASM_LIVE_BUDGET_SNAPSHOT_FOR_TEST || env?.ICONOPLASM_LIVE_BUDGET_SNAPSHOT || null
   if (!raw) return null
   if (typeof raw === "object") return raw
   try {
@@ -377,7 +375,11 @@ export function iconoplasmCardCatalogBudgetPreflightStatus(snapshot) {
     ["worker_requests", numberOrInfinity(snapshot?.workers?.requests_remaining), 1],
     ["worker_cpu_ms", numberOrInfinity(snapshot?.workers?.cpu_ms_remaining), 1],
     ["durable_object_requests", numberOrInfinity(snapshot?.durable_objects?.requests_remaining), 0],
-    ["durable_object_rows_written", numberOrInfinity(snapshot?.durable_objects?.rows_written_remaining), 0],
+    [
+      "durable_object_rows_written",
+      numberOrInfinity(snapshot?.durable_objects?.rows_written_remaining),
+      0,
+    ],
     ["logs_events", numberOrInfinity(snapshot?.logs?.events_remaining), 1],
   ].map(([name, remaining, required]) => ({
     name,
@@ -408,9 +410,7 @@ function assertIconoplasmCardCatalogBudgetPreflight(env) {
   if (required !== "1" && required !== "true") return
   const status = iconoplasmCardCatalogBudgetPreflightStatus(readIconoplasmLiveBudgetSnapshot(env))
   if (status.ok) return
-  throw new Error(
-    `Iconoplasm card catalog budget preflight failed: ${status.failures.join(", ")}`,
-  )
+  throw new Error(`Iconoplasm card catalog budget preflight failed: ${status.failures.join(", ")}`)
 }
 
 function iconoplasmBudgetRouteFamilyFromPath(path) {
@@ -5545,7 +5545,7 @@ function publicStatsCopy(payload) {
   const genes = Math.max(0, Number(payload?.gene_count || 0))
   const candidates = Math.max(0, Number(payload?.generated_candidate_blot_count || 0))
   if (!genes || !candidates) return ""
-  return `${formatPublicStatsNumber(genes)} genes · ${formatPublicStatsNumber(candidates)} generated candidate blots`
+  return `${formatPublicStatsNumber(genes)} genes · ${formatPublicStatsNumber(candidates)} AI blots`
 }
 
 async function publicStatsPayloadFromSummary(env, summary) {
@@ -16343,9 +16343,10 @@ async function handleMobileCardManifest(request, env) {
   }
   const versionInfo = await currentMobileCardSnapshotVersion(env)
   const requestedVersion = sanitizeText(body.version || "", 128)
-  const snapshotVersion = requestedVersion && requestedVersion === versionInfo.current
-    ? requestedVersion
-    : versionInfo.current
+  const snapshotVersion =
+    requestedVersion && requestedVersion === versionInfo.current
+      ? requestedVersion
+      : versionInfo.current
   if (!symbols.length) {
     return json(
       {
