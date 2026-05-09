@@ -945,6 +945,11 @@ test("Iconoplasm home keeps guest Discord login in the starter-card flow", () =>
   )
   assert.match(
     appSource,
+    /function buildCollectionEmptyMarkup\(collectionState\)[\s\S]*currentUser[\s\S]*COMMUNITY_URL[\s\S]*Join Discord/,
+    "logged-in empty collection states should also point users to the Discord server invite",
+  )
+  assert.match(
+    appSource,
     /renderCandidateGallery\(g\)[\s\S]*buildDiscordActionCardMarkup\(\)/,
     "gene pages should end with the same Discord action card",
   )

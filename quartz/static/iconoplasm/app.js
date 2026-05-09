@@ -1332,7 +1332,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   }
 
   function buildCollectionEmptyMarkup(collectionState) {
-    var isAuthenticated = !!(collectionState && collectionState.authenticated)
+    var isAuthenticated = !!(currentUser || (collectionState && collectionState.authenticated))
     var title = isAuthenticated ? "No genes discovered yet" : "Your collection starts after login"
     var body = isAuthenticated
       ? "Hover a gene in the extension for about a second, then come back here. Your shelf will fill itself in."
@@ -1343,10 +1343,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var actions =
       '<div class="icono-empty-actions">' +
       (isAuthenticated
-        ? ""
+        ? '<a class="icono-home-auth-link icono-empty-link" href="' +
+          esc(COMMUNITY_URL) +
+          '" target="_blank" rel="noopener noreferrer">Join Discord</a>'
         : '<a class="icono-home-auth-link icono-empty-link" href="' +
           esc(voteLoginUrl()) +
-          '">Discord Login</a>') +
+          '">Log in with Discord</a>') +
       '<a class="icono-empty-link icono-empty-link--subtle" href="https://brinedew.bio/posts/Iconoplasm-FAQ.html">Read FAQ</a>' +
       "</div>"
     return (
