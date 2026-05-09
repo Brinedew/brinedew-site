@@ -216,8 +216,12 @@ test("DO NOT DELETE: card sex labels use Mars and Venus symbols", async () => {
 
   const maleRows = shared.collectTooltipMetaRows({ essence: { sex: "male" } })
   assert.ok(
-    maleRows.some((row) => row.character === "♂"),
-    "simple card metadata should render male as the Mars symbol",
+    maleRows.some(
+      (row) =>
+        row.characterIsHtml &&
+        /data-icono-sex-symbol="mars"[\s\S]*<svg/.test(String(row.character || "")),
+    ),
+    "simple card metadata should render male as the vector Mars symbol, not a fallback font glyph",
   )
 
   const femaleHtml = shared.renderLabLabelCardHtml({
@@ -227,15 +231,15 @@ test("DO NOT DELETE: card sex labels use Mars and Venus symbols", async () => {
   })
   assert.match(
     femaleHtml,
-    /icono-label-hand-note--sex[\s\S]*♀/,
-    "lab-label card should render female as the Venus symbol",
+    /icono-label-hand-note--sex[\s\S]*data-icono-sex-symbol="venus"[\s\S]*<svg/,
+    "lab-label card should render female as the vector Venus symbol, not a fallback font glyph",
   )
 
   const litSource = readUtf8("./iconoplasm-extension/generated/lit-archival-card.js")
   assert.match(
     litSource,
-    /function displaySexSymbol\(value\)[\s\S]*male[\s\S]*(♂|\\u2642)[\s\S]*female[\s\S]*(♀|\\u2640)/,
-    "lit archival card should preserve the same direct payload sex-symbol mapping",
+    /function sexSymbolHtml\(value, extraClass\)[\s\S]*data-icono-sex-symbol[\s\S]*<svg/,
+    "lit archival card should preserve the same vector sex-symbol rendering",
   )
 })
 

@@ -27,13 +27,36 @@ function normalizeHandwrittenText(value) {
   }
 }
 
-function displaySexSymbol(value) {
+function sexSymbolKind(value) {
   var text = String(value || "")
     .trim()
     .toLowerCase()
-  if (text === "male") return "♂"
-  if (text === "female") return "♀"
-  return String(value || "").trim()
+  if (text === "male") return "mars"
+  if (text === "female") return "venus"
+  return ""
+}
+
+function sexSymbolHtml(value, extraClass) {
+  var kind = sexSymbolKind(value)
+  if (!kind) return ""
+  var label = kind === "mars" ? "male" : "female"
+  var classes = "icono-sex-symbol icono-sex-symbol--" + kind
+  if (extraClass) classes += " " + extraClass
+  var paths =
+    kind === "mars"
+      ? '<circle cx="9" cy="11" r="5.2"></circle><path d="M12.8 7.2 19 1"></path><path d="M14.4 1H19v4.6"></path>'
+      : '<circle cx="10" cy="8" r="5.2"></circle><path d="M10 13.2v7"></path><path d="M6.6 16.7h6.8"></path>'
+  return (
+    '<span class="' +
+    classes +
+    '" data-icono-sex-symbol="' +
+    kind +
+    '" role="img" aria-label="' +
+    label +
+    '"><svg viewBox="0 0 20 22" aria-hidden="true" focusable="false">' +
+    paths +
+    "</svg></span>"
+  )
 }
 
 function normalizeCardModelHandwriting(payload) {
@@ -43,7 +66,7 @@ function normalizeCardModelHandwriting(payload) {
   normalized.displayedFamilyFeature = normalizeHandwrittenText(safePayload.displayedFamilyFeature)
   normalized.handwrittenWeight = normalizeHandwrittenText(safePayload.handwrittenWeight)
   normalized.politicalNote = normalizeHandwrittenText(safePayload.politicalNote)
-  normalized.sexNote = normalizeHandwrittenText(displaySexSymbol(safePayload.sexNote))
+  normalized.sexNote = normalizeHandwrittenText(safePayload.sexNote)
   var rawStylePairs = Array.isArray(safePayload.stylePairs) ? safePayload.stylePairs : []
   normalized.stylePairs = [0, 1, 2, 3, 4].map(function (index) {
     var safePair = asObject(rawStylePairs[index])
@@ -143,7 +166,9 @@ function categoryFieldTemplate(selectedCategory) {
 }
 
 function sexNoteTemplate(sexNote, selectedCategory) {
-  var note = displaySexSymbol(sexNote)
+  var note = sexSymbolKind(sexNote)
+    ? sexSymbolHtml(sexNote, "icono-sex-symbol--hand")
+    : normalizeHandwrittenText(sexNote)
   if (!note) return nothing
   var categoryKey = String(selectedCategory || "")
     .trim()
@@ -151,7 +176,7 @@ function sexNoteTemplate(sexNote, selectedCategory) {
   var noteClass =
     "icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-" +
     (categoryKey || "unselected")
-  return html`<div class=${noteClass}>${note}</div>`
+  return html`<div class=${noteClass}>${unsafeHTML(note)}</div>`
 }
 
 function alignmentFieldTemplate(molecularAlignment, politicalNote) {
