@@ -14756,6 +14756,174 @@ async function allCatalogSymbolsForCardCatalogArtifact(env) {
   return Array.from(catalogCache.bySymbol.keys()).sort()
 }
 
+function parseJsonTextList(raw) {
+  try {
+    const parsed = JSON.parse(String(raw || "[]"))
+    if (!Array.isArray(parsed)) return []
+    return parsed.map((value) => String(value || "").trim()).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+function cardCatalogEssenceFromRow(row) {
+  const aesthetics = parseJsonTextList(row?.aesthetics_json)
+  const aestheticsOrigin = parseJsonTextList(row?.aesthetics_origin_json)
+  const politicsOrigin = parseJsonTextList(row?.politics_origin_json)
+  return {
+    ...(row?.weight_kg != null ? { weight_kg: Number(row.weight_kg) } : {}),
+    ...(row?.height_cm != null ? { height_cm: Number(row.height_cm) } : {}),
+    ...(row?.sex ? { sex: String(row.sex) } : {}),
+    ...(row?.age ? { age: String(row.age) } : {}),
+    ...(row?.age_years != null ? { age_years: Number(row.age_years) } : {}),
+    ...(row?.faction ? { faction: String(row.faction), politics: String(row.faction) } : {}),
+    ...(row?.skin_hex ? { skin_hex: String(row.skin_hex) } : {}),
+    ...(row?.skin_name ? { skin_name: String(row.skin_name) } : {}),
+    ...(row?.tissue_tau != null ? { tissue_tau: Number(row.tissue_tau) } : {}),
+    ...(row?.loeuf != null ? { loeuf: Number(row.loeuf) } : {}),
+    ...(row?.constraint_percentile != null
+      ? { constraint_percentile: Number(row.constraint_percentile) }
+      : {}),
+    ...(aesthetics.length ? { aesthetics } : {}),
+    ...(aestheticsOrigin.length ? { aesthetics_origin: aestheticsOrigin } : {}),
+    ...(politicsOrigin.length ? { politics_origin: politicsOrigin } : {}),
+    ...(row?.family_surname ? { family_surname: String(row.family_surname) } : {}),
+    ...(row?.family_members != null ? { family_members: Number(row.family_members) } : {}),
+    ...(row?.family_feature ? { family_feature: String(row.family_feature) } : {}),
+    ...(row?.essence_full_name ? { name: String(row.essence_full_name) } : {}),
+  }
+}
+
+function cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }) {
+  const symbol = normalizeSymbol(row?.gene_symbol || "")
+  if (!symbol) return null
+  const assetSha = normalizeSha256(row?.asset_sha256 || "")
+  const essence = cardCatalogEssenceFromRow(row)
+  const essenceFullName = sanitizeText(row?.essence_full_name || "", 255)
+  const catalogFullName = sanitizeText(row?.catalog_full_name || "", 255)
+  const fullName = essenceFullName || catalogFullName || symbol
+  const portrait = assetSha
+    ? {
+        status: "published",
+        hero_url: adminPortraitUrl(base, assetSha, "full"),
+        medium_url: adminPortraitUrl(base, assetSha, "medium"),
+        thumb_url: adminPortraitUrl(base, assetSha, "thumb"),
+        width: optionalInt(row?.width),
+        height: optionalInt(row?.height),
+        asset_sha256: assetSha,
+        candidate_image_id: optionalInt(row?.candidate_image_id),
+        vision_id: sanitizeText(row?.vision_id || "", 128) || null,
+        emulsion_id: publicEmulsionIdForRow(row) || null,
+        emulsion_label: generationRequestVisionLabel(row) || null,
+        artist_id: publicArtistIdForRow(row) || null,
+      }
+    : {
+        status: "missing",
+        hero_url: null,
+        medium_url: null,
+        thumb_url: null,
+        width: null,
+        height: null,
+        asset_sha256: null,
+        candidate_image_id: null,
+        emulsion_id: null,
+        emulsion_label: null,
+        artist_id: null,
+      }
+  return {
+    api_version: PUBLIC_API_VERSION,
+    schema_version: API_SCHEMA_VERSION,
+    canonical_key: "symbol",
+    canonical_symbol: symbol,
+    symbol,
+    full_name: fullName,
+    color: normalizeHexColor(row?.color_hex || "") || null,
+    ...(row?.weight_kg != null ? { weight_kg: Number(row.weight_kg) } : {}),
+    ...(row?.tissue_tau != null ? { tissue_tau: Number(row.tissue_tau) } : {}),
+    ...(row?.loeuf != null ? { loeuf: Number(row.loeuf) } : {}),
+    ...(row?.constraint_percentile != null
+      ? { constraint_percentile: Number(row.constraint_percentile) }
+      : {}),
+    essence: {
+      ...essence,
+      name: fullName,
+      ...(essence.sex
+        ? {}
+        : row?.tmh != null
+          ? { sex: coerceBoolean(row.tmh, false) ? "Male" : "Female" }
+          : {}),
+      ...(essence.sex_origin
+        ? {}
+        : row?.tmh != null
+          ? { sex_origin: [coerceBoolean(row.tmh, false) ? "Transmembrane" : "Soluble"] }
+          : {}),
+    },
+    ...(row?.manifestation ? { manifestation: String(row.manifestation) } : {}),
+    portrait,
+    resolved_from: "published_card_catalog_bulk",
+    snapshot_version: snapshotVersion,
+  }
+}
+
+async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, snapshotVersion }) {
+  if (!env?.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
+  const base = portraitBase(new URL(requestUrl || "https://iconoplasm.brinedew.bio/"), env)
+  const symbolList = Array.isArray(symbols)
+    ? normalizeRequestedSymbols(symbols, MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT)
+    : []
+  const sql = `SELECT
+       gc.gene_symbol,
+       gc.full_name AS catalog_full_name,
+       gc.color_hex,
+       gc.tmh,
+       ge.full_name AS essence_full_name,
+       ge.weight_kg,
+       ge.height_cm,
+       ge.sex,
+       ge.age,
+       ge.age_years,
+       ge.faction,
+       ge.skin_hex,
+       ge.skin_name,
+       ge.tissue_tau,
+       ge.loeuf,
+       ge.constraint_percentile,
+       ge.aesthetics_json,
+       ge.aesthetics_origin_json,
+       ge.politics_origin_json,
+       ge.family_surname,
+       ge.family_members,
+       ge.family_feature,
+       ge.manifestation,
+       ps.current_asset_sha256 AS asset_sha256,
+       pa.width,
+       pa.height,
+       pa.vision_id,
+       pa.candidate_image_id,
+       pa.emulsion_id,
+       pa.workflow_id,
+       pa.workflow_label,
+       pa.workflow_path,
+       pa.prompt_version,
+       pa.variant_slot
+     FROM icono_gene_catalog gc
+     LEFT JOIN icono_gene_essence ge
+       ON ge.gene_symbol = gc.gene_symbol
+     LEFT JOIN icono_publish_state ps
+       ON ps.gene_symbol = gc.gene_symbol
+     LEFT JOIN icono_portrait_assets pa
+       ON pa.gene_symbol = ps.gene_symbol
+      AND pa.asset_sha256 = ps.current_asset_sha256
+     ${symbolList.length ? `WHERE gc.gene_symbol IN (${symbolList.map(() => "?").join(",")})` : ""}
+     ORDER BY gc.gene_symbol ASC`
+  const stmt = env.ICONOPLASM_DB.prepare(sql)
+  const result = symbolList.length ? await stmt.bind(...symbolList).all() : await stmt.all()
+  const rows = Array.isArray(result?.results) ? result.results : []
+  return rows
+    .map((row) => cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }))
+    .filter(Boolean)
+}
+
 async function mobileCardSnapshotWarmSymbolsForInvalidation(
   env,
   { symbols = [], fullRebuild = false } = {},
@@ -16050,44 +16218,30 @@ async function publishCardCatalogArtifact(
   assertIconoplasmCardCatalogBudgetPreflight(env)
   const artifactVersion = String(version || "").trim()
   if (!artifactVersion) throw new Error("Card catalog artifact version missing")
-  const catalogSymbols = Array.isArray(symbols)
+  const requestedSymbols = Array.isArray(symbols)
     ? normalizeRequestedSymbols(symbols, MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT)
-    : await allCatalogSymbolsForCardCatalogArtifact(env)
-  if (!catalogSymbols.length && !Array.isArray(symbols)) {
-    const catalogRows = await loadCatalogRowsForPublish(env)
-    for (const gene of catalogRows) {
-      const symbol = normalizeSymbol(gene?.s || "")
-      if (symbol) catalogSymbols.push(symbol)
-    }
+    : null
+  if (Array.isArray(requestedSymbols) && !requestedSymbols.length) {
+    throw new Error("Card catalog has no catalog symbols")
   }
+  const records = await cardCatalogRecordsForArtifact(env, {
+    requestUrl,
+    symbols: requestedSymbols,
+    snapshotVersion: artifactVersion,
+  })
+  const catalogSymbols = Array.isArray(requestedSymbols)
+    ? requestedSymbols
+    : records.map((record) => normalizeSymbol(record?.symbol || "")).filter(Boolean)
   if (!catalogSymbols.length) throw new Error("Card catalog has no catalog symbols")
-
-  const url = new URL(requestUrl || "https://iconoplasm.brinedew.bio/")
-  const fields = [
-    "symbol",
-    "full_name",
-    "color",
-    "portrait",
-    "essence",
-    "manifestation",
-    "weight_kg",
-    "protein_length_aa",
-    "molecular_weight_kda",
-    "first_publication_year",
-    "tissue_tau",
-    "loeuf",
-    "constraint_percentile",
-  ].join(",")
   const cards = []
   const missing = []
   const seen = new Set()
-  for (const symbol of catalogSymbols) {
-    const record = await geneRecord(env, url, symbol, { fields })
-    const projected = projectGeneRecord(record, fields)
-    const vm = buildMobileCardVMFromGeneRecord(projected, {
+  for (const record of records) {
+    const vm = buildMobileCardVMFromGeneRecord(record, {
       snapshotVersion: artifactVersion,
       source: "published_card_catalog",
     })
+    const symbol = normalizeSymbol(record?.symbol || "")
     if (!assertCompleteMobileCardVM(vm)) {
       missing.push(symbol)
       continue

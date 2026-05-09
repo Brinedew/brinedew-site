@@ -46,6 +46,37 @@ class FakeStatement {
 
   async all() {
     if (
+      this.sql.includes("FROM icono_gene_catalog gc") &&
+      this.sql.includes("LEFT JOIN icono_gene_essence ge")
+    ) {
+      let symbols = Array.from(this.db.catalog.keys()).sort()
+      if (this.sql.includes("WHERE gc.gene_symbol IN")) {
+        const requested = new Set(this.args.map((arg) => String(arg || "").trim().toUpperCase()))
+        symbols = symbols.filter((symbol) => requested.has(symbol))
+      }
+      return {
+        results: symbols.map((symbol) => {
+          const catalog = this.db.catalog.get(symbol) || {}
+          const essence = this.db.essence.get(symbol) || {}
+          const portrait = this.db.published.get(symbol) || {}
+          return {
+            gene_symbol: symbol,
+            catalog_full_name: catalog.full_name,
+            color_hex: catalog.color_hex,
+            tmh: catalog.tmh,
+            essence_full_name: essence.full_name,
+            ...essence,
+            asset_sha256: portrait.asset_sha256,
+            width: portrait.width,
+            height: portrait.height,
+            vision_id: portrait.vision_id,
+            candidate_image_id: portrait.candidate_image_id,
+            emulsion_id: portrait.emulsion_id,
+          }
+        }),
+      }
+    }
+    if (
       this.sql.includes("SELECT gene_symbol") &&
       this.sql.includes("FROM icono_gene_catalog") &&
       this.sql.includes("WHERE gene_symbol > ?")
