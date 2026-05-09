@@ -186,12 +186,12 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   background: color-mix(in srgb, var(--light) 68%, white 32%);
 }
 
-.icono-guest-login-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem;
+.icono-card.icono-guest-login-card {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 0.75rem;
+  padding: 1.05rem 1.1rem;
   border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
   border-radius: var(--icono-radius-lg);
   background:
@@ -212,20 +212,32 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 
 .icono-guest-login-card-button {
   box-sizing: border-box;
+  width: fit-content;
+  min-width: 10.9rem;
   border-radius: var(--icono-radius-pill);
-  min-height: 2.2rem;
-  padding: 0.25rem 0.78rem;
+  min-height: 2.15rem;
+  padding: 0.32rem 0.9rem;
+  border-color: color-mix(in srgb, var(--dark) 72%, var(--accent) 28%);
+  background: color-mix(in srgb, var(--dark) 88%, var(--accent) 12%);
+  color: var(--light);
   font-family: "IBM Plex Mono", var(--codeFont, monospace);
   font-size: 0.88rem;
-  line-height: 1;
+  font-weight: 600;
+  line-height: 1.05;
 }
 
 .icono-guest-login-card-title {
+  max-width: 24ch;
   font-family: "IBM Plex Mono", var(--codeFont, monospace);
-  font-size: 1.2rem;
+  font-size: 1.12rem;
   font-weight: 600;
-  line-height: 1.18;
+  line-height: 1.22;
   letter-spacing: 0;
+}
+
+.icono-guest-login-card-button:hover {
+  background: color-mix(in srgb, var(--dark) 78%, var(--accent) 22%);
+  color: var(--light);
 }
 
 .icono-emulsion-meta {
@@ -2722,6 +2734,10 @@ html[data-theme="dark"] .icono-card--brick {
 
   .icono-grid[data-layout="masonry"] .icono-guest-login-card {
     width: calc(50% - 6px);
+  }
+
+  .icono-guest-login-card .icono-guest-login-card-button {
+    width: fit-content;
   }
 
   .icono-gene-request-surface {
