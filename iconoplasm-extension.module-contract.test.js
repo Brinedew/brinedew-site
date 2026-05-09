@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { readFileSync } from "node:fs"
+import { brotliDecompressSync } from "node:zlib"
 
 function readUtf8(path) {
   return readFileSync(new URL(path, import.meta.url), "utf8")
@@ -8,6 +9,147 @@ function readUtf8(path) {
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+const woff2KnownTags = [
+  "cmap",
+  "head",
+  "hhea",
+  "hmtx",
+  "maxp",
+  "name",
+  "OS/2",
+  "post",
+  "cvt ",
+  "fpgm",
+  "glyf",
+  "loca",
+  "prep",
+  "CFF ",
+  "VORG",
+  "EBDT",
+  "EBLC",
+  "gasp",
+  "hdmx",
+  "kern",
+  "LTSH",
+  "PCLT",
+  "VDMX",
+  "vhea",
+  "vmtx",
+  "BASE",
+  "GDEF",
+  "GPOS",
+  "GSUB",
+  "EBSC",
+  "JSTF",
+  "MATH",
+  "CBDT",
+  "CBLC",
+  "COLR",
+  "CPAL",
+  "SVG ",
+  "sbix",
+  "acnt",
+  "avar",
+  "bdat",
+  "bloc",
+  "bsln",
+  "cvar",
+  "fdsc",
+  "feat",
+  "fmtx",
+  "fvar",
+  "gvar",
+  "hsty",
+  "just",
+  "lcar",
+  "mort",
+  "morx",
+  "opbd",
+  "prop",
+  "trak",
+  "Zapf",
+  "Silf",
+  "Glat",
+  "Gloc",
+  "Feat",
+  "Sill",
+]
+
+function readUIntBase128(buffer, cursor) {
+  let value = 0
+  for (let i = 0; i < 5; i += 1) {
+    const byte = buffer[cursor.offset]
+    cursor.offset += 1
+    if (i === 0 && byte === 0x80) throw new Error("Invalid WOFF2 UIntBase128 leading zero")
+    value = (value << 7) | (byte & 0x7f)
+    if ((byte & 0x80) === 0) return value
+  }
+  throw new Error("Invalid WOFF2 UIntBase128 length")
+}
+
+function readWoff2Table(buffer, tableTag) {
+  assert.equal(buffer.toString("ascii", 0, 4), "wOF2", "expected a WOFF2 font")
+  const numTables = buffer.readUInt16BE(12)
+  const totalCompressedSize = buffer.readUInt32BE(20)
+  const cursor = { offset: 48 }
+  const tables = []
+
+  for (let i = 0; i < numTables; i += 1) {
+    const flags = buffer[cursor.offset]
+    cursor.offset += 1
+    const tagIndex = flags & 0x3f
+    const tag =
+      tagIndex === 0x3f
+        ? buffer.toString("ascii", cursor.offset, (cursor.offset += 4))
+        : woff2KnownTags[tagIndex]
+    const transformVersion = flags >> 6
+    const originalLength = readUIntBase128(buffer, cursor)
+    const transformed =
+      tag === "glyf" || tag === "loca" ? transformVersion !== 3 : transformVersion !== 0
+    const transformedLength = transformed ? readUIntBase128(buffer, cursor) : originalLength
+    tables.push({ tag, originalLength, transformedLength })
+  }
+
+  const compressedData = buffer.subarray(cursor.offset, cursor.offset + totalCompressedSize)
+  const decompressed = brotliDecompressSync(compressedData)
+  let tableOffset = 0
+  for (const table of tables) {
+    const length = table.transformedLength
+    const data = decompressed.subarray(tableOffset, tableOffset + length)
+    if (table.tag === tableTag) return data.subarray(0, table.originalLength)
+    tableOffset += length
+  }
+  throw new Error(`Missing WOFF2 table ${tableTag}`)
+}
+
+function cmapHasCodepoint(cmap, codepoint) {
+  const tableCount = cmap.readUInt16BE(2)
+  for (let i = 0; i < tableCount; i += 1) {
+    const tableOffset = cmap.readUInt32BE(4 + i * 8 + 4)
+    const format = cmap.readUInt16BE(tableOffset)
+    if (format === 12) {
+      const groupCount = cmap.readUInt32BE(tableOffset + 12)
+      for (let group = 0; group < groupCount; group += 1) {
+        const offset = tableOffset + 16 + group * 12
+        const start = cmap.readUInt32BE(offset)
+        const end = cmap.readUInt32BE(offset + 4)
+        if (codepoint >= start && codepoint <= end) return true
+      }
+    }
+    if (format === 4) {
+      const segCount = cmap.readUInt16BE(tableOffset + 6) / 2
+      const endCodes = tableOffset + 14
+      const startCodes = endCodes + segCount * 2 + 2
+      for (let segment = 0; segment < segCount; segment += 1) {
+        const start = cmap.readUInt16BE(startCodes + segment * 2)
+        const end = cmap.readUInt16BE(endCodes + segment * 2)
+        if (codepoint >= start && codepoint <= end) return true
+      }
+    }
+  }
+  return false
 }
 
 const requiredContentModules = [
@@ -40,6 +182,38 @@ test("DO NOT DELETE: extension content modules load before the content adapter",
       moduleIndex < adapterIndex,
       `${moduleName} should load before content.js so content.js stays a page adapter`,
     )
+  }
+})
+
+test("DO NOT DELETE: Iconoplasm card fonts ship macron-vowel glyph coverage", () => {
+  const fontPaths = [
+    "./shared/iconoplasm-card/fonts/Caveat-400.woff2",
+    "./shared/iconoplasm-card/fonts/IBMPlexMono-Medium.woff2",
+    "./shared/iconoplasm-card/fonts/IBMPlexMono-Regular.woff2",
+    "./shared/iconoplasm-card/fonts/LeagueSpartan-800.woff2",
+    "./shared/iconoplasm-card/fonts/SpecialElite-Regular.woff2",
+    "./quartz/static/iconoplasm/fonts/Caveat-400.woff2",
+    "./quartz/static/iconoplasm/fonts/IBMPlexMono-Medium.woff2",
+    "./quartz/static/iconoplasm/fonts/IBMPlexMono-Regular.woff2",
+    "./quartz/static/iconoplasm/fonts/LeagueSpartan-800.woff2",
+    "./quartz/static/iconoplasm/fonts/SpecialElite-Regular.woff2",
+    "./iconoplasm-extension/fonts/Caveat-400.woff2",
+    "./iconoplasm-extension/fonts/IBMPlexMono-Medium.woff2",
+    "./iconoplasm-extension/fonts/IBMPlexMono-Regular.woff2",
+    "./iconoplasm-extension/fonts/LeagueSpartan-800.woff2",
+    "./iconoplasm-extension/fonts/SpecialElite-Regular.woff2",
+  ]
+
+  for (const fontPath of fontPaths) {
+    const cmap = readWoff2Table(readFileSync(new URL(fontPath, import.meta.url)), "cmap")
+    for (const codepoint of [
+      0x0100, 0x0101, 0x0112, 0x0113, 0x012a, 0x012b, 0x014c, 0x014d, 0x016a, 0x016b,
+    ]) {
+      assert.ok(
+        cmapHasCodepoint(cmap, codepoint),
+        `${fontPath} should include U+${codepoint.toString(16).toUpperCase().padStart(4, "0")}`,
+      )
+    }
   }
 })
 
@@ -153,7 +327,9 @@ test("DO NOT DELETE: content.js delegates split responsibilities to extension mo
 
 test("DO NOT DELETE: simple card batch request includes fields consumed by its metadata rows", () => {
   const source = readUtf8("./iconoplasm-extension/content.js")
-  const fieldsMatch = source.match(/const GENE_DETAIL_BATCH_FIELDS = Object\.freeze\(\[([\s\S]*?)\]\)/)
+  const fieldsMatch = source.match(
+    /const GENE_DETAIL_BATCH_FIELDS = Object\.freeze\(\[([\s\S]*?)\]\)/,
+  )
   assert.ok(fieldsMatch, "content.js should define the projected batch fields for hover details")
   const fields = [...fieldsMatch[1].matchAll(/"([^"]+)"/g)].map((match) => match[1])
 
