@@ -261,6 +261,27 @@ test("home extension install surface is a gallery card after starter genes, not 
   )
 })
 
+test("installed extension card uses concise add-on settings copy", async () => {
+  const app = await readFile(appPath, "utf8")
+  const functionStart = app.indexOf("function currentInstallExperience()")
+  assert.notEqual(functionStart, -1, "missing current install experience builder")
+  const start = app.indexOf("if (iconoInstallState.installed)", functionStart)
+  const end = app.indexOf("if (browser && browser.isMobile)", start)
+  assert.notEqual(start, -1, "missing installed install-card branch")
+  assert.notEqual(end, -1, "missing installed install-card branch boundary")
+  const installedBlock = app.slice(start, end)
+
+  assert.match(installedBlock, /title: "Iconoplasm extension already installed\."/)
+  assert.match(
+    installedBlock,
+    /Hover a gene symbol on another site to open the gene card\. Use the add-on settings to change styling or blocklist words\./,
+  )
+  assert.doesNotMatch(installedBlock, /Already installed/)
+  assert.doesNotMatch(installedBlock, /homepage stays quiet/i)
+  assert.doesNotMatch(installedBlock, /blot card/i)
+  assert.doesNotMatch(installedBlock, /Read FAQ/)
+})
+
 test("mobile extension install card is device-specific and does not reuse desktop sideload steps", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function buildMobileInstallExperience(browser, faqUrl)")

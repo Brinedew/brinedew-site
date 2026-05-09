@@ -2030,19 +2030,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         tone: "installed",
         toggleLabel: "Installed",
         toggleMeta: iconoInstallState.version ? "v" + iconoInstallState.version : "Ready",
-        title: "Already installed",
-        note: "The homepage stays quiet on purpose. The extension activates on other pages with gene symbols.",
+        title: "Iconoplasm extension already installed.",
+        note: "Hover a gene symbol on another site to open the gene card. Use the add-on settings to change styling or blocklist words.",
         steps: [
-          "Hover a gene symbol on another site to open the blot card.",
-          "Use the popup if you want pills, underlines, or the archival card style.",
+          "Hover a gene symbol on another site to open the gene card.",
+          "Use the add-on settings to change styling or blocklist words.",
         ],
-        actions: [
-          {
-            href: faqUrl,
-            label: "Read FAQ",
-            subtle: false,
-          },
-        ],
+        actions: [],
       }
     }
     if (browser && browser.isMobile) {
