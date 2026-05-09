@@ -4495,8 +4495,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             "</div>" +
             '<div style="display:grid;gap:12px;">' +
             '<a class="icono-home-auth-link" href="' +
-            esc(voteLoginUrl()) +
-            '">Discord Login</a>' +
+            esc(currentUser ? COMMUNITY_URL : voteLoginUrl()) +
+            '"' +
+            (currentUser ? ' target="_blank" rel="noopener noreferrer"' : "") +
+            ">" +
+            (currentUser ? "Join Discord" : "Log in with Discord") +
+            "</a>" +
             renderGeneRequestSummaryMarkup(
               "Open requests on this gene",
               Array.isArray(state && state.gene_lane_summary) ? state.gene_lane_summary : [],

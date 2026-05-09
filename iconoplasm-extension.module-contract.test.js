@@ -950,6 +950,11 @@ test("Iconoplasm home keeps guest Discord login in the starter-card flow", () =>
   )
   assert.match(
     appSource,
+    /Log in to request new candidates[\s\S]*currentUser \? COMMUNITY_URL : voteLoginUrl\(\)[\s\S]*currentUser \? "Join Discord" : "Log in with Discord"/,
+    "gene request-access panels should not show a login action when the shared page user is already signed in",
+  )
+  assert.match(
+    appSource,
     /renderCandidateGallery\(g\)[\s\S]*buildDiscordActionCardMarkup\(\)/,
     "gene pages should end with the same Discord action card",
   )
