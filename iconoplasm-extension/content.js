@@ -292,23 +292,6 @@
 
   function applySupportedTooltipInlineMarkup(container, markup) {
     const text = String(markup || "")
-    const sexSymbolMatch = text.match(
-      /^<span class="icono-sex-symbol icono-sex-symbol--(mars|venus)" data-icono-sex-symbol="(mars|venus)" role="img" aria-label="(male|female)">[\s\S]*<\/span>$/,
-    )
-    if (sexSymbolMatch && sexSymbolMatch[1] === sexSymbolMatch[2]) {
-      const kind = sexSymbolMatch[1]
-      const symbol = document.createElement("span")
-      symbol.className = `icono-sex-symbol icono-sex-symbol--${kind}`
-      symbol.dataset.iconoSexSymbol = kind
-      symbol.setAttribute("role", "img")
-      symbol.setAttribute("aria-label", sexSymbolMatch[3])
-      symbol.innerHTML =
-        kind === "mars"
-          ? '<svg viewBox="0 0 20 22" aria-hidden="true" focusable="false"><circle cx="9" cy="11" r="5.2"></circle><path d="M12.8 7.2 19 1"></path><path d="M14.4 1H19v4.6"></path></svg>'
-          : '<svg viewBox="0 0 20 22" aria-hidden="true" focusable="false"><circle cx="10" cy="8" r="5.2"></circle><path d="M10 13.2v7"></path><path d="M6.6 16.7h6.8"></path></svg>'
-      container.appendChild(symbol)
-      return
-    }
     const skinDotMatch = text.match(
       /^<span class="iconoplasm-tooltip-skin-dot" style="background:([^"]+)"><\/span>(.*)$/,
     )

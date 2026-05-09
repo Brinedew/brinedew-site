@@ -1025,30 +1025,6 @@
   letter-spacing: 0.01em;
 }
 
-.icono-sex-symbol {
-  --icono-sex-symbol-size: 0.86em;
-  display: inline-block;
-  inline-size: var(--icono-sex-symbol-size);
-  block-size: calc(var(--icono-sex-symbol-size) * 1.1);
-  vertical-align: -0.08em;
-  color: currentColor;
-}
-
-.icono-sex-symbol svg {
-  display: block;
-  inline-size: 100%;
-  block-size: 100%;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.icono-label-hand-note--sex .icono-sex-symbol {
-  --icono-sex-symbol-size: 0.95em;
-}
-
 .icono-label-hand-note--sex,
 .icono-label-hand-note--age,
 .icono-label-hand-note--unit,

@@ -226,36 +226,13 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     }
   }
 
-  function sexSymbolKind(value) {
+  function displaySexSymbol(value) {
     var text = String(value || "")
       .trim()
       .toLowerCase()
-    if (text === "male") return "mars"
-    if (text === "female") return "venus"
-    return ""
-  }
-
-  function sexSymbolHtml(value, extraClass) {
-    var kind = sexSymbolKind(value)
-    if (!kind) return ""
-    var label = kind === "mars" ? "male" : "female"
-    var classes = "icono-sex-symbol icono-sex-symbol--" + kind
-    if (extraClass) classes += " " + extraClass
-    var paths =
-      kind === "mars"
-        ? '<circle cx="9" cy="11" r="5.2"></circle><path d="M12.8 7.2 19 1"></path><path d="M14.4 1H19v4.6"></path>'
-        : '<circle cx="10" cy="8" r="5.2"></circle><path d="M10 13.2v7"></path><path d="M6.6 16.7h6.8"></path>'
-    return (
-      '<span class="' +
-      classes +
-      '" data-icono-sex-symbol="' +
-      kind +
-      '" role="img" aria-label="' +
-      label +
-      '"><svg viewBox="0 0 20 22" aria-hidden="true" focusable="false">' +
-      paths +
-      "</svg></span>"
-    )
+    if (text === "male") return "♂"
+    if (text === "female") return "♀"
+    return String(value || "").trim()
   }
 
   function startRoughLoopObserver() {
@@ -550,7 +527,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
         : {}
     var rows = []
 
-    var sexText = sexSymbolKind(essence.sex) ? sexSymbolHtml(essence.sex) : String(essence.sex || "").trim()
+    var sexText = displaySexSymbol(essence.sex)
     var sexOrigin = uniqueDisplayValues(
       essence.sex_origin ||
         essence.gender_origin ||
@@ -561,7 +538,6 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     if (sexText) {
       rows.push({
         character: sexText,
-        characterIsHtml: Boolean(sexSymbolKind(essence.sex)),
         molecular: sexOrigin.length ? sexOrigin.join(", ") : "unknown",
       })
     }
@@ -726,13 +702,9 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
   }
 
   function renderLabLabelSexNoteHtml(sexNote, selectedCategory) {
-    var note = sexSymbolKind(sexNote)
-      ? sexSymbolHtml(sexNote, "icono-sex-symbol--hand")
-      : escapeHtml(
-          String(sexNote || "")
-            .trim()
-            .toLowerCase(),
-        )
+    var note = String(sexNote || "")
+      .trim()
+      .toLowerCase()
     if (!note) return ""
     var categoryKey = String(selectedCategory || "")
       .trim()
@@ -741,7 +713,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '<div class="icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-' +
       escapeHtml(categoryKey || "unselected") +
       '">' +
-      note +
+      escapeHtml(note) +
       "</div>"
     )
   }
@@ -1217,9 +1189,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     var selectedCategory = String(sexOriginValues[0] || "")
       .trim()
       .toLowerCase()
-    var sexNote = String(safeEssence.sex || "")
-      .trim()
-      .toLowerCase()
+    var sexNote = displaySexSymbol(safeEssence.sex)
     var firstPublicationYear = Number(safeGeneDetail.first_publication_year)
     var firstNoted =
       Number.isFinite(firstPublicationYear) && firstPublicationYear > 0
