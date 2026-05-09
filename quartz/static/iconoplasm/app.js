@@ -1807,7 +1807,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         label: "Chrome",
         tone: "manual",
         title: "Chrome",
-        note: "Chrome uses a developer package until the Chrome Web Store listing is live.",
+        note: "Manual installation for the moment. For one-click install, visit this page on Edge or Firefox browsers.",
         managerUrl: "chrome://extensions",
         steps: [
           {
@@ -1837,7 +1837,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         label: "Edge",
         tone: "store",
         title: "Edge",
-        note: "Install the signed Edge release from Microsoft Edge Add-ons.",
+        note: "",
         managerUrl: "edge://extensions",
         steps: [
           {
@@ -1864,7 +1864,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         label: "Firefox",
         tone: "store",
         title: "Firefox",
-        note: "Install the signed Firefox release from Mozilla Add-ons.",
+        note: "",
         managerUrl: "",
         steps: [
           {
