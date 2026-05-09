@@ -48,6 +48,7 @@ const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = "iconoplasm:hydrated-catalog-artifac
 const KV_CARD_CATALOG_ARTIFACT_PREFIX = "iconoplasm:card-catalog:"
 const KV_MOBILE_CARD_VM_PREFIX = "iconoplasm:mobile-card-vm:"
 const CARD_CATALOG_ARTIFACT_SCHEMA = "iconoplasm.cardCatalog.v1"
+const CARD_CATALOG_ARTIFACT_SHARD_SIZE = 750
 const CARD_ARTIFACT_UNAVAILABLE = "CARD_ARTIFACT_UNAVAILABLE"
 const MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT = 25000
 const MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_BATCH = 1000
@@ -16175,6 +16176,76 @@ function normalizeCardCatalogArtifact(raw) {
   }
 }
 
+function cardCatalogArtifactStoreKey(artifactVersion) {
+  return `${KV_CARD_CATALOG_ARTIFACT_PREFIX}${artifactVersion}`
+}
+
+function cardCatalogArtifactShardKey(artifactVersion, index) {
+  return `${cardCatalogArtifactStoreKey(artifactVersion)}:shard:${index}`
+}
+
+function cardCatalogArtifactManifestFromCards({
+  artifactVersion,
+  artifactValidatedAt,
+  catalogGeneCount,
+  cards,
+}) {
+  const shards = []
+  for (let index = 0; index * CARD_CATALOG_ARTIFACT_SHARD_SIZE < cards.length; index += 1) {
+    const shardCards = cards.slice(
+      index * CARD_CATALOG_ARTIFACT_SHARD_SIZE,
+      (index + 1) * CARD_CATALOG_ARTIFACT_SHARD_SIZE,
+    )
+    shards.push({
+      key: cardCatalogArtifactShardKey(artifactVersion, index),
+      index,
+      card_count: shardCards.length,
+      first_symbol: shardCards[0]?.symbol || null,
+      last_symbol: shardCards[shardCards.length - 1]?.symbol || null,
+    })
+  }
+  return {
+    schema: CARD_CATALOG_ARTIFACT_SCHEMA,
+    artifact_version: artifactVersion,
+    snapshot_version: artifactVersion,
+    artifact_validated_at: artifactValidatedAt,
+    source: "published_card_catalog",
+    storage: "kv_sharded",
+    shard_size: CARD_CATALOG_ARTIFACT_SHARD_SIZE,
+    shard_count: shards.length,
+    catalog_gene_count: catalogGeneCount,
+    card_count: cards.length,
+    shards,
+  }
+}
+
+async function writeCardCatalogArtifactToKV(env, artifact) {
+  const cards = Array.isArray(artifact?.cards) ? artifact.cards : []
+  const artifactVersion = String(artifact?.artifact_version || "").trim()
+  const manifest = cardCatalogArtifactManifestFromCards({
+    artifactVersion,
+    artifactValidatedAt: artifact.artifact_validated_at,
+    catalogGeneCount: artifact.catalog_gene_count,
+    cards,
+  })
+  for (const shard of manifest.shards) {
+    const shardCards = cards.slice(
+      shard.index * CARD_CATALOG_ARTIFACT_SHARD_SIZE,
+      (shard.index + 1) * CARD_CATALOG_ARTIFACT_SHARD_SIZE,
+    )
+    await env.KV.put(
+      shard.key,
+      JSON.stringify({
+        schema: CARD_CATALOG_ARTIFACT_SCHEMA,
+        artifact_version: artifactVersion,
+        shard_index: shard.index,
+        cards: shardCards,
+      }),
+    )
+  }
+  await env.KV.put(cardCatalogArtifactStoreKey(artifactVersion), JSON.stringify(manifest))
+}
+
 async function readPublishedCardCatalogArtifact(env, version) {
   const artifactVersion = String(version || "").trim()
   if (!artifactVersion || !env?.KV?.get) return null
@@ -16184,12 +16255,39 @@ async function readPublishedCardCatalogArtifact(env, version) {
   ) {
     return cardCatalogArtifactCache.value
   }
-  const raw = await env.KV.get(`${KV_CARD_CATALOG_ARTIFACT_PREFIX}${artifactVersion}`)
+  const raw = await env.KV.get(cardCatalogArtifactStoreKey(artifactVersion))
   let parsed = null
   try {
     parsed = raw ? JSON.parse(raw) : null
   } catch {
     parsed = null
+  }
+  if (
+    parsed?.schema === CARD_CATALOG_ARTIFACT_SCHEMA &&
+    parsed.storage === "kv_sharded" &&
+    Array.isArray(parsed.shards)
+  ) {
+    const cards = []
+    for (const shard of parsed.shards) {
+      const shardRaw = await env.KV.get(String(shard?.key || ""))
+      let shardParsed = null
+      try {
+        shardParsed = shardRaw ? JSON.parse(shardRaw) : null
+      } catch {
+        shardParsed = null
+      }
+      if (
+        shardParsed?.schema !== CARD_CATALOG_ARTIFACT_SCHEMA ||
+        String(shardParsed.artifact_version || "") !== artifactVersion ||
+        Number(shardParsed.shard_index) !== Number(shard.index) ||
+        !Array.isArray(shardParsed.cards) ||
+        shardParsed.cards.length !== Number(shard.card_count || 0)
+      ) {
+        return null
+      }
+      cards.push(...shardParsed.cards)
+    }
+    parsed = { ...parsed, cards }
   }
   const artifact = normalizeCardCatalogArtifact(parsed)
   if (!artifact) return null
@@ -16270,12 +16368,7 @@ async function publishCardCatalogArtifact(
     cards,
   })
   if (!artifact) throw new Error("Card catalog artifact failed validation")
-  const artifactForStore = { ...artifact }
-  delete artifactForStore.bySymbol
-  await env.KV.put(
-    `${KV_CARD_CATALOG_ARTIFACT_PREFIX}${artifactVersion}`,
-    JSON.stringify(artifactForStore),
-  )
+  await writeCardCatalogArtifactToKV(env, artifact)
   cardCatalogArtifactCache.version = artifactVersion
   cardCatalogArtifactCache.value = artifact
   return {

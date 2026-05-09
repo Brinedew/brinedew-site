@@ -225,6 +225,46 @@ function completeCardCatalogArtifact(symbols = ["ERBB2", "INS"], version = "test
   }
 }
 
+function putShardedCardCatalogArtifact(kvStore, symbols = ["ERBB2", "INS"], version = "test-vm-version") {
+  const cards = symbols.map((symbol) =>
+    completeMobileCardVM(symbol, version, "published_card_catalog"),
+  )
+  const shards = cards.map((card, index) => ({
+    key: `iconoplasm:card-catalog:${version}:shard:${index}`,
+    index,
+    card_count: 1,
+    first_symbol: card.symbol,
+    last_symbol: card.symbol,
+  }))
+  kvStore.set(
+    `iconoplasm:card-catalog:${version}`,
+    JSON.stringify({
+      schema: "iconoplasm.cardCatalog.v1",
+      artifact_version: version,
+      snapshot_version: version,
+      artifact_validated_at: "2026-05-09T00:00:00.000Z",
+      source: "published_card_catalog",
+      storage: "kv_sharded",
+      shard_size: 1,
+      shard_count: shards.length,
+      catalog_gene_count: cards.length,
+      card_count: cards.length,
+      shards,
+    }),
+  )
+  for (const shard of shards) {
+    kvStore.set(
+      shard.key,
+      JSON.stringify({
+        schema: "iconoplasm.cardCatalog.v1",
+        artifact_version: version,
+        shard_index: shard.index,
+        cards: [cards[shard.index]],
+      }),
+    )
+  }
+}
+
 function buildEnv({
   kvStore = new Map(),
   db = new FakeIconoplasmDb(),
@@ -322,6 +362,29 @@ test("mobile card manifest returns complete VMs from the published card catalog 
   assert.equal(card.field_status.family, "present")
   assert.equal(card.field_status.family_feature, "known_absent")
   assert.equal(card.payload.essence.faction, "pro-growth")
+})
+
+test("mobile card manifest reads all shards from the one published card catalog artifact path", async () => {
+  resetIconoplasmRuntimeCachesForTest()
+  const kvStore = new Map()
+  putShardedCardCatalogArtifact(kvStore, ["ERBB2", "INS"], "test-vm-version")
+  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS", "ERBB2"] }),
+    }),
+    buildEnv({ kvStore, db: null, cardArtifact: null }),
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.data_source, "published_card_catalog")
+  assert.equal(payload.diagnostics.artifact_gene_count, 2)
+  assert.deepEqual(
+    payload.cards.map((card) => card.symbol),
+    ["INS", "ERBB2"],
+  )
 })
 
 test("mobile card manifest fails loud when the published card catalog artifact is unavailable", async () => {
