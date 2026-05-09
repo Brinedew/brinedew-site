@@ -27,6 +27,15 @@ function normalizeHandwrittenText(value) {
   }
 }
 
+function displaySexSymbol(value) {
+  var text = String(value || "")
+    .trim()
+    .toLowerCase()
+  if (text === "male") return "♂"
+  if (text === "female") return "♀"
+  return String(value || "").trim()
+}
+
 function normalizeCardModelHandwriting(payload) {
   var safePayload = asObject(payload)
   var normalized = Object.assign({}, safePayload)
@@ -34,7 +43,7 @@ function normalizeCardModelHandwriting(payload) {
   normalized.displayedFamilyFeature = normalizeHandwrittenText(safePayload.displayedFamilyFeature)
   normalized.handwrittenWeight = normalizeHandwrittenText(safePayload.handwrittenWeight)
   normalized.politicalNote = normalizeHandwrittenText(safePayload.politicalNote)
-  normalized.sexNote = normalizeHandwrittenText(safePayload.sexNote)
+  normalized.sexNote = normalizeHandwrittenText(displaySexSymbol(safePayload.sexNote))
   var rawStylePairs = Array.isArray(safePayload.stylePairs) ? safePayload.stylePairs : []
   normalized.stylePairs = [0, 1, 2, 3, 4].map(function (index) {
     var safePair = asObject(rawStylePairs[index])
@@ -134,9 +143,7 @@ function categoryFieldTemplate(selectedCategory) {
 }
 
 function sexNoteTemplate(sexNote, selectedCategory) {
-  var note = String(sexNote || "")
-    .trim()
-    .toLowerCase()
+  var note = displaySexSymbol(sexNote)
   if (!note) return nothing
   var categoryKey = String(selectedCategory || "")
     .trim()
