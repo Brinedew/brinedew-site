@@ -1,11 +1,16 @@
 ---
 title: The Four Phases of Post-Childhood Mortality Drift
 date: 2026-05-11
-tags: [content/wiki, topic/aging, topic/demography, topic/mortality]
+tags:
+  - content/wiki
+  - topic/aging
+  - topic/demography
+  - topic/mortality
 aliases:
   - young-adult-mortality-plateau
   - accident-hump
   - gompertz-onset
+draft: true
 ---
 
 # The Four Phases of Post-Childhood Mortality Drift
