@@ -75,9 +75,9 @@ However, these observations don't necessarily support the specific atavistic mec
 
 ## Related concepts
 
-- [[tumor-suppressor-theory-of-aging]] - another evolutionary approach to cancer
+- [[tumor-suppressor-theory-of-aging.md.md.md.md.md.md.md.md.md.md.md]] - another evolutionary approach to cancer
 - [[p53-guardian]] - key protein that normally prevents cellular reversion
-- [[cellular-senescence]] - one way cells normally prevent cancerous behavior
+- [[cellular-senescence.md.md.md.md.md.md.md.md.md.md.md]] - one way cells normally prevent cancerous behavior
 
 ---
 
