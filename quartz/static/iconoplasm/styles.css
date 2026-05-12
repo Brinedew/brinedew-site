@@ -270,6 +270,65 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   color: var(--light);
 }
 
+.icono-vote-login-prompt {
+  display: grid;
+  flex: 1 1 100%;
+  gap: 0.5rem;
+  max-width: min(100%, 34rem);
+  margin-top: 0.25rem;
+  padding: 0.62rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 74%, var(--dark) 26%);
+  border-radius: var(--icono-radius-md);
+  background: color-mix(in srgb, var(--light) 92%, white 8%);
+  box-shadow: 0 4px 12px rgba(27, 18, 11, 0.04);
+  color: var(--dark);
+}
+
+.icono-vote-login-copy {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.icono-vote-login-title,
+.icono-vote-login-note,
+.icono-vote-login-link {
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.icono-vote-login-title {
+  font-size: 0.76rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.icono-vote-login-note {
+  font-size: 0.7rem;
+  line-height: 1.28;
+  color: color-mix(in srgb, var(--dark) 70%, var(--secondary, var(--darkgray)) 30%);
+}
+
+.icono-vote-login-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  min-height: 2rem;
+  padding: 0.38rem 0.62rem;
+  border: 1px solid color-mix(in srgb, var(--dark) 20%, var(--ui-border) 80%);
+  border-radius: var(--icono-radius-pill);
+  background: var(--dark);
+  color: var(--light);
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.icono-vote-login-link:hover {
+  background: color-mix(in srgb, var(--dark) 88%, var(--accent) 12%);
+}
+
 .icono-emulsion-meta {
   display: grid;
   gap: 0.14rem;

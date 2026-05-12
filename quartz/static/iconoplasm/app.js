@@ -105,7 +105,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var masonryLibsPromise = null
   var photoSwipeModulePromise = null
   var hasResolvedAuthState = false
-  var voteLoginRedirectPending = false
+  var voteLoginPromptVisible = false
   var iconoSidebarState = {
     page: "home",
     homeLayout: HOME_LAYOUT_DEFAULT,
@@ -2700,7 +2700,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       .trim()
       .toLowerCase()
     var detail = g || null
-    var cardVariant = resolveCardVariant()
+    var cardVariant = "lit-archival"
     var isArchivalVariant = isArchivalCardVariant(cardVariant)
     var isImageOnlyVariant = isImageOnlyCardVariant(cardVariant)
     var metaRows = detail ? collectTooltipMetaRows(detail) : []
@@ -3052,47 +3052,46 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     })
   }
 
-  function buildVoteLoginPromptCardMarkup() {
+  function buildVoteLoginPromptMarkup() {
     return (
-      '<article class="icono-card icono-guest-login-card icono-vote-login-card" data-icono-vote-login-card role="status" aria-live="polite">' +
-      '<div class="icono-home-auth-copy">' +
-      '<div class="icono-home-auth-title icono-guest-login-card-title">Log in with Discord to vote on this blot</div>' +
-      '<div class="icono-home-auth-note">Voting changes the public canonical blot ranking, so it needs a signed-in account.</div>' +
+      '<div class="icono-vote-login-prompt" data-icono-vote-login-prompt role="status" aria-live="polite">' +
+      '<div class="icono-vote-login-copy">' +
+      '<div class="icono-vote-login-title">Log in with Discord to vote.</div>' +
+      '<div class="icono-vote-login-note">Votes affect the public blot ranking, so they need a signed-in account.</div>' +
       "</div>" +
-      '<a class="icono-home-auth-link icono-guest-login-card-button" href="' +
+      '<a class="icono-vote-login-link" href="' +
       esc(voteLoginUrl()) +
       '">Log in with Discord</a>' +
-      "</article>"
+      "</div>"
     )
   }
 
   function showVoteLoginPopup(voteBox) {
-    var existing = document.querySelector("[data-icono-vote-login-card]")
+    var existing = document.querySelector("[data-icono-vote-login-prompt]")
     if (existing) {
       existing.remove()
     }
     var wrapper = document.createElement("div")
-    wrapper.innerHTML = buildVoteLoginPromptCardMarkup()
-    var card = wrapper.firstElementChild
-    if (!card) return
-    var anchor =
+    wrapper.innerHTML = buildVoteLoginPromptMarkup()
+    var prompt = wrapper.firstElementChild
+    if (!prompt) return
+    var host =
       voteBox &&
-      (voteBox.closest(".icono-card") ||
-        voteBox.closest(".icono-gene-card") ||
-        voteBox.closest(".icono-candidate-card"))
-    var parent = anchor && anchor.parentNode ? anchor.parentNode : voteBox && voteBox.parentNode
-    if (parent && anchor && anchor.parentNode === parent) {
-      parent.insertBefore(card, anchor.nextSibling)
-    } else if (parent) {
-      parent.appendChild(card)
+      (voteBox.closest(".icono-candidate-footer") ||
+        voteBox.closest("[data-icono-gene-vote-slot]") ||
+        voteBox.parentNode)
+    if (host && voteBox && voteBox.parentNode === host) {
+      voteBox.insertAdjacentElement("afterend", prompt)
+    } else if (host) {
+      host.appendChild(prompt)
     } else {
       var root = document.getElementById(ROOT_ID)
-      if (root) root.appendChild(card)
+      if (root) root.appendChild(prompt)
     }
-    if (!voteLoginRedirectPending) {
-      voteLoginRedirectPending = true
-      card.scrollIntoView({ block: "nearest", inline: "nearest" })
-      var link = card.querySelector("a")
+    if (!voteLoginPromptVisible) {
+      voteLoginPromptVisible = true
+      prompt.scrollIntoView({ block: "nearest", inline: "nearest" })
+      var link = prompt.querySelector("a")
       if (link && typeof link.focus === "function") link.focus({ preventScroll: true })
     }
   }

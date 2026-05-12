@@ -394,7 +394,7 @@ test("home extension install surface is a gallery card after starter genes, not 
   )
 })
 
-test("guest vote auth shows an explicit login card instead of redirecting straight to Discord", async () => {
+test("guest vote auth shows an inline prompt without joining artwork grids", async () => {
   const app = await readFile(appPath, "utf8")
   const popupStart = app.indexOf("function showVoteLoginPopup(")
   const popupEnd = app.indexOf("function voteBoxMarkup", popupStart)
@@ -407,16 +407,46 @@ test("guest vote auth shows an explicit login card instead of redirecting straig
     /window\.location\.(assign|href)|location\.assign|location\.href/,
     "guest vote clicks must not immediately redirect to Discord auth",
   )
-  assert.match(
-    app,
-    /function buildVoteLoginPromptCardMarkup\(/,
-    "guest vote auth should reuse the existing login-card visual pattern",
-  )
+  assert.match(app, /function buildVoteLoginPromptMarkup\(/, "guest vote auth should render a prompt")
+  const promptStart = app.indexOf("function buildVoteLoginPromptMarkup(")
+  const promptEnd = app.indexOf("function showVoteLoginPopup", promptStart)
+  assert.notEqual(promptStart, -1, "missing vote auth prompt builder")
+  assert.notEqual(promptEnd, -1, "missing vote auth prompt builder boundary")
+  const promptBlock = app.slice(promptStart, promptEnd)
+
   assert.match(
     popupBlock,
-    /buildVoteLoginPromptCardMarkup\(/,
+    /buildVoteLoginPromptMarkup\(/,
     "guest vote auth should render a visible prompt before exposing the Discord login CTA",
   )
+  assert.doesNotMatch(
+    promptBlock,
+    /icono-card|icono-guest-login-card|<article/,
+    "vote login prompts must be inline controls, not gallery cards",
+  )
+  assert.doesNotMatch(
+    popupBlock,
+    /\.closest\("\.icono-candidate-card"\)|insertBefore\(prompt,\s*anchor\.nextSibling\)|insertBefore\(card,\s*anchor\.nextSibling\)/,
+    "candidate vote prompts must not be inserted as siblings in the artwork grid",
+  )
+  assert.match(popupBlock, /\.closest\("\.icono-candidate-footer"\)/, "candidate prompts should anchor to the footer controls")
+})
+
+test("gene pages always render the vintage lab label card regardless of gallery card style", async () => {
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("function buildGeneLeadCardMarkup(g)")
+  const end = app.indexOf("function hydrateBrickPortrait", start)
+  assert.notEqual(start, -1, "missing gene lead renderer")
+  assert.notEqual(end, -1, "missing gene lead renderer boundary")
+  const block = app.slice(start, end)
+
+  assert.doesNotMatch(
+    block,
+    /resolveCardVariant\(/,
+    "gene pages must not inherit the mutable home/gallery card style",
+  )
+  assert.match(block, /var cardVariant = "lit-archival"/, "gene pages should force the vintage lab label card")
+  assert.match(block, /data-icono-card-variant/, "gene pages should expose their fixed card variant for validation")
 })
 
 test("blot-only masonry keeps auxiliary login cards out of the artwork grid", async () => {
