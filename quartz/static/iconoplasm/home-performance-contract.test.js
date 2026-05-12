@@ -4,7 +4,12 @@ import assert from "node:assert/strict"
 
 const appPath = new URL("./app.js", import.meta.url)
 const homeOrdersPath = new URL("./home-orders.js", import.meta.url)
+const stylesPath = new URL("./styles.css", import.meta.url)
 const headPath = new URL("../../components/Head.tsx", import.meta.url)
+const sharedCardCssPath = new URL(
+  "../../../shared/iconoplasm-card/shared-card-label.css",
+  import.meta.url,
+)
 
 test("public gallery default order is newly discovered genes first", async () => {
   const homeOrders = await readFile(homeOrdersPath, "utf8")
@@ -198,6 +203,82 @@ test("mobile home collection infocards wait for rich detail instead of fallback 
     collectionBlock,
     /\} else \{[\s\S]{0,900}loadDiscoveredGeneCardData\(entry\)/,
     "mobile/non-masonry infocards should use one manifest request, not a per-gene detail waterfall",
+  )
+})
+
+test("image-only home cards use the blot renderer in an adaptive masonry grid", async () => {
+  const app = await readFile(appPath, "utf8")
+
+  assert.match(app, /function effectiveHomeGridLayout\(layout, cardVariant\)/)
+  assert.match(app, /function shouldUseHomeMasonry\(layout, cardVariant\)/)
+  assert.match(app, /function buildImageOnlyTileCardMarkup\(g, cardIndex\)/)
+
+  const tileStart = app.indexOf("function buildImageOnlyTileCardMarkup(g, cardIndex)")
+  const tileEnd = app.indexOf("function buildBrickGridMarkup", tileStart)
+  assert.notEqual(tileStart, -1, "missing image-only tile renderer")
+  assert.notEqual(tileEnd, -1, "missing image-only tile renderer boundary")
+  const tileBlock = app.slice(tileStart, tileEnd)
+
+  assert.match(tileBlock, /icono-card--image-tile/)
+  assert.match(tileBlock, /icono-card--variant-image-only/)
+  assert.match(tileBlock, /buildArchivalBodyMarkup\([\s\S]*layoutVariant:\s*"image-only"/)
+  assert.doesNotMatch(
+    tileBlock,
+    /icono-card--masonry/,
+    "blot-only site cards must not use the generic thumbnail masonry renderer",
+  )
+
+  const appendStart = app.indexOf("function appendGrid(container, genes, startIndex, layout)")
+  const appendEnd = app.indexOf("function renderCandidateGallery", appendStart)
+  assert.notEqual(appendStart, -1, "missing appendGrid")
+  assert.notEqual(appendEnd, -1, "missing appendGrid boundary")
+  const appendBlock = app.slice(appendStart, appendEnd)
+  assert.match(appendBlock, /isImageOnlyCardVariant\(resolvedCardVariant\)/)
+  assert.match(appendBlock, /buildImageOnlyTileGridMarkup\(genes, startIndex\)/)
+})
+
+test("image-only masonry has a physical artboard cap and adaptive columns", async () => {
+  const styles = await readFile(stylesPath, "utf8")
+  const sharedCardCss = await readFile(sharedCardCssPath, "utf8")
+
+  assert.match(styles, /--icono-image-tile-width:\s*384px/)
+  assert.match(styles, /--icono-image-tile-gutter:\s*16px/)
+  assert.match(
+    styles,
+    /\.icono-grid\[data-layout="image-only-masonry"\]\s+\.icono-grid-sizer[\s\S]*width:\s*min\(100%,\s*var\(--icono-image-tile-width\)\)/,
+  )
+  assert.match(
+    styles,
+    /\.icono-grid\[data-layout="image-only-masonry"\]\s+\.icono-card--image-tile[\s\S]*width:\s*min\(100%,\s*var\(--icono-image-tile-width\)\)/,
+  )
+  assert.match(
+    styles,
+    /@media \(max-width:\s*600px\)[\s\S]*\.icono-grid\[data-layout="image-only-masonry"\]\s+\.icono-gutter-sizer[\s\S]*width:\s*0/,
+  )
+  assert.match(sharedCardCss, /\.icono-card--variant-image-only\.icono-card--image-tile/)
+})
+
+test("Iconoplasm middle column uses card fonts instead of inherited Crimson Pro", async () => {
+  const styles = await readFile(stylesPath, "utf8")
+
+  const titleStart = styles.indexOf(".icono-hero-title {")
+  const titleEnd = styles.indexOf("}", titleStart)
+  const taglineStart = styles.indexOf(".icono-hero .tagline {")
+  const taglineEnd = styles.indexOf("}", taglineStart)
+  const statStart = styles.indexOf(".icono-hero .stat {")
+  const statEnd = styles.indexOf("}", statStart)
+  assert.notEqual(titleStart, -1, "missing hero title styles")
+  assert.notEqual(taglineStart, -1, "missing hero tagline styles")
+  assert.notEqual(statStart, -1, "missing hero stat styles")
+
+  assert.match(styles.slice(titleStart, titleEnd), /font-family:\s*"League Spartan"/)
+  assert.match(styles.slice(taglineStart, taglineEnd), /font-family:\s*"Special Elite"/)
+  assert.match(styles.slice(statStart, statEnd), /font-family:\s*"IBM Plex Mono"/)
+  assert.doesNotMatch(styles, /Crimson Pro/)
+  assert.doesNotMatch(
+    styles,
+    /\.icono-(?:hero|mobile-data-failure)[^{]*\{[^}]*var\(--(?:bodyFont|headerFont)\)/,
+    "Iconoplasm-owned middle-column surfaces must not inherit Quartz Crimson Pro variables",
   )
 })
 

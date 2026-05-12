@@ -92,6 +92,7 @@
 }
 
 .icono-card--variant-image-only.icono-card--brick,
+.icono-card--variant-image-only.icono-card--image-tile,
 .iconoplasm-tooltip--variant-image-only {
   container-type: inline-size;
   inline-size: 100%;

@@ -6,6 +6,8 @@
   max-width: 960px;
   margin: 0 auto;
   padding: 0 1rem 2rem;
+  --icono-image-tile-width: 384px;
+  --icono-image-tile-gutter: 16px;
   --icono-reject: oklch(56% 0.16 28);
   /* Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md
      (Layout & Space, Visual Details, Motion) +
@@ -89,8 +91,9 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 
 .icono-hero-title {
   display: inline-block;
+  font-family: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
   font-size: clamp(2.85rem, 5vw, 4rem);
-  font-weight: 420;
+  font-weight: 800;
   line-height: 0.92;
   letter-spacing: -0.045em;
   margin: 0;
@@ -99,7 +102,10 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 }
 
 .icono-hero .tagline {
+  font-family: "Special Elite", Georgia, serif;
   font-size: 1.1rem;
+  line-height: 1.28;
+  letter-spacing: 0;
   color: var(--secondary, var(--darkgray));
   margin: 0.4rem 0 0;
   text-wrap: pretty;
@@ -109,7 +115,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   display: inline-block;
   margin-top: 0.6rem;
   padding: 0.25rem 0.75rem;
-  font-family: var(--codeFont, monospace);
+  font-family: "IBM Plex Mono", var(--codeFont, monospace);
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
   color: var(--darkgray);

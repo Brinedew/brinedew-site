@@ -29,7 +29,7 @@ Formation of new blood vessels that supply nutrients and oxygen to growing tissu
 **Anoikis**
 Programmed cell suicide triggered when cells lose appropriate attachment to the extracellular matrix.
 
-**[[antagonistic-pleiotropy-theory|Antagonistic pleiotropy theory]]**
+**[[antagonistic-pleiotropy-theory.md|Antagonistic pleiotropy theory]]**
 Idea that evolution selects genes which increase early-life fitness but decrease late-life fitness, contributing to aging.
 
 **Apical–basal polarity**
@@ -56,10 +56,10 @@ DNA repair system that fixes small, common chemical damages to single DNA bases 
 **Basement membrane**
 A thin, supportive sheet of proteins beneath cell layers that acts like both a scaffold and a barrier.
 
-**[[bcl-2|BCL-2]]**
+**[[bcl-2.md|BCL-2]]**
 Anti-apoptotic mitochondrial membrane protein that blocks cell death and can enable therapy resistance.
 
-**[[beta-catenin-ctnnb1|Beta-catenin]]**
+**[[beta-catenin-ctnnb1.md|Beta-catenin]]**
 Wnt pathway mediator that regulates gene expression and can drive proliferation when stabilized.
 
 
@@ -71,7 +71,7 @@ Idea that the immune system interacts with cancer in three stages: elimination (
 **[[ctvt|Canine transmissible venereal tumor (CTVT)]]**
 Naturally transmissible cancer lineage that spreads between dogs by cell transfer.
 
-**[[caspase-3-casp3-p42574|Caspase-3]]**
+**[[caspase-3-casp3-p42574.md|Caspase-3]]**
 Executioner protease in apoptosis that cleaves many substrates to dismantle the cell.
 
 **Catabolism**
@@ -131,13 +131,13 @@ Signaling proteins, often immune-derived, that modulate inflammation, growth, an
 
 ## D
 
-**[[death-pact|Death pact]]**
+**[[death-pact.md|Death pact]]**
 Governance strategy that enforces organization-level priorities by triggering collective agent death under specific failures or contexts.
 
-**[[de-darwinization|De-Darwinization]]**
+**[[De-Darwinization.md|De-Darwinization]]**
 Evolutionary pressure to reduce competition among cells in a multicellular organism.
 
-**[[dftd|Devil facial tumor disease (DFTD)]]**
+**[[dftd.md|Devil facial tumor disease (DFTD)]]**
 Transmissible cancer threatening Tasmanian devils that spreads by biting.
 
 **DNA damage response (DDR)**
@@ -146,7 +146,7 @@ Cellular network that senses DNA lesions and coordinates repair, checkpoint acti
 **DNA methylation**
 A chemical tag added to DNA bases that usually dampens gene activity and helps set long-term patterns of gene activity.
 
-**[[disposable-soma-theory|Disposable soma theory]]**
+**[[disposable-soma-theory.md|Disposable soma theory]]**
 Idea that evolution de-prioritizes long-term maintenance in favor of routing limited resources to reproduction, contributing to aging.
 
 **Driver mutation**
@@ -155,7 +155,7 @@ Genetic change to a cell within a tissue that confers it a fitness advantage ove
 
 ## E
 
-**[[e2f1-e2f1-q01094|E2F transcription factors]]**
+**[[e2f1-e2f1-q01094.md|E2F transcription factors]]**
 Proteins that drive expression of cell proliferation genes required for mitosis S-phase entry.
 
 **ECM**
@@ -164,7 +164,7 @@ ExtraCellular Matrix, a part of tissue outside of the cells, consisting of a ne
 **ECM remodeling**
 Changes to the extracellular matrix that alter tissue stiffness, signaling, and cell behavior, often via matrix metalloproteinases.
 
-**[[egfr-erbb1-p00533|EGFR signaling]]**
+**[[egfr-erbb1-p00533.md|EGFR signaling]]**
 Proliferation and survival pathway activated by EGF, often activated in cancer.
 
 **EMT (epithelial-mesenchymal transition)**
@@ -179,7 +179,7 @@ Changes in gene activity that are heritable through cell divisions without alter
 **Epigenetic landscape**
 2D visualization of potential cell states as a height map, forming valleys that correspond to progression of cell types.
 
-**[[eutely|Eutely]]**
+**[[eutely.md|Eutely]]**
 Developmental pattern in some species where adults have a fixed number of somatic cells and growth occurs only by cell enlargement.
 
 **Evolutionarily stable strategy**
@@ -191,7 +191,7 @@ Behavior pattern that, once common in a group, cannot be easily displaced by an 
 **Field cancerization**
 Region of seemingly normal tissue that shares early mutations, raising the chance that multiple tumors can arise there.
 
-**[[flower-drosophila|Flower (Drosophila)]]**
+**[[flower-drosophila.md|Flower (Drosophila)]]**
 Cell-surface protein that marks relative fitness for cell competition in flies.
 
 **Focal adhesions**

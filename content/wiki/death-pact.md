@@ -94,7 +94,7 @@ The organization of multicellular life offers a powerful, if imperfect, analogy.
 
 - In **facultative multicellularity** (e.g., slime molds), where cells can switch between solitary and collective states, the "pact" is temporary. Cheating—where some cells contribute less to the collective good (the stalk) to favor their own transmission (the spores)—is a persistent evolutionary problem.
     
-- In **obligate multicellularity** (e.g., vertebrates), the pact is absolute and enforced by iron-clad mechanisms of **[[De-Darwinization|somatic de-Darwinization]]**. A developmental bottleneck (starting from a single cell) and germline sequestration ensure that only a specialized lineage of cells can reproduce the whole. The immune system acts as a brutal policing mechanism. Widespread cellular defection (**cancer**) represents a breach of this pact, which typically ends in the death of the host—and the rebelling cells with it.
+- In **obligate multicellularity** (e.g., vertebrates), the pact is absolute and enforced by iron-clad mechanisms of **[[De-Darwinization.md|somatic de-Darwinization]]**. A developmental bottleneck (starting from a single cell) and germline sequestration ensure that only a specialized lineage of cells can reproduce the whole. The immune system acts as a brutal policing mechanism. Widespread cellular defection (**cancer**) represents a breach of this pact, which typically ends in the death of the host—and the rebelling cells with it.
     
 
 ## See Also

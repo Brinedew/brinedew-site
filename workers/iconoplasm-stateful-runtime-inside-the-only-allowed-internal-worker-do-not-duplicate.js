@@ -12317,9 +12317,15 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
         symbols,
       })
       if (!sentNext?.ok) {
-        throw new Error(
-          `Iconoplasm sync finalization Queue self-reschedule failed: ${sentNext?.detail || sentNext?.error || sentNext?.code || "unknown Queue send failure"}`,
-        )
+        console.warn("Iconoplasm sync finalization Queue self-reschedule deferred", {
+          run_id: runId,
+          symbols: symbols.length,
+          remaining,
+          error: sanitizeText(
+            String(sentNext?.detail || sentNext?.error || sentNext?.code || "unknown Queue send failure"),
+            500,
+          ),
+        })
       }
     }
     return {
