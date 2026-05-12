@@ -163,7 +163,7 @@ test("desktop home collection masonry paints discovery rows before rich detail h
 
   assert.match(
     block,
-    /if \(homeLayout === "masonry"\) \{\s*var immediateItems = pageEntries\.map\(function \(entry\) \{\s*return fallbackDiscoveredGene\(entry\)/,
+    /if \(shouldUseHomeMasonry\(homeLayout, cardVariant\)\) \{\s*var immediateItems = pageEntries\.map\(function \(entry\) \{\s*return fallbackDiscoveredGene\(entry\)/,
     "desktop masonry may create immediate discovery-row cards while rich gene details hydrate afterward",
   )
   assert.match(
@@ -173,7 +173,7 @@ test("desktop home collection masonry paints discovery rows before rich detail h
   )
   assert.match(
     block,
-    /if \(homeLayout === "masonry"\)[\s\S]*void hydrateBrickCards\(newCards\)/,
+    /if \(shouldUseHomeMasonry\(homeLayout, cardVariant\)\)[\s\S]*void hydrateBrickCards\(newCards\)/,
     "desktop masonry fallback cards must hydrate after first paint",
   )
 })
@@ -191,8 +191,8 @@ test("mobile home collection infocards wait for rich detail instead of fallback 
 
   assert.match(
     collectionBlock,
-    /if \(homeLayout === "masonry"\)[\s\S]*fallbackDiscoveredGene\(entry\)[\s\S]*\} else \{\s*return loadMobileCardPageVM\(pageEntries\)/,
-    "mobile/non-masonry infocards must be built from the strict mobile card manifest, not partial discovery fallback records",
+    /if \(shouldUseHomeMasonry\(homeLayout, cardVariant\)\)[\s\S]*fallbackDiscoveredGene\(entry\)[\s\S]*\} else \{\s*return loadMobileCardPageVM\(pageEntries\)/,
+    "simple/lit archival non-masonry infocards must be built from the strict mobile card manifest, while image-only uses the tile path",
   )
   assert.doesNotMatch(
     collectionBlock,
@@ -228,7 +228,7 @@ test("image-only home cards use the blot renderer in an adaptive masonry grid", 
     "blot-only site cards must not use the generic thumbnail masonry renderer",
   )
 
-  const appendStart = app.indexOf("function appendGrid(container, genes, startIndex, layout)")
+  const appendStart = app.indexOf("function appendGrid(container, genes, startIndex, layout")
   const appendEnd = app.indexOf("function renderCandidateGallery", appendStart)
   assert.notEqual(appendStart, -1, "missing appendGrid")
   assert.notEqual(appendEnd, -1, "missing appendGrid boundary")
@@ -260,6 +260,7 @@ test("image-only masonry has a physical artboard cap and adaptive columns", asyn
 
 test("Iconoplasm middle column uses card fonts instead of inherited Crimson Pro", async () => {
   const styles = await readFile(stylesPath, "utf8")
+  const app = await readFile(appPath, "utf8")
 
   const titleStart = styles.indexOf(".icono-hero-title {")
   const titleEnd = styles.indexOf("}", titleStart)
@@ -274,12 +275,16 @@ test("Iconoplasm middle column uses card fonts instead of inherited Crimson Pro"
   assert.match(styles.slice(titleStart, titleEnd), /font-family:\s*"League Spartan"/)
   assert.match(styles.slice(taglineStart, taglineEnd), /font-family:\s*"Special Elite"/)
   assert.match(styles.slice(statStart, statEnd), /font-family:\s*"IBM Plex Mono"/)
+  assert.match(styles, /#iconoplasm-root\s*\{[\s\S]*font-family:\s*"Special Elite"/)
+  assert.match(app, /<div class="icono-hero-title">ICONOPLASM<\/div>/)
   assert.doesNotMatch(styles, /Crimson Pro/)
+  assert.doesNotMatch(styles, /Monaspace/)
   assert.doesNotMatch(
     styles,
-    /\.icono-(?:hero|mobile-data-failure)[^{]*\{[^}]*var\(--(?:bodyFont|headerFont)\)/,
-    "Iconoplasm-owned middle-column surfaces must not inherit Quartz Crimson Pro variables",
+    /var\(--(?:bodyFont|headerFont|codeFont)\)/,
+    "Iconoplasm-owned surfaces must not inherit Quartz Crimson Pro or Monaspace font variables",
   )
+  assert.doesNotMatch(styles, /font-family:\s*inherit/)
 })
 
 test("extension install panel gives numbered click-by-click browser install instructions", async () => {
@@ -327,7 +332,7 @@ test("extension install panel gives numbered click-by-click browser install inst
 test("home extension install surface is a gallery card after starter genes, not a detached toolbar panel", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("var appendResolvedItems = function (resolvedItems)")
-  const end = app.indexOf("if (homeLayout === \"masonry\")", start)
+  const end = app.indexOf("if (shouldUseHomeMasonry(homeLayout, cardVariant))", start)
   assert.notEqual(start, -1, "missing home page append block")
   assert.notEqual(end, -1, "missing masonry branch after append block")
   const appendBlock = app.slice(start, end)

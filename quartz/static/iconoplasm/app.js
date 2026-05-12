@@ -901,11 +901,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       gutter.className = "icono-gutter-sizer"
       container.insertBefore(gutter, container.children[1] || null)
     }
+    var imageOnlyMasonry = container.getAttribute("data-layout") === "image-only-masonry"
     var msnry = new Masonry(container, {
       itemSelector: ".icono-card",
       columnWidth: ".icono-grid-sizer",
       gutter: ".icono-gutter-sizer",
-      percentPosition: true,
+      percentPosition: !imageOnlyMasonry,
+      fitWidth: imageOnlyMasonry,
       transitionDuration: 0,
       initLayout: false,
     })
@@ -1403,29 +1405,41 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
-  function buildHomeSkeletonGridMarkup(layout) {
-    var resolvedLayout = layout === "masonry" ? "masonry" : "bricks"
+  function buildImageOnlySkeletonCardMarkup(index) {
+    return (
+      '<article class="icono-card icono-card--image-tile icono-card--variant-image-only icono-card--skeleton" data-icono-index="' +
+      index +
+      '" style="--width:384;--height:512;">' +
+      '<div class="icono-card-skeleton-media"></div>' +
+      "</article>"
+    )
+  }
+
+  function buildHomeSkeletonGridMarkup(layout, cardVariant) {
+    var resolvedLayout = effectiveHomeGridLayout(layout, cardVariant)
     var html = ""
-    if (resolvedLayout === "masonry") {
+    if (resolvedLayout === "masonry" || resolvedLayout === "image-only-masonry") {
       html += '<div class="icono-grid-sizer"></div><div class="icono-gutter-sizer"></div>'
     }
     for (var i = 0; i < HOME_SKELETON_CARD_COUNT; i++) {
       html +=
-        resolvedLayout === "masonry"
+        resolvedLayout === "image-only-masonry"
+          ? buildImageOnlySkeletonCardMarkup(i)
+          : resolvedLayout === "masonry"
           ? buildMasonrySkeletonCardMarkup(i)
           : buildBrickSkeletonCardMarkup()
     }
     return html
   }
 
-  function buildHomeShellMarkup(layout) {
-    var resolvedLayout = layout === "masonry" ? "masonry" : HOME_LAYOUT_DEFAULT
+  function buildHomeShellMarkup(layout, cardVariant) {
+    var resolvedLayout = effectiveHomeGridLayout(layout, cardVariant)
     // Single source of truth: content/apps/iconoplasm/index.md intentionally ships an empty
     // mount root now. Keep the entire home shell here so the page cannot drift into a second
     // markdown-owned fallback renderer with stale dropdowns, copy, or skeleton markup.
     return (
       '<div class="icono-hero">' +
-      '<div class="icono-hero-title">Iconoplasm</div>' +
+      '<div class="icono-hero-title">ICONOPLASM</div>' +
       '<p class="tagline">Mnemonics for genes - <a class="internal" href="https://brinedew.bio/posts/Iconoplasm-FAQ.html">read FAQ</a></p>' +
       '<p class="stat" id="icono-public-inventory-stat" hidden aria-live="polite"></p>' +
       "</div>" +
@@ -1454,7 +1468,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-grid" id="icono-grid" data-layout="' +
       esc(resolvedLayout) +
       '" aria-busy="true">' +
-      buildHomeSkeletonGridMarkup(resolvedLayout) +
+      buildHomeSkeletonGridMarkup(layout, cardVariant) +
       "</div>" +
       '<div class="icono-load-sentinel" id="icono-load-sentinel" aria-hidden="true"></div>'
     )
@@ -1490,6 +1504,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return IconoCardShared.normalizeCardVariant(
       (settings && settings.cardVariant) || CARD_VARIANT_DEFAULT,
     )
+  }
+
+  function effectiveHomeGridLayout(layout, cardVariant) {
+    var resolvedCardVariant = cardVariant || resolveCardVariant()
+    if (isImageOnlyCardVariant(resolvedCardVariant)) return "image-only-masonry"
+    return layout === "masonry" ? "masonry" : HOME_LAYOUT_DEFAULT
+  }
+
+  function shouldUseHomeMasonry(layout, cardVariant) {
+    return effectiveHomeGridLayout(layout, cardVariant) !== HOME_LAYOUT_DEFAULT
   }
 
   function isArchivalCardVariant(cardVariant) {
@@ -4559,12 +4583,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function renderHome(root, restoreState) {
     var homeLayout = resolveHomeLayout()
+    var cardVariant = resolveCardVariant()
+    var homeGridLayout = effectiveHomeGridLayout(homeLayout, cardVariant)
     var settings = readIconoplasmSettings()
     var useClassicGallery = !!(currentUserIsIconoAdmin && settings && settings.showAllGenes)
     var pendingRestoreState = restoreState || null
     var activeRestoreState = pendingRestoreState
     iconoSidebarState.page = "home"
-    iconoSidebarState.homeLayout = homeLayout
+    iconoSidebarState.homeLayout = homeGridLayout
     iconoSidebarState.total = 0
     iconoSidebarState.publishedTotal = 0
     iconoSidebarState.gene = null
@@ -4574,7 +4600,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       root.querySelector("#icono-q") &&
       root.querySelector("#icono-order")
     if (!hasExistingShell) {
-      root.innerHTML = buildHomeShellMarkup(homeLayout)
+      root.innerHTML = buildHomeShellMarkup(homeLayout, cardVariant)
     }
     loadInstallReleaseMetadata()
     renderHomeInstallCta()
@@ -4960,10 +4986,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         Number((restoreConfig && restoreConfig.loadedCount) || 0) || 0,
       )
       clearBackgroundPrefill()
-      grid.setAttribute("data-layout", homeLayout)
+      grid.setAttribute("data-layout", homeGridLayout)
       grid.setAttribute("aria-busy", "true")
       grid.hidden = false
-      grid.innerHTML = buildHomeSkeletonGridMarkup(homeLayout)
+      grid.innerHTML = buildHomeSkeletonGridMarkup(homeLayout, cardVariant)
       destroyHomeMasonry()
       if (typeof grid._iconoPrefetchCleanup === "function") {
         grid._iconoPrefetchCleanup()
@@ -5036,14 +5062,20 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             galleryState.ready = true
             if (isFirstPage) {
               grid.innerHTML = ""
-              grid.setAttribute("data-layout", homeLayout)
+              grid.setAttribute("data-layout", homeGridLayout)
               grid.setAttribute("aria-busy", "false")
             }
             if (items.length) {
-              var newCards = appendGrid(grid, items, galleryState.items.length, homeLayout)
+              var newCards = appendGrid(
+                grid,
+                items,
+                galleryState.items.length,
+                homeLayout,
+                cardVariant,
+              )
               galleryState.items = galleryState.items.concat(items)
               galleryState.offset += items.length
-              if (homeLayout === "masonry") {
+              if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
                 applyHomeMasonry(grid, newCards)
                 setupOrderedPortraitPrefetch(grid, galleryState.items)
                 void hydrateBrickCards(newCards).then(function () {
@@ -5132,7 +5164,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               galleryState.discoveryEntries = discoveryRows.slice()
               galleryState.sortedDiscoveries = discoveryRows.slice()
               grid.innerHTML = ""
-              grid.setAttribute("data-layout", homeLayout)
+              grid.setAttribute("data-layout", homeGridLayout)
               grid.setAttribute("aria-busy", "false")
             } else {
               galleryState.discoveryEntries = galleryState.discoveryEntries.concat(discoveryRows)
@@ -5141,13 +5173,24 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             galleryState.hasMore = !!(data && data.has_more)
             galleryState.windowCursor = String((data && data.next_cursor) || "")
             if (cards.length) {
-              var newCards = appendGrid(grid, cards, galleryState.items.length, homeLayout)
+              var newCards = appendGrid(
+                grid,
+                cards,
+                galleryState.items.length,
+                homeLayout,
+                cardVariant,
+              )
               galleryState.items = galleryState.items.concat(cards)
-              destroyHomeMasonry()
-              warmBrickCardImages(galleryState.items)
-              wireBrickVoteBoxes(newCards)
-              wireMobileLabelCards(newCards)
-              refreshPortraitLightbox()
+              if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
+                applyHomeMasonry(grid, newCards)
+                setupOrderedPortraitPrefetch(grid, galleryState.items)
+              } else {
+                destroyHomeMasonry()
+                warmBrickCardImages(galleryState.items)
+                wireBrickVoteBoxes(newCards)
+                wireMobileLabelCards(newCards)
+                refreshPortraitLightbox()
+              }
             }
             if (failures.length) {
               console.error("[Iconoplasm] account gallery window VM failures:", failures)
@@ -5219,11 +5262,17 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             if (renderDisposed || requestId !== activeGalleryRequest) return
             if (isFirstPage) {
               grid.innerHTML = ""
-              grid.setAttribute("data-layout", homeLayout)
+              grid.setAttribute("data-layout", homeGridLayout)
               grid.setAttribute("aria-busy", "false")
             }
             if (resolvedItems.length) {
-              var newCards = appendGrid(grid, resolvedItems, galleryState.items.length, homeLayout)
+              var newCards = appendGrid(
+                grid,
+                resolvedItems,
+                galleryState.items.length,
+                homeLayout,
+                cardVariant,
+              )
               galleryState.items = galleryState.items.concat(resolvedItems)
               galleryState.offset += pageEntries.length
               var installCard = null
@@ -5237,7 +5286,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               var auxiliaryCards = []
               if (installCard) auxiliaryCards.push(installCard)
               if (discordActionCard) auxiliaryCards.push(discordActionCard)
-              if (homeLayout === "masonry") {
+              if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
                 applyHomeMasonry(
                   grid,
                   auxiliaryCards.length ? newCards.concat(auxiliaryCards) : newCards,
@@ -5287,7 +5336,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               orderEl.value = galleryState.order
             }
           }
-          if (homeLayout === "masonry") {
+          if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
             var immediateItems = pageEntries.map(function (entry) {
               return fallbackDiscoveredGene(entry)
             })
@@ -5538,6 +5587,50 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return html
   }
 
+  function buildImageOnlyTileCardMarkup(g, cardIndex) {
+    var dims = portraitDimensions(g)
+    var key = normalizedSymbol(g.symbol)
+    var portraitUrl = publishedPortraitUrl(g, "medium")
+    var href = "/gene/" + esc(encodeURIComponent(g.symbol))
+    var geneLinkAttrs = 'target="_blank" rel="noopener noreferrer"'
+    var detail = portraitDetailCache[key] || null
+    return (
+      '<article class="icono-card icono-card--image-tile icono-card--variant-image-only" data-icono-index="' +
+      cardIndex +
+      '" data-icono-symbol="' +
+      esc(g.symbol) +
+      '" data-icono-card-variant="image-only" style="--width:' +
+      dims.width +
+      ";--height:" +
+      dims.height +
+      ";--icono-card-accent:" +
+      esc(g.color || "#888") +
+      ';">' +
+      buildArchivalBodyMarkup(detail || g, {
+        mode: "brick",
+        layoutVariant: "image-only",
+        mobileReview: false,
+        portraitAlt: g.symbol + " blot",
+        portraitSrc: portraitUrl,
+        titleHref: href,
+        titleLinkAttrs: geneLinkAttrs,
+        voteHtml: "",
+      }) +
+      "</article>"
+    )
+  }
+
+  function buildImageOnlyTileGridMarkup(genes, startIndex) {
+    if (!genes.length) {
+      return ""
+    }
+    var html = ""
+    for (var i = 0; i < genes.length; i++) {
+      html += buildImageOnlyTileCardMarkup(genes[i], startIndex + i)
+    }
+    return html
+  }
+
   function buildBrickGridMarkup(genes, startIndex) {
     if (!genes.length) {
       return ""
@@ -5549,18 +5642,24 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return html
   }
 
-  function renderGrid(container, genes, layout) {
+  function renderGrid(container, genes, layout, cardVariant) {
     var resolvedLayout = layout || resolveHomeLayout()
+    var resolvedCardVariant = cardVariant || resolveCardVariant()
     container.innerHTML =
-      resolvedLayout === "masonry"
+      isImageOnlyCardVariant(resolvedCardVariant)
+        ? buildImageOnlyTileGridMarkup(genes, 0)
+        : resolvedLayout === "masonry"
         ? buildMasonryGridMarkup(genes, 0)
         : buildBrickGridMarkup(genes, 0)
   }
 
-  function appendGrid(container, genes, startIndex, layout) {
+  function appendGrid(container, genes, startIndex, layout, cardVariant) {
     var resolvedLayout = layout || resolveHomeLayout()
+    var resolvedCardVariant = cardVariant || resolveCardVariant()
     var html =
-      resolvedLayout === "masonry"
+      isImageOnlyCardVariant(resolvedCardVariant)
+        ? buildImageOnlyTileGridMarkup(genes, startIndex)
+        : resolvedLayout === "masonry"
         ? buildMasonryGridMarkup(genes, startIndex)
         : buildBrickGridMarkup(genes, startIndex)
     if (!html) return []
