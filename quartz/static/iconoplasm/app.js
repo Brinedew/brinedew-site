@@ -3054,14 +3054,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function buildVoteLoginPromptMarkup() {
     return (
-      '<div class="icono-vote-login-prompt" data-icono-vote-login-prompt role="status" aria-live="polite">' +
+      '<div class="icono-vote-login-overlay" data-icono-vote-login-prompt aria-hidden="false">' +
+      '<button type="button" class="icono-vote-login-backdrop" data-icono-vote-login-dismiss aria-label="Close login prompt"></button>' +
+      '<div class="icono-vote-login-dialog" role="dialog" aria-modal="true" aria-labelledby="icono-vote-login-title">' +
+      '<button type="button" class="icono-vote-login-close" data-icono-vote-login-dismiss aria-label="Close">Close</button>' +
       '<div class="icono-vote-login-copy">' +
-      '<div class="icono-vote-login-title">Log in with Discord to vote.</div>' +
-      '<div class="icono-vote-login-note">Votes affect the public blot ranking, so they need a signed-in account.</div>' +
+      '<div class="icono-vote-login-title" id="icono-vote-login-title">Log in with Discord to vote</div>' +
+      '<div class="icono-vote-login-note">Votes affect the public canonical blot ranking, so they need a signed-in account.</div>' +
       "</div>" +
       '<a class="icono-vote-login-link" href="' +
       esc(voteLoginUrl()) +
       '">Log in with Discord</a>' +
+      "</div>" +
       "</div>"
     )
   }
@@ -3075,22 +3079,29 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     wrapper.innerHTML = buildVoteLoginPromptMarkup()
     var prompt = wrapper.firstElementChild
     if (!prompt) return
-    var host =
-      voteBox &&
-      (voteBox.closest(".icono-candidate-footer") ||
-        voteBox.closest("[data-icono-gene-vote-slot]") ||
-        voteBox.parentNode)
-    if (host && voteBox && voteBox.parentNode === host) {
-      voteBox.insertAdjacentElement("afterend", prompt)
-    } else if (host) {
-      host.appendChild(prompt)
-    } else {
-      var root = document.getElementById(ROOT_ID)
-      if (root) root.appendChild(prompt)
+    var closePrompt = function () {
+      prompt.remove()
+      document.documentElement.classList.remove("icono-modal-locked")
+      document.body.classList.remove("icono-modal-locked")
+      document.removeEventListener("keydown", onKeydown)
+      voteLoginPromptVisible = false
+      if (voteBox && typeof voteBox.focus === "function") voteBox.focus({ preventScroll: true })
     }
+    var onKeydown = function (event) {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        closePrompt()
+      }
+    }
+    prompt.querySelectorAll("[data-icono-vote-login-dismiss]").forEach(function (button) {
+      button.addEventListener("click", closePrompt)
+    })
+    document.body.appendChild(prompt)
+    document.documentElement.classList.add("icono-modal-locked")
+    document.body.classList.add("icono-modal-locked")
+    document.addEventListener("keydown", onKeydown)
     if (!voteLoginPromptVisible) {
       voteLoginPromptVisible = true
-      prompt.scrollIntoView({ block: "nearest", inline: "nearest" })
       var link = prompt.querySelector("a")
       if (link && typeof link.focus === "function") link.focus({ preventScroll: true })
     }

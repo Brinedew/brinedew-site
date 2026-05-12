@@ -394,7 +394,7 @@ test("home extension install surface is a gallery card after starter genes, not 
   )
 })
 
-test("guest vote auth shows an inline prompt without joining artwork grids", async () => {
+test("guest vote auth shows a page-level modal without joining artwork grids", async () => {
   const app = await readFile(appPath, "utf8")
   const popupStart = app.indexOf("function showVoteLoginPopup(")
   const popupEnd = app.indexOf("function voteBoxMarkup", popupStart)
@@ -407,7 +407,7 @@ test("guest vote auth shows an inline prompt without joining artwork grids", asy
     /window\.location\.(assign|href)|location\.assign|location\.href/,
     "guest vote clicks must not immediately redirect to Discord auth",
   )
-  assert.match(app, /function buildVoteLoginPromptMarkup\(/, "guest vote auth should render a prompt")
+  assert.match(app, /function buildVoteLoginPromptMarkup\(/, "guest vote auth should render a modal prompt")
   const promptStart = app.indexOf("function buildVoteLoginPromptMarkup(")
   const promptEnd = app.indexOf("function showVoteLoginPopup", promptStart)
   assert.notEqual(promptStart, -1, "missing vote auth prompt builder")
@@ -419,17 +419,20 @@ test("guest vote auth shows an inline prompt without joining artwork grids", asy
     /buildVoteLoginPromptMarkup\(/,
     "guest vote auth should render a visible prompt before exposing the Discord login CTA",
   )
+  assert.match(promptBlock, /role="dialog"/, "vote login prompt should use a standard modal dialog")
+  assert.match(promptBlock, /aria-modal="true"/, "vote login prompt should take focus out of page context")
+  assert.match(popupBlock, /document\.body\.appendChild\(prompt\)/, "vote login prompt should mount at page level")
+  assert.match(popupBlock, /document\.documentElement\.classList\.add\("icono-modal-locked"\)/)
   assert.doesNotMatch(
     promptBlock,
-    /icono-card|icono-guest-login-card|<article/,
-    "vote login prompts must be inline controls, not gallery cards",
+    /icono-card|icono-guest-login-card|icono-candidate-footer|<article/,
+    "vote login modal must not reuse card/grid/footer classes",
   )
   assert.doesNotMatch(
     popupBlock,
-    /\.closest\("\.icono-candidate-card"\)|insertBefore\(prompt,\s*anchor\.nextSibling\)|insertBefore\(card,\s*anchor\.nextSibling\)/,
-    "candidate vote prompts must not be inserted as siblings in the artwork grid",
+    /\.closest\("\.icono-candidate-card"\)|\.closest\("\.icono-candidate-footer"\)|insertAdjacentElement|insertBefore|[^.]appendChild\(prompt\)/,
+    "candidate vote prompts must not be inserted into any artwork/card context",
   )
-  assert.match(popupBlock, /\.closest\("\.icono-candidate-footer"\)/, "candidate prompts should anchor to the footer controls")
 })
 
 test("gene pages always render the vintage lab label card regardless of gallery card style", async () => {
