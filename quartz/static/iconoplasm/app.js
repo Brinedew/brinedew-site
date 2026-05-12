@@ -5103,7 +5103,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
                 setupOrderedPortraitPrefetch(grid, galleryState.items)
                 void hydrateBrickCards(newCards).then(function () {
                   warmBrickCardImages(galleryState.items)
-                  applyHomeMasonry(grid, newCards)
+                  applyHomeMasonry(grid)
                 })
               } else {
                 destroyHomeMasonry()
@@ -5312,18 +5312,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               var auxiliaryCards = []
               if (installCard) auxiliaryCards.push(installCard)
               if (discordActionCard) auxiliaryCards.push(discordActionCard)
+              var masonryNewCards =
+                auxiliaryContainer === grid && auxiliaryCards.length
+                  ? newCards.concat(auxiliaryCards)
+                  : newCards
               if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
-                applyHomeMasonry(
-                  grid,
-                  auxiliaryCards.length ? newCards.concat(auxiliaryCards) : newCards,
-                )
+                applyHomeMasonry(grid, masonryNewCards)
                 setupOrderedPortraitPrefetch(grid, galleryState.items)
                 void hydrateBrickCards(newCards).then(function () {
                   warmBrickCardImages(galleryState.items)
-                  applyHomeMasonry(
-                    grid,
-                    auxiliaryCards.length ? newCards.concat(auxiliaryCards) : newCards,
-                  )
+                  applyHomeMasonry(grid)
                 })
               } else {
                 destroyHomeMasonry()

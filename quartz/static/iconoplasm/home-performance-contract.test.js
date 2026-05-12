@@ -403,12 +403,18 @@ test("blot-only masonry keeps auxiliary login cards out of the artwork grid", as
     "blot-only cards need a separate auxiliary host so login/install panels cannot become masonry items",
   )
   const appendStart = app.indexOf("var auxiliaryContainer = homeAuxiliaryContainer(grid, cardVariant)")
-  const appendEnd = app.indexOf("var auxiliaryCards = []", appendStart)
+  const appendEnd = app.indexOf("if (shouldUseHomeMasonry(homeLayout, cardVariant))", appendStart)
   assert.notEqual(appendStart, -1, "missing auxiliary container selection before appending login cards")
   const appendBlock = app.slice(appendStart, appendEnd)
   assert.match(appendBlock, /appendHomeInstallCard\(auxiliaryContainer\)/)
   assert.match(appendBlock, /appendDiscordActionCard\(auxiliaryContainer\)/)
+  assert.match(appendBlock, /auxiliaryContainer === grid[\s\S]*newCards\.concat\(auxiliaryCards\)[\s\S]*: newCards/)
   assert.match(app, /clearHomeAuxiliaryCards\(\)[\s\S]*destroyHomeMasonry\(\)/)
+  assert.doesNotMatch(
+    app,
+    /hydrateBrickCards\(newCards\)\.then\(function \(\) \{[\s\S]{0,180}applyHomeMasonry\(grid,\s*newCards\)/,
+    "hydration relayout must not re-append the same masonry elements or Masonry will reserve ghost slots",
+  )
   assert.match(css, /\.icono-home-auxiliary[\s\S]*width:\s*min\(100%,\s*var\(--icono-image-tile-width\)\)/)
 })
 
