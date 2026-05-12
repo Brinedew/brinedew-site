@@ -1924,6 +1924,17 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   margin: 0 0 1rem;
 }
 
+.icono-home-auxiliary {
+  display: grid;
+  gap: 1rem;
+  width: min(100%, var(--icono-image-tile-width));
+  margin: 1rem auto 0;
+}
+
+.icono-home-auxiliary[hidden] {
+  display: none !important;
+}
+
 .icono-collection-summary-host[hidden],
 .icono-empty[hidden] {
   display: none !important;

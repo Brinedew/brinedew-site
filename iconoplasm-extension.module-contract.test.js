@@ -930,8 +930,8 @@ test("Iconoplasm home keeps guest Discord login in the starter-card flow", () =>
   )
   assert.match(
     appSource,
-    /galleryState\.offset >= GUEST_STARTER_GENES\.length[\s\S]*appendDiscordActionCard\(grid\)/,
-    "Discord action card should be appended after the three starter gene cards render",
+    /galleryState\.offset >= GUEST_STARTER_GENES\.length[\s\S]*appendDiscordActionCard\(auxiliaryContainer\)/,
+    "Discord action card should be appended after the three starter gene cards render without forcing every card variant into the same grid host",
   )
   assert.match(
     appSource,

@@ -381,12 +381,35 @@ test("home extension install surface is a gallery card after starter genes, not 
 
   assert.doesNotMatch(app, /id="icono-install-panel-host"/)
   assert.match(app, /data-icono-home-install-card/)
-  assert.match(appendBlock, /galleryState\.offset >= GUEST_STARTER_GENES\.length[\s\S]*appendHomeInstallCard\(grid\)/)
+  assert.match(appendBlock, /galleryState\.offset >= GUEST_STARTER_GENES\.length[\s\S]*appendHomeInstallCard\(auxiliaryContainer\)/)
   assert.match(
     appendBlock,
-    /appendHomeInstallCard\(grid\)[\s\S]*appendDiscordActionCard\(grid\)/,
+    /appendHomeInstallCard\(auxiliaryContainer\)[\s\S]*appendDiscordActionCard\(auxiliaryContainer\)/,
     "install card should be inserted before the Discord action card in the starter grid flow",
   )
+})
+
+test("blot-only masonry keeps auxiliary login cards out of the artwork grid", async () => {
+  const app = await readFile(appPath, "utf8")
+  const css = await readFile(stylesPath, "utf8")
+  const helperStart = app.indexOf("function homeAuxiliaryContainer(grid, cardVariant)")
+  const helperEnd = app.indexOf("function clearHomeAuxiliaryCards()", helperStart)
+  assert.notEqual(helperStart, -1, "missing image-only auxiliary container helper")
+  assert.notEqual(helperEnd, -1, "missing image-only auxiliary cleanup helper")
+  const helperBlock = app.slice(helperStart, helperEnd)
+  assert.match(
+    helperBlock,
+    /isImageOnlyCardVariant\(cardVariant\)[\s\S]*document\.getElementById\("icono-home-auxiliary"\)/,
+    "blot-only cards need a separate auxiliary host so login/install panels cannot become masonry items",
+  )
+  const appendStart = app.indexOf("var auxiliaryContainer = homeAuxiliaryContainer(grid, cardVariant)")
+  const appendEnd = app.indexOf("var auxiliaryCards = []", appendStart)
+  assert.notEqual(appendStart, -1, "missing auxiliary container selection before appending login cards")
+  const appendBlock = app.slice(appendStart, appendEnd)
+  assert.match(appendBlock, /appendHomeInstallCard\(auxiliaryContainer\)/)
+  assert.match(appendBlock, /appendDiscordActionCard\(auxiliaryContainer\)/)
+  assert.match(app, /clearHomeAuxiliaryCards\(\)[\s\S]*destroyHomeMasonry\(\)/)
+  assert.match(css, /\.icono-home-auxiliary[\s\S]*width:\s*min\(100%,\s*var\(--icono-image-tile-width\)\)/)
 })
 
 test("installed extension card uses concise add-on settings copy", async () => {

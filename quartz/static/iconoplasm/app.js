@@ -1470,6 +1470,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '" aria-busy="true">' +
       buildHomeSkeletonGridMarkup(layout, cardVariant) +
       "</div>" +
+      '<div class="icono-home-auxiliary" id="icono-home-auxiliary" hidden></div>' +
       '<div class="icono-load-sentinel" id="icono-load-sentinel" aria-hidden="true"></div>'
     )
   }
@@ -2384,6 +2385,21 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (!card) return null
     container.appendChild(card)
     return card
+  }
+
+  function homeAuxiliaryContainer(grid, cardVariant) {
+    if (!grid || !isImageOnlyCardVariant(cardVariant)) return grid
+    var host = document.getElementById("icono-home-auxiliary")
+    if (!host) return grid
+    host.hidden = false
+    return host
+  }
+
+  function clearHomeAuxiliaryCards() {
+    var host = document.getElementById("icono-home-auxiliary")
+    if (!host) return
+    host.innerHTML = ""
+    host.hidden = true
   }
 
   function renderTooltipMetaSkeletonHtml() {
@@ -4994,6 +5010,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       grid.setAttribute("aria-busy", "true")
       grid.hidden = false
       grid.innerHTML = buildHomeSkeletonGridMarkup(homeLayout, cardVariant)
+      clearHomeAuxiliaryCards()
       destroyHomeMasonry()
       if (typeof grid._iconoPrefetchCleanup === "function") {
         grid._iconoPrefetchCleanup()
@@ -5065,7 +5082,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             galleryState.hasMore = Boolean(data && data.has_more)
             galleryState.ready = true
             if (isFirstPage) {
+              destroyHomeMasonry()
               grid.innerHTML = ""
+              clearHomeAuxiliaryCards()
               grid.setAttribute("data-layout", homeGridLayout)
               grid.setAttribute("aria-busy", "false")
             }
@@ -5165,9 +5184,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               Number((data && data.discovered_count) || galleryState.discoveredCount || 0) || 0,
             )
             if (isFirstPage) {
+              destroyHomeMasonry()
               galleryState.discoveryEntries = discoveryRows.slice()
               galleryState.sortedDiscoveries = discoveryRows.slice()
               grid.innerHTML = ""
+              clearHomeAuxiliaryCards()
               grid.setAttribute("data-layout", homeGridLayout)
               grid.setAttribute("aria-busy", "false")
             } else {
@@ -5281,11 +5302,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               galleryState.offset += pageEntries.length
               var installCard = null
               var discordActionCard = null
+              var auxiliaryContainer = homeAuxiliaryContainer(grid, cardVariant)
               if (galleryState.offset >= GUEST_STARTER_GENES.length) {
-                installCard = appendHomeInstallCard(grid)
+                installCard = appendHomeInstallCard(auxiliaryContainer)
               }
               if (galleryState.offset >= GUEST_STARTER_GENES.length) {
-                discordActionCard = appendDiscordActionCard(grid)
+                discordActionCard = appendDiscordActionCard(auxiliaryContainer)
               }
               var auxiliaryCards = []
               if (installCard) auxiliaryCards.push(installCard)
