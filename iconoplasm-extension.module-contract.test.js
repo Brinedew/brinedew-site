@@ -558,6 +558,26 @@ test("DO NOT DELETE: extension runtime typography uses Iconoplasm fonts, not leg
     "extension popup title should use the Iconoplasm title face",
   )
   assert.match(
+    readUtf8("./iconoplasm-extension/popup.html"),
+    /<h1>ICONOPLASM<\/h1>/,
+    "extension popup title should render the brand in all caps",
+  )
+  assert.match(
+    popupCss,
+    /\.popup-segment-label\s*\{[\s\S]*font-size:\s*0\.72rem;[\s\S]*letter-spacing:\s*0\.08em;[\s\S]*text-transform:\s*uppercase;/,
+    "segmented popup pills should use the same compact IBM label treatment as Appearance and Blocklist",
+  )
+  assert.match(
+    popupCss,
+    /\.popup-radio:checked \+ \.popup-segment-label\s*\{[\s\S]*font-weight:\s*500;/,
+    "active segmented pills should not become heavier than section kickers",
+  )
+  assert.match(
+    popupCss,
+    /\.popup-blocklist-symbol\s*\{[\s\S]*font-family:\s*"Special Elite"/,
+    "blocklisted terms should use the Special Elite gene-name face",
+  )
+  assert.match(
     contentCss,
     /\.iconoplasm-tooltip-meta-value\s*\{[\s\S]*font-family:\s*"IBM Plex Mono", monospace/,
     "extension tooltip body metadata should use IBM Plex Mono instead of the typewriter display face",

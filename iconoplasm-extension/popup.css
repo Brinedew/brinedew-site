@@ -217,10 +217,13 @@ input {
   border-radius: calc(var(--radius-lg) - 3px);
   background: transparent;
   color: var(--secondary);
-  font-size: 0.95rem;
+  font-size: 0.72rem;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
   line-height: 1.15;
   text-align: center;
+  text-transform: uppercase;
   overflow-wrap: normal;
   word-break: normal;
   cursor: pointer;
@@ -235,7 +238,7 @@ input {
   border-color: color-mix(in srgb, var(--ui-border) 58%, transparent);
   background: color-mix(in srgb, var(--light) 92%, white 8%);
   color: var(--dark);
-  font-weight: 600;
+  font-weight: 500;
   box-shadow:
     0 1px 3px rgba(33, 21, 12, 0.06),
     0 0 0 0.5px color-mix(in srgb, var(--ui-border) 36%, transparent);
@@ -445,10 +448,10 @@ input {
 }
 
 .popup-blocklist-symbol {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.84rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-family: "Special Elite", Georgia, serif;
+  font-size: 0.98rem;
+  font-weight: 400;
+  letter-spacing: 0;
   color: var(--dark);
 }
 
