@@ -563,6 +563,16 @@ test("DO NOT DELETE: extension runtime typography uses Iconoplasm fonts, not leg
     "extension popup title should render the brand in all caps",
   )
   assert.match(
+    readUtf8("./iconoplasm-extension/popup.html"),
+    /<legend>Highlight appearance<\/legend>/,
+    "extension popup should label highlight styling as Highlight appearance",
+  )
+  assert.match(
+    readUtf8("./iconoplasm-extension/popup.html"),
+    /<legend>Hover card appearance<\/legend>[\s\S]*aria-label="Hover card appearance"/,
+    "extension popup should label hover-card styling consistently for visible and accessible text",
+  )
+  assert.match(
     popupCss,
     /\.popup-segment-label\s*\{[\s\S]*font-size:\s*0\.72rem;[\s\S]*letter-spacing:\s*0\.08em;/,
     "segmented popup pills should use the same compact IBM size/weight treatment as Appearance and Blocklist",
