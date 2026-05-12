@@ -286,6 +286,11 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   --ui-bg: oklch(92% 0.01 75);
 }
 
+.icono-vote-login-overlay,
+.icono-vote-login-overlay * {
+  box-sizing: border-box;
+}
+
 .icono-vote-login-backdrop {
   position: absolute;
   inset: 0;
@@ -341,6 +346,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   align-items: center;
   justify-content: center;
   justify-self: start;
+  max-width: 100%;
   min-height: 2.4rem;
   padding: 0.5rem 0.9rem;
   border: 1px solid color-mix(in srgb, var(--dark) 20%, var(--ui-border) 80%);
@@ -351,7 +357,8 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   font-weight: 650;
   line-height: 1;
   text-decoration: none;
-  white-space: nowrap;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .icono-vote-login-link:hover {
