@@ -3060,7 +3060,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<button type="button" class="icono-vote-login-close" data-icono-vote-login-dismiss aria-label="Close">Close</button>' +
       '<div class="icono-vote-login-copy">' +
       '<div class="icono-vote-login-title" id="icono-vote-login-title">Log in with Discord to vote</div>' +
-      '<div class="icono-vote-login-note">Votes affect the public canonical blot ranking, so they need a signed-in account.</div>' +
       "</div>" +
       '<a class="icono-vote-login-link" href="' +
       esc(voteLoginUrl()) +
