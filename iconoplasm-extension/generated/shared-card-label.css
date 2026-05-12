@@ -264,6 +264,8 @@
   inset: 0;
   inline-size: 100%;
   block-size: 100%;
+  box-sizing: border-box;
+  margin: 0;
 }
 
 .icono-image-only-photo {

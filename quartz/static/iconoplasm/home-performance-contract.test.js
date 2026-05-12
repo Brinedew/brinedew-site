@@ -285,6 +285,11 @@ test("image-only masonry has a physical artboard cap and adaptive columns", asyn
     sharedCardCss,
     /\.icono-card--variant-image-only\.icono-card--brick,[\s\S]*\.icono-card--variant-image-only\.icono-card--image-tile,[\s\S]*aspect-ratio:\s*384\s*\/\s*512/,
   )
+  assert.match(
+    sharedCardCss,
+    /\.icono-image-only-photo,[\s\S]*\.icono-image-only-fallback\s*\{[\s\S]*margin:\s*0/,
+    "blot-only media must not inherit global img margins that create a top letterbox inside the physical card frame",
+  )
 
   const skeletonStart = app.indexOf("function buildImageOnlySkeletonCardMarkup(index)")
   const skeletonEnd = app.indexOf("function buildHomeSkeletonGridMarkup", skeletonStart)
