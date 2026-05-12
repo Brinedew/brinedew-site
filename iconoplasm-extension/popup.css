@@ -113,7 +113,7 @@ input {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--secondary);
+  color: color-mix(in srgb, var(--dark) 78%, transparent);
 }
 
 /* Kicker-only section header: replaces the old h2 + note pattern
@@ -216,14 +216,13 @@ input {
   border: 1px solid transparent;
   border-radius: calc(var(--radius-lg) - 3px);
   background: transparent;
-  color: var(--secondary);
+  color: color-mix(in srgb, var(--secondary) 64%, transparent);
   font-size: 0.72rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.08em;
   line-height: 1.15;
   text-align: center;
-  text-transform: uppercase;
   overflow-wrap: normal;
   word-break: normal;
   cursor: pointer;

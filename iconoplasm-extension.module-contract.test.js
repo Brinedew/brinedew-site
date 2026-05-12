@@ -564,8 +564,23 @@ test("DO NOT DELETE: extension runtime typography uses Iconoplasm fonts, not leg
   )
   assert.match(
     popupCss,
-    /\.popup-segment-label\s*\{[\s\S]*font-size:\s*0\.72rem;[\s\S]*letter-spacing:\s*0\.08em;[\s\S]*text-transform:\s*uppercase;/,
-    "segmented popup pills should use the same compact IBM label treatment as Appearance and Blocklist",
+    /\.popup-segment-label\s*\{[\s\S]*font-size:\s*0\.72rem;[\s\S]*letter-spacing:\s*0\.08em;/,
+    "segmented popup pills should use the same compact IBM size/weight treatment as Appearance and Blocklist",
+  )
+  assert.doesNotMatch(
+    popupCss.match(/\.popup-segment-label\s*\{[\s\S]*?\n\}/)?.[0] || "",
+    /text-transform:\s*uppercase/,
+    "segmented popup option labels should preserve their written casing",
+  )
+  assert.match(
+    popupCss,
+    /\.popup-field legend\s*\{[\s\S]*color:\s*color-mix\(in srgb, var\(--dark\) 78%, transparent\)/,
+    "above-picker field labels should use the stronger transparency value",
+  )
+  assert.match(
+    popupCss,
+    /\.popup-segment-label\s*\{[\s\S]*color:\s*color-mix\(in srgb, var\(--secondary\) 64%, transparent\)/,
+    "deselected picker options should use the softer transparency value",
   )
   assert.match(
     popupCss,
