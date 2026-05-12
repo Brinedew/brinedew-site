@@ -3052,10 +3052,49 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     })
   }
 
-  function showVoteLoginPopup() {
-    if (voteLoginRedirectPending) return
-    voteLoginRedirectPending = true
-    window.location.assign(voteLoginUrl())
+  function buildVoteLoginPromptCardMarkup() {
+    return (
+      '<article class="icono-card icono-guest-login-card icono-vote-login-card" data-icono-vote-login-card role="status" aria-live="polite">' +
+      '<div class="icono-home-auth-copy">' +
+      '<div class="icono-home-auth-title icono-guest-login-card-title">Log in with Discord to vote on this blot</div>' +
+      '<div class="icono-home-auth-note">Voting changes the public canonical blot ranking, so it needs a signed-in account.</div>' +
+      "</div>" +
+      '<a class="icono-home-auth-link icono-guest-login-card-button" href="' +
+      esc(voteLoginUrl()) +
+      '">Log in with Discord</a>' +
+      "</article>"
+    )
+  }
+
+  function showVoteLoginPopup(voteBox) {
+    var existing = document.querySelector("[data-icono-vote-login-card]")
+    if (existing) {
+      existing.remove()
+    }
+    var wrapper = document.createElement("div")
+    wrapper.innerHTML = buildVoteLoginPromptCardMarkup()
+    var card = wrapper.firstElementChild
+    if (!card) return
+    var anchor =
+      voteBox &&
+      (voteBox.closest(".icono-card") ||
+        voteBox.closest(".icono-gene-card") ||
+        voteBox.closest(".icono-candidate-card"))
+    var parent = anchor && anchor.parentNode ? anchor.parentNode : voteBox && voteBox.parentNode
+    if (parent && anchor && anchor.parentNode === parent) {
+      parent.insertBefore(card, anchor.nextSibling)
+    } else if (parent) {
+      parent.appendChild(card)
+    } else {
+      var root = document.getElementById(ROOT_ID)
+      if (root) root.appendChild(card)
+    }
+    if (!voteLoginRedirectPending) {
+      voteLoginRedirectPending = true
+      card.scrollIntoView({ block: "nearest", inline: "nearest" })
+      var link = card.querySelector("a")
+      if (link && typeof link.focus === "function") link.focus({ preventScroll: true })
+    }
   }
 
   function voteBoxMarkup(extraAttrs, options) {
@@ -3071,7 +3110,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       candidateImageId: opts.candidateImageId || 0,
       deferSnapshot: !!opts.deferSnapshot,
       apiBaseUrl: API,
-      onAuthRequired: showVoteLoginPopup,
+      onAuthRequired: function () {
+        showVoteLoginPopup(box)
+      },
       onVoteCommitted: function (data, state) {
         if (typeof opts.onVoteCommitted === "function") {
           opts.onVoteCommitted(data, state)

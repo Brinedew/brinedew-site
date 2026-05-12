@@ -394,6 +394,31 @@ test("home extension install surface is a gallery card after starter genes, not 
   )
 })
 
+test("guest vote auth shows an explicit login card instead of redirecting straight to Discord", async () => {
+  const app = await readFile(appPath, "utf8")
+  const popupStart = app.indexOf("function showVoteLoginPopup(")
+  const popupEnd = app.indexOf("function voteBoxMarkup", popupStart)
+  assert.notEqual(popupStart, -1, "missing vote auth prompt handler")
+  assert.notEqual(popupEnd, -1, "missing vote auth prompt handler boundary")
+  const popupBlock = app.slice(popupStart, popupEnd)
+
+  assert.doesNotMatch(
+    popupBlock,
+    /window\.location\.(assign|href)|location\.assign|location\.href/,
+    "guest vote clicks must not immediately redirect to Discord auth",
+  )
+  assert.match(
+    app,
+    /function buildVoteLoginPromptCardMarkup\(/,
+    "guest vote auth should reuse the existing login-card visual pattern",
+  )
+  assert.match(
+    popupBlock,
+    /buildVoteLoginPromptCardMarkup\(/,
+    "guest vote auth should render a visible prompt before exposing the Discord login CTA",
+  )
+})
+
 test("blot-only masonry keeps auxiliary login cards out of the artwork grid", async () => {
   const app = await readFile(appPath, "utf8")
   const css = await readFile(stylesPath, "utf8")
