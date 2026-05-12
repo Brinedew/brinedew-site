@@ -163,7 +163,7 @@ test("desktop home collection masonry paints discovery rows before rich detail h
 
   assert.match(
     block,
-    /if \(shouldUseHomeMasonry\(homeLayout, cardVariant\)\) \{\s*var immediateItems = pageEntries\.map\(function \(entry\) \{\s*return fallbackDiscoveredGene\(entry\)/,
+    /if \(shouldUseImmediateDiscoveryFallback\(homeLayout, cardVariant\)\) \{\s*var immediateItems = pageEntries\.map\(function \(entry\) \{\s*return fallbackDiscoveredGene\(entry\)/,
     "desktop masonry may create immediate discovery-row cards while rich gene details hydrate afterward",
   )
   assert.match(
@@ -173,7 +173,7 @@ test("desktop home collection masonry paints discovery rows before rich detail h
   )
   assert.match(
     block,
-    /if \(shouldUseHomeMasonry\(homeLayout, cardVariant\)\)[\s\S]*void hydrateBrickCards\(newCards\)/,
+    /var appendResolvedItems = function \(resolvedItems\)[\s\S]*if \(shouldUseHomeMasonry\(homeLayout, cardVariant\)\)[\s\S]*void hydrateBrickCards\(newCards\)/,
     "desktop masonry fallback cards must hydrate after first paint",
   )
 })
@@ -191,7 +191,7 @@ test("mobile home collection infocards wait for rich detail instead of fallback 
 
   assert.match(
     collectionBlock,
-    /if \(shouldUseHomeMasonry\(homeLayout, cardVariant\)\)[\s\S]*fallbackDiscoveredGene\(entry\)[\s\S]*\} else \{\s*return loadMobileCardPageVM\(pageEntries\)/,
+    /if \(shouldUseImmediateDiscoveryFallback\(homeLayout, cardVariant\)\)[\s\S]*fallbackDiscoveredGene\(entry\)[\s\S]*\} else \{\s*return loadMobileCardPageVM\(pageEntries\)/,
     "simple/lit archival non-masonry infocards must be built from the strict mobile card manifest, while image-only uses the tile path",
   )
   assert.doesNotMatch(
@@ -203,6 +203,30 @@ test("mobile home collection infocards wait for rich detail instead of fallback 
     collectionBlock,
     /\} else \{[\s\S]{0,900}loadDiscoveredGeneCardData\(entry\)/,
     "mobile/non-masonry infocards should use one manifest request, not a per-gene detail waterfall",
+  )
+})
+
+test("blot-only home collection waits for rich card payloads before masonry layout", async () => {
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("function loadNextGalleryPage()")
+  const end = app.indexOf("if (orderEl)", start)
+  assert.notEqual(start, -1, "missing loadNextGalleryPage")
+  assert.notEqual(end, -1, "missing loadNextGalleryPage boundary")
+  const block = app.slice(start, end)
+  const collectionStart = block.indexOf("ensureCollectionReady()")
+  assert.notEqual(collectionStart, -1, "missing personalized collection branch")
+  const collectionBlock = block.slice(collectionStart)
+
+  assert.match(app, /function shouldUseImmediateDiscoveryFallback\(layout, cardVariant\)/)
+  assert.match(
+    collectionBlock,
+    /if \(shouldUseImmediateDiscoveryFallback\(homeLayout, cardVariant\)\)[\s\S]*fallbackDiscoveredGene\(entry\)[\s\S]*\} else \{\s*return loadMobileCardPageVM\(pageEntries\)/,
+    "blot-only cards need rich card data before masonry; symbol-only fallback rows create empty square cards",
+  )
+  assert.doesNotMatch(
+    collectionBlock,
+    /if \(shouldUseHomeMasonry\(homeLayout, cardVariant\)\)[\s\S]{0,240}fallbackDiscoveredGene\(entry\)/,
+    "masonry layout eligibility must not automatically opt blot-only into symbol-only fallback cards",
   )
 })
 
@@ -240,6 +264,7 @@ test("image-only home cards use the blot renderer in an adaptive masonry grid", 
 test("image-only masonry has a physical artboard cap and adaptive columns", async () => {
   const styles = await readFile(stylesPath, "utf8")
   const sharedCardCss = await readFile(sharedCardCssPath, "utf8")
+  const app = await readFile(appPath, "utf8")
 
   assert.match(styles, /--icono-image-tile-width:\s*384px/)
   assert.match(styles, /--icono-image-tile-gutter:\s*16px/)
@@ -256,6 +281,23 @@ test("image-only masonry has a physical artboard cap and adaptive columns", asyn
     /@media \(max-width:\s*600px\)[\s\S]*\.icono-grid\[data-layout="image-only-masonry"\]\s+\.icono-gutter-sizer[\s\S]*width:\s*0/,
   )
   assert.match(sharedCardCss, /\.icono-card--variant-image-only\.icono-card--image-tile/)
+  assert.match(
+    sharedCardCss,
+    /\.icono-card--variant-image-only\.icono-card--brick,[\s\S]*\.icono-card--variant-image-only\.icono-card--image-tile,[\s\S]*aspect-ratio:\s*384\s*\/\s*512/,
+  )
+
+  const skeletonStart = app.indexOf("function buildImageOnlySkeletonCardMarkup(index)")
+  const skeletonEnd = app.indexOf("function buildHomeSkeletonGridMarkup", skeletonStart)
+  assert.notEqual(skeletonStart, -1, "missing image-only skeleton renderer")
+  assert.notEqual(skeletonEnd, -1, "missing image-only skeleton renderer boundary")
+  const skeletonBlock = app.slice(skeletonStart, skeletonEnd)
+  assert.match(skeletonBlock, /icono-card--image-tile/)
+  assert.match(skeletonBlock, /icono-card--variant-image-only/)
+  assert.match(
+    skeletonBlock,
+    /--width:384;--height:512/,
+    "blot-only masonry skeletons must reserve the same physical artboard geometry as final cards",
+  )
 })
 
 test("Iconoplasm middle column uses card fonts instead of inherited Crimson Pro", async () => {

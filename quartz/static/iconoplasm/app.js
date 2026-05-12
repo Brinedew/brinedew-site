@@ -1516,6 +1516,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return effectiveHomeGridLayout(layout, cardVariant) !== HOME_LAYOUT_DEFAULT
   }
 
+  function shouldUseImmediateDiscoveryFallback(layout, cardVariant) {
+    return layout === "masonry" && !isImageOnlyCardVariant(cardVariant)
+  }
+
   function isArchivalCardVariant(cardVariant) {
     return cardVariant === "lit-archival" || cardVariant === "neo-drab"
   }
@@ -5336,7 +5340,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               orderEl.value = galleryState.order
             }
           }
-          if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
+          if (shouldUseImmediateDiscoveryFallback(homeLayout, cardVariant)) {
             var immediateItems = pageEntries.map(function (entry) {
               return fallbackDiscoveredGene(entry)
             })

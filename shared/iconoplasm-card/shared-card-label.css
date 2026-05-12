@@ -97,7 +97,7 @@
   container-type: inline-size;
   inline-size: 100%;
   max-inline-size: 100%;
-  aspect-ratio: var(--width, 4) / var(--height, 5);
+  aspect-ratio: 384 / 512;
   display: block;
   border: 1px solid color-mix(in srgb, var(--icono-label-rule-strong) 88%, transparent);
   border-radius: 0;
