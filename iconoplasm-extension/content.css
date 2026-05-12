@@ -1,6 +1,6 @@
 /* Iconoplasm content styles -- gene highlighting + horizontal tooltip infobox.
  * Canonical extension root: D:\Coding\Website\iconoplasm-extension
- * Fonts: Crimson Pro (body), Monaspace Xenon (symbol) -- matching GeneGuessr.
+ * Fonts: IBM Plex Mono (body/labels), League Spartan (gene symbol), Special Elite (gene name).
  * Animation: fade only, no movement.
  * Tooltip: portrait left, infobox right, full gene color as background. */
 
@@ -315,17 +315,17 @@ body.iconoplasm-highlight-on-hover .iconoplasm-gene--pill:not(:hover) {
 }
 
 .iconoplasm-tooltip-portrait-status {
-  font-family: "Crimson Pro", "Georgia", serif;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 14px;
   letter-spacing: 0.02em;
   opacity: 0.9;
 }
 
 .iconoplasm-tooltip-portrait-symbol {
-  font-family: "Monaspace Xenon Web", "SF Mono", "Cascadia Code", "Consolas", monospace;
+  font-family: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
   font-size: 26px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.04em;
   line-height: 1.1;
   color: var(--iconoplasm-tooltip-ink);
 }
@@ -485,7 +485,7 @@ body.iconoplasm-highlight-on-hover .iconoplasm-gene--pill:not(:hover) {
   border-radius: 10px;
   background: rgba(24, 20, 17, 0.94);
   color: rgba(248, 244, 236, 0.96);
-  font: 500 14px/1.4 "Crimson Pro", "Georgia", serif;
+  font: 500 14px/1.4 "IBM Plex Mono", monospace;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
   opacity: 0;
   transform: translateY(8px);
@@ -520,7 +520,7 @@ body.iconoplasm-highlight-on-hover .iconoplasm-gene--pill:not(:hover) {
 }
 
 .iconoplasm-tooltip-meta-label {
-  font-family: "Crimson Pro", "Georgia", serif;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -529,7 +529,7 @@ body.iconoplasm-highlight-on-hover .iconoplasm-gene--pill:not(:hover) {
 }
 
 .iconoplasm-tooltip-meta-value {
-  font-family: "Crimson Pro", "Georgia", serif;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 15px;
   font-weight: 580;
   font-style: normal;

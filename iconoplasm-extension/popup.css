@@ -1,15 +1,31 @@
 @font-face {
-  font-family: "Crimson Pro";
-  src: url("fonts/CrimsonPro-Variable.woff2") format("woff2");
-  font-weight: 300 900;
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-Regular.woff2") format("woff2");
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "Monaspace Xenon Web";
-  src: url("fonts/MonaspaceXenon-Var.woff2") format("woff2");
-  font-weight: 200 800;
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-Medium.woff2") format("woff2");
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "League Spartan";
+  src: url("fonts/LeagueSpartan-800.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Special Elite";
+  src: url("fonts/SpecialElite-Regular.woff2") format("woff2");
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
@@ -36,7 +52,7 @@ body {
     radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 8%, transparent), transparent 34%),
     linear-gradient(180deg, color-mix(in srgb, var(--light) 97%, white 3%), color-mix(in srgb, var(--light) 94%, #eadfce 6%));
   color: var(--dark);
-  font-family: "Crimson Pro", serif;
+  font-family: "IBM Plex Mono", monospace;
   font-synthesis: none;
 }
 
@@ -80,10 +96,11 @@ input {
 
 .popup-brand-copy h1 {
   margin: 0.1rem 0 0;
+  font-family: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
   font-size: 1.58rem;
-  font-weight: 430;
+  font-weight: 800;
   line-height: 0.98;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
 }
 
 .popup-kicker,
@@ -91,7 +108,7 @@ input {
 .popup-field legend {
   margin: 0;
   padding: 0;
-  font-family: "Monaspace Xenon Web", monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.08em;
@@ -111,7 +128,7 @@ input {
   border: 1px solid color-mix(in srgb, var(--ui-border) 76%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--light) 72%, white 28%);
-  font-family: "Monaspace Xenon Web", monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 0.74rem;
   color: var(--secondary);
 }
@@ -134,9 +151,11 @@ input {
 
 .popup-section-head h2 {
   margin: 0;
+  font-family: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
   font-size: 1.16rem;
-  font-weight: 600;
+  font-weight: 800;
   line-height: 1.08;
+  letter-spacing: 0;
 }
 
 .popup-section-note {
@@ -250,7 +269,7 @@ input {
   border: 0;
   border-radius: calc(var(--radius-lg) - 2px);
   background: transparent;
-  font-family: "Monaspace Xenon Web", monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 0.72rem;
   font-weight: 450;
   letter-spacing: 0.04em;
@@ -295,7 +314,7 @@ input {
   border: 1px solid var(--ui-border);
   border-radius: calc(var(--radius-lg) - 2px);
   background: color-mix(in srgb, var(--light) 70%, white 30%);
-  font-family: "Monaspace Xenon Web", monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 0.88rem;
   letter-spacing: 0.04em;
   color: var(--dark);
@@ -319,7 +338,7 @@ input {
   border: 1px solid var(--ui-border);
   border-radius: calc(var(--radius-lg) - 2px);
   background: color-mix(in srgb, var(--light) 82%, white 18%);
-  font-family: "Crimson Pro", serif;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--dark);
@@ -376,7 +395,7 @@ input {
 .popup-blocklist-count {
   font-size: 0.78rem;
   color: var(--secondary);
-  font-family: "Monaspace Xenon Web", monospace;
+  font-family: "IBM Plex Mono", monospace;
   letter-spacing: 0.02em;
 }
 
@@ -415,7 +434,7 @@ input {
 
 .popup-blocklist-badge {
   font-size: 0.62rem;
-  font-family: "Monaspace Xenon Web", monospace;
+  font-family: "IBM Plex Mono", monospace;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--secondary);
@@ -426,7 +445,7 @@ input {
 }
 
 .popup-blocklist-symbol {
-  font-family: "Monaspace Xenon Web", monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 0.84rem;
   font-weight: 500;
   letter-spacing: 0.06em;
@@ -445,7 +464,7 @@ input {
   border: 0;
   border-radius: 4px;
   background: transparent;
-  font-family: "Monaspace Xenon Web", monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 0.72rem;
   line-height: 1;
   color: color-mix(in srgb, var(--secondary) 62%, transparent);
@@ -507,7 +526,7 @@ input {
   border: 1px solid color-mix(in srgb, oklch(45% 0.16 25) 42%, transparent);
   border-radius: 4px;
   background: color-mix(in srgb, oklch(60% 0.18 25) 12%, var(--paper));
-  font-family: "Monaspace Xenon Web", monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 0.68rem;
   font-weight: 700;
   line-height: 1;

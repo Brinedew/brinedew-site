@@ -1316,34 +1316,12 @@
     }
   }
 
-  // -- Font injection ------------------------------------------------
-  // Content scripts can't use relative URLs in CSS @font-face, so we
-  // inject a <style> element with chrome.runtime.getURL paths.
-  // The Paper-derived Iconoplasm label fonts are now self-hosted directly by
-  // generated/shared-card-label.css using shared relative paths; keep this
-  // injector limited to the extension's non-label baseline fonts so we don't
-  // reintroduce per-surface font drift.
+  // -- Font ownership ------------------------------------------------
+  // generated/shared-card-label.css owns the extension font faces. Keep this
+  // helper as a no-op compatibility hook so content init stays simple without
+  // reintroducing ad hoc legacy font injection.
   function injectFonts() {
-    const crimsonUrl = chrome.runtime.getURL("fonts/CrimsonPro-Variable.woff2")
-    const xenonUrl = chrome.runtime.getURL("fonts/MonaspaceXenon-Var.woff2")
-    const style = document.createElement("style")
-    style.textContent = `
-      @font-face {
-        font-family: 'Crimson Pro';
-        src: url('${crimsonUrl}') format('woff2');
-        font-weight: 300 900;
-        font-style: normal;
-        font-display: swap;
-      }
-      @font-face {
-        font-family: 'Monaspace Xenon Web';
-        src: url('${xenonUrl}') format('woff2');
-        font-weight: 200 800;
-        font-style: normal;
-        font-display: swap;
-      }
-    `
-    document.head.appendChild(style)
+    return undefined
   }
 
   // -- Init ----------------------------------------------------------

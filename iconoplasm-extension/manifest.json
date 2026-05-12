@@ -69,8 +69,6 @@
     {
       "resources": [
         "lit-archival-frame.html",
-        "fonts/CrimsonPro-Variable.woff2",
-        "fonts/MonaspaceXenon-Var.woff2",
         "fonts/IBMPlexMono-Regular.woff2",
         "fonts/IBMPlexMono-Medium.woff2",
         "fonts/LeagueSpartan-800.woff2",

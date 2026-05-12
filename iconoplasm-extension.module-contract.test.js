@@ -534,6 +534,41 @@ test("DO NOT DELETE: simple card portrait warmup decodes hover-neighbor images",
   )
 })
 
+test("DO NOT DELETE: extension runtime typography uses Iconoplasm fonts, not legacy site fonts", () => {
+  const contentCss = readUtf8("./iconoplasm-extension/content.css")
+  const popupCss = readUtf8("./iconoplasm-extension/popup.css")
+  const contentSource = readUtf8("./iconoplasm-extension/content.js")
+  const frameHtml = readUtf8("./iconoplasm-extension/lit-archival-frame.html")
+  const manifest = readUtf8("./iconoplasm-extension/manifest.json")
+  const runtimeTypography = [contentCss, popupCss, contentSource, frameHtml, manifest].join("\n")
+
+  assert.doesNotMatch(
+    runtimeTypography,
+    /Crimson Pro|Monaspace Xenon|CrimsonPro-Variable|MonaspaceXenon-Var/,
+    "extension runtime surfaces must not ship or inject the old Crimson/Monaspace typography",
+  )
+  assert.match(
+    popupCss,
+    /html,\s*\nbody\s*\{[\s\S]*font-family:\s*"IBM Plex Mono", monospace/,
+    "extension popup body text should use IBM Plex Mono",
+  )
+  assert.match(
+    popupCss,
+    /\.popup-brand-copy h1\s*\{[\s\S]*font-family:\s*"League Spartan"/,
+    "extension popup title should use the Iconoplasm title face",
+  )
+  assert.match(
+    contentCss,
+    /\.iconoplasm-tooltip-meta-value\s*\{[\s\S]*font-family:\s*"IBM Plex Mono", monospace/,
+    "extension tooltip body metadata should use IBM Plex Mono instead of the typewriter display face",
+  )
+  assert.match(
+    frameHtml,
+    /--headerFont:\s*"League Spartan"[\s\S]*--codeFont:\s*"IBM Plex Mono"/,
+    "extension iframe card shell should expose Iconoplasm font tokens to shared card CSS",
+  )
+})
+
 test("DO NOT DELETE: blot-only frame waits for portrait decode before first paint", () => {
   const frameSource = readUtf8("./iconoplasm-extension/lit-archival-frame.js")
   assert.match(
