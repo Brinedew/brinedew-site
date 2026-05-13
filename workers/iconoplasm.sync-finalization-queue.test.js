@@ -409,10 +409,12 @@ class FakeIconoplasmDb {
 function testKv() {
   return {
     store: new Map([["iconoplasm:gallery-version", "test-version"]]),
+    puts: [],
     async get(key) {
       return this.store.get(key) || null
     },
     async put(key, value) {
+      this.puts.push({ key, value })
       this.store.set(key, value)
     },
   }
@@ -944,13 +946,13 @@ test("queue drain message processes durable ledger batches without per-symbol ph
     {
       kind: "drain_finalization_ledger",
       run_id: "sync-test",
-      symbols,
-      idempotency_key: "sync-test:drain:2:TP53:BRCA1",
+      symbols: [],
+      idempotency_key: "sync-test:drain:0:all:all",
     },
   ])
 })
 
-test("queue drain consumer retries instead of acking when self-reschedule fails", async () => {
+test("queue drain consumer preserves progress when self-reschedule fails", async () => {
   const queue = buildFakeQueue({ failMessage: "Cloudflare API error: 429: daily Queue operations limit exceeded" })
   const symbols = ["TP53", "BRCA1"]
   const env = {
@@ -996,11 +998,11 @@ test("queue drain consumer retries instead of acking when self-reschedule fails"
     { waitUntil() {} },
   )
 
-  assert.equal(result.ok, false)
-  assert.equal(result.failed, 1)
-  assert.equal(result.retrying, 1)
-  assert.equal(acknowledged, false)
-  assert.deepEqual(retries, [{ delaySeconds: 30 }])
+  assert.equal(result.ok, true)
+  assert.equal(result.failed, 0)
+  assert.equal(result.retrying, 0)
+  assert.equal(acknowledged, true)
+  assert.deepEqual(retries, [])
   assert.deepEqual(queue.sent, [])
   assert.deepEqual(
     symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase),
@@ -1066,6 +1068,118 @@ test("queue drain message finalizes when only pending-finalize rows remain", asy
   assert.deepEqual(
     symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase),
     ["completed", "completed"],
+  )
+})
+
+test("scoped queue drain defers global KV publish while any ledger work remains active", async () => {
+  const queue = buildFakeQueue()
+  const kv = testKv()
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: [
+        {
+          gene_symbol: "TP53",
+          status: "queued",
+          phase: "completed_pending_finalize",
+          vision_ids_json: JSON.stringify(["anima-v1-1"]),
+        },
+        {
+          gene_symbol: "BRCA1",
+          status: "queued",
+          phase: "completed_pending_finalize",
+          vision_ids_json: JSON.stringify(["anima-v1-2"]),
+        },
+        {
+          gene_symbol: "EGFR",
+          status: "queued",
+          phase: "vote_summaries",
+          vision_ids_json: JSON.stringify(["anima-v1-3"]),
+        },
+      ],
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    KV: kv,
+  }
+  let acknowledged = false
+
+  const result = await handleIconoplasmSyncFinalizationQueue(
+    {
+      messages: [
+        {
+          body: {
+            kind: "drain_finalization_ledger",
+            run_id: "sync-test",
+            symbols: ["TP53", "BRCA1"],
+          },
+          ack() {
+            acknowledged = true
+          },
+          retry() {},
+        },
+      ],
+    },
+    env,
+    { waitUntil() {} },
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(result.processed, 0)
+  assert.equal(result.finalized, 0)
+  assert.equal(acknowledged, true)
+  assert.equal(kv.puts.length, 0)
+  assert.equal(env.ICONOPLASM_DB.jobs.get("TP53")?.phase, "completed_pending_finalize")
+  assert.equal(env.ICONOPLASM_DB.jobs.get("BRCA1")?.phase, "completed_pending_finalize")
+  assert.equal(env.ICONOPLASM_DB.jobs.get("EGFR")?.phase, "vote_summaries")
+  assert.equal(queue.sent.length, 1)
+  assert.deepEqual(queue.sent[0]?.symbols, [])
+})
+
+test("scoped queue drain performs one global finalization when the whole ledger is pending-finalize", async () => {
+  const queue = buildFakeQueue()
+  const kv = testKv()
+  const symbols = ["TP53", "BRCA1", "EGFR"]
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: symbols.map((symbol, index) => ({
+        gene_symbol: symbol,
+        status: "queued",
+        phase: "completed_pending_finalize",
+        vision_ids_json: JSON.stringify([`anima-v1-${index + 1}`]),
+      })),
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    KV: kv,
+  }
+
+  const result = await handleIconoplasmSyncFinalizationQueue(
+    {
+      messages: [
+        {
+          body: {
+            kind: "drain_finalization_ledger",
+            run_id: "sync-test",
+            symbols: ["TP53", "BRCA1"],
+          },
+          ack() {},
+          retry() {},
+        },
+      ],
+    },
+    env,
+    { waitUntil() {} },
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(result.finalized, 3)
+  assert.deepEqual(queue.sent, [])
+  assert.ok(kv.puts.length > 0)
+  assert.deepEqual(
+    symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.status),
+    ["completed", "completed", "completed"],
   )
 })
 

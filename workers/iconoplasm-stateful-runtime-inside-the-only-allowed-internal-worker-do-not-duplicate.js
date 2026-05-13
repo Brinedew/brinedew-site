@@ -12147,27 +12147,20 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
 async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbols = null } = {}) {
   if (!env?.ICONOPLASM_DB) return { ok: false, finalized: 0, remaining: 0 }
   const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
-  const scopedSymbolsJson = JSON.stringify(scopedSymbols)
   const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
   const remainingBeforeFinalize = await countSyncFinalizationJobs(env, {
-    whereSql: `status <> ? AND phase NOT IN (?, ?)
-      AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
+    whereSql: `status <> ? AND phase NOT IN (?, ?)`,
     bindArgs: [
       ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
       ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
       ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED,
-      scopedEnabled,
-      scopedSymbolsJson,
     ],
   })
   const pendingFinalizeCount = await countSyncFinalizationJobs(env, {
-    whereSql: `status <> ? AND phase = ?
-      AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
+    whereSql: `status <> ? AND phase = ?`,
     bindArgs: [
       ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
       ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-      scopedEnabled,
-      scopedSymbolsJson,
     ],
   })
   if (remainingBeforeFinalize > 0 || pendingFinalizeCount <= 0) {
@@ -12175,6 +12168,8 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
       ok: true,
       finalized: 0,
       remaining: remainingBeforeFinalize + pendingFinalizeCount,
+      global_finalize_deferred: remainingBeforeFinalize > 0,
+      broaden_next_drain: scopedEnabled > 0 && remainingBeforeFinalize > 0,
     }
   }
 
@@ -12182,14 +12177,11 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
     `SELECT vision_ids_json
      FROM icono_sync_finalization_jobs
      WHERE status <> ?
-       AND phase = ?
-       AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
+       AND phase = ?`,
   )
     .bind(
       ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
       ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-      scopedEnabled,
-      scopedSymbolsJson,
     )
     .all()
   const pendingFinalizeRows = Array.isArray(pendingFinalizeRowsResp?.results)
@@ -12207,12 +12199,12 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
     { maxItems: 5000 },
   )
 
-  // Chesterton's fence: dashboard refresh + gallery invalidation is the one
-  // intentionally global tail step. Keep it out of every per-symbol phase so a
-  // single finalizer runs once after the queue drains, instead of repeating the
-  // same global work until the worker falls over near the finish line. Vision
-  // rollups follow the same rule: dedupe them across the whole scoped drain
-  // instead of recomputing the same shared vision IDs once per symbol.
+  // Cost fence: dashboard refresh + gallery invalidation is the one intentionally
+  // global tail step. Scoped Queue messages are allowed to advance symbol work,
+  // but they must not publish the gallery/card-catalog artifact for their own
+  // 50-symbol slice. That repeats 20k-card KV writes hundreds of times. Only run
+  // this block after the whole finalization ledger has drained to pending-finalize.
+  // Vision rollups follow the same rule: dedupe them across the whole ledger.
   for (
     let start = 0;
     start < uniqueVisionIds.length;
@@ -12248,47 +12240,24 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
     },
   })
   const completedAt = new Date().toISOString()
-  if (scopedEnabled > 0) {
-    await env.ICONOPLASM_DB.prepare(
-      `UPDATE icono_sync_finalization_jobs
-       SET status = ?,
-           phase = ?,
-           updated_at = CURRENT_TIMESTAMP,
-           completed_at = ?,
-           last_error = ''
-       WHERE status <> ?
-         AND phase = ?
-         AND gene_symbol IN (SELECT value FROM json_each(?))`,
+  await env.ICONOPLASM_DB.prepare(
+    `UPDATE icono_sync_finalization_jobs
+     SET status = ?,
+         phase = ?,
+         updated_at = CURRENT_TIMESTAMP,
+         completed_at = ?,
+         last_error = ''
+     WHERE status <> ?
+       AND phase = ?`,
+  )
+    .bind(
+      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED,
+      completedAt,
+      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
     )
-      .bind(
-        ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-        ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED,
-        completedAt,
-        ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-        ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-        scopedSymbolsJson,
-      )
-      .run()
-  } else {
-    await env.ICONOPLASM_DB.prepare(
-      `UPDATE icono_sync_finalization_jobs
-       SET status = ?,
-           phase = ?,
-           updated_at = CURRENT_TIMESTAMP,
-           completed_at = ?,
-           last_error = ''
-       WHERE status <> ?
-         AND phase = ?`,
-    )
-      .bind(
-        ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-        ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED,
-        completedAt,
-        ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-        ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-      )
-      .run()
-  }
+    .run()
   return {
     ok: true,
     finalized: pendingFinalizeCount,
@@ -12312,14 +12281,17 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
     const remaining = Math.max(0, Number(drainResult?.remaining || 0) || 0)
     let sentNext = false
     if (remaining > 0) {
+      const nextSymbols = Array.isArray(drainResult?.reschedule_symbols)
+        ? drainResult.reschedule_symbols
+        : symbols
       sentNext = await sendSyncFinalizationDrainQueueMessage(env, {
         runId,
-        symbols,
+        symbols: nextSymbols,
       })
       if (!sentNext?.ok) {
         console.warn("Iconoplasm sync finalization Queue self-reschedule deferred", {
           run_id: runId,
-          symbols: symbols.length,
+          symbols: nextSymbols.length,
           remaining,
           error: sanitizeText(
             String(sentNext?.detail || sentNext?.error || sentNext?.code || "unknown Queue send failure"),
@@ -12622,7 +12594,8 @@ async function processPendingSyncFinalizationJobs(
     budget: partial ? partialBudget : null,
     recovered_stale_running: Math.max(0, Number(staleRecovery?.recovered || 0) || 0),
     finalized: Math.max(0, Number(finalizeResult?.finalized || 0) || 0),
-    remaining,
+    remaining: Math.max(remaining, Number(finalizeResult?.remaining || 0) || 0),
+    reschedule_symbols: finalizeResult?.broaden_next_drain ? [] : scopedSymbols,
     results,
   }
 }
