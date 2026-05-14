@@ -5,6 +5,7 @@ import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWo
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   handleIconoplasmSyncFinalizationQueue,
+  IconoplasmSyncGovernor,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 function finalizationPhasePriority(phase) {
@@ -1302,6 +1303,131 @@ test("queue drain consumer honors message permits while processing bounded ledge
     ["vote_summaries", "vote_summaries", "vote_summaries"],
   )
   assert.equal(queue.sent.length, 1)
+})
+
+test("queue drain consumer releases governor permit when message processing throws", async () => {
+  const queue = buildFakeQueue()
+  const releasePayloads = []
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: [
+        {
+          gene_symbol: "TP53",
+          status: "queued",
+          phase: "vision_rollups",
+          keep_assets_json: JSON.stringify([]),
+          legacy_assets_json: JSON.stringify([]),
+          vision_ids_json: JSON.stringify(["anima-v1-1"]),
+          requested_at: "2026-04-16T00:00:00.000Z",
+          next_attempt_at: "2026-04-16T00:00:00.000Z",
+        },
+      ],
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_SYNC_GOVERNOR: {
+      idFromName(name) {
+        return String(name || "")
+      },
+      get() {
+        return {
+          fetch: async (request) => {
+            const url = new URL(request.url)
+            if (url.pathname === "/permit") {
+              return new Response(JSON.stringify({ ok: true, granted: 1, lease_id: "lease-test" }), {
+                headers: { "Content-Type": "application/json" },
+              })
+            }
+            if (url.pathname === "/release") {
+              releasePayloads.push(await request.json())
+              return new Response(JSON.stringify({ ok: true }), {
+                headers: { "Content-Type": "application/json" },
+              })
+            }
+            return new Response(JSON.stringify({ ok: true }), {
+              headers: { "Content-Type": "application/json" },
+            })
+          },
+        }
+      },
+    },
+  }
+
+  await assert.rejects(
+    () =>
+      handleIconoplasmSyncFinalizationQueue(
+        {
+          messages: [
+            {
+              body: {
+                kind: "unsupported_test_message",
+                run_id: "sync-test",
+                symbols: ["TP53"],
+              },
+              ack() {},
+            },
+          ],
+        },
+        env,
+        { waitUntil() {} },
+      ),
+    /Unsupported Iconoplasm sync finalization Queue message/i,
+  )
+
+  assert.equal(releasePayloads.length, 1)
+  assert.equal(releasePayloads[0].lease_id, "lease-test")
+  assert.equal(releasePayloads[0].failed, 1)
+})
+
+test("sync governor replaces stale active consumer counts with expiring leases", async () => {
+  const originalNow = Date.now
+  Date.now = () => 1_000_000
+  try {
+    const storage = new Map([
+      [
+        "state",
+        {
+          batch_permits: 8,
+          active_consumers: 2009,
+          updated_at: "2026-05-13T09:36:36.076Z",
+        },
+      ],
+    ])
+    const governor = new IconoplasmSyncGovernor(
+      {
+        storage: {
+          async get(key) {
+            return storage.get(key)
+          },
+          async put(key, value) {
+            storage.set(key, value)
+          },
+        },
+      },
+      {},
+    )
+
+    const permitResponse = await governor.fetch(
+      new Request("https://iconoplasm-sync-governor/permit?requested=1", { method: "POST" }),
+    )
+    const permit = await permitResponse.json()
+
+    assert.equal(permit.governor.active_consumers, 1)
+    assert.match(permit.lease_id, /^lease-/)
+
+    const releaseResponse = await governor.fetch(
+      new Request("https://iconoplasm-sync-governor/release", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lease_id: permit.lease_id, processed: 1, failed: 0, retrying: 0 }),
+      }),
+    )
+    const release = await releaseResponse.json()
+
+    assert.equal(release.governor.active_consumers, 0)
+  } finally {
+    Date.now = originalNow
+  }
 })
 
 test("queue finalization consumer fails loud when Queue path is disabled", async () => {

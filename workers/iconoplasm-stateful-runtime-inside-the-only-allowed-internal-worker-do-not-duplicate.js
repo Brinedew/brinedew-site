@@ -8836,6 +8836,7 @@ function iconoplasmSyncGovernorDefaultState() {
     observed_utilization: 0,
     current_bottleneck: "warming_up",
     active_consumers: 0,
+    active_consumer_leases: {},
     last_error_rate: 0,
     last_latency_ms: 0,
     public_health: "unknown",
@@ -8843,12 +8844,30 @@ function iconoplasmSyncGovernorDefaultState() {
   }
 }
 
+function createIconoplasmSyncGovernorLeaseId() {
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+    return `lease-${globalThis.crypto.randomUUID()}`
+  }
+  return `lease-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+}
+
 function iconoplasmSyncGovernorStateFromRaw(raw) {
   const base = iconoplasmSyncGovernorDefaultState()
   if (!raw || typeof raw !== "object") return base
+  const activeConsumerLeases =
+    raw.active_consumer_leases && typeof raw.active_consumer_leases === "object"
+      ? Object.fromEntries(
+          Object.entries(raw.active_consumer_leases).filter(([leaseId, lease]) => {
+            if (!String(leaseId || "").trim() || !lease || typeof lease !== "object") return false
+            const expiresAtMs = Number(lease.expires_at_ms || lease.expiresAtMs || 0) || 0
+            return expiresAtMs > 0
+          }),
+        )
+      : {}
   return {
     ...base,
     ...raw,
+    active_consumer_leases: activeConsumerLeases,
     batch_permits: clampIconoplasmSyncGovernorPermits(raw.batch_permits ?? base.batch_permits),
     target_utilization:
       Number(raw.target_utilization || base.target_utilization) || base.target_utilization,
@@ -8866,16 +8885,39 @@ export class IconoplasmSyncGovernor {
 
   async storedState() {
     const raw = await this.state.storage.get("state")
-    return iconoplasmSyncGovernorStateFromRaw(raw)
+    return this.pruneLeases(iconoplasmSyncGovernorStateFromRaw(raw))
   }
 
   async persistState(state) {
-    const next = iconoplasmSyncGovernorStateFromRaw({
+    const next = this.pruneLeases(iconoplasmSyncGovernorStateFromRaw({
       ...state,
       updated_at: new Date().toISOString(),
-    })
+    }))
     await this.state.storage.put("state", next)
     return next
+  }
+
+  pruneLeases(state) {
+    const nowMs = Date.now()
+    const rawLeases =
+      state.active_consumer_leases && typeof state.active_consumer_leases === "object"
+        ? state.active_consumer_leases
+        : {}
+    const activeLeases = {}
+    for (const [leaseId, lease] of Object.entries(rawLeases)) {
+      if (!String(leaseId || "").trim() || !lease || typeof lease !== "object") continue
+      const expiresAtMs = Number(lease.expires_at_ms || lease.expiresAtMs || 0) || 0
+      if (expiresAtMs <= nowMs) continue
+      activeLeases[leaseId] = {
+        ...lease,
+        expires_at_ms: expiresAtMs,
+      }
+    }
+    return {
+      ...state,
+      active_consumer_leases: activeLeases,
+      active_consumers: Object.keys(activeLeases).length,
+    }
   }
 
   async fetch(request) {
@@ -8898,19 +8940,31 @@ export class IconoplasmSyncGovernor {
           }
         : stored
       const granted = Math.max(1, Math.min(requested, state.batch_permits))
+      const leaseId = createIconoplasmSyncGovernorLeaseId()
+      const activeConsumerLeases = {
+        ...(state.active_consumer_leases || {}),
+        [leaseId]: {
+          requested,
+          granted,
+          issued_at_ms: Date.now(),
+          expires_at_ms: Date.now() + 120_000,
+        },
+      }
       const next = await this.persistState({
         ...state,
-        active_consumers: Math.max(0, Number(state.active_consumers || 0) + 1),
+        active_consumer_leases: activeConsumerLeases,
+        active_consumers: Object.keys(activeConsumerLeases).length,
         observed_utilization: Math.min(
           1,
           Math.max(state.observed_utilization || 0, granted / Math.max(1, requested)),
         ),
       })
-      return Response.json({ ok: true, granted, governor: next })
+      return Response.json({ ok: true, granted, lease_id: leaseId, governor: next })
     }
     if (request.method === "POST" && url.pathname === "/release") {
       const payload = await request.json().catch(() => ({}))
       const state = await this.storedState()
+      const leaseId = String(payload?.lease_id || payload?.leaseId || "").trim()
       const processed = Math.max(0, Number(payload?.processed || 0) || 0)
       const failed = Math.max(0, Number(payload?.failed || 0) || 0)
       const retrying = Math.max(0, Number(payload?.retrying || 0) || 0)
@@ -8933,11 +8987,18 @@ export class IconoplasmSyncGovernor {
         permits = clampIconoplasmSyncGovernorPermits(permits + 1)
         bottleneck = "seeking_bottleneck"
       }
+      const activeConsumerLeases = {
+        ...(state.active_consumer_leases || {}),
+      }
+      if (leaseId) {
+        delete activeConsumerLeases[leaseId]
+      }
       const next = await this.persistState({
         ...state,
+        active_consumer_leases: activeConsumerLeases,
         batch_permits: permits,
         current_bottleneck: bottleneck,
-        active_consumers: Math.max(0, Number(state.active_consumers || 0) - 1),
+        active_consumers: Object.keys(activeConsumerLeases).length,
         observed_utilization: Math.min(1, Math.max(0, processed / total)),
         last_error_rate: errorRate,
         last_latency_ms: latencyMs,
@@ -12342,6 +12403,7 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
     0,
     Math.min(messages.length || 0, Number(permit?.granted || 0) || 0),
   )
+  const leaseId = String(permit?.lease_id || permit?.leaseId || "").trim()
   let retrying = 0
   const permittedMessages = messages.slice(0, permitGranted)
   const delayedMessages = messages.slice(permitGranted)
@@ -12350,6 +12412,16 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
     if (typeof message?.retry === "function") message.retry({ delaySeconds: 30 })
   }
   if (permitGranted <= 0) {
+    if (leaseId) {
+      await iconoplasmSyncGovernorJson(env, "/release", {
+        lease_id: leaseId,
+        processed: 0,
+        failed: 0,
+        retrying,
+        latency_ms: 0,
+        public_health: "healthy",
+      }).catch((error) => console.warn("Iconoplasm sync governor release failed", error))
+    }
     return {
       ok: false,
       processed: 0,
@@ -12365,52 +12437,65 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
   let processed = 0
   let failed = 0
   let finalized = 0
-  for (const message of permittedMessages) {
-    try {
-      const result = await processSyncFinalizationQueueMessage(env, ctx, message?.body)
-      if (result?.kind === "drain_finalization_ledger") {
-        processed += Math.max(0, Number(result?.processed || 0) || 0)
-        failed += Math.max(0, Number(result?.failed || 0) || 0)
-        finalized += Math.max(0, Number(result?.finalized || 0) || 0)
-      } else if (!result?.skipped) {
-        processed += 1
+  try {
+    for (const message of permittedMessages) {
+      try {
+        const result = await processSyncFinalizationQueueMessage(env, ctx, message?.body)
+        if (result?.kind === "drain_finalization_ledger") {
+          processed += Math.max(0, Number(result?.processed || 0) || 0)
+          failed += Math.max(0, Number(result?.failed || 0) || 0)
+          finalized += Math.max(0, Number(result?.finalized || 0) || 0)
+        } else if (!result?.skipped) {
+          processed += 1
+        }
+        if (typeof message?.ack === "function") message.ack()
+      } catch (error) {
+        failed += 1
+        retrying += 1
+        if (typeof message?.retry === "function") {
+          message.retry({ delaySeconds: 30 })
+        } else {
+          throw error
+        }
       }
-      if (typeof message?.ack === "function") message.ack()
-    } catch (error) {
-      failed += 1
-      retrying += 1
-      if (typeof message?.retry === "function") {
-        message.retry({ delaySeconds: 30 })
-      } else {
+    }
+    if (processed > 0) {
+      try {
+        const finalizeResult = await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, {
+          symbols: null,
+        })
+        finalized += Math.max(0, Number(finalizeResult?.finalized || 0) || 0)
+      } catch (error) {
+        failed += 1
         throw error
       }
     }
-  }
-  if (processed > 0) {
-    const finalizeResult = await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, {
-      symbols: null,
-    })
-    finalized += Math.max(0, Number(finalizeResult?.finalized || 0) || 0)
-  }
-  await iconoplasmSyncGovernorJson(env, "/release", {
-    processed,
-    failed,
-    retrying,
-    latency_ms: Date.now() - started,
-    // Queue message failures are retry pressure, not public-route health.
-    // The workstation and live probes report public health separately; feeding
-    // retry pressure into this field parks the whole factory even when public
-    // routes are responding normally.
-    public_health: "healthy",
-  })
-  return {
-    ok: failed <= 0,
-    processed,
-    failed,
-    retrying,
-    finalized,
-    granted: permitGranted,
-    permit_granted: permitGranted,
+    return {
+      ok: failed <= 0,
+      processed,
+      failed,
+      retrying,
+      finalized,
+      granted: permitGranted,
+      permit_granted: permitGranted,
+    }
+  } finally {
+    try {
+      await iconoplasmSyncGovernorJson(env, "/release", {
+        lease_id: leaseId,
+        processed,
+        failed,
+        retrying,
+        latency_ms: Date.now() - started,
+        // Queue message failures are retry pressure, not public-route health.
+        // The workstation and live probes report public health separately; feeding
+        // retry pressure into this field parks the whole factory even when public
+        // routes are responding normally.
+        public_health: "healthy",
+      })
+    } catch (error) {
+      console.warn("Iconoplasm sync governor release failed", error)
+    }
   }
 }
 
