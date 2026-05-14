@@ -1,3 +1,9 @@
+## Cybersecurity
+
+Use `pnpm` instead of `npm` or `yarn` for JavaScript dependency management wherever practical.
+
+Configure pnpm with `minimumReleaseAge: 1440` so newly published package versions cannot be installed until they are at least 24 hours old.
+
 ---
 draft: true
 ---

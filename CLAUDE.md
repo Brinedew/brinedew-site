@@ -1,3 +1,9 @@
+## Cybersecurity
+
+Use `pnpm` instead of `npm` or `yarn` for JavaScript dependency management wherever practical.
+
+Configure pnpm with `minimumReleaseAge: 1440` so newly published package versions cannot be installed until they are at least 24 hours old.
+
 # brinedew.com setup notes
 
 _For Claude Code and anyone else working on this site_
