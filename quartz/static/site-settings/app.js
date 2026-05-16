@@ -28,12 +28,6 @@ import {
     { value: "lit-archival", label: "Vintage lab label" },
     { value: "image-only", label: "Blot only" },
   ]
-  var GENERATION_PROVIDERS = [
-    { value: "openai-compatible", label: "OpenAI-compatible" },
-    { value: "replicate", label: "Replicate" },
-    { value: "gemini", label: "Gemini" },
-    { value: "custom", label: "Custom endpoint" },
-  ]
   var currentUser = null
   var currentUserIsIconoAdmin = false
 
@@ -229,47 +223,20 @@ import {
       "</select>" +
       "</div>" +
       "</div>" +
-      '<div class="site-settings-row">' +
-      '<div class="site-settings-copy"><h3>Image generation</h3></div>' +
-      '<div class="site-settings-control site-settings-control--stack">' +
-      '<label class="site-settings-field" for="site-settings-provider">' +
-      "<span>Provider</span>" +
-      '<select class="site-settings-select" id="site-settings-provider">' +
-      selectOptionsMarkup(snapshot.iconoplasm.generationProvider, GENERATION_PROVIDERS) +
-      "</select>" +
-      "</label>" +
-      '<label class="site-settings-field" for="site-settings-api-key">' +
-      "<span>API key</span>" +
-      '<div class="site-settings-secret">' +
-      '<input class="site-settings-input" id="site-settings-api-key" type="password" autocomplete="off" spellcheck="false" value="' +
-      esc(snapshot.iconoplasm.generationApiKey) +
-      '">' +
-      '<button class="site-settings-inline-btn" id="site-settings-api-key-toggle" type="button" aria-pressed="false">Show</button>' +
-      "</div>" +
-      "</label>" +
-      '<label class="site-settings-field" for="site-settings-model">' +
-      "<span>Model</span>" +
-      '<input class="site-settings-input" id="site-settings-model" type="text" autocomplete="off" spellcheck="false" value="' +
-      esc(snapshot.iconoplasm.generationModel) +
-      '" placeholder="gpt-image-1">' +
-      "</label>" +
-      '<label class="site-settings-field" for="site-settings-endpoint">' +
-      "<span>Endpoint</span>" +
-      '<input class="site-settings-input" id="site-settings-endpoint" type="url" autocomplete="off" spellcheck="false" value="' +
-      esc(snapshot.iconoplasm.generationEndpoint) +
-      '" placeholder="Optional override">' +
-      "</label>" +
       (currentUserIsIconoAdmin
-        ? '<label class="site-settings-toggle" for="site-settings-show-all-genes">' +
+        ? '<div class="site-settings-row">' +
+          '<div class="site-settings-copy"><h3>Admin gallery</h3></div>' +
+          '<div class="site-settings-control site-settings-control--stack">' +
+          '<label class="site-settings-toggle" for="site-settings-show-all-genes">' +
           '<input id="site-settings-show-all-genes" type="checkbox"' +
           (snapshot.iconoplasm.showAllGenes ? " checked" : "") +
           ">" +
           '<span><span class="site-settings-toggle-title">Use classic full gallery</span>' +
           '<span class="site-settings-toggle-note">Admins can switch this browser between the personal Pokedex shelf and the old full-catalog gallery.</span></span>' +
-          "</label>"
+          "</label>" +
+          "</div>" +
+          "</div>"
         : "") +
-      "</div>" +
-      "</div>" +
       "</section>" +
       '<section class="site-settings-section" id="browser">' +
       '<div class="site-settings-section-head">' +
@@ -289,12 +256,7 @@ import {
 
     var layoutEl = document.getElementById("site-settings-iconoplasm-layout")
     var cardVariantEl = document.getElementById("site-settings-iconoplasm-card-variant")
-    var providerEl = document.getElementById("site-settings-provider")
-    var apiKeyEl = document.getElementById("site-settings-api-key")
-    var modelEl = document.getElementById("site-settings-model")
-    var endpointEl = document.getElementById("site-settings-endpoint")
     var showAllGenesEl = document.getElementById("site-settings-show-all-genes")
-    var toggleBtn = document.getElementById("site-settings-api-key-toggle")
     var saveBtn = document.getElementById("site-settings-save")
     var resetBtn = document.getElementById("site-settings-reset")
     var statusEl = document.getElementById("site-settings-status")
@@ -324,10 +286,6 @@ import {
           homeLayout: layoutEl && layoutEl.value,
           cardVariant: cardVariantEl && cardVariantEl.value,
           showAllGenes: showAllGenesEl ? showAllGenesEl.checked : snapshot.iconoplasm.showAllGenes,
-          generationProvider: providerEl && providerEl.value,
-          generationApiKey: apiKeyEl && apiKeyEl.value,
-          generationModel: modelEl && modelEl.value,
-          generationEndpoint: endpointEl && endpointEl.value,
         }),
       }
     }
@@ -349,21 +307,8 @@ import {
       node.addEventListener("change", refreshDirtyState)
     }
 
-    if (toggleBtn && apiKeyEl) {
-      toggleBtn.addEventListener("click", function () {
-        var isVisible = apiKeyEl.getAttribute("type") === "text"
-        apiKeyEl.setAttribute("type", isVisible ? "password" : "text")
-        toggleBtn.textContent = isVisible ? "Show" : "Hide"
-        toggleBtn.setAttribute("aria-pressed", isVisible ? "false" : "true")
-      })
-    }
-
     bindDirtyTracking(layoutEl)
     bindDirtyTracking(cardVariantEl)
-    bindDirtyTracking(providerEl)
-    bindDirtyTracking(apiKeyEl)
-    bindDirtyTracking(modelEl)
-    bindDirtyTracking(endpointEl)
     bindDirtyTracking(showAllGenesEl)
 
     if (saveBtn) {

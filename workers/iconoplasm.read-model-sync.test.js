@@ -176,3 +176,75 @@ test("admin read-model sync with invalidate_gallery still honors skip flags", as
   assert.equal(writeSql.includes("icono_vote_asset_summary"), false)
   assert.equal(writeSql.includes("icono_admin_gene_rollup"), false)
 })
+
+test("admin overview summary is scoped to canonical catalog rows", async () => {
+  const env = buildEnv()
+
+  // The sync-complete proof depends on this behavior. Non-catalog asset/rollup
+  // rows can exist for admin/debug reasons, but they must not inflate the
+  // canonical public summary. This regression test protects the specific
+  // incident where the GUI showed 70 no-live genes even though the canonical
+  // catalog had 19,023 live portraits.
+  const syncResponse = await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/read-models/sync", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        symbols: [],
+        skip_vote_summaries: true,
+        skip_gene_rollups: true,
+        skip_vision_rollups: true,
+        invalidate_gallery: false,
+      }),
+    }),
+    env,
+    {},
+  )
+  assert.equal(syncResponse.status, 200)
+
+  const dashboardSummarySql = env.gatewayDb.calls.find(
+    (call) =>
+      call.method === "first" &&
+      call.sql.includes("COUNT(gc.gene_symbol) AS genes") &&
+      call.sql.includes("AS no_live"),
+  )?.sql
+
+  assert.match(
+    dashboardSummarySql || "",
+    /FROM icono_gene_catalog gc\s+LEFT JOIN icono_admin_gene_rollup gr\s+ON gr\.gene_symbol = gc\.gene_symbol/,
+  )
+
+  const countCacheSql = env.gatewayDb.calls
+    .filter((call) => call.method === "run" && call.sql.includes("icono_admin_gallery_count_cache"))
+    .map((call) => call.sql)
+  // D1 rejected the old one-shot UNION ALL count-cache insert in production.
+  // Keeping these as separate INSERT statements is intentional budget hygiene,
+  // not verbose test machinery.
+  assert.equal(countCacheSql.some((sql) => sql.includes("UNION ALL")), false)
+  assert.equal(countCacheSql.filter((sql) => sql.includes("INSERT INTO")).length, 10)
+
+  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/overview?event_limit=0", {
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+      },
+    }),
+    env,
+    {},
+  )
+
+  const attentionSql = env.gatewayDb.calls.find(
+    (call) =>
+      call.method === "all" &&
+      call.sql.includes("current_asset_missing") &&
+      call.sql.includes("LIMIT 12"),
+  )?.sql
+
+  assert.match(
+    attentionSql || "",
+    /FROM icono_gene_catalog gc\s+JOIN icono_admin_gene_rollup gr\s+ON gr\.gene_symbol = gc\.gene_symbol/,
+  )
+})

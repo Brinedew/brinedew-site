@@ -6,6 +6,7 @@ import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } fro
 import { unescapeHTML } from "../util/escape"
 import { CustomOgImagesEmitterName } from "../plugins/emitters/ogImage"
 import { getPublicUrlForSlug, isNoIndexFile } from "../util/crawlability"
+import { buildAiSearchJsonLd, serializeJsonLd } from "../util/aiSearchMetadata"
 
 // Build-time cache buster - always include a fresh timestamp so production HTML
 // points at the latest static assets even when environment-level cache vars linger.
@@ -165,6 +166,16 @@ export default (() => {
         ? fileData.frontmatter.canonicalUrl
         : socialUrl
     const robotsDirective = isNoIndexFile(fileData) ? "noindex,nofollow,noarchive" : "index,follow"
+    const aiSearchJsonLd = !isNoIndexFile(fileData)
+      ? serializeJsonLd(
+          buildAiSearchJsonLd({
+            baseUrl: cfg.baseUrl ?? "example.com",
+            pageTitle: cfg.pageTitle,
+            locale: cfg.locale,
+            fileData,
+          }),
+        )
+      : null
 
     const usesCustomOgImage = ctx.cfg.plugins.emitters.some(
       (e) => e.name === CustomOgImagesEmitterName,
@@ -235,6 +246,9 @@ export default (() => {
         />
         <meta name="description" content={description} />
         <meta name="robots" content={robotsDirective} />
+        {aiSearchJsonLd && (
+          <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: aiSearchJsonLd }} />
+        )}
 
         {/* Early theme attribute to avoid flash: apply saved theme before CSS */}
         <script

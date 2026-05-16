@@ -38,6 +38,11 @@ function coerceDate(fp: string, d: any): Date {
 }
 
 type MaybeDate = undefined | string | number
+
+export function usableFilesystemTimestamp(value: number): number | undefined {
+  return Number.isFinite(value) && value > 0 ? value : undefined
+}
+
 export const CreatedModifiedDate: QuartzTransformerPlugin<Partial<Options>> = (userOpts) => {
   const opts = { ...defaultOptions, ...userOpts }
   return {
@@ -71,8 +76,8 @@ export const CreatedModifiedDate: QuartzTransformerPlugin<Partial<Options>> = (u
             for (const source of opts.priority) {
               if (source === "filesystem") {
                 const st = await fs.promises.stat(fullFp)
-                created ||= st.birthtimeMs
-                modified ||= st.mtimeMs
+                created ||= usableFilesystemTimestamp(st.birthtimeMs)
+                modified ||= usableFilesystemTimestamp(st.mtimeMs)
               } else if (source === "frontmatter" && file.data.frontmatter) {
                 created ||= file.data.frontmatter.created as MaybeDate
                 modified ||= file.data.frontmatter.modified as MaybeDate

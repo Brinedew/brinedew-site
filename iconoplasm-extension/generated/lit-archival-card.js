@@ -1,6 +1,6 @@
 /* GENERATED FILE. Edit shared/iconoplasm-card/lit-archival-card.js and rerun node scripts/sync-iconoplasm-shared.mjs. */
 
-// node_modules/@lit/reactive-element/css-tag.js
+// node_modules/.pnpm/@lit+reactive-element@2.1.2/node_modules/@lit/reactive-element/css-tag.js
 var t = globalThis;
 var e = t.ShadowRoot && (void 0 === t.ShadyCSS || t.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype;
 var s = /* @__PURE__ */ Symbol();
@@ -37,7 +37,7 @@ var c = e ? (t4) => t4 : (t4) => t4 instanceof CSSStyleSheet ? ((t5) => {
   return r(e6);
 })(t4) : t4;
 
-// node_modules/@lit/reactive-element/reactive-element.js
+// node_modules/.pnpm/@lit+reactive-element@2.1.2/node_modules/@lit/reactive-element/reactive-element.js
 var { is: i2, defineProperty: e2, getOwnPropertyDescriptor: h, getOwnPropertyNames: r2, getOwnPropertySymbols: o2, getPrototypeOf: n2 } = Object;
 var a = globalThis;
 var c2 = a.trustedTypes;
@@ -259,7 +259,7 @@ var y = class extends HTMLElement {
 };
 y.elementStyles = [], y.shadowRootOptions = { mode: "open" }, y[d("elementProperties")] = /* @__PURE__ */ new Map(), y[d("finalized")] = /* @__PURE__ */ new Map(), p?.({ ReactiveElement: y }), (a.reactiveElementVersions ??= []).push("2.1.2");
 
-// node_modules/lit-html/lit-html.js
+// node_modules/.pnpm/lit-html@3.3.2/node_modules/lit-html/lit-html.js
 var t2 = globalThis;
 var i3 = (t4) => t4;
 var s2 = t2.trustedTypes;
@@ -513,7 +513,7 @@ var D = (t4, i6, s4) => {
   return h3._$AI(t4), h3;
 };
 
-// node_modules/lit-element/lit-element.js
+// node_modules/.pnpm/lit-element@4.2.2/node_modules/lit-element/lit-element.js
 var s3 = globalThis;
 var i4 = class extends y {
   constructor() {
@@ -542,7 +542,7 @@ var o4 = s3.litElementPolyfillSupport;
 o4?.({ LitElement: i4 });
 (s3.litElementVersions ??= []).push("4.2.2");
 
-// node_modules/lit-html/directive.js
+// node_modules/.pnpm/lit-html@3.3.2/node_modules/lit-html/directive.js
 var t3 = { ATTRIBUTE: 1, CHILD: 2, PROPERTY: 3, BOOLEAN_ATTRIBUTE: 4, EVENT: 5, ELEMENT: 6 };
 var e4 = (t4) => (...e6) => ({ _$litDirective$: t4, values: e6 });
 var i5 = class {
@@ -562,7 +562,7 @@ var i5 = class {
   }
 };
 
-// node_modules/lit-html/directives/unsafe-html.js
+// node_modules/.pnpm/lit-html@3.3.2/node_modules/lit-html/directives/unsafe-html.js
 var e5 = class extends i5 {
   constructor(i6) {
     if (super(i6), this.it = A, i6.type !== t3.CHILD) throw Error(this.constructor.directiveName + "() can only be used in child bindings");

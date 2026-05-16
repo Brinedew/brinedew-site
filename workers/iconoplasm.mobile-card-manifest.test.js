@@ -8,10 +8,16 @@ import {
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const source = readFileSync(
-  new URL("./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js", import.meta.url),
+  new URL(
+    "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+    import.meta.url,
+  ),
   "utf8",
 )
-const appSource = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
+const appSource = readFileSync(
+  new URL("../quartz/static/iconoplasm/app.js", import.meta.url),
+  "utf8",
+)
 
 class FakeStatement {
   constructor(db, sql) {
@@ -27,18 +33,24 @@ class FakeStatement {
 
   async first() {
     if (this.sql.includes("FROM icono_gene_catalog")) {
-      const symbol = String(this.args[0] || "").trim().toUpperCase()
+      const symbol = String(this.args[0] || "")
+        .trim()
+        .toUpperCase()
       return this.db.catalog.get(symbol) || null
     }
     if (
       this.sql.includes("FROM icono_publish_state ps") &&
       this.sql.includes("LEFT JOIN icono_portrait_assets pa")
     ) {
-      const symbol = String(this.args[0] || "").trim().toUpperCase()
+      const symbol = String(this.args[0] || "")
+        .trim()
+        .toUpperCase()
       return this.db.published.get(symbol) || null
     }
     if (this.sql.includes("FROM icono_gene_essence")) {
-      const symbol = String(this.args[0] || "").trim().toUpperCase()
+      const symbol = String(this.args[0] || "")
+        .trim()
+        .toUpperCase()
       return this.db.essence.get(symbol) || null
     }
     return null
@@ -51,7 +63,13 @@ class FakeStatement {
     ) {
       let symbols = Array.from(this.db.catalog.keys()).sort()
       if (this.sql.includes("WHERE gc.gene_symbol IN")) {
-        const requested = new Set(this.args.map((arg) => String(arg || "").trim().toUpperCase()))
+        const requested = new Set(
+          this.args.map((arg) =>
+            String(arg || "")
+              .trim()
+              .toUpperCase(),
+          ),
+        )
         symbols = symbols.filter((symbol) => requested.has(symbol))
       }
       return {
@@ -81,7 +99,9 @@ class FakeStatement {
       this.sql.includes("FROM icono_gene_catalog") &&
       this.sql.includes("WHERE gene_symbol > ?")
     ) {
-      const cursor = String(this.args[0] || "").trim().toUpperCase()
+      const cursor = String(this.args[0] || "")
+        .trim()
+        .toUpperCase()
       const limit = Number(this.args[1] || 1000)
       const rows = Array.from(this.db.catalog.keys())
         .filter((symbol) => symbol > cursor)
@@ -225,7 +245,11 @@ function completeCardCatalogArtifact(symbols = ["ERBB2", "INS"], version = "test
   }
 }
 
-function putShardedCardCatalogArtifact(kvStore, symbols = ["ERBB2", "INS"], version = "test-vm-version") {
+function putShardedCardCatalogArtifact(
+  kvStore,
+  symbols = ["ERBB2", "INS"],
+  version = "test-vm-version",
+) {
   const cards = symbols.map((symbol) =>
     completeMobileCardVM(symbol, version, "published_card_catalog"),
   )
@@ -272,6 +296,7 @@ function buildEnv({
   cardArtifact = completeCardCatalogArtifact(["ERBB2", "INS"], version),
   onKvGet = null,
 } = {}) {
+  resetIconoplasmRuntimeCachesForTest()
   return {
     ICONOPLASM_DB: db,
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
@@ -293,7 +318,11 @@ function buildEnv({
   }
 }
 
-function completeMobileCardVM(symbol = "ERBB2", version = "test-vm-version", dataSource = "kv_snapshot") {
+function completeMobileCardVM(
+  symbol = "ERBB2",
+  version = "test-vm-version",
+  dataSource = "kv_snapshot",
+) {
   const normalized = String(symbol || "ERBB2").toUpperCase()
   const fullName = normalized === "INS" ? "insulin" : "erb-b2 receptor tyrosine kinase 2"
   return {
@@ -335,14 +364,15 @@ function completeMobileCardVM(symbol = "ERBB2", version = "test-vm-version", dat
 }
 
 test("mobile card manifest returns complete VMs from the published card catalog artifact", async () => {
-  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["ERBB2"] }),
-    }),
-    buildEnv({ db: null }),
-  )
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["ERBB2"] }),
+      }),
+      buildEnv({ db: null }),
+    )
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("Cache-Control"), "no-store")
   assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "published-card-catalog")
@@ -371,14 +401,15 @@ test("mobile card manifest reads only needed shards from the one published card 
   const kvStore = new Map()
   const kvGets = []
   putShardedCardCatalogArtifact(kvStore, ["BRCA1", "ERBB2", "INS", "TP53"], "test-vm-version")
-  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS", "ERBB2"] }),
-    }),
-    buildEnv({ kvStore, db: null, cardArtifact: null, onKvGet: (key) => kvGets.push(key) }),
-  )
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS", "ERBB2"] }),
+      }),
+      buildEnv({ kvStore, db: null, cardArtifact: null, onKvGet: (key) => kvGets.push(key) }),
+    )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -388,25 +419,23 @@ test("mobile card manifest reads only needed shards from the one published card 
     payload.cards.map((card) => card.symbol),
     ["INS", "ERBB2"],
   )
-  assert.deepEqual(
-    kvGets.filter((key) => key.includes(":shard:")).sort(),
-    [
-      "iconoplasm:card-catalog:test-vm-version:shard:1",
-      "iconoplasm:card-catalog:test-vm-version:shard:2",
-    ],
-  )
+  assert.deepEqual(kvGets.filter((key) => key.includes(":shard:")).sort(), [
+    "iconoplasm:card-catalog:test-vm-version:shard:1",
+    "iconoplasm:card-catalog:test-vm-version:shard:2",
+  ])
 })
 
 test("mobile card manifest fails loud when the published card catalog artifact is unavailable", async () => {
   resetIconoplasmRuntimeCachesForTest()
-  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS"] }),
-    }),
-    buildEnv({ kvStore: new Map(), db: new FakeIconoplasmDb(), cardArtifact: null }),
-  )
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS"] }),
+      }),
+      buildEnv({ kvStore: new Map(), db: new FakeIconoplasmDb(), cardArtifact: null }),
+    )
   assert.equal(response.status, 503)
   assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "artifact-unavailable")
   assert.equal(response.headers.get("X-Iconoplasm-Snapshot-State"), "card-artifact-unavailable")
@@ -422,18 +451,19 @@ test("mobile card manifest does not fall back to a previous card catalog version
     schema: "iconoplasm.mobileCard.v1",
     status: "active",
   })
-  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS"] }),
-    }),
-    buildEnv({
-      db: null,
-      version: barrier,
-      cardArtifact: completeCardCatalogArtifact(["INS"], "previous-vm-version"),
-    }),
-  )
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS"] }),
+      }),
+      buildEnv({
+        db: null,
+        version: barrier,
+        cardArtifact: completeCardCatalogArtifact(["INS"], "previous-vm-version"),
+      }),
+    )
   assert.equal(response.status, 503)
   const payload = await response.json()
   assert.equal(payload.code, "CARD_ARTIFACT_UNAVAILABLE")
@@ -443,17 +473,18 @@ test("mobile card manifest does not fall back to a previous card catalog version
 test("admin card catalog publish refuses symbol-scoped artifacts", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const kvStore = new Map()
-  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer secret-admin-token",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ symbols: ["ERBB2"] }),
-    }),
-    buildEnv({ kvStore }),
-  )
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer secret-admin-token",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ symbols: ["ERBB2"] }),
+      }),
+      buildEnv({ kvStore }),
+    )
   assert.equal(response.status, 409)
   const payload = await response.json()
   assert.equal(payload.ok, false)
@@ -464,28 +495,29 @@ test("admin card catalog publish refuses symbol-scoped artifacts", async () => {
 
 test("admin card catalog publish does not count failed KV writes as published cards", async () => {
   resetIconoplasmRuntimeCachesForTest()
-  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer secret-admin-token",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ scope: "catalog" }),
-    }),
-    {
-      ...buildEnv(),
-      KV: {
-        async get(key) {
-          if (key === "iconoplasm:gallery-version") return "test-vm-version"
-          return null
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer secret-admin-token",
+          "Content-Type": "application/json",
         },
-        async put() {
-          throw new Error("KV write failed")
+        body: JSON.stringify({ scope: "catalog" }),
+      }),
+      {
+        ...buildEnv(),
+        KV: {
+          async get(key) {
+            if (key === "iconoplasm:gallery-version") return "test-vm-version"
+            return null
+          },
+          async put() {
+            throw new Error("KV write failed")
+          },
         },
       },
-    },
-  )
+    )
   const payload = await response.json()
 
   assert.equal(response.status, 409)
@@ -494,14 +526,15 @@ test("admin card catalog publish does not count failed KV writes as published ca
 })
 
 test("admin card VM warm endpoint keeps catalog warming behind admin auth", async () => {
-  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scope: "catalog", limit: 2 }),
-    }),
-    buildEnv(),
-  )
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "catalog", limit: 2 }),
+      }),
+      buildEnv(),
+    )
   assert.equal(response.status, 403)
 })
 
@@ -538,7 +571,10 @@ test("frontend mobile path uses the card catalog manifest and rejects fallback r
   assert.doesNotMatch(source, /writeMobileCardVMToSharedSnapshot/)
   const mobileBranch = appSource.slice(
     appSource.indexOf("return loadMobileCardPageVM(pageEntries)"),
-    appSource.indexOf("if (orderEl)", appSource.indexOf("return loadMobileCardPageVM(pageEntries)")),
+    appSource.indexOf(
+      "if (orderEl)",
+      appSource.indexOf("return loadMobileCardPageVM(pageEntries)"),
+    ),
   )
   assert.doesNotMatch(
     mobileBranch,

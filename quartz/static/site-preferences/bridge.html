@@ -16,10 +16,6 @@
           homeLayout: "bricks",
           cardVariant: "simple",
           showAllGenes: false,
-          generationProvider: "openai-compatible",
-          generationApiKey: "",
-          generationModel: "",
-          generationEndpoint: "",
         }
 
         function normalizeHomeLayout(layout) {
@@ -46,23 +42,12 @@
           var normalized = String(value || "")
             .trim()
             .toLowerCase()
-          return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on"
-        }
-
-        function normalizeGenerationProvider(provider) {
-          var value = String(provider || "")
-            .trim()
-            .toLowerCase()
-          if (["openai-compatible", "replicate", "gemini", "custom"].indexOf(value) >= 0) {
-            return value
-          }
-          return DEFAULTS.generationProvider
-        }
-
-        function trimStoredValue(value, maxLength) {
-          return String(value || "")
-            .trim()
-            .slice(0, maxLength)
+          return (
+            normalized === "true" ||
+            normalized === "1" ||
+            normalized === "yes" ||
+            normalized === "on"
+          )
         }
 
         function buildIconoplasmSettings(raw) {
@@ -71,11 +56,17 @@
             homeLayout: normalizeHomeLayout(source.homeLayout),
             cardVariant: normalizeCardVariant(source.cardVariant),
             showAllGenes: normalizeBooleanSetting(source.showAllGenes),
-            generationProvider: normalizeGenerationProvider(source.generationProvider),
-            generationApiKey: trimStoredValue(source.generationApiKey, 800),
-            generationModel: trimStoredValue(source.generationModel, 200),
-            generationEndpoint: trimStoredValue(source.generationEndpoint, 500),
           }
+        }
+
+        function hasLegacyIconoplasmProviderSettings(raw) {
+          if (!raw || typeof raw !== "object") return false
+          return (
+            Object.prototype.hasOwnProperty.call(raw, "generationApiKey") ||
+            Object.prototype.hasOwnProperty.call(raw, "generationProvider") ||
+            Object.prototype.hasOwnProperty.call(raw, "generationModel") ||
+            Object.prototype.hasOwnProperty.call(raw, "generationEndpoint")
+          )
         }
 
         function allowedOrigin(origin) {
@@ -95,7 +86,12 @@
 
         function readStoredSettings() {
           try {
-            return buildIconoplasmSettings(JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"))
+            var raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null")
+            var settings = buildIconoplasmSettings(raw)
+            if (hasLegacyIconoplasmProviderSettings(raw)) {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+            }
+            return settings
           } catch (_err) {
             return buildIconoplasmSettings(DEFAULTS)
           }

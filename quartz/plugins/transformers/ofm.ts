@@ -373,18 +373,21 @@ export const ObsidianFlavoredMarkdown: QuartzTransformerPlugin<Partial<Options>>
                 if (typeof replace === "string") {
                   node.value = node.value.replace(regex, replace)
                 } else {
-                  node.value = node.value.replace(regex, (substring: string, ...args) => {
-                    const replaceValue = replace(substring, ...args)
-                    if (typeof replaceValue === "string") {
-                      return replaceValue
-                    } else if (Array.isArray(replaceValue)) {
-                      return replaceValue.map(mdastToHtml).join("")
-                    } else if (typeof replaceValue === "object" && replaceValue !== null) {
-                      return mdastToHtml(replaceValue)
-                    } else {
-                      return substring
-                    }
-                  })
+                  node.value = node.value.replace(
+                    regex,
+                    (substring: string, ...args: unknown[]) => {
+                      const replaceValue = replace(substring, ...args)
+                      if (typeof replaceValue === "string") {
+                        return replaceValue
+                      } else if (Array.isArray(replaceValue)) {
+                        return replaceValue.map(mdastToHtml).join("")
+                      } else if (typeof replaceValue === "object" && replaceValue !== null) {
+                        return mdastToHtml(replaceValue)
+                      } else {
+                        return substring
+                      }
+                    },
+                  )
                 }
               }
             })

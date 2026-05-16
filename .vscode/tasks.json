@@ -2,11 +2,12 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Deploy Iconoplasm production fix",
+			"label": "Production deploy disabled — use explicit pipeline",
 			"type": "shell",
-			"command": "npx wrangler d1 migrations apply iconoplasm --remote && npx wrangler deploy",
+			"command": "printf '%s\n' 'Production deploy tasks are disabled in VS Code. Use the documented deploy pipeline with explicit approval instead.'",
 			"isBackground": false,
-			"group": "build"
+			"group": "none",
+			"problemMatcher": []
 		}
 	]
 }

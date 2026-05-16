@@ -595,21 +595,228 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   min-width: 11rem;
 }
 
-/* When the edit form expands, let it claim the whole rail so the textarea
-   isn't squeezed against the request shell. */
-.icono-gene-toolbar-rail:has([data-icono-edit-image-form]:not([hidden])) {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.icono-gene-toolbar-rail:has([data-icono-edit-image-form]:not([hidden])) > .icono-gene-edit-panel {
-  width: 100%;
-  grid-column: 1 / -1;
-}
-
 .icono-request-shell {
   display: grid;
   gap: 1rem;
   width: 100%;
+}
+
+.icono-image-edit-dialog {
+  width: min(68rem, calc(100vw - 2rem));
+  max-height: min(48rem, calc(100vh - 2rem));
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 78%, var(--dark) 22%);
+  border-radius: var(--icono-radius-lg);
+  background: var(--light);
+  color: var(--dark);
+  box-shadow: 0 24px 80px rgba(27, 18, 11, 0.32);
+}
+
+.icono-image-edit-dialog::backdrop {
+  background: color-mix(in srgb, rgba(27, 18, 11, 0.56) 88%, transparent 12%);
+  backdrop-filter: blur(9px);
+}
+
+.icono-image-edit-close-form {
+  position: absolute;
+  inset: 0.75rem 0.75rem auto auto;
+  z-index: 2;
+}
+
+.icono-image-edit-close {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 76%, var(--dark) 24%);
+  background: color-mix(in srgb, var(--light) 88%, white 12%);
+  color: var(--dark);
+  cursor: pointer;
+}
+
+.icono-image-edit-shell {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.icono-image-edit-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-right: 2.5rem;
+}
+
+.icono-image-edit-kicker {
+  margin: 0 0 0.15rem;
+  font-size: 0.74rem;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--dark) 58%, var(--secondary) 42%);
+}
+
+.icono-image-edit-header h2 {
+  margin: 0;
+  font-size: clamp(1.2rem, 2vw, 1.65rem);
+  line-height: 1.1;
+}
+
+.icono-image-edit-status {
+  max-width: 24rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 78%, var(--dark) 22%);
+  border-radius: var(--icono-radius-sm);
+  background: color-mix(in srgb, var(--light) 90%, white 10%);
+  font-size: 0.88rem;
+}
+
+.icono-image-edit-status[data-tone="error"] {
+  border-color: color-mix(in srgb, #8f2b24 44%, var(--ui-border) 56%);
+  color: #7c221d;
+}
+
+.icono-image-edit-status[data-tone="success"] {
+  border-color: color-mix(in srgb, #0f766e 44%, var(--ui-border) 56%);
+  color: #0f5f59;
+}
+
+.icono-image-edit-body {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.9fr) minmax(20rem, 1.1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.icono-image-edit-preview,
+.icono-image-edit-controls {
+  min-width: 0;
+}
+
+.icono-image-edit-preview > img,
+.icono-image-edit-before-after img {
+  display: block;
+  width: 100%;
+  max-height: 24rem;
+  object-fit: contain;
+  background: color-mix(in srgb, var(--dark) 8%, var(--light) 92%);
+  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
+  border-radius: var(--icono-radius-sm);
+}
+
+.icono-image-edit-before-after {
+  display: block;
+  margin-top: 0.75rem;
+}
+
+img-comparison-slider {
+  visibility: hidden;
+}
+
+img-comparison-slider [slot="second"] {
+  display: none;
+}
+
+img-comparison-slider.rendered {
+  visibility: inherit;
+}
+
+img-comparison-slider.rendered [slot="second"] {
+  display: unset;
+}
+
+.icono-image-edit-comparison-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.78rem;
+  color: color-mix(in srgb, var(--dark) 62%, var(--secondary) 38%);
+}
+
+.icono-image-edit-comparison {
+  width: 100%;
+  max-height: 24rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
+  border-radius: var(--icono-radius-sm);
+  background: color-mix(in srgb, var(--dark) 8%, var(--light) 92%);
+  overflow: hidden;
+  --divider-color: color-mix(in srgb, var(--light) 70%, white 30%);
+  --divider-width: 2px;
+  --divider-shadow: 0 0 10px rgba(27, 18, 11, 0.35);
+  --default-handle-color: color-mix(in srgb, var(--light) 82%, white 18%);
+  --default-handle-shadow: 0 2px 8px rgba(27, 18, 11, 0.32);
+}
+
+.icono-image-edit-comparison img {
+  border: 0;
+  border-radius: 0;
+}
+
+.icono-image-edit-controls,
+.icono-image-edit-adjustments,
+.icono-image-edit-provider-setup {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.icono-image-edit-field {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.88rem;
+}
+
+.icono-image-edit-field input,
+.icono-image-edit-field select,
+.icono-image-edit-adjustments input[type="text"],
+.icono-image-edit-adjustments input[type="number"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.icono-image-edit-provider-setup {
+  padding: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
+  border-radius: var(--icono-radius-sm);
+  background: color-mix(in srgb, var(--light) 94%, white 6%);
+}
+
+.icono-image-edit-adjustments {
+  margin: 0;
+  padding: 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
+  border-radius: var(--icono-radius-sm);
+}
+
+.icono-image-edit-adjustments label {
+  display: grid;
+  grid-template-columns: auto minmax(8rem, 1fr);
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  font-size: 0.88rem;
+}
+
+.icono-image-edit-actions {
+  display: flex;
+  justify-content: end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 760px) {
+  .icono-image-edit-dialog {
+    width: calc(100vw - 1rem);
+    max-height: calc(100vh - 1rem);
+  }
+
+  .icono-image-edit-body,
+  .icono-image-edit-before-after {
+    grid-template-columns: 1fr;
+  }
+
+  .icono-image-edit-adjustments label {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
 }
 
 .icono-request-actions {

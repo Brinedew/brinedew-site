@@ -146,6 +146,11 @@ class FakeSharedKv {
   constructor(hash = "costbarrier01", version = "gallery-version-1") {
     this.hash = hash
     this.version = version
+    this.getCounts = new Map()
+    const mobileCards = [
+      completeMobileCard("A1BG", version),
+      completeMobileCard("TP53", version),
+    ]
     this.store = new Map([
       [
         "iconoplasm:catalog-manifest",
@@ -169,16 +174,104 @@ class FakeSharedKv {
           ],
         }),
       ],
+      [
+        `iconoplasm:card-catalog:${version}`,
+        JSON.stringify({
+          schema: "iconoplasm.cardCatalog.v1",
+          artifact_version: version,
+          snapshot_version: version,
+          artifact_validated_at: "2026-04-05T00:00:00Z",
+          source: "published_card_catalog",
+          storage: "kv_sharded",
+          shard_size: 750,
+          shard_count: 2,
+          catalog_gene_count: 2,
+          card_count: 2,
+          shards: [
+            {
+              key: `iconoplasm:card-catalog:${version}:shard:0`,
+              index: 0,
+              card_count: 1,
+              first_symbol: "A1BG",
+              last_symbol: "ZZZZ",
+            },
+            {
+              key: `iconoplasm:card-catalog:${version}:shard:1`,
+              index: 1,
+              card_count: 1,
+              first_symbol: "A000",
+              last_symbol: "ZZZZ",
+            },
+          ],
+          symbol_shard_index: {
+            A1BG: 0,
+            TP53: 1,
+          },
+        }),
+      ],
+      [
+        `iconoplasm:card-catalog:${version}:shard:0`,
+        JSON.stringify({
+          schema: "iconoplasm.cardCatalog.v1",
+          artifact_version: version,
+          shard_index: 0,
+          cards: [mobileCards[0]],
+        }),
+      ],
+      [
+        `iconoplasm:card-catalog:${version}:shard:1`,
+        JSON.stringify({
+          schema: "iconoplasm.cardCatalog.v1",
+          artifact_version: version,
+          shard_index: 1,
+          cards: [mobileCards[1]],
+        }),
+      ],
       ["iconoplasm:gallery-version", version],
     ])
   }
 
   async get(key) {
+    this.getCounts.set(key, (this.getCounts.get(key) || 0) + 1)
     return this.store.has(key) ? this.store.get(key) : null
   }
 
   async put(key, value) {
     this.store.set(key, String(value))
+  }
+}
+
+function completeMobileCard(symbol, version) {
+  const normalized = String(symbol || "").trim().toUpperCase()
+  return {
+    __complete: true,
+    schema_version: "iconoplasm.mobileCard.v1",
+    snapshot_version: version,
+    data_source: "published_card_catalog",
+    symbol: normalized,
+    full_name: `${normalized} full name`,
+    display_color: "#5a7fff",
+    portrait: {
+      status: "ready",
+      url: `https://iconoplasmportraits.b-cdn.net/portraits/${normalized}/medium.webp`,
+      full_url: `https://iconoplasmportraits.b-cdn.net/portraits/${normalized}/full.webp`,
+      thumb_url: `https://iconoplasmportraits.b-cdn.net/portraits/${normalized}/thumb.webp`,
+      width: 384,
+      height: 512,
+      asset_sha256: normalized === "TP53" ? "b".repeat(64) : "a".repeat(64),
+      candidate_image_id: normalized === "TP53" ? 12 : 11,
+      vision_id: `anima-v1-${normalized}`,
+      emulsion_id: `A1-${normalized}`,
+    },
+    field_status: {
+      full_name: "present",
+      manifestation: "known_absent",
+      portrait: "present",
+    },
+    payload: {
+      symbol: normalized,
+      full_name: `${normalized} full name`,
+    },
   }
 }
 
@@ -306,5 +399,54 @@ test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact
   assert.equal(second.status, 200)
   assert.equal(db.portraitRefReads, 1)
   assert.equal(secondPayload.genes[0]?.pt != null || secondPayload.genes[0]?.ph != null, true)
+})
+
+test("DO NOT DELETE: mobile card manifest reuses the in-isolate gallery version barrier", async () => {
+  const kv = new FakeSharedKv()
+  const db = new FakeCostBarrierDb()
+  const env = buildEnv(kv, db)
+  const requestInit = {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ symbols: ["TP53"] }),
+  }
+
+  resetIconoplasmRuntimeCachesForTest()
+  const first = await handleIconoplasmGatewayRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", requestInit),
+    env,
+    { waitUntil() {} },
+  )
+  assert.equal(first.status, 200)
+  const second = await handleIconoplasmGatewayRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", requestInit),
+    env,
+    { waitUntil() {} },
+  )
+  assert.equal(second.status, 200)
+
+  assert.equal(kv.getCounts.get("iconoplasm:gallery-version"), 1)
+})
+
+test("DO NOT DELETE: symbol-scoped card manifest reads only exact indexed shards", async () => {
+  const kv = new FakeSharedKv()
+  const db = new FakeCostBarrierDb()
+
+  resetIconoplasmRuntimeCachesForTest()
+  const response = await handleIconoplasmGatewayRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbols: ["TP53"] }),
+    }),
+    buildEnv(kv, db),
+    { waitUntil() {} },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(payload.cards.map((card) => card.symbol), ["TP53"])
+  assert.equal(kv.getCounts.get(`iconoplasm:card-catalog:${kv.version}:shard:1`), 1)
+  assert.equal(kv.getCounts.get(`iconoplasm:card-catalog:${kv.version}:shard:0`) || 0, 0)
 })
 

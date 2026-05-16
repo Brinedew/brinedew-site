@@ -10,15 +10,10 @@ var ICONOPLASM_SHARED_BRIDGE_CHANNEL = "brinedew-site-preferences-bridge"
 var ICONOPLASM_SHARED_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260509a"
 var ICONOPLASM_SHARED_REQUEST_TIMEOUT_MS = 4000
 var ICONOPLASM_SETTINGS_CHANGE_EVENT = "iconoplasmsettingschange"
-var GENERATION_PROVIDER_DEFAULT = "openai-compatible"
 var ICONOPLASM_DEFAULT_SETTINGS = {
   homeLayout: "bricks",
   cardVariant: "simple",
   showAllGenes: false,
-  generationProvider: GENERATION_PROVIDER_DEFAULT,
-  generationApiKey: "",
-  generationModel: "",
-  generationEndpoint: "",
 }
 var sharedIconoplasmSettingsCache = null
 var sharedBridgePromise = null
@@ -47,26 +42,12 @@ function normalizeCardVariant(variant) {
   return ICONOPLASM_DEFAULT_SETTINGS.cardVariant
 }
 
-function normalizeGenerationProvider(provider) {
-  var value = String(provider || "")
-    .trim()
-    .toLowerCase()
-  if (["openai-compatible", "replicate", "gemini", "custom"].indexOf(value) >= 0) return value
-  return GENERATION_PROVIDER_DEFAULT
-}
-
 function normalizeBooleanSetting(value) {
   if (value === true) return true
   var normalized = String(value || "")
     .trim()
     .toLowerCase()
   return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on"
-}
-
-function trimStoredValue(value, maxLength) {
-  return String(value || "")
-    .trim()
-    .slice(0, maxLength)
 }
 
 function canUseLocalStorage() {
@@ -489,11 +470,26 @@ export function buildIconoplasmSettings(raw) {
     homeLayout: normalizeHomeLayout(source.homeLayout),
     cardVariant: normalizeCardVariant(source.cardVariant),
     showAllGenes: normalizeBooleanSetting(source.showAllGenes),
-    generationProvider: normalizeGenerationProvider(source.generationProvider),
-    generationApiKey: trimStoredValue(source.generationApiKey, 800),
-    generationModel: trimStoredValue(source.generationModel, 200),
-    generationEndpoint: trimStoredValue(source.generationEndpoint, 500),
   }
+}
+
+function hasLegacyIconoplasmProviderSettings(raw) {
+  if (!raw || typeof raw !== "object") return false
+  return (
+    Object.prototype.hasOwnProperty.call(raw, "generationApiKey") ||
+    Object.prototype.hasOwnProperty.call(raw, "generationProvider") ||
+    Object.prototype.hasOwnProperty.call(raw, "generationModel") ||
+    Object.prototype.hasOwnProperty.call(raw, "generationEndpoint")
+  )
+}
+
+function readStoredIconoplasmSettings() {
+  var raw = readJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY) || {}
+  var settings = buildIconoplasmSettings(raw)
+  if (hasLegacyIconoplasmProviderSettings(raw)) {
+    writeJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY, settings)
+  }
+  return settings
 }
 
 function iconoplasmSettingsSignature(settings) {
@@ -501,7 +497,11 @@ function iconoplasmSettingsSignature(settings) {
 }
 
 function dispatchIconoplasmSettingsChange(settings, source) {
-  if (typeof document === "undefined" || !document.dispatchEvent || typeof CustomEvent !== "function") {
+  if (
+    typeof document === "undefined" ||
+    !document.dispatchEvent ||
+    typeof CustomEvent !== "function"
+  ) {
     return
   }
   document.dispatchEvent(
@@ -526,7 +526,10 @@ function rememberIconoplasmSettings(settings, source) {
 
 function syncIconoplasmSettingsFromSharedHints(source) {
   var hintedSettings = buildIconoplasmSettings(readIconoplasmSettings())
-  if (iconoplasmSettingsSignature(sharedIconoplasmSettingsCache) === iconoplasmSettingsSignature(hintedSettings)) {
+  if (
+    iconoplasmSettingsSignature(sharedIconoplasmSettingsCache) ===
+    iconoplasmSettingsSignature(hintedSettings)
+  ) {
     return hintedSettings
   }
   rememberIconoplasmSettings(hintedSettings, source || "shared-hint")
@@ -538,7 +541,7 @@ export function readIconoplasmSettings() {
   var cached =
     sharedIconoplasmSettingsCache && typeof sharedIconoplasmSettingsCache === "object"
       ? sharedIconoplasmSettingsCache
-      : readJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY) || {}
+      : readStoredIconoplasmSettings()
   var settings = buildIconoplasmSettings(cached)
   var rawSharedLayout = readCookieValue(ICONOPLASM_LAYOUT_COOKIE_KEY)
   if (rawSharedLayout) settings.homeLayout = normalizeHomeLayout(rawSharedLayout)
@@ -557,7 +560,10 @@ export function writeIconoplasmSettings(settings) {
   if (!writeJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY, nextSettings)) return false
   if (!writeCookieValue(ICONOPLASM_LAYOUT_COOKIE_KEY, nextSettings.homeLayout)) return false
   if (!writeCookieValue(ICONOPLASM_CARD_VARIANT_COOKIE_KEY, nextSettings.cardVariant)) return false
-  if (!writeCookieValue(ICONOPLASM_SHOW_ALL_GENES_COOKIE_KEY, nextSettings.showAllGenes ? "1" : "0")) return false
+  if (
+    !writeCookieValue(ICONOPLASM_SHOW_ALL_GENES_COOKIE_KEY, nextSettings.showAllGenes ? "1" : "0")
+  )
+    return false
   if (shouldUseSharedSettingsBridge()) {
     void requestSharedIconoplasmSettings("writeIconoplasmSettings", nextSettings)
       .then(function (sharedSettings) {
@@ -594,9 +600,7 @@ export function iconoplasmSettingsDefaults() {
 
 export function syncSharedIconoplasmSettings() {
   if (!shouldUseSharedSettingsBridge()) {
-    return Promise.resolve(
-      rememberIconoplasmSettings(readJsonStorage(ICONOPLASM_SETTINGS_STORAGE_KEY) || {}, "local-read"),
-    )
+    return Promise.resolve(rememberIconoplasmSettings(readStoredIconoplasmSettings(), "local-read"))
   }
   return requestSharedIconoplasmSettings("readIconoplasmSettings")
     .then(function (sharedSettings) {

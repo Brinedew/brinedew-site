@@ -17,6 +17,15 @@ The one true Cloudflare credential is the account-owned token named `iconoplasm-
 
 Do not use Wrangler OAuth, local auth caches, old personal tokens, or second-choice repository secrets for Iconoplasm deploy, budget, telemetry, D1, Queue, or artifact publication work.
 
+## Iconoplasm Image Edit Key Storage
+
+B-517 stores user image-edit provider keys in D1 after encrypting them inside the internal stateful worker. The worker requires one Cloudflare Worker secret with at least 32 characters:
+
+- Preferred secret name: `ICONOPLASM_IMAGE_EDIT_KEY_SECRET`
+- Backward-compatible fallback names accepted by the worker: `ICONOPLASM_USER_KEY_ENCRYPTION_SECRET` or `ICONOPLASM_BYOK_ENCRYPTION_SECRET`
+
+Set this as a Worker secret on `geneguessr-api` in production and staging. Do not put the value in `wrangler*.toml`, GitHub Actions logs, localStorage, or committed documentation.
+
 ## Local Cloudflare Credential
 
 The local workstation has the same one path:

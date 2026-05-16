@@ -68,12 +68,18 @@ importers:
       hsluv:
         specifier: ^1.0.1
         version: 1.0.1
+      img-comparison-slider:
+        specifier: ^8.0.7
+        version: 8.0.7
       is-absolute-url:
         specifier: ^5.0.0
         version: 5.0.0
       js-yaml:
         specifier: ^4.1.1
         version: 4.1.1
+      katex:
+        specifier: ^0.16.46
+        version: 0.16.46
       lightningcss:
         specifier: ^1.31.1
         version: 1.32.0
@@ -216,6 +222,9 @@ importers:
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9
+      '@types/mdast':
+        specifier: ^4.0.4
+        version: 4.0.4
       '@types/node':
         specifier: ^25.2.2
         version: 25.7.0
@@ -225,6 +234,9 @@ importers:
       '@types/source-map-support':
         specifier: ^0.5.10
         version: 0.5.10
+      '@types/unist':
+        specifier: ^3.0.3
+        version: 3.0.3
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
@@ -1871,6 +1883,9 @@ packages:
     resolution: {integrity: sha512-Hs59xBNfUIunMFgWAbGX5cq6893IbWg4KnrjbYwX3tx0ztorVgTDA6B2sxf8ejHJ4wz8BqGUMYlnzNBer5NvGg==}
     engines: {node: '>= 4'}
 
+  img-comparison-slider@8.0.7:
+    resolution: {integrity: sha512-BALViPtL2FgcCa9K8KkrmhWuyeDkVu6XVwBoRm9pU8Y6P1rjw31zujuEMBWTz2w6W30zzdQZNTccvg7J9Gf/LQ==}
+
   immutable@5.1.5:
     resolution: {integrity: sha512-t7xcm2siw+hlUM68I+UEOK+z84RzmN59as9DZ7P1l0994DKUWV7UXBMQZVxaoMSRQ+PBZbHCOoBt7a2wxOMt+A==}
 
@@ -1941,6 +1956,10 @@ packages:
 
   katex@0.16.45:
     resolution: {integrity: sha512-pQpZbdBu7wCTmQUh7ufPmLr0pFoObnGUoL/yhtwJDgmmQpbkg/0HSVti25Fu4rmd1oCR6NGWe9vqTWuWv3GcNA==}
+    hasBin: true
+
+  katex@0.16.46:
+    resolution: {integrity: sha512-WHy4Coo+bGZyH7NwJKHkS04YFsFcarWbAEOAC3EMndzdN6VSZqklLLIgfxzyaW9jDoeGYJX9SWbJPKpecox0Uw==}
     hasBin: true
 
   kind-of@6.0.3:
@@ -4316,6 +4335,8 @@ snapshots:
 
   ignore@7.0.5: {}
 
+  img-comparison-slider@8.0.7: {}
+
   immutable@5.1.5: {}
 
   inline-style-parser@0.2.7: {}
@@ -4367,6 +4388,10 @@ snapshots:
       argparse: 2.0.1
 
   katex@0.16.45:
+    dependencies:
+      commander: 8.3.0
+
+  katex@0.16.46:
     dependencies:
       commander: 8.3.0
 

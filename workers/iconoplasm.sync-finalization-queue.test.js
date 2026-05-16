@@ -96,6 +96,23 @@ class FakeStatement {
       return { results: rows.slice(0, Math.max(0, Number(limit || 0) || 0)).map((row) => ({ ...row })) }
     }
     if (this.sql.includes("FROM icono_sync_finalization_jobs") && this.sql.includes("WHERE status <> ?")) {
+      if (this.sql.includes("SELECT gene_symbol") && this.sql.includes("AND phase = ?")) {
+        const [completedStatus, pendingFinalizePhase, limit] = this.args
+        const rows = [...this.db.jobs.values()]
+          .filter((row) => row.status !== completedStatus && row.phase === pendingFinalizePhase)
+          .sort((left, right) => {
+            const nextAttemptDelta = String(left.next_attempt_at || "").localeCompare(String(right.next_attempt_at || ""))
+            if (nextAttemptDelta !== 0) return nextAttemptDelta
+            const requestedDelta = String(left.requested_at || "").localeCompare(String(right.requested_at || ""))
+            if (requestedDelta !== 0) return requestedDelta
+            return String(left.gene_symbol || "").localeCompare(String(right.gene_symbol || ""))
+          })
+        return {
+          results: rows
+            .slice(0, Math.max(0, Number(limit || 0) || 0))
+            .map((row) => ({ gene_symbol: row.gene_symbol })),
+        }
+      }
       const scopedQuery =
         this.sql.includes("WITH scoped_symbols") ||
         this.sql.includes("gene_symbol IN (SELECT value FROM json_each(?))")
@@ -120,7 +137,7 @@ class FakeStatement {
         .sort((left, right) => {
           const leftPendingFinalize = left.phase === pendingFinalizePhase ? 1 : 0
           const rightPendingFinalize = right.phase === pendingFinalizePhase ? 1 : 0
-          if (leftPendingFinalize !== rightPendingFinalize) return leftPendingFinalize - rightPendingFinalize
+          if (leftPendingFinalize !== rightPendingFinalize) return rightPendingFinalize - leftPendingFinalize
           const nextAttemptDelta = String(left.next_attempt_at || "").localeCompare(String(right.next_attempt_at || ""))
           if (nextAttemptDelta !== 0) return nextAttemptDelta
           const requestedDelta = String(left.requested_at || "").localeCompare(String(right.requested_at || ""))
@@ -307,7 +324,7 @@ class FakeStatement {
           .split(",")
           .map((item) => item.trim())
           .filter(Boolean)
-        const wherePhase = this.args[4]
+        const wherePhase = this.sql.includes("WHERE phase = ?") ? this.args[3] : this.args[4]
         const scopedSymbolsJson = this.args[5]
         let scopedSymbols = null
         try {
@@ -519,7 +536,7 @@ test("admin finalization pending exposes queued, retrying, and pending-finalize 
   })
   assert.deepEqual(
     (payload?.jobs || []).map((job) => job.symbol),
-    ["TP53", "BRCA1", "EGFR"],
+    ["EGFR", "TP53", "BRCA1"],
   )
 })
 
@@ -1072,7 +1089,7 @@ test("queue drain message finalizes when only pending-finalize rows remain", asy
   )
 })
 
-test("scoped queue drain defers global KV publish while any ledger work remains active", async () => {
+test("scoped queue drain completes scoped pending-finalize rows while deferring global KV publish", async () => {
   const queue = buildFakeQueue()
   const kv = testKv()
   const env = {
@@ -1127,11 +1144,80 @@ test("scoped queue drain defers global KV publish while any ledger work remains 
 
   assert.equal(result.ok, true)
   assert.equal(result.processed, 0)
-  assert.equal(result.finalized, 0)
+  assert.equal(result.finalized, 2)
   assert.equal(acknowledged, true)
   assert.equal(kv.puts.length, 0)
-  assert.equal(env.ICONOPLASM_DB.jobs.get("TP53")?.phase, "completed_pending_finalize")
-  assert.equal(env.ICONOPLASM_DB.jobs.get("BRCA1")?.phase, "completed_pending_finalize")
+  assert.equal(env.ICONOPLASM_DB.jobs.get("TP53")?.status, "completed")
+  assert.equal(env.ICONOPLASM_DB.jobs.get("BRCA1")?.status, "completed")
+  assert.equal(env.ICONOPLASM_DB.jobs.get("TP53")?.phase, "completed")
+  assert.equal(env.ICONOPLASM_DB.jobs.get("BRCA1")?.phase, "completed")
+  assert.equal(env.ICONOPLASM_DB.jobs.get("EGFR")?.phase, "vote_summaries")
+  assert.equal(queue.sent.length, 1)
+  assert.deepEqual(queue.sent[0]?.symbols, [])
+})
+
+test("global queue drain bulk-completes ready pending-finalize rows during mixed ledger work without KV publish", async () => {
+  const queue = buildFakeQueue()
+  const kv = testKv()
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: [
+        {
+          gene_symbol: "TP53",
+          status: "queued",
+          phase: "completed_pending_finalize",
+          vision_ids_json: JSON.stringify(["anima-v1-1"]),
+        },
+        {
+          gene_symbol: "BRCA1",
+          status: "queued",
+          phase: "completed_pending_finalize",
+          vision_ids_json: JSON.stringify(["anima-v1-2"]),
+        },
+        {
+          gene_symbol: "EGFR",
+          status: "running",
+          phase: "vote_summaries",
+          last_attempt_at: "2099-01-01T00:00:00.000Z",
+          vision_ids_json: JSON.stringify(["anima-v1-3"]),
+        },
+      ],
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    KV: kv,
+  }
+  let acknowledged = false
+
+  const result = await handleIconoplasmSyncFinalizationQueue(
+    {
+      messages: [
+        {
+          body: {
+            kind: "drain_finalization_ledger",
+            run_id: "sync-test",
+            symbols: [],
+          },
+          ack() {
+            acknowledged = true
+          },
+          retry() {},
+        },
+      ],
+    },
+    env,
+    { waitUntil() {} },
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(result.processed, 0)
+  assert.equal(result.finalized, 2)
+  assert.equal(acknowledged, true)
+  assert.equal(kv.puts.length, 0)
+  assert.equal(env.ICONOPLASM_DB.jobs.get("TP53")?.status, "completed")
+  assert.equal(env.ICONOPLASM_DB.jobs.get("BRCA1")?.status, "completed")
+  assert.equal(env.ICONOPLASM_DB.jobs.get("EGFR")?.status, "running")
   assert.equal(env.ICONOPLASM_DB.jobs.get("EGFR")?.phase, "vote_summaries")
   assert.equal(queue.sent.length, 1)
   assert.deepEqual(queue.sent[0]?.symbols, [])

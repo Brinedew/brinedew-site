@@ -44,18 +44,24 @@ jobs:
           path: image_generation_queue.txt
           if-no-files-found: ignore
 
-      - name: Setup Node.js (22.x) with npm cache
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.0.9
+          run_install: false
+
+      - name: Setup Node.js (22.x) with pnpm cache
         uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
 
-      - name: Verify Node/npm and bump npm to >=10.9.2
+      - name: Verify Node/pnpm and dependency release delay
         run: |
           node -v
-          npm -v
-          npm i -g npm@10.9.2
-          npm -v
+          pnpm -v
+          pnpm config set minimumReleaseAge 1440
+          pnpm config get minimumReleaseAge
 
       - name: Validate Cloudflare secrets
         run: |
@@ -64,17 +70,30 @@ jobs:
             exit 1
           fi
 
-      - name: Install Wrangler CLI
-        run: npm install -g wrangler@4
-
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Bake Iconoplasm observability snapshot (production)
         run: node scripts/generate-iconoplasm-observability-snapshot.mjs --env production
 
+      - name: Verify Iconoplasm Worker budget guards
+        run: |
+          # This block must stay before deploy. The Iconoplasm sync fix is not
+          # just Worker code; it is the guarantee that the canonical GitHub path
+          # cannot overwrite the live Worker with a version that reintroduces
+          # per-scope KV publishes, Queue retry loops, hot D1 reads, or legacy
+          # Node package-manager installs. If a future deploy fails here, assume the
+          # guardrail caught real drift until the code proves otherwise.
+          pnpm test -- \
+            workers/iconoplasm.d1-cost-barrier.test.js \
+            workers/iconoplasm.d1-hot-query-guard.test.js \
+            workers/iconoplasm.do-not-delete-cost-guards.test.js \
+            workers/iconoplasm.sync-finalization-queue.test.js \
+            workers/iconoplasm.card-catalog-budget-preflight.test.js
+          node scripts/assert-iconoplasm-worker-budget-guards.mjs
+
       - name: Build Quartz site
-        run: npm run build
+        run: pnpm run build
 
       - name: Verify Geneguessr assets bundled
         run: |
@@ -108,21 +127,21 @@ jobs:
 
       - name: Deploy production static site to Cloudflare Pages
         working-directory: .wrangler-pages
-        run: wrangler pages deploy ../public --project-name brinedew-bio --branch main
+        run: pnpm exec wrangler pages deploy ../public --project-name brinedew-bio --branch main
 
       - name: Apply Geneguessr D1 migrations (production)
-        run: wrangler d1 migrations apply geneguessr --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+        run: pnpm exec wrangler d1 migrations apply geneguessr --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 
       - name: Apply Iconoplasm D1 migrations (production)
-        run: wrangler d1 migrations apply iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+        run: pnpm exec wrangler d1 migrations apply iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 
       - name: Deploy the only allowed internal stateful worker (production)
-        run: wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 
       - name: Ensure Iconoplasm finalization Queue consumer is bound
         run: |
           set -euo pipefail
-          output="$(wrangler queues consumer worker add iconoplasm-sync-finalization geneguessr-api 2>&1)" || {
+          output="$(pnpm exec wrangler queues consumer worker add iconoplasm-sync-finalization geneguessr-api 2>&1)" || {
             echo "$output"
             if echo "$output" | grep -Eiq "already exists|already.*consumer|duplicate"; then
               exit 0
@@ -132,7 +151,7 @@ jobs:
           echo "$output"
 
       - name: Upload public edge worker script without routes (production)
-        run: wrangler deploy --config wrangler.the-only-allowed-public-edge-worker-upload-only.toml
+        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-public-edge-worker-upload-only.toml
 
       - name: Reassign production routes to the public edge worker
         run: |

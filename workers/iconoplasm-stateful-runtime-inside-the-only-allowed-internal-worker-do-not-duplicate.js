@@ -35,6 +35,15 @@ const PUBLIC_API_VERSION = "v1"
 const PUBLIC_API_PREFIX = `/api/public/${PUBLIC_API_VERSION}`
 const SITE_GENE_API_PREFIX = "/api/iconoplasm/site/genes"
 const MIN_EXTENSION_VERSION = "0.3.0"
+const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
+  "openai-compatible": Object.freeze({
+    provider_id: "openai-compatible",
+    label: "OpenAI-compatible image edits",
+    default_endpoint_url: "https://api.openai.com/v1/images/edits",
+    default_model: "gpt-image-1.5",
+  }),
+})
+const ICONOPLASM_IMAGE_EDIT_DEFAULT_TIMEOUT_MS = 55_000
 
 const KV_CATALOG_MANIFEST = "iconoplasm:catalog-manifest"
 const KV_CATALOG_PREFIX = "iconoplasm:catalog:"
@@ -437,6 +446,10 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(path))
     return "gene_request_summary"
   if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+$/.test(path)) return "gene_request_state_gone"
+  if (path === "/api/iconoplasm/image-edit/providers") return "image_edit_providers"
+  if (path === "/api/iconoplasm/image-edit/jobs") return "image_edit_jobs"
+  if (/^\/api\/iconoplasm\/image-edit\/jobs\/[^/]+(?:\/publish)?$/.test(path))
+    return "image_edit_jobs"
   if (path === "/api/iconoplasm/candidates/copy") return "candidate_copy"
   if (path === "/api/iconoplasm/votes/me") return "votes_me"
   if (path === "/api/iconoplasm/votes/set") return "votes_set"
@@ -522,6 +535,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (family === "account_gallery_window") return "first_party_read"
   if (family.startsWith("discoveries_")) return "first_party_write"
   if (family.startsWith("gene_request_")) return "first_party_request"
+  if (family.startsWith("image_edit_")) return "first_party_write"
   if (family === "candidate_copy") return "first_party_write"
   if (family.startsWith("votes_"))
     return family === "votes_me" ? "first_party_read" : "first_party_write"
@@ -950,7 +964,8 @@ function emitIconoplasmBudgetAttributionTelemetryFromState(
   if (!state || !request) return false
   const budgetStatus = iconoplasmMutationLimiterBudgetStatus(state)
   return writeIconoplasmBudgetAttributionDataPoint(env, {
-    cycleKey: state?.cycleKey || budgetStatus?.snapshot?.cycle_key || "",
+    cycleKey:
+      budgetStatus?.snapshot?.cycle_key || state?.lastSnapshot?.cycle_key || state?.cycleKey || "",
     routeFamily: state?.attribution?.route_family || null,
     budgetClass: state?.attribution?.budget_class || null,
     actorClass: state?.attribution?.actor_class || null,
@@ -2763,6 +2778,794 @@ async function copyPortraitCandidateToGene(
     asset_sha256: assetSha,
     candidate_image_id: optionalInt(sourceRow.candidate_image_id),
     vision_id: sanitizeVoteVisionId(sourceRow.vision_id || "") || "",
+  }
+}
+
+function normalizeImageEditProviderId(raw) {
+  const providerId = String(raw || "")
+    .trim()
+    .toLowerCase()
+  if (providerId === "openai" || providerId === "openai_compatible") return "openai-compatible"
+  return ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS[providerId] ? providerId : ""
+}
+
+function imageEditProviderDefinition(providerId) {
+  const normalized = normalizeImageEditProviderId(providerId)
+  return normalized ? ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS[normalized] : null
+}
+
+function normalizeImageEditEndpointUrl(raw, providerDef) {
+  const fallback = providerDef?.default_endpoint_url || ""
+  const value = String(raw || fallback || "").trim()
+  if (!value) return ""
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== "https:") return ""
+    parsed.username = ""
+    parsed.password = ""
+    parsed.hash = ""
+    return parsed.toString()
+  } catch {
+    return ""
+  }
+}
+
+function normalizeImageEditModel(raw, providerDef) {
+  return sanitizeText(raw || providerDef?.default_model || "", 128) || ""
+}
+
+function imageEditSecretMaterial(env) {
+  return String(
+    env?.ICONOPLASM_IMAGE_EDIT_KEY_SECRET ||
+      env?.ICONOPLASM_USER_KEY_ENCRYPTION_SECRET ||
+      env?.ICONOPLASM_BYOK_ENCRYPTION_SECRET ||
+      "",
+  ).trim()
+}
+
+async function imageEditAesKey(env) {
+  const secret = imageEditSecretMaterial(env)
+  if (secret.length < 32) return null
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret))
+  return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["encrypt", "decrypt"])
+}
+
+function base64FromBytes(bytes) {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || [])
+  let binary = ""
+  for (let offset = 0; offset < view.length; offset += 0x8000) {
+    binary += String.fromCharCode(...view.slice(offset, offset + 0x8000))
+  }
+  return btoa(binary)
+}
+
+function bytesFromBase64(raw) {
+  const cleaned = String(raw || "")
+    .trim()
+    .replace(/^data:[^,]+,/i, "")
+  const binary = atob(cleaned)
+  const out = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) out[index] = binary.charCodeAt(index)
+  return out
+}
+
+function imageEditAdditionalData(userId, providerId) {
+  return new TextEncoder().encode(
+    `iconoplasm-image-edit-provider-key-v1\n${normalizeUserId(userId)}\n${normalizeImageEditProviderId(providerId)}`,
+  )
+}
+
+async function encryptImageEditApiKey(env, { userId, providerId, apiKey }) {
+  const key = await imageEditAesKey(env)
+  if (!key) throw new Error("Image edit key encryption secret is not configured")
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const plaintext = new TextEncoder().encode(String(apiKey || ""))
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv, additionalData: imageEditAdditionalData(userId, providerId) },
+    key,
+    plaintext,
+  )
+  return {
+    encryptedApiKey: base64FromBytes(new Uint8Array(ciphertext)),
+    encryptionIv: base64FromBytes(iv),
+    keyFingerprint: (await sha256Hex(`iconoplasm-image-edit-key\n${apiKey}`)).slice(0, 24),
+  }
+}
+
+async function decryptImageEditApiKey(env, row) {
+  const key = await imageEditAesKey(env)
+  if (!key) throw new Error("Image edit key encryption secret is not configured")
+  const plaintext = await crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv: bytesFromBase64(row?.encryption_iv || ""),
+      additionalData: imageEditAdditionalData(row?.user_id || "", row?.provider_id || ""),
+    },
+    key,
+    bytesFromBase64(row?.encrypted_api_key || ""),
+  )
+  return new TextDecoder().decode(plaintext)
+}
+
+function mapImageEditProviderRow(row) {
+  const providerId = normalizeImageEditProviderId(row?.provider_id || "")
+  const providerDef = imageEditProviderDefinition(providerId)
+  if (!providerId || !providerDef) return null
+  return {
+    provider_id: providerId,
+    label: providerDef.label,
+    configured: Boolean(row?.encrypted_api_key),
+    key_fingerprint: sanitizeText(row?.key_fingerprint || "", 64) || "",
+    endpoint_url: normalizeImageEditEndpointUrl(row?.endpoint_url || "", providerDef),
+    model: normalizeImageEditModel(row?.model || "", providerDef),
+  }
+}
+
+async function listImageEditProviderRows(env, userId) {
+  const response = await env.ICONOPLASM_DB.prepare(
+    `SELECT user_id, provider_id, encrypted_api_key, encryption_iv, key_fingerprint, endpoint_url, model, updated_at
+     FROM icono_user_image_provider_keys
+     WHERE user_id = ?
+     ORDER BY provider_id ASC`,
+  )
+    .bind(normalizeUserId(userId))
+    .all()
+  return Array.isArray(response?.results) ? response.results : []
+}
+
+async function getImageEditProviderRow(env, { userId, providerId }) {
+  const normalizedProviderId = normalizeImageEditProviderId(providerId)
+  if (!normalizedProviderId) return null
+  return env.ICONOPLASM_DB.prepare(
+    `SELECT user_id, provider_id, encrypted_api_key, encryption_iv, key_fingerprint, endpoint_url, model, updated_at
+     FROM icono_user_image_provider_keys
+     WHERE user_id = ?
+       AND provider_id = ?
+     LIMIT 1`,
+  )
+    .bind(normalizeUserId(userId), normalizedProviderId)
+    .first()
+}
+
+async function saveImageEditProviderKey(env, { userId, providerId, apiKey, endpointUrl, model }) {
+  const normalizedProviderId = normalizeImageEditProviderId(providerId)
+  const providerDef = imageEditProviderDefinition(normalizedProviderId)
+  if (!providerDef) return { ok: false, error: "Unsupported image edit provider" }
+  const cleanApiKey = String(apiKey || "").trim()
+  if (cleanApiKey.length < 8) return { ok: false, error: "API key is too short" }
+  const cleanEndpointUrl = normalizeImageEditEndpointUrl(endpointUrl || "", providerDef)
+  if (!cleanEndpointUrl) return { ok: false, error: "Provider endpoint must be an HTTPS URL" }
+  const cleanModel = normalizeImageEditModel(model || "", providerDef)
+  if (!cleanModel) return { ok: false, error: "Provider model is required" }
+  const encrypted = await encryptImageEditApiKey(env, {
+    userId,
+    providerId: normalizedProviderId,
+    apiKey: cleanApiKey,
+  })
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_user_image_provider_keys (
+       user_id, provider_id, encrypted_api_key, encryption_iv, key_fingerprint, endpoint_url, model, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT(user_id, provider_id) DO UPDATE SET
+       encrypted_api_key=excluded.encrypted_api_key,
+       encryption_iv=excluded.encryption_iv,
+       key_fingerprint=excluded.key_fingerprint,
+       endpoint_url=excluded.endpoint_url,
+       model=excluded.model,
+       updated_at=CURRENT_TIMESTAMP`,
+  )
+    .bind(
+      normalizeUserId(userId),
+      normalizedProviderId,
+      encrypted.encryptedApiKey,
+      encrypted.encryptionIv,
+      encrypted.keyFingerprint,
+      cleanEndpointUrl,
+      cleanModel,
+    )
+    .run()
+  return {
+    ok: true,
+    provider: mapImageEditProviderRow({
+      user_id: normalizeUserId(userId),
+      provider_id: normalizedProviderId,
+      encrypted_api_key: encrypted.encryptedApiKey,
+      encryption_iv: encrypted.encryptionIv,
+      key_fingerprint: encrypted.keyFingerprint,
+      endpoint_url: cleanEndpointUrl,
+      model: cleanModel,
+    }),
+  }
+}
+
+function normalizeImageEditAdjustments(raw) {
+  const source = raw && typeof raw === "object" ? raw : {}
+  const items = []
+  if (coerceBoolean(source.remove_ai_generation_errors ?? source.removeAiGenerationErrors, false)) {
+    items.push({ kind: "remove_ai_generation_errors", text: "remove visible AI generation errors" })
+  }
+  const sex = sanitizeText(source.sex || source.adjust_sex || source.adjustSex || "", 64)
+  if (sex) items.push({ kind: "sex", value: sex, text: `adjust sex presentation to ${sex}` })
+  const ageYears = optionalInt(source.age_years ?? source.ageYears ?? source.adjust_age_years)
+  if (ageYears != null) {
+    if (ageYears > 140) return { ok: false, error: "Age must be 140 years or less" }
+    items.push({ kind: "age_years", value: ageYears, text: `adjust age to ${ageYears} years old` })
+  }
+  const massKg = optionalFloat(source.mass_kg ?? source.massKg ?? source.adjust_mass_kg, {
+    min: 0.1,
+  })
+  if (massKg != null) {
+    if (massKg > 500) return { ok: false, error: "Mass must be 500 kg or less" }
+    items.push({ kind: "mass_kg", value: massKg, text: `adjust mass to ${massKg} kg` })
+  }
+  const surfaceTone = normalizeHexColor(
+    source.surface_tone_hex || source.surfaceToneHex || source.skin_hex || "",
+  )
+  if (surfaceTone)
+    items.push({
+      kind: "surface_tone_hex",
+      value: surfaceTone,
+      text: `adjust surface tone to ${surfaceTone}`,
+    })
+  const fantasticalFeature = sanitizeText(
+    source.fantastical_feature || source.fantasticalFeature || source.feature_name || "",
+    80,
+  )
+  if (fantasticalFeature) {
+    items.push({
+      kind: "fantastical_feature",
+      value: fantasticalFeature,
+      text: `make the fantastical feature human: ${fantasticalFeature}`,
+    })
+  }
+  const fashionRaw = Array.isArray(source.fashion_styles || source.fashionStyles)
+    ? source.fashion_styles || source.fashionStyles
+    : String(source.fashion_styles || source.fashionStyles || "")
+        .split(/[,+]/)
+        .map((part) => part.trim())
+  const fashionStyles = fashionRaw
+    .map((style) => sanitizeText(style || "", 64))
+    .filter(Boolean)
+    .slice(0, 8)
+  if (fashionStyles.length) {
+    items.push({
+      kind: "fashion_styles",
+      value: fashionStyles,
+      text: `adjust fashion style mix to ${fashionStyles.join(" + ")}`,
+    })
+  }
+  if (!items.length) return { ok: false, error: "Select at least one edit adjustment" }
+  return { ok: true, items }
+}
+
+function buildImageEditPrompt(adjustments) {
+  const lines = (Array.isArray(adjustments) ? adjustments : []).map((item) => `- ${item.text}`)
+  return [
+    "Edit the uploaded Iconoplasm blot with a localized image-to-image edit.",
+    "Keep the same character identity, pose, composition, lighting, blot texture, framing, and background unless a listed adjustment directly requires a change.",
+    "Only make these targeted adjustments:",
+    ...lines,
+    "Use bounded local edits and preserve every unrelated region. Do not redesign the image, change the gene concept, or introduce new artifacts.",
+  ].join("\n")
+}
+
+async function sourceImageEditAssetRow(env, { symbol, assetSha256 }) {
+  const symbolNorm = normalizeSymbol(symbol)
+  const assetSha = normalizeSha256(assetSha256)
+  if (!symbolNorm || !assetSha) return null
+  return env.ICONOPLASM_DB.prepare(
+    `SELECT
+       pa.gene_symbol,
+       pa.asset_sha256,
+       pa.r2_key_full,
+       pa.r2_key_medium,
+       pa.r2_key_thumb,
+       pa.mime,
+       pa.width,
+       pa.height,
+       pa.bytes,
+       pa.status,
+       pa.vision_id,
+       pa.candidate_image_id,
+       COALESCE(vs.upvotes, 0) AS image_upvotes,
+       COALESCE(vs.downvotes, 0) AS image_downvotes,
+       COALESCE(vs.score, 0) AS image_score
+     FROM icono_portrait_assets pa
+     LEFT JOIN icono_vote_asset_summary vs
+       ON vs.gene_symbol = pa.gene_symbol
+      AND vs.asset_sha256 = pa.asset_sha256
+     WHERE pa.gene_symbol = ?
+       AND pa.asset_sha256 = ?
+       AND COALESCE(pa.status, '') <> 'rejected'
+     LIMIT 1`,
+  )
+    .bind(symbolNorm, assetSha)
+    .first()
+}
+
+function mapImageEditJobRow(row, baseUrl = "") {
+  const id = sanitizeText(row?.id || "", 80) || ""
+  const sourceSymbol = normalizeSymbol(row?.source_gene_symbol || "") || ""
+  const sourceAssetSha = normalizeSha256(row?.source_asset_sha256 || "") || ""
+  const resultAssetSha = normalizeSha256(row?.result_asset_sha256 || "") || ""
+  const status = sanitizeText(row?.status || "", 32) || ""
+  const resultUrls = resultAssetSha
+    ? {
+        full: adminPortraitUrl(baseUrl, resultAssetSha, "full"),
+        medium: adminPortraitUrl(baseUrl, resultAssetSha, "medium"),
+        thumb: adminPortraitUrl(baseUrl, resultAssetSha, "thumb"),
+      }
+    : null
+  return {
+    id,
+    provider_id: normalizeImageEditProviderId(row?.provider_id || ""),
+    source_gene_symbol: sourceSymbol,
+    source_asset_sha256: sourceAssetSha,
+    source_candidate_image_id: optionalInt(row?.source_candidate_image_id),
+    source_vision_id: sanitizeVoteVisionId(row?.source_vision_id || ""),
+    source_votes: {
+      upvotes: Math.max(0, Number(row?.source_upvotes || 0) || 0),
+      downvotes: Math.max(0, Number(row?.source_downvotes || 0) || 0),
+      score: Number(row?.source_score || 0) || 0,
+    },
+    inherited_upvotes: Math.max(0, Number(row?.inherited_upvotes || 0) || 0),
+    adjustments: (() => {
+      try {
+        const parsed = JSON.parse(String(row?.adjustments_json || "[]"))
+        return Array.isArray(parsed) ? parsed : []
+      } catch {
+        return []
+      }
+    })(),
+    prompt: sanitizeText(row?.prompt || "", 4000) || "",
+    status,
+    error: sanitizeText(row?.error || "", 2000) || "",
+    result_asset_sha256: resultAssetSha,
+    result_urls: resultUrls,
+    published: Boolean(row?.published_at),
+    created_at: sanitizeText(row?.created_at || "", 64) || "",
+    completed_at: sanitizeText(row?.completed_at || "", 64) || "",
+    published_at: sanitizeText(row?.published_at || "", 64) || "",
+  }
+}
+
+async function insertImageEditJob(env, row) {
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_image_edit_jobs (
+       id,
+       user_id,
+       provider_id,
+       source_gene_symbol,
+       source_asset_sha256,
+       source_candidate_image_id,
+       source_vision_id,
+       source_upvotes,
+       source_downvotes,
+       source_score,
+       adjustments_json,
+       prompt,
+       status,
+       inherited_upvotes,
+       created_at,
+       updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+  )
+    .bind(
+      row.id,
+      row.user_id,
+      row.provider_id,
+      row.source_gene_symbol,
+      row.source_asset_sha256,
+      row.source_candidate_image_id,
+      row.source_vision_id,
+      row.source_upvotes,
+      row.source_downvotes,
+      row.source_score,
+      row.adjustments_json,
+      row.prompt,
+      row.status,
+      row.inherited_upvotes,
+    )
+    .run()
+}
+
+async function updateImageEditJobSucceeded(env, row) {
+  await env.ICONOPLASM_DB.prepare(
+    `UPDATE icono_image_edit_jobs
+     SET status = 'succeeded',
+         result_asset_sha256 = ?,
+         result_r2_key_full = ?,
+         result_r2_key_medium = ?,
+         result_r2_key_thumb = ?,
+         result_mime = ?,
+         result_width = ?,
+         result_height = ?,
+         result_bytes = ?,
+         updated_at = CURRENT_TIMESTAMP,
+         completed_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+  )
+    .bind(
+      row.result_asset_sha256,
+      row.result_r2_key_full,
+      row.result_r2_key_medium,
+      row.result_r2_key_thumb,
+      row.result_mime,
+      row.result_width,
+      row.result_height,
+      row.result_bytes,
+      row.id,
+    )
+    .run()
+}
+
+async function updateImageEditJobFailed(env, { id, error }) {
+  await env.ICONOPLASM_DB.prepare(
+    `UPDATE icono_image_edit_jobs
+     SET status = 'failed',
+         error = ?,
+         updated_at = CURRENT_TIMESTAMP,
+         completed_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+  )
+    .bind(sanitizeText(error || "", 2000) || "Image edit failed", id)
+    .run()
+}
+
+async function getImageEditJobForUser(env, { id, userId }) {
+  const jobId = sanitizeText(id || "", 80)
+  if (!jobId) return null
+  return env.ICONOPLASM_DB.prepare(
+    `SELECT *
+     FROM icono_image_edit_jobs
+     WHERE id = ?
+       AND user_id = ?
+     LIMIT 1`,
+  )
+    .bind(jobId, normalizeUserId(userId))
+    .first()
+}
+
+async function sha256HexBytes(bytes) {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || [])
+  const digest = await crypto.subtle.digest("SHA-256", view)
+  return Array.from(new Uint8Array(digest))
+    .map((n) => n.toString(16).padStart(2, "0"))
+    .join("")
+}
+
+async function responseBytes(response) {
+  return new Uint8Array(await response.arrayBuffer())
+}
+
+function isWebpContentType(contentType) {
+  return (
+    String(contentType || "")
+      .split(";")[0]
+      .trim()
+      .toLowerCase() === "image/webp"
+  )
+}
+
+function bytesAscii(bytes, start, end) {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || [])
+  let out = ""
+  for (let index = start; index < end && index < view.length; index += 1) {
+    out += String.fromCharCode(view[index])
+  }
+  return out
+}
+
+function littleEndian24(bytes, offset) {
+  return (bytes[offset] || 0) | ((bytes[offset + 1] || 0) << 8) | ((bytes[offset + 2] || 0) << 16)
+}
+
+function webpDimensions(bytes) {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || [])
+  if (view.length < 30 || bytesAscii(view, 0, 4) !== "RIFF" || bytesAscii(view, 8, 12) !== "WEBP") {
+    return null
+  }
+  const chunkType = bytesAscii(view, 12, 16)
+  if (chunkType === "VP8X") {
+    return {
+      width: littleEndian24(view, 24) + 1,
+      height: littleEndian24(view, 27) + 1,
+    }
+  }
+  if (chunkType === "VP8 " && view[23] === 0x9d && view[24] === 0x01 && view[25] === 0x2a) {
+    return {
+      width: (((view[27] || 0) << 8) | (view[26] || 0)) & 0x3fff,
+      height: (((view[29] || 0) << 8) | (view[28] || 0)) & 0x3fff,
+    }
+  }
+  if (chunkType === "VP8L" && view[20] === 0x2f) {
+    const b1 = view[21] || 0
+    const b2 = view[22] || 0
+    const b3 = view[23] || 0
+    const b4 = view[24] || 0
+    return {
+      width: 1 + (((b2 & 0x3f) << 8) | b1),
+      height: 1 + (((b4 & 0x0f) << 10) | (b3 << 2) | ((b2 & 0xc0) >> 6)),
+    }
+  }
+  return null
+}
+
+async function callOpenAiCompatibleImageEditProvider({
+  providerRow,
+  apiKey,
+  prompt,
+  sourceBytes,
+  sourceContentType,
+}) {
+  const providerDef = imageEditProviderDefinition(providerRow?.provider_id || "")
+  const endpointUrl = normalizeImageEditEndpointUrl(providerRow?.endpoint_url || "", providerDef)
+  const model = normalizeImageEditModel(providerRow?.model || "", providerDef)
+  const form = new FormData()
+  form.set("model", model)
+  form.set("prompt", prompt)
+  form.set("size", "auto")
+  form.set("output_format", "webp")
+  form.set(
+    "image",
+    new Blob([sourceBytes], { type: sourceContentType || "image/webp" }),
+    "source.webp",
+  )
+  const controller = new AbortController()
+  const timeout = setTimeout(
+    () => controller.abort("image edit provider timeout"),
+    ICONOPLASM_IMAGE_EDIT_DEFAULT_TIMEOUT_MS,
+  )
+  try {
+    const response = await fetch(endpointUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: form,
+      signal: controller.signal,
+    })
+    const raw = await response.text()
+    let payload = null
+    try {
+      payload = raw ? JSON.parse(raw) : null
+    } catch {
+      payload = null
+    }
+    if (!response.ok) {
+      throw new Error(
+        sanitizeText(
+          payload?.error?.message ||
+            payload?.error ||
+            raw ||
+            `Provider failed (${response.status})`,
+          500,
+        ) || `Provider failed (${response.status})`,
+      )
+    }
+    const first = Array.isArray(payload?.data) ? payload.data[0] : null
+    if (first?.b64_json) {
+      return {
+        bytes: bytesFromBase64(first.b64_json),
+        contentType: "image/webp",
+      }
+    }
+    if (first?.url) {
+      const imageResponse = await fetch(first.url, { headers: { Accept: "image/webp,image/*" } })
+      if (!imageResponse.ok)
+        throw new Error(`Provider image download failed (${imageResponse.status})`)
+      return {
+        bytes: await responseBytes(imageResponse),
+        contentType: imageResponse.headers.get("content-type") || "image/webp",
+      }
+    }
+    throw new Error("Provider returned no edited image")
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function callImageEditProvider(options) {
+  const providerId = normalizeImageEditProviderId(options?.providerRow?.provider_id || "")
+  if (providerId === "openai-compatible") return callOpenAiCompatibleImageEditProvider(options)
+  throw new Error("Unsupported image edit provider")
+}
+
+async function fetchImageEditRendition(sourceUrl, imageOptions) {
+  const response = await fetch(sourceUrl, {
+    headers: { Accept: "image/webp" },
+    cf: {
+      image: imageOptions,
+    },
+  })
+  if (!response.ok) throw new Error(`Image rendition transform failed (${response.status})`)
+  return responseBytes(response)
+}
+
+async function writeImageEditRenditions(env, url, { assetSha256, fullBytes }) {
+  const assetSha = normalizeSha256(assetSha256)
+  if (!assetSha) throw new Error("Missing edited asset SHA")
+  const keys = {
+    full: r2PortraitKey(assetSha, "full"),
+    medium: r2PortraitKey(assetSha, "medium"),
+    thumb: r2PortraitKey(assetSha, "thumb"),
+  }
+  await putPortraitStorageObject(env, keys.full, fullBytes, {
+    contentType: "image/webp",
+    cacheControl: "public, max-age=31536000, immutable",
+    customMetadata: { asset_sha256: assetSha, rendition: "full", source: "image_edit" },
+  })
+  const fullUrl = joinUrl(url?.origin || portraitBase(url, env), keys.full)
+  const mediumBytes = await fetchImageEditRendition(fullUrl, {
+    width: 512,
+    fit: "scale-down",
+    format: "webp",
+  })
+  const thumbBytes = await fetchImageEditRendition(fullUrl, {
+    width: 256,
+    height: 256,
+    fit: "cover",
+    gravity: "center",
+    format: "webp",
+  })
+  await putPortraitStorageObject(env, keys.medium, mediumBytes, {
+    contentType: "image/webp",
+    cacheControl: "public, max-age=31536000, immutable",
+    customMetadata: { asset_sha256: assetSha, rendition: "medium", source: "image_edit" },
+  })
+  await putPortraitStorageObject(env, keys.thumb, thumbBytes, {
+    contentType: "image/webp",
+    cacheControl: "public, max-age=31536000, immutable",
+    customMetadata: { asset_sha256: assetSha, rendition: "thumb", source: "image_edit" },
+  })
+  return {
+    keys,
+    bytes: fullBytes.byteLength,
+  }
+}
+
+async function publishImageEditCandidateAsset(env, job, userId) {
+  const symbol = normalizeSymbol(job?.source_gene_symbol || "")
+  const assetSha = normalizeSha256(job?.result_asset_sha256 || "")
+  if (!symbol || !assetSha) return { ok: false, error: "Image edit job has no publishable result" }
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_portrait_assets (
+       gene_symbol,
+       asset_sha256,
+       r2_key_full,
+       r2_key_medium,
+       r2_key_thumb,
+       mime,
+       width,
+       height,
+       bytes,
+       status,
+       autopick_eligible,
+       is_stale,
+       is_legacy,
+       vision_id,
+       emulsion_id,
+       workflow_id,
+       workflow_label,
+       workflow_path,
+       prompt_version,
+       variant_slot,
+       candidate_image_id,
+       artist_tag,
+       artist_name,
+       created_by,
+       created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 1, 0, 0, ?, NULL, 'image-edit', 'Image edit', NULL, NULL, NULL, NULL, NULL, NULL, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
+       status='approved',
+       autopick_eligible=1,
+       is_stale=0,
+       is_legacy=0,
+       r2_key_full=excluded.r2_key_full,
+       r2_key_medium=excluded.r2_key_medium,
+       r2_key_thumb=excluded.r2_key_thumb,
+       mime=excluded.mime,
+       width=COALESCE(excluded.width, icono_portrait_assets.width),
+       height=COALESCE(excluded.height, icono_portrait_assets.height),
+       bytes=COALESCE(excluded.bytes, icono_portrait_assets.bytes),
+       created_by=COALESCE(excluded.created_by, icono_portrait_assets.created_by)`,
+  )
+    .bind(
+      symbol,
+      assetSha,
+      String(job.result_r2_key_full || r2PortraitKey(assetSha, "full")),
+      String(job.result_r2_key_medium || r2PortraitKey(assetSha, "medium")),
+      String(job.result_r2_key_thumb || r2PortraitKey(assetSha, "thumb")),
+      sanitizeText(job.result_mime || "", 80) || "image/webp",
+      optionalInt(job.result_width),
+      optionalInt(job.result_height),
+      optionalInt(job.result_bytes),
+      sanitizeVoteVisionId(`image-edit:${job.id}`),
+      normalizeUserId(userId),
+    )
+    .run()
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason)
+     VALUES (?, ?, ?, 'edit_candidate', ?, ?)`,
+  )
+    .bind(
+      symbol,
+      normalizeSha256(job.source_asset_sha256 || "") || null,
+      assetSha,
+      normalizeUserId(userId),
+      `Published image edit job ${sanitizeText(job.id || "", 80) || ""}`,
+    )
+    .run()
+  return { ok: true, symbol, assetSha }
+}
+
+function imageEditInheritedVoteItems(job, userId) {
+  const symbol = normalizeSymbol(job?.source_gene_symbol || "")
+  const assetSha = normalizeSha256(job?.result_asset_sha256 || "")
+  if (!symbol || !assetSha) return []
+  const inherited = Math.max(0, Math.floor(Number(job?.inherited_upvotes || 0) || 0))
+  const visionId = sanitizeVoteVisionId(`image-edit:${job.id}`)
+  const items = []
+  for (let index = 0; index < inherited; index += 1) {
+    items.push({
+      asset_sha256: assetSha,
+      vision_id: visionId,
+      candidate_image_id: null,
+      user_id: normalizeUserId(`__system_image_edit_inherit__:${job.id}:${index + 1}`),
+      vote_value: 1,
+    })
+  }
+  items.push({
+    asset_sha256: assetSha,
+    vision_id: visionId,
+    candidate_image_id: null,
+    user_id: normalizeUserId(userId),
+    vote_value: 1,
+  })
+  return items
+}
+
+async function applyImageEditInheritedVotes(env, ctx, job, userId) {
+  const symbol = normalizeSymbol(job?.source_gene_symbol || "")
+  const assetSha = normalizeSha256(job?.result_asset_sha256 || "")
+  if (!symbol || !assetSha) return { ok: false, error: "Missing vote target" }
+  const items = imageEditInheritedVoteItems(job, userId)
+  if (!items.length) return { ok: true, inherited_upvotes: 0, projected: 0 }
+  const coordinatorImport = await iconoplasmVoteCoordinatorImportVotes(env, { symbol, items })
+  if (!coordinatorImport?.ok) return { ok: false, error: "Vote coordinator import failed" }
+  let projected = 0
+  for (const row of Array.isArray(coordinatorImport.results) ? coordinatorImport.results : []) {
+    await projectVoteCoordinatorLedgerRow(env, {
+      symbol,
+      assetSha256: row?.asset_sha256,
+      visionId: row?.vision_id,
+      candidateImageId: row?.candidate_image_id,
+      userId: row?.user_id,
+      voteValue: row?.final_vote_value,
+    })
+    await appendVoteEvent(env, {
+      symbol,
+      assetSha256: row?.asset_sha256,
+      visionId: row?.vision_id,
+      candidateRef: row?.candidate_ref,
+      candidateImageId: row?.candidate_image_id,
+      userId: row?.user_id,
+      voteValue: row?.final_vote_value,
+    })
+    projected += 1
+  }
+  const projectionRefresh = await scheduleVoteProjectionRefresh(env, ctx, {
+    symbol,
+    actorId: normalizeUserId(userId),
+    reason: "image_edit_publish_inherited_votes",
+  })
+  return {
+    ok: true,
+    inherited_upvotes: Math.max(0, Math.floor(Number(job?.inherited_upvotes || 0) || 0)),
+    imported_votes: items.length,
+    user_upvote: true,
+    projected,
+    projection_refresh: projectionRefresh,
   }
 }
 
@@ -4805,6 +5608,13 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/admin/requests/open")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/requests/fulfill") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/image-edit/providers")
+    return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
+  if (path === "/api/iconoplasm/image-edit/jobs") return requestMethod === "POST"
+  if (/^\/api\/iconoplasm\/image-edit\/jobs\/[^/]+$/.test(path))
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  if (/^\/api\/iconoplasm\/image-edit\/jobs\/[^/]+\/publish$/.test(path))
+    return requestMethod === "POST"
   if (path === "/api/iconoplasm/candidates/copy") return requestMethod === "POST"
   if (path === "/api/iconoplasm/votes/set") return requestMethod === "POST"
   if (path === "/api/iconoplasm/votes/snapshot") return requestMethod === "POST"
@@ -8889,10 +9699,12 @@ export class IconoplasmSyncGovernor {
   }
 
   async persistState(state) {
-    const next = this.pruneLeases(iconoplasmSyncGovernorStateFromRaw({
-      ...state,
-      updated_at: new Date().toISOString(),
-    }))
+    const next = this.pruneLeases(
+      iconoplasmSyncGovernorStateFromRaw({
+        ...state,
+        updated_at: new Date().toISOString(),
+      }),
+    )
     await this.state.storage.put("state", next)
     return next
   }
@@ -9660,6 +10472,8 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
      INSERT INTO icono_admin_gene_rollup (
        gene_symbol,
        full_name,
+       search_symbol,
+       search_full_name,
        manifestation,
        current_asset_sha256,
        current_asset_missing,
@@ -9810,6 +10624,8 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
      SELECT
        pi.gene_symbol,
        COALESCE(NULLIF(TRIM(pi.full_name), ''), pi.gene_symbol) AS full_name,
+       pi.gene_symbol AS search_symbol,
+       upper(COALESCE(NULLIF(TRIM(pi.full_name), ''), pi.gene_symbol)) AS search_full_name,
        COALESCE(pi.manifestation, '') AS manifestation,
        NULLIF(pi.current_asset_sha256, '') AS current_asset_sha256,
        CASE
@@ -9862,6 +10678,8 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
         OR NULLIF(pi.current_asset_sha256, '') IS NOT NULL
      ON CONFLICT(gene_symbol) DO UPDATE SET
        full_name = excluded.full_name,
+       search_symbol = excluded.search_symbol,
+       search_full_name = excluded.search_full_name,
        manifestation = excluded.manifestation,
        current_asset_sha256 = excluded.current_asset_sha256,
        current_asset_missing = excluded.current_asset_missing,
@@ -10190,11 +11008,14 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
       .run()
     return false
   }
+  const rollupFullName = sanitizeText(info?.full_name || "", 255) || symbol
 
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_admin_gene_rollup (
        gene_symbol,
        full_name,
+       search_symbol,
+       search_full_name,
        manifestation,
        current_asset_sha256,
        current_asset_missing,
@@ -10228,9 +11049,11 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
        leader_score,
        leader_created_at,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(gene_symbol) DO UPDATE SET
        full_name = excluded.full_name,
+       search_symbol = excluded.search_symbol,
+       search_full_name = excluded.search_full_name,
        manifestation = excluded.manifestation,
        current_asset_sha256 = excluded.current_asset_sha256,
        current_asset_missing = excluded.current_asset_missing,
@@ -10267,7 +11090,9 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
   )
     .bind(
       symbol,
-      sanitizeText(info?.full_name || "", 255) || symbol,
+      rollupFullName,
+      symbol,
+      rollupFullName.toUpperCase(),
       sanitizeText(info?.manifestation || "", 4000) || "",
       currentAssetSha,
       currentAssetMissing ? 1 : 0,
@@ -10306,24 +11131,144 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
   return true
 }
 
+async function rebuildAdminGalleryCountCache(env) {
+  if (!env?.ICONOPLASM_DB) return false
+  await env.ICONOPLASM_DB.prepare(`DELETE FROM icono_admin_gallery_count_cache`).run()
+  // Do not collapse this back into one giant INSERT ... SELECT ... UNION ALL.
+  // D1 rejected that shape in production with "too many terms in compound
+  // SELECT" after the Sync button had already refreshed the dashboard summary,
+  // which made the GUI report a 500 for work that mostly succeeded. The small
+  // fixed statements below are slightly more verbose and much easier on D1:
+  // each count is independently attributable, independently debuggable, and
+  // cannot fail because SQLite's compound-select term limit changed under us.
+  // If this needs to grow, add another single-count statement and keep the test
+  // that forbids UNION ALL in the gallery count-cache rebuild.
+  const countSelects = [
+    {
+      key: "live:all",
+      mode: "live",
+      filter: "all",
+      sql: `SELECT COUNT(*) AS total
+              FROM icono_admin_gene_rollup`,
+    },
+    {
+      key: "live:mismatch",
+      mode: "live",
+      filter: "mismatch",
+      sql: `SELECT COUNT(*) AS total
+              FROM icono_admin_gene_rollup
+             WHERE COALESCE(current_asset_missing, 0) = 1`,
+    },
+    {
+      key: "live:pinned",
+      mode: "live",
+      filter: "pinned",
+      sql: `SELECT COUNT(*) AS total
+              FROM icono_admin_gene_rollup
+             WHERE COALESCE(admin_override, 0) = 1`,
+    },
+    {
+      key: "live:missing",
+      mode: "live",
+      filter: "missing",
+      sql: `SELECT COUNT(*) AS total
+              FROM icono_admin_gene_rollup
+             WHERE COALESCE(candidate_count, 0) = 0`,
+    },
+    {
+      key: "live:stale",
+      mode: "live",
+      filter: "stale",
+      sql: `SELECT COUNT(*) AS total
+              FROM icono_admin_gene_rollup
+             WHERE COALESCE(stale_count, 0) > 0`,
+    },
+    {
+      key: "all:all",
+      mode: "all",
+      filter: "all",
+      sql: `SELECT COUNT(*) AS total
+              FROM icono_portrait_assets pa
+             WHERE COALESCE(pa.asset_sha256, '') <> ''`,
+    },
+    {
+      key: "all:mismatch",
+      mode: "all",
+      filter: "mismatch",
+      sql: `SELECT COUNT(*) AS total
+              FROM icono_portrait_assets pa
+              LEFT JOIN icono_admin_gene_rollup gr
+                ON gr.gene_symbol = pa.gene_symbol
+             WHERE COALESCE(pa.asset_sha256, '') <> ''
+               AND COALESCE(gr.current_asset_missing, 0) = 1`,
+    },
+    {
+      key: "all:pinned",
+      mode: "all",
+      filter: "pinned",
+      sql: `SELECT COUNT(*) AS total
+              FROM icono_portrait_assets pa
+              LEFT JOIN icono_admin_gene_rollup gr
+                ON gr.gene_symbol = pa.gene_symbol
+             WHERE COALESCE(pa.asset_sha256, '') <> ''
+               AND COALESCE(gr.admin_override, 0) = 1`,
+    },
+    {
+      key: "all:missing",
+      mode: "all",
+      filter: "missing",
+      sql: `SELECT 0 AS total`,
+    },
+    {
+      key: "all:stale",
+      mode: "all",
+      filter: "stale",
+      sql: `SELECT COUNT(*) AS total
+              FROM icono_portrait_assets pa
+             WHERE COALESCE(pa.asset_sha256, '') <> ''
+               AND COALESCE(pa.is_stale, 0) = 1`,
+    },
+  ]
+  for (const item of countSelects) {
+    await env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_admin_gallery_count_cache (count_key, mode, filter, total, updated_at)
+       SELECT ?, ?, ?, COALESCE(total, 0), CURRENT_TIMESTAMP
+       FROM (${item.sql})`,
+    )
+      .bind(item.key, item.mode, item.filter)
+      .run()
+  }
+  return true
+}
+
 async function rebuildDashboardSummary(env) {
   if (!env.ICONOPLASM_DB) return false
+  // Dashboard summary is a public-sync health number, so it must be scoped to
+  // the canonical published catalog. Asset rows and old rollup rows may exist
+  // for genes that were removed from icono_gene_catalog; those rows are useful
+  // in asset admin/debug surfaces, but they are not "missing live portraits" on
+  // the public site. In the 2026-05 incident, 137 non-catalog rollup rows made
+  // the overview say 19,090/19,160 with 70 no-live genes even though every
+  // canonical catalog row had a live portrait. Joining from icono_gene_catalog
+  // is the guardrail that keeps the Sync button from chasing ghosts.
   const row = await env.ICONOPLASM_DB.prepare(
     `SELECT
-       COUNT(*) AS genes,
-       SUM(CASE WHEN COALESCE(current_asset_sha256, '') <> '' THEN 1 ELSE 0 END) AS with_live,
-       SUM(CASE WHEN COALESCE(admin_override, 0) = 1 AND COALESCE(current_asset_sha256, '') <> '' THEN 1 ELSE 0 END) AS overrides,
-       SUM(CASE WHEN COALESCE(current_asset_missing, 0) = 1 THEN 1 ELSE 0 END) AS drift,
-       SUM(CASE WHEN COALESCE(current_asset_missing, 0) = 1 THEN 1 ELSE 0 END) AS current_asset_missing,
-       SUM(CASE WHEN COALESCE(candidate_count, 0) = 0 THEN 1 ELSE 0 END) AS missing,
-       SUM(CASE WHEN COALESCE(current_asset_sha256, '') = '' THEN 1 ELSE 0 END) AS no_live,
-       SUM(COALESCE(stale_count, 0)) AS stale_assets,
-       SUM(COALESCE(legacy_count, 0)) AS legacy_assets,
-       SUM(CASE WHEN COALESCE(candidate_count, 0) = 0 THEN 1 ELSE 0 END) AS zero_candidates,
-       SUM(CASE WHEN COALESCE(candidate_count, 0) = 1 THEN 1 ELSE 0 END) AS one_candidate,
-       SUM(CASE WHEN COALESCE(candidate_count, 0) BETWEEN 2 AND 5 THEN 1 ELSE 0 END) AS two_to_five_candidates,
-       SUM(CASE WHEN COALESCE(candidate_count, 0) >= 6 THEN 1 ELSE 0 END) AS six_plus_candidates
-     FROM icono_admin_gene_rollup`,
+       COUNT(gc.gene_symbol) AS genes,
+       SUM(CASE WHEN COALESCE(gr.current_asset_sha256, '') <> '' THEN 1 ELSE 0 END) AS with_live,
+       SUM(CASE WHEN COALESCE(gr.admin_override, 0) = 1 AND COALESCE(gr.current_asset_sha256, '') <> '' THEN 1 ELSE 0 END) AS overrides,
+       SUM(CASE WHEN COALESCE(gr.current_asset_missing, 0) = 1 THEN 1 ELSE 0 END) AS drift,
+       SUM(CASE WHEN COALESCE(gr.current_asset_missing, 0) = 1 THEN 1 ELSE 0 END) AS current_asset_missing,
+       SUM(CASE WHEN gr.gene_symbol IS NULL OR COALESCE(gr.candidate_count, 0) = 0 THEN 1 ELSE 0 END) AS missing,
+       SUM(CASE WHEN COALESCE(gr.current_asset_sha256, '') = '' THEN 1 ELSE 0 END) AS no_live,
+       SUM(COALESCE(gr.stale_count, 0)) AS stale_assets,
+       SUM(COALESCE(gr.legacy_count, 0)) AS legacy_assets,
+       SUM(CASE WHEN gr.gene_symbol IS NULL OR COALESCE(gr.candidate_count, 0) = 0 THEN 1 ELSE 0 END) AS zero_candidates,
+       SUM(CASE WHEN COALESCE(gr.candidate_count, 0) = 1 THEN 1 ELSE 0 END) AS one_candidate,
+       SUM(CASE WHEN COALESCE(gr.candidate_count, 0) BETWEEN 2 AND 5 THEN 1 ELSE 0 END) AS two_to_five_candidates,
+       SUM(CASE WHEN COALESCE(gr.candidate_count, 0) >= 6 THEN 1 ELSE 0 END) AS six_plus_candidates
+     FROM icono_gene_catalog gc
+     LEFT JOIN icono_admin_gene_rollup gr
+       ON gr.gene_symbol = gc.gene_symbol`,
   ).first()
 
   await env.ICONOPLASM_DB.prepare(
@@ -10377,6 +11322,7 @@ async function rebuildDashboardSummary(env) {
       Number(row?.six_plus_candidates || 0),
     )
     .run()
+  await rebuildAdminGalleryCountCache(env)
   return true
 }
 
@@ -10576,6 +11522,8 @@ async function bulkRebuildAdminReadModels(env) {
     `INSERT INTO icono_admin_gene_rollup (
        gene_symbol,
        full_name,
+       search_symbol,
+       search_full_name,
        manifestation,
        current_asset_sha256,
        current_asset_missing,
@@ -10731,6 +11679,8 @@ async function bulkRebuildAdminReadModels(env) {
      SELECT
        pi.gene_symbol,
        COALESCE(NULLIF(TRIM(pi.full_name), ''), pi.gene_symbol) AS full_name,
+       pi.gene_symbol AS search_symbol,
+       upper(COALESCE(NULLIF(TRIM(pi.full_name), ''), pi.gene_symbol)) AS search_full_name,
        COALESCE(pi.manifestation, '') AS manifestation,
        NULLIF(pi.current_asset_sha256, '') AS current_asset_sha256,
        CASE
@@ -11457,6 +12407,7 @@ const ICONOPLASM_SYNC_FINALIZATION_PHASE_GENE_ROLLUPS = "gene_rollups"
 const ICONOPLASM_SYNC_FINALIZATION_PHASE_VISION_ROLLUPS = "vision_rollups"
 const ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE = "completed_pending_finalize"
 const ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED = "completed"
+const ICONOPLASM_SYNC_FINALIZATION_PENDING_FINALIZE_BULK_COMPLETE_LIMIT = 1000
 
 function normalizeSyncFinalizationJobStatus(rawStatus) {
   const value = sanitizeText(rawStatus || "", 32).toLowerCase()
@@ -11847,8 +12798,8 @@ async function listPendingSyncFinalizationJobs(env, { limit = 200, symbols = nul
        AND (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM scoped_symbols))
      ORDER BY
        CASE
-         WHEN phase = ? THEN 1
-         ELSE 0
+         WHEN phase = ? THEN 0
+         ELSE 1
        END ASC,
        next_attempt_at ASC,
        requested_at ASC,
@@ -12209,6 +13160,7 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
   if (!env?.ICONOPLASM_DB) return { ok: false, finalized: 0, remaining: 0 }
   const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
   const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
+  const scopedSymbolsJson = JSON.stringify(scopedSymbols)
   const remainingBeforeFinalize = await countSyncFinalizationJobs(env, {
     whereSql: `status <> ? AND phase NOT IN (?, ?)`,
     bindArgs: [
@@ -12225,6 +13177,132 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
     ],
   })
   if (remainingBeforeFinalize > 0 || pendingFinalizeCount <= 0) {
+    // Ready-first finalization is the difference between progress and a budget
+    // treadmill. A mixed ledger can contain thousands of rows already parked in
+    // completed_pending_finalize while a smaller set is still doing reconcile /
+    // vote-summary / vision-rollup work. If we wait for the entire ledger
+    // before marking the ready rows completed, the GUI appears stalled and the
+    // Queue keeps retrying visible "unfinished" work that has no actual work
+    // left. Scoped drains may complete only their requested symbols; global
+    // drains may bulk-complete a bounded slice. Neither path publishes gallery
+    // or card-catalog KV until the full ledger is drained, which is the budget
+    // fence that prevents per-scope KV fanout.
+    if (scopedEnabled > 0 && remainingBeforeFinalize > 0) {
+      const scopedPendingFinalizeCount = await countSyncFinalizationJobs(env, {
+        whereSql: `phase = ?
+          AND status <> ?
+          AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
+        bindArgs: [
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+          scopedEnabled,
+          scopedSymbolsJson,
+        ],
+      })
+      if (scopedPendingFinalizeCount > 0) {
+        const completedAt = new Date().toISOString()
+        await env.ICONOPLASM_DB.prepare(
+          `UPDATE icono_sync_finalization_jobs
+           SET status = ?,
+               phase = ?,
+               updated_at = CURRENT_TIMESTAMP,
+               completed_at = ?,
+               last_error = ''
+           WHERE phase = ?
+             AND status <> ?
+             AND gene_symbol IN (SELECT value FROM json_each(?))`,
+        )
+          .bind(
+            ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+            ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED,
+            completedAt,
+            ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+            ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+            scopedSymbolsJson,
+          )
+          .run()
+        return {
+          ok: true,
+          finalized: scopedPendingFinalizeCount,
+          remaining: Math.max(
+            0,
+            remainingBeforeFinalize + pendingFinalizeCount - scopedPendingFinalizeCount,
+          ),
+          global_finalize_deferred: true,
+          scoped_finalize_only: true,
+          broaden_next_drain: true,
+        }
+      }
+    }
+    if (scopedEnabled <= 0 && pendingFinalizeCount > 0) {
+      const bulkLimit = Math.max(
+        1,
+        Math.min(
+          5000,
+          Number.parseInt(
+            String(
+              env?.ICONOPLASM_SYNC_FINALIZATION_PENDING_FINALIZE_BULK_COMPLETE_LIMIT ||
+                ICONOPLASM_SYNC_FINALIZATION_PENDING_FINALIZE_BULK_COMPLETE_LIMIT,
+            ),
+            10,
+          ) || ICONOPLASM_SYNC_FINALIZATION_PENDING_FINALIZE_BULK_COMPLETE_LIMIT,
+        ),
+      )
+      const bulkRowsResp = await env.ICONOPLASM_DB.prepare(
+        `SELECT gene_symbol
+         FROM icono_sync_finalization_jobs
+         WHERE status <> ?
+           AND phase = ?
+         ORDER BY next_attempt_at ASC, requested_at ASC, gene_symbol ASC
+         LIMIT ?`,
+      )
+        .bind(
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+          bulkLimit,
+        )
+        .all()
+      const bulkSymbols = normalizeSyncFinalizationJobSymbols(
+        (Array.isArray(bulkRowsResp?.results) ? bulkRowsResp.results : []).map(
+          (row) => row?.gene_symbol || "",
+        ),
+        { maxItems: bulkLimit },
+      )
+      if (bulkSymbols.length > 0) {
+        const completedAt = new Date().toISOString()
+        await env.ICONOPLASM_DB.prepare(
+          `UPDATE icono_sync_finalization_jobs
+           SET status = ?,
+               phase = ?,
+               updated_at = CURRENT_TIMESTAMP,
+               completed_at = ?,
+               last_error = ''
+           WHERE phase = ?
+             AND status <> ?
+             AND gene_symbol IN (SELECT value FROM json_each(?))`,
+        )
+          .bind(
+            ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+            ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED,
+            completedAt,
+            ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+            ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+            JSON.stringify(bulkSymbols),
+          )
+          .run()
+        return {
+          ok: true,
+          finalized: bulkSymbols.length,
+          remaining: Math.max(
+            0,
+            remainingBeforeFinalize + pendingFinalizeCount - bulkSymbols.length,
+          ),
+          global_finalize_deferred: true,
+          pending_finalize_bulk_complete: true,
+          broaden_next_drain: true,
+        }
+      }
+    }
     return {
       ok: true,
       finalized: 0,
@@ -12355,7 +13433,9 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
           symbols: nextSymbols.length,
           remaining,
           error: sanitizeText(
-            String(sentNext?.detail || sentNext?.error || sentNext?.code || "unknown Queue send failure"),
+            String(
+              sentNext?.detail || sentNext?.error || sentNext?.code || "unknown Queue send failure",
+            ),
             500,
           ),
         })
@@ -13222,25 +14302,27 @@ async function fetchAdminOverview(env, { eventLimit = 12 } = {}) {
       .first(),
     env.ICONOPLASM_DB.prepare(
       `SELECT
-         gene_symbol,
-         current_asset_missing,
-         candidate_count,
-         stale_count,
-         admin_override
-       FROM icono_admin_gene_rollup
-       WHERE current_asset_missing = 1
-          OR candidate_count = 0
-          OR stale_count > 0
-          OR admin_override = 1
+         gr.gene_symbol,
+         gr.current_asset_missing,
+         gr.candidate_count,
+         gr.stale_count,
+         gr.admin_override
+       FROM icono_gene_catalog gc
+       JOIN icono_admin_gene_rollup gr
+         ON gr.gene_symbol = gc.gene_symbol
+       WHERE gr.current_asset_missing = 1
+          OR gr.candidate_count = 0
+          OR gr.stale_count > 0
+          OR gr.admin_override = 1
        ORDER BY
          CASE
-           WHEN current_asset_missing = 1 THEN 100
-           WHEN candidate_count = 0 THEN 90
-           WHEN stale_count > 0 THEN 70
-           WHEN admin_override = 1 THEN 50
+           WHEN gr.current_asset_missing = 1 THEN 100
+           WHEN gr.candidate_count = 0 THEN 90
+           WHEN gr.stale_count > 0 THEN 70
+           WHEN gr.admin_override = 1 THEN 50
            ELSE 0
          END DESC,
-         gene_symbol ASC
+         gr.gene_symbol ASC
        LIMIT 12`,
     ).all(),
   ])
@@ -13452,6 +14534,35 @@ function normalizeAdminGalleryLimit(raw) {
   return Math.max(1, Math.min(120, Number.parseInt(String(raw || "60"), 10) || 60))
 }
 
+function adminGalleryCountCacheKey(mode, filter) {
+  return `${normalizeAdminGalleryMode(mode)}:${normalizeAdminGalleryFilter(filter)}`
+}
+
+async function cachedAdminGalleryTotal(env, { mode, filter } = {}) {
+  if (!env?.ICONOPLASM_DB) return null
+  try {
+    const row = await env.ICONOPLASM_DB.prepare(
+      `SELECT total
+       FROM icono_admin_gallery_count_cache
+       WHERE count_key = ?
+       LIMIT 1`,
+    )
+      .bind(adminGalleryCountCacheKey(mode, filter))
+      .first()
+    if (!row) return null
+    return Math.max(0, Number(row.total || 0) || 0)
+  } catch {
+    return null
+  }
+}
+
+async function countAdminGalleryRows(env, sql, params) {
+  const row = await env.ICONOPLASM_DB.prepare(sql)
+    .bind(...params)
+    .first()
+  return Math.max(0, Number(row?.total_rows || 0) || 0)
+}
+
 async function fetchAdminCoverage(env) {
   if (!env.ICONOPLASM_DB) {
     return { total: 0, zero: 0, one: 0, two_to_five: 0, six_plus: 0 }
@@ -13507,9 +14618,7 @@ async function fetchAdminGallery(
   const sharedWhereParts = []
   const params = []
   if (queryNorm) {
-    sharedWhereParts.push(
-      "(upper(gr.gene_symbol) LIKE ? OR upper(COALESCE(gr.full_name, '')) LIKE ?)",
-    )
+    sharedWhereParts.push("(gr.search_symbol LIKE ? OR gr.search_full_name LIKE ?)")
     params.push(`%${queryNorm}%`, `%${queryNorm}%`)
   }
   if (cleanedMode === "all") {
@@ -13563,8 +14672,7 @@ async function fetchAdminGallery(
          COALESCE(gr.rejected_count, 0) AS rejected_count,
          COALESCE(gr.stale_count, 0) AS stale_count,
          COALESCE(gr.legacy_count, 0) AS legacy_count,
-         COALESCE(gr.total_assets, 0) AS total_assets,
-         COUNT(*) OVER() AS total_rows
+         COALESCE(gr.total_assets, 0) AS total_assets
        FROM icono_portrait_assets pa
        LEFT JOIN icono_vote_asset_summary vs
          ON vs.gene_symbol = pa.gene_symbol
@@ -13579,7 +14687,20 @@ async function fetchAdminGallery(
       .all()
 
     const allRows = Array.isArray(allResp?.results) ? allResp.results : []
-    const allTotal = Number(allRows[0]?.total_rows || 0)
+    const cachedTotal = queryNorm
+      ? null
+      : await cachedAdminGalleryTotal(env, { mode: cleanedMode, filter: cleanedFilter })
+    const allTotal =
+      cachedTotal ??
+      (await countAdminGalleryRows(
+        env,
+        `SELECT COUNT(*) AS total_rows
+         FROM icono_portrait_assets pa
+         LEFT JOIN icono_admin_gene_rollup gr
+           ON gr.gene_symbol = pa.gene_symbol
+         ${whereClause}`,
+        params,
+      ))
 
     return {
       page: cleanedPage,
@@ -13679,8 +14800,7 @@ async function fetchAdminGallery(
        gr.leader_upvotes,
        gr.leader_downvotes,
        gr.leader_score,
-       gr.current_asset_missing AS has_mismatch,
-       COUNT(*) OVER() AS total_rows
+       gr.current_asset_missing AS has_mismatch
      FROM icono_admin_gene_rollup gr
      ${whereClause}
      ORDER BY ${orderClause}
@@ -13690,7 +14810,18 @@ async function fetchAdminGallery(
     .all()
 
   const rows = Array.isArray(resp?.results) ? resp.results : []
-  const total = Number(rows[0]?.total_rows || 0)
+  const cachedTotal = queryNorm
+    ? null
+    : await cachedAdminGalleryTotal(env, { mode: cleanedMode, filter: cleanedFilter })
+  const total =
+    cachedTotal ??
+    (await countAdminGalleryRows(
+      env,
+      `SELECT COUNT(*) AS total_rows
+       FROM icono_admin_gene_rollup gr
+       ${whereClause}`,
+      params,
+    ))
 
   return {
     page: cleanedPage,
@@ -14700,6 +15831,21 @@ function normalizeGalleryVersionBarrierValue(value) {
 
 async function currentGalleryVersionBarrier(env) {
   const now = Date.now()
+  // This is a speed cache, not the source of truth. The source of truth is the
+  // shared KV version barrier, and every publish/bump path updates this memory
+  // copy immediately. The five-second isolate TTL is still worth keeping:
+  // mobile-card and home traffic can call the barrier repeatedly inside one
+  // isolate, and reading KV on every call burns the same daily KV budget that
+  // previously hit 90%. Do not replace this with a memory-only cache; isolates
+  // are independent, so only KV is the cross-isolate read barrier.
+  if (
+    galleryVersionCache.loadedAt > 0 &&
+    now - galleryVersionCache.loadedAt < GALLERY_VERSION_CACHE_TTL_MS &&
+    galleryVersionCache.value !== null &&
+    galleryVersionCache.value !== undefined
+  ) {
+    return normalizeGalleryVersionBarrierValue(galleryVersionCache.value || "0")
+  }
   if (!env.KV) {
     galleryVersionCache.loadedAt = now
     return normalizeGalleryVersionBarrierValue(galleryVersionCache.value || "0")
@@ -14776,6 +15922,12 @@ async function syncAdminReadModelsAndInvalidateGallery(
     skipDashboard = false,
   } = {},
 ) {
+  // This wrapper is a trap for well-meaning cleanup. It exists because callers
+  // often want "refresh read models and then publish a fresh artifact", but the
+  // finalization queue deliberately decomposes that work into narrow phases.
+  // Dropping any skip flag here turns a symbol-scoped phase into a surprise
+  // rebuild and reintroduces the 2026-05 failure mode where a cheap GUI action
+  // quietly spends D1 rows and may publish KV artifacts too early.
   const result = await syncAdminReadModels(env, {
     symbols,
     visionIds,
@@ -16173,11 +17325,21 @@ function cardCatalogArtifactManifestFromCards({
   cards,
 }) {
   const shards = []
+  const symbolShardIndex = {}
+  // Keep the artifact contract, but make scoped reads exact. Without this
+  // manifest index, a request for a few symbols had to fetch broad range shards
+  // and then filter in memory. That is still "correct" data, but it is wasteful
+  // KV read fanout under real extension traffic. Old manifests remain readable
+  // through the range-shard fallback in readPublishedCardCatalogArtifact().
   for (let index = 0; index * CARD_CATALOG_ARTIFACT_SHARD_SIZE < cards.length; index += 1) {
     const shardCards = cards.slice(
       index * CARD_CATALOG_ARTIFACT_SHARD_SIZE,
       (index + 1) * CARD_CATALOG_ARTIFACT_SHARD_SIZE,
     )
+    for (const card of shardCards) {
+      const symbol = normalizeSymbol(card?.symbol || "")
+      if (symbol) symbolShardIndex[symbol] = index
+    }
     shards.push({
       key: cardCatalogArtifactShardKey(artifactVersion, index),
       index,
@@ -16198,7 +17360,43 @@ function cardCatalogArtifactManifestFromCards({
     catalog_gene_count: catalogGeneCount,
     card_count: cards.length,
     shards,
+    symbol_shard_index: symbolShardIndex,
   }
+}
+
+function cardCatalogIndexedShardsForSymbols(manifest, requestedSymbols) {
+  // Exact shard lookup is optional metadata, not a new public contract. Return
+  // null unless every requested symbol can be mapped safely; the caller then
+  // falls back to the older range check. Do not fall back to D1 on public card
+  // traffic here. D1 is the write/source-of-truth layer, KV is the shared read
+  // barrier, and memory is only an isolate-local speed cache.
+  const shards = Array.isArray(manifest?.shards) ? manifest.shards : []
+  const indexPayload =
+    manifest?.symbol_shard_index && typeof manifest.symbol_shard_index === "object"
+      ? manifest.symbol_shard_index
+      : manifest?.symbolShardIndex && typeof manifest.symbolShardIndex === "object"
+        ? manifest.symbolShardIndex
+        : null
+  if (!indexPayload || !requestedSymbols.length) return null
+  const byIndex = new Map()
+  for (const shard of shards) {
+    const index = Number(shard?.index)
+    if (Number.isFinite(index)) byIndex.set(index, shard)
+  }
+  const selected = new Map()
+  for (const symbol of requestedSymbols) {
+    const normalized = normalizeSymbol(symbol || "")
+    const rawEntry = indexPayload[normalized]
+    const rawIndex =
+      rawEntry && typeof rawEntry === "object"
+        ? (rawEntry.index ?? rawEntry.shard_index ?? rawEntry.shard)
+        : rawEntry
+    const index = Number(rawIndex)
+    const shard = byIndex.get(index)
+    if (!normalized || !Number.isFinite(index) || !shard) return null
+    selected.set(index, shard)
+  }
+  return shards.filter((shard) => selected.has(Number(shard?.index)))
 }
 
 async function writeCardCatalogArtifactToKV(env, artifact) {
@@ -16263,7 +17461,13 @@ async function readPublishedCardCatalogArtifact(env, version, symbols = null) {
   ) {
     const cards = []
     const shards = requestedSymbols
-      ? parsed.shards.filter((shard) =>
+      ? cardCatalogIndexedShardsForSymbols(parsed, requestedSymbols) ||
+        // Old manifests do not have symbol_shard_index. Range fallback keeps
+        // those artifacts readable until the next publish, but it must remain a
+        // KV-shard fallback only. Do not add a D1 fallback here for public card
+        // traffic; cold isolates multiplying D1 reads is the budget failure we
+        // are explicitly avoiding.
+        parsed.shards.filter((shard) =>
           requestedSymbols.some((symbol) => cardCatalogShardMayContainSymbol(shard, symbol)),
         )
       : parsed.shards
@@ -18230,6 +19434,331 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       return done("admin_requests_fulfill", json(result, 200, { "Cache-Control": "no-store" }))
     }
 
+    if (path === "/api/iconoplasm/image-edit/providers") {
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "image_edit_providers_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      if (!sessionUser?.user_id) {
+        return done(
+          "image_edit_providers_401",
+          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log in first." }, 401, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      const userId = normalizeUserId(sessionUser.user_id)
+      if (request.method === "GET" || request.method === "HEAD") {
+        const rows = await listImageEditProviderRows(env, userId)
+        const providers = rows.map(mapImageEditProviderRow).filter(Boolean)
+        return done(
+          "image_edit_providers",
+          asHead(
+            request,
+            json(
+              {
+                ok: true,
+                authenticated: true,
+                encryption_configured: Boolean(await imageEditAesKey(env)),
+                providers,
+                supported_providers: Object.values(ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS).map(
+                  (provider) => ({
+                    provider_id: provider.provider_id,
+                    label: provider.label,
+                    default_endpoint_url: provider.default_endpoint_url,
+                    default_model: provider.default_model,
+                  }),
+                ),
+              },
+              200,
+              { "Cache-Control": "no-store" },
+            ),
+          ),
+        )
+      }
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("image_edit_providers_400", json({ error: "Invalid JSON" }, 400))
+      }
+      try {
+        const saved = await saveImageEditProviderKey(env, {
+          userId,
+          providerId: p?.provider_id || p?.provider,
+          apiKey: p?.api_key || p?.apiKey,
+          endpointUrl: p?.endpoint_url || p?.endpointUrl,
+          model: p?.model,
+        })
+        if (!saved.ok) {
+          return done("image_edit_providers_400", json({ ok: false, error: saved.error }, 400))
+        }
+        return done(
+          "image_edit_providers",
+          json({ ok: true, provider: saved.provider }, 200, { "Cache-Control": "no-store" }),
+        )
+      } catch (error) {
+        return done(
+          "image_edit_providers_500",
+          json(
+            {
+              ok: false,
+              error: sanitizeText(error?.message || error || "Provider key save failed", 500),
+            },
+            500,
+          ),
+        )
+      }
+    }
+
+    if (path === "/api/iconoplasm/image-edit/jobs" && request.method === "POST") {
+      if (!env.ICONOPLASM_DB)
+        return done("image_edit_jobs_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      if (!iconoplasmVoteCoordinatorBinding(env))
+        return done(
+          "image_edit_jobs_500",
+          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
+        )
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      if (!sessionUser?.user_id) {
+        return done(
+          "image_edit_jobs_401",
+          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log in first." }, 401, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("image_edit_jobs_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const userId = normalizeUserId(sessionUser.user_id)
+      const providerId = normalizeImageEditProviderId(p?.provider_id || p?.provider || "")
+      const providerRow = await getImageEditProviderRow(env, { userId, providerId })
+      if (!providerRow?.encrypted_api_key) {
+        return done(
+          "image_edit_jobs_400",
+          json({ ok: false, error: "Selected image edit provider is not configured." }, 400),
+        )
+      }
+      const symbol = normalizeSymbol(p?.source_gene_symbol || p?.symbol || p?.gene_symbol || "")
+      const assetSha = normalizeSha256(p?.source_asset_sha256 || p?.asset_sha256 || "")
+      if (!symbol) return done("image_edit_jobs_400", json({ error: "Missing source gene" }, 400))
+      if (!assetSha)
+        return done("image_edit_jobs_400", json({ error: "Missing source asset" }, 400))
+      const adjustmentsResult = normalizeImageEditAdjustments(p?.adjustments || p || {})
+      if (!adjustmentsResult.ok) {
+        return done("image_edit_jobs_400", json({ ok: false, error: adjustmentsResult.error }, 400))
+      }
+      const sourceRow = await sourceImageEditAssetRow(env, { symbol, assetSha256: assetSha })
+      if (!sourceRow?.asset_sha256) {
+        return done("image_edit_jobs_404", json({ ok: false, error: "Source blot not found" }, 404))
+      }
+      const sourceKey =
+        String(sourceRow.r2_key_full || "") ||
+        String(sourceRow.r2_key_medium || "") ||
+        String(sourceRow.r2_key_thumb || "")
+      if (!sourceKey) {
+        return done(
+          "image_edit_jobs_409",
+          json({ ok: false, error: "Source blot has no stored image key" }, 409),
+        )
+      }
+      const jobId = crypto.randomUUID()
+      const inheritedUpvotes = Math.floor(
+        Math.max(0, Number(sourceRow.image_upvotes || 0) || 0) * 0.9,
+      )
+      const prompt = buildImageEditPrompt(adjustmentsResult.items)
+      await insertImageEditJob(env, {
+        id: jobId,
+        user_id: userId,
+        provider_id: providerId,
+        source_gene_symbol: symbol,
+        source_asset_sha256: assetSha,
+        source_candidate_image_id: optionalInt(sourceRow.candidate_image_id),
+        source_vision_id: sanitizeVoteVisionId(sourceRow.vision_id || ""),
+        source_upvotes: Math.max(0, Number(sourceRow.image_upvotes || 0) || 0),
+        source_downvotes: Math.max(0, Number(sourceRow.image_downvotes || 0) || 0),
+        source_score: Number(sourceRow.image_score || 0) || 0,
+        adjustments_json: JSON.stringify(adjustmentsResult.items),
+        prompt,
+        status: "running",
+        inherited_upvotes: inheritedUpvotes,
+      })
+      try {
+        const sourceObject = await readPortraitStorageObject(env, sourceKey, {
+          fallbackContentType: sourceRow.mime || "image/webp",
+        })
+        if (!sourceObject?.body) throw new Error("Source blot image could not be loaded")
+        const sourceBytes = await responseBytes(new Response(sourceObject.body))
+        const apiKey = await decryptImageEditApiKey(env, providerRow)
+        const providerResult = await callImageEditProvider({
+          providerRow,
+          apiKey,
+          prompt,
+          sourceBytes,
+          sourceContentType: sourceObject.contentType || sourceRow.mime || "image/webp",
+        })
+        const resultBytes = providerResult.bytes
+        if (!resultBytes?.byteLength) throw new Error("Provider returned an empty image")
+        const resultContentType = sanitizeText(providerResult.contentType || "", 80) || "image/webp"
+        if (!isWebpContentType(resultContentType)) {
+          throw new Error("Image edit provider returned a non-WebP image")
+        }
+        const resultSha = await sha256HexBytes(resultBytes)
+        if (resultSha === assetSha) throw new Error("Provider returned an unchanged image")
+        const resultDimensions = webpDimensions(resultBytes) || {
+          width: optionalInt(sourceRow.width),
+          height: optionalInt(sourceRow.height),
+        }
+        const renditions = await writeImageEditRenditions(env, url, {
+          assetSha256: resultSha,
+          fullBytes: resultBytes,
+        })
+        await updateImageEditJobSucceeded(env, {
+          id: jobId,
+          result_asset_sha256: resultSha,
+          result_r2_key_full: renditions.keys.full,
+          result_r2_key_medium: renditions.keys.medium,
+          result_r2_key_thumb: renditions.keys.thumb,
+          result_mime: "image/webp",
+          result_width: optionalInt(resultDimensions.width),
+          result_height: optionalInt(resultDimensions.height),
+          result_bytes: renditions.bytes,
+        })
+        const job = await getImageEditJobForUser(env, { id: jobId, userId })
+        return done(
+          "image_edit_jobs",
+          json(
+            {
+              ok: true,
+              job: mapImageEditJobRow(job, portraitBase(url, env)),
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      } catch (error) {
+        await updateImageEditJobFailed(env, {
+          id: jobId,
+          error: error?.message || error || "Image edit failed",
+        })
+        const job = await getImageEditJobForUser(env, { id: jobId, userId })
+        return done(
+          "image_edit_jobs_502",
+          json(
+            {
+              ok: false,
+              error: sanitizeText(error?.message || error || "Image edit failed", 500),
+              job: mapImageEditJobRow(job, portraitBase(url, env)),
+            },
+            502,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
+    }
+
+    const imageEditJobMatch = path.match(/^\/api\/iconoplasm\/image-edit\/jobs\/([^/]+)$/)
+    if (imageEditJobMatch && (request.method === "GET" || request.method === "HEAD")) {
+      if (!env.ICONOPLASM_DB)
+        return done("image_edit_job_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      if (!sessionUser?.user_id) {
+        return done(
+          "image_edit_job_401",
+          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log in first." }, 401, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      const userId = normalizeUserId(sessionUser.user_id)
+      const job = await getImageEditJobForUser(env, { id: imageEditJobMatch[1], userId })
+      if (!job) return done("image_edit_job_404", json({ ok: false, error: "Job not found" }, 404))
+      return done(
+        "image_edit_jobs",
+        asHead(
+          request,
+          json({ ok: true, job: mapImageEditJobRow(job, portraitBase(url, env)) }, 200, {
+            "Cache-Control": "no-store",
+          }),
+        ),
+      )
+    }
+
+    const imageEditPublishMatch = path.match(
+      /^\/api\/iconoplasm\/image-edit\/jobs\/([^/]+)\/publish$/,
+    )
+    if (imageEditPublishMatch && request.method === "POST") {
+      if (!env.ICONOPLASM_DB)
+        return done("image_edit_publish_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      if (!iconoplasmVoteCoordinatorBinding(env))
+        return done(
+          "image_edit_publish_500",
+          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
+        )
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      if (!sessionUser?.user_id) {
+        return done(
+          "image_edit_publish_401",
+          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log in first." }, 401, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      const userId = normalizeUserId(sessionUser.user_id)
+      const job = await getImageEditJobForUser(env, { id: imageEditPublishMatch[1], userId })
+      if (!job) {
+        return done("image_edit_publish_404", json({ ok: false, error: "Job not found" }, 404))
+      }
+      if (job.published_at) {
+        return done(
+          "image_edit_publish_409",
+          json({ ok: false, error: "Image edit job is already published" }, 409),
+        )
+      }
+      if (String(job.status || "") !== "succeeded" || !normalizeSha256(job.result_asset_sha256)) {
+        return done(
+          "image_edit_publish_409",
+          json({ ok: false, error: "Image edit job is not ready to publish" }, 409),
+        )
+      }
+      const assetResult = await publishImageEditCandidateAsset(env, job, userId)
+      if (!assetResult.ok) {
+        return done("image_edit_publish_400", json({ ok: false, error: assetResult.error }, 400))
+      }
+      const voteResult = await applyImageEditInheritedVotes(env, ctx, job, userId)
+      if (!voteResult.ok) {
+        return done("image_edit_publish_502", json({ ok: false, error: voteResult.error }, 502))
+      }
+      await env.ICONOPLASM_DB.prepare(
+        `UPDATE icono_image_edit_jobs
+         SET published_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+      )
+        .bind(job.id)
+        .run()
+      const publishedJob = await getImageEditJobForUser(env, { id: job.id, userId })
+      return done(
+        "image_edit_jobs",
+        json(
+          {
+            ok: true,
+            job: mapImageEditJobRow(publishedJob, portraitBase(url, env)),
+            vote_inheritance: voteResult,
+            asset_sha256: assetResult.assetSha,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
     if (path === "/api/iconoplasm/candidates/copy" && request.method === "POST") {
       if (!env.ICONOPLASM_DB)
         return done("candidate_copy_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
@@ -19892,6 +21421,16 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       // Bulk workstation sync now pushes the slow derived read-model refresh
       // into this dedicated endpoint after reconcile chunks land. That keeps a
       // fail-slow read-model rebuild from masquerading as one giant reconcile.
+      //
+      // Operational rule for the next person debugging the GUI Sync button:
+      // invalidate_gallery=false is a real budget control, not a cosmetic flag.
+      // The finalization queue uses this endpoint for vote summaries, gene
+      // rollups, vision rollups, and dashboard refreshes while intentionally
+      // deferring the global gallery/card-catalog KV publish until the durable
+      // ledger is drained. If a scoped phase starts publishing KV artifacts, KV
+      // writes fan out per scope and the panel may look "fresh" while the queue
+      // is still doing work. Keep scoped read-model refreshes D1-only and let
+      // the final ledger completion perform the single global publish.
       const result = invalidateGallery
         ? await syncAdminReadModelsAndInvalidateGallery(env, {
             symbols,

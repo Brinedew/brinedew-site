@@ -8,7 +8,10 @@ import {
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const source = readFileSync(
-  new URL("./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js", import.meta.url),
+  new URL(
+    "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+    import.meta.url,
+  ),
   "utf8",
 )
 
@@ -67,12 +70,15 @@ class FakeStatement {
         .filter((row) => {
           if (!hasCursor) return true
           if (String(row.last_encountered_at || "") < cursorTime) return true
-          return String(row.last_encountered_at || "") === cursorTime && row.gene_symbol > cursorSymbol
+          return (
+            String(row.last_encountered_at || "") === cursorTime && row.gene_symbol > cursorSymbol
+          )
         })
         .sort((left, right) => {
           return (
-            String(right.last_encountered_at || "").localeCompare(String(left.last_encountered_at || "")) ||
-            String(left.gene_symbol).localeCompare(String(right.gene_symbol))
+            String(right.last_encountered_at || "").localeCompare(
+              String(left.last_encountered_at || ""),
+            ) || String(left.gene_symbol).localeCompare(String(right.gene_symbol))
           )
         })
     }
@@ -144,7 +150,8 @@ class FakeGameSessions {
   get(id) {
     const session = this.sessions[String(id || "")]
     return {
-      fetch: async () => (session ? Response.json(session) : new Response("missing", { status: 404 })),
+      fetch: async () =>
+        session ? Response.json(session) : new Response("missing", { status: 404 }),
     }
   }
 }
@@ -199,8 +206,14 @@ function completeCardCatalogArtifact(symbols, version = "test-vm-version") {
 }
 
 function buildEnv({ db = new FakeDb(), version = "test-vm-version" } = {}) {
+  resetIconoplasmRuntimeCachesForTest()
   const symbols = ["INS", "PRL", "RHO", "TP53", "BRCA1"]
-  const kvStore = new Map([[`iconoplasm:card-catalog:${version}`, JSON.stringify(completeCardCatalogArtifact(symbols, version))]])
+  const kvStore = new Map([
+    [
+      `iconoplasm:card-catalog:${version}`,
+      JSON.stringify(completeCardCatalogArtifact(symbols, version)),
+    ],
+  ])
   return {
     ICONOPLASM_DB: db,
     GAME_SESSIONS: new FakeGameSessions({
@@ -220,12 +233,16 @@ function buildEnv({ db = new FakeDb(), version = "test-vm-version" } = {}) {
 
 test("account gallery window returns strict rich cards for newest without full shelf sort", async () => {
   const db = new FakeDb()
-  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=2", {
-      headers: { Cookie: "session=abc" },
-    }),
-    buildEnv({ db }),
-  )
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=2",
+        {
+          headers: { Cookie: "session=abc" },
+        },
+      ),
+      buildEnv({ db }),
+    )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -259,10 +276,12 @@ test("account gallery newest window puts the newly discovered 101st gene first",
   db.rows = ["INS", "RHO", "PRL"].map((symbol, index) =>
     db.row("user-123", symbol, `2026-04-29T00:0${index}:00Z`, index),
   )
-  db.rows = db.rows.concat(Array.from({ length: 97 }, (_, index) => {
-    const number = String(index + 1).padStart(3, "0")
-    return db.row("user-123", `G${number}`, `2026-04-29T00:${number.slice(1)}:00Z`, index)
-  }))
+  db.rows = db.rows.concat(
+    Array.from({ length: 97 }, (_, index) => {
+      const number = String(index + 1).padStart(3, "0")
+      return db.row("user-123", `G${number}`, `2026-04-29T00:${number.slice(1)}:00Z`, index)
+    }),
+  )
   db.rows.push(db.row("user-123", "NEW101", "2026-04-30T00:00:00Z", 0))
   resetIconoplasmRuntimeCachesForTest()
   const env = buildEnv({ db, version: "test-vm-version-101" })
@@ -272,12 +291,16 @@ test("account gallery newest window puts the newly discovered 101st gene first",
     JSON.stringify(completeCardCatalogArtifact(allSymbols, "test-vm-version-101")),
   )
 
-  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3", {
-      headers: { Cookie: "session=abc" },
-    }),
-    env,
-  )
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3",
+        {
+          headers: { Cookie: "session=abc" },
+        },
+      ),
+      env,
+    )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -288,20 +311,25 @@ test("account gallery newest window puts the newly discovered 101st gene first",
 
 test("account gallery window paginates symbol order with a stable cursor", async () => {
   const env = buildEnv()
-  const first = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&limit=2", {
-      headers: { Cookie: "session=abc" },
-    }),
-    env,
-  )
+  const first =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&limit=2",
+        {
+          headers: { Cookie: "session=abc" },
+        },
+      ),
+      env,
+    )
   const firstPayload = await first.json()
-  const second = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-    new Request(
-      `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&limit=2&cursor=${encodeURIComponent(firstPayload.next_cursor)}`,
-      { headers: { Cookie: "session=abc" } },
-    ),
-    env,
-  )
+  const second =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&limit=2&cursor=${encodeURIComponent(firstPayload.next_cursor)}`,
+        { headers: { Cookie: "session=abc" } },
+      ),
+      env,
+    )
   const secondPayload = await second.json()
 
   assert.deepEqual(
@@ -315,12 +343,16 @@ test("account gallery window paginates symbol order with a stable cursor", async
 })
 
 test("account gallery window rejects metric orders until a real order index exists", async () => {
-  const response = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=votes&limit=2", {
-      headers: { Cookie: "session=abc" },
-    }),
-    buildEnv(),
-  )
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=votes&limit=2",
+        {
+          headers: { Cookie: "session=abc" },
+        },
+      ),
+      buildEnv(),
+    )
   const payload = await response.json()
 
   assert.equal(response.status, 409)
@@ -353,6 +385,9 @@ test("account gallery endpoint block reads cards from the published artifact, no
 })
 
 test("account gallery endpoint has an explicit budget class", () => {
-  assert.match(source, /if \(path === "\/api\/iconoplasm\/account-gallery-window"\) return "account_gallery_window"/)
+  assert.match(
+    source,
+    /if \(path === "\/api\/iconoplasm\/account-gallery-window"\) return "account_gallery_window"/,
+  )
   assert.match(source, /if \(family === "account_gallery_window"\) return "first_party_read"/)
 })

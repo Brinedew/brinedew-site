@@ -36,11 +36,11 @@ test("Iconoplasm toolbar rails are real one-row rails, not wrapped action stacks
   const requestPanelBlock = cssBlockFor(css, ".icono-gene-toolbar-rail > .icono-gene-request-panel")
   assert.match(requestPanelBlock, /min-width:\s*11rem;/)
 
-  const expandedRailBlock = cssBlockFor(
-    css,
-    ".icono-gene-toolbar-rail:has([data-icono-edit-image-form]:not([hidden]))",
-  )
-  assert.match(expandedRailBlock, /grid-template-columns:\s*minmax\(0, 1fr\);/)
+  const editPanelBlock = cssBlockFor(css, ".icono-gene-toolbar-rail > .icono-gene-edit-panel")
+  assert.match(editPanelBlock, /width:\s*max-content;/)
+  assert.match(app, /data-icono-edit-source=/)
+  assert.match(app, /\.showModal\(/)
+  assert.doesNotMatch(app, /data-icono-edit-image-form/)
 })
 
 test("Iconoplasm archive progress summary is one compact status rail", async () => {

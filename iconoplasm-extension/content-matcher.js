@@ -51,12 +51,12 @@
 
   function hasLeftBoundary(text, index) {
     if (index <= 0) return true
-    return !isGeneTokenChar(text, index - 1)
+    return !isLetterOrNumber(text, index - 1)
   }
 
   function hasRightBoundary(text, index) {
     if (index >= text.length) return true
-    return !isGeneTokenChar(text, index)
+    return !isLetterOrNumber(text, index)
   }
 
   function buildTrie(symbols, normalizeToken) {
@@ -187,6 +187,10 @@
       let runEnd = index
       while (runEnd < source.length && isGeneTokenChar(source, runEnd)) {
         runEnd += 1
+      }
+      if (!hasRightBoundary(source, runEnd)) {
+        index = Math.max(runEnd, index + 1)
+        continue
       }
       const runText = source.slice(index, runEnd)
       const runMatches = collectRunCandidates(runText, index, trieRoot)

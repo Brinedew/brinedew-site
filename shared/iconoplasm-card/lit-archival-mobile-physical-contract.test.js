@@ -46,9 +46,9 @@ test("mobile archival renderer is infocard-only and has no sleeve or material at
     "renderMobileArchivalPhysicalPocketHtml",
     "renderMobileArchivalPhysicalSleeveHtml",
     "icono-card--mobile-physical-pocket",
-    "data-icono-physical-noun=\"sleeve-front\"",
-    "data-icono-physical-noun=\"thumb-cut\"",
-    "data-icono-material-system=\"baked-paper-atlas\"",
+    'data-icono-physical-noun="sleeve-front"',
+    'data-icono-physical-noun="thumb-cut"',
+    'data-icono-material-system="baked-paper-atlas"',
     "/static/iconoplasm/materials/mobile-pocket/",
     "generate-iconoplasm-mobile-pocket-materials",
   ]) {
@@ -174,13 +174,25 @@ test("mobile infocard closed state only peeks the top sheet and uses a real jagg
     css,
     '.icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]',
   )
-  assert.match(expandedBlock, /clip-path:\s*inset\(0\);/, "jagged crop must disappear when the viewport is fully open")
-  assert.match(expandedBlock, /filter:\s*none;/, "open state must remove the visible torn cutoff edge")
+  assert.match(
+    expandedBlock,
+    /clip-path:\s*inset\(0\);/,
+    "jagged crop must disappear when the viewport is fully open",
+  )
+  assert.match(
+    expandedBlock,
+    /filter:\s*none;/,
+    "open state must remove the visible torn cutoff edge",
+  )
   const peekAfterBlock = cssBlockFor(
     css,
     ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek::after",
   )
-  assert.match(peekAfterBlock, /content:\s*none;/, "the tab must not have a fake footer separator line")
+  assert.match(
+    peekAfterBlock,
+    /content:\s*none;/,
+    "the tab must not have a fake footer separator line",
+  )
   assert.equal(
     /icono-card--variant-lab-label\.icono-card--brick::after[\s\S]*linear-gradient/.test(css) ||
       /linear-gradient/.test(peekAfterBlock),
@@ -256,7 +268,12 @@ test("mobile archival card keeps one physical width instead of reflowing with th
     /\.icono-label-specimen-viewport[\s\S]*\.icono-brick-media-link[\s\S]*pointer-events:\s*none;/,
     "the visible blot must remain clickable for full-screen viewing; only the infocard surface owns the open/closed toggle",
   )
-  const rootMobileCardBlock = cardBlock.slice(0, cardBlock.indexOf(".icono-card--variant-lab-label.icono-card--brick .icono-mobile-card-physical-object"))
+  const rootMobileCardBlock = cardBlock.slice(
+    0,
+    cardBlock.indexOf(
+      ".icono-card--variant-lab-label.icono-card--brick .icono-mobile-card-physical-object",
+    ),
+  )
   assert.doesNotMatch(
     rootMobileCardBlock,
     /inline-size:\s*100%;/,
@@ -315,7 +332,10 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
 
 test("mobile Iconoplasm page removes nested padding that creates dead card gutters", async () => {
   const styles = await sourceText(path.join(repoRoot, "quartz/static/iconoplasm/styles.css"))
-  assert.match(styles, /@media \(max-width:\s*720px\)[\s\S]*#iconoplasm-root[\s\S]*padding-inline:\s*0;/)
+  assert.match(
+    styles,
+    /@media \(max-width:\s*720px\)[\s\S]*#iconoplasm-root[\s\S]*padding-inline:\s*0;/,
+  )
   assert.match(
     styles,
     /@media \(max-width:\s*720px\)[\s\S]*\.icono-gene-lead[\s\S]*align-items:\s*center;/,
@@ -331,7 +351,10 @@ test("mobile card recomputes fit scale on same-breakpoint browser resizing", asy
   assert.notEqual(reconcileEnd, -1, "missing mobile breakpoint refresh queue")
   const reconcileBlock = app.slice(reconcileStart, reconcileEnd)
   assert.match(reconcileBlock, /nextMode === mobileLabelReviewMode/)
-  assert.match(reconcileBlock, /querySelectorAll\(\s*["']\.icono-card--variant-lab-label\.icono-card--brick/)
+  assert.match(
+    reconcileBlock,
+    /querySelectorAll\(\s*["']\.icono-card--variant-lab-label\.icono-card--brick/,
+  )
   assert.match(
     reconcileBlock,
     /syncMobileLabelViewportGeometry\(mobileCards\[i\]\)/,
@@ -381,8 +404,16 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
     ".icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-body::before",
   )
   assert.match(bodyBeforeBlock, /right:\s*var\(--icono-label-mobile-tab-safe-inset\);/)
-  assert.doesNotMatch(bodyBeforeBlock, /left:\s*50%;/, "do not move the tab material to fake text centering")
-  assert.doesNotMatch(bodyBeforeBlock, /translateX\(-50%\);/, "do not move the tab material to fake text centering")
+  assert.doesNotMatch(
+    bodyBeforeBlock,
+    /left:\s*50%;/,
+    "do not move the tab material to fake text centering",
+  )
+  assert.doesNotMatch(
+    bodyBeforeBlock,
+    /translateX\(-50%\);/,
+    "do not move the tab material to fake text centering",
+  )
   assert.match(bodyBeforeBlock, /bottom:\s*calc\(100% - 0\.08rem\);/)
   assert.match(bodyBeforeBlock, /border-bottom:\s*0;/)
   assert.match(bodyBeforeBlock, /border-radius:\s*1\.16rem 1\.16rem 0 0/)
@@ -406,21 +437,36 @@ test("mobile infocard tab is part of the sheet surface and casts a shadow over t
     "the gene symbol tab text must seat above the infocard top edge instead of clipping through the sheet",
   )
   assert.match(tabBlock, /right:\s*var\(--icono-label-mobile-tab-safe-inset\);/)
-  assert.doesNotMatch(tabBlock, /left:\s*50%;/, "do not move the tab text container to fake text centering")
-  assert.doesNotMatch(tabBlock, /translateX\(-50%\);/, "do not move the tab text container to fake text centering")
+  assert.doesNotMatch(
+    tabBlock,
+    /left:\s*50%;/,
+    "do not move the tab text container to fake text centering",
+  )
+  assert.doesNotMatch(
+    tabBlock,
+    /translateX\(-50%\);/,
+    "do not move the tab text container to fake text centering",
+  )
   assert.match(
     tabBlock,
     /visible tab material is owned by the infocard body's compound surface/,
     "the tab text container must not own separate material/border geometry",
   )
-  assert.match(tabBlock, /inline-size:\s*calc\(var\(--icono-label-mobile-tab-width\) \+ 1\.36rem\);/)
+  assert.match(
+    tabBlock,
+    /inline-size:\s*calc\(var\(--icono-label-mobile-tab-width\) \+ 1\.36rem\);/,
+  )
   assert.match(tabBlock, /font-family:\s*"League Spartan";/)
   assert.match(
     tabBlock,
     /font-size:\s*var\(--icono-label-mobile-tab-symbol-size\);/,
     "mobile gene symbol scale must come from the tab typography token",
   )
-  assert.match(tabBlock, /align-items:\s*center;/, "tab symbol should sit optically centered in the tab face")
+  assert.match(
+    tabBlock,
+    /align-items:\s*center;/,
+    "tab symbol should sit optically centered in the tab face",
+  )
   assert.match(
     tabBlock,
     /padding:\s*0\.05rem 0\.58rem 0;/,
@@ -482,7 +528,10 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
 
   assert.match(geometry, /--icono-label-mobile-dossier-top/)
   assert.match(geometry, /--icono-label-mobile-viewport-height/)
-  assert.match(geometry, /voteRect[\s\S]*\? toPhysicalCardPx\(voteRect\.bottom - cardRect\.top\) \+ 16/)
+  assert.match(
+    geometry,
+    /voteRect[\s\S]*\? toPhysicalCardPx\(voteRect\.bottom - cardRect\.top\) \+ 16/,
+  )
   assert.match(geometry, /fullInfoHeight = Math\.max\(toPhysicalCardPx\(peekRect\.height\)/)
   assert.match(
     geometry,
@@ -498,9 +547,18 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
     /infoCard\.offsetHeight|icono-label-dossier-shell|icono-label-dossier-sheet/,
     "open viewport height must not follow stretching grid shells",
   )
-  assert.match(app, /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)[\s\S]*?restoreCardTop\(\)[\s\S]*?\}, 320\)/)
-  assert.match(app, /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)[\s\S]*?restoreCardTop\(\)[\s\S]*?\}, 720\)/)
-  assert.equal(/scrollBy|scrollIntoView|translateY|sleeve|envelope|sleeve-front|physical-noun/.test(geometry), false)
+  assert.match(
+    app,
+    /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)[\s\S]*?restoreCardTop\(\)[\s\S]*?\}, 320\)/,
+  )
+  assert.match(
+    app,
+    /setTimeout\(function \(\) \{\s*syncMobileLabelViewportGeometry\(card\)[\s\S]*?restoreCardTop\(\)[\s\S]*?\}, 720\)/,
+  )
+  assert.equal(
+    /scrollBy|scrollIntoView|translateY|sleeve|envelope|sleeve-front|physical-noun/.test(geometry),
+    false,
+  )
   const expansionStart = app.indexOf("function setMobileLabelExpanded")
   const expansionEnd = app.indexOf("function setMobileLabelQcCopy", expansionStart)
   assert.notEqual(expansionStart, -1, "missing mobile expansion helper")
@@ -617,7 +675,10 @@ test("same-session archive return reuses the live home view instead of rebuildin
     "caching the home view happens after the URL has changed to the gene route, so it must not stamp home state onto the gene history entry",
   )
   assert.match(cacheBlock, /document\.createDocumentFragment\(\)/)
-  assert.match(cacheBlock, /while \(root\.firstChild\)[\s\S]*fragment\.appendChild\(root\.firstChild\)/)
+  assert.match(
+    cacheBlock,
+    /while \(root\.firstChild\)[\s\S]*fragment\.appendChild\(root\.firstChild\)/,
+  )
   assert.match(cacheBlock, /snapshot: activeHomeHistorySnapshot/)
   assert.match(cacheBlock, /cleanup: activeHomeRenderCleanup/)
   assert.match(cacheBlock, /activeHomeHistorySnapshot = null/)
@@ -647,9 +708,14 @@ test("same-session archive return reuses the live home view instead of rebuildin
 
 test("mobile card uses the larger B-483 type scale instead of the tiny draft scale", async () => {
   const css = await sourceText(cssPath)
-  const cardStart = css.indexOf(".icono-card--variant-lab-label.icono-card--brick {\n    /* Mobile archival card has four text voices")
+  const cardStart = css.indexOf(
+    ".icono-card--variant-lab-label.icono-card--brick {\n    /* Mobile archival card has four text voices",
+  )
   assert.notEqual(cardStart, -1, "missing mobile typography token block")
-  const cardEnd = css.indexOf(".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name", cardStart)
+  const cardEnd = css.indexOf(
+    ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name",
+    cardStart,
+  )
   assert.notEqual(cardEnd, -1, "missing mobile typography token block end")
   const tokenBlock = css.slice(cardStart, cardEnd)
   assert.match(tokenBlock, /--icono-label-mobile-tab-symbol-size:\s*1\.14rem;/)
@@ -662,7 +728,10 @@ test("mobile card uses the larger B-483 type scale instead of the tiny draft sca
   assert.match(tokenBlock, /--icono-label-mobile-label-size:\s*0\.52rem;/)
   assert.doesNotMatch(tokenBlock, /--icono-label-mobile-typewriter-size:\s*0\.672rem;/)
   assert.doesNotMatch(tokenBlock, /--icono-label-mobile-hand-size:\s*1\.8rem;/)
-  assert.doesNotMatch(tokenBlock, /--icono-label-mobile-hand-size:\s*var\(--icono-label-mobile-typewriter-size\);/)
+  assert.doesNotMatch(
+    tokenBlock,
+    /--icono-label-mobile-hand-size:\s*var\(--icono-label-mobile-typewriter-size\);/,
+  )
   const labMobileEnd = css.indexOf(".icono-card--variant-neo-drab.icono-card--brick", cardEnd)
   assert.notEqual(labMobileEnd, -1, "missing lab mobile typography block end")
   const labMobileTypography = css.slice(cardEnd, labMobileEnd)
@@ -749,7 +818,10 @@ test("mobile open-state handwritten annotations do not cover fixed typewriter la
     css,
     ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-dossier-shell\n    .icono-label-style-pair",
   )
-  assert.match(stylePairBlock, /grid-template-columns:\s*minmax\(0,\s*1\.18fr\) minmax\(5\.9rem,\s*0\.82fr\);/)
+  assert.match(
+    stylePairBlock,
+    /grid-template-columns:\s*minmax\(0,\s*1\.18fr\) minmax\(5\.9rem,\s*0\.82fr\);/,
+  )
   assert.match(
     stylePairBlock,
     /min-block-size:\s*3\.12rem;/,
@@ -913,7 +985,7 @@ test("mobile infocard gestures keep voting and navigation isolated from the view
   )
   assert.match(
     app,
-    /event\.target\.closest\("\[data-icono-vote-box\], \[data-icono-brick-vote-box\], \[data-icono-gene-vote-box\]"\)[\s\S]*return/,
+    /event\.target\.closest\([\s\S]*"\[data-icono-vote-box\], \[data-icono-brick-vote-box\], \[data-icono-gene-vote-box\]"[\s\S]*\)[\s\S]*return/,
     "vote clicks must not toggle the infocard viewport",
   )
   assert.match(
@@ -1017,7 +1089,10 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
   const app = await sourceText(appPath)
   const css = await sourceText(cssPath)
   const litCard = await sourceText(litCardPath)
-  assert.match(app, /labelVoteBoxMarkup\(detail \|\| g,[\s\S]*showArrows: isMobileLabelReviewEnabled\(\)/)
+  assert.match(
+    app,
+    /labelVoteBoxMarkup\(detail \|\| g,[\s\S]*showArrows: isMobileLabelReviewEnabled\(\)/,
+  )
   assert.match(app, /voteHtml: isImageOnlyVariant \? "" : labelVoteHtml/)
   assert.match(
     app,
@@ -1064,7 +1139,10 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
     false,
     "mobile review must not blank the info-card voting controls",
   )
-  assert.match(css, /\.icono-label-mobile-peek-swipe[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/)
+  assert.match(
+    css,
+    /\.icono-label-mobile-peek-swipe[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/,
+  )
   assert.match(
     css,
     /\.icono-label-mobile-peek-swipe[\s\S]*\.icono-vote-btn-arrow[\s\S]*inline-size:\s*1\.44rem/,
@@ -1075,5 +1153,8 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
     /\.icono-label-mobile-peek-toggle:focus-visible[\s\S]*outline:\s*1px dashed/,
     "click/focus treatment must not draw a bright boxed artifact over the infocard",
   )
-  assert.equal(/data-icono-mobile-sleeve-vote|icono-label-mobile-pocket-control/.test(app + css), false)
+  assert.equal(
+    /data-icono-mobile-sleeve-vote|icono-label-mobile-pocket-control/.test(app + css),
+    false,
+  )
 })

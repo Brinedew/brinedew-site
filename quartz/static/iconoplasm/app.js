@@ -21,6 +21,7 @@ import {
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=20260509a"
 import "./generated/lit-archival-card.js?v=20260429b477attachedtab"
+import "./vendor/img-comparison-slider.js?v=20260516b517"
 
 var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function () {
   return null
@@ -91,6 +92,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><circle cx="6" cy="4.75" r="1.5" stroke="currentColor" stroke-width="1.6"/><circle cx="6" cy="15.25" r="1.5" stroke="currentColor" stroke-width="1.6"/><circle cx="14" cy="9" r="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M6 6.25v7.5M6 9.25a3 3 0 0 0 3 3h3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
   var ICONO_SEND_ICON =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="M4 10h12M11 5l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  var ICONO_EDIT_ICON =
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="m4.75 13.85-.6 2.5 2.5-.6 8.45-8.45a1.6 1.6 0 0 0 0-2.26l-.14-.14a1.6 1.6 0 0 0-2.26 0l-7.95 8.95Z" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/><path d="m11.8 5.8 2.4 2.4" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"/></svg>'
   var portraitDetailCache = Object.create(null)
   var portraitDetailPromiseCache = Object.create(null)
   var portraitImageCache = Object.create(null)
@@ -1426,8 +1429,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         resolvedLayout === "image-only-masonry"
           ? buildImageOnlySkeletonCardMarkup(i)
           : resolvedLayout === "masonry"
-          ? buildMasonrySkeletonCardMarkup(i)
-          : buildBrickSkeletonCardMarkup()
+            ? buildMasonrySkeletonCardMarkup(i)
+            : buildBrickSkeletonCardMarkup()
     }
     return html
   }
@@ -1706,7 +1709,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function detectInstallBrowser() {
     var ua = String((window.navigator && window.navigator.userAgent) || "").toLowerCase()
     var isMobile = /android|iphone|ipad|ipod|mobile/.test(ua)
-    var platform = ua.indexOf("android") !== -1 ? "android" : /iphone|ipad|ipod/.test(ua) ? "ios" : "desktop"
+    var platform =
+      ua.indexOf("android") !== -1 ? "android" : /iphone|ipad|ipod/.test(ua) ? "ios" : "desktop"
     var hasBraveMarker = !!(window.navigator && window.navigator.brave)
     if (ua.indexOf("firefox") !== -1) {
       return {
@@ -1841,7 +1845,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       requested === "edge" ||
       requested === "firefox" ||
       requested === "safari"
-    ) return requested
+    )
+      return requested
     if (browser && browser.family === "brave") return "brave"
     if (browser && browser.family === "edge") return "edge"
     if (browser && browser.family === "safari") return "safari"
@@ -1873,7 +1878,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       note =
         "Edge Android has mobile extension support, but Iconoplasm is not verified or published there yet."
       steps = [
-        "Verify Microsoft Partner Center exposes Iconoplasm to Edge Android installs.",
+        "Confirm the public Edge Add-ons listing supports Android installs.",
         "Run a real Android Edge install test before showing a live install button here.",
         "For now, use desktop Edge for one-click install.",
       ]
@@ -4149,121 +4154,455 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
-  function renderEditImageShellMarkup(genePayload) {
+  function sourceVoteCount(item, key) {
+    var value = Number((item && item[key]) || 0)
+    return Number.isFinite(value) ? value : 0
+  }
+
+  function renderEditImageActionMarkup(source, genePayload, item) {
     var symbol = normalizedSymbol(genePayload && genePayload.symbol)
-    var portrait = (genePayload && genePayload.portrait) || null
-    var assetSha = String((portrait && portrait.asset_sha256) || "")
+    var sourceItem = item || {}
+    var assetSha = String((sourceItem && sourceItem.asset_sha256) || "")
       .trim()
       .toLowerCase()
+    var imageUrl =
+      source === "candidate"
+        ? candidatePortraitUrl(sourceItem, "medium")
+        : publishedPortraitUrl(genePayload, "medium")
+    if (!imageUrl && source === "candidate") imageUrl = candidatePortraitUrl(sourceItem, "full")
+    if (!imageUrl && source !== "candidate") imageUrl = publishedPortraitUrl(genePayload, "full")
     if (!symbol || !assetSha) return ""
+    var candidateImageId = Number((sourceItem && sourceItem.candidate_image_id) || 0)
+    var visionId = String((sourceItem && sourceItem.vision_id) || "").trim()
+    var label = source === "candidate" ? "Edit candidate blot" : "Edit blot"
     return (
-      '<section class="icono-gene-request-surface icono-gene-edit-panel" data-icono-edit-image-panel="' +
+      '<section class="icono-gene-request-surface icono-gene-edit-panel">' +
+      '<button type="button" class="icono-request-inline-submit icono-image-edit-open" data-icono-edit-source="' +
+      esc(source) +
+      '" data-icono-source-symbol="' +
       esc(symbol) +
       '" data-icono-source-asset-sha256="' +
       esc(assetSha) +
+      '" data-icono-source-image-url="' +
+      esc(imageUrl || "") +
+      '" data-icono-source-candidate-image-id="' +
+      esc(candidateImageId > 0 ? String(Math.round(candidateImageId)) : "") +
+      '" data-icono-source-vision-id="' +
+      esc(visionId) +
+      '" data-icono-source-upvotes="' +
+      esc(String(sourceVoteCount(sourceItem, "image_upvotes"))) +
+      '" data-icono-source-downvotes="' +
+      esc(String(sourceVoteCount(sourceItem, "image_downvotes"))) +
+      '" data-icono-source-score="' +
+      esc(String(sourceVoteCount(sourceItem, "image_score"))) +
       '">' +
-      '<div class="icono-request-shell">' +
-      '<div class="icono-request-actions">' +
-      // Sentence-case to match the rest of the action vocabulary
-      // ("Approve blot" / "Reject blot" / "New candidate"). FAQ still reads
-      // naturally because we capitalize "Edit blot" the same way mid-sentence.
-      '<button type="button" class="icono-request-inline-submit" data-icono-edit-image-toggle>Edit blot</button>' +
-      '<form class="icono-request-form" data-icono-edit-image-form hidden>' +
-      '<label class="icono-request-option-copy" for="icono-edit-image-prompt-' +
-      esc(symbol) +
-      '">' +
-      '<span class="icono-request-option-title">Small correction prompt</span>' +
-      "<span>Describe the fix: anatomy, anchor traits, background, or style drift.</span>" +
-      "</label>" +
-      '<textarea id="icono-edit-image-prompt-' +
-      esc(symbol) +
-      '" data-icono-edit-image-prompt class="icono-search-input icono-request-picker-input" rows="3" maxlength="2000" placeholder="Fix the hands, keep the same character concept, add a fitting background..." required></textarea>' +
-      '<button type="submit" class="icono-request-inline-submit" data-default-label="submit edit">submit edit</button>' +
-      "</form>" +
-      '<div data-icono-edit-image-note hidden style="font-size:0.92rem;"></div>' +
-      "</div>" +
-      "</div>" +
+      esc(label) +
+      "</button>" +
       "</section>"
     )
   }
 
-  function wireGeneEditImagePanel(container, genePayload) {
-    if (!container || !genePayload) return
-    var panel = container.querySelector("[data-icono-edit-image-panel]")
-    if (!panel) return
-    var form = panel.querySelector("[data-icono-edit-image-form]")
-    var toggle = panel.querySelector("[data-icono-edit-image-toggle]")
-    var promptInput = panel.querySelector("[data-icono-edit-image-prompt]")
-    var note = panel.querySelector("[data-icono-edit-image-note]")
-    var symbol = normalizedSymbol(genePayload.symbol)
-    var sourceAssetSha = String(panel.getAttribute("data-icono-source-asset-sha256") || "")
-      .trim()
-      .toLowerCase()
-    if (!form || !toggle || !promptInput || !symbol || !sourceAssetSha) return
+  var imageEditDialogState = {
+    dialog: null,
+    source: null,
+    providers: [],
+    supportedProviders: [],
+    job: null,
+    loading: false,
+    encryptionConfigured: false,
+  }
 
-    function setEditStatus(message, tone) {
-      if (!note) return
-      note.textContent = String(message || "").trim()
-      note.hidden = !note.textContent
-      note.style.color = tone === "error" ? "#b42318" : tone === "success" ? "#0f766e" : "inherit"
+  function renderImageEditDialogMarkup() {
+    return (
+      '<dialog class="icono-image-edit-dialog" data-icono-image-edit-dialog>' +
+      '<form method="dialog" class="icono-image-edit-close-form">' +
+      '<button type="submit" class="icono-image-edit-close" aria-label="Close edit modal">x</button>' +
+      "</form>" +
+      '<div class="icono-image-edit-shell">' +
+      '<header class="icono-image-edit-header">' +
+      '<div><p class="icono-image-edit-kicker">Blot editor</p><h2 data-icono-image-edit-title>Edit blot</h2></div>' +
+      '<div data-icono-image-edit-status class="icono-image-edit-status" hidden></div>' +
+      "</header>" +
+      '<div class="icono-image-edit-body">' +
+      '<section class="icono-image-edit-preview">' +
+      '<img data-icono-image-edit-source-img alt="Source blot" loading="eager">' +
+      '<div class="icono-image-edit-before-after" data-icono-image-edit-result hidden>' +
+      '<div class="icono-image-edit-comparison-labels" aria-hidden="true"><span>Before</span><span>After</span></div>' +
+      '<img-comparison-slider class="icono-image-edit-comparison" data-icono-image-edit-comparison tabindex="0">' +
+      '<img slot="first" data-icono-image-edit-before alt="Before edit">' +
+      '<img slot="second" data-icono-image-edit-after alt="After edit">' +
+      "</img-comparison-slider>" +
+      "</div>" +
+      "</section>" +
+      '<section class="icono-image-edit-controls">' +
+      '<label class="icono-image-edit-field">Provider<select data-icono-image-edit-provider></select></label>' +
+      '<details class="icono-image-edit-provider-setup">' +
+      "<summary>Provider key</summary>" +
+      '<label class="icono-image-edit-field">API key<input type="password" data-icono-image-edit-api-key autocomplete="off"></label>' +
+      '<label class="icono-image-edit-field">Endpoint<input type="url" data-icono-image-edit-endpoint></label>' +
+      '<label class="icono-image-edit-field">Model<input type="text" data-icono-image-edit-model></label>' +
+      '<button type="button" class="icono-request-inline-submit" data-icono-image-edit-save-provider>Save provider</button>' +
+      "</details>" +
+      '<fieldset class="icono-image-edit-adjustments">' +
+      "<legend>Adjustments</legend>" +
+      '<label><input type="checkbox" data-icono-image-edit-adjustment="remove_ai_generation_errors"> Remove AI generation errors</label>' +
+      '<label><input type="checkbox" data-icono-image-edit-adjustment="sex"> Sex <input type="text" data-icono-image-edit-sex placeholder="female, male, androgynous"></label>' +
+      '<label><input type="checkbox" data-icono-image-edit-adjustment="age_years"> Age <input type="number" min="0" max="140" data-icono-image-edit-age> years old</label>' +
+      '<label><input type="checkbox" data-icono-image-edit-adjustment="mass_kg"> Mass <input type="number" min="0.1" max="500" step="0.1" data-icono-image-edit-mass> kg</label>' +
+      '<label><input type="checkbox" data-icono-image-edit-adjustment="surface_tone_hex"> Surface tone <input type="color" data-icono-image-edit-tone value="#b17f62"></label>' +
+      '<label><input type="checkbox" data-icono-image-edit-adjustment="fantastical_feature"> Humanize feature <input type="text" data-icono-image-edit-feature placeholder="#feature"></label>' +
+      '<label><input type="checkbox" data-icono-image-edit-adjustment="fashion_styles"> Fashion mix <input type="text" data-icono-image-edit-fashion placeholder="#fashion1 + #fashion2"></label>' +
+      "</fieldset>" +
+      '<div class="icono-image-edit-actions">' +
+      '<button type="button" class="icono-request-inline-submit" data-icono-image-edit-submit disabled>Edit</button>' +
+      '<button type="button" class="icono-request-inline-submit" data-icono-image-edit-publish disabled>Publish</button>' +
+      "</div>" +
+      "</section>" +
+      "</div>" +
+      "</div>" +
+      "</dialog>"
+    )
+  }
+
+  function ensureImageEditDialog() {
+    if (imageEditDialogState.dialog && document.body.contains(imageEditDialogState.dialog)) {
+      return imageEditDialogState.dialog
     }
+    var wrapper = document.createElement("div")
+    wrapper.innerHTML = renderImageEditDialogMarkup()
+    var dialog = wrapper.firstElementChild
+    document.body.appendChild(dialog)
+    imageEditDialogState.dialog = dialog
+    wireImageEditDialog(dialog)
+    return dialog
+  }
 
-    toggle.addEventListener("click", function () {
-      form.hidden = !form.hidden
-      toggle.setAttribute("aria-expanded", form.hidden ? "false" : "true")
-      if (!form.hidden) promptInput.focus()
-    })
+  function imageEditSetStatus(message, tone) {
+    var dialog = ensureImageEditDialog()
+    var status = dialog.querySelector("[data-icono-image-edit-status]")
+    if (!status) return
+    status.textContent = String(message || "").trim()
+    status.hidden = !status.textContent
+    status.dataset.tone = tone || ""
+  }
 
-    form.addEventListener("submit", function (event) {
-      event.preventDefault()
-      var prompt = String(promptInput.value || "").trim()
-      if (!prompt) {
-        setEditStatus("Describe the correction before submitting.", "error")
-        promptInput.focus()
-        return
-      }
-      var button = form.querySelector('button[type="submit"]')
-      if (button) {
-        button.disabled = true
-        button.textContent = "Submitting..."
-      }
-      setEditStatus("", "")
-      fetchJSON("/api/iconoplasm/requests", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-        },
-        body: JSON.stringify({
-          symbol: symbol,
-          request_kind: "edit_image",
-          request_prompt: prompt,
-          source_gene_symbol: symbol,
-          source_asset_sha256: sourceAssetSha,
-          request_mode: "random",
-        }),
+  function imageEditSelectedProvider() {
+    var dialog = ensureImageEditDialog()
+    var select = dialog.querySelector("[data-icono-image-edit-provider]")
+    return String((select && select.value) || "").trim()
+  }
+
+  function imageEditHasAdjustment() {
+    var dialog = ensureImageEditDialog()
+    return Boolean(dialog.querySelector("[data-icono-image-edit-adjustment]:checked"))
+  }
+
+  function updateImageEditButtons() {
+    var dialog = ensureImageEditDialog()
+    var editButton = dialog.querySelector("[data-icono-image-edit-submit]")
+    var publishButton = dialog.querySelector("[data-icono-image-edit-publish]")
+    var saveProviderButton = dialog.querySelector("[data-icono-image-edit-save-provider]")
+    if (editButton) {
+      editButton.disabled =
+        imageEditDialogState.loading ||
+        !imageEditDialogState.encryptionConfigured ||
+        !imageEditSelectedProvider() ||
+        !imageEditHasAdjustment()
+      editButton.textContent = imageEditDialogState.loading ? "Editing..." : "Edit"
+    }
+    if (publishButton) {
+      publishButton.disabled =
+        imageEditDialogState.loading ||
+        !imageEditDialogState.job ||
+        imageEditDialogState.job.status !== "succeeded" ||
+        imageEditDialogState.job.published
+    }
+    if (saveProviderButton) {
+      saveProviderButton.disabled =
+        imageEditDialogState.loading || !imageEditDialogState.encryptionConfigured
+    }
+    var setup = dialog.querySelector(".icono-image-edit-provider-setup")
+    if (setup)
+      setup.open =
+        !imageEditDialogState.encryptionConfigured || !imageEditDialogState.providers.length
+  }
+
+  function renderImageEditProviders() {
+    var dialog = ensureImageEditDialog()
+    var select = dialog.querySelector("[data-icono-image-edit-provider]")
+    if (!select) return
+    var providers = imageEditDialogState.providers || []
+    select.innerHTML = providers.length
+      ? providers
+          .map(function (provider) {
+            return (
+              '<option value="' +
+              esc(provider.provider_id) +
+              '">' +
+              esc(provider.label || provider.provider_id) +
+              (provider.model ? " · " + esc(provider.model) : "") +
+              "</option>"
+            )
+          })
+          .join("")
+      : '<option value="">No provider key saved</option>'
+    select.disabled = !providers.length
+    var supported = imageEditDialogState.supportedProviders[0] || {}
+    var endpoint = dialog.querySelector("[data-icono-image-edit-endpoint]")
+    var model = dialog.querySelector("[data-icono-image-edit-model]")
+    if (endpoint && !endpoint.value) endpoint.value = supported.default_endpoint_url || ""
+    if (model && !model.value) model.value = supported.default_model || ""
+    if (!imageEditDialogState.encryptionConfigured) select.disabled = true
+    updateImageEditButtons()
+  }
+
+  function loadImageEditProviders() {
+    imageEditSetStatus("Loading providers...", "")
+    return fetchAuthedJSON("/api/iconoplasm/image-edit/providers", { cache: "no-store" })
+      .then(function (payload) {
+        imageEditDialogState.providers = Array.isArray(payload && payload.providers)
+          ? payload.providers
+          : []
+        imageEditDialogState.supportedProviders = Array.isArray(
+          payload && payload.supported_providers,
+        )
+          ? payload.supported_providers
+          : []
+        imageEditDialogState.encryptionConfigured = Boolean(
+          payload && payload.encryption_configured,
+        )
+        imageEditSetStatus(
+          !imageEditDialogState.encryptionConfigured
+            ? "Image edit key storage is not configured."
+            : imageEditDialogState.providers.length
+              ? ""
+              : "Save a provider key before editing blots.",
+          imageEditDialogState.encryptionConfigured && imageEditDialogState.providers.length
+            ? ""
+            : "warn",
+        )
+        renderImageEditProviders()
       })
-        .then(function () {
-          promptInput.value = ""
-          form.hidden = true
-          toggle.setAttribute("aria-expanded", "false")
-          setEditStatus(
-            "Edit queued. The corrected blot will land in the candidate pool after workstation review.",
-            "success",
-          )
+      .catch(function (error) {
+        imageEditDialogState.providers = []
+        imageEditDialogState.encryptionConfigured = false
+        renderImageEditProviders()
+        imageEditSetStatus(String((error && error.message) || "Could not load providers."), "error")
+      })
+  }
+
+  function collectImageEditAdjustments() {
+    var dialog = ensureImageEditDialog()
+    function checked(kind) {
+      var el = dialog.querySelector('[data-icono-image-edit-adjustment="' + kind + '"]')
+      return Boolean(el && el.checked)
+    }
+    var adjustments = {}
+    if (checked("remove_ai_generation_errors")) adjustments.remove_ai_generation_errors = true
+    if (checked("sex")) adjustments.sex = dialog.querySelector("[data-icono-image-edit-sex]").value
+    if (checked("age_years"))
+      adjustments.age_years = Number(dialog.querySelector("[data-icono-image-edit-age]").value)
+    if (checked("mass_kg"))
+      adjustments.mass_kg = Number(dialog.querySelector("[data-icono-image-edit-mass]").value)
+    if (checked("surface_tone_hex"))
+      adjustments.surface_tone_hex = dialog.querySelector("[data-icono-image-edit-tone]").value
+    if (checked("fantastical_feature"))
+      adjustments.fantastical_feature = dialog.querySelector(
+        "[data-icono-image-edit-feature]",
+      ).value
+    if (checked("fashion_styles")) {
+      adjustments.fashion_styles = String(
+        dialog.querySelector("[data-icono-image-edit-fashion]").value || "",
+      )
+        .split(/[,+]/)
+        .map(function (part) {
+          return part.trim()
         })
-        .catch(function (error) {
-          var message = String((error && error.message) || "Could not queue edit.")
-          if (/log in|auth/i.test(message)) message += " Use Discord Login first, then try again."
-          setEditStatus(message, "error")
-        })
-        .finally(function () {
-          if (button) {
-            button.disabled = false
-            button.textContent = String(button.getAttribute("data-default-label") || "submit edit")
-          }
-        })
+        .filter(Boolean)
+    }
+    return adjustments
+  }
+
+  function openImageEditDialog(source) {
+    var dialog = ensureImageEditDialog()
+    imageEditDialogState.source = source
+    imageEditDialogState.job = null
+    imageEditDialogState.loading = false
+    var title = dialog.querySelector("[data-icono-image-edit-title]")
+    var sourceImg = dialog.querySelector("[data-icono-image-edit-source-img]")
+    var result = dialog.querySelector("[data-icono-image-edit-result]")
+    if (title)
+      title.textContent = source.source === "candidate" ? "Edit candidate blot" : "Edit blot"
+    if (sourceImg) {
+      sourceImg.src = source.image_url || ""
+      sourceImg.alt = source.symbol + " " + source.source + " blot"
+    }
+    if (result) result.hidden = true
+    imageEditSetStatus("", "")
+    updateImageEditButtons()
+    loadImageEditProviders()
+    if (typeof dialog.showModal === "function") dialog.showModal()
+    else dialog.setAttribute("open", "open")
+  }
+
+  function sourceFromEditButton(button) {
+    return {
+      source: String(button.getAttribute("data-icono-edit-source") || "canonical"),
+      symbol: normalizedSymbol(button.getAttribute("data-icono-source-symbol")),
+      asset_sha256: String(button.getAttribute("data-icono-source-asset-sha256") || "")
+        .trim()
+        .toLowerCase(),
+      image_url: String(button.getAttribute("data-icono-source-image-url") || "").trim(),
+      candidate_image_id: String(button.getAttribute("data-icono-source-candidate-image-id") || ""),
+      vision_id: String(button.getAttribute("data-icono-source-vision-id") || ""),
+    }
+  }
+
+  function submitImageEdit() {
+    var source = imageEditDialogState.source
+    if (!source || !source.symbol || !source.asset_sha256) return
+    var providerId = imageEditSelectedProvider()
+    var adjustments = collectImageEditAdjustments()
+    imageEditDialogState.loading = true
+    updateImageEditButtons()
+    imageEditSetStatus("Editing blot...", "")
+    fetchAuthedJSON("/api/iconoplasm/image-edit/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        provider_id: providerId,
+        source_gene_symbol: source.symbol,
+        source_asset_sha256: source.asset_sha256,
+        source_candidate_image_id: source.candidate_image_id || null,
+        source_vision_id: source.vision_id || "",
+        adjustments: adjustments,
+      }),
     })
+      .then(function (payload) {
+        var job = payload && payload.job
+        imageEditDialogState.job = job
+        var dialog = ensureImageEditDialog()
+        var result = dialog.querySelector("[data-icono-image-edit-result]")
+        var before = dialog.querySelector("[data-icono-image-edit-before]")
+        var after = dialog.querySelector("[data-icono-image-edit-after]")
+        if (before) before.src = source.image_url || ""
+        if (after) after.src = (job && job.result_urls && job.result_urls.medium) || ""
+        if (result) result.hidden = false
+        imageEditSetStatus("Edit ready to publish.", "success")
+      })
+      .catch(function (error) {
+        imageEditSetStatus(String((error && error.message) || "Image edit failed."), "error")
+      })
+      .finally(function () {
+        imageEditDialogState.loading = false
+        updateImageEditButtons()
+      })
+  }
+
+  function saveImageEditProvider() {
+    var dialog = ensureImageEditDialog()
+    var supported = imageEditDialogState.supportedProviders[0] || {
+      provider_id: "openai-compatible",
+    }
+    var apiKey = String(dialog.querySelector("[data-icono-image-edit-api-key]").value || "").trim()
+    var endpoint = String(
+      dialog.querySelector("[data-icono-image-edit-endpoint]").value || "",
+    ).trim()
+    var model = String(dialog.querySelector("[data-icono-image-edit-model]").value || "").trim()
+    if (!imageEditDialogState.encryptionConfigured) {
+      imageEditSetStatus("Image edit key storage is not configured.", "error")
+      return
+    }
+    if (!apiKey) {
+      imageEditSetStatus("Paste a provider API key first.", "error")
+      return
+    }
+    imageEditDialogState.loading = true
+    updateImageEditButtons()
+    fetchAuthedJSON("/api/iconoplasm/image-edit/providers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        provider_id: supported.provider_id || "openai-compatible",
+        api_key: apiKey,
+        endpoint_url: endpoint,
+        model: model,
+      }),
+    })
+      .then(function () {
+        dialog.querySelector("[data-icono-image-edit-api-key]").value = ""
+        imageEditSetStatus("Provider saved.", "success")
+        return loadImageEditProviders()
+      })
+      .catch(function (error) {
+        imageEditSetStatus(String((error && error.message) || "Could not save provider."), "error")
+      })
+      .finally(function () {
+        imageEditDialogState.loading = false
+        updateImageEditButtons()
+      })
+  }
+
+  function publishImageEditJob() {
+    var state = imageEditDialogState
+    if (!state.job || !state.job.id) return
+    state.loading = true
+    updateImageEditButtons()
+    imageEditSetStatus("Publishing candidate blot...", "")
+    fetchAuthedJSON(
+      "/api/iconoplasm/image-edit/jobs/" + encodeURIComponent(state.job.id) + "/publish",
+      {
+        method: "POST",
+      },
+    )
+      .then(function (payload) {
+        state.job = payload && payload.job ? payload.job : state.job
+        imageEditSetStatus("Published as a new candidate blot.", "success")
+        var root = document.getElementById(ROOT_ID)
+        if (root && state.source && state.source.symbol) {
+          renderGene(root, state.source.symbol, { forceFresh: true })
+        }
+      })
+      .catch(function (error) {
+        imageEditSetStatus(String((error && error.message) || "Could not publish edit."), "error")
+      })
+      .finally(function () {
+        state.loading = false
+        updateImageEditButtons()
+      })
+  }
+
+  function wireImageEditDialog(dialog) {
+    dialog.addEventListener("change", function (event) {
+      if (
+        event.target &&
+        (event.target.matches("[data-icono-image-edit-adjustment]") ||
+          event.target.matches("[data-icono-image-edit-provider]"))
+      ) {
+        updateImageEditButtons()
+      }
+    })
+    dialog.addEventListener("input", function (event) {
+      if (event.target && event.target.closest(".icono-image-edit-adjustments")) {
+        updateImageEditButtons()
+      }
+    })
+    var edit = dialog.querySelector("[data-icono-image-edit-submit]")
+    var publish = dialog.querySelector("[data-icono-image-edit-publish]")
+    var saveProvider = dialog.querySelector("[data-icono-image-edit-save-provider]")
+    if (edit) edit.addEventListener("click", submitImageEdit)
+    if (publish) publish.addEventListener("click", publishImageEditJob)
+    if (saveProvider) saveProvider.addEventListener("click", saveImageEditProvider)
+  }
+
+  function wireGeneEditImagePanel(container) {
+    if (!container) return
+    var buttons = container.querySelectorAll("[data-icono-edit-source]")
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].addEventListener("click", function (event) {
+        openImageEditDialog(sourceFromEditButton(event.currentTarget))
+      })
+    }
   }
 
   function wireGeneRequestPanel(container, genePayload) {
@@ -5719,10 +6058,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function renderGrid(container, genes, layout, cardVariant) {
     var resolvedLayout = layout || resolveHomeLayout()
     var resolvedCardVariant = cardVariant || resolveCardVariant()
-    container.innerHTML =
-      isImageOnlyCardVariant(resolvedCardVariant)
-        ? buildImageOnlyTileGridMarkup(genes, 0)
-        : resolvedLayout === "masonry"
+    container.innerHTML = isImageOnlyCardVariant(resolvedCardVariant)
+      ? buildImageOnlyTileGridMarkup(genes, 0)
+      : resolvedLayout === "masonry"
         ? buildMasonryGridMarkup(genes, 0)
         : buildBrickGridMarkup(genes, 0)
   }
@@ -5730,10 +6068,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function appendGrid(container, genes, startIndex, layout, cardVariant) {
     var resolvedLayout = layout || resolveHomeLayout()
     var resolvedCardVariant = cardVariant || resolveCardVariant()
-    var html =
-      isImageOnlyCardVariant(resolvedCardVariant)
-        ? buildImageOnlyTileGridMarkup(genes, startIndex)
-        : resolvedLayout === "masonry"
+    var html = isImageOnlyCardVariant(resolvedCardVariant)
+      ? buildImageOnlyTileGridMarkup(genes, startIndex)
+      : resolvedLayout === "masonry"
         ? buildMasonryGridMarkup(genes, startIndex)
         : buildBrickGridMarkup(genes, startIndex)
     if (!html) return []
@@ -5814,6 +6151,29 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           "</button>" +
           "</div>"
       }
+      var editMarkup =
+        '<button type="button" class="icono-candidate-action-btn icono-candidate-action-btn--edit icono-image-edit-open" data-icono-edit-source="candidate" data-icono-source-symbol="' +
+        esc(genePayload.symbol) +
+        '" data-icono-source-asset-sha256="' +
+        esc(assetSha) +
+        '" data-icono-source-image-url="' +
+        esc(mediumUrl || fullUrl || "") +
+        '" data-icono-source-candidate-image-id="' +
+        esc(candidateImageId > 0 ? String(Math.round(candidateImageId)) : "") +
+        '" data-icono-source-vision-id="' +
+        esc(visionId) +
+        '" data-icono-source-upvotes="' +
+        esc(String(sourceVoteCount(candidate, "image_upvotes"))) +
+        '" data-icono-source-downvotes="' +
+        esc(String(sourceVoteCount(candidate, "image_downvotes"))) +
+        '" data-icono-source-score="' +
+        esc(String(sourceVoteCount(candidate, "image_score"))) +
+        '" aria-label="Edit candidate blot for ' +
+        esc(genePayload.symbol) +
+        '" title="Edit candidate blot">' +
+        ICONO_EDIT_ICON +
+        '<span class="icono-visually-hidden">Edit candidate blot</span>' +
+        "</button>"
       html +=
         '<article class="icono-candidate-card" style="--width:' +
         width +
@@ -5858,6 +6218,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         voteBoxMarkup(voteAttrs) +
         '<div class="icono-candidate-secondary-actions">' +
         removeMarkup +
+        editMarkup +
         // B-467: "Copy to gene" stays a <details>/<summary> for keyboard semantics, but the
         // summary is rendered as a circular icon control. The visible "Copy to gene" string
         // is preserved inside .icono-visually-hidden so the public-candidate-actions test
@@ -5982,7 +6343,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     // and let CSS lay them out side-by-side on wide viewports, stacked but
     // inside one bordered surface on narrow ones.
     html += '<div class="icono-gene-toolbar-rail" data-icono-canonical-rail>'
-    html += renderEditImageShellMarkup(g)
+    html += renderEditImageActionMarkup("canonical", g, (g && g.portrait) || {})
     // Chesterton fence: this shell must exist before any network round-trip.
     // The old blocking placeholder trained the codebase back toward a monolithic
     // request-state bootstrap. Keep the shell static and let summary/options
@@ -5999,7 +6360,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     html += "</section>"
 
     html += renderCandidateGallery(g)
-    html += '<section class="icono-gene-discord-card">' + buildDiscordActionCardMarkup() + "</section>"
+    html +=
+      '<section class="icono-gene-discord-card">' + buildDiscordActionCardMarkup() + "</section>"
 
     container.innerHTML = html
     wireGeneVoteBox(container, g)

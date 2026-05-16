@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { readFileSync } from "node:fs"
 import { brotliDecompressSync } from "node:zlib"
+import vm from "node:vm"
 
 function readUtf8(path) {
   return readFileSync(new URL(path, import.meta.url), "utf8")
@@ -9,6 +10,17 @@ function readUtf8(path) {
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+function loadContentMatcher() {
+  const sandbox = {}
+  sandbox.globalThis = sandbox
+  vm.runInNewContext(readUtf8("./iconoplasm-extension/content-matcher.js"), sandbox)
+  return sandbox.IconoplasmContentMatcher
+}
+
+function normalizeMatcherResults(matches) {
+  return Array.from(matches || [], (match) => ({ ...match }))
 }
 
 const woff2KnownTags = [
@@ -323,6 +335,41 @@ test("DO NOT DELETE: content.js delegates split responsibilities to extension mo
       `${pattern} means a split extension responsibility drifted back into content.js`,
     )
   }
+})
+
+test("DO NOT DELETE: canonical gene symbols require word-like boundaries while allowing hyphen prefixes", () => {
+  const matcherApi = loadContentMatcher()
+  assert.equal(typeof matcherApi?.createGeneMatcher, "function")
+
+  const matcher = matcherApi.createGeneMatcher({
+    SYMBOL: { c: "#123456", n: "Example gene" },
+  })
+
+  assert.deepEqual(
+    normalizeMatcherResults(matcher.findMatches("thatSYMBOL")),
+    [],
+    "SYMBOL inside a larger letter/digit word should not be highlighted",
+  )
+  assert.deepEqual(
+    normalizeMatcherResults(matcher.findMatches("SYMBOLthat")),
+    [],
+    "SYMBOL followed by more letters or digits should not be highlighted",
+  )
+  assert.deepEqual(
+    normalizeMatcherResults(matcher.findMatches("that-SYMBOL")),
+    [{ symbol: "SYMBOL", index: 5, length: 6, text: "SYMBOL", matchedBy: "symbol" }],
+    "SYMBOL after a separator hyphen should be highlighted as its own gene token",
+  )
+  assert.deepEqual(
+    normalizeMatcherResults(matcher.findMatches("SYMBOL-that")),
+    [{ symbol: "SYMBOL", index: 0, length: 6, text: "SYMBOL", matchedBy: "symbol" }],
+    "SYMBOL before a separator hyphen should be highlighted as its own gene token",
+  )
+  assert.deepEqual(
+    normalizeMatcherResults(matcher.findMatches("(SYMBOL)/that")),
+    [{ symbol: "SYMBOL", index: 1, length: 6, text: "SYMBOL", matchedBy: "symbol" }],
+    "punctuation should separate a canonical gene symbol from surrounding prose",
+  )
 })
 
 test("DO NOT DELETE: simple card batch request includes fields consumed by its metadata rows", () => {
