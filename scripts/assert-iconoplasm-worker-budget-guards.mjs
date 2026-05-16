@@ -66,7 +66,11 @@ includesOrFail(
   "Worker must keep the shared gallery version barrier.",
 )
 
-includesOrFail(workflow, "pnpm/action-setup", "Production workflow must install pnpm explicitly.")
+includesOrFail(
+  workflow,
+  "corepack prepare pnpm@11.0.9 --activate",
+  "Production workflow must install pnpm explicitly after Node 22 is active.",
+)
 includesOrFail(
   workflow,
   "pnpm config set minimumReleaseAge 1440",
