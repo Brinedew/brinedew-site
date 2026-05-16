@@ -45,10 +45,21 @@ if ($headSha -ne $originSha) {
 Write-Host "[deploy] Canonical production deploy path: GitHub Actions only."
 Write-Host "[deploy] Dispatching Deploy Production (Cloudflare Pages + Worker) for origin/main..."
 
-$dispatchTime = Get-Date
+$dispatchTime = [DateTimeOffset]::UtcNow
 gh workflow run ".github/workflows/deploy-quartz.yml" --ref main
 if ($LASTEXITCODE -ne 0) {
   throw "[deploy] Failed to dispatch production workflow."
+}
+
+function Convert-GitHubRunTimestamp($Value) {
+  if ($Value -is [DateTime]) {
+    return [DateTimeOffset]::new($Value.ToUniversalTime())
+  }
+  return [DateTimeOffset]::Parse(
+    [string]$Value,
+    [System.Globalization.CultureInfo]::InvariantCulture,
+    [System.Globalization.DateTimeStyles]::AssumeUniversal
+  )
 }
 
 # `gh workflow run` does not return the new run id, so resolve it by looking for the
@@ -66,9 +77,9 @@ while ((Get-Date) -lt $deadline -and -not $run) {
     Where-Object {
       $_.event -eq "workflow_dispatch" -and
       $_.headSha -eq $originSha -and
-      [DateTime]::Parse($_.createdAt) -ge $dispatchTime.AddSeconds(-10)
+      (Convert-GitHubRunTimestamp $_.createdAt) -ge $dispatchTime.AddSeconds(-10)
     } |
-    Sort-Object createdAt -Descending |
+    Sort-Object { Convert-GitHubRunTimestamp $_.createdAt } -Descending |
     Select-Object -First 1
 
   if (-not $run) {
