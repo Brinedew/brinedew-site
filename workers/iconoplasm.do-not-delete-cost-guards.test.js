@@ -11,13 +11,13 @@ function DO_NOT_DELETE_THIS_HELPER_BECAUSE_IT_COUNTS_THE_NUMBER_OF_SEPARATE_ALAR
 }
 
 test("DO NOT DELETE: the protected Iconoplasm D1 alarms are named in at least three different places", () => {
-  const agents = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../../AGENTS.md")
-  const opus = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../../.github/agents/opus.agent.md")
-  const copilot = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../../.github/copilot-instructions.md")
+  const claude = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../CLAUDE.md")
   const onboarding = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../docs/ICONOPLASM_ONBOARDING.md")
-  const instruction = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../../.github/instructions/iconoplasm-d1-cost-barrier.instructions.md")
+  const deployWorkflow = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../.github/workflows/deploy-quartz.yml")
+  const deployGuardScript = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../scripts/assert-iconoplasm-worker-budget-guards.mjs")
+  const instruction = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../.github/instructions/iconoplasm-d1-cost-barrier.instructions.md")
 
-  const combined = [agents, opus, copilot, onboarding, instruction].join("\n")
+  const combined = [claude, onboarding, deployWorkflow, deployGuardScript, instruction].join("\n")
   for (const protectedFile of [
     "iconoplasm.d1-cost-barrier.test.js",
     "iconoplasm.d1-hot-query-guard.test.js",
@@ -32,8 +32,8 @@ test("DO NOT DELETE: the protected Iconoplasm D1 alarms are named in at least th
 })
 
 test("DO NOT DELETE: the deterministic hook guard exists and uses absurdly explicit function names", () => {
-  const hookJson = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../../.github/hooks/iconoplasm-d1-guardrails.json")
-  const hookScript = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../../.github/hooks/iconoplasm-d1-guardrails.ps1")
+  const hookJson = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../.github/hooks/iconoplasm-d1-guardrails.json")
+  const hookScript = DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8("../.github/hooks/iconoplasm-d1-guardrails.ps1")
 
   assert.match(hookJson, /iconoplasm-d1-guardrails\.ps1/, "hook config should point at the Iconoplasm D1 guard script")
   assert.match(

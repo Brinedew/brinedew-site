@@ -30,7 +30,7 @@
     "ops:codex-mcp": "node ./scripts/codex-mcp-health.mjs",
     "ops:codex-mcp:reset": "node ./scripts/codex-mcp-health.mjs --reset",
     "format": "pnpm exec prettier . --write",
-    "test": "tsx --test",
+    "test": "node scripts/run-tests.mjs",
     "profile": "0x -D prof node ./quartz/bootstrap-cli.mjs build --concurrency=1"
   },
   "engines": {

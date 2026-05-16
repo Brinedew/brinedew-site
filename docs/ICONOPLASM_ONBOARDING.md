@@ -272,9 +272,10 @@ Treat these as protected alarms, not cleanup fodder:
 - `workers/iconoplasm.do-not-delete-cost-guards.test.js`
 - `.github/hooks/iconoplasm-d1-guardrails.json`
 - `.github/hooks/iconoplasm-d1-guardrails.ps1`
-- `AGENTS.md`
-- `.github/agents/opus.agent.md`
+- `CLAUDE.md`
 - `.github/instructions/iconoplasm-d1-cost-barrier.instructions.md`
+- `.github/workflows/deploy-quartz.yml`
+- `scripts/assert-iconoplasm-worker-budget-guards.mjs`
 
 If one of those tests fails, your first assumption should be that code drifted into a dangerous shape.
 
@@ -290,7 +291,7 @@ If you genuinely need to replace one of these guards, the replacement has to lan
 Verified test command:
 
 ```text
-npm test -- workers/iconoplasm.d1-cost-barrier.test.js workers/iconoplasm.gallery-votes-cache.test.js workers/iconoplasm.gene-requests.test.js workers/iconoplasm.public-media.test.js workers/iconoplasm.gallery-order.test.js
+pnpm test -- workers/iconoplasm.d1-cost-barrier.test.js workers/iconoplasm.d1-hot-query-guard.test.js workers/iconoplasm.do-not-delete-cost-guards.test.js workers/iconoplasm.sync-finalization-queue.test.js workers/iconoplasm.card-catalog-budget-preflight.test.js
 ```
 
 If that suite stops proving fresh-isolate reuse of shared snapshots, assume you are one edit away from another billing incident.
