@@ -4159,6 +4159,116 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return Number.isFinite(value) ? value : 0
   }
 
+  function imageEditFirstTextValue() {
+    for (var i = 0; i < arguments.length; i++) {
+      var value = arguments[i]
+      if (Array.isArray(value) || (value && typeof value === "object")) continue
+      var text = String(value == null ? "" : value).trim()
+      if (text) return text
+    }
+    return ""
+  }
+
+  function imageEditFirstNumberValue() {
+    for (var i = 0; i < arguments.length; i++) {
+      var value = arguments[i]
+      if (value == null || value === "") continue
+      var number = Number(value)
+      if (Number.isFinite(number)) return number
+    }
+    return null
+  }
+
+  function imageEditFirstHexValue() {
+    for (var i = 0; i < arguments.length; i++) {
+      var text = imageEditFirstTextValue(arguments[i])
+      if (/^#[0-9a-f]{6}$/i.test(text)) return text.toLowerCase()
+    }
+    return ""
+  }
+
+  function imageEditFirstTextListValue() {
+    for (var i = 0; i < arguments.length; i++) {
+      var value = arguments[i]
+      if (value && typeof value === "object" && !Array.isArray(value)) continue
+      var parts = Array.isArray(value) ? value : String(value || "").split(/[,+]/)
+      var list = parts
+        .map(function (part) {
+          return String(part || "").trim()
+        })
+        .filter(Boolean)
+        .slice(0, 8)
+      if (list.length) return list
+    }
+    return []
+  }
+
+  function imageEditSourceAdjustmentContext(genePayload, item) {
+    var gene = genePayload || {}
+    var sourceItem = item || {}
+    var essence = gene && gene.essence && typeof gene.essence === "object" ? gene.essence : {}
+    var ageYears = imageEditFirstNumberValue(
+      sourceItem.age_years,
+      sourceItem.ageYears,
+      essence.age_years,
+      gene.age_years,
+    )
+    var massKg = imageEditFirstNumberValue(
+      sourceItem.mass_kg,
+      sourceItem.massKg,
+      sourceItem.weight_kg,
+      essence.weight_kg,
+      gene.weight_kg,
+    )
+    var fashionStyles = imageEditFirstTextListValue(
+      sourceItem.fashion_styles,
+      sourceItem.fashionStyles,
+      sourceItem.aesthetics,
+      essence.fashion_styles,
+      essence.fashionStyles,
+      essence.aesthetics,
+      gene.fashion_styles,
+      gene.aesthetics,
+    )
+    var context = {
+      sex: imageEditFirstTextValue(sourceItem.sex, essence.sex, gene.sex),
+      surface_tone_hex: imageEditFirstHexValue(
+        sourceItem.surface_tone_hex,
+        sourceItem.surfaceToneHex,
+        sourceItem.skin_hex,
+        essence.surface_tone_hex,
+        essence.skin_hex,
+        gene.skin_hex,
+      ),
+      surface_tone_name: imageEditFirstTextValue(
+        sourceItem.surface_tone_name,
+        sourceItem.skin_name,
+        essence.skin_name,
+        gene.skin_name,
+      ),
+      fantastical_feature: imageEditFirstTextValue(
+        sourceItem.fantastical_feature,
+        sourceItem.fantasticalFeature,
+        sourceItem.feature_name,
+        sourceItem.family_feature,
+        essence.family_feature,
+        gene.family_feature,
+      ),
+    }
+    if (ageYears != null) context.age_years = ageYears
+    if (massKg != null) context.mass_kg = massKg
+    if (fashionStyles.length) context.fashion_styles = fashionStyles
+    return context
+  }
+
+  function imageEditSourceAdjustmentContextAttr(genePayload, item) {
+    return (
+      ' data-icono-source-adjustments="' +
+      esc(JSON.stringify(imageEditSourceAdjustmentContext(genePayload, item))) +
+      '"'
+    )
+  }
+
   function renderEditImageActionMarkup(source, genePayload, item) {
     var symbol = normalizedSymbol(genePayload && genePayload.symbol)
     var sourceItem = item || {}
@@ -4195,7 +4305,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       esc(String(sourceVoteCount(sourceItem, "image_downvotes"))) +
       '" data-icono-source-score="' +
       esc(String(sourceVoteCount(sourceItem, "image_score"))) +
-      '">' +
+      '"' +
+      imageEditSourceAdjustmentContextAttr(genePayload, sourceItem) +
+      ">" +
       esc(label) +
       "</button>" +
       "</section>"
@@ -4214,18 +4326,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function renderImageEditDialogMarkup() {
     return (
-      '<dialog class="icono-image-edit-dialog" data-icono-image-edit-dialog>' +
-      '<form method="dialog" class="icono-image-edit-close-form">' +
-      '<button type="submit" class="icono-image-edit-close" aria-label="Close edit modal">x</button>' +
-      "</form>" +
+      '<sl-dialog class="icono-image-edit-dialog" data-icono-image-edit-dialog label="Edit blot">' +
       '<div class="icono-image-edit-shell">' +
-      '<header class="icono-image-edit-header">' +
-      '<div><p class="icono-image-edit-kicker">Blot editor</p><h2 data-icono-image-edit-title>Edit blot</h2></div>' +
-      '<div data-icono-image-edit-status class="icono-image-edit-status" hidden></div>' +
-      "</header>" +
       '<div class="icono-image-edit-body">' +
       '<section class="icono-image-edit-preview">' +
-      '<img data-icono-image-edit-source-img alt="Source blot" loading="eager">' +
+      '<div class="icono-image-edit-artboard"><img data-icono-image-edit-source-img alt="Source blot" loading="eager"></div>' +
       '<div class="icono-image-edit-before-after" data-icono-image-edit-result hidden>' +
       '<div class="icono-image-edit-comparison-labels" aria-hidden="true"><span>Before</span><span>After</span></div>' +
       '<img-comparison-slider class="icono-image-edit-comparison" data-icono-image-edit-comparison tabindex="0">' +
@@ -4235,32 +4340,25 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       "</div>" +
       "</section>" +
       '<section class="icono-image-edit-controls">' +
-      '<label class="icono-image-edit-field">Provider<select data-icono-image-edit-provider></select></label>' +
-      '<details class="icono-image-edit-provider-setup">' +
-      "<summary>Provider key</summary>" +
-      '<label class="icono-image-edit-field">API key<input type="password" data-icono-image-edit-api-key autocomplete="off"></label>' +
-      '<label class="icono-image-edit-field">Endpoint<input type="url" data-icono-image-edit-endpoint></label>' +
-      '<label class="icono-image-edit-field">Model<input type="text" data-icono-image-edit-model></label>' +
-      '<button type="button" class="icono-request-inline-submit" data-icono-image-edit-save-provider>Save provider</button>' +
-      "</details>" +
-      '<fieldset class="icono-image-edit-adjustments">' +
-      "<legend>Adjustments</legend>" +
-      '<label><input type="checkbox" data-icono-image-edit-adjustment="remove_ai_generation_errors"> Remove AI generation errors</label>' +
-      '<label><input type="checkbox" data-icono-image-edit-adjustment="sex"> Sex <input type="text" data-icono-image-edit-sex placeholder="female, male, androgynous"></label>' +
-      '<label><input type="checkbox" data-icono-image-edit-adjustment="age_years"> Age <input type="number" min="0" max="140" data-icono-image-edit-age> years old</label>' +
-      '<label><input type="checkbox" data-icono-image-edit-adjustment="mass_kg"> Mass <input type="number" min="0.1" max="500" step="0.1" data-icono-image-edit-mass> kg</label>' +
-      '<label><input type="checkbox" data-icono-image-edit-adjustment="surface_tone_hex"> Surface tone <input type="color" data-icono-image-edit-tone value="#b17f62"></label>' +
-      '<label><input type="checkbox" data-icono-image-edit-adjustment="fantastical_feature"> Humanize feature <input type="text" data-icono-image-edit-feature placeholder="#feature"></label>' +
-      '<label><input type="checkbox" data-icono-image-edit-adjustment="fashion_styles"> Fashion mix <input type="text" data-icono-image-edit-fashion placeholder="#fashion1 + #fashion2"></label>' +
-      "</fieldset>" +
-      '<div class="icono-image-edit-actions">' +
-      '<button type="button" class="icono-request-inline-submit" data-icono-image-edit-submit disabled>Edit</button>' +
-      '<button type="button" class="icono-request-inline-submit" data-icono-image-edit-publish disabled>Publish</button>' +
-      "</div>" +
+      '<sl-select label="Editing API" hoist data-icono-image-edit-provider></sl-select>' +
+      '<sl-alert data-icono-image-edit-status class="icono-image-edit-status" variant="neutral" hidden></sl-alert>' +
+      '<section class="icono-image-edit-adjustments" aria-label="Adjustments">' +
+      '<div class="icono-image-edit-adjustment-row icono-image-edit-adjustment-row--solo" data-icono-image-edit-adjustment-row="remove_ai_generation_errors"><sl-checkbox data-icono-image-edit-adjustment="remove_ai_generation_errors">Remove visible AI errors</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="remove_ai_generation_errors">Uses the source blot only</span></div>' +
+      '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="sex"><sl-checkbox data-icono-image-edit-adjustment="sex">Sex presentation</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="sex"></span></div>' +
+      '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="age_years"><sl-checkbox data-icono-image-edit-adjustment="age_years">Age</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="age_years"></span></div>' +
+      '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="mass_kg"><sl-checkbox data-icono-image-edit-adjustment="mass_kg">Mass</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="mass_kg"></span></div>' +
+      '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="surface_tone_hex"><sl-checkbox data-icono-image-edit-adjustment="surface_tone_hex">Surface tone</sl-checkbox><span class="icono-image-edit-adjustment-value icono-image-edit-adjustment-value--tone" data-icono-image-edit-adjustment-value="surface_tone_hex"></span></div>' +
+      '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="fantastical_feature"><sl-checkbox data-icono-image-edit-adjustment="fantastical_feature">Humanize feature</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="fantastical_feature"></span></div>' +
+      '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="fashion_styles"><sl-checkbox data-icono-image-edit-adjustment="fashion_styles">Style mix</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="fashion_styles"></span></div>' +
+      "</section>" +
       "</section>" +
       "</div>" +
       "</div>" +
-      "</dialog>"
+      '<div slot="footer" class="icono-image-edit-actions">' +
+      '<sl-button type="button" data-icono-image-edit-publish disabled>Publish</sl-button>' +
+      '<sl-button type="button" variant="primary" data-icono-image-edit-submit disabled>Edit</sl-button>' +
+      "</div>" +
+      "</sl-dialog>"
     )
   }
 
@@ -4283,7 +4381,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (!status) return
     status.textContent = String(message || "").trim()
     status.hidden = !status.textContent
+    status.open = Boolean(status.textContent)
     status.dataset.tone = tone || ""
+    status.variant =
+      tone === "error" ? "danger" : tone === "success" ? "success" : tone === "warn" ? "warning" : "neutral"
   }
 
   function imageEditSelectedProvider() {
@@ -4294,20 +4395,24 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function imageEditHasAdjustment() {
     var dialog = ensureImageEditDialog()
-    return Boolean(dialog.querySelector("[data-icono-image-edit-adjustment]:checked"))
+    var options = dialog.querySelectorAll("[data-icono-image-edit-adjustment]")
+    for (var i = 0; i < options.length; i++) {
+      if (options[i].checked && !options[i].disabled) return true
+    }
+    return false
   }
 
   function updateImageEditButtons() {
     var dialog = ensureImageEditDialog()
     var editButton = dialog.querySelector("[data-icono-image-edit-submit]")
     var publishButton = dialog.querySelector("[data-icono-image-edit-publish]")
-    var saveProviderButton = dialog.querySelector("[data-icono-image-edit-save-provider]")
     if (editButton) {
       editButton.disabled =
         imageEditDialogState.loading ||
         !imageEditDialogState.encryptionConfigured ||
         !imageEditSelectedProvider() ||
         !imageEditHasAdjustment()
+      editButton.loading = Boolean(imageEditDialogState.loading)
       editButton.textContent = imageEditDialogState.loading ? "Editing..." : "Edit"
     }
     if (publishButton) {
@@ -4316,15 +4421,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         !imageEditDialogState.job ||
         imageEditDialogState.job.status !== "succeeded" ||
         imageEditDialogState.job.published
+      publishButton.loading = Boolean(imageEditDialogState.loading && imageEditDialogState.job)
     }
-    if (saveProviderButton) {
-      saveProviderButton.disabled =
-        imageEditDialogState.loading || !imageEditDialogState.encryptionConfigured
-    }
-    var setup = dialog.querySelector(".icono-image-edit-provider-setup")
-    if (setup)
-      setup.open =
-        !imageEditDialogState.encryptionConfigured || !imageEditDialogState.providers.length
   }
 
   function renderImageEditProviders() {
@@ -4336,22 +4434,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       ? providers
           .map(function (provider) {
             return (
-              '<option value="' +
+              '<sl-option value="' +
               esc(provider.provider_id) +
               '">' +
               esc(provider.label || provider.provider_id) +
               (provider.model ? " · " + esc(provider.model) : "") +
-              "</option>"
+              "</sl-option>"
             )
           })
           .join("")
-      : '<option value="">No provider key saved</option>'
+      : '<sl-option value="">No saved image editing provider</sl-option>'
+    select.value = providers.length ? providers[0].provider_id : ""
     select.disabled = !providers.length
-    var supported = imageEditDialogState.supportedProviders[0] || {}
-    var endpoint = dialog.querySelector("[data-icono-image-edit-endpoint]")
-    var model = dialog.querySelector("[data-icono-image-edit-model]")
-    if (endpoint && !endpoint.value) endpoint.value = supported.default_endpoint_url || ""
-    if (model && !model.value) model.value = supported.default_model || ""
     if (!imageEditDialogState.encryptionConfigured) select.disabled = true
     updateImageEditButtons()
   }
@@ -4373,10 +4467,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         )
         imageEditSetStatus(
           !imageEditDialogState.encryptionConfigured
-            ? "Image edit key storage is not configured."
+            ? "Image editing provider storage is not configured."
             : imageEditDialogState.providers.length
               ? ""
-              : "Save a provider key before editing blots.",
+              : "Set up a saved image editing provider before editing blots.",
           imageEditDialogState.encryptionConfigured && imageEditDialogState.providers.length
             ? ""
             : "warn",
@@ -4393,34 +4487,85 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function collectImageEditAdjustments() {
     var dialog = ensureImageEditDialog()
+    var context =
+      (imageEditDialogState.source && imageEditDialogState.source.adjustments) || {}
     function checked(kind) {
       var el = dialog.querySelector('[data-icono-image-edit-adjustment="' + kind + '"]')
-      return Boolean(el && el.checked)
+      return Boolean(el && el.checked && !el.disabled)
     }
     var adjustments = {}
     if (checked("remove_ai_generation_errors")) adjustments.remove_ai_generation_errors = true
-    if (checked("sex")) adjustments.sex = dialog.querySelector("[data-icono-image-edit-sex]").value
-    if (checked("age_years"))
-      adjustments.age_years = Number(dialog.querySelector("[data-icono-image-edit-age]").value)
-    if (checked("mass_kg"))
-      adjustments.mass_kg = Number(dialog.querySelector("[data-icono-image-edit-mass]").value)
+    if (checked("sex")) adjustments.sex = imageEditFirstTextValue(context.sex)
+    if (checked("age_years")) adjustments.age_years = Number(context.age_years)
+    if (checked("mass_kg")) adjustments.mass_kg = Number(context.mass_kg)
     if (checked("surface_tone_hex"))
-      adjustments.surface_tone_hex = dialog.querySelector("[data-icono-image-edit-tone]").value
+      adjustments.surface_tone_hex = imageEditFirstHexValue(context.surface_tone_hex)
     if (checked("fantastical_feature"))
-      adjustments.fantastical_feature = dialog.querySelector(
-        "[data-icono-image-edit-feature]",
-      ).value
+      adjustments.fantastical_feature = imageEditFirstTextValue(context.fantastical_feature)
     if (checked("fashion_styles")) {
-      adjustments.fashion_styles = String(
-        dialog.querySelector("[data-icono-image-edit-fashion]").value || "",
-      )
-        .split(/[,+]/)
-        .map(function (part) {
-          return part.trim()
-        })
-        .filter(Boolean)
+      adjustments.fashion_styles = imageEditFirstTextListValue(context.fashion_styles)
     }
     return adjustments
+  }
+
+  function imageEditContextValue(kind, context) {
+    var source = context || {}
+    if (kind === "sex") return imageEditFirstTextValue(source.sex)
+    if (kind === "age_years") return imageEditFirstNumberValue(source.age_years)
+    if (kind === "mass_kg") return imageEditFirstNumberValue(source.mass_kg)
+    if (kind === "surface_tone_hex") return imageEditFirstHexValue(source.surface_tone_hex)
+    if (kind === "fantastical_feature")
+      return imageEditFirstTextValue(source.fantastical_feature)
+    if (kind === "fashion_styles") return imageEditFirstTextListValue(source.fashion_styles)
+    return true
+  }
+
+  function imageEditContextValueAvailable(kind, value) {
+    if (kind === "remove_ai_generation_errors") return true
+    if (kind === "age_years") return value != null && value >= 0 && value <= 140
+    if (kind === "mass_kg") return value != null && value > 0 && value <= 500
+    if (kind === "fashion_styles") return Array.isArray(value) && value.length > 0
+    return Boolean(value)
+  }
+
+  function imageEditContextValueLabel(kind, value, context) {
+    if (kind === "remove_ai_generation_errors") return "Uses the source blot only"
+    if (kind === "age_years") return String(value) + " years"
+    if (kind === "mass_kg") return String(value) + " kg"
+    if (kind === "surface_tone_hex") {
+      var name = imageEditFirstTextValue(context && context.surface_tone_name)
+      return name ? value + " · " + name : value
+    }
+    if (kind === "fashion_styles") return value.join(" + ")
+    return String(value || "")
+  }
+
+  function renderImageEditContext(source) {
+    var dialog = ensureImageEditDialog()
+    var context = (source && source.adjustments) || {}
+    var rows = dialog.querySelectorAll("[data-icono-image-edit-adjustment-row]")
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i]
+      var kind = row.getAttribute("data-icono-image-edit-adjustment-row") || ""
+      var checkbox = row.querySelector("[data-icono-image-edit-adjustment]")
+      var valueEl = row.querySelector("[data-icono-image-edit-adjustment-value]")
+      var value = imageEditContextValue(kind, context)
+      var available = imageEditContextValueAvailable(kind, value)
+      if (checkbox) {
+        checkbox.checked = false
+        checkbox.disabled = !available
+      }
+      row.classList.toggle("icono-image-edit-adjustment-row--unavailable", !available)
+      if (valueEl) {
+        valueEl.textContent = available
+          ? imageEditContextValueLabel(kind, value, context)
+          : "Unavailable from gene data"
+        if (kind === "surface_tone_hex") {
+          valueEl.style.setProperty("--icono-context-color", available ? value : "transparent")
+        }
+      }
+    }
+    updateImageEditButtons()
   }
 
   function openImageEditDialog(source) {
@@ -4428,24 +4573,30 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     imageEditDialogState.source = source
     imageEditDialogState.job = null
     imageEditDialogState.loading = false
-    var title = dialog.querySelector("[data-icono-image-edit-title]")
     var sourceImg = dialog.querySelector("[data-icono-image-edit-source-img]")
     var result = dialog.querySelector("[data-icono-image-edit-result]")
-    if (title)
-      title.textContent = source.source === "candidate" ? "Edit candidate blot" : "Edit blot"
+    dialog.label = source.source === "candidate" ? "Edit candidate blot" : "Edit blot"
     if (sourceImg) {
       sourceImg.src = source.image_url || ""
       sourceImg.alt = source.symbol + " " + source.source + " blot"
     }
     if (result) result.hidden = true
     imageEditSetStatus("", "")
+    renderImageEditContext(source)
     updateImageEditButtons()
     loadImageEditProviders()
-    if (typeof dialog.showModal === "function") dialog.showModal()
+    if (typeof dialog.show === "function") dialog.show()
     else dialog.setAttribute("open", "open")
   }
 
   function sourceFromEditButton(button) {
+    var adjustments = {}
+    try {
+      var parsed = JSON.parse(button.getAttribute("data-icono-source-adjustments") || "{}")
+      if (parsed && typeof parsed === "object") adjustments = parsed
+    } catch (_err) {
+      adjustments = {}
+    }
     return {
       source: String(button.getAttribute("data-icono-edit-source") || "canonical"),
       symbol: normalizedSymbol(button.getAttribute("data-icono-source-symbol")),
@@ -4455,6 +4606,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       image_url: String(button.getAttribute("data-icono-source-image-url") || "").trim(),
       candidate_image_id: String(button.getAttribute("data-icono-source-candidate-image-id") || ""),
       vision_id: String(button.getAttribute("data-icono-source-vision-id") || ""),
+      adjustments: adjustments,
     }
   }
 
@@ -4492,50 +4644,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       })
       .catch(function (error) {
         imageEditSetStatus(String((error && error.message) || "Image edit failed."), "error")
-      })
-      .finally(function () {
-        imageEditDialogState.loading = false
-        updateImageEditButtons()
-      })
-  }
-
-  function saveImageEditProvider() {
-    var dialog = ensureImageEditDialog()
-    var supported = imageEditDialogState.supportedProviders[0] || {
-      provider_id: "openai-compatible",
-    }
-    var apiKey = String(dialog.querySelector("[data-icono-image-edit-api-key]").value || "").trim()
-    var endpoint = String(
-      dialog.querySelector("[data-icono-image-edit-endpoint]").value || "",
-    ).trim()
-    var model = String(dialog.querySelector("[data-icono-image-edit-model]").value || "").trim()
-    if (!imageEditDialogState.encryptionConfigured) {
-      imageEditSetStatus("Image edit key storage is not configured.", "error")
-      return
-    }
-    if (!apiKey) {
-      imageEditSetStatus("Paste a provider API key first.", "error")
-      return
-    }
-    imageEditDialogState.loading = true
-    updateImageEditButtons()
-    fetchAuthedJSON("/api/iconoplasm/image-edit/providers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify({
-        provider_id: supported.provider_id || "openai-compatible",
-        api_key: apiKey,
-        endpoint_url: endpoint,
-        model: model,
-      }),
-    })
-      .then(function () {
-        dialog.querySelector("[data-icono-image-edit-api-key]").value = ""
-        imageEditSetStatus("Provider saved.", "success")
-        return loadImageEditProviders()
-      })
-      .catch(function (error) {
-        imageEditSetStatus(String((error && error.message) || "Could not save provider."), "error")
       })
       .finally(function () {
         imageEditDialogState.loading = false
@@ -4582,17 +4690,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         updateImageEditButtons()
       }
     })
-    dialog.addEventListener("input", function (event) {
-      if (event.target && event.target.closest(".icono-image-edit-adjustments")) {
+    dialog.addEventListener("sl-change", function (event) {
+      if (
+        event.target &&
+        (event.target.matches("[data-icono-image-edit-adjustment]") ||
+          event.target.matches("[data-icono-image-edit-provider]"))
+      ) {
         updateImageEditButtons()
       }
     })
     var edit = dialog.querySelector("[data-icono-image-edit-submit]")
     var publish = dialog.querySelector("[data-icono-image-edit-publish]")
-    var saveProvider = dialog.querySelector("[data-icono-image-edit-save-provider]")
     if (edit) edit.addEventListener("click", submitImageEdit)
     if (publish) publish.addEventListener("click", publishImageEditJob)
-    if (saveProvider) saveProvider.addEventListener("click", saveImageEditProvider)
   }
 
   function wireGeneEditImagePanel(container) {
@@ -6168,7 +6278,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         esc(String(sourceVoteCount(candidate, "image_downvotes"))) +
         '" data-icono-source-score="' +
         esc(String(sourceVoteCount(candidate, "image_score"))) +
-        '" aria-label="Edit candidate blot for ' +
+        '"' +
+        imageEditSourceAdjustmentContextAttr(genePayload, candidate) +
+        ' aria-label="Edit candidate blot for ' +
         esc(genePayload.symbol) +
         '" title="Edit candidate blot">' +
         ICONO_EDIT_ICON +

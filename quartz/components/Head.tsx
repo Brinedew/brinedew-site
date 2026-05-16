@@ -409,8 +409,29 @@ export default (() => {
                   ></script>
                   <link
                     rel="stylesheet"
+                    href={joinSegments(
+                      root,
+                      "static",
+                      `iconoplasm/vendor/shoelace/cdn/themes/light.css?v=${CACHE_BUST}`,
+                    )}
+                  />
+                  <link
+                    rel="stylesheet"
                     href={joinSegments(root, "static", `iconoplasm/styles.css?v=${CACHE_BUST}`)}
                   />
+                  <script
+                    type="module"
+                    data-shoelace={joinSegments(
+                      root,
+                      "static",
+                      "iconoplasm/vendor/shoelace/cdn",
+                    )}
+                    src={joinSegments(
+                      root,
+                      "static",
+                      `iconoplasm/vendor/shoelace/cdn/shoelace-autoloader.js?v=${CACHE_BUST}`,
+                    )}
+                  ></script>
                   <script
                     type="module"
                     src={joinSegments(root, "static", `iconoplasm/app.js?v=${CACHE_BUST}`)}

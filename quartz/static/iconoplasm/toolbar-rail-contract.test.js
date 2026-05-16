@@ -39,7 +39,8 @@ test("Iconoplasm toolbar rails are real one-row rails, not wrapped action stacks
   const editPanelBlock = cssBlockFor(css, ".icono-gene-toolbar-rail > .icono-gene-edit-panel")
   assert.match(editPanelBlock, /width:\s*max-content;/)
   assert.match(app, /data-icono-edit-source=/)
-  assert.match(app, /\.showModal\(/)
+  assert.match(app, /<sl-dialog/)
+  assert.match(app, /\.show\(/)
   assert.doesNotMatch(app, /data-icono-edit-image-form/)
 })
 

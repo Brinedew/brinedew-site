@@ -54,6 +54,7 @@
     "@masonry-grid/vanilla": "^1.1.0",
     "@myriaddreamin/rehype-typst": "^0.6.0",
     "@napi-rs/simple-git": "0.1.22",
+    "@shoelace-style/shoelace": "2.20.1",
     "@tweenjs/tween.js": "^25.0.0",
     "ansi-truncate": "^1.4.0",
     "async-mutex": "^0.5.0",

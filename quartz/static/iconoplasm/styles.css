@@ -602,87 +602,98 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 }
 
 .icono-image-edit-dialog {
-  width: min(68rem, calc(100vw - 2rem));
+  --width: min(74rem, calc(100vw - 2rem));
+  --sl-font-sans: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
+  --sl-focus-ring-color: color-mix(in srgb, var(--secondary) 42%, transparent);
+  --sl-input-height-medium: 2.55rem;
+  --sl-input-height-small: 2.25rem;
+  --sl-input-border-radius-medium: 7px;
+  --sl-input-border-radius-small: 7px;
+  --sl-input-background-color: color-mix(in srgb, var(--light) 92%, var(--dark) 8%);
+  --sl-input-background-color-hover: color-mix(in srgb, var(--light) 88%, var(--secondary) 12%);
+  --sl-input-background-color-focus: color-mix(in srgb, var(--light) 90%, var(--secondary) 10%);
+  --sl-input-border-color: color-mix(in srgb, var(--ui-border) 80%, var(--dark) 20%);
+  --sl-input-border-color-hover: color-mix(in srgb, var(--secondary) 46%, var(--ui-border) 54%);
+  --sl-input-border-color-focus: color-mix(in srgb, var(--secondary) 60%, var(--ui-border) 40%);
+  --sl-input-color: var(--dark);
+  --sl-input-placeholder-color: color-mix(in srgb, var(--dark) 46%, var(--light) 54%);
+  --sl-input-label-color: color-mix(in srgb, var(--dark) 82%, var(--secondary) 18%);
+  --sl-panel-background-color: var(--light);
+  --sl-color-primary-600: color-mix(in srgb, var(--secondary) 84%, var(--dark) 16%);
+  --sl-color-primary-700: color-mix(in srgb, var(--secondary) 70%, var(--dark) 30%);
+  --sl-color-neutral-0: var(--light);
+  --sl-color-neutral-50: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
+  --sl-color-neutral-100: color-mix(in srgb, var(--light) 88%, var(--dark) 12%);
+  --sl-color-neutral-200: color-mix(in srgb, var(--ui-border) 88%, var(--dark) 12%);
+  --sl-color-neutral-700: color-mix(in srgb, var(--dark) 72%, var(--light) 28%);
+  --sl-color-neutral-900: var(--dark);
+  color: var(--dark);
+}
+
+.icono-image-edit-dialog::part(overlay) {
+  background: color-mix(in srgb, rgba(27, 18, 11, 0.62) 88%, transparent 12%);
+  backdrop-filter: blur(10px);
+}
+
+.icono-image-edit-dialog::part(panel) {
   max-height: min(48rem, calc(100vh - 2rem));
-  padding: 0;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 78%, var(--dark) 22%);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 72%, var(--dark) 28%);
   border-radius: var(--icono-radius-lg);
-  background: var(--light);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--light) 96%, white 4%),
+      color-mix(in srgb, var(--light) 94%, var(--secondary) 6%)
+    );
+  box-shadow: 0 28px 90px rgba(27, 18, 11, 0.34);
+}
+
+.icono-image-edit-dialog::part(header) {
+  align-items: center;
+  padding: 1rem 1.1rem 0.7rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent 28%);
+}
+
+.icono-image-edit-dialog::part(title) {
+  font-family: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
+  font-size: clamp(1.18rem, 2vw, 1.55rem);
+  line-height: 1.1;
   color: var(--dark);
-  box-shadow: 0 24px 80px rgba(27, 18, 11, 0.32);
 }
 
-.icono-image-edit-dialog::backdrop {
-  background: color-mix(in srgb, rgba(27, 18, 11, 0.56) 88%, transparent 12%);
-  backdrop-filter: blur(9px);
+.icono-image-edit-dialog::part(close-button) {
+  color: color-mix(in srgb, var(--dark) 74%, var(--secondary) 26%);
 }
 
-.icono-image-edit-close-form {
-  position: absolute;
-  inset: 0.75rem 0.75rem auto auto;
-  z-index: 2;
+.icono-image-edit-dialog::part(body) {
+  padding: 0;
+  overflow: auto;
 }
 
-.icono-image-edit-close {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 76%, var(--dark) 24%);
-  background: color-mix(in srgb, var(--light) 88%, white 12%);
-  color: var(--dark);
-  cursor: pointer;
+.icono-image-edit-dialog::part(footer) {
+  padding: 0.8rem 1.1rem 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent 28%);
+  background: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
 }
 
 .icono-image-edit-shell {
   display: grid;
-  gap: 1rem;
-  padding: 1rem;
-}
-
-.icono-image-edit-header {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-right: 2.5rem;
-}
-
-.icono-image-edit-kicker {
-  margin: 0 0 0.15rem;
-  font-size: 0.74rem;
-  letter-spacing: 0;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--dark) 58%, var(--secondary) 42%);
-}
-
-.icono-image-edit-header h2 {
-  margin: 0;
-  font-size: clamp(1.2rem, 2vw, 1.65rem);
-  line-height: 1.1;
+  gap: 0.85rem;
+  padding: 0.95rem 1.1rem 1.1rem;
 }
 
 .icono-image-edit-status {
-  max-width: 24rem;
-  padding: 0.45rem 0.6rem;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 78%, var(--dark) 22%);
-  border-radius: var(--icono-radius-sm);
-  background: color-mix(in srgb, var(--light) 90%, white 10%);
-  font-size: 0.88rem;
+  width: 100%;
 }
 
-.icono-image-edit-status[data-tone="error"] {
-  border-color: color-mix(in srgb, #8f2b24 44%, var(--ui-border) 56%);
-  color: #7c221d;
-}
-
-.icono-image-edit-status[data-tone="success"] {
-  border-color: color-mix(in srgb, #0f766e 44%, var(--ui-border) 56%);
-  color: #0f5f59;
+.icono-image-edit-status::part(base) {
+  border-radius: 8px;
 }
 
 .icono-image-edit-body {
   display: grid;
-  grid-template-columns: minmax(16rem, 0.9fr) minmax(20rem, 1.1fr);
+  grid-template-columns: minmax(18rem, 0.95fr) minmax(22rem, 1.05fr);
   gap: 1rem;
   align-items: start;
 }
@@ -692,11 +703,27 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   min-width: 0;
 }
 
-.icono-image-edit-preview > img,
+.icono-image-edit-artboard {
+  display: grid;
+  place-items: center;
+  min-height: clamp(17rem, 38vh, 26rem);
+  padding: clamp(0.75rem, 1.5vw, 1.2rem);
+  border: 1px solid color-mix(in srgb, var(--ui-border) 78%, var(--dark) 22%);
+  border-radius: var(--icono-radius-md);
+  background:
+    radial-gradient(
+      circle at 50% 42%,
+      color-mix(in srgb, var(--light) 88%, white 12%),
+      color-mix(in srgb, var(--light) 78%, var(--dark) 22%) 78%
+    );
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 36%, transparent);
+}
+
+.icono-image-edit-artboard > img,
 .icono-image-edit-before-after img {
   display: block;
   width: 100%;
-  max-height: 24rem;
+  max-height: 23rem;
   object-fit: contain;
   background: color-mix(in srgb, var(--dark) 8%, var(--light) 92%);
   border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
@@ -752,60 +779,109 @@ img-comparison-slider.rendered [slot="second"] {
   border-radius: 0;
 }
 
-.icono-image-edit-controls,
-.icono-image-edit-adjustments,
-.icono-image-edit-provider-setup {
+.icono-image-edit-controls {
   display: grid;
-  gap: 0.7rem;
-}
-
-.icono-image-edit-field {
-  display: grid;
-  gap: 0.3rem;
-  font-size: 0.88rem;
-}
-
-.icono-image-edit-field input,
-.icono-image-edit-field select,
-.icono-image-edit-adjustments input[type="text"],
-.icono-image-edit-adjustments input[type="number"] {
-  width: 100%;
-  min-width: 0;
-}
-
-.icono-image-edit-provider-setup {
-  padding: 0.65rem;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
-  border-radius: var(--icono-radius-sm);
-  background: color-mix(in srgb, var(--light) 94%, white 6%);
+  gap: 0.85rem;
 }
 
 .icono-image-edit-adjustments {
-  margin: 0;
+  display: grid;
+  gap: 0.55rem;
   padding: 0.7rem;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
-  border-radius: var(--icono-radius-sm);
+  border: 1px solid color-mix(in srgb, var(--ui-border) 78%, var(--dark) 22%);
+  border-radius: var(--icono-radius-md);
+  background: color-mix(in srgb, var(--light) 96%, white 4%);
 }
 
-.icono-image-edit-adjustments label {
+.icono-image-edit-adjustment-row {
   display: grid;
-  grid-template-columns: auto minmax(8rem, 1fr);
+  grid-template-columns: minmax(9.5rem, 0.72fr) minmax(0, 1fr);
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.65rem;
   min-width: 0;
-  font-size: 0.88rem;
+  padding: 0.55rem 0.6rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--light) 92%, var(--dark) 8%);
+}
+
+.icono-image-edit-adjustment-row--unavailable {
+  background: color-mix(in srgb, var(--light) 96%, var(--dark) 4%);
+}
+
+.icono-image-edit-adjustment-row sl-checkbox::part(label) {
+  color: color-mix(in srgb, var(--dark) 82%, var(--secondary) 18%);
+}
+
+.icono-image-edit-adjustment-row--unavailable sl-checkbox::part(label),
+.icono-image-edit-adjustment-row--unavailable .icono-image-edit-adjustment-value {
+  color: color-mix(in srgb, var(--dark) 42%, var(--light) 58%);
+}
+
+.icono-image-edit-adjustment-value {
+  justify-self: end;
+  min-width: 0;
+  max-width: 100%;
+  color: color-mix(in srgb, var(--dark) 70%, var(--secondary) 30%);
+  font-size: 0.82rem;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.icono-image-edit-adjustment-value--tone {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+}
+
+.icono-image-edit-adjustment-value--tone::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 0.82rem;
+  height: 0.82rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 70%, var(--dark) 30%);
+  background: var(--icono-context-color, transparent);
+}
+
+@media (min-width: 960px) {
+  .icono-image-edit-adjustments {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .icono-image-edit-adjustment-row {
+    grid-template-columns: 1fr;
+    align-content: start;
+    gap: 0.38rem;
+  }
+
+  .icono-image-edit-adjustment-row--solo {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(9.5rem, 0.72fr) minmax(0, 1fr);
+  }
+
+  .icono-image-edit-adjustment-row:not(.icono-image-edit-adjustment-row--solo)
+    .icono-image-edit-adjustment-value {
+    justify-self: start;
+    text-align: left;
+  }
 }
 
 .icono-image-edit-actions {
   display: flex;
   justify-content: end;
-  gap: 0.5rem;
+  gap: 0.65rem;
   flex-wrap: wrap;
 }
 
 @media (max-width: 760px) {
   .icono-image-edit-dialog {
     width: calc(100vw - 1rem);
+    --width: calc(100vw - 1rem);
+  }
+
+  .icono-image-edit-dialog::part(panel) {
     max-height: calc(100vh - 1rem);
   }
 
@@ -814,8 +890,14 @@ img-comparison-slider.rendered [slot="second"] {
     grid-template-columns: 1fr;
   }
 
-  .icono-image-edit-adjustments label {
-    grid-template-columns: auto minmax(0, 1fr);
+  .icono-image-edit-adjustment-row {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+
+  .icono-image-edit-adjustment-value {
+    justify-self: start;
+    text-align: left;
   }
 }
 
