@@ -1,0 +1,52 @@
+{
+  "name": "@brinedew/components",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./components": "./dist/index.js"
+  },
+  "dependencies": {
+    "@quartz-community/utils": "github:quartz-community/utils",
+    "hsluv": "^1.0.2",
+    "preact": "^10.28.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.7.0",
+    "sass": "^1.99.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "quartz": {
+    "category": "component",
+    "components": {
+      "HomepageCrawlFrontier": {
+        "displayName": "Homepage Crawl Frontier",
+        "defaultPosition": "afterBody",
+        "defaultPriority": 10
+      },
+      "IconoplasmPageSwitcher": {
+        "displayName": "Iconoplasm Page Switcher",
+        "defaultPosition": "left",
+        "defaultPriority": 25
+      },
+      "TagSections": {
+        "displayName": "Tag Sections",
+        "defaultPosition": "beforeBody",
+        "defaultPriority": 15
+      },
+      "Citation": {
+        "displayName": "Citation",
+        "defaultPosition": "afterBody",
+        "defaultPriority": 20
+      },
+      "ProteinInfobox": {
+        "displayName": "Protein Infobox",
+        "defaultPosition": "beforeBody",
+        "defaultPriority": 10
+      }
+    }
+  }
+}
