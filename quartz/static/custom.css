@@ -88,6 +88,10 @@ h2.page-title a::before {
   align-items: center;
   font-size: 0;
 }
+/* Keep page-title compact inside toolbar flexbox */
+.flex-component .page-title {
+  margin: 0 !important;
+}
 .page-title a::before {
   font-size: 19px;
 }
@@ -970,10 +974,10 @@ a.internal {
 /* TOC: reduce line-height on wrapped links, tighten item spacing */
 .toc ul.toc-content.overflow > li {
   margin-bottom: 0.5rem !important;
-  line-height: 1.2 !important;
+  line-height: 1 !important;
 }
 .toc ul.toc-content.overflow > li > a {
-  line-height: 1.2 !important;
+  line-height: 1 !important;
 }
 
 /* Image captions: reduce gap between image and caption */
