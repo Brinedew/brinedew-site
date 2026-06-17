@@ -4,7 +4,6 @@ description: "Search human genes as memorable character cards called blots. Icon
 canonicalUrl: "https://iconoplasm.brinedew.bio/"
 date: 2025-12-01
 draft: false
-folderPage: true
 cssclasses:
 - iconoplasm-page
 tags:

@@ -88,15 +88,23 @@ h2.page-title a::before {
   align-items: center;
   font-size: 0;
 }
-/* Keep toolbar items optically aligned */
+/* Toolbar: align all flex children vertically center, equal height */
+.flex-component {
+  align-items: center;
+  width: 100%;
+}
 .flex-component > div {
-  height: 32px;
   display: flex;
   align-items: center;
+  min-height: 32px;
 }
 .flex-component .page-title {
   margin: 0 !important;
-  text-box: trim-both auto;
+  display: flex;
+  align-items: center;
+}
+.flex-component .search {
+  flex: 1;
 }
 .page-title a::before {
   font-size: 19px;
@@ -510,10 +518,8 @@ article p {
 /* Links: swap base/hover (base = accent teal, hover = gray) */
 a {
   color: var(--accent);
-  text-decoration-color: var(--accent);
-  text-decoration-thickness: 1.5px;
-  text-underline-offset: 0.2em;
-  font-weight: 400; /* remove bolding */
+  text-decoration: none;
+  font-weight: 400;
 }
 
 a:hover {
@@ -523,6 +529,18 @@ a:hover {
 /* Hide external link glyph (also disabled in config) */
 a.external .external-icon {
   display: none !important;
+}
+
+/* External links: colored + underlined */
+a.external {
+  text-decoration: underline !important;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 0.2em;
+}
+
+/* Internal links: colored only, no underline, no pills */
+a.internal {
+  text-decoration: none !important;
 }
 
 /* Text selection highlighting with proper contrast */
@@ -618,13 +636,20 @@ a.external .external-icon {
 }
 
 /* Image captions: match v4's .image-with-caption > figcaption styling */
+figure {
+  margin: 1.5em 0;
+}
+figure > img,
+figure > picture {
+  margin-bottom: 0;
+}
 figure > figcaption {
   text-align: center;
   font-size: 0.82em;
   color: var(--darkgray);
   text-wrap: balance;
   max-width: 34rem;
-  margin: 0 auto;
+  margin: 0.3rem auto 0;
 }
 
 /* View Transitions - Crossfade everything except persistent UI */
@@ -796,6 +821,11 @@ article li:has(> input[type="checkbox"]:checked) {
   height: auto;
 }
 
+/* Iconoplasm: hide folder-page listing (gene card pages are not folder pages) */
+body[data-slug^="apps/iconoplasm"] .page-listing {
+  display: none;
+}
+
 /* Fix Table of Contents - Remove Progressive Dimming and Bold Fonts */
 .toc {
   /* TOC header */
@@ -870,14 +900,17 @@ ul.toc-content.overflow {
 }
 .draft-locked { display: none }
 .draft-unlocked .draft-locked { display: block }
-article[data-draft="true"]:not(.draft-unlocked)::after {
+
+/* Fadeout gradient on truncated draft content for unauthorized users */
+body[data-page-draft="true"]:not(.draft-unlocked) .markdown-preview-view::after {
   content: '';
   display: block;
-  height: 6rem;
-  margin-top: -6rem;
+  height: 5rem;
+  margin-top: -5rem;
   background: linear-gradient(transparent, var(--light));
   position: relative;
   pointer-events: none;
+  z-index: 1;
 }
 .draft-cta-msg[hidden] { display: none }
 
@@ -965,15 +998,6 @@ article[data-draft="true"]:not(.draft-unlocked)::after {
   color: var(--tertiary) !important;
 }
 
-/* External links underline, internal links no underline */
-a.external {
-  text-decoration: underline !important;
-  text-underline-offset: 0.2em;
-}
-a.internal {
-  text-decoration: none !important;
-}
-
 /* TOC: reduce line-height on wrapped links, tighten item spacing */
 .toc ul.toc-content.overflow > li {
   margin-bottom: 0.5rem !important;
@@ -981,11 +1005,6 @@ a.internal {
 }
 .toc ul.toc-content.overflow > li > a {
   line-height: 1 !important;
-}
-
-/* Image captions: reduce gap between image and caption */
-figure > figcaption {
-  margin-top: 0.25rem !important;
 }
 
 /* v5 darkmode uses saved-theme, not data-theme */

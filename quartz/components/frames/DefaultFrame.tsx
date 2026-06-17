@@ -47,21 +47,27 @@ export const DefaultFrame: PageFrame = {
               componentData.fileData.frontmatter?.draft === "true"
             if (!isDraftPage) return null
             return (
-              <>
-                <span class="draft-indicator popover-hint">Unpublished draft</span>
-                <article class="icono-card icono-guest-login-card" id="draft-cta">
-                  <div class="icono-home-auth-copy">
-                    <div class="icono-guest-login-card-title">Continue to read the draft.</div>
-                    <p class="draft-cta-msg draft-cta-msg--guest">Log in and become a supporter to read the full article.</p>
-                    <p class="draft-cta-msg draft-cta-msg--user" hidden>Become a supporter to read the full article.</p>
-                  </div>
-                  <a href="/api/auth/login" class="icono-guest-login-card-button draft-cta-btn--login">Log in with Discord</a>
-                  <a href="/posts/Support-me" class="icono-guest-login-card-button draft-cta-btn--support" hidden>Support Brinedew</a>
-                </article>
-              </>
+              <span class="draft-indicator popover-hint">Unpublished draft</span>
             )
           })()}
           <Content {...componentData} />
+          {(() => {
+            const isDraftPage =
+              componentData.fileData.frontmatter?.draft === true ||
+              componentData.fileData.frontmatter?.draft === "true"
+            if (!isDraftPage) return null
+            return (
+              <article class="icono-card icono-guest-login-card" id="draft-cta">
+                <div class="icono-home-auth-copy">
+                  <div class="icono-guest-login-card-title">Continue to read the draft.</div>
+                  <p class="draft-cta-msg draft-cta-msg--guest">Log in and become a supporter to read the full article.</p>
+                  <p class="draft-cta-msg draft-cta-msg--user" hidden>Become a supporter to read the full article.</p>
+                </div>
+                <a href="/api/auth/login" class="icono-guest-login-card-button draft-cta-btn--login">Log in with Discord</a>
+                <a href="/posts/Support-me" class="icono-guest-login-card-button draft-cta-btn--support" hidden>Support Brinedew</a>
+              </article>
+            )
+          })()}
           <hr />
           <div class="page-footer">
             {afterBody.map((BodyComponent) => (
