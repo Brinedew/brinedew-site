@@ -1,0 +1,18 @@
+<!-- @dsCard group="Components" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="card.css">
+<style>
+  .seg{display:flex;width:100%;padding:3px;border-radius:10px;background:color-mix(in srgb,var(--ui-border) 34%,var(--light))}
+  .seg label{flex:1;text-align:center;padding:0.5rem;border-radius:7px;font-family:var(--font-label);font-size:11px;letter-spacing:0.06em;color:color-mix(in srgb,var(--secondary) 64%,transparent);cursor:pointer}
+  .seg label.on{background:color-mix(in srgb,var(--light) 92%,white 8%);color:var(--ink);box-shadow:0 1px 3px rgba(33,21,12,.06),0 0 0 .5px color-mix(in srgb,var(--ui-border) 36%,transparent)}
+  .tabs{display:flex;gap:0.25rem;padding:0.2rem;border:1px solid color-mix(in srgb,var(--ui-border) 62%,transparent);border-radius:10px;background:color-mix(in srgb,var(--light) 60%,white 40%)}
+  .tabs button{flex:1;padding:0.48rem;border:0;border-radius:8px;background:transparent;font-family:var(--font-label);font-size:11px;letter-spacing:0.04em;text-transform:uppercase;color:var(--secondary);cursor:pointer}
+  .tabs button.on{background:color-mix(in srgb,var(--light) 96%,white 4%);color:var(--ink);box-shadow:0 1px 3px rgba(33,21,12,.06),0 0 0 1px color-mix(in srgb,var(--ui-border) 48%,transparent)}
+</style>
+</head><body><div class="card">
+  <div class="kicker">Segmented track · sliding active pill</div>
+  <div class="seg"><label>Underline</label><label class="on">Color pills</label><label>Pill outline</label><label>Rough ellipse</label></div>
+  <div class="kicker" style="margin-top:6px">Tabs</div>
+  <div class="tabs"><button class="on">Appearance</button><button>Blocklist</button><button>Account</button></div>
+</div></body></html>

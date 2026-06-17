@@ -1,0 +1,19 @@
+name = "the-only-allowed-public-benchmark-edge-worker-that-must-not-touch-state"
+main = "the-only-allowed-public-benchmark-edge-worker-that-must-not-touch-state.js"
+compatibility_date = "2025-11-12"
+workers_dev = false
+preview_urls = false
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[[services]]
+binding = "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE"
+service = "geneguessr-api"

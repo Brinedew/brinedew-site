@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Iconoplasm — Extension UI Kit</title>
+  <link rel="stylesheet" href="../../colors_and_type.css" />
+  <link rel="stylesheet" href="kit.css" />
+  <link rel="stylesheet" href="lablabel.css" />
+  <link rel="stylesheet" href="popup.css" />
+  <style>
+    body { background: #ece7df; }    .stage { position: relative; min-height: 100vh; }
+    /* floating popup, like the toolbar dropdown */
+    .popup-mount { position: fixed; top: 14px; right: 18px; z-index: 1000; }
+    .popup-mount::before {
+      content: ""; position: absolute; top: -9px; right: 34px;
+      border-left: 9px solid transparent; border-right: 9px solid transparent;
+      border-bottom: 9px solid #fbf7f0; filter: drop-shadow(0 -1px 0 rgba(32,18,11,.14));
+    }
+    .toolbar-hint {
+      position: fixed; top: 16px; right: 410px; z-index: 1000;
+      display: flex; align-items: center; gap: 8px;
+      font-family: "IBM Plex Mono", monospace; font-size: 12px; color: #6b6258;
+      background: rgba(255,255,255,.7); border: 1px solid #d9d6d0; border-radius: 999px;
+      padding: 6px 12px;
+    }
+    @media (max-width: 980px) {
+      .popup-mount { position: static; margin: 16px auto; width: max-content; }
+      .popup-mount::before { display: none; }
+      .toolbar-hint { display: none; }
+      .stage { display: flex; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script src="genes.js"></script>
+  <script src="rough.js"></script>
+  <script src="roughloop.js"></script>
+  <script type="text/babel" src="HoverCard.jsx"></script>
+  <script type="text/babel" src="Popup.jsx"></script>
+  <script type="text/babel" src="Article.jsx"></script>
+
+  <script type="text/babel">
+    const { useState, useRef } = React;
+
+    const DEFAULT_BLOCK = [
+      { sym: "SET", kind: "default" }, { sym: "REST", kind: "default" },
+      { sym: "CAT", kind: "default" }, { sym: "BANK", kind: "default" },
+    ];
+
+    function App() {
+      const [settings, setSettings] = useState({ highlight: "pill", timing: "always", card: "simple" });
+      const [blocklist, setBlocklist] = useState(DEFAULT_BLOCK);
+      const [hover, setHover] = useState(null); // { g, rect }
+      const hideT = useRef(null);
+
+      const set = (k, v) => setSettings((s) => ({ ...s, [k]: v }));
+      const blocked = new Set(blocklist.map((b) => b.sym));
+      const addBlock = (sym) => setBlocklist((l) => l.find((b) => b.sym === sym) ? l : [{ sym, kind: "custom" }, ...l]);
+      const removeBlock = (sym) => setBlocklist((l) => l.filter((b) => b.sym !== sym));
+
+      const onEnter = (g, rect) => { clearTimeout(hideT.current); setHover({ g, rect }); };
+      const onLeave = () => { hideT.current = setTimeout(() => setHover(null), 130); };
+      const keepCard = () => clearTimeout(hideT.current);
+      const dropCard = () => { hideT.current = setTimeout(() => setHover(null), 130); };
+
+      // position the card under the gene, clamped to viewport
+      let cardStyle = {};
+      if (hover) {
+        const w = settings.card === "lit-archival" ? 760 : settings.card === "image-only" ? 320 : 480;
+        let left = hover.rect.left;
+        left = Math.max(12, Math.min(left, window.innerWidth - w - 12));
+        let top = hover.rect.bottom + 8;
+        cardStyle = { left, top, width: w };
+      }
+
+      return (
+        <div className="stage">
+          <div className="page">
+            <div className="page-bar">
+              <span className="dot" style={{ background: "#e0635c" }}></span>
+              <span className="dot" style={{ background: "#e6b94f" }}></span>
+              <span className="dot" style={{ background: "#5aab6e" }}></span>
+              <span className="url">en.wikipedia.org/wiki/Tumor_suppressor_gene</span>
+            </div>
+            <Article mode={settings.highlight} timing={settings.timing} blocked={blocked}
+              onEnter={onEnter} onLeave={onLeave} />
+          </div>
+
+          <div className="toolbar-hint">▲ live extension popup — change settings</div>
+          <div className="popup-mount">
+            <ExtensionPopup settings={settings} set={set}
+              blocklist={blocklist} addBlock={addBlock} removeBlock={removeBlock} />
+          </div>
+
+          {hover && (
+            <div className="hc-wrap" style={cardStyle} onMouseEnter={keepCard} onMouseLeave={dropCard}>
+              <div className="hc-anim show">
+                <HoverCard g={hover.g} variant={settings.card} />
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

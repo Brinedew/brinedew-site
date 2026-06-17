@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Iconoplasm simple card hover stress</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f7f2e9;
+        --ink: #211c18;
+        --line: rgba(33, 28, 24, 0.18);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.45;
+      }
+
+      main {
+        min-height: 220vh;
+        padding: 10px clamp(16px, 3vw, 36px) 28px;
+      }
+
+      h1,
+      h2 {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.1;
+      }
+
+      h2 {
+        margin-bottom: 10px;
+      }
+
+      p {
+        margin: 6px 0 0;
+        max-width: 82ch;
+        color: rgba(33, 28, 24, 0.72);
+        font-size: 13px;
+      }
+
+      .band {
+        border-block: 1px solid var(--line);
+        padding: 12px 0 14px;
+      }
+
+      .band + .band {
+        margin-top: 42vh;
+      }
+
+      .near-bottom {
+        margin-top: 62vh;
+      }
+
+      .symbols {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        margin-top: 12px;
+        max-width: 980px;
+      }
+
+      .symbols span {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 2px 7px;
+        border: 1px solid rgba(33, 28, 24, 0.22);
+        background: rgba(255, 255, 255, 0.48);
+        font-family: "Bahnschrift", "Arial Narrow", ui-sans-serif, system-ui, sans-serif;
+        font-size: 19px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+
+      .edge-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .edge-row .symbols {
+        align-content: start;
+        min-height: 140px;
+        margin-top: 0;
+      }
+
+      @media (max-width: 720px) {
+        main {
+          padding-inline: 12px;
+        }
+
+        .edge-row {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="band">
+        <h1>Longest names, top edge</h1>
+        <p>
+          Hover these near the top of the viewport. Cards should stay readable and avoid jumping
+          below the screen edge.
+        </p>
+        <div class="symbols">
+          <span>GART</span><span>KIR2DS4</span><span>PAICS</span><span>MTHFD2</span>
+          <span>MTHFD1</span><span>SRMS</span><span>KIR3DS1</span><span>KIR3DL3</span>
+          <span>KIR3DL2</span><span>KIR3DL1</span><span>KIR2DS1</span><span>KIR2DS2</span>
+          <span>KIR2DL5A</span><span>KIR2DS5</span><span>KIR2DS3</span><span>KIR2DL5B</span>
+          <span>KIR2DL4</span><span>KIR2DL3</span><span>KIR2DL2</span><span>KIR2DL1</span>
+        </div>
+      </section>
+
+      <section class="band">
+        <h2>Dense neighbor hovers</h2>
+        <p>
+          Move across adjacent symbols without stopping. Neighbor portraits should already be
+          prepared instead of flashing through the unloaded state.
+        </p>
+        <div class="symbols">
+          <span>DDOST</span><span>ABO</span><span>TRPC4AP</span><span>C1GALT1</span>
+          <span>ATIC</span><span>HCN2</span><span>VIPAS39</span><span>APPL2</span> <span>GART</span
+          ><span>PAICS</span><span>MTHFD1</span><span>MTHFD2</span> <span>KIR2DL1</span
+          ><span>KIR2DL2</span><span>KIR2DL3</span><span>KIR2DL4</span>
+        </div>
+      </section>
+
+      <section class="band near-bottom">
+        <h2>Bottom-edge placement</h2>
+        <p>
+          Hover these while they are close to the bottom of the viewport. The tooltip should choose
+          the upward side when that keeps it visible.
+        </p>
+        <div class="edge-row">
+          <div class="symbols">
+            <span>GART</span><span>PAICS</span><span>MTHFD2</span><span>MTHFD1</span>
+          </div>
+          <div class="symbols">
+            <span>KIR3DL1</span><span>KIR3DL2</span><span>KIR2DL1</span><span>KIR2DL4</span>
+          </div>
+          <div class="symbols">
+            <span>TRPC4AP</span><span>C1GALT1</span><span>VIPAS39</span><span>APPL2</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

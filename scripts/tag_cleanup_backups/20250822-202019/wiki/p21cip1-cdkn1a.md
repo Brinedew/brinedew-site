@@ -1,0 +1,15 @@
+---
+title: p21^CIP1 (CDKN1A)
+tags: [glossary, protein]
+date: 2025-08-21
+status: draft
+aliases: [CDKN1A, CIP1]
+---
+
+# p21^CIP1 (CDKN1A)
+
+**What it is.** p53-induced inhibitor of multiple cyclin–CDK complexes.
+
+**Why it matters here.** Implements p53-mediated cell-cycle arrest; contributes to senescence entry.
+
+**Notes.** Type: CKI; Upstream: p53.

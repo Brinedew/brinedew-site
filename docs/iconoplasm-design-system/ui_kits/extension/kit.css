@@ -1,0 +1,112 @@
+/* Iconoplasm Extension UI kit styles.
+   Adapted (cosmetic-only) from content.css + popup.css + shared-card-label.css. */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+
+/* ============================================================ ARTICLE PAGE */
+.page {
+  min-height: 100vh;
+  background: #fbfbfa;
+  color: #202124;
+  font-family: "Georgia", "Times New Roman", serif;
+}
+.page-bar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px;
+  background: #f1f0ee;
+  border-bottom: 1px solid #d9d6d0;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px; color: #6b6258;
+}
+.page-bar .dot { width: 11px; height: 11px; border-radius: 50%; }
+.page-bar .url {
+  flex: 1; background: #fff; border: 1px solid #d9d6d0; border-radius: 6px;
+  padding: 5px 10px; color: #4a4036;
+}
+.article { max-width: 720px; margin: 0 auto; padding: 34px 28px 120px; }
+.article h1 { font-size: 30px; line-height: 1.15; margin: 0 0 4px; font-weight: 600; }
+.article .lede { color: #5a5550; font-style: italic; margin: 0 0 22px; }
+.article h2 { font-size: 21px; margin: 28px 0 8px; font-weight: 600; }
+.article p { font-size: 17px; line-height: 1.62; margin: 0 0 16px; }
+.article .ref { vertical-align: super; font-size: 0.7em; color: #3366cc; }
+
+/* ============================================================ GENE HIGHLIGHT */
+.gene { position: relative; cursor: pointer; white-space: nowrap; transition: opacity .15s ease; }
+.gene:hover { opacity: 0.85; }
+.gene--underline {
+  background-image: linear-gradient(to top, var(--c) 0, var(--c) 100%);
+  background-repeat: no-repeat; background-size: 100% 0.16em;
+  background-position: 0 calc(100% - 0.01em);
+}
+.gene--pill {
+  color: #fff; border-radius: 0.18em; padding: 0.02em 0.12em;
+  background: color-mix(in srgb, var(--c) 80%, transparent);
+  text-shadow: 0 0.02em 0.12em rgba(0,0,0,.18);
+  box-shadow: 0 0 0 0.04em color-mix(in srgb, var(--c) 80%, transparent);
+}
+.gene--pill-outline {
+  border-radius: 0.18em; padding: 0.02em 0.12em;
+  box-shadow: 0 0 0 0.11em color-mix(in srgb, var(--c) 78%, transparent),
+              inset 0 0 0 0.08em rgba(255,255,255,.3);
+}
+.gene--ellipse { isolation: isolate; }
+.gene--ellipse .gene-loop {
+  position: absolute; left: -9px; right: -9px; top: -6px; bottom: -6px;
+  width: calc(100% + 18px); height: calc(100% + 12px); overflow: visible; pointer-events: none;
+}
+.gene--ellipse .gene-loop path { fill: none; stroke: var(--c); stroke-width: 1.7; vector-effect: non-scaling-stroke; }
+
+/* "On hover" timing: paint only appears while hovered (matches highlight-on-hover body class). */
+.timing-hover .gene--underline:not(:hover) { background-size: 100% 0; }
+.timing-hover .gene--pill:not(:hover) { background: transparent; color: inherit; box-shadow: none; text-shadow: none; }
+.timing-hover .gene--pill-outline:not(:hover) { box-shadow: none; }
+.timing-hover .gene--ellipse:not(:hover) .gene-loop { opacity: 0; }
+
+/* ============================================================ HOVER CARDS */
+.hc-wrap { position: fixed; z-index: 999; pointer-events: none; }
+.hc-anim {
+  opacity: 0; transform: translateY(8px) scale(.96);
+  transition: opacity .26s cubic-bezier(.16,1,.3,1), transform .26s cubic-bezier(.16,1,.3,1);
+}
+.hc-anim.show { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+
+/* --- SIMPLE (horizontal) --- */
+.hc-simple {
+  display: flex; width: 480px; border-radius: 4px; overflow: hidden;
+  background: #d9d2c8; color: #211c18;
+  box-shadow: 0 0 0 1px rgba(74,61,49,.16), 0 8px 18px rgba(40,32,24,.1), 0 16px 34px rgba(40,32,24,.18);
+}
+.hc-simple .por { flex: 0 0 168px; position: relative; background: var(--p); }
+.hc-simple .bod {
+  flex: 1; padding: 17px 17px 13px 14px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E"),
+    rgba(248,244,236,.99);
+}
+.hc-simple .sym { font-family: "League Spartan", sans-serif; font-weight: 800; font-size: 34px; letter-spacing: -.05em; line-height: .9; }
+.hc-simple .nm { font-family: "Special Elite", serif; font-size: 15px; margin-top: 3px; color: rgba(33,28,24,.92); }
+.hc-simple .hc-hr { height: 1px; background: rgba(74,61,49,.18); margin: 11px 0 4px; }
+/* two-column meta: LEFT = molecular data, RIGHT = human-term isomorphism */
+.hc-colhead { display: grid; grid-template-columns: 1fr 1fr; padding: 4px 0 3px; border-bottom: 1px solid rgba(74,61,49,.2); }
+.hc-colhead span { font-family: "IBM Plex Mono", monospace; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; opacity: .5; padding: 0 8px; }
+.hc-colhead span:last-child { color: #2c7a72; opacity: .85; padding-left: 12px; }
+.hc-mrow { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid rgba(74,61,49,.08); align-items: center; }
+.hc-mrow:last-child { border-bottom: 0; }
+.hc-mcell { display: flex; flex-direction: column; min-width: 0; padding: 5px 8px; }
+.hc-mcell.human { border-left: 1px solid rgba(74,61,49,.12); padding-left: 12px; }
+.hc-ml { font-family: "IBM Plex Mono", monospace; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; opacity: .55; }
+.hc-mv { font-family: "Special Elite", serif; font-size: 15px; opacity: .9; line-height: 1.1; }
+.hc-hv { font-family: "Caveat", cursive; font-size: 22px; color: #2c7a72; line-height: .95; }
+
+/* --- BLOT ONLY --- */
+.hc-blot {
+  position: relative; width: 320px; aspect-ratio: 384/512; overflow: hidden;
+  border: 1px solid rgba(32,18,11,.26); background: var(--p);
+  box-shadow: 0 0 0 1px rgba(32,18,11,.1), 0 12px 28px rgba(22,14,11,.22);
+}
+.hc-blot::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 56%, rgba(16,10,8,.18) 78%, rgba(16,10,8,.62) 100%); }
+.hc-blot .ov { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; display: flex; align-items: flex-end; justify-content: space-between; padding: 20px; }
+.hc-blot .ov .nm { font-family: "Special Elite", serif; font-size: 14px; color: rgba(250,238,222,.92); text-shadow: 0 3px 12px rgba(8,5,4,.42); max-width: 16ch; }
+.hc-blot .ov .sym { font-family: "League Spartan", sans-serif; font-weight: 800; font-size: 42px; letter-spacing: -.05em; line-height: .9; color: rgba(253,245,232,.96); text-shadow: 0 8px 18px rgba(8,5,4,.4); }

@@ -1,0 +1,81 @@
+name: Deploy Benchmark Worker
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install Wrangler CLI
+        run: npm install -g wrangler@4
+
+      - name: Apply D1 migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+        run: |
+          echo "Applying D1 migrations..."
+          set +e
+          OUTPUT=$(wrangler d1 migrations apply geneguessr --remote --config workers/benchmark/the-only-allowed-benchmark-migrations-do-not-deploy.toml 2>&1)
+          STATUS=$?
+          set -e
+          echo "$OUTPUT"
+          if [ "$STATUS" -ne 0 ]; then
+            if echo "$OUTPUT" | grep -qi "duplicate column name: state"; then
+              echo "Migration already applied on remote DB; continuing."
+            else
+              echo "Migration apply failed with unexpected error."
+              exit "$STATUS"
+            fi
+          fi
+
+      - name: Deploy the only allowed internal stateful worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+        run: |
+          echo "Deploying the only allowed internal stateful worker..."
+          wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+
+      - name: Upload public benchmark edge worker script without routes
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+        run: |
+          echo "Uploading public benchmark edge worker script..."
+          wrangler deploy --config workers/benchmark/the-only-allowed-public-benchmark-edge-worker-upload-only.toml
+
+      - name: Reassign benchmark route to the public benchmark edge worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+        run: |
+          node scripts/reassign-cloudflare-worker-routes.mjs \
+            brinedew.bio \
+            the-only-allowed-public-benchmark-edge-worker-that-must-not-touch-state \
+            "geneguessr-bench.brinedew.bio/*"
+
+      - name: Smoke test health endpoint
+        run: |
+          set -euo pipefail
+          echo "Waiting 10s for Worker to propagate..."
+          sleep 10
+
+          RESP=$(curl -sf "https://geneguessr-bench.brinedew.bio/health" || echo '{"ok":false}')
+          echo "Health response: $RESP"
+
+          OK=$(echo "$RESP" | jq -r '.ok')
+          if [ "$OK" != "true" ]; then
+            echo "Health check failed"
+            exit 1
+          fi
+
+          echo "Benchmark Worker is healthy"

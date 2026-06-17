@@ -1,0 +1,45 @@
+/* Iconoplasm archive website shell. */
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background:
+    radial-gradient(circle at 50% -10%, color-mix(in srgb,#1b7269 5%,transparent), transparent 40%),
+    #efe8dd;
+  color: #20120b;
+  font-family: "IBM Plex Mono", monospace;
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .04; z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.site-nav {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 22px;
+  background: color-mix(in srgb, #f4ede5 86%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(32,18,11,.16);
+}
+.site-nav img { border-radius: 9px; }
+.site-nav .wm { font-family: "League Spartan", sans-serif; font-weight: 800; font-size: 22px; letter-spacing: 0; }
+.site-nav .kick { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: rgba(32,18,11,.45); line-height: 1; }
+.site-search {
+  margin-left: auto; min-width: 0; width: 240px; max-width: 40vw;
+  padding: 8px 12px; border: 1px solid rgba(32,18,11,.2); border-radius: 8px;
+  background: rgba(255,255,255,.6); font-family: inherit; font-size: 13px; color: #20120b; text-transform: uppercase;
+}
+.site-search::placeholder { text-transform: none; color: rgba(90,71,54,.5); }
+.site-search:focus { outline: none; border-color: #1b7269; box-shadow: 0 0 0 3px color-mix(in srgb,#1b7269 14%,transparent); }
+
+.feed { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; padding: 26px 20px 120px; display: flex; flex-direction: column; gap: 22px; }
+
+.arch-head { padding: 22px 24px; border: 1px solid rgba(32,18,11,.16); border-radius: 14px; background: color-mix(in srgb,#f4ede5 80%,white 20%); box-shadow: 0 10px 24px rgba(33,21,12,.05); }
+.arch-head .kick { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: rgba(32,18,11,.45); }
+.arch-head .count { font-family: "League Spartan", sans-serif; font-weight: 800; font-size: 40px; line-height: 1; margin: 6px 0 2px; }
+.arch-head .sub { font-family: "Special Elite", serif; font-size: 15px; color: rgba(32,18,11,.7); }
+.arch-bar { margin-top: 14px; height: 8px; border-radius: 999px; background: rgba(32,18,11,.1); overflow: hidden; }
+.arch-fill { height: 100%; background: #1b7269; border-radius: 999px; }
+
+.spec-wrap { box-shadow: 0 10px 24px rgba(53,38,27,.10); }

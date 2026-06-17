@@ -7,7 +7,6 @@ on:
 
 jobs:
   build-preview:
-    if: ${{ github.repository == 'jackyzha0/quartz' }}
     runs-on: ubuntu-latest
     name: Build Preview
     steps:
@@ -20,13 +19,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: Cache dependencies
-        uses: actions/cache@v5
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm config set minimumReleaseAge 1440
 
       - name: Cache Quartz plugins
         uses: actions/cache@v5
@@ -36,19 +33,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-plugins-
 
-      - run: npm ci
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
 
       - name: Install Quartz plugins
-        run: npx quartz plugin install
+        run: pnpm exec quartz plugin install --from-config
 
-      - name: Check types and style
-        run: npm run check
+      - name: Sync shared Iconoplasm assets
+        run: pnpm run sync:iconoplasm-shared
 
       - name: Build Quartz
-        run: npx quartz build -d docs -v
+        run: pnpm run build
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: preview-build
           path: public

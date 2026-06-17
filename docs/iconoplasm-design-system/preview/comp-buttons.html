@@ -1,0 +1,19 @@
+<!-- @dsCard group="Components" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="card.css">
+<style>
+  .btn{font-family:var(--font-label);font-size:14px;font-weight:600;padding:0.5rem 0.86rem;border-radius:8px;border:1px solid var(--ui-border);background:color-mix(in srgb,var(--light) 82%,white 18%);color:var(--ink);cursor:pointer}
+  .btn--primary{border-color:color-mix(in srgb,var(--accent) 46%,var(--ui-border));background:color-mix(in srgb,var(--accent) 12%,var(--light));color:color-mix(in srgb,var(--ink) 85%,var(--accent) 15%)}
+  .btn--ghost{border-color:transparent;background:transparent;font-size:13px;color:var(--secondary)}
+</style>
+</head><body><div class="card">
+  <div class="kicker">Buttons</div>
+  <div class="row" style="align-items:center;gap:12px">
+    <button class="btn btn--primary">Add</button>
+    <button class="btn">Restore defaults</button>
+    <button class="btn btn--ghost">Sign out</button>
+    <a class="btn btn--primary" style="text-decoration:none;display:inline-block">Sign in with Discord</a>
+  </div>
+  <div class="kicker">Primary = teal-tinted fill + warmed border. Hover lightens the fill. No lift, no shrink-on-press.</div>
+</div></body></html>
