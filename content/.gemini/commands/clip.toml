@@ -1,0 +1,1 @@
+prompt = "{{!powershell:Get-Clipboard -Raw}}"

@@ -1,0 +1,29 @@
+properties:
+  mass:
+    displayName: Mass (kDa)
+  percent_disordered:
+    displayName: Disorder (%)
+  alignment:
+    displayName: Classification
+views:
+  - type: table
+    name: Protein Database
+    filters:
+      and:
+        - file.hasTag("protein")
+    order:
+      - file.name
+      - mass
+      - length (aa)
+      - alignment
+      - percent_disordered
+      - kegg_families
+      - persona_image
+    sort:
+      - property: mass
+        direction: ASC
+    columnSize:
+      file.name: 200
+      note.mass: 80
+      note.alignment: 120
+      note.percent_disordered: 100
