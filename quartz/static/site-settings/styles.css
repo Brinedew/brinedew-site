@@ -1,0 +1,356 @@
+.site-settings-shell {
+  max-width: 42rem;
+  margin: 0 0 2.5rem;
+}
+
+.site-settings-header {
+  margin-bottom: 1.1rem;
+}
+
+.site-settings-title {
+  margin: 0;
+  color: var(--dark);
+  font-size: clamp(1.95rem, 3vw, 2.45rem);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+}
+
+.site-settings-section + .site-settings-section {
+  margin-top: 1.8rem;
+  padding-top: 1.15rem;
+  border-top: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent);
+}
+
+.site-settings-section {
+  scroll-margin-top: 1rem;
+}
+
+.site-settings-section-head {
+  margin-bottom: 0.35rem;
+}
+
+.site-settings-section-head h2 {
+  margin: 0;
+  font-size: 1.32rem;
+  font-weight: 600;
+}
+
+.site-settings-section-head p {
+  margin: 0.18rem 0 0;
+  color: var(--secondary, var(--darkgray));
+}
+
+.site-settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
+  gap: 1rem;
+  padding: 0.8rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent);
+}
+
+.site-settings-copy h3 {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.site-settings-control {
+  min-width: 0;
+}
+
+.site-settings-control--stack {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.site-settings-segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.site-settings-segment {
+  position: relative;
+  display: inline-flex;
+}
+
+.site-settings-radio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.site-settings-segment-label,
+.site-settings-inline-btn,
+.site-settings-sidebar-btn,
+.site-settings-input,
+.site-settings-select {
+  font: inherit;
+}
+
+.site-settings-segment-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--light);
+  color: var(--dark);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.site-settings-radio:checked + .site-settings-segment-label {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--ui-border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--light));
+}
+
+.site-settings-radio:focus-visible + .site-settings-segment-label,
+.site-settings-input:focus,
+.site-settings-select:focus,
+.site-settings-inline-btn:focus-visible,
+.site-settings-sidebar-btn:focus-visible,
+.site-settings-sidebar-nav a:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.site-settings-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.site-settings-field > span {
+  color: var(--secondary, var(--darkgray));
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.site-settings-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: start;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--light) 92%, transparent);
+}
+
+.site-settings-toggle input {
+  margin-top: 0.1rem;
+  inline-size: 1rem;
+  block-size: 1rem;
+  accent-color: var(--accent);
+}
+
+.site-settings-toggle-title {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--dark);
+  font-weight: 600;
+}
+
+.site-settings-toggle-note {
+  display: block;
+  color: var(--secondary, var(--darkgray));
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.site-settings-input,
+.site-settings-select {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.6rem 0.75rem;
+  box-sizing: border-box;
+  color: var(--dark);
+  background: var(--light);
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+}
+
+.site-settings-textarea {
+  min-height: 5.5rem;
+  resize: vertical;
+}
+
+.site-settings-emulsion-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.site-settings-emulsion-meter {
+  color: var(--secondary, var(--darkgray));
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.site-settings-secret {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.55rem;
+}
+
+.site-settings-inline-btn,
+.site-settings-sidebar-btn {
+  appearance: none;
+  border: 1px solid var(--ui-border);
+  color: var(--dark);
+  background: var(--light);
+  cursor: pointer;
+  font-weight: 600;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.site-settings-inline-btn {
+  min-height: 2.5rem;
+  padding: 0 0.8rem;
+  border-radius: 6px;
+}
+
+.site-settings-inline-btn:hover,
+.site-settings-sidebar-btn:hover,
+.site-settings-segment-label:hover {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--ui-border));
+}
+
+#site-settings-sidebar {
+  margin-top: 1.5rem;
+}
+
+.site-settings-sidebar-rail {
+  padding: 0;
+  background: transparent;
+  border: none;
+  font-size: 0.875rem;
+}
+
+.site-settings-sidebar-section {
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 70%, transparent);
+}
+
+.site-settings-sidebar-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.site-settings-sidebar-label {
+  margin-bottom: 0.45rem;
+  color: var(--secondary, var(--darkgray));
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.site-settings-sidebar-nav {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.site-settings-sidebar-nav a {
+  color: var(--dark);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.site-settings-sidebar-nav a:hover,
+.site-settings-sidebar-nav a[data-active="true"] {
+  color: var(--accent);
+}
+
+.site-settings-sidebar-actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.site-settings-sidebar-btn {
+  justify-content: flex-start;
+  min-height: 2.1rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.site-settings-sidebar-btn--quiet {
+  background: transparent;
+}
+
+.site-settings-sidebar-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.site-settings-sidebar-status {
+  min-height: 1.2rem;
+  margin: 0.1rem 0 0;
+  color: var(--secondary, var(--darkgray));
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.site-settings-sidebar-status--success {
+  color: color-mix(in srgb, var(--accent) 72%, var(--dark));
+}
+
+.site-settings-sidebar-status--error {
+  color: oklch(56% 0.16 28);
+}
+
+.site-settings-sidebar-status--dirty {
+  color: var(--dark);
+}
+
+.site-settings-sidebar-note {
+  margin: 0;
+  color: var(--secondary, var(--darkgray));
+  line-height: 1.45;
+}
+
+.site-settings-plain-value {
+  color: var(--dark);
+  line-height: 1.45;
+}
+
+@media (max-width: 900px) {
+  .site-settings-row {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .site-settings-shell {
+    margin-bottom: 1.75rem;
+  }
+
+  .site-settings-secret {
+    grid-template-columns: 1fr;
+  }
+
+  .site-settings-inline-btn {
+    width: 100%;
+  }
+}
