@@ -591,7 +591,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
         )}
 
         {/* Custom CSS last with self-hosted fonts (bumped version to refresh caches) */}
-        <link href="/static/custom.css?v=bio8" rel="stylesheet" type="text/css" />
+        <link href="/static/custom.css?v=bio9" rel="stylesheet" type="text/css" />
         {iconoplasmBootstrapScript && (
           <script dangerouslySetInnerHTML={{ __html: iconoplasmBootstrapScript }} />
         )}

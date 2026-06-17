@@ -515,15 +515,33 @@ article p {
   line-height: 1.35;
 }
 
-/* Links: swap base/hover (base = accent teal, hover = gray) */
+/* Links: quiet by default, teal only on hover.
+   Brand principle (CLAUDE.md): teal is an accent for interaction, not default
+   decoration. Links read as muted text with a faint dotted underline; the accent
+   appears when the reader engages. */
 a {
-  color: var(--accent);
+  color: var(--darkgray);
   text-decoration: none;
   font-weight: 400;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
 }
 
 a:hover {
-  color: var(--gray);
+  color: var(--accent);
+}
+
+/* Content links (internal + external): subtle dotted underline, muted; teal on hover */
+a.internal,
+a.external {
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, var(--gray) 50%, transparent);
+  text-underline-offset: 0.18em;
+}
+
+a.internal:hover,
+a.external:hover {
+  color: var(--accent);
+  text-decoration-color: var(--accent);
 }
 
 /* Hide external link glyph (also disabled in config) */
@@ -531,16 +549,96 @@ a.external .external-icon {
   display: none !important;
 }
 
-/* External links: colored + underlined */
-a.external {
-  text-decoration: underline !important;
-  text-decoration-color: var(--accent);
-  text-underline-offset: 0.2em;
+/* Image links: no underline (would draw a rule under the image) */
+a:has(> img),
+a:has(> picture),
+a.internal:has(> img),
+a.internal:has(> picture),
+a.external:has(> img),
+a.external:has(> picture) {
+  text-decoration: none;
 }
 
-/* Internal links: colored only, no underline, no pills */
-a.internal {
-  text-decoration: none !important;
+/* Navigation chrome: clean, no dotted underline */
+.page-title a,
+header a,
+footer a,
+.explorer a,
+.toc a,
+.tag-sections a,
+.folder-container a,
+.homepage-crawl-frontier h2 a {
+  text-decoration: none;
+}
+
+/* Homepage crawl frontier — editorial section treatment.
+   Layout from nathan.rs: section boxes flow into a 2-column CSS grid (not
+   stacked vertically, not an auto-fit grid). Each box has a left-justified
+   muted uppercase header on a hairline rule, with a single-column link list
+   below. Same four boxes (Posts / Wiki / Drafts / Apps), only restyled. */
+.homepage-crawl-frontier {
+  margin: 2.5rem 0 0;
+}
+
+.homepage-crawl-frontier__sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(1.5rem, 4vw, 3rem);
+  align-items: start;
+}
+
+.homepage-crawl-frontier section {
+  min-width: 0;
+}
+
+.homepage-crawl-frontier h2 {
+  color: var(--gray);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.homepage-crawl-frontier h2 a {
+  color: inherit;
+}
+
+.homepage-crawl-frontier h2 a:hover {
+  color: var(--accent);
+}
+
+.homepage-crawl-frontier ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.homepage-crawl-frontier li {
+  margin: 0;
+  padding: 0.3rem 0;
+  line-height: 1.35;
+}
+
+.homepage-crawl-frontier li > a {
+  display: inline-block;
+  line-height: 1.3;
+}
+
+.homepage-crawl-frontier p {
+  color: var(--gray);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  margin: 0.2rem 0 0;
+}
+
+/* Single column on narrow screens */
+@media all and (max-width: 800px) {
+  .homepage-crawl-frontier__sections {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* Text selection highlighting with proper contrast */
