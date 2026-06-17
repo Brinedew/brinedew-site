@@ -1,0 +1,49 @@
+/* Iconoplasm toolbar popup — cosmetic recreation of popup.css. */
+.popup {
+  width: 380px;
+  font-family: "IBM Plex Mono", monospace;
+  color: oklch(20% 0.035 50);
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, #1b7269 8%, transparent), transparent 34%),
+    linear-gradient(180deg, #fbf7f0, #f3e9da);
+  border: 1px solid rgba(32,18,11,.14);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(33,21,12,.22);
+  overflow: hidden;
+}
+.popup-shell { display: grid; gap: .95rem; padding: 1rem; }
+.popup-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.popup-brand { display: flex; align-items: center; gap: .78rem; }
+.popup-brand img { border-radius: 10px; box-shadow: 0 0 0 1px rgba(32,18,11,.12), 0 8px 18px rgba(33,21,12,.08); }
+.popup-kicker { margin: 0; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: color-mix(in srgb, #20120b 78%, transparent); }
+.popup-brand h1 { margin: .1rem 0 0; font-family: "League Spartan", sans-serif; font-size: 1.58rem; font-weight: 800; line-height: .98; }
+.popup-version { padding: .32rem .55rem; border: 1px solid rgba(32,18,11,.18); border-radius: 999px; background: rgba(255,255,255,.5); font-size: .74rem; color: #5a4736; }
+
+.popup-tabs { display: flex; gap: .25rem; padding: .2rem; border: 1px solid rgba(32,18,11,.16); border-radius: 10px; background: rgba(255,255,255,.4); }
+.popup-tab { flex: 1; padding: .48rem .6rem; border: 0; border-radius: 8px; background: transparent; font-family: inherit; font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; color: #5a4736; cursor: pointer; }
+.popup-tab.active { background: #fbf7f0; color: #20120b; font-weight: 600; box-shadow: 0 1px 3px rgba(33,21,12,.06), 0 0 0 1px rgba(32,18,11,.12); }
+
+.popup-section { display: grid; gap: .9rem; padding: .95rem; border: 1px solid rgba(32,18,11,.14); border-radius: 14px; background: rgba(255,255,255,.45); box-shadow: 0 10px 24px rgba(33,21,12,.05); }
+.popup-legend { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: color-mix(in srgb, #20120b 78%, transparent); }
+.popup-field { display: grid; gap: .42rem; }
+
+.seg { display: flex; padding: 3px; border-radius: 10px; background: color-mix(in srgb, rgba(32,18,11,.16) 34%, #f6efe4); }
+.seg button { flex: 1; min-height: 2.2rem; padding: .4rem .3rem; border: 1px solid transparent; border-radius: 7px; background: transparent; font-family: inherit; font-size: .68rem; letter-spacing: .04em; color: color-mix(in srgb, #5a4736 64%, transparent); cursor: pointer; line-height: 1.1; }
+.seg button.on { border-color: rgba(32,18,11,.12); background: #fbf7f0; color: #20120b; box-shadow: 0 1px 3px rgba(33,21,12,.06); }
+
+.popup-input-row { display: flex; gap: .5rem; }
+.popup-input { flex: 1; min-width: 0; padding: .5rem .7rem; border: 1px solid rgba(32,18,11,.2); border-radius: 8px; background: rgba(255,255,255,.6); font-family: inherit; font-size: .85rem; letter-spacing: .04em; color: #20120b; text-transform: uppercase; }
+.popup-input::placeholder { text-transform: none; color: rgba(90,71,54,.5); }
+.popup-input:focus { outline: none; border-color: #1b7269; box-shadow: 0 0 0 3px color-mix(in srgb,#1b7269 14%,transparent); }
+.popup-btn { padding: .5rem .86rem; border: 1px solid rgba(32,18,11,.2); border-radius: 8px; background: #1b7269; color: #fff; font-family: inherit; font-size: .9rem; font-weight: 600; cursor: pointer; }
+.popup-btn.full { display: block; width: 100%; text-align: center; text-decoration: none; }
+
+.popup-list { list-style: none; margin: 0; padding: 0; }
+.popup-li { display: flex; align-items: center; justify-content: space-between; padding: .5rem .2rem; border-bottom: 1px solid rgba(32,18,11,.1); }
+.popup-li:last-child { border-bottom: 0; }
+.popup-badge { font-size: .6rem; text-transform: uppercase; letter-spacing: .08em; color: #5a4736; background: rgba(32,18,11,.1); padding: .1rem .34rem; border-radius: 3px; }
+.popup-li .sym { font-family: "Special Elite", serif; font-size: .98rem; margin-left: .4rem; }
+.popup-x { width: 1.4rem; height: 1.4rem; border: 0; border-radius: 4px; background: transparent; color: rgba(90,71,54,.62); cursor: pointer; font-family: inherit; }
+.popup-x:hover { background: color-mix(in srgb, #a24834 12%, transparent); color: #a24834; }
+.popup-note { margin: 0; font-size: .82rem; color: #5a4736; line-height: 1.4; }
+.popup-status { display: flex; align-items: center; gap: .5rem; margin-top: .65rem; padding: .65rem .7rem; border: 1px solid rgba(90,71,54,.16); border-radius: 6px; background: rgba(255,255,255,.4); font-size: .85rem; color: #5a4736; }

@@ -1,0 +1,181 @@
+/* ============================================================================
+   ICONOPLASM — colors_and_type.css
+   Core visual foundations: fonts, color tokens, type scale, semantic styles.
+   Source of truth: iconoplasm-extension (popup.css, content.css,
+   generated/shared-card-label.css).
+
+   The brand is a "wet lab gene blot archive where each gene is a character."
+   Everything imitates real printed lab materials: cream specimen paper,
+   typewriter fields, teal pen annotations, rust ink stamps.
+   ============================================================================ */
+
+/* ---- 1. FONTS -------------------------------------------------------------
+   Three voices in a strict hierarchy. Never mix their jobs.
+   1) IBM Plex Mono   — pre-printed form chrome (labels, captions, the grid).
+                        Gene-INDEPENDENT. Defines the fields.
+   2) Special Elite   — typewritten molecular values that fill the fields.
+                        Monospace typewriter feel; sits inside form slots.
+   3) Caveat          — handwritten teal annotations of human-like traits.
+                        Spills OUT of fields, rotated, for authentic effect.
+   + League Spartan 800 — the gene SYMBOL only (TP53, BRCA1). The loud headline.
+   --------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-Regular.woff2") format("woff2"),
+       url("fonts/IBMPlexMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-Medium.woff2") format("woff2"),
+       url("fonts/IBMPlexMono-Medium.ttf") format("truetype");
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "League Spartan";
+  src: url("fonts/LeagueSpartan-800.woff2") format("woff2"),
+       url("fonts/LeagueSpartan-800.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Special Elite";
+  src: url("fonts/SpecialElite-Regular.woff2") format("woff2"),
+       url("fonts/SpecialElite-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Caveat";
+  src: url("fonts/Caveat-400.woff2") format("woff2"),
+       url("fonts/Caveat-400.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* ---- 2. FONT FAMILY TOKENS --------------------------------------------- */
+  --font-symbol: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif; /* gene symbol */
+  --font-label:  "IBM Plex Mono", ui-monospace, monospace;  /* pre-printed chrome */
+  --font-type:   "Special Elite", "IBM Plex Mono", monospace; /* typewritten values */
+  --font-hand:   "Caveat", "Segoe Script", cursive;          /* pen annotations */
+
+  /* ---- 3. CORE PALETTE (warm paper system, from popup.css) --------------- */
+  --light:      oklch(96% 0.015 75);    /* #f6efe4  warm cream paper        */
+  --dark:       oklch(20% 0.035 50);    /* #281a10  dark roast ink          */
+  --accent:     oklch(50% 0.08 185);    /* #1b7269  teal pen (the only pop) */
+  --ui-border:  oklch(82% 0.02 70);     /* #d8cdba  hairline / field border */
+  --secondary:  oklch(40% 0.04 55);     /* #5a4736  muted brown label text  */
+
+  /* literal hexes for tools that don't speak oklch */
+  --paper:        #f4ede5;  /* specimen paper            */
+  --paper-2:      #efe6d9;  /* paper, one shade deeper   */
+  --ink:          #20120b;  /* near-black warm ink       */
+  --ink-soft:     #34241b;  /* typed value brown         */
+  --pen:          #1b7269;  /* teal annotation pen       */
+  --stamp:        #a24834;  /* rust red ink stamp        */
+  --rule:         rgba(32,18,11,0.16);  /* form hairline           */
+  --rule-strong:  rgba(32,18,11,0.26);  /* form border             */
+  --muted:        rgba(32,18,11,0.42);  /* faint pre-printed text  */
+
+  /* ---- 4. NEO-DRAB (dark "sodium dossier" skin, optional) ---------------- */
+  --drab-paper:   #171a14;  /* dark olive field paper    */
+  --drab-paper-2: #202318;
+  --drab-ink:     #ede2b5;  /* pale chartreuse ink       */
+  --drab-pen:     #d7b642;  /* sodium yellow accent      */
+  --drab-stamp:   #c06a3a;
+
+  /* ---- 5. PROMO / MARKETING (dark stage, from promo-marquee) ------------- */
+  --stage:        #161616;  /* near-black promo backdrop */
+  --stage-ink:    #f0ece4;
+  --stage-muted:  #9a948a;
+
+  /* ---- 6. PLACEHOLDER GENE COLOR ----------------------------------------- */
+  /* Each gene gets a server-assigned unique color. Before it loads, or for an
+     unknown gene, fall back to this neutral slate. Pills/underlines/ellipses
+     all key off --gene-color. */
+  --gene-color:   #6b6b78;  /* DEFAULT_PLACEHOLDER_COLOR */
+  --gene-fg:      #ffffff;  /* legible text on a filled pill */
+
+  /* ---- 7. RADII & ELEVATION ---------------------------------------------- */
+  /* Two worlds: SOFT chrome (popup, archive shell) is gently rounded; the
+     printed LAB CARD itself is hard-edged (radius 0) like a real sheet. */
+  --radius-xl: 14px;   /* popup section cards            */
+  --radius-lg: 10px;   /* segmented tracks, inputs       */
+  --radius-sm: 4px;    /* simple tooltip card            */
+  --radius-card: 0px;  /* the printed specimen sheet — NEVER round */
+
+  --shadow-card:  0 10px 24px rgba(53,38,27,0.10);  /* grounded, not floating */
+  --shadow-soft:  0 10px 24px rgba(33,21,12,0.05);
+  --shadow-pop:   0 8px 18px rgba(40,32,24,0.10), 0 16px 34px rgba(40,32,24,0.18);
+
+  /* ---- 8. TYPE SCALE (semantic) ------------------------------------------ */
+  /* Sizes given for typical web/popup chrome. The lab card itself scales
+     everything off container width (cqw) — see shared-card-label.css. */
+}
+
+/* ---- 9. SEMANTIC TYPOGRAPHY ----------------------------------------------
+   Apply these classes (or copy the rules) to get the right voice instantly. */
+
+/* Gene symbol — the loud headline. Tight tracking, near-1 leading. */
+.t-symbol {
+  font-family: var(--font-symbol);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+  color: var(--ink);
+}
+
+/* Pre-printed field label / kicker / caption — quiet, spaced, uppercase. */
+.t-label {
+  font-family: var(--font-label);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  color: var(--muted);
+}
+
+/* Typewritten molecular value — fills a form field. */
+.t-typed {
+  font-family: var(--font-type);
+  letter-spacing: 0.03em;
+  line-height: 1.05;
+  color: var(--ink);
+}
+
+/* Handwritten annotation — teal pen, rotated, spills out of the field. */
+.t-hand {
+  font-family: var(--font-hand);
+  color: var(--pen);
+  line-height: 0.9;
+  letter-spacing: 0.01em;
+  transform: rotate(-4deg);
+  transform-origin: left center;
+}
+
+/* Body / UI copy — plain mono. */
+.t-body {
+  font-family: var(--font-label);
+  font-weight: 400;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: var(--secondary);
+}
+
+/* Full gene name (subhead under the symbol) — typewriter, pretty wrap. */
+.t-name {
+  font-family: var(--font-type);
+  letter-spacing: 0;
+  line-height: 1.22;
+  text-wrap: pretty;
+  color: color-mix(in srgb, var(--ink) 92%, transparent);
+}

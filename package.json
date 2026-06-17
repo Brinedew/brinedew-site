@@ -3,6 +3,7 @@
   "description": "🌱 publish your digital garden and notes as a website",
   "private": true,
   "version": "5.0.0",
+  "packageManager": "pnpm@11.0.9",
   "type": "module",
   "author": "jackyzha0 <j.zhao2k19@gmail.com>",
   "license": "MIT",
@@ -13,22 +14,34 @@
   },
   "scripts": {
     "quartz": "./quartz/bootstrap-cli.mjs",
-    "docs": "npx quartz build --serve -d docs",
-    "check": "tsc --noEmit && npx prettier . --check",
-    "format": "npx prettier . --write",
-    "test": "tsx --test",
+    "sync:iconoplasm-shared": "node ./scripts/sync-iconoplasm-shared.mjs",
+    "package:iconoplasm-extension": "node ./scripts/package-iconoplasm-extension.mjs",
+    "package:iconoplasm-firefox": "node ./scripts/package-iconoplasm-extension.mjs --target=firefox",
+    "package:iconoplasm-safari": "node ./scripts/package-iconoplasm-extension.mjs --target=safari",
+    "package:iconoplasm-firefox-source": "node ./scripts/package-iconoplasm-firefox-source.mjs",
+    "version:iconoplasm-extension:patch": "node ./scripts/bump-iconoplasm-extension-version.mjs --patch",
+    "version:iconoplasm-extension:minor": "node ./scripts/bump-iconoplasm-extension-version.mjs --minor",
+    "version:iconoplasm-extension:major": "node ./scripts/bump-iconoplasm-extension-version.mjs --major",
+    "dev": "pnpm run sync:iconoplasm-shared && node ./quartz/bootstrap-cli.mjs build --serve -d content",
+    "build": "pnpm run sync:iconoplasm-shared && node ./quartz/bootstrap-cli.mjs build -d content",
+    "docs": "pnpm run sync:iconoplasm-shared && node ./quartz/bootstrap-cli.mjs build --serve -d docs",
+    "watch": "pnpm run sync:iconoplasm-shared && node ./quartz/bootstrap-cli.mjs watch -d content",
+    "check": "tsc --noEmit && pnpm exec prettier . --check",
+    "benchmark:iconoplasm-extension": "node ./scripts/benchmark-iconoplasm-extension.mjs",
+    "format": "pnpm exec prettier . --write",
+    "test": "node scripts/run-tests.mjs",
     "profile": "0x -D prof ./quartz/bootstrap-cli.mjs build --concurrency=1",
-    "install-plugins": "npx tsx ./quartz/plugins/loader/install-plugins.ts",
-    "build": "node ./quartz/bootstrap-cli.mjs build -d content"
+    "install-plugins": "pnpm exec quartz plugin install --from-config"
   },
   "engines": {
     "npm": ">=10.9.2",
-    "node": ">=22"
+    "node": ">=22",
+    "pnpm": ">=10.0.0"
   },
   "keywords": [
     "site generator",
     "ssg",
-    "digital-garden",
+    "digital garden",
     "markdown",
     "blog",
     "quartz"
@@ -49,8 +62,10 @@
     "globby": "^16.1.0",
     "hast-util-from-html": "^2.0.3",
     "hast-util-to-jsx-runtime": "^2.3.6",
+    "hsluv": "^1.0.1",
     "isomorphic-git": "^1.36.3",
     "lightningcss": "^1.31.1",
+    "lit": "3.3.2",
     "micromorph": "^0.4.5",
     "minimatch": "^10.1.1",
     "preact": "^10.28.2",
@@ -60,10 +75,12 @@
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.2",
     "rfdc": "^1.4.1",
+    "roughjs": "^4.6.6",
     "serve-handler": "^6.1.6",
     "sharp": "^0.34.5",
     "source-map-support": "^0.5.21",
     "to-vfile": "^8.0.0",
+    "toml": "^3.0.0",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.1.0",
     "vfile": "^6.0.3",
@@ -72,7 +89,13 @@
     "yaml": "^2.8.2",
     "yargs": "^18.0.0"
   },
+  "overrides": {
+    "minimatch": "^10.1.1",
+    "brace-expansion": "^5.0.2",
+    "js-yaml": "^4.1.1"
+  },
   "devDependencies": {
+    "@cloudflare/puppeteer": "^1.1.0",
     "@quartz-community/types": "github:quartz-community/types",
     "@quartz-community/utils": "github:quartz-community/utils",
     "@types/hast": "^3.0.4",
@@ -84,6 +107,9 @@
     "esbuild": "^0.27.2",
     "prettier": "^3.8.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "web-ext": "^10.1.0",
+    "wrangler": "^4.63.0",
+    "wxt": "0.20.26"
   }
 }

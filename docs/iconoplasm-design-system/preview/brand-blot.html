@@ -1,0 +1,24 @@
+<!-- @dsCard group="Brand" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="card.css">
+<style>
+  body{background:#e9e3d8}
+  .strip{display:flex;gap:18px;align-items:flex-start}
+  .blot{position:relative;width:200px;aspect-ratio:384/512;border:1px solid var(--rule-strong);overflow:hidden;background:linear-gradient(160deg,#2a3a52,#0e1320)}
+  .blot.b2{background:linear-gradient(160deg,#5a2f4a,#1b0f18)}
+  .blot.b3{background:linear-gradient(160deg,#3d6b4f,#15241a)}
+  .blot::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 56%,rgba(16,10,8,.18) 78%,rgba(16,10,8,.62) 100%)}
+  .ov{position:absolute;left:0;right:0;bottom:0;padding:14px;display:flex;align-items:flex-end;justify-content:space-between;z-index:1}
+  .ov .nm{font-family:var(--font-type);font-size:11px;color:rgba(250,238,222,.92);text-shadow:0 3px 12px rgba(8,5,4,.42)}
+  .ov .sym{font-family:var(--font-symbol);font-weight:800;font-size:30px;letter-spacing:-0.05em;line-height:.9;color:rgba(253,245,232,.96);text-shadow:0 8px 18px rgba(8,5,4,.4)}
+</style>
+</head><body><div class="card" style="padding:18px 22px">
+  <div class="kicker">Blot only · 384×512 portrait + symbol overlay + protection gradient</div>
+  <div class="strip">
+    <div class="blot"><div class="ov"><span class="nm">rhodopsin</span><span class="sym">RHO</span></div></div>
+    <div class="blot b2"><div class="ov"><span class="nm">homeobox B1</span><span class="sym">HOXB1</span></div></div>
+    <div class="blot b3"><div class="ov"><span class="nm">insulin</span><span class="sym">INS</span></div></div>
+  </div>
+  <div class="kicker">Where another product would use an icon, Iconoplasm uses the gene's full character portrait.</div>
+</div></body></html>

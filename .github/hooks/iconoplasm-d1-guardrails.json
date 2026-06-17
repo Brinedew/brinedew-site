@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "command",
+        "windows": {
+          "command": "pwsh -File .github/hooks/iconoplasm-d1-guardrails.ps1"
+        },
+        "timeout": 15
+      }
+    ]
+  }
+}

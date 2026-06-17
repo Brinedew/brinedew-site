@@ -1,0 +1,194 @@
+name: Deploy Production (Cloudflare Pages + Worker)
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CACHE_BUST: ${{ github.sha }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          pip install pandas pyyaml python-frontmatter requests
+
+      - name: Enrich protein pages
+        run: python scripts/enrich-proteins.py
+
+      - name: Upload image generation queue
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: image-generation-queue
+          path: image_generation_queue.txt
+          if-no-files-found: ignore
+
+      - name: Setup Node.js (22.x)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+
+      - name: Verify Node/pnpm and dependency release delay
+        run: |
+          node -v
+          pnpm -v
+          pnpm config set minimumReleaseAge 1440
+          pnpm config get minimumReleaseAge
+
+      - name: Validate Cloudflare secrets
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "Missing CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN or CLOUDFLARE_ACCOUNT_ID repository secret." >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+
+      - name: Install Quartz plugins
+        run: pnpm exec quartz plugin install --from-config
+
+      - name: Bake Iconoplasm observability snapshot (production)
+        run: node scripts/generate-iconoplasm-observability-snapshot.mjs --env production
+
+      - name: Verify Iconoplasm Worker budget guards
+        run: |
+          # This block must stay before deploy. The Iconoplasm sync fix is not
+          # just Worker code; it is the guarantee that the canonical GitHub path
+          # cannot overwrite the live Worker with a version that reintroduces
+          # per-scope KV publishes, Queue retry loops, hot D1 reads, or legacy
+          # Node package-manager installs. If a future deploy fails here, assume the
+          # guardrail caught real drift until the code proves otherwise.
+          pnpm test -- \
+            workers/iconoplasm.d1-cost-barrier.test.js \
+            workers/iconoplasm.d1-hot-query-guard.test.js \
+            workers/iconoplasm.do-not-delete-cost-guards.test.js \
+            workers/iconoplasm.sync-finalization-queue.test.js \
+            workers/iconoplasm.card-catalog-budget-preflight.test.js
+          node scripts/assert-iconoplasm-worker-budget-guards.mjs
+
+      - name: Build Quartz site
+        run: pnpm run build
+
+      - name: Verify Geneguessr assets bundled
+        run: |
+          ls -lah public/static/geneguessr
+          grep -n "bootstrapGame" public/static/geneguessr/app.js
+
+      - name: Ensure CNAME file exists
+        run: |
+          mkdir -p public
+          if [ -f "content/CNAME" ]; then
+            cp content/CNAME public/CNAME
+          elif [ -f "CNAME" ]; then
+            cp CNAME public/CNAME
+          else
+            echo "brinedew.com" > public/CNAME
+          fi
+
+      - name: Disable Jekyll processing
+        run: |
+          mkdir -p public
+          touch public/.nojekyll
+
+      # Pages validates the wrangler.toml in its current working directory and rejects
+      # Worker-only keys like `main`, `routes`, and `triggers`. Keep the production
+      # Worker config at repo root, but copy a tiny Pages-only config into an isolated
+      # temp directory so this workflow remains the single canonical deploy path.
+      - name: Prepare isolated Pages Wrangler config
+        run: |
+          mkdir -p .wrangler-pages
+          cp wrangler.pages.toml .wrangler-pages/wrangler.toml
+
+      - name: Deploy production static site to Cloudflare Pages
+        working-directory: .wrangler-pages
+        run: pnpm exec wrangler pages deploy ../public --project-name brinedew-bio --branch main
+
+      - name: Apply Geneguessr D1 migrations (production)
+        run: pnpm exec wrangler d1 migrations apply geneguessr --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+
+      - name: Apply Iconoplasm D1 migrations (production)
+        run: pnpm exec wrangler d1 migrations apply iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+
+      - name: Deploy the only allowed internal stateful worker (production)
+        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+
+      - name: Ensure Iconoplasm finalization Queue consumer is bound
+        run: |
+          set -euo pipefail
+          output="$(pnpm exec wrangler queues consumer worker add iconoplasm-sync-finalization geneguessr-api 2>&1)" || {
+            echo "$output"
+            if echo "$output" | grep -Eiq "already exists|already.*consumer|duplicate"; then
+              exit 0
+            fi
+            exit 1
+          }
+          echo "$output"
+
+      - name: Upload public edge worker script with routes (production)
+        run: pnpm exec wrangler deploy
+
+      - name: Reassign production routes to the public edge worker
+        run: |
+          node scripts/reassign-cloudflare-worker-routes.mjs \
+            brinedew.bio \
+            the-only-allowed-public-edge-worker-that-must-not-touch-state \
+            "brinedew.bio/*" \
+            "brinedew.bio/api/*" \
+            "www.brinedew.bio/*" \
+            "geneguessr.brinedew.bio/*" \
+            "iconoplasm.brinedew.bio/*"
+
+      - name: Smoke test Discord OAuth bootstrap (production)
+        run: |
+          set -euo pipefail
+          headers_file="$(mktemp)"
+          curl -sS -D "$headers_file" -o /dev/null "https://brinedew.bio/api/auth/login?leaderboard_opt_in=0"
+
+          status="$(awk 'NR==1 { print $2 }' "$headers_file")"
+          location="$(grep -i '^Location:' "$headers_file" | head -n1 | sed -E 's/^[Ll]ocation:[[:space:]]*//' | tr -d '\r')"
+
+          echo "OAuth login status: $status"
+          echo "OAuth redirect location: $location"
+
+          if [ "$status" != "302" ]; then
+            echo "Expected 302 from production /api/auth/login but got $status" >&2
+            exit 1
+          fi
+
+          if [[ "$location" != https://discord.com/oauth2/authorize* ]]; then
+            echo "Expected Discord OAuth redirect URL, got: $location" >&2
+            exit 1
+          fi
+
+          if echo "$location" | grep -Eq 'client_id=(|undefined|null)($|&)'; then
+            echo "Discord OAuth redirect has invalid client_id in production." >&2
+            exit 1
+          fi

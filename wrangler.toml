@@ -1,0 +1,88 @@
+# GeneGuessr API Worker
+#
+# DATA FLOW (so future-you doesn't get confused):
+# ------------------------------------------------
+# 1. Protein data source: Datasets/cellulore/proteins_with_demographics.json
+# 2. This worker serves data from D1 via /api/protein, /api/game/bootstrap, etc.
+# 3. Frontend (quartz/static/geneguessr/app.js) consumes the API
+#
+# Worker deployment: GitHub Actions runs `wrangler deploy` on push to main
+#
+# SECRETS (set via `wrangler secret put <NAME>`):
+# -----------------------------------------------
+# Discord OAuth (existing):
+#   DISCORD_CLIENT_ID        - OAuth app client ID
+#   DISCORD_CLIENT_SECRET    - OAuth app client secret
+#   DISCORD_GUILD_ID         - Server ID for membership check
+#   DISCORD_SUPPORTER_ROLE_ID - Optional: role snowflake that marks a user as a
+#                               supporter. If set, the OAuth callback reads the
+#                               user's Discord roles and upgrades users.tier
+#                               from "registered" to "supporter" when present.
+#
+# Discord Bot (for daily recap):
+#   DISCORD_PUBLIC_KEY             - Ed25519 public key for interactions validation
+#   DISCORD_APPLICATION_ID         - Discord app ID (same as client ID)
+#   DISCORD_BOT_TOKEN              - Bot token for REST API posting
+#   DISCORD_GENEGUESSR_CHANNEL_ID  - Channel ID for posting recaps
+#   BOT_CRON_TOKEN                 - Shared secret for protected recap endpoints
+#
+# Other:
+#   DAILY_TARGET_SALT        - Salt for deterministic daily protein selection
+
+name = "the-only-allowed-public-edge-worker-that-must-not-touch-state"
+main = "workers/the-only-allowed-public-edge-worker-that-must-not-touch-state.js"
+compatibility_date = "2025-11-12"
+compatibility_flags = ["nodejs_compat"]
+
+# Keep the worker off workers.dev; only serve the custom domain route.
+workers_dev = false
+preview_urls = false
+
+
+# Custom domain routes
+routes = [
+  { pattern = "brinedew.bio/*", zone_name = "brinedew.bio" },
+  { pattern = "brinedew.bio/api/*", zone_name = "brinedew.bio" },
+  { pattern = "www.brinedew.bio/*", zone_name = "brinedew.bio" },
+  { pattern = "geneguessr.brinedew.bio/*", zone_name = "brinedew.bio" },
+  { pattern = "iconoplasm.brinedew.bio/*", zone_name = "brinedew.bio" }
+]
+
+# Keep observability logs explicitly enabled across CLI deployments.
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1
+
+# Repo-wide hard boundary:
+# this routed public worker is not allowed to hold D1, KV, R2, or session
+# bindings at all. It must stay a dumb edge shell and forward everything to the
+# one internal worker that is allowed to touch state.
+[[services]]
+binding = "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE"
+service = "geneguessr-api"
+
+[env.staging]
+name = "the-only-allowed-public-edge-worker-that-must-not-touch-state-staging"
+
+# Staging should be reachable without DNS work.
+workers_dev = true
+preview_urls = true
+
+# Do not claim the prod custom-domain route in staging, but do provide same-origin
+# API routing for the staging site.
+routes = [{ pattern = "staging.brinedew.bio/*", zone_name = "brinedew.bio" }]
+
+[[env.staging.services]]
+binding = "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE"
+service = "geneguessr-api-staging"

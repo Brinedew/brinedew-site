@@ -1,0 +1,38 @@
+<!-- @dsCard group="Components" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="card.css">
+<style>
+  body{background:#e9e3d8}
+  .tip{--c:#c0392b;display:flex;width:520px;max-width:100%;background:#d9d2c8;border-radius:4px;overflow:hidden;box-shadow:0 0 0 1px rgba(74,61,49,.16),0 8px 18px rgba(40,32,24,.1),0 16px 34px rgba(40,32,24,.18)}
+  .por{flex:0 0 176px;background:linear-gradient(160deg,#7a1f16,#2a0d09)}
+  .bod{flex:1;padding:18px 18px 14px 14px;background:rgba(248,244,236,.99);min-width:0}
+  .sym{font-family:var(--font-symbol);font-weight:800;font-size:34px;letter-spacing:-.05em;line-height:.9;color:#211c18}
+  .nm{font-family:var(--font-type);font-size:15px;margin-top:3px;color:#211c18}
+  .hr{height:1px;background:rgba(74,61,49,.18);margin:11px 0 4px}
+  .colhead{display:grid;grid-template-columns:1fr 1fr;padding:4px 0 3px;border-bottom:1px solid rgba(74,61,49,.2)}
+  .colhead span{font-family:var(--font-label);font-size:9px;letter-spacing:.14em;text-transform:uppercase;opacity:.5;padding:0 8px}
+  .colhead span:last-child{color:#2c7a72;opacity:.85;padding-left:12px}
+  .mrow{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid rgba(74,61,49,.08);align-items:center}
+  .mrow:last-child{border-bottom:0}
+  .mcell{display:flex;flex-direction:column;min-width:0;padding:5px 8px}
+  .mcell.human{border-left:1px solid rgba(74,61,49,.12);padding-left:12px}
+  .ml{font-family:var(--font-label);font-size:9px;text-transform:uppercase;letter-spacing:.08em;opacity:.55}
+  .mv{font-family:var(--font-type);font-size:15px;opacity:.9;line-height:1.1}
+  .hv{font-family:var(--font-hand);font-size:22px;color:#2c7a72;line-height:.95}
+</style>
+</head><body><div class="card" style="padding:18px 24px">
+  <div class="kicker">Hover card · "Simple" variant — left column molecular data, right column its human-term isomorphism</div>
+  <div class="tip">
+    <div class="por"></div>
+    <div class="bod">
+      <div class="sym">TP53</div>
+      <div class="nm">tumor protein p53</div>
+      <div class="hr"></div>
+      <div class="mrow"><div class="mcell"><span class="ml">first noted</span><span class="mv">1979</span></div><div class="mcell human"><span class="ml">age</span><span class="hv">41 y.o.</span></div></div>
+      <div class="mrow"><div class="mcell"><span class="ml">mass</span><span class="mv">44 kDa</span></div><div class="mcell human"><span class="ml">weight</span><span class="hv">44 kg</span></div></div>
+      <div class="mrow"><div class="mcell"><span class="ml">soluble</span><span class="mv">soluble</span></div><div class="mcell human"><span class="ml">sex</span><span class="hv">female</span></div></div>
+      <div class="mrow"><div class="mcell"><span class="ml">pfam clan</span><span class="mv">P53</span></div><div class="mcell human"><span class="ml">style</span><span class="hv">dark academia</span></div></div>
+    </div>
+  </div>
+</div></body></html>

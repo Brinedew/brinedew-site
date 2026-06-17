@@ -1,0 +1,660 @@
+/* Iconoplasm content styles -- gene highlighting + horizontal tooltip infobox.
+ * Canonical extension root: D:\Coding\Website\iconoplasm-extension
+ * Fonts: IBM Plex Mono (body/labels), League Spartan (gene symbol), Special Elite (gene name).
+ * Animation: fade only, no movement.
+ * Tooltip: portrait left, infobox right, full gene color as background. */
+
+/* Font faces are injected dynamically by content.js using chrome.runtime.getURL */
+
+/* -- Gene highlight ------------------------------------------------- */
+.iconoplasm-gene {
+  position: relative;
+  display: inline;
+  overflow-anchor: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  line-height: inherit;
+  white-space: inherit;
+  vertical-align: baseline;
+  transition:
+    opacity 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+  text-decoration-skip-ink: auto;
+  cursor: text;
+}
+
+.iconoplasm-gene-copy {
+  display: inline;
+  position: relative;
+  z-index: 1;
+  font: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  line-height: inherit;
+  white-space: inherit;
+  vertical-align: baseline;
+}
+
+.iconoplasm-gene-paint-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 0;
+}
+
+.iconoplasm-gene-paint-fragment {
+  position: absolute;
+  pointer-events: none;
+}
+
+.iconoplasm-gene--underline {
+  /* Fence: underline mode must be paint-only. Real borders change the inline
+     box metrics and can shift line breaks on dense text pages. */
+  background-image: linear-gradient(
+    to top,
+    var(--iconoplasm-gene-color, #6b6b78) 0,
+    var(--iconoplasm-gene-color, #6b6b78) 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 100% 0.16em;
+  background-position: 0 calc(100% - 0.01em);
+}
+
+.iconoplasm-gene--pill,
+.iconoplasm-gene--pill-outline {
+  display: inline;
+  position: relative;
+  z-index: 0;
+  margin: 0;
+  background: transparent;
+  box-shadow: none;
+  line-height: inherit;
+  isolation: isolate;
+}
+
+.iconoplasm-gene--pill .iconoplasm-gene-copy,
+.iconoplasm-gene--pill-outline .iconoplasm-gene-copy {
+  border-radius: 0.18em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.iconoplasm-gene--pill {
+  color: var(--iconoplasm-gene-fg, #ffffff);
+  text-shadow: 0 0.02em 0.12em rgba(0, 0, 0, 0.16);
+}
+
+.iconoplasm-gene--pill .iconoplasm-gene-copy {
+  background: color-mix(in srgb, var(--iconoplasm-gene-color, #6b6b78) 72%, transparent);
+  box-shadow:
+    0 0 0 0.1em color-mix(in srgb, var(--iconoplasm-gene-color, #6b6b78) 72%, transparent),
+    0 0 0 0.145em rgba(22, 18, 16, 0.58);
+}
+
+.iconoplasm-gene--pill-outline {
+  color: inherit;
+  text-shadow: none;
+}
+
+.iconoplasm-gene--pill-outline .iconoplasm-gene-copy {
+  box-shadow:
+    0 0 0 0.11em color-mix(in srgb, var(--iconoplasm-gene-color, #6b6b78) 76%, transparent),
+    inset 0 0 0 0.08em rgba(255, 255, 255, 0.3);
+}
+
+.iconoplasm-gene--ellipse {
+  position: relative;
+  z-index: 0;
+  margin: 0;
+  color: inherit;
+  line-height: inherit;
+  text-decoration: none;
+  isolation: isolate;
+}
+
+.iconoplasm-gene--ellipse .iconoplasm-gene-copy {
+  display: inline;
+}
+
+.iconoplasm-gene-paint-fragment--ellipse .iconoplasm-gene-rough-loop {
+  inset: 0;
+}
+
+.iconoplasm-gene-rough-loop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  /* Keep ellipse strokes keyed to the gene color itself.
+     If we mix with currentColor here, the same gene shifts between black/blue/body-link tints
+     depending on surrounding page chrome, which makes identical genes look inconsistent. */
+  color: var(--iconoplasm-gene-color, #6b6b78);
+  z-index: 0;
+}
+
+.iconoplasm-gene--ellipse .iconoplasm-gene-rough-loop path {
+  vector-effect: non-scaling-stroke;
+}
+
+.iconoplasm-gene--ellipse .iconoplasm-gene-rough-loop svg,
+.iconoplasm-gene--ellipse .iconoplasm-gene-rough-loop g,
+.iconoplasm-gene--ellipse .iconoplasm-gene-rough-loop ellipse {
+  overflow: visible;
+}
+
+.iconoplasm-gene:hover {
+  opacity: 0.85;
+}
+
+body.iconoplasm-highlight-on-hover .iconoplasm-gene:not(:hover) {
+  background-size: 0 0;
+}
+
+body.iconoplasm-highlight-on-hover .iconoplasm-gene:not(:hover) .iconoplasm-gene-paint-layer {
+  opacity: 0;
+}
+
+body.iconoplasm-highlight-on-hover .iconoplasm-gene--pill:not(:hover) {
+  color: inherit;
+  text-shadow: none;
+}
+
+/* -- Tooltip container: horizontal card ----------------------------- */
+/* Source: C:\Users\Admin\.codex\skills\normalize\SKILL.md (Spacing & Layout, Components) +
+   C:\Users\Admin\.codex\skills\polish\SKILL.md (Concentric radii, Surface separation).
+   Keep extension tooltip geometry close to the site brick cards. When this regains huge lift
+   shadows or overly sharp one-off corners, the shared card system starts feeling disjointed. */
+.iconoplasm-tooltip {
+  --iconoplasm-tooltip-shell: #d9d2c8;
+  --iconoplasm-tooltip-surface: rgba(248, 244, 236, 0.99);
+  --iconoplasm-tooltip-ink: #211c18;
+  --iconoplasm-tooltip-muted: rgba(33, 28, 24, 0.72);
+  --iconoplasm-tooltip-line-strong: rgba(74, 61, 49, 0.18);
+  --iconoplasm-tooltip-line: rgba(74, 61, 49, 0.08);
+  --iconoplasm-tooltip-shadow-1: rgba(40, 32, 24, 0.06);
+  --iconoplasm-tooltip-shadow-2: rgba(40, 32, 24, 0.1);
+  --iconoplasm-tooltip-shadow-3: rgba(40, 32, 24, 0.14);
+  --iconoplasm-tooltip-shadow-4: rgba(40, 32, 24, 0.18);
+  --iconoplasm-tooltip-portrait-base: color-mix(
+    in srgb,
+    var(--iconoplasm-gene-color, #6b6b78) 20%,
+    #dfe2df
+  );
+  position: absolute;
+  overflow-anchor: none;
+  z-index: 2147483647;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(8px) scale(0.96);
+  transition:
+    opacity 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Horizontal layout */
+  display: flex;
+  flex-direction: row;
+  width: 500px;
+  background: var(--iconoplasm-tooltip-shell);
+  color: var(--iconoplasm-tooltip-ink);
+
+  /* Card surface */
+  border-radius: 4px;
+  overflow: hidden;
+  border: none;
+
+  /* Keep the tooltip grounded like the site cards, not floating like a modal. */
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--iconoplasm-tooltip-line-strong) 74%, transparent),
+    0 8px 18px var(--iconoplasm-tooltip-shadow-2),
+    0 16px 34px var(--iconoplasm-tooltip-shadow-4);
+
+  -webkit-font-smoothing: antialiased;
+}
+
+.iconoplasm-tooltip:not(.iconoplasm-tooltip--frame-card) {
+  min-height: 298px;
+}
+
+.iconoplasm-tooltip-visible {
+  opacity: 1;
+  pointer-events: auto;
+  cursor: pointer;
+  transform: translateY(0) scale(1);
+}
+
+/* -- Portrait: left side -------------------------------------------- */
+.iconoplasm-tooltip-portrait {
+  /* Source: C:\Users\Admin\.codex\skills\normalize\SKILL.md (Spacing & Layout)
+     Mirror the site card: the portrait rail should feel fully docked to the text rail,
+     not like a narrower panel floating beside it. */
+  flex-shrink: 0;
+  width: 192px;
+  min-height: 240px; /* 4:5 ratio */
+  background-color: var(--iconoplasm-tooltip-portrait-base);
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  position: relative;
+}
+
+.iconoplasm-tooltip-portrait-img {
+  position: absolute;
+  inset: -1px;
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
+  margin: 0 !important;
+  max-width: none !important;
+  border: 0 !important;
+  vertical-align: top !important;
+  object-fit: cover;
+  object-position: center top;
+  display: none;
+}
+
+.iconoplasm-tooltip-portrait-fallback {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 16px;
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(
+        in srgb,
+        var(--iconoplasm-gene-color, #6b6b78) 18%,
+        var(--iconoplasm-tooltip-surface)
+      ),
+      color-mix(in srgb, var(--iconoplasm-tooltip-surface) 92%, transparent)
+    ),
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--iconoplasm-tooltip-ink) 12%, transparent),
+      transparent 60%
+    );
+}
+
+.iconoplasm-tooltip-portrait-missing .iconoplasm-tooltip-portrait-fallback {
+  display: flex;
+}
+
+/* Gradient fade on right edge */
+.iconoplasm-tooltip-portrait-fade {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  opacity: 0.9;
+  background: var(--iconoplasm-tooltip-line-strong);
+}
+
+.iconoplasm-tooltip-portrait-missing .iconoplasm-tooltip-portrait-fade {
+  display: none;
+}
+
+.iconoplasm-tooltip-portrait-status {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+
+.iconoplasm-tooltip-portrait-symbol {
+  font-family: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  color: var(--iconoplasm-tooltip-ink);
+}
+
+/* -- Infobox: right side -------------------------------------------- */
+.iconoplasm-tooltip-body {
+  /* Source: C:\Users\Admin\.codex\skills\polish\SKILL.md (Visual Alignment & Spacing)
+     + C:\Users\Admin\.codex\skills\normalize\SKILL.md (Spacing & Layout).
+     Match the site card's single text spine and tighter sub-row rhythm so the
+     extension tooltip does not drift into its own off-spec variant again. */
+  --icono-card-cell-pad-x: 8px;
+  --icono-card-origin-pad-x: 10px;
+  --icono-card-subrow-pad-y: 2px;
+  --icono-card-subrow-group-pad-top: 3px;
+  --icono-card-subrow-group-pad-bottom: 5px;
+  --icono-card-subrow-gap: 1px;
+  flex: 1;
+  padding: 20px 20px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-width: 0;
+  min-height: 240px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E"),
+    var(--iconoplasm-tooltip-surface);
+  color: var(--iconoplasm-tooltip-ink);
+}
+
+.iconoplasm-tooltip-lit-frame-shell {
+  width: 100%;
+  height: 100%;
+  /* Fence: the iframe used to rely on height:100% alone, which can collapse inside flex items and
+     makes the card appear "present in DOM but not visible". Keep an explicit floor here. */
+  min-height: 298px;
+}
+
+.iconoplasm-tooltip-lit-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 298px;
+  border: 0;
+  background: transparent;
+}
+
+.iconoplasm-tooltip-lit-frame--prewarm {
+  position: fixed !important;
+  left: -1px !important;
+  top: -1px !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+.iconoplasm-tooltip.iconoplasm-tooltip--frame-card {
+  /* Fence: Lit archival is a wide printed sheet, not the compact classic tooltip. Give the iframe
+     enough width to preserve the website's composition instead of crushing it into a narrow card. */
+  width: min(860px, calc(100vw - 16px));
+  max-width: none;
+  min-height: 298px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.iconoplasm-tooltip--variant-image-only.iconoplasm-tooltip--frame-card {
+  width: min(380px, calc(100vw - 16px));
+  aspect-ratio: 384 / 512;
+  min-height: 0;
+}
+
+.iconoplasm-tooltip--frame-card .iconoplasm-tooltip-portrait {
+  display: none;
+}
+
+.iconoplasm-tooltip.iconoplasm-tooltip--frame-card > .iconoplasm-tooltip-portrait {
+  display: none;
+}
+
+.iconoplasm-tooltip--frame-card .iconoplasm-tooltip-body {
+  flex: 1 1 auto;
+  padding: 0;
+  min-height: 298px;
+  background: transparent;
+}
+
+.iconoplasm-tooltip--variant-image-only.iconoplasm-tooltip--frame-card .iconoplasm-tooltip-body,
+.iconoplasm-tooltip--variant-image-only .iconoplasm-tooltip-lit-frame-shell,
+.iconoplasm-tooltip--variant-image-only .iconoplasm-tooltip-lit-frame {
+  aspect-ratio: 384 / 512;
+  min-height: 0;
+  height: auto;
+}
+
+.iconoplasm-tooltip-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 62px;
+  padding: 0 var(--icono-card-cell-pad-x) 14px;
+  border-bottom: 1px solid var(--iconoplasm-tooltip-line-strong);
+  margin-bottom: 2px;
+}
+
+.iconoplasm-tooltip-header .icono-shared-card-header-row {
+  width: 100%;
+}
+
+.iconoplasm-tooltip-vote-slot {
+  display: inline-flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+/* Gene symbol -- match the blot-only title treatment without inheriting per-gene accent color. */
+.iconoplasm-tooltip-symbol {
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+  font-family: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
+  text-align: left;
+  color: var(--iconoplasm-tooltip-ink);
+}
+
+/* Full gene name -- match the blot-only name treatment, adapted to the light simple card. */
+.iconoplasm-tooltip-name {
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.22;
+  margin-top: 2px;
+  font-family: "Special Elite", "Georgia", serif;
+  letter-spacing: 0;
+  max-inline-size: 20ch;
+  overflow: visible;
+  text-align: left;
+  text-wrap: pretty;
+  color: color-mix(in srgb, var(--iconoplasm-tooltip-ink) 92%, transparent);
+}
+
+/* -- Tooltip metadata: 2-column character | origin ------------------- */
+.iconoplasm-tooltip-meta {
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 128px;
+  color: var(--iconoplasm-tooltip-ink);
+  padding-top: 4px;
+}
+
+.iconoplasm-tooltip-meta:empty {
+  display: none;
+}
+
+.iconoplasm-tooltip-meta--loading {
+  display: flex;
+  min-height: 151px;
+}
+
+.iconoplasm-auth-toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483647;
+  max-width: min(320px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(24, 20, 17, 0.94);
+  color: rgba(248, 244, 236, 0.96);
+  font:
+    500 14px/1.4 "IBM Plex Mono",
+    monospace;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.iconoplasm-auth-toast-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.iconoplasm-tooltip-meta-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: 0;
+  background: transparent;
+  border-bottom: 1px solid var(--iconoplasm-tooltip-line);
+}
+
+.iconoplasm-tooltip-meta-cell {
+  display: flex;
+  flex-direction: column;
+  padding: 7px var(--icono-card-cell-pad-x);
+  min-width: 0;
+}
+
+.iconoplasm-tooltip-meta-cell--origin {
+  padding-left: var(--icono-card-origin-pad-x);
+}
+
+.iconoplasm-tooltip-meta-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+  line-height: 1.2;
+}
+
+.iconoplasm-tooltip-meta-value {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 15px;
+  font-weight: 580;
+  font-style: normal;
+  line-height: 1.42;
+  opacity: 0.88;
+  overflow-wrap: anywhere;
+  text-shadow: none;
+}
+
+.iconoplasm-tooltip-meta-cell--origin .iconoplasm-tooltip-meta-value {
+  font-style: italic;
+  font-weight: 420;
+  opacity: 0.72;
+  letter-spacing: 0;
+}
+
+.iconoplasm-tooltip-meta-value--compact {
+  font-size: 14px;
+  line-height: 1.14;
+  overflow-wrap: break-word;
+}
+
+.iconoplasm-tooltip-meta-pairs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--icono-card-subrow-gap);
+  background: transparent;
+  border-bottom: 1px solid var(--iconoplasm-tooltip-line);
+  padding: var(--icono-card-subrow-group-pad-top) 0 var(--icono-card-subrow-group-pad-bottom);
+}
+
+.iconoplasm-tooltip-meta-pair-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: 0;
+}
+
+.iconoplasm-tooltip-meta-pair-row + .iconoplasm-tooltip-meta-pair-row {
+  border-top: none;
+}
+
+.iconoplasm-tooltip-meta-pair-cell {
+  min-width: 0;
+  padding: var(--icono-card-subrow-pad-y) var(--icono-card-cell-pad-x);
+}
+
+.iconoplasm-tooltip-meta-pair-cell--origin {
+  padding-left: var(--icono-card-origin-pad-x);
+}
+
+.iconoplasm-tooltip-meta-pair-cell .iconoplasm-tooltip-meta-value--compact {
+  /* Source-of-truth note:
+     C:\Users\Admin\.codex\skills\polish\SKILL.md (Typography Refinement / hierarchy)
+     C:\Users\Admin\.codex\skills\normalize\SKILL.md (shared pattern consistency)
+     Keep pair rows aligned to the same text spine as full rows and match their visual
+     weight; only tighten the leading so the block reads as subordinate sub-rows. */
+  font-size: 15px;
+  line-height: 0.98;
+  font-style: normal;
+  font-weight: 580;
+  opacity: 0.88;
+}
+
+.iconoplasm-tooltip-meta-pair-cell--origin .iconoplasm-tooltip-meta-value--compact {
+  font-style: italic;
+  font-weight: 420;
+  opacity: 0.72;
+}
+
+.iconoplasm-tooltip-meta-value--error {
+  color: #ffd7d1;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.iconoplasm-tooltip-meta-skeleton-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.iconoplasm-tooltip-meta-skeleton-cell {
+  padding: 7px 4px;
+}
+
+.iconoplasm-tooltip-meta-skeleton-cell--origin {
+  padding-left: 10px;
+}
+
+.iconoplasm-tooltip-skeleton-line {
+  display: block;
+  width: 100%;
+  height: 13px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--iconoplasm-tooltip-ink) 8%, transparent) 0%,
+    color-mix(in srgb, var(--iconoplasm-tooltip-ink) 18%, transparent) 50%,
+    color-mix(in srgb, var(--iconoplasm-tooltip-ink) 8%, transparent) 100%
+  );
+  opacity: 0.9;
+}
+
+.iconoplasm-tooltip-skeleton-line--short {
+  width: 66%;
+}
+
+/* Skin color dot */
+.iconoplasm-tooltip-skin-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+  border: 0.5px solid var(--iconoplasm-tooltip-line-strong);
+}

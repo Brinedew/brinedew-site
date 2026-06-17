@@ -1,7 +1,7 @@
 .DS_Store
-.gitignore
 node_modules
 public
+public_v5test
 prof
 tsconfig.tsbuildinfo
 .obsidian
@@ -10,6 +10,7 @@ private/
 .replit
 replit.nix
 quartz/cli/tui/dist/
+
 # Community plugins are installed by npx quartz plugin install — don't track in git
 .quartz/plugins/github:quartz-community/
 .quartz/plugins/alias-redirects/
@@ -56,3 +57,49 @@ quartz/cli/tui/dist/
 .quartz/plugins/tag-list/
 .quartz/plugins/tag-page/
 .quartz/plugins/unlisted-pages/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Script caches
+scripts/uniprot_cache/
+*.csv.next
+
+# Syncthing ignore file (not needed in git)
+.stignore
+
+# Auto-generated Excalidraw exports (generated from .md files)
+**/*.excalidraw.png
+**/*.excalidraw.svg
+
+.wrangler/
+.wxt/
+
+# Environment files (API keys etc)
+.env
+.env.*
+.dev.vars
+
+# Binary executables (download separately)
+scripts/datasets.exe
+
+# Large data files that should be fetched/generated
+scripts/topk_ladder.json
+scripts/embedding_dump.json
+
+# Root-level junk (temp files, scratch images)
+/nul
+/tmp/
+/artifacts/
+/.tmp_quartz_dev*.log
+/.tmp_quartz_dev_pid.txt
+/tmp-icono-hover-server.js
+/tmp-icono-hover-server.err.log
+/tmp-icono-hover-server.out.log
+iconoplasm-extension/.wxt-*/
+/*.png
+/*.jpg
+!logo-mask.png

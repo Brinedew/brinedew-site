@@ -1,0 +1,57 @@
+/* Shared layout helpers for Design System preview cards.
+   Pair with ../colors_and_type.css (which carries fonts + tokens). */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-label);
+  -webkit-font-smoothing: antialiased;
+}
+
+.card {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* faint paper grain on every specimen card */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.kicker {
+  font-family: var(--font-label);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.row { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
+.col { display: flex; flex-direction: column; gap: 6px; }
+
+/* swatches */
+.swatch {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 84px;
+  min-width: 96px;
+  flex: 1;
+  padding: 8px 9px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-card);
+}
+.swatch .name { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.25; }
+.swatch .hex { font-size: 10px; letter-spacing: 0.1em; opacity: 0.72; }
+
+.divider { height: 1px; background: var(--rule); border: 0; margin: 2px 0; }

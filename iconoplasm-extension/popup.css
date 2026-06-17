@@ -1,0 +1,598 @@
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-Medium.woff2") format("woff2");
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "League Spartan";
+  src: url("fonts/LeagueSpartan-800.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Special Elite";
+  src: url("fonts/SpecialElite-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --light: oklch(96% 0.015 75);
+  --dark: oklch(20% 0.035 50);
+  --accent: oklch(50% 0.08 185);
+  --ui-border: oklch(82% 0.02 70);
+  --secondary: oklch(40% 0.04 55);
+  --radius-xl: 14px;
+  --radius-lg: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-width: 368px;
+  background:
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--accent) 8%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--light) 97%, white 3%),
+      color-mix(in srgb, var(--light) 94%, #eadfce 6%)
+    );
+  color: var(--dark);
+  font-family: "IBM Plex Mono", monospace;
+  font-synthesis: none;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.popup-shell {
+  display: grid;
+  gap: 0.95rem;
+  min-width: 0;
+  padding: 1rem;
+}
+
+.popup-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.popup-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.78rem;
+  min-width: 0;
+}
+
+.popup-brand-mark {
+  flex: 0 0 auto;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ui-border) 84%, transparent),
+    0 8px 18px rgba(33, 21, 12, 0.08);
+}
+
+.popup-brand-copy h1 {
+  margin: 0.1rem 0 0;
+  font-family: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
+  font-size: 1.58rem;
+  font-weight: 800;
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+
+.popup-kicker,
+.popup-section-kicker,
+.popup-field legend {
+  margin: 0;
+  padding: 0;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--dark) 78%, transparent);
+}
+
+/* Kicker-only section header: replaces the old h2 + note pattern
+   with a compact monospace label that lets section content breathe. */
+.popup-section-kicker {
+  margin-bottom: 0.2rem;
+}
+
+.popup-version {
+  flex: 0 0 auto;
+  padding: 0.32rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 76%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--light) 72%, white 28%);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.74rem;
+  color: var(--secondary);
+}
+
+.popup-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.popup-site-link {
+  flex: 0 0 auto;
+  padding: 0.32rem 0;
+  border: 0;
+  background: transparent;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--secondary);
+  line-height: 1;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.popup-site-link:hover,
+.popup-site-link:focus-visible {
+  color: var(--dark);
+  outline: none;
+}
+
+.popup-section {
+  display: grid;
+  gap: 0.9rem;
+  min-width: 0;
+  padding: 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 78%, transparent);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--light) 82%, white 18%);
+  box-shadow: 0 10px 24px rgba(33, 21, 12, 0.05);
+}
+
+.popup-section-head {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.popup-section-head h2 {
+  margin: 0;
+  font-family: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
+  font-size: 1.16rem;
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.popup-section-note {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 0.95rem;
+  line-height: 1.38;
+  text-wrap: pretty;
+}
+
+.popup-field-list {
+  display: grid;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.popup-field {
+  display: grid;
+  gap: 0.42rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* Segmented track — a unified rounded track with a sliding pill indicator
+   that highlights the active option. Replaces individual bordered buttons. */
+.popup-segmented {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  padding: 3px;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--ui-border) 34%, var(--light));
+}
+
+.popup-segment {
+  position: relative;
+  display: inline-flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.popup-radio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.popup-segment-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 2.45rem;
+  min-width: 0;
+  padding: 0.48rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-lg) - 3px);
+  background: transparent;
+  color: color-mix(in srgb, var(--secondary) 64%, transparent);
+  font-size: 0.72rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  text-align: center;
+  overflow-wrap: normal;
+  word-break: normal;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.popup-radio:checked + .popup-segment-label {
+  border-color: color-mix(in srgb, var(--ui-border) 58%, transparent);
+  background: color-mix(in srgb, var(--light) 92%, white 8%);
+  color: var(--dark);
+  font-weight: 500;
+  box-shadow:
+    0 1px 3px rgba(33, 21, 12, 0.06),
+    0 0 0 0.5px color-mix(in srgb, var(--ui-border) 36%, transparent);
+}
+
+.popup-radio:focus-visible + .popup-segment-label {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.popup-segment-label:hover {
+  color: var(--dark);
+  background: color-mix(in srgb, var(--light) 60%, white 40%);
+}
+
+/* ---- Tabs ---- */
+
+.popup-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 62%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--light) 60%, white 40%);
+}
+
+.popup-tab {
+  flex: 1 1 0;
+  padding: 0.48rem 0.6rem;
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 2px);
+  background: transparent;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  font-weight: 450;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--secondary);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.popup-tab:hover {
+  background: color-mix(in srgb, var(--light) 85%, white 15%);
+  color: var(--dark);
+}
+
+.popup-tab--active {
+  background: color-mix(in srgb, var(--light) 96%, white 4%);
+  color: var(--dark);
+  font-weight: 550;
+  box-shadow:
+    0 1px 3px rgba(33, 21, 12, 0.06),
+    0 0 0 1px color-mix(in srgb, var(--ui-border) 48%, transparent);
+}
+
+/* ---- Panels ---- */
+
+.popup-panel--hidden {
+  display: none;
+}
+
+/* ---- Blocklist ---- */
+
+.popup-blocklist-input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.popup-text-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--ui-border);
+  border-radius: calc(var(--radius-lg) - 2px);
+  background: color-mix(in srgb, var(--light) 70%, white 30%);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.88rem;
+  letter-spacing: 0.04em;
+  color: var(--dark);
+  text-transform: uppercase;
+}
+
+.popup-text-input::placeholder {
+  color: color-mix(in srgb, var(--secondary) 50%, transparent);
+  text-transform: none;
+}
+
+.popup-text-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.popup-btn {
+  flex: 0 0 auto;
+  padding: 0.5rem 0.86rem;
+  border: 1px solid var(--ui-border);
+  border-radius: calc(var(--radius-lg) - 2px);
+  background: color-mix(in srgb, var(--light) 82%, white 18%);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--dark);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.popup-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--ui-border));
+  background: color-mix(in srgb, var(--light) 92%, white 8%);
+}
+
+.popup-btn--primary {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--ui-border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--light));
+  color: color-mix(in srgb, var(--dark) 85%, var(--accent) 15%);
+}
+
+.popup-btn--primary:hover {
+  background: color-mix(in srgb, var(--accent) 18%, var(--light));
+}
+
+.popup-btn--full {
+  display: block;
+  width: 100%;
+  text-align: center;
+  text-decoration: none;
+}
+
+.popup-btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  font-size: 0.82rem;
+  padding: 0.3rem 0.5rem;
+  color: var(--secondary);
+}
+
+.popup-btn--ghost:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--dark);
+}
+
+.popup-btn--hidden {
+  display: none;
+}
+
+.popup-blocklist-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.15rem 0;
+}
+
+.popup-blocklist-count {
+  font-size: 0.78rem;
+  color: var(--secondary);
+  font-family: "IBM Plex Mono", monospace;
+  letter-spacing: 0.02em;
+}
+
+.popup-blocklist-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+}
+
+/* Flat divider list — replaces bordered card items with clean rows
+   separated by hairlines. Each row has a small x dismiss target. */
+.popup-blocklist-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.52rem 0.2rem;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 42%, transparent);
+  border-radius: 0;
+  background: transparent;
+}
+
+.popup-blocklist-item:last-child {
+  border-bottom: 0;
+}
+
+.popup-blocklist-left {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.popup-blocklist-badge {
+  font-size: 0.62rem;
+  font-family: "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--secondary);
+  background: color-mix(in srgb, var(--ui-border) 36%, transparent);
+  padding: 0.1rem 0.34rem;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.popup-blocklist-symbol {
+  font-family: "Special Elite", Georgia, serif;
+  font-size: 0.98rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--dark);
+}
+
+/* x dismiss — compact hit target with a multiplication sign glyph,
+   replaces the old text "remove" button. */
+.popup-blocklist-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  line-height: 1;
+  color: color-mix(in srgb, var(--secondary) 62%, transparent);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.popup-blocklist-remove:hover {
+  background: color-mix(in srgb, oklch(60% 0.18 25) 12%, transparent);
+  color: oklch(45% 0.16 25);
+}
+
+.popup-blocklist-empty {
+  margin: 0;
+  padding: 0.3rem 0;
+  font-size: 0.88rem;
+  color: var(--secondary);
+  line-height: 1.4;
+}
+
+.popup-blocklist-empty--hidden {
+  display: none;
+}
+
+/* ---- Account ---- */
+
+.popup-account-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--secondary) 16%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--paper) 76%, var(--muted) 24%);
+}
+
+.popup-account-status-text {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--secondary);
+  line-height: 1.4;
+}
+
+.popup-account-status--signed-in .popup-account-status-text {
+  font-weight: 700;
+  color: color-mix(in srgb, var(--dark) 72%, var(--secondary));
+}
+
+.popup-account-sign-out {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.22rem;
+  min-width: 0;
+  height: 1.55rem;
+  padding: 0 0.42rem;
+  border: 1px solid color-mix(in srgb, oklch(45% 0.16 25) 42%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, oklch(60% 0.18 25) 12%, var(--paper));
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  color: oklch(42% 0.16 25);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.popup-account-sign-out:hover {
+  background: color-mix(in srgb, oklch(60% 0.18 25) 22%, var(--paper));
+  border-color: color-mix(in srgb, oklch(42% 0.16 25) 66%, transparent);
+}
+
+.popup-account-sign-out:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.popup-account-sign-out--hidden {
+  display: none;
+}
