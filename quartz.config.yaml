@@ -1,0 +1,293 @@
+# yaml-language-server: $schema=./quartz/plugins/quartz-plugins.schema.json
+configuration:
+  pageTitle: Brinedew
+  pageTitleSuffix: ""
+  enableSPA: true
+  enablePopovers: true
+  locale: en-US
+  baseUrl: staging.brinedew.bio
+  ignorePatterns:
+    - private
+    - Templates
+    - .obsidian
+    - .trash
+    - .stfolder
+    - .gemini
+  theme:
+    fontOrigin: local
+    cdnCaching: false
+    typography:
+      header: Crimson Pro
+      body: Crimson Pro
+      code: Monaspace Xenon Web
+    colors:
+      lightMode:
+        light: oklch(96% 0.015 75)
+        lightgray: oklch(85% 0.02 65)
+        gray: oklch(70% 0.025 60)
+        darkgray: oklch(45% 0.03 55)
+        dark: oklch(20% 0.035 50)
+        secondary: oklch(40% 0.04 55)
+        tertiary: oklch(50% 0.08 185)
+        highlight: "#8f9fa926"
+        textHighlight: "#ffea0059"
+      darkMode:
+        light: oklch(16% 0.01 45)
+        lightgray: oklch(36% 0.02 50)
+        gray: oklch(58% 0.025 55)
+        darkgray: oklch(80% 0.02 60)
+        dark: oklch(85% 0.015 65)
+        secondary: oklch(70% 0.02 60)
+        tertiary: oklch(68% 0.08 185)
+        highlight: "#8f9fa926"
+        textHighlight: "#7dd3fc40"
+plugins:
+  - source: github:quartz-community/created-modified-date
+    enabled: true
+    options:
+      defaultDateType: modified
+      priority:
+        - frontmatter
+        - git
+        - filesystem
+    order: 10
+  - source: github:quartz-community/syntax-highlighting
+    enabled: true
+    options:
+      theme:
+        light: github-light
+        dark: github-dark
+      keepBackground: false
+    order: 20
+  - source: github:quartz-community/obsidian-flavored-markdown
+    enabled: true
+    options:
+      comments: true
+      highlight: true
+      wikilinks: true
+      callouts: true
+      mermaid: true
+      parseTags: true
+      parseArrows: true
+      parseBlockReferences: true
+      enableInHtmlEmbed: true
+      enableYouTubeEmbed: true
+      enableVideoEmbed: true
+      enableCheckbox: true
+    order: 30
+  - source: github:quartz-community/github-flavored-markdown
+    enabled: true
+    order: 40
+  - source: github:quartz-community/table-of-contents
+    enabled: true
+    order: 50
+    layout:
+      position: right
+      priority: 30
+  - source: github:quartz-community/crawl-links
+    enabled: true
+    options:
+      markdownLinkResolution: shortest
+    order: 60
+  - source: github:quartz-community/description
+    enabled: true
+    order: 70
+  - source: github:quartz-community/latex
+    enabled: true
+    options:
+      renderEngine: katex
+    order: 80
+  - source: github:quartz-community/citations
+    enabled: false
+    order: 85
+  - source: github:quartz-community/hard-line-breaks
+    enabled: true
+    order: 90
+  - source: github:quartz-community/ox-hugo
+    enabled: false
+    order: 91
+  - source: github:quartz-community/roam
+    enabled: false
+    order: 92
+  - source: github:quartz-community/fonts
+    enabled: false
+  - source: github:quartz-community/remove-draft
+    enabled: false
+  - source: github:quartz-community/explicit-publish
+    enabled: false
+  - source: github:quartz-community/unlisted-pages
+    enabled: true
+    options: {}
+    order: 45
+  - source: github:quartz-community/encrypted-pages
+    enabled: true
+    options:
+      iterations: 600000
+      passwordField: password
+      unlistWhenEncrypted: false
+      outputPath: static/encryptedContentIndex.json
+  - source: github:quartz-community/stacked-pages
+    enabled: false
+    layout:
+      position: afterBody
+      priority: 50
+      display: all
+  - source: github:quartz-community/alias-redirects
+    enabled: true
+  - source: github:quartz-community/content-index
+    enabled: true
+    options:
+      enableSiteMap: true
+      enableRSS: true
+  - source: github:quartz-community/favicon
+    enabled: true
+  - source: github:quartz-community/og-image
+    enabled: false
+  - source: github:quartz-community/cname
+    enabled: true
+    options:
+      domain: brinedew.bio
+  - source: github:quartz-community/canvas-page
+    enabled: true
+  - source: github:quartz-community/content-page
+    enabled: true
+  - source: github:quartz-community/folder-page
+    enabled: true
+  - source: github:quartz-community/tag-page
+    enabled: true
+  # explorer disabled — live site uses custom nav
+  - source: github:quartz-community/graph
+    enabled: false
+  - source: github:quartz-community/search
+    enabled: true
+    layout:
+      position: left
+      priority: 20
+      group: toolbar
+      groupOptions:
+        grow: true
+  - source: github:quartz-community/backlinks
+    enabled: false
+  - source: github:quartz-community/article-title
+    enabled: false
+  - source: github:quartz-community/content-meta
+    enabled: false
+  - source: github:quartz-community/tag-list
+    enabled: false
+    layout:
+      position: beforeBody
+      priority: 30
+  - source: github:quartz-community/page-title
+    enabled: true
+    layout:
+      position: left
+      priority: 10
+      group: toolbar
+  - source: github:quartz-community/darkmode
+    enabled: true
+    layout:
+      position: left
+      priority: 30
+      group: toolbar
+  - source: github:quartz-community/reader-mode
+    enabled: true
+    layout:
+      position: left
+      priority: 35
+      group: toolbar
+  - source: github:quartz-community/breadcrumbs
+    enabled: false
+  - source: github:quartz-community/comments
+    enabled: false
+    options:
+      provider: giscus
+      options: {}
+    layout:
+      position: afterBody
+      priority: 10
+  - source: github:quartz-community/footer
+    enabled: true
+    options:
+      links:
+        About: /About.html
+        Support me: /posts/Support-me.html
+  - source: github:quartz-community/recent-notes
+    enabled: false
+  - source:
+      name: homepage-crawl-frontier
+      repo: ./.quartz/plugins/brinedew-components
+    enabled: true
+    order: 24
+    layout:
+      position: afterBody
+      priority: 10
+  - source:
+      name: iconoplasm-page-switcher
+      repo: ./.quartz/plugins/brinedew-components
+    enabled: true
+    order: 24
+    layout:
+      position: left
+      priority: 25
+  - source:
+      name: tag-sections
+      repo: ./.quartz/plugins/brinedew-components
+    enabled: true
+    order: 24
+    layout:
+      position: left
+      priority: 40
+  - source:
+      name: image-captions
+      repo: ./.quartz/plugins/brinedew-image-captions
+    enabled: true
+    order: 25
+  - source: github:quartz-community/spacer
+    enabled: true
+    options: {}
+    order: 25
+    layout:
+      position: left
+      priority: 25
+      display: mobile-only
+  - source: github:quartz-community/bases-page
+    enabled: true
+    options: {}
+    order: 50
+  - source: github:quartz-community/note-properties
+    enabled: true
+    options:
+      hidePropertiesView: true
+  # quartz-themes disabled — conflicts with our custom theme colors
+  - source: github:quartz-community/obsidian-plugin-excalidraw
+    enabled: true
+    options:
+      enableInteraction: true
+      darkMode: auto
+      exportPadding: 20
+    order: 50
+layout:
+  groups:
+    toolbar:
+      priority: 35
+      direction: row
+      gap: 0.5rem
+  byPageType:
+    "404":
+      positions:
+        beforeBody: []
+        left: []
+        right: []
+    content: {}
+    folder:
+      exclude:
+        - reader-mode
+      positions:
+        right: []
+    tag:
+      exclude:
+        - reader-mode
+      positions:
+        right: []
+    canvas: {}
+    bases: {}
