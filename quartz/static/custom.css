@@ -204,12 +204,22 @@ h2 {
   font-size: 1.4em;
   font-weight: 600;
   margin-top: 2em;
+  margin-bottom: 1em;
 }
 
 h3 {
   font-size: 1.2em;
   font-weight: 600;
   margin-top: 1.5em;
+  margin-bottom: 0.6em;
+}
+
+h4 {
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--dark);
+  margin-top: 1.2em;
+  margin-bottom: 0.5em;
 }
 
 /* Body text with proper contrast and personality */
@@ -764,6 +774,12 @@ article li:has(> input[type="checkbox"]:checked) {
 }
 
 /* Sidebar: match v4 behavior - static position, no sticky scroll */
+.page > #quartz-body .sidebar {
+  position: static;
+  height: auto;
+}
+
+/* Sidebar: match v4 static position */
 .page > #quartz-body .sidebar {
   position: static;
   height: auto;
