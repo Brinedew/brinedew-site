@@ -821,8 +821,9 @@ article li:has(> input[type="checkbox"]:checked) {
   height: auto;
 }
 
-/* Iconoplasm: hide folder-page listing (gene card pages are not folder pages) */
-body[data-slug^="apps/iconoplasm"] .page-listing {
+/* Iconoplasm + GeneGuessr: hide folder-page listing (app pages are not folder pages) */
+body[data-slug^="apps/iconoplasm"] .page-listing,
+body[data-slug^="apps/geneguessr"] .page-listing {
   display: none;
 }
 
