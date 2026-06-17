@@ -4,7 +4,7 @@ import { CSSResourceToStyleElement, JSResourceToScriptElement } from "../util/re
 import { googleFontHref, googleFontSubsetHref } from "../util/theme"
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { unescapeHTML } from "../util/escape"
-import { CustomOgImagesEmitterName } from "../plugins/emitters/ogImage"
+import { CustomOgImagesEmitterName } from "../../.quartz/plugins"
 import { getPublicUrlForSlug, isNoIndexFile } from "../util/crawlability"
 import { buildAiSearchJsonLd, serializeJsonLd } from "../util/aiSearchMetadata"
 
@@ -591,7 +591,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
         )}
 
         {/* Custom CSS last with self-hosted fonts (bumped version to refresh caches) */}
-        <link href="/static/custom.css?v=bio6" rel="stylesheet" type="text/css" />
+        <link href="/static/custom.css?v=bio7" rel="stylesheet" type="text/css" />
         {iconoplasmBootstrapScript && (
           <script dangerouslySetInnerHTML={{ __html: iconoplasmBootstrapScript }} />
         )}
