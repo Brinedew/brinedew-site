@@ -1,0 +1,30 @@
+<!-- @dsCard group="Components" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="card.css">
+<style>
+  .demo{font-family:Georgia,serif;font-size:18px;color:#2a2018;line-height:1.5}
+  .g{position:relative;white-space:nowrap}
+  /* underline: paint-only */
+  .u{background-image:linear-gradient(to top,var(--c) 0,var(--c) 100%);background-repeat:no-repeat;background-size:100% 0.16em;background-position:0 calc(100% - 0.01em)}
+  /* filled pill */
+  .pill{color:#fff;border-radius:0.18em;padding:0.02em 0.1em;background:color-mix(in srgb,var(--c) 80%,transparent);text-shadow:0 0.02em 0.12em rgba(0,0,0,.18)}
+  /* pill outline */
+  .po{border-radius:0.18em;padding:0.02em 0.1em;box-shadow:0 0 0 0.11em color-mix(in srgb,var(--c) 78%,transparent),inset 0 0 0 0.08em rgba(255,255,255,.3)}
+  /* rough ellipse */
+  .ell svg{position:absolute;left:-8px;right:-8px;top:-5px;bottom:-5px;width:calc(100% + 16px);height:calc(100% + 10px);overflow:visible}
+  .ell path{fill:none;stroke:var(--c);stroke-width:1.6;vector-effect:non-scaling-stroke}
+</style>
+</head><body><div class="card">
+  <div class="kicker">Gene highlight styles · 4 modes · keyed to the gene color</div>
+  <p class="demo" style="margin:0">
+    Mutations in <span class="g u" style="--c:#c0392b">TP53</span> and
+    <span class="g pill" style="--c:#2a6f9e">BRCA1</span> were noted; the
+    <span class="g po" style="--c:#3d8b6e">PTEN</span> locus and
+    <span class="g ell" style="--c:#7d5ba6"><svg viewBox="0 0 120 40" preserveAspectRatio="none"><path d="M14 22 C 8 8, 40 4, 70 6 C 104 8, 116 16, 110 24 C 104 33, 70 37, 40 35 C 12 33, 6 26, 16 18"/></svg>RHO</span>
+    were screened.
+  </p>
+  <div class="row" style="gap:20px">
+    <span class="kicker">underline</span><span class="kicker">color pill</span><span class="kicker">pill outline</span><span class="kicker">rough ellipse (rough.js)</span>
+  </div>
+</div></body></html>

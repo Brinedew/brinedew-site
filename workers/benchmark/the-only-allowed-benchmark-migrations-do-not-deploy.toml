@@ -1,0 +1,15 @@
+# Migration-only config for benchmark tables.
+# This file exists so benchmark schema work does not force the public benchmark
+# edge worker to regain a D1 binding.
+
+name = "the-only-allowed-benchmark-migrations-do-not-deploy"
+main = "the-only-allowed-public-benchmark-edge-worker-that-must-not-touch-state.js"
+compatibility_date = "2025-11-12"
+workers_dev = false
+preview_urls = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "geneguessr"
+database_id = "c213abba-394b-42e0-ba15-a1b179cbe7db"
+migrations_dir = "migrations"

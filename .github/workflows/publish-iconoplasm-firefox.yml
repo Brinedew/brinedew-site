@@ -1,0 +1,104 @@
+name: Publish Iconoplasm Firefox extension
+
+# Store publish is deliberately workflow_dispatch-only. The supported trigger
+# surface is the local Iconoplasm GUI's human release gate, not pushes, cron, or
+# unattended LLM/CLI automation.
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: AMO signing channel
+        required: true
+        default: listed
+        type: choice
+        options:
+          - listed
+          - unlisted
+      human_confirmation:
+        description: "Type exactly: YES, I AM A HUMAN, PUBLISH ICONOPLASM"
+        required: true
+        type: string
+      expected_version:
+        description: Expected iconoplasm-extension manifest version
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish-firefox:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: .
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Confirm human publish intent
+        env:
+          HUMAN_CONFIRMATION: ${{ inputs.human_confirmation }}
+        run: |
+          if ($env:HUMAN_CONFIRMATION -ne "YES, I AM A HUMAN, PUBLISH ICONOPLASM") {
+            throw "Firefox store publish requires the exact human confirmation phrase from the Iconoplasm GUI."
+          }
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up pnpm
+        run: corepack enable
+
+      - name: Check AMO secrets
+        run: |
+          if (-not "${{ secrets.AMO_JWT_ISSUER }}") {
+            throw 'Missing GitHub secret AMO_JWT_ISSUER'
+          }
+          if (-not "${{ secrets.AMO_JWT_SECRET }}") {
+            throw 'Missing GitHub secret AMO_JWT_SECRET'
+          }
+
+      - name: Check requested version
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: |
+          $manifest = Get-Content iconoplasm-extension/manifest.json -Raw | ConvertFrom-Json
+          if ($manifest.version -ne $env:EXPECTED_VERSION) {
+            throw "Expected Iconoplasm extension version $env:EXPECTED_VERSION, got $($manifest.version)"
+          }
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Package extension payload
+        run: pnpm run package:iconoplasm-firefox
+
+      - name: Lint Firefox package
+        run: pnpm exec web-ext lint --source-dir iconoplasm-extension/dist/firefox-package
+
+      - name: Submit to Firefox Add-ons
+        run: |
+          pnpm exec web-ext sign `
+            --source-dir iconoplasm-extension/dist/firefox-package `
+            --artifacts-dir iconoplasm-extension/dist/firefox-signed `
+            --channel ${{ inputs.channel }} `
+            --api-key ${{ secrets.AMO_JWT_ISSUER }} `
+            --api-secret ${{ secrets.AMO_JWT_SECRET }}
+
+      - name: Upload unsigned zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: iconoplasm-firefox-source-bundle
+          path: iconoplasm-extension/dist/iconoplasm-firefox-v*.zip
+          if-no-files-found: error
+
+      - name: Upload signed Firefox artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iconoplasm-firefox-signed
+          path: iconoplasm-extension/dist/firefox-signed/**/*
+          if-no-files-found: error

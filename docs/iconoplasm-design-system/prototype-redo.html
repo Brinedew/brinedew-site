@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Iconoplasm redo — switcher / clans / suggestions</title>
+<link rel="stylesheet" href="colors_and_type.css" />
+<style>
+  /* Archive shell, straight from ui_kits/archive/archive.css */
+  body {
+    background:
+      radial-gradient(circle at 50% -10%, color-mix(in srgb, var(--pen) 5%, transparent), transparent 40%),
+      #efe8dd;
+    color: var(--ink);
+    font-family: var(--font-label);
+    margin: 0;
+    padding: 26px 20px 80px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+  .sec-kicker { font-family: var(--font-label); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin: 2px 2px 8px; }
+
+  /* Desktop left-sidebar nav: a normal vertical tab list (Linear/Notion style) */
+  .pages { display: flex; flex-direction: column; gap: 2px; width: 220px; }
+  .pages a { display: block; padding: 0.45rem 0.6rem; border-radius: 6px; font-family: var(--font-label); font-size: 13px; color: var(--secondary); text-decoration: none; }
+  .pages a:hover { background: color-mix(in srgb, var(--ui-border) 22%, transparent); color: var(--ink); }
+  .pages a.on { background: color-mix(in srgb, var(--pen) 10%, transparent); color: var(--pen); font-weight: 600; }
+  /* Mobile top bar: horizontal underline tabs */
+  .mtabs { display: flex; border-bottom: 1px solid var(--ui-border); width: 300px; }
+  .mtabs a { flex: 1; text-align: center; padding: 0.6rem; border-bottom: 2px solid transparent; font-family: var(--font-label); font-size: 13px; color: var(--secondary); text-decoration: none; }
+  .mtabs a.on { color: var(--pen); border-bottom-color: var(--pen); font-weight: 600; }
+
+  /* Clans progress header = DS .arch-head */
+  .arch-head { padding: 20px 22px; border: 1px solid var(--rule); border-radius: 14px; background: color-mix(in srgb, #f4ede5 80%, white 20%); box-shadow: var(--shadow-soft); }
+  .arch-head .count { font-family: var(--font-symbol); font-weight: 800; font-size: 40px; line-height: 1; margin: 6px 0 2px; color: color-mix(in srgb, var(--ink) 88%, var(--pen) 12%); }
+  .arch-head .sub { font-family: var(--font-type); font-size: 14px; color: color-mix(in srgb, var(--ink) 70%, transparent); }
+  .arch-bar { margin-top: 14px; height: 8px; border-radius: 999px; background: rgba(32,18,11,.1); overflow: hidden; }
+  .arch-fill { height: 100%; background: var(--pen); border-radius: 999px; width: 8%; }
+
+  /* Clan = printed specimen card, one per row: cream paper, hairline, grounded shadow */
+  .clans-list { display: flex; flex-direction: column; gap: 14px; }
+  .clan { border: 1px solid var(--rule-strong); background: linear-gradient(180deg, var(--paper), var(--paper-2)); box-shadow: var(--shadow-card); padding: 15px 17px 13px; }
+  .clan .head { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+  .clan .head-l { min-width: 0; }
+  .clan .k { font-family: var(--font-label); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .clan .k a { color: var(--secondary); text-decoration: none; }
+  .clan .k a:hover { color: var(--pen); }
+  .clan .nm { font-family: var(--font-type); font-size: 20px; color: var(--ink); margin-top: 1px; }
+  .clan .ae { font-family: var(--font-hand); font-size: 29px; line-height: 1; color: var(--pen); display: inline-block; transform: rotate(-3deg); white-space: nowrap; }
+  .clan .ae a { color: var(--pen); text-decoration: none; }
+  .clan .ae a:hover { text-decoration: underline; }
+  /* Reel: prev arrow, a 2x2 page of four tiles, next arrow (arrows span both rows) */
+  .clan .reel { display: flex; align-items: stretch; gap: 10px; margin-top: 12px; }
+  .clan .strip { display: grid; grid-template-columns: repeat(2, 1fr); align-items: start; gap: 10px; flex: 1; min-width: 0; }
+  .clan .foot { font-family: var(--font-label); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 10px; }
+
+  /* Paging arrows: same height as a blot, hairline tile, chevron */
+  .nav { flex: 0 0 auto; width: 34px; align-self: stretch; border: 1px solid var(--rule); background: color-mix(in srgb, var(--paper) 55%, transparent); color: var(--secondary); font-size: 18px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: 3px; }
+  .nav:hover:not(:disabled) { color: var(--pen); border-color: color-mix(in srgb, var(--pen) 40%, var(--rule)); background: color-mix(in srgb, var(--pen) 7%, var(--paper)); }
+  .nav:disabled { color: color-mix(in srgb, var(--secondary) 36%, transparent); border-color: color-mix(in srgb, var(--rule) 55%, transparent); background: transparent; cursor: default; }
+
+  /* Blot tile = shared DS image-only card: 384/512, cover, name (bottom-left) +
+     symbol (bottom-right) caption, scaled with container queries. */
+  .blot { position: relative; width: 100%; aspect-ratio: 384/512; container-type: inline-size; border: 1px solid var(--rule-strong); overflow: hidden; background: linear-gradient(160deg, #2a3a52, #0e1320); }
+  .blot.b2 { background: linear-gradient(160deg, #5a2f4a, #1b0f18); }
+  .blot.b3 { background: linear-gradient(160deg, #3d6b4f, #15241a); }
+  .blot.b4 { background: linear-gradient(160deg, #6b5a2f, #1a1410); }
+  .blot.b5 { background: linear-gradient(160deg, #45506b, #14161f); }
+  .blot::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 56%, rgba(16,10,8,.58) 100%); }
+  .blot .cap { position: absolute; inset: 0; display: flex; align-items: flex-end; padding: clamp(16px, 5.4cqw, 24px); z-index: 1; }
+  .blot .cap-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; column-gap: clamp(.85rem, 3.2cqw, 1.4rem); width: 100%; }
+  .blot .nm { font-family: var(--font-type); color: rgba(250,238,222,.92); font-size: clamp(.9rem, 3.2cqw, 1.12rem); line-height: 1.22; text-align: left; }
+  .blot .sym { justify-self: end; text-align: right; font-family: var(--font-symbol); font-weight: 800; font-size: clamp(2rem, 11cqw, 3.75rem); line-height: .9; letter-spacing: -0.05em; color: rgba(253,245,232,.96); text-shadow: 0 1px 0 rgba(13,9,7,.4), 0 8px 18px rgba(8,5,4,.38); }
+
+  /* Unfiled (sealed) = uniform rust-stamp specimen chips — tidy, never ragged */
+  .unfiled-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 9px; }
+  .unfiled { border: 1px solid var(--rule); background: color-mix(in srgb, var(--paper) 55%, transparent); aspect-ratio: 384/512; display: flex; align-items: center; justify-content: center; }
+  .unfiled span { font-family: var(--font-label); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: color-mix(in srgb, var(--stamp) 62%, transparent); transform: rotate(-7deg); border: 1px solid color-mix(in srgb, var(--stamp) 38%, transparent); padding: 2px 6px; border-radius: 3px; }
+
+  /* Suggestions = DS input (.inp) + .btn--primary, terse copy only */
+  .cmt { border: 1px solid var(--rule); border-radius: 14px; background: color-mix(in srgb, #f4ede5 80%, white 20%); box-shadow: var(--shadow-soft); padding: 15px 17px; }
+  .cmt .lab { font-family: var(--font-label); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 9px; }
+  .cmt .row { display: flex; gap: 8px; align-items: flex-end; }
+  .cmt textarea { flex: 1; padding: 0.55rem 0.7rem; border: 1px solid var(--ui-border); border-radius: 8px; background: color-mix(in srgb, var(--light) 70%, white 30%); font-family: var(--font-type); font-size: 14px; color: var(--ink); resize: vertical; min-height: 2.6rem; }
+  .cmt textarea:focus { outline: none; border-color: var(--pen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pen) 14%, transparent); }
+  .btn--primary { font-family: var(--font-label); font-size: 13px; font-weight: 600; padding: 0.5rem 0.86rem; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--accent) 46%, var(--ui-border)); background: color-mix(in srgb, var(--accent) 12%, var(--light)); color: color-mix(in srgb, var(--ink) 85%, var(--accent) 15%); cursor: pointer; white-space: nowrap; }
+  .cmt ul { list-style: none; margin: 12px 0 0; padding: 0; }
+  .cmt li { display: flex; gap: 10px; padding: 0.7rem 0; border-top: 1px solid color-mix(in srgb, var(--ui-border) 42%, transparent); }
+  .cmt .av { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; overflow: hidden; border: 1px solid var(--ui-border); background: color-mix(in srgb, var(--pen) 16%, var(--paper)); display: flex; align-items: center; justify-content: center; font-family: var(--font-label); font-size: 12px; color: var(--pen); }
+  .cmt .av img { width: 100%; height: 100%; object-fit: cover; }
+  .cmt .main { flex: 1; min-width: 0; }
+  .cmt .meta { font-family: var(--font-label); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .cmt .who { color: var(--secondary); }
+  .cmt .body { font-family: var(--font-type); font-size: 14px; color: var(--ink-soft); margin-top: 3px; }
+  .cmt .acts { margin-top: 5px; display: flex; gap: 12px; }
+  .cmt .acts button { border: 0; background: none; padding: 0; cursor: pointer; font-family: var(--font-label); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: color-mix(in srgb, var(--secondary) 70%, transparent); }
+  .cmt .acts button:hover { color: var(--pen); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div>
+    <div class="sec-kicker">Left sidebar — page tabs (desktop)</div>
+    <div class="pages"><a class="on">Archive</a><a>Clans</a></div>
+    <div class="sec-kicker" style="margin-top:14px">Mobile — top tab bar</div>
+    <div class="mtabs"><a class="on">Archive</a><a>Clans</a></div>
+  </div>
+
+  <div>
+    <div class="sec-kicker">Clans page — header</div>
+    <div class="arch-head">
+      <div class="t-label">Clans</div>
+      <div class="count">47</div>
+      <div class="sub">recorded out of 566 protein clans</div>
+      <div class="arch-bar"><div class="arch-fill"></div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="sec-kicker">Recorded clans</div>
+    <div class="clans-list">
+      <div class="clan">
+        <div class="head">
+          <div class="head-l">
+            <div class="k"><a>Pfam · CL0239</a></div>
+            <div class="nm">Insulin</div>
+          </div>
+          <div class="ae"><a>sweet lolita</a></div>
+        </div>
+        <div class="reel">
+          <button class="nav" disabled aria-label="Previous">&#8249;</button>
+          <div class="strip">
+            <div class="blot b3"><div class="cap"><div class="cap-row"><div class="nm">Insulin</div><div class="sym">INS</div></div></div></div>
+            <div class="blot"><div class="cap"><div class="cap-row"><div class="nm">Insulin-like growth factor 1</div><div class="sym">IGF1</div></div></div></div>
+            <div class="blot b2"><div class="cap"><div class="cap-row"><div class="nm">Insulin-like growth factor 2</div><div class="sym">IGF2</div></div></div></div>
+            <div class="blot b4"><div class="cap"><div class="cap-row"><div class="nm">Relaxin-1</div><div class="sym">RLN1</div></div></div></div>
+          </div>
+          <button class="nav" aria-label="Next">&#8250;</button>
+        </div>
+        <div class="foot">38 recorded · page 1 of 10</div>
+      </div>
+      <div class="clan">
+        <div class="head">
+          <div class="head-l">
+            <div class="k"><a>Pfam · CL0010</a></div>
+            <div class="nm">SH3</div>
+          </div>
+          <div class="ae"><a>flogger</a></div>
+        </div>
+        <div class="reel">
+          <button class="nav" disabled aria-label="Previous">&#8249;</button>
+          <div class="strip">
+            <div class="blot b2"><div class="cap"><div class="cap-row"><div class="nm">Cullin-9</div><div class="sym">CUL9</div></div></div></div>
+            <div class="blot b4"><div class="cap"><div class="cap-row"><div class="nm">Cullin-7</div><div class="sym">CUL7</div></div></div></div>
+            <div class="blot b3"><div class="cap"><div class="cap-row"><div class="nm">Spectrin alpha chain</div><div class="sym">SPTA1</div></div></div></div>
+            <div class="blot b5"><div class="cap"><div class="cap-row"><div class="nm">Myosin-10</div><div class="sym">MYH10</div></div></div></div>
+          </div>
+          <button class="nav" aria-label="Next">&#8250;</button>
+        </div>
+        <div class="foot">7 recorded · page 1 of 2</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="sec-kicker">Unfiled — 519 clans</div>
+    <div class="unfiled-grid">
+      <div class="unfiled"><span>Unfiled</span></div>
+      <div class="unfiled"><span>Unfiled</span></div>
+      <div class="unfiled"><span>Unfiled</span></div>
+      <div class="unfiled"><span>Unfiled</span></div>
+      <div class="unfiled"><span>Unfiled</span></div>
+      <div class="unfiled"><span>Unfiled</span></div>
+      <div class="unfiled"><span>Unfiled</span></div>
+      <div class="unfiled"><span>Unfiled</span></div>
+      <div class="unfiled"><span>Unfiled</span></div>
+      <div class="unfiled"><span>Unfiled</span></div>
+      <div class="unfiled"><span>Unfiled</span></div>
+      <div class="unfiled"><span>Unfiled</span></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="sec-kicker">Gene page — suggestions (sits above candidate blots)</div>
+    <div class="cmt">
+      <div class="lab">Suggestions · 1</div>
+      <div class="row">
+        <textarea placeholder="Suggest a prop, theme, or activity…"></textarea>
+        <button class="btn--primary">Suggest</button>
+      </div>
+      <ul>
+        <li>
+          <span class="av"><img alt="" src="https://cdn.discordapp.com/embed/avatars/4.png"></span>
+          <div class="main">
+            <div class="meta"><span class="who">loweren</span> · 8m · edited</div>
+            <div class="body">Give INS a sugar-cube prop and an open lace parasol.</div>
+            <div class="acts"><button>Edit</button><button>Delete</button></div>
+          </div>
+        </li>
+        <li>
+          <span class="av">M</span>
+          <div class="main">
+            <div class="meta"><span class="who">maptester</span> · 2h</div>
+            <div class="body">Put INS on a tiny pancreas-shaped stool.</div>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Iconoplasm</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="popup-header">
+        <div class="popup-brand">
+          <img class="popup-brand-mark" src="icons/icon-48.png" alt="" width="40" height="40" />
+          <div class="popup-brand-copy">
+            <p class="popup-kicker">Gene mnemonics</p>
+            <h1>ICONOPLASM</h1>
+          </div>
+        </div>
+        <div class="popup-header-actions">
+          <a
+            class="popup-site-link"
+            href="https://iconoplasm.brinedew.bio/"
+            target="_blank"
+            rel="noopener"
+            aria-label="Open Iconoplasm website"
+            title="Open Iconoplasm website"
+          >
+            Site
+          </a>
+          <div class="popup-version" id="version-text">v0.4.1</div>
+        </div>
+      </header>
+
+      <!-- Tab bar -->
+      <nav class="popup-tabs" role="tablist" aria-label="Settings">
+        <button
+          class="popup-tab popup-tab--active"
+          role="tab"
+          aria-selected="true"
+          aria-controls="panel-appearance"
+          id="tab-appearance"
+        >
+          Appearance
+        </button>
+        <button
+          class="popup-tab"
+          role="tab"
+          aria-selected="false"
+          aria-controls="panel-blocklist"
+          id="tab-blocklist"
+        >
+          Blocklist
+        </button>
+        <button
+          class="popup-tab"
+          role="tab"
+          aria-selected="false"
+          aria-controls="panel-account"
+          id="tab-account"
+        >
+          Account
+        </button>
+      </nav>
+
+      <!-- Appearance tab -->
+      <section
+        class="popup-panel"
+        id="panel-appearance"
+        role="tabpanel"
+        aria-labelledby="tab-appearance"
+      >
+        <div class="popup-section">
+          <div class="popup-field-list">
+            <fieldset class="popup-field">
+              <legend>Highlight appearance</legend>
+              <div
+                class="popup-segmented"
+                id="highlight-mode"
+                role="radiogroup"
+                aria-label="Gene highlight"
+              >
+                <label class="popup-segment">
+                  <input type="radio" name="highlight-mode" value="underline" class="popup-radio" />
+                  <span class="popup-segment-label">Under line</span>
+                </label>
+                <label class="popup-segment">
+                  <input type="radio" name="highlight-mode" value="pill" class="popup-radio" />
+                  <span class="popup-segment-label">Color pills</span>
+                </label>
+                <label class="popup-segment">
+                  <input
+                    type="radio"
+                    name="highlight-mode"
+                    value="pill-outline"
+                    class="popup-radio"
+                  />
+                  <span class="popup-segment-label">Pill outline</span>
+                </label>
+                <label class="popup-segment">
+                  <input type="radio" name="highlight-mode" value="ellipse" class="popup-radio" />
+                  <span class="popup-segment-label">Rough ellipse</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="popup-field">
+              <legend>Highlight timing</legend>
+              <div
+                class="popup-segmented popup-segmented--compact"
+                id="highlight-visibility"
+                role="radiogroup"
+                aria-label="Highlight timing"
+              >
+                <label class="popup-segment">
+                  <input
+                    type="radio"
+                    name="highlight-visibility"
+                    value="always"
+                    class="popup-radio"
+                  />
+                  <span class="popup-segment-label">Always on</span>
+                </label>
+                <label class="popup-segment">
+                  <input
+                    type="radio"
+                    name="highlight-visibility"
+                    value="hover"
+                    class="popup-radio"
+                  />
+                  <span class="popup-segment-label">On hover</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="popup-field">
+              <legend>Hover card appearance</legend>
+              <div
+                class="popup-segmented"
+                id="card-variant"
+                role="radiogroup"
+                aria-label="Hover card appearance"
+              >
+                <label class="popup-segment">
+                  <input type="radio" name="card-variant" value="simple" class="popup-radio" />
+                  <span class="popup-segment-label">Simple</span>
+                </label>
+                <label class="popup-segment">
+                  <input
+                    type="radio"
+                    name="card-variant"
+                    value="lit-archival"
+                    class="popup-radio"
+                  />
+                  <span class="popup-segment-label">Vintage lab label</span>
+                </label>
+                <label class="popup-segment">
+                  <input type="radio" name="card-variant" value="image-only" class="popup-radio" />
+                  <span class="popup-segment-label">Blot only</span>
+                </label>
+              </div>
+            </fieldset>
+          </div>
+        </div>
+      </section>
+
+      <!-- Blocklist tab -->
+      <section
+        class="popup-panel popup-panel--hidden"
+        id="panel-blocklist"
+        role="tabpanel"
+        aria-labelledby="tab-blocklist"
+      >
+        <div class="popup-section">
+          <p class="popup-section-kicker">Ignored symbols</p>
+          <div class="popup-blocklist-input-row">
+            <input
+              type="text"
+              id="blocklist-input"
+              class="popup-text-input"
+              placeholder="Add gene symbol..."
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="blocklist-add-btn" class="popup-btn popup-btn--primary">Add</button>
+          </div>
+          <div class="popup-blocklist-bar">
+            <span class="popup-blocklist-count" id="blocklist-count"></span>
+            <button id="blocklist-restore-btn" class="popup-btn popup-btn--ghost popup-btn--hidden">
+              Restore defaults
+            </button>
+          </div>
+          <ul id="blocklist-items" class="popup-blocklist-list" aria-label="Blocked symbols"></ul>
+          <p class="popup-blocklist-empty popup-blocklist-empty--hidden" id="blocklist-empty">
+            Nothing blocked. All gene symbols will be highlighted.
+          </p>
+        </div>
+      </section>
+
+      <!-- Account tab -->
+      <section
+        class="popup-panel popup-panel--hidden"
+        id="panel-account"
+        role="tabpanel"
+        aria-labelledby="tab-account"
+      >
+        <div class="popup-section">
+          <p class="popup-section-kicker">Account</p>
+          <a
+            href="https://iconoplasm.brinedew.bio/api/auth/login?return_to=https://iconoplasm.brinedew.bio/"
+            target="_blank"
+            rel="noopener"
+            class="popup-btn popup-btn--primary popup-btn--full"
+            id="account-sign-in-link"
+            >Sign in with Discord</a
+          >
+          <div class="popup-account-status" id="account-status">
+            <p class="popup-account-status-text" id="account-status-text">Checking...</p>
+            <button
+              class="popup-account-sign-out popup-account-sign-out--hidden"
+              id="account-sign-out-btn"
+              type="button"
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <span aria-hidden="true">×</span>
+              <span>Sign out</span>
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="blocklist-defaults.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -109,12 +109,6 @@
       "commit": "4afb630a1cc9034267beb93c928e81d0fa2f4d4b",
       "installedAt": "2026-06-03T13:16:36.746Z"
     },
-    "explorer": {
-      "source": "github:quartz-community/explorer",
-      "resolved": "https://github.com/quartz-community/explorer.git",
-      "commit": "a2dfd1373abe58ace461ebea0b4e94cb287f894e",
-      "installedAt": "2026-06-03T13:32:35.808Z"
-    },
     "favicon": {
       "source": "github:quartz-community/favicon",
       "resolved": "https://github.com/quartz-community/favicon.git",
@@ -157,6 +151,33 @@
       "commit": "0d448f38a24c568c5539ff2cd57d813293430ccd",
       "installedAt": "2026-06-03T13:16:36.965Z"
     },
+    "homepage-crawl-frontier": {
+      "source": {
+        "name": "homepage-crawl-frontier",
+        "repo": "./.quartz/plugins/brinedew-components"
+      },
+      "resolved": "D:\\Coding\\Website\\.quartz\\plugins\\brinedew-components",
+      "commit": "local",
+      "installedAt": "2026-06-17T12:55:17.444Z"
+    },
+    "iconoplasm-page-switcher": {
+      "source": {
+        "name": "iconoplasm-page-switcher",
+        "repo": "./.quartz/plugins/brinedew-components"
+      },
+      "resolved": "D:\\Coding\\Website\\.quartz\\plugins\\brinedew-components",
+      "commit": "local",
+      "installedAt": "2026-06-17T12:55:17.445Z"
+    },
+    "image-captions": {
+      "source": {
+        "name": "image-captions",
+        "repo": "./.quartz/plugins/brinedew-image-captions"
+      },
+      "resolved": "D:\\Coding\\Website\\.quartz\\plugins\\brinedew-image-captions",
+      "commit": "local",
+      "installedAt": "2026-06-17T12:55:17.445Z"
+    },
     "latex": {
       "source": "github:quartz-community/latex",
       "resolved": "https://github.com/quartz-community/latex.git",
@@ -198,17 +219,6 @@
       "resolved": "https://github.com/quartz-community/page-title.git",
       "commit": "a1c1fe0a9c6a5ce1acf6efa01d473a7d9850e2a3",
       "installedAt": "2026-06-03T13:32:36.002Z"
-    },
-    "quartz-themes": {
-      "source": {
-        "name": "quartz-themes",
-        "repo": "github:saberzero1/quartz-themes",
-        "subdir": "plugin"
-      },
-      "resolved": "https://github.com/saberzero1/quartz-themes.git",
-      "commit": "945135e8b70576753d0591e1713fe56553100b3d",
-      "subdir": "plugin",
-      "installedAt": "2026-06-11T15:50:25.576Z"
     },
     "reader-mode": {
       "source": "github:quartz-community/reader-mode",
@@ -275,6 +285,15 @@
       "resolved": "https://github.com/quartz-community/tag-page.git",
       "commit": "eabf3eec55c0bab7f49e69957341f34d2ae3c5a1",
       "installedAt": "2026-06-03T13:32:36.377Z"
+    },
+    "tag-sections": {
+      "source": {
+        "name": "tag-sections",
+        "repo": "./.quartz/plugins/brinedew-components"
+      },
+      "resolved": "D:\\Coding\\Website\\.quartz\\plugins\\brinedew-components",
+      "commit": "local",
+      "installedAt": "2026-06-17T12:55:17.445Z"
     },
     "unlisted-pages": {
       "source": "github:quartz-community/unlisted-pages",

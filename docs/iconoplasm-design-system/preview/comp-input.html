@@ -1,0 +1,24 @@
+<!-- @dsCard group="Components" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="card.css">
+<style>
+  .inp{flex:1;padding:0.5rem 0.7rem;border:1px solid var(--ui-border);border-radius:8px;background:color-mix(in srgb,var(--light) 70%,white 30%);font-family:var(--font-label);font-size:14px;letter-spacing:0.04em;color:var(--ink);text-transform:uppercase}
+  .inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 14%,transparent)}
+  .item{display:flex;align-items:center;justify-content:space-between;padding:0.52rem 0.2rem;border-bottom:1px solid color-mix(in srgb,var(--ui-border) 42%,transparent)}
+  .badge{font-family:var(--font-label);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--secondary);background:color-mix(in srgb,var(--ui-border) 36%,transparent);padding:0.1rem 0.34rem;border-radius:3px}
+  .sym{font-family:var(--font-type);font-size:16px;margin-left:8px}
+  .x{border:0;background:transparent;color:color-mix(in srgb,var(--secondary) 62%,transparent);font-family:var(--font-label);cursor:pointer}
+</style>
+</head><body><div class="card">
+  <div class="kicker">Blocklist · ignored symbols</div>
+  <div class="row" style="gap:8px;align-items:center">
+    <input class="inp" placeholder="Add gene symbol…">
+  </div>
+  <div>
+    <div class="item"><span><span class="badge">default</span><span class="sym">SET</span></span><button class="x">×</button></div>
+    <div class="item"><span><span class="badge">default</span><span class="sym">REST</span></span><button class="x">×</button></div>
+    <div class="item"><span><span class="badge">custom</span><span class="sym">CAT</span></span><button class="x">×</button></div>
+  </div>
+  <div class="kicker">74 default-blocked ambiguous English words (SET, REST, CAT…). Un-block or add your own.</div>
+</div></body></html>

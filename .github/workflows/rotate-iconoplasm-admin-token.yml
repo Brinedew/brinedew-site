@@ -1,0 +1,61 @@
+name: Rotate Iconoplasm admin token
+
+on:
+  workflow_dispatch:
+    inputs:
+      operator_confirmation:
+        description: "Type exactly: ROTATE ICONOPLASM ADMIN TOKEN"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rotate-token:
+    name: Provision Worker admin-token secret
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
+      OPERATOR_CONFIRMATION: ${{ inputs.operator_confirmation }}
+    steps:
+      - name: Confirm deliberate token rotation
+        run: |
+          if [ "${OPERATOR_CONFIRMATION}" != "ROTATE ICONOPLASM ADMIN TOKEN" ]; then
+            echo "This workflow rotates the live Iconoplasm admin token. Re-run it only with the exact confirmation phrase." >&2
+            exit 1
+          fi
+          if [ -z "${ICONOPLASM_ADMIN_TOKEN:-}" ]; then
+            echo "Missing GitHub secret ICONOPLASM_ADMIN_TOKEN." >&2
+            exit 1
+          fi
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "Missing CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN or CLOUDFLARE_ACCOUNT_ID repository secret." >&2
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rotate stateful Worker secret
+        run: |
+          printf '%s' "${ICONOPLASM_ADMIN_TOKEN}" \
+            | npx wrangler secret put ICONOPLASM_ADMIN_TOKEN \
+                --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+
+      - name: Rotate public edge Worker secret
+        run: |
+          printf '%s' "${ICONOPLASM_ADMIN_TOKEN}" \
+            | npx wrangler secret put ICONOPLASM_ADMIN_TOKEN \
+                --config wrangler.the-only-allowed-public-edge-worker-upload-only.toml

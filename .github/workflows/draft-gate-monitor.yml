@@ -1,0 +1,46 @@
+name: Draft Gate Monitor
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-draft-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check draft page returns content (not 404, not full)
+        run: |
+          set -euo pipefail
+          errors=0
+          for url in \
+            "https://brinedew.bio/wiki/antagonistic-pleiotropy-theory" \
+            "https://brinedew.bio/posts/10-intuitions-on-tissue-architecture" \
+            "https://brinedew.bio/wiki/selection-shadow-theory" \
+            "https://brinedew.bio/posts/aging-is-a-disease" \
+            "https://brinedew.bio/posts/Biologist-learns-control-theory"
+          do
+            echo "Checking $url"
+            resp=$(curl -sS -o /tmp/draft-check.html -w "%{http_code}" "$url")
+            if [ "$resp" != "200" ]; then
+              echo "FAIL: $url returned $resp (expected 200)"
+              errors=$((errors+1))
+              continue
+            fi
+            if ! grep -q 'data-page-draft="true"' /tmp/draft-check.html; then
+              echo "FAIL: $url missing data-page-draft marker"
+              errors=$((errors+1))
+              continue
+            fi
+            if grep -q 'Clinical implications' /tmp/draft-check.html; then
+              echo "FAIL: $url contains full content (Clinical implications should be truncated)"
+              errors=$((errors+1))
+              continue
+            fi
+            echo "OK: $url"
+          done
+          if [ "$errors" -gt 0 ]; then
+            echo "FAILED: $errors checks failed"
+            exit 1
+          fi
+          echo "All checks passed"
