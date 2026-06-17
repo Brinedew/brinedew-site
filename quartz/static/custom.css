@@ -58,11 +58,37 @@ h3,
 h4,
 h5,
 h6,
-.page-title,
+h2.page-title,
 .breadcrumbs,
 nav,
 button {
   font-family: "Crimson Pro", serif !important;
+}
+
+/* Logo: mask using page-title link, not page-title wrapper (v5 wraps in h2) */
+h2.page-title a::before {
+  content: "";
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  margin-right: 0.5rem;
+  background-color: currentColor;
+  mask-image: url("/static/logo-mask.png");
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  -webkit-mask-image: url("/static/logo-mask.png");
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  vertical-align: middle;
+}
+.page-title a {
+  color: var(--dark);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+.page-title a:hover {
+  color: var(--accent);
 }
 code,
 pre {
@@ -201,10 +227,18 @@ article {
   color: var(--dark); /* Explicit color for better contrast */
 }
 
+article p,
+article li,
+article ul,
+article ol,
+article td,
+article th,
+article blockquote {
+  color: var(--dark);
+}
 article p {
   margin-bottom: 0.75em;
-  text-wrap: pretty; /* 2025: better line breaks */
-  color: var(--dark);
+  text-wrap: pretty;
 }
 
 .draft-warning-wrap {
@@ -562,6 +596,16 @@ a.external .external-icon {
   border: none;
 }
 
+/* Image captions: match v4's .image-with-caption > figcaption styling */
+figure > figcaption {
+  text-align: center;
+  font-size: 0.82em;
+  color: var(--darkgray);
+  text-wrap: balance;
+  max-width: 34rem;
+  margin: 0 auto;
+}
+
 /* View Transitions - Crossfade everything except persistent UI */
 ::view-transition-old(root),
 ::view-transition-new(root) {
@@ -588,10 +632,16 @@ header {
   transition: none !important;
 }
 
-/* Lazy loading for all images */
-img {
-  loading: lazy;
-  decoding: async;
+/* Lazy loading for all images is handled by HTML attributes */
+
+/* Hide heading anchor link icons (v5 uses <a role="anchor" href="#id"> inside heading) */
+h1[id] > a[role="anchor"],
+h2[id] > a[role="anchor"],
+h3[id] > a[role="anchor"],
+h4[id] > a[role="anchor"],
+h5[id] > a[role="anchor"],
+h6[id] > a[role="anchor"] {
+  display: none;
 }
 
 /* Content width override */
@@ -713,6 +763,12 @@ article li:has(> input[type="checkbox"]:checked) {
   }
 }
 
+/* Sidebar: match v4 behavior - static position, no sticky scroll */
+.page > #quartz-body .sidebar {
+  position: static;
+  height: auto;
+}
+
 /* Fix Table of Contents - Remove Progressive Dimming and Bold Fonts */
 .toc {
   /* TOC header */
@@ -723,6 +779,8 @@ article li:has(> input[type="checkbox"]:checked) {
 }
 
 ul.toc-content.overflow {
+  margin-bottom: 0.25em;
+  line-height: 1.075;
   /* Remove progressive dimming - all TOC items same opacity */
   & > li > a {
     color: var(--dark) !important;
