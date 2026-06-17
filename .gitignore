@@ -58,6 +58,12 @@ quartz/cli/tui/dist/
 .quartz/plugins/tag-page/
 .quartz/plugins/unlisted-pages/
 
+# Brinedew plugin symlinks (created by scripts/setup-brinedew-plugins.mjs)
+.quartz/plugins/homepage-crawl-frontier
+.quartz/plugins/iconoplasm-page-switcher
+.quartz/plugins/tag-sections
+.quartz/plugins/image-captions
+
 # Python cache
 __pycache__/
 *.pyc
