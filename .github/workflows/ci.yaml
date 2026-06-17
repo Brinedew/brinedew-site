@@ -57,7 +57,7 @@ jobs:
         run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
 
       - name: Install Quartz plugins
-        run: pnpm exec quartz plugin install --from-config
+        run: node ./quartz/bootstrap-cli.mjs plugin install --from-config
 
       - name: Sync shared Iconoplasm assets
         run: pnpm run sync:iconoplasm-shared

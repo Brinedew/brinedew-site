@@ -31,7 +31,7 @@
     "format": "pnpm exec prettier . --write",
     "test": "node scripts/run-tests.mjs",
     "profile": "0x -D prof ./quartz/bootstrap-cli.mjs build --concurrency=1",
-    "install-plugins": "pnpm exec quartz plugin install --from-config"
+    "install-plugins": "node ./quartz/bootstrap-cli.mjs plugin install --from-config"
   },
   "engines": {
     "npm": ">=10.9.2",
