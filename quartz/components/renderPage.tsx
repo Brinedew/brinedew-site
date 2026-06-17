@@ -335,6 +335,31 @@ export function renderPage(
   const Body = BodyConstructor()
   const frame = resolveFrame(frameName)
 
+  // Draft handling: wrap content after first <hr> in .draft-locked
+  function transformDraftTree(draftRoot: Root): void {
+    const hrIndex = draftRoot.children.findIndex(
+      (child) => child.type === "element" && child.tagName === "hr",
+    )
+    if (hrIndex < 0) return
+
+    const locked = draftRoot.children.slice(hrIndex)
+    const lockedWrapper: Element = {
+      type: "element",
+      tagName: "div",
+      properties: { className: ["draft-locked"] },
+      children: locked as ElementContent[],
+    }
+    draftRoot.children = [...draftRoot.children.slice(0, hrIndex), lockedWrapper]
+  }
+
+  const isDraftPage =
+    componentData.fileData.frontmatter?.draft === true ||
+    componentData.fileData.frontmatter?.draft === "true"
+
+  if (isDraftPage) {
+    transformDraftTree(root)
+  }
+
   const lang = componentData.fileData.frontmatter?.lang ?? cfg.locale?.split("-")[0] ?? "en"
   const direction = i18n(cfg.locale).direction ?? "ltr"
   // During local dev (--serve), the dev server serves from root without the
@@ -346,7 +371,7 @@ export function renderPage(
   const doc = (
     <html lang={lang} dir={direction}>
       <Head {...componentData} />
-      <body data-slug={slug} data-basepath={basePath}>
+      <body data-slug={slug} data-basepath={basePath} data-page-draft={isDraftPage ? "true" : undefined}>
         {frame.css && <style dangerouslySetInnerHTML={{ __html: frame.css }} />}
         <div id="quartz-root" class="page" data-frame={frame.name}>
           <Body {...componentData}>
