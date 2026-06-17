@@ -967,6 +967,20 @@ a.internal {
   text-decoration: none !important;
 }
 
+/* TOC: reduce line-height on wrapped links, tighten item spacing */
+.toc ul.toc-content.overflow > li {
+  margin-bottom: 0.5rem !important;
+  line-height: 1.2 !important;
+}
+.toc ul.toc-content.overflow > li > a {
+  line-height: 1.2 !important;
+}
+
+/* Image captions: reduce gap between image and caption */
+figure > figcaption {
+  margin-top: 0.25rem !important;
+}
+
 /* v5 darkmode uses saved-theme, not data-theme */
 :root[saved-theme="dark"] {
   --light: oklch(16% 0.01 45);
