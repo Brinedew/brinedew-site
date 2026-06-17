@@ -1,5 +1,5 @@
 ---
-title: Repairman's paradox trips up engineers in biology
+title: How sprinkler fallacy trips up engineers in biology
 tags:
   - content/post
 date: 2026-06-13
@@ -7,9 +7,34 @@ draft: true
 aliases:
   -
 ---
-# Repairman's paradox trips up engineers in biology
+# How sprinkler fallacy trips up engineers in biology
 
-I'm a biologist, but for one reason or another, most of my friends ended up as engineers and programmers. As a result, I get exposed to biomedical reasoning that looks solid on its surface, but would end up causing more harm than good if taken seriously as a biohacker intervention program. Here's one fallacy I see very often.
+The last entry in the handbook *Universal Principles of Design* (available [here](https://people.engr.tamu.edu/pcr/courses/csce431/winter20/UniversalPrinciplesOfDesign.pdf)) is named "Weakest Link". According to authors, it is a design pattern featuring an element whose job is to fail and protect other, more valuable elements.
+
+Crumple zones in cars absorb the kinetic energy on collision, protecting the passenger.
+
+Fuses in electrical circuits short out first and turn off the device without frying the electronics.
+
+Shear pins in boat motors easily break when the propeller hits a rock, saving the engine.
+
+And the glass bulb of the sprinkler shatters in the heat of the fire, allowing the water to spray out.
+*** 
+Components designed for self-destruction are called "Sacrificial components" or "Fusible links"
+
+Imagine a very naive engineer tasked with resiliencemaxxing various systems. They might start by finding the most fragile components and making them less fragile. 
+
+Of course, this will end up in tragic proposals like:
+
+* Make car hulls from stronger metal
+* Swap fuses for normal wiring
+* Make shear pins solid diamond
+* Make sprinkler bulbs from bulletproof acrylic
+
+The pattern in these proposals makes up a fallacy - known as "Perverse resilience" or "Suboptimization", but I prefer "Sprinkler fallacy". 
+
+"Surely", you might object, "no technical person would actually suggest making sprinklers unbreakable."
+
+***
 
 Let's say you're a local handyman. One day, you notice some shards of glass and puddles of water around your house. Something in your house broke! This is inconvenient, and you're worried about the mold, so you decide to make sure that whatever happened doesn't happen again. 
 
@@ -18,7 +43,7 @@ You diagnose the origin of the breakage (the broken bulb in your ceiling), and m
 A week later, your house is gone. Turns out, the device you "repaired" was a sprinkler. Sprinklers are designed so that the heat from the fire breaks the sprinkler's glass bulb. Broken bulb allows the water to leak out and quench the fire. By making the sprinkler glass unbreakable, you doomed your house to die in a fire.
 
 *Repairman's paradox* is a situation where **making a part of the system more resilient ends up destroying the system quicker**. In the spirit of the Sequences, you could say that "repairing a sprinkler during a fire" is a *repairman's fallacy*.
-***
+
 Okay, the sprinkler example had to be kind of contrived, because these kinds of paradoxes occur very rarely in everyday repair of inanimate objects. Our devices weren't produced by natural selection, they were designed by engineers. Rational design principles make sure that our our devices are modular, fully documented, and have few degrees of freedom, which makes their repair straightforward and intuitive. Plus, we expect devices to be repaired by skilled people with full knowledge of the underlying mechanisms. Our repairman would rightfully be ridiculed for not knowing what sprinklers are for.
 
 However, in biology, there's a huge conceptual gap between discovering a mechanism and discovering what the mechanism is for. It's not so easy to draw a distinction between "damage" and "damage prevention" when organisms have to repair themselves (regenerate) all the time, and nobody has a full model of what all the mechanisms do, across all the nested levels of complexity. Repairing the gene often kills the cell, and killing the cell often saves the organism.
