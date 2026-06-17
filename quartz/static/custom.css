@@ -89,8 +89,14 @@ h2.page-title a::before {
   font-size: 0;
 }
 /* Keep page-title compact inside toolbar flexbox */
+.flex-component > div {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+}
 .flex-component .page-title {
   margin: 0 !important;
+  text-box: trim-both auto;
 }
 .page-title a::before {
   font-size: 19px;
