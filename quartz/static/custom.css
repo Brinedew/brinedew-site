@@ -86,6 +86,10 @@ h2.page-title a::before {
   text-decoration: none;
   display: inline-flex;
   align-items: center;
+  font-size: 0;
+}
+.page-title a::before {
+  font-size: 19px;
 }
 .page-title a:hover {
   color: var(--accent);
