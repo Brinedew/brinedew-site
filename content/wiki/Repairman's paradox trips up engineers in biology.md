@@ -1,7 +1,7 @@
 ---
 title: Repairman's paradox trips up engineers in biology
 tags:
-  - content/wiki
+  - content/post
 date: 2026-06-13
 draft: true
 aliases:
