@@ -4,7 +4,6 @@ description: "Can you identify the protein from its 3D structure? A daily guessi
 canonicalUrl: "https://geneguessr.brinedew.bio/"
 date: 2025-11-23
 draft: false
-folderPage: true
 tags:
 - content/apps
 ---
