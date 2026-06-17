@@ -1,6 +1,12 @@
 /* Iconoplasm – gene persona browser
    All colors reference Quartz CSS variables for automatic light/dark theming. */
 
+/* Static shell: hidden by default, only shown as no-JS fallback.
+   app.js removes this class on hydration to reveal the real gene card. */
+.icono-static-shell-only {
+  display: none !important;
+}
+
 /* ───────── Root container ───────── */
 #iconoplasm-root {
   max-width: 960px;
