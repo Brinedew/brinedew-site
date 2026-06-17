@@ -172,7 +172,8 @@ function personalizeIconoplasmStaticGeneShell(html, path) {
     .replace(/(<div\b[^>]*\bid=["']iconoplasm-root["'][^>]*)(>)/, (_match, open, close) => {
       return `${open} data-icono-startup-route="gene"${close}${iconoplasmStaticGeneShellHtml(safeSymbol, safeLetter)}`
     })
-    .replace(/\s*<!-- iconoplasm-static-gene-shell:start -->[\s\S]*?<!-- iconoplasm-static-gene-shell:end -->\s*/g, "")
+    .replace(/<div\b[^>]*\bclass="icono-nav icono-static-shell-only"[^>]*>[\s\S]*?<\/div>/gi, "")
+    .replace(/<div\b[^>]*\bid="icono-gene-content"[^>]*>[\s\S]*?<\/div>\s*(?=[\s]*<\/div>)/gi, "")
     .replace(/(<[^>]*\bdata-icono-static-symbol\b[^>]*>)(.*?)(<\/[^>]+>)/g, `$1${safeSymbol}$3`)
     .replace(/(<[^>]*\bdata-icono-static-letter\b[^>]*>)(.*?)(<\/[^>]+>)/g, `$1${safeLetter}$3`)
   return next
