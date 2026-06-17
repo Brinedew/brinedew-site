@@ -600,7 +600,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
         <script dangerouslySetInnerHTML={{ __html: `document.addEventListener('DOMContentLoaded',function(){var l=document.querySelector('h2.page-title a');if(l)l.href='https://brinedew.bio'})` }} />
 
         {/* Auth sidebar: loads on all pages, self-mounts the account panel into .right.sidebar */}
-        <script type="module" src="/static/shared/auth-sidebar.mjs?v=20260617a" />
+        <script type="module" src="/static/shared/auth-sidebar.mjs?v=20260617b" />
 
         {/* Conditional app assets - computed outside JSX for SSR reliability */}
         {(() => {

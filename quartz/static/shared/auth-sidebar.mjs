@@ -4,9 +4,16 @@ async function init() {
   const sidebar = document.querySelector(".right.sidebar")
   if (!sidebar) return
 
-  // If stack still exists in the DOM (preserved by Micromorph), just update the login link
+  const isHomepage = window.location.pathname === "/" || window.location.pathname === ""
+
+  // Remove stack if it exists (SPA navigation away from a page where it was mounted)
   const existing = document.getElementById("brd-sidebar-stack")
   if (existing && existing.isConnected) {
+    if (isHomepage) {
+      existing.remove()
+      return
+    }
+    // If stack still exists in the DOM (preserved by Micromorph), just update the login link
     const loginLink = existing.querySelector('.brd-sidebar-btn')
     if (loginLink) {
       const returnTo = encodeURIComponent(window.location.pathname)
@@ -14,6 +21,9 @@ async function init() {
     }
     return
   }
+
+  // Don't mount on the landing page
+  if (isHomepage) return
 
   // First mount — create the stack
   const stack = mountSidebarStack({
