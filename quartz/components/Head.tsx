@@ -591,10 +591,13 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
         )}
 
         {/* Custom CSS last with self-hosted fonts (bumped version to refresh caches) */}
-        <link href="/static/custom.css?v=bio7" rel="stylesheet" type="text/css" />
+        <link href="/static/custom.css?v=bio8" rel="stylesheet" type="text/css" />
         {iconoplasmBootstrapScript && (
           <script dangerouslySetInnerHTML={{ __html: iconoplasmBootstrapScript }} />
         )}
+
+        {/* Auth sidebar: loads on all pages, self-mounts the account panel into .right.sidebar */}
+        <script type="module" src="/static/shared/auth-sidebar.mjs?v=20260617a" />
 
         {/* Conditional app assets - computed outside JSX for SSR reliability */}
         {(() => {

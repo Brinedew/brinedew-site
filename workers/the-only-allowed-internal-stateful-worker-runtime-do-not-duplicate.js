@@ -1244,16 +1244,29 @@ function truncateDraftHtml(html, request) {
   const closeTag = '</article>'
   const articleContent = fullArticle.slice(0, -closeTag.length)
 
-  // Find first <hr> that is NOT inside a <td>, <th>, <table>, <tr>, or <blockquote>
+  // Strip .draft-locked content entirely from the HTML served to low-access users.
+  // This prevents locked text from being in the source even though CSS hides it.
+  let cleanedContent = articleContent.replace(
+    /<div\b[^>]*class="[^"]*draft-locked[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
+    "",
+  )
+
+  // Also strip the draft-cta article (it will be re-added by the template)
+  cleanedContent = cleanedContent.replace(
+    /<article\b[^>]*id="draft-cta"[^>]*>[\s\S]*?<\/article>/gi,
+    "",
+  )
+
+  // Try to find first <hr> at top level (not inside tables/blockquotes/figures)
   let hrIdx = -1
   let depth = 0
-  const skipTags = /^<\/(td|th|table|tr|blockquote|div|figure|details)>/i
-  const enterTags = /^<(td|th|table|tr|blockquote|div|figure|details)\b/i
-  for (let i = 0; i < articleContent.length; i++) {
-    if (articleContent[i] !== '<') continue
-    const tagEnd = articleContent.indexOf('>', i)
+  const skipTags = /^<\/(td|th|table|tr|blockquote|figure|details)>/i
+  const enterTags = /^<(td|th|table|tr|blockquote|figure|details)\b/i
+  for (let i = 0; i < cleanedContent.length; i++) {
+    if (cleanedContent[i] !== '<') continue
+    const tagEnd = cleanedContent.indexOf('>', i)
     if (tagEnd < 0) continue
-    const tag = articleContent.substring(i, tagEnd + 1)
+    const tag = cleanedContent.substring(i, tagEnd + 1)
     if (skipTags.test(tag)) depth--
     else if (enterTags.test(tag)) depth++
     else if (/^<hr\b/i.test(tag) && depth === 0) { hrIdx = i; break }
@@ -1261,45 +1274,47 @@ function truncateDraftHtml(html, request) {
   }
 
   if (hrIdx >= 0) {
-    const preview = articleContent.substring(0, hrIdx)
-    return html.replace(fullArticle, preview + closeTag)
+    const preview = cleanedContent.substring(0, hrIdx)
+    return html.replace(fullArticle, preview + closeTag + '<div data-truncated="true"></div>')
   }
 
-  const textOnly = fullArticle.replace(/<[^>]+>/g, " ")
-  const words = textOnly.replace(/\s+/g, " ").trim().split(" ")
+  // 100-word fallback: count words only from cleaned (non-locked) content
+  const textOnly = cleanedContent.replace(/<[^>]+>/g, " ")
+  const words = textOnly.replace(/\s+/g, " ").trim().split(" ").filter(Boolean)
   if (words.length <= 100) {
-    return html
+    return html.replace(fullArticle, cleanedContent + closeTag)
   }
 
-  // Find table position in articleContent (not fullArticle with wrapper)
-  const tableStart = articleContent.match(/<(table|div class="table-container")/i)
+  // Find table position
+  const tableStart = cleanedContent.match(/<(table|div class="table-container")/i)
 
-  // 100-word fallback on non-table text
+  // 100-word truncation
   let wordCount = 0
   let inTag = false
   let truncIdx = -1
-  for (let i = 0; i < fullArticle.length; i++) {
-    const ch = fullArticle[i]
+  for (let i = 0; i < cleanedContent.length; i++) {
+    const ch = cleanedContent[i]
     if (ch === "<") inTag = true
     else if (ch === ">") { inTag = false; continue }
     if (inTag) continue
-    if (ch === " " && i > 0 && fullArticle[i - 1] !== ">" && fullArticle[i + 1] !== "<") {
+    if (ch === " " && i > 0 && cleanedContent[i - 1] !== ">" && cleanedContent[i + 1] !== "<") {
       wordCount++
       if (wordCount >= 100) { truncIdx = i; break }
     }
   }
-  if (truncIdx < 0) return html
+  if (truncIdx < 0) {
+    return html.replace(fullArticle, cleanedContent + closeTag)
+  }
   // If truncation point lands inside/after a table, back up to before the table
   if (tableStart && tableStart.index > 0 && tableStart.index <= truncIdx) {
-    const preview = articleContent.substring(0, tableStart.index).trim()
+    const preview = cleanedContent.substring(0, tableStart.index).trim()
     if (preview.length > 0) {
-      return html.replace(fullArticle, preview + closeTag)
+      return html.replace(fullArticle, preview + closeTag + '<div data-truncated="true"></div>')
     }
-    // All text is inside the table — no pre-table content to show
-    return html
+    return html.replace(fullArticle, cleanedContent + closeTag)
   }
-  const preview = articleContent.substring(0, truncIdx)
-  return html.replace(fullArticle, preview + closeTag)
+  const preview = cleanedContent.substring(0, truncIdx)
+  return html.replace(fullArticle, preview + closeTag + '<div data-truncated="true"></div>')
 }
 
 export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
