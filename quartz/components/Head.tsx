@@ -600,7 +600,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
         <script dangerouslySetInnerHTML={{ __html: `document.addEventListener('DOMContentLoaded',function(){var l=document.querySelector('h2.page-title a');if(l)l.href='https://brinedew.bio'})` }} />
 
         {/* Auth sidebar: loads on all pages, self-mounts the account panel into .right.sidebar */}
-        <script type="module" src="/static/shared/auth-sidebar.mjs?v=20260617b" />
+        <script>{`document.addEventListener('DOMContentLoaded',function(){var s=document.createElement('script');s.type='module';s.src='/static/shared/auth-sidebar.mjs?v=20260617b';document.body.appendChild(s)})`}</script>
 
         {/* Conditional app assets - computed outside JSX for SSR reliability */}
         {(() => {
@@ -645,10 +645,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
                       `geneguessr/molstar-shared.js?v=${CACHE_BUST}`,
                     )}
                   ></script>
-                  <script
-                    type="module"
-                    src={joinSegments(root, "static", `geneguessr/app.js?v=${CACHE_BUST}`)}
-                  ></script>
+                  <script>{`document.addEventListener('DOMContentLoaded',function(){var s=document.createElement('script');s.type='module';s.src='${joinSegments(root, "static", `geneguessr/app.js?v=${CACHE_BUST}`)}';document.body.appendChild(s)})`}</script>
                 </>
               )}
               {isIconoplasm && (
@@ -726,19 +723,8 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
                       __html: `document.querySelectorAll('link[data-icono-async-style]').forEach(function(l){function a(){l.media='all';l.removeAttribute('data-icono-async-style')}if(l.sheet){a()}else{l.addEventListener('load',a,{once:true})}})`,
                     }}
                   />
-                  <script
-                    type="module"
-                    src={joinSegments(root, "static", `iconoplasm/app.js?v=${CACHE_BUST}`)}
-                  ></script>
-                  <script
-                    type="module"
-                    data-shoelace="/static/iconoplasm/vendor/shoelace/cdn"
-                    src={joinSegments(
-                      root,
-                      "static",
-                      `iconoplasm/vendor/shoelace/cdn/shoelace-autoloader.js?v=${CACHE_BUST}`,
-                    )}
-                  ></script>
+                  <script>{`document.addEventListener('DOMContentLoaded',function(){var s=document.createElement('script');s.type='module';s.src='${joinSegments(root, "static", `iconoplasm/app.js?v=${CACHE_BUST}`)}';document.body.appendChild(s)})`}</script>
+                  <script>{`var ss=document.createElement('script');ss.type='module';ss.setAttribute('data-shoelace','/static/iconoplasm/vendor/shoelace/cdn');ss.src='${joinSegments(root, "static", `iconoplasm/vendor/shoelace/cdn/shoelace-autoloader.js?v=${CACHE_BUST}`)}';document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(ss)})`}</script>
                 </>
               )}
               {isSettings && (
@@ -747,10 +733,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
                     rel="stylesheet"
                     href={joinSegments(root, "static", `site-settings/styles.css?v=${CACHE_BUST}`)}
                   />
-                  <script
-                    type="module"
-                    src={joinSegments(root, "static", `site-settings/app.js?v=${CACHE_BUST}`)}
-                  ></script>
+                  <script>{`document.addEventListener('DOMContentLoaded',function(){var s=document.createElement('script');s.type='module';s.src='${joinSegments(root, "static", `site-settings/app.js?v=${CACHE_BUST}`)}';document.body.appendChild(s)})`}</script>
                 </>
               )}
             </>
