@@ -698,6 +698,7 @@ var SECTION_CONFIG = {
   meta: { displayName: "Meta" }
 };
 var TagSections = ({ fileData, displayClass }) => {
+  if (String(fileData.slug ?? "").startsWith("apps/")) return null;
   const isDraft = fileData.frontmatter?.draft === true || fileData.frontmatter?.draft === "true";
   const pageTags = isDraft ? ["draft", ...Array.isArray(fileData.frontmatter?.tags) ? fileData.frontmatter.tags : []] : fileData.frontmatter?.tags ?? [];
   if (!Array.isArray(pageTags) || pageTags.length === 0) {
