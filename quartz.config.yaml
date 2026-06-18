@@ -228,7 +228,7 @@ plugins:
     order: 24
     layout:
       position: left
-      priority: 25
+      priority: 38
   - source:
       name: tag-sections
       repo: ./.quartz/plugins/brinedew-components
