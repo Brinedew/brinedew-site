@@ -9191,12 +9191,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     init()
   }
 
-  // Also handle Quartz's SPA navigation events
+  // Handle Quartz SPA navigation: micromorph replaces the body after popstate,
+  // potentially emptying #iconoplasm-root. Re-init when the popstate handler's
+  // render() couldn't have run yet (different path) or the root is empty.
   document.addEventListener("nav", function () {
-    // Skip if navigateTo already rendered for this path
-    var current = window.location.pathname + window.location.search
-    if (lastRenderedPath === current) return
-    // Re-init when Quartz navigates to this page
+    var currentPath = window.location.pathname + window.location.search
+    if (lastRenderedPath === currentPath) {
+      // popstate handler already rendered this path — check if the root survived
+      var root = document.getElementById(ROOT_ID)
+      if (root && root.children.length > 0) return
+    }
     setTimeout(init, 0)
   })
 })()
