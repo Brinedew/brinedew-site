@@ -724,7 +724,7 @@ Iconoplasm turns human gene symbols into memorable character cards called blots.
 ## Core links
 
 - [Iconoplasm](https://${ICONOPLASM_HOST}/): Search and browse human gene character cards
-- [Iconoplasm FAQ](https://brinedew.bio/posts/Iconoplasm-FAQ): Project background and use cases
+- [Iconoplasm FAQ](https://brinedew.bio/wiki/iconoplasm-faq): Project background and use cases
 - [Privacy Policy](https://${ICONOPLASM_HOST}/privacy): Data handling for the website and extension
 - [Sitemap](https://${ICONOPLASM_HOST}/sitemap.xml): Crawlable Iconoplasm URLs
 

@@ -92,11 +92,11 @@ Generated files:
 
 ## platform note
 
-Desktop Firefox only for now. Do not mark Android support.
+Supports both Desktop Firefox and Firefox for Android (strict_min_version 115.0+).
 
 ## support
 
-- Support site: https://brinedew.bio/posts/Iconoplasm-FAQ.html
+- Support site: https://brinedew.bio/wiki/iconoplasm-faq
 - Privacy policy: https://iconoplasm.brinedew.bio/apps/iconoplasm/privacy
 - Homepage: https://iconoplasm.brinedew.bio/
 
