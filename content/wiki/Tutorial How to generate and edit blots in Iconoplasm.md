@@ -52,13 +52,11 @@ Below are the registration instructions for each provider.
 
 **Adding funds.**
 
-Gemini API has a **Free tier** with generous rate limits that works immediately after creating your key — no credit card required. 
-
-For higher rate limits, advanced features, or paid models like Gemini 3 Pro Image Preview:
+Gemini API previously offered a Free tier for image generation, but the free tier has been **discontinued** for the `gemini-3.1-flash-image` model — you must set up billing to use it:
 1. In the AI Studio sidebar, click **Billing**.
 2. Click **Set up billing** — this links your Google Cloud billing account.
 
-![[image-41.png|Gemini billing — Free tier available without any payment setup]]
+![[image-41.png|Gemini billing — set up billing to use image generation models]]
 
 ### 2b. Krea API
 
