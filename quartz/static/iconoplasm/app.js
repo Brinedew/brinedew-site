@@ -1791,7 +1791,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         : '<a class="icono-home-auth-link icono-empty-link" href="' +
           esc(voteLoginUrl()) +
           '">Log in with Discord</a>') +
-      '<a class="icono-empty-link icono-empty-link--subtle" href="https://brinedew.bio/posts/Iconoplasm-FAQ.html">Read FAQ</a>' +
+      '<a class="icono-empty-link icono-empty-link--subtle" href="https://brinedew.bio/wiki/iconoplasm-faq">Read FAQ</a>' +
       "</div>"
     return (
       '<section class="icono-empty icono-empty--collection">' +
@@ -1903,7 +1903,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return (
       '<div class="icono-hero">' +
       '<div class="icono-hero-title">ICONOPLASM</div>' +
-      '<p class="tagline">Gene character cards - <a class="internal" href="https://brinedew.bio/posts/Iconoplasm-FAQ.html">read FAQ</a></p>' +
+      '<p class="tagline">Gene character cards - <a class="internal" href="https://brinedew.bio/wiki/iconoplasm-faq">read FAQ</a></p>' +
       '<p class="stat" id="icono-public-inventory-stat" hidden aria-live="polite"></p>' +
       "</div>" +
       '<div class="icono-gallery-toolbar">' +
@@ -2576,7 +2576,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function currentInstallExperience() {
     syncInstallStateFromDomMarker()
     var browser = detectInstallBrowser()
-    var faqUrl = "https://brinedew.bio/posts/Iconoplasm-FAQ.html"
+    var faqUrl = "https://brinedew.bio/wiki/iconoplasm-faq"
     var guestLoginActions = currentUser
       ? []
       : [

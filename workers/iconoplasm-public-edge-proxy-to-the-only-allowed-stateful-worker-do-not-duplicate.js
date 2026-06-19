@@ -643,7 +643,7 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
               error:
                 "High-fanout batch reads are reserved for the Iconoplasm website UI and browser extension",
               code: "FIRST_PARTY_ONLY",
-              faq_url: "https://brinedew.bio/posts/Iconoplasm-FAQ.html",
+              faq_url: "https://brinedew.bio/wiki/iconoplasm-faq",
             },
             403,
           ),
@@ -657,7 +657,7 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
               {
                 error: "Rich per-gene detail is reserved for the Iconoplasm website UI",
                 code: "FIRST_PARTY_ONLY",
-                faq_url: "https://brinedew.bio/posts/Iconoplasm-FAQ.html",
+                faq_url: "https://brinedew.bio/wiki/iconoplasm-faq",
               },
               403,
             ),
