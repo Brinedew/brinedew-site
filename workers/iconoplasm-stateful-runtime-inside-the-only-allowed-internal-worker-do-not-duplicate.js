@@ -4690,8 +4690,34 @@ async function callGeminiImageProvider({
   for (const image of Array.isArray(referenceImages) ? referenceImages.slice(0, 5) : []) {
     if (image?.bytes?.byteLength) parts.push(geminiInlineImagePart(image.bytes, image.contentType))
   }
-  const responseFormatImage = { aspectRatio: requestOptions.aspectRatio }
-  if (requestOptions.imageSize) responseFormatImage.imageSize = requestOptions.imageSize
+  const GEMINI_ASPECT_RATIO_MAP = {
+    "1:1": "ASPECT_RATIO_ONE_BY_ONE",
+    "2:3": "ASPECT_RATIO_TWO_BY_THREE",
+    "3:2": "ASPECT_RATIO_THREE_BY_TWO",
+    "3:4": "ASPECT_RATIO_THREE_BY_FOUR",
+    "4:3": "ASPECT_RATIO_FOUR_BY_THREE",
+    "4:5": "ASPECT_RATIO_FOUR_BY_FIVE",
+    "5:4": "ASPECT_RATIO_FIVE_BY_FOUR",
+    "9:16": "ASPECT_RATIO_NINE_BY_SIXTEEN",
+    "16:9": "ASPECT_RATIO_SIXTEEN_BY_NINE",
+    "21:9": "ASPECT_RATIO_TWENTY_ONE_BY_NINE",
+    "1:8": "ASPECT_RATIO_ONE_BY_EIGHT",
+    "8:1": "ASPECT_RATIO_EIGHT_BY_ONE",
+    "1:4": "ASPECT_RATIO_ONE_BY_FOUR",
+    "4:1": "ASPECT_RATIO_FOUR_BY_ONE",
+  }
+  const GEMINI_IMAGE_SIZE_MAP = {
+    "512": "IMAGE_SIZE_FIVE_TWELVE",
+    "1K": "IMAGE_SIZE_ONE_K",
+    "2K": "IMAGE_SIZE_TWO_K",
+    "4K": "IMAGE_SIZE_FOUR_K",
+  }
+  const responseFormatImage = {
+    aspectRatio: GEMINI_ASPECT_RATIO_MAP[requestOptions.aspectRatio] || requestOptions.aspectRatio,
+  }
+  if (requestOptions.imageSize) {
+    responseFormatImage.imageSize = GEMINI_IMAGE_SIZE_MAP[requestOptions.imageSize] || requestOptions.imageSize
+  }
   const payload = await fetchJsonWithDeadline(
     `${geminiApiBaseUrl(providerRow)}/models/${encodeURIComponent(
       requestOptions.model,
