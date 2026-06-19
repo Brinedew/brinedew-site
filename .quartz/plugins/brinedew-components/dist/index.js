@@ -2023,8 +2023,30 @@ var ImageCaptions = () => {
     }
   };
 };
+
+// src/plugins/draftTagInjector.ts
+var rehypeDraftTag = () => {
+  return (_tree, file) => {
+    const fm = file.data?.frontmatter;
+    if (!fm) return;
+    const isDraft = fm.draft === true || fm.draft === "true";
+    if (!isDraft) return;
+    const tags = Array.isArray(fm.tags) ? fm.tags : [];
+    if (!tags.includes("draft")) {
+      tags.push("draft");
+      fm.tags = tags;
+    }
+  };
+};
+var DraftTagInjector = () => ({
+  name: "brinedew-draft-tag-injector",
+  htmlPlugins() {
+    return [rehypeDraftTag];
+  }
+});
 export {
   Citation_default as Citation,
+  DraftTagInjector,
   HomepageCrawlFrontier_default as HomepageCrawlFrontier,
   IconoplasmPageSwitcher_default as IconoplasmPageSwitcher,
   ImageCaptions,

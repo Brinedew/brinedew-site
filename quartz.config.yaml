@@ -238,8 +238,13 @@ plugins:
       position: left
       priority: 40
   - source:
+      name: draft-tag-injector
+      repo: ./.quartz/plugins/brinedew-components
+    enabled: true
+    order: 45
+  - source:
       name: image-captions
-      repo: ./.quartz/plugins/brinedew-image-captions
+      repo: ./.quartz/plugins/brinedew-components
     enabled: true
     order: 25
   - source: github:quartz-community/spacer
