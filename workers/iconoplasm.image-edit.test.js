@@ -2202,7 +2202,7 @@ test("image edit jobs can use Gemini API models", async () => {
       assert.equal(init.headers["x-goog-api-key"], "gemini-test-secret")
       const body = JSON.parse(String(init.body || "{}"))
       assert.deepEqual(body.generationConfig.responseFormat, {
-        image: { aspectRatio: "3:4" },
+        image: { aspectRatio: "ASPECT_RATIO_THREE_BY_FOUR", imageSize: "IMAGE_SIZE_ONE_K" },
       })
       assert.match(String(body.contents[0].parts[0].text || ""), /3:4 vertical Iconoplasm blot/)
       assert.equal(
