@@ -93,6 +93,6 @@ Suggested tags:
 
 ## Support links
 
-- Support site: https://brinedew.bio/posts/Iconoplasm-FAQ.html
+- Support site: https://brinedew.bio/wiki/iconoplasm-faq
 - Privacy policy: https://iconoplasm.brinedew.bio/apps/iconoplasm/privacy
 - Homepage: https://iconoplasm.brinedew.bio/
