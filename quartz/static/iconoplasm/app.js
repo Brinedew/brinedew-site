@@ -4767,8 +4767,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function renderRequestDirectGenerationMarkup() {
     return (
       '<div class="icono-request-direct-panel" data-icono-request-direct-panel>' +
-      '<div class="icono-request-direct-result" data-icono-request-direct-result hidden>' +
-      '<img data-icono-request-direct-image alt="Generated candidate blot" loading="eager">' +
+      '<div class="icono-request-direct-result" data-icono-request-direct-result data-empty="true">' +
+      '<div class="icono-request-direct-result-placeholder" data-icono-request-direct-result-placeholder>' +
+      '<span>No candidate yet</span>' +
+      "</div>" +
+      '<img data-icono-request-direct-image alt="Generated candidate blot" loading="eager" hidden>' +
       "</div>" +
       '<div class="icono-request-direct-controls">' +
       '<div class="icono-request-direct-provider-row">' +
@@ -5824,12 +5827,17 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         return String(urls.medium || urls.full || urls.thumb || "").trim()
       }
 
+      function setDirectResultEmpty(empty) {
+        if (directResult) directResult.setAttribute("data-empty", empty ? "true" : "false")
+        if (directImage) directImage.hidden = !!empty
+      }
+
       function submitDirectCandidateGeneration() {
         var selected = selectedDirectProviderAndModel()
         if (!selected.providerId) return
         requestDirectState.loading = true
         requestDirectState.job = null
-        if (directResult) directResult.hidden = true
+        setDirectResultEmpty(true)
         if (directImage) directImage.removeAttribute("src")
         updateDirectGenerationButtons()
         setStatus("Generating candidate...", "")
@@ -5852,7 +5860,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             requestDirectState.job = job || null
             var url = directResultUrl(job)
             if (directImage && url) directImage.src = url
-            if (directResult) directResult.hidden = !url
+            setDirectResultEmpty(!url)
             setStatus("Candidate generated.", "success")
           })
           .catch(function (error) {
@@ -6158,7 +6166,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           directEmulsionQuery.value = option ? requestOptionPrimaryLabel(option) : ""
         }
         requestDirectState.job = null
-        if (directResult) directResult.hidden = true
+        setDirectResultEmpty(true)
         if (directImage) directImage.removeAttribute("src")
         updateDirectGenerationButtons()
         closeDirectUserEmulsionResults()
@@ -6244,7 +6252,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         directEmulsionQuery.addEventListener("input", function () {
           requestDirectState.selectedUserEmulsion = null
           requestDirectState.job = null
-          if (directResult) directResult.hidden = true
+          setDirectResultEmpty(true)
           if (directImage) directImage.removeAttribute("src")
           updateDirectGenerationButtons()
           directUserEmulsionActiveIndex = -1
