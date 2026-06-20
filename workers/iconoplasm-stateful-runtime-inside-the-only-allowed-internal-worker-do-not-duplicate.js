@@ -4901,6 +4901,7 @@ async function pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs }) {
     if (status === "completed") {
       const urls = Array.isArray(payload?.result?.urls) ? payload.result.urls : []
       const imageUrl = String(urls[0] || "").trim()
+      console.log("[KREA_DEBUG] completed job_id=" + jobId + " result_keys=" + Object.keys(payload?.result || {}).join(",") + " image_url=" + imageUrl)
       if (!imageUrl) throw new Error("Krea job completed without an image URL")
       return downloadProviderImageBytes(imageUrl)
     }
@@ -5011,19 +5012,23 @@ async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = 
       if (strengthParam) body[strengthParam] = 0.85
     }
   }
+  const requestUrl = `${baseUrl}${endpointPath}`
+  const requestBodyJson = JSON.stringify(body)
+  console.log("[KREA_DEBUG] model=" + kreaModel + " url=" + requestUrl + " body=" + requestBodyJson)
   const payload = await fetchJsonWithDeadline(
-    `${baseUrl}${endpointPath}`,
+    requestUrl,
     {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: requestBodyJson,
     },
     15_000,
     "Krea job creation timeout",
   )
+  console.log("[KREA_DEBUG] response_keys=" + Object.keys(payload || {}).join(",") + " job_id=" + String(payload?.job_id || ""))
   const jobId = sanitizeText(payload?.job_id || payload?.id || "", 120) || ""
   if (!jobId) {
     const urls = Array.isArray(payload?.result?.urls) ? payload.result.urls : []
