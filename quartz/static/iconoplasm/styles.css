@@ -725,6 +725,81 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   padding: 1rem 1.2rem 1.2rem;
 }
 
+.icono-request-dialog::part(footer) {
+  padding: 0.8rem 1.1rem 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent 28%);
+  background: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
+}
+
+.icono-request-direct-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  width: 100%;
+}
+
+.icono-request-direct-generate,
+.icono-request-direct-publish {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: min(11rem, 100%);
+  min-height: var(--icono-action-height);
+  padding: var(--icono-action-padding);
+  border: 1px solid var(--icono-action-border);
+  border-radius: var(--icono-radius-pill);
+  background: var(--icono-action-secondary-bg);
+  color: var(--dark);
+  font-family: var(--icono-action-font) !important;
+  font-size: var(--icono-action-font-size);
+  font-weight: 600;
+  line-height: 1;
+  transition:
+    transform 0.16s var(--icono-ease-out),
+    border-color 0.16s var(--icono-ease-out),
+    background-color 0.16s var(--icono-ease-out),
+    color 0.16s var(--icono-ease-out),
+    opacity 0.16s var(--icono-ease-out);
+}
+
+.icono-request-direct-publish {
+  background: var(--icono-action-primary-bg);
+  color: var(--icono-action-primary-text);
+}
+
+.icono-request-direct-generate:not(:disabled):hover,
+.icono-request-direct-generate:not(:disabled):focus-visible,
+.icono-request-direct-publish:not(:disabled):hover,
+.icono-request-direct-publish:not(:disabled):focus-visible {
+  border-color: var(--icono-action-border-hover);
+  transform: translateY(-1px);
+}
+
+.icono-request-direct-generate:not(:disabled):hover,
+.icono-request-direct-generate:not(:disabled):focus-visible {
+  background: var(--icono-action-secondary-bg-hover);
+}
+
+.icono-request-direct-publish:not(:disabled):hover,
+.icono-request-direct-publish:not(:disabled):focus-visible {
+  background: var(--icono-action-primary-bg-hover);
+}
+
+.icono-request-direct-generate:disabled,
+.icono-request-direct-publish:disabled {
+  border-color: var(--icono-action-border);
+  background: color-mix(in srgb, var(--ui-bg) 88%, var(--light) 12%);
+  color: color-mix(in srgb, var(--dark) 42%, var(--light) 58%);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.icono-request-direct-publish[hidden] {
+  display: none;
+}
+
 .icono-request-provider-field {
   display: grid;
   gap: 0.34rem;
@@ -1200,13 +1275,6 @@ img-comparison-slider.rendered [slot="second"] {
   align-items: end;
 }
 
-.icono-request-direct-action-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-  align-items: center;
-}
-
 .icono-request-direct-emulsion-picker {
   width: 100%;
 }
@@ -1419,26 +1487,18 @@ img-comparison-slider.rendered [slot="second"] {
 
 @media (min-width: 760px) {
   .icono-request-direct-controls {
-    grid-template-columns:
-      minmax(18rem, 1fr)
-      max-content;
+    grid-template-columns: 1fr;
     grid-template-areas:
-      "provider actions"
-      "picker picker"
-      "preview preview"
-      "status status";
+      "provider"
+      "picker"
+      "preview"
+      "status";
     align-items: start;
     column-gap: 1rem;
   }
 
   .icono-request-direct-provider-row {
     grid-area: provider;
-  }
-
-  .icono-request-direct-action-row {
-    grid-area: actions;
-    align-self: start;
-    justify-self: start;
   }
 
   .icono-request-direct-emulsion-picker {
@@ -1472,7 +1532,6 @@ img-comparison-slider.rendered [slot="second"] {
     grid-template-columns: 1fr;
     grid-template-areas:
       "provider"
-      "actions"
       "picker"
       "preview"
       "status";
