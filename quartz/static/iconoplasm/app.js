@@ -5156,7 +5156,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var options = []
     supported.forEach(function (sp) {
       if (!configured[sp.provider_id]) return
-      (sp.model_options || []).forEach(function (m) {
+      var editModels = (sp.model_options || []).filter(function (m) {
+        return m.edit_image_param
+      })
+      editModels.forEach(function (m) {
         options.push({
           value: sp.provider_id + ":" + m.model,
           label: sp.label + " · " + m.label,
@@ -5170,7 +5173,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             return '<sl-option value="' + esc(opt.value) + '">' + esc(opt.label) + "</sl-option>"
           })
           .join("")
-      : '<sl-option value="">No saved image editing provider</sl-option>'
+      : '<sl-option value="">No editing-capable providers configured</sl-option>'
     select.disabled = !options.length
     if (!imageEditDialogState.encryptionConfigured) select.disabled = true
     setImageEditProviderValue(select, selectedValue)
