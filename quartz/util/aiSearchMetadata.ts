@@ -5,7 +5,11 @@ import { getPublicUrlForSlug } from "./crawlability"
 type JsonLdScalar = string | number | boolean
 export type AiSearchJsonLd = Record<
   string,
-  JsonLdScalar | JsonLdScalar[] | Record<string, JsonLdScalar>
+  | JsonLdScalar
+  | JsonLdScalar[]
+  | Record<string, JsonLdScalar>
+  | Record<string, unknown>
+  | Array<Record<string, unknown>>
 >
 
 type BuildAiSearchJsonLdArgs = {
@@ -115,9 +119,12 @@ export function buildAiSearchJsonLd({
 
   if (jsonLd["@type"] === "FAQPage" && Array.isArray(fm.faq)) {
     jsonLd.mainEntity = (fm.faq as Array<Record<string, unknown>>)
-      .filter((entry): entry is Record<string, string> =>
-        typeof entry.question === "string" && typeof entry.answer === "string" &&
-        entry.question.trim().length > 0 && entry.answer.trim().length > 0,
+      .filter(
+        (entry): entry is Record<string, string> =>
+          typeof entry.question === "string" &&
+          typeof entry.answer === "string" &&
+          entry.question.trim().length > 0 &&
+          entry.answer.trim().length > 0,
       )
       .map((entry) => ({
         "@type": "Question",
