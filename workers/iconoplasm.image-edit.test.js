@@ -864,46 +864,65 @@ test("image edit provider keys are encrypted and listed without secrets", async 
     /\$0\.067\/image/,
   )
   const krea = filtered.supported_providers.find((provider) => provider.provider_id === "krea")
-  const kreaModelFlags = Object.fromEntries(
-    krea.model_options.map((option) => [option.model, option.edit_capable]),
+  // The default op is image_edit, so the list is filtered to edit-capable models.
+  // Verify every edit-capable Krea model is exposed and the text-to-image-only
+  // ones (Krea 2 Large, Seedream 4) are absent from the edit dialog.
+  const kreaModelNames = (krea.model_options || []).map((option) => option.model)
+  for (const required of [
+    "bfl/flux-1-kontext-dev",
+    "bfl/flux-1-dev",
+    "google/nano-banana",
+    "google/nano-banana-pro",
+    "google/nano-banana-2",
+    "openai/gpt-image",
+    "openai/gpt-image-2",
+    "bytedance/seededit",
+    "runway/gen-4-image",
+    "ideogram/ideogram-3",
+    "z-image/z-image",
+  ]) {
+    assert.ok(
+      kreaModelNames.includes(required),
+      "Krea edit dialog should expose " + required,
+    )
+  }
+  for (const hidden of [
+    "krea/krea-2/large",
+    "krea/krea-2/medium",
+    "krea/krea-2/medium-turbo",
+    "bytedance/seedream-4",
+    "bytedance/seedream-5-lite",
+    "luma/uni-1",
+    "google/imagen-3",
+    "google/imagen-4",
+    "google/imagen-4-fast",
+    "google/imagen-4-ultra",
+    "bfl/flux-1.1-pro",
+    "bfl/flux-1.1-pro-ultra",
+    "ideogram/ideogram-2-turbo",
+    "qwen/2512",
+  ]) {
+    assert.ok(
+      !kreaModelNames.includes(hidden),
+      "Krea edit dialog should NOT expose " + hidden,
+    )
+  }
+  // The edit-capable flag and the source-image field name are preserved on
+  // every exposed model so the backend can pick the right body shape.
+  const fluxKontext = krea.model_options.find(
+    (option) => option.model === "bfl/flux-1-kontext-dev",
   )
-  // Frontend uses edit_capable to filter the edit dropdown.
-  assert.equal(
-    kreaModelFlags["bfl/flux-1-dev"],
-    true,
-    "Krea Flux should be exposed as edit-capable",
+  assert.equal(fluxKontext.edit_capable, true)
+  assert.equal(fluxKontext.edit_image_param, "image_url")
+  assert.equal(fluxKontext.edit_strength_param, "strength")
+  const nanoBananaPro = krea.model_options.find(
+    (option) => option.model === "google/nano-banana-pro",
   )
-  assert.equal(
-    kreaModelFlags["google/nano-banana-pro"],
-    true,
-    "Krea Nano Banana Pro should be exposed as edit-capable",
-  )
-  assert.equal(
-    kreaModelFlags["openai/gpt-image-2"],
-    true,
-    "Krea ChatGPT 2 should be exposed as edit-capable",
-  )
-  assert.equal(
-    kreaModelFlags["krea/krea-2/large"],
-    false,
-    "Krea 2 Large is text-to-image only and must not be exposed as edit-capable",
-  )
-  assert.equal(
-    kreaModelFlags["bytedance/seedream-4"],
-    false,
-    "Seedream 4 only takes style_images and must not be exposed as edit-capable",
-  )
-  // And the field used to send the source image (image_url vs image_urls)
-  // is preserved so the backend can still pick the right body field.
-  assert.equal(
-    krea.model_options.find((option) => option.model === "bfl/flux-1-dev").edit_image_param,
-    "image_url",
-  )
-  assert.equal(
-    krea.model_options.find((option) => option.model === "google/nano-banana-pro")
-      .edit_image_param,
-    "image_urls",
-  )
+  assert.equal(nanoBananaPro.edit_capable, true)
+  assert.equal(nanoBananaPro.edit_image_param, "image_urls")
+  // The dialog also pins the user's last-used model at the top of the list
+  // when the worker writes one. We trigger that write via a successful edit
+  // job and re-fetch the providers list; see the dedicated last-used test.
 })
 
 test("OpenAI is a first-class BYOK image provider with model pricing and Image API requests", async () => {
@@ -2199,7 +2218,7 @@ test("candidate generation jobs can use Krea API models and expose compute-unit 
     assert.equal(saveResponse.status, 200)
     assert.equal(saved.provider.provider_id, "krea")
     assert.equal(saved.provider.model, "krea/krea-2/large")
-    assert.equal(saved.provider.pricing_label, "$0.060/image")
+    assert.equal(saved.provider.pricing_label, "$0.060/request")
 
     const createResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -3240,6 +3259,500 @@ test("image edit jobs with Krea Seedream 4 are rejected because the model has no
     assert.equal(created.job.status, "failed")
     assert.match(created.job.error, /does not support image-to-image editing/i)
     assert.equal(providerCalled, false)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("image edit jobs with Krea Flux Kontext use image_url + strength in the request body", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    if (url === "https://api.krea.ai/generate/image/bfl/flux-1-kontext-dev") {
+      const body = JSON.parse(String(init.body || "{}"))
+      assert.equal(typeof body.image_url, "string")
+      assert.match(body.image_url, /\/portraits\/v1\//)
+      assert.equal(Array.isArray(body.image_urls), false)
+      assert.equal(body.strength, 0.85)
+      return new Response(JSON.stringify({ job_id: "kontext-job-1", status: "queued" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (url === "https://api.krea.ai/jobs/kontext-job-1") {
+      return new Response(
+        JSON.stringify({
+          job_id: "kontext-job-1",
+          status: "completed",
+          result: { urls: ["https://krea.example/kontext.png"] },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://krea.example/kontext.png") {
+      return new Response("kontext-png-bytes", {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      })
+    }
+    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "bfl/flux-1-kontext-dev",
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+
+    const createResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "krea",
+              model: "bfl/flux-1-kontext-dev",
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const created = await createResponse.json()
+    assert.equal(createResponse.status, 200)
+    assert.equal(created.job.status, "succeeded")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("image edit jobs with Krea Runway Gen-4 use reference_images[{url,tag}] body shape", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    if (url === "https://api.krea.ai/generate/image/runway/gen-4-image") {
+      const body = JSON.parse(String(init.body || "{}"))
+      // Runway wants reference_images as an object array, not a string array.
+      assert.equal(Array.isArray(body.reference_images), true)
+      assert.equal(body.reference_images.length, 1)
+      assert.equal(typeof body.reference_images[0], "object")
+      assert.match(body.reference_images[0].url, /\/portraits\/v1\//)
+      assert.equal(body.reference_images[0].tag, "source")
+      return new Response(JSON.stringify({ job_id: "runway-job-1", status: "queued" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (url === "https://api.krea.ai/jobs/runway-job-1") {
+      return new Response(
+        JSON.stringify({
+          job_id: "runway-job-1",
+          status: "completed",
+          result: { urls: ["https://krea.example/runway.png"] },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://krea.example/runway.png") {
+      return new Response("runway-png-bytes", {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      })
+    }
+    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "runway/gen-4-image",
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+
+    const createResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "krea",
+              model: "runway/gen-4-image",
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const created = await createResponse.json()
+    assert.equal(createResponse.status, 200)
+    assert.equal(created.job.status, "succeeded")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("image edit jobs with Krea Ideogram 3.0 use character_reference_images body shape", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    if (url === "https://api.krea.ai/generate/image/ideogram/ideogram-3") {
+      const body = JSON.parse(String(init.body || "{}"))
+      assert.equal(Array.isArray(body.character_reference_images), true)
+      assert.equal(body.character_reference_images.length, 1)
+      assert.equal(typeof body.character_reference_images[0], "string")
+      assert.match(body.character_reference_images[0], /\/portraits\/v1\//)
+      return new Response(JSON.stringify({ job_id: "ideogram-job-1", status: "queued" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (url === "https://api.krea.ai/jobs/ideogram-job-1") {
+      return new Response(
+        JSON.stringify({
+          job_id: "ideogram-job-1",
+          status: "completed",
+          result: { urls: ["https://krea.example/ideogram.png"] },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://krea.example/ideogram.png") {
+      return new Response("ideogram-png-bytes", {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      })
+    }
+    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "ideogram/ideogram-3",
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+
+    const createResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "krea",
+              model: "ideogram/ideogram-3",
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const created = await createResponse.json()
+    assert.equal(createResponse.status, 200)
+    assert.equal(created.job.status, "succeeded")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("candidate-generation provider list includes only generate-capable Krea models", async () => {
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request(
+      "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+        body: JSON.stringify({
+          provider_id: "krea",
+          api_key: "krea-test-secret",
+          model: "krea/krea-2/large",
+        }),
+      },
+    ),
+    env,
+    { waitUntil() {} },
+  )
+
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers?op=candidate_generation",
+        { headers: { Cookie: "session=abc123" } },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+  const body = await response.json()
+  assert.equal(body.operation, "candidate_generation")
+  const krea = body.supported_providers.find((p) => p.provider_id === "krea")
+  const kreaModelNames = krea.model_options.map((m) => m.model)
+  for (const required of [
+    "krea/krea-2/large",
+    "bfl/flux-1-dev",
+    "google/nano-banana-pro",
+    "openai/gpt-image-2",
+    "bytedance/seedream-4",
+    "ideogram/ideogram-3",
+  ]) {
+    assert.ok(
+      kreaModelNames.includes(required),
+      "Krea candidate generation should expose " + required,
+    )
+  }
+  // The user gets to pick a text-to-image model for the "new candidate" flow.
+  // Edit-only models (SeedEdit, Runway) should not appear in this list.
+  assert.ok(
+    !kreaModelNames.includes("bytedance/seededit"),
+    "SeedEdit is edit-only and should not appear in candidate generation",
+  )
+  assert.ok(
+    !kreaModelNames.includes("runway/gen-4-image"),
+    "Runway Gen-4 requires reference images and should not appear in candidate generation",
+  )
+})
+
+test("last-used model is remembered and pinned at the top of the providers list, but only on change", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  // Track every KV put to the last-used key. A user who submits 10 successful
+  // edits with the same model should produce exactly 1 KV write.
+  const kvPuts = []
+  const env = buildEnv(db)
+  env.KV = {
+    async get(k) {
+      if (k.startsWith("iconoplasm:image-edit-last-used:")) {
+        // Pretend the user previously used bfl/flux-1-kontext-dev.
+        if (k.endsWith(":krea")) return "bfl/flux-1-kontext-dev"
+        return ""
+      }
+      return null
+    },
+    async put(k, v, opts) {
+      kvPuts.push({ k, v, opts })
+    },
+    async delete() {},
+  }
+  let kreaCalls = 0
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    if (
+      url === "https://api.krea.ai/generate/image/bfl/flux-1-kontext-dev" ||
+      url === "https://api.krea.ai/generate/image/bfl/flux-1-dev"
+    ) {
+      kreaCalls += 1
+      return new Response(JSON.stringify({ job_id: "job-" + kreaCalls, status: "queued" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (url.startsWith("https://api.krea.ai/jobs/job-")) {
+      return new Response(
+        JSON.stringify({
+          job_id: url.split("/").pop(),
+          status: "completed",
+          result: { urls: ["https://krea.example/x.png"] },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://krea.example/x.png") {
+      return new Response("png", { status: 200, headers: { "Content-Type": "image/png" } })
+    }
+    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "bfl/flux-1-kontext-dev",
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+
+    // The providers list should pin the (mocked) last-used model at index 0.
+    const listResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers?op=image_edit",
+          { headers: { Cookie: "session=abc123" } },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const listed = await listResponse.json()
+    const krea = listed.supported_providers.find((p) => p.provider_id === "krea")
+    assert.equal(krea.model_options[0].model, "bfl/flux-1-kontext-dev")
+    assert.equal(krea.model_options[0].last_used, true)
+
+    // Now submit a successful edit job using the same model. The worker must
+    // NOT write to KV because the model is already the last-used one.
+    const kvPutsBefore = kvPuts.filter((p) =>
+      p.k.startsWith("iconoplasm:image-edit-last-used:image_edit:user-1:krea"),
+    ).length
+    const createResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "krea",
+              model: "bfl/flux-1-kontext-dev",
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const created = await createResponse.json()
+    assert.equal(createResponse.status, 200)
+    assert.equal(created.job.status, "succeeded")
+    const kvPutsAfter = kvPuts.filter((p) =>
+      p.k.startsWith("iconoplasm:image-edit-last-used:image_edit:user-1:krea"),
+    ).length
+    assert.equal(
+      kvPutsAfter,
+      kvPutsBefore,
+      "Worker should NOT write to KV when the user picks the same model they used before",
+    )
+
+    // Submit a job with a different model. The worker MUST write to KV once.
+    const newKvPutsBefore = kvPuts.filter((p) =>
+      p.k.startsWith("iconoplasm:image-edit-last-used:image_edit:user-1:krea"),
+    ).length
+    // Switch the saved provider's model to bfl/flux-1-dev by sending the new
+    // model in the request body. The route at line 25671 already applies the
+    // model override from the body to providerRow.model.
+    const secondResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "krea",
+              model: "bfl/flux-1-dev",
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    await secondResponse.json()
+    const newKvPutsAfter = kvPuts.filter((p) =>
+      p.k.startsWith("iconoplasm:image-edit-last-used:image_edit:user-1:krea"),
+    ).length
+    assert.equal(
+      newKvPutsAfter,
+      newKvPutsBefore + 1,
+      "Worker should write to KV exactly once when the user switches model",
+    )
   } finally {
     globalThis.fetch = originalFetch
   }

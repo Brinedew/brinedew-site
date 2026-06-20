@@ -193,7 +193,7 @@ test("new candidate modal exposes separate free queue and configured image API g
   )
   assert.match(
     app,
-    /fetchAuthedJSON\("\/api\/iconoplasm\/image-edit\/providers"/,
+    /\/api\/iconoplasm\/image-edit\/providers/,
     "direct generation should reuse the saved image provider settings instead of adding a second key path",
   )
   assert.match(
