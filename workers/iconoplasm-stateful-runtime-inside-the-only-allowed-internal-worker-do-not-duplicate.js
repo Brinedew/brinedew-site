@@ -4651,9 +4651,14 @@ async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = 
 
   if (urls.length) {
     if (!editImageParam) {
+      var editLabels = (providerDef?.model_options || [])
+        .filter(function (m) { return m.edit_image_param })
+        .map(function (m) { return m.label })
+        .filter(Boolean)
       throw new Error(
-        `The selected Krea model "${kreaOption?.label || kreaModel}" does not support image-to-image editing. ` +
-        `Switch to a model that supports image input (e.g. Flux) in your provider settings.`,
+        "The selected Krea model \"" + (kreaOption?.label || kreaModel) +
+        "\" does not support image-to-image editing. " +
+        "Use a model that supports image input: " + editLabels.join(", ") + ".",
       )
     }
     if (editImageParam === "image_url") {
@@ -25663,6 +25668,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const userId = normalizeUserId(sessionUser.user_id)
       const providerId = normalizeImageEditProviderId(p?.provider_id || p?.provider || "")
       const providerRow = await getImageEditProviderRow(env, { userId, providerId })
+      if (providerRow && p?.model) {
+        providerRow.model = sanitizeText(String(p.model).trim(), 128) || providerRow.model
+      }
       if (!providerRow?.encrypted_api_key) {
         return done(
           "image_edit_jobs_400",
