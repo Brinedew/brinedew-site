@@ -103,6 +103,8 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         endpoint_path: "/generate/image/bfl/flux-1-dev",
         pricing_label: "~$0.002/image",
         estimated_seconds: 4,
+        edit_image_param: "image_url",
+        edit_strength_param: "strength",
       }),
       Object.freeze({
         model: "google/nano-banana-pro",
@@ -110,6 +112,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         endpoint_path: "/generate/image/google/nano-banana-pro",
         pricing_label: "~$0.10/image",
         estimated_seconds: 45,
+        edit_image_param: "image_urls",
       }),
       Object.freeze({
         model: "openai/gpt-image-2",
@@ -117,6 +120,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         endpoint_path: "/generate/image/openai/gpt-image-2",
         pricing_label: "~$0.16/image",
         estimated_seconds: 60,
+        edit_image_param: "image_urls",
       }),
       Object.freeze({
         model: "bytedance/seedream-4",
@@ -4619,39 +4623,45 @@ async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = 
   const kreaModel = resolveImageEditProviderModel(providerRow?.model || "", providerDef)
   const kreaOption = imageEditProviderModelOption(providerDef, kreaModel)
   const isNativeKrea2 = kreaModelIsNativeKrea2(kreaModel)
+  const editImageParam = String(kreaOption?.edit_image_param || "").trim()
   const urls = (Array.isArray(imageUrls) ? imageUrls : [])
     .map((value) => String(value || "").trim())
     .filter(Boolean)
     .slice(0, 1)
 
+  const reqWidth =
+    Number(kreaOption?.request_width) > 0
+      ? Number(kreaOption.request_width)
+      : ICONOPLASM_BLOT_REQUEST_WIDTH
+  const reqHeight =
+    Number(kreaOption?.request_height) > 0
+      ? Number(kreaOption.request_height)
+      : ICONOPLASM_BLOT_REQUEST_HEIGHT
+
   let body
   if (isNativeKrea2) {
-    const reqWidth =
-      Number(kreaOption?.request_width) > 0
-        ? Number(kreaOption.request_width)
-        : ICONOPLASM_BLOT_REQUEST_WIDTH
-    const reqHeight =
-      Number(kreaOption?.request_height) > 0
-        ? Number(kreaOption.request_height)
-        : ICONOPLASM_BLOT_REQUEST_HEIGHT
     body = {
       prompt,
       aspect_ratio: kreaModelAspectRatio(reqWidth, reqHeight),
       resolution: "1K",
     }
   } else {
-    const reqWidth =
-      Number(kreaOption?.request_width) > 0
-        ? Number(kreaOption.request_width)
-        : ICONOPLASM_BLOT_REQUEST_WIDTH
-    const reqHeight =
-      Number(kreaOption?.request_height) > 0
-        ? Number(kreaOption.request_height)
-        : ICONOPLASM_BLOT_REQUEST_HEIGHT
     body = { prompt, width: reqWidth, height: reqHeight }
-    if (urls.length) {
-      body.image_url = urls[0]
-      body.strength = 0.85
+  }
+
+  if (urls.length) {
+    if (!editImageParam) {
+      throw new Error(
+        `The selected Krea model "${kreaOption?.label || kreaModel}" does not support image-to-image editing. ` +
+        `Switch to a model that supports image input (e.g. Flux) in your provider settings.`,
+      )
+    }
+    if (editImageParam === "image_url") {
+      body[editImageParam] = urls[0]
+      const strengthParam = String(kreaOption?.edit_strength_param || "").trim()
+      if (strengthParam) body[strengthParam] = 0.85
+    } else {
+      body[editImageParam] = urls
     }
   }
   const payload = await fetchJsonWithDeadline(
