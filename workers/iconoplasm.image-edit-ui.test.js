@@ -134,7 +134,10 @@ test("B-517 edit blot UI uses one dialog modal and the direct image-edit APIs", 
   assert.doesNotMatch(adjustmentRowCss, /border-radius:\s*8px/)
   assert.match(css, /\.icono-image-edit-before-after/)
   assert.match(css, /img-comparison-slider\.rendered/)
-  assert.match(head, /data-shoelace="\/static\/iconoplasm\/vendor\/shoelace\/cdn"/)
+  assert.match(
+    head,
+    /setAttribute\(['"]data-shoelace['"],\s*['"]\/static\/iconoplasm\/vendor\/shoelace\/cdn['"]\)/,
+  )
   assert.doesNotMatch(head, /data-shoelace=\{joinSegments/)
 })
 

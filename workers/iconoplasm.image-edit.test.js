@@ -861,7 +861,48 @@ test("image edit provider keys are encrypted and listed without secrets", async 
   assert.ok(gemini.model_options.some((option) => option.model === "gemini-3.1-flash-image"))
   assert.match(
     gemini.model_options.find((option) => option.model === "gemini-3.1-flash-image").pricing_label,
-    /\$0\.039\/image/,
+    /\$0\.067\/image/,
+  )
+  const krea = filtered.supported_providers.find((provider) => provider.provider_id === "krea")
+  const kreaModelFlags = Object.fromEntries(
+    krea.model_options.map((option) => [option.model, option.edit_capable]),
+  )
+  // Frontend uses edit_capable to filter the edit dropdown.
+  assert.equal(
+    kreaModelFlags["bfl/flux-1-dev"],
+    true,
+    "Krea Flux should be exposed as edit-capable",
+  )
+  assert.equal(
+    kreaModelFlags["google/nano-banana-pro"],
+    true,
+    "Krea Nano Banana Pro should be exposed as edit-capable",
+  )
+  assert.equal(
+    kreaModelFlags["openai/gpt-image-2"],
+    true,
+    "Krea ChatGPT 2 should be exposed as edit-capable",
+  )
+  assert.equal(
+    kreaModelFlags["krea/krea-2/large"],
+    false,
+    "Krea 2 Large is text-to-image only and must not be exposed as edit-capable",
+  )
+  assert.equal(
+    kreaModelFlags["bytedance/seedream-4"],
+    false,
+    "Seedream 4 only takes style_images and must not be exposed as edit-capable",
+  )
+  // And the field used to send the source image (image_url vs image_urls)
+  // is preserved so the backend can still pick the right body field.
+  assert.equal(
+    krea.model_options.find((option) => option.model === "bfl/flux-1-dev").edit_image_param,
+    "image_url",
+  )
+  assert.equal(
+    krea.model_options.find((option) => option.model === "google/nano-banana-pro")
+      .edit_image_param,
+    "image_urls",
   )
 })
 
@@ -2891,6 +2932,314 @@ test("image edit publish is limited to the job owner", async () => {
     assert.match(publishPayload.error, /not found/i)
     assert.equal(db.publishedAsset, undefined)
     assert.equal(db.voteImportPayload, undefined)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("image edit jobs with Krea Flux use image_url + strength in the request body", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  const fetchCalls = []
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    fetchCalls.push({ url, init })
+    if (url === "https://api.krea.ai/generate/image/bfl/flux-1-dev") {
+      assert.equal(init.headers.Authorization, "Bearer krea-test-secret")
+      const body = JSON.parse(String(init.body || "{}"))
+      // Flux (bfl/flux-1-dev) uses singular image_url, not the image_urls[] array.
+      assert.equal(typeof body.image_url, "string")
+      assert.match(body.image_url, /\/portraits\/v1\//)
+      assert.equal(Array.isArray(body.image_urls), false)
+      // Krea Flux also takes a strength field for img2img; the worker sets 0.85.
+      assert.equal(body.strength, 0.85)
+      return new Response(JSON.stringify({ job_id: "flux-job-1", status: "queued" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (url === "https://api.krea.ai/jobs/flux-job-1") {
+      return new Response(
+        JSON.stringify({
+          job_id: "flux-job-1",
+          status: "completed",
+          result: { urls: ["https://krea.example/flux.png"] },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://krea.example/flux.png") {
+      return new Response("flux-png-bytes", {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      })
+    }
+    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "bfl/flux-1-dev",
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+
+    const createResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "krea",
+              model: "bfl/flux-1-dev",
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const created = await createResponse.json()
+    assert.equal(createResponse.status, 200)
+    assert.equal(created.job.status, "succeeded")
+    assert.ok(created.job.result_asset_sha256)
+    // The Krea job creation call must have been made exactly once.
+    const fluxCalls = fetchCalls.filter((call) => call.url === "https://api.krea.ai/generate/image/bfl/flux-1-dev")
+    assert.equal(fluxCalls.length, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("image edit jobs with Krea Nano Banana Pro use image_urls[] array and aspect_ratio", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  const fetchCalls = []
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    fetchCalls.push({ url, init })
+    if (url === "https://api.krea.ai/generate/image/google/nano-banana-pro") {
+      const body = JSON.parse(String(init.body || "{}"))
+      // Nano Banana Pro on Krea takes image_urls[] (plural array), not singular image_url.
+      assert.equal(Array.isArray(body.image_urls), true)
+      assert.equal(body.image_urls.length, 1)
+      assert.match(body.image_urls[0], /\/portraits\/v1\//)
+      assert.equal("image_url" in body, false)
+      // The blot is 3:4 and Nano Banana Pro supports 3:4 in its aspect_ratio enum.
+      assert.equal(body.aspect_ratio, "3:4")
+      return new Response(JSON.stringify({ job_id: "nbp-job-1", status: "queued" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (url === "https://api.krea.ai/jobs/nbp-job-1") {
+      return new Response(
+        JSON.stringify({
+          job_id: "nbp-job-1",
+          status: "completed",
+          result: { urls: ["https://krea.example/nbp.png"] },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://krea.example/nbp.png") {
+      return new Response("nbp-png-bytes", {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      })
+    }
+    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "google/nano-banana-pro",
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+
+    const createResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "krea",
+              model: "google/nano-banana-pro",
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const created = await createResponse.json()
+    assert.equal(createResponse.status, 200)
+    assert.equal(created.job.status, "succeeded")
+    assert.ok(created.job.result_asset_sha256)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("image edit jobs with Krea Krea-2-Large are rejected because the model cannot do image-to-image", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  let providerCalled = false
+  globalThis.fetch = async () => {
+    providerCalled = true
+    throw new Error("Krea 2 Large should not be called for an image edit job")
+  }
+
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "krea/krea-2/large",
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+
+    const createResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "krea",
+              model: "krea/krea-2/large",
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const created = await createResponse.json()
+    assert.equal(createResponse.status, 502)
+    assert.equal(created.job.status, "failed")
+    assert.match(created.job.error, /does not support image-to-image editing/i)
+    assert.match(created.job.error, /Flux/)
+    assert.equal(providerCalled, false)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("image edit jobs with Krea Seedream 4 are rejected because the model has no image input field", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  let providerCalled = false
+  globalThis.fetch = async () => {
+    providerCalled = true
+    throw new Error("Seedream 4 should not be called for an image edit job")
+  }
+
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "bytedance/seedream-4",
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+
+    const createResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "krea",
+              model: "bytedance/seedream-4",
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const created = await createResponse.json()
+    assert.equal(createResponse.status, 502)
+    assert.equal(created.job.status, "failed")
+    assert.match(created.job.error, /does not support image-to-image editing/i)
+    assert.equal(providerCalled, false)
   } finally {
     globalThis.fetch = originalFetch
   }

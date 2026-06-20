@@ -294,6 +294,13 @@ import {
       '<label class="site-settings-field"><span>Model and price</span><select class="site-settings-select" id="site-settings-image-api-model">' +
       imageProviderModelOptionsMarkup(supportedProvider, selectedModel) +
       "</select></label>" +
+      '<div class="site-settings-plain-value" id="site-settings-image-api-price">' +
+      esc(
+        selectedModelOption && selectedModelOption.pricing_label
+          ? selectedModelOption.pricing_label
+          : "Pricing varies by model.",
+      ) +
+      "</div>" +
       '<label class="site-settings-field"><span>API key</span><div class="site-settings-secret"><input class="site-settings-input" id="site-settings-image-api-key" type="password" autocomplete="off" placeholder="' +
       esc(savedProvider && savedProvider.configured ? "Saved key is configured" : "Paste API key") +
       '"><button class="site-settings-inline-btn" id="site-settings-image-api-save" type="button">Save API</button></div></label>' +
@@ -685,6 +692,14 @@ import {
         ""
       imageApiModelEl.innerHTML = imageProviderModelOptionsMarkup(provider, selectedModel)
       if (!imageApiModelEl.value && selectedModel) imageApiModelEl.value = selectedModel
+      var imageApiPriceEl = document.getElementById("site-settings-image-api-price")
+      var currentModelOption = imageProviderModelOption(provider, imageApiModelEl.value || selectedModel)
+      if (imageApiPriceEl) {
+        imageApiPriceEl.textContent =
+          currentModelOption && currentModelOption.pricing_label
+            ? currentModelOption.pricing_label
+            : "Pricing varies by model."
+      }
       if (imageApiKeyEl) {
         imageApiKeyEl.value = ""
         imageApiKeyEl.placeholder =
@@ -699,6 +714,17 @@ import {
     }
 
     if (imageApiProviderEl) imageApiProviderEl.addEventListener("change", syncImageApiControls)
+    if (imageApiModelEl) {
+      imageApiModelEl.addEventListener("change", function () {
+        var provider = imageProviderById(imageApiProviderEl.value)
+        var option = imageProviderModelOption(provider, imageApiModelEl.value)
+        var imageApiPriceEl = document.getElementById("site-settings-image-api-price")
+        if (imageApiPriceEl) {
+          imageApiPriceEl.textContent =
+            option && option.pricing_label ? option.pricing_label : "Pricing varies by model."
+        }
+      })
+    }
     if (imageApiRetryBtn) {
       imageApiRetryBtn.addEventListener("click", function () {
         void loadImageProviders().then(render)
