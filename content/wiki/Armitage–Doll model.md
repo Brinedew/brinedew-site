@@ -3,7 +3,7 @@ title: Armitage–Doll model
 tags:
 - content/wiki
 date: 2025-11-09
-draft: false
+draft: true
 aliases:
 - 
 ---
