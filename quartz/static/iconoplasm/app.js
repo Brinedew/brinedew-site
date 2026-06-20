@@ -5150,24 +5150,35 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var select = dialog.querySelector("[data-icono-image-edit-provider]")
     if (!select) return
     var providers = imageEditDialogState.providers || []
-    var selectedProviderId = providers.length ? providers[0].provider_id : ""
-    select.innerHTML = providers.length
-      ? providers
-          .map(function (provider) {
-            return (
-              '<sl-option value="' +
-              esc(provider.provider_id) +
-              '">' +
-              esc(provider.label || provider.provider_id) +
-              (provider.model ? " · " + esc(provider.model) : "") +
-              "</sl-option>"
-            )
+    var supported = imageEditDialogState.supportedProviders || []
+    var configured = {}
+    providers.forEach(function (p) { configured[p.provider_id] = p })
+    var options = []
+    supported.forEach(function (sp) {
+      var stored = configured[sp.provider_id]
+      if (!stored) return
+      var editModels = (sp.model_options || []).filter(function (m) {
+        return m.edit_image_param
+      })
+      if (!editModels.length) return
+      editModels.forEach(function (m) {
+        options.push({
+          value: sp.provider_id + ":" + m.model,
+          label: sp.label + " · " + m.label,
+        })
+      })
+    })
+    var selectedValue = options.length ? options[0].value : ""
+    select.innerHTML = options.length
+      ? options
+          .map(function (opt) {
+            return '<sl-option value="' + esc(opt.value) + '">' + esc(opt.label) + "</sl-option>"
           })
           .join("")
-      : '<sl-option value="">No saved image editing provider</sl-option>'
-    select.disabled = !providers.length
+      : '<sl-option value="">No editing-capable providers configured</sl-option>'
+    select.disabled = !options.length
     if (!imageEditDialogState.encryptionConfigured) select.disabled = true
-    setImageEditProviderValue(select, selectedProviderId)
+    setImageEditProviderValue(select, selectedValue)
     updateImageEditButtons()
   }
 
@@ -5382,7 +5393,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function submitImageEdit() {
     var source = imageEditDialogState.source
     if (!source || !source.symbol || !source.asset_sha256) return
-    var providerId = imageEditSelectedProvider()
+    var raw = imageEditSelectedProvider()
+    var providerParts = raw.split(":")
+    var providerId = providerParts[0] || raw
+    var model = providerParts.slice(1).join(":") || ""
     var adjustments = collectImageEditAdjustments()
     var dialog = ensureImageEditDialog()
     var sourceViewer = dialog.querySelector("[data-icono-image-edit-source-viewer]")
@@ -5392,17 +5406,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     imageEditDialogState.loading = true
     updateImageEditButtons()
     imageEditSetStatus("Editing blot...", "")
+    var body = {
+      provider_id: providerId,
+      source_gene_symbol: source.symbol,
+      source_asset_sha256: source.asset_sha256,
+      source_candidate_image_id: source.candidate_image_id || null,
+      source_vision_id: source.vision_id || "",
+      adjustments: adjustments,
+    }
+    if (model) body.model = model
     fetchAuthedJSON("/api/iconoplasm/image-edit/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify({
-        provider_id: providerId,
-        source_gene_symbol: source.symbol,
-        source_asset_sha256: source.asset_sha256,
-        source_candidate_image_id: source.candidate_image_id || null,
-        source_vision_id: source.vision_id || "",
-        adjustments: adjustments,
-      }),
+      body: JSON.stringify(body),
     })
       .then(function (payload) {
         var job = payload && payload.job
