@@ -512,6 +512,14 @@ If you encounter components with inline CSS/JS (legacy code), don't copy those p
 
 **Put scripts in scripts/ folder:** Don't create PowerShell or Python scripts in the project root. Always use `scripts/` directory to keep tools organized and separate from content.
 
+## CRITICAL — Never inject HTML via Worker
+
+The Worker must ONLY truncate content (remove text after <hr> or 100 words). NEVER inject CTA HTML via Worker — it breaks table layouts and causes HTML to be malformed. The CTA must be a SITE ELEMENT rendered by the Quartz template (renderPage.tsx), outside the <article> element.
+
+## CRITICAL — Build-time over Worker
+
+Build-time transformations (renderPage.tsx HAST tree modification) are more reliable than Worker-based truncation. Use .draft-locked wrapper at build time, CSS hiding at render time, and JS auth check for revealing. This avoids Worker route dependency.
+
 ## deploy-quartz.yml: public edge worker route wiring
 
 The public edge worker deploys alongside its routes from `wrangler.toml` (step "Upload public edge worker script with routes"). This is intentional. The old approach used a separate `upload-only` TOML config with the `routes` key stripped out, then a separate Node script to reassign routes. That caused two problems:
@@ -523,6 +531,22 @@ The public edge worker deploys alongside its routes from `wrangler.toml` (step "
 The current approach (`wrangler deploy` without `--config`) deploys routes from `wrangler.toml` atomically with the script. The subsequent `Reassign production routes` step is a safety-net no-op: it checks each pattern and logs "Route already points at..." when routes are already correct.
 
 The guard test at `workers/iconoplasm.do-not-delete-cost-guards.test.js:317` enforces the deploy order: internal stateful worker first, public edge worker second, routes reassigned third. If you change the workflow, update all four assertions together, not just one.
+
+## Iconoplasm cost barriers and budget guards
+
+- Treat Iconoplasm's Cloudflare free-plan protection as a multi-budget system, not a D1-only rule. The live admin cost cockpit at `/admin#costs` tracks D1 read/write/storage, Workers requests/CPU/log events, Durable Object requests/writes, KV reads/writes/deletes/lists/storage, Queue operations, Pages Functions, and R2 storage/Class A/Class B. Before changing hot paths, publication, or repair flows, identify which of those meters the path can burn.
+- D1 row-read blowups are still one catastrophic failure mode, especially for full-inventory reads, but they are not the only budget fence.
+- If you touch `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js` or any worker path it calls, assume that any full-table read reachable from public or first-party traffic can bankrupt the project if it is only cached in module memory.
+- Do not rely on per-isolate JS object TTL caches as a billing barrier. Cloudflare can run many isolates at once, so the same "cached" 20k-row read can multiply globally.
+- Full-inventory public/runtime snapshots must use the shared versioned KV barrier pattern keyed by `KV_GALLERY_VERSION` (for example: published portrait refs, portrait fingerprints, published gallery rows, uniqueness rows) rather than raw D1 reads on cold isolate startup.
+- The Iconoplasm app-owned budget/preflight path is a mutation and publication barrier, not a hot-read dependency. Hot public and first-party reads must stay off that request path entirely; dangerous admin mutation or publication families should fail closed through explicit preflights.
+- Current card-catalog publication preflight failure names are `kv_reads`, `kv_writes`, `kv_lists`, `d1_rows_read`, `d1_rows_written`, `queue_operations`, `worker_requests`, `worker_cpu_ms`, `durable_object_requests`, `durable_object_rows_written`, `logs_events`, and `r2_available`. If code or the admin cockpit adds another Cloudflare meter, update this list and the tests in the same change.
+- If you need usage visibility, use Cloudflare dashboard or GraphQL analytics. Do not quietly rebuild an app-owned read telemetry report and call it authoritative.
+- Do not wrap canonical indexed keys like `gene_symbol` and normalized `asset_sha256` in `upper(...)` / `lower(...)` on hot paths unless you have proved it does not destroy index use.
+- If you change any Iconoplasm cost barrier, preserve or strengthen the explicit warning comments in code and keep the cold-isolate and budget-preflight regression tests passing. In particular, do not weaken `workers/iconoplasm.d1-cost-barrier.test.js`, `workers/iconoplasm.d1-hot-query-guard.test.js`, `workers/iconoplasm.do-not-delete-cost-guards.test.js`, or `workers/iconoplasm.card-catalog-budget-preflight.test.js` just to make a change fit.
+- Do not delete or neuter the Iconoplasm D1 guard tests just because they fail. They are one part of the larger cost-barrier system: the D1 tests guard catastrophic full-inventory row reads, and the card-catalog preflight test guards multi-meter publication headroom across KV, D1, Queues, Workers, Durable Objects, logs, and R2.
+- If one of those tests fails, your default assumption should be "the code or guardrail drifted," not "the test is annoying." Fix the code, or replace the guard in the same change with something stricter and leave a comment explaining why.
+- If a change makes you wonder whether a public route is doing an O(N) read, stop and audit before shipping. Guessing wrong here is not acceptable because this exact failure mode can take down the whole project financially.
 
 ---
 
