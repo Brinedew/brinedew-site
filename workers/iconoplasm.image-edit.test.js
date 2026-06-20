@@ -2098,12 +2098,12 @@ test("candidate generation jobs can use Krea API models and expose compute-unit 
       assert.equal(init.headers.Authorization, "Bearer krea-test-secret")
       const body = JSON.parse(String(init.body || "{}"))
       assert.equal(body.prompt.includes("Alpha-1-B Glycoprotein"), true)
-      // Krea 2 only accepts fixed dimension pairs; 928x1152 (4:5) is the closest
-      // supported framing to the 3:4 blot.
-      assert.equal(body.width, 928)
-      assert.equal(body.height, 1152)
-      assert.equal("imageUrls" in body, false)
-      assert.equal("imageUrl" in body, false)
+      // Krea 2 uses aspect_ratio/resolution instead of width/height
+      assert.equal(body.aspect_ratio, "4:5")
+      assert.equal(body.resolution, "1K")
+      assert.equal("width" in body, false)
+      assert.equal("height" in body, false)
+      assert.equal("image_url" in body, false)
       return new Response(JSON.stringify({ job_id: "krea-job-1", status: "queued" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
