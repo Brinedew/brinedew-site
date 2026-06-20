@@ -288,7 +288,7 @@ import {
       (imageProviderState.encryptionConfigured
         ? ""
         : '<div class="site-settings-plain-value">Server-side key encryption is not configured yet.</div>') +
-      '<p class="site-settings-plain-value">Save an API key per provider. Pick which model to use at edit / generate time.</p>' +
+      '<p class="site-settings-plain-value">Save an API key per provider.</p>' +
       '<label class="site-settings-field"><span>Provider</span><select class="site-settings-select" id="site-settings-image-api-provider">' +
       imageProviderOptionsMarkup(selectedProviderId) +
       "</select></label>" +

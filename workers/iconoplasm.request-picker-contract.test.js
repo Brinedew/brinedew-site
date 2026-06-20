@@ -361,8 +361,8 @@ test("direct generation result uses edit-modal geometry instead of a handmade si
   )
   assert.match(
     app,
-    /var selectedProviderId = providers\.length \? providers\[0\]\.provider_id : ""[^]*providerSelect\.value = selectedProviderId/,
-    "direct generation should default to the first saved provider whenever providers exist",
+    /providerSelect\.value = options\.length \? options\[0\]\.value : ""/,
+    "direct generation should default to the first compound provider_id:model option whenever providers exist",
   )
   assert.match(
     css,
