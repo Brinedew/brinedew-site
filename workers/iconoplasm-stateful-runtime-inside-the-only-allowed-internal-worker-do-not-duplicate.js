@@ -26321,6 +26321,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const userId = normalizeUserId(sessionUser.user_id)
       const providerId = normalizeImageEditProviderId(p?.provider_id || p?.provider || "")
       const providerRow = await getImageEditProviderRow(env, { userId, providerId })
+      if (providerRow && p?.model) {
+        providerRow.model = sanitizeText(String(p.model).trim(), 128) || providerRow.model
+      }
       if (!providerRow?.encrypted_api_key) {
         return done(
           "candidate_generation_jobs_400",
