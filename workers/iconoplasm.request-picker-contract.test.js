@@ -173,8 +173,8 @@ test("new candidate modal exposes separate free queue and configured image API g
   )
   assert.match(
     app,
-    /class="icono-request-direct-action-row"[\s\S]*data-icono-request-image-generate[\s\S]*data-icono-request-image-publish/,
-    "direct generation should keep generate and publish in a stable action row",
+    /slot="footer" class="icono-request-direct-actions"[\s\S]*data-icono-request-image-generate[\s\S]*data-icono-request-image-publish/,
+    "direct generation should pin generate and publish in the dialog footer like Edit blot",
   )
   assert.match(
     app,
@@ -301,18 +301,18 @@ test("direct generation result uses edit-modal geometry instead of a handmade si
   )
   assert.match(
     css,
-    /@media\s*\(min-width:\s*760px\)\s*\{[^]*\.icono-request-direct-controls\s*\{[^}]*grid-template-columns:[^}]*minmax\(18rem,\s*1fr\)[^}]*max-content/,
-    "desktop direct generation controls should keep Provider and Generate/Publish in a clear top row",
+    /@media\s*\(min-width:\s*760px\)\s*\{[^]*\.icono-request-direct-controls\s*\{[^}]*grid-template-columns:\s*1fr/,
+    "desktop direct generation controls should stack as a single column instead of side-by-side with the action row",
   )
   assert.match(
     css,
-    /\.icono-request-direct-controls\s*\{[^}]*grid-template-areas:\s*"provider actions"\s*"picker picker"\s*"preview preview"\s*"status status"/,
-    "desktop direct generation controls should keep sample and prompt controls in the control stack",
+    /\.icono-request-direct-controls\s*\{[^}]*grid-template-areas:\s*"provider"\s*"picker"\s*"preview"\s*"status"/,
+    "desktop direct generation controls should keep sample and prompt controls in a clean control stack",
   )
   assert.match(
     css,
-    /\.icono-request-direct-action-row\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/,
-    "generate and publish actions should stay visible instead of being squeezed out by the preview column",
+    /\.icono-request-direct-actions\s*\{[^}]*display:\s*flex[^}]*justify-content:\s*space-between/,
+    "generate and publish actions should live in the dialog footer, spaced like the edit dialog",
   )
   assert.match(
     css,
@@ -321,8 +321,8 @@ test("direct generation result uses edit-modal geometry instead of a handmade si
   )
   assert.match(
     css,
-    /\.icono-request-direct-panel:has\(\.icono-request-direct-result:not\(\[hidden\]\)\)\s*[\r\n ]*\.icono-request-direct-controls\s*\{[^}]*grid-template-columns:\s*1fr[^}]*"provider"[^}]*"actions"/,
-    "after generation the controls should collapse to an edit-modal-style stack instead of overflowing beside Provider",
+    /\.icono-request-direct-panel:has\(\.icono-request-direct-result:not\(\[hidden\]\)\)\s*[\r\n ]*\.icono-request-direct-controls\s*\{[^}]*grid-template-columns:\s*1fr[^}]*"provider"[^}]*"picker"/,
+    "after generation the controls should collapse to an edit-modal-style stack without an actions row beside Provider",
   )
   assert.doesNotMatch(
     css,
@@ -341,8 +341,8 @@ test("direct generation result uses edit-modal geometry instead of a handmade si
   )
   assert.match(
     css,
-    /\.icono-request-direct-generate\s*\{[^}]*background:\s*var\(--icono-action-primary-bg\)/,
-    "direct generate should share the primary action token instead of a one-off color",
+    /\.icono-request-direct-publish\s*\{[^}]*background:\s*var\(--icono-action-primary-bg\)/,
+    "publish candidate should be the primary action token; generate is the secondary token when no image is ready",
   )
   assert.match(
     css,

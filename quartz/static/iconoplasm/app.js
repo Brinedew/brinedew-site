@@ -4774,10 +4774,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-request-direct-provider-row">' +
       '<label class="icono-request-provider-field"><span>Provider</span><select class="icono-request-provider-select" data-icono-request-provider></select></label>' +
       "</div>" +
-      '<div class="icono-request-direct-action-row">' +
-      '<button type="button" class="icono-request-direct-generate" data-icono-request-image-generate disabled>Generate candidate</button>' +
-      '<button type="button" class="icono-request-direct-publish" data-icono-request-image-publish hidden disabled>Publish candidate</button>' +
-      "</div>" +
       '<div class="icono-search-wrapper icono-request-picker-search icono-request-direct-emulsion-picker" data-icono-request-direct-emulsion-picker>' +
       '<input data-icono-request-direct-emulsion-query class="icono-search-input icono-request-picker-input" type="text" autocomplete="off" placeholder="use my emulsion" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="icono-request-direct-emulsion-results">' +
       '<div class="icono-search-results icono-request-results icono-request-direct-emulsion-results" id="icono-request-direct-emulsion-results" role="listbox" data-icono-request-direct-emulsion-results hidden></div>' +
@@ -4844,6 +4840,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '">' +
       '<div class="icono-request-dialog-shell" data-icono-request-body>' +
       renderRequestShellMarkup(safeSymbol) +
+      "</div>" +
+      '<div slot="footer" class="icono-request-direct-actions">' +
+      '<button type="button" class="icono-request-direct-generate" data-icono-request-image-generate disabled>Generate candidate</button>' +
+      '<button type="button" class="icono-request-direct-publish" data-icono-request-image-publish hidden disabled>Publish candidate</button>' +
       "</div>" +
       "</sl-dialog>"
     )
