@@ -1469,20 +1469,46 @@ img-comparison-slider.rendered [slot="second"] {
 }
 
 .icono-request-direct-result {
+  position: relative;
   width: min(var(--icono-image-tile-width), 100%);
-  min-height: 0;
+  aspect-ratio: 4 / 5;
+  border-radius: var(--icono-radius-sm);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ui-bg) 80%, var(--light) 20%);
+  border: 1px solid color-mix(in srgb, var(--ui-border) 76%, transparent 24%);
   justify-self: center;
 }
 
-.icono-request-direct-result[hidden] {
+.icono-request-direct-result-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--dark) 48%, var(--light) 52%);
+  pointer-events: none;
+}
+
+.icono-request-direct-result[data-empty="false"] .icono-request-direct-result-placeholder {
   display: none;
 }
 
 .icono-request-direct-result img {
   display: block;
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
   border-radius: var(--icono-radius-sm);
+}
+
+.icono-request-direct-result img[hidden] {
+  display: none;
 }
 
 @media (min-width: 760px) {
@@ -1513,7 +1539,7 @@ img-comparison-slider.rendered [slot="second"] {
     grid-area: status;
   }
 
-  .icono-request-direct-panel:has(.icono-request-direct-result:not([hidden])) {
+  .icono-request-direct-panel {
     grid-template-columns: minmax(18rem, var(--icono-image-tile-width)) minmax(22rem, 1fr);
     grid-template-areas: "viewer controls";
     align-self: start;
@@ -1521,13 +1547,11 @@ img-comparison-slider.rendered [slot="second"] {
     column-gap: 1rem;
   }
 
-  .icono-request-direct-panel:has(.icono-request-direct-result:not([hidden]))
-    .icono-request-direct-result {
+  .icono-request-direct-result {
     grid-area: viewer;
   }
 
-  .icono-request-direct-panel:has(.icono-request-direct-result:not([hidden]))
-    .icono-request-direct-controls {
+  .icono-request-direct-controls {
     grid-area: controls;
     grid-template-columns: 1fr;
     grid-template-areas:
