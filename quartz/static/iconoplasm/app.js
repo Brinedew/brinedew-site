@@ -5667,23 +5667,34 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       function renderDirectProviders() {
         if (!providerSelect) return
         var providers = requestDirectState.providers || []
-        providerSelect.innerHTML = providers.length
-          ? providers
-              .map(function (provider) {
+        var supported = requestDirectState.supportedProviders || []
+        var configured = {}
+        providers.forEach(function (p) { configured[p.provider_id] = p })
+        var options = []
+        supported.forEach(function (sp) {
+          if (!configured[sp.provider_id]) return
+          ;(sp.model_options || []).forEach(function (m) {
+            options.push({
+              value: sp.provider_id + ":" + m.model,
+              label: sp.label + " · " + m.label,
+            })
+          })
+        })
+        providerSelect.innerHTML = options.length
+          ? options
+              .map(function (opt) {
                 return (
                   '<option value="' +
-                  esc(provider.provider_id) +
+                  esc(opt.value) +
                   '">' +
-                  esc(provider.label || provider.provider_id) +
-                  (provider.model ? " · " + esc(provider.model) : "") +
+                  esc(opt.label) +
                   "</option>"
                 )
               })
               .join("")
           : '<option value="">No saved image API</option>'
-        var selectedProviderId = providers.length ? providers[0].provider_id : ""
-        providerSelect.value = selectedProviderId
-        providerSelect.disabled = !providers.length
+        providerSelect.value = options.length ? options[0].value : ""
+        providerSelect.disabled = !options.length
       }
 
       function setDirectStatus(message, tone) {
@@ -5729,12 +5740,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             requestDirectState.providers = Array.isArray(payload && payload.providers)
               ? payload.providers
               : []
+            requestDirectState.supportedProviders = Array.isArray(
+              payload && payload.supported_providers,
+            )
+              ? payload.supported_providers
+              : []
             requestDirectState.providerReady = Boolean(payload && payload.encryption_configured)
             renderDirectProviders()
             updateDirectGenerationButtons()
           })
           .catch(function () {
             requestDirectState.providers = []
+            requestDirectState.supportedProviders = []
             requestDirectState.providerReady = false
             renderDirectProviders()
             updateDirectGenerationButtons()
@@ -5742,7 +5759,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
 
       function selectedDirectProviderId() {
+        // Returns the raw selected value, which is "provider_id:model".
         return String((providerSelect && providerSelect.value) || "").trim()
+      }
+
+      function selectedDirectProviderAndModel() {
+        var raw = selectedDirectProviderId()
+        if (!raw) return { providerId: "", model: "" }
+        var idx = raw.indexOf(":")
+        if (idx < 0) return { providerId: raw, model: "" }
+        return { providerId: raw.slice(0, idx), model: raw.slice(idx + 1) }
       }
 
       function selectedDirectPromptBodyMode() {
@@ -5799,25 +5825,27 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
 
       function submitDirectCandidateGeneration() {
-        var providerId = selectedDirectProviderId()
-        if (!providerId) return
+        var selected = selectedDirectProviderAndModel()
+        if (!selected.providerId) return
         requestDirectState.loading = true
         requestDirectState.job = null
         if (directResult) directResult.hidden = true
         if (directImage) directImage.removeAttribute("src")
         updateDirectGenerationButtons()
         setStatus("Generating candidate...", "")
+        var body = {
+          provider_id: selected.providerId,
+          symbol: symbol,
+          request_kind: "new_candidate",
+          request_mode: "novel",
+          prompt_body_mode: selectedDirectPromptBodyMode(),
+          user_emulsion_id: selectedDirectUserEmulsionId(),
+        }
+        if (selected.model) body.model = selected.model
         fetchAuthedJSON("/api/iconoplasm/candidate-generation/jobs", {
           method: "POST",
           headers: { "Content-Type": "application/json; charset=utf-8" },
-          body: JSON.stringify({
-            provider_id: providerId,
-            symbol: symbol,
-            request_kind: "new_candidate",
-            request_mode: "novel",
-            prompt_body_mode: selectedDirectPromptBodyMode(),
-            user_emulsion_id: selectedDirectUserEmulsionId(),
-          }),
+          body: JSON.stringify(body),
         })
           .then(function (payload) {
             var job = payload && payload.job
