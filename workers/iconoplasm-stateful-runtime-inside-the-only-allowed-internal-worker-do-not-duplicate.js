@@ -76,6 +76,8 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         image_size: ICONOPLASM_OPENAI_BLOT_REQUEST_SIZE,
         image_quality: "high",
         estimated_seconds: 180,
+        edit_capable: true,
+        generate_capable: true,
       }),
     ]),
   }),
@@ -83,53 +85,291 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
     provider_id: "krea",
     label: "Krea API",
     default_endpoint_url: "https://api.krea.ai",
-    default_model: "krea/krea-2/large",
+    default_model: "bfl/flux-1-kontext-dev",
     capabilities: Object.freeze(["edit", "generate"]),
+    // Source of truth: https://docs.krea.ai/api-reference/image/.
+    // Compiled 2026-06-20 by hand from each model's docs page (--url line + body
+    // schema). When this list drifts from Krea, re-check the docs page for the
+    // model and update both the model id and the request-shape fields.
     model_options: Object.freeze([
       Object.freeze({
-        model: "krea/krea-2/large",
-        label: "Krea 2 Large",
-        endpoint_path: "/generate/image/krea/krea-2/large",
-        pricing_label: "$0.060/image",
-        // Krea 2 rejects arbitrary dimensions; this is the closest supported pair
-        // to the 3:4 blot aspect (4:5 = 0.806 vs 3:4 = 0.75) at max 1K resolution.
-        request_width: 928,
-        request_height: 1152,
-        estimated_seconds: 30,
+        model: "bfl/flux-1-kontext-dev",
+        label: "Flux Kontext",
+        endpoint_path: "/generate/image/bfl/flux-1-kontext-dev",
+        pricing_label: "$0.013/request",
+        estimated_seconds: 15,
+        edit_capable: true,
+        generate_capable: true,
+        edit_image_param: "image_url",
+        edit_strength_param: "strength",
+        edit_image_object_shape: "string",
       }),
       Object.freeze({
         model: "bfl/flux-1-dev",
         label: "Flux",
         endpoint_path: "/generate/image/bfl/flux-1-dev",
-        pricing_label: "~$0.002/image",
+        pricing_label: "$0.007/request",
         estimated_seconds: 4,
+        edit_capable: true,
+        generate_capable: true,
         edit_image_param: "image_url",
         edit_strength_param: "strength",
+        edit_image_object_shape: "string",
       }),
       Object.freeze({
         model: "google/nano-banana-pro",
         label: "Nano Banana Pro",
         endpoint_path: "/generate/image/google/nano-banana-pro",
-        pricing_label: "~$0.10/image",
+        pricing_label: "$0.15–$0.30/request (1K–4K)",
         estimated_seconds: 45,
+        edit_capable: true,
+        generate_capable: true,
         edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
         supports_aspect_ratio: true,
+        aspect_ratio_options: Object.freeze([
+          "21:9", "1:1", "4:3", "3:2", "2:3", "5:4", "4:5", "3:4", "16:9", "9:16",
+        ]),
+      }),
+      Object.freeze({
+        model: "google/nano-banana-2",
+        label: "Nano Banana 2",
+        endpoint_path: "/generate/image/google/nano-banana-2",
+        pricing_label: "$0.08–$0.16/request (1K–4K)",
+        estimated_seconds: 30,
+        edit_capable: true,
+        generate_capable: true,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        supports_aspect_ratio: true,
+        aspect_ratio_options: Object.freeze([
+          "4:1", "21:9", "1:1", "4:3", "3:2", "2:3", "5:4", "4:5", "3:4", "16:9", "9:16", "1:4", "1:8",
+        ]),
+      }),
+      Object.freeze({
+        model: "google/nano-banana",
+        label: "Nano Banana",
+        endpoint_path: "/generate/image/google/nano-banana",
+        pricing_label: "$0.043/request",
+        estimated_seconds: 20,
+        edit_capable: true,
+        generate_capable: true,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        supports_aspect_ratio: true,
+        aspect_ratio_options: Object.freeze([
+          "21:9", "1:1", "4:3", "3:2", "2:3", "5:4", "4:5", "3:4", "16:9", "9:16",
+        ]),
+      }),
+      Object.freeze({
+        model: "openai/gpt-image",
+        label: "ChatGPT Image",
+        endpoint_path: "/generate/image/openai/gpt-image",
+        pricing_label: "$0.375/request",
+        estimated_seconds: 90,
+        edit_capable: true,
+        generate_capable: true,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
       }),
       Object.freeze({
         model: "openai/gpt-image-2",
-        label: "GPT Image 2",
+        label: "ChatGPT 2",
         endpoint_path: "/generate/image/openai/gpt-image-2",
-        pricing_label: "~$0.16/image",
+        pricing_label: "—",
         estimated_seconds: 60,
+        edit_capable: true,
+        generate_capable: true,
         edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
         supports_aspect_ratio: true,
+        aspect_ratio_options: Object.freeze([
+          "16:9", "2:1", "3:2", "4:3", "1:1", "3:4", "2:3", "1:2", "9:16",
+        ]),
+      }),
+      Object.freeze({
+        model: "z-image/z-image",
+        label: "Z Image",
+        endpoint_path: "/generate/image/z-image/z-image",
+        pricing_label: "$0.003/request",
+        estimated_seconds: 10,
+        edit_capable: true,
+        generate_capable: true,
+        edit_image_param: "image_url",
+        edit_strength_param: "denoising_strength",
+        edit_image_object_shape: "string",
+        supports_aspect_ratio: true,
+        aspect_ratio_options: Object.freeze(["1:1", "4:3", "2:3", "16:9", "9:16"]),
+      }),
+      Object.freeze({
+        model: "bytedance/seededit",
+        label: "SeedEdit",
+        endpoint_path: "/generate/image/bytedance/seededit",
+        pricing_label: "—",
+        estimated_seconds: 20,
+        edit_capable: true,
+        generate_capable: false,
+        edit_image_param: "image_url",
+        edit_image_object_shape: "string",
+        edit_requires_image: true,
+      }),
+      Object.freeze({
+        model: "runway/gen-4-image",
+        label: "Runway Gen-4",
+        endpoint_path: "/generate/image/runway/gen-4-image",
+        pricing_label: "—",
+        estimated_seconds: 60,
+        edit_capable: true,
+        generate_capable: false,
+        edit_image_param: "reference_images",
+        edit_image_object_shape: "object-array",
+        edit_reference_tag: "source",
+        edit_requires_image: true,
+      }),
+      Object.freeze({
+        model: "ideogram/ideogram-3",
+        label: "Ideogram 3.0",
+        endpoint_path: "/generate/image/ideogram/ideogram-3",
+        pricing_label: "$0.063–$0.158/request (character ref)",
+        estimated_seconds: 45,
+        edit_capable: true,
+        generate_capable: true,
+        edit_image_param: "character_reference_images",
+        edit_image_object_shape: "string-array",
+      }),
+      Object.freeze({
+        model: "bfl/flux-1.1-pro",
+        label: "Flux 1.1 Pro",
+        endpoint_path: "/generate/image/bfl/flux-1.1-pro",
+        pricing_label: "$0.042/request",
+        estimated_seconds: 8,
+        edit_capable: false,
+        generate_capable: true,
+      }),
+      Object.freeze({
+        model: "bfl/flux-1.1-pro-ultra",
+        label: "Flux 1.1 Pro Ultra",
+        endpoint_path: "/generate/image/bfl/flux-1.1-pro-ultra",
+        pricing_label: "$0.063/request",
+        estimated_seconds: 15,
+        edit_capable: false,
+        generate_capable: true,
+      }),
+      Object.freeze({
+        model: "ideogram/ideogram-2-turbo",
+        label: "Ideogram 2.0A Turbo",
+        endpoint_path: "/generate/image/ideogram/ideogram-2-turbo",
+        pricing_label: "$0.026/request",
+        estimated_seconds: 12,
+        edit_capable: false,
+        generate_capable: true,
+      }),
+      Object.freeze({
+        model: "google/imagen-3",
+        label: "Imagen 3",
+        endpoint_path: "/generate/image/google/imagen-3",
+        pricing_label: "$0.042/request",
+        estimated_seconds: 15,
+        edit_capable: false,
+        generate_capable: true,
+      }),
+      Object.freeze({
+        model: "google/imagen-4",
+        label: "Imagen 4",
+        endpoint_path: "/generate/image/google/imagen-4",
+        pricing_label: "$0.042/request",
+        estimated_seconds: 20,
+        edit_capable: false,
+        generate_capable: true,
+      }),
+      Object.freeze({
+        model: "google/imagen-4-fast",
+        label: "Imagen 4 Fast",
+        endpoint_path: "/generate/image/google/imagen-4-fast",
+        pricing_label: "$0.021/request",
+        estimated_seconds: 8,
+        edit_capable: false,
+        generate_capable: true,
+      }),
+      Object.freeze({
+        model: "google/imagen-4-ultra",
+        label: "Imagen 4 Ultra",
+        endpoint_path: "/generate/image/google/imagen-4-ultra",
+        pricing_label: "$0.063/request",
+        estimated_seconds: 30,
+        edit_capable: false,
+        generate_capable: true,
+      }),
+      Object.freeze({
+        model: "qwen/2512",
+        label: "Qwen 2512",
+        endpoint_path: "/generate/image/qwen/2512",
+        pricing_label: "$0.019/request",
+        estimated_seconds: 20,
+        edit_capable: false,
+        generate_capable: true,
       }),
       Object.freeze({
         model: "bytedance/seedream-4",
         label: "Seedream 4",
         endpoint_path: "/generate/image/bytedance/seedream-4",
-        pricing_label: "~$0.02/image",
+        pricing_label: "$0.032/request",
         estimated_seconds: 20,
+        edit_capable: false,
+        generate_capable: true,
+      }),
+      Object.freeze({
+        model: "bytedance/seedream-5-lite",
+        label: "Seedream 5 Lite",
+        endpoint_path: "/generate/image/bytedance/seedream-5-lite",
+        pricing_label: "$0.037/request",
+        estimated_seconds: 15,
+        edit_capable: false,
+        generate_capable: true,
+      }),
+      Object.freeze({
+        model: "luma/uni-1",
+        label: "Luma UNI-1 (Krea)",
+        endpoint_path: "/generate/image/luma/uni-1",
+        pricing_label: "$0.040–$0.127/request (by reference count)",
+        estimated_seconds: 30,
+        edit_capable: false,
+        generate_capable: true,
+      }),
+      Object.freeze({
+        model: "krea/krea-2/large",
+        label: "Krea 2 Large",
+        endpoint_path: "/generate/image/krea/krea-2/large",
+        pricing_label: "$0.060/request",
+        estimated_seconds: 30,
+        edit_capable: false,
+        generate_capable: true,
+        // Krea 2 rejects arbitrary dimensions; aspect_ratio is required.
+        // 3:4 is NOT in the enum, 4:5 is the closest.
+        request_width: 928,
+        request_height: 1152,
+      }),
+      Object.freeze({
+        model: "krea/krea-2/medium",
+        label: "Krea 2 Medium",
+        endpoint_path: "/generate/image/krea/krea-2/medium",
+        pricing_label: "—",
+        estimated_seconds: 20,
+        edit_capable: false,
+        generate_capable: true,
+        request_width: 928,
+        request_height: 1152,
+      }),
+      Object.freeze({
+        model: "krea/krea-2/medium-turbo",
+        label: "Krea 2 Medium Turbo",
+        endpoint_path: "/generate/image/krea/krea-2/medium-turbo",
+        pricing_label: "—",
+        estimated_seconds: 10,
+        edit_capable: false,
+        generate_capable: true,
+        request_width: 928,
+        request_height: 1152,
       }),
     ]),
   }),
@@ -146,6 +386,8 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         pricing_label: "~$0.067/image",
         aspect_ratio: ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO,
         image_size: "1K",
+        edit_capable: true,
+        generate_capable: true,
       }),
       Object.freeze({
         model: "gemini-3-pro-image",
@@ -153,6 +395,8 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         pricing_label: "$0.134/image",
         aspect_ratio: ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO,
         image_size: "1K",
+        edit_capable: true,
+        generate_capable: true,
       }),
     ]),
   }),
@@ -170,6 +414,8 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         output_format: "png",
         aspect_ratio: ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO,
         estimated_seconds: 75,
+        edit_capable: true,
+        generate_capable: true,
       }),
       Object.freeze({
         model: "uni-1-max",
@@ -178,6 +424,8 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         output_format: "png",
         aspect_ratio: ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO,
         estimated_seconds: 95,
+        edit_capable: true,
+        generate_capable: true,
       }),
     ]),
   }),
@@ -3503,6 +3751,60 @@ function imageEditProviderDefinition(providerId) {
   return normalized ? ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS[normalized] : null
 }
 
+// Per-user last-used model memory. Keyed by (user, operation, provider).
+// Stored in KV. Only written when the model changes, so a user hammering the
+// same model 1000 times does not produce 1000 KV writes.
+const ICONOPLASM_IMAGE_EDIT_LAST_USED_KV_PREFIX = "iconoplasm:image-edit-last-used:"
+const ICONOPLASM_IMAGE_EDIT_LAST_USED_OPERATIONS = Object.freeze([
+  "image_edit",
+  "candidate_generation",
+])
+function imageEditLastUsedKvKey(userId, operation, providerId) {
+  return (
+    ICONOPLASM_IMAGE_EDIT_LAST_USED_KV_PREFIX +
+    String(operation || "image_edit") +
+    ":" +
+    normalizeUserId(userId) +
+    ":" +
+    normalizeImageEditProviderId(providerId)
+  )
+}
+async function readImageEditLastUsedModel(env, { userId, operation, providerId }) {
+  if (!env?.KV) return ""
+  const op = String(operation || "image_edit")
+  if (!ICONOPLASM_IMAGE_EDIT_LAST_USED_OPERATIONS.includes(op)) return ""
+  const pid = normalizeImageEditProviderId(providerId)
+  if (!pid) return ""
+  try {
+    const raw = await env.KV.get(imageEditLastUsedKvKey(userId, op, pid))
+    return sanitizeText(raw || "", 256) || ""
+  } catch {
+    return ""
+  }
+}
+async function recordImageEditLastUsedModel(env, { userId, operation, providerId, model }) {
+  if (!env?.KV) return
+  const op = String(operation || "image_edit")
+  if (!ICONOPLASM_IMAGE_EDIT_LAST_USED_OPERATIONS.includes(op)) return
+  const pid = normalizeImageEditProviderId(providerId)
+  const cleanModel = sanitizeText(model || "", 256) || ""
+  if (!pid || !cleanModel) return
+  // Skip the write if the model is already the last-used one. This is the
+  // optimization the user asked for: a user submitting 1000 edits with the
+  // same model produces exactly one KV write for that (op, provider, model).
+  const current = await readImageEditLastUsedModel(env, { userId, operation, providerId })
+  if (current === cleanModel) return
+  try {
+    await env.KV.put(imageEditLastUsedKvKey(userId, op, pid), cleanModel, {
+      // 90 days is well past any realistic session resumption window. A user
+      // who comes back after 90 days gets the default model again.
+      expirationTtl: 60 * 60 * 24 * 90,
+    })
+  } catch {
+    // best-effort; do not fail the job because the memory write failed
+  }
+}
+
 function normalizeImageEditEndpointUrl(raw, providerDef) {
   const fallback = providerDef?.default_endpoint_url || ""
   const value = String(raw || fallback || "").trim()
@@ -3547,12 +3849,23 @@ function resolveImageEditProviderModel(raw, providerDef) {
 function mapImageEditModelOption(option) {
   if (!option || typeof option !== "object") return null
   const editImageParam = sanitizeText(option.edit_image_param || "", 64) || ""
+  const editCapable = option.edit_capable === true ? true : Boolean(editImageParam)
+  const generateCapable = option.generate_capable !== false
   return {
     model: sanitizeText(option.model || "", 128) || "",
     label: sanitizeText(option.label || option.model || "", 160) || "",
     pricing_label: sanitizeText(option.pricing_label || "", 120) || "",
     edit_image_param: editImageParam,
-    edit_capable: Boolean(editImageParam),
+    edit_capable: editCapable,
+    generate_capable: generateCapable,
+    edit_image_object_shape: sanitizeText(option.edit_image_object_shape || "", 32) || "",
+    edit_strength_param: sanitizeText(option.edit_strength_param || "", 64) || "",
+    edit_reference_tag: sanitizeText(option.edit_reference_tag || "", 32) || "",
+    edit_requires_image: option.edit_requires_image === true,
+    supports_aspect_ratio: option.supports_aspect_ratio === true,
+    aspect_ratio_options: Array.isArray(option.aspect_ratio_options)
+      ? option.aspect_ratio_options.map((s) => String(s || "")).filter(Boolean)
+      : [],
   }
 }
 
@@ -4629,6 +4942,7 @@ async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = 
   const kreaOption = imageEditProviderModelOption(providerDef, kreaModel)
   const isNativeKrea2 = kreaModelIsNativeKrea2(kreaModel)
   const editImageParam = String(kreaOption?.edit_image_param || "").trim()
+  const editImageObjectShape = String(kreaOption?.edit_image_object_shape || "").trim()
   const urls = (Array.isArray(imageUrls) ? imageUrls : [])
     .map((value) => String(value || "").trim())
     .filter(Boolean)
@@ -4643,6 +4957,13 @@ async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = 
       ? Number(kreaOption.request_height)
       : ICONOPLASM_BLOT_REQUEST_HEIGHT
 
+  // Build the body, dispatching by model capabilities.
+  // isNativeKrea2 (Krea 2 Large/Medium/Medium-Turbo): aspect_ratio is required
+  // and the enum has no 3:4, so we use the global helper that picks 4:5.
+  // supports_aspect_ratio: the model has an aspect_ratio enum and we use it
+  // when it includes 3:4 (blot default). Otherwise we fall back to width/height.
+  // default: width + height (Krea uses these as defaults even if the model has
+  // a soft aspect_ratio).
   let body
   if (isNativeKrea2) {
     body = {
@@ -4651,9 +4972,14 @@ async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = 
       resolution: "1K",
     }
   } else if (kreaOption?.supports_aspect_ratio) {
-    body = {
-      prompt,
-      aspect_ratio: kreaModelAspectRatio(reqWidth, reqHeight),
+    const aspectOptions = Array.isArray(kreaOption?.aspect_ratio_options)
+      ? kreaOption.aspect_ratio_options
+      : []
+    const blotAspect = "3:4"
+    if (aspectOptions.includes(blotAspect)) {
+      body = { prompt, aspect_ratio: blotAspect }
+    } else {
+      body = { prompt, width: reqWidth, height: reqHeight }
     }
   } else {
     body = { prompt, width: reqWidth, height: reqHeight }
@@ -4661,7 +4987,7 @@ async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = 
 
   if (urls.length) {
     if (!editImageParam) {
-      var editLabels = (providerDef?.model_options || [])
+      const editLabels = (providerDef?.model_options || [])
         .filter(function (m) { return m.edit_image_param })
         .map(function (m) { return m.label })
         .filter(Boolean)
@@ -4671,12 +4997,18 @@ async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = 
         "Use a model that supports image input: " + editLabels.join(", ") + ".",
       )
     }
-    if (editImageParam === "image_url") {
+    if (editImageObjectShape === "object-array") {
+      // Runway Gen-4: reference_images[] is an array of {url, tag} objects.
+      const tag = String(kreaOption?.edit_reference_tag || "source").trim() || "source"
+      body[editImageParam] = [{ url: urls[0], tag }]
+    } else if (editImageObjectShape === "string-array") {
+      // Nano Banana, ChatGPT, Ideogram: array of URL strings.
+      body[editImageParam] = urls
+    } else {
+      // Default: singular URL field.
       body[editImageParam] = urls[0]
       const strengthParam = String(kreaOption?.edit_strength_param || "").trim()
       if (strengthParam) body[strengthParam] = 0.85
-    } else {
-      body[editImageParam] = urls
     }
   }
   const payload = await fetchJsonWithDeadline(
@@ -25117,6 +25449,51 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (request.method === "GET" || request.method === "HEAD") {
         const rows = await listImageEditProviderRows(env, userId)
         const providers = rows.map(mapImageEditProviderRow).filter(Boolean)
+        // Operation scope: edit dialog asks for edit-capable models,
+        // candidate generation dialog asks for generate-capable models.
+        // Default is image_edit (backward-compatible).
+        const opParam = sanitizeText(url.searchParams.get("op") || "image_edit", 32) || "image_edit"
+        const operation =
+          opParam === "candidate_generation" ? "candidate_generation" : "image_edit"
+        const requiredCapability = operation === "candidate_generation" ? "generate" : "edit"
+        const allDefs = Object.values(ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS).map(
+          mapImageEditProviderDefinition,
+        )
+        const scopedDefs = allDefs
+          .map(function (def) {
+            const filteredOptions = (def.model_options || []).filter(function (m) {
+              if (requiredCapability === "edit") return m.edit_capable === true
+              return m.generate_capable !== false
+            })
+            return Object.assign({}, def, { model_options: filteredOptions })
+          })
+          .filter(function (def) {
+            return Array.isArray(def.model_options) && def.model_options.length > 0
+          })
+        // Pin the user's last-used model for this (operation, provider) at the top
+        // of each provider's model_options, so the dropdown shows their last pick
+        // first. The pin only applies to providers the user has a saved key for.
+        if (env.KV) {
+          const configuredProviderIds = new Set(providers.map((p) => p.provider_id))
+          await Promise.all(
+            scopedDefs.map(async function (def) {
+              if (!configuredProviderIds.has(def.provider_id)) return
+              const lastUsed = await readImageEditLastUsedModel(env, {
+                userId,
+                operation,
+                providerId: def.provider_id,
+              })
+              if (!lastUsed) return
+              const options = Array.isArray(def.model_options) ? def.model_options : []
+              const pinned = options.find(function (m) { return m.model === lastUsed })
+              if (!pinned) return
+              const unpinned = options.filter(function (m) { return m.model !== lastUsed })
+              def.model_options = [Object.assign({}, pinned, { last_used: true })].concat(
+                unpinned,
+              )
+            }),
+          )
+        }
         return done(
           "image_edit_providers",
           asHead(
@@ -25126,10 +25503,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                 ok: true,
                 authenticated: true,
                 encryption_configured: Boolean(await imageEditAesKey(env)),
+                operation,
                 providers,
-                supported_providers: Object.values(ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS).map(
-                  mapImageEditProviderDefinition,
-                ),
+                supported_providers: scopedDefs,
               },
               200,
               { "Cache-Control": "no-store" },
@@ -25783,6 +26159,15 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           result_height: optionalInt(resultDimensions.height),
           result_bytes: renditions.bytes,
         })
+        // Remember the model the user picked for this provider, but only if
+        // it differs from the previously-stored value (avoids one KV write per
+        // re-edit with the same model).
+        await recordImageEditLastUsedModel(env, {
+          userId,
+          operation: "image_edit",
+          providerId: providerId,
+          model: providerRow?.model || "",
+        })
         const job = await getImageEditJobForUser(env, { id: jobId, userId })
         return done(
           "image_edit_jobs",
@@ -26053,6 +26438,14 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           result_width: optionalInt(resultDimensions.width),
           result_height: optionalInt(resultDimensions.height),
           result_bytes: renditions.bytes,
+        })
+        // Remember the model the user picked for candidate generation, but
+        // only if it differs from the previously-stored value.
+        await recordImageEditLastUsedModel(env, {
+          userId,
+          operation: "candidate_generation",
+          providerId: providerId,
+          model: providerRow?.model || "",
         })
         const job = await getCandidateGenerationJobForUser(env, { id: jobId, userId })
         return done(

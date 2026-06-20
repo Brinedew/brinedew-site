@@ -108,8 +108,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var portraitRetainedImageCache = Object.create(null)
   var portraitRetainedImageOrder = []
   var geneRequestSummaryCache = Object.create(null)
-  var imageEditProvidersCache = null
-  var imageEditProvidersPromise = null
+  var imageEditProvidersCache = Object.create(null)
+  var imageEditProvidersPromise = Object.create(null)
   var homeMasonry = null
   var candidateMasonry = null
   var portraitLightboxCleanup = null
@@ -1098,28 +1098,36 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   }
 
   function invalidateImageEditProviders() {
-    imageEditProvidersCache = null
-    imageEditProvidersPromise = null
+    imageEditProvidersCache = Object.create(null)
+    imageEditProvidersPromise = Object.create(null)
   }
 
   function fetchImageEditProviders(options) {
     var opts = options || {}
+    var op = opts.op === "candidate_generation" ? "candidate_generation" : "image_edit"
+    var cacheKey = op
     if (opts.forceFresh) invalidateImageEditProviders()
-    if (!opts.forceFresh && imageEditProvidersCache) {
-      return Promise.resolve(imageEditProvidersCache)
+    if (!opts.forceFresh && imageEditProvidersCache[cacheKey]) {
+      return Promise.resolve(imageEditProvidersCache[cacheKey])
     }
-    if (!opts.forceFresh && imageEditProvidersPromise) return imageEditProvidersPromise
-    imageEditProvidersPromise = singleFlightQuery("image-edit-providers", function () {
-      return fetchAuthedJSON("/api/iconoplasm/image-edit/providers", { cache: "no-store" }).then(
-        function (payload) {
-          imageEditProvidersCache = payload || {}
-          return imageEditProvidersCache
-        },
-      )
-    }).finally(function () {
-      imageEditProvidersPromise = null
+    if (!opts.forceFresh && imageEditProvidersPromise[cacheKey]) {
+      return imageEditProvidersPromise[cacheKey]
+    }
+    imageEditProvidersPromise[cacheKey] = singleFlightQuery(
+      "image-edit-providers:" + op,
+      function () {
+        return fetchAuthedJSON(
+          "/api/iconoplasm/image-edit/providers?op=" + encodeURIComponent(op),
+          { cache: "no-store" },
+        ).then(function (payload) {
+          imageEditProvidersCache[cacheKey] = payload || {}
+          return imageEditProvidersCache[cacheKey]
+        })
+      },
+    ).finally(function () {
+      imageEditProvidersPromise[cacheKey] = null
     })
-    return imageEditProvidersPromise
+    return imageEditProvidersPromise[cacheKey]
   }
 
   function hydrateGridPortrait(container, symbol, genePayload) {
@@ -5156,10 +5164,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var options = []
     supported.forEach(function (sp) {
       if (!configured[sp.provider_id]) return
-      var editModels = (sp.model_options || []).filter(function (m) {
-        return m.edit_image_param
-      })
-      editModels.forEach(function (m) {
+      ;(sp.model_options || []).forEach(function (m) {
         options.push({
           value: sp.provider_id + ":" + m.model,
           label: sp.label + " · " + m.label,
@@ -5173,7 +5178,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             return '<sl-option value="' + esc(opt.value) + '">' + esc(opt.label) + "</sl-option>"
           })
           .join("")
-      : '<sl-option value="">No editing-capable providers configured</sl-option>'
+      : '<sl-option value="">No saved image editing provider</sl-option>'
     select.disabled = !options.length
     if (!imageEditDialogState.encryptionConfigured) select.disabled = true
     setImageEditProviderValue(select, selectedValue)
@@ -5203,7 +5208,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function loadImageEditProviders() {
     imageEditSetStatus("Loading providers...", "")
-    return fetchImageEditProviders()
+    return fetchImageEditProviders({ op: "image_edit" })
       .then(function (payload) {
         imageEditDialogState.providers = Array.isArray(payload && payload.providers)
           ? payload.providers
@@ -5719,7 +5724,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
 
       function loadDirectProviders() {
-        return fetchImageEditProviders()
+        return fetchImageEditProviders({ op: "candidate_generation" })
           .then(function (payload) {
             requestDirectState.providers = Array.isArray(payload && payload.providers)
               ? payload.providers

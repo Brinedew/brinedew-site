@@ -157,8 +157,8 @@ test("B-517 removes image provider secrets from browser settings storage", () =>
 
   assert.doesNotMatch(settings, /site-settings-api-key|generationApiKey/)
   assert.match(settings, /site-settings-image-api-provider/)
-  assert.match(settings, /site-settings-image-api-model/)
-  assert.match(settings, /site-settings-image-api-price/)
+  assert.doesNotMatch(settings, /site-settings-image-api-model/)
+  assert.doesNotMatch(settings, /site-settings-image-api-price/)
   assert.match(settings, /\/api\/iconoplasm\/image-edit\/providers/)
   assert.doesNotMatch(preferences, /generationApiKey:\s*trimStoredValue|generationApiKey:\s*""/)
   assert.doesNotMatch(bridge, /generationApiKey:\s*trimStoredValue|generationApiKey:\s*""/)
