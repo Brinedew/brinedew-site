@@ -268,9 +268,9 @@ test("new and edit image modal previews use candidate masonry-sized medium previ
   const directResultCss = css.match(/(?:^|\n)\.icono-request-direct-result\s*\{[^}]*\}/)?.[0] || ""
   const directResultImageCss =
     css.match(/(?:^|\n)\.icono-request-direct-result img\s*\{[^}]*\}/)?.[0] || ""
-  assert.doesNotMatch(directResultCss, /border:|background:|overflow:\s*hidden/)
-  assert.match(directResultImageCss, /height:\s*auto/)
-  assert.doesNotMatch(directResultImageCss, /aspect-ratio|object-fit|object-position/)
+  assert.match(directResultCss, /aspect-ratio:\s*4\s*\/\s*5/)
+  assert.match(directResultImageCss, /position:\s*absolute/)
+  assert.match(directResultImageCss, /object-fit:\s*cover/)
   assert.match(
     css,
     /\.icono-image-edit-before-after\s*\{[^}]*width:\s*min\(var\(--icono-image-tile-width\),\s*100%\)/,
@@ -316,13 +316,13 @@ test("direct generation result uses edit-modal geometry instead of a handmade si
   )
   assert.match(
     css,
-    /\.icono-request-direct-panel:has\(\.icono-request-direct-result:not\(\[hidden\]\)\)\s*\{[^}]*grid-template-columns:\s*minmax\(18rem,\s*var\(--icono-image-tile-width\)\)\s*minmax\(22rem,\s*1fr\)/,
-    "after generation the result should use the same viewer-plus-controls proportions as the edit modal",
+    /@media\s*\(min-width:\s*760px\)\s*\{[^]*\.icono-request-direct-panel\s*\{[^}]*grid-template-columns:\s*minmax\(18rem,\s*var\(--icono-image-tile-width\)\)\s*minmax\(22rem,\s*1fr\)/,
+    "the direct generation panel should reserve a fixed viewer-plus-controls layout from the start so the result does not shift the form on arrival",
   )
   assert.match(
     css,
-    /\.icono-request-direct-panel:has\(\.icono-request-direct-result:not\(\[hidden\]\)\)\s*[\r\n ]*\.icono-request-direct-controls\s*\{[^}]*grid-template-columns:\s*1fr[^}]*"provider"[^}]*"picker"/,
-    "after generation the controls should collapse to an edit-modal-style stack without an actions row beside Provider",
+    /@media\s*\(min-width:\s*760px\)\s*\{[^]*\.icono-request-direct-controls\s*\{[^}]*grid-template-columns:\s*1fr[^}]*"provider"[^}]*"picker"/,
+    "the direct generation controls should sit beside the viewer in a fixed stack so the form does not reorganize when the result arrives",
   )
   assert.doesNotMatch(
     css,
