@@ -4593,36 +4593,66 @@ async function pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs }) {
   )
 }
 
+function kreaModelIsNativeKrea2(model) {
+  return String(model || "").startsWith("krea/")
+}
+
+function kreaModelAspectRatio(width, height) {
+  const ratio = Number(width) / Number(height)
+  if (ratio >= 0.95 && ratio <= 1.05) return "1:1"
+  if (ratio >= 0.72 && ratio <= 0.78) return "3:4"
+  if (ratio >= 0.78 && ratio <= 0.84) return "4:5"
+  if (ratio >= 0.65 && ratio <= 0.69) return "2:3"
+  if (ratio >= 0.55 && ratio <= 0.6) return "9:16"
+  if (ratio >= 1.3 && ratio <= 1.38) return "4:3"
+  if (ratio >= 1.45 && ratio <= 1.55) return "3:2"
+  if (ratio >= 1.7 && ratio <= 1.8) return "16:9"
+  if (ratio >= 2.2 && ratio <= 2.5) return "2.35:1"
+  return "4:5"
+}
+
 async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = [] }) {
   const baseUrl = kreaApiBaseUrl(providerRow)
   const endpointPath = kreaModelEndpointPath(providerRow)
   const timeoutMs = providerRequestTimeoutMs(providerRow)
-  // Some Krea models (e.g. Krea 2) only accept a fixed set of dimension pairs and
-  // reject the raw 3:4 blot size; such models pin request_width/request_height on
-  // their option. Everything else keeps the default 3:4 blot dimensions.
   const providerDef = imageEditProviderDefinition("krea")
   const kreaModel = resolveImageEditProviderModel(providerRow?.model || "", providerDef)
   const kreaOption = imageEditProviderModelOption(providerDef, kreaModel)
-  const reqWidth =
-    Number(kreaOption?.request_width) > 0
-      ? Number(kreaOption.request_width)
-      : ICONOPLASM_BLOT_REQUEST_WIDTH
-  const reqHeight =
-    Number(kreaOption?.request_height) > 0
-      ? Number(kreaOption.request_height)
-      : ICONOPLASM_BLOT_REQUEST_HEIGHT
-  const body = {
-    prompt,
-    width: reqWidth,
-    height: reqHeight,
-  }
+  const isNativeKrea2 = kreaModelIsNativeKrea2(kreaModel)
   const urls = (Array.isArray(imageUrls) ? imageUrls : [])
     .map((value) => String(value || "").trim())
     .filter(Boolean)
-    .slice(0, 5)
-  if (urls.length) {
-    body.imageUrls = urls
-    body.imageUrl = urls[0]
+    .slice(0, 1)
+
+  let body
+  if (isNativeKrea2) {
+    const reqWidth =
+      Number(kreaOption?.request_width) > 0
+        ? Number(kreaOption.request_width)
+        : ICONOPLASM_BLOT_REQUEST_WIDTH
+    const reqHeight =
+      Number(kreaOption?.request_height) > 0
+        ? Number(kreaOption.request_height)
+        : ICONOPLASM_BLOT_REQUEST_HEIGHT
+    body = {
+      prompt,
+      aspect_ratio: kreaModelAspectRatio(reqWidth, reqHeight),
+      resolution: "1K",
+    }
+  } else {
+    const reqWidth =
+      Number(kreaOption?.request_width) > 0
+        ? Number(kreaOption.request_width)
+        : ICONOPLASM_BLOT_REQUEST_WIDTH
+    const reqHeight =
+      Number(kreaOption?.request_height) > 0
+        ? Number(kreaOption.request_height)
+        : ICONOPLASM_BLOT_REQUEST_HEIGHT
+    body = { prompt, width: reqWidth, height: reqHeight }
+    if (urls.length) {
+      body.image_url = urls[0]
+      body.strength = 0.85
+    }
   }
   const payload = await fetchJsonWithDeadline(
     `${baseUrl}${endpointPath}`,
