@@ -5634,8 +5634,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       form._iconoRequestFormWired = true
       var directPanel = body.querySelector("[data-icono-request-direct-panel]")
       var providerSelect = body.querySelector("[data-icono-request-provider]")
-      var directGenerateButton = body.querySelector("[data-icono-request-image-generate]")
-      var directPublishButton = body.querySelector("[data-icono-request-image-publish]")
+      var directGenerateButton = dialog
+        ? dialog.querySelector("[data-icono-request-image-generate]")
+        : null
+      var directPublishButton = dialog
+        ? dialog.querySelector("[data-icono-request-image-publish]")
+        : null
       var directResult = body.querySelector("[data-icono-request-direct-result]")
       var directImage = body.querySelector("[data-icono-request-direct-image]")
       var directStatus = body.querySelector("[data-icono-request-direct-status]")
