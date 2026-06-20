@@ -288,27 +288,17 @@ import {
       (imageProviderState.encryptionConfigured
         ? ""
         : '<div class="site-settings-plain-value">Server-side key encryption is not configured yet.</div>') +
+      '<p class="site-settings-plain-value">Save an API key per provider. Pick which model to use at edit / generate time.</p>' +
       '<label class="site-settings-field"><span>Provider</span><select class="site-settings-select" id="site-settings-image-api-provider">' +
       imageProviderOptionsMarkup(selectedProviderId) +
       "</select></label>" +
-      '<label class="site-settings-field"><span>Model and price</span><select class="site-settings-select" id="site-settings-image-api-model">' +
-      imageProviderModelOptionsMarkup(supportedProvider, selectedModel) +
-      "</select></label>" +
-      '<div class="site-settings-plain-value" id="site-settings-image-api-price">' +
-      esc(
-        selectedModelOption && selectedModelOption.pricing_label
-          ? selectedModelOption.pricing_label
-          : "Pricing varies by model.",
-      ) +
-      "</div>" +
       '<label class="site-settings-field"><span>API key</span><div class="site-settings-secret"><input class="site-settings-input" id="site-settings-image-api-key" type="password" autocomplete="off" placeholder="' +
       esc(savedProvider && savedProvider.configured ? "Saved key is configured" : "Paste API key") +
       '"><button class="site-settings-inline-btn" id="site-settings-image-api-save" type="button">Save API</button></div></label>' +
       '<div class="site-settings-plain-value" id="site-settings-image-api-status">' +
       esc(
         savedProvider && savedProvider.configured
-          ? "Saved. " +
-              (savedProvider.pricing_label || selectedModelOption?.pricing_label || "" || "")
+          ? "Saved."
           : "No key saved for this provider.",
       ) +
       "</div>" +
@@ -578,7 +568,6 @@ import {
     var cardVariantEl = document.getElementById("site-settings-iconoplasm-card-variant")
     var showAllGenesEl = document.getElementById("site-settings-show-all-genes")
     var imageApiProviderEl = document.getElementById("site-settings-image-api-provider")
-    var imageApiModelEl = document.getElementById("site-settings-image-api-model")
     var imageApiKeyEl = document.getElementById("site-settings-image-api-key")
     var imageApiSaveBtn = document.getElementById("site-settings-image-api-save")
     var imageApiStatusEl = document.getElementById("site-settings-image-api-status")
@@ -682,24 +671,9 @@ import {
     bindDirtyTracking(showAllGenesEl)
 
     function syncImageApiControls() {
-      if (!imageApiProviderEl || !imageApiModelEl) return
+      if (!imageApiProviderEl) return
       var provider = imageProviderById(imageApiProviderEl.value)
       var saved = savedImageProviderById(imageApiProviderEl.value)
-      var selectedModel =
-        (saved && saved.model) ||
-        (provider && provider.default_model) ||
-        imageApiModelEl.value ||
-        ""
-      imageApiModelEl.innerHTML = imageProviderModelOptionsMarkup(provider, selectedModel)
-      if (!imageApiModelEl.value && selectedModel) imageApiModelEl.value = selectedModel
-      var imageApiPriceEl = document.getElementById("site-settings-image-api-price")
-      var currentModelOption = imageProviderModelOption(provider, imageApiModelEl.value || selectedModel)
-      if (imageApiPriceEl) {
-        imageApiPriceEl.textContent =
-          currentModelOption && currentModelOption.pricing_label
-            ? currentModelOption.pricing_label
-            : "Pricing varies by model."
-      }
       if (imageApiKeyEl) {
         imageApiKeyEl.value = ""
         imageApiKeyEl.placeholder =
@@ -707,24 +681,11 @@ import {
       }
       if (imageApiStatusEl) {
         imageApiStatusEl.textContent =
-          saved && saved.configured
-            ? "Saved. " + (saved.pricing_label || "")
-            : "No key saved for this provider."
+          saved && saved.configured ? "Saved." : "No key saved for this provider."
       }
     }
 
     if (imageApiProviderEl) imageApiProviderEl.addEventListener("change", syncImageApiControls)
-    if (imageApiModelEl) {
-      imageApiModelEl.addEventListener("change", function () {
-        var provider = imageProviderById(imageApiProviderEl.value)
-        var option = imageProviderModelOption(provider, imageApiModelEl.value)
-        var imageApiPriceEl = document.getElementById("site-settings-image-api-price")
-        if (imageApiPriceEl) {
-          imageApiPriceEl.textContent =
-            option && option.pricing_label ? option.pricing_label : "Pricing varies by model."
-        }
-      })
-    }
     if (imageApiRetryBtn) {
       imageApiRetryBtn.addEventListener("click", function () {
         void loadImageProviders().then(render)
@@ -732,7 +693,7 @@ import {
     }
     if (imageApiSaveBtn) {
       imageApiSaveBtn.addEventListener("click", function () {
-        if (!imageApiProviderEl || !imageApiModelEl || !imageApiKeyEl) return
+        if (!imageApiProviderEl || !imageApiKeyEl) return
         var apiKey = String(imageApiKeyEl.value || "").trim()
         if (!apiKey) {
           if (imageApiStatusEl) imageApiStatusEl.textContent = "Paste an API key before saving."
@@ -753,7 +714,6 @@ import {
           headers: { "Content-Type": "application/json; charset=utf-8" },
           body: JSON.stringify({
             provider_id: imageApiProviderEl.value,
-            model: imageApiModelEl.value,
             endpoint_url: endpointUrl,
             api_key: apiKey,
           }),
