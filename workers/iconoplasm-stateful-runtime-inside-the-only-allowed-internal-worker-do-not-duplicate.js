@@ -113,6 +113,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         pricing_label: "~$0.10/image",
         estimated_seconds: 45,
         edit_image_param: "image_urls",
+        supports_aspect_ratio: true,
       }),
       Object.freeze({
         model: "openai/gpt-image-2",
@@ -121,6 +122,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         pricing_label: "~$0.16/image",
         estimated_seconds: 60,
         edit_image_param: "image_urls",
+        supports_aspect_ratio: true,
       }),
       Object.freeze({
         model: "bytedance/seedream-4",
@@ -3544,10 +3546,13 @@ function resolveImageEditProviderModel(raw, providerDef) {
 
 function mapImageEditModelOption(option) {
   if (!option || typeof option !== "object") return null
+  const editImageParam = sanitizeText(option.edit_image_param || "", 64) || ""
   return {
     model: sanitizeText(option.model || "", 128) || "",
     label: sanitizeText(option.label || option.model || "", 160) || "",
     pricing_label: sanitizeText(option.pricing_label || "", 120) || "",
+    edit_image_param: editImageParam,
+    edit_capable: Boolean(editImageParam),
   }
 }
 
@@ -4644,6 +4649,11 @@ async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = 
       prompt,
       aspect_ratio: kreaModelAspectRatio(reqWidth, reqHeight),
       resolution: "1K",
+    }
+  } else if (kreaOption?.supports_aspect_ratio) {
+    body = {
+      prompt,
+      aspect_ratio: kreaModelAspectRatio(reqWidth, reqHeight),
     }
   } else {
     body = { prompt, width: reqWidth, height: reqHeight }

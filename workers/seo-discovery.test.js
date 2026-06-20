@@ -83,9 +83,11 @@ test("GeneGuessr canonical subdomain owns public app URLs", async () => {
     resolvePostAuthAppUrl(new URL("https://geneguessr.brinedew.bio/api/auth/callback"), ""),
     "https://geneguessr.brinedew.bio/",
   )
+  // Apex auth stays on the apex blog site (not the older "redirect to geneguessr" default).
+  // Each subdomain is its own app; users who log in from brinedew.bio land back on brinedew.bio.
   assert.equal(
     resolvePostAuthAppUrl(new URL("https://brinedew.bio/api/auth/callback"), ""),
-    "https://geneguessr.brinedew.bio/",
+    "https://brinedew.bio/",
   )
 
   globalThis.fetch = async () => {
