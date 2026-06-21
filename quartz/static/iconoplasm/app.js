@@ -4769,7 +4769,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-request-direct-panel" data-icono-request-direct-panel>' +
       '<div class="icono-request-direct-result" data-icono-request-direct-result data-empty="true">' +
       '<div class="icono-request-direct-result-placeholder" data-icono-request-direct-result-placeholder>' +
-      '<span>No candidate yet</span>' +
+      "<span>No candidate yet</span>" +
       "</div>" +
       '<img data-icono-request-direct-image alt="Generated candidate blot" loading="eager" hidden>' +
       "</div>" +
@@ -5163,7 +5163,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var providers = imageEditDialogState.providers || []
     var supported = imageEditDialogState.supportedProviders || []
     var configured = {}
-    providers.forEach(function (p) { configured[p.provider_id] = p })
+    providers.forEach(function (p) {
+      configured[p.provider_id] = p
+    })
     var options = []
     supported.forEach(function (sp) {
       if (!configured[sp.provider_id]) return
@@ -5678,7 +5680,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         var providers = requestDirectState.providers || []
         var supported = requestDirectState.supportedProviders || []
         var configured = {}
-        providers.forEach(function (p) { configured[p.provider_id] = p })
+        providers.forEach(function (p) {
+          configured[p.provider_id] = p
+        })
         var options = []
         supported.forEach(function (sp) {
           if (!configured[sp.provider_id]) return
@@ -5692,13 +5696,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         providerSelect.innerHTML = options.length
           ? options
               .map(function (opt) {
-                return (
-                  '<option value="' +
-                  esc(opt.value) +
-                  '">' +
-                  esc(opt.label) +
-                  "</option>"
-                )
+                return '<option value="' + esc(opt.value) + '">' + esc(opt.label) + "</option>"
               })
               .join("")
           : '<option value="">No saved image API</option>'
@@ -6543,7 +6541,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var cardVariant = resolveCardVariant()
     var homeGridLayout = effectiveHomeGridLayout(homeLayout, cardVariant)
     var settings = readIconoplasmSettings()
-    var useClassicGallery = !!(currentUser && currentUserIsIconoAdmin && settings && settings.showAllGenes)
+    var useClassicGallery = !!(
+      currentUser &&
+      currentUserIsIconoAdmin &&
+      settings &&
+      settings.showAllGenes
+    )
     var pendingRestoreState = restoreState || null
     var activeRestoreState = pendingRestoreState
     iconoSidebarState.page = "home"
@@ -8157,9 +8160,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function suggestAvatarMarkup(c) {
     var url = String((c && c.avatar_url) || "").trim()
     if (url) {
-      return '<span class="icono-suggest-av"><img alt="" loading="lazy" src="' + esc(url) + '"></span>'
+      return (
+        '<span class="icono-suggest-av"><img alt="" loading="lazy" src="' + esc(url) + '"></span>'
+      )
     }
-    var letter = String((c && c.username) || "?").trim().charAt(0) || "?"
+    var letter =
+      String((c && c.username) || "?")
+        .trim()
+        .charAt(0) || "?"
     return '<span class="icono-suggest-av">' + esc(letter.toUpperCase()) + "</span>"
   }
 
@@ -8215,9 +8223,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function suggestErrText(err) {
     return (
-      (err && err.payload && err.payload.error) ||
-      (err && err.message) ||
-      "Something went wrong."
+      (err && err.payload && err.payload.error) || (err && err.message) || "Something went wrong."
     )
   }
 
@@ -8367,7 +8373,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         renderSuggestList(listEl, data && data.comments, countEl)
       })
       .catch(function () {
-        if (listEl) listEl.innerHTML = '<p class="icono-suggest-empty">Could not load suggestions.</p>'
+        if (listEl)
+          listEl.innerHTML = '<p class="icono-suggest-empty">Could not load suggestions.</p>'
       })
     var form = sec.querySelector("[data-icono-suggest-form]")
     if (form && form.getAttribute("data-wired") !== "true") {

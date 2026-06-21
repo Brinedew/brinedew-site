@@ -128,7 +128,16 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         edit_image_object_shape: "string-array",
         supports_aspect_ratio: true,
         aspect_ratio_options: Object.freeze([
-          "21:9", "1:1", "4:3", "3:2", "2:3", "5:4", "4:5", "3:4", "16:9", "9:16",
+          "21:9",
+          "1:1",
+          "4:3",
+          "3:2",
+          "2:3",
+          "5:4",
+          "4:5",
+          "3:4",
+          "16:9",
+          "9:16",
         ]),
       }),
       Object.freeze({
@@ -143,7 +152,19 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         edit_image_object_shape: "string-array",
         supports_aspect_ratio: true,
         aspect_ratio_options: Object.freeze([
-          "4:1", "21:9", "1:1", "4:3", "3:2", "2:3", "5:4", "4:5", "3:4", "16:9", "9:16", "1:4", "1:8",
+          "4:1",
+          "21:9",
+          "1:1",
+          "4:3",
+          "3:2",
+          "2:3",
+          "5:4",
+          "4:5",
+          "3:4",
+          "16:9",
+          "9:16",
+          "1:4",
+          "1:8",
         ]),
       }),
       Object.freeze({
@@ -158,7 +179,16 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         edit_image_object_shape: "string-array",
         supports_aspect_ratio: true,
         aspect_ratio_options: Object.freeze([
-          "21:9", "1:1", "4:3", "3:2", "2:3", "5:4", "4:5", "3:4", "16:9", "9:16",
+          "21:9",
+          "1:1",
+          "4:3",
+          "3:2",
+          "2:3",
+          "5:4",
+          "4:5",
+          "3:4",
+          "16:9",
+          "9:16",
         ]),
       }),
       Object.freeze({
@@ -184,7 +214,15 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         edit_image_object_shape: "string-array",
         supports_aspect_ratio: true,
         aspect_ratio_options: Object.freeze([
-          "16:9", "2:1", "3:2", "4:3", "1:1", "3:4", "2:3", "1:2", "9:16",
+          "16:9",
+          "2:1",
+          "3:2",
+          "4:3",
+          "1:1",
+          "3:4",
+          "2:3",
+          "1:2",
+          "9:16",
         ]),
       }),
       Object.freeze({
@@ -4923,7 +4961,14 @@ async function pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs }) {
     if (status === "completed") {
       const urls = Array.isArray(payload?.result?.urls) ? payload.result.urls : []
       const imageUrl = String(urls[0] || "").trim()
-      console.log("[KREA_DEBUG] completed job_id=" + jobId + " result_keys=" + Object.keys(payload?.result || {}).join(",") + " image_url=" + imageUrl)
+      console.log(
+        "[KREA_DEBUG] completed job_id=" +
+          jobId +
+          " result_keys=" +
+          Object.keys(payload?.result || {}).join(",") +
+          " image_url=" +
+          imageUrl,
+      )
       if (!imageUrl) throw new Error("Krea job completed without an image URL")
       return downloadProviderImageBytes(imageUrl)
     }
@@ -5011,13 +5056,20 @@ async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = 
   if (urls.length) {
     if (!editImageParam) {
       const editLabels = (providerDef?.model_options || [])
-        .filter(function (m) { return m.edit_image_param })
-        .map(function (m) { return m.label })
+        .filter(function (m) {
+          return m.edit_image_param
+        })
+        .map(function (m) {
+          return m.label
+        })
         .filter(Boolean)
       throw new Error(
-        "The selected Krea model \"" + (kreaOption?.label || kreaModel) +
-        "\" does not support image-to-image editing. " +
-        "Use a model that supports image input: " + editLabels.join(", ") + ".",
+        'The selected Krea model "' +
+          (kreaOption?.label || kreaModel) +
+          '" does not support image-to-image editing. ' +
+          "Use a model that supports image input: " +
+          editLabels.join(", ") +
+          ".",
       )
     }
     if (editImageObjectShape === "object-array") {
@@ -5050,7 +5102,12 @@ async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = 
     15_000,
     "Krea job creation timeout",
   )
-  console.log("[KREA_DEBUG] response_keys=" + Object.keys(payload || {}).join(",") + " job_id=" + String(payload?.job_id || ""))
+  console.log(
+    "[KREA_DEBUG] response_keys=" +
+      Object.keys(payload || {}).join(",") +
+      " job_id=" +
+      String(payload?.job_id || ""),
+  )
   const jobId = sanitizeText(payload?.job_id || payload?.id || "", 120) || ""
   if (!jobId) {
     const urls = Array.isArray(payload?.result?.urls) ? payload.result.urls : []
@@ -5121,7 +5178,7 @@ async function callGeminiImageProvider({
     "4:1": "ASPECT_RATIO_FOUR_BY_ONE",
   }
   const GEMINI_IMAGE_SIZE_MAP = {
-    "512": "IMAGE_SIZE_FIVE_TWELVE",
+    512: "IMAGE_SIZE_FIVE_TWELVE",
     "1K": "IMAGE_SIZE_ONE_K",
     "2K": "IMAGE_SIZE_TWO_K",
     "4K": "IMAGE_SIZE_FOUR_K",
@@ -5130,7 +5187,8 @@ async function callGeminiImageProvider({
     aspectRatio: GEMINI_ASPECT_RATIO_MAP[requestOptions.aspectRatio] || requestOptions.aspectRatio,
   }
   if (requestOptions.imageSize) {
-    responseFormatImage.imageSize = GEMINI_IMAGE_SIZE_MAP[requestOptions.imageSize] || requestOptions.imageSize
+    responseFormatImage.imageSize =
+      GEMINI_IMAGE_SIZE_MAP[requestOptions.imageSize] || requestOptions.imageSize
   }
   const payload = await fetchJsonWithDeadline(
     `${geminiApiBaseUrl(providerRow)}/models/${encodeURIComponent(
@@ -25480,8 +25538,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         // candidate generation dialog asks for generate-capable models.
         // Default is image_edit (backward-compatible).
         const opParam = sanitizeText(url.searchParams.get("op") || "image_edit", 32) || "image_edit"
-        const operation =
-          opParam === "candidate_generation" ? "candidate_generation" : "image_edit"
+        const operation = opParam === "candidate_generation" ? "candidate_generation" : "image_edit"
         const requiredCapability = operation === "candidate_generation" ? "generate" : "edit"
         const allDefs = Object.values(ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS).map(
           mapImageEditProviderDefinition,
@@ -25512,12 +25569,14 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               })
               if (!lastUsed) return
               const options = Array.isArray(def.model_options) ? def.model_options : []
-              const pinned = options.find(function (m) { return m.model === lastUsed })
+              const pinned = options.find(function (m) {
+                return m.model === lastUsed
+              })
               if (!pinned) return
-              const unpinned = options.filter(function (m) { return m.model !== lastUsed })
-              def.model_options = [Object.assign({}, pinned, { last_used: true })].concat(
-                unpinned,
-              )
+              const unpinned = options.filter(function (m) {
+                return m.model !== lastUsed
+              })
+              def.model_options = [Object.assign({}, pinned, { last_used: true })].concat(unpinned)
             }),
           )
         }
