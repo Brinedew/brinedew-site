@@ -3150,6 +3150,28 @@ async function getUserEmulsionByPublicId(env, publicId) {
   return mapped?.text && mapped.id === parsed.publicId ? mapped : null
 }
 
+async function getUserEmulsionByPublicIdForSession(env, sessionUser, publicId) {
+  const parsed = parseUserEmulsionPublicId(publicId)
+  const userId = normalizeUserId(sessionUser?.user_id || "")
+  if (!parsed || !userId || !env.DB) return null
+
+  const current = await getUserEmulsionForSession(env, sessionUser)
+  if (current?.text && current.id === parsed.publicId) return current
+
+  const versionRow = await env.DB.prepare(
+    `SELECT user_id, username, public_id, revision, emulsion_text
+       FROM iconoplasm_user_emulsion_versions
+      WHERE user_id = ?
+        AND public_id = ?
+        AND COALESCE(emulsion_text, '') <> ''
+      LIMIT 1`,
+  )
+    .bind(userId, parsed.publicId)
+    .first()
+  const versionMapped = versionRow ? mapUserEmulsionVersionRow(versionRow, sessionUser) : null
+  return versionMapped?.text && versionMapped.id === parsed.publicId ? versionMapped : null
+}
+
 async function updateUserEmulsionForSession(env, sessionUser, rawText) {
   if (!env.DB) throw new Error("DB binding missing")
   const userId = normalizeUserId(sessionUser?.user_id || "")
@@ -26371,7 +26393,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         64,
       )
       const userEmulsion = selectedUserEmulsionId
-        ? await getUserEmulsionByPublicId(env, selectedUserEmulsionId)
+        ? await getUserEmulsionByPublicIdForSession(env, sessionUser, selectedUserEmulsionId)
         : await getUserEmulsionForSession(env, sessionUser)
       if (selectedUserEmulsionId && !userEmulsion) {
         return done(

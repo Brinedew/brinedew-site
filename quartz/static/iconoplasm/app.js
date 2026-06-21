@@ -5667,6 +5667,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var filteredOptions = []
       var pickerOpen = false
       var directUserEmulsionOptions = []
+      var directUserEmulsionOptionsLoaded = false
+      var directUserEmulsionOptionsLoading = null
       var directUserEmulsionActiveIndex = -1
       var directUserEmulsionPickerOpen = false
       var refreshedSampleForDirectPrompt = false
@@ -5785,6 +5787,63 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       function selectedDirectUserEmulsionId() {
         var option = requestDirectState.selectedUserEmulsion || null
         return String((option && (option.user_emulsion_id || option.emulsion_id)) || "").trim()
+      }
+
+      function directUserEmulsionOptionFromSaved(emulsion, kind) {
+        var id = String((emulsion && emulsion.id) || "").trim()
+        if (!id) return null
+        return {
+          user_emulsion_id: id,
+          emulsion_id: id,
+          label: id,
+          primary_label: id,
+          secondary_label: kind === "current" ? "Current saved emulsion" : "Saved revision",
+          search_text: id,
+          image_count: 0,
+          live_count: 0,
+          score: 0,
+          vote_h_index: 0,
+          preview_assets: [],
+        }
+      }
+
+      function rememberDirectUserEmulsionOptions(payload) {
+        var seen = Object.create(null)
+        var options = []
+        var current = directUserEmulsionOptionFromSaved(payload && payload.emulsion, "current")
+        if (current) {
+          options.push(current)
+          seen[current.user_emulsion_id] = true
+        }
+        var history = Array.isArray(payload && payload.history) ? payload.history : []
+        for (var i = 0; i < history.length; i++) {
+          var option = directUserEmulsionOptionFromSaved(history[i], "history")
+          if (!option || seen[option.user_emulsion_id]) continue
+          options.push(option)
+          seen[option.user_emulsion_id] = true
+        }
+        directUserEmulsionOptions = options
+        directUserEmulsionOptionsLoaded = true
+        return options
+      }
+
+      function ensureDirectUserEmulsionOptionsLoaded() {
+        if (directUserEmulsionOptionsLoaded) return Promise.resolve(directUserEmulsionOptions)
+        if (directUserEmulsionOptionsLoading) return directUserEmulsionOptionsLoading
+        directUserEmulsionOptionsLoading = fetchAuthedJSON("/api/iconoplasm/user-emulsion", {
+          credentials: "include",
+        })
+          .then(function (payload) {
+            directUserEmulsionOptionsLoading = null
+            return rememberDirectUserEmulsionOptions(payload || {})
+          })
+          .catch(function () {
+            directUserEmulsionOptionsLoading = null
+            directUserEmulsionOptionsLoaded = true
+            directUserEmulsionOptions = []
+            return directUserEmulsionOptions
+          })
+        return directUserEmulsionOptionsLoading
       }
 
       function candidateGenerationSampleLabel() {
@@ -6137,16 +6196,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       async function renderDirectUserEmulsionResultsList() {
         if (!directEmulsionQuery || !directEmulsionResults) return
         var renderQuery = directEmulsionQuery.value
-        var loadedOptions = await ensureRequestOptionsLoaded(renderQuery)
+        var loadedOptions = await ensureDirectUserEmulsionOptionsLoaded()
         if (directEmulsionQuery.value !== renderQuery) {
           void renderDirectUserEmulsionResultsList()
           return
         }
-        directUserEmulsionOptions = filterRequestOptions(
-          renderQuery,
-          loadedOptions,
-          isDirectUserEmulsionOption,
-        )
+        directUserEmulsionOptions = filterRequestOptions(renderQuery, loadedOptions)
         var selectedId = selectedDirectUserEmulsionId()
         var html = renderDirectUserEmulsionOptionMarkup(null, selectedId, true)
         if (directUserEmulsionOptions.length) {
