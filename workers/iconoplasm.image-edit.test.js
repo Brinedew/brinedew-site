@@ -539,7 +539,10 @@ class FakeStatement {
       })
       return { meta: { changes: 1, last_row_id: id } }
     }
-    if (this.sql.includes("UPDATE icono_gene_comments") && this.sql.includes("status = 'deleted'")) {
+    if (
+      this.sql.includes("UPDATE icono_gene_comments") &&
+      this.sql.includes("status = 'deleted'")
+    ) {
       // Soft delete: SET status='deleted', updated_at=? WHERE id=? AND user_id=? AND status='visible'
       const updatedAt = this.args[0]
       const commentId = Number(this.args[1] || 0)
@@ -881,10 +884,7 @@ test("image edit provider keys are encrypted and listed without secrets", async 
     "ideogram/ideogram-3",
     "z-image/z-image",
   ]) {
-    assert.ok(
-      kreaModelNames.includes(required),
-      "Krea edit dialog should expose " + required,
-    )
+    assert.ok(kreaModelNames.includes(required), "Krea edit dialog should expose " + required)
   }
   for (const hidden of [
     "krea/krea-2/large",
@@ -902,16 +902,11 @@ test("image edit provider keys are encrypted and listed without secrets", async 
     "ideogram/ideogram-2-turbo",
     "qwen/2512",
   ]) {
-    assert.ok(
-      !kreaModelNames.includes(hidden),
-      "Krea edit dialog should NOT expose " + hidden,
-    )
+    assert.ok(!kreaModelNames.includes(hidden), "Krea edit dialog should NOT expose " + hidden)
   }
   // The edit-capable flag and the source-image field name are preserved on
   // every exposed model so the backend can pick the right body shape.
-  const fluxKontext = krea.model_options.find(
-    (option) => option.model === "bfl/flux-1-kontext-dev",
-  )
+  const fluxKontext = krea.model_options.find((option) => option.model === "bfl/flux-1-kontext-dev")
   assert.equal(fluxKontext.edit_capable, true)
   assert.equal(fluxKontext.edit_image_param, "image_url")
   assert.equal(fluxKontext.edit_strength_param, "strength")
@@ -3042,7 +3037,9 @@ test("image edit jobs with Krea Flux use image_url + strength in the request bod
     assert.equal(created.job.status, "succeeded")
     assert.ok(created.job.result_asset_sha256)
     // The Krea job creation call must have been made exactly once.
-    const fluxCalls = fetchCalls.filter((call) => call.url === "https://api.krea.ai/generate/image/bfl/flux-1-dev")
+    const fluxCalls = fetchCalls.filter(
+      (call) => call.url === "https://api.krea.ai/generate/image/bfl/flux-1-dev",
+    )
     assert.equal(fluxCalls.length, 1)
   } finally {
     globalThis.fetch = originalFetch
