@@ -1343,7 +1343,7 @@ test("candidate generation appends the signed-in user's saved emulsion and publi
   }
 })
 
-test("candidate generation can use another user's selected emulsion without local references", async () => {
+test("candidate generation rejects another user's selected emulsion", async () => {
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
   db.users.set("user-2", {
@@ -1357,11 +1357,6 @@ test("candidate generation can use another user's selected emulsion without loca
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
     if (url === "https://api.openai.com/v1/images/generations") {
-      const body = JSON.parse(String(init.body || "{}"))
-      const prompt = String(body.prompt || "")
-      assert.match(prompt, /User emulsion:/)
-      assert.match(prompt, /cyan rim light, quiet archival scan texture/)
-      assert.match(prompt, /Reference images: none/)
       return new Response(JSON.stringify({ data: [{ b64_json: base64(GENERATED_BYTES) }] }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -1410,9 +1405,9 @@ test("candidate generation can use another user's selected emulsion without loca
         { waitUntil() {} },
       )
     const created = await createResponse.json()
-    assert.equal(createResponse.status, 200)
-    assert.equal(created.job.requested_emulsion_id, "LOWEREN-2")
-    assert.equal(created.job.reference_assets.length, 0)
+    assert.equal(createResponse.status, 400)
+    assert.match(created.error, /Selected user emulsion is not available/)
+    assert.equal(db.candidateGenerationJobs.size, 0)
   } finally {
     globalThis.fetch = originalFetch
   }

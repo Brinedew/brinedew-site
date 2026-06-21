@@ -245,7 +245,12 @@ test("direct Image API generation has its own user-emulsion picker separate from
   assert.match(directMarkup, /data-icono-request-direct-emulsion-results/)
   assert.match(wireAuthenticatedRequestForm, /directEmulsionQuery/)
   assert.match(wireAuthenticatedRequestForm, /directUserEmulsionOptions/)
-  assert.match(wireAuthenticatedRequestForm, /option_type[^]*user_emulsion/)
+  assert.match(wireAuthenticatedRequestForm, /\/api\/iconoplasm\/user-emulsion/)
+  assert.doesNotMatch(
+    wireAuthenticatedRequestForm,
+    /filterRequestOptions\([^)]*isDirectUserEmulsionOption/,
+    "direct generation must not populate the private emulsion picker from the shared public request options",
+  )
   assert.match(submitDirectCandidateGeneration, /selectedDirectUserEmulsionId\(\)/)
   assert.match(
     submitDirectCandidateGeneration,
