@@ -7,7 +7,11 @@ title: Cellular Senescence
 ---
 # Cellular Senescence
 
-Irreversible cell cycle arrest accompanied by altered cellular metabolism and secretory activity. This is one of the ways multicellular organisms prevent damaged cells from becoming cancerous. ^what-it-is
+**Cellular senescence** is a biological state in which a cell permanently stops dividing but remains metabolically active and resists cell death. Biologists Leonard Hayflick and Paul Moorhead first described this phenomenon in 1961 after observing that normal human cells in laboratory cultures could only divide a limited number of times before halting. Unlike programmed cell death (apoptosis), which dismantles and removes cells, senescent cells persist in the body. While in this state, they undergo major changes in their structure, shape, and gene activity.
+
+Cells enter senescence in response to various forms of stress and genetic damage. Senescence is often caused by the progressive shortening of telomeres—the protective caps at the ends of chromosomes—which occurs each time a cell divides. Other triggers include severe DNA damage, chemical stress from reactive oxygen species, and the abnormal activation of oncogenes. Inside the cell, these stresses activate specific molecular pathways, primarily governed by the tumor-suppressor proteins p53, p21, and p16. These proteins block the molecular machinery required for cell division, locking the cell in its non-dividing state.
+
+Senescence serves dual roles in health and disease, with both benefits and drawbacks. Senescence helps restrict the proliferation of damaged cells, preventing tumors and participating in tissue repair and embryonic development pathways. However, the immune system becomes less effective at clearing senescent cells over time. The accumulation of senescent cells in older tissues drives chronic inflammation and tissue degradation. Because of this link to lifespan, senolytics—drugs that selectively eliminate senescent cells—are studied as a potential treatment for age-related degeneration.
 
 ## Molecular pathways
 
