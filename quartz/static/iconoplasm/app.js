@@ -5791,6 +5791,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         var id = String((emulsion && emulsion.id) || "").trim()
         if (!id) return null
         return {
+          option_type: "user_emulsion",
           user_emulsion_id: id,
           emulsion_id: id,
           label: id,

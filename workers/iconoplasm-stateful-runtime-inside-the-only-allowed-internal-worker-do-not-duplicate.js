@@ -5875,6 +5875,7 @@ function mapCandidateGenerationJobRow(row, baseUrl = "") {
     reference_assets: references,
     status,
     error: sanitizeText(row?.error || "", 2000) || "",
+    prompt: sanitizeText(row?.prompt || "", 8000) || "",
     result_asset_sha256: resultAssetSha,
     result_urls: resultAssetSha
       ? {
