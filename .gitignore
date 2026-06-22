@@ -58,10 +58,17 @@ quartz/cli/tui/dist/
 .quartz/plugins/tag-page/
 .quartz/plugins/unlisted-pages/
 
-# Brinedew plugin symlinks (created by scripts/setup-brinedew-plugins.mjs)
+# Brinedew plugin symlinks. The Quartz v5 install code
+# (quartz/cli/plugin-git-handlers.js) creates these at runtime on each
+# host using path.resolve() of the repo URL in quartz.config.yaml, so
+# the symlink target is host-appropriate. Do NOT commit a symlink here
+# with a host-specific absolute target (e.g. D:/...) -- it will fail on
+# every other host with ENOENT in regeneratePluginIndex. See B-567
+# postmortem in the brinedew Linear workspace.
 .quartz/plugins/homepage-crawl-frontier
 .quartz/plugins/iconoplasm-page-switcher
 .quartz/plugins/tag-sections
+.quartz/plugins/draft-tag-injector
 .quartz/plugins/image-captions
 
 # Python cache

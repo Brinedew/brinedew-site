@@ -68,7 +68,17 @@ export function symlinkOrCopySync(target, linkPath) {
   try {
     fs.symlinkSync(target, linkPath, "dir")
   } catch (err) {
-    if (err.code === "EEXIST") return
+    // EEXIST here means a pre-existing entry of *some* kind is in the way.
+    // Silently returning is dangerous: it can leave a symlink whose target
+    // does not resolve on the current host (e.g. a Windows-absolute path
+    // committed to git, when running on Linux CI). That pre-existing symlink
+    // then survives into regeneratePluginIndex and breaks the build with
+    // ENOENT. We log the conflict so a wrong-target symlink is visible
+    // in CI logs instead of silent. See B-567.
+    if (err.code === "EEXIST") {
+      console.warn(`[brinedew/quartz] symlinkOrCopySync: ${linkPath} already exists; leaving as-is`)
+      return
+    }
     if (err.code === "EPERM" && process.platform === "win32") {
       try {
         fs.symlinkSync(target, linkPath, "junction")
