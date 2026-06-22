@@ -259,6 +259,31 @@ test("direct Image API generation has its own user-emulsion picker separate from
   assert.doesNotMatch(submitDirectCandidateGeneration, /selectedUserEmulsionIdForDirectGeneration/)
 })
 
+test("direct user-emulsion options carry option_type so the click handler can read the user_emulsion_id", () => {
+  const fromSavedStart = app.indexOf("function directUserEmulsionOptionFromSaved")
+  assert.notEqual(fromSavedStart, -1, "directUserEmulsionOptionFromSaved must exist")
+  const fromSavedEnd = app.indexOf("\n      function", fromSavedStart + 1)
+  const fromSaved = app.slice(fromSavedStart, fromSavedEnd)
+  assert.match(
+    fromSaved,
+    /option_type:\s*"user_emulsion"/,
+    "direct user-emulsion options must mark option_type=\"user_emulsion\" so renderRequestOptionButtonMarkup resolves user_emulsion_id (not the empty vision_id fallback)",
+  )
+  const wireStart = app.indexOf("function wireAuthenticatedRequestForm")
+  const wireEnd = app.indexOf("function loadSummary", wireStart)
+  const wire = app.slice(wireStart, wireEnd)
+  assert.match(wire, /data-icono-request-direct-emulsion-option/)
+  const clickHandlerMatch = wire.match(
+    /directEmulsionResults\.addEventListener\(\s*"click"[\s\S]*?\}\)\s*\n\s*\}\s*\n/,
+  )
+  assert.ok(clickHandlerMatch, "direct emulsion click handler must exist")
+  assert.match(
+    clickHandlerMatch[0],
+    /button\.getAttribute\(\s*"data-icono-request-direct-emulsion-option"\s*\)/,
+    "click handler must read the rendered user_emulsion_id attribute",
+  )
+})
+
 test("new and edit image modal previews use candidate masonry-sized medium previews", () => {
   assert.match(
     css,
