@@ -9,6 +9,7 @@ const links = [
   { name: "homepage-crawl-frontier", target: "brinedew-components" },
   { name: "iconoplasm-page-switcher", target: "brinedew-components" },
   { name: "tag-sections", target: "brinedew-components" },
+  { name: "draft-tag-injector", target: "brinedew-components" },
   { name: "image-captions", target: "brinedew-image-captions" },
 ]
 
