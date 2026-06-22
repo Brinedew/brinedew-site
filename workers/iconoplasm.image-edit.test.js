@@ -1218,7 +1218,12 @@ test("candidate generation jobs use novel provider generation and publish explic
     assert.equal(created.job.requested_vision_id, "")
     assert.equal(created.job.prompt_body_mode, "prose_sample")
     assert.equal(created.job.sample_label, "A1BG-7")
-    assert.equal("prompt" in created.job, false)
+    assert.equal("prompt" in created.job, true, "candidate generation job should expose the stored prompt so the caller can verify what was sent to the provider")
+    assert.ok(
+      typeof created.job.prompt === "string" && created.job.prompt.length > 0,
+      "stored prompt should be a non-empty string",
+    )
+    assert.match(created.job.prompt, /Subject gene:\s*A1BG/)
     assert.equal(created.job.reference_assets.length, 0)
     assert.ok(created.job.result_asset_sha256)
     assert.equal(env.ICONOPLASM_PORTRAITS.puts.length, 3)
