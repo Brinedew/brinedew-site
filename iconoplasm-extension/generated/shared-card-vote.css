@@ -173,7 +173,7 @@
   min-width: 0;
   min-height: calc(22 / 1220 * 100cqw);
   padding: 0;
-  font-family: "Special Elite" !important;
+  font-family: "Special Elite", "Courier New", monospace !important;
   font-size: calc(22 / 1220 * 100cqw);
   font-weight: 400;
   letter-spacing: 0.03em;
