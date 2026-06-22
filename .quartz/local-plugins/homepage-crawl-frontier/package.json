@@ -1,0 +1,24 @@
+{
+  "name": "@brinedew/homepage-crawl-frontier",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./components": "./dist/index.js"
+  },
+  "dependencies": {
+    "preact": "^10.28.2"
+  },
+  "quartz": {
+    "category": "component",
+    "components": {
+      "HomepageCrawlFrontier": {
+        "displayName": "Homepage Crawl Frontier",
+        "defaultPosition": "afterBody",
+        "defaultPriority": 10
+      }
+    }
+  }
+}
