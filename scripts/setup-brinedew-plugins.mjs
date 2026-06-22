@@ -1,5 +1,5 @@
-import { symlinkSync, existsSync, lstatSync, rmSync } from "node:fs"
-import { join, dirname } from "node:path"
+import { symlinkSync, existsSync, lstatSync, statSync, rmSync } from "node:fs"
+import { join, dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -13,24 +13,37 @@ const links = [
   { name: "image-captions", target: "brinedew-image-captions" },
 ]
 
+function isValidSymlink(linkPath, expectedTarget) {
+  try {
+    const lst = lstatSync(linkPath)
+    if (!lst.isSymbolicLink()) return false
+    const resolvedTarget = resolve(dirname(linkPath), expectedTarget)
+    const targetStat = statSync(resolvedTarget)
+    return targetStat.isDirectory()
+  } catch {
+    return false
+  }
+}
+
 for (const { name, target } of links) {
   const linkPath = join(pluginsDir, name)
-  let needsLink = true
+  const targetPath = join(pluginsDir, target)
+  if (!existsSync(targetPath)) {
+    console.error(`  ✗ ${name}: target ${target} does not exist at ${targetPath}`)
+    continue
+  }
+  if (isValidSymlink(linkPath, target)) {
+    console.log(`  = ${name} (symlink already present and resolves)`)
+    continue
+  }
   if (existsSync(linkPath)) {
     try {
-      const lst = lstatSync(linkPath)
-      if (lst.isSymbolicLink()) {
-        needsLink = false
-      } else {
-        rmSync(linkPath, { recursive: true, force: true })
-      }
-    } catch {
       rmSync(linkPath, { recursive: true, force: true })
+      console.log(`  - removed stale ${name}`)
+    } catch (err) {
+      console.error(`  ✗ ${name}: failed to remove stale entry: ${err.message}`)
+      continue
     }
-  }
-  if (!needsLink) {
-    console.log(`  = ${name} (symlink already present)`)
-    continue
   }
   try {
     symlinkSync(target, linkPath, "dir")
