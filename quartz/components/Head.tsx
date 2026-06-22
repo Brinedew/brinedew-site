@@ -376,7 +376,7 @@ export default (() => {
   src: url("/static/iconoplasm/fonts/SpecialElite-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 @font-face {
   font-family: "Caveat";
