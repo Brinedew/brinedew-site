@@ -1,0 +1,20 @@
+{
+  "name": "@brinedew/image-captions",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./components": "./dist/index.js"
+  },
+  "quartz": {
+    "category": "component",
+    "components": {
+      "ImageCaptions": {
+        "displayName": "Image Captions",
+        "defaultPosition": "afterBody",
+        "defaultPriority": 20
+      }
+    }
+  }
+}

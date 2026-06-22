@@ -215,7 +215,7 @@ plugins:
     enabled: false
   - source:
       name: homepage-crawl-frontier
-      repo: ./.quartz/plugins/brinedew-components
+      repo: ./.quartz/local-plugins/homepage-crawl-frontier
     enabled: true
     order: 24
     layout:
@@ -223,7 +223,7 @@ plugins:
       priority: 10
   - source:
       name: iconoplasm-page-switcher
-      repo: ./.quartz/plugins/brinedew-components
+      repo: ./.quartz/local-plugins/iconoplasm-page-switcher
     enabled: true
     order: 24
     layout:
@@ -231,7 +231,7 @@ plugins:
       priority: 38
   - source:
       name: tag-sections
-      repo: ./.quartz/plugins/brinedew-components
+      repo: ./.quartz/local-plugins/tag-sections
     enabled: true
     order: 24
     layout:
@@ -239,12 +239,12 @@ plugins:
       priority: 40
   - source:
       name: draft-tag-injector
-      repo: ./.quartz/plugins/brinedew-components
+      repo: ./.quartz/local-plugins/draft-tag-injector
     enabled: true
     order: 45
   - source:
       name: image-captions
-      repo: ./.quartz/plugins/brinedew-components
+      repo: ./.quartz/local-plugins/image-captions
     enabled: true
     order: 25
   - source: github:quartz-community/spacer

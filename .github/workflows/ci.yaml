@@ -56,9 +56,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
 
-      - name: Create brinedew plugin symlinks
-        run: node scripts/setup-brinedew-plugins.mjs
-
       - name: Install Quartz plugins
         run: node ./quartz/bootstrap-cli.mjs plugin install --from-config
 
