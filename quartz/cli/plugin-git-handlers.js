@@ -245,9 +245,21 @@ function parseExportsFromDts(content) {
 async function regeneratePluginIndex() {
   if (!fs.existsSync(PLUGINS_DIR)) return
 
+  // Filter out broken symlinks before stat. fs.statSync follows symlinks and
+  // throws ENOENT on a dangling target. A pre-committed symlink whose target
+  // is a host-specific absolute path (e.g. "D:/..." on Windows) will resolve
+  // on the dev's host and fail on Linux CI. We don't want a single broken
+  // symlink to abort the entire install. See B-567 in the brinedew Linear
+  // workspace for the full postmortem.
   const pluginDirs = fs.readdirSync(PLUGINS_DIR).filter((name) => {
     const pluginPath = path.join(PLUGINS_DIR, name)
-    return fs.statSync(pluginPath).isDirectory()
+    try {
+      const stat = fs.statSync(pluginPath)
+      return stat.isDirectory()
+    } catch (err) {
+      if (err.code === "ENOENT") return false
+      throw err
+    }
   })
 
   // Phase 1: Collect all exports per plugin, detect conflicts

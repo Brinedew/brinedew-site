@@ -1,4 +1,75 @@
 # yaml-language-server: $schema=./quartz/plugins/quartz-plugins.schema.json
+#
+# -----------------------------------------------------------------------------
+# HOW TO ADD A NEW LOCAL BRINEDEW PLUGIN
+# -----------------------------------------------------------------------------
+#
+# Read this before adding a new local-path plugin entry. The wrong way to do
+# it blocks production deploys with ENOENT and costs hours of debugging.
+# See B-567 (closed) for the full postmortem of how this got broken before.
+#
+# A "local" plugin is one that ships in this repo, not pulled from GitHub.
+# Each local plugin MUST be a real directory at the path the config points
+# at. Specifically:
+#
+#   1. The plugin source dir must exist on disk and contain:
+#        package.json          (with `quartz.components.<Name>` declared)
+#        dist/index.js         (the built component)
+#        dist/index.d.ts       (the types)
+#      The shared components live in .quartz/local-plugins/<name>/ and are
+#      re-bundled from the canonical .quartz/plugins/brinedew-components/
+#      source via `pnpm --filter @brinedew/<name> build` from the
+#      brinedew-components package.
+#
+#   2. Add a config entry like:
+#
+#        - source:
+#            name: <name>
+#            repo: ./.quartz/local-plugins/<name>
+#          enabled: true
+#          order: <int>
+#
+#   3. DO NOT commit a symlink at .quartz/plugins/<name> in git. The
+#      Quartz v5 install code (quartz/cli/plugin-git-handlers.js) creates
+#      local-plugin symlinks at runtime on the runner with a path that
+#      resolves on the runner's filesystem. If you commit a symlink with
+#      a host-specific absolute target (e.g. "D:/Coding/.../...") it will
+#      be a Windows-absolute path that does not exist on the Linux CI
+#      runner, and the install step will fail with ENOENT inside
+#      regeneratePluginIndex at quartz/cli/plugin-git-handlers.js:250
+#      (fs.statSync on the symlink follows it to a path that doesn't
+#      resolve).
+#
+#   4. The .gitignore already lists every installed plugin dir, so a
+#      runner-created symlink under .quartz/plugins/<name> will never
+#      be committed. That is the desired behavior. Let the install
+#      code own those entries.
+#
+#   5. If you ever need a symlink at .quartz/plugins/<name> in git (you
+#      don't, see #3), use a RELATIVE target like:
+#
+#        ../../local-plugins/<name>
+#
+#      Never commit a Windows-absolute or any other host-absolute path.
+#      The previous symlink in git had target
+#      "D:/Coding/Website/.quartz/local-plugins/draft-tag-injector"
+#      which works on Vladimir's PC and nowhere else.
+#
+#   6. If the install step ever reports "Linked <name> (local)" but
+#      the build then fails with ENOENT inside regeneratePluginIndex,
+#      the first thing to check is whether .quartz/plugins/<name> is a
+#      pre-existing symlink with a target that doesn't resolve on the
+#      current host. That is what B-567 was.
+#
+# Reference paths in this repo:
+#   - quartz/cli/plugin-git-handlers.js:245-251  regeneratePluginIndex ENOENT
+#   - quartz/cli/plugin-git-handlers.js:610-630  local symlink creation
+#   - quartz/cli/helpers.js:67-84                symlinkOrCopySync (swallows EEXIST)
+#   - .quartz/local-plugins/<name>/              per-plugin source dirs
+#   - .quartz/plugins/brinedew-components/       canonical bundled source
+#   - .gitignore                                lists every installed plugin dir
+#
+# -----------------------------------------------------------------------------
 configuration:
   pageTitle: Brinedew
   pageTitleSuffix: ""
