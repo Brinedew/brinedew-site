@@ -1,4 +1,4 @@
-import { symlinkSync, existsSync, mkdirSync } from "node:fs"
+import { symlinkSync, existsSync, lstatSync, rmSync } from "node:fs"
 import { join, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -15,7 +15,23 @@ const links = [
 
 for (const { name, target } of links) {
   const linkPath = join(pluginsDir, name)
-  if (existsSync(linkPath)) continue
+  let needsLink = true
+  if (existsSync(linkPath)) {
+    try {
+      const lst = lstatSync(linkPath)
+      if (lst.isSymbolicLink()) {
+        needsLink = false
+      } else {
+        rmSync(linkPath, { recursive: true, force: true })
+      }
+    } catch {
+      rmSync(linkPath, { recursive: true, force: true })
+    }
+  }
+  if (!needsLink) {
+    console.log(`  = ${name} (symlink already present)`)
+    continue
+  }
   try {
     symlinkSync(target, linkPath, "dir")
     console.log(`  ✓ ${name} -> ${target}`)
