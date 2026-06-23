@@ -713,17 +713,16 @@ function buildEnv(db = new FakeDb(), session = { user_id: "user-1", username: "t
     GAME_SESSIONS: buildSessionBinding(session),
     ICONOPLASM_VOTE_COORDINATORS: buildVoteCoordinatorBinding(db),
     ICONOPLASM_IMAGE_EDIT_KEY_SECRET: "test-secret-with-more-than-32-bytes-for-aes",
-    // Krea jobs are always finalized in a ctx.waitUntil background task.
-    // Tests drain that task synchronously, so the production 5s poll
-    // interval would make every Krea test 5s slower than necessary.
+    // Krea sync polling defaults to 2s. Tests override to 0 so a 0ms poll
+    // interval is used (no sleeping between fetches).
     ICONOPLASM_KREA_POLL_INTERVAL_MS: "0",
   }
 }
 
 // Captures every promise handed to ctx.waitUntil so tests can await them.
-// Used because Krea jobs are always async (kickoff + ctx.waitUntil +
-// 202 response); tests that want to inspect the final job state must
-// drain the waitUntil queue before re-reading the job row.
+// Used by routes that have legitimate background work (vote projection,
+// comment mirror, etc.). The Krea image-edit and candidate-generation
+// routes are now synchronous and do not need this.
 function capturingContext() {
   const tasks = []
   return {
@@ -745,16 +744,11 @@ function capturingContext() {
   }
 }
 
-// Convenience helper for the common pattern: hit the POST, then drain
-// the waitUntil queue, then GET the job. Returns the GET response.
-async function createKreaImageEditJobAndAwait({
-  env,
-  ctx,
-  body,
-  providerKey,
-  model,
-  cookie = "session=abc123",
-}) {
+// Convenience helper for Krea image-edit jobs. Krea is now synchronous:
+// the POST returns 200 with the job (or 502 with an error). For tests
+// that want to assert the failure path, the helper returns the failure
+// response as-is.
+async function createKreaImageEditJobAndAwait({ env, ctx, body, cookie = "session=abc123" }) {
   const create =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
@@ -769,23 +763,7 @@ async function createKreaImageEditJobAndAwait({
       ctx,
     )
   const created = await create.json()
-  if (ctx?.drain) await ctx.drain()
-  if (create.status === 202 && created?.job?.id) {
-    const jobId = created.job.id
-    const get =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(
-          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs/" +
-            encodeURIComponent(jobId),
-          { method: "GET", headers: { Cookie: cookie } },
-        ),
-        env,
-        ctx,
-      )
-    const fetched = await get.json()
-    return { create, created, get, fetched }
-  }
-  return { create, created, get: null, fetched: null }
+  return { create, created }
 }
 
 test("user emulsion settings store the current Discord-owned emulsion revision", async () => {
@@ -2318,24 +2296,10 @@ test("candidate generation jobs can use Krea API models and expose compute-unit 
         createCtx,
       )
     const created = await createResponse.json()
-    assert.equal(createResponse.status, 202, "create status: " + JSON.stringify(created))
-    assert.equal(created.job.status, "running")
-    await createCtx.drain()
-    // Re-read the job through a GET to pick up the completion that happened in waitUntil
-    const getResponse =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(
-          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/candidate-generation/jobs/" +
-            encodeURIComponent(created.job.id),
-          { method: "GET", headers: { Cookie: "session=abc123" } },
-        ),
-        env,
-        { waitUntil() {} },
-      )
-    const fetched = await getResponse.json()
-    assert.equal(fetched.job.status, "succeeded")
-    assert.equal(fetched.job.request_mode, "novel")
-    assert.ok(fetched.job.result_asset_sha256)
+    assert.equal(createResponse.status, 200, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "succeeded")
+    assert.equal(created.job.request_mode, "novel")
+    assert.ok(created.job.result_asset_sha256)
     assert.ok(fetchCalls.some((call) => call.url === "https://api.krea.ai/jobs/krea-job-1"))
     assert.equal(env.ICONOPLASM_PORTRAITS.deletes.length, 1)
   } finally {
@@ -3150,7 +3114,7 @@ test("image edit jobs with Krea Flux use image_url + strength in the request bod
     )
 
     const createCtx = capturingContext()
-    const { create, created, fetched } = await createKreaImageEditJobAndAwait({
+    const { create, created } = await createKreaImageEditJobAndAwait({
       env,
       ctx: createCtx,
       body: {
@@ -3161,11 +3125,9 @@ test("image edit jobs with Krea Flux use image_url + strength in the request bod
         adjustments: { remove_ai_generation_errors: true },
       },
     })
-    assert.equal(create.status, 202, "create status: " + JSON.stringify(created))
-    assert.equal(created.job.status, "running")
-    assert.ok(fetched, "expected the GET response after waitUntil drain")
-    assert.equal(fetched.job.status, "succeeded", "final job state: " + JSON.stringify(fetched.job))
-    assert.ok(fetched.job.result_asset_sha256)
+    assert.equal(create.status, 200, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "succeeded")
+    assert.ok(created.job.result_asset_sha256)
     // The Krea job creation call must have been made exactly once.
     const fluxCalls = fetchCalls.filter(
       (call) => call.url === "https://api.krea.ai/generate/image/bfl/flux-1-dev",
@@ -3275,7 +3237,7 @@ test("image edit jobs with Krea Nano Banana Pro use image_urls[] array and aspec
     )
 
     const createCtx = capturingContext()
-    const { create, created, fetched } = await createKreaImageEditJobAndAwait({
+    const { create, created } = await createKreaImageEditJobAndAwait({
       env,
       ctx: createCtx,
       body: {
@@ -3286,11 +3248,9 @@ test("image edit jobs with Krea Nano Banana Pro use image_urls[] array and aspec
         adjustments: { remove_ai_generation_errors: true },
       },
     })
-    assert.equal(create.status, 202, "create status: " + JSON.stringify(created))
-    assert.equal(created.job.status, "running")
-    assert.ok(fetched, "expected the GET response after waitUntil drain")
-    assert.equal(fetched.job.status, "succeeded", "final job state: " + JSON.stringify(fetched.job))
-    assert.ok(fetched.job.result_asset_sha256)
+    assert.equal(create.status, 200, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "succeeded")
+    assert.ok(created.job.result_asset_sha256)
     // The /assets upload must have been made exactly once.
     const assetCalls = fetchCalls.filter((call) => call.url === "https://api.krea.ai/assets")
     assert.equal(assetCalls.length, 1)
@@ -3490,7 +3450,7 @@ test("image edit jobs with Krea Flux Kontext use image_url + strength in the req
     )
 
     const createCtx = capturingContext()
-    const { create, created, fetched } = await createKreaImageEditJobAndAwait({
+    const { create, created } = await createKreaImageEditJobAndAwait({
       env,
       ctx: createCtx,
       body: {
@@ -3501,10 +3461,9 @@ test("image edit jobs with Krea Flux Kontext use image_url + strength in the req
         adjustments: { remove_ai_generation_errors: true },
       },
     })
-    assert.equal(create.status, 202, "create status: " + JSON.stringify(created))
-    assert.equal(created.job.status, "running")
-    assert.ok(fetched, "expected the GET response after waitUntil drain")
-    assert.equal(fetched.job.status, "succeeded", "final job state: " + JSON.stringify(fetched.job))
+    assert.equal(create.status, 200, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "succeeded")
+    assert.ok(created.job.result_asset_sha256)
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -3594,7 +3553,7 @@ test("image edit jobs with Krea ChatGPT 2 send width + height + aspect_ratio (B-
     )
 
     const createCtx = capturingContext()
-    const { create, created, fetched } = await createKreaImageEditJobAndAwait({
+    const { create, created } = await createKreaImageEditJobAndAwait({
       env,
       ctx: createCtx,
       body: {
@@ -3605,10 +3564,9 @@ test("image edit jobs with Krea ChatGPT 2 send width + height + aspect_ratio (B-
         adjustments: { remove_ai_generation_errors: true },
       },
     })
-    assert.equal(create.status, 202, "create status: " + JSON.stringify(created))
-    assert.equal(created.job.status, "running")
-    assert.ok(fetched, "expected the GET response after waitUntil drain")
-    assert.equal(fetched.job.status, "succeeded", "final job state: " + JSON.stringify(fetched.job))
+    assert.equal(create.status, 200, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "succeeded")
+    assert.ok(created.job.result_asset_sha256)
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -3692,7 +3650,7 @@ test("image edit jobs with Krea Runway Gen-4 use reference_images[{url,tag}] bod
     )
 
     const createCtx = capturingContext()
-    const { create, created, fetched } = await createKreaImageEditJobAndAwait({
+    const { create, created } = await createKreaImageEditJobAndAwait({
       env,
       ctx: createCtx,
       body: {
@@ -3703,10 +3661,9 @@ test("image edit jobs with Krea Runway Gen-4 use reference_images[{url,tag}] bod
         adjustments: { remove_ai_generation_errors: true },
       },
     })
-    assert.equal(create.status, 202, "create status: " + JSON.stringify(created))
-    assert.equal(created.job.status, "running")
-    assert.ok(fetched, "expected the GET response after waitUntil drain")
-    assert.equal(fetched.job.status, "succeeded", "final job state: " + JSON.stringify(fetched.job))
+    assert.equal(create.status, 200, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "succeeded")
+    assert.ok(created.job.result_asset_sha256)
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -3791,7 +3748,7 @@ test("image edit jobs with Krea Ideogram 3.0 use character_reference_images body
     )
 
     const createCtx = capturingContext()
-    const { create, created, fetched } = await createKreaImageEditJobAndAwait({
+    const { create, created } = await createKreaImageEditJobAndAwait({
       env,
       ctx: createCtx,
       body: {
@@ -3802,10 +3759,9 @@ test("image edit jobs with Krea Ideogram 3.0 use character_reference_images body
         adjustments: { remove_ai_generation_errors: true },
       },
     })
-    assert.equal(create.status, 202, "create status: " + JSON.stringify(created))
-    assert.equal(created.job.status, "running")
-    assert.ok(fetched, "expected the GET response after waitUntil drain")
-    assert.equal(fetched.job.status, "succeeded", "final job state: " + JSON.stringify(fetched.job))
+    assert.equal(create.status, 200, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "succeeded")
+    assert.ok(created.job.result_asset_sha256)
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -3997,22 +3953,9 @@ test("last-used model is remembered and pinned at the top of the providers list,
         firstCtx,
       )
     const created = await createResponse.json()
-    assert.equal(createResponse.status, 202, "create status: " + JSON.stringify(created))
-    assert.equal(created.job.status, "running")
+    assert.equal(createResponse.status, 200, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "succeeded")
     await firstCtx.drain()
-    // Re-read the job through a GET to verify it succeeded
-    const getResp =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(
-          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs/" +
-            encodeURIComponent(created.job.id),
-          { method: "GET", headers: { Cookie: "session=abc123" } },
-        ),
-        env,
-        { waitUntil() {} },
-      )
-    const fetched = await getResp.json()
-    assert.equal(fetched.job.status, "succeeded")
     const kvPutsAfter = kvPuts.filter((p) =>
       p.k.startsWith("iconoplasm:image-edit-last-used:image_edit:user-1:krea"),
     ).length
@@ -4049,8 +3992,9 @@ test("last-used model is remembered and pinned at the top of the providers list,
         env,
         secondCtx,
       )
-    await secondResponse.json()
-    await secondCtx.drain()
+    const secondCreated = await secondResponse.json()
+    assert.equal(secondResponse.status, 200, "create status: " + JSON.stringify(secondCreated))
+    assert.equal(secondCreated.job.status, "succeeded")
     const newKvPutsAfter = kvPuts.filter((p) =>
       p.k.startsWith("iconoplasm:image-edit-last-used:image_edit:user-1:krea"),
     ).length
@@ -4147,27 +4091,9 @@ test("Krea structured error responses surface a readable message, not [object Ob
         createCtx,
       )
     const created = await createResponse.json()
-    assert.equal(createResponse.status, 202, "create status: " + JSON.stringify(created))
-    assert.equal(created.job.status, "running")
-    await createCtx.drain()
-    // Re-read the job to pick up the failure that happened in waitUntil
-    const getResponse =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(
-          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs/" +
-            encodeURIComponent(created.job.id),
-          { method: "GET", headers: { Cookie: "session=abc123" } },
-        ),
-        env,
-        { waitUntil() {} },
-      )
-    const fetched = await getResponse.json()
-    assert.equal(fetched.job.status, "failed")
-    // The error message must contain the actual Krea message text, NOT
-    // "[object Object]". This is the smoking-gun regression for the bug
-    // that made it impossible to diagnose Krea image-edit failures.
-    assert.notEqual(fetched.job.error, "[object Object]")
-    assert.match(fetched.job.error, /Could not fetch the source image/)
+    assert.equal(createResponse.status, 502, "create status: " + JSON.stringify(created))
+    assert.notEqual(created.error, "[object Object]")
+    assert.match(created.error, /Could not fetch the source image/)
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -4238,58 +4164,32 @@ test("Krea asset upload failure surfaces a readable error from the Krea error bo
   }
 })
 
-test("Krea jobs that exceed the synchronous wait budget return 202 with status=running and finish via ctx.waitUntil", async () => {
-  // Real Krea models (especially nano-banana-pro) can take 60-120s, which
-  // blows the Cloudflare Workers 50-subrequest limit if we poll in the
-  // request. The fix: when pollKreaJob exhausts its subrequest budget, it
-  // throws a `KREA_JOB_STILL_RUNNING` sentinel. The route catches that,
-  // returns 202 with the running job, and schedules the rest of the
-  // polling in ctx.waitUntil. The client then polls the GET endpoint.
+test("Krea 4xx from the create-job POST surfaces 502 with the Krea error text", async () => {
+  // Krea is now sync. A 4xx from the create-job POST is the route's error
+  // path: the response is 502 with the Krea error text, the D1 row is
+  // marked failed. There is no ctx.waitUntil, no 202, no ghost row.
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
   const env = buildEnv(db)
-  const fetchCalls = []
-  globalThis.fetch = async (input, init = {}) => {
+  globalThis.fetch = async (input) => {
     const url = String(input)
-    fetchCalls.push({ url, init })
     if (url === "https://api.krea.ai/assets") {
       return new Response(
         JSON.stringify({
-          id: "krea-asset-wait-1",
-          image_url: "https://krea.example/uploaded/wait-source.png",
+          id: "krea-asset-billing-1",
+          image_url: "https://krea.example/uploaded/billing-source.png",
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     }
-    if (url === "https://api.krea.ai/generate/image/google/nano-banana-pro") {
-      return new Response(JSON.stringify({ job_id: "krea-wait-job-1", status: "queued" }), {
-        status: 200,
+    if (url === "https://api.krea.ai/generate/image/openai/gpt-image-2") {
+      return new Response(JSON.stringify({ error: "This model requires a higher plan." }), {
+        status: 402,
         headers: { "Content-Type": "application/json" },
       })
-    }
-    if (url === "https://api.krea.ai/jobs/krea-wait-job-1") {
-      // Always return "processing" so the in-request polling never sees
-      // "completed" — it will exhaust the poll budget and throw the
-      // sentinel.
-      return new Response(JSON.stringify({ job_id: "krea-wait-job-1", status: "processing" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })
-    }
-    if (url === "https://krea.example/uploaded/wait-source.png") {
-      // Just an asset URL, never fetched in this test.
-      return new Response("source", { status: 200, headers: { "Content-Type": "image/webp" } })
-    }
-    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
-      return new Response(EDITED_BYTES, { status: 200, headers: { "Content-Type": "image/webp" } })
     }
     throw new Error(`Unexpected fetch ${url}`)
   }
-  // Track ctx.waitUntil invocations so we can confirm the background task
-  // was scheduled.
-  const waitUntilTasks = []
-  const ctx = { waitUntil: (p) => waitUntilTasks.push(p) }
-
   try {
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
@@ -4300,12 +4200,12 @@ test("Krea jobs that exceed the synchronous wait budget return 202 with status=r
           body: JSON.stringify({
             provider_id: "krea",
             api_key: "krea-test-secret",
-            model: "google/nano-banana-pro",
+            model: "openai/gpt-image-2",
           }),
         },
       ),
       env,
-      ctx,
+      { waitUntil() {} },
     )
     const createResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -4316,7 +4216,7 @@ test("Krea jobs that exceed the synchronous wait budget return 202 with status=r
             headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
             body: JSON.stringify({
               provider_id: "krea",
-              model: "google/nano-banana-pro",
+              model: "openai/gpt-image-2",
               source_gene_symbol: "A1BG",
               source_asset_sha256: SOURCE_SHA,
               adjustments: { remove_ai_generation_errors: true },
@@ -4324,31 +4224,14 @@ test("Krea jobs that exceed the synchronous wait budget return 202 with status=r
           },
         ),
         env,
-        ctx,
+        { waitUntil() {} },
       )
     const created = await createResponse.json()
-    // The route returns 202 Accepted with a running job. The job's status
-    // is "running" — the worker will continue polling in the background.
-    assert.equal(createResponse.status, 202)
-    assert.equal(created.ok, true)
-    assert.equal(created.status, "running")
-    assert.equal(created.job.status, "running")
-    assert.ok(created.job.id)
-    // The route must have scheduled at least one ctx.waitUntil task to
-    // continue the polling out-of-band.
-    assert.ok(waitUntilTasks.length >= 1, "ctx.waitUntil must be used to continue polling")
-    // The synchronous request must NOT have polled more than 12 times (the
-    // configured KREA_MAX_POLLS_PER_REQUEST). This is what keeps us under
-    // the 50 subrequest limit.
-    const pollCalls = fetchCalls.filter(
-      (call) => call.url === "https://api.krea.ai/jobs/krea-wait-job-1",
-    )
-    assert.ok(
-      pollCalls.length <= 12,
-      "in-request polling must be capped to keep subrequest usage low (got " +
-        pollCalls.length +
-        ")",
-    )
+    // Sync failure: 502 with the Krea error text in the body, job marked failed.
+    assert.equal(createResponse.status, 502)
+    assert.equal(created.ok, false)
+    assert.equal(created.job.status, "failed")
+    assert.match(created.error, /requires a higher plan/)
   } finally {
     globalThis.fetch = originalFetch
   }
