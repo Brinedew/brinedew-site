@@ -5431,22 +5431,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       .then(function (payload) {
         var job = payload && payload.job
         imageEditDialogState.job = job
-        var dialog = ensureImageEditDialog()
-        var sourceViewer = dialog.querySelector("[data-icono-image-edit-source-viewer]")
-        var result = dialog.querySelector("[data-icono-image-edit-result]")
-        var before = dialog.querySelector("[data-icono-image-edit-before]")
-        var after = dialog.querySelector("[data-icono-image-edit-after]")
-        if (before) before.src = source.image_url || ""
-        if (after)
-          after.src =
-            (job && job.result_urls && job.result_urls.medium) ||
-            (job && job.result_urls && job.result_urls.full) ||
-            (job && job.result_urls && job.result_urls.thumb) ||
-            ""
-        applyImageEditAspectRatio(dialog, source)
-        if (sourceViewer) sourceViewer.hidden = true
-        if (result) result.hidden = false
-        imageEditSetStatus("Edit ready to publish.", "success")
+        // Krea (and other slow providers) can take longer than the Worker
+        // synchronous wait budget. When that happens the worker returns
+        // { ok: true, status: "running", job: { id, status: "running" } }
+        // with HTTP 202. We then poll the GET endpoint every 2 seconds
+        // until the job is succeeded or failed, surfacing the result in
+        // the same UI.
+        if (payload && payload.status === "running" && job && job.id) {
+          imageEditSetStatus("Krea is rendering the edit. This can take up to a few minutes...", "")
+          pollImageEditJobUntilDone(job.id, source, { attempts: 0 })
+          return
+        }
+        showImageEditResult(job, source)
       })
       .catch(function (error) {
         imageEditSetStatus(String((error && error.message) || "Image edit failed."), "error")
@@ -5455,6 +5451,79 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         imageEditDialogState.loading = false
         updateImageEditButtons()
       })
+  }
+
+  function showImageEditResult(job, source) {
+    if (!job) {
+      imageEditSetStatus("Image edit did not return a job.", "error")
+      return
+    }
+    var dialog = ensureImageEditDialog()
+    var sourceViewer = dialog.querySelector("[data-icono-image-edit-source-viewer]")
+    var result = dialog.querySelector("[data-icono-image-edit-result]")
+    var before = dialog.querySelector("[data-icono-image-edit-before]")
+    var after = dialog.querySelector("[data-icono-image-edit-after]")
+    if (before) before.src = source.image_url || ""
+    if (after)
+      after.src =
+        (job && job.result_urls && job.result_urls.medium) ||
+        (job && job.result_urls && job.result_urls.full) ||
+        (job && job.result_urls && job.result_urls.thumb) ||
+        ""
+    applyImageEditAspectRatio(dialog, source)
+    if (job.status === "failed") {
+      imageEditSetStatus(String((job && job.error) || "Image edit failed."), "error")
+      if (sourceViewer) sourceViewer.hidden = false
+      if (result) result.hidden = true
+      return
+    }
+    if (sourceViewer) sourceViewer.hidden = true
+    if (result) result.hidden = false
+    imageEditSetStatus("Edit ready to publish.", "success")
+  }
+
+  function pollImageEditJobUntilDone(jobId, source, options) {
+    var attempts = (options && options.attempts) || 0
+    var maxAttempts = 240 // ~8 minutes at 2s intervals
+    function tick() {
+      attempts += 1
+      fetchAuthedJSON("/api/iconoplasm/image-edit/jobs/" + encodeURIComponent(jobId), {
+        headers: { Accept: "application/json" },
+      })
+        .then(function (payload) {
+          var job = payload && payload.job
+          imageEditDialogState.job = job
+          if (!job) throw new Error("Polling returned no job")
+          if (job.status === "succeeded" || job.status === "failed") {
+            showImageEditResult(job, source)
+            imageEditDialogState.loading = false
+            updateImageEditButtons()
+            return
+          }
+          if (attempts >= maxAttempts) {
+            imageEditSetStatus(
+              "Krea is still rendering after " +
+                Math.round(maxAttempts * 2) +
+                " seconds. Check the gene page in a minute.",
+              "error",
+            )
+            imageEditDialogState.loading = false
+            updateImageEditButtons()
+            return
+          }
+          imageEditSetStatus("Krea is rendering the edit... (" + attempts * 2 + "s elapsed)", "")
+          setTimeout(tick, 2_000)
+        })
+        .catch(function (error) {
+          imageEditSetStatus(
+            "Lost contact with the edit job: " + String((error && error.message) || error),
+            "error",
+          )
+          imageEditDialogState.loading = false
+          updateImageEditButtons()
+        })
+    }
+    setTimeout(tick, 1_500)
   }
 
   function publishImageEditJob() {
