@@ -910,6 +910,13 @@ test("image edit provider keys are encrypted and listed without secrets", async 
   assert.equal(fluxKontext.edit_capable, true)
   assert.equal(fluxKontext.edit_image_param, "image_url")
   assert.equal(fluxKontext.edit_strength_param, "strength")
+  // Krea's docs say strength: 1.0 "fully replaces the source". The
+  // default here has to be a real-edit value, not a regenerate value —
+  // see the regression test for the "edit returns a new image" bug.
+  assert.equal(fluxKontext.edit_strength_default, 0.5)
+  const fluxDev = krea.model_options.find((option) => option.model === "bfl/flux-1-dev")
+  assert.equal(fluxDev.edit_strength_param, "strength")
+  assert.equal(fluxDev.edit_strength_default, 0.5)
   const nanoBananaPro = krea.model_options.find(
     (option) => option.model === "google/nano-banana-pro",
   )
@@ -1218,7 +1225,11 @@ test("candidate generation jobs use novel provider generation and publish explic
     assert.equal(created.job.requested_vision_id, "")
     assert.equal(created.job.prompt_body_mode, "prose_sample")
     assert.equal(created.job.sample_label, "A1BG-7")
-    assert.equal("prompt" in created.job, true, "candidate generation job should expose the stored prompt so the caller can verify what was sent to the provider")
+    assert.equal(
+      "prompt" in created.job,
+      true,
+      "candidate generation job should expose the stored prompt so the caller can verify what was sent to the provider",
+    )
     assert.ok(
       typeof created.job.prompt === "string" && created.job.prompt.length > 0,
       "stored prompt should be a non-empty string",
@@ -2959,15 +2970,46 @@ test("image edit jobs with Krea Flux use image_url + strength in the request bod
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
     fetchCalls.push({ url, init })
+    if (url === "https://api.krea.ai/assets") {
+      // Krea now requires uploading the source image to /assets first to get
+      // a Krea-hosted image_url that the inference server can definitely reach.
+      assert.equal(init.method, "POST")
+      assert.equal(init.headers.Authorization, "Bearer krea-test-secret")
+      // The body must be multipart/form-data (a real FormData), and the `file`
+      // field must carry the actual source image bytes.
+      assert.ok(init.body instanceof FormData, "Krea asset upload must use FormData")
+      const fileField = init.body.get("file")
+      assert.ok(fileField, "Krea asset upload must include a file field")
+      assert.ok(fileField.size > 0, "Krea asset upload file must be non-empty")
+      return new Response(
+        JSON.stringify({
+          id: "krea-asset-flux-1",
+          image_url: "https://krea.example/uploaded/flux-source.png",
+          width: 1024,
+          height: 1024,
+          size_bytes: fileField.size,
+          mime_type: "image/webp",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
     if (url === "https://api.krea.ai/generate/image/bfl/flux-1-dev") {
       assert.equal(init.headers.Authorization, "Bearer krea-test-secret")
       const body = JSON.parse(String(init.body || "{}"))
       // Flux (bfl/flux-1-dev) uses singular image_url, not the image_urls[] array.
       assert.equal(typeof body.image_url, "string")
-      assert.match(body.image_url, /\/portraits\/v1\//)
+      // The image_url must be the Krea-hosted URL from the /assets upload,
+      // not our own CDN URL. This is the key fix for the "edit returns a
+      // new image" bug.
+      assert.equal(body.image_url, "https://krea.example/uploaded/flux-source.png")
       assert.equal(Array.isArray(body.image_urls), false)
-      // Krea Flux also takes a strength field for img2img; the worker sets 0.85.
-      assert.equal(body.strength, 0.85)
+      // Krea Flux also takes a strength field for img2img. The worker
+      // uses the per-model edit_strength_default (0.5 for the Flux
+      // family). The previous fixed value of 0.85 was effectively
+      // "regenerate almost completely using the source as a faint hint"
+      // per Krea's own docs (1.0 = "fully replaces the source"); 0.5
+      // produces a real edit.
+      assert.equal(body.strength, 0.5)
       return new Response(JSON.stringify({ job_id: "flux-job-1", status: "queued" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -3038,7 +3080,7 @@ test("image edit jobs with Krea Flux use image_url + strength in the request bod
         { waitUntil() {} },
       )
     const created = await createResponse.json()
-    assert.equal(createResponse.status, 200)
+    assert.equal(createResponse.status, 200, "create status: " + JSON.stringify(created))
     assert.equal(created.job.status, "succeeded")
     assert.ok(created.job.result_asset_sha256)
     // The Krea job creation call must have been made exactly once.
@@ -3046,6 +3088,9 @@ test("image edit jobs with Krea Flux use image_url + strength in the request bod
       (call) => call.url === "https://api.krea.ai/generate/image/bfl/flux-1-dev",
     )
     assert.equal(fluxCalls.length, 1)
+    // The /assets upload must have been made exactly once.
+    const assetCalls = fetchCalls.filter((call) => call.url === "https://api.krea.ai/assets")
+    assert.equal(assetCalls.length, 1)
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -3059,12 +3104,35 @@ test("image edit jobs with Krea Nano Banana Pro use image_urls[] array and aspec
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
     fetchCalls.push({ url, init })
+    if (url === "https://api.krea.ai/assets") {
+      // Nano Banana Pro on Krea needs a Krea-hosted source image, not our CDN
+      // URL. The worker uploads the source bytes here.
+      assert.ok(init.body instanceof FormData, "Krea asset upload must use FormData")
+      const fileField = init.body.get("file")
+      assert.ok(fileField, "Krea asset upload must include a file field")
+      assert.ok(fileField.size > 0, "Krea asset upload file must be non-empty")
+      return new Response(
+        JSON.stringify({
+          id: "krea-asset-nbp-1",
+          image_url: "https://krea.example/uploaded/nbp-source.png",
+          width: 1024,
+          height: 1024,
+          size_bytes: fileField.size,
+          mime_type: "image/webp",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
     if (url === "https://api.krea.ai/generate/image/google/nano-banana-pro") {
       const body = JSON.parse(String(init.body || "{}"))
       // Nano Banana Pro on Krea takes image_urls[] (plural array), not singular image_url.
       assert.equal(Array.isArray(body.image_urls), true)
       assert.equal(body.image_urls.length, 1)
-      assert.match(body.image_urls[0], /\/portraits\/v1\//)
+      // The image_urls[] entry must be the Krea-hosted URL from the /assets
+      // upload — NOT our CDN URL. This is the key fix for the bug where
+      // Nano Banana Pro was silently dropping the source image and generating
+      // a fresh portrait from the prompt alone.
+      assert.equal(body.image_urls[0], "https://krea.example/uploaded/nbp-source.png")
       assert.equal("image_url" in body, false)
       // The blot is 3:4 and Nano Banana Pro supports 3:4 in its aspect_ratio enum.
       assert.equal(body.aspect_ratio, "3:4")
@@ -3141,6 +3209,9 @@ test("image edit jobs with Krea Nano Banana Pro use image_urls[] array and aspec
     assert.equal(createResponse.status, 200)
     assert.equal(created.job.status, "succeeded")
     assert.ok(created.job.result_asset_sha256)
+    // The /assets upload must have been made exactly once.
+    const assetCalls = fetchCalls.filter((call) => call.url === "https://api.krea.ai/assets")
+    assert.equal(assetCalls.length, 1)
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -3267,12 +3338,25 @@ test("image edit jobs with Krea Flux Kontext use image_url + strength in the req
   const env = buildEnv(db)
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
+    if (url === "https://api.krea.ai/assets") {
+      assert.ok(init.body instanceof FormData, "Krea asset upload must use FormData")
+      return new Response(
+        JSON.stringify({
+          id: "krea-asset-kontext-1",
+          image_url: "https://krea.example/uploaded/kontext-source.png",
+          width: 1024,
+          height: 1024,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
     if (url === "https://api.krea.ai/generate/image/bfl/flux-1-kontext-dev") {
       const body = JSON.parse(String(init.body || "{}"))
       assert.equal(typeof body.image_url, "string")
-      assert.match(body.image_url, /\/portraits\/v1\//)
+      // Source must be Krea-hosted, not our CDN URL.
+      assert.equal(body.image_url, "https://krea.example/uploaded/kontext-source.png")
       assert.equal(Array.isArray(body.image_urls), false)
-      assert.equal(body.strength, 0.85)
+      assert.equal(body.strength, 0.5)
       return new Response(JSON.stringify({ job_id: "kontext-job-1", status: "queued" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -3356,13 +3440,26 @@ test("image edit jobs with Krea Runway Gen-4 use reference_images[{url,tag}] bod
   const env = buildEnv(db)
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
+    if (url === "https://api.krea.ai/assets") {
+      assert.ok(init.body instanceof FormData, "Krea asset upload must use FormData")
+      return new Response(
+        JSON.stringify({
+          id: "krea-asset-runway-1",
+          image_url: "https://krea.example/uploaded/runway-source.png",
+          width: 1024,
+          height: 1024,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
     if (url === "https://api.krea.ai/generate/image/runway/gen-4-image") {
       const body = JSON.parse(String(init.body || "{}"))
       // Runway wants reference_images as an object array, not a string array.
       assert.equal(Array.isArray(body.reference_images), true)
       assert.equal(body.reference_images.length, 1)
       assert.equal(typeof body.reference_images[0], "object")
-      assert.match(body.reference_images[0].url, /\/portraits\/v1\//)
+      // Source URL inside the object must be the Krea-hosted URL.
+      assert.equal(body.reference_images[0].url, "https://krea.example/uploaded/runway-source.png")
       assert.equal(body.reference_images[0].tag, "source")
       return new Response(JSON.stringify({ job_id: "runway-job-1", status: "queued" }), {
         status: 200,
@@ -3447,12 +3544,28 @@ test("image edit jobs with Krea Ideogram 3.0 use character_reference_images body
   const env = buildEnv(db)
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
+    if (url === "https://api.krea.ai/assets") {
+      assert.ok(init.body instanceof FormData, "Krea asset upload must use FormData")
+      return new Response(
+        JSON.stringify({
+          id: "krea-asset-ideogram-1",
+          image_url: "https://krea.example/uploaded/ideogram-source.png",
+          width: 1024,
+          height: 1024,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
     if (url === "https://api.krea.ai/generate/image/ideogram/ideogram-3") {
       const body = JSON.parse(String(init.body || "{}"))
       assert.equal(Array.isArray(body.character_reference_images), true)
       assert.equal(body.character_reference_images.length, 1)
       assert.equal(typeof body.character_reference_images[0], "string")
-      assert.match(body.character_reference_images[0], /\/portraits\/v1\//)
+      // Source must be Krea-hosted, not our CDN URL.
+      assert.equal(
+        body.character_reference_images[0],
+        "https://krea.example/uploaded/ideogram-source.png",
+      )
       return new Response(JSON.stringify({ job_id: "ideogram-job-1", status: "queued" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -3612,6 +3725,17 @@ test("last-used model is remembered and pinned at the top of the providers list,
   let kreaCalls = 0
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
+    if (url === "https://api.krea.ai/assets") {
+      return new Response(
+        JSON.stringify({
+          id: "krea-asset-last-used",
+          image_url: "https://krea.example/uploaded/last-used-source.png",
+          width: 1024,
+          height: 1024,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
     if (
       url === "https://api.krea.ai/generate/image/bfl/flux-1-kontext-dev" ||
       url === "https://api.krea.ai/generate/image/bfl/flux-1-dev"
@@ -3749,6 +3873,281 @@ test("last-used model is remembered and pinned at the top of the providers list,
       newKvPutsAfter,
       newKvPutsBefore + 1,
       "Worker should write to KV exactly once when the user switches model",
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("Krea structured error responses surface a readable message, not [object Object]", async () => {
+  // The previous behavior: when Krea returned {"error":{"code":"...","message":"..."}}
+  // the worker would set status: "failed", error: "[object Object]" because it
+  // tried to coerce a nested object to a string. This test pins the fix:
+  // the surfaced error must contain the actual Krea message text.
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    if (url === "https://api.krea.ai/assets") {
+      return new Response(
+        JSON.stringify({
+          id: "krea-asset-err-1",
+          image_url: "https://krea.example/uploaded/source.png",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://api.krea.ai/generate/image/google/nano-banana") {
+      return new Response(
+        JSON.stringify({
+          job_id: "krea-err-job-1",
+          status: "queued",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://api.krea.ai/jobs/krea-err-job-1") {
+      // Real Krea error shape: error is { code, message } where message is a string.
+      return new Response(
+        JSON.stringify({
+          job_id: "krea-err-job-1",
+          status: "failed",
+          error: { code: "model_rejected_image_url", message: "Could not fetch the source image" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
+      return new Response(EDITED_BYTES, { status: 200, headers: { "Content-Type": "image/webp" } })
+    }
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "google/nano-banana",
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+    const createResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "krea",
+              model: "google/nano-banana",
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const created = await createResponse.json()
+    assert.equal(createResponse.status, 502)
+    assert.equal(created.job.status, "failed")
+    // The error message must contain the actual Krea message text, NOT
+    // "[object Object]". This is the smoking-gun regression for the bug
+    // that made it impossible to diagnose Krea image-edit failures.
+    assert.notEqual(created.job.error, "[object Object]")
+    assert.match(created.job.error, /Could not fetch the source image/)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("Krea asset upload failure surfaces a readable error from the Krea error body", async () => {
+  // If Krea returns a 4xx from /assets (e.g. bad auth, file too large), the
+  // worker should propagate the readable Krea error to the user, not
+  // "[object Object]".
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url === "https://api.krea.ai/assets") {
+      return new Response(
+        JSON.stringify({
+          error: { code: "file_too_large", message: "Maximum file size: 75MB" },
+        }),
+        { status: 413, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "google/nano-banana",
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+    const createResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "krea",
+              model: "google/nano-banana",
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const created = await createResponse.json()
+    assert.equal(createResponse.status, 502)
+    assert.equal(created.job.status, "failed")
+    assert.notEqual(created.job.error, "[object Object]")
+    assert.match(created.job.error, /Maximum file size: 75MB/)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("Krea jobs that exceed the synchronous wait budget return 202 with status=running and finish via ctx.waitUntil", async () => {
+  // Real Krea models (especially nano-banana-pro) can take 60-120s, which
+  // blows the Cloudflare Workers 50-subrequest limit if we poll in the
+  // request. The fix: when pollKreaJob exhausts its subrequest budget, it
+  // throws a `KREA_JOB_STILL_RUNNING` sentinel. The route catches that,
+  // returns 202 with the running job, and schedules the rest of the
+  // polling in ctx.waitUntil. The client then polls the GET endpoint.
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  const fetchCalls = []
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    fetchCalls.push({ url, init })
+    if (url === "https://api.krea.ai/assets") {
+      return new Response(
+        JSON.stringify({
+          id: "krea-asset-wait-1",
+          image_url: "https://krea.example/uploaded/wait-source.png",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://api.krea.ai/generate/image/google/nano-banana-pro") {
+      return new Response(JSON.stringify({ job_id: "krea-wait-job-1", status: "queued" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (url === "https://api.krea.ai/jobs/krea-wait-job-1") {
+      // Always return "processing" so the in-request polling never sees
+      // "completed" — it will exhaust the poll budget and throw the
+      // sentinel.
+      return new Response(JSON.stringify({ job_id: "krea-wait-job-1", status: "processing" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (url === "https://krea.example/uploaded/wait-source.png") {
+      // Just an asset URL, never fetched in this test.
+      return new Response("source", { status: 200, headers: { "Content-Type": "image/webp" } })
+    }
+    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
+      return new Response(EDITED_BYTES, { status: 200, headers: { "Content-Type": "image/webp" } })
+    }
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+  // Track ctx.waitUntil invocations so we can confirm the background task
+  // was scheduled.
+  const waitUntilTasks = []
+  const ctx = { waitUntil: (p) => waitUntilTasks.push(p) }
+
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "google/nano-banana-pro",
+          }),
+        },
+      ),
+      env,
+      ctx,
+    )
+    const createResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "krea",
+              model: "google/nano-banana-pro",
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        ctx,
+      )
+    const created = await createResponse.json()
+    // The route returns 202 Accepted with a running job. The job's status
+    // is "running" — the worker will continue polling in the background.
+    assert.equal(createResponse.status, 202)
+    assert.equal(created.ok, true)
+    assert.equal(created.status, "running")
+    assert.equal(created.job.status, "running")
+    assert.ok(created.job.id)
+    // The route must have scheduled at least one ctx.waitUntil task to
+    // continue the polling out-of-band.
+    assert.ok(waitUntilTasks.length >= 1, "ctx.waitUntil must be used to continue polling")
+    // The synchronous request must NOT have polled more than 12 times (the
+    // configured KREA_MAX_POLLS_PER_REQUEST). This is what keeps us under
+    // the 50 subrequest limit.
+    const pollCalls = fetchCalls.filter(
+      (call) => call.url === "https://api.krea.ai/jobs/krea-wait-job-1",
+    )
+    assert.ok(
+      pollCalls.length <= 12,
+      "in-request polling must be capped to keep subrequest usage low (got " +
+        pollCalls.length +
+        ")",
     )
   } finally {
     globalThis.fetch = originalFetch

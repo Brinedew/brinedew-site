@@ -60,6 +60,15 @@ const ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO = "3:4"
 const ICONOPLASM_OPENAI_BLOT_REQUEST_SIZE = ICONOPLASM_BLOT_REQUEST_SIZE
 const ICONOPLASM_PRINT_COPY_KV_TTL_SECONDS = 60 * 60 * 24 * 30
 const ICONOPLASM_IMAGE_PROVIDER_TIMEOUT_MS = 10 * 60 * 1000
+// Krea job polling: how long to sleep between status checks and how many
+// polls we run inside one request before handing the wait off to the
+// route's `ctx.waitUntil` + the client's GET polling. The defaults are
+// chosen so a synchronous Krea edit (Krea's 2026 typical 30-60s job) fits
+// well within the Cloudflare Workers subrequest limit (50/free, 1000/paid)
+// — 4s × 12 = 48s wall time, 12 polling subrequests + ~3 for asset upload,
+// job creation, and result download = 15 total, well under 50.
+const KREA_POLL_INTERVAL_MS = 4_000
+const KREA_MAX_POLLS_PER_REQUEST = 12
 const MIN_EXTENSION_VERSION = "0.3.0"
 const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
   openai: Object.freeze({
@@ -91,6 +100,15 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
     // Compiled 2026-06-20 by hand from each model's docs page (--url line + body
     // schema). When this list drifts from Krea, re-check the docs page for the
     // model and update both the model id and the request-shape fields.
+    //
+    // `requires_krea_asset_upload`: when true, the worker uploads the source
+    // image to Krea's /assets endpoint (multipart/form-data) and uses the
+    // returned Krea-hosted image_url as the source. This is the only reliable
+    // way to feed source bytes to the nano-banana family and the
+    // `image_urls[]` style inputs: passing our CDN URL directly caused the
+    // "edit returns a completely new image" bug because Krea's inference
+    // servers could not reach `iconoplasmportraits.b-cdn.net` and silently
+    // generated a fresh image from the prompt alone.
     model_options: Object.freeze([
       Object.freeze({
         model: "bfl/flux-1-kontext-dev",
@@ -102,7 +120,15 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         generate_capable: true,
         edit_image_param: "image_url",
         edit_strength_param: "strength",
+        // Krea's docs say 1.0 "fully replaces" the source image. The
+        // previous default of 0.85 was effectively "regenerate almost
+        // completely using the source as a faint hint" — every edit came
+        // back as a brand-new image that did not preserve the source's
+        // identity, style, or composition. 0.5 is a real edit: changes
+        // what the prompt asks for, keeps everything else.
+        edit_strength_default: 0.5,
         edit_image_object_shape: "string",
+        requires_krea_asset_upload: true,
       }),
       Object.freeze({
         model: "bfl/flux-1-dev",
@@ -114,7 +140,9 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         generate_capable: true,
         edit_image_param: "image_url",
         edit_strength_param: "strength",
+        edit_strength_default: 0.5,
         edit_image_object_shape: "string",
+        requires_krea_asset_upload: true,
       }),
       Object.freeze({
         model: "google/nano-banana-pro",
@@ -139,6 +167,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
           "16:9",
           "9:16",
         ]),
+        requires_krea_asset_upload: true,
       }),
       Object.freeze({
         model: "google/nano-banana-2",
@@ -166,6 +195,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
           "1:4",
           "1:8",
         ]),
+        requires_krea_asset_upload: true,
       }),
       Object.freeze({
         model: "google/nano-banana",
@@ -190,6 +220,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
           "16:9",
           "9:16",
         ]),
+        requires_krea_asset_upload: true,
       }),
       Object.freeze({
         model: "openai/gpt-image",
@@ -201,6 +232,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         generate_capable: true,
         edit_image_param: "image_urls",
         edit_image_object_shape: "string-array",
+        requires_krea_asset_upload: true,
       }),
       Object.freeze({
         model: "openai/gpt-image-2",
@@ -224,6 +256,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
           "1:2",
           "9:16",
         ]),
+        requires_krea_asset_upload: true,
       }),
       Object.freeze({
         model: "z-image/z-image",
@@ -235,9 +268,14 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         generate_capable: true,
         edit_image_param: "image_url",
         edit_strength_param: "denoising_strength",
+        // Krea's Z Image default denoising_strength is 0.6. 0.85 was
+        // basically "regenerate, lightly reference the source." 0.5
+        // produces a real edit that preserves the source.
+        edit_strength_default: 0.5,
         edit_image_object_shape: "string",
         supports_aspect_ratio: true,
         aspect_ratio_options: Object.freeze(["1:1", "4:3", "2:3", "16:9", "9:16"]),
+        requires_krea_asset_upload: true,
       }),
       Object.freeze({
         model: "bytedance/seededit",
@@ -250,6 +288,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         edit_image_param: "image_url",
         edit_image_object_shape: "string",
         edit_requires_image: true,
+        requires_krea_asset_upload: true,
       }),
       Object.freeze({
         model: "runway/gen-4-image",
@@ -263,6 +302,11 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         edit_image_object_shape: "object-array",
         edit_reference_tag: "source",
         edit_requires_image: true,
+        // Runway Gen-4 wants {url, tag} objects in reference_images[]. We
+        // still upload to /assets first so the URL is on Krea's CDN and
+        // definitely reachable, then wrap it in the object shape the model
+        // expects.
+        requires_krea_asset_upload: true,
       }),
       Object.freeze({
         model: "ideogram/ideogram-3",
@@ -274,6 +318,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         generate_capable: true,
         edit_image_param: "character_reference_images",
         edit_image_object_shape: "string-array",
+        requires_krea_asset_upload: true,
       }),
       Object.freeze({
         model: "bfl/flux-1.1-pro",
@@ -3923,6 +3968,18 @@ function mapImageEditModelOption(option) {
     edit_reference_tag: sanitizeText(option.edit_reference_tag || "", 32) || "",
     edit_requires_image: option.edit_requires_image === true,
     supports_aspect_ratio: option.supports_aspect_ratio === true,
+    // Surface the per-model strength default to the client so the dialog
+    // and any future UI can show "low/medium/high preservation" hints and
+    // so tests can pin the value. Krea's own docs say strength: 1.0
+    // "fully replaces the source image", so this number must be < 1
+    // for any model whose job is to preserve the source.
+    edit_strength_default:
+      typeof option.edit_strength_default === "number" &&
+      Number.isFinite(option.edit_strength_default) &&
+      option.edit_strength_default >= 0 &&
+      option.edit_strength_default <= 1
+        ? option.edit_strength_default
+        : null,
     aspect_ratio_options: Array.isArray(option.aspect_ratio_options)
       ? option.aspect_ratio_options.map((s) => String(s || "")).filter(Boolean)
       : [],
@@ -4899,18 +4956,60 @@ function kreaModelEndpointPath(providerRow) {
   return `/generate/image/${model.replace(/^\/+/, "")}`
 }
 
+// Walk an unknown value and pull out the first reasonable human-readable string
+// for an error message. The Krea API and OpenAI API both return structured
+// errors (objects with `error.code` / `error.message`, sometimes with
+// `error.message` itself being an object), and naively string-coercing those
+// yields "[object Object]" which is what we were previously surfacing to users.
+// This helper walks the tree, prefers strings, and falls back to a short JSON
+// snippet of the original payload so the operator can still see the shape.
+function coerceErrorMessage(value, maxLen = 500) {
+  if (value == null) return null
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (trimmed) return trimmed.slice(0, maxLen)
+    return null
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value)
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = coerceErrorMessage(item, maxLen)
+      if (found) return found
+    }
+    return null
+  }
+  if (typeof value === "object") {
+    // Prefer the conventional Krea/OpenAI error fields first.
+    const preferredKeys = ["message", "detail", "details", "error_description", "reason", "code"]
+    for (const key of preferredKeys) {
+      const found = coerceErrorMessage(value[key], maxLen)
+      if (found) return found
+    }
+    // Fall back to a short JSON dump of the whole object so the operator can
+    // still see the shape. Truncated to keep the surfaced message compact.
+    try {
+      const serialized = JSON.stringify(value)
+      if (serialized && serialized !== "{}") {
+        return serialized.slice(0, maxLen)
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  return null
+}
+
 function providerErrorMessage(payload, raw, status) {
-  return (
-    sanitizeText(
-      payload?.error?.message ||
-        payload?.error?.details ||
-        payload?.error ||
-        payload?.message ||
-        raw ||
-        `Provider failed (${status})`,
-      500,
-    ) || `Provider failed (${status})`
-  )
+  const fromPayload =
+    coerceErrorMessage(payload?.error?.message) ||
+    coerceErrorMessage(payload?.error?.details) ||
+    coerceErrorMessage(payload?.error) ||
+    coerceErrorMessage(payload?.message)
+  const fromRaw = coerceErrorMessage(raw)
+  const message = fromPayload || fromRaw || `Provider failed (${status || 500})`
+  return sanitizeText(message, 500) || `Provider failed (${status || 500})`
 }
 
 async function fetchJsonWithDeadline(url, init, timeoutMs, timeoutMessage) {
@@ -4944,16 +5043,28 @@ async function downloadProviderImageBytes(imageUrl) {
 }
 
 async function pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs }) {
-  const deadline = Date.now() + timeoutMs
+  // Poll the Krea job status endpoint. We sleep `pollIntervalMs` between
+  // attempts, with a per-poll fetch deadline of `perPollTimeoutMs`. We also
+  // cap the total number of polls at `maxPolls` so we never blow the
+  // Cloudflare Workers subrequest limit (50 by default on the free plan) on
+  // jobs that take many minutes — anything past `maxPolls` is escalated to
+  // the route so the worker can hand the wait off to `ctx.waitUntil` and
+  // let the client poll the GET endpoint instead.
+  const pollIntervalMs = Math.max(1_000, Number(KREA_POLL_INTERVAL_MS) || 4_000)
+  const perPollTimeoutMs = 10_000
+  const maxPolls = Math.max(1, Number(KREA_MAX_POLLS_PER_REQUEST) || 12)
+  const deadline = Date.now() + Math.min(timeoutMs, pollIntervalMs * maxPolls)
   let lastPayload = null
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 2_000))
+  let polls = 0
+  while (Date.now() < deadline && polls < maxPolls) {
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
+    polls += 1
     const payload = await fetchJsonWithDeadline(
       `${baseUrl}/jobs/${encodeURIComponent(jobId)}`,
       {
         headers: { Authorization: `Bearer ${apiKey}` },
       },
-      10_000,
+      perPollTimeoutMs,
       "Krea job status timeout",
     )
     lastPayload = payload
@@ -4967,7 +5078,9 @@ async function pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs }) {
           " result_keys=" +
           Object.keys(payload?.result || {}).join(",") +
           " image_url=" +
-          imageUrl,
+          imageUrl +
+          " polls=" +
+          polls,
       )
       if (!imageUrl) throw new Error("Krea job completed without an image URL")
       return downloadProviderImageBytes(imageUrl)
@@ -4976,11 +5089,19 @@ async function pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs }) {
       throw new Error(providerErrorMessage(payload, "", 502))
     }
   }
-  throw new Error(
-    `Krea job did not complete before the ${Math.round(timeoutMs / 1000)}s deadline${
-      lastPayload?.status ? ` (last status: ${lastPayload.status})` : ""
-    }`,
+  // If we got here we either ran out of polls or hit the deadline. Surface a
+  // sentinel error the route can recognize and use to hand the wait off to
+  // ctx.waitUntil + the GET polling endpoint instead of failing the request
+  // with a useless "Too many subrequests" 502.
+  const err = new Error(
+    `Krea job still ${lastPayload?.status || "pending"} after ${polls} polls; the worker will continue polling out-of-band.`,
   )
+  err.code = "KREA_JOB_STILL_RUNNING"
+  err.kreaJobId = jobId
+  err.kreaBaseUrl = baseUrl
+  err.kreaApiKey = apiKey
+  err.kreaPollsUsed = polls
+  throw err
 }
 
 function kreaModelIsNativeKrea2(model) {
@@ -5001,7 +5122,172 @@ function kreaModelAspectRatio(width, height) {
   return "4:5"
 }
 
-async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = [] }) {
+// Some Krea-hosted models (notably the nano-banana family and the
+// `image_urls[]` style reference inputs) treat the URLs in the request body
+// as opaque style references. If the URL is on a CDN Krea's backend cannot
+// reach, the model silently generates a fresh image that satisfies the text
+// prompt without modifying the source — exactly the bug we hit. The
+// /assets/upload endpoint solves this by giving us a Krea-hosted image URL
+// (or asset id) that we can put in image_urls[] and that Krea's own backend
+// can definitely fetch.
+//
+// Upload shape per https://docs.krea.ai/api-reference/assets/upload-an-asset:
+//   POST {baseUrl}/assets  (multipart/form-data: file=@blob, description=...)
+//   200 → { id, image_url, width, height, size_bytes, mime_type, ... }
+async function uploadKreaAsset({ baseUrl, apiKey, bytes, contentType, description, timeoutMs }) {
+  if (!bytes?.byteLength) {
+    throw new Error("Krea asset upload requires non-empty image bytes")
+  }
+  const form = new FormData()
+  const blob = new Blob([bytes], {
+    type: String(contentType || "image/webp").split(";")[0] || "image/webp",
+  })
+  form.set("file", blob, "source.webp")
+  if (description) form.set("description", String(description).slice(0, 280))
+  const controller = new AbortController()
+  const timeout = setTimeout(
+    () => controller.abort("Krea asset upload timeout"),
+    Math.max(15_000, Number(timeoutMs) || 15_000),
+  )
+  try {
+    const response = await fetch(`${baseUrl}/assets`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form,
+      signal: controller.signal,
+    })
+    const rawText = await response.text()
+    let payload = null
+    try {
+      payload = rawText ? JSON.parse(rawText) : null
+    } catch {
+      payload = null
+    }
+    if (!response.ok) {
+      throw new Error(
+        `Krea asset upload failed (${response.status}): ${providerErrorMessage(
+          payload,
+          rawText,
+          response.status,
+        )}`,
+      )
+    }
+    const imageUrl = sanitizeText(payload?.image_url || "", 2048)
+    const assetId = sanitizeText(payload?.id || "", 128)
+    if (!imageUrl && !assetId) {
+      throw new Error(
+        "Krea asset upload returned no image_url or id: " +
+          (providerErrorMessage(payload, rawText, response.status) || rawText || "empty body"),
+      )
+    }
+    return { imageUrl, assetId, raw: payload }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+// Continues a Krea image edit job whose synchronous request would have
+// blown the Worker subrequest limit. The synchronous call has already
+// kicked off the Krea job and stored the Krea job_id, the base URL, and
+// the decrypted API key. Here we re-poll until completion, download the
+// resulting image, normalize it to webp, write renditions to storage,
+// and update the icono_image_edit_jobs row to "succeeded". If polling
+// fails, we mark the job as "failed" with a readable error.
+async function finishImageEditJobFromKreaAsync(env, url, params) {
+  const { jobId, apiKey, baseUrl, kreaJobId, sourceKey, sourceRow, assetSha, providerRow, userId } =
+    params
+  try {
+    const resultBytes = await pollKreaJobToCompletion({ baseUrl, apiKey, kreaJobId })
+    if (!resultBytes?.byteLength) throw new Error("Provider returned an empty image")
+    // Convert to webp (downloadProviderImageBytes returned image/webp/png
+    // already; normalizeProviderImageToWebp is the safety net for any
+    // non-webp types).
+    const normalizedResult = await normalizeProviderImageToWebp(env, url, {
+      bytes: resultBytes,
+      contentType: "image/webp",
+    })
+    const normalizedBytes = normalizedResult.bytes
+    if (!normalizedBytes?.byteLength) throw new Error("Provider returned an empty image")
+    const resultSha = await sha256HexBytes(normalizedBytes)
+    if (resultSha === assetSha) throw new Error("Provider returned an unchanged image")
+    const resultDimensions = webpDimensions(normalizedBytes) || {
+      width: optionalInt(sourceRow?.width),
+      height: optionalInt(sourceRow?.height),
+    }
+    const renditions = await writeImageEditRenditions(env, url, {
+      assetSha256: resultSha,
+      fullBytes: normalizedBytes,
+    })
+    await updateImageEditJobSucceeded(env, {
+      id: jobId,
+      result_asset_sha256: resultSha,
+      result_r2_key_full: renditions.keys.full,
+      result_r2_key_medium: renditions.keys.medium,
+      result_r2_key_thumb: renditions.keys.thumb,
+      result_mime: "image/webp",
+      result_width: optionalInt(resultDimensions.width),
+      result_height: optionalInt(resultDimensions.height),
+      result_bytes: renditions.bytes,
+    })
+    await recordImageEditLastUsedModel(env, {
+      userId,
+      operation: "image_edit",
+      providerId: "krea",
+      model: providerRow?.model || "",
+    })
+  } catch (error) {
+    await updateImageEditJobFailed(env, {
+      id: jobId,
+      error: coerceErrorMessage(error) || error?.message || error || "Image edit failed",
+    })
+  }
+}
+
+// Like pollKreaJob but with a much higher poll budget and a 15-minute
+// hard ceiling. Used by the ctx.waitUntil background task; we don't need
+// to keep subrequest usage low here because the background context runs
+// under a separate Worker invocation with its own 50-subrequest quota.
+async function pollKreaJobToCompletion({ baseUrl, apiKey, kreaJobId }) {
+  const pollIntervalMs = 5_000
+  const perPollTimeoutMs = 10_000
+  const hardCeilingMs = 15 * 60 * 1000
+  const deadline = Date.now() + hardCeilingMs
+  let lastPayload = null
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
+    const payload = await fetchJsonWithDeadline(
+      `${baseUrl}/jobs/${encodeURIComponent(kreaJobId)}`,
+      { headers: { Authorization: `Bearer ${apiKey}` } },
+      perPollTimeoutMs,
+      "Krea job status timeout",
+    )
+    lastPayload = payload
+    const status = String(payload?.status || "").toLowerCase()
+    if (status === "completed") {
+      const urls = Array.isArray(payload?.result?.urls) ? payload.result.urls : []
+      const imageUrl = String(urls[0] || "").trim()
+      if (!imageUrl) throw new Error("Krea job completed without an image URL")
+      return downloadProviderImageBytes(imageUrl)
+    }
+    if (status === "failed" || status === "cancelled") {
+      throw new Error(providerErrorMessage(payload, "", 502))
+    }
+  }
+  throw new Error(
+    `Krea job did not complete before the ${Math.round(hardCeilingMs / 60000)}m deadline${
+      lastPayload?.status ? ` (last status: ${lastPayload.status})` : ""
+    }`,
+  )
+}
+
+async function callKreaImageProvider({
+  providerRow,
+  apiKey,
+  prompt,
+  imageUrls = [],
+  sourceBytes = null,
+  sourceContentType = "image/webp",
+}) {
   const baseUrl = kreaApiBaseUrl(providerRow)
   const endpointPath = kreaModelEndpointPath(providerRow)
   const timeoutMs = providerRequestTimeoutMs(providerRow)
@@ -5011,6 +5297,8 @@ async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = 
   const isNativeKrea2 = kreaModelIsNativeKrea2(kreaModel)
   const editImageParam = String(kreaOption?.edit_image_param || "").trim()
   const editImageObjectShape = String(kreaOption?.edit_image_object_shape || "").trim()
+  const requireKreaAssetUpload = kreaOption?.requires_krea_asset_upload === true
+  const preferKreaAssetId = kreaOption?.krea_image_field === "asset_id"
   const urls = (Array.isArray(imageUrls) ? imageUrls : [])
     .map((value) => String(value || "").trim())
     .filter(Boolean)
@@ -5072,18 +5360,84 @@ async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = 
           ".",
       )
     }
-    if (editImageObjectShape === "object-array") {
+    // Upload the source image to Krea's /assets endpoint when the model is
+    // configured to require it. This guarantees Krea's backend can fetch the
+    // image (no dependency on whether Krea can reach our CDN) and gives us a
+    // Krea-hosted URL/ID to put in the request body. The previous behavior of
+    // passing our CDN URL directly is what caused the "edit returns a new
+    // image" bug — the source image was silently dropped because Krea could
+    // not reach `iconoplasmportraits.b-cdn.net` from its inference servers.
+    let sourceForBody = urls[0]
+    if (requireKreaAssetUpload) {
+      if (!sourceBytes?.byteLength) {
+        throw new Error(
+          "Krea model " +
+            (kreaOption?.label || kreaModel) +
+            " requires a Krea-hosted source image, but the worker has no source bytes to upload.",
+        )
+      }
+      console.log(
+        "[KREA_DEBUG] uploading source asset to " + baseUrl + "/assets (model=" + kreaModel + ")",
+      )
+      const uploaded = await uploadKreaAsset({
+        baseUrl,
+        apiKey,
+        bytes: sourceBytes,
+        contentType: sourceContentType,
+        description: "iconoplasm blot edit source",
+        timeoutMs: Math.max(15_000, Math.ceil(timeoutMs / 4)),
+      })
+      console.log(
+        "[KREA_DEBUG] uploaded asset image_url=" +
+          String(uploaded.imageUrl || "").slice(0, 200) +
+          " asset_id=" +
+          String(uploaded.assetId || ""),
+      )
+      const kreaSource = preferKreaAssetId
+        ? uploaded.assetId || uploaded.imageUrl
+        : uploaded.imageUrl || uploaded.assetId
+      if (editImageObjectShape === "object-array") {
+        // Runway Gen-4 style: [{ url, tag }]
+        const tag = String(kreaOption?.edit_reference_tag || "source").trim() || "source"
+        body[editImageParam] = [{ url: kreaSource, tag }]
+      } else if (editImageObjectShape === "string-array") {
+        // Nano Banana, ChatGPT, Ideogram: array of URL strings.
+        body[editImageParam] = [kreaSource]
+      } else {
+        // Default: singular URL/ID field.
+        body[editImageParam] = kreaSource
+      }
+      // Honor the model's strength parameter even when we uploaded the source
+      // — strength controls how strongly the model adheres to the source vs
+      // regenerating. The previous fixed value of 0.85 was effectively
+      // "regenerate almost completely using the source as a faint hint"
+      // (Krea's own docs say 1.0 = "fully replaces the source"). The
+      // per-model `edit_strength_default` below is the conservative
+      // real-edit value; operators can override per model.
+      const strengthParam = String(kreaOption?.edit_strength_param || "").trim()
+      if (strengthParam) {
+        const raw = kreaOption?.edit_strength_default
+        const value =
+          typeof raw === "number" && Number.isFinite(raw) && raw >= 0 && raw <= 1 ? raw : 0.5
+        body[strengthParam] = value
+      }
+    } else if (editImageObjectShape === "object-array") {
       // Runway Gen-4: reference_images[] is an array of {url, tag} objects.
       const tag = String(kreaOption?.edit_reference_tag || "source").trim() || "source"
-      body[editImageParam] = [{ url: urls[0], tag }]
+      body[editImageParam] = [{ url: sourceForBody, tag }]
     } else if (editImageObjectShape === "string-array") {
       // Nano Banana, ChatGPT, Ideogram: array of URL strings.
-      body[editImageParam] = urls
+      body[editImageParam] = [sourceForBody]
     } else {
       // Default: singular URL field.
-      body[editImageParam] = urls[0]
+      body[editImageParam] = sourceForBody
       const strengthParam = String(kreaOption?.edit_strength_param || "").trim()
-      if (strengthParam) body[strengthParam] = 0.85
+      if (strengthParam) {
+        const raw = kreaOption?.edit_strength_default
+        const value =
+          typeof raw === "number" && Number.isFinite(raw) && raw >= 0 && raw <= 1 ? raw : 0.5
+        body[strengthParam] = value
+      }
     }
   }
   const requestUrl = `${baseUrl}${endpointPath}`
@@ -5113,7 +5467,9 @@ async function callKreaImageProvider({ providerRow, apiKey, prompt, imageUrls = 
     const urls = Array.isArray(payload?.result?.urls) ? payload.result.urls : []
     const imageUrl = String(urls[0] || "").trim()
     if (imageUrl) return downloadProviderImageBytes(imageUrl)
-    throw new Error("Krea returned no job id")
+    throw new Error(
+      "Krea returned no job id: " + (providerErrorMessage(payload, "", 502) || "empty response"),
+    )
   }
   return pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs })
 }
@@ -26268,6 +26624,41 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           ),
         )
       } catch (error) {
+        // Krea's polling sometimes exceeds the synchronous wait budget so
+        // we don't blow the Worker subrequest limit (50 on the free plan).
+        // The pollKreaJob helper surfaces a `KREA_JOB_STILL_RUNNING` sentinel
+        // with the kreaJobId, baseUrl, and apiKey attached. In that case we
+        // keep the job row at status="running", hand the rest of the wait
+        // off to ctx.waitUntil, and return 202 Accepted with the running job
+        // so the client can poll the existing GET endpoint.
+        if (error && error.code === "KREA_JOB_STILL_RUNNING") {
+          ctx.waitUntil(
+            finishImageEditJobFromKreaAsync(env, url, {
+              jobId,
+              apiKey: error.kreaApiKey,
+              baseUrl: error.kreaBaseUrl,
+              kreaJobId: error.kreaJobId,
+              sourceKey,
+              sourceRow,
+              assetSha,
+              providerRow,
+              userId,
+            }),
+          )
+          const job = await getImageEditJobForUser(env, { id: jobId, userId })
+          return done(
+            "image_edit_jobs_running",
+            json(
+              {
+                ok: true,
+                status: "running",
+                job: mapImageEditJobRow(job, portraitBase(url, env)),
+              },
+              202,
+              { "Cache-Control": "no-store" },
+            ),
+          )
+        }
         await updateImageEditJobFailed(env, {
           id: jobId,
           error: error?.message || error || "Image edit failed",
