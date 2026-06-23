@@ -5210,7 +5210,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     select.value = selectedProviderId
     var afterUpgrade =
       typeof customElements !== "undefined" && customElements.whenDefined
-        ? customElements.whenDefined("sl-select")
+        ? Promise.all([
+            customElements.whenDefined("sl-select"),
+            customElements.whenDefined("sl-option"),
+          ])
         : Promise.resolve()
     afterUpgrade.then(function () {
       select.value = selectedProviderId
