@@ -3217,13 +3217,13 @@ test("image edit jobs with Krea Nano Banana Pro use image_urls[] array and aspec
       // a fresh portrait from the prompt alone.
       assert.equal(body.image_urls[0], "https://krea.example/uploaded/nbp-source.png")
       assert.equal("image_url" in body, false)
-      // Live API requires explicit width + height (422 Validation failed
-      // otherwise — B-574). The blot default is 1536x2048.
-      assert.equal(body.width, 1536)
-      assert.equal(body.height, 2048)
-      // The blot is 3:4 and Nano Banana Pro supports 3:4 in its aspect_ratio
-      // enum, so we send aspect_ratio as a redundant hint. Krea accepts it.
+      // Nano Banana Pro accepts aspect_ratio (the blot default 3:4 is in
+      // its enum) and does NOT require explicit width/height. Sending
+      // width/height on top of aspect_ratio can squash the source on models
+      // that interpret the literal pixel dimensions.
       assert.equal(body.aspect_ratio, "3:4")
+      assert.equal("width" in body, false)
+      assert.equal("height" in body, false)
       return new Response(JSON.stringify({ job_id: "nbp-job-1", status: "queued" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -3496,6 +3496,110 @@ test("image edit jobs with Krea Flux Kontext use image_url + strength in the req
       body: {
         provider_id: "krea",
         model: "bfl/flux-1-kontext-dev",
+        source_gene_symbol: "A1BG",
+        source_asset_sha256: SOURCE_SHA,
+        adjustments: { remove_ai_generation_errors: true },
+      },
+    })
+    assert.equal(create.status, 202, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "running")
+    assert.ok(fetched, "expected the GET response after waitUntil drain")
+    assert.equal(fetched.job.status, "succeeded", "final job state: " + JSON.stringify(fetched.job))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("image edit jobs with Krea ChatGPT 2 send width + height + aspect_ratio (B-574)", async () => {
+  // Krea's openai/gpt-image-2 endpoint 422s with `Required: width, height`
+  // if the body omits pixel dimensions, even when aspect_ratio is set. The
+  // model definition opts in via requires_width_height: true, so the body
+  // builder must send all three fields.
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  const fetchCalls = []
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    fetchCalls.push({ url, init })
+    if (url === "https://api.krea.ai/assets") {
+      return new Response(
+        JSON.stringify({
+          id: "krea-asset-gpt2-1",
+          image_url: "https://krea.example/uploaded/gpt2-source.png",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://api.krea.ai/generate/image/openai/gpt-image-2") {
+      const body = JSON.parse(String(init.body || "{}"))
+      assert.equal(Array.isArray(body.image_urls), true)
+      assert.equal(body.image_urls[0], "https://krea.example/uploaded/gpt2-source.png")
+      // gpt-image-2 requires explicit width + height. Without them Krea
+      // returns 422 'Required: width, height'.
+      assert.equal(body.width, 1536)
+      assert.equal(body.height, 2048)
+      // aspect_ratio is also acceptable to gpt-image-2 and is in its
+      // enum; we send it as a redundant hint.
+      assert.equal(body.aspect_ratio, "3:4")
+      return new Response(JSON.stringify({ job_id: "gpt2-job-1", status: "queued" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (url === "https://api.krea.ai/jobs/gpt2-job-1") {
+      return new Response(
+        JSON.stringify({
+          job_id: "gpt2-job-1",
+          status: "completed",
+          result: { urls: ["https://krea.example/gpt2.png"] },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://krea.example/gpt2.png") {
+      return new Response("gpt2-png-bytes", {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      })
+    }
+    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+
+  try {
+    const providerCtx = capturingContext()
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "openai/gpt-image-2",
+          }),
+        },
+      ),
+      env,
+      providerCtx,
+    )
+
+    const createCtx = capturingContext()
+    const { create, created, fetched } = await createKreaImageEditJobAndAwait({
+      env,
+      ctx: createCtx,
+      body: {
+        provider_id: "krea",
+        model: "openai/gpt-image-2",
         source_gene_symbol: "A1BG",
         source_asset_sha256: SOURCE_SHA,
         adjustments: { remove_ai_generation_errors: true },

@@ -235,6 +235,10 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         generate_capable: true,
         edit_image_param: "image_urls",
         edit_image_object_shape: "string-array",
+        // The Krea docs for gpt-image-2 list width/height as optional, but
+        // the live endpoint 422s with `Required: width, height` whenever the
+        // body omits them, even when aspect_ratio is set. Send both.
+        requires_width_height: true,
         supports_aspect_ratio: true,
         aspect_ratio_options: Object.freeze([
           "16:9",
@@ -3959,6 +3963,7 @@ function mapImageEditModelOption(option) {
     edit_reference_tag: sanitizeText(option.edit_reference_tag || "", 32) || "",
     edit_requires_image: option.edit_requires_image === true,
     supports_aspect_ratio: option.supports_aspect_ratio === true,
+    requires_width_height: option.requires_width_height === true,
     // Surface the per-model strength default to the client so the dialog
     // and any future UI can show "low/medium/high preservation" hints and
     // so tests can pin the value. Krea's own docs say strength: 1.0
@@ -5283,23 +5288,34 @@ function kreaRequestBodyShape(kreaOption, prompt, reqWidth, reqHeight) {
       resolution: "1K",
     }
   }
-  // Every other Krea model we proxy takes width + height as required number
-  // fields (per the live docs for nano-banana-pro, gpt-image-2, flux-1.1-pro,
-  // and the rest of the family). Even when a model exposes an aspect_ratio
-  // enum, the live API still requires explicit width/height, so we always
-  // send both. aspect_ratio is added as a redundant hint when the model
-  // supports it and the requested canvas ratio is in its enum — Krea treats
-  // it as advisory and does not reject the body for it.
-  const body = { prompt, width: reqWidth, height: reqHeight }
-  if (kreaOption?.supports_aspect_ratio) {
+  // Default: width + height. Krea's Flux / Z Image / Ideogram / Runway / etc.
+  // documentation lists these as the canonical sizing fields.
+  // When the model exposes an aspect_ratio enum AND 3:4 is in it, we prefer
+  // aspect_ratio (matching Krea's documentation for nano-banana, ideogram-3
+  // variants, and friends) — sending literal pixel dimensions on top of an
+  // aspect_ratio can squash the source image on Flux/Runway paths. The
+  // exception is Krea models documented to require width/height even when
+  // aspect_ratio is also accepted (currently the openai/gpt-image-2 family,
+  // which 422s without them). Those opt in via `requires_width_height:
+  // true` on their model definition.
+  if (kreaOption?.supports_aspect_ratio && !kreaOption?.requires_width_height) {
     const aspectOptions = Array.isArray(kreaOption?.aspect_ratio_options)
       ? kreaOption.aspect_ratio_options
       : []
     if (aspectOptions.includes("3:4")) {
-      body.aspect_ratio = "3:4"
+      return { prompt, aspect_ratio: "3:4" }
+    }
+    return { prompt, width: reqWidth, height: reqHeight }
+  }
+  if (kreaOption?.supports_aspect_ratio && kreaOption?.requires_width_height) {
+    return {
+      prompt,
+      width: reqWidth,
+      height: reqHeight,
+      aspect_ratio: "3:4",
     }
   }
-  return body
+  return { prompt, width: reqWidth, height: reqHeight }
 }
 
 // Attach the source image to the Krea request body. When the model requires

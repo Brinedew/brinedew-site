@@ -79,8 +79,13 @@ test("B-517 edit blot UI uses one dialog modal and the direct image-edit APIs", 
   assert.match(app, /\/api\/iconoplasm\/image-edit\/jobs/)
   assert.match(
     app,
-    /selectedValue = options\.length \? options\[0\]\.value : ""/,
+    /selectedValue = lastUsedValue \|\| \(options\.length \? options\[0\]\.value : ""\)/,
   )
+  assert.match(
+    app,
+    /options\.sort\(function \(a, b\) \{\s*return a\.label\.localeCompare\(b\.label\)\s*\}\)/,
+  )
+  assert.match(app, /last used/)
   assert.match(app, /function setImageEditProviderValue\(select, providerId\)/)
   assert.match(app, /customElements\.whenDefined\("sl-select"\)/)
   assert.match(app, /select\.updateComplete\.then\(function \(\) \{/)
