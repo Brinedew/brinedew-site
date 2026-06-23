@@ -283,6 +283,11 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         edit_image_param: "image_url",
         edit_image_object_shape: "string",
         edit_requires_image: true,
+        // SeedEdit's body schema is exactly {prompt, seed, image_url}; any
+        // size key (width/height/aspect_ratio/resolution) is rejected as
+        // "Unrecognized key(s) in object". Let Krea pick dimensions from
+        // the source image.
+        body_omits_size: true,
         requires_krea_asset_upload: true,
       }),
       Object.freeze({
@@ -291,16 +296,18 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         endpoint_path: "/generate/image/runway/gen-4-image",
         pricing_label: "—",
         estimated_seconds: 60,
-        edit_capable: true,
+        // Runway Gen-4 caps the prompt at 1000 chars. The shared Iconoplasm
+        // edit prompt template is ~1500 chars (suffix + per-adjustment
+        // text). Truncating the prompt would silently drop the user's edit
+        // instructions, and there is no per-model prompt override path
+        // today. Hide from the edit dialog until we add a short-prompt
+        // path for Runway specifically.
+        edit_capable: false,
         generate_capable: false,
         edit_image_param: "reference_images",
         edit_image_object_shape: "object-array",
         edit_reference_tag: "source",
         edit_requires_image: true,
-        // Runway Gen-4 wants {url, tag} objects in reference_images[]. We
-        // still upload to /assets first so the URL is on Krea's CDN and
-        // definitely reachable, then wrap it in the object shape the model
-        // expects.
         requires_krea_asset_upload: true,
       }),
       Object.freeze({
@@ -313,6 +320,17 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         generate_capable: true,
         edit_image_param: "character_reference_images",
         edit_image_object_shape: "string-array",
+        // Ideogram V_3's resolution enum (per
+        // https://developer.ideogram.ai/api-reference/api-reference/generate-v3)
+        // does not include a true 3:4 aspect ratio. 1536x2048 (3:4) is
+        // not in the enum and fails with "Resolution 1536x2048 is not
+        // supported for Ideogram V_3". The KREAbilling body schema only
+        // accepts `width + height` (not Ideogram's `aspect_ratio` field
+        // directly), so we use the closest V_3 resolution to 3:4: 896x1152
+        // (≈ 0.778, very close to 3:4's 0.75). Acceptable trade-off: the
+        // output is slightly wider than the Iconoplasm 3:4 source, but
+        // it's the best we can do with V_3 through KREAbilling.
+        width_height_override: Object.freeze({ width: 896, height: 1152 }),
         requires_krea_asset_upload: true,
       }),
       Object.freeze({
@@ -3949,7 +3967,11 @@ function resolveImageEditProviderModel(raw, providerDef) {
 function mapImageEditModelOption(option) {
   if (!option || typeof option !== "object") return null
   const editImageParam = sanitizeText(option.edit_image_param || "", 64) || ""
-  const editCapable = option.edit_capable === true ? true : Boolean(editImageParam)
+  // The model's `edit_capable` flag is authoritative when set. Older
+  // model definitions only have `edit_image_param`, so fall back to
+  // its presence as a hint of edit capability.
+  const hasExplicitEditFlag = option.edit_capable === true || option.edit_capable === false
+  const editCapable = hasExplicitEditFlag ? option.edit_capable === true : Boolean(editImageParam)
   const generateCapable = option.generate_capable !== false
   return {
     model: sanitizeText(option.model || "", 128) || "",
@@ -5167,6 +5189,31 @@ function kreaRequestBodyShape(kreaOption, prompt, reqWidth, reqHeight) {
       resolution: "1K",
     }
   }
+  // Per-model size overrides. The KREAbilling gateway forwards to
+  // provider-specific backends (Ideogram, Runway, ByteDance SeedEdit, ...)
+  // that each have their own body schema. The pre-existing assumption that
+  // every Krea endpoint accepts `width + height` is wrong — see B-575.
+  // Each of these flags opts one model into the shape its target endpoint
+  // actually accepts.
+  //   width_height_override: { width, height } — KREAbilling accepts the
+  //                            width/height pair, but the downstream
+  //                            provider validates the specific resolution.
+  //                            For Ideogram V_3, the 3:4 aspect is supported
+  //                            only at specific enum values; 1536x2048 is
+  //                            rejected. We pick a valid V_3 resolution.
+  //   body_omits_size:    SeedEdit, where the body schema is exactly
+  //                       {prompt, seed, image_url} and any size key is
+  //                       rejected as an unrecognized key.
+  if (kreaOption?.width_height_override) {
+    return {
+      prompt,
+      width: kreaOption.width_height_override.width,
+      height: kreaOption.width_height_override.height,
+    }
+  }
+  if (kreaOption?.body_omits_size === true) {
+    return { prompt }
+  }
   // Default: width + height. Krea's Flux / Z Image / Ideogram / Runway / etc.
   // documentation lists these as the canonical sizing fields.
   // When the model exposes an aspect_ratio enum AND 3:4 is in it, we prefer
@@ -5416,6 +5463,18 @@ async function callKreaImageProvider({
       rawText.slice(0, 2000),
   )
   if (!createResponse.ok) {
+    // Log the request body and raw response to the worker log so
+    // operators debugging future KREAbilling integration issues can see
+    // what the worker actually sent vs what Krea responded with. The
+    // user-facing error stays clean — just the Krea message.
+    console.log(
+      "[KREA_DEBUG] krea_rejected status=" +
+        createResponse.status +
+        " sent_body=" +
+        JSON.stringify(body).slice(0, 1000) +
+        " krea_response=" +
+        String(rawText || "").slice(0, 1000),
+    )
     throw new Error(
       "Krea rejected (status " +
         createResponse.status +
