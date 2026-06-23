@@ -169,7 +169,7 @@ importers:
         specifier: ^10.1.0
         version: 10.4.0(jiti@2.7.0)
       wrangler:
-        specifier: ^4.63.0
+        specifier: 4.100.0
         version: 4.100.0
       wxt:
         specifier: 0.20.26

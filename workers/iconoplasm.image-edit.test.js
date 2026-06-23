@@ -713,7 +713,79 @@ function buildEnv(db = new FakeDb(), session = { user_id: "user-1", username: "t
     GAME_SESSIONS: buildSessionBinding(session),
     ICONOPLASM_VOTE_COORDINATORS: buildVoteCoordinatorBinding(db),
     ICONOPLASM_IMAGE_EDIT_KEY_SECRET: "test-secret-with-more-than-32-bytes-for-aes",
+    // Krea jobs are always finalized in a ctx.waitUntil background task.
+    // Tests drain that task synchronously, so the production 5s poll
+    // interval would make every Krea test 5s slower than necessary.
+    ICONOPLASM_KREA_POLL_INTERVAL_MS: "0",
   }
+}
+
+// Captures every promise handed to ctx.waitUntil so tests can await them.
+// Used because Krea jobs are always async (kickoff + ctx.waitUntil +
+// 202 response); tests that want to inspect the final job state must
+// drain the waitUntil queue before re-reading the job row.
+function capturingContext() {
+  const tasks = []
+  return {
+    tasks,
+    waitUntil(promise) {
+      tasks.push(Promise.resolve(promise))
+    },
+    async drain() {
+      while (tasks.length) {
+        const task = tasks.shift()
+        try {
+          await task
+        } catch {
+          // The finalize function catches its own errors and writes them to
+          // the job row. Tests should re-read the job to see the failure.
+        }
+      }
+    },
+  }
+}
+
+// Convenience helper for the common pattern: hit the POST, then drain
+// the waitUntil queue, then GET the job. Returns the GET response.
+async function createKreaImageEditJobAndAwait({
+  env,
+  ctx,
+  body,
+  providerKey,
+  model,
+  cookie = "session=abc123",
+}) {
+  const create =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: cookie },
+          body: JSON.stringify(body),
+        },
+      ),
+      env,
+      ctx,
+    )
+  const created = await create.json()
+  if (ctx?.drain) await ctx.drain()
+  if (create.status === 202 && created?.job?.id) {
+    const jobId = created.job.id
+    const get =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs/" +
+            encodeURIComponent(jobId),
+          { method: "GET", headers: { Cookie: cookie } },
+        ),
+        env,
+        ctx,
+      )
+    const fetched = await get.json()
+    return { create, created, get, fetched }
+  }
+  return { create, created, get: null, fetched: null }
 }
 
 test("user emulsion settings store the current Discord-owned emulsion revision", async () => {
@@ -2033,6 +2105,7 @@ test("Luma Uni image edits use the Agents API source field and visible pricing",
             headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
             body: JSON.stringify({
               provider_id: "luma",
+              model: "uni-1",
               source_gene_symbol: "A1BG",
               source_asset_sha256: SOURCE_SHA,
               adjustments: { remove_ai_generation_errors: true },
@@ -2043,7 +2116,7 @@ test("Luma Uni image edits use the Agents API source field and visible pricing",
         { waitUntil() {} },
       )
     const created = await createResponse.json()
-    assert.equal(createResponse.status, 200)
+    assert.equal(createResponse.status, 200, "create status: " + JSON.stringify(created))
     assert.equal(created.job.status, "succeeded")
     assert.ok(created.job.result_asset_sha256)
     assert.ok(
@@ -2226,6 +2299,7 @@ test("candidate generation jobs can use Krea API models and expose compute-unit 
     assert.equal(saved.provider.model, "krea/krea-2/large")
     assert.equal(saved.provider.pricing_label, "$0.060/request")
 
+    const createCtx = capturingContext()
     const createResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request(
@@ -2241,13 +2315,27 @@ test("candidate generation jobs can use Krea API models and expose compute-unit 
           },
         ),
         env,
-        { waitUntil() {} },
+        createCtx,
       )
     const created = await createResponse.json()
-    assert.equal(createResponse.status, 200)
-    assert.equal(created.job.status, "succeeded")
-    assert.equal(created.job.request_mode, "novel")
-    assert.ok(created.job.result_asset_sha256)
+    assert.equal(createResponse.status, 202, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "running")
+    await createCtx.drain()
+    // Re-read the job through a GET to pick up the completion that happened in waitUntil
+    const getResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/candidate-generation/jobs/" +
+            encodeURIComponent(created.job.id),
+          { method: "GET", headers: { Cookie: "session=abc123" } },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const fetched = await getResponse.json()
+    assert.equal(fetched.job.status, "succeeded")
+    assert.equal(fetched.job.request_mode, "novel")
+    assert.ok(fetched.job.result_asset_sha256)
     assert.ok(fetchCalls.some((call) => call.url === "https://api.krea.ai/jobs/krea-job-1"))
     assert.equal(env.ICONOPLASM_PORTRAITS.deletes.length, 1)
   } finally {
@@ -3043,6 +3131,7 @@ test("image edit jobs with Krea Flux use image_url + strength in the request bod
   }
 
   try {
+    const providerCtx = capturingContext()
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
         "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
@@ -3057,32 +3146,26 @@ test("image edit jobs with Krea Flux use image_url + strength in the request bod
         },
       ),
       env,
-      { waitUntil() {} },
+      providerCtx,
     )
 
-    const createResponse =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(
-          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
-            body: JSON.stringify({
-              provider_id: "krea",
-              model: "bfl/flux-1-dev",
-              source_gene_symbol: "A1BG",
-              source_asset_sha256: SOURCE_SHA,
-              adjustments: { remove_ai_generation_errors: true },
-            }),
-          },
-        ),
-        env,
-        { waitUntil() {} },
-      )
-    const created = await createResponse.json()
-    assert.equal(createResponse.status, 200, "create status: " + JSON.stringify(created))
-    assert.equal(created.job.status, "succeeded")
-    assert.ok(created.job.result_asset_sha256)
+    const createCtx = capturingContext()
+    const { create, created, fetched } = await createKreaImageEditJobAndAwait({
+      env,
+      ctx: createCtx,
+      body: {
+        provider_id: "krea",
+        model: "bfl/flux-1-dev",
+        source_gene_symbol: "A1BG",
+        source_asset_sha256: SOURCE_SHA,
+        adjustments: { remove_ai_generation_errors: true },
+      },
+    })
+    assert.equal(create.status, 202, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "running")
+    assert.ok(fetched, "expected the GET response after waitUntil drain")
+    assert.equal(fetched.job.status, "succeeded", "final job state: " + JSON.stringify(fetched.job))
+    assert.ok(fetched.job.result_asset_sha256)
     // The Krea job creation call must have been made exactly once.
     const fluxCalls = fetchCalls.filter(
       (call) => call.url === "https://api.krea.ai/generate/image/bfl/flux-1-dev",
@@ -3134,7 +3217,12 @@ test("image edit jobs with Krea Nano Banana Pro use image_urls[] array and aspec
       // a fresh portrait from the prompt alone.
       assert.equal(body.image_urls[0], "https://krea.example/uploaded/nbp-source.png")
       assert.equal("image_url" in body, false)
-      // The blot is 3:4 and Nano Banana Pro supports 3:4 in its aspect_ratio enum.
+      // Live API requires explicit width + height (422 Validation failed
+      // otherwise — B-574). The blot default is 1536x2048.
+      assert.equal(body.width, 1536)
+      assert.equal(body.height, 2048)
+      // The blot is 3:4 and Nano Banana Pro supports 3:4 in its aspect_ratio
+      // enum, so we send aspect_ratio as a redundant hint. Krea accepts it.
       assert.equal(body.aspect_ratio, "3:4")
       return new Response(JSON.stringify({ job_id: "nbp-job-1", status: "queued" }), {
         status: 200,
@@ -3186,29 +3274,23 @@ test("image edit jobs with Krea Nano Banana Pro use image_urls[] array and aspec
       { waitUntil() {} },
     )
 
-    const createResponse =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(
-          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
-            body: JSON.stringify({
-              provider_id: "krea",
-              model: "google/nano-banana-pro",
-              source_gene_symbol: "A1BG",
-              source_asset_sha256: SOURCE_SHA,
-              adjustments: { remove_ai_generation_errors: true },
-            }),
-          },
-        ),
-        env,
-        { waitUntil() {} },
-      )
-    const created = await createResponse.json()
-    assert.equal(createResponse.status, 200)
-    assert.equal(created.job.status, "succeeded")
-    assert.ok(created.job.result_asset_sha256)
+    const createCtx = capturingContext()
+    const { create, created, fetched } = await createKreaImageEditJobAndAwait({
+      env,
+      ctx: createCtx,
+      body: {
+        provider_id: "krea",
+        model: "google/nano-banana-pro",
+        source_gene_symbol: "A1BG",
+        source_asset_sha256: SOURCE_SHA,
+        adjustments: { remove_ai_generation_errors: true },
+      },
+    })
+    assert.equal(create.status, 202, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "running")
+    assert.ok(fetched, "expected the GET response after waitUntil drain")
+    assert.equal(fetched.job.status, "succeeded", "final job state: " + JSON.stringify(fetched.job))
+    assert.ok(fetched.job.result_asset_sha256)
     // The /assets upload must have been made exactly once.
     const assetCalls = fetchCalls.filter((call) => call.url === "https://api.krea.ai/assets")
     assert.equal(assetCalls.length, 1)
@@ -3407,28 +3489,22 @@ test("image edit jobs with Krea Flux Kontext use image_url + strength in the req
       { waitUntil() {} },
     )
 
-    const createResponse =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(
-          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
-            body: JSON.stringify({
-              provider_id: "krea",
-              model: "bfl/flux-1-kontext-dev",
-              source_gene_symbol: "A1BG",
-              source_asset_sha256: SOURCE_SHA,
-              adjustments: { remove_ai_generation_errors: true },
-            }),
-          },
-        ),
-        env,
-        { waitUntil() {} },
-      )
-    const created = await createResponse.json()
-    assert.equal(createResponse.status, 200)
-    assert.equal(created.job.status, "succeeded")
+    const createCtx = capturingContext()
+    const { create, created, fetched } = await createKreaImageEditJobAndAwait({
+      env,
+      ctx: createCtx,
+      body: {
+        provider_id: "krea",
+        model: "bfl/flux-1-kontext-dev",
+        source_gene_symbol: "A1BG",
+        source_asset_sha256: SOURCE_SHA,
+        adjustments: { remove_ai_generation_errors: true },
+      },
+    })
+    assert.equal(create.status, 202, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "running")
+    assert.ok(fetched, "expected the GET response after waitUntil drain")
+    assert.equal(fetched.job.status, "succeeded", "final job state: " + JSON.stringify(fetched.job))
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -3511,28 +3587,22 @@ test("image edit jobs with Krea Runway Gen-4 use reference_images[{url,tag}] bod
       { waitUntil() {} },
     )
 
-    const createResponse =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(
-          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
-            body: JSON.stringify({
-              provider_id: "krea",
-              model: "runway/gen-4-image",
-              source_gene_symbol: "A1BG",
-              source_asset_sha256: SOURCE_SHA,
-              adjustments: { remove_ai_generation_errors: true },
-            }),
-          },
-        ),
-        env,
-        { waitUntil() {} },
-      )
-    const created = await createResponse.json()
-    assert.equal(createResponse.status, 200)
-    assert.equal(created.job.status, "succeeded")
+    const createCtx = capturingContext()
+    const { create, created, fetched } = await createKreaImageEditJobAndAwait({
+      env,
+      ctx: createCtx,
+      body: {
+        provider_id: "krea",
+        model: "runway/gen-4-image",
+        source_gene_symbol: "A1BG",
+        source_asset_sha256: SOURCE_SHA,
+        adjustments: { remove_ai_generation_errors: true },
+      },
+    })
+    assert.equal(create.status, 202, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "running")
+    assert.ok(fetched, "expected the GET response after waitUntil drain")
+    assert.equal(fetched.job.status, "succeeded", "final job state: " + JSON.stringify(fetched.job))
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -3616,28 +3686,22 @@ test("image edit jobs with Krea Ideogram 3.0 use character_reference_images body
       { waitUntil() {} },
     )
 
-    const createResponse =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(
-          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
-            body: JSON.stringify({
-              provider_id: "krea",
-              model: "ideogram/ideogram-3",
-              source_gene_symbol: "A1BG",
-              source_asset_sha256: SOURCE_SHA,
-              adjustments: { remove_ai_generation_errors: true },
-            }),
-          },
-        ),
-        env,
-        { waitUntil() {} },
-      )
-    const created = await createResponse.json()
-    assert.equal(createResponse.status, 200)
-    assert.equal(created.job.status, "succeeded")
+    const createCtx = capturingContext()
+    const { create, created, fetched } = await createKreaImageEditJobAndAwait({
+      env,
+      ctx: createCtx,
+      body: {
+        provider_id: "krea",
+        model: "ideogram/ideogram-3",
+        source_gene_symbol: "A1BG",
+        source_asset_sha256: SOURCE_SHA,
+        adjustments: { remove_ai_generation_errors: true },
+      },
+    })
+    assert.equal(create.status, 202, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "running")
+    assert.ok(fetched, "expected the GET response after waitUntil drain")
+    assert.equal(fetched.job.status, "succeeded", "final job state: " + JSON.stringify(fetched.job))
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -3808,6 +3872,7 @@ test("last-used model is remembered and pinned at the top of the providers list,
     const kvPutsBefore = kvPuts.filter((p) =>
       p.k.startsWith("iconoplasm:image-edit-last-used:image_edit:user-1:krea"),
     ).length
+    const firstCtx = capturingContext()
     const createResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request(
@@ -3825,11 +3890,25 @@ test("last-used model is remembered and pinned at the top of the providers list,
           },
         ),
         env,
-        { waitUntil() {} },
+        firstCtx,
       )
     const created = await createResponse.json()
-    assert.equal(createResponse.status, 200)
-    assert.equal(created.job.status, "succeeded")
+    assert.equal(createResponse.status, 202, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "running")
+    await firstCtx.drain()
+    // Re-read the job through a GET to verify it succeeded
+    const getResp =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs/" +
+            encodeURIComponent(created.job.id),
+          { method: "GET", headers: { Cookie: "session=abc123" } },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const fetched = await getResp.json()
+    assert.equal(fetched.job.status, "succeeded")
     const kvPutsAfter = kvPuts.filter((p) =>
       p.k.startsWith("iconoplasm:image-edit-last-used:image_edit:user-1:krea"),
     ).length
@@ -3846,6 +3925,7 @@ test("last-used model is remembered and pinned at the top of the providers list,
     // Switch the saved provider's model to bfl/flux-1-dev by sending the new
     // model in the request body. The route at line 25671 already applies the
     // model override from the body to providerRow.model.
+    const secondCtx = capturingContext()
     const secondResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request(
@@ -3863,9 +3943,10 @@ test("last-used model is remembered and pinned at the top of the providers list,
           },
         ),
         env,
-        { waitUntil() {} },
+        secondCtx,
       )
     await secondResponse.json()
+    await secondCtx.drain()
     const newKvPutsAfter = kvPuts.filter((p) =>
       p.k.startsWith("iconoplasm:image-edit-last-used:image_edit:user-1:krea"),
     ).length
@@ -3941,6 +4022,7 @@ test("Krea structured error responses surface a readable message, not [object Ob
       env,
       { waitUntil() {} },
     )
+    const createCtx = capturingContext()
     const createResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request(
@@ -3958,16 +4040,30 @@ test("Krea structured error responses surface a readable message, not [object Ob
           },
         ),
         env,
-        { waitUntil() {} },
+        createCtx,
       )
     const created = await createResponse.json()
-    assert.equal(createResponse.status, 502)
-    assert.equal(created.job.status, "failed")
+    assert.equal(createResponse.status, 202, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "running")
+    await createCtx.drain()
+    // Re-read the job to pick up the failure that happened in waitUntil
+    const getResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs/" +
+            encodeURIComponent(created.job.id),
+          { method: "GET", headers: { Cookie: "session=abc123" } },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const fetched = await getResponse.json()
+    assert.equal(fetched.job.status, "failed")
     // The error message must contain the actual Krea message text, NOT
     // "[object Object]". This is the smoking-gun regression for the bug
     // that made it impossible to diagnose Krea image-edit failures.
-    assert.notEqual(created.job.error, "[object Object]")
-    assert.match(created.job.error, /Could not fetch the source image/)
+    assert.notEqual(fetched.job.error, "[object Object]")
+    assert.match(fetched.job.error, /Could not fetch the source image/)
   } finally {
     globalThis.fetch = originalFetch
   }
