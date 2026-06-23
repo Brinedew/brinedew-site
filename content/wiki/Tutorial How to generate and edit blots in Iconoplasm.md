@@ -215,6 +215,11 @@ If your provider requires billing that hasn't been set up yet, the dialog will s
 - Click the X (**Reject blot**) to downvote it.
 - The canonical blot is the one with the highest approval score.
 
+
+## Model comparison
+
+![[NB2.png|Image edited with the Nano-Banana 2 model for age and color]]
+
 ## Pricing
 
 Each provider sets its own rates. Iconoplasm's dropdown shows rough estimates â€” always check the official pricing page before generating at scale.
@@ -227,3 +232,4 @@ Each provider sets its own rates. Iconoplasm's dropdown shows rough estimates â€
 | **OpenAI API** | GPT Image 2 | ~$0.21 | [openai.com/api/pricing](https://openai.com/api/pricing) |
 
 All costs are billed directly by the provider, not by Iconoplasm.
+
