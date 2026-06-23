@@ -5169,16 +5169,28 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       configured[p.provider_id] = p
     })
     var options = []
+    var lastUsedValue = ""
+    var lastUsedLabel = ""
     supported.forEach(function (sp) {
       if (!configured[sp.provider_id]) return
       ;(sp.model_options || []).forEach(function (m) {
-        options.push({
-          value: sp.provider_id + ":" + m.model,
-          label: sp.label + " · " + m.label,
-        })
+        var value = sp.provider_id + ":" + m.model
+        var label = sp.label + " · " + m.label
+        if (m.last_used && !lastUsedValue) {
+          lastUsedValue = value
+          lastUsedLabel = label + " · last used"
+        } else {
+          options.push({ value: value, label: label })
+        }
       })
     })
-    var selectedValue = options.length ? options[0].value : ""
+    options.sort(function (a, b) {
+      return a.label.localeCompare(b.label)
+    })
+    if (lastUsedValue) {
+      options.unshift({ value: lastUsedValue, label: lastUsedLabel })
+    }
+    var selectedValue = lastUsedValue || (options.length ? options[0].value : "")
     select.innerHTML = options.length
       ? options
           .map(function (opt) {
