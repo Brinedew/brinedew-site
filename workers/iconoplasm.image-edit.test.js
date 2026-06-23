@@ -930,7 +930,6 @@ test("image edit provider keys are encrypted and listed without secrets", async 
     "openai/gpt-image",
     "openai/gpt-image-2",
     "bytedance/seededit",
-    "runway/gen-4-image",
     "ideogram/ideogram-3",
     "z-image/z-image",
   ]) {
@@ -951,6 +950,7 @@ test("image edit provider keys are encrypted and listed without secrets", async 
     "bfl/flux-1.1-pro-ultra",
     "ideogram/ideogram-2-turbo",
     "qwen/2512",
+    "runway/gen-4-image",
   ]) {
     assert.ok(!kreaModelNames.includes(hidden), "Krea edit dialog should NOT expose " + hidden)
   }
@@ -3469,6 +3469,102 @@ test("image edit jobs with Krea Flux Kontext use image_url + strength in the req
   }
 })
 
+test("image edit jobs with Krea SeedEdit omit width/height from the body", async () => {
+  // SeedEdit's body schema is exactly {prompt, seed, image_url}. Any size
+  // key (width/height/aspect_ratio/resolution) is rejected as
+  // "Unrecognized key(s) in object". Verify we don't send them.
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    if (url === "https://api.krea.ai/assets") {
+      return new Response(
+        JSON.stringify({
+          id: "krea-asset-seededit-1",
+          image_url: "https://krea.example/uploaded/seededit-source.png",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://api.krea.ai/generate/image/bytedance/seededit") {
+      const body = JSON.parse(String(init.body || "{}"))
+      // The source image goes in image_url (Krea-hosted, not our CDN).
+      assert.equal(body.image_url, "https://krea.example/uploaded/seededit-source.png")
+      // No size fields.
+      assert.equal(body.width, undefined)
+      assert.equal(body.height, undefined)
+      assert.equal(body.aspect_ratio, undefined)
+      assert.equal(body.resolution, undefined)
+      return new Response(JSON.stringify({ job_id: "seededit-job-1", status: "queued" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (url === "https://api.krea.ai/jobs/seededit-job-1") {
+      return new Response(
+        JSON.stringify({
+          job_id: "seededit-job-1",
+          status: "completed",
+          result: { urls: ["https://krea.example/seededit.png"] },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://krea.example/seededit.png") {
+      return new Response("seededit-png-bytes", {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      })
+    }
+    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "bytedance/seededit",
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+    const createCtx = capturingContext()
+    const { create, created } = await createKreaImageEditJobAndAwait({
+      env,
+      ctx: createCtx,
+      body: {
+        provider_id: "krea",
+        model: "bytedance/seededit",
+        source_gene_symbol: "A1BG",
+        source_asset_sha256: SOURCE_SHA,
+        adjustments: { remove_ai_generation_errors: true },
+      },
+    })
+    assert.equal(create.status, 200, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "succeeded")
+    assert.ok(created.job.result_asset_sha256)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("image edit jobs with Krea ChatGPT 2 send width + height + aspect_ratio (B-574)", async () => {
   // Krea's openai/gpt-image-2 endpoint 422s with `Required: width, height`
   // if the body omits pixel dimensions, even when aspect_ratio is set. The
@@ -3572,50 +3668,50 @@ test("image edit jobs with Krea ChatGPT 2 send width + height + aspect_ratio (B-
   }
 })
 
-test("image edit jobs with Krea Runway Gen-4 use reference_images[{url,tag}] body shape", async () => {
+test("image edit jobs with Krea SeedEdit omit width/height from the body", async () => {
+  // SeedEdit's body schema is exactly {prompt, seed, image_url}. Any size
+  // key (width/height/aspect_ratio/resolution) is rejected as
+  // "Unrecognized key(s) in object". Verify we don't send them.
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
   const env = buildEnv(db)
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
     if (url === "https://api.krea.ai/assets") {
-      assert.ok(init.body instanceof FormData, "Krea asset upload must use FormData")
       return new Response(
         JSON.stringify({
-          id: "krea-asset-runway-1",
-          image_url: "https://krea.example/uploaded/runway-source.png",
-          width: 1024,
-          height: 1024,
+          id: "krea-asset-seededit-1",
+          image_url: "https://krea.example/uploaded/seededit-source.png",
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     }
-    if (url === "https://api.krea.ai/generate/image/runway/gen-4-image") {
+    if (url === "https://api.krea.ai/generate/image/bytedance/seededit") {
       const body = JSON.parse(String(init.body || "{}"))
-      // Runway wants reference_images as an object array, not a string array.
-      assert.equal(Array.isArray(body.reference_images), true)
-      assert.equal(body.reference_images.length, 1)
-      assert.equal(typeof body.reference_images[0], "object")
-      // Source URL inside the object must be the Krea-hosted URL.
-      assert.equal(body.reference_images[0].url, "https://krea.example/uploaded/runway-source.png")
-      assert.equal(body.reference_images[0].tag, "source")
-      return new Response(JSON.stringify({ job_id: "runway-job-1", status: "queued" }), {
+      // The source image goes in image_url (Krea-hosted, not our CDN).
+      assert.equal(body.image_url, "https://krea.example/uploaded/seededit-source.png")
+      // No size fields.
+      assert.equal(body.width, undefined)
+      assert.equal(body.height, undefined)
+      assert.equal(body.aspect_ratio, undefined)
+      assert.equal(body.resolution, undefined)
+      return new Response(JSON.stringify({ job_id: "seededit-job-1", status: "queued" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       })
     }
-    if (url === "https://api.krea.ai/jobs/runway-job-1") {
+    if (url === "https://api.krea.ai/jobs/seededit-job-1") {
       return new Response(
         JSON.stringify({
-          job_id: "runway-job-1",
+          job_id: "seededit-job-1",
           status: "completed",
-          result: { urls: ["https://krea.example/runway.png"] },
+          result: { urls: ["https://krea.example/seededit.png"] },
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     }
-    if (url === "https://krea.example/runway.png") {
-      return new Response("runway-png-bytes", {
+    if (url === "https://krea.example/seededit.png") {
+      return new Response("seededit-png-bytes", {
         status: 200,
         headers: { "Content-Type": "image/png" },
       })
@@ -3641,21 +3737,20 @@ test("image edit jobs with Krea Runway Gen-4 use reference_images[{url,tag}] bod
           body: JSON.stringify({
             provider_id: "krea",
             api_key: "krea-test-secret",
-            model: "runway/gen-4-image",
+            model: "bytedance/seededit",
           }),
         },
       ),
       env,
       { waitUntil() {} },
     )
-
     const createCtx = capturingContext()
     const { create, created } = await createKreaImageEditJobAndAwait({
       env,
       ctx: createCtx,
       body: {
         provider_id: "krea",
-        model: "runway/gen-4-image",
+        model: "bytedance/seededit",
         source_gene_symbol: "A1BG",
         source_asset_sha256: SOURCE_SHA,
         adjustments: { remove_ai_generation_errors: true },
@@ -3697,6 +3792,13 @@ test("image edit jobs with Krea Ideogram 3.0 use character_reference_images body
         body.character_reference_images[0],
         "https://krea.example/uploaded/ideogram-source.png",
       )
+      // Ideogram V_3's resolution enum (per developer.ideogram.ai) does
+      // not include a true 3:4 aspect. 1536x2048 (3:4) is rejected with
+      // "Resolution 1536x2048 is not supported for Ideogram V_3". The
+      // closest V_3 resolution is 896x1152 (≈ 0.778, near 3:4's 0.75).
+      // The KREAbilling body schema accepts width/height directly.
+      assert.equal(body.width, 896)
+      assert.equal(body.height, 1152)
       return new Response(JSON.stringify({ job_id: "ideogram-job-1", status: "queued" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -3754,6 +3856,102 @@ test("image edit jobs with Krea Ideogram 3.0 use character_reference_images body
       body: {
         provider_id: "krea",
         model: "ideogram/ideogram-3",
+        source_gene_symbol: "A1BG",
+        source_asset_sha256: SOURCE_SHA,
+        adjustments: { remove_ai_generation_errors: true },
+      },
+    })
+    assert.equal(create.status, 200, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "succeeded")
+    assert.ok(created.job.result_asset_sha256)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("image edit jobs with Krea SeedEdit omit width/height from the body", async () => {
+  // SeedEdit's body schema is exactly {prompt, seed, image_url}. Any size
+  // key (width/height/aspect_ratio/resolution) is rejected as
+  // "Unrecognized key(s) in object". Verify we don't send them.
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    if (url === "https://api.krea.ai/assets") {
+      return new Response(
+        JSON.stringify({
+          id: "krea-asset-seededit-1",
+          image_url: "https://krea.example/uploaded/seededit-source.png",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://api.krea.ai/generate/image/bytedance/seededit") {
+      const body = JSON.parse(String(init.body || "{}"))
+      // The source image goes in image_url (Krea-hosted, not our CDN).
+      assert.equal(body.image_url, "https://krea.example/uploaded/seededit-source.png")
+      // No size fields.
+      assert.equal(body.width, undefined)
+      assert.equal(body.height, undefined)
+      assert.equal(body.aspect_ratio, undefined)
+      assert.equal(body.resolution, undefined)
+      return new Response(JSON.stringify({ job_id: "seededit-job-1", status: "queued" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (url === "https://api.krea.ai/jobs/seededit-job-1") {
+      return new Response(
+        JSON.stringify({
+          job_id: "seededit-job-1",
+          status: "completed",
+          result: { urls: ["https://krea.example/seededit.png"] },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://krea.example/seededit.png") {
+      return new Response("seededit-png-bytes", {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      })
+    }
+    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "bytedance/seededit",
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+    const createCtx = capturingContext()
+    const { create, created } = await createKreaImageEditJobAndAwait({
+      env,
+      ctx: createCtx,
+      body: {
+        provider_id: "krea",
+        model: "bytedance/seededit",
         source_gene_symbol: "A1BG",
         source_asset_sha256: SOURCE_SHA,
         adjustments: { remove_ai_generation_errors: true },
