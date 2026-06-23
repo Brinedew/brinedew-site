@@ -5120,142 +5120,21 @@ async function uploadKreaAsset({ baseUrl, apiKey, bytes, contentType, descriptio
   }
 }
 
-// Finalizes a Krea image edit job in the background. The synchronous
-// request has already inserted the job row, kicked off the Krea job (or
-// received an immediate result), and handed this function off to
-// ctx.waitUntil. We poll the Krea job to completion (if async), download
-// the result, normalize to webp, write renditions, and update the
-// icono_image_edit_jobs row to "succeeded". On any failure we mark the
-// row as "failed" with a readable error.
-async function finishImageEditJobFromKreaAsync(env, url, params) {
-  const { jobId, kickoff, sourceKey, sourceRow, assetSha, providerRow, userId } = params
-  try {
-    let providerOutput
-    if (kickoff?.mode === "immediate") {
-      providerOutput = { bytes: kickoff.bytes, contentType: kickoff.contentType || "image/webp" }
-    } else {
-      const { baseUrl, apiKey, kreaJobId } = kickoff
-      providerOutput = await pollKreaJobToCompletion({ baseUrl, apiKey, kreaJobId, env })
-    }
-    if (!providerOutput?.bytes?.byteLength) throw new Error("Provider returned an empty image")
-    const normalizedResult = await normalizeProviderImageToWebp(env, url, providerOutput)
-    const normalizedBytes = normalizedResult.bytes
-    if (!normalizedBytes?.byteLength) throw new Error("Provider returned an empty image")
-    const resultSha = await sha256HexBytes(normalizedBytes)
-    if (resultSha === assetSha) throw new Error("Provider returned an unchanged image")
-    const resultDimensions = webpDimensions(normalizedBytes) || {
-      width: optionalInt(sourceRow?.width),
-      height: optionalInt(sourceRow?.height),
-    }
-    const renditions = await writeImageEditRenditions(env, url, {
-      assetSha256: resultSha,
-      fullBytes: normalizedBytes,
-    })
-    await updateImageEditJobSucceeded(env, {
-      id: jobId,
-      result_asset_sha256: resultSha,
-      result_r2_key_full: renditions.keys.full,
-      result_r2_key_medium: renditions.keys.medium,
-      result_r2_key_thumb: renditions.keys.thumb,
-      result_mime: "image/webp",
-      result_width: optionalInt(resultDimensions.width),
-      result_height: optionalInt(resultDimensions.height),
-      result_bytes: renditions.bytes,
-    })
-    await recordImageEditLastUsedModel(env, {
-      userId,
-      operation: "image_edit",
-      providerId: "krea",
-      model: providerRow?.model || "",
-    })
-  } catch (error) {
-    await updateImageEditJobFailed(env, {
-      id: jobId,
-      error: coerceErrorMessage(error) || error?.message || error || "Image edit failed",
-    })
-  }
-}
-
-// Finalizes a Krea candidate generation job in the background. The
-// synchronous request has already inserted the job row, kicked off the Krea
-// job (or received an immediate result), and handed this function off to
-// ctx.waitUntil. Mirrors finishImageEditJobFromKreaAsync but writes to the
-// candidate generation table and uses fixed blot dimensions.
-async function finishCandidateGenerationJobFromKreaAsync(env, url, params) {
-  const { jobId, kickoff, providerRow, userId } = params
-  try {
-    let providerOutput
-    if (kickoff?.mode === "immediate") {
-      providerOutput = { bytes: kickoff.bytes, contentType: kickoff.contentType || "image/webp" }
-    } else {
-      const { baseUrl, apiKey, kreaJobId } = kickoff
-      providerOutput = await pollKreaJobToCompletion({ baseUrl, apiKey, kreaJobId, env })
-    }
-    if (!providerOutput?.bytes?.byteLength) throw new Error("Provider returned an empty image")
-    const normalizedResult = await normalizeProviderImageToWebp(env, url, providerOutput)
-    const normalizedBytes = normalizedResult.bytes
-    if (!normalizedBytes?.byteLength) throw new Error("Provider returned an empty image")
-    const resultSha = await sha256HexBytes(normalizedBytes)
-    const resultDimensions = webpDimensions(normalizedBytes) || {
-      width: ICONOPLASM_BLOT_REQUEST_WIDTH,
-      height: ICONOPLASM_BLOT_REQUEST_HEIGHT,
-    }
-    const renditions = await writeImageEditRenditions(env, url, {
-      assetSha256: resultSha,
-      fullBytes: normalizedBytes,
-    })
-    await updateCandidateGenerationJobSucceeded(env, {
-      id: jobId,
-      result_asset_sha256: resultSha,
-      result_r2_key_full: renditions.keys.full,
-      result_r2_key_medium: renditions.keys.medium,
-      result_r2_key_thumb: renditions.keys.thumb,
-      result_mime: "image/webp",
-      result_width: optionalInt(resultDimensions.width),
-      result_height: optionalInt(resultDimensions.height),
-      result_bytes: renditions.bytes,
-    })
-    await recordImageEditLastUsedModel(env, {
-      userId,
-      operation: "candidate_generation",
-      providerId: "krea",
-      model: providerRow?.model || "",
-    })
-  } catch (error) {
-    await updateCandidateGenerationJobFailed(env, {
-      id: jobId,
-      error: coerceErrorMessage(error) || error?.message || error || "Image generation failed",
-    })
-  }
-}
-
 // Like pollKreaJob but with a much higher poll budget and a 15-minute
 // hard ceiling. Used by the ctx.waitUntil background task; we don't need
 // to keep subrequest usage low here because the background context runs
 // under a separate Worker invocation with its own 50-subrequest quota.
-async function pollKreaJobToCompletion({ baseUrl, apiKey, kreaJobId, env }) {
-  // Tests set ICONOPLASM_KREA_POLL_INTERVAL_MS to a small value (often 0) so
-  // the waitUntil finalize completes in a single tick. We use ?? so an
-  // explicit 0 still means "no sleep" (unlike || which would fall back to
-  // the default).
-  const pollIntervalMs = (() => {
-    const raw = env?.ICONOPLASM_KREA_POLL_INTERVAL_MS
-    if (raw === undefined || raw === null) return 5_000
-    const parsed = Number(raw)
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 5_000
-  })()
-  const perPollTimeoutMs = 10_000
-  const hardCeilingMs = 15 * 60 * 1000
-  const deadline = Date.now() + hardCeilingMs
+async function pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs, pollIntervalMs = 2_000 }) {
+  const deadline = Date.now() + timeoutMs
   let lastPayload = null
   while (Date.now() < deadline) {
     if (pollIntervalMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
     }
     const payload = await fetchJsonWithDeadline(
-      `${baseUrl}/jobs/${encodeURIComponent(kreaJobId)}`,
+      `${baseUrl}/jobs/${encodeURIComponent(jobId)}`,
       { headers: { Authorization: `Bearer ${apiKey}` } },
-      perPollTimeoutMs,
+      10_000,
       "Krea job status timeout",
     )
     lastPayload = payload
@@ -5271,7 +5150,7 @@ async function pollKreaJobToCompletion({ baseUrl, apiKey, kreaJobId, env }) {
     }
   }
   throw new Error(
-    `Krea job did not complete before the ${Math.round(hardCeilingMs / 60000)}m deadline${
+    `Krea job did not complete before the ${Math.round(timeoutMs / 1000)}s deadline${
       lastPayload?.status ? ` (last status: ${lastPayload.status})` : ""
     }`,
   )
@@ -5431,23 +5310,36 @@ function kreaAttachSourceToBody({
   return Promise.resolve(body)
 }
 
-// Kicks off a Krea image edit job synchronously: builds the request body,
-// uploads the source asset to Krea's /assets endpoint when the model needs
-// it, POSTs to the model's create-job endpoint, and returns the Krea
-// job_id plus the polling context. The caller hands the rest off to
-// ctx.waitUntil so the HTTP request returns quickly. The full poll +
-// download + finalize cycle happens in the background.
-async function kickOffKreaImageJob({
+// Synchronous Krea call: build the request body per the model's metadata
+// (requires_width_height / supports_aspect_ratio / requires_krea_asset_upload),
+// upload the source asset to Krea's /assets endpoint when the model needs it,
+// POST to the create-job endpoint, and poll Krea to completion — all in one
+// flow. Returns `{ bytes, contentType }` on success, throws on failure or
+// timeout. Same shape as callOpenAiImageProvider / callGeminiImageProvider /
+// callLumaImageProvider, so the route handler treats Krea the same as the
+// other providers. No ctx.waitUntil, no 202, no D1 job row.
+async function callKreaImageProvider({
   providerRow,
   apiKey,
   prompt,
   sourceUrl = "",
   sourceBytes = null,
   sourceContentType = "image/webp",
+  env = null,
 }) {
   const baseUrl = kreaApiBaseUrl(providerRow)
   const endpointPath = kreaModelEndpointPath(providerRow)
   const timeoutMs = providerRequestTimeoutMs(providerRow)
+  // Tests set ICONOPLASM_KREA_POLL_INTERVAL_MS to a small value (often 0)
+  // so the sync polling doesn't block the test for the real 2s poll
+  // interval. We use ?? so an explicit 0 still means "no sleep" (unlike ||
+  // which would fall back to the default).
+  const pollIntervalMs = (() => {
+    const raw = env?.ICONOPLASM_KREA_POLL_INTERVAL_MS
+    if (raw === undefined || raw === null) return 2_000
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 2_000
+  })()
   const providerDef = imageEditProviderDefinition("krea")
   const kreaModel = resolveImageEditProviderModel(providerRow?.model || "", providerDef)
   const kreaOption = imageEditProviderModelOption(providerDef, kreaModel)
@@ -5536,18 +5428,15 @@ async function kickOffKreaImageJob({
   if (!jobId) {
     // Some Krea endpoints (generation, not edit) can return a fully-completed
     // payload immediately without a job_id. In that case there's nothing to
-    // poll and the caller's background task should download and finalize.
+    // poll and we download + return the image inline.
     const resultUrls = Array.isArray(payload?.result?.urls) ? payload.result.urls : []
     const imageUrl = String(resultUrls[0] || "").trim()
-    if (imageUrl) {
-      const bytes = await downloadProviderImageBytes(imageUrl)
-      return { mode: "immediate", bytes, contentType: "image/webp" }
-    }
+    if (imageUrl) return downloadProviderImageBytes(imageUrl)
     throw new Error(
       "Krea returned no job id: " + (providerErrorMessage(payload, "", 502) || "empty response"),
     )
   }
-  return { mode: "async", kreaJobId: jobId, baseUrl, apiKey }
+  return pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs, pollIntervalMs })
 }
 
 function geminiApiBaseUrl(providerRow) {
@@ -5789,12 +5678,11 @@ async function callLumaImageProvider({
   })
 }
 
-// Synchronous image-edit dispatch. Krea is intentionally NOT here — Krea
-// jobs are always handled async via kickOffKreaImageJob +
-// finishImageEditJobFromKreaAsync in the route handler, because polling
-// a remote provider inside a single HTTP request blows the browser and
-// edge wall time on slow models (60-120s for nano-banana-pro,
-// openai/gpt-image-2, etc.).
+// Synchronous image-edit dispatch. Krea is here alongside OpenAI, Gemini,
+// and Luma — callKreaImageProvider does the asset upload, create-job, and
+// poll-to-completion in a single flow. The route handler treats Krea the
+// same as the other providers: returns 200 with the result, or 502 with
+// a clear error. No ctx.waitUntil, no 202, no D1 job row.
 async function callImageEditProvider(options) {
   const providerId = normalizeImageEditProviderId(options?.providerRow?.provider_id || "")
   if (providerId === "openai") return callOpenAiImageProvider(options)
@@ -5804,8 +5692,13 @@ async function callImageEditProvider(options) {
       ...options,
       sourceUrl: options?.sourceUrl || "",
     })
+  if (providerId === "krea")
+    return callKreaImageProvider({
+      ...options,
+      sourceUrl: options?.sourceUrl || "",
+    })
   throw new Error(
-    `Image edit provider "${providerId || "unknown"}" is not handled by the synchronous dispatcher (Krea is async-only).`,
+    `Image edit provider "${providerId || "unknown"}" is not handled by the synchronous dispatcher.`,
   )
 }
 
@@ -6268,8 +6161,13 @@ async function callCandidateGenerationProvider(options) {
       ...options,
       imageUrls: [],
     })
+  if (providerId === "krea")
+    return callKreaImageProvider({
+      ...options,
+      sourceUrl: "",
+    })
   throw new Error(
-    `Candidate generation provider "${providerId || "unknown"}" is not handled by the synchronous dispatcher (Krea is async-only).`,
+    `Candidate generation provider "${providerId || "unknown"}" is not handled by the synchronous dispatcher.`,
   )
 }
 
@@ -26647,51 +26545,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         const sourceContentType = sourceObject.contentType || sourceRow.mime || "image/webp"
         const sourceUrl = joinUrl(portraitBase(url, env), sourceKey)
 
-        // Krea jobs are always handled async: the synchronous phase uploads
-        // the source asset and creates the Krea job (fast, ~3-5s), then the
-        // rest of the wait is handed off to ctx.waitUntil. The request
-        // returns 202 immediately and the client polls the GET endpoint.
-        // This avoids burning 30-60+ seconds of request wall time polling a
-        // remote provider inside a single HTTP request — which was the
-        // root cause of `ERR_CONNECTION_CLOSED` on slow models like
-        // openai/gpt-image-2 (60s) and google/nano-banana-pro (45-120s).
-        if (providerId === "krea") {
-          const kickoff = await kickOffKreaImageJob({
-            providerRow,
-            apiKey,
-            prompt,
-            sourceUrl,
-            sourceBytes,
-            sourceContentType,
-          })
-          ctx.waitUntil(
-            finishImageEditJobFromKreaAsync(env, url, {
-              jobId,
-              kickoff,
-              sourceKey,
-              sourceRow,
-              assetSha,
-              providerRow,
-              userId,
-              apiKey,
-            }),
-          )
-          const job = await getImageEditJobForUser(env, { id: jobId, userId })
-          return done(
-            "image_edit_jobs_running",
-            json(
-              {
-                ok: true,
-                status: "running",
-                job: mapImageEditJobRow(job, portraitBase(url, env)),
-              },
-              202,
-              { "Cache-Control": "no-store" },
-            ),
-          )
-        }
-
-        // OpenAI / Gemini / Luma: synchronous POST, return 200 with result.
+        // OpenAI / Gemini / Luma / Krea: synchronous POST, return 200 with result.
         const providerResult = await callImageEditProvider({
           providerRow,
           apiKey,
@@ -26699,6 +26553,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           sourceBytes,
           sourceContentType,
           sourceUrl,
+          env,
         })
         const normalizedResult = await normalizeProviderImageToWebp(env, url, providerResult)
         const resultBytes = normalizedResult.bytes
@@ -26979,43 +26834,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       try {
         const apiKey = await decryptImageEditApiKey(env, providerRow)
 
-        // Krea candidate generation is always async — same wall-time problem
-        // as the edit path. Kick off synchronously, hand the rest to
-        // ctx.waitUntil, return 202.
-        if (providerId === "krea") {
-          const kickoff = await kickOffKreaImageJob({
-            providerRow,
-            apiKey,
-            prompt,
-          })
-          ctx.waitUntil(
-            finishCandidateGenerationJobFromKreaAsync(env, url, {
-              jobId,
-              kickoff,
-              providerRow,
-              userId,
-            }),
-          )
-          const job = await getCandidateGenerationJobForUser(env, { id: jobId, userId })
-          return done(
-            "candidate_generation_jobs_running",
-            json(
-              {
-                ok: true,
-                status: "running",
-                job: mapCandidateGenerationJobRow(job, portraitBase(url, env)),
-              },
-              202,
-              { "Cache-Control": "no-store" },
-            ),
-          )
-        }
-
         const providerResult = await callCandidateGenerationProvider({
           providerRow,
           apiKey,
           prompt,
           referenceImages: [],
+          env,
         })
         const normalizedResult = await normalizeProviderImageToWebp(env, url, providerResult)
         const resultBytes = normalizedResult.bytes

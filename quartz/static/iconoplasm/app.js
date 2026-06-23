@@ -5051,8 +5051,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     job: null,
     loading: false,
     encryptionConfigured: false,
-    pollTimer: 0,
-    polledJobId: "",
   }
 
   function renderImageEditDialogMarkup() {
@@ -5366,8 +5364,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     imageEditDialogState.source = source
     imageEditDialogState.job = null
     imageEditDialogState.loading = false
-    cancelImageEditPoll()
-    imageEditDialogState.polledJobId = ""
     var sourceImg = dialog.querySelector("[data-icono-image-edit-source-img]")
     var sourceViewer = dialog.querySelector("[data-icono-image-edit-source-viewer]")
     var result = dialog.querySelector("[data-icono-image-edit-result]")
@@ -5420,11 +5416,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function submitImageEdit() {
     var source = imageEditDialogState.source
     if (!source || !source.symbol || !source.asset_sha256) return
-    // Cancel any in-flight poll from a previous submit. Without this, an
-    // earlier edit's setTimeout chain keeps running and writes stale status
-    // text over the new request's status, and the browser keeps hammering
-    // the GET endpoint for a job the user no longer cares about.
-    cancelImageEditPoll()
     var raw = imageEditSelectedProvider()
     var providerParts = raw.split(":")
     var providerId = providerParts[0] || raw
@@ -5456,18 +5447,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       .then(function (payload) {
         var job = payload && payload.job
         imageEditDialogState.job = job
-        // Krea (and other slow providers) can take longer than the Worker
-        // synchronous wait budget. When that happens the worker returns
-        // { ok: true, status: "running", job: { id, status: "running" } }
-        // with HTTP 202. We then poll the GET endpoint every 2 seconds
-        // until the job is succeeded or failed, surfacing the result in
-        // the same UI. The Edit button stays disabled (loading=true) until
-        // the poll completes; the .finally() below only resets loading for
-        // the sync-success path. The poll also resets loading on its own
-        // terminal states.
-        if (payload && payload.status === "running" && job && job.id) {
-          imageEditSetStatus("Krea is rendering the edit. This can take up to a few minutes...", "")
-          pollImageEditJobUntilDone(job.id, source, { attempts: 0 })
+        if (payload && payload.ok === false && payload.error) {
+          // The route returned 502 with an error string in the body. Show
+          // the error to the user. The Edit button is re-enabled so they
+          // can retry.
+          imageEditDialogState.loading = false
+          imageEditSetStatus(String(payload.error), "error")
+          updateImageEditButtons()
           return
         }
         imageEditDialogState.loading = false
@@ -5508,76 +5494,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (sourceViewer) sourceViewer.hidden = true
     if (result) result.hidden = false
     imageEditSetStatus("Edit ready to publish.", "success")
-  }
-
-  function cancelImageEditPoll() {
-    var state = imageEditDialogState
-    if (state && state.pollTimer) {
-      clearTimeout(state.pollTimer)
-      state.pollTimer = 0
-    }
-  }
-
-  function pollImageEditJobUntilDone(jobId, source, options) {
-    var attempts = (options && options.attempts) || 0
-    var maxAttempts = 240 // ~8 minutes at 2s intervals
-    // Track the active poll so cancelImageEditPoll can stop it when the user
-    // submits a new edit before the old one finishes. If the dialog's job is
-    // replaced by a newer request, the bail check in tick() also stops the
-    // chain immediately rather than racing with the new submit's status text.
-    var state = imageEditDialogState
-    state.polledJobId = jobId
-    function scheduleNext() {
-      state.pollTimer = setTimeout(tick, 2_000)
-    }
-    function tick() {
-      if (imageEditDialogState.polledJobId !== jobId) return
-      attempts += 1
-      fetchAuthedJSON("/api/iconoplasm/image-edit/jobs/" + encodeURIComponent(jobId), {
-        headers: { Accept: "application/json" },
-      })
-        .then(function (payload) {
-          if (imageEditDialogState.polledJobId !== jobId) return
-          var job = payload && payload.job
-          imageEditDialogState.job = job
-          if (!job) throw new Error("Polling returned no job")
-          if (job.status === "succeeded" || job.status === "failed") {
-            showImageEditResult(job, source)
-            imageEditDialogState.loading = false
-            imageEditDialogState.pollTimer = 0
-            updateImageEditButtons()
-            return
-          }
-          if (attempts >= maxAttempts) {
-            imageEditSetStatus(
-              "Krea is still rendering after " +
-                Math.round(maxAttempts * 2) +
-                " seconds. Check the gene page in a minute.",
-              "error",
-            )
-            imageEditDialogState.loading = false
-            imageEditDialogState.pollTimer = 0
-            updateImageEditButtons()
-            return
-          }
-          imageEditSetStatus("Krea is rendering the edit... (" + attempts * 2 + "s elapsed)", "")
-          scheduleNext()
-        })
-        .catch(function (error) {
-          if (imageEditDialogState.polledJobId !== jobId) return
-          imageEditSetStatus(
-            "Lost contact with the edit job: " + String((error && error.message) || error),
-            "error",
-          )
-          imageEditDialogState.loading = false
-          imageEditDialogState.pollTimer = 0
-          updateImageEditButtons()
-        })
-    }
-    // First poll after a short delay so the POST has time to land the job
-    // row on the server side. The first scheduleNext replaces this initial
-    // setTimeout when the request goes async.
-    state.pollTimer = setTimeout(tick, 1_500)
   }
 
   function publishImageEditJob() {
@@ -6043,12 +5959,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           .then(function (payload) {
             var job = payload && payload.job
             requestDirectState.job = job || null
-            if (payload && payload.status === "running" && job && job.id) {
-              setStatus(
-                "Image API is generating the candidate. This can take up to a few minutes...",
-                "",
-              )
-              pollDirectCandidateGeneration(job.id, { attempts: 0 })
+            if (payload && payload.ok === false && payload.error) {
+              setStatus(String(payload.error), "error")
               return
             }
             var url = directResultUrl(job)
@@ -6066,62 +5978,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             requestDirectState.loading = false
             updateDirectGenerationButtons()
           })
-      }
-
-      function pollDirectCandidateGeneration(jobId, options) {
-        var attempts = (options && options.attempts) || 0
-        var maxAttempts = 240 // ~8 minutes at 2s intervals
-        function tick() {
-          attempts += 1
-          fetchAuthedJSON(
-            "/api/iconoplasm/candidate-generation/jobs/" + encodeURIComponent(jobId),
-            { headers: { Accept: "application/json" } },
-          )
-            .then(function (payload) {
-              var job = payload && payload.job
-              if (!job) throw new Error("Polling returned no job")
-              requestDirectState.job = job
-              if (job.status === "succeeded" || job.status === "failed") {
-                var url = directResultUrl(job)
-                if (directImage && url) directImage.src = url
-                setDirectResultEmpty(!url)
-                if (job.status === "failed") {
-                  setStatus(String((job && job.error) || "Candidate generation failed."), "error")
-                } else {
-                  setStatus("Candidate generated.", "success")
-                }
-                requestDirectState.loading = false
-                updateDirectGenerationButtons()
-                return
-              }
-              if (attempts >= maxAttempts) {
-                setStatus(
-                  "Image API is still generating after " +
-                    Math.round(maxAttempts * 2) +
-                    " seconds. Check the gene page in a minute.",
-                  "error",
-                )
-                requestDirectState.loading = false
-                updateDirectGenerationButtons()
-                return
-              }
-              setStatus(
-                "Image API is generating the candidate... (" + attempts * 2 + "s elapsed)",
-                "",
-              )
-              setTimeout(tick, 2_000)
-            })
-            .catch(function (error) {
-              setStatus(
-                "Lost contact with the generation job: " +
-                  String((error && error.message) || error),
-                "error",
-              )
-              requestDirectState.loading = false
-              updateDirectGenerationButtons()
-            })
-        }
-        tick()
       }
 
       function publishDirectCandidateGeneration() {
