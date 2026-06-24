@@ -4476,21 +4476,18 @@ test("synchronous Krea edit stays under the 50-subrequest Worker cap on a slow m
     }
     if (url === "https://api.krea.ai/generate/image/google/nano-banana-pro") {
       createCalls += 1
-      return new Response(
-        JSON.stringify({ job_id: "krea-slow-job-1", status: "queued" }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      )
+      return new Response(JSON.stringify({ job_id: "krea-slow-job-1", status: "queued" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
     }
     if (url === "https://api.krea.ai/jobs/krea-slow-job-1") {
       pollIndex += 1
       if (pollIndex < 30) {
-        return new Response(
-          JSON.stringify({ job_id: "krea-slow-job-1", status: "processing" }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        )
+        return new Response(JSON.stringify({ job_id: "krea-slow-job-1", status: "processing" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
       }
       return new Response(
         JSON.stringify({
@@ -4643,10 +4640,10 @@ test("re-editing the same blot with the same Krea API key skips the /assets uplo
     if (url === "https://api.krea.ai/jobs/krea-reuse-job-1") {
       pollIndex += 1
       if (pollIndex < 2) {
-        return new Response(
-          JSON.stringify({ job_id: "krea-reuse-job-1", status: "processing" }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        )
+        return new Response(JSON.stringify({ job_id: "krea-reuse-job-1", status: "processing" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
       }
       return new Response(
         JSON.stringify({

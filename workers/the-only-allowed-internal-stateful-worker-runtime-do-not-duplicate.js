@@ -1242,7 +1242,7 @@ function truncateDraftHtml(html, request) {
   if (!articleMatch) return html
 
   const fullArticle = articleMatch[0]
-  const closeTag = '</article>'
+  const closeTag = "</article>"
   const articleContent = fullArticle.slice(0, -closeTag.length)
 
   // Strip .draft-locked content entirely from the HTML served to low-access users.
@@ -1264,13 +1264,16 @@ function truncateDraftHtml(html, request) {
   const skipTags = /^<\/(td|th|table|tr|blockquote|figure|details)>/i
   const enterTags = /^<(td|th|table|tr|blockquote|figure|details)\b/i
   for (let i = 0; i < cleanedContent.length; i++) {
-    if (cleanedContent[i] !== '<') continue
-    const tagEnd = cleanedContent.indexOf('>', i)
+    if (cleanedContent[i] !== "<") continue
+    const tagEnd = cleanedContent.indexOf(">", i)
     if (tagEnd < 0) continue
     const tag = cleanedContent.substring(i, tagEnd + 1)
     if (skipTags.test(tag)) depth--
     else if (enterTags.test(tag)) depth++
-    else if (/^<hr\b/i.test(tag) && depth === 0) { hrIdx = i; break }
+    else if (/^<hr\b/i.test(tag) && depth === 0) {
+      hrIdx = i
+      break
+    }
     i = tagEnd
   }
 
@@ -1296,11 +1299,17 @@ function truncateDraftHtml(html, request) {
   for (let i = 0; i < cleanedContent.length; i++) {
     const ch = cleanedContent[i]
     if (ch === "<") inTag = true
-    else if (ch === ">") { inTag = false; continue }
+    else if (ch === ">") {
+      inTag = false
+      continue
+    }
     if (inTag) continue
     if (ch === " " && i > 0 && cleanedContent[i - 1] !== ">" && cleanedContent[i + 1] !== "<") {
       wordCount++
-      if (wordCount >= 100) { truncIdx = i; break }
+      if (wordCount >= 100) {
+        truncIdx = i
+        break
+      }
     }
   }
   if (truncIdx < 0) {
@@ -4040,7 +4049,10 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     const forceReset =
       practiceRestart ||
       (practiceMode && dateOverrideUniprot && existingState?.targetId !== dateOverrideUniprot) ||
-      (!practiceMode && targetSeed && existingState?.targetId && existingState.targetId !== targetSeed.uniprot)
+      (!practiceMode &&
+        targetSeed &&
+        existingState?.targetId &&
+        existingState.targetId !== targetSeed.uniprot)
 
     const state = await ensureSessionForTodayWithState(env, sessionId, targetSeed, existingState, {
       practiceMode,

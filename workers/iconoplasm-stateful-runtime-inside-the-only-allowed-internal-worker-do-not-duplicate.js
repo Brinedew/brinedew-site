@@ -5320,7 +5320,10 @@ async function getCachedKreaAssetUpload(env, { userId, keyFingerprint, sourceSha
   return { imageUrl, assetId }
 }
 
-async function setCachedKreaAssetUpload(env, { userId, keyFingerprint, sourceSha, imageUrl, assetId }) {
+async function setCachedKreaAssetUpload(
+  env,
+  { userId, keyFingerprint, sourceSha, imageUrl, assetId },
+) {
   if (!env?.KV) return
   if (!imageUrl && !assetId) return
   const key = kreaAssetUploadCacheKvKey(userId, keyFingerprint, sourceSha)
@@ -5974,8 +5977,7 @@ async function writeImageEditRenditions(env, url, { assetSha256, bytes, contentT
   if (!assetSha) throw new Error("Missing edited asset SHA")
   const sourceBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || [])
   if (!sourceBytes.byteLength) throw new Error("Image edit result bytes are empty")
-  const sourceContentType =
-    sanitizeText(contentType || "", 80) || "application/octet-stream"
+  const sourceContentType = sanitizeText(contentType || "", 80) || "application/octet-stream"
   const keys = {
     full: r2PortraitKey(assetSha, "full"),
     medium: r2PortraitKey(assetSha, "medium"),
