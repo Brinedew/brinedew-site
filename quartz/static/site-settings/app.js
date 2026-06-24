@@ -297,9 +297,7 @@ import {
       '"><button class="site-settings-inline-btn" id="site-settings-image-api-save" type="button">Save API</button></div></label>' +
       '<div class="site-settings-plain-value" id="site-settings-image-api-status">' +
       esc(
-        savedProvider && savedProvider.configured
-          ? "Saved."
-          : "No key saved for this provider.",
+        savedProvider && savedProvider.configured ? "Saved." : "No key saved for this provider.",
       ) +
       "</div>" +
       "</div>" +
@@ -702,8 +700,7 @@ import {
         imageApiSaveBtn.disabled = true
         if (imageApiStatusEl) imageApiStatusEl.textContent = "Saving API key."
         var provider = imageProviderById(imageApiProviderEl.value)
-        var endpointUrl =
-          (provider && provider.default_endpoint_url) || ""
+        var endpointUrl = (provider && provider.default_endpoint_url) || ""
         if (!endpointUrl) {
           if (imageApiStatusEl) imageApiStatusEl.textContent = "Unknown provider."
           imageApiSaveBtn.disabled = false

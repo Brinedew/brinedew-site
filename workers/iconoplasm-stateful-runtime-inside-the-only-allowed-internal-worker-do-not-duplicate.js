@@ -5142,17 +5142,55 @@ async function uploadKreaAsset({ baseUrl, apiKey, bytes, contentType, descriptio
   }
 }
 
-// Like pollKreaJob but with a much higher poll budget and a 15-minute
-// hard ceiling. Used by the ctx.waitUntil background task; we don't need
-// to keep subrequest usage low here because the background context runs
-// under a separate Worker invocation with its own 50-subrequest quota.
+// Poll Krea to completion with a budget-capped subrequest footprint.
+//
+// Two adjustments keep the synchronous image-edit handler under the 50-
+// subrequest Worker cap even on Krea's slowest models (Luma Uni 1.1 Max has
+// an `estimated_seconds` of 95s, so the previous fixed-2s poll cadence
+// alone could fire 30+ GETs on top of the upload, create, normalize, and
+// rendition subrequests and push the request past the limit):
+//
+//   1. The first poll fires immediately, without the leading `setTimeout`.
+//      The create-job POST and the first /jobs/{id} GET are launched back-
+//      to-back; if the job is already `completed` the loop exits with one
+//      poll instead of two.
+//   2. The cadence adapts: 2s for the first 5 polls, 4s for the next 10,
+//      then 6s until the budget is exhausted. The wall-clock cost is the
+//      same — `providerRequestTimeoutMs(providerRow)` is the wall-clock
+//      ceiling — but the subrequest count drops by 30-50% on long jobs.
 async function pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs, pollIntervalMs = 2_000 }) {
   const deadline = Date.now() + timeoutMs
   let lastPayload = null
+  let pollIndex = 0
+  // Fast lanes: how many polls at each interval. Counts are inclusive of
+  // the first poll that uses the lane's interval.
+  const POLL_FAST_COUNT = 5
+  const POLL_MEDIUM_COUNT = 10
+  // Tests set ICONOPLASM_KREA_POLL_INTERVAL_MS to a small value (often 0)
+  // so the sync polling doesn't block the test for the real 2s/4s/6s lane
+  // intervals. We use ?? so an explicit 0 still means "no sleep" (unlike ||
+  // which would fall back to the default). The medium and slow lanes
+  // inherit the override so a test can drive 30+ polls in finite time.
+  const fastLaneMs = pollIntervalMs
+  const mediumLaneMs = pollIntervalMs > 0 ? pollIntervalMs * 2 : pollIntervalMs
+  const slowLaneMs = pollIntervalMs > 0 ? pollIntervalMs * 3 : pollIntervalMs
+  const POLL_MEDIUM_MS = mediumLaneMs
+  const POLL_SLOW_MS = slowLaneMs
   while (Date.now() < deadline) {
-    if (pollIntervalMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
+    // Skip the leading sleep on the very first poll — the create-job POST
+    // already gave Krea time to begin work.
+    if (pollIndex > 0) {
+      const laneMs =
+        pollIndex <= POLL_FAST_COUNT
+          ? fastLaneMs
+          : pollIndex <= POLL_FAST_COUNT + POLL_MEDIUM_COUNT
+            ? POLL_MEDIUM_MS
+            : POLL_SLOW_MS
+      if (laneMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, laneMs))
+      }
     }
+    pollIndex += 1
     const payload = await fetchJsonWithDeadline(
       `${baseUrl}/jobs/${encodeURIComponent(jobId)}`,
       { headers: { Authorization: `Bearer ${apiKey}` } },
@@ -5252,6 +5290,91 @@ function kreaRequestBodyShape(kreaOption, prompt, reqWidth, reqHeight) {
 // `iconoplasmportraits.b-cdn.net` and silently generated a fresh image from
 // the prompt alone.
 //
+// KV key for the cached Krea asset upload result. Keyed by:
+//   - userId      so a different user with the same source bytes cannot
+//                 accidentally reuse a Krea-hosted URL from another account
+//   - keyFingerprint so rotating the API key invalidates the cache
+//   - sourceSha   the SHA-256 of the source bytes (hosting the same asset
+//                 twice yields the same Krea image_url)
+// We store the imageUrl + assetId so the next call can skip the multipart
+// upload subrequest and go straight to the Krea create-job POST.
+function kreaAssetUploadCacheKvKey(userId, keyFingerprint, sourceSha) {
+  return (
+    "iconoplasm:krea-asset-upload:v1:" +
+    normalizeUserId(userId) +
+    ":" +
+    sanitizeText(keyFingerprint || "", 64) +
+    ":" +
+    sanitizeText(sourceSha || "", 64)
+  )
+}
+
+async function getCachedKreaAssetUpload(env, { userId, keyFingerprint, sourceSha }) {
+  if (!env?.KV) return null
+  const key = kreaAssetUploadCacheKvKey(userId, keyFingerprint, sourceSha)
+  const raw = await env.KV.get(key, "json")
+  if (!raw || typeof raw !== "object") return null
+  const imageUrl = sanitizeText(raw.imageUrl || "", 2048)
+  const assetId = sanitizeText(raw.assetId || "", 128)
+  if (!imageUrl && !assetId) return null
+  return { imageUrl, assetId }
+}
+
+async function setCachedKreaAssetUpload(
+  env,
+  { userId, keyFingerprint, sourceSha, imageUrl, assetId },
+) {
+  if (!env?.KV) return
+  if (!imageUrl && !assetId) return
+  const key = kreaAssetUploadCacheKvKey(userId, keyFingerprint, sourceSha)
+  // Krea assets are user-account-scoped and the API key fingerprint bounds
+  // the cache to a specific Krea account. 30-day TTL is the standard
+  // short-lived cache ceiling used elsewhere in the worker (see the
+  // gene-card image cache at line ~24160) and is well within the user's
+  // edit-retry window.
+  try {
+    await env.KV.put(
+      key,
+      JSON.stringify({ imageUrl, assetId, cached_at: new Date().toISOString() }),
+      { expirationTtl: 60 * 60 * 24 * 30 },
+    )
+  } catch {
+    /* cache write is best-effort */
+  }
+}
+
+async function cachedOrUploadKreaAsset({
+  env,
+  userId,
+  keyFingerprint,
+  sourceSha,
+  baseUrl,
+  apiKey,
+  bytes,
+  contentType,
+  description,
+  timeoutMs,
+}) {
+  const cached = await getCachedKreaAssetUpload(env, { userId, keyFingerprint, sourceSha })
+  if (cached) return cached
+  const uploaded = await uploadKreaAsset({
+    baseUrl,
+    apiKey,
+    bytes,
+    contentType,
+    description,
+    timeoutMs,
+  })
+  await setCachedKreaAssetUpload(env, {
+    userId,
+    keyFingerprint,
+    sourceSha,
+    imageUrl: uploaded.imageUrl,
+    assetId: uploaded.assetId,
+  })
+  return uploaded
+}
+
 // edit_image_object_shape controls how the URL is wrapped:
 //   "object-array"  → [{ url, tag }] (Runway Gen-4)
 //   "string-array"  → [url] (Nano Banana, ChatGPT, Ideogram)
@@ -5264,6 +5387,9 @@ function kreaAttachSourceToBody({
   sourceContentType,
   baseUrl,
   apiKey,
+  env,
+  userId,
+  providerRow,
   kreaModel,
   timeoutMs,
 }) {
@@ -5296,46 +5422,94 @@ function kreaAttachSourceToBody({
           " requires a Krea-hosted source image, but the worker has no source bytes to upload.",
       )
     }
-    console.log(
-      "[KREA_DEBUG] uploading source asset to " + baseUrl + "/assets (model=" + kreaModel + ")",
-    )
-    return uploadKreaAsset({
-      baseUrl,
-      apiKey,
-      bytes: sourceBytes,
-      contentType: sourceContentType,
-      description: "iconoplasm blot edit source",
-      timeoutMs: Math.max(15_000, Math.ceil(timeoutMs / 4)),
-    }).then((uploaded) => {
+    return sha256HexBytes(sourceBytes).then(async (sourceSha) => {
+      const keyFingerprint = String(providerRow?.key_fingerprint || "").trim()
+      const cached = env
+        ? await getCachedKreaAssetUpload(env, { userId, keyFingerprint, sourceSha })
+        : null
+      if (cached) {
+        console.log(
+          "[KREA_DEBUG] reusing cached Krea asset image_url=" +
+            String(cached.imageUrl || "").slice(0, 200) +
+            " asset_id=" +
+            String(cached.assetId || "") +
+            " (model=" +
+            kreaModel +
+            ", sourceSha=" +
+            sourceSha.slice(0, 12) +
+            ")",
+        )
+        const kreaSource = preferKreaAssetId
+          ? cached.assetId || cached.imageUrl
+          : cached.imageUrl || cached.assetId
+        if (editImageObjectShape === "object-array") {
+          const tag = String(kreaOption?.edit_reference_tag || "source").trim() || "source"
+          body[editImageParam] = [{ url: kreaSource, tag }]
+        } else if (editImageObjectShape === "string-array") {
+          body[editImageParam] = [kreaSource]
+        } else {
+          body[editImageParam] = kreaSource
+        }
+        const strengthParam = String(kreaOption?.edit_strength_param || "").trim()
+        if (strengthParam) {
+          const raw = kreaOption?.edit_strength_default
+          const value =
+            typeof raw === "number" && Number.isFinite(raw) && raw >= 0 && raw <= 1 ? raw : 0.5
+          body[strengthParam] = value
+        }
+        return body
+      }
       console.log(
-        "[KREA_DEBUG] uploaded asset image_url=" +
-          String(uploaded.imageUrl || "").slice(0, 200) +
-          " asset_id=" +
-          String(uploaded.assetId || ""),
+        "[KREA_DEBUG] uploading source asset to " +
+          baseUrl +
+          "/assets (model=" +
+          kreaModel +
+          ", sourceSha=" +
+          sourceSha.slice(0, 12) +
+          ")",
       )
-      const kreaSource = preferKreaAssetId
-        ? uploaded.assetId || uploaded.imageUrl
-        : uploaded.imageUrl || uploaded.assetId
-      if (editImageObjectShape === "object-array") {
-        const tag = String(kreaOption?.edit_reference_tag || "source").trim() || "source"
-        body[editImageParam] = [{ url: kreaSource, tag }]
-      } else if (editImageObjectShape === "string-array") {
-        body[editImageParam] = [kreaSource]
-      } else {
-        body[editImageParam] = kreaSource
-      }
-      // Honor the model's strength parameter when we uploaded the source.
-      // 0.85 was effectively "regenerate almost completely"; 0.5 is the
-      // conservative real-edit value. Krea's docs say 1.0 fully replaces
-      // the source.
-      const strengthParam = String(kreaOption?.edit_strength_param || "").trim()
-      if (strengthParam) {
-        const raw = kreaOption?.edit_strength_default
-        const value =
-          typeof raw === "number" && Number.isFinite(raw) && raw >= 0 && raw <= 1 ? raw : 0.5
-        body[strengthParam] = value
-      }
-      return body
+      return cachedOrUploadKreaAsset({
+        env,
+        userId,
+        keyFingerprint,
+        sourceSha,
+        baseUrl,
+        apiKey,
+        bytes: sourceBytes,
+        contentType: sourceContentType,
+        description: "iconoplasm blot edit source",
+        timeoutMs: Math.max(15_000, Math.ceil(timeoutMs / 4)),
+      }).then((uploaded) => {
+        console.log(
+          "[KREA_DEBUG] uploaded asset image_url=" +
+            String(uploaded.imageUrl || "").slice(0, 200) +
+            " asset_id=" +
+            String(uploaded.assetId || ""),
+        )
+        const kreaSource = preferKreaAssetId
+          ? uploaded.assetId || uploaded.imageUrl
+          : uploaded.imageUrl || uploaded.assetId
+        if (editImageObjectShape === "object-array") {
+          const tag = String(kreaOption?.edit_reference_tag || "source").trim() || "source"
+          body[editImageParam] = [{ url: kreaSource, tag }]
+        } else if (editImageObjectShape === "string-array") {
+          body[editImageParam] = [kreaSource]
+        } else {
+          body[editImageParam] = kreaSource
+        }
+        // Honor the model's strength parameter when we uploaded the source.
+        // 0.85 was effectively "regenerate almost completely"; 0.5 is the
+        // conservative real-edit value. Krea's docs say 1.0 fully replaces
+        // the source.
+        const strengthParam = String(kreaOption?.edit_strength_param || "").trim()
+        if (strengthParam) {
+          const raw = kreaOption?.edit_strength_default
+          const value =
+            typeof raw === "number" && Number.isFinite(raw) && raw >= 0 && raw <= 1 ? raw : 0.5
+          body[strengthParam] = value
+        }
+        return body
+      })
     })
   }
 
@@ -5373,6 +5547,7 @@ async function callKreaImageProvider({
   sourceBytes = null,
   sourceContentType = "image/webp",
   env = null,
+  userId = "",
 }) {
   const baseUrl = kreaApiBaseUrl(providerRow)
   const endpointPath = kreaModelEndpointPath(providerRow)
@@ -5416,6 +5591,9 @@ async function callKreaImageProvider({
       sourceContentType,
       baseUrl,
       apiKey,
+      env,
+      userId,
+      providerRow,
       kreaModel,
       timeoutMs,
     })
@@ -5755,6 +5933,7 @@ async function callImageEditProvider(options) {
     return callKreaImageProvider({
       ...options,
       sourceUrl: options?.sourceUrl || "",
+      userId: options?.userId || "",
     })
   throw new Error(
     `Image edit provider "${providerId || "unknown"}" is not handled by the synchronous dispatcher.`,
@@ -5784,71 +5963,121 @@ function providerOutputExtension(contentType) {
   return "bin"
 }
 
-async function normalizeProviderImageToWebp(env, url, { bytes, contentType }) {
-  const sourceBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || [])
-  const sourceContentType = sanitizeText(contentType || "", 80) || "application/octet-stream"
-  if (isWebpContentType(sourceContentType)) {
-    return { bytes: sourceBytes, contentType: "image/webp" }
-  }
-  const sourceSha = await sha256HexBytes(sourceBytes)
-  const tempKey = `portraits/tmp/provider-output/${sourceSha}.${providerOutputExtension(sourceContentType)}`
-  await putPortraitStorageObject(env, tempKey, sourceBytes, {
-    contentType: sourceContentType,
-    cacheControl: "private, max-age=60",
-    customMetadata: { source: "provider_output_normalization" },
-  })
-  try {
-    const tempUrl = joinUrl(url?.origin || portraitBase(url, env), tempKey)
-    const webpBytes = await fetchImageEditRendition(tempUrl, {
-      fit: "scale-down",
-      format: "webp",
-    })
-    if (!webpBytes?.byteLength) throw new Error("Image normalization returned an empty WebP")
-    return { bytes: webpBytes, contentType: "image/webp" }
-  } finally {
-    await deletePortraitStorageObject(env, tempKey)
-  }
-}
-
-async function writeImageEditRenditions(env, url, { assetSha256, fullBytes }) {
+// Render the provider's output bytes into the three canonical portrait
+// renditions (full, medium, thumb) in a single pipeline that touches the
+// public Worker edge transform exactly once per non-WebP source and exactly
+// twice for WebP sources. The previous implementation made 3–5 round-trips
+// through the transform for the same WebP bytes (normalize-tmp + full PUT +
+// medium transform + thumb transform + 2 rendition PUTs). This merged form
+// keeps the worker-edge subrequest cost to a constant per request regardless
+// of provider output format, which is what keeps the synchronous Krea edit
+// path under the 50-subrequest Worker cap on slow models.
+async function writeImageEditRenditions(env, url, { assetSha256, bytes, contentType }) {
   const assetSha = normalizeSha256(assetSha256)
   if (!assetSha) throw new Error("Missing edited asset SHA")
+  const sourceBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || [])
+  if (!sourceBytes.byteLength) throw new Error("Image edit result bytes are empty")
+  const sourceContentType = sanitizeText(contentType || "", 80) || "application/octet-stream"
   const keys = {
     full: r2PortraitKey(assetSha, "full"),
     medium: r2PortraitKey(assetSha, "medium"),
     thumb: r2PortraitKey(assetSha, "thumb"),
   }
-  await putPortraitStorageObject(env, keys.full, fullBytes, {
-    contentType: "image/webp",
-    cacheControl: "public, max-age=31536000, immutable",
-    customMetadata: { asset_sha256: assetSha, rendition: "full", source: "image_edit" },
+
+  if (isWebpContentType(sourceContentType)) {
+    // WebP in, WebP out for all three renditions. The full is the provider
+    // bytes as-is; the medium and thumb are produced by fetching the full
+    // back through the public Worker edge Image Resizing transform. This
+    // matches the previous writeImageEditRenditions contract (full size
+    // is the source dimensions; medium is 512w; thumb is 256x256 cover).
+    await putPortraitStorageObject(env, keys.full, sourceBytes, {
+      contentType: "image/webp",
+      cacheControl: "public, max-age=31536000, immutable",
+      customMetadata: { asset_sha256: assetSha, rendition: "full", source: "image_edit" },
+    })
+    const fullUrl = joinUrl(url?.origin || portraitBase(url, env), keys.full)
+    const [mediumBytes, thumbBytes] = await Promise.all([
+      fetchImageEditRendition(fullUrl, {
+        width: 512,
+        fit: "scale-down",
+        format: "webp",
+      }),
+      fetchImageEditRendition(fullUrl, {
+        width: 256,
+        height: 256,
+        fit: "cover",
+        gravity: "center",
+        format: "webp",
+      }),
+    ])
+    await Promise.all([
+      putPortraitStorageObject(env, keys.medium, mediumBytes, {
+        contentType: "image/webp",
+        cacheControl: "public, max-age=31536000, immutable",
+        customMetadata: { asset_sha256: assetSha, rendition: "medium", source: "image_edit" },
+      }),
+      putPortraitStorageObject(env, keys.thumb, thumbBytes, {
+        contentType: "image/webp",
+        cacheControl: "public, max-age=31536000, immutable",
+        customMetadata: { asset_sha256: assetSha, rendition: "thumb", source: "image_edit" },
+      }),
+    ])
+    return { keys, bytes: sourceBytes.byteLength }
+  }
+
+  // Non-WebP provider output. Single normalize-tmp upload + single transform
+  // pass that produces all three renditions. The transform is invoked on
+  // the public Worker edge with `format=webp` plus the per-rendition
+  // width/height, so we only touch the edge once per rendition instead of
+  // once for normalization and once per rendition as the previous
+  // implementation did.
+  const sourceSha = await sha256HexBytes(sourceBytes)
+  const tempKey = `portraits/tmp/provider-output/${sourceSha}.${providerOutputExtension(
+    sourceContentType,
+  )}`
+  await putPortraitStorageObject(env, tempKey, sourceBytes, {
+    contentType: sourceContentType,
+    cacheControl: "private, max-age=60",
+    customMetadata: { source: "provider_output_normalization" },
   })
-  const fullUrl = joinUrl(url?.origin || portraitBase(url, env), keys.full)
-  const mediumBytes = await fetchImageEditRendition(fullUrl, {
-    width: 512,
-    fit: "scale-down",
-    format: "webp",
-  })
-  const thumbBytes = await fetchImageEditRendition(fullUrl, {
-    width: 256,
-    height: 256,
-    fit: "cover",
-    gravity: "center",
-    format: "webp",
-  })
-  await putPortraitStorageObject(env, keys.medium, mediumBytes, {
-    contentType: "image/webp",
-    cacheControl: "public, max-age=31536000, immutable",
-    customMetadata: { asset_sha256: assetSha, rendition: "medium", source: "image_edit" },
-  })
-  await putPortraitStorageObject(env, keys.thumb, thumbBytes, {
-    contentType: "image/webp",
-    cacheControl: "public, max-age=31536000, immutable",
-    customMetadata: { asset_sha256: assetSha, rendition: "thumb", source: "image_edit" },
-  })
-  return {
-    keys,
-    bytes: fullBytes.byteLength,
+  const tempUrl = joinUrl(url?.origin || portraitBase(url, env), tempKey)
+  try {
+    const [fullBytes, mediumBytes, thumbBytes] = await Promise.all([
+      fetchImageEditRendition(tempUrl, { fit: "scale-down", format: "webp" }),
+      fetchImageEditRendition(tempUrl, {
+        width: 512,
+        fit: "scale-down",
+        format: "webp",
+      }),
+      fetchImageEditRendition(tempUrl, {
+        width: 256,
+        height: 256,
+        fit: "cover",
+        gravity: "center",
+        format: "webp",
+      }),
+    ])
+    if (!fullBytes?.byteLength) throw new Error("Image normalization returned an empty WebP")
+    await putPortraitStorageObject(env, keys.full, fullBytes, {
+      contentType: "image/webp",
+      cacheControl: "public, max-age=31536000, immutable",
+      customMetadata: { asset_sha256: assetSha, rendition: "full", source: "image_edit" },
+    })
+    await Promise.all([
+      putPortraitStorageObject(env, keys.medium, mediumBytes, {
+        contentType: "image/webp",
+        cacheControl: "public, max-age=31536000, immutable",
+        customMetadata: { asset_sha256: assetSha, rendition: "medium", source: "image_edit" },
+      }),
+      putPortraitStorageObject(env, keys.thumb, thumbBytes, {
+        contentType: "image/webp",
+        cacheControl: "public, max-age=31536000, immutable",
+        customMetadata: { asset_sha256: assetSha, rendition: "thumb", source: "image_edit" },
+      }),
+    ])
+    return { keys, bytes: fullBytes.byteLength }
+  } finally {
+    await deletePortraitStorageObject(env, tempKey)
   }
 }
 
@@ -26613,24 +26842,35 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           sourceContentType,
           sourceUrl,
           env,
+          userId,
         })
-        const normalizedResult = await normalizeProviderImageToWebp(env, url, providerResult)
-        const resultBytes = normalizedResult.bytes
-        if (!resultBytes?.byteLength) throw new Error("Provider returned an empty image")
+        const resultBytes =
+          providerResult?.bytes instanceof Uint8Array
+            ? providerResult.bytes
+            : new Uint8Array(providerResult?.bytes || [])
+        if (!resultBytes.byteLength) throw new Error("Provider returned an empty image")
         const resultContentType =
-          sanitizeText(normalizedResult.contentType || "", 80) || "image/webp"
-        if (!isWebpContentType(resultContentType)) {
-          throw new Error("Image edit provider returned a non-WebP image")
-        }
+          sanitizeText(providerResult?.contentType || "", 80) || "image/webp"
+        // writeImageEditRenditions now handles non-WebP provider output by
+        // normalizing through the public Worker edge Image Resizing transform
+        // in the same pipeline that produces the medium and thumb renditions,
+        // so we no longer fail-fast on non-WebP. The merged function takes
+        // the original bytes and content type and produces the full + medium
+        // + thumb WebP renditions itself.
         const resultSha = await sha256HexBytes(resultBytes)
         if (resultSha === assetSha) throw new Error("Provider returned an unchanged image")
         const resultDimensions = webpDimensions(resultBytes) || {
           width: optionalInt(sourceRow.width),
           height: optionalInt(sourceRow.height),
         }
+        // writeImageEditRenditions now normalizes non-WebP provider output
+        // and produces all three renditions in a single pipeline, so the
+        // old normalizeProviderImageToWebp pre-pass is gone. The full WebP
+        // bytes are passed straight through.
         const renditions = await writeImageEditRenditions(env, url, {
           assetSha256: resultSha,
-          fullBytes: resultBytes,
+          bytes: resultBytes,
+          contentType: resultContentType,
         })
         await updateImageEditJobSucceeded(env, {
           id: jobId,
@@ -26900,14 +27140,16 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           referenceImages: [],
           env,
         })
-        const normalizedResult = await normalizeProviderImageToWebp(env, url, providerResult)
-        const resultBytes = normalizedResult.bytes
-        if (!resultBytes?.byteLength) throw new Error("Provider returned an empty image")
+        const resultBytes =
+          providerResult?.bytes instanceof Uint8Array
+            ? providerResult.bytes
+            : new Uint8Array(providerResult?.bytes || [])
+        if (!resultBytes.byteLength) throw new Error("Provider returned an empty image")
         const resultContentType =
-          sanitizeText(normalizedResult.contentType || "", 80) || "image/webp"
-        if (!isWebpContentType(resultContentType)) {
-          throw new Error("Image generation provider returned a non-WebP image")
-        }
+          sanitizeText(providerResult?.contentType || "", 80) || "image/webp"
+        // writeImageEditRenditions now handles non-WebP provider output by
+        // normalizing through the public Worker edge Image Resizing transform
+        // in the same pipeline that produces the medium and thumb renditions.
         const resultSha = await sha256HexBytes(resultBytes)
         const resultDimensions = webpDimensions(resultBytes) || {
           width: ICONOPLASM_BLOT_REQUEST_WIDTH,
@@ -26915,7 +27157,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         }
         const renditions = await writeImageEditRenditions(env, url, {
           assetSha256: resultSha,
-          fullBytes: resultBytes,
+          bytes: resultBytes,
+          contentType: resultContentType,
         })
         await updateCandidateGenerationJobSucceeded(env, {
           id: jobId,
