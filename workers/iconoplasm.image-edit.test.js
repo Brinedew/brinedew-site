@@ -4434,3 +4434,303 @@ test("Krea 4xx from the create-job POST surfaces 502 with the Krea error text", 
     globalThis.fetch = originalFetch
   }
 })
+
+// Subrequest-budget regression. The synchronous Krea edit handler runs
+// inside one Worker invocation, and Workers default to a 50-subrequest
+// per-invocation cap on the free plan. A Krea edit on a slow model can
+// legitimately take 60-120 seconds; if the polling cadence is fixed at 2s
+// the poll loop alone fires 30-60 GET /jobs/{id} requests before the
+// rendition pipeline runs. This test pins the per-invocation subrequest
+// count for a worst-case 60s Krea edit (the nano-banana-pro slow path
+// that B-574 verified live) and asserts the merged rendition pipeline +
+// adaptive poll cadence stay under the 50-subrequest cap with headroom.
+test("synchronous Krea edit stays under the 50-subrequest Worker cap on a slow model", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  // Default poll interval is 0 (set in buildEnv) so the test runs in
+  // finite time, but the first poll must still fire without a sleep. The
+  // adaptive cadence kicks in for the second+ polls; for the test we
+  // simulate ~60 seconds of Krea work by returning "processing" for the
+  // first 29 polls, then "completed" on the 30th. That is the same
+  // number of polls a real 60s job would fire (30 polls × 2s = 60s).
+  let pollIndex = 0
+  let createCalls = 0
+  let assetUploadCalls = 0
+  const fetchUrls = []
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    fetchUrls.push(url)
+    if (url === "https://api.krea.ai/assets") {
+      assetUploadCalls += 1
+      return new Response(
+        JSON.stringify({
+          id: "krea-asset-slow-1",
+          image_url: "https://krea.example/uploaded/slow-source.png",
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      )
+    }
+    if (url === "https://api.krea.ai/generate/image/google/nano-banana-pro") {
+      createCalls += 1
+      return new Response(
+        JSON.stringify({ job_id: "krea-slow-job-1", status: "queued" }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      )
+    }
+    if (url === "https://api.krea.ai/jobs/krea-slow-job-1") {
+      pollIndex += 1
+      if (pollIndex < 30) {
+        return new Response(
+          JSON.stringify({ job_id: "krea-slow-job-1", status: "processing" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        )
+      }
+      return new Response(
+        JSON.stringify({
+          job_id: "krea-slow-job-1",
+          status: "completed",
+          result: { urls: ["https://krea.example/slow-result.png"] },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://krea.example/slow-result.png") {
+      // Non-WebP return so the merged normalize+writeImageEditRenditions
+      // path runs and we exercise the (was-3-subrequest) tmp round-trip
+      // saving. The merged pipeline produces full/medium/thumb WebP in
+      // one normalize + one transform pass.
+      return new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      })
+    }
+    if (init?.cf?.image?.format === "webp") {
+      // Both the full normalize and the medium/thumb transforms come
+      // through the worker-edge Image Resizing transform; return WebP
+      // bytes regardless of width to keep the test cheap.
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "google/nano-banana-pro",
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+    const { create, created } = await createKreaImageEditJobAndAwait({
+      env,
+      ctx: { waitUntil() {} },
+      body: {
+        provider_id: "krea",
+        model: "google/nano-banana-pro",
+        source_gene_symbol: "A1BG",
+        source_asset_sha256: SOURCE_SHA,
+        adjustments: { remove_ai_generation_errors: true },
+      },
+    })
+    assert.equal(create.status, 200, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "succeeded")
+    // The synchronous flow must not blow the 50-subrequest cap. Headroom
+    // is intentional: a 60s Krea job that returned WebP would cost 25
+    // subrequests; non-WebP + tmp round-trip is the most expensive shape
+    // the live path takes, and it must still be under 50.
+    assert.ok(
+      fetchUrls.length < 50,
+      "Subrequest count " +
+        fetchUrls.length +
+        " is at or above the 50-subrequest Worker cap. URLs:\n" +
+        fetchUrls.join("\n"),
+    )
+    assert.equal(assetUploadCalls, 1, "first edit must call Krea /assets")
+    assert.equal(createCalls, 1, "must call Krea create-job once")
+    // Confirm the merged normalize+writeImageEditRenditions path: with a
+    // PNG return we expect the tmp normalize file to be PUT and DELETEd
+    // exactly once (not 3 times as the previous implementation did).
+    const normalizePuts = env.ICONOPLASM_PORTRAITS.puts.filter((p) =>
+      String(p.key || "").startsWith("portraits/tmp/provider-output/"),
+    )
+    const normalizeDeletes = env.ICONOPLASM_PORTRAITS.deletes.filter((k) =>
+      String(k || "").startsWith("portraits/tmp/provider-output/"),
+    )
+    assert.equal(
+      normalizePuts.length,
+      1,
+      "merged normalize+writeImageEditRenditions must PUT the tmp source exactly once",
+    )
+    assert.equal(
+      normalizeDeletes.length,
+      1,
+      "merged normalize+writeImageEditRenditions must DELETE the tmp source exactly once",
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+// Subrequest-budget regression for the re-edit KV cache. Editing the
+// same blot twice with the same provider API key must skip the Krea
+// /assets multipart upload on the second call, saving one subrequest.
+// The cache is keyed by (userId, keyFingerprint, sourceSha) and is the
+// load-bearing change that keeps the synchronous edit under the 50-
+// subrequest cap for users who iterate on the same source image.
+test("re-editing the same blot with the same Krea API key skips the /assets upload on the second call", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  const kvStore = new Map()
+  env.KV = {
+    async get(k, type) {
+      const v = kvStore.get(k)
+      if (v == null) return null
+      if (type === "json") {
+        try {
+          return JSON.parse(v)
+        } catch {
+          return null
+        }
+      }
+      return v
+    },
+    async put(k, v) {
+      kvStore.set(k, v)
+    },
+    async delete(k) {
+      kvStore.delete(k)
+    },
+  }
+  let assetUploadCalls = 0
+  let pollIndex = 0
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    if (url === "https://api.krea.ai/assets") {
+      assetUploadCalls += 1
+      return new Response(
+        JSON.stringify({
+          id: "krea-asset-reuse-1",
+          image_url: "https://krea.example/uploaded/reuse.png",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://api.krea.ai/generate/image/bfl/flux-1-dev") {
+      return new Response(JSON.stringify({ job_id: "krea-reuse-job-1", status: "queued" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (url === "https://api.krea.ai/jobs/krea-reuse-job-1") {
+      pollIndex += 1
+      if (pollIndex < 2) {
+        return new Response(
+          JSON.stringify({ job_id: "krea-reuse-job-1", status: "processing" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        )
+      }
+      return new Response(
+        JSON.stringify({
+          job_id: "krea-reuse-job-1",
+          status: "completed",
+          result: { urls: ["https://krea.example/reuse-result.png"] },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://krea.example/reuse-result.png") {
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.format === "webp") {
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+  try {
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            provider_id: "krea",
+            api_key: "krea-test-secret",
+            model: "bfl/flux-1-dev",
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+    const first = await createKreaImageEditJobAndAwait({
+      env,
+      ctx: { waitUntil() {} },
+      body: {
+        provider_id: "krea",
+        model: "bfl/flux-1-dev",
+        source_gene_symbol: "A1BG",
+        source_asset_sha256: SOURCE_SHA,
+        adjustments: { remove_ai_generation_errors: true },
+      },
+    })
+    assert.equal(first.create.status, 200, "first edit status: " + JSON.stringify(first.created))
+    assert.equal(assetUploadCalls, 1, "first edit must call Krea /assets exactly once")
+    // The asset upload cache must have been populated for the (user, key,
+    // source-sha) tuple after the first edit.
+    const cacheKeys = [...kvStore.keys()].filter((k) =>
+      k.startsWith("iconoplasm:krea-asset-upload:v1:"),
+    )
+    assert.equal(
+      cacheKeys.length,
+      1,
+      "first edit must populate the Krea asset upload cache exactly once",
+    )
+    // Re-edit the same blot with the same model. The /assets upload must
+    // be served from the KV cache and not re-call Krea.
+    const second = await createKreaImageEditJobAndAwait({
+      env,
+      ctx: { waitUntil() {} },
+      body: {
+        provider_id: "krea",
+        model: "bfl/flux-1-dev",
+        source_gene_symbol: "A1BG",
+        source_asset_sha256: SOURCE_SHA,
+        adjustments: { remove_ai_generation_errors: true },
+      },
+    })
+    assert.equal(second.create.status, 200, "second edit status: " + JSON.stringify(second.created))
+    assert.equal(
+      assetUploadCalls,
+      1,
+      "re-edit with the same source bytes must NOT re-call Krea /assets",
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
