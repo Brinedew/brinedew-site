@@ -91,7 +91,9 @@ export async function putDiscordRecapImage(env, day, bytes, { contentType = "ima
   const writeUrl = bunnyWriteUrl(env, key)
   const password = bunnyStoragePassword(env)
   if (!writeUrl || !password) {
-    throw new Error("Recap image storage is not configured for writes (Bunny zone/password missing)")
+    throw new Error(
+      "Recap image storage is not configured for writes (Bunny zone/password missing)",
+    )
   }
   const response = await fetch(writeUrl, {
     method: "PUT",

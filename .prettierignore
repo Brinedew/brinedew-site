@@ -1,3 +1,82 @@
 public
 node_modules
 .quartz-cache
+
+# Lockfiles. Reformatting pnpm-lock.yaml is a footgun: pnpm validates
+# the file with a content hash and a reformat breaks the install on
+# every contributor machine.
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Vendored third-party bundles. The Iconoplasm app ships Shoelace,
+# KaTeX, Photoswipe, masonry, imagesloaded, and img-comparison-slider
+# as static vendor files. Reformatting these is a no-op for the
+# runtime and they are regenerated from the upstream npm packages.
+quartz/static/iconoplasm/vendor/
+quartz/static/vendor/katex/
+iconoplasm-extension/vendor/
+
+# Auto-generated build artifacts. These are produced by the local
+# Quartz plugin bundler (tsup), the iconoplasm-extension wxt build,
+# the Card component generator, the observability snapshot collector,
+# and the clan catalog generator. Prettier should not reformat them
+# because (a) the build regenerates them on every run and (b) some
+# of them are minified or near-minified output.
+.quartz/plugins/*/dist/
+.quartz/plugins/*/src/
+.quartz/plugins/*/tsup.config.ts
+.quartz/local-plugins/*/dist/
+.quartz/local-plugins/*/src/
+.quartz/plugins/index.ts
+iconoplasm-extension/dist/
+iconoplasm-extension/generated/
+quartz/static/iconoplasm/generated/
+shared/iconoplasm-card/
+workers/generated/
+
+# Generated Lit / Card / 3rd-party runtime bundles that are checked
+# in for offline use and do not need prettier attention.
+quartz/static/iconoplasm/vendor/shoelace/cdn/assets/icons/icons.json
+docs/iconoplasm-design-system/assets/rough.js
+
+# MDX / Obsidian excalidraw frontmatter blocks. Prettier reorders the
+# JSON-shaped frontmatter keys in ways that break the live editor.
+content/Attachments/*.excalidraw.md
+content/Attachments/*.excalidraw
+
+# Obsidian-managed vault. The wiki and posts under content/ are
+# edited in Obsidian and synced via Syncthing. Prettier reorders
+# frontmatter keys and breaks wikilinks in a way that Obsidian then
+# rewrites again, causing churn. The contributor who wants prettier-
+# clean prose should run "pnpm exec prettier <file>" on a single
+# post by hand.
+content/wiki/
+content/posts/
+content/apps/
+content/index.md
+content/About.md
+content/Attachments/
+content/Templates/
+content/.obsidian/
+content/.gemini/
+
+# Iconoplasm design system preview HTML pages. These are hand-edited
+# style guides and prettier's HTML formatter mangles the inline
+# styles and class lists in ways that break the visual demo.
+docs/iconoplasm-design-system/preview/
+docs/iconoplasm-design-system/ui_kits/
+docs/iconoplasm-design-system/prototype-redo.html
+docs/iconoplasm-design-system/colors_and_type.css
+docs/iconoplasm-design-system/README.md
+
+# Planning and design docs. These are narrative content, not source
+# code; prettier reformats headings and bullet lists in ways that
+# are churn-heavy and don't change the meaning.
+plans/
+docs/DISCORD_INTEGRATION.md
+docs/v5-migration-knowledge.md
+workers/DISCORD_SETUP.md
+
+# Claude Code session state. Not project source.
+.claude/settings.local.json

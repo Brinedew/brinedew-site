@@ -62,10 +62,7 @@ test("put writes to the Bunny storage API with the AccessKey header", async () =
 test("load reads from the public CDN base and returns bytes", async () => {
   await withMockedFetch(
     (url) => {
-      assert.equal(
-        url,
-        "https://iconoplasmportraits.b-cdn.net/discord-recap-images/2026-06-03.png",
-      )
+      assert.equal(url, "https://iconoplasmportraits.b-cdn.net/discord-recap-images/2026-06-03.png")
       return new Response(new Uint8Array([9, 8, 7]), { status: 200 })
     },
     async () => {
