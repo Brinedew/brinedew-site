@@ -14,10 +14,7 @@ export type CrawlSection = "apps" | "posts" | "wiki" | "pages" | "drafts"
 
 export function isNoIndexFile(file: { frontmatter?: FrontmatterLike | null }): boolean {
   const fm = file.frontmatter ?? {}
-  return (
-    truthyFrontmatter(fm.noindex) ||
-    truthyFrontmatter(fm.excludeFromSearch)
-  )
+  return truthyFrontmatter(fm.noindex) || truthyFrontmatter(fm.excludeFromSearch)
 }
 
 export function isCrawlableFile(file: QuartzPluginData): boolean {

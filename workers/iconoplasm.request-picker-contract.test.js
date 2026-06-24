@@ -267,7 +267,7 @@ test("direct user-emulsion options carry option_type so the click handler can re
   assert.match(
     fromSaved,
     /option_type:\s*"user_emulsion"/,
-    "direct user-emulsion options must mark option_type=\"user_emulsion\" so renderRequestOptionButtonMarkup resolves user_emulsion_id (not the empty vision_id fallback)",
+    'direct user-emulsion options must mark option_type="user_emulsion" so renderRequestOptionButtonMarkup resolves user_emulsion_id (not the empty vision_id fallback)',
   )
   const wireStart = app.indexOf("function wireAuthenticatedRequestForm")
   const wireEnd = app.indexOf("function loadSummary", wireStart)
