@@ -1,4 +1,8 @@
-import { mountSidebarStack, wireSharedUserPanel, buildSharedUserPanelMarkup } from "./sidebar-shell.js"
+import {
+  mountSidebarStack,
+  wireSharedUserPanel,
+  buildSharedUserPanelMarkup,
+} from "./sidebar-shell.js"
 
 async function init() {
   const sidebar = document.querySelector(".right.sidebar")
@@ -14,10 +18,10 @@ async function init() {
       return
     }
     // If stack still exists in the DOM (preserved by Micromorph), just update the login link
-    const loginLink = existing.querySelector('.brd-sidebar-btn')
+    const loginLink = existing.querySelector(".brd-sidebar-btn")
     if (loginLink) {
       const returnTo = encodeURIComponent(window.location.pathname)
-      loginLink.href = '/api/auth/login?return_to=' + returnTo
+      loginLink.href = "/api/auth/login?return_to=" + returnTo
     }
     return
   }
@@ -51,7 +55,12 @@ async function init() {
           user: data.user,
           returnTo: window.location.pathname,
         })
-        wireSharedUserPanel(panel, { returnTo: window.location.pathname, onAuthChanged() { window.location.reload() } })
+        wireSharedUserPanel(panel, {
+          returnTo: window.location.pathname,
+          onAuthChanged() {
+            window.location.reload()
+          },
+        })
       }
     }
   } catch {}
