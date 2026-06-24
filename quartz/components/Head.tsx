@@ -597,7 +597,11 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
         )}
 
         {/* Fix logo link to always point to main site (page-title plugin uses relative paths) */}
-        <script dangerouslySetInnerHTML={{ __html: `document.addEventListener('DOMContentLoaded',function(){var l=document.querySelector('h2.page-title a');if(l)l.href='https://brinedew.bio'})` }} />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `document.addEventListener('DOMContentLoaded',function(){var l=document.querySelector('h2.page-title a');if(l)l.href='https://brinedew.bio'})`,
+          }}
+        />
 
         {/* Auth sidebar: loads on all pages, self-mounts the account panel into .right.sidebar */}
         <script>{`document.addEventListener('DOMContentLoaded',function(){var s=document.createElement('script');s.type='module';s.src='/static/shared/auth-sidebar.mjs?v=20260617b';document.body.appendChild(s)})`}</script>

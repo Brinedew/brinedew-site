@@ -523,7 +523,9 @@ a {
   color: var(--darkgray);
   text-decoration: none;
   font-weight: 400;
-  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+  transition:
+    color 0.15s ease,
+    text-decoration-color 0.15s ease;
 }
 
 a:hover {
@@ -673,8 +675,6 @@ footer a,
   fill: currentColor;
   transition: opacity 0.1s ease;
 }
-
-
 
 /* Hide placeholder text inside the search input */
 .search-bar::placeholder {
@@ -997,12 +997,16 @@ ul.toc-content.overflow {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.draft-locked { display: none }
-.draft-unlocked .draft-locked { display: block }
+.draft-locked {
+  display: none;
+}
+.draft-unlocked .draft-locked {
+  display: block;
+}
 
 /* Fadeout gradient on truncated draft content for unauthorized users */
 body[data-page-draft="true"]:not(.draft-unlocked) .markdown-preview-view::after {
-  content: '';
+  content: "";
   display: block;
   height: 5rem;
   margin-top: -5rem;
@@ -1011,7 +1015,9 @@ body[data-page-draft="true"]:not(.draft-unlocked) .markdown-preview-view::after 
   pointer-events: none;
   z-index: 1;
 }
-.draft-cta-msg[hidden] { display: none }
+.draft-cta-msg[hidden] {
+  display: none;
+}
 
 /* Card copied from iconoplasm styles.css .icono-card.icono-guest-login-card */
 .icono-card.icono-guest-login-card {

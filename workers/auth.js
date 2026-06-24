@@ -499,7 +499,8 @@ export async function handleMe(request, env) {
   if (
     readEnvString(env.DISCORD_SUPPORTER_ROLE_ID) &&
     session.access_token &&
-    (!session.last_discord_role_verify || Date.now() - session.last_discord_role_verify > ROLE_VERIFY_TTL)
+    (!session.last_discord_role_verify ||
+      Date.now() - session.last_discord_role_verify > ROLE_VERIFY_TTL)
   ) {
     try {
       const guildResp = await fetch(
@@ -515,19 +516,21 @@ export async function handleMe(request, env) {
       if (hasRole !== (tier === "supporter")) {
         tier = hasRole ? "supporter" : "registered"
         session.tier = tier
-        await env.DB.prepare(
-          `UPDATE users SET tier = ?, updated_at = ? WHERE discord_id = ?`,
-        ).bind(tier, Date.now(), session.user_id).run()
+        await env.DB.prepare(`UPDATE users SET tier = ?, updated_at = ? WHERE discord_id = ?`)
+          .bind(tier, Date.now(), session.user_id)
+          .run()
       }
       // Cache the verify timestamp so the next /api/auth/me doesn't
       // retry within the TTL window. Always update the store so the
       // timestamp persists across worker isolates.
       session.last_discord_role_verify = Date.now()
-      await stub.fetch(new Request("http://internal/store", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(session),
-      }))
+      await stub.fetch(
+        new Request("http://internal/store", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(session),
+        }),
+      )
     } catch {
       // Network error / timeout — do NOT cache; next page load retries.
     }
