@@ -1,0 +1,393 @@
+import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
+
+type ContactFormOptions = {
+  /** Turnstile site key. If empty, the form renders without the bot check. */
+  turnstileSiteKey?: string
+  /** Path the form posts to. Must be an endpoint on the stateful worker. */
+  endpoint?: string
+}
+
+/**
+ * Site-wide contact form for the brinedew.bio About page.
+ *
+ * Renders a fully themed form with Cloudflare Turnstile, posts JSON to
+ * `/api/contact` on the stateful worker, and shows inline success / error
+ * status without a full page navigation. This component intentionally
+ * embeds the form markup directly in the rendered HTML so it works with
+ * Quartz's SPA navigation (no need for MutationObserver wiring here:
+ * Quartz replaces the page body but the afterDOMLoaded script wires the
+ * form submit handler on every page load, which is exactly what SPA
+ * navigation triggers).
+ */
+const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
+  const endpoint = opts.endpoint || "/api/contact"
+  const turnstileSiteKey = String(opts.turnstileSiteKey || "").trim()
+  const turnstileConfigured = Boolean(turnstileSiteKey)
+
+  const Component: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
+    // Opt-in: only render on pages that explicitly include the contact form.
+    // We check the file's frontmatter `contact: true` (or aliases) to decide,
+    // so other pages never get the form even though the component is enabled
+    // in quartz.config.yaml. This is the safest default for a site-wide
+    // layout slot.
+    const frontmatter = (fileData?.frontmatter as Record<string, unknown>) || null
+    const aliases = ["contact", "contactForm", "showContactForm"]
+    const wantsForm = Array.isArray(frontmatter)
+      ? frontmatter.some((v) => aliases.includes(String(v)))
+      : frontmatter && typeof frontmatter === "object"
+        ? aliases.some((k) => Boolean((frontmatter as Record<string, unknown>)[k]))
+        : false
+    if (!wantsForm) return null
+
+    return (
+      <div class="contact-form-card" data-contact-form-root data-endpoint={endpoint}>
+        <form class="contact-form" data-contact-form novalidate>
+          <p class="contact-form__intro">
+            Drop me a message. Replies usually go out within a couple of days.
+          </p>
+
+          <label class="contact-form__field">
+            <span class="contact-form__label">Your name</span>
+            <input
+              class="contact-form__input"
+              type="text"
+              name="name"
+              maxLength={120}
+              autocomplete="name"
+              placeholder="Name (optional)"
+            />
+          </label>
+
+          <label class="contact-form__field">
+            <span class="contact-form__label">Your email</span>
+            <input
+              class="contact-form__input"
+              type="email"
+              name="email"
+              required
+              maxLength={254}
+              autocomplete="email"
+              placeholder="you@example.com"
+            />
+          </label>
+
+          <label class="contact-form__field">
+            <span class="contact-form__label">Subject</span>
+            <input
+              class="contact-form__input"
+              type="text"
+              name="subject"
+              maxLength={200}
+              placeholder="Subject (optional)"
+            />
+          </label>
+
+          <label class="contact-form__field">
+            <span class="contact-form__label">Message</span>
+            <textarea
+              class="contact-form__textarea"
+              name="message"
+              required
+              rows={6}
+              maxLength={5000}
+              placeholder="What would you like to say?"
+            ></textarea>
+          </label>
+
+          {/* Honeypot: real users don't see or fill this. Bots that auto-fill every
+              input will trip the silent 200 OK response. */}
+          <div class="contact-form__honeypot" aria-hidden="true">
+            <label>
+              Website
+              <input
+                type="text"
+                name="website"
+                tabIndex={-1}
+                autocomplete="off"
+                aria-hidden="true"
+              />
+            </label>
+          </div>
+
+          {turnstileConfigured && (
+            <div
+              class="cf-turnstile"
+              data-sitekey={turnstileSiteKey}
+              data-theme="auto"
+            ></div>
+          )}
+
+          <div class="contact-form__actions">
+            <button
+              class="contact-form__submit"
+              type="submit"
+              data-contact-form-submit
+            >
+              Send message
+            </button>
+          </div>
+
+          <p
+            class="contact-form__status"
+            data-contact-form-status
+            data-tone="neutral"
+            aria-live="polite"
+            role="status"
+          ></p>
+        </form>
+      </div>
+    )
+  }
+
+  Component.displayName = "ContactForm"
+
+  Component.css = `
+.contact-form-card {
+  margin: 2.25rem 0 1.5rem;
+  padding: 1.75rem 1.5rem 1.5rem;
+  border: 1px solid var(--gray);
+  border-radius: 16px;
+  background: var(--light);
+  max-width: 36rem;
+}
+
+.contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.contact-form__intro {
+  margin: 0 0 0.25rem;
+  color: var(--darkgray);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.contact-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.contact-form__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--darkgray);
+}
+
+.contact-form__input,
+.contact-form__textarea {
+  font: inherit;
+  color: var(--dark);
+  background: var(--lightgray);
+  border: 1px solid var(--gray);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.contact-form__textarea {
+  resize: vertical;
+  min-height: 6.5rem;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.contact-form__input:focus,
+.contact-form__textarea:focus {
+  outline: none;
+  border-color: var(--tertiary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tertiary) 25%, transparent);
+}
+
+.contact-form__honeypot {
+  position: absolute;
+  left: -10000px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.contact-form__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.contact-form__submit {
+  font: inherit;
+  font-weight: 600;
+  color: var(--light);
+  background: var(--tertiary);
+  border: 1px solid var(--tertiary);
+  border-radius: 8px;
+  padding: 0.7rem 1.2rem;
+  cursor: pointer;
+  transition: filter 120ms ease, transform 120ms ease;
+}
+
+.contact-form__submit:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.contact-form__submit:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.contact-form__submit:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.contact-form__status {
+  margin: 0;
+  min-height: 1.25rem;
+  font-size: 0.92rem;
+  color: var(--darkgray);
+  line-height: 1.4;
+}
+
+.contact-form__status[data-tone="ok"] {
+  color: oklch(45% 0.12 150);
+}
+
+.contact-form__status[data-tone="error"] {
+  color: oklch(50% 0.18 25);
+}
+`
+
+  // SPA-safe init. Quartz's SPA navigation calls afterDOMLoaded on every page
+  // change, so this wires up the submit handler fresh each time without needing
+  // a MutationObserver. The script is small and idempotent.
+  Component.afterDOMLoaded = `
+(function () {
+  function attach(root) {
+    if (!root || root.__contactFormWired === true) return;
+    var form = root.querySelector("[data-contact-form]");
+    if (!form) return;
+    root.__contactFormWired = true;
+    var endpoint = root.getAttribute("data-endpoint") || "/api/contact";
+    var status = root.querySelector("[data-contact-form-status]");
+    var submit = root.querySelector("[data-contact-form-submit]");
+
+    function setStatus(message, tone) {
+      if (!status) return;
+      status.textContent = String(message || "");
+      status.setAttribute("data-tone", tone || "neutral");
+    }
+
+    function getTurnstileToken() {
+      var field = form.querySelector("[name='cf-turnstile-response']");
+      return field ? String(field.value || "").trim() : "";
+    }
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var nameInput = form.querySelector("input[name='name']");
+      var emailInput = form.querySelector("input[name='email']");
+      var subjectInput = form.querySelector("input[name='subject']");
+      var messageInput = form.querySelector("textarea[name='message']");
+      var honeypot = form.querySelector("input[name='website']");
+
+      var email = emailInput ? String(emailInput.value || "").trim() : "";
+      var message = messageInput ? String(messageInput.value || "").trim() : "";
+
+      if (!email) {
+        setStatus("Enter your email so I can reply.", "error");
+        if (emailInput) emailInput.focus();
+        return;
+      }
+      if (!message || message.length < 3) {
+        setStatus("Write a message of at least 3 characters.", "error");
+        if (messageInput) messageInput.focus();
+        return;
+      }
+
+      var turnstileToken = getTurnstileToken();
+      if (window.turnstile && typeof window.turnstile.getResponse === "function") {
+        var v = window.turnstile.getResponse(root.querySelector(".cf-turnstile") || undefined);
+        if (v) turnstileToken = v;
+      }
+
+      if (submit) submit.disabled = true;
+      setStatus("Sending…", "neutral");
+
+      var payload = {
+        name: nameInput ? String(nameInput.value || "").trim() : "",
+        email: email,
+        subject: subjectInput ? String(subjectInput.value || "").trim() : "",
+        message: message,
+        website: honeypot ? String(honeypot.value || "") : "",
+        turnstile_token: turnstileToken,
+      };
+
+      fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify(payload),
+      })
+        .then(function (resp) {
+          return resp.text().then(function (text) {
+            var data = null;
+            try { data = text ? JSON.parse(text) : null; } catch (_e) { data = { raw: text }; }
+            return { ok: resp.ok, status: resp.status, data: data };
+          });
+        })
+        .then(function (result) {
+          if (result.ok) {
+            setStatus("Thanks — your message is on its way to my inbox.", "ok");
+            form.reset();
+            if (window.turnstile && typeof window.turnstile.reset === "function") {
+              var widget = root.querySelector(".cf-turnstile");
+              if (widget) window.turnstile.reset(widget);
+            }
+          } else {
+            var msg = (result.data && result.data.error) ? result.data.error : ("HTTP " + result.status);
+            setStatus(msg, "error");
+          }
+        })
+        .catch(function (err) {
+          setStatus(String((err && err.message) || err || "Submission failed."), "error");
+        })
+        .finally(function () {
+          if (submit) submit.disabled = false;
+        });
+    });
+  }
+
+  // Attach to anything currently on the page, and re-attach on Quartz's
+  // SPA navigation events. The form is rendered only on pages that include
+  // the ContactForm component, but Quartz replaces the body on each nav.
+  function init() {
+    var roots = document.querySelectorAll("[data-contact-form-root]");
+    for (var i = 0; i < roots.length; i++) attach(roots[i]);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+
+  // Quartz SPA nav fires a popstate on browser back/forward; emit a custom
+  // event the form can listen to. We hook into history.pushState too.
+  var origPush = history.pushState;
+  history.pushState = function () {
+    origPush.apply(this, arguments);
+    window.dispatchEvent(new Event("quartz:nav"));
+  };
+  window.addEventListener("popstate", function () { window.dispatchEvent(new Event("quartz:nav")); });
+  window.addEventListener("quartz:nav", init);
+})();
+`
+
+  return Component
+}
+
+export default (ContactForm as unknown) as QuartzComponentConstructor<ContactFormOptions>
