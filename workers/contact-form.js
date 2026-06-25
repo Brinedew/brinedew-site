@@ -152,7 +152,10 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
     return jsonError("Enter a valid email address.", 422, { ...rl.headers, ...corsHeaders })
   }
   if (!body || body.length < 3) {
-    return jsonError("Write a message of at least 3 characters.", 422, { ...rl.headers, ...corsHeaders })
+    return jsonError("Write a message of at least 3 characters.", 422, {
+      ...rl.headers,
+      ...corsHeaders,
+    })
   }
 
   // We do NOT include the visitor's address in the `from` field of the email we
@@ -199,8 +202,7 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
   // is the same one the rest of the worker uses; we prefix our keys so
   // contact entries never collide with anything else.
   if (env.KV) {
-    const messageId =
-      "contact-inbox:" + new Date().toISOString() + ":" + crypto.randomUUID();
+    const messageId = "contact-inbox:" + new Date().toISOString() + ":" + crypto.randomUUID()
     const record = {
       id: messageId,
       received_at: new Date().toISOString(),
@@ -212,16 +214,16 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
       user_agent: request.headers.get("User-Agent") || null,
       ip: request.headers.get("CF-Connecting-IP") || null,
       cloudflare_send_message_id: sendResult?.messageId || null,
-    };
+    }
     const write = env.KV.put(messageId, JSON.stringify(record), {
       // Keep contact records for 365 days. They are not the primary delivery
       // mechanism (Email Routing is), only a backup / audit log.
       expirationTtl: 60 * 60 * 24 * 365,
-    });
+    })
     if (ctx && typeof ctx.waitUntil === "function") {
-      ctx.waitUntil(write);
+      ctx.waitUntil(write)
     } else {
-      await write;
+      await write
     }
   }
 
