@@ -1797,23 +1797,8 @@ var ContactForm = (opts = {}) => {
     const wantsForm = Array.isArray(frontmatter) ? frontmatter.some((v3) => aliases.includes(String(v3))) : frontmatter && typeof frontmatter === "object" ? aliases.some((k3) => Boolean(frontmatter[k3])) : false;
     if (!wantsForm) return null;
     return /* @__PURE__ */ u2("div", { class: "contact-form-card", "data-contact-form-root": true, "data-endpoint": endpoint, children: /* @__PURE__ */ u2("form", { class: "contact-form", "data-contact-form": true, novalidate: true, children: [
-      /* @__PURE__ */ u2("p", { class: "contact-form__intro", children: "Drop me a message. Replies usually go out within a couple of days." }),
       /* @__PURE__ */ u2("label", { class: "contact-form__field", children: [
-        /* @__PURE__ */ u2("span", { class: "contact-form__label", children: "Your name" }),
-        /* @__PURE__ */ u2(
-          "input",
-          {
-            class: "contact-form__input",
-            type: "text",
-            name: "name",
-            maxLength: 120,
-            autocomplete: "name",
-            placeholder: "Name (optional)"
-          }
-        )
-      ] }),
-      /* @__PURE__ */ u2("label", { class: "contact-form__field", children: [
-        /* @__PURE__ */ u2("span", { class: "contact-form__label", children: "Your email" }),
+        /* @__PURE__ */ u2("span", { class: "contact-form__label", children: "Email" }),
         /* @__PURE__ */ u2(
           "input",
           {
@@ -1828,19 +1813,6 @@ var ContactForm = (opts = {}) => {
         )
       ] }),
       /* @__PURE__ */ u2("label", { class: "contact-form__field", children: [
-        /* @__PURE__ */ u2("span", { class: "contact-form__label", children: "Subject" }),
-        /* @__PURE__ */ u2(
-          "input",
-          {
-            class: "contact-form__input",
-            type: "text",
-            name: "subject",
-            maxLength: 200,
-            placeholder: "Subject (optional)"
-          }
-        )
-      ] }),
-      /* @__PURE__ */ u2("label", { class: "contact-form__field", children: [
         /* @__PURE__ */ u2("span", { class: "contact-form__label", children: "Message" }),
         /* @__PURE__ */ u2(
           "textarea",
@@ -1849,8 +1821,7 @@ var ContactForm = (opts = {}) => {
             name: "message",
             required: true,
             rows: 6,
-            maxLength: 5e3,
-            placeholder: "What would you like to say?"
+            maxLength: 5e3
           }
         )
       ] }),
@@ -1873,7 +1844,7 @@ var ContactForm = (opts = {}) => {
           class: "contact-form__submit",
           type: "submit",
           "data-contact-form-submit": true,
-          children: "Send message"
+          children: "Send"
         }
       ) }),
       /* @__PURE__ */ u2(
@@ -1903,13 +1874,6 @@ var ContactForm = (opts = {}) => {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-}
-
-.contact-form__intro {
-  margin: 0 0 0.25rem;
-  color: var(--darkgray);
-  font-size: 0.95rem;
-  line-height: 1.5;
 }
 
 .contact-form__field {
@@ -2028,9 +1992,7 @@ var ContactForm = (opts = {}) => {
 
     form.addEventListener("submit", function (event) {
       event.preventDefault();
-      var nameInput = form.querySelector("input[name='name']");
       var emailInput = form.querySelector("input[name='email']");
-      var subjectInput = form.querySelector("input[name='subject']");
       var messageInput = form.querySelector("textarea[name='message']");
       var honeypot = form.querySelector("input[name='website']");
 
@@ -2038,12 +2000,12 @@ var ContactForm = (opts = {}) => {
       var message = messageInput ? String(messageInput.value || "").trim() : "";
 
       if (!email) {
-        setStatus("Enter your email so I can reply.", "error");
+        setStatus("Enter your email.", "error");
         if (emailInput) emailInput.focus();
         return;
       }
       if (!message || message.length < 3) {
-        setStatus("Write a message of at least 3 characters.", "error");
+        setStatus("Write a message.", "error");
         if (messageInput) messageInput.focus();
         return;
       }
@@ -2052,9 +2014,7 @@ var ContactForm = (opts = {}) => {
       setStatus("Sending\u2026", "neutral");
 
       var payload = {
-        name: nameInput ? String(nameInput.value || "").trim() : "",
         email: email,
-        subject: subjectInput ? String(subjectInput.value || "").trim() : "",
         message: message,
         website: honeypot ? String(honeypot.value || "") : "",
       };

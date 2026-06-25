@@ -15,9 +15,7 @@
  */
 
 const CONTACT_BODY_MAX = 5000
-const CONTACT_NAME_MAX = 120
 const CONTACT_EMAIL_MAX = 254
-const CONTACT_SUBJECT_MAX = 200
 const RATE_LIMIT_PER_MIN = 5
 const RATE_WINDOW_MS = 60_000
 
@@ -98,22 +96,33 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value) && value.length <= CONTACT_EMAIL_MAX
 }
 
-function buildContactEmail({ name, fromEmail, subject, body, meta }) {
-  const safeName = name || "Anonymous"
-  const safeSubject = subject || "Brinedew.com contact form submission"
+function buildContactEmail({ fromEmail, body, meta }) {
+  const submittedAt = new Date()
+  // "Contact form at brinedew.bio - 26 Jun 2026, 04:57 UTC"
+  const formatted =
+    submittedAt.toLocaleString("en-GB", {
+      timeZone: "UTC",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }) + " UTC"
+  const subject = `Contact form at brinedew.bio - ${formatted}`
   const lines = [
-    `From: ${safeName} <${fromEmail}>`,
+    `From: ${fromEmail}`,
     "",
     body,
     "",
     "---",
     `Reply to: ${fromEmail}`,
-    `Submitted: ${new Date().toISOString()}`,
+    `Submitted: ${submittedAt.toISOString()}`,
     `Origin: ${meta?.origin || "(unknown)"}`,
     `User agent: ${meta?.userAgent || "(unknown)"}`,
     `CF-Connecting-IP: ${meta?.ip || "(unknown)"}`,
   ]
-  return { subject: safeSubject, text: lines.join("\n") }
+  return { subject, text: lines.join("\n") }
 }
 
 export async function handleContactSubmission(request, env, ctx, corsHeaders) {
@@ -143,9 +152,7 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
     return jsonOk({ queued: false, ignored: true }, { ...rl.headers, ...corsHeaders })
   }
 
-  const name = sanitizeText(payload?.name || "", CONTACT_NAME_MAX)
   const fromEmail = sanitizeText(payload?.email || "", CONTACT_EMAIL_MAX)
-  const subject = sanitizeText(payload?.subject || "", CONTACT_SUBJECT_MAX)
   const body = sanitizeText(payload?.message || payload?.body || "", CONTACT_BODY_MAX)
 
   if (!fromEmail || !isValidEmail(fromEmail)) {
@@ -165,9 +172,7 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
   // but Cloudflare Email Sending's `env.CONTACT_EMAIL.send(...)` API does not
   // currently expose a reply-to parameter, so the body carries the address.
   const { subject: emailSubject, text: emailText } = buildContactEmail({
-    name,
     fromEmail,
-    subject,
     body,
     meta: {
       origin: request.headers.get("Origin") || "(none)",
@@ -207,7 +212,6 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
       id: messageId,
       received_at: new Date().toISOString(),
       from_email: fromEmail,
-      name: name || null,
       subject: emailSubject,
       body,
       origin: request.headers.get("Origin") || null,
