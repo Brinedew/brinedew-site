@@ -1,0 +1,21 @@
+{
+  "name": "@brinedew/contact-form",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./components": "./dist/index.js"
+  },
+  "quartz": {
+    "category": "component",
+    "components": {
+      "ContactForm": {
+        "displayName": "Contact Form",
+        "defaultPosition": "afterBody",
+        "defaultPriority": 15
+      }
+    }
+  }
+}

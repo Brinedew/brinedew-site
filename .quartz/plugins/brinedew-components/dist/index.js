@@ -1788,6 +1788,362 @@ ProteinInfobox.css = `
 `;
 var ProteinInfobox_default = (() => ProteinInfobox);
 
+// src/components/ContactForm.tsx
+var ContactForm = (opts = {}) => {
+  const endpoint = opts.endpoint || "/api/contact";
+  const turnstileSiteKey = String(opts.turnstileSiteKey || "").trim();
+  const turnstileConfigured = Boolean(turnstileSiteKey);
+  const Component = ({ fileData }) => {
+    const frontmatter = fileData?.frontmatter || null;
+    const aliases = ["contact", "contactForm", "showContactForm"];
+    const wantsForm = Array.isArray(frontmatter) ? frontmatter.some((v3) => aliases.includes(String(v3))) : frontmatter && typeof frontmatter === "object" ? aliases.some((k3) => Boolean(frontmatter[k3])) : false;
+    if (!wantsForm) return null;
+    return /* @__PURE__ */ u2("div", { class: "contact-form-card", "data-contact-form-root": true, "data-endpoint": endpoint, children: /* @__PURE__ */ u2("form", { class: "contact-form", "data-contact-form": true, novalidate: true, children: [
+      /* @__PURE__ */ u2("p", { class: "contact-form__intro", children: "Drop me a message. Replies usually go out within a couple of days." }),
+      /* @__PURE__ */ u2("label", { class: "contact-form__field", children: [
+        /* @__PURE__ */ u2("span", { class: "contact-form__label", children: "Your name" }),
+        /* @__PURE__ */ u2(
+          "input",
+          {
+            class: "contact-form__input",
+            type: "text",
+            name: "name",
+            maxLength: 120,
+            autocomplete: "name",
+            placeholder: "Name (optional)"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ u2("label", { class: "contact-form__field", children: [
+        /* @__PURE__ */ u2("span", { class: "contact-form__label", children: "Your email" }),
+        /* @__PURE__ */ u2(
+          "input",
+          {
+            class: "contact-form__input",
+            type: "email",
+            name: "email",
+            required: true,
+            maxLength: 254,
+            autocomplete: "email",
+            placeholder: "you@example.com"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ u2("label", { class: "contact-form__field", children: [
+        /* @__PURE__ */ u2("span", { class: "contact-form__label", children: "Subject" }),
+        /* @__PURE__ */ u2(
+          "input",
+          {
+            class: "contact-form__input",
+            type: "text",
+            name: "subject",
+            maxLength: 200,
+            placeholder: "Subject (optional)"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ u2("label", { class: "contact-form__field", children: [
+        /* @__PURE__ */ u2("span", { class: "contact-form__label", children: "Message" }),
+        /* @__PURE__ */ u2(
+          "textarea",
+          {
+            class: "contact-form__textarea",
+            name: "message",
+            required: true,
+            rows: 6,
+            maxLength: 5e3,
+            placeholder: "What would you like to say?"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "contact-form__honeypot", "aria-hidden": "true", children: /* @__PURE__ */ u2("label", { children: [
+        "Website",
+        /* @__PURE__ */ u2(
+          "input",
+          {
+            type: "text",
+            name: "website",
+            tabIndex: -1,
+            autocomplete: "off",
+            "aria-hidden": "true"
+          }
+        )
+      ] }) }),
+      turnstileConfigured && /* @__PURE__ */ u2(
+        "div",
+        {
+          class: "cf-turnstile",
+          "data-sitekey": turnstileSiteKey,
+          "data-theme": "auto"
+        }
+      ),
+      /* @__PURE__ */ u2("div", { class: "contact-form__actions", children: /* @__PURE__ */ u2(
+        "button",
+        {
+          class: "contact-form__submit",
+          type: "submit",
+          "data-contact-form-submit": true,
+          children: "Send message"
+        }
+      ) }),
+      /* @__PURE__ */ u2(
+        "p",
+        {
+          class: "contact-form__status",
+          "data-contact-form-status": true,
+          "data-tone": "neutral",
+          "aria-live": "polite",
+          role: "status"
+        }
+      )
+    ] }) });
+  };
+  Component.displayName = "ContactForm";
+  Component.css = `
+.contact-form-card {
+  margin: 2.25rem 0 1.5rem;
+  padding: 1.75rem 1.5rem 1.5rem;
+  border: 1px solid var(--gray);
+  border-radius: 16px;
+  background: var(--light);
+  max-width: 36rem;
+}
+
+.contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.contact-form__intro {
+  margin: 0 0 0.25rem;
+  color: var(--darkgray);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.contact-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.contact-form__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--darkgray);
+}
+
+.contact-form__input,
+.contact-form__textarea {
+  font: inherit;
+  color: var(--dark);
+  background: var(--lightgray);
+  border: 1px solid var(--gray);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.contact-form__textarea {
+  resize: vertical;
+  min-height: 6.5rem;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.contact-form__input:focus,
+.contact-form__textarea:focus {
+  outline: none;
+  border-color: var(--tertiary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tertiary) 25%, transparent);
+}
+
+.contact-form__honeypot {
+  position: absolute;
+  left: -10000px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.contact-form__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.contact-form__submit {
+  font: inherit;
+  font-weight: 600;
+  color: var(--light);
+  background: var(--tertiary);
+  border: 1px solid var(--tertiary);
+  border-radius: 8px;
+  padding: 0.7rem 1.2rem;
+  cursor: pointer;
+  transition: filter 120ms ease, transform 120ms ease;
+}
+
+.contact-form__submit:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.contact-form__submit:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.contact-form__submit:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.contact-form__status {
+  margin: 0;
+  min-height: 1.25rem;
+  font-size: 0.92rem;
+  color: var(--darkgray);
+  line-height: 1.4;
+}
+
+.contact-form__status[data-tone="ok"] {
+  color: oklch(45% 0.12 150);
+}
+
+.contact-form__status[data-tone="error"] {
+  color: oklch(50% 0.18 25);
+}
+`;
+  Component.afterDOMLoaded = `
+(function () {
+  function attach(root) {
+    if (!root || root.__contactFormWired === true) return;
+    var form = root.querySelector("[data-contact-form]");
+    if (!form) return;
+    root.__contactFormWired = true;
+    var endpoint = root.getAttribute("data-endpoint") || "/api/contact";
+    var status = root.querySelector("[data-contact-form-status]");
+    var submit = root.querySelector("[data-contact-form-submit]");
+
+    function setStatus(message, tone) {
+      if (!status) return;
+      status.textContent = String(message || "");
+      status.setAttribute("data-tone", tone || "neutral");
+    }
+
+    function getTurnstileToken() {
+      var field = form.querySelector("[name='cf-turnstile-response']");
+      return field ? String(field.value || "").trim() : "";
+    }
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var nameInput = form.querySelector("input[name='name']");
+      var emailInput = form.querySelector("input[name='email']");
+      var subjectInput = form.querySelector("input[name='subject']");
+      var messageInput = form.querySelector("textarea[name='message']");
+      var honeypot = form.querySelector("input[name='website']");
+
+      var email = emailInput ? String(emailInput.value || "").trim() : "";
+      var message = messageInput ? String(messageInput.value || "").trim() : "";
+
+      if (!email) {
+        setStatus("Enter your email so I can reply.", "error");
+        if (emailInput) emailInput.focus();
+        return;
+      }
+      if (!message || message.length < 3) {
+        setStatus("Write a message of at least 3 characters.", "error");
+        if (messageInput) messageInput.focus();
+        return;
+      }
+
+      var turnstileToken = getTurnstileToken();
+      if (window.turnstile && typeof window.turnstile.getResponse === "function") {
+        var v = window.turnstile.getResponse(root.querySelector(".cf-turnstile") || undefined);
+        if (v) turnstileToken = v;
+      }
+
+      if (submit) submit.disabled = true;
+      setStatus("Sending\u2026", "neutral");
+
+      var payload = {
+        name: nameInput ? String(nameInput.value || "").trim() : "",
+        email: email,
+        subject: subjectInput ? String(subjectInput.value || "").trim() : "",
+        message: message,
+        website: honeypot ? String(honeypot.value || "") : "",
+        turnstile_token: turnstileToken,
+      };
+
+      fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify(payload),
+      })
+        .then(function (resp) {
+          return resp.text().then(function (text) {
+            var data = null;
+            try { data = text ? JSON.parse(text) : null; } catch (_e) { data = { raw: text }; }
+            return { ok: resp.ok, status: resp.status, data: data };
+          });
+        })
+        .then(function (result) {
+          if (result.ok) {
+            setStatus("Thanks \u2014 your message is on its way to my inbox.", "ok");
+            form.reset();
+            if (window.turnstile && typeof window.turnstile.reset === "function") {
+              var widget = root.querySelector(".cf-turnstile");
+              if (widget) window.turnstile.reset(widget);
+            }
+          } else {
+            var msg = (result.data && result.data.error) ? result.data.error : ("HTTP " + result.status);
+            setStatus(msg, "error");
+          }
+        })
+        .catch(function (err) {
+          setStatus(String((err && err.message) || err || "Submission failed."), "error");
+        })
+        .finally(function () {
+          if (submit) submit.disabled = false;
+        });
+    });
+  }
+
+  // Attach to anything currently on the page, and re-attach on Quartz's
+  // SPA navigation events. The form is rendered only on pages that include
+  // the ContactForm component, but Quartz replaces the body on each nav.
+  function init() {
+    var roots = document.querySelectorAll("[data-contact-form-root]");
+    for (var i = 0; i < roots.length; i++) attach(roots[i]);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+
+  // Quartz SPA nav fires a popstate on browser back/forward; emit a custom
+  // event the form can listen to. We hook into history.pushState too.
+  var origPush = history.pushState;
+  history.pushState = function () {
+    origPush.apply(this, arguments);
+    window.dispatchEvent(new Event("quartz:nav"));
+  };
+  window.addEventListener("popstate", function () { window.dispatchEvent(new Event("quartz:nav")); });
+  window.addEventListener("quartz:nav", init);
+})();
+`;
+  return Component;
+};
+var ContactForm_default = ContactForm;
+
 // ../../../node_modules/.pnpm/unist-util-is@6.0.1/node_modules/unist-util-is/lib/index.js
 var convert = (
   // Note: overloads in JSDoc can’t yet use different `@template`s.
@@ -2046,6 +2402,7 @@ var DraftTagInjector = () => ({
 });
 export {
   Citation_default as Citation,
+  ContactForm_default as ContactForm,
   DraftTagInjector,
   HomepageCrawlFrontier_default as HomepageCrawlFrontier,
   IconoplasmPageSwitcher_default as IconoplasmPageSwitcher,

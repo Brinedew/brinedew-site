@@ -103,6 +103,16 @@ new_sqlite_classes = ["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"]
 tag = "v4"
 new_sqlite_classes = ["IconoplasmSyncGovernor"]
 
+# Cloudflare Email Service send binding.
+# Used by the site-wide /api/contact endpoint to deliver contact-form submissions
+# from no-reply@brinedew.bio -> contact@brinedew.bio (which Email Routing forwards
+# to brinedew@proton.me). Token used by the deploy workflow must have the
+# "Email Sending" scope.
+[[send_email]]
+name = "CONTACT_EMAIL"
+destination_address = "brinedew@proton.me"
+allowed_sender_addresses = ["noreply@brinedew.bio", "contact@brinedew.bio"]
+
 [vars]
 # Billing guardrail model:
 # 1) hard monthly stop near the included PAYGO allowance, and
@@ -227,6 +237,13 @@ new_sqlite_classes = ["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"]
 [[env.staging.migrations]]
 tag = "v4"
 new_sqlite_classes = ["IconoplasmSyncGovernor"]
+
+# Same email sending binding on staging so the form works end-to-end on
+# staging.brinedew.bio before any production deploy.
+[[env.staging.send_email]]
+name = "CONTACT_EMAIL"
+destination_address = "brinedew@proton.me"
+allowed_sender_addresses = ["noreply@brinedew.bio", "contact@brinedew.bio"]
 
 [env.staging.vars]
 ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "500000000"
