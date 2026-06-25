@@ -1791,13 +1791,12 @@ var ProteinInfobox_default = (() => ProteinInfobox);
 // src/components/ContactForm.tsx
 var ContactForm = (opts = {}) => {
   const endpoint = opts.endpoint || "/api/contact";
-  const turnstileConfigEndpoint = opts.turnstileConfigEndpoint || "/api/contact-turnstile-config";
   const Component = ({ fileData }) => {
     const frontmatter = fileData?.frontmatter || null;
     const aliases = ["contact", "contactForm", "showContactForm"];
     const wantsForm = Array.isArray(frontmatter) ? frontmatter.some((v3) => aliases.includes(String(v3))) : frontmatter && typeof frontmatter === "object" ? aliases.some((k3) => Boolean(frontmatter[k3])) : false;
     if (!wantsForm) return null;
-    return /* @__PURE__ */ u2("div", { class: "contact-form-card", "data-contact-form-root": true, "data-endpoint": endpoint, "data-turnstile-config": turnstileConfigEndpoint, children: /* @__PURE__ */ u2("form", { class: "contact-form", "data-contact-form": true, novalidate: true, children: [
+    return /* @__PURE__ */ u2("div", { class: "contact-form-card", "data-contact-form-root": true, "data-endpoint": endpoint, children: /* @__PURE__ */ u2("form", { class: "contact-form", "data-contact-form": true, novalidate: true, children: [
       /* @__PURE__ */ u2("p", { class: "contact-form__intro", children: "Drop me a message. Replies usually go out within a couple of days." }),
       /* @__PURE__ */ u2("label", { class: "contact-form__field", children: [
         /* @__PURE__ */ u2("span", { class: "contact-form__label", children: "Your name" }),
@@ -1868,7 +1867,6 @@ var ContactForm = (opts = {}) => {
           }
         )
       ] }) }),
-      /* @__PURE__ */ u2("div", { class: "cf-turnstile", "data-contact-form-turnstile": true, "data-theme": "auto" }),
       /* @__PURE__ */ u2("div", { class: "contact-form__actions", children: /* @__PURE__ */ u2(
         "button",
         {
@@ -2013,80 +2011,6 @@ var ContactForm = (opts = {}) => {
 `;
   Component.afterDOMLoaded = `
 (function () {
-  function ensureTurnstileScript() {
-    if (document.querySelector("script[data-contact-form-turnstile-loader]")) {
-      return Promise.resolve();
-    }
-    return new Promise(function (resolve, reject) {
-      var s = document.createElement("script");
-      s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
-      s.async = true;
-      s.defer = true;
-      s.setAttribute("data-contact-form-turnstile-loader", "1");
-      s.onload = function () { resolve(); };
-      s.onerror = function () { reject(new Error("Failed to load Turnstile")); };
-      document.head.appendChild(s);
-    });
-  }
-
-  function mountTurnstile(root) {
-    if (root.__turnstileMounted) return Promise.resolve();
-    var mount = root.querySelector("[data-contact-form-turnstile]");
-    if (!mount) return Promise.resolve();
-    if (!mount.__siteKey) return Promise.resolve();
-    root.__turnstileMounted = true;
-    return ensureTurnstileScript().then(function () {
-      if (!window.turnstile || typeof window.turnstile.render !== "function") {
-        root.__turnstileMounted = false;
-        return;
-      }
-      try {
-        window.turnstile.render(mount, {
-          sitekey: mount.__siteKey,
-          theme: mount.getAttribute("data-theme") || "auto",
-          callback: function (token) {
-            mount.__lastToken = token || "";
-          },
-        });
-      } catch (_e) {
-        root.__turnstileMounted = false;
-      }
-    }).catch(function () {
-      root.__turnstileMounted = false;
-    });
-  }
-
-  function loadTurnstileKey(root) {
-    if (root.__turnstileLoaded) return Promise.resolve(root.__turnstileConfig || { siteKey: "", configured: false });
-    root.__turnstileLoaded = true;
-    var cfgEndpoint = root.getAttribute("data-turnstile-config") || "/api/contact-turnstile-config";
-    return fetch(cfgEndpoint, { credentials: "omit" })
-      .then(function (resp) {
-        if (!resp.ok) return { siteKey: "", configured: false };
-        return resp.json();
-      })
-      .catch(function () { return { siteKey: "", configured: false }; })
-      .then(function (cfg) {
-        root.__turnstileConfig = cfg;
-        var mount = root.querySelector("[data-contact-form-turnstile]");
-        if (mount && cfg && cfg.siteKey) {
-          mount.__siteKey = cfg.siteKey;
-        }
-        return cfg;
-      });
-  }
-
-  function getTurnstileToken(root) {
-    var mount = root.querySelector("[data-contact-form-turnstile]");
-    if (mount && mount.__lastToken) return String(mount.__lastToken);
-    if (mount && window.turnstile && typeof window.turnstile.getResponse === "function") {
-      var v = window.turnstile.getResponse(mount);
-      return v ? String(v) : "";
-    }
-    var field = document.querySelector("[name='cf-turnstile-response']");
-    return field ? String(field.value || "").trim() : "";
-  }
-
   function attach(root) {
     if (!root || root.__contactFormWired === true) return;
     var form = root.querySelector("[data-contact-form]");
@@ -2124,8 +2048,6 @@ var ContactForm = (opts = {}) => {
         return;
       }
 
-      var turnstileToken = getTurnstileToken(root);
-
       if (submit) submit.disabled = true;
       setStatus("Sending\u2026", "neutral");
 
@@ -2135,7 +2057,6 @@ var ContactForm = (opts = {}) => {
         subject: subjectInput ? String(subjectInput.value || "").trim() : "",
         message: message,
         website: honeypot ? String(honeypot.value || "") : "",
-        turnstile_token: turnstileToken,
       };
 
       fetch(endpoint, {
@@ -2154,10 +2075,6 @@ var ContactForm = (opts = {}) => {
           if (result.ok) {
             setStatus("Thanks \u2014 your message is on its way to my inbox.", "ok");
             form.reset();
-            if (window.turnstile && typeof window.turnstile.reset === "function") {
-              var mount = root.querySelector("[data-contact-form-turnstile]");
-              if (mount) window.turnstile.reset(mount);
-            }
           } else {
             var msg = (result.data && result.data.error) ? result.data.error : ("HTTP " + result.status);
             setStatus(msg, "error");
@@ -2170,12 +2087,6 @@ var ContactForm = (opts = {}) => {
           if (submit) submit.disabled = false;
         });
     });
-
-    // Fetch the site key and mount the Turnstile widget. This is async and
-    // doesn't block form rendering; if Turnstile is not configured (e.g.
-    // local dev with no key) the form still works because the worker treats
-    // an unconfigured Turnstile as "passed".
-    loadTurnstileKey(root).then(function () { mountTurnstile(root); });
   }
 
   // Attach to anything currently on the page, and re-attach on Quartz's

@@ -77,44 +77,6 @@ function sanitizeText(raw, maxLen) {
   return v.slice(0, maxLen)
 }
 
-async function verifyTurnstileSubmission(env, request, token) {
-  const secret = String(env.ICONOPLASM_TURNSTILE_SECRET_KEY || "").trim()
-  if (!secret) {
-    return { configured: false, passed: true, reason: "unconfigured" }
-  }
-  const cleanedToken = String(token || "").trim()
-  if (!cleanedToken) {
-    return { configured: true, passed: false, reason: "missing" }
-  }
-  const payload = new URLSearchParams()
-  payload.set("secret", secret)
-  payload.set("response", cleanedToken)
-  const remoteIp = String(request.headers.get("CF-Connecting-IP") || "").trim()
-  if (remoteIp) payload.set("remoteip", remoteIp)
-  try {
-    const resp = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: payload,
-    })
-    const data = await resp.json().catch(() => ({}))
-    if (!resp.ok) {
-      return { configured: true, passed: false, reason: `siteverify_http_${resp.status}` }
-    }
-    return {
-      configured: true,
-      passed: Boolean(data?.success),
-      reason: Array.isArray(data?.["error-codes"]) ? data["error-codes"].join(",") : "",
-    }
-  } catch (error) {
-    return {
-      configured: true,
-      passed: false,
-      reason: String(error?.message || error || "turnstile_failed").slice(0, 255) || "turnstile_failed",
-    }
-  }
-}
-
 function jsonError(message, status, extraHeaders = {}) {
   return new Response(JSON.stringify({ ok: false, error: message }), {
     status,
@@ -179,21 +141,6 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
   const honeypot = sanitizeText(payload?.website || "", 255) || ""
   if (honeypot) {
     return jsonOk({ queued: false, ignored: true }, { ...rl.headers, ...corsHeaders })
-  }
-
-  // Validate the Turnstile token before doing anything else. Same posture as the
-  // artist-blacklist endpoint: if Turnstile is not configured (e.g. local dev)
-  // we let the submission through.
-  const turnstile = await verifyTurnstileSubmission(
-    env,
-    request,
-    payload?.turnstile_token || payload?.turnstileToken || payload?.cf_turnstile_response || "",
-  )
-  if (turnstile.configured && !turnstile.passed) {
-    return jsonError("Please complete the bot check and try again.", 400, {
-      ...rl.headers,
-      ...corsHeaders,
-    })
   }
 
   const name = sanitizeText(payload?.name || "", CONTACT_NAME_MAX)
@@ -264,7 +211,6 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
       origin: request.headers.get("Origin") || null,
       user_agent: request.headers.get("User-Agent") || null,
       ip: request.headers.get("CF-Connecting-IP") || null,
-      turnstile_passed: turnstile.passed,
       cloudflare_send_message_id: sendResult?.messageId || null,
     };
     const write = env.KV.put(messageId, JSON.stringify(record), {
