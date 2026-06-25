@@ -34,24 +34,8 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
     return (
       <div class="contact-form-card" data-contact-form-root data-endpoint={endpoint}>
         <form class="contact-form" data-contact-form novalidate>
-          <p class="contact-form__intro">
-            Drop me a message. Replies usually go out within a couple of days.
-          </p>
-
           <label class="contact-form__field">
-            <span class="contact-form__label">Your name</span>
-            <input
-              class="contact-form__input"
-              type="text"
-              name="name"
-              maxLength={120}
-              autocomplete="name"
-              placeholder="Name (optional)"
-            />
-          </label>
-
-          <label class="contact-form__field">
-            <span class="contact-form__label">Your email</span>
+            <span class="contact-form__label">Email</span>
             <input
               class="contact-form__input"
               type="email"
@@ -64,17 +48,6 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
           </label>
 
           <label class="contact-form__field">
-            <span class="contact-form__label">Subject</span>
-            <input
-              class="contact-form__input"
-              type="text"
-              name="subject"
-              maxLength={200}
-              placeholder="Subject (optional)"
-            />
-          </label>
-
-          <label class="contact-form__field">
             <span class="contact-form__label">Message</span>
             <textarea
               class="contact-form__textarea"
@@ -82,7 +55,6 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
               required
               rows={6}
               maxLength={5000}
-              placeholder="What would you like to say?"
             ></textarea>
           </label>
 
@@ -105,7 +77,7 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
               type="submit"
               data-contact-form-submit
             >
-              Send message
+              Send
             </button>
           </div>
 
@@ -137,13 +109,6 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-}
-
-.contact-form__intro {
-  margin: 0 0 0.25rem;
-  color: var(--darkgray);
-  font-size: 0.95rem;
-  line-height: 1.5;
 }
 
 .contact-form__field {
@@ -266,9 +231,7 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
 
     form.addEventListener("submit", function (event) {
       event.preventDefault();
-      var nameInput = form.querySelector("input[name='name']");
       var emailInput = form.querySelector("input[name='email']");
-      var subjectInput = form.querySelector("input[name='subject']");
       var messageInput = form.querySelector("textarea[name='message']");
       var honeypot = form.querySelector("input[name='website']");
 
@@ -276,12 +239,12 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
       var message = messageInput ? String(messageInput.value || "").trim() : "";
 
       if (!email) {
-        setStatus("Enter your email so I can reply.", "error");
+        setStatus("Enter your email.", "error");
         if (emailInput) emailInput.focus();
         return;
       }
       if (!message || message.length < 3) {
-        setStatus("Write a message of at least 3 characters.", "error");
+        setStatus("Write a message.", "error");
         if (messageInput) messageInput.focus();
         return;
       }
@@ -290,9 +253,7 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
       setStatus("Sending…", "neutral");
 
       var payload = {
-        name: nameInput ? String(nameInput.value || "").trim() : "",
         email: email,
-        subject: subjectInput ? String(subjectInput.value || "").trim() : "",
         message: message,
         website: honeypot ? String(honeypot.value || "") : "",
       };
