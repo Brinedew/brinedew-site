@@ -1534,8 +1534,18 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
     // Site-wide contact form (brinedew.bio/About). Lives next to /api/auth/*
     // because both are platform-level concerns that don't belong to any single
     // Brinedew app subdomain.
-    if (url.pathname === "/api/contact") {
+    if (url.pathname === "/api/contact" && request.method === "POST") {
       return handleContactSubmission(request, env, ctx, corsHeaders)
+    }
+    // Public Turnstile site-key lookup for the static contact form. The key is
+    // a public identifier (safe to expose), but we still gate it on a valid
+    // origin so an unrelated site can't burn through the endpoint.
+    if (url.pathname === "/api/contact-turnstile-config" && request.method === "GET") {
+      const siteKey = String(env.ICONOPLASM_TURNSTILE_SITE_KEY || "").trim()
+      return Response.json(
+        { siteKey, configured: Boolean(siteKey) },
+        { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300", ...corsHeaders } },
+      )
     }
 
     // The live settings page runs on brinedew.bio and probes Iconoplasm admin state via

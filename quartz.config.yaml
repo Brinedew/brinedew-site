@@ -283,18 +283,18 @@ plugins:
         About: /About.html
         Support me: /posts/Support-me.html
   # Contact form for the brinedew.bio About page. The component is opt-in:
-  # pages that want it must include <div class="contact-form-card"> markup or
-  # trigger the component via Component.Custom(); see content/About.md for the
-  # canonical usage. Turnstile site key is read from ICONOPLASM_TURNSTILE_SITE_KEY
-  # at build time via the env var passed to `pnpm run build`.
+  # pages that want it must include the contact form component, see
+  # content/About.md for the canonical usage. The Turnstile site key is
+  # fetched at runtime from /api/contact-turnstile-config on the same
+  # stateful worker, so the static build does not need any Turnstile env var.
   - source:
       name: contact-form
       repo: ./.quartz/local-plugins/contact-form
     enabled: true
     order: 24
     options:
-      turnstileSiteKey: ${ICONOPLASM_TURNSTILE_SITE_KEY}
       endpoint: /api/contact
+      turnstileConfigEndpoint: /api/contact-turnstile-config
     layout:
       position: afterBody
       priority: 15

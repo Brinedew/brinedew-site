@@ -1,10 +1,10 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 
 type ContactFormOptions = {
-  /** Turnstile site key. If empty, the form renders without the bot check. */
-  turnstileSiteKey?: string
   /** Path the form posts to. Must be an endpoint on the stateful worker. */
   endpoint?: string
+  /** Path the script uses to fetch the Turnstile site key. */
+  turnstileConfigEndpoint?: string
 }
 
 /**
@@ -21,8 +21,7 @@ type ContactFormOptions = {
  */
 const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
   const endpoint = opts.endpoint || "/api/contact"
-  const turnstileSiteKey = String(opts.turnstileSiteKey || "").trim()
-  const turnstileConfigured = Boolean(turnstileSiteKey)
+  const turnstileConfigEndpoint = opts.turnstileConfigEndpoint || "/api/contact-turnstile-config"
 
   const Component: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
     // Opt-in: only render on pages that explicitly include the contact form.
@@ -40,7 +39,7 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
     if (!wantsForm) return null
 
     return (
-      <div class="contact-form-card" data-contact-form-root data-endpoint={endpoint}>
+      <div class="contact-form-card" data-contact-form-root data-endpoint={endpoint} data-turnstile-config={turnstileConfigEndpoint}>
         <form class="contact-form" data-contact-form novalidate>
           <p class="contact-form__intro">
             Drop me a message. Replies usually go out within a couple of days.
@@ -109,13 +108,15 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
             </label>
           </div>
 
-          {turnstileConfigured && (
-            <div
-              class="cf-turnstile"
-              data-sitekey={turnstileSiteKey}
-              data-theme="auto"
-            ></div>
-          )}
+          {/*
+            The Turnstile site key is fetched at runtime from
+            /api/contact-turnstile-config so the static Quartz build doesn't
+            need the key as a build-time env var. The worker serves the same
+            key that gates the artist-blacklist form, so the contact form
+            and the blocklist form share one Turnstile widget configuration.
+            The mount div starts empty; afterDOMLoaded injects the widget.
+          */}
+          <div class="cf-turnstile" data-contact-form-turnstile data-theme="auto"></div>
 
           <div class="contact-form__actions">
             <button
@@ -267,6 +268,80 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
   // a MutationObserver. The script is small and idempotent.
   Component.afterDOMLoaded = `
 (function () {
+  function ensureTurnstileScript() {
+    if (document.querySelector("script[data-contact-form-turnstile-loader]")) {
+      return Promise.resolve();
+    }
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+      s.async = true;
+      s.defer = true;
+      s.setAttribute("data-contact-form-turnstile-loader", "1");
+      s.onload = function () { resolve(); };
+      s.onerror = function () { reject(new Error("Failed to load Turnstile")); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function mountTurnstile(root) {
+    if (root.__turnstileMounted) return Promise.resolve();
+    var mount = root.querySelector("[data-contact-form-turnstile]");
+    if (!mount) return Promise.resolve();
+    if (!mount.__siteKey) return Promise.resolve();
+    root.__turnstileMounted = true;
+    return ensureTurnstileScript().then(function () {
+      if (!window.turnstile || typeof window.turnstile.render !== "function") {
+        root.__turnstileMounted = false;
+        return;
+      }
+      try {
+        window.turnstile.render(mount, {
+          sitekey: mount.__siteKey,
+          theme: mount.getAttribute("data-theme") || "auto",
+          callback: function (token) {
+            mount.__lastToken = token || "";
+          },
+        });
+      } catch (_e) {
+        root.__turnstileMounted = false;
+      }
+    }).catch(function () {
+      root.__turnstileMounted = false;
+    });
+  }
+
+  function loadTurnstileKey(root) {
+    if (root.__turnstileLoaded) return Promise.resolve(root.__turnstileConfig || { siteKey: "", configured: false });
+    root.__turnstileLoaded = true;
+    var cfgEndpoint = root.getAttribute("data-turnstile-config") || "/api/contact-turnstile-config";
+    return fetch(cfgEndpoint, { credentials: "omit" })
+      .then(function (resp) {
+        if (!resp.ok) return { siteKey: "", configured: false };
+        return resp.json();
+      })
+      .catch(function () { return { siteKey: "", configured: false }; })
+      .then(function (cfg) {
+        root.__turnstileConfig = cfg;
+        var mount = root.querySelector("[data-contact-form-turnstile]");
+        if (mount && cfg && cfg.siteKey) {
+          mount.__siteKey = cfg.siteKey;
+        }
+        return cfg;
+      });
+  }
+
+  function getTurnstileToken(root) {
+    var mount = root.querySelector("[data-contact-form-turnstile]");
+    if (mount && mount.__lastToken) return String(mount.__lastToken);
+    if (mount && window.turnstile && typeof window.turnstile.getResponse === "function") {
+      var v = window.turnstile.getResponse(mount);
+      return v ? String(v) : "";
+    }
+    var field = document.querySelector("[name='cf-turnstile-response']");
+    return field ? String(field.value || "").trim() : "";
+  }
+
   function attach(root) {
     if (!root || root.__contactFormWired === true) return;
     var form = root.querySelector("[data-contact-form]");
@@ -280,11 +355,6 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
       if (!status) return;
       status.textContent = String(message || "");
       status.setAttribute("data-tone", tone || "neutral");
-    }
-
-    function getTurnstileToken() {
-      var field = form.querySelector("[name='cf-turnstile-response']");
-      return field ? String(field.value || "").trim() : "";
     }
 
     form.addEventListener("submit", function (event) {
@@ -309,11 +379,7 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
         return;
       }
 
-      var turnstileToken = getTurnstileToken();
-      if (window.turnstile && typeof window.turnstile.getResponse === "function") {
-        var v = window.turnstile.getResponse(root.querySelector(".cf-turnstile") || undefined);
-        if (v) turnstileToken = v;
-      }
+      var turnstileToken = getTurnstileToken(root);
 
       if (submit) submit.disabled = true;
       setStatus("Sending…", "neutral");
@@ -344,8 +410,8 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
             setStatus("Thanks — your message is on its way to my inbox.", "ok");
             form.reset();
             if (window.turnstile && typeof window.turnstile.reset === "function") {
-              var widget = root.querySelector(".cf-turnstile");
-              if (widget) window.turnstile.reset(widget);
+              var mount = root.querySelector("[data-contact-form-turnstile]");
+              if (mount) window.turnstile.reset(mount);
             }
           } else {
             var msg = (result.data && result.data.error) ? result.data.error : ("HTTP " + result.status);
@@ -359,6 +425,12 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
           if (submit) submit.disabled = false;
         });
     });
+
+    // Fetch the site key and mount the Turnstile widget. This is async and
+    // doesn't block form rendering; if Turnstile is not configured (e.g.
+    // local dev with no key) the form still works because the worker treats
+    // an unconfigured Turnstile as "passed".
+    loadTurnstileKey(root).then(function () { mountTurnstile(root); });
   }
 
   // Attach to anything currently on the page, and re-attach on Quartz's
