@@ -46,6 +46,11 @@
         "displayName": "Protein Infobox",
         "defaultPosition": "beforeBody",
         "defaultPriority": 10
+      },
+      "ContactForm": {
+        "displayName": "Contact Form",
+        "defaultPosition": "afterBody",
+        "defaultPriority": 15
       }
     }
   }

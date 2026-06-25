@@ -883,6 +883,7 @@ import {
   handlePostRecap,
   handleRenderPage,
 } from "./discord.js"
+import { handleContactSubmission } from "./contact-form.js"
 // Import stats handlers
 import {
   handleMigrateStats,
@@ -1528,6 +1529,13 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
           headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
         })
       }
+    }
+
+    // Site-wide contact form (brinedew.bio/About). Lives next to /api/auth/*
+    // because both are platform-level concerns that don't belong to any single
+    // Brinedew app subdomain.
+    if (url.pathname === "/api/contact") {
+      return handleContactSubmission(request, env, ctx, corsHeaders)
     }
 
     // The live settings page runs on brinedew.bio and probes Iconoplasm admin state via

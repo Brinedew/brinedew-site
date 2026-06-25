@@ -3,6 +3,7 @@ title: About
 hide:
   - navigation
 draft: false
+contact: true
 ---
 ## About me
 I'm a wet lab biologist dabbling in computational side of life science. Here you can find the side projects I've been cooking on my own time.
@@ -11,4 +12,4 @@ I'm a researcher, not a medical doctor. The content of this site is not medical 
 
 ## Contact
 
-Reach me at [brinedew@proton.me](mailto:brinedew@proton.me).
+The address is not in this page on purpose. Use the form below and your message lands in my inbox directly.
