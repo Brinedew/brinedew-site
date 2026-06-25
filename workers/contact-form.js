@@ -96,7 +96,7 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value) && value.length <= CONTACT_EMAIL_MAX
 }
 
-function buildContactEmail({ fromEmail, body, meta }) {
+function buildContactEmail({ body }) {
   const submittedAt = new Date()
   // "Contact form at brinedew.bio - 26 Jun 2026, 04:57 UTC"
   const formatted =
@@ -110,19 +110,7 @@ function buildContactEmail({ fromEmail, body, meta }) {
       hour12: false,
     }) + " UTC"
   const subject = `Contact form at brinedew.bio - ${formatted}`
-  const lines = [
-    `From: ${fromEmail}`,
-    "",
-    body,
-    "",
-    "---",
-    `Reply to: ${fromEmail}`,
-    `Submitted: ${submittedAt.toISOString()}`,
-    `Origin: ${meta?.origin || "(unknown)"}`,
-    `User agent: ${meta?.userAgent || "(unknown)"}`,
-    `CF-Connecting-IP: ${meta?.ip || "(unknown)"}`,
-  ]
-  return { subject, text: lines.join("\n") }
+  return { subject, text: body }
 }
 
 export async function handleContactSubmission(request, env, ctx, corsHeaders) {
@@ -171,14 +159,9 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
   // generated `Reply-To` header in the email would normally be set client-side,
   // but Cloudflare Email Sending's `env.CONTACT_EMAIL.send(...)` API does not
   // currently expose a reply-to parameter, so the body carries the address.
+  const emailBody = `From: ${fromEmail}\n\n${body}`
   const { subject: emailSubject, text: emailText } = buildContactEmail({
-    fromEmail,
-    body,
-    meta: {
-      origin: request.headers.get("Origin") || "(none)",
-      userAgent: request.headers.get("User-Agent") || "(none)",
-      ip: request.headers.get("CF-Connecting-IP") || "(none)",
-    },
+    body: emailBody,
   })
 
   if (!env.CONTACT_EMAIL || typeof env.CONTACT_EMAIL.send !== "function") {
