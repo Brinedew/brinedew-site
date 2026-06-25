@@ -282,11 +282,10 @@ plugins:
       links:
         About: /About.html
         Support me: /posts/Support-me.html
-  # Contact form for the brinedew.bio About page. The component is opt-in:
-  # pages that want it must include the contact form component, see
-  # content/About.md for the canonical usage. The Turnstile site key is
-  # fetched at runtime from /api/contact-turnstile-config on the same
-  # stateful worker, so the static build does not need any Turnstile env var.
+  # Contact form for the brinedew.bio About page. Opt-in via the
+  # `contact: true` frontmatter on content/About.md. The form posts to
+  # /api/contact on the stateful worker, which delivers via Cloudflare
+  # Email Sending to contact@brinedew.bio -> Email Routing -> your inbox.
   - source:
       name: contact-form
       repo: ./.quartz/local-plugins/contact-form
@@ -294,7 +293,6 @@ plugins:
     order: 24
     options:
       endpoint: /api/contact
-      turnstileConfigEndpoint: /api/contact-turnstile-config
     layout:
       position: afterBody
       priority: 15
