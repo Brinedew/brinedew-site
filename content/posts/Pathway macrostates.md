@@ -1,7 +1,7 @@
 ---
 title: Pathway macrostates
 tags:
-  - content/post
+  - content/wiki
 date: 2026-05-02
 draft: true
 ---
