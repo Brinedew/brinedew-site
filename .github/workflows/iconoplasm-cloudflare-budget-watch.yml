@@ -21,8 +21,11 @@ jobs:
       ICONOPLASM_KV_BUDGET_ALERT_RATIO: "0.8"
       ICONOPLASM_KV_DELETE_BUDGET_ALERT_RATIO: "0.95"
     steps:
+      # Bump actions/checkout @v6 -> @v7 (2026 current major). This
+      # schedule-driven KV headroom check fires every 2 hours; bumping the
+      # checkout pin keeps it aligned with the rest of the workflow set.
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node.js (22.x)
         uses: actions/setup-node@v6

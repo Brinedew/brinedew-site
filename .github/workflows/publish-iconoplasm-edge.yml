@@ -31,7 +31,13 @@ permissions:
 
 jobs:
   publish-edge:
-    runs-on: windows-latest
+    # Re-platformed from windows-latest to ubuntu-latest. PowerShell 7 is
+    # preinstalled on GitHub-hosted Linux runners, and the only Win32-shaped
+    # calls in this workflow (Invoke-WebRequest, Invoke-RestMethod, Get-FileHash,
+    # ConvertFrom-Json) are cross-platform on PS7. This cuts billable minutes
+    # roughly in half and avoids windows-2022 vs windows-2025 runner-image
+    # churn that has broken PowerShell steps in 2025-2026.
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: pwsh
@@ -40,8 +46,10 @@ jobs:
       EDGE_PRODUCT_ID: b8547df3-4156-4b56-b7dc-3752347b6794
       EDGE_API_ROOT: https://api.addons.microsoftedge.microsoft.com
     steps:
+      # Bump actions/checkout @v4 -> @v7 and actions/setup-node @v4 -> @v6
+      # (2026 current majors).
       - name: Check out repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Confirm human publish intent
         env:
@@ -52,7 +60,7 @@ jobs:
           }
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
 
@@ -208,9 +216,12 @@ jobs:
           }
           throw "Timed out waiting for Edge publish operation."
 
+      # Bump actions/upload-artifact @v4 -> @v7 (2026 current major). v4 was
+      # not the GH13-deprecated line, but pinning to the current major is
+      # what every other workflow in this repo now does.
       - name: Upload Edge zip
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: iconoplasm-edge-package
           path: iconoplasm-extension/dist/iconoplasm-edge-v*.zip

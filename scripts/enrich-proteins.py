@@ -2,8 +2,16 @@
 """
 Protein Page Enrichment Script
 
-Scans Website/content/wiki/*.md for protein pages and enriches frontmatter
-with molecular + persona data from Cellulore.
+Scans content/wiki/*.md for protein pages and enriches frontmatter with molecular
++ persona data from the local Cellulore snapshot, then writes
+image_generation_queue.txt with prompts for missing images.
+
+Runs as a required step in the canonical production deploy
+(.github/workflows/deploy-quartz.yml "Enrich protein pages"). The input snapshot
+lives at ../Datasets/cellulore/proteins_with_demographics.json relative to this
+repo; if that path is missing, the script fails loud and the deploy is blocked
+(see deploy-quartz.yml "Verify Iconoplasm Worker budget guards" for the
+related cost-barrier gate).
 
 Usage:
     python scripts/enrich-proteins.py
@@ -11,12 +19,6 @@ Usage:
 Outputs:
     - Updated frontmatter in protein pages
     - image_generation_queue.txt with prompts for missing images
-"""
-"""
-Enriches markdown frontmatter and generates image prompts for protein pages.
-
-Note: This script is for local/manual use only. Do not run as part of CI/CD workflows.
-Run locally after updating markdown or metadata. Large files are not tracked in git.
 """
 
 import sys

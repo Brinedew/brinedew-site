@@ -21,7 +21,12 @@ jobs:
           echo "OWNER_LOWERCASE=${OWNER,,}" >> ${GITHUB_ENV}
         env:
           OWNER: "${{ github.repository_owner }}"
-      - uses: actions/checkout@v6
+      # Bump actions/checkout @v6 -> @v7 (2026 current major).
+      # NOTE: this workflow is gated on github.repository == 'jackyzha0/quartz'
+      # (line below), so it never runs in the brinedew fork. The Dockerfile
+      # and this workflow are upstream-Quartz carryover. Keep them in sync
+      # with the upstream template, but do not assume they execute here.
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
       - name: Inject slug/short variables

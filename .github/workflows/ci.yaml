@@ -17,7 +17,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      # Bump actions/checkout @v6 -> @v7 and actions/cache @v5 -> @v6 (2026
+      # current majors). setup-node @v6 is already the latest. Dependabot
+      # version-updates covers npm dependencies; this project explicitly pins
+      # GitHub Actions to majors instead of SHA so Dependabot can PR drift.
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -38,7 +42,7 @@ jobs:
           echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
       - name: Cache pnpm dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ${{ env.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -46,7 +50,7 @@ jobs:
             ${{ runner.os }}-pnpm-
 
       - name: Cache Quartz plugins
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .quartz/plugins
           key: ${{ runner.os }}-plugins-${{ hashFiles('quartz.lock.json') }}
