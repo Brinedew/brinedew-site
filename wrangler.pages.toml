@@ -4,6 +4,7 @@
 name = "brinedew-bio"
 # compatibility_date matches wrangler.toml. Cloudflare Pages reads the
 # compat date from this file when deploy-quartz.yml copies it into
-# .wrangler-pages/ before `wrangler pages deploy`.
-compatibility_date = "2026-06-29"
+# .wrangler-pages/ before `wrangler pages deploy`. Use the runner's UTC
+# date, not the local date — Cloudflare rejects future-dated configs.
+compatibility_date = "2026-06-28"
 pages_build_output_dir = "../public"
