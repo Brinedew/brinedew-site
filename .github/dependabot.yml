@@ -1,20 +1,73 @@
 version: 2
+
+# Dependabot hardening (2026):
+#   - daily cadence (default for npm/github-actions ecosystems)
+#   - groups split into auto-mergeable minor+patch and manual major batches
+#   - open-pull-requests-limit caps the back-log so a missed week does not
+#     generate 20+ PRs at once under minimumReleaseAge=1440
+#   - labels: every Dependabot PR shows up tagged so the inbox filter works
+#   - target-branch: pin to main so Dependabot never opens against legacy
+#     v4 / v5 branches (this repo merged into v5 long ago and the v5 branch
+#     is no longer the integration line)
+#   - ignore: keep major bumps for the few packages where the major upgrade
+#     needs a deliberate migration commit (wrangler, wxt, @types/node).
+#     Everything else still rolls in via the auto-merge groups.
 updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
+    open-pull-requests-limit: 8
+    target-branch: "main"
+    labels:
+      - "dependencies"
+      - "npm"
     groups:
-      production-dependencies:
+      npm-minor-and-patch:
         applies-to: "version-updates"
+        update-types:
+          - "minor"
+          - "patch"
         patterns:
           - "*"
+      npm-major:
+        applies-to: "version-updates"
+        update-types:
+          - "major"
+        patterns:
+          - "*"
+    ignore:
+      # wrangler: major upgrades typically require wrangler.toml / compat-date
+      # changes; do them deliberately.
+      - dependency-name: "wrangler"
+        update-types: ["version-update:semver-major"]
+      # wxt: the browser-extension bundler; majors re-shape wxt.config.ts.
+      - dependency-name: "wxt"
+        update-types: ["version-update:semver-major"]
+      # @types/node: majors land on a new Node LTS; bump with the .node-version file.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
+    open-pull-requests-limit: 5
+    target-branch: "main"
+    labels:
+      - "dependencies"
+      - "github-actions"
     groups:
-      ci-dependencies:
+      github-actions-minor-and-patch:
         applies-to: "version-updates"
+        update-types:
+          - "minor"
+          - "patch"
+        patterns:
+          - "*"
+      github-actions-major:
+        applies-to: "version-updates"
+        update-types:
+          - "major"
         patterns:
           - "*"

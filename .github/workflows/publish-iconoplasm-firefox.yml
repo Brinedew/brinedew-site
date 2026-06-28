@@ -28,14 +28,20 @@ permissions:
 
 jobs:
   publish-firefox:
-    runs-on: windows-latest
+    # Re-platformed from windows-latest to ubuntu-latest. PowerShell 7 is
+    # preinstalled on GitHub-hosted Linux runners, and the web-ext sign/lint
+    # steps run via pnpm and Node, both fully cross-platform. See
+    # publish-iconoplasm-edge.yml for the matching rationale.
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: pwsh
         working-directory: .
     steps:
+      # Bump actions/checkout @v4 -> @v7 and actions/setup-node @v4 -> @v6
+      # (2026 current majors).
       - name: Check out repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Confirm human publish intent
         env:
@@ -46,7 +52,7 @@ jobs:
           }
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
 
@@ -89,15 +95,17 @@ jobs:
             --api-key ${{ secrets.AMO_JWT_ISSUER }} `
             --api-secret ${{ secrets.AMO_JWT_SECRET }}
 
+      # Bump actions/upload-artifact @v4 -> @v7 (2026 current major). Both
+      # upload steps share the same action pin.
       - name: Upload unsigned zip
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: iconoplasm-firefox-source-bundle
           path: iconoplasm-extension/dist/iconoplasm-firefox-v*.zip
           if-no-files-found: error
 
       - name: Upload signed Firefox artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: iconoplasm-firefox-signed
           path: iconoplasm-extension/dist/firefox-signed/**/*

@@ -36,26 +36,39 @@ jobs:
             exit 1
           fi
 
+      # Bump actions/checkout @v4 -> @v7 and actions/setup-node @v4 -> @v6
+      # (2026 current majors). The setup-node bump also lets us drop
+      # `cache: "npm"` and install with pnpm below, matching package.json.
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
+      # This workflow rotates the live ICONOPLASM_ADMIN_TOKEN in two Workers.
+      # Use pnpm to match package.json#packageManager ("pnpm@11.0.9") and
+      # .npmrc#engine-strict. The previous `npm ci` + `cache: "npm"` shape
+      # worked only because nothing here depended on the JS toolchain; the
+      # moment someone adds a JS preflight it would silently install with
+      # the wrong lockfile.
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: "npm"
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Rotate stateful Worker secret
         run: |
           printf '%s' "${ICONOPLASM_ADMIN_TOKEN}" \
-            | npx wrangler secret put ICONOPLASM_ADMIN_TOKEN \
+            | pnpm exec wrangler secret put ICONOPLASM_ADMIN_TOKEN \
                 --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 
       - name: Rotate public edge Worker secret
         run: |
           printf '%s' "${ICONOPLASM_ADMIN_TOKEN}" \
-            | npx wrangler secret put ICONOPLASM_ADMIN_TOKEN \
+            | pnpm exec wrangler secret put ICONOPLASM_ADMIN_TOKEN \
                 --config wrangler.the-only-allowed-public-edge-worker-upload-only.toml

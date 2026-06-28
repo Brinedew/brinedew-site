@@ -14,7 +14,7 @@ _For Claude Code and anyone else working on this site_
 
 Personal longevity research blog built with Quartz 4. This is a modern static site generator optimized for Obsidian integration, with features like graph view, backlinks, full-text search, and proper digital garden functionality.
 
-The basic flow: write markdown in `content/`, push to GitHub, CI builds the site with Quartz, GitHub Pages serves it at brinedew.com. Takes about 60 seconds from push to live.
+The basic flow: write markdown in `content/`, push to GitHub, the canonical production deploy path (`scripts/deploy-cloudflare-prod.ps1` -> `.github/workflows/deploy-quartz.yml`) builds the site with Quartz and ships it to Cloudflare Pages at `brinedew.bio`, with a public-edge Cloudflare Worker in front. Takes about 2-3 minutes from dispatch to live. See "the deployment pipeline" below for the current shape; the older "GitHub Pages + brinedew.com" mental model is obsolete.
 
 ## Design Context
 
@@ -64,7 +64,8 @@ npx quartz build    # builds static site to public/
 1. Write markdown in Obsidian on any device (phone, tablet, PC)
 2. Syncthing syncs content automatically across all devices
 3. When ready to publish: Git commit and push from PC
-4. Wait a minute, check brinedew.com
+4. From the PC, dispatch production: `powershell -File scripts/deploy-cloudflare-prod.ps1`. The script refuses to dispatch unless HEAD == origin/main and the working tree is clean, so this is safe to run by hand.
+5. Wait for the dispatched `Deploy Production (Cloudflare Pages + Worker)` workflow to finish (~2-3 min), check `https://brinedew.bio/`
 
 **Device setup:**
 
@@ -170,11 +171,11 @@ Use `content/posts/dark-mode-test-page.md` to test that all content types render
 
 ## when things break
 
-**Site not updating?** Check GitHub Actions first: https://github.com/Brinedew/brinedew-site/actions
+**Site not updating?** First check the GitHub Actions tab on this repo for the `Deploy Production (Cloudflare Pages + Worker)` workflow run. Then check `docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md` and `docs/ICONOPLASM_OPERATIONS.md` (and the "Site is broken" runbook in `AGENTS.md`) before doing anything else.
 
-- Green checkmark = deployment succeeded, changes should be live in ~60 seconds
-- Red X = build failed, check the logs for errors
-- Yellow circle = build in progress, wait for completion
+- Green checkmark = dispatch + Pages + Worker deploy succeeded, changes should be live on `brinedew.bio` in ~2-3 min total
+- Red X = build failed or one of the deploy steps failed; check the failing step's log
+- Yellow circle = dispatch in progress or in the `production-deploy` concurrency queue
 
 **Build failing?** Check that:
 
@@ -214,14 +215,36 @@ git reset --hard origin/main
 
 ## the deployment pipeline
 
-1. Push to main
-2. GitHub Actions spins up Ubuntu runner
-3. Installs Node.js + Quartz dependencies
-4. Runs `npx quartz build`
-5. Uploads the `./public` directory as a Pages artifact
-6. Deploys to GitHub Pages
+Production deploy is **Cloudflare Pages + Cloudflare Worker**, not GitHub Pages. The canonical entry point is `scripts/deploy-cloudflare-prod.ps1`, which dispatches `.github/workflows/deploy-quartz.yml` against the exact `origin/main` SHA. Do not run `wrangler pages deploy` or `wrangler deploy` by hand for production — local machine auth, local config drift, and partial deploys are exactly what the dispatch path is designed to prevent.
 
-No gh-pages branch, no manual deployment commands. Just push and wait.
+The flow on a production push:
+
+1. Push your commit to `main` (via Obsidian Git Sync or the PC).
+2. From the PC, dispatch: `powershell -File scripts/deploy-cloudflare-prod.ps1`. The script refuses unless HEAD == origin/main and the working tree is clean.
+3. The dispatched `Deploy Production (Cloudflare Pages + Worker)` workflow (`concurrency: production-deploy, cancel-in-progress: true`) runs on `ubuntu-latest` and, in order:
+   1. Checks out at full depth.
+   2. Sets up Node 22 + pnpm 11 via corepack, with `minimumReleaseAge: 1440`.
+   3. Runs `scripts/enrich-proteins.py` (Python 3.12, pandas/pyyaml/python-frontmatter/requests).
+   4. Installs dependencies and the Quartz plugin set.
+   5. Runs the Iconoplasm worker-budget guard tests + `scripts/assert-iconoplasm-worker-budget-guards.mjs`. **If any of these fail, the deploy is blocked.** This is the canonical cost-barrier gate; see `docs/ICONOPLASM_OPERATIONS.md`.
+   6. Runs `pnpm run build` (Quartz + Iconoplasm shared-asset sync + plugin install + content rendering into `public/`).
+   7. Writes `public/CNAME` from `content/CNAME` (fallback `brinedew.bio`, never `brinedew.com`).
+   8. Deploys the static site to Cloudflare Pages via an isolated Pages-only `wrangler.pages.toml` config.
+   9. Applies D1 migrations to `geneguessr` and `iconoplasm`.
+   10. Deploys the internal stateful Worker.
+   11. Re-binds the Iconoplasm finalization queue consumer.
+   12. Deploys the public edge Worker with routes from `wrangler.toml`.
+   13. Reassigns production routes (idempotent safety net).
+   14. Smoke-tests `https://brinedew.bio/api/auth/login` for a 302 to `https://discord.com/oauth2/authorize` with a non-empty `client_id`.
+
+Total wall time on a clean cache is 2-3 minutes.
+
+What it does **not** do (and the previous "GitHub Pages + brinedew.com" mental model implied):
+
+- It does not publish to GitHub Pages. There is no `gh-pages` branch, no `actions/deploy-pages` step, and no Pages artifact in this repo.
+- It does not serve `brinedew.com`. The canonical domain is `brinedew.bio` (see `quartz.config.yaml:79` and `:220`); the old `brinedew.com` fallback CNAME in the deploy workflow was a 2026-06-29 cleanup target.
+
+For preview deploys on a PR, `build-preview.yaml` builds the same site and `deploy-preview.yaml` uploads it to a Cloudflare Pages branch preview (only if `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN` secrets are set).
 
 ## quartz features we're using
 

@@ -10,8 +10,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      # Bump actions/checkout @v6 -> @v7 (2026 current major). Wrangler is
+      # installed via the devDependency at package.json (wrangler 4.x) in
+      # other workflows; this benchmark workflow uses a global install so
+      # the runner shell is reproducible without a checkout install step.
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

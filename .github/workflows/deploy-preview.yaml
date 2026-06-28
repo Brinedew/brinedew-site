@@ -32,9 +32,11 @@ jobs:
           echo "::notice title=Preview deploy skipped::Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN repo secrets to enable Cloudflare Pages preview deployments."
           echo "enabled=false" >> "$GITHUB_OUTPUT"
 
+      # Bump actions/download-artifact @v7 -> @v8 (2026 current major).
+      # This pairs with build-preview.yaml's actions/upload-artifact @v7.
       - name: Download build artifact
         if: ${{ steps.cf-config.outputs.enabled == 'true' }}
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         id: preview-build-artifact
         with:
           name: preview-build
