@@ -23,7 +23,7 @@ Concrete rules:
 ## Local development overrides
 
 - **Local API override:** `?gg_api=http://127.0.0.1:8787` for local dev only. Persists in localStorage; clear with `?gg_api=clear`.
-- **Staging resources (dormant):** KV `b0394946...`, D1 `iconoplasm-staging` (3d1c101a..., ledger drifted), queues `*-staging`, Pages `brinedew-bio-staging`, workers `geneguessr-api-staging` / public-edge-staging. No CI deploys to them anymore; delete from the dash if you want them gone.
+- **Staging on Cloudflare:** `brinedew-bio-staging` Pages project and three workers (`the-only-allowed-public-edge-worker-that-must-not-touch-state-staging`, `geneguessr-api-staging`, `geneguessr-benchmark-staging`) are live on the dashboard. `staging.brinedew.bio` resolves. **Production deploys do not update staging.** Staging serves whatever was last manually dispatched to it. Trust `brinedew.bio` for "is the live site correct"; do not trust `staging.brinedew.bio` as a preview of production.
 
 ## Verify live infrastructure — project-specific cases
 
