@@ -1,10 +1,9 @@
 name = "the-only-allowed-public-edge-worker-that-must-not-touch-state"
 main = "workers/the-only-allowed-public-edge-worker-that-must-not-touch-state.js"
-# compatibility_date bumped to 2026-06-29 to match the root wrangler.toml.
-# This file is the upload-only path for the public edge Worker and is
-# expected to be the deployment source for the same Worker the root
-# wrangler.toml describes. See wrangler.toml for the rationale comment.
-compatibility_date = "2026-06-29"
+# compatibility_date matches wrangler.toml (2026-06-28, the runner's UTC
+# date at deploy time). Future dates are rejected with Cloudflare code
+# 10021. See wrangler.toml for the full rationale.
+compatibility_date = "2026-06-28"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = false
 preview_urls = false

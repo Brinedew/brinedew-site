@@ -31,11 +31,14 @@
 
 name = "the-only-allowed-public-edge-worker-that-must-not-touch-state"
 main = "workers/the-only-allowed-public-edge-worker-that-must-not-touch-state.js"
-# compatibility_date bumped to today (2026-06-29). Cloudflare's best practice is
-# to keep this current; see https://developers.cloudflare.com/workers/configuration/compatibility-dates/
+# compatibility_date uses the runner's UTC date, not the user's local date.
+# Cloudflare rejects "compatibility date in the future" with code 10021
+# when the date is past the Cloudflare server's current UTC date. The
+# 2026-06-29 deploy failed on 2026-06-28 UTC; 2026-06-28 was accepted.
+# See https://developers.cloudflare.com/workers/configuration/compatibility-dates/
 # The do-not-duplicate stateful-worker config keeps its own date because
 # it is under the Iconoplasm D1 cost-barrier guardrail and is bumped separately.
-compatibility_date = "2026-06-29"
+compatibility_date = "2026-06-28"
 compatibility_flags = ["nodejs_compat"]
 
 # Keep the worker off workers.dev; only serve the custom domain route.
