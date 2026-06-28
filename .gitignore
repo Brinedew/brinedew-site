@@ -70,6 +70,9 @@ quartz/cli/tui/dist/
 .quartz/plugins/tag-sections
 .quartz/plugins/draft-tag-injector
 .quartz/plugins/image-captions
+.quartz/plugins/contact-form
+.quartz/plugins/brinedew-components
+.quartz/plugins/brinedew-image-captions
 
 # Python cache
 __pycache__/

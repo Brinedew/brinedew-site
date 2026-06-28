@@ -2,4 +2,8 @@
 # Keep this file minimal and separate from the root Worker config, then copy it into
 # the CI temp directory used for `wrangler pages deploy`.
 name = "brinedew-bio"
+# compatibility_date matches wrangler.toml. Cloudflare Pages reads the
+# compat date from this file when deploy-quartz.yml copies it into
+# .wrangler-pages/ before `wrangler pages deploy`.
+compatibility_date = "2026-06-29"
 pages_build_output_dir = "../public"

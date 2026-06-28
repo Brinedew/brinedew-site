@@ -27,14 +27,14 @@ short first-response guide that distills the 2026-06-26 incident into a
 
 ## The two serving paths
 
-| Path | URL | DNS | Who serves the bytes | When to use |
-|---|---|---|---|---|
-| Bunny pull zone | `https://iconoplasmportraits.b-cdn.net/portraits/v1/...` | Bunny NS layer (wildcard) | Bunny CDN edge | Primary. Set in the manifest's `portrait_base_url`. |
-| Worker origin | `https://iconoplasm.brinedew.bio/portraits/v1/...` | Cloudflare authoritative | Cloudflare worker, which fetches from Bunny storage | Fallback. Lives in the same `wrangler.toml` deploy. The `/portraits/` route is already wired and tested; see `iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js:1559-1577` and `iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js:25289-25307`. |
+| Path            | URL                                                      | DNS                       | Who serves the bytes                                | When to use                                                                                                                                                                                                                                                                                                                 |
+| --------------- | -------------------------------------------------------- | ------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bunny pull zone | `https://iconoplasmportraits.b-cdn.net/portraits/v1/...` | Bunny NS layer (wildcard) | Bunny CDN edge                                      | Primary. Set in the manifest's `portrait_base_url`.                                                                                                                                                                                                                                                                         |
+| Worker origin   | `https://iconoplasm.brinedew.bio/portraits/v1/...`       | Cloudflare authoritative  | Cloudflare worker, which fetches from Bunny storage | Fallback. Lives in the same `wrangler.toml` deploy. The `/portraits/` route is already wired and tested; see `iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js:1559-1577` and `iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js:25289-25307`. |
 
 The worker-origin URL is reachable from any network because `brinedew.bio` is
-on Cloudflare DNS. The Bunny URL is reachable from any network *that can
-resolve `b-cdn.net` hostnames* — which is most public resolvers, but not all
+on Cloudflare DNS. The Bunny URL is reachable from any network _that can
+resolve `b-cdn.net` hostnames_ — which is most public resolvers, but not all
 consumer ISP resolvers (see the 2026-06-26 incident).
 
 ## Why public resolvers can't see the bug
@@ -105,9 +105,9 @@ When a user reports "portraits broken on the live site":
 - Some consumer ISP resolvers return NXDOMAIN. This is a resolver-side
   failure, not a project-side failure.
 
-The pattern — Bunny's pull zone hostname broken for *some* resolvers but not
+The pattern — Bunny's pull zone hostname broken for _some_ resolvers but not
 others, while the worker-origin URL works for everyone — is the signature of
-a *resolver-side* bug. Wait for the resolver to recover. Do not fix the
+a _resolver-side_ bug. Wait for the resolver to recover. Do not fix the
 project.
 
 ## Evidence
@@ -116,7 +116,7 @@ The full investigation that produced this runbook is in
 `artifacts/image-bug-diagnosis-2026-06-26/`. Key files:
 
 - `thum_800.png` — thum.io screenshot showing the page rendering correctly
-  on a network that *can* resolve the Bunny hostname. The disproof of the
+  on a network that _can_ resolve the Bunny hostname. The disproof of the
   "every user in the world is broken" hypothesis.
 - `worker-origin-portrait-200x200.png` — a real portrait rendering on the
   user's own Playwright session when accessed via the worker-origin URL.

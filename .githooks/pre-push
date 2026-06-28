@@ -12,21 +12,24 @@ cd "$repo_root"
 current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 
 # Only guard production pushes from main.
-# This hook is deliberately build-only: production release itself happens in the
-# Deploy Production GitHub Actions workflow so pushes do not depend on one machine's
-# Cloudflare session or perform half of a deploy locally.
+# This hook is deliberately cheap: a types + prettier pass, not a full
+# Quartz build. The full build is owned by .github/workflows/deploy-quartz.yml
+# (the canonical production deploy path). Running `npx quartz build` here
+# as well used to double-build on every push to main and added ~20s of
+# laptop time per push for no benefit — the CI build is the source of
+# truth and the GitHub Actions deploy path is what the user dispatches
+# via scripts/deploy-cloudflare-prod.ps1.
 if [ "$current_branch" != "main" ]; then
   exit 0
 fi
 
-echo "[pre-push] Verifying production build for main..."
+echo "[pre-push] Running pnpm check (types + prettier) for main..."
 
-# Install deps only when missing to keep sync fast.
 if [ ! -d node_modules ]; then
-  npm ci --no-audit --no-fund
+  pnpm install --frozen-lockfile --no-audit --no-fund
 fi
 
-node quartz/bootstrap-cli.mjs build -d content
+pnpm run check
 
-echo "[pre-push] Build passed."
-echo "[pre-push] Canonical production deploy path: Deploy Production (Cloudflare Pages + Worker)."
+echo "[pre-push] Check passed."
+echo "[pre-push] Canonical production deploy path: scripts/deploy-cloudflare-prod.ps1 -> .github/workflows/deploy-quartz.yml."
