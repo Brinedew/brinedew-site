@@ -8,9 +8,9 @@ draft: true
 # What is an agent
 
 The literature on philosophy, cybernetics and AI is littered with debates on what does it mean to call something an agent. They are all very interesting, but for all practical purposes there's a simple pragmatic concept that is worth adopting.
-### Russel-Norvig agents
+### Russell & Norvig agents
 
-The canonical AI textbook *Artificial Intelligence: A Modern Approach* by Russel and Norvig gives a simple practical definition of agents:
+The canonical AI textbook *Artificial Intelligence: A Modern Approach* by Russell and Norvig gives a simple practical definition of agents:
 > "An agent is anything that can be viewed as perceiving its environment through **sensors** and acting upon that environment through **actuators**."
 
 Note how the wording *"viewed as"* shifts focus away from metaphysics of action, and towards the researcher's own interpretation of reality. As we learned, "all models are wrong, but some are useful".
