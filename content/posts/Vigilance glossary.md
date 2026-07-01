@@ -6,6 +6,9 @@ tags:
 title: Vigilance glossary
 ---
 # Vigilance glossary
+
+This is a catalog of phrases that trigger my alarm bell when reading papers.
+
 **We reversed aging** - did you actually measure the reduction in late-life mortality rates of the treatment group compared to controls? Did you observe the treatment group breaking lifespan records for the species? Or did you just score better on frailty measures? 
 
 **We rejuvenated the cells** - what's the mutational load of these "younger" cells? Did the cell's oncogenes get un-mutated to become comparable to the DNA of the cell in a newborn organism? Or did you just remove the barriers that kept old mutated cells from becoming tumorigenic?
