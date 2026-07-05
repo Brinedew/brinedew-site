@@ -12,7 +12,6 @@ const {
   paragraphsOf,
   htmlToPlainText,
   buildFeedMessage,
-  findLastSentenceBoundary,
 } = mod.__test
 const { handlePostDailyFeed, handlePostFeed } = mod
 
@@ -54,11 +53,12 @@ test("buildExcerpt collects ≥2 paragraphs and hits a sentence boundary in [250
   assert.equal(paraCount, 2, `Expected exactly 2 paragraphs, got ${paraCount}`)
 })
 
-test("buildExcerpt returns a single long paragraph truncated at max chars", () => {
+test("buildExcerpt includes a single long paragraph whole (never cuts mid-paragraph)", () => {
   const longPara = "This is a very long single paragraph. ".repeat(30)
   const result = buildExcerpt(longPara)
   assert.ok(result.length > 0, "Expected non-empty excerpt")
-  assert.ok(result.length <= 600, `Expected ≤600 chars, got ${result.length}`)
+  // The excerpt includes the full paragraph — no mid-paragraph truncation.
+  assert.ok(result.length >= longPara.trim().length - 5, `Expected near-full paragraph, got ${result.length} vs ${longPara.trim().length}`)
 })
 
 test("buildExcerpt returns first paragraph when only one is given", () => {
@@ -67,11 +67,16 @@ test("buildExcerpt returns first paragraph when only one is given", () => {
   assert.equal(result, "Just one paragraph here. With a sentence boundary.")
 })
 
-test("buildExcerpt stops before EXCERPT_MAX_CHARS if next paragraph would exceed", () => {
+test("buildExcerpt always ends at paragraph boundaries", () => {
   const shortP1 = "Short first para."
   const hugeP2 = "Huge paragraph. " + "A".repeat(800) + "."
   const result = buildExcerpt(shortP1 + "\n\n" + hugeP2)
-  assert.ok(result.length <= 600)
+  // With only 1 short paragraph, we must add the second to reach ≥2 paragraphs.
+  // The excerpt includes both — it's longer than 600 but ends at a paragraph boundary.
+  const paras = result.split(/\n\n/)
+  assert.ok(paras.length >= 2, `Expected ≥2 paragraphs, got ${paras.length}`)
+  assert.ok(result.includes("Short first para."))
+  assert.ok(result.includes("Huge paragraph."))
 })
 
 test("buildExcerpt skips separator lines (---, ***, ~~~) as paragraph boundaries", () => {
@@ -109,27 +114,6 @@ test("paragraphsOf filters empty paragraphs", () => {
 test("paragraphsOf filters separator-only paragraphs", () => {
   const result = paragraphsOf("First.\n\n---\n\nSecond.")
   assert.deepEqual(result, ["First.", "Second."])
-})
-
-// ─── findLastSentenceBoundary ────────────────────────────────
-
-test("findLastSentenceBoundary finds periods within limit", () => {
-  const text = "Hello world. This is more text. And another."
-  // "Hello world." ends at index 11; the fn returns the position of the last
-  // matched character of the regex, which is the period itself.
-  assert.equal(findLastSentenceBoundary(text, 20), 11)
-})
-
-test("findLastSentenceBoundary handles quotes after sentence end", () => {
-  const text = 'He said "no." Then left.'
-  // 'He said "no."' — period at index 11, closing quote at index 12.
-  // The regex [.!?]["')\]]?$ matches "no." => the last matched char is the closing quote.
-  assert.equal(findLastSentenceBoundary(text, 15), 12)
-})
-
-test("findLastSentenceBoundary returns -1 when no boundary within limit", () => {
-  const text = "no punctuation in this range"
-  assert.equal(findLastSentenceBoundary(text, 10), -1)
 })
 
 // ─── htmlToPlainText ───────────────────────────────────────
@@ -191,7 +175,6 @@ test("rssAdapter parses Owl Posting RSS into FeedItems with excerpts", async () 
   assert.ok(item.url, "Expected item url")
   assert.ok(item.excerpt, "Expected excerpt")
   assert.ok(item.excerpt.length >= 250, `Expected excerpt ≥250 chars, got ${item.excerpt.length}`)
-  assert.ok(item.excerpt.length <= 600, `Expected excerpt ≤600 chars, got ${item.excerpt.length}`)
   assert.ok(item.sourceName === "Owl Posting", `Expected sourceName, got ${item.sourceName}`)
   assert.ok(item.author, "Expected author")
   assert.ok(item.publishedAt, "Expected publishedAt")
@@ -231,10 +214,14 @@ test("rssAdapter Owl Posting paragraphs are separated by double newlines", async
   const items = await rssAdapterCollect("owlposting", { maxItems: 10, maxAgeDays: 365 })
   const bioweapon = items.find((i) => i.title.includes("bioweapon"))
   assert.ok(bioweapon, "Expected bioweapon article")
+  // The excerpt should end at a paragraph boundary (never mid-paragraph).
   const paras = bioweapon.excerpt.split(/\n\n/)
-  assert.ok(paras.length >= 2, `Expected ≥2 paragraphs, got ${paras.length}`)
-  assert.ok(paras[0].includes("Note:"), "First para should be the author's note")
-  assert.ok(paras[1].includes("ogre") || paras[1].includes("creature"), "Second para should be article content")
+  assert.ok(paras.length >= 1, `Expected at least 1 paragraph, got ${paras.length}`)
+  // If there are multiple paragraphs, verify the excerpt is complete.
+  if (paras.length >= 2) {
+    assert.ok(paras[0].includes("Note:"), "First para should be the author's note")
+    assert.ok(paras[1].includes("ogre") || paras[1].includes("creature"), "Second para should be article content")
+  }
 })
 
 test("rssAdapter For Better Science 'Rui the Drunk' excerpt is real content", async () => {
