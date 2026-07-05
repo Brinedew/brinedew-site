@@ -340,6 +340,47 @@ function readabilityAdapter(opts) {
   }
 }
 
+/**
+ * Factory: an adapter for YouTube channels via the Atom RSS feed.
+ * Videos don't need excerpts — Discord auto-embeds the thumbnail
+ * when a bare YouTube URL is posted. Sets `linkOnly: true` on each
+ * item so the message builder formats accordingly.
+ */
+function youtubeAdapter(opts) {
+  const { id, name, channelId, maxAgeDays = 30, maxItems = 10 } = opts
+  const feedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`
+
+  return {
+    id,
+    name,
+    async collect(env, { ignoreAge = false } = {}) {
+      const xml = await fetchUrlText(feedUrl)
+      if (!xml) return []
+      const feed = await rssParser.parseString(xml)
+      const cutoff = ignoreAge ? 0 : Date.now() - maxAgeDays * 24 * 60 * 60 * 1000
+      const fresh = itemsFromFeed(feed)
+        .filter((i) => Date.parse(i.pubDate) >= cutoff)
+        .slice(0, maxItems)
+
+      return fresh.map((item) => {
+        const videoId = item.id?.replace("yt:video:", "") || ""
+        const url = videoId ? `https://www.youtube.com/watch?v=${videoId}` : stripUtm(item.link || "")
+        return {
+          id: item.id || item.guid || item.link || item.title || "",
+          sourceName: name,
+          author: name,
+          title: (item.title || "").trim(),
+          url,
+          excerpt: "",
+          publishedAt: item.pubDate || "",
+          text: "",
+          linkOnly: true,
+        }
+      })
+    },
+  }
+}
+
 async function loadCachedItem(env, sourceId, itemId) {
   if (!itemId) return null
   const raw = await env.KV.get(cacheKey(sourceId, itemId))
@@ -376,9 +417,14 @@ const SOURCES = [
     name: "Lior Pachter",
     feedUrl: "https://liorpachter.wordpress.com/feed/",
   }),
+  youtubeAdapter({
+    id: "clockwork",
+    name: "Clockwork",
+    channelId: "UCIZa-t5ctYtAn6BruNTxxwQ",
+  }),
 ]
 
-function buildFeedMessage(items) {
+function buildFeedMessage(items, { includeHeader = true } = {}) {
   if (items.length === 0) return null
   const now = new Date()
   const day = now.getUTCDate()
@@ -390,13 +436,18 @@ function buildFeedMessage(items) {
     const titleLine = item.url
       ? `*${byline}* — **[${item.title}](${item.url})**`
       : `*${byline}* — **${item.title}**`
+    // linkOnly items (YouTube): just the title link. Discord embeds the
+    // thumbnail from the hyperlink automatically. No bare URL, no excerpt.
+    if (item.linkOnly) return titleLine
     if (!item.excerpt) return titleLine
     return `${titleLine}\n> ${item.excerpt.replace(/\n/g, "\n> ")}`
   })
 
   const chunks = []
-  let current = header
-  for (const block of blocks) {
+  let current = includeHeader ? header : blocks[0]
+  const start = includeHeader ? 0 : 1
+  for (let i = start; i < blocks.length; i++) {
+    const block = blocks[i]
     const candidate = current + "\n\n" + block
     if (candidate.length <= 1900) {
       current = candidate
@@ -497,13 +548,27 @@ export async function handlePostDailyFeed(env) {
     return { ok: true, skipped: "no_new_content", day: new Date().toISOString().slice(0, 10) }
   }
 
-  const built = buildFeedMessage(allNew)
-  if (!built) {
+  // Split text items and link-only (video) items into separate messages.
+  // Videos get their own messages so Discord embeds the thumbnail cleanly.
+  const textItems = allNew.filter((i) => !i.linkOnly)
+  const videoItems = allNew.filter((i) => i.linkOnly)
+
+  const allChunks = []
+  if (textItems.length > 0) {
+    const built = buildFeedMessage(textItems, { includeHeader: true })
+    if (built) allChunks.push(...built.chunks)
+  }
+  if (videoItems.length > 0) {
+    const built = buildFeedMessage(videoItems, { includeHeader: false })
+    if (built) allChunks.push(...built.chunks)
+  }
+
+  if (allChunks.length === 0) {
     return { ok: true, skipped: "no_content", day: new Date().toISOString().slice(0, 10) }
   }
 
   try {
-    const ids = await postFeedToDiscord(env, built.chunks)
+    const ids = await postFeedToDiscord(env, allChunks)
     // Mark as posted only AFTER Discord confirms receipt.
     for (const [sourceId, items] of bySource) {
       await markPostedMulti(env, sourceId, items)
