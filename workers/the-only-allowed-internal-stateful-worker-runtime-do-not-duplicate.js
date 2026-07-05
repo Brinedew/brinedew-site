@@ -884,6 +884,7 @@ import {
   handleRenderPage,
 } from "./discord.js"
 import { handleContactSubmission } from "./contact-form.js"
+import { handlePostDailyFeed, handlePostFeed } from "./discord-feed.js"
 // Import stats handlers
 import {
   handleMigrateStats,
@@ -2144,6 +2145,10 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       return handlePostRecap(request, env)
     }
 
+    if (url.pathname === "/api/discord/post-feed" && request.method === "POST") {
+      return handlePostFeed(request, env)
+    }
+
     // Stats endpoints
     if (url.pathname === "/api/migrate-stats" && request.method === "POST") {
       const response = await handleMigrateStats(request, env)
@@ -2593,6 +2598,16 @@ export default {
         console.log("[CRON] Recap post result:", result)
       } catch (err) {
         console.error("[CRON] Recap posting failed:", err)
+      }
+      return
+    }
+
+    if (cronExpr === "6 12 * * *") {
+      try {
+        const result = await handlePostDailyFeed(env)
+        console.log("[CRON] Feed post result:", result)
+      } catch (err) {
+        console.error("[CRON] Feed posting failed:", err)
       }
       return
     }
