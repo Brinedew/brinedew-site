@@ -14,6 +14,30 @@ const FEED_CHANNEL_NAME = "feed"
 const DESKTOP_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
+/**
+ * ─── Excerpt spec ──────────────────────────────────────────────
+ *
+ * The excerpt is the lead paragraphs of a post, shown as a blockquote in
+ * Discord. It must be readable, complete, and never break mid-paragraph.
+ *
+ * RULES (applied uniformly to all sources):
+ *
+ * 1. Collect complete paragraphs one at a time.
+ * 2. Skip short paragraphs (< 60 chars) — they are metadata artifacts
+ *    (TOC entries, acknowledgments, numbered list items). The first
+ *    paragraph is always accepted unconditionally.
+ * 3. Stop collecting when ANY of these is true:
+ *    a. We have ≥2 paragraphs AND ≥250 chars (enough content).
+ *    b. Adding the next paragraph would exceed 600 chars AND we already
+ *       have ≥2 paragraphs.
+ * 4. The excerpt ALWAYS ends at a paragraph boundary. Never cuts
+ *    mid-paragraph, never cuts mid-sentence. If this means the excerpt
+ *    exceeds 600 chars, that is acceptable — a complete paragraph is
+ *    more valuable than an arbitrary character limit.
+ *
+ * ────────────────────────────────────────────────────────────────
+ */
+
 const EXCERPT_MIN_CHARS = 250
 const EXCERPT_MAX_CHARS = 600
 const EXCERPT_MIN_PARAGRAPHS = 2
@@ -93,20 +117,23 @@ function paragraphsOf(text) {
 
 /**
  * Excerpt rule — applied uniformly to all sources. No per-source logic.
- * Collect paragraphs until we have ≥2 paragraphs AND the joined text
- * ends on a sentence boundary within [250, 600] characters.
  *
- * Sentence boundary = the last char in the candidate text is `.`, `!`, `?`, or
- * a closing quote/bracket that follows one of those. No char-only early exit.
+ * Collect complete paragraphs until one of these conditions is met:
+ *   1. We have ≥2 paragraphs AND ≥250 chars (enough content to be useful)
+ *   2. Adding the next paragraph would exceed 600 chars
+ *
+ * The excerpt ALWAYS ends at a paragraph boundary. Never cuts mid-paragraph,
+ * never cuts mid-sentence. If a single paragraph is longer than 600 chars,
+ * include it whole — it's better to overshoot than to produce a broken snippet.
+ *
+ * Short paragraphs (< 60 chars) are skipped during accumulation because they
+ * are metadata artifacts: numbered list entries, TOC items, acknowledgments.
+ * The first paragraph is always accepted unconditionally.
  */
 function buildExcerpt(text) {
   const paras = paragraphsOf(text)
   if (paras.length === 0) return ""
 
-  // Collect paragraphs, skipping very short ones (< 60 chars) when accumulating
-  // toward the paragraph minimum. Short paragraphs are metadata artifacts:
-  // numbered list entries ("1. Introduction"), TOC items, acknowledgments.
-  // The first paragraph is always accepted unconditionally.
   const out = []
   let joined = ""
   for (const p of paras) {
@@ -114,42 +141,19 @@ function buildExcerpt(text) {
       out.push(p)
       joined = p
     } else {
-      // Skip short paragraphs — they're likely TOC entries, not content.
       if (p.length < EXCERPT_MIN_PARA_LENGTH) continue
       const candidate = joined + "\n\n" + p
-      if (candidate.length > EXCERPT_MAX_CHARS) break
+      // Stop if we have enough content (≥2 paragraphs AND ≥250 chars).
+      if (joined.length >= EXCERPT_MIN_CHARS && out.length >= EXCERPT_MIN_PARAGRAPHS) break
+      // Stop if adding this paragraph would exceed the limit and we already
+      // have at least 2 paragraphs — don't let one huge paragraph dominate.
+      if (candidate.length > EXCERPT_MAX_CHARS && out.length >= EXCERPT_MIN_PARAGRAPHS) break
       out.push(p)
       joined = candidate
     }
-    if (out.length >= EXCERPT_MIN_PARAGRAPHS && joined.length >= EXCERPT_MIN_CHARS) {
-      if (/[.!?]["')\]]?$/.test(joined)) break
-    }
-  }
-
-  // If we still don't have enough paragraphs after filtering, fall back to
-  // the first paragraph plus the next paragraph that meets the minimum length.
-  if (out.length < EXCERPT_MIN_PARAGRAPHS) {
-    const firstLong = paras.slice(1).find((p) => p.length >= EXCERPT_MIN_PARA_LENGTH)
-    if (firstLong) {
-      return [paras[0], firstLong].join("\n\n").slice(0, EXCERPT_MAX_CHARS).trim()
-    }
-    return paras[0].slice(0, EXCERPT_MAX_CHARS).trim()
-  }
-
-  if (joined.length > EXCERPT_MAX_CHARS) {
-    const lastBoundary = findLastSentenceBoundary(joined, EXCERPT_MAX_CHARS)
-    joined = lastBoundary > EXCERPT_MIN_CHARS ? joined.slice(0, lastBoundary + 1) : joined.slice(0, EXCERPT_MAX_CHARS)
   }
 
   return joined.replace(/\s+([.,;:!?])/g, "$1").trim()
-}
-
-function findLastSentenceBoundary(text, maxIndex) {
-  const limit = Math.min(maxIndex, text.length - 1)
-  for (let i = limit; i > 0; i--) {
-    if (/[.!?]["')\]]?$/.test(text.slice(0, i + 1))) return i
-  }
-  return -1
 }
 
 async function fetchUrlText(url) {
@@ -533,5 +537,4 @@ export const __test = {
   rssAdapter,
   readabilityAdapter,
   extractWithReadability,
-  findLastSentenceBoundary,
 }
