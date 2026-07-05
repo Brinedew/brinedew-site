@@ -129,6 +129,7 @@ ICONOPLASM_PORTRAIT_BASE_URL = "https://iconoplasmportraits.b-cdn.net"
 ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https://iconoplasmportraits.b-cdn.net"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST = "storage.bunnycdn.com"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE = "iconoplasm-portraits"
+DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 
 # Temporary no-R2 hotfix: Cloudflare is currently rejecting worker version
 # uploads with code 10136/10136-style binding failures because this account no
@@ -151,7 +152,7 @@ ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE = "iconoplasm-portraits"
 # instead of waiting for the nightly run. Clean ticks are ~free (one indexed
 # changes-since query + reuse); a tick only flips the version when something
 # actually changed, and content-addressed shard-level publish keeps that cheap.
-crons = ["55 23 * * *", "3 0 * * *", "*/15 * * * *"]
+crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "*/15 * * * *"]
 
 [env.staging]
 name = "geneguessr-api-staging"
