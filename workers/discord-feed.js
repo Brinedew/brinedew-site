@@ -223,7 +223,7 @@ function rssAdapter(opts) {
     name,
     url,
     bodyField = "contentEncoded",
-    maxAgeDays = 14,
+    maxAgeDays = 30,
     maxItems = 5,
     cleanAuthor = (a) => (a || "").trim(),
   } = opts
@@ -231,11 +231,11 @@ function rssAdapter(opts) {
   return {
     id,
     name,
-    async collect(env) {
+    async collect(env, { ignoreAge = false } = {}) {
       const xml = await fetchUrlText(url)
       if (!xml) return []
       const feed = await rssParser.parseString(xml)
-      const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000
+      const cutoff = ignoreAge ? 0 : Date.now() - maxAgeDays * 24 * 60 * 60 * 1000
       const fresh = itemsFromFeed(feed)
         .filter((i) => Date.parse(i.pubDate) >= cutoff)
         .slice(0, maxItems)
@@ -271,16 +271,16 @@ function rssAdapter(opts) {
  * the article HTML; we convert to text with html-to-text.
  */
 function readabilityAdapter(opts) {
-  const { id, name, feedUrl, maxAgeDays = 14, maxItems = 5, cleanAuthor = (a) => (a || "").trim() } = opts
+  const { id, name, feedUrl, maxAgeDays = 30, maxItems = 5, cleanAuthor = (a) => (a || "").trim() } = opts
 
   return {
     id,
     name,
-    async collect(env) {
+    async collect(env, { ignoreAge = false } = {}) {
       const xml = await fetchUrlText(feedUrl)
       if (!xml) return []
       const feed = await rssParser.parseString(xml)
-      const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000
+      const cutoff = ignoreAge ? 0 : Date.now() - maxAgeDays * 24 * 60 * 60 * 1000
       const fresh = itemsFromFeed(feed)
         .filter((i) => Date.parse(i.pubDate) >= cutoff)
         .slice(0, maxItems)
@@ -472,11 +472,17 @@ export async function handlePostDailyFeed(env) {
 
   for (const source of SOURCES) {
     try {
-      const collected = await source.collect(env)
+      const seen = await env.KV.get(sourceSeenKey(source.id))
+      const ignoreAge = !seen
+      const collected = await source.collect(env, { ignoreAge })
+      console.log(`[FEED] ${source.id}: collected ${collected.length} items (ignoreAge=${ignoreAge})`)
       const filtered = await filterUnposted(env, source.id, collected)
+      console.log(`[FEED] ${source.id}: ${filtered.length} unposted after filter`)
       if (filtered.length > 0) {
-        allNew.push(...filtered)
-        bySource.set(source.id, filtered)
+        // First-post guarantee: only include the latest item for unseen sources
+        const items = ignoreAge ? [filtered[0]] : filtered
+        allNew.push(...items)
+        bySource.set(source.id, items)
       }
     } catch (err) {
       console.warn(`[FEED] Failed for ${source.id}:`, toErrorMessage(err))
