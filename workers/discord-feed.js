@@ -104,7 +104,9 @@ function sourceSeenKey(sourceId) {
 function htmlToPlainText(html) {
   if (!html) return ""
   const input = html.length > 50000 ? html.slice(0, 50000) : html
-  return htmlToText(input, HTML_TO_TEXT_OPTIONS).replace(/\n{3,}/g, "\n\n").trim()
+  return htmlToText(input, HTML_TO_TEXT_OPTIONS)
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
 }
 
 function paragraphsOf(text) {
@@ -181,7 +183,10 @@ function extractWithReadability(html) {
 
 const rssParser = new Parser({
   customFields: {
-    item: [["dc:creator", "creator"], ["content:encoded", "contentEncoded"]],
+    item: [
+      ["dc:creator", "creator"],
+      ["content:encoded", "contentEncoded"],
+    ],
   },
 })
 
@@ -275,7 +280,14 @@ function rssAdapter(opts) {
  * the article HTML; we convert to text with html-to-text.
  */
 function readabilityAdapter(opts) {
-  const { id, name, feedUrl, maxAgeDays = 30, maxItems = 5, cleanAuthor = (a) => (a || "").trim() } = opts
+  const {
+    id,
+    name,
+    feedUrl,
+    maxAgeDays = 30,
+    maxItems = 5,
+    cleanAuthor = (a) => (a || "").trim(),
+  } = opts
 
   return {
     id,
@@ -364,7 +376,9 @@ function youtubeAdapter(opts) {
 
       return fresh.map((item) => {
         const videoId = item.id?.replace("yt:video:", "") || ""
-        const url = videoId ? `https://www.youtube.com/watch?v=${videoId}` : stripUtm(item.link || "")
+        const url = videoId
+          ? `https://www.youtube.com/watch?v=${videoId}`
+          : stripUtm(item.link || "")
         return {
           id: item.id || item.guid || item.link || item.title || "",
           sourceName: name,
@@ -463,7 +477,10 @@ function buildFeedMessage(items, { includeHeader = true } = {}) {
 async function postDiscordMessage(env, channelId, content) {
   const botToken = env.DISCORD_BOT_TOKEN
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort("discord_feed_timeout"), FEED_DISCORD_POST_TIMEOUT_MS)
+  const timeout = setTimeout(
+    () => controller.abort("discord_feed_timeout"),
+    FEED_DISCORD_POST_TIMEOUT_MS,
+  )
   let resp
   try {
     resp = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
@@ -509,7 +526,9 @@ async function ensureFeedChannel(env) {
 
 async function markPostedMulti(env, sourceId, items) {
   const expiration = Math.floor(Date.now() / 1000) + FEED_TTL_SECONDS
-  await Promise.all(items.map((item) => env.KV.put(postedKey(sourceId, item.id), "1", { expiration })))
+  await Promise.all(
+    items.map((item) => env.KV.put(postedKey(sourceId, item.id), "1", { expiration })),
+  )
 }
 
 async function filterUnposted(env, sourceId, items) {
@@ -530,7 +549,9 @@ export async function handlePostDailyFeed(env) {
       const seen = await env.KV.get(sourceSeenKey(source.id))
       const ignoreAge = !seen
       const collected = await source.collect(env, { ignoreAge })
-      console.log(`[FEED] ${source.id}: collected ${collected.length} items (ignoreAge=${ignoreAge})`)
+      console.log(
+        `[FEED] ${source.id}: collected ${collected.length} items (ignoreAge=${ignoreAge})`,
+      )
       const filtered = await filterUnposted(env, source.id, collected)
       console.log(`[FEED] ${source.id}: ${filtered.length} unposted after filter`)
       if (filtered.length > 0) {
@@ -582,7 +603,12 @@ export async function handlePostDailyFeed(env) {
       item_count: allNew.length,
     }
   } catch (err) {
-    return { ok: false, error: "post_failed", day: new Date().toISOString().slice(0, 10), details: toErrorMessage(err) }
+    return {
+      ok: false,
+      error: "post_failed",
+      day: new Date().toISOString().slice(0, 10),
+      details: toErrorMessage(err),
+    }
   }
 }
 
