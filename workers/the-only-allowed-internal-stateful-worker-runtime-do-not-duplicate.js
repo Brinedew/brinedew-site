@@ -2701,6 +2701,11 @@ export default {
       }
       console.log(`[CRON] Bootstrap cache warmed for ${tomorrowStr} (${origins.length} origins)`)
 
+      // Write puzzle_actual so the recap handler always has data,
+      // even if nobody plays tomorrow.
+      await recordDailyPickOnce(env, tomorrowStr, targetProtein.uniprot, cronAudit)
+      console.log(`[CRON] puzzle_actual:${tomorrowStr} written`)
+
       console.log(`[CRON] Pre-warm complete: ${targetProtein.uniprot} (${source})`)
     } catch (err) {
       console.error("[CRON] Pre-warm failed:", err)
