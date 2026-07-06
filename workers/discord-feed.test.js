@@ -7,12 +7,7 @@ import { fileURLToPath } from "node:url"
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "__fixtures__")
 
 const mod = await import("./discord-feed.js")
-const {
-  buildExcerpt,
-  paragraphsOf,
-  htmlToPlainText,
-  buildFeedMessage,
-} = mod.__test
+const { buildExcerpt, paragraphsOf, htmlToPlainText, buildFeedMessage } = mod.__test
 const { handlePostDailyFeed, handlePostFeed } = mod
 
 function fixture(name) {
@@ -26,14 +21,22 @@ function mockFetch(handler) {
     calls.push({ url: String(url), init })
     return handler(String(url), init)
   }
-  return { calls, restore: () => { globalThis.fetch = original } }
+  return {
+    calls,
+    restore: () => {
+      globalThis.fetch = original
+    },
+  }
 }
 
 function mockKv(initial) {
   const store = new Map(Object.entries(initial || {}))
   return {
     get: (k) => Promise.resolve(store.get(k) || null),
-    put: (k, v, opts) => { store.set(k, v); return Promise.resolve() },
+    put: (k, v, opts) => {
+      store.set(k, v)
+      return Promise.resolve()
+    },
     list: () => Promise.resolve([]),
     _store: store,
   }
@@ -42,8 +45,10 @@ function mockKv(initial) {
 // ─── buildExcerpt ───────────────────────────────────────────
 
 test("buildExcerpt collects ≥2 paragraphs and hits a sentence boundary in [250,600]", () => {
-  const p1 = "A short first sentence. This continues with more detail about the topic, filling up enough characters that when combined with the second paragraph we exceed the minimum threshold of two hundred and fifty characters for the excerpt building rule to activate properly."
-  const p2 = "Second paragraph that discusses an important subtopic. It goes into depth about the implications of the findings described above."
+  const p1 =
+    "A short first sentence. This continues with more detail about the topic, filling up enough characters that when combined with the second paragraph we exceed the minimum threshold of two hundred and fifty characters for the excerpt building rule to activate properly."
+  const p2 =
+    "Second paragraph that discusses an important subtopic. It goes into depth about the implications of the findings described above."
   const text = [p1, p2, "Unused third paragraph."].join("\n\n")
   const result = buildExcerpt(text)
   assert.ok(result.length >= 250, `Expected ≥250 chars, got ${result.length}`)
@@ -58,7 +63,10 @@ test("buildExcerpt includes a single long paragraph whole (never cuts mid-paragr
   const result = buildExcerpt(longPara)
   assert.ok(result.length > 0, "Expected non-empty excerpt")
   // The excerpt includes the full paragraph — no mid-paragraph truncation.
-  assert.ok(result.length >= longPara.trim().length - 5, `Expected near-full paragraph, got ${result.length} vs ${longPara.trim().length}`)
+  assert.ok(
+    result.length >= longPara.trim().length - 5,
+    `Expected near-full paragraph, got ${result.length} vs ${longPara.trim().length}`,
+  )
 })
 
 test("buildExcerpt returns first paragraph when only one is given", () => {
@@ -86,7 +94,10 @@ test("buildExcerpt skips separator lines (---, ***, ~~~) as paragraph boundaries
     "This is actually the second paragraph. But the --- shouldn't count as one.",
   ].join("\n\n")
   const result = buildExcerpt(text)
-  assert.ok(result.includes("First real paragraph"), `Expected first para, got: "${result.slice(0, 40)}"`)
+  assert.ok(
+    result.includes("First real paragraph"),
+    `Expected first para, got: "${result.slice(0, 40)}"`,
+  )
   assert.ok(result.includes("This is actually"), "Expected second para to be included")
 })
 
@@ -136,10 +147,13 @@ test("htmlToPlainText strips HTML, skips figure/figcaption", () => {
 test("buildFeedMessage formats a single source item correctly", () => {
   const items = [
     {
-      id: "1", sourceName: "TestSource", author: "Author Name",
-      title: "Post Title", url: "https://example.com/post",
-      excerpt: "First para. Second para that continues."
-    }
+      id: "1",
+      sourceName: "TestSource",
+      author: "Author Name",
+      title: "Post Title",
+      url: "https://example.com/post",
+      excerpt: "First para. Second para that continues.",
+    },
   ]
   const result = buildFeedMessage(items)
   assert.ok(result, "Expected formatted message")
@@ -155,13 +169,30 @@ test("buildFeedMessage returns null for empty items", () => {
 
 test("buildFeedMessage splits chunks at 1900 chars", () => {
   const items = [
-    { id: "1", sourceName: "Source", author: "A", title: "T".repeat(400), url: "https://x.com/p1", excerpt: "X".repeat(1600) },
-    { id: "2", sourceName: "Source", author: "B", title: "Normal", url: "https://x.com/p2", excerpt: "This should be in a different chunk from the first oversized item." },
+    {
+      id: "1",
+      sourceName: "Source",
+      author: "A",
+      title: "T".repeat(400),
+      url: "https://x.com/p1",
+      excerpt: "X".repeat(1600),
+    },
+    {
+      id: "2",
+      sourceName: "Source",
+      author: "B",
+      title: "Normal",
+      url: "https://x.com/p2",
+      excerpt: "This should be in a different chunk from the first oversized item.",
+    },
   ]
   const result = buildFeedMessage(items)
   assert.ok(result.chunks.length > 1, `Expected multiple chunks, got ${result.chunks.length}`)
   assert.ok(result.chunks[0].includes("Daily Feed"), "First chunk must include the header")
-  assert.ok(result.chunks.some((c) => c.includes("This should be")), "Second item should appear in a chunk")
+  assert.ok(
+    result.chunks.some((c) => c.includes("This should be")),
+    "Second item should appear in a chunk",
+  )
 })
 
 // ─── rssAdatper.parse ──────────────────────────────────────────
@@ -186,7 +217,10 @@ test("rssAdapter parses For Better Science RSS (WordPress, contentEncoded availa
   const item = items[0]
   assert.ok(item.title, "Expected title")
   assert.ok(item.excerpt, "Expected excerpt from content:encoded")
-  assert.ok(item.excerpt.length >= 250, `Expected excerpt ≥250 chars, got ${item.excerpt.length} chars`)
+  assert.ok(
+    item.excerpt.length >= 250,
+    `Expected excerpt ≥250 chars, got ${item.excerpt.length} chars`,
+  )
 })
 
 // ─── Content quality ──────────────────────────────────────────
@@ -195,9 +229,18 @@ test("rssAdapter Owl Posting 'cancer vaccine' excerpt skips TOC entries and incl
   const items = await rssAdapterCollect("owlposting", { maxItems: 10, maxAgeDays: 365 })
   const vaccine = items.find((i) => i.title.includes("cancer vaccine"))
   assert.ok(vaccine, "Expected cancer vaccine article")
-  assert.ok(!vaccine.excerpt.includes("1. Introduction"), "TOC entry '1. Introduction' should be filtered out")
-  assert.ok(!vaccine.excerpt.includes("INTRODUCTION"), "TOC entry 'INTRODUCTION' should be filtered out")
-  assert.ok(vaccine.excerpt.includes("cancer vaccine") || vaccine.excerpt.includes("normal vaccines"), "Excerpt should include actual article content about cancer vaccines")
+  assert.ok(
+    !vaccine.excerpt.includes("1. Introduction"),
+    "TOC entry '1. Introduction' should be filtered out",
+  )
+  assert.ok(
+    !vaccine.excerpt.includes("INTRODUCTION"),
+    "TOC entry 'INTRODUCTION' should be filtered out",
+  )
+  assert.ok(
+    vaccine.excerpt.includes("cancer vaccine") || vaccine.excerpt.includes("normal vaccines"),
+    "Excerpt should include actual article content about cancer vaccines",
+  )
   const paras = vaccine.excerpt.split(/\n\n/)
   assert.ok(paras.length >= 2, `Expected ≥2 paragraphs in excerpt, got ${paras.length}`)
 })
@@ -206,7 +249,10 @@ test("rssAdapter Owl Posting 'TIGIT' excerpt is real content, not metadata", asy
   const items = await rssAdapterCollect("owlposting", { maxItems: 10, maxAgeDays: 365 })
   const tigit = items.find((i) => i.title.includes("TIGIT"))
   assert.ok(tigit, "Expected TIGIT article")
-  assert.ok(tigit.excerpt.startsWith("There exist drug classes"), `Expected real content, got: "${tigit.excerpt.slice(0, 40)}"`)
+  assert.ok(
+    tigit.excerpt.startsWith("There exist drug classes"),
+    `Expected real content, got: "${tigit.excerpt.slice(0, 40)}"`,
+  )
   assert.ok(tigit.excerpt.includes("amyloid-beta"), "Expected article body content")
 })
 
@@ -220,7 +266,10 @@ test("rssAdapter Owl Posting paragraphs are separated by double newlines", async
   // If there are multiple paragraphs, verify the excerpt is complete.
   if (paras.length >= 2) {
     assert.ok(paras[0].includes("Note:"), "First para should be the author's note")
-    assert.ok(paras[1].includes("ogre") || paras[1].includes("creature"), "Second para should be article content")
+    assert.ok(
+      paras[1].includes("ogre") || paras[1].includes("creature"),
+      "Second para should be article content",
+    )
   }
 })
 
@@ -228,14 +277,23 @@ test("rssAdapter For Better Science 'Rui the Drunk' excerpt is real content", as
   const items = await rssAdapterCollect("forbetterscience", { maxItems: 10, maxAgeDays: 365 })
   const rui = items.find((i) => i.title.includes("Rui"))
   assert.ok(rui, "Expected Rui article")
-  assert.ok(rui.excerpt.includes("dictator") || rui.excerpt.includes("misconduct"), "Expected article content about misconduct")
-  assert.ok(!rui.excerpt.includes("Schneider Shorts"), "Should not include Schneider Shorts preamble")
+  assert.ok(
+    rui.excerpt.includes("dictator") || rui.excerpt.includes("misconduct"),
+    "Expected article content about misconduct",
+  )
+  assert.ok(
+    !rui.excerpt.includes("Schneider Shorts"),
+    "Should not include Schneider Shorts preamble",
+  )
 })
 
 test("rssAdapter no image captions in excerpts", async () => {
   const items = await rssAdapterCollect("owlposting", { maxItems: 10, maxAgeDays: 365 })
   for (const item of items) {
-    assert.ok(!item.excerpt.includes("image caption"), `Image caption leaked into excerpt for "${item.title}"`)
+    assert.ok(
+      !item.excerpt.includes("image caption"),
+      `Image caption leaked into excerpt for "${item.title}"`,
+    )
     assert.ok(!item.excerpt.includes("figcaption"), "figcaption tag leaked into excerpt")
   }
 })
@@ -303,14 +361,23 @@ function simpleKv() {
   const m = new Map()
   return {
     get: (k) => Promise.resolve(m.get(k) ?? null),
-    put: (k, v) => { m.set(k, v); return Promise.resolve() },
+    put: (k, v) => {
+      m.set(k, v)
+      return Promise.resolve()
+    },
     _: m,
   }
 }
 
 async function rssAdapterCollect(sourceId, opts = {}) {
   const { rssAdapter } = (await import("./discord-feed.js")).__test
-  const xml = fixture(sourceId === "owlposting" ? "owlposting-rss.xml" : sourceId === "forbetterscience" ? "forbetterscience-rss.xml" : null)
+  const xml = fixture(
+    sourceId === "owlposting"
+      ? "owlposting-rss.xml"
+      : sourceId === "forbetterscience"
+        ? "forbetterscience-rss.xml"
+        : null,
+  )
   if (!xml) throw new Error(`No fixture for ${sourceId}`)
   const urlMap = {
     owlposting: "https://www.owlposting.com/feed/",
