@@ -60,6 +60,17 @@ const ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO = "3:4"
 const ICONOPLASM_OPENAI_BLOT_REQUEST_SIZE = ICONOPLASM_BLOT_REQUEST_SIZE
 const ICONOPLASM_PRINT_COPY_KV_TTL_SECONDS = 60 * 60 * 24 * 30
 const ICONOPLASM_IMAGE_PROVIDER_TIMEOUT_MS = 10 * 60 * 1000
+const ICONOPLASM_PROVIDER_POLL_INITIAL_WAIT_MS = 60_000
+const ICONOPLASM_PROVIDER_POLL_INTERVAL_MS = 10_000
+const ICONOPLASM_PROVIDER_POLL_HARD_TIMEOUT_MS = 10 * 60 * 1000
+
+function resolveProviderPollConfig(env) {
+  const raw = env?.ICONOPLASM_PROVIDER_POLL_INTERVAL_MS
+  const override = raw != null ? Number(raw) : NaN
+  const interval = Number.isFinite(override) && override >= 0 ? override : ICONOPLASM_PROVIDER_POLL_INTERVAL_MS
+  const initialWait = Number.isFinite(override) && override >= 0 ? override : ICONOPLASM_PROVIDER_POLL_INITIAL_WAIT_MS
+  return { initialWait, interval, hardTimeout: ICONOPLASM_PROVIDER_POLL_HARD_TIMEOUT_MS }
+}
 const MIN_EXTENSION_VERSION = "0.3.0"
 const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
   openai: Object.freeze({
@@ -5204,39 +5215,14 @@ async function uploadKreaAsset({ baseUrl, apiKey, bytes, contentType, descriptio
 //      then 6s until the budget is exhausted. The wall-clock cost is the
 //      same — `providerRequestTimeoutMs(providerRow)` is the wall-clock
 //      ceiling — but the subrequest count drops by 30-50% on long jobs.
-async function pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs, pollIntervalMs = 2_000 }) {
-  const deadline = Date.now() + timeoutMs
+async function pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs, env = null }) {
+  const config = resolveProviderPollConfig(env)
+  const hardTimeout = Math.min(timeoutMs, config.hardTimeout)
+  const deadline = Date.now() + hardTimeout
   let lastPayload = null
-  let pollIndex = 0
-  // Fast lanes: how many polls at each interval. Counts are inclusive of
-  // the first poll that uses the lane's interval.
-  const POLL_FAST_COUNT = 5
-  const POLL_MEDIUM_COUNT = 10
-  // Tests set ICONOPLASM_KREA_POLL_INTERVAL_MS to a small value (often 0)
-  // so the sync polling doesn't block the test for the real 2s/4s/6s lane
-  // intervals. We use ?? so an explicit 0 still means "no sleep" (unlike ||
-  // which would fall back to the default). The medium and slow lanes
-  // inherit the override so a test can drive 30+ polls in finite time.
-  const fastLaneMs = pollIntervalMs
-  const mediumLaneMs = pollIntervalMs > 0 ? pollIntervalMs * 2 : pollIntervalMs
-  const slowLaneMs = pollIntervalMs > 0 ? pollIntervalMs * 3 : pollIntervalMs
-  const POLL_MEDIUM_MS = mediumLaneMs
-  const POLL_SLOW_MS = slowLaneMs
+  await new Promise((resolve) => setTimeout(resolve, config.initialWait))
   while (Date.now() < deadline) {
-    // Skip the leading sleep on the very first poll — the create-job POST
-    // already gave Krea time to begin work.
-    if (pollIndex > 0) {
-      const laneMs =
-        pollIndex <= POLL_FAST_COUNT
-          ? fastLaneMs
-          : pollIndex <= POLL_FAST_COUNT + POLL_MEDIUM_COUNT
-            ? POLL_MEDIUM_MS
-            : POLL_SLOW_MS
-      if (laneMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, laneMs))
-      }
-    }
-    pollIndex += 1
+    await new Promise((resolve) => setTimeout(resolve, config.interval))
     const payload = await fetchJsonWithDeadline(
       `${baseUrl}/jobs/${encodeURIComponent(jobId)}`,
       { headers: { Authorization: `Bearer ${apiKey}` } },
@@ -5599,15 +5585,6 @@ async function callKreaImageProvider({
   const endpointPath = kreaModelEndpointPath(providerRow)
   const timeoutMs = providerRequestTimeoutMs(providerRow)
   // Tests set ICONOPLASM_KREA_POLL_INTERVAL_MS to a small value (often 0)
-  // so the sync polling doesn't block the test for the real 2s poll
-  // interval. We use ?? so an explicit 0 still means "no sleep" (unlike ||
-  // which would fall back to the default).
-  const pollIntervalMs = (() => {
-    const raw = env?.ICONOPLASM_KREA_POLL_INTERVAL_MS
-    if (raw === undefined || raw === null) return 2_000
-    const parsed = Number(raw)
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 2_000
-  })()
   const providerDef = imageEditProviderDefinition("krea")
   const kreaModel = resolveImageEditProviderModel(providerRow?.model || "", providerDef)
   const kreaOption = imageEditProviderModelOption(providerDef, kreaModel)
@@ -5719,7 +5696,7 @@ async function callKreaImageProvider({
       "Krea returned no job id: " + (providerErrorMessage(payload, "", 502) || "empty response"),
     )
   }
-  return pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs, pollIntervalMs })
+  return pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs, env })
 }
 
 function geminiApiBaseUrl(providerRow) {
@@ -5866,16 +5843,14 @@ function lumaOutputImageUrl(payload) {
   return String(output?.url || payload?.assets?.image || "").trim()
 }
 
-async function pollLumaGeneration({ baseUrl, apiKey, generationId, timeoutMs }) {
-  const deadline = Date.now() + timeoutMs
+async function pollLumaGeneration({ baseUrl, apiKey, generationId, timeoutMs, env = null }) {
+  const config = resolveProviderPollConfig(env)
+  const hardTimeout = Math.min(timeoutMs, config.hardTimeout)
+  const deadline = Date.now() + hardTimeout
+  await new Promise((resolve) => setTimeout(resolve, config.initialWait))
   let lastPayload = null
-  let pollCount = 0
   while (Date.now() < deadline) {
-    // Adaptive cadence: 2s for the first 5 polls, 4s for the next 10, then 6s.
-    // Keeps the request under the 50-subrequest Worker cap on slow models.
-    const interval = pollCount < 5 ? 2_000 : pollCount < 15 ? 4_000 : 6_000
-    await new Promise((resolve) => setTimeout(resolve, interval))
-    pollCount++
+    await new Promise((resolve) => setTimeout(resolve, config.interval))
     const payload = await fetchJsonWithDeadline(
       `${baseUrl}/generations/${encodeURIComponent(generationId)}`,
       {
@@ -5921,6 +5896,7 @@ async function callLumaImageProvider({
   sourceBytes = null,
   sourceContentType = "image/webp",
   imageUrls = [],
+  env = null,
 }) {
   const baseUrl = lumaApiBaseUrl(providerRow)
   const options = lumaImageRequestOptions(providerRow)
@@ -5992,6 +5968,7 @@ async function callLumaImageProvider({
     apiKey,
     generationId,
     timeoutMs: providerRequestTimeoutMs(providerRow, 120_000),
+    env,
   })
 }
 
