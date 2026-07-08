@@ -5867,6 +5867,8 @@ async function callLumaImageProvider({
   apiKey,
   prompt,
   sourceUrl = "",
+  sourceBytes = null,
+  sourceContentType = "image/webp",
   imageUrls = [],
 }) {
   const baseUrl = lumaApiBaseUrl(providerRow)
@@ -5880,15 +5882,36 @@ async function callLumaImageProvider({
     aspect_ratio: options.aspectRatio,
   }
   if (source) {
-    body.source = { url: source }
+    // Prefer sending source bytes directly as base64. Luma's servers
+    // cannot always reach external CDN URLs (same bug Krea had — see
+    // line 5285). Falling back to URL when bytes are unavailable.
+    const bytes = sourceBytes instanceof Uint8Array ? sourceBytes : new Uint8Array(sourceBytes || [])
+    if (bytes.byteLength) {
+      body.source = {
+        data: base64FromBytes(bytes),
+        media_type: sourceContentType || "image/webp",
+      }
+      console.log(
+        "[LUMA_DEBUG] source=base64 bytes=" + bytes.byteLength + " media_type=" + (sourceContentType || "image/webp"),
+      )
+    } else {
+      body.source = { url: source }
+      console.log("[LUMA_DEBUG] source=url " + source)
+    }
     const refs = lumaImageRefsFromUrls(imageUrls, 8)
     if (refs.length) body.image_ref = refs
   } else {
     const refs = lumaImageRefsFromUrls(imageUrls, 9)
     if (refs.length) body.image_ref = refs
   }
+  const requestUrl = `${baseUrl}/generations`
+  const serializedBody = JSON.stringify(body)
+  console.log(
+    "[LUMA_DEBUG] url=" + requestUrl + " type=" + body.type + " model=" + body.model +
+    " body_bytes=" + serializedBody.length,
+  )
   const payload = await fetchJsonWithDeadline(
-    `${baseUrl}/generations`,
+    requestUrl,
     {
       method: "POST",
       headers: {
@@ -5896,10 +5919,16 @@ async function callLumaImageProvider({
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify(body),
+      body: serializedBody,
     },
     15_000,
     "Luma generation creation timeout",
+  )
+  console.log(
+    "[LUMA_DEBUG] response state=" + String(payload?.state || "") +
+    " id=" + String(payload?.id || "") +
+    " failure_code=" + String(payload?.failure_code || "") +
+    " failure_reason=" + String(payload?.failure_reason || ""),
   )
   const immediateUrl = lumaOutputImageUrl(payload)
   if (String(payload?.state || "").toLowerCase() === "completed" && immediateUrl) {
