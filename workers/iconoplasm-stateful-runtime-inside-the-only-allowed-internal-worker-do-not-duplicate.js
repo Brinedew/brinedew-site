@@ -5906,6 +5906,7 @@ async function callLumaImageProvider({
     model: options.model,
     prompt,
     output_format: options.outputFormat,
+    aspect_ratio: options.aspectRatio,
   }
   if (source) {
     // Prefer sending source bytes directly as base64. Luma's servers
