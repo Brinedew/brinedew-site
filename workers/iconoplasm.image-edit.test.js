@@ -2008,7 +2008,8 @@ test("Luma Uni image edits use the Agents API source field and visible pricing",
       assert.equal(body.model, "uni-1")
       assert.equal(body.output_format, "png")
       assert.equal(body.aspect_ratio, "3:4")
-      assert.match(body.source.url, /portraits\/v1\/aa\//)
+      assert.ok(body.source.data, "source.data should be base64-encoded image bytes")
+      assert.equal(body.source.media_type, "image/webp")
       assert.equal(body.prompt.includes("visible AI generation errors"), true)
       return new Response(
         JSON.stringify({
