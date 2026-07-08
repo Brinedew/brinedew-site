@@ -4199,6 +4199,17 @@ const IMAGE_EDIT_SHARED_SUFFIX_PROMPT_DEFINITION = Object.freeze({
   default_prompt_template:
     "Preserve character identity, pose, composition, lighting, blot texture, framing, and background unless a selected adjustment directly requires a change. Use bounded local edits and preserve every unrelated region. Do not redesign the image, change the gene concept, or introduce text, labels, watermark, UI, border, collage, contact sheet, or new artifacts.",
 })
+const IMAGE_EDIT_SHARED_PREFIX_PROMPT_KIND = "shared_prefix"
+const IMAGE_EDIT_SHARED_PREFIX_PROMPT_DEFINITION = Object.freeze({
+  kind: IMAGE_EDIT_SHARED_PREFIX_PROMPT_KIND,
+  label: "Shared prefix",
+  description: "Always prepended once to every edit-blot provider prompt.",
+  default_prompt_template: [
+    "Edit the uploaded Iconoplasm blot with a localized image-to-image edit.",
+    `Output canvas: ${ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO} vertical Iconoplasm blot, target ${ICONOPLASM_BLOT_REQUEST_SIZE} px when the provider accepts exact dimensions. Compose directly for the full frame; do not rely on later cropping.`,
+    "Only make these targeted adjustments:",
+  ].join("\n"),
+})
 const IMAGE_EDIT_PROMPT_DEFINITIONS = Object.freeze([
   {
     kind: "remove_ai_generation_errors",
@@ -4258,6 +4269,7 @@ function normalizeImageEditPromptKind(raw) {
 function normalizeStoredImageEditPromptKind(raw) {
   const kind = sanitizeText(raw || "", 80) || ""
   if (kind === IMAGE_EDIT_SHARED_SUFFIX_PROMPT_KIND) return kind
+  if (kind === IMAGE_EDIT_SHARED_PREFIX_PROMPT_KIND) return kind
   return normalizeImageEditPromptKind(kind)
 }
 
@@ -4375,6 +4387,21 @@ function mapImageEditSharedSuffixPromptPayload(row) {
   }
 }
 
+function mapImageEditSharedPrefixPromptPayload(row) {
+  const promptTemplate = sanitizeImageEditPromptTemplate(row?.prompt_template || "")
+  return {
+    kind: IMAGE_EDIT_SHARED_PREFIX_PROMPT_DEFINITION.kind,
+    label: IMAGE_EDIT_SHARED_PREFIX_PROMPT_DEFINITION.label,
+    description: IMAGE_EDIT_SHARED_PREFIX_PROMPT_DEFINITION.description,
+    default_prompt_template: IMAGE_EDIT_SHARED_PREFIX_PROMPT_DEFINITION.default_prompt_template,
+    prompt_template:
+      promptTemplate || IMAGE_EDIT_SHARED_PREFIX_PROMPT_DEFINITION.default_prompt_template,
+    customized: Boolean(promptTemplate),
+    updated_by: sanitizeText(row?.updated_by || "", 255) || "",
+    updated_at: sanitizeText(row?.updated_at || "", 64) || "",
+  }
+}
+
 async function listImageEditPromptTemplateRows(env) {
   const result = await env.ICONOPLASM_DB.prepare(
     `SELECT kind, prompt_template, updated_by, updated_at
@@ -4403,6 +4430,14 @@ function imageEditSharedSuffixPromptTemplate(templatesByKind = new Map()) {
   )
 }
 
+function imageEditSharedPrefixPromptTemplate(templatesByKind = new Map()) {
+  return (
+    sanitizeImageEditPromptTemplate(
+      templatesByKind.get(IMAGE_EDIT_SHARED_PREFIX_PROMPT_KIND) || "",
+    ) || IMAGE_EDIT_SHARED_PREFIX_PROMPT_DEFINITION.default_prompt_template
+  )
+}
+
 async function imageEditPromptTemplatesPayload(env) {
   const rowsByKind = new Map()
   for (const row of await listImageEditPromptTemplateRows(env)) {
@@ -4412,6 +4447,11 @@ async function imageEditPromptTemplatesPayload(env) {
   return {
     ok: true,
     max_length: IMAGE_EDIT_PROMPT_TEMPLATE_MAX_LENGTH,
+    prefix: mapImageEditSharedPrefixPromptPayload(
+      rowsByKind.get(IMAGE_EDIT_SHARED_PREFIX_PROMPT_KIND) || {
+        kind: IMAGE_EDIT_SHARED_PREFIX_PROMPT_KIND,
+      },
+    ),
     suffix: mapImageEditSharedSuffixPromptPayload(
       rowsByKind.get(IMAGE_EDIT_SHARED_SUFFIX_PROMPT_KIND) || {
         kind: IMAGE_EDIT_SHARED_SUFFIX_PROMPT_KIND,
@@ -4456,7 +4496,16 @@ async function saveImageEditPromptTemplate(env, { kind, promptTemplate, updatedB
             updated_at: new Date().toISOString(),
           }),
         }
-      : {
+      : normalizedKind === IMAGE_EDIT_SHARED_PREFIX_PROMPT_KIND
+        ? {
+            prefix: mapImageEditSharedPrefixPromptPayload({
+              kind: normalizedKind,
+              prompt_template: cleanPrompt,
+              updated_by: actor,
+              updated_at: new Date().toISOString(),
+            }),
+          }
+        : {
           prompt: mapImageEditPromptTemplatePayload({
             kind: normalizedKind,
             prompt_template: cleanPrompt,
@@ -4523,18 +4572,15 @@ function normalizeImageEditAdjustments(raw) {
   return { ok: true, items: materializeImageEditAdjustments(items) }
 }
 
-function buildImageEditPrompt(adjustments, sharedSuffixTemplate = "") {
+function buildImageEditPrompt(adjustments, sharedSuffixTemplate = "", sharedPrefixTemplate = "") {
   const lines = (Array.isArray(adjustments) ? adjustments : []).map((item) => `- ${item.text}`)
+  const prefix =
+    sanitizeImageEditPromptTemplate(sharedPrefixTemplate) ||
+    IMAGE_EDIT_SHARED_PREFIX_PROMPT_DEFINITION.default_prompt_template
   const suffix =
     sanitizeImageEditPromptTemplate(sharedSuffixTemplate) ||
     IMAGE_EDIT_SHARED_SUFFIX_PROMPT_DEFINITION.default_prompt_template
-  return [
-    "Edit the uploaded Iconoplasm blot with a localized image-to-image edit.",
-    iconoplasmBlotRequestPromptLine(),
-    "Only make these targeted adjustments:",
-    ...lines,
-    suffix,
-  ].join("\n")
+  return [prefix, ...lines, suffix].join("\n")
 }
 
 function iconoplasmBlotRequestPromptLine() {
@@ -5879,7 +5925,6 @@ async function callLumaImageProvider({
     model: options.model,
     prompt,
     output_format: options.outputFormat,
-    aspect_ratio: options.aspectRatio,
   }
   if (source) {
     // Prefer sending source bytes directly as base64. Luma's servers
@@ -5908,7 +5953,8 @@ async function callLumaImageProvider({
   const serializedBody = JSON.stringify(body)
   console.log(
     "[LUMA_DEBUG] url=" + requestUrl + " type=" + body.type + " model=" + body.model +
-    " body_bytes=" + serializedBody.length,
+    " body_bytes=" + serializedBody.length +
+    " prompt_preview=" + (body.prompt || "").slice(0, 200),
   )
   const payload = await fetchJsonWithDeadline(
     requestUrl,
@@ -26835,6 +26881,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const prompt = buildImageEditPrompt(
         materializedAdjustments,
         imageEditSharedSuffixPromptTemplate(promptTemplatesByKind),
+        imageEditSharedPrefixPromptTemplate(promptTemplatesByKind),
       )
       await insertImageEditJob(env, {
         id: jobId,

@@ -2210,6 +2210,23 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         </div>
         <button class="btn-primary" type="button" id="prompts-refresh">Refresh</button>
       </div>
+      <section class="prompt-editor prompt-prefix-editor" id="prompt-prefix-editor">
+        <div>
+          <div class="detail-kicker">Always-on prompt</div>
+          <h2>Shared prefix</h2>
+          <p class="small" id="prompt-prefix-description">This prefix is prepended once to every edit-blot prompt. It is not tied to a checkbox.</p>
+        </div>
+        <label>Shared prefix
+          <textarea id="prompt-prefix-text" maxlength="2400" spellcheck="true" disabled></textarea>
+        </label>
+        <div>
+          <h3>Default prefix</h3>
+          <div class="prompt-default" id="prompt-prefix-default"></div>
+        </div>
+        <div class="actions">
+          <button class="btn-primary" type="button" data-prompt-prefix-save disabled>Save prefix</button>
+        </div>
+      </section>
       <section class="prompt-editor prompt-suffix-editor" id="prompt-suffix-editor">
         <div>
           <div class="detail-kicker">Always-on prompt</div>
@@ -2450,6 +2467,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         selectedRequestId: null,
         requestsLoaded: false,
         imageEditPrompts: [],
+        imageEditPromptPrefix: null,
         imageEditPromptSuffix: null,
         selectedPromptKind: '',
         promptsLoaded: false,
@@ -2532,6 +2550,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         promptTemplateDescription: document.getElementById('prompt-template-description'),
         promptTemplateText: document.getElementById('prompt-template-text'),
         promptTemplateDefault: document.getElementById('prompt-template-default'),
+        promptPrefixText: document.getElementById('prompt-prefix-text'),
+        promptPrefixDefault: document.getElementById('prompt-prefix-default'),
+        promptPrefixSave: document.querySelector('[data-prompt-prefix-save]'),
         promptSuffixText: document.getElementById('prompt-suffix-text'),
         promptSuffixDefault: document.getElementById('prompt-suffix-default'),
         promptTemplateStatus: document.getElementById('prompt-template-status'),
@@ -3011,6 +3032,19 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         els.promptTemplateStatus.dataset.tone = tone || '';
       }
 
+      function renderImageEditPromptPrefix() {
+        var prefix = state.imageEditPromptPrefix || null;
+        if (els.promptPrefixText) {
+          els.promptPrefixText.value = prefix ? String(prefix.prompt_template || '') : '';
+          els.promptPrefixText.maxLength = Math.max(1, Number(state.promptMaxLength || 2400) || 2400);
+          els.promptPrefixText.disabled = !prefix;
+        }
+        if (els.promptPrefixDefault) {
+          els.promptPrefixDefault.textContent = prefix ? String(prefix.default_prompt_template || '') : '';
+        }
+        if (els.promptPrefixSave) els.promptPrefixSave.disabled = !prefix;
+      }
+
       function renderImageEditPromptSuffix() {
         var suffix = state.imageEditPromptSuffix || null;
         if (els.promptSuffixText) {
@@ -3026,6 +3060,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function renderImageEditPrompts() {
         if (!els.promptTemplateList) return;
+        renderImageEditPromptPrefix();
         renderImageEditPromptSuffix();
         var prompts = Array.isArray(state.imageEditPrompts) ? state.imageEditPrompts : [];
         if (!prompts.length) {
@@ -3060,6 +3095,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           setPromptStatus('Loading prompts...', '');
           var data = await apiJson('/image-edit-prompts', { method: 'GET' });
           state.imageEditPrompts = Array.isArray(data.prompts) ? data.prompts : [];
+          state.imageEditPromptPrefix = data.prefix || null;
           state.imageEditPromptSuffix = data.suffix || null;
           state.promptMaxLength = Math.max(1, Number(data.max_length || 2400) || 2400);
           state.promptsLoaded = true;
@@ -3106,6 +3142,40 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           setLog({ error: 'Shared suffix save failed', details: err.response || message });
         } finally {
           if (els.promptSuffixSave) els.promptSuffixSave.disabled = !state.imageEditPromptSuffix;
+        }
+      }
+
+      async function saveImageEditPromptPrefix() {
+        var prefix = state.imageEditPromptPrefix || { kind: 'shared_prefix' };
+        if (!els.promptPrefixText) return;
+        var promptTemplate = String(els.promptPrefixText.value || '').trim();
+        if (!promptTemplate) {
+          setPromptStatus('Shared prefix cannot be empty.', 'error');
+          return;
+        }
+        try {
+          if (els.promptPrefixSave) els.promptPrefixSave.disabled = true;
+          setPromptStatus('Saving shared prefix...', '');
+          var data = await apiJson('/image-edit-prompts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              kind: prefix.kind || 'shared_prefix',
+              prompt_template: promptTemplate
+            })
+          });
+          if (data && data.prefix) {
+            state.imageEditPromptPrefix = data.prefix;
+          }
+          renderImageEditPromptPrefix();
+          setPromptStatus('Shared prefix saved.', 'success');
+          setLog({ ok: true, prefix: data && data.prefix });
+        } catch (err) {
+          var message = requestErrorMessage(err, 'Shared prefix save failed.');
+          setPromptStatus(message, 'error');
+          setLog({ error: 'Shared prefix save failed', details: err.response || message });
+        } finally {
+          if (els.promptPrefixSave) els.promptPrefixSave.disabled = !state.imageEditPromptPrefix;
         }
       }
 
@@ -6516,6 +6586,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         }
         if (els.promptSuffixSave) {
           els.promptSuffixSave.addEventListener('click', saveImageEditPromptSuffix);
+        }
+        if (els.promptPrefixSave) {
+          els.promptPrefixSave.addEventListener('click', saveImageEditPromptPrefix);
         }
 
         document.body.addEventListener('click', async function (ev) {
