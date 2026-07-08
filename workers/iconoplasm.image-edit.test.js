@@ -713,9 +713,9 @@ function buildEnv(db = new FakeDb(), session = { user_id: "user-1", username: "t
     GAME_SESSIONS: buildSessionBinding(session),
     ICONOPLASM_VOTE_COORDINATORS: buildVoteCoordinatorBinding(db),
     ICONOPLASM_IMAGE_EDIT_KEY_SECRET: "test-secret-with-more-than-32-bytes-for-aes",
-    // Krea sync polling defaults to 2s. Tests override to 0 so a 0ms poll
-    // interval is used (no sleeping between fetches).
-    ICONOPLASM_KREA_POLL_INTERVAL_MS: "0",
+    // Provider polling defaults to 10s initial wait + 10s interval.
+    // Tests override to 0 so polling doesn't block the test suite.
+    ICONOPLASM_PROVIDER_POLL_INTERVAL_MS: "0",
   }
 }
 
