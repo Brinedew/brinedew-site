@@ -5869,8 +5869,13 @@ function lumaOutputImageUrl(payload) {
 async function pollLumaGeneration({ baseUrl, apiKey, generationId, timeoutMs }) {
   const deadline = Date.now() + timeoutMs
   let lastPayload = null
+  let pollCount = 0
   while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 2_000))
+    // Adaptive cadence: 2s for the first 5 polls, 4s for the next 10, then 6s.
+    // Keeps the request under the 50-subrequest Worker cap on slow models.
+    const interval = pollCount < 5 ? 2_000 : pollCount < 15 ? 4_000 : 6_000
+    await new Promise((resolve) => setTimeout(resolve, interval))
+    pollCount++
     const payload = await fetchJsonWithDeadline(
       `${baseUrl}/generations/${encodeURIComponent(generationId)}`,
       {
