@@ -158,7 +158,33 @@ GPT Image 2 has no free tier. Without billing, Iconoplasm shows: **"Billing hard
 
 12. Click **Continue**. Your card is saved. You're billed monthly for actual usage.
 
+### 2e. fal.ai API
+1. Visit https://fal.ai/login and log in using one of the suggested gateways
+![[image-44.png|fal.ai login page]]
 
+2. Complete their annoying entry survey (click whatever)
+
+![[image-45.png|fal.ai new account survey]]
+3. You will see the fal dashboard
+![[image-46.png|fal dashboard main page|697]]
+
+4. Go to https://fal.ai/dashboard/keys. You will see the keys page.
+![[image-47.png|fal dashboard keys page]]
+5. Tap the "+ Add key" button on top right. The dialog window will open.
+![[image-48.png|574]]
+6.  Tap "create key" in bottom right. The key will appear: copy it right away, you will not see it again.
+7. Tap "done" after you've copied the key.
+
+**Adding funds.**
+1. Go to https://fal.ai/dashboard/usage-billing/credits
+![[image-50.png|fal.ai credits page]]
+2. Find the "Buy credits" card.
+![[image-49.png]]
+3. Tap "Custom" and input the desired amount. The minimum is $10.
+4. Tap the "Buy $10.00 credits" button.
+5. Fill in your address details - can leave tax ID field unfilled.
+![[image-51.png]]
+6. Stripe payment processing page will open, fill in your bank card details there. 
 ## 3. Configure your API key in Iconoplasm
 
 Now that you have a key from one of the providers above, save it in Iconoplasm settings. The steps are the same regardless of which provider you chose.
