@@ -670,7 +670,6 @@ async function runScheduledIconoplasmGalleryRefresh(env, ctx) {
     )
   }
 }
-}
 
 function stableSitemapDate() {
   // Keep `lastmod` stable within a day to avoid thrashing crawlers with a constantly-changing sitemap.
