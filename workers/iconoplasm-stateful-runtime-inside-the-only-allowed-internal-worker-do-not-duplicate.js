@@ -553,7 +553,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         edit_image_param: "image_urls",
         edit_image_object_shape: "string-array",
         image_size: "auto_2K",
-        output_format: "jpeg",
+        output_format: "png",
       }),
       Object.freeze({
         model: "bytedance/seedream/v5/lite/edit",
@@ -565,7 +565,6 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         edit_image_param: "image_urls",
         edit_image_object_shape: "string-array",
         image_size: "auto_2K",
-        output_format: "jpeg",
       }),
     ]),
   }),

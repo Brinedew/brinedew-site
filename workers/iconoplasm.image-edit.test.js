@@ -2323,7 +2323,7 @@ test("Fal.ai Seedream 5 image edits use queue-based polling and visible pricing"
       assert.ok(Array.isArray(body.image_urls), "image_urls should be an array")
       assert.equal(body.image_urls.length, 1, "should have one source image")
       assert.equal(body.image_size, "auto_2K")
-      assert.equal(body.output_format, "jpeg")
+      assert.equal(body.output_format, "png")
       assert.equal(body.num_images, 1)
       assert.equal(body.enable_safety_checker, true)
       return new Response(
