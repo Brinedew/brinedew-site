@@ -83,9 +83,11 @@ test("B-517 edit blot UI uses one dialog modal and the direct image-edit APIs", 
   )
   assert.match(
     app,
-    /options\.sort\(function \(a, b\) \{\s*return a\.label\.localeCompare\(b\.label\)\s*\}\)/,
+    /options\.sort\(function \(a, b\) \{\s*return a\.label\.localeCompare\(b\.label, undefined, \{ sensitivity: "base", numeric: true \}\)\s*\}\)/,
   )
   assert.match(app, /last used/)
+  assert.doesNotMatch(app, /options\.unshift\(\{ value: lastUsedValue/)
+  assert.match(app, /payload\.last_used/)
   assert.match(app, /function setImageEditProviderValue\(select, providerId\)/)
   assert.match(app, /customElements\.whenDefined\("sl-select"\)/)
   assert.match(app, /select\.updateComplete\.then\(function \(\) \{/)

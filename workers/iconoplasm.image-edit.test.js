@@ -972,9 +972,8 @@ test("image edit provider keys are encrypted and listed without secrets", async 
   )
   assert.equal(nanoBananaPro.edit_capable, true)
   assert.equal(nanoBananaPro.edit_image_param, "image_urls")
-  // The dialog also pins the user's last-used model at the top of the list
-  // when the worker writes one. We trigger that write via a successful edit
-  // job and re-fetch the providers list; see the dedicated last-used test.
+  // The dialog marks the user's last-used model in place (no reordering).
+  // See the dedicated last-used test for KV write-on-change behavior.
 })
 
 test("OpenAI is a first-class BYOK image provider with model pricing and Image API requests", async () => {
@@ -4162,24 +4161,27 @@ test("candidate-generation provider list includes only generate-capable Krea mod
   )
 })
 
-test("last-used model is remembered and pinned at the top of the providers list, but only on change", async () => {
+test("last-used model is remembered without reordering the providers list, but only on change", async () => {
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
   // Track every KV put to the last-used key. A user who submits 10 successful
   // edits with the same model should produce exactly 1 KV write.
   const kvPuts = []
   const env = buildEnv(db)
+  const lastUsedStore = new Map()
+  // Pretend the user previously used Krea flux-1-kontext-dev.
+  lastUsedStore.set(
+    "iconoplasm:image-edit-last-used:image_edit:user-1",
+    "krea:bfl/flux-1-kontext-dev",
+  )
   env.KV = {
     async get(k) {
-      if (k.startsWith("iconoplasm:image-edit-last-used:")) {
-        // Pretend the user previously used bfl/flux-1-kontext-dev.
-        if (k.endsWith(":krea")) return "bfl/flux-1-kontext-dev"
-        return ""
-      }
+      if (lastUsedStore.has(k)) return lastUsedStore.get(k)
       return null
     },
     async put(k, v, opts) {
       kvPuts.push({ k, v, opts })
+      lastUsedStore.set(k, v)
     },
     async delete() {},
   }
@@ -4249,7 +4251,7 @@ test("last-used model is remembered and pinned at the top of the providers list,
       { waitUntil() {} },
     )
 
-    // The providers list should pin the (mocked) last-used model at index 0.
+    // The providers list keeps stable model order and only marks last_used.
     const listResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request(
@@ -4261,13 +4263,27 @@ test("last-used model is remembered and pinned at the top of the providers list,
       )
     const listed = await listResponse.json()
     const krea = listed.supported_providers.find((p) => p.provider_id === "krea")
-    assert.equal(krea.model_options[0].model, "bfl/flux-1-kontext-dev")
-    assert.equal(krea.model_options[0].last_used, true)
+    const lastUsedOption = krea.model_options.find((m) => m.last_used === true)
+    assert.equal(lastUsedOption?.model, "bfl/flux-1-kontext-dev")
+    assert.deepEqual(listed.last_used, {
+      provider_id: "krea",
+      model: "bfl/flux-1-kontext-dev",
+    })
+    // Order stays catalog order: Flux Kontext is first by definition, and
+    // flux-1-dev remains after it. last_used is only a flag, not a reshuffle.
+    const liveOrder = krea.model_options.map((m) => m.model)
+    assert.equal(liveOrder[0], "bfl/flux-1-kontext-dev")
+    assert.ok(liveOrder.indexOf("bfl/flux-1-dev") > 0)
+    assert.equal(
+      krea.model_options.filter((m) => m.last_used === true).length,
+      1,
+      "exactly one last_used flag",
+    )
 
     // Now submit a successful edit job using the same model. The worker must
     // NOT write to KV because the model is already the last-used one.
     const kvPutsBefore = kvPuts.filter((p) =>
-      p.k.startsWith("iconoplasm:image-edit-last-used:image_edit:user-1:krea"),
+      p.k === "iconoplasm:image-edit-last-used:image_edit:user-1",
     ).length
     const firstCtx = capturingContext()
     const createResponse =
@@ -4294,7 +4310,7 @@ test("last-used model is remembered and pinned at the top of the providers list,
     assert.equal(created.job.status, "succeeded")
     await firstCtx.drain()
     const kvPutsAfter = kvPuts.filter((p) =>
-      p.k.startsWith("iconoplasm:image-edit-last-used:image_edit:user-1:krea"),
+      p.k === "iconoplasm:image-edit-last-used:image_edit:user-1",
     ).length
     assert.equal(
       kvPutsAfter,
@@ -4304,7 +4320,7 @@ test("last-used model is remembered and pinned at the top of the providers list,
 
     // Submit a job with a different model. The worker MUST write to KV once.
     const newKvPutsBefore = kvPuts.filter((p) =>
-      p.k.startsWith("iconoplasm:image-edit-last-used:image_edit:user-1:krea"),
+      p.k === "iconoplasm:image-edit-last-used:image_edit:user-1",
     ).length
     // Switch the saved provider's model to bfl/flux-1-dev by sending the new
     // model in the request body. The route at line 25671 already applies the
@@ -4333,13 +4349,17 @@ test("last-used model is remembered and pinned at the top of the providers list,
     assert.equal(secondResponse.status, 200, "create status: " + JSON.stringify(secondCreated))
     assert.equal(secondCreated.job.status, "succeeded")
     const newKvPutsAfter = kvPuts.filter((p) =>
-      p.k.startsWith("iconoplasm:image-edit-last-used:image_edit:user-1:krea"),
+      p.k === "iconoplasm:image-edit-last-used:image_edit:user-1",
     ).length
     assert.equal(
       newKvPutsAfter,
       newKvPutsBefore + 1,
       "Worker should write to KV exactly once when the user switches model",
     )
+    const lastWrite = kvPuts
+      .filter((p) => p.k === "iconoplasm:image-edit-last-used:image_edit:user-1")
+      .at(-1)
+    assert.equal(lastWrite?.v, "krea:bfl/flux-1-dev")
   } finally {
     globalThis.fetch = originalFetch
   }
