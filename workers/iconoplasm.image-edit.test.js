@@ -2336,12 +2336,19 @@ test("Fal.ai Seedream 5 image edits use queue-based polling and visible pricing"
       )
     }
     if (url === "https://queue.fal.run/bytedance/seedream/v5/pro/edit/requests/fal-job-1/status") {
+      // Live fal queue status endpoints require POST (405 Allow: POST on GET).
+      assert.equal(String(init.method || "GET").toUpperCase(), "POST")
       return new Response(
-        JSON.stringify({ status: "COMPLETED", request_id: "fal-job-1" }),
+        JSON.stringify({
+          status: "COMPLETED",
+          request_id: "fal-job-1",
+          response_url: "https://queue.fal.run/bytedance/seedream/v5/pro/edit/requests/fal-job-1",
+        }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     }
     if (url === "https://queue.fal.run/bytedance/seedream/v5/pro/edit/requests/fal-job-1") {
+      assert.equal(String(init.method || "GET").toUpperCase(), "POST")
       return new Response(
         JSON.stringify({
           images: [{ url: "https://fal.example/output.png", content_type: "image/png" }],
