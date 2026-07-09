@@ -1373,6 +1373,8 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
     return "internal_repair"
   if (path === ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
     return "internal_vote_projection_refresh"
+  if (path === ICONOPLASM_REFRESH_GALLERY_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
+    return "internal_gallery_refresh"
   if (path.startsWith("/api/iconoplasm/admin/")) {
     throw new IconoplasmUnclassifiedHandledRouteError(path)
   }
@@ -10083,6 +10085,10 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/admin/votes/projection-refresh/process")
     return requestMethod === "POST"
   if (path === ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
+    return requestMethod === "POST"
+  if (path === ICONOPLASM_REFRESH_GALLERY_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
+    return requestMethod === "POST"
+  if (path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
     return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/finalization/pending")
     return requestMethod === "GET" || requestMethod === "HEAD"
