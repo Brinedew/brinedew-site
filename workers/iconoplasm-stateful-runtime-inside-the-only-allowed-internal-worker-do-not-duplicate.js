@@ -3913,51 +3913,68 @@ function imageEditProviderDefinition(providerId) {
   return normalized ? ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS[normalized] : null
 }
 
-// Per-user last-used model memory. Keyed by (user, operation, provider).
-// Stored in KV. Only written when the model changes, so a user hammering the
-// same model 1000 times does not produce 1000 KV writes.
+// Per-user last-used model memory for an operation (image_edit or
+// candidate_generation). One selection across all providers so the dialog can
+// preselect the true most recent pick without reordering the dropdown.
+// Value shape: "provider_id:model" (first colon splits). Only written when the
+// selection changes, so hammering the same model does not produce KV writes.
 const ICONOPLASM_IMAGE_EDIT_LAST_USED_KV_PREFIX = "iconoplasm:image-edit-last-used:"
 const ICONOPLASM_IMAGE_EDIT_LAST_USED_OPERATIONS = Object.freeze([
   "image_edit",
   "candidate_generation",
 ])
-function imageEditLastUsedKvKey(userId, operation, providerId) {
+function imageEditLastUsedKvKey(userId, operation) {
   return (
     ICONOPLASM_IMAGE_EDIT_LAST_USED_KV_PREFIX +
     String(operation || "image_edit") +
     ":" +
-    normalizeUserId(userId) +
-    ":" +
-    normalizeImageEditProviderId(providerId)
+    normalizeUserId(userId)
   )
 }
-async function readImageEditLastUsedModel(env, { userId, operation, providerId }) {
-  if (!env?.KV) return ""
-  const op = String(operation || "image_edit")
-  if (!ICONOPLASM_IMAGE_EDIT_LAST_USED_OPERATIONS.includes(op)) return ""
+function encodeImageEditLastUsedSelection(providerId, model) {
   const pid = normalizeImageEditProviderId(providerId)
-  if (!pid) return ""
+  const cleanModel = sanitizeText(model || "", 256) || ""
+  if (!pid || !cleanModel) return ""
+  return pid + ":" + cleanModel
+}
+function decodeImageEditLastUsedSelection(raw) {
+  const value = sanitizeText(raw || "", 320) || ""
+  if (!value) return null
+  const idx = value.indexOf(":")
+  if (idx <= 0) return null
+  const providerId = normalizeImageEditProviderId(value.slice(0, idx))
+  const model = sanitizeText(value.slice(idx + 1), 256) || ""
+  if (!providerId || !model) return null
+  return { provider_id: providerId, model }
+}
+async function readImageEditLastUsedSelection(env, { userId, operation }) {
+  if (!env?.KV) return null
+  const op = String(operation || "image_edit")
+  if (!ICONOPLASM_IMAGE_EDIT_LAST_USED_OPERATIONS.includes(op)) return null
   try {
-    const raw = await env.KV.get(imageEditLastUsedKvKey(userId, op, pid))
-    return sanitizeText(raw || "", 256) || ""
+    const raw = await env.KV.get(imageEditLastUsedKvKey(userId, op))
+    return decodeImageEditLastUsedSelection(raw)
   } catch {
-    return ""
+    return null
   }
 }
 async function recordImageEditLastUsedModel(env, { userId, operation, providerId, model }) {
   if (!env?.KV) return
   const op = String(operation || "image_edit")
   if (!ICONOPLASM_IMAGE_EDIT_LAST_USED_OPERATIONS.includes(op)) return
-  const pid = normalizeImageEditProviderId(providerId)
-  const cleanModel = sanitizeText(model || "", 256) || ""
-  if (!pid || !cleanModel) return
-  // Skip the write if the model is already the last-used one. This is the
-  // optimization the user asked for: a user submitting 1000 edits with the
-  // same model produces exactly one KV write for that (op, provider, model).
-  const current = await readImageEditLastUsedModel(env, { userId, operation, providerId })
-  if (current === cleanModel) return
+  const encoded = encodeImageEditLastUsedSelection(providerId, model)
+  if (!encoded) return
+  // Skip the write if the selection is already the last-used one.
+  const current = await readImageEditLastUsedSelection(env, { userId, operation: op })
+  if (
+    current &&
+    current.provider_id === normalizeImageEditProviderId(providerId) &&
+    current.model === (sanitizeText(model || "", 256) || "")
+  ) {
+    return
+  }
   try {
-    await env.KV.put(imageEditLastUsedKvKey(userId, op, pid), cleanModel, {
+    await env.KV.put(imageEditLastUsedKvKey(userId, op), encoded, {
       // 90 days is well past any realistic session resumption window. A user
       // who comes back after 90 days gets the default model again.
       expirationTtl: 60 * 60 * 24 * 90,
@@ -26446,31 +26463,31 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           .filter(function (def) {
             return Array.isArray(def.model_options) && def.model_options.length > 0
           })
-        // Pin the user's last-used model for this (operation, provider) at the top
-        // of each provider's model_options, so the dropdown shows their last pick
-        // first. The pin only applies to providers the user has a saved key for.
+        // Mark the single most-recent selection in place. Do not reorder
+        // model_options — the UI keeps a stable alphanumeric list and only
+        // labels/preselects the last-used entry.
+        let lastUsedSelection = null
         if (env.KV) {
           const configuredProviderIds = new Set(providers.map((p) => p.provider_id))
-          await Promise.all(
-            scopedDefs.map(async function (def) {
-              if (!configuredProviderIds.has(def.provider_id)) return
-              const lastUsed = await readImageEditLastUsedModel(env, {
-                userId,
-                operation,
-                providerId: def.provider_id,
-              })
-              if (!lastUsed) return
-              const options = Array.isArray(def.model_options) ? def.model_options : []
-              const pinned = options.find(function (m) {
-                return m.model === lastUsed
-              })
-              if (!pinned) return
-              const unpinned = options.filter(function (m) {
-                return m.model !== lastUsed
-              })
-              def.model_options = [Object.assign({}, pinned, { last_used: true })].concat(unpinned)
-            }),
-          )
+          const remembered = await readImageEditLastUsedSelection(env, {
+            userId,
+            operation,
+          })
+          if (
+            remembered &&
+            configuredProviderIds.has(remembered.provider_id)
+          ) {
+            const def = scopedDefs.find((entry) => entry.provider_id === remembered.provider_id)
+            const options = Array.isArray(def?.model_options) ? def.model_options : []
+            const match = options.find((m) => m.model === remembered.model)
+            if (match) {
+              match.last_used = true
+              lastUsedSelection = {
+                provider_id: remembered.provider_id,
+                model: remembered.model,
+              }
+            }
+          }
         }
         return done(
           "image_edit_providers",
@@ -26484,6 +26501,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                 operation,
                 providers,
                 supported_providers: scopedDefs,
+                last_used: lastUsedSelection,
               },
               200,
               { "Cache-Control": "no-store" },

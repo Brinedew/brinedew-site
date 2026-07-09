@@ -5054,6 +5054,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     source: null,
     providers: [],
     supportedProviders: [],
+    lastUsed: null,
     job: null,
     loading: false,
     encryptionConfigured: false,
@@ -5172,29 +5173,46 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     providers.forEach(function (p) {
       configured[p.provider_id] = p
     })
-    var options = []
+    // Prefer the explicit last_used selection from the API. Fall back to any
+    // model_options last_used flag for older payloads.
+    var lastUsedSelection = imageEditDialogState.lastUsed || null
     var lastUsedValue = ""
-    var lastUsedLabel = ""
+    if (lastUsedSelection && lastUsedSelection.provider_id && lastUsedSelection.model) {
+      lastUsedValue = lastUsedSelection.provider_id + ":" + lastUsedSelection.model
+    }
+    var options = []
     supported.forEach(function (sp) {
       if (!configured[sp.provider_id]) return
       ;(sp.model_options || []).forEach(function (m) {
         var value = sp.provider_id + ":" + m.model
         var label = sp.label + " · " + m.label
-        if (m.last_used && !lastUsedValue) {
-          lastUsedValue = value
-          lastUsedLabel = label + " · last used"
-        } else {
-          options.push({ value: value, label: label })
-        }
+        if (!lastUsedValue && m.last_used) lastUsedValue = value
+        options.push({
+          value: value,
+          label: label,
+          lastUsed: false,
+        })
       })
     })
+    // Stable alphanumeric order. Last-used is a label/preselect only — never
+    // rearrange the list, which made the menu feel jumpy and error-prone.
     options.sort(function (a, b) {
-      return a.label.localeCompare(b.label)
+      return a.label.localeCompare(b.label, undefined, { sensitivity: "base", numeric: true })
     })
     if (lastUsedValue) {
-      options.unshift({ value: lastUsedValue, label: lastUsedLabel })
+      options.forEach(function (opt) {
+        if (opt.value === lastUsedValue) {
+          opt.lastUsed = true
+          opt.label = opt.label + " · last used"
+        }
+      })
     }
     var selectedValue = lastUsedValue || (options.length ? options[0].value : "")
+    // If the remembered selection is no longer available, fall back to the
+    // first sorted option instead of leaving a stale value.
+    if (selectedValue && !options.some(function (opt) { return opt.value === selectedValue })) {
+      selectedValue = options.length ? options[0].value : ""
+    }
     select.innerHTML = options.length
       ? options
           .map(function (opt) {
@@ -5244,6 +5262,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         )
           ? payload.supported_providers
           : []
+        imageEditDialogState.lastUsed =
+          payload && payload.last_used && typeof payload.last_used === "object"
+            ? payload.last_used
+            : null
         imageEditDialogState.encryptionConfigured = Boolean(
           payload && payload.encryption_configured,
         )
@@ -5752,6 +5774,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var directEmulsionResults = body.querySelector("[data-icono-request-direct-emulsion-results]")
       var requestDirectState = {
         providers: [],
+        supportedProviders: [],
+        lastUsed: null,
         providerReady: false,
         loading: false,
         job: null,
@@ -5781,16 +5805,33 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         providers.forEach(function (p) {
           configured[p.provider_id] = p
         })
+        var lastUsedSelection = requestDirectState.lastUsed || null
+        var lastUsedValue = ""
+        if (lastUsedSelection && lastUsedSelection.provider_id && lastUsedSelection.model) {
+          lastUsedValue = lastUsedSelection.provider_id + ":" + lastUsedSelection.model
+        }
         var options = []
         supported.forEach(function (sp) {
           if (!configured[sp.provider_id]) return
           ;(sp.model_options || []).forEach(function (m) {
-            options.push({
-              value: sp.provider_id + ":" + m.model,
-              label: sp.label + " · " + m.label,
-            })
+            var value = sp.provider_id + ":" + m.model
+            var label = sp.label + " · " + m.label
+            if (!lastUsedValue && m.last_used) lastUsedValue = value
+            options.push({ value: value, label: label })
           })
         })
+        options.sort(function (a, b) {
+          return a.label.localeCompare(b.label, undefined, { sensitivity: "base", numeric: true })
+        })
+        if (lastUsedValue) {
+          options.forEach(function (opt) {
+            if (opt.value === lastUsedValue) opt.label = opt.label + " · last used"
+          })
+        }
+        var selectedValue = lastUsedValue || (options.length ? options[0].value : "")
+        if (selectedValue && !options.some(function (opt) { return opt.value === selectedValue })) {
+          selectedValue = options.length ? options[0].value : ""
+        }
         providerSelect.innerHTML = options.length
           ? options
               .map(function (opt) {
@@ -5798,7 +5839,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               })
               .join("")
           : '<option value="">No saved image API</option>'
-        providerSelect.value = options.length ? options[0].value : ""
+        providerSelect.value = selectedValue
         providerSelect.disabled = !options.length
       }
 
@@ -5850,6 +5891,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             )
               ? payload.supported_providers
               : []
+            requestDirectState.lastUsed =
+              payload && payload.last_used && typeof payload.last_used === "object"
+                ? payload.last_used
+                : null
             requestDirectState.providerReady = Boolean(payload && payload.encryption_configured)
             renderDirectProviders()
             updateDirectGenerationButtons()
@@ -5857,6 +5902,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           .catch(function () {
             requestDirectState.providers = []
             requestDirectState.supportedProviders = []
+            requestDirectState.lastUsed = null
             requestDirectState.providerReady = false
             renderDirectProviders()
             updateDirectGenerationButtons()
