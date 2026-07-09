@@ -6079,10 +6079,48 @@ async function callFalImageProvider({
     throw new Error("Fal returned no request id: " + (providerErrorMessage(submitPayload, "", 502) || "empty response"))
   }
 
-  return pollFalJob({ baseUrl, apiKey, model: falModel, requestId, timeoutMs, env })
+  // Prefer the queue URLs fal returns on submit. Fall back to the documented
+  // path shape when a provider omits them.
+  const statusUrl =
+    sanitizeText(submitPayload?.status_url || "", 500) ||
+    `${baseUrl}/${falModel}/requests/${encodeURIComponent(requestId)}/status`
+  const responseUrl =
+    sanitizeText(submitPayload?.response_url || "", 500) ||
+    `${baseUrl}/${falModel}/requests/${encodeURIComponent(requestId)}`
+
+  return pollFalJob({
+    apiKey,
+    requestId,
+    statusUrl,
+    responseUrl,
+    timeoutMs,
+    env,
+  })
 }
 
-async function pollFalJob({ baseUrl, apiKey, model, requestId, timeoutMs, env = null }) {
+// Live fal queue endpoints for Seedream (and currently flux/schnell too) accept
+// POST on /status and /requests/{id}, not GET. Official OpenAPI/docs still say
+// GET; live probes return 405 Allow: POST. Always POST when polling.
+function falQueueAuthInit(apiKey) {
+  return {
+    method: "POST",
+    headers: {
+      Authorization: `Key ${apiKey}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: "{}",
+  }
+}
+
+async function pollFalJob({
+  apiKey,
+  requestId,
+  statusUrl,
+  responseUrl,
+  timeoutMs,
+  env = null,
+}) {
   const config = resolveProviderPollConfig(env)
   const hardTimeout = Math.min(timeoutMs, config.hardTimeout)
   const deadline = Date.now() + hardTimeout
@@ -6090,10 +6128,9 @@ async function pollFalJob({ baseUrl, apiKey, model, requestId, timeoutMs, env = 
   await new Promise((resolve) => setTimeout(resolve, config.initialWait))
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, config.interval))
-    const statusUrl = `${baseUrl}/${model}/requests/${encodeURIComponent(requestId)}/status`
     const payload = await fetchJsonWithDeadline(
       statusUrl,
-      { headers: { Authorization: `Key ${apiKey}` } },
+      falQueueAuthInit(apiKey),
       10_000,
       "Fal job status timeout",
     )
@@ -6101,10 +6138,11 @@ async function pollFalJob({ baseUrl, apiKey, model, requestId, timeoutMs, env = 
     const status = String(payload?.status || "").toUpperCase()
     console.log("[FAL_DEBUG] poll status=" + status + " request_id=" + requestId)
     if (status === "COMPLETED") {
-      const responseUrl = `${baseUrl}/${model}/requests/${encodeURIComponent(requestId)}`
+      const resultUrl =
+        sanitizeText(payload?.response_url || "", 500) || responseUrl
       const resultPayload = await fetchJsonWithDeadline(
-        responseUrl,
-        { headers: { Authorization: `Key ${apiKey}` } },
+        resultUrl,
+        falQueueAuthInit(apiKey),
         15_000,
         "Fal result fetch timeout",
       )
