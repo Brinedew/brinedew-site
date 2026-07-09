@@ -185,7 +185,7 @@ async function buildDailySummaryData(env, day) {
       body: {
         error: "No puzzle data for this day",
         day,
-        hint: "Either no one played, or the day hasn't happened yet",
+        hint: "Pre-warm cron should have written puzzle_actual. Check cron health.",
       },
     }
   }
