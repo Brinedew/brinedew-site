@@ -540,11 +540,73 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
     provider_id: "fal",
     label: "Fal.ai",
     default_endpoint_url: "https://queue.fal.run",
-    // Edit-only provider surface today. Generation models are not listed
-    // until they have been contract-tested for text-to-image.
-    default_model: "bytedance/seedream/v5/pro/edit",
-    capabilities: Object.freeze(["edit"]),
+    default_model: "fal-ai/nano-banana-pro/edit",
+    capabilities: Object.freeze(["edit", "generate"]),
+    // Fal models verified against live OpenAPI schemas 2026-07-09.
+    // No fallback versions — only the current best per model family.
+    // OpenAI and Gemini are included so users with a single Fal key get
+    // access without registering separate provider accounts.
     model_options: Object.freeze([
+      // ── Edit (image → image) ──────────────────────────────────────
+      Object.freeze({
+        model: "fal-ai/nano-banana-pro/edit",
+        label: "Nano Banana Pro Edit",
+        pricing_label: "~$0.04/image",
+        estimated_seconds: 45,
+        edit_capable: true,
+        generate_capable: false,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        supports_aspect_ratio: true,
+        output_format: "png",
+      }),
+      Object.freeze({
+        model: "fal-ai/flux-pro/kontext",
+        label: "Flux Kontext",
+        pricing_label: "~$0.10/image",
+        estimated_seconds: 15,
+        edit_capable: true,
+        generate_capable: false,
+        edit_image_param: "image_url",
+        edit_image_object_shape: "string",
+        supports_aspect_ratio: true,
+        output_format: "png",
+      }),
+      Object.freeze({
+        model: "openai/gpt-image-2/edit",
+        label: "GPT Image 2 Edit",
+        pricing_label: "~$0.08/image",
+        estimated_seconds: 180,
+        edit_capable: true,
+        generate_capable: false,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        output_format: "png",
+      }),
+      Object.freeze({
+        model: "fal-ai/gemini-3-pro-image-preview/edit",
+        label: "Gemini 3 Pro Edit",
+        pricing_label: "~$0.08/image",
+        estimated_seconds: 60,
+        edit_capable: true,
+        generate_capable: false,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        supports_aspect_ratio: true,
+        output_format: "png",
+      }),
+      Object.freeze({
+        model: "fal-ai/gemini-25-flash-image/edit",
+        label: "Gemini 2.5 Flash Edit",
+        pricing_label: "~$0.04/image",
+        estimated_seconds: 30,
+        edit_capable: true,
+        generate_capable: false,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        supports_aspect_ratio: true,
+        output_format: "png",
+      }),
       Object.freeze({
         model: "bytedance/seedream/v5/pro/edit",
         label: "Seedream 5 Pro Edit",
@@ -567,6 +629,78 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         edit_image_param: "image_urls",
         edit_image_object_shape: "string-array",
         image_size: "auto_2K",
+        output_format: "png",
+      }),
+      Object.freeze({
+        model: "fal-ai/omnigen-v2",
+        label: "OmniGen v2",
+        pricing_label: "~$0.04/image",
+        estimated_seconds: 60,
+        // Single endpoint handles both gen and edit; edit uses input_image_urls.
+        edit_capable: true,
+        generate_capable: true,
+        edit_image_param: "input_image_urls",
+        edit_image_object_shape: "string-array",
+        output_format: "png",
+      }),
+      // ── Generate (text → image) ──────────────────────────────────
+      Object.freeze({
+        model: "fal-ai/nano-banana-pro",
+        label: "Nano Banana Pro",
+        pricing_label: "~$0.04/image",
+        estimated_seconds: 45,
+        edit_capable: false,
+        generate_capable: true,
+        supports_aspect_ratio: true,
+        output_format: "png",
+      }),
+      Object.freeze({
+        model: "fal-ai/flux-2",
+        label: "Flux 2",
+        pricing_label: "~$0.05/image",
+        estimated_seconds: 15,
+        edit_capable: false,
+        generate_capable: true,
+        output_format: "png",
+      }),
+      Object.freeze({
+        model: "bytedance/seedream/v5/pro/text-to-image",
+        label: "Seedream 5 Pro",
+        pricing_label: "~$0.08/image",
+        estimated_seconds: 45,
+        edit_capable: false,
+        generate_capable: true,
+        image_size: "auto_2K",
+        output_format: "png",
+      }),
+      Object.freeze({
+        model: "openai/gpt-image-2",
+        label: "GPT Image 2",
+        pricing_label: "~$0.08/image",
+        estimated_seconds: 180,
+        edit_capable: false,
+        generate_capable: true,
+        output_format: "png",
+      }),
+      Object.freeze({
+        model: "fal-ai/gemini-3-pro-image-preview",
+        label: "Gemini 3 Pro",
+        pricing_label: "~$0.08/image",
+        estimated_seconds: 60,
+        edit_capable: false,
+        generate_capable: true,
+        supports_aspect_ratio: true,
+        output_format: "png",
+      }),
+      Object.freeze({
+        model: "fal-ai/gemini-25-flash-image",
+        label: "Gemini 2.5 Flash",
+        pricing_label: "~$0.04/image",
+        estimated_seconds: 30,
+        edit_capable: false,
+        generate_capable: true,
+        supports_aspect_ratio: true,
+        output_format: "png",
       }),
     ]),
   }),
@@ -6026,10 +6160,14 @@ async function callLumaImageProvider({
   })
 }
 
-// Fal.ai queue-based image editing. Uses the same submit → poll → result
-// pattern as Krea, but Fal's queue API is simpler: no asset upload needed
-// (image_urls accepts public URLs directly), and the response shape is
+// Fal.ai queue-based image editing/generation. Uses the same submit → poll →
+// result pattern as Krea, but Fal's queue API is simpler: no asset upload
+// needed (image_urls accepts public URLs directly), and the response shape is
 // always { images: [{ url }] }.
+//
+// Different Fal models use different source-image parameter names:
+//   image_urls (array), image_url (string), input_image_urls (array).
+// The correct param comes from the model option's edit_image_param.
 async function callFalImageProvider({
   providerRow,
   apiKey,
@@ -6049,7 +6187,8 @@ async function callFalImageProvider({
   body.num_images = 1
   body.enable_safety_checker = true
   if (sourceUrl) {
-    body.image_urls = [sourceUrl]
+    const editImageParam = sanitizeText(falOption?.edit_image_param || "", 64) || "image_urls"
+    body[editImageParam] = [sourceUrl]
   }
 
   const submitUrl = `${baseUrl}/${falModel}`
