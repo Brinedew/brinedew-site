@@ -24898,10 +24898,16 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       // sequence: it no-ops by content hash when nothing changed, and its budget
       // preflight throws when there is no KV/D1 headroom (so the cron simply skips
       // on an exhausted free-tier day rather than overspending).
+      console.log("[CRON] gallery refresh handler reached, calling invalidateGalleryCache")
       let result
       try {
         result = { ok: true, ...(await invalidateGalleryCache(meteredEnv)) }
       } catch (error) {
+        console.error(
+          "[CRON] gallery refresh threw:",
+          String(error?.message || error || "unknown"),
+          "code=" + String(error?.code || ""),
+        )
         result = {
           ok: false,
           skipped: true,
@@ -24909,6 +24915,7 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
           error: sanitizeText(String(error?.message || error), 500),
         }
       }
+      console.log("[CRON] gallery refresh result:", JSON.stringify(result).slice(0, 500))
       const response = json(result, 200, { "Cache-Control": "no-store" })
       responseStatus = response.status
       return response

@@ -645,9 +645,10 @@ async function runScheduledIconoplasmGalleryRefresh(env, ctx) {
   // Frequent, cheap gallery-only tick (the "*/15" cron). It does NOT run the heavy
   // maintenance (vote-projection refresh / canon repair). It just republishes the
   // public card-catalog so a canonical change — e.g. a vote auto-promote — reaches
-  // the guest gallery within ~15min instead of ~24h. invalidateGalleryCache no-ops
-  // by content hash when nothing changed (one indexed changes-since query + reuse),
-  // and self-skips on exhausted free-tier budget (caught inside the route).
+  // the home gallery / game cards within ~15min instead of waiting for the nightly
+  // run. invalidateGalleryCache no-ops by content hash when nothing changed (one
+  // indexed changes-since query + reuse), and self-skips on exhausted free-tier
+  // budget (caught inside the route).
   try {
     const galleryResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -662,8 +663,13 @@ async function runScheduledIconoplasmGalleryRefresh(env, ctx) {
     const galleryResult = await galleryResponse.json()
     console.log("[CRON] Iconoplasm frequent gallery refresh result:", galleryResult)
   } catch (err) {
-    console.error("[CRON] Iconoplasm frequent gallery refresh failed:", err)
+    console.error(
+      "[CRON] Iconoplasm frequent gallery refresh failed:",
+      String(err?.message || err || "unknown error"),
+      "code=" + String(err?.code || ""),
+    )
   }
+}
 }
 
 function stableSitemapDate() {
