@@ -2326,29 +2326,31 @@ test("Fal.ai Seedream 5 image edits use queue-based polling and visible pricing"
       assert.equal(body.output_format, "png")
       assert.equal(body.num_images, 1)
       assert.equal(body.enable_safety_checker, true)
+      // Live fal returns shortened status/response URLs under the app root,
+      // not the full model path we submitted to. The poller must follow them.
       return new Response(
         JSON.stringify({
           request_id: "fal-job-1",
-          status_url: "https://queue.fal.run/bytedance/seedream/v5/pro/edit/requests/fal-job-1/status",
-          response_url: "https://queue.fal.run/bytedance/seedream/v5/pro/edit/requests/fal-job-1",
+          status_url: "https://queue.fal.run/bytedance/seedream/requests/fal-job-1/status",
+          response_url: "https://queue.fal.run/bytedance/seedream/requests/fal-job-1",
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     }
-    if (url === "https://queue.fal.run/bytedance/seedream/v5/pro/edit/requests/fal-job-1/status") {
-      // Live fal queue status endpoints require POST (405 Allow: POST on GET).
-      assert.equal(String(init.method || "GET").toUpperCase(), "POST")
+    if (url === "https://queue.fal.run/bytedance/seedream/requests/fal-job-1/status") {
+      // Shortened fal status URLs accept GET (POST returns 405 Allow: GET,HEAD).
+      assert.equal(String(init.method || "GET").toUpperCase(), "GET")
       return new Response(
         JSON.stringify({
           status: "COMPLETED",
           request_id: "fal-job-1",
-          response_url: "https://queue.fal.run/bytedance/seedream/v5/pro/edit/requests/fal-job-1",
+          response_url: "https://queue.fal.run/bytedance/seedream/requests/fal-job-1",
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     }
-    if (url === "https://queue.fal.run/bytedance/seedream/v5/pro/edit/requests/fal-job-1") {
-      assert.equal(String(init.method || "GET").toUpperCase(), "POST")
+    if (url === "https://queue.fal.run/bytedance/seedream/requests/fal-job-1") {
+      assert.equal(String(init.method || "GET").toUpperCase(), "GET")
       return new Response(
         JSON.stringify({
           images: [{ url: "https://fal.example/output.png", content_type: "image/png" }],
@@ -2433,8 +2435,9 @@ test("Fal.ai Seedream 5 image edits use queue-based polling and visible pricing"
       fetchCalls.some(
         (call) =>
           call.url ===
-          "https://queue.fal.run/bytedance/seedream/v5/pro/edit/requests/fal-job-1/status",
+          "https://queue.fal.run/bytedance/seedream/requests/fal-job-1/status",
       ),
+      "poller must follow fal-returned shortened status_url",
     )
     assert.equal(env.ICONOPLASM_PORTRAITS.deletes.length, 1)
   } finally {
