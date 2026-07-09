@@ -4282,7 +4282,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var box = boxes[i]
       ;(function (voteBox) {
         var candidateAssetSha = voteBox.getAttribute("data-icono-candidate-vote-box")
-        wireVoteBox(voteBox, symbol, candidateAssetSha, {
+        var handle = wireVoteBox(voteBox, symbol, candidateAssetSha, {
           deferSnapshot: true,
           visionId: voteBox.getAttribute("data-icono-vision-id") || "",
           candidateImageId: voteBox.getAttribute("data-icono-candidate-image-id") || 0,
@@ -4290,6 +4290,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             refreshGeneAfterCandidateVote(symbol, data, state, { assetSha: candidateAssetSha })
           },
         })
+        // Prime deferred snapshots immediately on gene candidates. Without this,
+        // a publisher who already has a real upvote from image-edit publish sees
+        // a blank checkmark, and the first click toggles that endorsement off.
+        if (handle && typeof handle.ensureSnapshot === "function") {
+          handle.ensureSnapshot()
+        }
       })(box)
     }
   }
@@ -5503,6 +5509,49 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     else dialog.removeAttribute("open")
   }
 
+  function seedPublisherVoteSnapshotAfterImageEditPublish(payload) {
+    // Publish writes a real upvote for the publisher. Seed the shared vote
+    // localStorage key before the gene re-render so the candidate checkmark
+    // lights immediately and the first click does not toggle that endorsement off.
+    try {
+      if (typeof localStorage === "undefined") return
+      var symbol = normalizedSymbol(
+        (payload && payload.job && payload.job.source_gene_symbol) ||
+          (imageEditDialogState.source && imageEditDialogState.source.symbol) ||
+          "",
+      )
+      var assetSha = normalizedAssetSha(
+        (payload && payload.asset_sha256) ||
+          (payload && payload.job && payload.job.result_asset_sha256) ||
+          "",
+      )
+      if (!symbol || !assetSha) return
+      var inherit = (payload && payload.vote_inheritance) || {}
+      var upvotes = Math.max(
+        1,
+        Number(inherit.imported_votes || 0) ||
+          Number(inherit.inherited_upvotes || 0) + (inherit.user_upvote ? 1 : 0) ||
+          1,
+      )
+      var snapshot = {
+        image_upvotes: upvotes,
+        image_downvotes: 0,
+        image_score: upvotes,
+        user_vote: 1,
+      }
+      localStorage.setItem(
+        "iconoplasm.vote.a:" + symbol + "|" + assetSha,
+        JSON.stringify(snapshot),
+      )
+      // Vote-projection auto-promotion is already queued by publish. Poll the
+      // gene detail until this asset becomes canonical without requiring
+      // another manual upvote click.
+      refreshGeneWhenCanonicalDetailMatchesVote(symbol, assetSha)
+    } catch (_error) {
+      /* best-effort UI hydration */
+    }
+  }
+
   function publishImageEditJob() {
     var state = imageEditDialogState
     if (!state.job || !state.job.id) return
@@ -5519,6 +5568,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         state.job = payload && payload.job ? payload.job : state.job
         state.loading = false
         updateImageEditButtons()
+        seedPublisherVoteSnapshotAfterImageEditPublish(payload)
         var root = document.getElementById(ROOT_ID)
         if (root && state.source && state.source.symbol) {
           renderGene(root, state.source.symbol, { forceFresh: true })

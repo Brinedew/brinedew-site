@@ -2868,6 +2868,7 @@ test("image edit jobs call the provider, write renditions, and publish with inhe
     assert.equal(published.vote_inheritance.imported_votes, 7)
     assert.equal(published.vote_inheritance.user_upvote, true)
     assert.equal(db.voteImportPayload.items.length, 7)
+    // Publish is an endorsement: the publisher gets a real upvote row.
     assert.equal(db.voteImportPayload.items.filter((item) => item.user_id === "user-1").length, 1)
     assert.equal(
       db.voteImportPayload.items.filter((item) =>

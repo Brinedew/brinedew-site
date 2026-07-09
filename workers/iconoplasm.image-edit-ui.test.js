@@ -358,6 +358,7 @@ test("publish success closes the edit dialog so the refreshed candidates are vis
 
   assert.match(closeImageEditDialog, /dialog\.hide/)
   assert.match(publishImageEditJob, /closeImageEditDialog\(\)/)
+  assert.match(publishImageEditJob, /seedPublisherVoteSnapshotAfterImageEditPublish\(payload\)/)
   assert.match(publishImageEditJob, /renderGene\(root,\s*state\.source\.symbol/)
   // Failures must keep the dialog open with an error status.
   assert.match(publishImageEditJob, /\.catch\(function \(error\)/)
@@ -366,6 +367,25 @@ test("publish success closes the edit dialog so the refreshed candidates are vis
     publishImageEditJob.slice(publishImageEditJob.indexOf(".catch")),
     /closeImageEditDialog\(\)/,
   )
+})
+
+test("image-edit publish keeps a real publisher upvote and hydrates the vote UI", () => {
+  const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
+  const seedStart = app.indexOf("function seedPublisherVoteSnapshotAfterImageEditPublish")
+  const seedEnd = app.indexOf("function publishImageEditJob", seedStart)
+  const wireStart = app.indexOf("function wireCandidateVoteBoxes")
+  const wireEnd = app.indexOf("function wireCandidateRemoveButtons", wireStart)
+  assert.notEqual(seedStart, -1)
+  assert.notEqual(seedEnd, -1)
+  assert.notEqual(wireStart, -1)
+  assert.notEqual(wireEnd, -1)
+  const seed = app.slice(seedStart, seedEnd)
+  const wire = app.slice(wireStart, wireEnd)
+
+  assert.match(seed, /iconoplasm\.vote\.a:/)
+  assert.match(seed, /user_vote:\s*1/)
+  assert.match(seed, /refreshGeneWhenCanonicalDetailMatchesVote\(symbol,\s*assetSha\)/)
+  assert.match(wire, /handle\.ensureSnapshot\(\)/)
 })
 
 test("deferred candidate gallery wires candidate edit buttons after rendering cards", () => {
