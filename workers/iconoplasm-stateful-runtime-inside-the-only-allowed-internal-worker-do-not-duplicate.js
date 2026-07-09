@@ -544,8 +544,8 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
     capabilities: Object.freeze(["edit", "generate"]),
     // Fal models verified against live OpenAPI schemas 2026-07-09.
     // No fallback versions — only the current best per model family.
-    // OpenAI and Gemini are included so users with a single Fal key get
-    // access without registering separate provider accounts.
+    // Gemini excluded: not used through Krea either.
+    // GPT Image 2 excluded: already available through OpenAI direct and Krea.
     model_options: Object.freeze([
       // ── Edit (image → image) ──────────────────────────────────────
       Object.freeze({
@@ -553,6 +553,18 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         label: "Nano Banana Pro Edit",
         pricing_label: "~$0.04/image",
         estimated_seconds: 45,
+        edit_capable: true,
+        generate_capable: false,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        supports_aspect_ratio: true,
+        output_format: "png",
+      }),
+      Object.freeze({
+        model: "fal-ai/nano-banana-2/edit",
+        label: "Nano Banana 2 Edit",
+        pricing_label: "~$0.02/image",
+        estimated_seconds: 30,
         edit_capable: true,
         generate_capable: false,
         edit_image_param: "image_urls",
@@ -584,30 +596,6 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         output_format: "png",
       }),
       Object.freeze({
-        model: "fal-ai/gemini-3-pro-image-preview/edit",
-        label: "Gemini 3 Pro Edit",
-        pricing_label: "~$0.08/image",
-        estimated_seconds: 60,
-        edit_capable: true,
-        generate_capable: false,
-        edit_image_param: "image_urls",
-        edit_image_object_shape: "string-array",
-        supports_aspect_ratio: true,
-        output_format: "png",
-      }),
-      Object.freeze({
-        model: "fal-ai/gemini-25-flash-image/edit",
-        label: "Gemini 2.5 Flash Edit",
-        pricing_label: "~$0.04/image",
-        estimated_seconds: 30,
-        edit_capable: true,
-        generate_capable: false,
-        edit_image_param: "image_urls",
-        edit_image_object_shape: "string-array",
-        supports_aspect_ratio: true,
-        output_format: "png",
-      }),
-      Object.freeze({
         model: "bytedance/seedream/v5/pro/edit",
         label: "Seedream 5 Pro Edit",
         pricing_label: "~$0.08/image",
@@ -636,7 +624,6 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         label: "OmniGen v2",
         pricing_label: "~$0.04/image",
         estimated_seconds: 60,
-        // Single endpoint handles both gen and edit; edit uses input_image_urls.
         edit_capable: true,
         generate_capable: true,
         edit_image_param: "input_image_urls",
@@ -649,6 +636,16 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         label: "Nano Banana Pro",
         pricing_label: "~$0.04/image",
         estimated_seconds: 45,
+        edit_capable: false,
+        generate_capable: true,
+        supports_aspect_ratio: true,
+        output_format: "png",
+      }),
+      Object.freeze({
+        model: "fal-ai/nano-banana-2",
+        label: "Nano Banana 2",
+        pricing_label: "~$0.02/image",
+        estimated_seconds: 30,
         edit_capable: false,
         generate_capable: true,
         supports_aspect_ratio: true,
@@ -680,26 +677,6 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         estimated_seconds: 180,
         edit_capable: false,
         generate_capable: true,
-        output_format: "png",
-      }),
-      Object.freeze({
-        model: "fal-ai/gemini-3-pro-image-preview",
-        label: "Gemini 3 Pro",
-        pricing_label: "~$0.08/image",
-        estimated_seconds: 60,
-        edit_capable: false,
-        generate_capable: true,
-        supports_aspect_ratio: true,
-        output_format: "png",
-      }),
-      Object.freeze({
-        model: "fal-ai/gemini-25-flash-image",
-        label: "Gemini 2.5 Flash",
-        pricing_label: "~$0.04/image",
-        estimated_seconds: 30,
-        edit_capable: false,
-        generate_capable: true,
-        supports_aspect_ratio: true,
         output_format: "png",
       }),
     ]),
