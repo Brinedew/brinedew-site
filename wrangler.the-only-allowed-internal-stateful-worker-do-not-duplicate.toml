@@ -10,7 +10,9 @@ name = "geneguessr-api"
 main = "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 compatibility_date = "2025-11-12"
 compatibility_flags = ["nodejs_compat"]
-workers_dev = false
+# Cron triggers need workers_dev=true to fire. The public edge worker owns
+# production routes; this worker is only publicly reachable via service binding.
+workers_dev = true
 preview_urls = false
 
 [observability]
