@@ -6098,18 +6098,19 @@ async function callFalImageProvider({
   })
 }
 
-// Live fal queue endpoints for Seedream (and currently flux/schnell too) accept
-// POST on /status and /requests/{id}, not GET. Official OpenAPI/docs still say
-// GET; live probes return 405 Allow: POST. Always POST when polling.
-function falQueueAuthInit(apiKey) {
+// Fal submit returns status_url / response_url that must be used as-is.
+// Live Seedream submit returns shortened paths like:
+//   https://queue.fal.run/bytedance/seedream/requests/{id}/status
+// Those accept GET (Allow: GET,HEAD). Reconstructing the full model path
+//   .../seedream/v5/lite/edit/requests/{id}/status
+// returns 405 Allow: POST and is the wrong route. Prefer submit URLs + GET.
+function falQueueReadInit(apiKey) {
   return {
-    method: "POST",
+    method: "GET",
     headers: {
       Authorization: `Key ${apiKey}`,
-      "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: "{}",
   }
 }
 
@@ -6130,19 +6131,26 @@ async function pollFalJob({
     await new Promise((resolve) => setTimeout(resolve, config.interval))
     const payload = await fetchJsonWithDeadline(
       statusUrl,
-      falQueueAuthInit(apiKey),
+      falQueueReadInit(apiKey),
       10_000,
       "Fal job status timeout",
     )
     lastPayload = payload
     const status = String(payload?.status || "").toUpperCase()
-    console.log("[FAL_DEBUG] poll status=" + status + " request_id=" + requestId)
+    console.log(
+      "[FAL_DEBUG] poll status=" +
+        status +
+        " request_id=" +
+        requestId +
+        " status_url=" +
+        statusUrl,
+    )
     if (status === "COMPLETED") {
       const resultUrl =
         sanitizeText(payload?.response_url || "", 500) || responseUrl
       const resultPayload = await fetchJsonWithDeadline(
         resultUrl,
-        falQueueAuthInit(apiKey),
+        falQueueReadInit(apiKey),
         15_000,
         "Fal result fetch timeout",
       )
