@@ -540,8 +540,10 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
     provider_id: "fal",
     label: "Fal.ai",
     default_endpoint_url: "https://queue.fal.run",
+    // Edit-only provider surface today. Generation models are not listed
+    // until they have been contract-tested for text-to-image.
     default_model: "bytedance/seedream/v5/pro/edit",
-    capabilities: Object.freeze(["edit", "generate"]),
+    capabilities: Object.freeze(["edit"]),
     model_options: Object.freeze([
       Object.freeze({
         model: "bytedance/seedream/v5/pro/edit",
@@ -549,7 +551,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         pricing_label: "~$0.08/image",
         estimated_seconds: 45,
         edit_capable: true,
-        generate_capable: true,
+        generate_capable: false,
         edit_image_param: "image_urls",
         edit_image_object_shape: "string-array",
         image_size: "auto_2K",
@@ -561,7 +563,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         pricing_label: "~$0.04/image",
         estimated_seconds: 25,
         edit_capable: true,
-        generate_capable: true,
+        generate_capable: false,
         edit_image_param: "image_urls",
         edit_image_object_shape: "string-array",
         image_size: "auto_2K",
@@ -4028,12 +4030,13 @@ function resolveImageEditProviderModel(raw, providerDef) {
 function mapImageEditModelOption(option) {
   if (!option || typeof option !== "object") return null
   const editImageParam = sanitizeText(option.edit_image_param || "", 64) || ""
-  // The model's `edit_capable` flag is authoritative when set. Older
-  // model definitions only have `edit_image_param`, so fall back to
-  // its presence as a hint of edit capability.
+  // Capability flags must be explicit. Do not default generate_capable to true:
+  // that leaked edit-only models into the candidate-generation menu.
+  // edit_capable may still fall back to edit_image_param for older Krea rows
+  // that predate the flag, but generate never defaults open.
   const hasExplicitEditFlag = option.edit_capable === true || option.edit_capable === false
   const editCapable = hasExplicitEditFlag ? option.edit_capable === true : Boolean(editImageParam)
-  const generateCapable = option.generate_capable !== false
+  const generateCapable = option.generate_capable === true
   return {
     model: sanitizeText(option.model || "", 128) || "",
     label: sanitizeText(option.label || option.model || "", 160) || "",
@@ -26456,7 +26459,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           .map(function (def) {
             const filteredOptions = (def.model_options || []).filter(function (m) {
               if (requiredCapability === "edit") return m.edit_capable === true
-              return m.generate_capable !== false
+              return m.generate_capable === true
             })
             return Object.assign({}, def, { model_options: filteredOptions })
           })
