@@ -343,6 +343,31 @@ test("edit blot preview swaps the source viewer for the comparison viewer after 
   assert.doesNotMatch(previewImageCss, /object-fit:\s*contain|background:|border:|max-height/)
 })
 
+test("publish success closes the edit dialog so the refreshed candidates are visible", () => {
+  const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
+  const closeStart = app.indexOf("function closeImageEditDialog")
+  const closeEnd = app.indexOf("function publishImageEditJob", closeStart)
+  const publishStart = app.indexOf("function publishImageEditJob")
+  const publishEnd = app.indexOf("function wireImageEditDialog", publishStart)
+  assert.notEqual(closeStart, -1)
+  assert.notEqual(closeEnd, -1)
+  assert.notEqual(publishStart, -1)
+  assert.notEqual(publishEnd, -1)
+  const closeImageEditDialog = app.slice(closeStart, closeEnd)
+  const publishImageEditJob = app.slice(publishStart, publishEnd)
+
+  assert.match(closeImageEditDialog, /dialog\.hide/)
+  assert.match(publishImageEditJob, /closeImageEditDialog\(\)/)
+  assert.match(publishImageEditJob, /renderGene\(root,\s*state\.source\.symbol/)
+  // Failures must keep the dialog open with an error status.
+  assert.match(publishImageEditJob, /\.catch\(function \(error\)/)
+  assert.match(publishImageEditJob, /Could not publish edit/)
+  assert.doesNotMatch(
+    publishImageEditJob.slice(publishImageEditJob.indexOf(".catch")),
+    /closeImageEditDialog\(\)/,
+  )
+})
+
 test("deferred candidate gallery wires candidate edit buttons after rendering cards", () => {
   const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
   const attachStart = app.indexOf("function attachDeferredCandidateGallery")
