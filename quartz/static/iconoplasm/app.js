@@ -5496,6 +5496,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     imageEditSetStatus("Edit ready to publish.", "success")
   }
 
+  function closeImageEditDialog() {
+    var dialog = imageEditDialogState.dialog
+    if (!dialog || !document.body.contains(dialog)) return
+    if (typeof dialog.hide === "function") dialog.hide()
+    else dialog.removeAttribute("open")
+  }
+
   function publishImageEditJob() {
     var state = imageEditDialogState
     if (!state.job || !state.job.id) return
@@ -5510,17 +5517,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
       .then(function (payload) {
         state.job = payload && payload.job ? payload.job : state.job
-        imageEditSetStatus("Published as a new candidate blot.", "success")
+        state.loading = false
+        updateImageEditButtons()
         var root = document.getElementById(ROOT_ID)
         if (root && state.source && state.source.symbol) {
           renderGene(root, state.source.symbol, { forceFresh: true })
         }
+        // Publish finished: dismiss the modal so the refreshed candidate grid
+        // is visible immediately. Failures keep the dialog open with the error.
+        closeImageEditDialog()
       })
       .catch(function (error) {
-        imageEditSetStatus(String((error && error.message) || "Could not publish edit."), "error")
-      })
-      .finally(function () {
         state.loading = false
+        imageEditSetStatus(String((error && error.message) || "Could not publish edit."), "error")
         updateImageEditButtons()
       })
   }
