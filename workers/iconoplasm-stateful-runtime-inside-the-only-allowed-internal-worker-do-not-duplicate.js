@@ -6456,6 +6456,9 @@ function imageEditInheritedVoteItems(job, userId) {
       vote_value: 1,
     })
   }
+  // Publishing is an explicit endorsement: record a real upvote for the
+  // publisher. The gene-page vote UI must hydrate that vote (local snapshot +
+  // deferred snapshot prime) so the first click does not toggle it off.
   items.push({
     asset_sha256: assetSha,
     vision_id: visionId,
