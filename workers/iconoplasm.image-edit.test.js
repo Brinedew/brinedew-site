@@ -913,27 +913,23 @@ test("image edit provider keys are encrypted and listed without secrets", async 
   assert.ok(filtered.supported_providers.some((provider) => provider.provider_id === "fal"))
   const fal = filtered.supported_providers.find((provider) => provider.provider_id === "fal")
   const falEditModels = (fal.model_options || []).map((o) => o.model)
-  // Edit menu must expose Fal edit models.
   for (const required of [
     "fal-ai/nano-banana-pro/edit",
+    "fal-ai/nano-banana-2/edit",
     "fal-ai/flux-pro/kontext",
     "openai/gpt-image-2/edit",
-    "fal-ai/gemini-3-pro-image-preview/edit",
-    "fal-ai/gemini-25-flash-image/edit",
     "bytedance/seedream/v5/pro/edit",
     "bytedance/seedream/v5/lite/edit",
     "fal-ai/omnigen-v2",
   ]) {
     assert.ok(falEditModels.includes(required), "Fal edit dialog should expose " + required)
   }
-  // Gen-only models must NOT appear in the edit menu.
   for (const hidden of [
     "fal-ai/nano-banana-pro",
+    "fal-ai/nano-banana-2",
     "fal-ai/flux-2",
     "bytedance/seedream/v5/pro/text-to-image",
     "openai/gpt-image-2",
-    "fal-ai/gemini-3-pro-image-preview",
-    "fal-ai/gemini-25-flash-image",
   ]) {
     assert.ok(!falEditModels.includes(hidden), "Fal edit dialog should NOT expose gen-only " + hidden)
   }
@@ -4193,21 +4189,19 @@ test("candidate-generation provider list includes only generate-capable Krea mod
   const falGenModels = (fal.model_options || []).map((m) => m.model)
   for (const required of [
     "fal-ai/nano-banana-pro",
+    "fal-ai/nano-banana-2",
     "fal-ai/flux-2",
     "bytedance/seedream/v5/pro/text-to-image",
     "openai/gpt-image-2",
-    "fal-ai/gemini-3-pro-image-preview",
-    "fal-ai/gemini-25-flash-image",
     "fal-ai/omnigen-v2",
   ]) {
     assert.ok(falGenModels.includes(required), "Fal gen should expose " + required)
   }
   for (const hidden of [
     "fal-ai/nano-banana-pro/edit",
+    "fal-ai/nano-banana-2/edit",
     "fal-ai/flux-pro/kontext",
     "openai/gpt-image-2/edit",
-    "fal-ai/gemini-3-pro-image-preview/edit",
-    "fal-ai/gemini-25-flash-image/edit",
     "bytedance/seedream/v5/pro/edit",
     "bytedance/seedream/v5/lite/edit",
   ]) {
