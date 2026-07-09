@@ -1407,6 +1407,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (family === "artist_blacklist_submission") return "public_submission"
   if (family === "internal_repair") return "internal_maintenance"
   if (family === "internal_vote_projection_refresh") return "internal_maintenance"
+  if (family === "internal_gallery_refresh") return "internal_maintenance"
   if (
     family === "admin_overview" ||
     family === "admin_coverage" ||
@@ -1477,6 +1478,7 @@ function iconoplasmBudgetClassFromHistoricalRouteFamilyForReport(routeFamily) {
 
 function iconoplasmBudgetSourceClassFromRequest(request, path, routeFamily) {
   if (routeFamily === "internal_repair") return "internal_maintenance"
+  if (routeFamily === "internal_gallery_refresh") return "internal_maintenance"
   if (path.startsWith("/api/iconoplasm/admin/")) {
     if (
       routeFamily === "admin_ingest" ||
