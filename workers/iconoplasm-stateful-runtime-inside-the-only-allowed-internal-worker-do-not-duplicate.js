@@ -536,6 +536,39 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
       }),
     ]),
   }),
+  fal: Object.freeze({
+    provider_id: "fal",
+    label: "Fal.ai",
+    default_endpoint_url: "https://queue.fal.run",
+    default_model: "bytedance/seedream/v5/pro/edit",
+    capabilities: Object.freeze(["edit", "generate"]),
+    model_options: Object.freeze([
+      Object.freeze({
+        model: "bytedance/seedream/v5/pro/edit",
+        label: "Seedream 5 Pro Edit",
+        pricing_label: "~$0.08/image",
+        estimated_seconds: 45,
+        edit_capable: true,
+        generate_capable: true,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        image_size: "auto_2K",
+        output_format: "jpeg",
+      }),
+      Object.freeze({
+        model: "bytedance/seedream/v5/lite/edit",
+        label: "Seedream 5 Lite Edit",
+        pricing_label: "~$0.04/image",
+        estimated_seconds: 25,
+        edit_capable: true,
+        generate_capable: true,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        image_size: "auto_2K",
+        output_format: "jpeg",
+      }),
+    ]),
+  }),
 })
 const ICONOPLASM_IMAGE_EDIT_DEFAULT_TIMEOUT_MS = ICONOPLASM_IMAGE_PROVIDER_TIMEOUT_MS
 const USER_EMULSION_MAX_LENGTH = 140
@@ -3872,6 +3905,7 @@ function normalizeImageEditProviderId(raw) {
   if (providerId === "google" || providerId === "google-gemini") return "gemini"
   if (providerId === "luma-ai" || providerId === "lumaai" || providerId === "luma-agents")
     return "luma"
+  if (providerId === "fal-ai" || providerId === "falai") return "fal"
   return ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS[providerId] ? providerId : ""
 }
 
@@ -5973,11 +6007,131 @@ async function callLumaImageProvider({
   })
 }
 
+// Fal.ai queue-based image editing. Uses the same submit → poll → result
+// pattern as Krea, but Fal's queue API is simpler: no asset upload needed
+// (image_urls accepts public URLs directly), and the response shape is
+// always { images: [{ url }] }.
+async function callFalImageProvider({
+  providerRow,
+  apiKey,
+  prompt,
+  sourceUrl = "",
+  env = null,
+}) {
+  const providerDef = imageEditProviderDefinition("fal")
+  const falModel = resolveImageEditProviderModel(providerRow?.model || "", providerDef)
+  const falOption = imageEditProviderModelOption(providerDef, falModel)
+  const baseUrl = String(providerRow?.endpoint_url || providerDef?.default_endpoint_url || "https://queue.fal.run").replace(/\/+$/, "")
+  const timeoutMs = providerRequestTimeoutMs(providerRow)
+
+  const body = { prompt }
+  if (falOption?.image_size) body.image_size = falOption.image_size
+  if (falOption?.output_format) body.output_format = falOption.output_format
+  body.num_images = 1
+  body.enable_safety_checker = true
+  if (sourceUrl) {
+    body.image_urls = [sourceUrl]
+  }
+
+  const submitUrl = `${baseUrl}/${falModel}`
+  console.log(
+    "[FAL_DEBUG] model=" + falModel + " url=" + submitUrl +
+    " body=" + JSON.stringify(body).slice(0, 1000),
+  )
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort("Fal submit timeout"), 15_000)
+  let submitResponse
+  try {
+    submitResponse = await fetch(submitUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Key ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
+  const rawText = await submitResponse.text()
+  let submitPayload = null
+  try {
+    submitPayload = rawText ? JSON.parse(rawText) : null
+  } catch {
+    submitPayload = null
+  }
+  console.log(
+    "[FAL_DEBUG] submit status=" + submitResponse.status +
+    " request_id=" + String(submitPayload?.request_id || "") +
+    " raw=" + rawText.slice(0, 2000),
+  )
+  if (!submitResponse.ok) {
+    throw new Error(
+      "Fal rejected (status " +
+        submitResponse.status +
+        "): " +
+        (providerErrorMessage(submitPayload, rawText, submitResponse.status) || rawText || "empty body"),
+    )
+  }
+
+  const requestId = sanitizeText(submitPayload?.request_id || "", 120) || ""
+  if (!requestId) {
+    throw new Error("Fal returned no request id: " + (providerErrorMessage(submitPayload, "", 502) || "empty response"))
+  }
+
+  return pollFalJob({ baseUrl, apiKey, model: falModel, requestId, timeoutMs, env })
+}
+
+async function pollFalJob({ baseUrl, apiKey, model, requestId, timeoutMs, env = null }) {
+  const config = resolveProviderPollConfig(env)
+  const hardTimeout = Math.min(timeoutMs, config.hardTimeout)
+  const deadline = Date.now() + hardTimeout
+  let lastPayload = null
+  await new Promise((resolve) => setTimeout(resolve, config.initialWait))
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, config.interval))
+    const statusUrl = `${baseUrl}/${model}/requests/${encodeURIComponent(requestId)}/status`
+    const payload = await fetchJsonWithDeadline(
+      statusUrl,
+      { headers: { Authorization: `Key ${apiKey}` } },
+      10_000,
+      "Fal job status timeout",
+    )
+    lastPayload = payload
+    const status = String(payload?.status || "").toUpperCase()
+    console.log("[FAL_DEBUG] poll status=" + status + " request_id=" + requestId)
+    if (status === "COMPLETED") {
+      const responseUrl = `${baseUrl}/${model}/requests/${encodeURIComponent(requestId)}`
+      const resultPayload = await fetchJsonWithDeadline(
+        responseUrl,
+        { headers: { Authorization: `Key ${apiKey}` } },
+        15_000,
+        "Fal result fetch timeout",
+      )
+      const images = Array.isArray(resultPayload?.images) ? resultPayload.images : []
+      const imageUrl = String(images[0]?.url || "").trim()
+      if (!imageUrl) throw new Error("Fal completed without an image URL")
+      return downloadProviderImageBytes(imageUrl)
+    }
+    if (status === "FAILED" || status === "CANCELLED") {
+      throw new Error(
+        providerErrorMessage(payload, "", 502) || "Fal job " + status.toLowerCase(),
+      )
+    }
+  }
+  throw new Error(
+    `Fal job did not complete before the ${Math.round(timeoutMs / 1000)}s deadline${
+      lastPayload?.status ? ` (last status: ${lastPayload.status})` : ""
+    }`,
+  )
+}
+
 // Synchronous image-edit dispatch. Krea is here alongside OpenAI, Gemini,
-// and Luma — callKreaImageProvider does the asset upload, create-job, and
-// poll-to-completion in a single flow. The route handler treats Krea the
-// same as the other providers: returns 200 with the result, or 502 with
-// a clear error. No ctx.waitUntil, no 202, no D1 job row.
+// Luma, and Fal — callKreaImageProvider does the asset upload, create-job,
+// and poll-to-completion in a single flow. The route handler treats Krea
+// the same as the other providers: returns 200 with the result, or 502
+// with a clear error. No ctx.waitUntil, no 202, no D1 job row.
 async function callImageEditProvider(options) {
   const providerId = normalizeImageEditProviderId(options?.providerRow?.provider_id || "")
   if (providerId === "openai") return callOpenAiImageProvider(options)
@@ -5992,6 +6146,11 @@ async function callImageEditProvider(options) {
       ...options,
       sourceUrl: options?.sourceUrl || "",
       userId: options?.userId || "",
+    })
+  if (providerId === "fal")
+    return callFalImageProvider({
+      ...options,
+      sourceUrl: options?.sourceUrl || "",
     })
   throw new Error(
     `Image edit provider "${providerId || "unknown"}" is not handled by the synchronous dispatcher.`,
@@ -6509,6 +6668,11 @@ async function callCandidateGenerationProvider(options) {
     })
   if (providerId === "krea")
     return callKreaImageProvider({
+      ...options,
+      sourceUrl: "",
+    })
+  if (providerId === "fal")
+    return callFalImageProvider({
       ...options,
       sourceUrl: "",
     })

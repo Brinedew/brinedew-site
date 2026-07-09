@@ -2308,6 +2308,133 @@ test("candidate generation jobs can use Krea API models and expose compute-unit 
   }
 })
 
+test("Fal.ai Seedream 5 image edits use queue-based polling and visible pricing", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  const fetchCalls = []
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    fetchCalls.push({ url, init })
+    if (url === "https://queue.fal.run/bytedance/seedream/v5/pro/edit") {
+      assert.equal(init.headers.Authorization, "Key fal-test-secret")
+      const body = JSON.parse(String(init.body || "{}"))
+      assert.equal(body.prompt.includes("visible AI generation errors"), true)
+      assert.ok(Array.isArray(body.image_urls), "image_urls should be an array")
+      assert.equal(body.image_urls.length, 1, "should have one source image")
+      assert.equal(body.image_size, "auto_2K")
+      assert.equal(body.output_format, "jpeg")
+      assert.equal(body.num_images, 1)
+      assert.equal(body.enable_safety_checker, true)
+      return new Response(
+        JSON.stringify({
+          request_id: "fal-job-1",
+          status_url: "https://queue.fal.run/bytedance/seedream/v5/pro/edit/requests/fal-job-1/status",
+          response_url: "https://queue.fal.run/bytedance/seedream/v5/pro/edit/requests/fal-job-1",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://queue.fal.run/bytedance/seedream/v5/pro/edit/requests/fal-job-1/status") {
+      return new Response(
+        JSON.stringify({ status: "COMPLETED", request_id: "fal-job-1" }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://queue.fal.run/bytedance/seedream/v5/pro/edit/requests/fal-job-1") {
+      return new Response(
+        JSON.stringify({
+          images: [{ url: "https://fal.example/output.png", content_type: "image/png" }],
+          seed: 42,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://fal.example/output.png") {
+      return new Response("fal-png-bytes", {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      })
+    }
+    // Internal portrait CDN URL used as source image for providers that
+    // accept image_urls (Fal.ai, Krea asset upload, etc.)
+    if (url.includes("/portraits/") || url.includes("/portrait/")) {
+      return new Response("source-portrait-bytes", {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+
+  try {
+    const saveResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "fal",
+              api_key: "fal-test-secret",
+              model: "bytedance/seedream/v5/pro/edit",
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const saved = await saveResponse.json()
+    assert.equal(saveResponse.status, 200)
+    assert.equal(saved.provider.provider_id, "fal")
+    assert.equal(saved.provider.model, "bytedance/seedream/v5/pro/edit")
+    assert.equal(saved.provider.pricing_label, "~$0.08/image")
+
+    const createResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "fal",
+              model: "bytedance/seedream/v5/pro/edit",
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const created = await createResponse.json()
+    assert.equal(createResponse.status, 200, "create status: " + JSON.stringify(created))
+    assert.equal(created.job.status, "succeeded")
+    assert.ok(created.job.result_asset_sha256)
+    assert.ok(
+      fetchCalls.some(
+        (call) =>
+          call.url ===
+          "https://queue.fal.run/bytedance/seedream/v5/pro/edit/requests/fal-job-1/status",
+      ),
+    )
+    assert.equal(env.ICONOPLASM_PORTRAITS.deletes.length, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("image edit jobs can use Gemini API models", async () => {
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
