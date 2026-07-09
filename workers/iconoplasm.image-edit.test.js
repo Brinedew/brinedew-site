@@ -917,6 +917,7 @@ test("image edit provider keys are encrypted and listed without secrets", async 
     "fal-ai/nano-banana-pro/edit",
     "fal-ai/nano-banana-2/edit",
     "fal-ai/flux-pro/kontext",
+    "fal-ai/flux-2/edit",
     "openai/gpt-image-2/edit",
     "bytedance/seedream/v5/pro/edit",
     "bytedance/seedream/v5/lite/edit",
@@ -929,6 +930,7 @@ test("image edit provider keys are encrypted and listed without secrets", async 
     "fal-ai/nano-banana-2",
     "fal-ai/flux-2",
     "bytedance/seedream/v5/pro/text-to-image",
+    "bytedance/seedream/v5/lite/text-to-image",
     "openai/gpt-image-2",
   ]) {
     assert.ok(!falEditModels.includes(hidden), "Fal edit dialog should NOT expose gen-only " + hidden)
@@ -4192,6 +4194,7 @@ test("candidate-generation provider list includes only generate-capable Krea mod
     "fal-ai/nano-banana-2",
     "fal-ai/flux-2",
     "bytedance/seedream/v5/pro/text-to-image",
+    "bytedance/seedream/v5/lite/text-to-image",
     "openai/gpt-image-2",
     "fal-ai/omnigen-v2",
   ]) {
@@ -4201,6 +4204,7 @@ test("candidate-generation provider list includes only generate-capable Krea mod
     "fal-ai/nano-banana-pro/edit",
     "fal-ai/nano-banana-2/edit",
     "fal-ai/flux-pro/kontext",
+    "fal-ai/flux-2/edit",
     "openai/gpt-image-2/edit",
     "bytedance/seedream/v5/pro/edit",
     "bytedance/seedream/v5/lite/edit",
