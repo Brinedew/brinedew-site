@@ -882,6 +882,7 @@ import {
   handleDailySummary,
   handleInteractions,
   handleMarkPosted,
+  handlePostCatchupRecaps,
   handlePostDailyRecap,
   handlePostRecap,
   handleRenderPage,
@@ -2277,6 +2278,27 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       })
     }
 
+    if (url.pathname === "/api/admin/post-recap" && request.method === "POST") {
+      if (!(await isAdmin(request, env))) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        })
+      }
+      let day = null
+      try {
+        const body = await request.json()
+        if (typeof body?.day === "string") day = body.day
+      } catch {
+        // Optional JSON body
+      }
+      const result = await handlePostDailyRecap(env, { day: day || undefined })
+      return new Response(JSON.stringify(result), {
+        status: result.ok ? 200 : 500,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
     if (url.pathname === "/api/admin/feature-flags" && request.method === "POST") {
       const response = await handleFeatureFlags(request, env)
       return new Response(response.body, {
@@ -2601,6 +2623,20 @@ export default {
         console.log("[CRON] Recap post result:", result)
       } catch (err) {
         console.error("[CRON] Recap posting failed:", err)
+      }
+      // Catch-up: scan recent days for any recaps missed due to cron failures
+      // (e.g. CPU budget exhaustion from gallery refresh). Posts at most 3 days
+      // back, stopping at the first day with no puzzle data.
+      try {
+        const catchup = await handlePostCatchupRecaps(env, 3)
+        if (catchup.results?.length > 0) {
+          const posted = catchup.results.filter((r) => r.ok && r.message_id)
+          if (posted.length > 0) {
+            console.log("[CRON] Catch-up posted missed recaps:", posted.map((r) => r.day).join(", "))
+          }
+        }
+      } catch (err) {
+        console.error("[CRON] Catch-up recap failed:", err)
       }
       return
     }
