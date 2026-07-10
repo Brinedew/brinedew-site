@@ -421,6 +421,50 @@ export async function handlePostDailyRecap(env, options = {}) {
 }
 
 /**
+ * Catch-up: scan recent days and post any recaps that were missed.
+ * Returns results for each day attempted. Stops on the first day that
+ * has no puzzle data (i.e. we've reached before the game launched).
+ *
+ * @param {object} env
+ * @param {number} [maxDays=3] — how many recent days to check (excluding today)
+ * @returns {{ ok: boolean, results: Array }}
+ */
+export async function handlePostCatchupRecaps(env, maxDays = 3) {
+  const results = []
+  const today = new Date()
+  for (let offset = 1; offset <= maxDays; offset++) {
+    const d = new Date(today)
+    d.setUTCDate(d.getUTCDate() - offset)
+    const day = d.toISOString().slice(0, 10)
+
+    // Check if already posted before calling the full handler (cheap KV read)
+    const alreadyPosted = await readPostedMarker(env, day)
+    if (alreadyPosted) {
+      results.push({ day, skipped: "already_posted", message_id: alreadyPosted.message_id })
+      continue
+    }
+
+    // Check if puzzle data exists — if not, we've gone past the game launch
+    const puzzleData = await env.KV.get(`puzzle_actual:${day}`)
+    if (!puzzleData) {
+      results.push({ day, skipped: "no_puzzle_data" })
+      break // No point checking earlier days
+    }
+
+    // Post the missed recap
+    console.log(`[CRON] Catch-up: posting missed recap for ${day}`)
+    const result = await handlePostDailyRecap(env, { day })
+    results.push(result)
+
+    // If posting failed (not just skipped), log but continue to next day
+    if (!result.ok) {
+      console.warn(`[CRON] Catch-up recap for ${day} failed:`, result.error, result.details)
+    }
+  }
+  return { ok: true, results }
+}
+
+/**
  * POST /api/discord/post-recap
  * Optional body: { day: "YYYY-MM-DD" }.
  */
