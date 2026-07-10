@@ -4447,8 +4447,8 @@ const IMAGE_EDIT_PROMPT_DEFINITIONS = Object.freeze([
   {
     kind: "fantastical_feature",
     label: "Feature",
-    description: "Humanizes a fantastical family feature from source data.",
-    default_prompt_template: "Make the fantastical feature human and portrait-plausible: {value}.",
+    description: "Adds or removes fantastical family features.",
+    default_prompt_template: "Adjust fantastical anatomical features: {value}.",
   },
   {
     kind: "fashion_styles",
