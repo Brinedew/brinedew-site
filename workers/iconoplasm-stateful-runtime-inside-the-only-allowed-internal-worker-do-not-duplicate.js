@@ -24896,10 +24896,18 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       // the free tier; a 30s CPU budget fits 3-4 chunks. This removes the
       // dependency on cron delivery reliability — one cron firing drains the
       // entire rebuild instead of needing one firing per chunk.
-      const GALLERY_REFRESH_MAX_CHUNKS_PER_INVOCATION = 4
+      //
+      // max_chunks is passed by the caller: */15 cron sends 4 (drain fast),
+      // nightly maintenance sends 1 (leave budget for canon repair + recap).
+      const payload = await parseJsonBody(request)
+      const requestedMaxChunks = Number(payload?.max_chunks)
+      const maxChunks =
+        Number.isFinite(requestedMaxChunks) && requestedMaxChunks >= 1 && requestedMaxChunks <= 10
+          ? requestedMaxChunks
+          : 1
       let lastResult = null
       let chunksProcessed = 0
-      for (let attempt = 0; attempt < GALLERY_REFRESH_MAX_CHUNKS_PER_INVOCATION; attempt += 1) {
+      for (let attempt = 0; attempt < maxChunks; attempt += 1) {
         let result
         try {
           result = { ok: true, ...(await invalidateGalleryCache(meteredEnv)) }
