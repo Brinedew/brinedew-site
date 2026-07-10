@@ -629,7 +629,7 @@ async function runScheduledIconoplasmMaintenance(env, ctx) {
         new Request("https://geneguessr-api/__internal/iconoplasm/refresh-gallery", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: "scheduled_gallery_refresh" }),
+          body: JSON.stringify({ reason: "scheduled_gallery_refresh", max_chunks: 1 }),
         }),
         env,
         ctx,
@@ -653,7 +653,7 @@ async function runScheduledIconoplasmGalleryRefresh(env, ctx) {
         new Request("https://geneguessr-api/__internal/iconoplasm/refresh-gallery", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: "scheduled_gallery_refresh_frequent" }),
+          body: JSON.stringify({ reason: "scheduled_gallery_refresh_frequent", max_chunks: 4 }),
         }),
         env,
         ctx,
