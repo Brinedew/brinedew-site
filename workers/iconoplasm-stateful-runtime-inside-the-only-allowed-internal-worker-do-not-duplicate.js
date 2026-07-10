@@ -24891,32 +24891,51 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
     }
 
     if (isIconoplasmRefreshGalleryRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
-      // Bounded gallery freshness: republish the public card-catalog artifact so
-      // canonical changes (vote promotions, canon repair, reconciles) reach the
-      // home gallery and game cards within ~24h instead of waiting for a manual
-      // sync. invalidateGalleryCache is the complete, tested publish->version-flip
-      // sequence: it no-ops by content hash when nothing changed, and its budget
-      // preflight throws when there is no KV/D1 headroom (so the cron simply skips
-      // on an exhausted free-tier day rather than overspending).
-      console.log("[CRON] gallery refresh handler reached, calling invalidateGalleryCache")
-      let result
-      try {
-        result = { ok: true, ...(await invalidateGalleryCache(meteredEnv)) }
-      } catch (error) {
-        console.error(
-          "[CRON] gallery refresh threw:",
-          String(error?.message || error || "unknown"),
-          "code=" + String(error?.code || ""),
-        )
-        result = {
-          ok: false,
-          skipped: true,
-          code: sanitizeText(String(error?.code || ""), 128) || "GALLERY_REFRESH_SKIPPED",
-          error: sanitizeText(String(error?.message || error), 500),
+      // Self-draining gallery refresh: keep processing chunks until the rebuild
+      // completes or we hit the per-invocation ceiling. Each chunk is ~5-8s on
+      // the free tier; a 30s CPU budget fits 3-4 chunks. This removes the
+      // dependency on cron delivery reliability — one cron firing drains the
+      // entire rebuild instead of needing one firing per chunk.
+      const GALLERY_REFRESH_MAX_CHUNKS_PER_INVOCATION = 4
+      let lastResult = null
+      let chunksProcessed = 0
+      for (let attempt = 0; attempt < GALLERY_REFRESH_MAX_CHUNKS_PER_INVOCATION; attempt += 1) {
+        let result
+        try {
+          result = { ok: true, ...(await invalidateGalleryCache(meteredEnv)) }
+        } catch (error) {
+          console.error(
+            "[CRON] gallery refresh chunk threw:",
+            String(error?.message || error || "unknown"),
+            "code=" + String(error?.code || ""),
+          )
+          result = {
+            ok: false,
+            skipped: true,
+            code: sanitizeText(String(error?.code || ""), 128) || "GALLERY_REFRESH_SKIPPED",
+            error: sanitizeText(String(error?.message || error), 500),
+          }
+          lastResult = result
+          break
         }
+        lastResult = result
+        chunksProcessed += 1
+        const catalog = result?.card_catalog || {}
+        console.log(
+          "[CRON] gallery refresh chunk " + attempt + ":" +
+          " rebuild=" + Boolean(catalog.rebuild) +
+          " bootstrap_more=" + Boolean(catalog.bootstrap_more) +
+          " chunk=" + Number(catalog.rebuild_chunk || 0) +
+          " cursor=" + String(catalog.rebuild_cursor || ""),
+        )
+        if (!catalog.bootstrap_more) break
       }
-      console.log("[CRON] gallery refresh result:", JSON.stringify(result).slice(0, 500))
-      const response = json(result, 200, { "Cache-Control": "no-store" })
+      console.log(
+        "[CRON] gallery refresh complete: chunks_processed=" + chunksProcessed +
+        " ok=" + Boolean(lastResult?.ok) +
+        " bootstrap_more=" + Boolean(lastResult?.card_catalog?.bootstrap_more),
+      )
+      const response = json(lastResult || { ok: false, error: "no result" }, 200, { "Cache-Control": "no-store" })
       responseStatus = response.status
       return response
     }
