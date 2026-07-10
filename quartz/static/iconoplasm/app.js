@@ -5304,7 +5304,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (checked("surface_tone_hex"))
       adjustments.surface_tone_hex = imageEditFirstHexValue(context.surface_tone_hex)
     if (checked("fantastical_feature"))
-      adjustments.fantastical_feature = imageEditFirstTextValue(context.fantastical_feature)
+      adjustments.fantastical_feature = imageEditFirstTextValue(context.fantastical_feature) || "remove all fantastical features, restore human anatomy"
     if (checked("fashion_styles")) {
       adjustments.fashion_styles = imageEditFirstTextListValue(context.fashion_styles)
     }
@@ -5324,6 +5324,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function imageEditContextValueAvailable(kind, value) {
     if (kind === "remove_ai_generation_errors") return true
+    if (kind === "fantastical_feature") return true
     if (kind === "age_years") return value != null && value >= 0 && value <= 140
     if (kind === "mass_kg") return value != null && value > 0
     if (kind === "fashion_styles") return Array.isArray(value) && value.length > 0
@@ -5338,6 +5339,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var name = imageEditFirstTextValue(context && context.surface_tone_name)
       return name ? value + " · " + name : value
     }
+    if (kind === "fantastical_feature") return value ? String(value) : "Remove fantastical features"
     if (kind === "fashion_styles") return value.join(" + ")
     return String(value || "")
   }
