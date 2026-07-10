@@ -642,13 +642,11 @@ async function runScheduledIconoplasmMaintenance(env, ctx) {
 }
 
 async function runScheduledIconoplasmGalleryRefresh(env, ctx) {
-  // Frequent, cheap gallery-only tick (the "*/15" cron). It does NOT run the heavy
-  // maintenance (vote-projection refresh / canon repair). It just republishes the
-  // public card-catalog so a canonical change — e.g. a vote auto-promote — reaches
-  // the home gallery / game cards within ~15min instead of waiting for the nightly
-  // run. invalidateGalleryCache no-ops by content hash when nothing changed (one
-  // indexed changes-since query + reuse), and self-skips on exhausted free-tier
-  // budget (caught inside the route).
+  // Self-draining gallery refresh: keep processing chunks until the rebuild
+  // completes or we hit the per-invocation ceiling. Each chunk is ~5-8s on
+  // the free tier; a 30s CPU budget fits 3-4 chunks. This removes the
+  // dependency on cron delivery reliability — one cron firing drains the
+  // entire rebuild instead of needing one firing per chunk.
   try {
     const galleryResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
