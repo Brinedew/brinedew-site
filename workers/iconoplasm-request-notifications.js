@@ -162,22 +162,36 @@ export async function markRequestNotificationsRead(
   return { ok: true, marked_read: positiveInteger(response?.meta?.changes) }
 }
 
+function publicEmulsionIdFromFulfilledVisionId(value) {
+  // Fulfillment notifications persist the resolved vision ID, not an emulsion
+  // snapshot. Derive the same stable public code the site uses (for example,
+  // anima-v1-4527 becomes A1-4527), and omit it rather than exposing an
+  // internal ID when a future vision naming scheme is not yet understood.
+  const match = boundedText(value, 255).match(/^([a-z0-9]+)-v(\d+)-(\d+)$/i)
+  if (!match) return ""
+  const [, workflow, promptVersion, variantSlot] = match
+  const normalizedPromptVersion = String(Number.parseInt(promptVersion, 10) || "")
+  const normalizedVariantSlot = String(Number.parseInt(variantSlot, 10) || "")
+  if (!workflow || !normalizedPromptVersion || !normalizedVariantSlot) return ""
+  return `${workflow.slice(0, 1).toUpperCase()}${normalizedPromptVersion}-${normalizedVariantSlot}`
+}
+
+function discordEmulsionLine(row) {
+  if (row?.request_mode === "specific") {
+    const selected = boundedText(row?.requested_emulsion_label, 255) || "Your selected emulsion"
+    return `Emulsion: **${selected}**`
+  }
+  const resolved = publicEmulsionIdFromFulfilledVisionId(row?.fulfilled_vision_id)
+  return resolved ? `Emulsion: **Random** (resolved to ${resolved})` : "Emulsion: **Random**"
+}
+
 function discordMessage(row) {
   const symbol = geneSymbol(row?.gene_symbol) || "your gene"
   const isEdit = requestKind(row?.request_kind) === "edit_image"
-  const emulsion =
-    row?.request_mode === "specific"
-      ? boundedText(row?.requested_emulsion_label, 255) || "Your selected emulsion"
-      : "Random selection"
-  const action = isEdit
-    ? `You asked Iconoplasm's free generation queue to edit the **${symbol}** blot.`
-    : `You asked Iconoplasm's free generation queue for a new **${symbol}** candidate blot.`
   return [
-    isEdit
-      ? "**Your free blot-edit request is ready**"
-      : "**Your free candidate request is ready**",
-    action,
-    `Emulsion: **${emulsion}**`,
+    isEdit ? "Your free queue edit request is ready." : "Your free queue request is ready.",
+    `Gene: **${symbol}**`,
+    discordEmulsionLine(row),
     `Review it here: <https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(symbol)}>`,
   ].join("\n")
 }
