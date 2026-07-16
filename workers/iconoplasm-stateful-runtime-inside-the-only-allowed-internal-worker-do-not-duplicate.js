@@ -17881,13 +17881,19 @@ async function iconoplasmSyncGovernorJson(env, path, payload = {}) {
   return response.json()
 }
 
-function buildSyncFinalizationDrainQueueMessage({ runId = "", symbols = [], reason = "" } = {}) {
+function buildSyncFinalizationDrainQueueMessage({
+  runId = "",
+  symbols = [],
+  reason = "",
+  drainScopedPhases = false,
+} = {}) {
   const safeRunId = sanitizeText(runId || reason || "", 128) || "manual"
   const safeSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
   return {
     kind: "drain_finalization_ledger",
     run_id: safeRunId,
     symbols: safeSymbols,
+    ...(drainScopedPhases ? { drain_scoped_phases: true } : {}),
     idempotency_key: `${safeRunId}:drain:${safeSymbols.length}:${safeSymbols[0] || "all"}:${safeSymbols.at(-1) || "all"}`,
   }
 }
@@ -17965,7 +17971,13 @@ async function ensureSyncFinalizationJobsTable(env) {
 
 async function enqueueSyncFinalizationJobs(
   env,
-  { rows = [], actorId = "workstation_sync", reason = "sync_finalization", runId = "" } = {},
+  {
+    rows = [],
+    actorId = "workstation_sync",
+    reason = "sync_finalization",
+    runId = "",
+    drainScopedPhases = false,
+  } = {},
 ) {
   if (!env?.ICONOPLASM_DB) return { ok: false, code: "NO_DB", queued: 0 }
   await ensureSyncFinalizationJobsTable(env)
@@ -18050,6 +18062,7 @@ async function enqueueSyncFinalizationJobs(
       runId: safeRunId,
       reason: safeReason,
       symbols,
+      drainScopedPhases,
     })
     if (sentQueueMessage?.ok) {
       queueMessages += 1
@@ -18715,12 +18728,39 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
   if (kind === "drain_finalization_ledger") {
     const runId = sanitizeText(body.run_id || body.runId || "", 128) || "manual"
     const symbols = normalizeSyncFinalizationJobSymbols(body.symbols, { maxItems: 5000 })
-    const drainResult = await processPendingSyncFinalizationJobs(env, ctx, {
-      limit: ICONOPLASM_SYNC_FINALIZATION_QUEUE_DRAIN_BATCH_LIMIT,
-      finalizeIfDrained: true,
-      symbols,
-    })
-    const remaining = Math.max(0, Number(drainResult?.remaining || 0) || 0)
+    // A scoped tray publication is already bounded by a tiny explicit symbol
+    // manifest. Advancing only one phase per Queue delivery turned two images
+    // into four or five Cloudflare scheduling laps (111s in B-639). Preserve
+    // the Queue + D1 ledger as the only execution path, but let one delivery
+    // advance a small scope through every durable phase. Large/unscoped repair
+    // messages keep one pass so they cannot monopolize a consumer invocation.
+    const maxPasses =
+      coerceBoolean(body.drain_scoped_phases ?? body.drainScopedPhases, false) &&
+      symbols.length > 0 &&
+      symbols.length <= 50
+        ? 8
+        : 1
+    let drainResult = null
+    let processed = 0
+    let failed = 0
+    let finalized = 0
+    let remaining = 0
+    let passes = 0
+    for (let pass = 0; pass < maxPasses; pass += 1) {
+      drainResult = await processPendingSyncFinalizationJobs(env, ctx, {
+        limit: ICONOPLASM_SYNC_FINALIZATION_QUEUE_DRAIN_BATCH_LIMIT,
+        finalizeIfDrained: true,
+        symbols,
+      })
+      passes += 1
+      const passProcessed = Math.max(0, Number(drainResult?.processed || 0) || 0)
+      const passFailed = Math.max(0, Number(drainResult?.failed || 0) || 0)
+      processed += passProcessed
+      failed += passFailed
+      finalized += Math.max(0, Number(drainResult?.finalized || 0) || 0)
+      remaining = Math.max(0, Number(drainResult?.remaining || 0) || 0)
+      if (remaining <= 0 || passFailed > 0 || drainResult?.partial || passProcessed <= 0) break
+    }
     let sentNext = false
     if (remaining > 0) {
       const nextSymbols = Array.isArray(drainResult?.reschedule_symbols)
@@ -18729,6 +18769,7 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
       sentNext = await sendSyncFinalizationDrainQueueMessage(env, {
         runId,
         symbols: nextSymbols,
+        drainScopedPhases: maxPasses > 1,
       })
       if (!sentNext?.ok) {
         console.warn("Iconoplasm sync finalization Queue self-reschedule deferred", {
@@ -18747,10 +18788,11 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
     return {
       ok: true,
       kind,
-      processed: Math.max(0, Number(drainResult?.processed || 0) || 0),
-      failed: Math.max(0, Number(drainResult?.failed || 0) || 0),
-      finalized: Math.max(0, Number(drainResult?.finalized || 0) || 0),
+      processed,
+      failed,
+      finalized,
       remaining,
+      passes,
       queue_message_sent: sentNext,
       result: drainResult,
     }
@@ -29313,6 +29355,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         actorId,
         reason,
         runId: p?.run_id ?? p?.runId ?? reason,
+        drainScopedPhases: coerceBoolean(
+          p?.drain_scoped_phases ?? p?.drainScopedPhases,
+          false,
+        ),
       })
 
       if (coerceBoolean(p?.process_now ?? p?.processNow, false)) {
@@ -29392,6 +29438,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         runId: p?.run_id ?? p?.runId ?? p?.reason ?? "admin_finalization_kick",
         reason: p?.reason ?? "admin_finalization_kick",
         symbols: Array.isArray(p?.symbols) ? p.symbols : [],
+        drainScopedPhases: coerceBoolean(
+          p?.drain_scoped_phases ?? p?.drainScopedPhases,
+          false,
+        ),
       })
       if (!sentQueueMessage?.ok) {
         return done(
