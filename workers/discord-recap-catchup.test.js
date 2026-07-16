@@ -7,7 +7,10 @@ function makeFakeEnv({ posted = new Set(), puzzles = new Set() } = {}) {
   const kvStore = new Map()
 
   for (const day of posted) {
-    kvStore.set(`discord_summary_posted:${day}`, JSON.stringify({ message_id: "old_msg", posted_at: Date.now() }))
+    kvStore.set(
+      `discord_summary_posted:${day}`,
+      JSON.stringify({ message_id: "old_msg", posted_at: Date.now() }),
+    )
   }
 
   for (const day of puzzles) {
@@ -19,15 +22,21 @@ function makeFakeEnv({ posted = new Set(), puzzles = new Set() } = {}) {
     run: async () => ({}),
     first: async () => ({ gene: "TP53", full_name: "Tumor protein p53", uniprot: "P12345" }),
     all: async () => ({ results: [] }),
-    bind: function () { return this },
+    bind: function () {
+      return this
+    },
   }
   const db = { prepare: () => stmt }
 
   return {
     KV: {
       get: async (key) => kvStore.get(key) ?? null,
-      put: async (key, value) => { kvStore.set(key, value) },
-      delete: async (key) => { kvStore.delete(key) },
+      put: async (key, value) => {
+        kvStore.set(key, value)
+      },
+      delete: async (key) => {
+        kvStore.delete(key)
+      },
     },
     DB: db,
     DISCORD_BOT_TOKEN: "test-token",
@@ -57,10 +66,14 @@ function withFixedDate(isoString, fn) {
       if (args.length === 0) return new origDate(fixedNow)
       return new origDate(...args)
     }
-    static now() { return fixedNow.getTime() }
+    static now() {
+      return fixedNow.getTime()
+    }
   }
   globalThis.Date = FixedDate
-  return Promise.resolve(fn()).finally(() => { globalThis.Date = origDate })
+  return Promise.resolve(fn()).finally(() => {
+    globalThis.Date = origDate
+  })
 }
 
 test("catchup skips already-posted days", async () => {
