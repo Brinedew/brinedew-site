@@ -4,6 +4,7 @@ import test from "node:test"
 
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { deliverPendingRequestFulfillmentNotifications } from "./iconoplasm-request-notifications.js"
+import { createRequestInbox } from "../quartz/static/iconoplasm/request-inbox.js"
 
 const BRINEDEW_USER_ID = "1289482311557058641"
 
@@ -484,6 +485,91 @@ test("request inbox UI uses server read state and bounded live refresh", () => {
   assert.match(css, /\.sidebar\.right > \.brd-sidebar-stack[\s\S]*max-height: none/)
   assert.match(head, /custom\.css\?v=\$\{CACHE_BUST\}/)
   assert.doesNotMatch(head, /custom\.css\?v=bio\d+/)
+})
+
+test("request inbox uses one-open Shoelace groups and an accessible unread dot", async () => {
+  const payload = {
+    ok: true,
+    authenticated: true,
+    unread_count: 1,
+    open_count: 1,
+    notifications: [
+      {
+        id: 7,
+        unread: true,
+        gene_symbol: "INS",
+        gene_url: "/gene/INS",
+        image_url: "https://example.test/ins.webp",
+        requested_emulsion_label: "Random default",
+        created_at: "2026-07-16 13:45:00",
+      },
+    ],
+    open_requests: [
+      {
+        id: 51,
+        gene_symbol: "DNMT3B",
+        gene_url: "/gene/DNMT3B",
+        requested_emulsion_label: "A1-1370",
+        created_at: "2026-07-16 13:50:00",
+      },
+    ],
+  }
+  const inbox = createRequestInbox({
+    fetchJSON: async () => payload,
+    getCurrentUser: () => ({ id: BRINEDEW_USER_ID }),
+    renderSidebar() {},
+    escapeHtml: (value) => String(value ?? ""),
+  })
+  await inbox.refresh()
+
+  const initialMarkup = inbox.panelMarkup()
+  assert.equal((initialMarkup.match(/<sl-details/g) || []).length, 2)
+  assert.match(initialMarkup, /data-icono-request-group="ready" open/)
+  assert.doesNotMatch(initialMarkup, /data-icono-request-group="waiting" open/)
+  assert.match(initialMarkup, /<sl-badge[^>]+variant="danger"[^>]+aria-hidden="true"/)
+  assert.match(initialMarkup, /1 unread notification/)
+
+  function fakeGroup(name) {
+    return {
+      name,
+      hideCalls: 0,
+      handlers: {},
+      getAttribute(attribute) {
+        return attribute === "data-icono-request-group" ? this.name : ""
+      },
+      addEventListener(eventName, handler) {
+        this.handlers[eventName] = handler
+      },
+      hide() {
+        this.hideCalls += 1
+        if (this.handlers["sl-hide"]) this.handlers["sl-hide"]()
+        return Promise.resolve()
+      },
+      removeAttribute() {},
+    }
+  }
+  const ready = fakeGroup("ready")
+  const waiting = fakeGroup("waiting")
+  const groups = [ready, waiting]
+  inbox.wire({
+    querySelector() {
+      return null
+    },
+    querySelectorAll(selector) {
+      return selector === "[data-icono-request-group]" ? groups : []
+    },
+  })
+
+  waiting.handlers["sl-show"]()
+  assert.equal(ready.hideCalls, 1)
+  assert.equal(waiting.hideCalls, 0)
+  assert.match(inbox.panelMarkup(), /data-icono-request-group="waiting" open/)
+  assert.doesNotMatch(inbox.panelMarkup(), /data-icono-request-group="ready" open/)
+
+  ready.handlers["sl-show"]()
+  assert.equal(waiting.hideCalls, 1)
+  assert.match(inbox.panelMarkup(), /data-icono-request-group="ready" open/)
+  assert.doesNotMatch(inbox.panelMarkup(), /data-icono-request-group="waiting" open/)
 })
 
 test("notification routes stay explicitly classified by the fail-loud cost fence", () => {
