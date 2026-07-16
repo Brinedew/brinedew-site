@@ -13,6 +13,7 @@ export function createRequestInbox({ fetchJSON, getCurrentUser, renderSidebar, e
     open_requests: [],
     notifications: [],
     last_seen_notification_id: 0,
+    active_group: "ready",
   }
   var refreshTimer = 0
   var lifecycleWired = false
@@ -68,6 +69,7 @@ export function createRequestInbox({ fetchJSON, getCurrentUser, renderSidebar, e
     state.open_requests = []
     state.notifications = []
     state.last_seen_notification_id = 0
+    state.active_group = "ready"
   }
 
   function refresh(options) {
@@ -82,6 +84,7 @@ export function createRequestInbox({ fetchJSON, getCurrentUser, renderSidebar, e
       .then(function (payload) {
         if (!payload || !payload.ok || !payload.authenticated) return null
         var notifications = Array.isArray(payload.notifications) ? payload.notifications : []
+        var firstLoad = !state.loaded
         var previousHighWater = state.last_seen_notification_id
         var newestUnread = notifications.find(function (item) {
           return item && item.unread && Number(item.id || 0) > previousHighWater
@@ -91,6 +94,13 @@ export function createRequestInbox({ fetchJSON, getCurrentUser, renderSidebar, e
         state.open_count = Math.max(0, Number(payload.open_count || 0) || 0)
         state.open_requests = Array.isArray(payload.open_requests) ? payload.open_requests : []
         state.notifications = notifications
+        if (firstLoad) {
+          state.active_group = notifications.length
+            ? "ready"
+            : state.open_requests.length
+              ? "waiting"
+              : "ready"
+        }
         state.last_seen_notification_id = notifications.reduce(function (highest, item) {
           return Math.max(highest, Number((item && item.id) || 0) || 0)
         }, previousHighWater)
@@ -147,6 +157,82 @@ export function createRequestInbox({ fetchJSON, getCurrentUser, renderSidebar, e
     })
   }
 
+  function requestGroupSummaryMarkup(label, count, unread) {
+    var safeCount = Math.max(0, Number(count || 0) || 0)
+    return (
+      '<span slot="summary" class="icono-request-inbox__group-summary">' +
+      '<span class="icono-request-inbox__group-label">' +
+      escapeHtml(label) +
+      "</span>" +
+      '<span class="icono-request-inbox__group-meta">' +
+      (unread
+        ? '<sl-badge class="icono-request-inbox__unread-dot" variant="danger" pill aria-hidden="true"></sl-badge>' +
+          '<span class="sr-only">' +
+          escapeHtml(String(unread)) +
+          (unread === 1 ? " unread notification" : " unread notifications") +
+          "</span>"
+        : "") +
+      '<span class="icono-request-inbox__group-count">' +
+      escapeHtml(String(safeCount)) +
+      "</span></span></span>"
+    )
+  }
+
+  function requestGroupMarkup(name, label, count, unread, content) {
+    return (
+      '<sl-details class="icono-request-inbox__group" data-icono-request-group="' +
+      escapeHtml(name) +
+      '"' +
+      (state.active_group === name ? " open" : "") +
+      ">" +
+      requestGroupSummaryMarkup(label, count, unread) +
+      '<div class="icono-request-inbox__group-body">' +
+      content +
+      "</div></sl-details>"
+    )
+  }
+
+  function fulfilledRequestMarkup(item) {
+    return (
+      '<a class="icono-request-inbox__item' +
+      (item.unread ? " icono-request-inbox__item--unread" : "") +
+      '" href="' +
+      escapeHtml(item.gene_url || "/") +
+      '" data-icono-request-notification-id="' +
+      escapeHtml(String(item.id || "")) +
+      '">' +
+      (item.image_url
+        ? '<img src="' +
+          escapeHtml(item.image_url) +
+          '" alt="" loading="lazy" decoding="async" width="44" height="56">'
+        : '<span class="icono-request-inbox__photo-placeholder" aria-hidden="true"></span>') +
+      '<span class="icono-request-inbox__copy"><span class="icono-request-inbox__line"><strong>' +
+      escapeHtml(item.gene_symbol || "Gene") +
+      "</strong><em>ready</em></span>" +
+      '<span class="icono-request-inbox__emulsion">' +
+      escapeHtml(item.requested_emulsion_label || "Requested blot") +
+      "</span><small>Fulfilled " +
+      escapeHtml(ageLabel(item.created_at)) +
+      "</small></span></a>"
+    )
+  }
+
+  function waitingRequestMarkup(item) {
+    return (
+      '<a class="icono-request-inbox__item icono-request-inbox__item--queued" href="' +
+      escapeHtml(item.gene_url || "/") +
+      '" data-icono-nav><span class="icono-request-inbox__queue-mark" aria-hidden="true"></span>' +
+      '<span class="icono-request-inbox__copy"><span class="icono-request-inbox__line"><strong>' +
+      escapeHtml(item.gene_symbol || "Gene") +
+      "</strong><em>queued</em></span>" +
+      '<span class="icono-request-inbox__emulsion">' +
+      escapeHtml(item.requested_emulsion_label || "Random default") +
+      "</span><small>Requested " +
+      escapeHtml(ageLabel(item.created_at)) +
+      "</small></span></a>"
+    )
+  }
+
   function panelMarkup() {
     if (!getCurrentUser()) return ""
     if (state.loading && !state.loaded) {
@@ -159,76 +245,35 @@ export function createRequestInbox({ fetchJSON, getCurrentUser, renderSidebar, e
     var notifications = Array.isArray(state.notifications) ? state.notifications.slice(0, 8) : []
     var openRequests = Array.isArray(state.open_requests) ? state.open_requests.slice(0, 4) : []
     var unread = Math.max(0, Number(state.unread_count || 0) || 0)
-    var openCount = Math.max(0, Number(state.open_count || 0) || 0)
     var html =
       '<div class="icono-request-inbox">' +
-      '<div class="icono-request-inbox__head"><span>Request inbox</span>' +
-      (unread
-        ? '<span class="icono-request-inbox__unread" aria-label="' +
-          escapeHtml(String(unread)) +
-          ' unread">' +
-          escapeHtml(String(unread)) +
-          " new</span>"
-        : '<span class="icono-request-inbox__quiet">Up to date</span>') +
-      "</div>" +
-      '<div class="icono-request-inbox__summary">' +
-      escapeHtml(
-        openCount
-          ? openCount + (openCount === 1 ? " request waiting" : " requests waiting")
-          : "Nothing waiting",
-      ) +
-      (unread
-        ? '<button type="button" data-icono-request-inbox-read-all>Mark all read</button>'
-        : "") +
-      "</div>"
+      '<div class="icono-request-inbox__head"><span>Request inbox</span></div>' +
+      '<div class="icono-request-inbox__groups">'
 
-    if (!notifications.length && !openRequests.length) {
-      html +=
-        '<div class="icono-request-inbox__empty"><strong>No requests yet.</strong>' +
-        "Ask for a new blot on any gene page; its result will appear here.</div>"
-    }
-
+    var readyContent = unread
+      ? '<div class="icono-request-inbox__group-actions"><button type="button" data-icono-request-inbox-read-all>Mark all read</button></div>'
+      : ""
     for (var i = 0; i < notifications.length; i++) {
-      var item = notifications[i] || {}
-      html +=
-        '<a class="icono-request-inbox__item' +
-        (item.unread ? " icono-request-inbox__item--unread" : "") +
-        '" href="' +
-        escapeHtml(item.gene_url || "/") +
-        '" data-icono-request-notification-id="' +
-        escapeHtml(String(item.id || "")) +
-        '">' +
-        (item.image_url
-          ? '<img src="' +
-            escapeHtml(item.image_url) +
-            '" alt="" loading="lazy" decoding="async" width="44" height="56">'
-          : '<span class="icono-request-inbox__photo-placeholder" aria-hidden="true"></span>') +
-        '<span class="icono-request-inbox__copy"><span class="icono-request-inbox__line"><strong>' +
-        escapeHtml(item.gene_symbol || "Gene") +
-        "</strong><em>ready</em></span>" +
-        '<span class="icono-request-inbox__emulsion">' +
-        escapeHtml(item.requested_emulsion_label || "Requested blot") +
-        "</span><small>Fulfilled " +
-        escapeHtml(ageLabel(item.created_at)) +
-        "</small></span></a>"
+      readyContent += fulfilledRequestMarkup(notifications[i] || {})
+    }
+    if (!notifications.length) {
+      readyContent +=
+        '<div class="icono-request-inbox__empty"><strong>Nothing ready yet.</strong>' +
+        "Finished requests will stay here.</div>"
     }
 
+    var waitingContent = ""
     for (var j = 0; j < openRequests.length; j++) {
-      var queued = openRequests[j] || {}
-      html +=
-        '<a class="icono-request-inbox__item icono-request-inbox__item--queued" href="' +
-        escapeHtml(queued.gene_url || "/") +
-        '" data-icono-nav><span class="icono-request-inbox__queue-mark" aria-hidden="true"></span>' +
-        '<span class="icono-request-inbox__copy"><span class="icono-request-inbox__line"><strong>' +
-        escapeHtml(queued.gene_symbol || "Gene") +
-        "</strong><em>queued</em></span>" +
-        '<span class="icono-request-inbox__emulsion">' +
-        escapeHtml(queued.requested_emulsion_label || "Random default") +
-        "</span><small>Requested " +
-        escapeHtml(ageLabel(queued.created_at)) +
-        "</small></span></a>"
+      waitingContent += waitingRequestMarkup(openRequests[j] || {})
     }
-    return html + "</div>"
+    if (!openRequests.length) {
+      waitingContent +=
+        '<div class="icono-request-inbox__empty"><strong>Nothing waiting.</strong>' +
+        "New requests appear here until they are ready.</div>"
+    }
+    html += requestGroupMarkup("ready", "Ready", notifications.length, unread, readyContent)
+    html += requestGroupMarkup("waiting", "Waiting", openRequests.length, 0, waitingContent)
+    return html + "</div></div>"
   }
 
   function wire(stack) {
@@ -241,6 +286,27 @@ export function createRequestInbox({ fetchJSON, getCurrentUser, renderSidebar, e
           readAll.disabled = false
         })
       })
+    }
+    var groups = stack.querySelectorAll("[data-icono-request-group]")
+    for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) {
+      ;(function (group) {
+        var groupName = group.getAttribute("data-icono-request-group") || ""
+        group.addEventListener("sl-show", function () {
+          state.active_group = groupName
+          for (var otherIndex = 0; otherIndex < groups.length; otherIndex++) {
+            var other = groups[otherIndex]
+            if (other === group) continue
+            if (typeof other.hide === "function") {
+              void other.hide()
+            } else {
+              other.removeAttribute("open")
+            }
+          }
+        })
+        group.addEventListener("sl-hide", function () {
+          if (state.active_group === groupName) state.active_group = ""
+        })
+      })(groups[groupIndex])
     }
     var links = stack.querySelectorAll("[data-icono-request-notification-id]")
     for (var i = 0; i < links.length; i++) {
