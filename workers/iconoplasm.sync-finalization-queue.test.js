@@ -1069,7 +1069,7 @@ test("queue finalization consumer rejects the old per-symbol message path", asyn
   assert.deepEqual(queue.sent, [])
 })
 
-test("queue drain message processes durable ledger batches without per-symbol phase fan-out", async () => {
+test("scoped queue drain opt-in completes all durable phases in one delivery", async () => {
   const queue = buildFakeQueue()
   const symbols = ["TP53", "BRCA1"]
   const env = {
@@ -1101,6 +1101,7 @@ test("queue drain message processes durable ledger batches without per-symbol ph
             kind: "drain_finalization_ledger",
             run_id: "sync-test",
             symbols,
+            drain_scoped_phases: true,
           },
           ack() {
             acknowledged = true
@@ -1116,21 +1117,15 @@ test("queue drain message processes durable ledger batches without per-symbol ph
   )
 
   assert.equal(result.ok, true)
-  assert.equal(result.processed, 2)
+  assert.equal(result.processed, 8)
+  assert.equal(result.finalized, 2)
   assert.equal(acknowledged, true)
   assert.deepEqual(retries, [])
   assert.deepEqual(
     symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase),
-    ["vote_summaries", "vote_summaries"],
+    ["completed", "completed"],
   )
-  assert.deepEqual(queue.sent, [
-    {
-      kind: "drain_finalization_ledger",
-      run_id: "sync-test",
-      symbols: [],
-      idempotency_key: "sync-test:drain:0:all:all",
-    },
-  ])
+  assert.deepEqual(queue.sent, [])
 })
 
 test("queue drain consumer preserves progress when self-reschedule fails", async () => {
