@@ -114,6 +114,7 @@ function notificationRow(overrides = {}) {
     request_id: 42,
     requester_user_id: BRINEDEW_USER_ID,
     gene_symbol: "INS",
+    request_kind: "new_candidate",
     fulfilled_asset_sha256: "a".repeat(64),
     fulfilled_vision_id: "anima-v1-4527",
     request_mode: "specific",
@@ -134,6 +135,39 @@ function notificationRow(overrides = {}) {
   }
 }
 
+function validWebpResponse() {
+  const bytes = new Uint8Array([
+    0x52,
+    0x49,
+    0x46,
+    0x46, // RIFF
+    0x08,
+    0x00,
+    0x00,
+    0x00,
+    0x57,
+    0x45,
+    0x42,
+    0x50, // WEBP
+    0x56,
+    0x50,
+    0x38,
+    0x20,
+  ])
+  return new Response(bytes, { headers: { "Content-Type": "image/webp" } })
+}
+
+function deliveryEnv(db) {
+  return {
+    ICONOPLASM_DB: db,
+    DISCORD_BOT_TOKEN: "test-token",
+    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "iconoplasm-portraits",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-storage-access-key",
+  }
+}
+
 test("notification migration creates inbox rows atomically and never backfills users", () => {
   const migration = readFileSync(
     new URL("../migrations-iconoplasm/0047_request_fulfillment_notifications.sql", import.meta.url),
@@ -145,6 +179,18 @@ test("notification migration creates inbox rows atomically and never backfills u
   assert.match(migration, /INSERT OR IGNORE INTO icono_request_notifications/)
   assert.match(migration, /request_id INTEGER NOT NULL UNIQUE/)
   assert.doesNotMatch(migration, /INSERT[\s\S]+SELECT[\s\S]+FROM icono_generation_requests/i)
+
+  const requestKindMigration = readFileSync(
+    new URL("../migrations-iconoplasm/0048_request_notification_request_kind.sql", import.meta.url),
+    "utf8",
+  )
+  assert.match(requestKindMigration, /ADD COLUMN request_kind/)
+  assert.match(requestKindMigration, /DROP TRIGGER IF EXISTS/)
+  assert.match(requestKindMigration, /NEW\.request_kind/)
+  assert.doesNotMatch(
+    requestKindMigration,
+    /INSERT[\s\S]+SELECT[\s\S]+FROM icono_generation_requests/i,
+  )
 })
 
 test("authenticated inbox returns exact fulfillment context and durable unread count", async () => {
@@ -238,31 +284,88 @@ test("Brinedew fulfillment sends one nonce-enforced DM and is retry-idempotent",
   const calls = []
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (url, init) => {
-    calls.push({ url: String(url), body: JSON.parse(String(init?.body || "{}")) })
-    if (String(url).endsWith("/users/@me/channels")) return Response.json({ id: "dm-channel-1" })
+    const call = { url: String(url), init }
+    calls.push(call)
+    if (call.url.includes("storage.bunnycdn.com")) return validWebpResponse()
+    if (call.url.endsWith("/users/@me/channels")) {
+      call.json = JSON.parse(String(init?.body || "{}"))
+      return Response.json({ id: "dm-channel-1" })
+    }
+    call.form = init?.body
+    call.json = JSON.parse(String(call.form.get("payload_json") || "{}"))
+    call.file = call.form.get("files[0]")
     return Response.json({ id: "discord-message-1" })
   }
   try {
-    const first = await deliverPendingRequestFulfillmentNotifications(
-      { ICONOPLASM_DB: db, DISCORD_BOT_TOKEN: "test-token" },
-      { requestIds: [42] },
-    )
-    const second = await deliverPendingRequestFulfillmentNotifications(
-      { ICONOPLASM_DB: db, DISCORD_BOT_TOKEN: "test-token" },
-      { requestIds: [42] },
-    )
+    const first = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db), {
+      requestIds: [42],
+    })
+    const second = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db), {
+      requestIds: [42],
+    })
 
     assert.equal(first.delivered, 1)
     assert.equal(second.considered, 0)
-    assert.equal(calls.length, 2)
-    assert.equal(calls[0].body.recipient_id, BRINEDEW_USER_ID)
-    assert.equal(calls[1].body.nonce, "icono-fulfillment-7")
-    assert.equal(calls[1].body.enforce_nonce, true)
-    assert.deepEqual(calls[1].body.allowed_mentions, { parse: [] })
-    assert.match(calls[1].body.content, /INS/)
-    assert.match(calls[1].body.content, /A1-4527/)
+    assert.equal(calls.length, 3)
+    assert.match(
+      calls[0].url,
+      new RegExp(`/iconoplasm-portraits/portraits/v1/aa/${"a".repeat(64)}/full\\.webp$`),
+    )
+    assert.equal(calls[0].init.headers.AccessKey, "test-storage-access-key")
+    assert.equal(calls[1].json.recipient_id, BRINEDEW_USER_ID)
+    assert.ok(calls[2].form instanceof FormData)
+    assert.equal(calls[2].init.headers["Content-Type"], undefined)
+    assert.equal(calls[2].json.nonce, "icono-fulfillment-7")
+    assert.equal(calls[2].json.enforce_nonce, true)
+    assert.deepEqual(calls[2].json.allowed_mentions, { parse: [] })
+    assert.match(calls[2].json.content, /free candidate request/i)
+    assert.match(calls[2].json.content, /free generation queue/i)
+    assert.match(calls[2].json.content, /new \*\*INS\*\* candidate blot/)
+    assert.match(calls[2].json.content, /Emulsion: \*\*A1-4527\*\*/)
+    assert.match(calls[2].json.content, /<https:\/\/iconoplasm\.brinedew\.bio\/gene\/INS>/)
+    assert.doesNotMatch(calls[2].json.content, /\nhttps:\/\//)
+    assert.deepEqual(calls[2].json.attachments, [
+      {
+        id: 0,
+        filename: `iconoplasm-ins-${"a".repeat(12)}.webp`,
+        description: "INS candidate blot from Iconoplasm's free generation queue",
+      },
+    ])
+    assert.equal(calls[2].file.name, `iconoplasm-ins-${"a".repeat(12)}.webp`)
+    assert.equal(calls[2].file.type, "image/webp")
+    assert.ok(calls[2].file.size > 0)
     assert.equal(row.discord_status, "sent")
     assert.equal(row.discord_message_id, "discord-message-1")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("free blot-edit fulfillment copy preserves its distinct user journey", async () => {
+  const row = notificationRow({ request_kind: "edit_image" })
+  const db = new NotificationDb([row])
+  const originalFetch = globalThis.fetch
+  let messagePayload
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("storage.bunnycdn.com")) return validWebpResponse()
+    if (String(url).endsWith("/users/@me/channels")) {
+      return Response.json({ id: "dm-channel-1" })
+    }
+    messagePayload = JSON.parse(String(init?.body?.get("payload_json") || "{}"))
+    return Response.json({ id: "discord-message-1" })
+  }
+  try {
+    const result = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db), {
+      requestIds: [42],
+    })
+
+    assert.equal(result.delivered, 1)
+    assert.match(messagePayload.content, /free blot-edit request/i)
+    assert.match(messagePayload.content, /free generation queue to edit the \*\*INS\*\* blot/i)
+    assert.equal(
+      messagePayload.attachments[0].description,
+      "INS blot edit from Iconoplasm's free generation queue",
+    )
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -275,24 +378,76 @@ test("an ambiguous Discord message POST is terminal and never retried", async ()
   let fetchCalls = 0
   globalThis.fetch = async (url) => {
     fetchCalls += 1
+    if (String(url).includes("storage.bunnycdn.com")) return validWebpResponse()
     if (String(url).endsWith("/users/@me/channels")) return Response.json({ id: "dm-channel-1" })
     throw new Error("socket closed after upload")
   }
   try {
-    const first = await deliverPendingRequestFulfillmentNotifications(
-      { ICONOPLASM_DB: db, DISCORD_BOT_TOKEN: "test-token" },
-      { requestIds: [42] },
-    )
-    const second = await deliverPendingRequestFulfillmentNotifications(
-      { ICONOPLASM_DB: db, DISCORD_BOT_TOKEN: "test-token" },
-      { requestIds: [42] },
-    )
+    const first = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db), {
+      requestIds: [42],
+    })
+    const second = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db), {
+      requestIds: [42],
+    })
 
     assert.equal(first.unknown, 1)
     assert.equal(second.considered, 0)
-    assert.equal(fetchCalls, 2)
+    assert.equal(fetchCalls, 3)
     assert.equal(row.discord_status, "unknown")
     assert.match(row.discord_error, /outcome unknown/i)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("a missing fulfilled image fails visibly before Discord receives a message", async () => {
+  const row = notificationRow()
+  const db = new NotificationDb([row])
+  const originalFetch = globalThis.fetch
+  const urls = []
+  globalThis.fetch = async (url) => {
+    urls.push(String(url))
+    return new Response("missing", { status: 404, headers: { "Content-Type": "text/plain" } })
+  }
+  try {
+    const result = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db), {
+      requestIds: [42],
+    })
+
+    assert.equal(result.delivered, 0)
+    assert.equal(result.failed, 1)
+    assert.equal(urls.length, 1)
+    assert.match(urls[0], /storage\.bunnycdn\.com/)
+    assert.doesNotMatch(urls[0], /discord\.com/)
+    assert.equal(row.discord_status, "failed")
+    assert.match(row.discord_error, /portrait download failed \(404\)/i)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("an interrupted fulfilled image download returns the outbox to retry", async () => {
+  const row = notificationRow()
+  const db = new NotificationDb([row])
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () =>
+    new Response(
+      new ReadableStream({
+        pull(controller) {
+          controller.error(new Error("storage stream reset"))
+        },
+      }),
+      { headers: { "Content-Type": "image/webp" } },
+    )
+  try {
+    const result = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db), {
+      requestIds: [42],
+    })
+
+    assert.equal(result.delivered, 0)
+    assert.equal(result.failed, 1)
+    assert.equal(row.discord_status, "retry")
+    assert.match(row.discord_error, /download interrupted.*storage stream reset/i)
   } finally {
     globalThis.fetch = originalFetch
   }

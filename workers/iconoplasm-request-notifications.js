@@ -10,6 +10,10 @@ export const ICONOPLASM_FULFILLMENT_DM_TEST_RECIPIENT_ID = "1289482311557058641"
 
 const DISCORD_API_BASE = "https://discord.com/api/v10"
 const DISCORD_MAX_ATTEMPTS = 4
+// Discord's default per-file upload limit is 10 MiB. Portrait full renditions
+// are capped far below that in normal operation, but reject oversized or bogus
+// CDN responses before buffering them into a multipart request.
+const DISCORD_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
 
 function boundedText(value, maxLength) {
   const text = String(value || "").trim()
@@ -34,6 +38,10 @@ function assetSha(value) {
   return /^[a-f0-9]{64}$/.test(sha) ? sha : ""
 }
 
+function requestKind(value) {
+  return boundedText(value, 64) === "edit_image" ? "edit_image" : "new_candidate"
+}
+
 function mapNotification(row, portraitUrlForAsset) {
   const id = positiveInteger(row?.id)
   const requestId = positiveInteger(row?.request_id)
@@ -45,6 +53,7 @@ function mapNotification(row, portraitUrlForAsset) {
     notification_key: boundedText(row?.notification_key, 255),
     request_id: requestId,
     kind: "request_fulfilled",
+    request_kind: requestKind(row?.request_kind),
     gene_symbol: symbol,
     requested_emulsion_label:
       boundedText(row?.requested_emulsion_label, 255) ||
@@ -155,14 +164,179 @@ export async function markRequestNotificationsRead(
 
 function discordMessage(row) {
   const symbol = geneSymbol(row?.gene_symbol) || "your gene"
+  const isEdit = requestKind(row?.request_kind) === "edit_image"
   const emulsion =
-    boundedText(row?.requested_emulsion_label, 255) ||
-    (row?.request_mode === "specific" ? "your requested emulsion" : "a random emulsion")
+    row?.request_mode === "specific"
+      ? boundedText(row?.requested_emulsion_label, 255) || "Your selected emulsion"
+      : "Random selection"
+  const action = isEdit
+    ? `You asked Iconoplasm's free generation queue to edit the **${symbol}** blot.`
+    : `You asked Iconoplasm's free generation queue for a new **${symbol}** candidate blot.`
   return [
-    `Your Iconoplasm request is ready: **${symbol}**`,
-    `Emulsion: ${emulsion}`,
-    `https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(symbol)}`,
+    isEdit
+      ? "**Your free blot-edit request is ready**"
+      : "**Your free candidate request is ready**",
+    action,
+    `Emulsion: **${emulsion}**`,
+    `Review it here: <https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(symbol)}>`,
   ].join("\n")
+}
+
+function portraitCdnBase(env) {
+  return boundedText(
+    env?.ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL || env?.ICONOPLASM_PORTRAIT_BASE_URL || "",
+    2000,
+  ).replace(/\/+$/, "")
+}
+
+function fulfilledPortraitUrl(env, row) {
+  const sha = assetSha(row?.fulfilled_asset_sha256)
+  const base = portraitCdnBase(env)
+  if (!sha || !base) return ""
+  return `${base}/portraits/v1/${sha.slice(0, 2)}/${sha}/full.webp`
+}
+
+function fulfilledPortraitRequest(env, row) {
+  const sha = assetSha(row?.fulfilled_asset_sha256)
+  if (!sha) return null
+  const key = `portraits/v1/${sha.slice(0, 2)}/${sha}/full.webp`
+  const storageZone = boundedText(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE, 255)
+  const storagePassword = boundedText(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD, 2000)
+  if (storageZone && storagePassword) {
+    const storageHost =
+      boundedText(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST, 255) || "storage.bunnycdn.com"
+    return {
+      url: `https://${storageHost}/${encodeURIComponent(storageZone)}/${key}`,
+      headers: { AccessKey: storagePassword, Accept: "image/webp" },
+    }
+  }
+  const publicUrl = fulfilledPortraitUrl(env, row)
+  return publicUrl ? { url: publicUrl, headers: { Accept: "image/webp" } } : null
+}
+
+function hasWebpSignature(bytes) {
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength < 12) return false
+  return (
+    String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+    String.fromCharCode(...bytes.slice(8, 12)) === "WEBP"
+  )
+}
+
+async function readBoundedResponseBytes(response, maxBytes) {
+  const reader = response.body?.getReader()
+  if (!reader) {
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    return bytes.byteLength <= maxBytes ? bytes : null
+  }
+
+  const chunks = []
+  let byteLength = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      byteLength += value.byteLength
+      if (byteLength > maxBytes) {
+        await reader.cancel("Discord attachment limit exceeded")
+        return null
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  const bytes = new Uint8Array(byteLength)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return bytes
+}
+
+async function loadFulfilledPortraitAttachment(env, row) {
+  const symbol = geneSymbol(row?.gene_symbol) || "gene"
+  const sha = assetSha(row?.fulfilled_asset_sha256)
+  const portraitRequest = fulfilledPortraitRequest(env, row)
+  if (!sha || !portraitRequest) {
+    return {
+      ok: false,
+      retryable: false,
+      error: "Fulfilled portrait attachment is missing a valid asset SHA or CDN base URL.",
+    }
+  }
+
+  let response
+  try {
+    response = await fetch(portraitRequest.url, { headers: portraitRequest.headers })
+  } catch (error) {
+    return {
+      ok: false,
+      retryable: true,
+      error: `Fulfilled portrait download failed: ${boundedText(error?.message || error || "unknown", 500)}`,
+    }
+  }
+  if (!response.ok) {
+    return {
+      ok: false,
+      retryable: response.status === 429 || response.status >= 500,
+      error: `Fulfilled portrait download failed (${response.status}).`,
+    }
+  }
+
+  const contentType = boundedText(response.headers.get("Content-Type"), 255)
+    .split(";", 1)[0]
+    .toLowerCase()
+  const declaredBytes = Number.parseInt(response.headers.get("Content-Length") || "0", 10) || 0
+  if (contentType !== "image/webp" && contentType !== "application/octet-stream") {
+    return {
+      ok: false,
+      retryable: false,
+      error: `Fulfilled portrait has unexpected content type: ${contentType || "missing"}.`,
+    }
+  }
+  if (declaredBytes > DISCORD_ATTACHMENT_MAX_BYTES) {
+    return {
+      ok: false,
+      retryable: false,
+      error: `Fulfilled portrait exceeds Discord's ${DISCORD_ATTACHMENT_MAX_BYTES}-byte upload limit.`,
+    }
+  }
+
+  let bytes
+  try {
+    bytes = await readBoundedResponseBytes(response, DISCORD_ATTACHMENT_MAX_BYTES)
+  } catch (error) {
+    return {
+      ok: false,
+      retryable: true,
+      error: `Fulfilled portrait download interrupted: ${boundedText(error?.message || error || "unknown", 500)}`,
+    }
+  }
+  if (!bytes) {
+    return {
+      ok: false,
+      retryable: false,
+      error: `Fulfilled portrait exceeds Discord's ${DISCORD_ATTACHMENT_MAX_BYTES}-byte upload limit.`,
+    }
+  }
+  if (!hasWebpSignature(bytes)) {
+    return {
+      ok: false,
+      retryable: false,
+      error: "Fulfilled portrait is not a valid WebP image.",
+    }
+  }
+  const filename = `iconoplasm-${symbol.toLowerCase()}-${sha.slice(0, 12)}.webp`
+  const requestLabel =
+    requestKind(row?.request_kind) === "edit_image" ? "blot edit" : "candidate blot"
+  return {
+    ok: true,
+    filename,
+    description: `${symbol} ${requestLabel} from Iconoplasm's free generation queue`,
+    blob: new Blob([bytes], { type: "image/webp" }),
+  }
 }
 
 async function setDiscordState(env, notificationId, status, fields = {}) {
@@ -252,6 +426,15 @@ export async function deliverPendingRequestFulfillmentNotifications(
       continue
     }
 
+    const attachment = await loadFulfilledPortraitAttachment(env, row)
+    if (!attachment.ok) {
+      await setDiscordState(env, notificationId, attachment.retryable ? "retry" : "failed", {
+        error: attachment.error,
+      })
+      result.failed += 1
+      continue
+    }
+
     let channelId = ""
     try {
       const response = await fetch(`${DISCORD_API_BASE}/users/@me/channels`, {
@@ -278,17 +461,29 @@ export async function deliverPendingRequestFulfillmentNotifications(
     }
 
     try {
+      const messagePayload = {
+        content: discordMessage(row),
+        nonce: `icono-fulfillment-${notificationId}`,
+        enforce_nonce: true,
+        allowed_mentions: { parse: [] },
+        attachments: [
+          {
+            id: 0,
+            filename: attachment.filename,
+            description: attachment.description,
+          },
+        ],
+      }
+      const form = new FormData()
+      form.append("payload_json", JSON.stringify(messagePayload))
+      form.append("files[0]", attachment.blob, attachment.filename)
       const response = await fetch(
         `${DISCORD_API_BASE}/channels/${encodeURIComponent(channelId)}/messages`,
         {
           method: "POST",
-          headers: { Authorization: `Bot ${botToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            content: discordMessage(row),
-            nonce: `icono-fulfillment-${notificationId}`,
-            enforce_nonce: true,
-            allowed_mentions: { parse: [] },
-          }),
+          // Do not set Content-Type: fetch must add the multipart boundary.
+          headers: { Authorization: `Bot ${botToken}` },
+          body: form,
         },
       )
       const payload = await response.json().catch(() => ({}))
