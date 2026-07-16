@@ -279,7 +279,7 @@ test("non-Brinedew fulfillment is suppressed before any Discord fetch", async ()
 })
 
 test("Brinedew fulfillment sends one nonce-enforced DM and is retry-idempotent", async () => {
-  const row = notificationRow()
+  const row = notificationRow({ request_mode: "random" })
   const db = new NotificationDb([row])
   const calls = []
   const originalFetch = globalThis.fetch
@@ -318,12 +318,15 @@ test("Brinedew fulfillment sends one nonce-enforced DM and is retry-idempotent",
     assert.equal(calls[2].json.nonce, "icono-fulfillment-7")
     assert.equal(calls[2].json.enforce_nonce, true)
     assert.deepEqual(calls[2].json.allowed_mentions, { parse: [] })
-    assert.match(calls[2].json.content, /free candidate request/i)
-    assert.match(calls[2].json.content, /free generation queue/i)
-    assert.match(calls[2].json.content, /new \*\*INS\*\* candidate blot/)
-    assert.match(calls[2].json.content, /Emulsion: \*\*A1-4527\*\*/)
-    assert.match(calls[2].json.content, /<https:\/\/iconoplasm\.brinedew\.bio\/gene\/INS>/)
-    assert.doesNotMatch(calls[2].json.content, /\nhttps:\/\//)
+    assert.equal(
+      calls[2].json.content,
+      [
+        "Your free queue request is ready.",
+        "Gene: **INS**",
+        "Emulsion: **Random** (resolved to A1-4527)",
+        "Review it here: <https://iconoplasm.brinedew.bio/gene/INS>",
+      ].join("\n"),
+    )
     assert.deepEqual(calls[2].json.attachments, [
       {
         id: 0,
@@ -360,8 +363,15 @@ test("free blot-edit fulfillment copy preserves its distinct user journey", asyn
     })
 
     assert.equal(result.delivered, 1)
-    assert.match(messagePayload.content, /free blot-edit request/i)
-    assert.match(messagePayload.content, /free generation queue to edit the \*\*INS\*\* blot/i)
+    assert.equal(
+      messagePayload.content,
+      [
+        "Your free queue edit request is ready.",
+        "Gene: **INS**",
+        "Emulsion: **A1-4527**",
+        "Review it here: <https://iconoplasm.brinedew.bio/gene/INS>",
+      ].join("\n"),
+    )
     assert.equal(
       messagePayload.attachments[0].description,
       "INS blot edit from Iconoplasm's free generation queue",
