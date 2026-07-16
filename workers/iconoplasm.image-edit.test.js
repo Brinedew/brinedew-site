@@ -933,7 +933,10 @@ test("image edit provider keys are encrypted and listed without secrets", async 
     "bytedance/seedream/v5/lite/text-to-image",
     "openai/gpt-image-2",
   ]) {
-    assert.ok(!falEditModels.includes(hidden), "Fal edit dialog should NOT expose gen-only " + hidden)
+    assert.ok(
+      !falEditModels.includes(hidden),
+      "Fal edit dialog should NOT expose gen-only " + hidden,
+    )
   }
   const gemini = filtered.supported_providers.find((provider) => provider.provider_id === "gemini")
   assert.ok(gemini.model_options.some((option) => option.model === "gemini-3.1-flash-image"))
@@ -2457,9 +2460,7 @@ test("Fal.ai Seedream 5 image edits use queue-based polling and visible pricing"
     assert.ok(created.job.result_asset_sha256)
     assert.ok(
       fetchCalls.some(
-        (call) =>
-          call.url ===
-          "https://queue.fal.run/bytedance/seedream/requests/fal-job-1/status",
+        (call) => call.url === "https://queue.fal.run/bytedance/seedream/requests/fal-job-1/status",
       ),
       "poller must follow fal-returned shortened status_url",
     )
@@ -4334,8 +4335,8 @@ test("last-used model is remembered without reordering the providers list, but o
 
     // Now submit a successful edit job using the same model. The worker must
     // NOT write to KV because the model is already the last-used one.
-    const kvPutsBefore = kvPuts.filter((p) =>
-      p.k === "iconoplasm:image-edit-last-used:image_edit:user-1",
+    const kvPutsBefore = kvPuts.filter(
+      (p) => p.k === "iconoplasm:image-edit-last-used:image_edit:user-1",
     ).length
     const firstCtx = capturingContext()
     const createResponse =
@@ -4361,8 +4362,8 @@ test("last-used model is remembered without reordering the providers list, but o
     assert.equal(createResponse.status, 200, "create status: " + JSON.stringify(created))
     assert.equal(created.job.status, "succeeded")
     await firstCtx.drain()
-    const kvPutsAfter = kvPuts.filter((p) =>
-      p.k === "iconoplasm:image-edit-last-used:image_edit:user-1",
+    const kvPutsAfter = kvPuts.filter(
+      (p) => p.k === "iconoplasm:image-edit-last-used:image_edit:user-1",
     ).length
     assert.equal(
       kvPutsAfter,
@@ -4371,8 +4372,8 @@ test("last-used model is remembered without reordering the providers list, but o
     )
 
     // Submit a job with a different model. The worker MUST write to KV once.
-    const newKvPutsBefore = kvPuts.filter((p) =>
-      p.k === "iconoplasm:image-edit-last-used:image_edit:user-1",
+    const newKvPutsBefore = kvPuts.filter(
+      (p) => p.k === "iconoplasm:image-edit-last-used:image_edit:user-1",
     ).length
     // Switch the saved provider's model to bfl/flux-1-dev by sending the new
     // model in the request body. The route at line 25671 already applies the
@@ -4400,8 +4401,8 @@ test("last-used model is remembered without reordering the providers list, but o
     const secondCreated = await secondResponse.json()
     assert.equal(secondResponse.status, 200, "create status: " + JSON.stringify(secondCreated))
     assert.equal(secondCreated.job.status, "succeeded")
-    const newKvPutsAfter = kvPuts.filter((p) =>
-      p.k === "iconoplasm:image-edit-last-used:image_edit:user-1",
+    const newKvPutsAfter = kvPuts.filter(
+      (p) => p.k === "iconoplasm:image-edit-last-used:image_edit:user-1",
     ).length
     assert.equal(
       newKvPutsAfter,

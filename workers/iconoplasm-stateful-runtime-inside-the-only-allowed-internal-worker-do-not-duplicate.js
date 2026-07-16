@@ -67,8 +67,10 @@ const ICONOPLASM_PROVIDER_POLL_HARD_TIMEOUT_MS = 10 * 60 * 1000
 function resolveProviderPollConfig(env) {
   const raw = env?.ICONOPLASM_PROVIDER_POLL_INTERVAL_MS
   const override = raw != null ? Number(raw) : NaN
-  const interval = Number.isFinite(override) && override >= 0 ? override : ICONOPLASM_PROVIDER_POLL_INTERVAL_MS
-  const initialWait = Number.isFinite(override) && override >= 0 ? override : ICONOPLASM_PROVIDER_POLL_INITIAL_WAIT_MS
+  const interval =
+    Number.isFinite(override) && override >= 0 ? override : ICONOPLASM_PROVIDER_POLL_INTERVAL_MS
+  const initialWait =
+    Number.isFinite(override) && override >= 0 ? override : ICONOPLASM_PROVIDER_POLL_INITIAL_WAIT_MS
   return { initialWait, interval, hardTimeout: ICONOPLASM_PROVIDER_POLL_HARD_TIMEOUT_MS }
 }
 const MIN_EXTENSION_VERSION = "0.3.0"
@@ -4706,13 +4708,13 @@ async function saveImageEditPromptTemplate(env, { kind, promptTemplate, updatedB
             }),
           }
         : {
-          prompt: mapImageEditPromptTemplatePayload({
-            kind: normalizedKind,
-            prompt_template: cleanPrompt,
-            updated_by: actor,
-            updated_at: new Date().toISOString(),
+            prompt: mapImageEditPromptTemplatePayload({
+              kind: normalizedKind,
+              prompt_template: cleanPrompt,
+              updated_by: actor,
+              updated_at: new Date().toISOString(),
+            }),
           }),
-        }),
   }
 }
 
@@ -6101,14 +6103,18 @@ async function callLumaImageProvider({
     // Prefer sending source bytes directly as base64. Luma's servers
     // cannot always reach external CDN URLs (same bug Krea had — see
     // line 5285). Falling back to URL when bytes are unavailable.
-    const bytes = sourceBytes instanceof Uint8Array ? sourceBytes : new Uint8Array(sourceBytes || [])
+    const bytes =
+      sourceBytes instanceof Uint8Array ? sourceBytes : new Uint8Array(sourceBytes || [])
     if (bytes.byteLength) {
       body.source = {
         data: base64FromBytes(bytes),
         media_type: sourceContentType || "image/webp",
       }
       console.log(
-        "[LUMA_DEBUG] source=base64 bytes=" + bytes.byteLength + " media_type=" + (sourceContentType || "image/webp"),
+        "[LUMA_DEBUG] source=base64 bytes=" +
+          bytes.byteLength +
+          " media_type=" +
+          (sourceContentType || "image/webp"),
       )
     } else {
       body.source = { url: source }
@@ -6123,9 +6129,16 @@ async function callLumaImageProvider({
   const requestUrl = `${baseUrl}/generations`
   const serializedBody = JSON.stringify(body)
   console.log(
-    "[LUMA_DEBUG] url=" + requestUrl + " type=" + body.type + " model=" + body.model +
-    " body_bytes=" + serializedBody.length +
-    " prompt_preview=" + (body.prompt || "").slice(0, 200),
+    "[LUMA_DEBUG] url=" +
+      requestUrl +
+      " type=" +
+      body.type +
+      " model=" +
+      body.model +
+      " body_bytes=" +
+      serializedBody.length +
+      " prompt_preview=" +
+      (body.prompt || "").slice(0, 200),
   )
   const payload = await fetchJsonWithDeadline(
     requestUrl,
@@ -6142,10 +6155,14 @@ async function callLumaImageProvider({
     "Luma generation creation timeout",
   )
   console.log(
-    "[LUMA_DEBUG] response state=" + String(payload?.state || "") +
-    " id=" + String(payload?.id || "") +
-    " failure_code=" + String(payload?.failure_code || "") +
-    " failure_reason=" + String(payload?.failure_reason || ""),
+    "[LUMA_DEBUG] response state=" +
+      String(payload?.state || "") +
+      " id=" +
+      String(payload?.id || "") +
+      " failure_code=" +
+      String(payload?.failure_code || "") +
+      " failure_reason=" +
+      String(payload?.failure_reason || ""),
   )
   const immediateUrl = lumaOutputImageUrl(payload)
   if (String(payload?.state || "").toLowerCase() === "completed" && immediateUrl) {
@@ -6170,17 +6187,13 @@ async function callLumaImageProvider({
 // Different Fal models use different source-image parameter names:
 //   image_urls (array), image_url (string), input_image_urls (array).
 // The correct param comes from the model option's edit_image_param.
-async function callFalImageProvider({
-  providerRow,
-  apiKey,
-  prompt,
-  sourceUrl = "",
-  env = null,
-}) {
+async function callFalImageProvider({ providerRow, apiKey, prompt, sourceUrl = "", env = null }) {
   const providerDef = imageEditProviderDefinition("fal")
   const falModel = resolveImageEditProviderModel(providerRow?.model || "", providerDef)
   const falOption = imageEditProviderModelOption(providerDef, falModel)
-  const baseUrl = String(providerRow?.endpoint_url || providerDef?.default_endpoint_url || "https://queue.fal.run").replace(/\/+$/, "")
+  const baseUrl = String(
+    providerRow?.endpoint_url || providerDef?.default_endpoint_url || "https://queue.fal.run",
+  ).replace(/\/+$/, "")
   const timeoutMs = providerRequestTimeoutMs(providerRow)
 
   const body = { prompt }
@@ -6195,8 +6208,12 @@ async function callFalImageProvider({
 
   const submitUrl = `${baseUrl}/${falModel}`
   console.log(
-    "[FAL_DEBUG] model=" + falModel + " url=" + submitUrl +
-    " body=" + JSON.stringify(body).slice(0, 1000),
+    "[FAL_DEBUG] model=" +
+      falModel +
+      " url=" +
+      submitUrl +
+      " body=" +
+      JSON.stringify(body).slice(0, 1000),
   )
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort("Fal submit timeout"), 15_000)
@@ -6222,22 +6239,30 @@ async function callFalImageProvider({
     submitPayload = null
   }
   console.log(
-    "[FAL_DEBUG] submit status=" + submitResponse.status +
-    " request_id=" + String(submitPayload?.request_id || "") +
-    " raw=" + rawText.slice(0, 2000),
+    "[FAL_DEBUG] submit status=" +
+      submitResponse.status +
+      " request_id=" +
+      String(submitPayload?.request_id || "") +
+      " raw=" +
+      rawText.slice(0, 2000),
   )
   if (!submitResponse.ok) {
     throw new Error(
       "Fal rejected (status " +
         submitResponse.status +
         "): " +
-        (providerErrorMessage(submitPayload, rawText, submitResponse.status) || rawText || "empty body"),
+        (providerErrorMessage(submitPayload, rawText, submitResponse.status) ||
+          rawText ||
+          "empty body"),
     )
   }
 
   const requestId = sanitizeText(submitPayload?.request_id || "", 120) || ""
   if (!requestId) {
-    throw new Error("Fal returned no request id: " + (providerErrorMessage(submitPayload, "", 502) || "empty response"))
+    throw new Error(
+      "Fal returned no request id: " +
+        (providerErrorMessage(submitPayload, "", 502) || "empty response"),
+    )
   }
 
   // Prefer the queue URLs fal returns on submit. Fall back to the documented
@@ -6275,14 +6300,7 @@ function falQueueReadInit(apiKey) {
   }
 }
 
-async function pollFalJob({
-  apiKey,
-  requestId,
-  statusUrl,
-  responseUrl,
-  timeoutMs,
-  env = null,
-}) {
+async function pollFalJob({ apiKey, requestId, statusUrl, responseUrl, timeoutMs, env = null }) {
   const config = resolveProviderPollConfig(env)
   const hardTimeout = Math.min(timeoutMs, config.hardTimeout)
   const deadline = Date.now() + hardTimeout
@@ -6299,16 +6317,10 @@ async function pollFalJob({
     lastPayload = payload
     const status = String(payload?.status || "").toUpperCase()
     console.log(
-      "[FAL_DEBUG] poll status=" +
-        status +
-        " request_id=" +
-        requestId +
-        " status_url=" +
-        statusUrl,
+      "[FAL_DEBUG] poll status=" + status + " request_id=" + requestId + " status_url=" + statusUrl,
     )
     if (status === "COMPLETED") {
-      const resultUrl =
-        sanitizeText(payload?.response_url || "", 500) || responseUrl
+      const resultUrl = sanitizeText(payload?.response_url || "", 500) || responseUrl
       const resultPayload = await fetchJsonWithDeadline(
         resultUrl,
         falQueueReadInit(apiKey),
@@ -6321,9 +6333,7 @@ async function pollFalJob({
       return downloadProviderImageBytes(imageUrl)
     }
     if (status === "FAILED" || status === "CANCELLED") {
-      throw new Error(
-        providerErrorMessage(payload, "", 502) || "Fal job " + status.toLowerCase(),
-      )
+      throw new Error(providerErrorMessage(payload, "", 502) || "Fal job " + status.toLowerCase())
     }
   }
   throw new Error(
@@ -24972,20 +24982,31 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
         chunksProcessed += 1
         const catalog = result?.card_catalog || {}
         console.log(
-          "[CRON] gallery refresh chunk " + attempt + ":" +
-          " rebuild=" + Boolean(catalog.rebuild) +
-          " bootstrap_more=" + Boolean(catalog.bootstrap_more) +
-          " chunk=" + Number(catalog.rebuild_chunk || 0) +
-          " cursor=" + String(catalog.rebuild_cursor || ""),
+          "[CRON] gallery refresh chunk " +
+            attempt +
+            ":" +
+            " rebuild=" +
+            Boolean(catalog.rebuild) +
+            " bootstrap_more=" +
+            Boolean(catalog.bootstrap_more) +
+            " chunk=" +
+            Number(catalog.rebuild_chunk || 0) +
+            " cursor=" +
+            String(catalog.rebuild_cursor || ""),
         )
         if (!catalog.bootstrap_more) break
       }
       console.log(
-        "[CRON] gallery refresh complete: chunks_processed=" + chunksProcessed +
-        " ok=" + Boolean(lastResult?.ok) +
-        " bootstrap_more=" + Boolean(lastResult?.card_catalog?.bootstrap_more),
+        "[CRON] gallery refresh complete: chunks_processed=" +
+          chunksProcessed +
+          " ok=" +
+          Boolean(lastResult?.ok) +
+          " bootstrap_more=" +
+          Boolean(lastResult?.card_catalog?.bootstrap_more),
       )
-      const response = json(lastResult || { ok: false, error: "no result" }, 200, { "Cache-Control": "no-store" })
+      const response = json(lastResult || { ok: false, error: "no result" }, 200, {
+        "Cache-Control": "no-store",
+      })
       responseStatus = response.status
       return response
     }
@@ -26697,10 +26718,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             userId,
             operation,
           })
-          if (
-            remembered &&
-            configuredProviderIds.has(remembered.provider_id)
-          ) {
+          if (remembered && configuredProviderIds.has(remembered.provider_id)) {
             const def = scopedDefs.find((entry) => entry.provider_id === remembered.provider_id)
             const options = Array.isArray(def?.model_options) ? def.model_options : []
             const match = options.find((m) => m.model === remembered.model)
@@ -29355,10 +29373,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         actorId,
         reason,
         runId: p?.run_id ?? p?.runId ?? reason,
-        drainScopedPhases: coerceBoolean(
-          p?.drain_scoped_phases ?? p?.drainScopedPhases,
-          false,
-        ),
+        drainScopedPhases: coerceBoolean(p?.drain_scoped_phases ?? p?.drainScopedPhases, false),
       })
 
       if (coerceBoolean(p?.process_now ?? p?.processNow, false)) {
@@ -29438,10 +29453,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         runId: p?.run_id ?? p?.runId ?? p?.reason ?? "admin_finalization_kick",
         reason: p?.reason ?? "admin_finalization_kick",
         symbols: Array.isArray(p?.symbols) ? p.symbols : [],
-        drainScopedPhases: coerceBoolean(
-          p?.drain_scoped_phases ?? p?.drainScopedPhases,
-          false,
-        ),
+        drainScopedPhases: coerceBoolean(p?.drain_scoped_phases ?? p?.drainScopedPhases, false),
       })
       if (!sentQueueMessage?.ok) {
         return done(
