@@ -5210,7 +5210,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var selectedValue = lastUsedValue || (options.length ? options[0].value : "")
     // If the remembered selection is no longer available, fall back to the
     // first sorted option instead of leaving a stale value.
-    if (selectedValue && !options.some(function (opt) { return opt.value === selectedValue })) {
+    if (
+      selectedValue &&
+      !options.some(function (opt) {
+        return opt.value === selectedValue
+      })
+    ) {
       selectedValue = options.length ? options[0].value : ""
     }
     select.innerHTML = options.length
@@ -5304,7 +5309,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (checked("surface_tone_hex"))
       adjustments.surface_tone_hex = imageEditFirstHexValue(context.surface_tone_hex)
     if (checked("fantastical_feature"))
-      adjustments.fantastical_feature = imageEditFirstTextValue(context.fantastical_feature) || "remove all fantastical features, restore human anatomy"
+      adjustments.fantastical_feature =
+        imageEditFirstTextValue(context.fantastical_feature) ||
+        "remove all fantastical features, restore human anatomy"
     if (checked("fashion_styles")) {
       adjustments.fashion_styles = imageEditFirstTextListValue(context.fashion_styles)
     }
@@ -5563,10 +5570,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         image_score: upvotes,
         user_vote: 1,
       }
-      localStorage.setItem(
-        "iconoplasm.vote.a:" + symbol + "|" + assetSha,
-        JSON.stringify(snapshot),
-      )
+      localStorage.setItem("iconoplasm.vote.a:" + symbol + "|" + assetSha, JSON.stringify(snapshot))
       // Vote-projection auto-promotion is already queued by publish. Poll the
       // gene detail until this asset becomes canonical without requiring
       // another manual upvote click.
@@ -5831,7 +5835,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           })
         }
         var selectedValue = lastUsedValue || (options.length ? options[0].value : "")
-        if (selectedValue && !options.some(function (opt) { return opt.value === selectedValue })) {
+        if (
+          selectedValue &&
+          !options.some(function (opt) {
+            return opt.value === selectedValue
+          })
+        ) {
           selectedValue = options.length ? options[0].value : ""
         }
         providerSelect.innerHTML = options.length
