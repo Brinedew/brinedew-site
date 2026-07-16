@@ -470,6 +470,7 @@ test("request inbox UI uses server read state and bounded live refresh", () => {
     "utf8",
   )
   const css = readFileSync(new URL("../quartz/static/custom.css", import.meta.url), "utf8")
+  const head = readFileSync(new URL("../quartz/components/Head.tsx", import.meta.url), "utf8")
 
   assert.match(app, /import \{ createRequestInbox \} from "\.\/request-inbox\.js"/)
   assert.match(inbox, /\/api\/iconoplasm\/notifications\?limit=25/)
@@ -480,6 +481,9 @@ test("request inbox UI uses server read state and bounded live refresh", () => {
   assert.doesNotMatch(inbox, /icono_last_seen_fulfilled/)
   assert.match(css, /\.icono-request-inbox__item--unread/)
   assert.match(css, /prefers-reduced-motion: reduce/)
+  assert.match(css, /\.sidebar\.right > \.brd-sidebar-stack[\s\S]*max-height: none/)
+  assert.match(head, /custom\.css\?v=\$\{CACHE_BUST\}/)
+  assert.doesNotMatch(head, /custom\.css\?v=bio\d+/)
 })
 
 test("notification routes stay explicitly classified by the fail-loud cost fence", () => {
