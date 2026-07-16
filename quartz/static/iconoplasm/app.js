@@ -12,6 +12,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js"
+import { createRequestInbox } from "./request-inbox.js"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -419,6 +420,17 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     d.textContent = s
     return d.innerHTML
   }
+
+  var requestInbox = createRequestInbox({
+    fetchJSON: fetchJSON,
+    getCurrentUser: function () {
+      return currentUser
+    },
+    renderSidebar: function () {
+      renderIconoplasmSidebar()
+    },
+    escapeHtml: esc,
+  })
 
   function normalizedSymbol(symbol) {
     return String(symbol || "")
@@ -2130,6 +2142,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         }),
       },
     ]
+    var requestInboxMarkup = requestInbox.panelMarkup()
+    if (requestInboxMarkup) {
+      panels.push({
+        id: "icono-request-inbox-panel",
+        className: "brd-sidebar-panel--request-inbox",
+        markup: requestInboxMarkup,
+      })
+    }
     if (iconoSidebarMarkup) {
       panels.push({
         id: "icono-sidebar-panel",
@@ -2146,6 +2166,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         void updateSharedUserState(user)
       },
     })
+    requestInbox.wire(stack)
     renderHomeInstallCta()
   }
 
@@ -2169,6 +2190,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     hasResolvedAuthState = true
     if (previousHadUser !== !!currentUser) {
       invalidateImageEditProviders()
+    }
+    if (currentUser) {
+      requestInbox.start()
+    } else {
+      requestInbox.stop()
+      requestInbox.reset()
     }
     renderIconoplasmSidebar()
     if (getRoute().page === "home") {
@@ -6596,6 +6623,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           .then(function () {
             delete geneRequestSummaryCache[symbol]
             setStatus("Queued for free generation.", "success")
+            void requestInbox.refresh()
             return fetchGeneRequestSummary(symbol, { forceFresh: true }).then(function (state) {
               wireAuthenticatedRequestForm(state)
               return state
