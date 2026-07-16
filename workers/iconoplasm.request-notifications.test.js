@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
@@ -570,6 +570,28 @@ test("request inbox uses one-open Shoelace groups and an accessible unread dot",
   assert.equal(waiting.hideCalls, 1)
   assert.match(inbox.panelMarkup(), /data-icono-request-group="ready" open/)
   assert.doesNotMatch(inbox.panelMarkup(), /data-icono-request-group="waiting" open/)
+})
+
+test("every Shoelace component used by the request inbox has a deployable public entry", () => {
+  for (const component of ["details", "badge"]) {
+    const entry = new URL(
+      `../quartz/static/iconoplasm/vendor/shoelace/cdn/components/${component}/${component}.js`,
+      import.meta.url,
+    )
+    assert.equal(existsSync(entry), true, `missing Shoelace ${component} entry`)
+    const source = readFileSync(entry, "utf8")
+    const imports = [...source.matchAll(/from "([^\"]+)"|import "([^\"]+)"/g)].map(
+      (match) => match[1] || match[2],
+    )
+    assert.ok(imports.length > 0, `Shoelace ${component} entry has no module imports`)
+    for (const importedPath of imports) {
+      assert.equal(
+        existsSync(new URL(importedPath, entry)),
+        true,
+        `Shoelace ${component} entry references missing ${importedPath}`,
+      )
+    }
+  }
 })
 
 test("notification routes stay explicitly classified by the fail-loud cost fence", () => {
