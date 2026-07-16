@@ -315,6 +315,17 @@ article p {
   gap: 1rem;
 }
 
+/* Quartz caps every right-sidebar child at 24rem below the desktop breakpoint.
+   The account + request inbox stack is real document content, so that cap makes
+   it paint through the footer as soon as the user has a few requests. */
+@media (max-width: 1199px) {
+  .page > #quartz-body .sidebar.right > .brd-sidebar-stack {
+    flex: 1 1 auto;
+    width: 100%;
+    max-height: none;
+  }
+}
+
 .brd-sidebar-panel {
   margin: 0;
   padding: 0;

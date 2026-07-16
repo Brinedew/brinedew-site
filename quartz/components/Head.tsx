@@ -590,8 +590,9 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
           <link rel="preload" as="image" href="/static/logo-mask.png" fetchpriority="high" />
         )}
 
-        {/* Custom CSS last with self-hosted fonts (bumped version to refresh caches) */}
-        <link href="/static/custom.css?v=bio9" rel="stylesheet" type="text/css" />
+        {/* Custom CSS last. Use the build cache key; a hand-bumped version left
+            browsers running old sidebar CSS after the request inbox shipped. */}
+        <link href={`/static/custom.css?v=${CACHE_BUST}`} rel="stylesheet" type="text/css" />
         {iconoplasmBootstrapScript && (
           <script dangerouslySetInnerHTML={{ __html: iconoplasmBootstrapScript }} />
         )}
