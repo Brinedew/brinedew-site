@@ -2632,7 +2632,10 @@ export default {
         if (catchup.results?.length > 0) {
           const posted = catchup.results.filter((r) => r.ok && r.message_id)
           if (posted.length > 0) {
-            console.log("[CRON] Catch-up posted missed recaps:", posted.map((r) => r.day).join(", "))
+            console.log(
+              "[CRON] Catch-up posted missed recaps:",
+              posted.map((r) => r.day).join(", "),
+            )
           }
         }
       } catch (err) {
