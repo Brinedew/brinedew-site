@@ -6,6 +6,11 @@ import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
 import { ICONOPLASM_CLAN_CATALOG } from "./generated/iconoplasm-clan-catalog.js"
 import { renderIconoplasmArtistStylesHtml } from "./iconoplasm-artist-styles-html.js"
+import {
+  deliverPendingRequestFulfillmentNotifications,
+  markRequestNotificationsRead as markRequestNotificationsReadForUser,
+  readRequestNotificationInbox,
+} from "./iconoplasm-request-notifications.js"
 import { ICONOPLASM_WIKI_PAGEVIEWS } from "./iconoplasm-wiki-pageviews.js"
 import { normalizeIconoplasmHomeOrder } from "../quartz/static/iconoplasm/home-orders.js"
 import "../shared/iconoplasm-card/shared-card-runtime.js"
@@ -1292,6 +1297,8 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (/^\/api\/iconoplasm\/genes\/[^/]+\/comments$/.test(path)) return "gene_comments"
   if (path === "/api/iconoplasm/requests") return "gene_request_submit"
   if (path === "/api/iconoplasm/requests/options") return "gene_request_options"
+  if (path === "/api/iconoplasm/notifications") return "request_notifications"
+  if (path === "/api/iconoplasm/notifications/read") return "request_notifications_read"
   if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(path))
     return "gene_request_summary"
   if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+$/.test(path)) return "gene_request_state_gone"
@@ -1399,6 +1406,8 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (family === "gene_comments") return "first_party_write"
   if (family.startsWith("discoveries_")) return "first_party_write"
   if (family.startsWith("gene_request_")) return "first_party_request"
+  if (family === "request_notifications") return "first_party_read"
+  if (family === "request_notifications_read") return "first_party_write"
   if (family.startsWith("image_edit_")) return "first_party_write"
   if (family === "user_emulsion") return "first_party_write"
   if (family.startsWith("candidate_generation_")) return "first_party_write"
@@ -3672,6 +3681,47 @@ function mapGenerationRequestRow(row) {
   }
 }
 
+async function requestNotificationInboxPayload(env, request, { limit = 25 } = {}) {
+  const sessionUser = await iconoplasmSessionUser(request, env)
+  const requesterUserId = normalizeUserId(sessionUser?.user_id || "")
+  if (!requesterUserId || isGuestUserId(requesterUserId)) {
+    return {
+      ok: true,
+      authenticated: false,
+      unread_count: 0,
+      open_count: 0,
+      open_requests: [],
+      notifications: [],
+    }
+  }
+  const openRequests = await listOpenGenerationRequests(env, {
+    limit: 10,
+    requesterUserId,
+  })
+  const base = portraitBase(new URL("https://iconoplasm.brinedew.bio/"), env)
+  return readRequestNotificationInbox(env, {
+    requesterUserId,
+    limit,
+    openRequests,
+    portraitUrlForAsset(asset) {
+      return adminPortraitUrl(base, asset, "thumb")
+    },
+  })
+}
+
+async function markRequestNotificationsRead(
+  env,
+  request,
+  { notificationIds = [], markAll = false } = {},
+) {
+  const sessionUser = await iconoplasmSessionUser(request, env)
+  const requesterUserId = normalizeUserId(sessionUser?.user_id || "")
+  return markRequestNotificationsReadForUser(env, {
+    requesterUserId: isGuestUserId(requesterUserId) ? "" : requesterUserId,
+    notificationIds,
+    markAll,
+  })
+}
 function mapGeneDiscoveryRow(row) {
   const weightKg = Number(row?.weight_kg)
   const ageYears = Number(row?.age_years)
@@ -10056,6 +10106,9 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+$/.test(path))
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/requests") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/notifications")
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/notifications/read") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/requests/open")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/requests/fulfill") return requestMethod === "POST"
@@ -26577,6 +26630,35 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
+    if (path === "/api/iconoplasm/notifications" && request.method === "GET") {
+      const payload = await requestNotificationInboxPayload(env, request, {
+        limit: url.searchParams.get("limit") || "25",
+      })
+      return done(
+        payload.ok ? "request_notifications" : "request_notifications_500",
+        json(payload, payload.status || (payload.ok ? 200 : 500), { "Cache-Control": "no-store" }),
+      )
+    }
+
+    if (path === "/api/iconoplasm/notifications/read" && request.method === "POST") {
+      let p = {}
+      try {
+        p = await request.json()
+      } catch {
+        return done("request_notifications_read_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const payload = await markRequestNotificationsRead(env, request, {
+        notificationIds: p?.notification_ids,
+        markAll: p?.all === true,
+      })
+      return done(
+        payload.ok
+          ? "request_notifications_read"
+          : `request_notifications_read_${payload.status || 500}`,
+        json(payload, payload.status || (payload.ok ? 200 : 500), { "Cache-Control": "no-store" }),
+      )
+    }
+
     if (path === "/api/iconoplasm/admin/requests/open" && request.method === "GET") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_requests_open_403", json({ error: "Unauthorized" }, 403))
@@ -26624,6 +26706,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         items: Array.isArray(p?.items) ? p.items : [],
         resolvedBy: await actor(request, env),
       })
+      if (result.request_ids?.length) {
+        const delivery = deliverPendingRequestFulfillmentNotifications(env, {
+          requestIds: result.request_ids,
+        }).catch((error) => {
+          console.error(
+            "Iconoplasm fulfillment notification delivery failed:",
+            sanitizeText(error?.message || error || "unknown error", 500),
+          )
+        })
+        if (ctx?.waitUntil) ctx.waitUntil(delivery)
+        else await delivery
+      }
       return done("admin_requests_fulfill", json(result, 200, { "Cache-Control": "no-store" }))
     }
 
