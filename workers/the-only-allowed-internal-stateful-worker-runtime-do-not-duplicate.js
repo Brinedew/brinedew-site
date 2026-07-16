@@ -872,6 +872,7 @@ import {
   IconoplasmSyncGovernor,
   handleIconoplasmQueue,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { deliverPendingRequestFulfillmentNotifications } from "./iconoplasm-request-notifications.js"
 import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate } from "./benchmark/the-only-allowed-benchmark-stateful-runtime-do-not-duplicate.js"
 
 export { IconoplasmVoteCoordinator }
@@ -2608,8 +2609,26 @@ export default {
     }
 
     if (cronExpr === "*/15 * * * *") {
-      // Cheap gallery-only freshness tick — NOT the heavy maintenance.
-      await runScheduledIconoplasmGalleryRefresh(env, ctx)
+      // These jobs share a clock, not a failure domain. Drain the durable outbox
+      // even when the unrelated gallery refresh fails, while preserving the
+      // gallery job's existing fail-loud behavior.
+      const [galleryRefresh, notificationDelivery] = await Promise.allSettled([
+        runScheduledIconoplasmGalleryRefresh(env, ctx),
+        deliverPendingRequestFulfillmentNotifications(env, { limit: 20 }),
+      ])
+      if (notificationDelivery.status === "fulfilled") {
+        if (notificationDelivery.value.considered) {
+          console.log("[CRON] Iconoplasm fulfillment notifications:", notificationDelivery.value)
+        }
+      } else {
+        console.error(
+          "[CRON] Iconoplasm fulfillment notification delivery failed:",
+          String(
+            notificationDelivery.reason?.message || notificationDelivery.reason || "unknown error",
+          ),
+        )
+      }
+      if (galleryRefresh.status === "rejected") throw galleryRefresh.reason
       return
     }
 
