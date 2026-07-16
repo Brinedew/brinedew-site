@@ -391,8 +391,13 @@ test("direct generation result uses edit-modal geometry instead of a handmade si
   )
   assert.match(
     app,
-    /providerSelect\.value = options\.length \? options\[0\]\.value : ""/,
-    "direct generation should default to the first compound provider_id:model option whenever providers exist",
+    /var selectedValue = lastUsedValue \|\| \(options\.length \? options\[0\]\.value : ""\)/,
+    "direct generation should restore the last compound provider_id:model option and otherwise use the first available option",
+  )
+  assert.match(
+    app,
+    /if \(\s*selectedValue\s*&&\s*!options\.some\(function \(opt\) \{\s*return opt\.value === selectedValue\s*\}\)\s*\) \{\s*selectedValue = options\.length \? options\[0\]\.value : ""/,
+    "a removed last-used provider should fall back to the first currently available compound option",
   )
   assert.match(
     css,
