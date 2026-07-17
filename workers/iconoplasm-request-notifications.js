@@ -72,12 +72,12 @@ function allRequestersDiscordDeliveryEnabled(env) {
   return resolveIconoplasmFulfillmentDeliveryPolicy(env).all_requesters
 }
 
-function mapReadyRequest(row, notification, portraitUrlForAsset) {
-  const requestId = positiveInteger(row?.id)
-  const notificationId = positiveInteger(notification?.id)
+function mapReadyNotification(row, portraitUrlForAsset) {
+  const requestId = positiveInteger(row?.request_id)
+  const notificationId = positiveInteger(row?.id)
   const symbol = geneSymbol(row?.gene_symbol)
   const sha = assetSha(row?.fulfilled_asset_sha256)
-  const readAt = boundedText(notification?.read_at, 64)
+  const readAt = boundedText(row?.read_at, 64)
   return {
     id: requestId,
     request_id: requestId,
@@ -90,16 +90,15 @@ function mapReadyRequest(row, notification, portraitUrlForAsset) {
       (row?.request_mode === "specific" ? "Specific emulsion" : "Random default"),
     fulfilled_asset_sha256: sha,
     fulfilled_vision_id: boundedText(row?.fulfilled_vision_id, 255),
-    created_at: boundedText(row?.created_at, 64),
-    fulfilled_at:
-      boundedText(row?.fulfilled_at, 64) ||
-      boundedText(row?.updated_at, 64) ||
-      boundedText(row?.created_at, 64),
+    candidate_image_id: positiveInteger(row?.candidate_image_id),
+    asset_created_at: boundedText(row?.asset_created_at, 64),
+    created_at: boundedText(row?.request_created_at, 64),
+    fulfilled_at: boundedText(row?.created_at, 64),
     read_at: readAt,
-    unread: Boolean(notificationId && !readAt),
+    unread: !readAt,
     gene_url: symbol ? `/gene/${encodeURIComponent(symbol)}` : "/",
     image_url: sha && portraitUrlForAsset ? portraitUrlForAsset(sha) : "",
-    discord_status: boundedText(notification?.discord_status, 64),
+    discord_status: "sent",
   }
 }
 
@@ -108,9 +107,7 @@ export async function readRequestNotificationInbox(
   {
     requesterUserId,
     limit = 50,
-    readyRequests = [],
     openRequests = [],
-    readyCount = 0,
     openCount = 0,
     cancelledCount = 0,
     portraitUrlForAsset,
@@ -122,52 +119,61 @@ export async function readRequestNotificationInbox(
   const requesterId = userId(requesterUserId)
   if (!requesterId) return { ok: false, status: 401, error: "Authentication required" }
   const safeLimit = Math.max(1, Math.min(50, positiveInteger(limit) || 50))
-  const ready = (Array.isArray(readyRequests) ? readyRequests : []).slice(0, safeLimit)
-  const readyRequestIds = ready.map((row) => positiveInteger(row?.id)).filter(Boolean)
-  const notificationRowsPromise = readyRequestIds.length
-    ? env.ICONOPLASM_DB.prepare(
-        `SELECT n.*
-         FROM icono_request_notifications n
-         WHERE n.requester_user_id = ?
-           AND n.discord_status = 'sent'
-           AND n.request_id IN (${readyRequestIds.map(() => "?").join(",")})`,
-      )
-        .bind(requesterId, ...readyRequestIds)
-        .all()
-    : Promise.resolve({ results: [] })
-  const [unreadRow, rowsResponse] = await Promise.all([
+  // A Ready card is a delivery receipt, not a dump of every row ever marked
+  // fulfilled. Historical workstation runs coalesced multiple request IDs
+  // onto one portrait, and manual acceptance tests reused old catalogue
+  // assets. Neither is evidence that a requester received an independent
+  // result. The durable notification is the current product boundary: it is
+  // created for the exact request/asset pair and the request becomes fulfilled
+  // only after Discord confirms delivery. Re-check the live request and asset
+  // joins here so a stale or mismatched notification cannot render.
+  const validDeliveryJoin = `
+    FROM icono_request_notifications n
+    JOIN icono_generation_requests gr
+      ON gr.id = n.request_id
+     AND gr.requester_user_id = n.requester_user_id
+     AND gr.gene_symbol = n.gene_symbol
+     AND gr.fulfilled_asset_sha256 = n.fulfilled_asset_sha256
+     AND gr.status = 'fulfilled'
+    JOIN icono_portrait_assets pa
+      ON pa.gene_symbol = n.gene_symbol
+     AND pa.asset_sha256 = n.fulfilled_asset_sha256`
+  const [countRow, rowsResponse] = await Promise.all([
     env.ICONOPLASM_DB.prepare(
-      `SELECT COUNT(*) AS unread_count
-       FROM icono_request_notifications
-       WHERE requester_user_id = ?
-         AND discord_status = 'sent'
-         AND read_at IS NULL`,
+      `SELECT
+         COUNT(*) AS ready_count,
+         SUM(CASE WHEN n.read_at IS NULL THEN 1 ELSE 0 END) AS unread_count
+       ${validDeliveryJoin}
+       WHERE n.requester_user_id = ?
+         AND n.discord_status = 'sent'`,
     )
       .bind(requesterId)
       .first(),
-    notificationRowsPromise,
+    env.ICONOPLASM_DB.prepare(
+      `SELECT
+         n.*,
+         gr.created_at AS request_created_at,
+         pa.created_at AS asset_created_at,
+         pa.candidate_image_id
+       ${validDeliveryJoin}
+       WHERE n.requester_user_id = ?
+         AND n.discord_status = 'sent'
+       ORDER BY n.created_at DESC, n.id DESC
+       LIMIT ?`,
+    )
+      .bind(requesterId, safeLimit)
+      .all(),
   ])
   const pending = Array.isArray(openRequests) ? openRequests : []
-  const notificationByRequestId = new Map(
-    (Array.isArray(rowsResponse?.results) ? rowsResponse.results : []).map((row) => [
-      positiveInteger(row?.request_id),
-      row,
-    ]),
-  )
+  const ready = Array.isArray(rowsResponse?.results) ? rowsResponse.results : []
   return {
     ok: true,
     authenticated: true,
-    unread_count: positiveInteger(unreadRow?.unread_count),
-    ready_count: Math.max(positiveInteger(readyCount), ready.length),
+    unread_count: positiveInteger(countRow?.unread_count),
+    ready_count: Math.max(positiveInteger(countRow?.ready_count), ready.length),
     open_count: Math.max(positiveInteger(openCount), pending.length),
     cancelled_count: positiveInteger(cancelledCount),
-    ready_requests: ready.map((row) =>
-      mapReadyRequest(
-        row,
-        notificationByRequestId.get(positiveInteger(row?.id)),
-        portraitUrlForAsset,
-      ),
-    ),
+    ready_requests: ready.map((row) => mapReadyNotification(row, portraitUrlForAsset)),
     open_requests: pending.map((row) => {
       const symbol = geneSymbol(row?.gene_symbol)
       return {

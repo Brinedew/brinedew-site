@@ -49,24 +49,20 @@ class NotificationStatement {
   }
 
   async first() {
-    if (this.sql.includes("COUNT(*) AS unread_count")) {
+    if (this.sql.includes("COUNT(*) AS ready_count")) {
       const requesterUserId = String(this.args[0] || "")
-      return {
-        unread_count: this.db.notifications.filter(
-          (row) =>
-            row.requester_user_id === requesterUserId &&
-            row.discord_status === "sent" &&
-            !row.read_at,
-        ).length,
-      }
-    }
-    if (this.sql.includes("AS ready_count") && this.sql.includes("AS cancelled_count")) {
-      const requesterUserId = String(this.args[0] || "")
-      const rows = [...this.db.readyRequests, ...this.db.openRequests].filter(
-        (row) => row.requester_user_id === requesterUserId,
+      const ready = this.db.notifications.filter(
+        (row) => row.requester_user_id === requesterUserId && row.discord_status === "sent",
       )
       return {
-        ready_count: rows.filter((row) => row.status === "fulfilled").length,
+        ready_count: ready.length,
+        unread_count: ready.filter((row) => !row.read_at).length,
+      }
+    }
+    if (this.sql.includes("AS open_count") && this.sql.includes("AS cancelled_count")) {
+      const requesterUserId = String(this.args[0] || "")
+      const rows = this.db.openRequests.filter((row) => row.requester_user_id === requesterUserId)
+      return {
         open_count: rows.filter((row) => ["open", "delivery_pending"].includes(row.status)).length,
         cancelled_count: this.db.cancelledRequests.filter(
           (row) => row.requester_user_id === requesterUserId,
@@ -92,13 +88,10 @@ class NotificationStatement {
     }
     if (this.sql.includes("FROM icono_request_notifications n")) {
       const requesterUserId = String(this.args[0] || "")
-      const requestIds = this.args.slice(1).map(Number).filter(Boolean)
       return {
         results: this.db.notifications.filter(
           (row) =>
-            row.requester_user_id === requesterUserId &&
-            row.discord_status === "sent" &&
-            (!requestIds.length || requestIds.includes(Number(row.request_id))),
+            row.requester_user_id === requesterUserId && row.discord_status === "sent",
         ),
       }
     }
@@ -277,6 +270,8 @@ function notificationRow(overrides = {}) {
     request_kind: "new_candidate",
     fulfilled_asset_sha256: "a".repeat(64),
     fulfilled_vision_id: "anima-v1-4527",
+    candidate_image_id: 59981,
+    asset_created_at: "2026-07-16 13:44:10",
     request_mode: "specific",
     requested_vision_id: "anima-v1-4527",
     requested_emulsion_id: "A1-4527",
@@ -387,12 +382,18 @@ test("authenticated inbox returns exact fulfillment context and durable unread c
   assert.equal(payload.ready_requests[0].request_id, 42)
   assert.equal(payload.ready_requests[0].notification_id, 7)
   assert.equal(payload.ready_requests[0].gene_symbol, "INS")
+  assert.equal(payload.ready_requests[0].candidate_image_id, 59981)
+  assert.equal(payload.ready_requests[0].asset_created_at, "2026-07-16 13:44:10")
   assert.equal(payload.ready_requests[0].requested_emulsion_label, "A1-4527")
   assert.match(payload.ready_requests[0].image_url, /a{64}\/thumb\.webp$/)
 })
 
-test("request inbox keeps repeated submissions separate from delivery notices", async () => {
-  const sent = notificationRow({ request_id: 37, discord_status: "sent" })
+test("request inbox does not promote legacy fulfilled rows without verified delivery receipts", async () => {
+  const sent = notificationRow({
+    request_id: 37,
+    gene_symbol: "HPN",
+    discord_status: "sent",
+  })
   const repeatedRequests = [37, 2, 1].map((id) => ({
     id,
     gene_symbol: "HPN",
@@ -426,15 +427,13 @@ test("request inbox keeps repeated submissions separate from delivery notices", 
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload.ready_count, 3)
+  assert.equal(payload.ready_count, 1)
   assert.equal(payload.cancelled_count, 1)
   assert.deepEqual(
     payload.ready_requests.map((row) => row.request_id),
-    [37, 2, 1],
+    [37],
   )
   assert.equal(payload.ready_requests[0].notification_id, 7)
-  assert.equal(payload.ready_requests[1].notification_id, 0)
-  assert.equal(payload.ready_requests[2].notification_id, 0)
   assert.ok(payload.ready_requests.every((row) => row.gene_symbol === "HPN"))
 })
 
@@ -896,6 +895,9 @@ test("request inbox uses one-open Shoelace groups and an accessible unread dot",
         image_url: "https://example.test/ins.webp",
         requested_emulsion_label: "Random default",
         fulfilled_at: "2026-07-16 13:45:00",
+        candidate_image_id: 59981,
+        asset_created_at: "2026-07-16 13:44:10",
+        fulfilled_asset_sha256: "a".repeat(64),
       },
     ],
     open_requests: [
@@ -921,6 +923,9 @@ test("request inbox uses one-open Shoelace groups and an accessible unread dot",
   assert.match(initialMarkup, /data-icono-request-group="ready" open/)
   assert.doesNotMatch(initialMarkup, /data-icono-request-group="waiting" open/)
   assert.match(initialMarkup, /data-icono-request-id="42"/)
+  assert.match(initialMarkup, /data-icono-candidate-image-id="59981"/)
+  assert.match(initialMarkup, /data-icono-asset-sha="a{64}"/)
+  assert.match(initialMarkup, /Request #42 · image/)
   assert.match(initialMarkup, /data-icono-request-notification-id="7"/)
   assert.match(initialMarkup, /<sl-badge[^>]+variant="danger"[^>]+aria-hidden="true"/)
   assert.match(initialMarkup, /1 unread notification/)
@@ -968,11 +973,11 @@ test("request inbox uses one-open Shoelace groups and an accessible unread dot",
   assert.doesNotMatch(inbox.panelMarkup(), /data-icono-request-group="waiting" open/)
 })
 
-test("request inbox renders every returned request even when genes repeat", async () => {
+test("request inbox renders every verified delivery receipt even when genes repeat", async () => {
   const readyRequests = Array.from({ length: 20 }, (_, index) => ({
     id: index + 1,
     request_id: index + 1,
-    notification_id: index === 0 ? 7 : 0,
+    notification_id: index + 1,
     unread: index === 0,
     gene_symbol: index < 3 ? "HPN" : `GENE${index}`,
     gene_url: index < 3 ? "/gene/HPN" : `/gene/GENE${index}`,
@@ -999,7 +1004,7 @@ test("request inbox renders every returned request even when genes repeat", asyn
 
   const markup = inbox.panelMarkup()
   assert.equal((markup.match(/data-icono-request-id=/g) || []).length, 20)
-  assert.equal((markup.match(/data-icono-request-notification-id=/g) || []).length, 1)
+  assert.equal((markup.match(/data-icono-request-notification-id=/g) || []).length, 20)
   assert.equal((markup.match(/<strong>HPN<\/strong>/g) || []).length, 3)
   assert.match(markup, /data-icono-request-group="ready" open/)
   assert.match(markup, />20<\/span>/)
