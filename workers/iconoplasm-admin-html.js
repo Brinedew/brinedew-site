@@ -377,6 +377,50 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       background: var(--warn-light);
       border-color: #ead6a2;
     }
+    .request-status-pill--fulfilled {
+      color: var(--ok);
+      background: var(--ok-light);
+      border-color: #bfdfca;
+    }
+    .request-status-pill--delivery-pending {
+      color: var(--info);
+      background: var(--info-light);
+      border-color: #c7def7;
+    }
+    .request-result-link {
+      display: inline-grid;
+      grid-template-columns: 52px minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      color: inherit;
+      text-decoration: none;
+    }
+    .request-result-thumb {
+      display: block;
+      width: 52px;
+      height: 64px;
+      object-fit: cover;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #f6f2ed;
+    }
+    .request-result-panel {
+      display: grid;
+      gap: 10px;
+    }
+    .request-result-preview {
+      display: block;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #f6f2ed;
+    }
+    .request-result-preview img {
+      display: block;
+      width: 100%;
+      max-height: 520px;
+      object-fit: contain;
+    }
     .request-detail-panel {
       display: grid;
       gap: 14px;
@@ -2170,6 +2214,15 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               <option value="random">Random default</option>
             </select>
           </label>
+          <label>Status
+            <select id="requests-status">
+              <option value="all" selected>All statuses</option>
+              <option value="open">Open</option>
+              <option value="delivery_pending">Delivery pending</option>
+              <option value="fulfilled">Fulfilled</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </label>
           <label>Rows
             <input id="requests-limit" type="number" min="1" max="2000" value="500" />
           </label>
@@ -2188,6 +2241,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
                 <th>Mode / emulsion</th>
                 <th>Requester</th>
                 <th>Source</th>
+                <th>Result</th>
               </tr>
             </thead>
             <tbody id="requests-list"></tbody>
@@ -2539,6 +2593,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         requestsSearch: document.getElementById('requests-search'),
         requestsKind: document.getElementById('requests-kind'),
         requestsMode: document.getElementById('requests-mode'),
+        requestsStatus: document.getElementById('requests-status'),
         requestsLimit: document.getElementById('requests-limit'),
         requestsSummary: document.getElementById('requests-summary'),
         requestsList: document.getElementById('requests-list'),
@@ -2868,8 +2923,48 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function requestStatusPill(status) {
         var value = String(status || 'open').toLowerCase();
-        var cls = value === 'open' ? ' request-status-pill--open' : '';
+        var cls = value === 'open'
+          ? ' request-status-pill--open'
+          : value === 'fulfilled'
+            ? ' request-status-pill--fulfilled'
+            : value === 'delivery_pending'
+              ? ' request-status-pill--delivery-pending'
+              : '';
         return '<span class="request-status-pill' + cls + '">' + esc(value) + '</span>';
+      }
+
+      function requestResultMarkup(row) {
+        var result = row && row.fulfilled_asset;
+        if (!result || !result.asset_sha256) {
+          return '<div class="small">Awaiting result</div>';
+        }
+        var imageUrl = result.thumb_url || result.medium_url || result.full_url || '';
+        var fullUrl = result.full_url || result.medium_url || imageUrl;
+        return [
+          '<a class="request-result-link" href="' + esc(fullUrl) + '" target="_blank" rel="noopener noreferrer" aria-label="Open result image for request ' + esc(row.id || '') + '">',
+          imageUrl ? '<img class="request-result-thumb" src="' + esc(imageUrl) + '" alt="Result for ' + esc(row.gene_symbol || 'request') + '" loading="lazy">' : '',
+          '<span><strong>Result image</strong><span class="small mono">' + esc(shortSha(result.asset_sha256)) + '</span></span>',
+          '</a>'
+        ].join('');
+      }
+
+      function requestResultDetailMarkup(row) {
+        var result = row && row.fulfilled_asset;
+        if (!result || !result.asset_sha256) return '';
+        var imageUrl = result.medium_url || result.thumb_url || result.full_url || '';
+        var fullUrl = result.full_url || imageUrl;
+        return [
+          '<section class="request-result-panel">',
+          '<div><div class="detail-kicker">Result image</div><div class="detail-copy">The blot produced by this request remains attached to its history row.</div></div>',
+          imageUrl ? '<a class="request-result-preview" href="' + esc(fullUrl) + '" target="_blank" rel="noopener noreferrer"><img src="' + esc(imageUrl) + '" alt="Result for ' + esc(row.gene_symbol || 'request') + '"></a>' : '',
+          '<div class="request-detail-grid">',
+          '<div class="request-detail-card"><span>Asset SHA</span><strong class="mono">' + esc(result.asset_sha256) + '</strong></div>',
+          '<div class="request-detail-card"><span>Asset status</span><strong>' + esc(result.status || 'unknown') + '</strong></div>',
+          '<div class="request-detail-card"><span>Emulsion</span><strong>' + esc(result.emulsion_id || 'unknown') + '</strong></div>',
+          '<div class="request-detail-card"><span>Candidate ID</span><strong>' + esc(result.candidate_image_id || 'none') + '</strong></div>',
+          '</div>',
+          '</section>'
+        ].join('');
       }
 
       function requestSearchHaystack(row) {
@@ -2898,9 +2993,11 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var query = String((els.requestsSearch && els.requestsSearch.value) || '').trim().toLowerCase();
         var kind = String((els.requestsKind && els.requestsKind.value) || 'all');
         var mode = String((els.requestsMode && els.requestsMode.value) || 'all');
+        var status = String((els.requestsStatus && els.requestsStatus.value) || 'all');
         return (state.generationRequests || []).filter(function (row) {
           if (kind !== 'all' && String(row.request_kind || '') !== kind) return false;
           if (mode !== 'all' && String(row.request_mode || '') !== mode) return false;
+          if (status !== 'all' && String(row.status || '') !== status) return false;
           if (!query) return true;
           return requestSearchHaystack(row).includes(query);
         });
@@ -2908,17 +3005,19 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function requestSummaryMarkup(rows) {
         var all = Array.isArray(state.generationRequests) ? state.generationRequests : [];
-        var newCount = rows.filter(function (row) { return String(row.request_kind || '') !== 'edit_image'; }).length;
-        var editCount = rows.filter(function (row) { return String(row.request_kind || '') === 'edit_image'; }).length;
-        var specificCount = rows.filter(function (row) { return String(row.request_mode || '') === 'specific'; }).length;
+        var openCount = all.filter(function (row) { return String(row.status || '') === 'open'; }).length;
+        var pendingCount = all.filter(function (row) { return String(row.status || '') === 'delivery_pending'; }).length;
+        var fulfilledCount = all.filter(function (row) { return String(row.status || '') === 'fulfilled'; }).length;
+        var cancelledCount = all.filter(function (row) { return String(row.status || '') === 'cancelled'; }).length;
         var laneCount = Array.isArray(state.generationRequestLanes) ? state.generationRequestLanes.length : 0;
         return [
           '<span class="request-summary-chip"><strong>' + esc(String(rows.length)) + '</strong> shown</span>',
-          '<span class="request-summary-chip"><strong>' + esc(String(all.length)) + '</strong> open total</span>',
-          '<span class="request-summary-chip"><strong>' + esc(String(newCount)) + '</strong> new blot</span>',
-          '<span class="request-summary-chip"><strong>' + esc(String(editCount)) + '</strong> edit blot</span>',
-          '<span class="request-summary-chip"><strong>' + esc(String(specificCount)) + '</strong> specific emulsion</span>',
-          '<span class="request-summary-chip"><strong>' + esc(String(laneCount)) + '</strong> fulfillment lanes</span>'
+          '<span class="request-summary-chip"><strong>' + esc(String(all.length)) + '</strong> loaded history</span>',
+          '<span class="request-summary-chip"><strong>' + esc(String(openCount)) + '</strong> open</span>',
+          '<span class="request-summary-chip"><strong>' + esc(String(pendingCount)) + '</strong> delivery pending</span>',
+          '<span class="request-summary-chip"><strong>' + esc(String(fulfilledCount)) + '</strong> fulfilled</span>',
+          '<span class="request-summary-chip"><strong>' + esc(String(cancelledCount)) + '</strong> cancelled</span>',
+          '<span class="request-summary-chip"><strong>' + esc(String(laneCount)) + '</strong> active lanes</span>'
         ].join('');
       }
 
@@ -2936,6 +3035,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           '<td><div>' + esc(row.request_mode || '') + '</div><div class="small mono">' + esc(row.requested_emulsion_label || row.requested_vision_id || '') + '</div></td>',
           '<td><div>' + esc(row.requester_username || 'unknown') + '</div><div class="small mono">' + esc(row.requester_user_id || '') + '</div></td>',
           '<td>' + source + '</td>',
+          '<td>' + requestResultMarkup(row) + '</td>',
           '</tr>'
         ].join('');
       }
@@ -2966,6 +3066,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           '<div class="request-detail-card"><span>Source gene</span><strong>' + esc(selected.source_gene_symbol || selected.gene_symbol || '') + '</strong></div>',
           '<div class="request-detail-card"><span>Source asset</span><strong class="mono">' + esc(selected.source_asset_sha256 || 'none') + '</strong></div>',
           '</div>',
+          requestResultDetailMarkup(selected),
           (selected.request_prompt ? '<div><h3>Request prompt</h3><p class="small">' + esc(selected.request_prompt) + '</p></div>' : ''),
           '<div><h3>Raw request row</h3><pre class="request-raw">' + esc(raw) + '</pre></div>',
           '<div class="vision-dashboard-actions">',
@@ -2984,7 +3085,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         if (els.requestsSummary) els.requestsSummary.innerHTML = requestSummaryMarkup(rows);
         els.requestsList.innerHTML = rows.length
           ? rows.map(requestRowMarkup).join('')
-          : '<tr><td colspan="7"><strong>No matching open requests.</strong><div class="small">Try clearing filters or increasing the row limit.</div></td></tr>';
+          : '<tr><td colspan="8"><strong>No matching requests.</strong><div class="small">Try clearing filters or increasing the row limit.</div></td></tr>';
         renderRequestDetail();
       }
 
@@ -2992,17 +3093,17 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         if (!els.requestsList) return;
         try {
           if (els.requestsList) {
-            els.requestsList.innerHTML = '<tr><td colspan="7">Loading open requests…</td></tr>';
+            els.requestsList.innerHTML = '<tr><td colspan="8">Loading request history…</td></tr>';
           }
           var limit = Math.max(1, Math.min(2000, Number.parseInt(String((els.requestsLimit && els.requestsLimit.value) || '500'), 10) || 500));
-          var data = await apiJson('/requests/open?limit=' + encodeURIComponent(String(limit)), { method: 'GET' });
+          var data = await apiJson('/requests/history?limit=' + encodeURIComponent(String(limit)), { method: 'GET' });
           state.generationRequests = Array.isArray(data.rows) ? data.rows : [];
           state.generationRequestLanes = Array.isArray(data.lane_summary) ? data.lane_summary : [];
           state.requestsLoaded = true;
           renderGenerationRequests();
         } catch (err) {
           var message = requestErrorMessage(err, 'Requests load failed.');
-          els.requestsList.innerHTML = '<tr><td colspan="7"><strong>Requests failed.</strong><div class="small">' + esc(message) + '</div></td></tr>';
+          els.requestsList.innerHTML = '<tr><td colspan="8"><strong>Requests failed.</strong><div class="small">' + esc(message) + '</div></td></tr>';
           if (els.requestsSummary) els.requestsSummary.innerHTML = '';
           if (els.requestsDetail) els.requestsDetail.innerHTML = inlineFailureMarkup('Requests failed fast', message);
           setLog({ error: 'Requests load failed', details: err.response || message });
@@ -6850,7 +6951,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             refreshGenerationRequests();
           });
         }
-        [els.requestsSearch, els.requestsKind, els.requestsMode].forEach(function (input) {
+        [els.requestsSearch, els.requestsKind, els.requestsMode, els.requestsStatus].forEach(function (input) {
           if (!input) return;
           input.addEventListener('input', renderGenerationRequests);
           input.addEventListener('change', renderGenerationRequests);
@@ -6925,7 +7026,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           els.activityFilter.addEventListener('input', renderActivityFeed);
         }
         if (els.requestsList) {
-          els.requestsList.innerHTML = '<tr><td colspan="7">Open this tab to load request rows.</td></tr>';
+          els.requestsList.innerHTML = '<tr><td colspan="8">Open this tab to load request history.</td></tr>';
         }
         if (els.promptTemplateList) {
           els.promptTemplateList.innerHTML = inlineFailureMarkup('Prompts not loaded', 'Open this tab to load image edit prompt templates.');

@@ -1379,6 +1379,7 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/admin/catalog/publish") return "admin_catalog_publish"
   if (path === "/api/iconoplasm/admin/essence/upsert") return "admin_essence_upsert"
   if (path === "/api/iconoplasm/admin/essence/state") return "admin_essence_state"
+  if (path === "/api/iconoplasm/admin/requests/history") return "admin_requests_history"
   if (path === "/api/iconoplasm/admin/requests/open") return "admin_requests_open"
   if (path === "/api/iconoplasm/admin/requests/drain-plan") return "admin_requests_drain_plan"
   if (path === "/api/iconoplasm/admin/requests/fulfill") return "admin_requests_fulfill"
@@ -1467,6 +1468,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_canon_audit" ||
     family === "admin_public_stats_audit" ||
     family === "admin_finalization_pending" ||
+    family === "admin_requests_history" ||
     family === "admin_requests_open" ||
     family === "admin_requests_drain_plan" ||
     family === "admin_requests_fulfill" ||
@@ -3705,7 +3707,7 @@ function generationRequestVisionLabel(row) {
   return sanitizeVoteVisionId(row?.requested_vision_id || row?.vision_id || "") || ""
 }
 
-function mapGenerationRequestRow(row) {
+function mapGenerationRequestRow(row, { portraitBaseUrl = "" } = {}) {
   const geneSymbol = normalizeSymbol(row?.gene_symbol || "") || ""
   const requestMode = normalizeGenerationRequestMode(row?.request_mode)
   const requestedVisionId =
@@ -3714,6 +3716,30 @@ function mapGenerationRequestRow(row) {
   const requestPrompt = sanitizeGenerationRequestPrompt(row?.request_prompt || "")
   const sourceGeneSymbol = normalizeSymbol(row?.source_gene_symbol || "") || ""
   const sourceAssetSha = normalizeSha256(row?.source_asset_sha256 || "") || ""
+  const fulfilledAssetSha = normalizeSha256(row?.fulfilled_asset_sha256 || "") || ""
+  const fulfilledAsset = fulfilledAssetSha
+    ? {
+        asset_sha256: fulfilledAssetSha,
+        status: sanitizeText(row?.fulfilled_asset_status || "", 64) || "",
+        candidate_image_id: optionalInt(row?.fulfilled_candidate_image_id),
+        vision_id: sanitizeVoteVisionId(row?.fulfilled_asset_vision_id || "") || "",
+        emulsion_id: publicEmulsionIdForRow({
+          emulsion_id: row?.fulfilled_asset_emulsion_id,
+          vision_id: row?.fulfilled_asset_vision_id,
+        }),
+        width: optionalInt(row?.fulfilled_asset_width),
+        height: optionalInt(row?.fulfilled_asset_height),
+        thumb_url: portraitBaseUrl
+          ? adminPortraitUrl(portraitBaseUrl, fulfilledAssetSha, "thumb")
+          : "",
+        medium_url: portraitBaseUrl
+          ? adminPortraitUrl(portraitBaseUrl, fulfilledAssetSha, "medium")
+          : "",
+        full_url: portraitBaseUrl
+          ? adminPortraitUrl(portraitBaseUrl, fulfilledAssetSha, "full")
+          : "",
+      }
+    : null
   return {
     id: Number(row?.id || 0),
     gene_symbol: geneSymbol,
@@ -3742,9 +3768,10 @@ function mapGenerationRequestRow(row) {
     updated_at: sanitizeText(row?.updated_at || "", 64) || "",
     fulfilled_at: sanitizeText(row?.fulfilled_at || "", 64) || "",
     fulfilled_by: sanitizeText(row?.fulfilled_by || "", 255) || "",
-    fulfilled_asset_sha256: normalizeSha256(row?.fulfilled_asset_sha256 || "") || "",
+    fulfilled_asset_sha256: fulfilledAssetSha,
     fulfilled_vision_id: sanitizeVoteVisionId(row?.fulfilled_vision_id || "") || "",
     fulfillment_note: sanitizeText(row?.fulfillment_note || "", 2000) || "",
+    fulfilled_asset: fulfilledAsset,
     lane_key: buildGenerationRequestLaneKey({
       geneSymbol,
       requestMode,
@@ -3920,7 +3947,10 @@ function summarizeGenerationRequestRows(rows, { requesterUserId = "" } = {}) {
 }
 
 async function enrichGenerationRequestRows(env, rows) {
-  return (Array.isArray(rows) ? rows : []).map(mapGenerationRequestRow)
+  const base = portraitBase(new URL("https://iconoplasm.brinedew.bio/"), env)
+  return (Array.isArray(rows) ? rows : []).map((row) =>
+    mapGenerationRequestRow(row, { portraitBaseUrl: base }),
+  )
 }
 
 function openGenerationRequestFilters({
@@ -3973,6 +4003,28 @@ async function listOpenGenerationRequests(
   })
 }
 
+async function listGenerationRequestHistory(env, { limit = 500, geneSymbol = "" } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  const cleanedLimit = Math.max(
+    1,
+    Math.min(2000, Number.parseInt(String(limit || "500"), 10) || 500),
+  )
+  const symbolNorm = normalizeSymbol(geneSymbol || "") || ""
+  const statuses = ["open", "delivery_pending", "fulfilled", "cancelled"]
+  const whereParts = [`gr.status IN (${statuses.map(() => "?").join(",")})`]
+  const params = [...statuses]
+  if (symbolNorm) {
+    whereParts.push("gr.gene_symbol = ?")
+    params.push(symbolNorm)
+  }
+  return queryGenerationRequests(env, {
+    whereParts,
+    params,
+    orderBy: "gr.created_at DESC, gr.id DESC",
+    limit: cleanedLimit,
+  })
+}
+
 async function queryGenerationRequests(env, { whereParts, params, orderBy, limit }) {
   const resp = await env.ICONOPLASM_DB.prepare(
     // D1 cost fence: every caller supplies indexed equality predicates. Keep
@@ -3986,12 +4038,21 @@ async function queryGenerationRequests(env, { whereParts, params, orderBy, limit
        COALESCE(avr.workflow_id, '') AS requested_workflow_id,
        COALESCE(avr.workflow_label, '') AS requested_workflow_label,
        COALESCE(avr.prompt_version, '') AS requested_prompt_version,
-       COALESCE(avr.variant_slot, '') AS requested_variant_slot
+       COALESCE(avr.variant_slot, '') AS requested_variant_slot,
+       COALESCE(pa.status, '') AS fulfilled_asset_status,
+       pa.candidate_image_id AS fulfilled_candidate_image_id,
+       COALESCE(pa.vision_id, '') AS fulfilled_asset_vision_id,
+       COALESCE(pa.emulsion_id, '') AS fulfilled_asset_emulsion_id,
+       pa.width AS fulfilled_asset_width,
+       pa.height AS fulfilled_asset_height
      FROM icono_generation_requests gr
      LEFT JOIN icono_gene_catalog gc
        ON gc.gene_symbol = gr.gene_symbol
      LEFT JOIN icono_admin_vision_rollup avr
        ON avr.vision_id = gr.requested_vision_id
+     LEFT JOIN icono_portrait_assets pa
+       ON pa.gene_symbol = gr.gene_symbol
+      AND pa.asset_sha256 = gr.fulfilled_asset_sha256
      WHERE ${whereParts.join(" AND ")}
      ORDER BY ${orderBy}
      LIMIT ?`,
@@ -10315,6 +10376,8 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/notifications")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/notifications/read") return requestMethod === "POST"
+  if (path === "/api/iconoplasm/admin/requests/history")
+    return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/requests/open")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/requests/drain-plan")
@@ -26876,6 +26939,44 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           ? "request_notifications_read"
           : `request_notifications_read_${payload.status || 500}`,
         json(payload, payload.status || (payload.ok ? 200 : 500), { "Cache-Control": "no-store" }),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/requests/history" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_requests_history_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_requests_history_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      const limit = Math.max(
+        1,
+        Math.min(2000, Number.parseInt(url.searchParams.get("limit") || "500", 10) || 500),
+      )
+      const symbol = normalizeSymbol(url.searchParams.get("symbol") || "") || ""
+      const rows = await listGenerationRequestHistory(env, { limit, geneSymbol: symbol })
+      const activeRows = rows.filter(
+        (row) => row.status === "open" || row.status === "delivery_pending",
+      )
+      const statusCounts = rows.reduce((counts, row) => {
+        const status = String(row?.status || "open")
+        counts[status] = Number(counts[status] || 0) + 1
+        return counts
+      }, {})
+      return done(
+        "admin_requests_history",
+        json(
+          {
+            ok: true,
+            count: rows.length,
+            rows,
+            status_counts: statusCounts,
+            lane_summary: summarizeGenerationRequestRows(activeRows),
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
       )
     }
 
