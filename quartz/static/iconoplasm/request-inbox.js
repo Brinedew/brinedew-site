@@ -223,6 +223,10 @@ export function createRequestInbox({
       escapeHtml(item.gene_url || "/") +
       '" data-icono-request-id="' +
       escapeHtml(String(item.request_id || item.id || "")) +
+      '" data-icono-asset-sha="' +
+      escapeHtml(String(item.fulfilled_asset_sha256 || "")) +
+      '" data-icono-candidate-image-id="' +
+      escapeHtml(String(item.candidate_image_id || "")) +
       '"' +
       (item.notification_id
         ? ' data-icono-request-notification-id="' + escapeHtml(String(item.notification_id)) + '"'
@@ -238,7 +242,11 @@ export function createRequestInbox({
       "</strong><em>ready</em></span>" +
       '<span class="icono-request-inbox__emulsion">' +
       escapeHtml(item.requested_emulsion_label || "Requested blot") +
-      "</span><small>Ready " +
+      "</span><small>Request #" +
+      escapeHtml(String(item.request_id || item.id || "?")) +
+      " · image " +
+      escapeHtml(ageLabel(item.asset_created_at || item.fulfilled_at || item.created_at)) +
+      " · ready " +
       escapeHtml(ageLabel(item.fulfilled_at || item.created_at)) +
       "</small></span></a>"
     )

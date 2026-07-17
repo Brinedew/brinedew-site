@@ -3760,8 +3760,7 @@ async function requestNotificationInboxPayload(env, request, { limit = 50 } = {}
     }
   }
   const safeLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit || "50"), 10) || 50))
-  const [readyRequests, openRequests, counts] = await Promise.all([
-    listFulfilledGenerationRequests(env, { limit: safeLimit, requesterUserId }),
+  const [openRequests, counts] = await Promise.all([
     listOpenGenerationRequests(env, {
       limit: safeLimit,
       requesterUserId,
@@ -3773,9 +3772,7 @@ async function requestNotificationInboxPayload(env, request, { limit = 50 } = {}
   return readRequestNotificationInbox(env, {
     requesterUserId,
     limit: safeLimit,
-    readyRequests,
     openRequests,
-    readyCount: counts.ready_count,
     openCount: counts.open_count,
     cancelledCount: counts.cancelled_count,
     portraitUrlForAsset(asset) {
@@ -3963,19 +3960,6 @@ async function listOpenGenerationRequests(
   })
 }
 
-async function listFulfilledGenerationRequests(env, { limit = 50, requesterUserId = "" } = {}) {
-  if (!env.ICONOPLASM_DB) return []
-  const requesterNorm = normalizeUserId(requesterUserId || "")
-  if (!requesterNorm || isGuestUserId(requesterNorm)) return []
-  const cleanedLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit || "50"), 10) || 50))
-  return queryGenerationRequests(env, {
-    whereParts: ["gr.requester_user_id = ?", "gr.status = 'fulfilled'"],
-    params: [requesterNorm],
-    orderBy: "gr.created_at DESC, gr.id DESC",
-    limit: cleanedLimit,
-  })
-}
-
 async function queryGenerationRequests(env, { whereParts, params, orderBy, limit }) {
   const resp = await env.ICONOPLASM_DB.prepare(
     // D1 cost fence: every caller supplies indexed equality predicates. Keep
@@ -4005,14 +3989,13 @@ async function queryGenerationRequests(env, { whereParts, params, orderBy, limit
 }
 
 async function countGenerationRequestInboxStates(env, requesterUserId) {
-  if (!env.ICONOPLASM_DB) return { ready_count: 0, open_count: 0, cancelled_count: 0 }
+  if (!env.ICONOPLASM_DB) return { open_count: 0, cancelled_count: 0 }
   const requesterNorm = normalizeUserId(requesterUserId || "")
   if (!requesterNorm || isGuestUserId(requesterNorm)) {
-    return { ready_count: 0, open_count: 0, cancelled_count: 0 }
+    return { open_count: 0, cancelled_count: 0 }
   }
   const row = await env.ICONOPLASM_DB.prepare(
     `SELECT
-       SUM(CASE WHEN status = 'fulfilled' THEN 1 ELSE 0 END) AS ready_count,
        SUM(CASE WHEN status IN ('open', 'delivery_pending') THEN 1 ELSE 0 END) AS open_count,
        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled_count
      FROM icono_generation_requests
@@ -4021,7 +4004,6 @@ async function countGenerationRequestInboxStates(env, requesterUserId) {
     .bind(requesterNorm)
     .first()
   return {
-    ready_count: Math.max(0, Number(row?.ready_count || 0) || 0),
     open_count: Math.max(0, Number(row?.open_count || 0) || 0),
     cancelled_count: Math.max(0, Number(row?.cancelled_count || 0) || 0),
   }
