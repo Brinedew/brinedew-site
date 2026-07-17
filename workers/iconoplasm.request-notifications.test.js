@@ -22,7 +22,12 @@ class NotificationStatement {
 
   async first() {
     if (this.sql.includes("COUNT(*) AS unread_count")) {
-      return { unread_count: this.db.notifications.filter((row) => !row.read_at).length }
+      const requesterUserId = String(this.args[0] || "")
+      return {
+        unread_count: this.db.notifications.filter(
+          (row) => row.requester_user_id === requesterUserId && !row.read_at,
+        ).length,
+      }
     }
     return null
   }
@@ -39,10 +44,19 @@ class NotificationStatement {
       }
     }
     if (this.sql.includes("FROM icono_request_notifications n")) {
-      return { results: this.db.notifications }
+      const requesterUserId = String(this.args[0] || "")
+      return {
+        results: this.db.notifications.filter((row) => row.requester_user_id === requesterUserId),
+      }
     }
     if (this.sql.includes("FROM icono_generation_requests gr")) {
-      return { results: this.db.openRequests }
+      const requesterUserId = String(this.args[0] || "")
+      const requesterScoped = this.sql.includes("gr.requester_user_id = ?")
+      return {
+        results: requesterScoped
+          ? this.db.openRequests.filter((row) => row.requester_user_id === requesterUserId)
+          : this.db.openRequests,
+      }
     }
     return { results: [] }
   }
@@ -228,6 +242,84 @@ test("authenticated inbox returns exact fulfillment context and durable unread c
   assert.equal(payload.notifications[0].gene_symbol, "INS")
   assert.equal(payload.notifications[0].requested_emulsion_label, "A1-4527")
   assert.match(payload.notifications[0].image_url, /a{64}\/thumb\.webp$/)
+})
+
+test("each user sees only their own inbox and waiting requests", async () => {
+  const otherUserId = "757634039292362843"
+  const db = new NotificationDb(
+    [
+      notificationRow({ id: 7, request_id: 42, requester_user_id: BRINEDEW_USER_ID }),
+      notificationRow({
+        id: 8,
+        request_id: 43,
+        requester_user_id: otherUserId,
+        gene_symbol: "NR3C2",
+      }),
+    ],
+    [
+      {
+        id: 51,
+        gene_symbol: "TP53",
+        requester_user_id: BRINEDEW_USER_ID,
+        request_mode: "random",
+        requested_vision_id: "",
+        request_kind: "new_candidate",
+        status: "open",
+        created_at: "2026-07-16 13:50:00",
+      },
+      {
+        id: 52,
+        gene_symbol: "NR3C2",
+        requester_user_id: otherUserId,
+        request_mode: "specific",
+        requested_vision_id: "anima-v1-2048",
+        request_kind: "new_candidate",
+        status: "open",
+        created_at: "2026-07-16 13:51:00",
+      },
+    ],
+  )
+
+  const brinedewResponse =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/notifications", {
+        headers: { Cookie: "session=test" },
+      }),
+      { ICONOPLASM_DB: db, GAME_SESSIONS: buildSessionBinding(BRINEDEW_USER_ID) },
+      { waitUntil() {} },
+    )
+  const otherResponse =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/notifications", {
+        headers: { Cookie: "session=test" },
+      }),
+      { ICONOPLASM_DB: db, GAME_SESSIONS: buildSessionBinding(otherUserId) },
+      { waitUntil() {} },
+    )
+  const brinedewInbox = await brinedewResponse.json()
+  const otherInbox = await otherResponse.json()
+
+  assert.deepEqual(
+    brinedewInbox.notifications.map((row) => row.request_id),
+    [42],
+  )
+  assert.deepEqual(
+    brinedewInbox.open_requests.map((row) => row.request_id),
+    [51],
+  )
+  assert.equal(brinedewInbox.unread_count, 1)
+  assert.equal(brinedewInbox.open_count, 1)
+
+  assert.deepEqual(
+    otherInbox.notifications.map((row) => row.request_id),
+    [43],
+  )
+  assert.deepEqual(
+    otherInbox.open_requests.map((row) => row.request_id),
+    [52],
+  )
+  assert.equal(otherInbox.unread_count, 1)
+  assert.equal(otherInbox.open_count, 1)
 })
 
 test("read state is written only inside the authenticated requester's inbox", async () => {
