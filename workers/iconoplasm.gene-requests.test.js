@@ -446,6 +446,7 @@ test("admin request history keeps fulfilled rows and attaches their result image
   assert.equal(fulfilled.fulfilled_asset.asset_sha256, fulfilledSha)
   assert.equal(fulfilled.fulfilled_asset.emulsion_id, "A1-18")
   assert.equal(fulfilled.fulfilled_asset.candidate_image_id, 59995)
+  assert.match(fulfilled.fulfilled_asset.thumb_url, /^https:\/\/iconoplasm\.brinedew\.bio\//)
   assert.match(fulfilled.fulfilled_asset.thumb_url, new RegExp(fulfilledSha + "/thumb\\.webp$"))
   assert.match(fulfilled.fulfilled_asset.medium_url, new RegExp(fulfilledSha + "/medium\\.webp$"))
 })
