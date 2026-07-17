@@ -2,7 +2,10 @@ import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
-import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  fulfillGenerationRequests,
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   deliverPendingRequestFulfillmentNotifications,
   reconcileDeliveredRequestFulfillments,
@@ -244,6 +247,60 @@ class DeliveryReconciliationDb {
   }
 }
 
+class FulfillmentStatement {
+  constructor(db, sql) {
+    this.db = db
+    this.sql = String(sql || "")
+    this.args = []
+  }
+
+  bind(...args) {
+    this.args = args
+    return this
+  }
+
+  async first() {
+    if (!this.sql.includes("FROM icono_generation_requests")) {
+      throw new Error(`Unexpected fulfillment read SQL: ${this.sql}`)
+    }
+    const request = this.db.requests.find((row) => Number(row.id) === Number(this.args[0]))
+    return request ? { ...request } : null
+  }
+
+  async run() {
+    if (this.sql.includes("SET status = 'delivery_pending'")) {
+      const requestId = Number(this.args[4])
+      const request = this.db.requests.find((row) => Number(row.id) === requestId)
+      if (!request || request.status !== "open") return { meta: { changes: 0 } }
+      request.status = "delivery_pending"
+      request.fulfilled_asset_sha256 = String(this.args[1] || "")
+      request.fulfilled_vision_id = String(this.args[2] || "")
+      request.fulfillment_note = String(this.args[3] || "")
+      return { meta: { changes: 1 } }
+    }
+    if (this.sql.includes("SET updated_at = CURRENT_TIMESTAMP")) {
+      const [requestId, assetSha, visionId] = this.args
+      const request = this.db.requests.find((row) => Number(row.id) === Number(requestId))
+      const matches =
+        request?.status === "delivery_pending" &&
+        request.fulfilled_asset_sha256 === assetSha &&
+        request.fulfilled_vision_id === visionId
+      return { meta: { changes: matches ? 1 : 0 } }
+    }
+    throw new Error(`Unexpected fulfillment write SQL: ${this.sql}`)
+  }
+}
+
+class FulfillmentDb {
+  constructor(requests) {
+    this.requests = requests
+  }
+
+  prepare(sql) {
+    return new FulfillmentStatement(this, sql)
+  }
+}
+
 function buildSessionBinding(userId = BRINEDEW_USER_ID) {
   return {
     idFromName(name) {
@@ -321,6 +378,126 @@ function deliveryEnv(db) {
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-storage-access-key",
   }
 }
+
+test("fulfillment replay settles only the exact asset already bound to the request", async () => {
+  const assetSha = "a".repeat(64)
+  const db = new FulfillmentDb([
+    {
+      id: 40,
+      status: "open",
+      fulfilled_asset_sha256: "",
+      fulfilled_vision_id: "",
+    },
+  ])
+  const item = {
+    request_ids: [40],
+    fulfilled_asset_sha256: assetSha,
+    fulfilled_vision_id: "anima-v1-1398",
+  }
+
+  const started = await fulfillGenerationRequests(
+    { ICONOPLASM_DB: db },
+    { items: [item], resolvedBy: "pytest" },
+  )
+  assert.equal(started.ok, true)
+  assert.deepEqual(started.request_ids, [40])
+  assert.deepEqual(started.settled_request_ids, [])
+  assert.equal(db.requests[0].status, "delivery_pending")
+  assert.equal(db.requests[0].fulfilled_asset_sha256, assetSha)
+
+  const pendingReplay = await fulfillGenerationRequests(
+    { ICONOPLASM_DB: db },
+    { items: [item], resolvedBy: "pytest" },
+  )
+  assert.equal(pendingReplay.ok, true)
+  assert.deepEqual(pendingReplay.request_ids, [40])
+  assert.deepEqual(pendingReplay.settled_request_ids, [])
+
+  db.requests[0].status = "fulfilled"
+  const replayed = await fulfillGenerationRequests(
+    { ICONOPLASM_DB: db },
+    { items: [item], resolvedBy: "pytest" },
+  )
+  assert.equal(replayed.ok, true)
+  assert.deepEqual(replayed.request_ids, [])
+  assert.deepEqual(replayed.settled_request_ids, [40])
+})
+
+test("fulfillment replay rejects a later candidate for an already settled request", async () => {
+  const originalAsset = "a".repeat(64)
+  const laterAsset = "b".repeat(64)
+  const db = new FulfillmentDb([
+    {
+      id: 40,
+      status: "fulfilled",
+      fulfilled_asset_sha256: originalAsset,
+      fulfilled_vision_id: "anima-v1-1398",
+    },
+  ])
+
+  const result = await fulfillGenerationRequests(
+    { ICONOPLASM_DB: db },
+    {
+      items: [
+        {
+          request_ids: [40],
+          fulfilled_asset_sha256: laterAsset,
+          fulfilled_vision_id: "anima-v1-4534",
+        },
+      ],
+      resolvedBy: "pytest",
+    },
+  )
+
+  assert.equal(result.ok, false)
+  assert.deepEqual(result.request_ids, [])
+  assert.deepEqual(result.settled_request_ids, [])
+  assert.equal(result.conflicts[0].reason, "request_already_bound_to_different_result")
+  assert.equal(db.requests[0].fulfilled_asset_sha256, originalAsset)
+  assert.equal(db.requests[0].fulfilled_vision_id, "anima-v1-1398")
+})
+
+test("fulfillment batch preflight prevents partial rebinding", async () => {
+  const originalAsset = "a".repeat(64)
+  const db = new FulfillmentDb([
+    {
+      id: 40,
+      status: "open",
+      fulfilled_asset_sha256: "",
+      fulfilled_vision_id: "",
+    },
+    {
+      id: 41,
+      status: "fulfilled",
+      fulfilled_asset_sha256: originalAsset,
+      fulfilled_vision_id: "anima-v1-original",
+    },
+  ])
+
+  const result = await fulfillGenerationRequests(
+    { ICONOPLASM_DB: db },
+    {
+      items: [
+        {
+          request_ids: [40],
+          fulfilled_asset_sha256: "b".repeat(64),
+          fulfilled_vision_id: "anima-v1-new",
+        },
+        {
+          request_ids: [41],
+          fulfilled_asset_sha256: "c".repeat(64),
+          fulfilled_vision_id: "anima-v1-wrong",
+        },
+      ],
+      resolvedBy: "pytest",
+    },
+  )
+
+  assert.equal(result.ok, false)
+  assert.equal(db.requests[0].status, "open")
+  assert.equal(db.requests[0].fulfilled_asset_sha256, "")
+  assert.equal(db.requests[1].fulfilled_asset_sha256, originalAsset)
+})
 
 test("notification migration creates inbox rows atomically and never backfills users", () => {
   const migration = readFileSync(
@@ -1065,6 +1242,8 @@ test("workstation fulfillment fails loudly until every requester DM is sent", ()
   assert.match(route, /notification_delivery: delivery/)
   assert.match(route, /notification_settlement: settlement/)
   assert.match(route, /has not received the required Discord DM yet/)
+  assert.match(route, /admin_requests_fulfill_conflict/)
+  assert.match(route, /json\(result, 409/)
   assert.doesNotMatch(route, /ctx\?\.waitUntil\(delivery\)/)
 })
 
