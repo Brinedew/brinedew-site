@@ -18,6 +18,44 @@ class FakeStatement {
 
   async all() {
     this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
+    if (this.sql.includes("FROM icono_admin_vision_rollup") && this.args.includes("anima-v1-18")) {
+      return {
+        results: [
+          {
+            vision_id: "anima-v1-18",
+            emulsion_id: "A1-18",
+            workflow_id: "A1-",
+            workflow_label: "Anima v1",
+            prompt_version: "1",
+            variant_slot: "18",
+            artist_tag: "anima",
+            artist_name: "Anima",
+            image_count: 2,
+            live_count: 2,
+            score: 0,
+          },
+        ],
+      }
+    }
+    if (this.sql.includes("ranked_previews AS") && this.args[0]?.includes("anima-v1-18")) {
+      return {
+        results: [
+          {
+            vision_id: "anima-v1-18",
+            gene_symbol: "CD4",
+            asset_sha256: "66".repeat(32),
+            is_current: 1,
+            preview_rank: 1,
+          },
+        ],
+      }
+    }
+    if (
+      this.sql.includes("COALESCE(vs.upvotes, 0) AS upvotes") &&
+      this.args[0]?.includes("anima-v1-18")
+    ) {
+      return { results: [{ vision_id: "anima-v1-18", upvotes: 0 }] }
+    }
     if (this.sql.includes("FROM icono_gene_catalog")) {
       return {
         results: [
@@ -180,6 +218,62 @@ test("admin read-model sync with invalidate_gallery still honors skip flags", as
 
   assert.equal(writeSql.includes("icono_vote_asset_summary"), false)
   assert.equal(writeSql.includes("icono_admin_gene_rollup"), false)
+})
+
+test("batched vision sync atomically refreshes the request-picker projection", async () => {
+  const env = buildEnv()
+
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/read-models/sync", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer secret-admin-token",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          vision_ids: ["anima-v1-18"],
+          skip_vote_summaries: true,
+          skip_gene_rollups: true,
+          skip_dashboard: true,
+          invalidate_gallery: false,
+        }),
+      }),
+      env,
+      {},
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.ok, true)
+  assert.equal(payload?.visions, 1)
+
+  const pickerDelete = env.gatewayDb.calls.find(
+    (call) =>
+      call.method === "run" &&
+      call.sql.includes("DELETE FROM icono_generation_request_vision_option_rollup"),
+  )
+  const pickerWrite = env.gatewayDb.calls.find(
+    (call) =>
+      call.method === "run" &&
+      call.sql.includes("INSERT INTO icono_generation_request_vision_option_rollup"),
+  )
+
+  assert.ok(pickerDelete, "the dependent picker row must be invalidated in the same sync")
+  assert.ok(pickerWrite, "the dependent picker row must be rebuilt before sync succeeds")
+  assert.equal(pickerWrite.args[0], "anima-v1-18")
+  assert.equal(pickerWrite.args[8], 2)
+  assert.equal(pickerWrite.args[9], 2)
+  assert.deepEqual(JSON.parse(pickerWrite.args[12]), [
+    {
+      vision_id: "anima-v1-18",
+      gene_symbol: "CD4",
+      asset_sha256: "66".repeat(32),
+      is_current: true,
+      preview_rank: 1,
+    },
+  ])
+  assert.equal(pickerWrite.args[13], 2)
 })
 
 test("admin overview summary is scoped to canonical catalog rows", async () => {
