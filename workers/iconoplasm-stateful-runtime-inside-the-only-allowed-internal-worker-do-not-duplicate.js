@@ -948,6 +948,11 @@ const ADMIN_READ_MODEL_SYNC_REQUEST_SYMBOL_MAX = 1000
 const ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX = 1000
 const ADMIN_READ_MODEL_STEP_DEFAULT = 1
 const ADMIN_READ_MODEL_STEP_MAX = 25
+// Bump only alongside a migration that rebuilds every request-option row from
+// canonical portrait/publish truth. Serving a row built by older semantics is
+// worse than omitting it: the picker is part of the request contract and must
+// not advertise an example that the execution path cannot reproduce.
+const GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION = 2
 const adminReadModelState = {
   ready: false,
   promise: null,
@@ -4092,6 +4097,7 @@ async function createGenerationRequest(
       `SELECT preview_assets_json
        FROM icono_generation_request_vision_option_rollup
        WHERE vision_id = ?
+         AND builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
        LIMIT 1`,
     )
       .bind(visionNorm)
@@ -7739,8 +7745,9 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
          score,
          vote_h_index,
          preview_assets_json,
+         builder_version,
          updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
        ON CONFLICT(vision_id) DO UPDATE SET
          emulsion_id = excluded.emulsion_id,
          workflow_id = excluded.workflow_id,
@@ -7754,6 +7761,7 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
          score = excluded.score,
          vote_h_index = excluded.vote_h_index,
          preview_assets_json = excluded.preview_assets_json,
+         builder_version = excluded.builder_version,
          updated_at = CURRENT_TIMESTAMP`,
     )
       .bind(
@@ -7770,6 +7778,7 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
         Number(row?.score || 0) || 0,
         Math.max(0, Number(voteHIndexMap.get(visionId) || 0) || 0),
         serializeGenerationRequestPreviewAssetsJson(previewMap.get(visionId) || []),
+        GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION,
       )
       .run()
     written += 1
@@ -8128,6 +8137,7 @@ async function listGenerationRequestVisionOptions(env, url) {
        FROM icono_generation_request_vision_option_rollup
        WHERE vision_id IS NOT NULL
          AND vision_id <> ''
+         AND builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
          AND (
            (emulsion_id >= ? AND emulsion_id < ?)
            OR (vision_id >= ? AND vision_id < ?)
@@ -8198,6 +8208,7 @@ async function listGenerationRequestVisionOptions(env, url) {
        preview_assets_json
      FROM icono_generation_request_vision_option_rollup
      WHERE COALESCE(vision_id, '') <> ''
+       AND builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
      ORDER BY vote_h_index DESC, live_count DESC, score DESC, image_count DESC, vision_id ASC
      LIMIT 120`,
   ).all()
@@ -15837,6 +15848,14 @@ async function rebuildVisionRollupsBatch(env, rawVisionIds) {
   )
     .bind(visionIdsJson)
     .run()
+
+  // This batched function is the production mutation path used by sync
+  // finalization, ingest, publish, and vote projection. The old per-vision
+  // implementation refreshed the request picker, but this path historically
+  // stopped after icono_admin_vision_rollup. Keep the dependent read model in
+  // the same awaited mutation boundary so a completed job means both
+  // projections are current, including deletion of vanished visions.
+  await rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds)
 
   return visionIds.length
 }
