@@ -4,7 +4,14 @@
 // rendering, and interaction wiring. app.js supplies only the shared API,
 // current-user, sidebar-render, and escaping boundaries.
 
-export function createRequestInbox({ fetchJSON, getCurrentUser, renderSidebar, escapeHtml }) {
+export function createRequestInbox({
+  fetchJSON,
+  getCurrentUser,
+  renderSidebar,
+  escapeHtml,
+  ensurePortraitSource,
+  resolvePortraitUrl,
+}) {
   var state = {
     loaded: false,
     loading: false,
@@ -81,9 +88,15 @@ export function createRequestInbox({ fetchJSON, getCurrentUser, renderSidebar, e
       credentials: "include",
       cache: "no-store",
     })
-      .then(function (payload) {
+      .then(async function (payload) {
         if (!payload || !payload.ok || !payload.authenticated) return null
         var notifications = Array.isArray(payload.notifications) ? payload.notifications : []
+        var firstImage = notifications.find(function (item) {
+          return item && item.image_url
+        })
+        if (firstImage && typeof ensurePortraitSource === "function") {
+          await ensurePortraitSource(firstImage.image_url)
+        }
         var firstLoad = !state.loaded
         var previousHighWater = state.last_seen_notification_id
         var newestUnread = notifications.find(function (item) {
@@ -193,6 +206,10 @@ export function createRequestInbox({ fetchJSON, getCurrentUser, renderSidebar, e
   }
 
   function fulfilledRequestMarkup(item) {
+    var imageUrl =
+      item.image_url && typeof resolvePortraitUrl === "function"
+        ? resolvePortraitUrl(item.image_url)
+        : item.image_url
     return (
       '<a class="icono-request-inbox__item' +
       (item.unread ? " icono-request-inbox__item--unread" : "") +
@@ -201,9 +218,9 @@ export function createRequestInbox({ fetchJSON, getCurrentUser, renderSidebar, e
       '" data-icono-request-notification-id="' +
       escapeHtml(String(item.id || "")) +
       '">' +
-      (item.image_url
+      (imageUrl
         ? '<img src="' +
-          escapeHtml(item.image_url) +
+          escapeHtml(imageUrl) +
           '" alt="" loading="lazy" decoding="async" width="44" height="56">'
         : '<span class="icono-request-inbox__photo-placeholder" aria-hidden="true"></span>') +
       '<span class="icono-request-inbox__copy"><span class="icono-request-inbox__line"><strong>' +
