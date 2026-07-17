@@ -6,10 +6,35 @@ import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotD
 import {
   deliverPendingRequestFulfillmentNotifications,
   reconcileDeliveredRequestFulfillments,
+  resolveIconoplasmFulfillmentDeliveryPolicy,
 } from "./iconoplasm-request-notifications.js"
 import { createRequestInbox } from "../quartz/static/iconoplasm/request-inbox.js"
 
 const BRINEDEW_USER_ID = "1289482311557058641"
+
+test("DM delivery policy defaults to Brinedew-only and expands only with the exact rollout flag", () => {
+  assert.deepEqual(resolveIconoplasmFulfillmentDeliveryPolicy({}), {
+    mode: "brinedew_test",
+    all_requesters: false,
+    test_recipient_id: BRINEDEW_USER_ID,
+  })
+  assert.deepEqual(
+    resolveIconoplasmFulfillmentDeliveryPolicy({
+      ICONOPLASM_FULFILLMENT_DM_DELIVERY_MODE: "all_requesters",
+    }),
+    {
+      mode: "all_requesters",
+      all_requesters: true,
+      test_recipient_id: BRINEDEW_USER_ID,
+    },
+  )
+  assert.equal(
+    resolveIconoplasmFulfillmentDeliveryPolicy({
+      ICONOPLASM_FULFILLMENT_DM_DELIVERY_MODE: "all_requester",
+    }).all_requesters,
+    false,
+  )
+})
 
 class NotificationStatement {
   constructor(db, sql) {
