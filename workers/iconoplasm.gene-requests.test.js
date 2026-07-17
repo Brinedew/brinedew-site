@@ -47,7 +47,9 @@ class FakeRequestStatement {
         fulfillment_note: "",
       },
     ]
-    const statuses = this.args.filter((value) => ["open", "delivery_pending"].includes(value))
+    const statuses = this.args.filter((value) =>
+      ["open", "delivery_pending", "fulfilled", "cancelled"].includes(value),
+    )
     const statusFiltered = rows.filter((row) => !statuses.length || statuses.includes(row.status))
     if (!this.sql.includes("gr.requester_user_id = ?")) return statusFiltered
     const filterArgs = this.args.slice(statuses.length)
@@ -373,6 +375,80 @@ function buildSessionBinding(session) {
     },
   }
 }
+
+test("admin request history keeps fulfilled rows and attaches their result image", async () => {
+  const fulfilledSha = "a".repeat(64)
+  const env = buildEnv({
+    dbOptions: {
+      requestRows: [
+        {
+          id: 41,
+          gene_symbol: "NR3C2",
+          full_name: "nuclear receptor subfamily 3 group C member 2",
+          requester_user_id: "user-1",
+          requester_username: "tester",
+          request_kind: "new_candidate",
+          request_mode: "specific",
+          requested_vision_id: "anima-v1-19",
+          status: "open",
+          created_at: "2026-07-17 12:34:55",
+        },
+        {
+          id: 39,
+          gene_symbol: "NR3C2",
+          full_name: "nuclear receptor subfamily 3 group C member 2",
+          requester_user_id: "user-1",
+          requester_username: "tester",
+          request_kind: "new_candidate",
+          request_mode: "specific",
+          requested_vision_id: "anima-v1-18",
+          status: "fulfilled",
+          created_at: "2026-07-17 12:30:00",
+          fulfilled_at: "2026-07-17 12:33:00",
+          fulfilled_asset_sha256: fulfilledSha,
+          fulfilled_asset_status: "approved",
+          fulfilled_candidate_image_id: 59995,
+          fulfilled_asset_vision_id: "anima-v1-18",
+          fulfilled_asset_emulsion_id: "A1-18",
+          fulfilled_asset_width: 882,
+          fulfilled_asset_height: 1134,
+        },
+        {
+          id: 1,
+          gene_symbol: "A1BG",
+          requester_user_id: "user-2",
+          request_kind: "new_candidate",
+          request_mode: "random",
+          status: "cancelled",
+          created_at: "2026-07-01 00:00:00",
+        },
+      ],
+    },
+  })
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/requests/history?limit=500",
+        { headers: { "x-iconoplasm-admin-token": "test-admin-token" } },
+      ),
+      env,
+      {},
+    )
+  const payload = await response.json()
+  const fulfilled = payload.rows.find((row) => row.id === 39)
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.rows.length, 3)
+  assert.equal(payload.status_counts.open, 1)
+  assert.equal(payload.status_counts.fulfilled, 1)
+  assert.equal(payload.status_counts.cancelled, 1)
+  assert.equal(payload.lane_summary.length, 1)
+  assert.equal(fulfilled.fulfilled_asset.asset_sha256, fulfilledSha)
+  assert.equal(fulfilled.fulfilled_asset.emulsion_id, "A1-18")
+  assert.equal(fulfilled.fulfilled_asset.candidate_image_id, 59995)
+  assert.match(fulfilled.fulfilled_asset.thumb_url, new RegExp(fulfilledSha + "/thumb\\.webp$"))
+  assert.match(fulfilled.fulfilled_asset.medium_url, new RegExp(fulfilledSha + "/medium\\.webp$"))
+})
 
 test("admin drain plan selects only the requester who can receive a DM during the live test", async () => {
   const brinedewId = "1289482311557058641"
