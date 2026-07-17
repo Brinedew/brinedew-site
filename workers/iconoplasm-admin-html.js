@@ -426,11 +426,11 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       width: 100%;
       max-width: 100%;
       height: auto;
-      max-height: 520px;
       object-fit: contain;
     }
     .request-detail-panel {
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
       gap: 14px;
       padding: 16px;
       border: 1px solid var(--border);
