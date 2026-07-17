@@ -8383,15 +8383,19 @@ async function generationRequestDiagnostics(env, url, request, symbol) {
   return result
 }
 
-async function fulfillGenerationRequests(
+export async function fulfillGenerationRequests(
   env,
   { items = [], resolvedBy = "workstation_sync" } = {},
 ) {
   if (!env.ICONOPLASM_DB)
     return { ok: false, fulfilled: 0, request_ids: [], error: "ICONOPLASM_DB binding missing" }
   const actorNorm = normalizeUserId(resolvedBy || "workstation_sync")
+  const intentsByRequestId = new Map()
+  const requestedRequestIds = new Set()
   const deliveryRequestIds = new Set()
   const startedDeliveryIds = new Set()
+  const settledRequestIds = new Set()
+  const conflicts = []
   let skipped = 0
 
   for (const rawItem of Array.isArray(items) ? items : []) {
@@ -8399,27 +8403,138 @@ async function fulfillGenerationRequests(
       skipped += 1
       continue
     }
-    let requestIds = Array.from(
+    const requestIds = Array.from(
       new Set(
         (Array.isArray(rawItem.request_ids) ? rawItem.request_ids : [])
           .map((value) => Number(value || 0))
           .filter((value) => value > 0),
       ),
     )
-    // A fulfillment is always for the exact durable request IDs carried by the
-    // generation session.  Inferring a wider set from gene/style fields caused
-    // one person's candidate to silently close another person's request.
-    if (!requestIds.length) {
-      skipped += 1
-      continue
-    }
+    for (const requestId of requestIds) requestedRequestIds.add(requestId)
     const fulfilledVisionId = sanitizeVoteVisionId(
       rawItem.fulfilled_vision_id || rawItem.vision_id || "",
     )
     const fulfilledAssetSha =
       normalizeSha256(rawItem.fulfilled_asset_sha256 || rawItem.asset_sha256 || "") || ""
     const note = sanitizeText(rawItem.note || rawItem.fulfillment_note || "", 2000) || ""
+    // A fulfillment is always for the exact durable request IDs carried by the
+    // generation session. Inferring a wider set from gene/style fields caused
+    // one person's candidate to silently close another person's request.
+    if (!requestIds.length) {
+      skipped += 1
+      continue
+    }
+    if (!fulfilledAssetSha || !fulfilledVisionId) {
+      conflicts.push({
+        request_ids: requestIds,
+        reason: "invalid_fulfillment_identity",
+      })
+      continue
+    }
     for (const requestId of requestIds) {
+      const intent = {
+        requestId,
+        fulfilledAssetSha,
+        fulfilledVisionId,
+        note,
+      }
+      const previous = intentsByRequestId.get(requestId)
+      if (
+        previous &&
+        (previous.fulfilledAssetSha !== fulfilledAssetSha ||
+          previous.fulfilledVisionId !== fulfilledVisionId)
+      ) {
+        conflicts.push({
+          request_id: requestId,
+          reason: "request_assigned_to_multiple_results",
+          existing_asset_sha256: previous.fulfilledAssetSha,
+          attempted_asset_sha256: fulfilledAssetSha,
+          existing_vision_id: previous.fulfilledVisionId,
+          attempted_vision_id: fulfilledVisionId,
+        })
+        continue
+      }
+      intentsByRequestId.set(requestId, intent)
+    }
+  }
+
+  async function readRequest(requestId) {
+    return env.ICONOPLASM_DB.prepare(
+      `SELECT id,
+              status,
+              COALESCE(fulfilled_asset_sha256, '') AS fulfilled_asset_sha256,
+              COALESCE(fulfilled_vision_id, '') AS fulfilled_vision_id
+       FROM icono_generation_requests
+       WHERE id = ?
+       LIMIT 1`,
+    )
+      .bind(requestId)
+      .first()
+  }
+
+  function matchesIntent(row, intent) {
+    return (
+      normalizeSha256(row?.fulfilled_asset_sha256 || "") === intent.fulfilledAssetSha &&
+      sanitizeVoteVisionId(row?.fulfilled_vision_id || "") === intent.fulfilledVisionId
+    )
+  }
+
+  const preflightRows = new Map()
+  for (const intent of intentsByRequestId.values()) {
+    const row = await readRequest(intent.requestId)
+    preflightRows.set(intent.requestId, row || null)
+    const status = String(row?.status || "")
+      .trim()
+      .toLowerCase()
+    if (!row) {
+      conflicts.push({ request_id: intent.requestId, reason: "request_not_found" })
+    } else if (status === "open") {
+      continue
+    } else if (["delivery_pending", "fulfilled"].includes(status)) {
+      if (!matchesIntent(row, intent)) {
+        conflicts.push({
+          request_id: intent.requestId,
+          reason: "request_already_bound_to_different_result",
+          status,
+          existing_asset_sha256: normalizeSha256(row.fulfilled_asset_sha256 || "") || "",
+          attempted_asset_sha256: intent.fulfilledAssetSha,
+          existing_vision_id: sanitizeVoteVisionId(row.fulfilled_vision_id || "") || "",
+          attempted_vision_id: intent.fulfilledVisionId,
+        })
+      }
+    } else {
+      conflicts.push({
+        request_id: intent.requestId,
+        reason: "request_not_fulfillable",
+        status,
+      })
+    }
+  }
+
+  if (conflicts.length) {
+    return {
+      ok: false,
+      fulfillment_started: 0,
+      fulfilled: 0,
+      skipped,
+      request_ids: [],
+      settled_request_ids: [],
+      requested_request_ids: Array.from(requestedRequestIds).sort((a, b) => a - b),
+      conflicts,
+      error: "Request fulfillment identity conflict",
+    }
+  }
+
+  for (const intent of intentsByRequestId.values()) {
+    const preflightRow = preflightRows.get(intent.requestId)
+    const preflightStatus = String(preflightRow?.status || "")
+      .trim()
+      .toLowerCase()
+    if (preflightStatus === "fulfilled") {
+      settledRequestIds.add(intent.requestId)
+      continue
+    }
+    if (preflightStatus === "open") {
       const beginResp = await env.ICONOPLASM_DB.prepare(
         `UPDATE icono_generation_requests
          SET status = 'delivery_pending',
@@ -8432,38 +8547,75 @@ async function fulfillGenerationRequests(
          WHERE id = ?
            AND status = 'open'`,
       )
-        .bind(actorNorm, fulfilledAssetSha, fulfilledVisionId, note, requestId)
+        .bind(
+          actorNorm,
+          intent.fulfilledAssetSha,
+          intent.fulfilledVisionId,
+          intent.note,
+          intent.requestId,
+        )
         .run()
       if (Number(beginResp?.meta?.changes || 0) > 0) {
-        deliveryRequestIds.add(requestId)
-        startedDeliveryIds.add(requestId)
+        deliveryRequestIds.add(intent.requestId)
+        startedDeliveryIds.add(intent.requestId)
         continue
       }
-      // A replay after a timeout can safely resume delivery for the asset
-      // already chosen on the first transition. It must never replace that
-      // asset with a later local candidate.
+    }
+
+    // A replay after a timeout can safely resume delivery for the asset already
+    // chosen on the first transition. It must never replace that asset with a
+    // later local candidate.
+    const currentRow = await readRequest(intent.requestId)
+    const currentStatus = String(currentRow?.status || "")
+      .trim()
+      .toLowerCase()
+    if (currentStatus === "fulfilled" && matchesIntent(currentRow, intent)) {
+      settledRequestIds.add(intent.requestId)
+      continue
+    }
+    if (currentStatus === "delivery_pending" && matchesIntent(currentRow, intent)) {
       const resumeResp = await env.ICONOPLASM_DB.prepare(
         `UPDATE icono_generation_requests
          SET updated_at = CURRENT_TIMESTAMP
          WHERE id = ?
-           AND status = 'delivery_pending'`,
+           AND status = 'delivery_pending'
+           AND fulfilled_asset_sha256 = ?
+           AND fulfilled_vision_id = ?`,
       )
-        .bind(requestId)
+        .bind(intent.requestId, intent.fulfilledAssetSha, intent.fulfilledVisionId)
         .run()
       if (Number(resumeResp?.meta?.changes || 0) > 0) {
-        deliveryRequestIds.add(requestId)
+        deliveryRequestIds.add(intent.requestId)
+        continue
       }
     }
+    conflicts.push({
+      request_id: intent.requestId,
+      reason: "request_changed_during_fulfillment",
+      status: currentStatus,
+      existing_asset_sha256: normalizeSha256(currentRow?.fulfilled_asset_sha256 || "") || "",
+      attempted_asset_sha256: intent.fulfilledAssetSha,
+      existing_vision_id: sanitizeVoteVisionId(currentRow?.fulfilled_vision_id || "") || "",
+      attempted_vision_id: intent.fulfilledVisionId,
+    })
   }
 
   return {
-    ok: true,
+    ok: conflicts.length === 0,
     fulfillment_started: startedDeliveryIds.size,
     fulfilled: 0,
     skipped,
     request_ids: Array.from(deliveryRequestIds).sort(function (a, b) {
       return a - b
     }),
+    settled_request_ids: Array.from(settledRequestIds).sort(function (a, b) {
+      return a - b
+    }),
+    requested_request_ids: Array.from(requestedRequestIds).sort(function (a, b) {
+      return a - b
+    }),
+    conflicts,
+    ...(conflicts.length ? { error: "Request changed during fulfillment" } : {}),
   }
 }
 
@@ -27064,6 +27216,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         items: Array.isArray(p?.items) ? p.items : [],
         resolvedBy: await actor(request, env),
       })
+      if (!result.ok) {
+        return done(
+          "admin_requests_fulfill_conflict",
+          json(result, 409, { "Cache-Control": "no-store" }),
+        )
+      }
       if (result.request_ids?.length) {
         // A request is not a completed tray outcome until its owner has the
         // delivery that tells them the image is ready. Await this exact batch
