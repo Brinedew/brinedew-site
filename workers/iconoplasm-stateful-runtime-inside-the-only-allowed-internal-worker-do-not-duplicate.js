@@ -11,6 +11,7 @@ import {
   markRequestNotificationsRead as markRequestNotificationsReadForUser,
   reconcileDeliveredRequestFulfillments,
   readRequestNotificationInbox,
+  resolveIconoplasmFulfillmentDeliveryPolicy,
 } from "./iconoplasm-request-notifications.js"
 import { ICONOPLASM_WIKI_PAGEVIEWS } from "./iconoplasm-wiki-pageviews.js"
 import { normalizeIconoplasmHomeOrder } from "../quartz/static/iconoplasm/home-orders.js"
@@ -1374,6 +1375,7 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/admin/essence/upsert") return "admin_essence_upsert"
   if (path === "/api/iconoplasm/admin/essence/state") return "admin_essence_state"
   if (path === "/api/iconoplasm/admin/requests/open") return "admin_requests_open"
+  if (path === "/api/iconoplasm/admin/requests/drain-plan") return "admin_requests_drain_plan"
   if (path === "/api/iconoplasm/admin/requests/fulfill") return "admin_requests_fulfill"
   if (/^\/api\/iconoplasm\/admin\/requests\/gene\/[^/]+\/diagnostics$/.test(path))
     return "admin_gene_request_diagnostics"
@@ -1461,6 +1463,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_public_stats_audit" ||
     family === "admin_finalization_pending" ||
     family === "admin_requests_open" ||
+    family === "admin_requests_drain_plan" ||
     family === "admin_requests_fulfill" ||
     family === "admin_image_edit_prompts" ||
     family === "admin_gene_request_diagnostics" ||
@@ -3899,15 +3902,11 @@ async function enrichGenerationRequestRows(env, rows) {
   return (Array.isArray(rows) ? rows : []).map(mapGenerationRequestRow)
 }
 
-async function listOpenGenerationRequests(
-  env,
-  { limit = 500, geneSymbol = "", requesterUserId = "", statuses = ["open"] } = {},
-) {
-  if (!env.ICONOPLASM_DB) return []
-  const cleanedLimit = Math.max(
-    1,
-    Math.min(2000, Number.parseInt(String(limit || "500"), 10) || 500),
-  )
+function openGenerationRequestFilters({
+  geneSymbol = "",
+  requesterUserId = "",
+  statuses = ["open"],
+} = {}) {
   const symbolNorm = normalizeSymbol(geneSymbol || "") || ""
   const requesterNorm = normalizeUserId(requesterUserId || "")
   const requestStatuses = Array.from(
@@ -3928,6 +3927,23 @@ async function listOpenGenerationRequests(
     whereParts.push("gr.requester_user_id = ?")
     params.push(requesterNorm)
   }
+  return { whereParts, params }
+}
+
+async function listOpenGenerationRequests(
+  env,
+  { limit = 500, geneSymbol = "", requesterUserId = "", statuses = ["open"] } = {},
+) {
+  if (!env.ICONOPLASM_DB) return []
+  const cleanedLimit = Math.max(
+    1,
+    Math.min(2000, Number.parseInt(String(limit || "500"), 10) || 500),
+  )
+  const { whereParts, params } = openGenerationRequestFilters({
+    geneSymbol,
+    requesterUserId,
+    statuses,
+  })
   const resp = await env.ICONOPLASM_DB.prepare(
     // D1 cost fence: gene symbols are normalized before they hit this queue.
     // Keep equality raw so the request panel stays on the index path instead of
@@ -3954,6 +3970,41 @@ async function listOpenGenerationRequests(
     .bind(...params, cleanedLimit)
     .all()
   return enrichGenerationRequestRows(env, Array.isArray(resp?.results) ? resp.results : [])
+}
+
+async function countOpenGenerationRequests(env, filters = {}) {
+  if (!env.ICONOPLASM_DB) return 0
+  const { whereParts, params } = openGenerationRequestFilters(filters)
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT COUNT(*) AS count
+     FROM icono_generation_requests gr
+     WHERE ${whereParts.join(" AND ")}`,
+  )
+    .bind(...params)
+    .first()
+  return Math.max(0, Number.parseInt(String(row?.count || "0"), 10) || 0)
+}
+
+async function generationRequestDrainPlan(env, { limit = 500 } = {}) {
+  const policy = resolveIconoplasmFulfillmentDeliveryPolicy(env)
+  // The temporary Discord gate is a work-selection policy, not a later
+  // suppression.  Selecting an ineligible row would spend GPU time and publish
+  // a candidate while knowingly leaving its owner without the required DM.
+  const openFilters = { statuses: ["open"] }
+  const eligibleFilters = policy.all_requesters
+    ? openFilters
+    : { ...openFilters, requesterUserId: policy.test_recipient_id }
+  const [totalOpenCount, eligibleCount, eligibleRows] = await Promise.all([
+    countOpenGenerationRequests(env, openFilters),
+    countOpenGenerationRequests(env, eligibleFilters),
+    listOpenGenerationRequests(env, { limit, ...eligibleFilters }),
+  ])
+  return {
+    delivery_mode: policy.mode,
+    total_open_count: totalOpenCount,
+    eligible_count: eligibleCount,
+    rows: eligibleRows,
+  }
 }
 
 async function createGenerationRequest(
@@ -8198,26 +8249,9 @@ async function fulfillGenerationRequests(
           .filter((value) => value > 0),
       ),
     )
-    const requestMode = normalizeGenerationRequestMode(rawItem.request_mode)
-    const symbolNorm = normalizeSymbol(rawItem.gene_symbol || rawItem.symbol || "") || ""
-    const requestedVisionId =
-      requestMode === "specific" ? sanitizeVoteVisionId(rawItem.requested_vision_id || "") : ""
-    if (!requestIds.length && requestMode === "specific" && symbolNorm && requestedVisionId) {
-      const fallbackResp = await env.ICONOPLASM_DB.prepare(
-        `SELECT id
-         FROM icono_generation_requests
-         WHERE status = 'open'
-           AND gene_symbol = ?
-           AND request_mode = 'specific'
-           AND requested_vision_id = ?
-         ORDER BY created_at ASC, id ASC`,
-      )
-        .bind(symbolNorm, requestedVisionId)
-        .all()
-      requestIds = (Array.isArray(fallbackResp?.results) ? fallbackResp.results : [])
-        .map((row) => Number(row?.id || 0))
-        .filter((value) => value > 0)
-    }
+    // A fulfillment is always for the exact durable request IDs carried by the
+    // generation session.  Inferring a wider set from gene/style fields caused
+    // one person's candidate to silently close another person's request.
     if (!requestIds.length) {
       skipped += 1
       continue
@@ -10197,6 +10231,8 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/notifications/read") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/requests/open")
+    return requestMethod === "GET" || requestMethod === "HEAD"
+  if (path === "/api/iconoplasm/admin/requests/drain-plan")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/requests/fulfill") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/image-edit-prompts")
@@ -26776,6 +26812,25 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           200,
           { "Cache-Control": "no-store" },
         ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/requests/drain-plan" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_requests_drain_plan_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_requests_drain_plan_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      const limit = Math.max(
+        1,
+        Math.min(2000, Number.parseInt(url.searchParams.get("limit") || "500", 10) || 500),
+      )
+      const plan = await generationRequestDrainPlan(env, { limit })
+      return done(
+        "admin_requests_drain_plan",
+        json({ ok: true, ...plan }, 200, { "Cache-Control": "no-store" }),
       )
     }
 

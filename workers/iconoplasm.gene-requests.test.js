@@ -18,7 +18,43 @@ class FakeRequestStatement {
   }
 
   async first() {
+    if (
+      this.sql.includes("COUNT(*) AS count") &&
+      this.sql.includes("FROM icono_generation_requests gr")
+    ) {
+      return { count: this.requestRows().length }
+    }
     return null
+  }
+
+  requestRows() {
+    const rows = this.db.requestRows || [
+      {
+        id: 1,
+        gene_symbol: "A1BG",
+        full_name: "alpha-1-B glycoprotein",
+        requester_user_id: "user-1",
+        requester_username: "tester",
+        request_mode: "random",
+        requested_vision_id: "",
+        status: "open",
+        created_at: "2026-04-04T10:00:00Z",
+        updated_at: "2026-04-04T10:00:00Z",
+        fulfilled_at: "",
+        fulfilled_by: "",
+        fulfilled_asset_sha256: "",
+        fulfilled_vision_id: "",
+        fulfillment_note: "",
+      },
+    ]
+    const statuses = this.args.filter((value) => ["open", "delivery_pending"].includes(value))
+    const statusFiltered = rows.filter((row) => !statuses.length || statuses.includes(row.status))
+    if (!this.sql.includes("gr.requester_user_id = ?")) return statusFiltered
+    const filterArgs = this.args.slice(statuses.length)
+    if (this.sql.includes("LIMIT ?")) filterArgs.pop()
+    if (this.sql.includes("gr.gene_symbol = ?")) filterArgs.shift()
+    const requesterUserId = String(filterArgs.at(-1) || "")
+    return statusFiltered.filter((row) => row.requester_user_id === requesterUserId)
   }
 
   async all() {
@@ -256,25 +292,7 @@ class FakeRequestStatement {
     if (this.sql.includes("FROM icono_generation_requests gr")) {
       this.db.requestReads += 1
       return {
-        results: [
-          {
-            id: 1,
-            gene_symbol: "A1BG",
-            full_name: "alpha-1-B glycoprotein",
-            requester_user_id: "user-1",
-            requester_username: "tester",
-            request_mode: "random",
-            requested_vision_id: "",
-            status: "open",
-            created_at: "2026-04-04T10:00:00Z",
-            updated_at: "2026-04-04T10:00:00Z",
-            fulfilled_at: "",
-            fulfilled_by: "",
-            fulfilled_asset_sha256: "",
-            fulfilled_vision_id: "",
-            fulfillment_note: "",
-          },
-        ],
+        results: this.requestRows(),
       }
     }
 
@@ -299,6 +317,7 @@ class FakeRequestDb {
     this.failPreviewHydration = !!options.failPreviewHydration
     this.failOptionRollupRead = !!options.failOptionRollupRead
     this.lastOptionRollupArgs = []
+    this.requestRows = Array.isArray(options.requestRows) ? options.requestRows : null
   }
 
   prepare(sql) {
@@ -354,6 +373,54 @@ function buildSessionBinding(session) {
     },
   }
 }
+
+test("admin drain plan selects only the requester who can receive a DM during the live test", async () => {
+  const brinedewId = "1289482311557058641"
+  const rows = [
+    {
+      id: 20,
+      gene_symbol: "DNMT3B",
+      requester_user_id: "another-user",
+      requester_username: "l_chart",
+      request_mode: "specific",
+      requested_vision_id: "anima-v1-1370",
+      status: "open",
+      created_at: "2026-07-17T01:00:00Z",
+    },
+    {
+      id: 37,
+      gene_symbol: "DNMT3B",
+      requester_user_id: brinedewId,
+      requester_username: "brinedew",
+      request_mode: "specific",
+      requested_vision_id: "anima-v1-1370",
+      status: "open",
+      created_at: "2026-07-17T02:00:00Z",
+    },
+  ]
+  const env = buildEnv({ bindGateway: false, dbOptions: { requestRows: rows } })
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/requests/drain-plan", {
+        headers: { "X-Iconoplasm-Admin-Token": "test-admin-token" },
+      }),
+      {
+        ICONOPLASM_DB: env.gatewayDb,
+        ICONOPLASM_ADMIN_TOKEN: "test-admin-token",
+      },
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.delivery_mode, "brinedew_test")
+  assert.equal(payload.total_open_count, 2)
+  assert.equal(payload.eligible_count, 1)
+  assert.deepEqual(
+    payload.rows.map((row) => row.id),
+    [37],
+  )
+})
 
 test("legacy one-shot gene request route is gone and fails loudly", async () => {
   const env = buildEnv()
