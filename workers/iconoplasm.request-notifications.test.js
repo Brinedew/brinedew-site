@@ -90,8 +90,7 @@ class NotificationStatement {
       const requesterUserId = String(this.args[0] || "")
       return {
         results: this.db.notifications.filter(
-          (row) =>
-            row.requester_user_id === requesterUserId && row.discord_status === "sent",
+          (row) => row.requester_user_id === requesterUserId && row.discord_status === "sent",
         ),
       }
     }
