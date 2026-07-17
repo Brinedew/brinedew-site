@@ -394,6 +394,8 @@ test("admin drain plan selects only the requester who can receive a DM during th
       requester_username: "brinedew",
       request_mode: "specific",
       requested_vision_id: "anima-v1-1370",
+      requested_reference_asset_sha256: "b".repeat(64),
+      requested_reference_gene_symbol: "ZP4",
       status: "open",
       created_at: "2026-07-17T02:00:00Z",
     },
@@ -420,6 +422,34 @@ test("admin drain plan selects only the requester who can receive a DM during th
     payload.rows.map((row) => row.id),
     [37],
   )
+  assert.equal(payload.rows[0]?.requested_reference_asset_sha256, "b".repeat(64))
+  assert.equal(payload.rows[0]?.requested_reference_gene_symbol, "ZP4")
+})
+
+test("specific requests snapshot a ranked example instead of storing a label-only promise", () => {
+  const worker = readFileSync(
+    new URL(
+      "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+      import.meta.url,
+    ),
+    "utf8",
+  )
+  const migration = readFileSync(
+    new URL(
+      "../migrations-iconoplasm/0050_generation_request_reference_snapshot.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  )
+
+  assert.match(
+    worker,
+    /SELECT preview_assets_json\s+FROM icono_generation_request_vision_option_rollup/,
+  )
+  assert.match(worker, /requested_reference_asset_sha256/)
+  assert.match(worker, /requested_reference_gene_symbol/)
+  assert.match(migration, /json_extract\(opt\.preview_assets_json, '\$\[0\]\.asset_sha256'\)/)
+  assert.match(migration, /status IN \('open', 'delivery_pending'\)/)
 })
 
 test("legacy one-shot gene request route is gone and fails loudly", async () => {
