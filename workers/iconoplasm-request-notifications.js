@@ -57,11 +57,19 @@ function nextDiscordRetryAt(attemptCount) {
     .replace(/\.\d{3}Z$/, "")
 }
 
-function allRequestersDiscordDeliveryEnabled(env) {
-  return (
+export function resolveIconoplasmFulfillmentDeliveryPolicy(env) {
+  const allRequesters =
     boundedText(env?.ICONOPLASM_FULFILLMENT_DM_DELIVERY_MODE, 64) ===
     ICONOPLASM_FULFILLMENT_DM_ALL_REQUESTERS_MODE
-  )
+  return {
+    mode: allRequesters ? ICONOPLASM_FULFILLMENT_DM_ALL_REQUESTERS_MODE : "brinedew_test",
+    all_requesters: allRequesters,
+    test_recipient_id: ICONOPLASM_FULFILLMENT_DM_TEST_RECIPIENT_ID,
+  }
+}
+
+function allRequestersDiscordDeliveryEnabled(env) {
+  return resolveIconoplasmFulfillmentDeliveryPolicy(env).all_requesters
 }
 
 function mapNotification(row, portraitUrlForAsset) {
