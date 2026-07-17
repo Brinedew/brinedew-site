@@ -407,10 +407,16 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     .request-result-panel {
       display: grid;
       gap: 10px;
+      width: 100%;
+      min-width: 0;
     }
     .request-result-preview {
       display: block;
       overflow: hidden;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      box-sizing: border-box;
       border: 1px solid var(--border);
       border-radius: 12px;
       background: #f6f2ed;
@@ -418,6 +424,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     .request-result-preview img {
       display: block;
       width: 100%;
+      max-width: 100%;
+      height: auto;
       max-height: 520px;
       object-fit: contain;
     }
