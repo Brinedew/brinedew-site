@@ -872,7 +872,10 @@ import {
   IconoplasmSyncGovernor,
   handleIconoplasmQueue,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
-import { deliverPendingRequestFulfillmentNotifications } from "./iconoplasm-request-notifications.js"
+import {
+  deliverPendingRequestFulfillmentNotifications,
+  reconcileDeliveredRequestFulfillments,
+} from "./iconoplasm-request-notifications.js"
 import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate } from "./benchmark/the-only-allowed-benchmark-stateful-runtime-do-not-duplicate.js"
 
 export { IconoplasmVoteCoordinator }
@@ -2617,8 +2620,12 @@ export default {
         deliverPendingRequestFulfillmentNotifications(env, { limit: 20 }),
       ])
       if (notificationDelivery.status === "fulfilled") {
+        const notificationSettlement = await reconcileDeliveredRequestFulfillments(env)
         if (notificationDelivery.value.considered) {
-          console.log("[CRON] Iconoplasm fulfillment notifications:", notificationDelivery.value)
+          console.log("[CRON] Iconoplasm fulfillment notifications:", {
+            ...notificationDelivery.value,
+            finalized: notificationSettlement.finalized,
+          })
         }
       } else {
         console.error(

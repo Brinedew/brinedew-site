@@ -9,6 +9,7 @@ import { renderIconoplasmArtistStylesHtml } from "./iconoplasm-artist-styles-htm
 import {
   deliverPendingRequestFulfillmentNotifications,
   markRequestNotificationsRead as markRequestNotificationsReadForUser,
+  reconcileDeliveredRequestFulfillments,
   readRequestNotificationInbox,
 } from "./iconoplasm-request-notifications.js"
 import { ICONOPLASM_WIKI_PAGEVIEWS } from "./iconoplasm-wiki-pageviews.js"
@@ -3697,6 +3698,7 @@ async function requestNotificationInboxPayload(env, request, { limit = 25 } = {}
   const openRequests = await listOpenGenerationRequests(env, {
     limit: 10,
     requesterUserId,
+    statuses: ["open", "delivery_pending"],
   })
   const base = portraitBase(new URL("https://iconoplasm.brinedew.bio/"), env)
   return readRequestNotificationInbox(env, {
@@ -3840,7 +3842,7 @@ async function enrichGenerationRequestRows(env, rows) {
 
 async function listOpenGenerationRequests(
   env,
-  { limit = 500, geneSymbol = "", requesterUserId = "" } = {},
+  { limit = 500, geneSymbol = "", requesterUserId = "", statuses = ["open"] } = {},
 ) {
   if (!env.ICONOPLASM_DB) return []
   const cleanedLimit = Math.max(
@@ -3849,8 +3851,16 @@ async function listOpenGenerationRequests(
   )
   const symbolNorm = normalizeSymbol(geneSymbol || "") || ""
   const requesterNorm = normalizeUserId(requesterUserId || "")
-  const whereParts = ["gr.status = 'open'"]
-  const params = []
+  const requestStatuses = Array.from(
+    new Set(
+      (Array.isArray(statuses) ? statuses : ["open"])
+        .map((status) => String(status || "").trim())
+        .filter((status) => status === "open" || status === "delivery_pending"),
+    ),
+  )
+  const safeStatuses = requestStatuses.length ? requestStatuses : ["open"]
+  const whereParts = [`gr.status IN (${safeStatuses.map(() => "?").join(",")})`]
+  const params = [...safeStatuses]
   if (symbolNorm) {
     whereParts.push("gr.gene_symbol = ?")
     params.push(symbolNorm)
@@ -8113,7 +8123,8 @@ async function fulfillGenerationRequests(
   if (!env.ICONOPLASM_DB)
     return { ok: false, fulfilled: 0, request_ids: [], error: "ICONOPLASM_DB binding missing" }
   const actorNorm = normalizeUserId(resolvedBy || "workstation_sync")
-  const fulfilledIds = new Set()
+  const deliveryRequestIds = new Set()
+  const startedDeliveryIds = new Set()
   let skipped = 0
 
   for (const rawItem of Array.isArray(items) ? items : []) {
@@ -8159,9 +8170,9 @@ async function fulfillGenerationRequests(
       normalizeSha256(rawItem.fulfilled_asset_sha256 || rawItem.asset_sha256 || "") || ""
     const note = sanitizeText(rawItem.note || rawItem.fulfillment_note || "", 2000) || ""
     for (const requestId of requestIds) {
-      const updateResp = await env.ICONOPLASM_DB.prepare(
+      const beginResp = await env.ICONOPLASM_DB.prepare(
         `UPDATE icono_generation_requests
-         SET status = 'fulfilled',
+         SET status = 'delivery_pending',
              updated_at = CURRENT_TIMESTAMP,
              fulfilled_at = CURRENT_TIMESTAMP,
              fulfilled_by = ?,
@@ -8173,17 +8184,34 @@ async function fulfillGenerationRequests(
       )
         .bind(actorNorm, fulfilledAssetSha, fulfilledVisionId, note, requestId)
         .run()
-      if (Number(updateResp?.meta?.changes || 0) > 0) {
-        fulfilledIds.add(requestId)
+      if (Number(beginResp?.meta?.changes || 0) > 0) {
+        deliveryRequestIds.add(requestId)
+        startedDeliveryIds.add(requestId)
+        continue
+      }
+      // A replay after a timeout can safely resume delivery for the asset
+      // already chosen on the first transition. It must never replace that
+      // asset with a later local candidate.
+      const resumeResp = await env.ICONOPLASM_DB.prepare(
+        `UPDATE icono_generation_requests
+         SET updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?
+           AND status = 'delivery_pending'`,
+      )
+        .bind(requestId)
+        .run()
+      if (Number(resumeResp?.meta?.changes || 0) > 0) {
+        deliveryRequestIds.add(requestId)
       }
     }
   }
 
   return {
     ok: true,
-    fulfilled: fulfilledIds.size,
+    fulfillment_started: startedDeliveryIds.size,
+    fulfilled: 0,
     skipped,
-    request_ids: Array.from(fulfilledIds).sort(function (a, b) {
+    request_ids: Array.from(deliveryRequestIds).sort(function (a, b) {
       return a - b
     }),
   }
@@ -26707,16 +26735,76 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         resolvedBy: await actor(request, env),
       })
       if (result.request_ids?.length) {
-        const delivery = deliverPendingRequestFulfillmentNotifications(env, {
+        // A request is not a completed tray outcome until its owner has the
+        // delivery that tells them the image is ready. Await this exact batch
+        // here rather than hiding a failed DM behind waitUntil(). The durable
+        // cron outbox still retries transient failures, but the workstation
+        // must fail loudly instead of declaring a silent fulfillment success.
+        const delivery = await deliverPendingRequestFulfillmentNotifications(env, {
           requestIds: result.request_ids,
         }).catch((error) => {
           console.error(
             "Iconoplasm fulfillment notification delivery failed:",
             sanitizeText(error?.message || error || "unknown error", 500),
           )
+          return {
+            ok: false,
+            considered: 0,
+            delivered: 0,
+            suppressed: 0,
+            failed: result.request_ids.length,
+            unknown: 0,
+            error: sanitizeText(error?.message || error || "unknown error", 500),
+          }
         })
-        if (ctx?.waitUntil) ctx.waitUntil(delivery)
-        else await delivery
+        const settlement = await reconcileDeliveredRequestFulfillments(env, {
+          requestIds: result.request_ids,
+        }).catch((error) => ({
+          ok: false,
+          finalized: 0,
+          pending_request_ids: result.request_ids,
+          error: sanitizeText(error?.message || error || "unknown error", 500),
+        }))
+        const deliveryComplete =
+          delivery?.ok === true &&
+          settlement?.ok === true &&
+          Array.isArray(settlement?.pending_request_ids) &&
+          settlement.pending_request_ids.length === 0 &&
+          Number(delivery?.failed || 0) === 0 &&
+          Number(delivery?.unknown || 0) === 0 &&
+          Number(delivery?.suppressed || 0) === 0
+        if (!deliveryComplete) {
+          return done(
+            "admin_requests_fulfill_delivery_pending",
+            json(
+              {
+                ...result,
+                ok: false,
+                error:
+                  "Image publication succeeded, but at least one requester has not received the required Discord DM yet.",
+                notification_delivery: delivery,
+                notification_settlement: settlement,
+              },
+              200,
+              { "Cache-Control": "no-store" },
+            ),
+          )
+        }
+        return done(
+          "admin_requests_fulfill",
+          json(
+            {
+              ...result,
+              fulfilled: Number(settlement?.finalized || 0),
+              notification_delivery: delivery,
+              notification_settlement: settlement,
+            },
+            200,
+            {
+              "Cache-Control": "no-store",
+            },
+          ),
+        )
       }
       return done("admin_requests_fulfill", json(result, 200, { "Cache-Control": "no-store" }))
     }
