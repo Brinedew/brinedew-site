@@ -100,7 +100,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var portraitDetailCache = Object.create(null)
   var portraitDetailPromiseCache = Object.create(null)
   var geneCardArtifactCache = Object.create(null)
-  var geneCardArtifactPromiseCache = Object.create(null)
   var voteProjectionRefreshPolls = Object.create(null)
   var VOTE_PROJECTION_REFRESH_DELAYS_MS = [600, 1200, 2000, 3200, 5000, 8000, 13000]
   var portraitImageCache = Object.create(null)
@@ -869,28 +868,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return /^[a-f0-9]{64}$/.test(assetSha) ? assetSha : ""
   }
 
-  function currentGenePortraitAssetSha(genePayload) {
-    return printCopyCurrentAssetSha(genePayload)
-  }
-
-  function currentGenePortraitRenderSignature(genePayload) {
-    var portrait = (genePayload && genePayload.portrait) || {}
-    return [
-      currentGenePortraitAssetSha(genePayload),
-      String((portrait && portrait.vision_id) || "").trim(),
-      String((portrait && portrait.emulsion_id) || "").trim(),
-      String((portrait && portrait.artist_id) || "").trim(),
-      String((portrait && portrait.emulsion_label) || "").trim(),
-      String((portrait && portrait.sample_label) || "").trim(),
-      String((portrait && portrait.sample_number) || "").trim(),
-      String((portrait && portrait.sample_text_hash) || "").trim(),
-    ].join("|")
-  }
-
-  function currentGeneCanonicalAssetSignature(genePayload) {
-    return currentGenePortraitAssetSha(genePayload)
-  }
-
   function normalizedAssetSha(value) {
     var assetSha = String(value || "")
       .trim()
@@ -973,6 +950,33 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     })
   }
 
+  function isCompleteGeneDetailPayload(payload, symbol) {
+    var expectedSymbol = normalizedSymbol(symbol)
+    return !!(
+      payload &&
+      typeof payload === "object" &&
+      normalizedSymbol(payload.symbol) === expectedSymbol &&
+      payload.essence &&
+      typeof payload.essence === "object" &&
+      Array.isArray(payload.portrait_candidates)
+    )
+  }
+
+  function fetchCompleteGeneDetailFromEndpoint(key, options) {
+    var detailPath = "/api/iconoplasm/site/genes/" + encodeURIComponent(key)
+    var requestInit = undefined
+    if (options && options.forceFresh) {
+      detailPath += "?fresh=" + encodeURIComponent(String(Date.now()))
+      requestInit = { cache: "no-store" }
+    }
+    return fetchJSON(detailPath, requestInit).then(function (data) {
+      if (!isCompleteGeneDetailPayload(data, key)) {
+        throw new Error("Incomplete gene detail response for " + key)
+      }
+      return data
+    })
+  }
+
   function fetchGeneDetail(symbol, options) {
     var key = normalizedSymbol(symbol)
     if (!key) return Promise.resolve(null)
@@ -985,8 +989,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       delete portraitDetailCache[key]
       delete portraitDetailPromiseCache[key]
     }
-    if (!options.forceFresh && portraitDetailCache[key])
+    if (!options.forceFresh && isCompleteGeneDetailPayload(portraitDetailCache[key], key))
       return Promise.resolve(portraitDetailCache[key])
+    delete portraitDetailCache[key]
     if (!options.forceFresh && portraitDetailPromiseCache[key])
       return portraitDetailPromiseCache[key]
     var bootstrap = window.__iconoplasmBootstrap || null
@@ -994,7 +999,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       !options.forceFresh &&
       bootstrap &&
       bootstrap.geneDetailSymbol === key &&
-      bootstrap.geneDetailData
+      isCompleteGeneDetailPayload(bootstrap.geneDetailData, key)
     ) {
       portraitDetailCache[key] = bootstrap.geneDetailData
       return Promise.resolve(bootstrap.geneDetailData)
@@ -1007,12 +1012,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     ) {
       portraitDetailPromiseCache[key] = bootstrap.geneDetailPromise
         .then(function (data) {
-          if (data) {
+          if (isCompleteGeneDetailPayload(data, key)) {
             portraitDetailCache[key] = data
             bootstrap.geneDetailData = data
             return data
           }
-          return fetchGeneDetail(symbol)
+          // A head-started promise from an older page build may still resolve
+          // to the lean card projection. Repair it with the complete endpoint
+          // instead of recursively rejoining the same incomplete promise.
+          return fetchCompleteGeneDetailFromEndpoint(key, options).then(function (completeData) {
+            portraitDetailCache[key] = completeData
+            bootstrap.geneDetailData = completeData
+            return completeData
+          })
         })
         .finally(function () {
           delete portraitDetailPromiseCache[key]
@@ -1022,14 +1034,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
     // Rich per-gene detail is intentionally first-party only now. Bulk consumers
     // should sync from catalog snapshots + changes instead of crawling one gene at a time.
-    var detailPath = "/api/iconoplasm/site/genes/" + encodeURIComponent(key)
-    var requestInit = undefined
-    if (options.forceFresh) {
-      detailPath += "?fresh=" + encodeURIComponent(String(Date.now()))
-      requestInit = { cache: "no-store" }
-    }
-
-    portraitDetailPromiseCache[key] = fetchJSON(detailPath, requestInit)
+    portraitDetailPromiseCache[key] = fetchCompleteGeneDetailFromEndpoint(key, options)
       .then(function (data) {
         portraitDetailCache[key] = data
         return data
@@ -1044,64 +1049,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return portraitDetailPromiseCache[key]
   }
 
-  function fetchGeneCardArtifact(symbol) {
-    // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
-    // Search terms: PRL split-brain, gene card artifact, canonical blot,
-    // logged-out stale card, KV_GALLERY_VERSION.
-    //
-    // The gene page's fast first render uses the same public card artifact as
-    // `/api/iconoplasm/cards/:symbol`. It should not synthesize a card from
-    // partial client state or from a stale candidate list. The backend owns the
-    // D1-to-KV publication sequence; this frontend cache is only an in-page
-    // convenience and is cleared whenever we force a fresh gene render.
-    var key = normalizedSymbol(symbol)
-    if (!key) return Promise.resolve(null)
-    if (geneCardArtifactCache[key]) return Promise.resolve(geneCardArtifactCache[key])
-    if (geneCardArtifactPromiseCache[key]) return geneCardArtifactPromiseCache[key]
-    var bootstrap = window.__iconoplasmBootstrap || null
-    if (bootstrap && bootstrap.geneDetailSymbol === key && bootstrap.geneCardData) {
-      rememberGeneCardArtifact(bootstrap.geneCardData, { trusted: true })
-      return Promise.resolve(bootstrap.geneCardData)
-    }
-    if (bootstrap && bootstrap.geneDetailSymbol === key && bootstrap.geneCardPromise) {
-      geneCardArtifactPromiseCache[key] = bootstrap.geneCardPromise
-        .then(function (data) {
-          if (data) {
-            rememberGeneCardArtifact(data, { trusted: true })
-            bootstrap.geneCardData = data
-          }
-          return data || null
-        })
-        .finally(function () {
-          delete geneCardArtifactPromiseCache[key]
-        })
-      return geneCardArtifactPromiseCache[key]
-    }
-    geneCardArtifactPromiseCache[key] = fetchJSON(
-      "/api/iconoplasm/cards/" + encodeURIComponent(key),
-    )
-      .then(function (payload) {
-        var card = payload && (payload.card || (payload.cards && payload.cards[0]))
-        var data = (card && card.payload) || (payload && payload.payload) || null
-        if (data) rememberGeneCardArtifact(data, { trusted: true })
-        return data || null
-      })
-      .catch(function () {
-        return null
-      })
-      .finally(function () {
-        delete geneCardArtifactPromiseCache[key]
-      })
-    return geneCardArtifactPromiseCache[key]
-  }
-
   function invalidateGeneDetail(symbol) {
     var key = normalizedSymbol(symbol)
     if (!key) return
     delete portraitDetailCache[key]
     delete portraitDetailPromiseCache[key]
     delete geneCardArtifactCache[key]
-    delete geneCardArtifactPromiseCache[key]
     delete geneRequestSummaryCache[key]
   }
 
@@ -8194,8 +8147,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
 
     var richGenePromise = null
-    var renderedGenePortraitSignature = ""
-    var renderedGeneCanonicalAssetSignature = ""
     var getRichGenePromise = function () {
       if (!richGenePromise) richGenePromise = fetchGeneDetail(symbol, opts)
       return richGenePromise
@@ -8205,50 +8156,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         return richData ? { data: richData, source: "detail" } : null
       })
       .then(function (winner) {
-        if (winner && winner.data) return winner
-        return fetchGeneCardArtifact(symbol).then(function (cardData) {
-          if (cardData) return { data: cardData, source: "card" }
-          return null
-        })
-      })
-      .then(function (winner) {
         if (!winner || !winner.data) return winner
         return ensurePortraitDelivery(winner.data).then(function () {
           return winner
         })
       })
-
-    var scheduleRichGeneRefresh = function () {
-      window.setTimeout(function () {
-        getRichGenePromise()
-          .then(function (richGene) {
-            if (renderId !== activeGeneRenderId || !richGene || !contentEl) return
-            iconoSidebarState.gene = {
-              symbol: normalizedSymbol(richGene && richGene.symbol ? richGene.symbol : symbol),
-              error: false,
-              hasPortrait: !!publishedPortraitUrl(richGene, "medium"),
-              candidateCount: Array.isArray(richGene && richGene.portrait_candidates)
-                ? richGene.portrait_candidates.length
-                : 0,
-              aliasCount: Array.isArray(richGene && richGene.aliases) ? richGene.aliases.length : 0,
-            }
-            renderIconoplasmSidebar()
-            var richGenePortraitSignature = currentGenePortraitRenderSignature(richGene)
-            var richGeneCanonicalAssetSignature = currentGeneCanonicalAssetSignature(richGene)
-            if (
-              richGeneCanonicalAssetSignature &&
-              richGeneCanonicalAssetSignature !== renderedGeneCanonicalAssetSignature
-            ) {
-              renderGeneContent(contentEl, richGene)
-              renderedGenePortraitSignature = richGenePortraitSignature
-              renderedGeneCanonicalAssetSignature = richGeneCanonicalAssetSignature
-            } else {
-              renderGeneDeferredPanels(contentEl, richGene)
-            }
-          })
-          .catch(function () {})
-      }, 250)
-    }
     var renderGeneResult = function (result) {
       if (renderId !== activeGeneRenderId) return
       var g = result && result.data
@@ -8285,12 +8197,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
       renderIconoplasmSidebar()
       renderGeneContent(contentEl, g)
-      renderedGenePortraitSignature = currentGenePortraitRenderSignature(g)
-      renderedGeneCanonicalAssetSignature = currentGeneCanonicalAssetSignature(g)
       recordGenePageVisitDiscovery(g && g.symbol ? g.symbol : symbol)
-      if (result && result.source === "card") {
-        scheduleRichGeneRefresh()
-      }
     }
     firstGenePromise.then(renderGeneResult).catch(function (err) {
       if (renderId !== activeGeneRenderId) return

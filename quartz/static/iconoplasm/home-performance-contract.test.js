@@ -1542,8 +1542,18 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.match(head, /startGeneDetailFetch\(\)/)
   assert.match(
     head,
-    /if \(embeddedGeneCard\) \{[\s\S]*bootstrap\.geneDetailPromise = Promise\.resolve\(embeddedGeneCard\)/,
-    "the high-priority portrait decision should reuse the canonical embedded detail without another API round trip",
+    /var isCompleteGeneDetail = function \(data\)[\s\S]*Array\.isArray\(data\.portrait_candidates\)/,
+    "the head bootstrap must distinguish a complete gene detail from the lean first-paint card",
+  )
+  assert.doesNotMatch(
+    head,
+    /bootstrap\.geneDetailPromise = Promise\.resolve\(embeddedGeneCard\)/,
+    "a lean embedded card must never become the authoritative gene-detail promise",
+  )
+  assert.match(
+    head,
+    /var portraitSeedPromise = embeddedGeneCard[\s\S]*Promise\.resolve\(embeddedGeneCard\)[\s\S]*bootstrap\.portraitSourcePromise = portraitSeedPromise/,
+    "the lean card may accelerate the portrait probe without poisoning complete detail",
   )
   assert.match(head, /img\.fetchPriority = "high"/)
   assert.doesNotMatch(
@@ -1562,16 +1572,27 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.notEqual(fetchStart, -1, "missing fetchGeneDetail")
   assert.notEqual(fetchEnd, -1, "missing fetchGeneDetail boundary")
   const fetchBlock = app.slice(fetchStart, fetchEnd)
+  assert.match(fetchBlock, /isCompleteGeneDetailPayload\(portraitDetailCache\[key\], key\)/)
   assert.match(fetchBlock, /bootstrap\.geneDetailData/)
   assert.match(fetchBlock, /bootstrap\.geneDetailPromise/)
+  assert.match(
+    fetchBlock,
+    /isCompleteGeneDetailPayload\(data, key\)[\s\S]*fetchCompleteGeneDetailFromEndpoint\(key, options\)/,
+    "an older or incomplete bootstrap promise must be repaired by the complete endpoint",
+  )
+  assert.doesNotMatch(
+    fetchBlock,
+    /return fetchGeneDetail\(symbol\)/,
+    "an incomplete bootstrap must not recursively rejoin its own promise",
+  )
   assert.ok(
     fetchBlock.indexOf("bootstrap.geneDetailPromise") <
-      fetchBlock.indexOf('"/api/iconoplasm/site/genes/"'),
+      fetchBlock.lastIndexOf(
+        "portraitDetailPromiseCache[key] = fetchCompleteGeneDetailFromEndpoint",
+      ),
     "the app must join the head-started gene detail request before issuing its own endpoint fetch",
   )
-  assert.match(app, /function fetchGeneCardArtifact\(symbol\)/)
   assert.match(app, /bootstrap\.geneCardPromise/)
-  assert.match(app, /\/api\/iconoplasm\/cards\//)
   assert.match(app, /function rememberGeneCardArtifact\(payload, options\)/)
   const rememberStart = app.indexOf("function rememberGeneCardArtifact(payload, options)")
   const rememberEnd = app.indexOf("function rememberGeneCardArtifacts(items)", rememberStart)
@@ -1589,34 +1610,16 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.doesNotMatch(app, /generated\/lit-archival-card/)
   assert.doesNotMatch(app, /renderLitArchivalCardHtml\(genePayload/)
   assert.match(block, /var getRichGenePromise = function \(\)/)
-  assert.match(
-    block,
-    /getRichGenePromise\(\)[\s\S]*return richData \? \{ data: richData, source: "detail" \} : null[\s\S]*fetchGeneCardArtifact\(symbol\)[\s\S]*if \(cardData\) return \{ data: cardData, source: "card" \}/,
-    "gene pages must prefer the current per-gene detail endpoint and use the card artifact only as a failure fallback",
-  )
-  assert.doesNotMatch(block, /Promise\.race\(\[[\s\S]*richGenePromise/)
-  assert.match(block, /window\.setTimeout\(function \(\) \{[\s\S]*getRichGenePromise\(\)/)
-  assert.match(block, /renderGeneDeferredPanels\(contentEl, richGene\)/)
-  assert.match(app, /function currentGenePortraitRenderSignature\(genePayload\)/)
-  assert.match(app, /function currentGeneCanonicalAssetSignature\(genePayload\)/)
-  assert.match(app, /String\(\(portrait && portrait\.sample_label\) \|\| ""\)\.trim\(\)/)
-  assert.match(block, /var renderedGenePortraitSignature = ""/)
-  assert.match(block, /var renderedGeneCanonicalAssetSignature = ""/)
-  assert.match(block, /renderedGenePortraitSignature = currentGenePortraitRenderSignature\(g\)/)
-  assert.match(
-    block,
-    /renderedGeneCanonicalAssetSignature = currentGeneCanonicalAssetSignature\(g\)/,
-  )
-  assert.match(
-    block,
-    /var richGeneCanonicalAssetSignature = currentGeneCanonicalAssetSignature\(richGene\)[\s\S]*richGeneCanonicalAssetSignature !== renderedGeneCanonicalAssetSignature[\s\S]*renderGeneContent\(contentEl, richGene\)/,
-    "rich gene detail may replace the first-paint card only when the canonical portrait asset changes",
-  )
   assert.doesNotMatch(
     block,
-    /richGenePortraitSignature !== renderedGenePortraitSignature[\s\S]*renderGeneContent\(contentEl, richGene\)/,
-    "stale rich-detail provenance or naming drift must not overwrite the first-paint card when the canonical asset is unchanged",
+    /fetchGeneCardArtifact\(symbol\)/,
+    "gene pages must not silently downgrade a failed complete-detail read to a sparse card",
   )
+  assert.match(
+    block,
+    /getRichGenePromise\(\)[\s\S]*return richData \? \{ data: richData, source: "detail" \} : null/,
+  )
+  assert.doesNotMatch(block, /Promise\.race\(\[[\s\S]*richGenePromise/)
   assert.match(block, /renderGeneContent\(contentEl, g\)/)
   assert.doesNotMatch(block, /renderGeneResult\(\{ data: cachedGeneCard, source: "card" \}\)/)
   assert.match(block, /hasHeadStartedGene/)
