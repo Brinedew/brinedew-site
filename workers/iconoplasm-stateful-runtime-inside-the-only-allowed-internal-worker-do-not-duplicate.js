@@ -3946,8 +3946,10 @@ function summarizeGenerationRequestRows(rows, { requesterUserId = "" } = {}) {
   })
 }
 
-async function enrichGenerationRequestRows(env, rows) {
-  const base = portraitBase(new URL("https://iconoplasm.brinedew.bio/"), env)
+async function enrichGenerationRequestRows(env, rows, { portraitBaseUrl = "" } = {}) {
+  const base =
+    String(portraitBaseUrl || "").replace(/\/+$/, "") ||
+    portraitBase(new URL("https://iconoplasm.brinedew.bio/"), env)
   return (Array.isArray(rows) ? rows : []).map((row) =>
     mapGenerationRequestRow(row, { portraitBaseUrl: base }),
   )
@@ -4003,7 +4005,10 @@ async function listOpenGenerationRequests(
   })
 }
 
-async function listGenerationRequestHistory(env, { limit = 500, geneSymbol = "" } = {}) {
+async function listGenerationRequestHistory(
+  env,
+  { limit = 500, geneSymbol = "", portraitBaseUrl = "" } = {},
+) {
   if (!env.ICONOPLASM_DB) return []
   const cleanedLimit = Math.max(
     1,
@@ -4022,10 +4027,14 @@ async function listGenerationRequestHistory(env, { limit = 500, geneSymbol = "" 
     params,
     orderBy: "gr.created_at DESC, gr.id DESC",
     limit: cleanedLimit,
+    portraitBaseUrl,
   })
 }
 
-async function queryGenerationRequests(env, { whereParts, params, orderBy, limit }) {
+async function queryGenerationRequests(
+  env,
+  { whereParts, params, orderBy, limit, portraitBaseUrl = "" },
+) {
   const resp = await env.ICONOPLASM_DB.prepare(
     // D1 cost fence: every caller supplies indexed equality predicates. Keep
     // normalization out of SQL so request inbox reads stay on those indexes.
@@ -4059,7 +4068,9 @@ async function queryGenerationRequests(env, { whereParts, params, orderBy, limit
   )
     .bind(...params, limit)
     .all()
-  return enrichGenerationRequestRows(env, Array.isArray(resp?.results) ? resp.results : [])
+  return enrichGenerationRequestRows(env, Array.isArray(resp?.results) ? resp.results : [], {
+    portraitBaseUrl,
+  })
 }
 
 async function countGenerationRequestInboxStates(env, requesterUserId) {
@@ -26955,7 +26966,14 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         Math.min(2000, Number.parseInt(url.searchParams.get("limit") || "500", 10) || 500),
       )
       const symbol = normalizeSymbol(url.searchParams.get("symbol") || "") || ""
-      const rows = await listGenerationRequestHistory(env, { limit, geneSymbol: symbol })
+      const rows = await listGenerationRequestHistory(env, {
+        limit,
+        geneSymbol: symbol,
+        // Keep admin previews on the same proven portrait-delivery route as gene pages.
+        // Direct storage-host URLs are not a browser contract and can fail even when
+        // the public portrait proxy serves the same rendition correctly.
+        portraitBaseUrl: url.origin,
+      })
       const activeRows = rows.filter(
         (row) => row.status === "open" || row.status === "delivery_pending",
       )
