@@ -102,33 +102,46 @@ export default (() => {
   if (geneMatch && window.fetch) {
     bootstrap.geneDetailSymbol = decodeURIComponent(geneMatch[1] || "").trim().toUpperCase()
     if (bootstrap.geneDetailSymbol) {
+      var isCompleteGeneDetail = function (data) {
+        return !!(
+          data &&
+          typeof data === "object" &&
+          data.symbol === bootstrap.geneDetailSymbol &&
+          data.essence &&
+          typeof data.essence === "object" &&
+          Array.isArray(data.portrait_candidates)
+        )
+      }
       var startGeneDetailFetch = function () {
         if (bootstrap.geneDetailPromise) return bootstrap.geneDetailPromise
-        if (embeddedGeneCard) {
-          // The edge worker has already read the canonical detail for the
-          // first-paint shell. Reusing it starts the tab-level portrait probe
-          // immediately without a second API round trip.
-          bootstrap.geneDetailData = embeddedGeneCard
-          bootstrap.geneDetailPromise = Promise.resolve(embeddedGeneCard)
-        } else {
-          bootstrap.geneDetailPromise = fetch(
-            origin + "/api/iconoplasm/site/genes/" + encodeURIComponent(bootstrap.geneDetailSymbol),
-          )
-            .then(function (response) {
-              if (!response.ok) return null
-              return response.json().catch(function () {
-                return null
-              })
-            })
-            .then(function (data) {
-              bootstrap.geneDetailData = data || null
-              return data || null
-            })
-            .catch(function () {
+        // The embedded payload is intentionally a lean first-paint card. It is
+        // not a gene-detail response: it omits essence, aliases and candidate
+        // blots. Always start the complete detail read, regardless of account
+        // state, and keep the two payload classes separate.
+        bootstrap.geneDetailPromise = fetch(
+          origin + "/api/iconoplasm/site/genes/" + encodeURIComponent(bootstrap.geneDetailSymbol),
+        )
+          .then(function (response) {
+            if (!response.ok) return null
+            return response.json().catch(function () {
               return null
             })
-        }
-        bootstrap.portraitSourcePromise = bootstrap.geneDetailPromise.then(function (data) {
+          })
+          .then(function (data) {
+            var completeData = isCompleteGeneDetail(data) ? data : null
+            bootstrap.geneDetailData = completeData
+            return completeData
+          })
+          .catch(function () {
+            return null
+          })
+        // The lean card is still the earliest safe source for the portrait URL;
+        // using it here preserves first-paint performance without promoting it
+        // into the complete-detail cache.
+        var portraitSeedPromise = embeddedGeneCard
+          ? Promise.resolve(embeddedGeneCard)
+          : bootstrap.geneDetailPromise
+        bootstrap.portraitSourcePromise = portraitSeedPromise.then(function (data) {
           try {
             var storedDecision = JSON.parse(
               window.sessionStorage.getItem("iconoplasm.portrait-source.v1") || "null",
