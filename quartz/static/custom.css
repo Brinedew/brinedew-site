@@ -622,6 +622,10 @@ article p {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  max-height: min(31rem, 58vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .icono-request-inbox__group-actions {
@@ -776,6 +780,32 @@ article p {
   display: block;
   margin-bottom: 0.12rem;
   color: var(--dark);
+}
+
+.icono-request-inbox__limit-note,
+.icono-request-inbox__cancelled-count {
+  color: var(--secondary);
+  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+  font-size: 0.61rem;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.icono-request-inbox__limit-note {
+  padding: 0.7rem 0.1rem;
+  text-wrap: pretty;
+}
+
+.icono-request-inbox__cancelled-count {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.18rem 0.1rem 0;
+}
+
+.icono-request-inbox__cancelled-count span {
+  min-width: 1.2rem;
+  text-align: right;
 }
 
 .icono-request-ready-notice {

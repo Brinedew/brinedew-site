@@ -3744,7 +3744,7 @@ function mapGenerationRequestRow(row) {
   }
 }
 
-async function requestNotificationInboxPayload(env, request, { limit = 25 } = {}) {
+async function requestNotificationInboxPayload(env, request, { limit = 50 } = {}) {
   const sessionUser = await iconoplasmSessionUser(request, env)
   const requesterUserId = normalizeUserId(sessionUser?.user_id || "")
   if (!requesterUserId || isGuestUserId(requesterUserId)) {
@@ -3752,21 +3752,32 @@ async function requestNotificationInboxPayload(env, request, { limit = 25 } = {}
       ok: true,
       authenticated: false,
       unread_count: 0,
+      ready_count: 0,
       open_count: 0,
+      cancelled_count: 0,
+      ready_requests: [],
       open_requests: [],
-      notifications: [],
     }
   }
-  const openRequests = await listOpenGenerationRequests(env, {
-    limit: 10,
-    requesterUserId,
-    statuses: ["open", "delivery_pending"],
-  })
+  const safeLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit || "50"), 10) || 50))
+  const [readyRequests, openRequests, counts] = await Promise.all([
+    listFulfilledGenerationRequests(env, { limit: safeLimit, requesterUserId }),
+    listOpenGenerationRequests(env, {
+      limit: safeLimit,
+      requesterUserId,
+      statuses: ["open", "delivery_pending"],
+    }),
+    countGenerationRequestInboxStates(env, requesterUserId),
+  ])
   const base = portraitBase(new URL("https://iconoplasm.brinedew.bio/"), env)
   return readRequestNotificationInbox(env, {
     requesterUserId,
-    limit,
+    limit: safeLimit,
+    readyRequests,
     openRequests,
+    readyCount: counts.ready_count,
+    openCount: counts.open_count,
+    cancelledCount: counts.cancelled_count,
     portraitUrlForAsset(asset) {
       return adminPortraitUrl(base, asset, "thumb")
     },
@@ -3944,10 +3955,31 @@ async function listOpenGenerationRequests(
     requesterUserId,
     statuses,
   })
+  return queryGenerationRequests(env, {
+    whereParts,
+    params,
+    orderBy: "gr.created_at ASC, gr.id ASC",
+    limit: cleanedLimit,
+  })
+}
+
+async function listFulfilledGenerationRequests(env, { limit = 50, requesterUserId = "" } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  const requesterNorm = normalizeUserId(requesterUserId || "")
+  if (!requesterNorm || isGuestUserId(requesterNorm)) return []
+  const cleanedLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit || "50"), 10) || 50))
+  return queryGenerationRequests(env, {
+    whereParts: ["gr.requester_user_id = ?", "gr.status = 'fulfilled'"],
+    params: [requesterNorm],
+    orderBy: "gr.created_at DESC, gr.id DESC",
+    limit: cleanedLimit,
+  })
+}
+
+async function queryGenerationRequests(env, { whereParts, params, orderBy, limit }) {
   const resp = await env.ICONOPLASM_DB.prepare(
-    // D1 cost fence: gene symbols are normalized before they hit this queue.
-    // Keep equality raw so the request panel stays on the index path instead of
-    // forcing expression scans with upper(...).
+    // D1 cost fence: every caller supplies indexed equality predicates. Keep
+    // normalization out of SQL so request inbox reads stay on those indexes.
     `SELECT
        gr.*, 
        COALESCE(gc.full_name, '') AS full_name,
@@ -3964,12 +3996,35 @@ async function listOpenGenerationRequests(
      LEFT JOIN icono_admin_vision_rollup avr
        ON avr.vision_id = gr.requested_vision_id
      WHERE ${whereParts.join(" AND ")}
-     ORDER BY gr.created_at ASC, gr.id ASC
+     ORDER BY ${orderBy}
      LIMIT ?`,
   )
-    .bind(...params, cleanedLimit)
+    .bind(...params, limit)
     .all()
   return enrichGenerationRequestRows(env, Array.isArray(resp?.results) ? resp.results : [])
+}
+
+async function countGenerationRequestInboxStates(env, requesterUserId) {
+  if (!env.ICONOPLASM_DB) return { ready_count: 0, open_count: 0, cancelled_count: 0 }
+  const requesterNorm = normalizeUserId(requesterUserId || "")
+  if (!requesterNorm || isGuestUserId(requesterNorm)) {
+    return { ready_count: 0, open_count: 0, cancelled_count: 0 }
+  }
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       SUM(CASE WHEN status = 'fulfilled' THEN 1 ELSE 0 END) AS ready_count,
+       SUM(CASE WHEN status IN ('open', 'delivery_pending') THEN 1 ELSE 0 END) AS open_count,
+       SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled_count
+     FROM icono_generation_requests
+     WHERE requester_user_id = ?`,
+  )
+    .bind(requesterNorm)
+    .first()
+  return {
+    ready_count: Math.max(0, Number(row?.ready_count || 0) || 0),
+    open_count: Math.max(0, Number(row?.open_count || 0) || 0),
+    cancelled_count: Math.max(0, Number(row?.cancelled_count || 0) || 0),
+  }
 }
 
 async function countOpenGenerationRequests(env, filters = {}) {
@@ -26759,7 +26814,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
     if (path === "/api/iconoplasm/notifications" && request.method === "GET") {
       const payload = await requestNotificationInboxPayload(env, request, {
-        limit: url.searchParams.get("limit") || "25",
+        limit: url.searchParams.get("limit") || "50",
       })
       return done(
         payload.ok ? "request_notifications" : "request_notifications_500",

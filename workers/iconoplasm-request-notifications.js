@@ -72,16 +72,16 @@ function allRequestersDiscordDeliveryEnabled(env) {
   return resolveIconoplasmFulfillmentDeliveryPolicy(env).all_requesters
 }
 
-function mapNotification(row, portraitUrlForAsset) {
-  const id = positiveInteger(row?.id)
-  const requestId = positiveInteger(row?.request_id)
+function mapReadyRequest(row, notification, portraitUrlForAsset) {
+  const requestId = positiveInteger(row?.id)
+  const notificationId = positiveInteger(notification?.id)
   const symbol = geneSymbol(row?.gene_symbol)
   const sha = assetSha(row?.fulfilled_asset_sha256)
-  const readAt = boundedText(row?.read_at, 64)
+  const readAt = boundedText(notification?.read_at, 64)
   return {
-    id,
-    notification_key: boundedText(row?.notification_key, 255),
+    id: requestId,
     request_id: requestId,
+    notification_id: notificationId,
     kind: "request_fulfilled",
     request_kind: requestKind(row?.request_kind),
     gene_symbol: symbol,
@@ -91,24 +91,50 @@ function mapNotification(row, portraitUrlForAsset) {
     fulfilled_asset_sha256: sha,
     fulfilled_vision_id: boundedText(row?.fulfilled_vision_id, 255),
     created_at: boundedText(row?.created_at, 64),
+    fulfilled_at:
+      boundedText(row?.fulfilled_at, 64) ||
+      boundedText(row?.updated_at, 64) ||
+      boundedText(row?.created_at, 64),
     read_at: readAt,
-    unread: !readAt,
+    unread: Boolean(notificationId && !readAt),
     gene_url: symbol ? `/gene/${encodeURIComponent(symbol)}` : "/",
     image_url: sha && portraitUrlForAsset ? portraitUrlForAsset(sha) : "",
-    discord_status: boundedText(row?.discord_status, 64) || "pending",
+    discord_status: boundedText(notification?.discord_status, 64),
   }
 }
 
 export async function readRequestNotificationInbox(
   env,
-  { requesterUserId, limit = 25, openRequests = [], portraitUrlForAsset } = {},
+  {
+    requesterUserId,
+    limit = 50,
+    readyRequests = [],
+    openRequests = [],
+    readyCount = 0,
+    openCount = 0,
+    cancelledCount = 0,
+    portraitUrlForAsset,
+  } = {},
 ) {
   if (!env?.ICONOPLASM_DB) {
     return { ok: false, status: 500, error: "ICONOPLASM_DB binding missing" }
   }
   const requesterId = userId(requesterUserId)
   if (!requesterId) return { ok: false, status: 401, error: "Authentication required" }
-  const safeLimit = Math.max(1, Math.min(50, positiveInteger(limit) || 25))
+  const safeLimit = Math.max(1, Math.min(50, positiveInteger(limit) || 50))
+  const ready = (Array.isArray(readyRequests) ? readyRequests : []).slice(0, safeLimit)
+  const readyRequestIds = ready.map((row) => positiveInteger(row?.id)).filter(Boolean)
+  const notificationRowsPromise = readyRequestIds.length
+    ? env.ICONOPLASM_DB.prepare(
+        `SELECT n.*
+         FROM icono_request_notifications n
+         WHERE n.requester_user_id = ?
+           AND n.discord_status = 'sent'
+           AND n.request_id IN (${readyRequestIds.map(() => "?").join(",")})`,
+      )
+        .bind(requesterId, ...readyRequestIds)
+        .all()
+    : Promise.resolve({ results: [] })
   const [unreadRow, rowsResponse] = await Promise.all([
     env.ICONOPLASM_DB.prepare(
       `SELECT COUNT(*) AS unread_count
@@ -119,23 +145,29 @@ export async function readRequestNotificationInbox(
     )
       .bind(requesterId)
       .first(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT n.*
-       FROM icono_request_notifications n
-       WHERE n.requester_user_id = ?
-         AND n.discord_status = 'sent'
-       ORDER BY n.created_at DESC, n.id DESC
-       LIMIT ?`,
-    )
-      .bind(requesterId, safeLimit)
-      .all(),
+    notificationRowsPromise,
   ])
   const pending = Array.isArray(openRequests) ? openRequests : []
+  const notificationByRequestId = new Map(
+    (Array.isArray(rowsResponse?.results) ? rowsResponse.results : []).map((row) => [
+      positiveInteger(row?.request_id),
+      row,
+    ]),
+  )
   return {
     ok: true,
     authenticated: true,
     unread_count: positiveInteger(unreadRow?.unread_count),
-    open_count: pending.length,
+    ready_count: Math.max(positiveInteger(readyCount), ready.length),
+    open_count: Math.max(positiveInteger(openCount), pending.length),
+    cancelled_count: positiveInteger(cancelledCount),
+    ready_requests: ready.map((row) =>
+      mapReadyRequest(
+        row,
+        notificationByRequestId.get(positiveInteger(row?.id)),
+        portraitUrlForAsset,
+      ),
+    ),
     open_requests: pending.map((row) => {
       const symbol = geneSymbol(row?.gene_symbol)
       return {
@@ -147,9 +179,6 @@ export async function readRequestNotificationInbox(
         gene_url: symbol ? `/gene/${encodeURIComponent(symbol)}` : "/",
       }
     }),
-    notifications: (Array.isArray(rowsResponse?.results) ? rowsResponse.results : []).map((row) =>
-      mapNotification(row, portraitUrlForAsset),
-    ),
   }
 }
 
