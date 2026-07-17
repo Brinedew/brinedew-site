@@ -448,6 +448,10 @@ test("specific requests snapshot a ranked example instead of storing a label-onl
   )
   assert.match(worker, /requested_reference_asset_sha256/)
   assert.match(worker, /requested_reference_gene_symbol/)
+  assert.match(
+    worker,
+    /WHERE vision_id = \?\s+AND builder_version = \$\{GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION\}/,
+  )
   assert.match(migration, /json_extract\(opt\.preview_assets_json, '\$\[0\]\.asset_sha256'\)/)
   assert.match(migration, /status IN \('open', 'delivery_pending'\)/)
 })
@@ -534,8 +538,36 @@ test("authenticated request options return rich emulsion rows from the dedicated
     String(env.gatewayDb.lastOptionRollupSql || ""),
     /ORDER BY vote_h_index DESC,\s*live_count DESC,\s*score DESC,\s*image_count DESC,\s*vision_id ASC/,
   )
+  assert.match(String(env.gatewayDb.lastOptionRollupSql || ""), /builder_version = 2/)
   assert.equal(env.gatewayDb.visionRollupReads, 0)
   assert.equal(env.gatewayDb.previewReads, 0)
+})
+
+test("request-option v2 migration repairs previews from canonical SHA identity", () => {
+  const migration = readFileSync(
+    new URL("../migrations-iconoplasm/0051_request_option_rollup_v2.sql", import.meta.url),
+    "utf8",
+  )
+
+  assert.match(
+    migration,
+    /ADD COLUMN builder_version INTEGER NOT NULL DEFAULT 0/,
+    "the picker projection must declare which builder semantics produced each row",
+  )
+  assert.match(
+    migration,
+    /FROM icono_portrait_assets pa[\s\S]*LEFT JOIN icono_publish_state ps/,
+    "the repair must derive from portrait and publish truth instead of copying the stale picker/admin projection",
+  )
+  assert.match(migration, /COALESCE\(pa\.asset_sha256, ''\) <> ''/)
+  assert.doesNotMatch(
+    migration,
+    /COALESCE\(pa\.r2_key_medium, pa\.r2_key_thumb, pa\.r2_key_full, ''\) <> ''/,
+    "healthy SHA-addressed portraits must not disappear because copied legacy R2-key columns drifted",
+  )
+  assert.match(migration, /preview_rank <= 5/)
+  assert.match(migration, /builder_version = excluded\.builder_version/)
+  assert.match(migration, /NOT EXISTS \(\s*SELECT 1\s*FROM icono_portrait_assets pa/)
 })
 
 test("authenticated request options include shared user emulsions with preview thumbnails", async () => {
