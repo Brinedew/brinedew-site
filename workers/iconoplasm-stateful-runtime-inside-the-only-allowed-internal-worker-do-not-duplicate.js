@@ -3724,6 +3724,14 @@ function mapGenerationRequestRow(row) {
     requested_emulsion_id: requestMode === "specific" ? publicEmulsionIdForRow(row) : "",
     requested_emulsion_label:
       requestMode === "specific" ? generationRequestVisionLabel(row) : "Random default",
+    requested_reference_asset_sha256:
+      requestMode === "specific"
+        ? normalizeSha256(row?.requested_reference_asset_sha256 || "") || ""
+        : "",
+    requested_reference_gene_symbol:
+      requestMode === "specific"
+        ? normalizeSymbol(row?.requested_reference_gene_symbol || "") || ""
+        : "",
     status: sanitizeText(row?.status || "", 64) || "open",
     created_at: sanitizeText(row?.created_at || "", 64) || "",
     updated_at: sanitizeText(row?.updated_at || "", 64) || "",
@@ -4077,6 +4085,31 @@ async function createGenerationRequest(
   }
   const sourceSymbolNorm = normalizeSymbol(sourceGeneSymbol || geneSymbol || "") || symbolNorm
   const sourceAssetNorm = normalizeSha256(sourceAssetSha256 || "") || ""
+  let requestedReferenceAssetSha = ""
+  let requestedReferenceGeneSymbol = ""
+  if (mode === "specific") {
+    const optionRow = await env.ICONOPLASM_DB.prepare(
+      `SELECT preview_assets_json
+       FROM icono_generation_request_vision_option_rollup
+       WHERE vision_id = ?
+       LIMIT 1`,
+    )
+      .bind(visionNorm)
+      .first()
+    const rankedReferences = parseGenerationRequestPreviewAssetsJson(
+      optionRow?.preview_assets_json || "[]",
+    )
+    const selectedReference = rankedReferences[0] || null
+    requestedReferenceAssetSha = normalizeSha256(selectedReference?.asset_sha256 || "") || ""
+    requestedReferenceGeneSymbol = normalizeSymbol(selectedReference?.gene_symbol || "") || ""
+    if (!requestedReferenceAssetSha) {
+      return {
+        ok: false,
+        error:
+          "This emulsion has no reproducible example blot. Refresh the picker and choose another emulsion.",
+      }
+    }
+  }
   const insertResp = await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_generation_requests (
        gene_symbol,
@@ -4088,9 +4121,11 @@ async function createGenerationRequest(
        source_asset_sha256,
        request_mode,
        requested_vision_id,
+       requested_reference_asset_sha256,
+       requested_reference_gene_symbol,
        status,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)`,
   )
     .bind(
       symbolNorm,
@@ -4102,6 +4137,8 @@ async function createGenerationRequest(
       sourceAssetNorm,
       mode,
       visionNorm,
+      requestedReferenceAssetSha,
+      requestedReferenceGeneSymbol,
     )
     .run()
   const requestId = Number(insertResp?.meta?.last_row_id || 0)
