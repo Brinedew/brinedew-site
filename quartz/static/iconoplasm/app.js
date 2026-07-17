@@ -13,6 +13,7 @@ import {
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js"
 import { createRequestInbox } from "./request-inbox.js"
+import { portraitDelivery } from "./portrait-delivery.js"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -421,6 +422,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return d.innerHTML
   }
 
+  portraitDelivery.adopt(
+    window.__iconoplasmBootstrap && window.__iconoplasmBootstrap.portraitSourcePromise,
+  )
+
   var requestInbox = createRequestInbox({
     fetchJSON: fetchJSON,
     getCurrentUser: function () {
@@ -430,6 +435,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       renderIconoplasmSidebar()
     },
     escapeHtml: esc,
+    ensurePortraitSource: portraitDelivery.ensure,
+    resolvePortraitUrl: portraitDelivery.resolve,
   })
 
   function normalizedSymbol(symbol) {
@@ -438,7 +445,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       .toUpperCase()
   }
 
-  function publishedPortraitUrl(genePayload, preferredSize) {
+  function rawPublishedPortraitUrl(genePayload, preferredSize) {
     var portrait = genePayload && genePayload.portrait
     var flatHeroUrl = String((genePayload && genePayload.ph) || "").trim()
     var flatMediumUrl = String((genePayload && genePayload.pt) || "").trim()
@@ -453,7 +460,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return heroUrl || mediumUrl || thumbUrl
   }
 
-  function candidatePortraitUrl(candidate, preferredSize) {
+  function publishedPortraitUrl(genePayload, preferredSize) {
+    return portraitDelivery.resolve(rawPublishedPortraitUrl(genePayload, preferredSize))
+  }
+
+  function rawCandidatePortraitUrl(candidate, preferredSize) {
     var item = candidate || {}
     var fullUrl = String(item.full_url || "").trim()
     var mediumUrl = String(item.medium_url || "").trim()
@@ -461,6 +472,32 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (preferredSize === "medium") return mediumUrl || thumbUrl || fullUrl
     if (preferredSize === "thumb") return thumbUrl || mediumUrl || fullUrl
     return fullUrl || mediumUrl || thumbUrl
+  }
+
+  function candidatePortraitUrl(candidate, preferredSize) {
+    return portraitDelivery.resolve(rawCandidatePortraitUrl(candidate, preferredSize))
+  }
+
+  function firstRawPortraitUrl(records) {
+    var source = Array.isArray(records) ? records : [records]
+    for (var i = 0; i < source.length; i++) {
+      var item = source[i]
+      var published = rawPublishedPortraitUrl(item, "medium")
+      if (published) return published
+      var candidates = Array.isArray(item && item.portrait_candidates)
+        ? item.portrait_candidates
+        : []
+      for (var j = 0; j < candidates.length; j++) {
+        var candidate = rawCandidatePortraitUrl(candidates[j], "medium")
+        if (candidate) return candidate
+      }
+    }
+    return ""
+  }
+
+  function ensurePortraitDelivery(records) {
+    var firstUrl = firstRawPortraitUrl(records)
+    return firstUrl ? portraitDelivery.ensure(firstUrl) : Promise.resolve("")
   }
 
   function emulsionDisplayInfo(item) {
@@ -4630,9 +4667,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
-  function requestOptionPreviewUrl(asset) {
+  function rawRequestOptionPreviewUrl(asset) {
     var item = asset || {}
     return String(item.medium_url || item.thumb_url || "").trim()
+  }
+
+  function requestOptionPreviewUrl(asset) {
+    return portraitDelivery.resolve(rawRequestOptionPreviewUrl(asset))
   }
 
   function renderRequestOptionPreviewStripMarkup(option) {
@@ -7234,7 +7275,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         }
 
         requestPromise
-          .then(function (data) {
+          .then(async function (data) {
             if (renderDisposed || requestId !== activeGalleryRequest) return
             var items = Array.isArray(data && data.items) ? data.items : []
             var isFirstPage = galleryState.offset === 0
@@ -7254,6 +7295,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               grid.setAttribute("aria-busy", "false")
             }
             if (items.length) {
+              await ensurePortraitDelivery(items)
               var newCards = appendGrid(
                 grid,
                 items,
@@ -7314,7 +7356,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         return
       }
       if (accountGalleryWindowAvailable(galleryState.order, activeDiscoveryScope())) {
-        var renderAccountGalleryWindow = function (data) {
+        var renderAccountGalleryWindow = async function (data) {
           if (!data || renderDisposed || requestId !== activeGalleryRequest) return false
           var isFirstPage = galleryState.offset === 0
           var cards = Array.isArray(data && data.cards)
@@ -7357,6 +7399,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           galleryState.hasMore = !!(data && data.has_more)
           galleryState.windowCursor = String((data && data.next_cursor) || "")
           if (cards.length) {
+            await ensurePortraitDelivery(cards)
             var newCards = appendGrid(
               grid,
               cards,
@@ -7418,7 +7461,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         )
           .then(function (data) {
             if (!data || renderDisposed || requestId !== activeGalleryRequest) return
-            renderAccountGalleryWindow(data)
+            return renderAccountGalleryWindow(data)
           })
           .catch(function (err) {
             if (renderDisposed || requestId !== activeGalleryRequest) return
@@ -7461,103 +7504,107 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             return
           }
           var appendResolvedItems = function (resolvedItems) {
-            if (renderDisposed || requestId !== activeGalleryRequest) return
-            if (isFirstPage) {
-              grid.innerHTML = ""
-              grid.setAttribute("data-layout", homeGridLayout)
-              grid.setAttribute("aria-busy", "false")
-            }
-            if (resolvedItems.length) {
-              var newCards = appendGrid(
-                grid,
-                resolvedItems,
-                galleryState.items.length,
-                homeLayout,
-                cardVariant,
-              )
-              galleryState.items = galleryState.items.concat(resolvedItems)
-              galleryState.offset += pageEntries.length
-              var installCard = null
-              var discordActionCard = null
-              var auxiliaryContainer = homeAuxiliaryContainer(grid, cardVariant)
-              if (galleryState.offset >= GUEST_STARTER_GENES.length) {
-                installCard = appendHomeInstallCard(auxiliaryContainer)
+            return (async function () {
+              await ensurePortraitDelivery(resolvedItems)
+              if (renderDisposed || requestId !== activeGalleryRequest) return
+              if (isFirstPage) {
+                grid.innerHTML = ""
+                grid.setAttribute("data-layout", homeGridLayout)
+                grid.setAttribute("aria-busy", "false")
               }
-              if (galleryState.offset >= GUEST_STARTER_GENES.length) {
-                discordActionCard = appendDiscordActionCard(auxiliaryContainer)
-              }
-              var auxiliaryCards = []
-              if (installCard) auxiliaryCards.push(installCard)
-              if (discordActionCard) auxiliaryCards.push(discordActionCard)
-              var masonryNewCards =
-                auxiliaryContainer === grid && auxiliaryCards.length
-                  ? newCards.concat(auxiliaryCards)
-                  : newCards
-              if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
-                applyHomeMasonry(grid, masonryNewCards)
-                setupOrderedPortraitPrefetch(grid, galleryState.items)
-                void hydrateBrickCards(newCards).then(function () {
-                  warmBrickCardImages(galleryState.items)
-                  applyHomeMasonry(grid)
-                })
-              } else {
-                destroyHomeMasonry()
-                warmBrickCardImages(galleryState.items)
-                wireBrickVoteBoxes(newCards)
-                wireMobileLabelCards(newCards)
-                refreshPortraitLightbox()
-                prewarmMobileCardPageVM(
-                  galleryState.sortedDiscoveries.slice(
-                    galleryState.offset,
-                    galleryState.offset + currentGalleryLimit(),
-                  ),
+              if (resolvedItems.length) {
+                var newCards = appendGrid(
+                  grid,
+                  resolvedItems,
+                  galleryState.items.length,
+                  homeLayout,
+                  cardVariant,
                 )
+                galleryState.items = galleryState.items.concat(resolvedItems)
+                galleryState.offset += pageEntries.length
+                var installCard = null
+                var discordActionCard = null
+                var auxiliaryContainer = homeAuxiliaryContainer(grid, cardVariant)
+                if (galleryState.offset >= GUEST_STARTER_GENES.length) {
+                  installCard = appendHomeInstallCard(auxiliaryContainer)
+                }
+                if (galleryState.offset >= GUEST_STARTER_GENES.length) {
+                  discordActionCard = appendDiscordActionCard(auxiliaryContainer)
+                }
+                var auxiliaryCards = []
+                if (installCard) auxiliaryCards.push(installCard)
+                if (discordActionCard) auxiliaryCards.push(discordActionCard)
+                var masonryNewCards =
+                  auxiliaryContainer === grid && auxiliaryCards.length
+                    ? newCards.concat(auxiliaryCards)
+                    : newCards
+                if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
+                  applyHomeMasonry(grid, masonryNewCards)
+                  setupOrderedPortraitPrefetch(grid, galleryState.items)
+                  void hydrateBrickCards(newCards).then(function () {
+                    warmBrickCardImages(galleryState.items)
+                    applyHomeMasonry(grid)
+                  })
+                } else {
+                  destroyHomeMasonry()
+                  warmBrickCardImages(galleryState.items)
+                  wireBrickVoteBoxes(newCards)
+                  wireMobileLabelCards(newCards)
+                  refreshPortraitLightbox()
+                  prewarmMobileCardPageVM(
+                    galleryState.sortedDiscoveries.slice(
+                      galleryState.offset,
+                      galleryState.offset + currentGalleryLimit(),
+                    ),
+                  )
+                }
+                if (
+                  isFirstPage &&
+                  galleryState.offset < galleryState.prefillTarget &&
+                  galleryState.hasMore
+                ) {
+                  clearBackgroundPrefill()
+                  backgroundPrefillTimer = window.setTimeout(function () {
+                    backgroundPrefillTimer = null
+                    loadNextGalleryPage()
+                  }, 140)
+                }
+              } else {
+                galleryState.offset += pageEntries.length
               }
-              if (
-                isFirstPage &&
-                galleryState.offset < galleryState.prefillTarget &&
-                galleryState.hasMore
-              ) {
-                clearBackgroundPrefill()
-                backgroundPrefillTimer = window.setTimeout(function () {
-                  backgroundPrefillTimer = null
-                  loadNextGalleryPage()
-                }, 140)
+              renderCollectionChrome()
+              syncHeroCount()
+              updateSentinelObserver()
+              setLoadingState("", false)
+              syncHomeHistoryState(false)
+              maybeRestoreHomeScroll()
+              if (orderEl && orderEl.value !== galleryState.order) {
+                orderEl.value = galleryState.order
               }
-            } else {
-              galleryState.offset += pageEntries.length
-            }
-            renderCollectionChrome()
-            syncHeroCount()
-            updateSentinelObserver()
-            setLoadingState("", false)
-            syncHomeHistoryState(false)
-            maybeRestoreHomeScroll()
-            if (orderEl && orderEl.value !== galleryState.order) {
-              orderEl.value = galleryState.order
-            }
+            })()
           }
           if (shouldUseImmediateDiscoveryFallback(homeLayout, cardVariant)) {
             var immediateItems = pageEntries.map(function (entry) {
               return fallbackDiscoveredGene(entry)
             })
-            appendResolvedItems(immediateItems.filter(Boolean))
+            return appendResolvedItems(immediateItems.filter(Boolean))
           } else {
             return loadMobileCardPageVM(pageEntries).then(function (result) {
               var richItems = Array.isArray(result && result.cards) ? result.cards : []
               var failures = Array.isArray(result && result.failures) ? result.failures : []
-              appendResolvedItems(richItems.filter(Boolean))
-              if (failures.length) {
-                console.error("[Iconoplasm] mobile card manifest failures:", failures)
-                var failureTiles = appendMobileDataFailureTiles(grid, failures)
-                if (failureTiles.length) {
-                  grid.setAttribute("aria-busy", "false")
+              return appendResolvedItems(richItems.filter(Boolean)).then(function () {
+                if (failures.length) {
+                  console.error("[Iconoplasm] mobile card manifest failures:", failures)
+                  var failureTiles = appendMobileDataFailureTiles(grid, failures)
+                  if (failureTiles.length) {
+                    grid.setAttribute("aria-busy", "false")
+                  }
+                  renderCollectionChrome()
+                  syncHeroCount()
+                  updateSentinelObserver()
+                  setLoadingState("", false)
                 }
-                renderCollectionChrome()
-                syncHeroCount()
-                updateSentinelObserver()
-                setLoadingState("", false)
-              }
+              })
             })
           }
         })
@@ -8162,6 +8209,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         return fetchGeneCardArtifact(symbol).then(function (cardData) {
           if (cardData) return { data: cardData, source: "card" }
           return null
+        })
+      })
+      .then(function (winner) {
+        if (!winner || !winner.data) return winner
+        return ensurePortraitDelivery(winner.data).then(function () {
+          return winner
         })
       })
 
@@ -9477,6 +9530,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function init() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
+    portraitDelivery.install(document)
     startMobileLabelBreakpointObserver()
     startSharedIconoplasmSettingsAutoSync()
     var currentState = readHistoryState()

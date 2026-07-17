@@ -56,6 +56,136 @@ test("stateful worker can serve Bunny-backed portraits without a direct bucket b
   }
 })
 
+test("stateful worker favors authenticated Bunny storage over a fragile public CDN", async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input?.url || ""
+    assert.equal(url, `https://storage.bunnycdn.com/iconoplasm-portraits/${PORTRAIT_KEY}`)
+    assert.equal(init?.headers?.AccessKey, "storage-access-key")
+    return new Response("storage-image-bytes", {
+      status: 200,
+      headers: {
+        "Content-Type": "image/webp",
+        ETag: '"bunny-storage-etag"',
+      },
+    })
+  }
+
+  try {
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(`https://iconoplasm.brinedew.bio/${PORTRAIT_KEY}`),
+        {
+          ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: CDN_BASE,
+          ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+          ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "iconoplasm-portraits",
+          ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-access-key",
+        },
+        {},
+      )
+
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get("content-type"), "image/webp")
+    assert.equal(await response.text(), "storage-image-bytes")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("public edge serves first-party portrait URLs from authenticated Bunny storage", async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input?.url || ""
+    assert.equal(url, `https://storage.bunnycdn.com/iconoplasm-portraits/${PORTRAIT_KEY}`)
+    assert.equal(init?.headers?.AccessKey, "storage-access-key")
+    return new Response("public-edge-storage-image-bytes", {
+      status: 200,
+      headers: { "Content-Type": "image/webp" },
+    })
+  }
+  const env = {
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: CDN_BASE,
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "iconoplasm-portraits",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-access-key",
+  }
+
+  try {
+    const response =
+      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        new Request(`https://iconoplasm.brinedew.bio/${PORTRAIT_KEY}`),
+        bindOnlyAllowedGateway(env),
+        {},
+      )
+
+    assert.equal(response.status, 200)
+    assert.equal(await response.text(), "public-edge-storage-image-bytes")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("portrait cache ignores a cache-busting query and avoids a second storage read", async () => {
+  const originalFetch = globalThis.fetch
+  const originalCaches = globalThis.caches
+  const entries = new Map()
+  let fetches = 0
+  globalThis.fetch = async () => {
+    fetches += 1
+    return new Response("cached-storage-image-bytes", {
+      status: 200,
+      headers: { "Content-Type": "image/webp" },
+    })
+  }
+  Object.defineProperty(globalThis, "caches", {
+    configurable: true,
+    value: {
+      default: {
+        async match(request) {
+          const cached = entries.get(request.url)
+          return cached ? cached.clone() : undefined
+        },
+        async put(request, response) {
+          entries.set(request.url, response.clone())
+        },
+      },
+    },
+  })
+  const env = {
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "iconoplasm-portraits",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-access-key",
+  }
+  const ctx = {
+    waitUntil(promise) {
+      return promise
+    },
+  }
+
+  try {
+    const first =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(`https://iconoplasm.brinedew.bio/${PORTRAIT_KEY}?fresh=1`),
+        env,
+        ctx,
+      )
+    assert.equal(first.status, 200)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const second =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(`https://iconoplasm.brinedew.bio/${PORTRAIT_KEY}?fresh=2`),
+        env,
+        ctx,
+      )
+    assert.equal(second.status, 200)
+    assert.equal(await second.text(), "cached-storage-image-bytes")
+    assert.equal(fetches, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+    Object.defineProperty(globalThis, "caches", { configurable: true, value: originalCaches })
+  }
+})
+
 test("public catalog dump proxies to the stateful worker when portraits live in external storage", async () => {
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (input) => {

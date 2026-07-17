@@ -59,14 +59,36 @@ test("put writes to the Bunny storage API with the AccessKey header", async () =
   )
 })
 
-test("load reads from the public CDN base and returns bytes", async () => {
+test("load reads from Bunny storage with its AccessKey and returns bytes", async () => {
   await withMockedFetch(
-    (url) => {
-      assert.equal(url, "https://iconoplasmportraits.b-cdn.net/discord-recap-images/2026-06-03.png")
+    (url, init) => {
+      assert.equal(
+        url,
+        "https://storage.bunnycdn.com/iconoplasm-portraits/discord-recap-images/2026-06-03.png",
+      )
+      assert.equal(init.headers.AccessKey, "secret-access-key")
       return new Response(new Uint8Array([9, 8, 7]), { status: 200 })
     },
     async () => {
       const bytes = await loadDiscordRecapImageBytes(BUNNY_ENV, "2026-06-03")
+      assert.ok(bytes instanceof Uint8Array)
+      assert.equal(bytes.byteLength, 3)
+    },
+  )
+})
+
+test("load falls back to the public CDN only without storage credentials", async () => {
+  await withMockedFetch(
+    (url, init) => {
+      assert.equal(url, "https://iconoplasmportraits.b-cdn.net/discord-recap-images/2026-06-03.png")
+      assert.deepEqual(init, {})
+      return new Response(new Uint8Array([9, 8, 7]), { status: 200 })
+    },
+    async () => {
+      const bytes = await loadDiscordRecapImageBytes(
+        { ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net" },
+        "2026-06-03",
+      )
       assert.ok(bytes instanceof Uint8Array)
       assert.equal(bytes.byteLength, 3)
     },

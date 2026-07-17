@@ -2868,7 +2868,12 @@ function externalPortraitStoragePassword(env) {
 }
 
 function canReadExternalPortraitStorage(env) {
-  return Boolean(externalPortraitCdnBase(env))
+  return Boolean(
+    (externalPortraitStorageZone(env) &&
+      externalPortraitStorageHost(env) &&
+      externalPortraitStoragePassword(env)) ||
+    externalPortraitCdnBase(env),
+  )
 }
 
 function canWriteExternalPortraitStorage(env) {
@@ -2902,6 +2907,22 @@ async function readPortraitStorageObject(env, key, { fallbackContentType = "imag
       etag: object.httpEtag || key,
     }
   }
+  const storageUrl = externalPortraitStorageWriteUrl(env, key)
+  const storagePassword = externalPortraitStoragePassword(env)
+  if (storageUrl && storagePassword) {
+    const response = await fetch(storageUrl, {
+      headers: { AccessKey: storagePassword },
+    })
+    if (response.status === 404) return null
+    if (!response.ok) {
+      throw new Error(`External portrait storage fetch failed (${response.status}) for ${key}`)
+    }
+    return {
+      body: response.body,
+      contentType: response.headers.get("content-type") || fallbackContentType,
+      etag: response.headers.get("etag") || key,
+    }
+  }
   const publicUrl = externalPortraitPublicUrl(env, key)
   if (!publicUrl) return null
   const response = await fetch(publicUrl)
@@ -2914,6 +2935,44 @@ async function readPortraitStorageObject(env, key, { fallbackContentType = "imag
     contentType: response.headers.get("content-type") || fallbackContentType,
     etag: response.headers.get("etag") || key,
   }
+}
+
+function portraitEdgeCacheKey(request) {
+  const cacheUrl = new URL(request.url)
+  // Portrait filenames are content-addressed. Query strings are only useful
+  // for browser cache busting and must not create duplicate edge objects.
+  cacheUrl.search = ""
+  return new Request(cacheUrl.toString(), { method: "GET" })
+}
+
+function portraitEdgeCache() {
+  return globalThis.caches?.default || null
+}
+
+function portraitHeadResponse(response) {
+  return new Response(null, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  })
+}
+
+async function cachedPortraitResponse(request, ctx, load) {
+  const cacheable = request.method === "GET" || request.method === "HEAD"
+  const cache = cacheable ? portraitEdgeCache() : null
+  const cacheKey = cache ? portraitEdgeCacheKey(request) : null
+  if (cache && cacheKey) {
+    const cached = await cache.match(cacheKey)
+    if (cached) return request.method === "HEAD" ? portraitHeadResponse(cached) : cached
+  }
+
+  const fresh = await load()
+  if (cache && cacheKey && fresh.ok && request.method === "GET") {
+    const cacheWrite = cache.put(cacheKey, fresh.clone()).catch(() => null)
+    if (typeof ctx?.waitUntil === "function") ctx.waitUntil(cacheWrite)
+    else await cacheWrite
+  }
+  return request.method === "HEAD" ? portraitHeadResponse(fresh) : fresh
 }
 
 async function headPortraitStorageObject(env, key) {
@@ -25901,20 +25960,24 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
     if (path.startsWith("/portraits/")) {
       const key = path.replace(/^\/+/, "")
-      const obj = await readPortraitStorageObject(env, key, { fallbackContentType: "image/webp" })
-      if (!obj && !env.ICONOPLASM_PORTRAITS && !canReadExternalPortraitStorage(env)) {
-        return done("portrait_no_binding", json({ error: "Portrait bucket not configured" }, 404))
-      }
-      if (!obj) return done("portrait_404", json({ error: "Portrait not found" }, 404))
       return done(
         "portrait",
-        new Response(obj.body, {
-          headers: {
-            "Content-Type": obj.contentType || "image/webp",
-            "Cache-Control": "public, max-age=31536000, immutable",
-            ETag: `"${obj.etag || key}"`,
-            "Access-Control-Allow-Origin": "*",
-          },
+        await cachedPortraitResponse(request, ctx, async () => {
+          const obj = await readPortraitStorageObject(env, key, {
+            fallbackContentType: "image/webp",
+          })
+          if (!obj && !env.ICONOPLASM_PORTRAITS && !canReadExternalPortraitStorage(env)) {
+            return json({ error: "Portrait bucket not configured" }, 404)
+          }
+          if (!obj) return json({ error: "Portrait not found" }, 404)
+          return new Response(obj.body, {
+            headers: {
+              "Content-Type": obj.contentType || "image/webp",
+              "Cache-Control": "public, max-age=31536000, immutable",
+              ETag: `"${obj.etag || key}"`,
+              "Access-Control-Allow-Origin": "*",
+            },
+          })
         }),
       )
     }
