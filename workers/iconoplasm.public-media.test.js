@@ -225,6 +225,25 @@ function buildCatalogResolveKv() {
   })
 }
 
+function buildSessionBinding(sessions) {
+  return {
+    idFromName(name) {
+      return String(name || "")
+    },
+    get(id) {
+      return {
+        async fetch() {
+          const session = sessions[String(id || "")] || null
+          return new Response(JSON.stringify(session), {
+            status: session ? 200 : 404,
+            headers: { "Content-Type": "application/json" },
+          })
+        },
+      }
+    },
+  }
+}
+
 function buildEnv(overrides = {}, { bindGateway = true } = {}) {
   const gatewayDb =
     overrides.ICONOPLASM_DB === undefined ? new FakeIconoplasmDb() : overrides.ICONOPLASM_DB
@@ -286,8 +305,42 @@ test("site gene payload includes published portrait dimensions for first-party b
   assert.equal(payload?.portrait?.height, 512)
   assert.equal(payload?.portrait?.sample_label, "A1BG-3")
   assert.equal(payload?.portrait?.sample_number, 3)
+  assert.equal(typeof payload?.essence, "object")
+  assert.ok(Array.isArray(payload?.portrait_candidates))
   assert.equal("manifestation" in payload, false)
   assert.equal("description" in payload, false)
+})
+
+test("site gene detail is identical for guest, Loweren, and every other account", async () => {
+  const sessions = buildSessionBinding({
+    "session:loweren-session": { user_id: "loweren-id", username: "Loweren" },
+    "session:another-session": { user_id: "another-id", username: "another-user" },
+  })
+  const read = async (cookie = "") => {
+    resetIconoplasmRuntimeCachesForTest()
+    const response =
+      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+          headers: {
+            Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
+            ...(cookie ? { Cookie: cookie } : {}),
+          },
+        }),
+        buildEnv({ GAME_SESSIONS: sessions }),
+        {},
+      )
+    assert.equal(response.status, 200)
+    return response.json()
+  }
+
+  const guest = await read()
+  const loweren = await read("session=loweren-session")
+  const anotherAccount = await read("session=another-session")
+
+  assert.deepEqual(loweren, guest)
+  assert.deepEqual(anotherAccount, guest)
+  assert.equal(typeof guest.essence, "object")
+  assert.ok(Array.isArray(guest.portrait_candidates))
 })
 
 test("site gene detail canonicalizes alias requests before rendering the gene payload", async () => {

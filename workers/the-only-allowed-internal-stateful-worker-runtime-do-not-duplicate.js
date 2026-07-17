@@ -74,7 +74,7 @@ const ICONOPLASM_GENE_FONT_PRELOAD_LINKS = [
   "</static/iconoplasm/fonts/Caveat-400.woff2>; rel=preload; as=font; type=font/woff2; crossorigin",
 ]
 const ICONOPLASM_HTML_SHELL_EDGE_CACHE_TTL_SECONDS = 300
-const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-06-17-remove-static-shell-v2"
+const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-07-18-complete-gene-detail-v1"
 const ICONOPLASM_PUBLIC_NO_VARY_SEARCH =
   'params=("utm_source" "utm_medium" "utm_campaign" "utm_content" "utm_term" "fbclid" "gclid" "mc_cid" "mc_eid" "codex_verify")'
 
