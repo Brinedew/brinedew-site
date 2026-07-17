@@ -184,20 +184,6 @@ function iconoplasmCardPayloadFromManifest(payload) {
   return (card && card.payload) || (payload && payload.payload) || null
 }
 
-function iconoplasmPortraitPreloadUrlFromCardPayload(manifestPayload, cardPayload) {
-  const card =
-    manifestPayload && (manifestPayload.card || (manifestPayload.cards && manifestPayload.cards[0]))
-  return (
-    cardPayload?.portrait?.medium_url ||
-    cardPayload?.portrait?.hero_url ||
-    cardPayload?.portrait?.thumb_url ||
-    card?.portrait?.url ||
-    card?.portrait?.full_url ||
-    card?.portrait?.thumb_url ||
-    ""
-  )
-}
-
 function iconoplasmCanonicalAssetFromCardPayload(cardPayload) {
   const value = String(cardPayload?.portrait?.asset_sha256 || "")
     .trim()
@@ -357,12 +343,12 @@ async function iconoplasmGeneCardBootstrapInjection(request, env, ctx, path) {
       source: "site_gene_detail",
       payload: cardPayload,
     }
-    const portraitUrl = iconoplasmPortraitPreloadUrlFromCardPayload(null, cardPayload)
-    const portraitPreload = portraitUrl
-      ? `<link rel="preload" as="image" href="${escapeIconoplasmHtmlAttribute(portraitUrl)}" fetchpriority="high">`
-      : ""
     return {
-      injection: `${portraitPreload}<script type="application/json" id="iconoplasm-card-bootstrap">${iconoplasmSafeJsonScriptPayload(payload)}</script>`,
+      // The inline head bootstrap consumes this canonical payload and performs
+      // the one allowed high-priority Bunny probe only when this tab has not
+      // already chosen a portrait source. A server-injected preload cannot see
+      // sessionStorage and would retry a dead source on every navigation.
+      injection: `<script type="application/json" id="iconoplasm-card-bootstrap">${iconoplasmSafeJsonScriptPayload(payload)}</script>`,
       leadCardHtml: iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload),
       snapshotVersion,
     }

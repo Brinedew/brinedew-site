@@ -1540,7 +1540,17 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   )
   assert.match(head, /var startGeneDetailFetch = function \(\)/)
   assert.match(head, /startGeneDetailFetch\(\)/)
+  assert.match(
+    head,
+    /if \(embeddedGeneCard\) \{[\s\S]*bootstrap\.geneDetailPromise = Promise\.resolve\(embeddedGeneCard\)/,
+    "the high-priority portrait decision should reuse the canonical embedded detail without another API round trip",
+  )
   assert.match(head, /img\.fetchPriority = "high"/)
+  assert.doesNotMatch(
+    internalWorker,
+    /iconoplasmPortraitPreloadUrlFromCardPayload|<link rel="preload" as="image" href="\$\{escapeIconoplasmHtmlAttribute\(portraitUrl\)\}/,
+    "the server cannot unconditionally preload Bunny because it cannot see the tab's failed-source decision",
+  )
   assert.doesNotMatch(head, /installCriticalGeneRenderer\(\)/)
   assert.doesNotMatch(
     head,

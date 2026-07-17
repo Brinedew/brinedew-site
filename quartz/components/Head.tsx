@@ -104,22 +104,30 @@ export default (() => {
     if (bootstrap.geneDetailSymbol) {
       var startGeneDetailFetch = function () {
         if (bootstrap.geneDetailPromise) return bootstrap.geneDetailPromise
-        bootstrap.geneDetailPromise = fetch(
-          origin + "/api/iconoplasm/site/genes/" + encodeURIComponent(bootstrap.geneDetailSymbol),
-        )
-          .then(function (response) {
-            if (!response.ok) return null
-            return response.json().catch(function () {
+        if (embeddedGeneCard) {
+          // The edge worker has already read the canonical detail for the
+          // first-paint shell. Reusing it starts the tab-level portrait probe
+          // immediately without a second API round trip.
+          bootstrap.geneDetailData = embeddedGeneCard
+          bootstrap.geneDetailPromise = Promise.resolve(embeddedGeneCard)
+        } else {
+          bootstrap.geneDetailPromise = fetch(
+            origin + "/api/iconoplasm/site/genes/" + encodeURIComponent(bootstrap.geneDetailSymbol),
+          )
+            .then(function (response) {
+              if (!response.ok) return null
+              return response.json().catch(function () {
+                return null
+              })
+            })
+            .then(function (data) {
+              bootstrap.geneDetailData = data || null
+              return data || null
+            })
+            .catch(function () {
               return null
             })
-          })
-          .then(function (data) {
-            bootstrap.geneDetailData = data || null
-            return data || null
-          })
-          .catch(function () {
-            return null
-          })
+        }
         bootstrap.portraitSourcePromise = bootstrap.geneDetailPromise.then(function (data) {
           try {
             var storedDecision = JSON.parse(
