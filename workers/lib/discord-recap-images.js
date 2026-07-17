@@ -16,7 +16,7 @@ export function buildDiscordRecapImageKey(day) {
 // dead. We reuse the already-live Bunny CDN object storage that the Iconoplasm
 // portrait pipeline depends on. The same env vars drive both:
 //
-//   ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL   - public read base (no auth)
+//   ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL   - credential-less fallback read base
 //   ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST   - storage API host (write/head)
 //   ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE   - storage zone name
 //   ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD - storage AccessKey (secret)
@@ -64,7 +64,7 @@ export function canWriteDiscordRecapImage(env) {
 
 export function canReadDiscordRecapImage(env) {
   if (env?.STRUCTURES_BUCKET) return true
-  return Boolean(bunnyCdnBase(env))
+  return Boolean((bunnyStorageZone(env) && bunnyStoragePassword(env)) || bunnyCdnBase(env))
 }
 
 /**
@@ -168,6 +168,19 @@ export async function loadDiscordRecapImageBytes(env, day) {
     const object = await env.STRUCTURES_BUCKET.get(key)
     if (!object) return null
     const imageData = await object.arrayBuffer()
+    if (!imageData || imageData.byteLength <= 0) return null
+    return new Uint8Array(imageData)
+  }
+
+  const storageUrl = bunnyWriteUrl(env, key)
+  const password = bunnyStoragePassword(env)
+  if (storageUrl && password) {
+    const response = await fetch(storageUrl, { headers: { AccessKey: password } })
+    if (response.status === 404) return null
+    if (!response.ok) {
+      throw new Error(`Recap image fetch failed (${response.status}) for ${key}`)
+    }
+    const imageData = await response.arrayBuffer()
     if (!imageData || imageData.byteLength <= 0) return null
     return new Uint8Array(imageData)
   }

@@ -13,12 +13,19 @@ const DATA_REFRESH_TTL_MS = 5 * 60 * 1000
 const PORTRAIT_DATA_URL_CACHE_LIMIT = 48
 const PORTRAIT_DATA_URL_ERROR_CACHE_LIMIT = 96
 const PORTRAIT_DATA_URL_ERROR_TTL_MS = 30 * 1000
+const PORTRAIT_SOURCE_TIMEOUT_MS = 2500
+const PORTRAIT_PRIMARY_ORIGIN = "https://iconoplasmportraits.b-cdn.net"
+const PORTRAIT_FALLBACK_ORIGIN = HOST
+const PORTRAIT_SOURCE_SESSION_KEY = "iconoplasm_portrait_source_by_tab"
 const REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION = 4
 const CONTRACT_ERROR_INVALID_MANIFEST = "invalid_manifest"
 const CONTRACT_ERROR_INCOMPATIBLE_ARTIFACT = "incompatible_artifact"
 const CONTRACT_ERROR_INCOMPATIBLE_EXTENSION = "incompatible_extension"
 const portraitDataUrlCache = new Map()
 const portraitDataUrlErrorCache = new Map()
+const portraitSourceByTab = new Map()
+const portraitSourceDecisionByTab = new Map()
+let portraitSourceStateLoaded = false
 
 chrome.runtime.onInstalled.addListener(() => {
   fetchGeneData()
@@ -27,6 +34,21 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.runtime.onStartup.addListener(() => {
   fetchGeneData()
 })
+
+if (chrome.tabs?.onRemoved?.addListener) {
+  chrome.tabs.onRemoved.addListener(async (tabId) => {
+    await loadPortraitSourceState()
+    portraitSourceByTab.delete(portraitTabKey(tabId))
+    portraitSourceDecisionByTab.delete(portraitTabKey(tabId))
+    const session = chrome.storage?.session
+    if (!session?.set) return
+    try {
+      await session.set({
+        [PORTRAIT_SOURCE_SESSION_KEY]: Object.fromEntries(portraitSourceByTab),
+      })
+    } catch (_err) {}
+  })
+}
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "GET_GENE_DATA") {
@@ -38,7 +60,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true
   }
   if (msg.type === "WARM_PORTRAIT_DATA_URLS") {
-    warmPortraitDataUrls(msg.urls).then((count) =>
+    warmPortraitDataUrls(msg.urls, sender?.tab?.id).then((count) =>
       sendResponse({
         ok: true,
         count,
@@ -61,10 +83,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true
   }
   if (msg.type === "GET_PORTRAIT_DATA_URL") {
-    fetchPortraitDataUrl(msg.url).then((dataUrl) =>
+    fetchPortraitDataUrl(msg.url, sender?.tab?.id).then((result) =>
       sendResponse({
-        ok: Boolean(dataUrl),
-        dataUrl: dataUrl || "",
+        ok: Boolean(result?.dataUrl || result?.sourceUrl),
+        dataUrl: result?.dataUrl || "",
+        sourceUrl: result?.sourceUrl || "",
       }),
     )
     return true
@@ -345,24 +368,96 @@ function clearPortraitDataUrlCaches() {
   portraitDataUrlErrorCache.clear()
 }
 
-async function fetchPortraitDataUrl(url) {
-  const normalizedUrl = String(url || "").trim()
-  if (!normalizedUrl) return ""
-  if (portraitDataUrlCache.has(normalizedUrl)) {
-    return portraitDataUrlCache.get(normalizedUrl)
-  }
-  if (hasFreshPortraitDataUrlError(normalizedUrl)) {
+async function clearPortraitSourceStates() {
+  portraitSourceByTab.clear()
+  portraitSourceDecisionByTab.clear()
+  portraitSourceStateLoaded = true
+  const session = chrome.storage?.session
+  if (session?.remove) await session.remove([PORTRAIT_SOURCE_SESSION_KEY])
+}
+
+function portraitPath(rawUrl) {
+  const value = String(rawUrl || "").trim()
+  if (!value) return ""
+  try {
+    const parsed = new URL(value, HOST)
+    if (parsed.origin !== PORTRAIT_PRIMARY_ORIGIN && parsed.origin !== PORTRAIT_FALLBACK_ORIGIN) {
+      return ""
+    }
+    if (!parsed.pathname.startsWith("/portraits/")) return ""
+    return parsed.pathname + parsed.search
+  } catch (_err) {
     return ""
   }
+}
+
+function portraitTabKey(tabId) {
+  return Number.isInteger(tabId) && tabId >= 0 ? String(tabId) : "extension"
+}
+
+function normalizedPortraitState(value) {
+  const source = value?.source === "primary" || value?.source === "fallback" ? value.source : ""
+  const failed = Array.isArray(value?.failed)
+    ? Array.from(new Set(value.failed.filter((item) => item === "primary" || item === "fallback")))
+    : []
+  return { source, failed }
+}
+
+async function loadPortraitSourceState() {
+  if (portraitSourceStateLoaded) return
+  portraitSourceStateLoaded = true
+  const session = chrome.storage?.session
+  if (!session?.get) return
   try {
-    const resp = await fetch(normalizedUrl, {
+    const stored = await session.get([PORTRAIT_SOURCE_SESSION_KEY])
+    const values = stored?.[PORTRAIT_SOURCE_SESSION_KEY]
+    if (!values || typeof values !== "object") return
+    for (const [key, value] of Object.entries(values)) {
+      portraitSourceByTab.set(key, normalizedPortraitState(value))
+    }
+  } catch (_err) {
+    // In-memory tab state still prevents fanout while this worker is alive.
+  }
+}
+
+async function rememberPortraitSourceState(tabId, state) {
+  await loadPortraitSourceState()
+  portraitSourceByTab.set(portraitTabKey(tabId), normalizedPortraitState(state))
+  const session = chrome.storage?.session
+  if (!session?.set) return
+  try {
+    await session.set({
+      [PORTRAIT_SOURCE_SESSION_KEY]: Object.fromEntries(portraitSourceByTab),
+    })
+  } catch (_err) {
+    // The live worker state remains authoritative for this tab.
+  }
+}
+
+async function portraitSourceState(tabId) {
+  await loadPortraitSourceState()
+  return normalizedPortraitState(portraitSourceByTab.get(portraitTabKey(tabId)))
+}
+
+function portraitUrlForSource(path, source) {
+  return `${source === "fallback" ? PORTRAIT_FALLBACK_ORIGIN : PORTRAIT_PRIMARY_ORIGIN}${path}`
+}
+
+async function fetchPortraitBytes(resolvedUrl, cacheKey) {
+  if (portraitDataUrlCache.has(cacheKey)) return portraitDataUrlCache.get(cacheKey)
+  if (hasFreshPortraitDataUrlError(resolvedUrl)) return ""
+  const controller = typeof AbortController === "function" ? new AbortController() : null
+  const timer = setTimeout(() => controller?.abort(), PORTRAIT_SOURCE_TIMEOUT_MS)
+  try {
+    const resp = await fetch(resolvedUrl, {
       headers: {
         "X-Iconoplasm-Extension-Version": currentExtensionVersion(),
       },
+      ...(controller ? { signal: controller.signal } : {}),
     })
     if (!resp.ok) {
-      console.error("[Iconoplasm] Portrait fetch failed:", resp.status, normalizedUrl)
-      rememberPortraitDataUrlError(normalizedUrl, `http_${resp.status}`)
+      console.error("[Iconoplasm] Portrait fetch failed:", resp.status, resolvedUrl)
+      rememberPortraitDataUrlError(resolvedUrl, `http_${resp.status}`)
       return ""
     }
     const contentType = resp.headers.get("Content-Type") || "image/webp"
@@ -372,28 +467,88 @@ async function fetchPortraitDataUrl(url) {
     // Earlier blank-image behavior became hard to reason about because a caller
     // could treat an empty string like a valid warmed result. Keep failures
     // uncached so the next request can recover as soon as the CDN/object is healthy.
-    rememberPortraitDataUrl(normalizedUrl, dataUrl)
+    rememberPortraitDataUrl(cacheKey, dataUrl)
     return dataUrl
   } catch (err) {
     console.error("[Iconoplasm] Portrait fetch error:", err)
     rememberPortraitDataUrlError(
-      normalizedUrl,
+      resolvedUrl,
       err && err.message ? err.message : String(err || "fetch_error"),
     )
     return ""
+  } finally {
+    clearTimeout(timer)
   }
 }
 
-async function warmPortraitDataUrls(urls) {
+async function ensurePortraitSource(rawUrl, tabId) {
+  const path = portraitPath(rawUrl)
+  if (!path) return ""
+  const key = portraitTabKey(tabId)
+  const existing = await portraitSourceState(tabId)
+  if (existing.source) return existing.source
+  if (portraitSourceDecisionByTab.has(key)) return portraitSourceDecisionByTab.get(key)
+
+  const decision = (async () => {
+    const primaryUrl = portraitUrlForSource(path, "primary")
+    const dataUrl = await fetchPortraitBytes(primaryUrl, path)
+    if (dataUrl) {
+      await rememberPortraitSourceState(tabId, { source: "primary", failed: [] })
+      return "primary"
+    }
+    await rememberPortraitSourceState(tabId, { source: "fallback", failed: ["primary"] })
+    return "fallback"
+  })().finally(() => {
+    portraitSourceDecisionByTab.delete(key)
+  })
+  portraitSourceDecisionByTab.set(key, decision)
+  return decision
+}
+
+async function fetchPortraitDataUrl(url, tabId) {
+  const normalizedUrl = String(url || "").trim()
+  if (!normalizedUrl) return { dataUrl: "", sourceUrl: "" }
+  const path = portraitPath(normalizedUrl)
+  if (!path) {
+    const dataUrl = await fetchPortraitBytes(normalizedUrl, normalizedUrl)
+    return { dataUrl, sourceUrl: normalizedUrl }
+  }
+
+  const source = await ensurePortraitSource(normalizedUrl, tabId)
+  const resolvedUrl = portraitUrlForSource(path, source)
+  let dataUrl = portraitDataUrlCache.get(path) || ""
+  if (!dataUrl) dataUrl = await fetchPortraitBytes(resolvedUrl, path)
+  if (dataUrl) return { dataUrl, sourceUrl: resolvedUrl }
+
+  const current = await portraitSourceState(tabId)
+  const failed = Array.from(new Set(current.failed.concat(source)))
+  const alternate = source === "primary" ? "fallback" : "primary"
+  if (failed.includes(alternate)) {
+    await rememberPortraitSourceState(tabId, { source, failed })
+    return { dataUrl: "", sourceUrl: resolvedUrl }
+  }
+  await rememberPortraitSourceState(tabId, { source: alternate, failed })
+  const alternateUrl = portraitUrlForSource(path, alternate)
+  dataUrl = await fetchPortraitBytes(alternateUrl, path)
+  if (!dataUrl) {
+    await rememberPortraitSourceState(tabId, {
+      source: alternate,
+      failed: Array.from(new Set(failed.concat(alternate))),
+    })
+  }
+  return { dataUrl, sourceUrl: alternateUrl }
+}
+
+async function warmPortraitDataUrls(urls, tabId) {
   const normalized = Array.isArray(urls)
     ? Array.from(new Set(urls.map((url) => String(url || "").trim()).filter(Boolean)))
     : []
   if (!normalized.length) return 0
 
   const results = await Promise.all(
-    normalized.map((url) => fetchPortraitDataUrl(url).catch(() => "")),
+    normalized.map((url) => fetchPortraitDataUrl(url, tabId).catch(() => null)),
   )
-  return results.filter(Boolean).length
+  return results.filter((result) => Boolean(result?.dataUrl)).length
 }
 
 async function fetchManifest() {
@@ -541,7 +696,9 @@ if (globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__) {
     fetchPortraitDataUrl,
     warmPortraitDataUrls,
     clearPortraitDataUrlCaches,
+    clearPortraitSourceStates,
     hasFreshPortraitDataUrlError,
+    portraitSourceState,
     portraitErrorTtlMs: PORTRAIT_DATA_URL_ERROR_TTL_MS,
   })
 }

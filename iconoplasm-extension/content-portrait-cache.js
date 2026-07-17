@@ -41,6 +41,8 @@
             dataUrlCache.set(url, dataUrl)
             return dataUrl
           }
+          const sourceUrl = response && response.ok && response.sourceUrl ? response.sourceUrl : ""
+          if (sourceUrl) return sourceUrl
         } catch (_) {
           // Fall back to the direct site URL below.
         } finally {
