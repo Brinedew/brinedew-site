@@ -3,7 +3,10 @@ import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
-import { deliverPendingRequestFulfillmentNotifications } from "./iconoplasm-request-notifications.js"
+import {
+  deliverPendingRequestFulfillmentNotifications,
+  reconcileDeliveredRequestFulfillments,
+} from "./iconoplasm-request-notifications.js"
 import { createRequestInbox } from "../quartz/static/iconoplasm/request-inbox.js"
 
 const BRINEDEW_USER_ID = "1289482311557058641"
@@ -25,7 +28,10 @@ class NotificationStatement {
       const requesterUserId = String(this.args[0] || "")
       return {
         unread_count: this.db.notifications.filter(
-          (row) => row.requester_user_id === requesterUserId && !row.read_at,
+          (row) =>
+            row.requester_user_id === requesterUserId &&
+            row.discord_status === "sent" &&
+            !row.read_at,
         ).length,
       }
     }
@@ -37,21 +43,32 @@ class NotificationStatement {
       this.sql.includes("FROM icono_request_notifications n") &&
       this.sql.includes("discord_status IN")
     ) {
+      const deliverableStatuses = this.args.filter((value) =>
+        ["pending", "retry", "suppressed_not_test_recipient"].includes(String(value || "")),
+      )
       return {
         results: this.db.notifications.filter((row) =>
-          ["pending", "retry"].includes(row.discord_status),
+          deliverableStatuses.includes(row.discord_status),
         ),
       }
     }
     if (this.sql.includes("FROM icono_request_notifications n")) {
       const requesterUserId = String(this.args[0] || "")
       return {
-        results: this.db.notifications.filter((row) => row.requester_user_id === requesterUserId),
+        results: this.db.notifications.filter(
+          (row) => row.requester_user_id === requesterUserId && row.discord_status === "sent",
+        ),
       }
     }
     if (this.sql.includes("FROM icono_generation_requests gr")) {
-      const requesterUserId = String(this.args[0] || "")
       const requesterScoped = this.sql.includes("gr.requester_user_id = ?")
+      const requesterUserId = String(
+        requesterScoped
+          ? this.args.find(
+              (value) => !["open", "delivery_pending"].includes(String(value || "")),
+            ) || ""
+          : "",
+      )
       return {
         results: requesterScoped
           ? this.db.openRequests.filter((row) => row.requester_user_id === requesterUserId)
@@ -67,7 +84,8 @@ class NotificationStatement {
       const ids = this.args.slice(1).map(Number)
       let changes = 0
       for (const row of this.db.notifications) {
-        if (row.requester_user_id !== userId || row.read_at) continue
+        if (row.requester_user_id !== userId || row.discord_status !== "sent" || row.read_at)
+          continue
         if (ids.length && !ids.includes(Number(row.id))) continue
         row.read_at = "2026-07-16 14:00:00"
         changes += 1
@@ -76,20 +94,24 @@ class NotificationStatement {
     }
     if (this.sql.includes("discord_attempt_count = discord_attempt_count + 1")) {
       const row = this.db.notifications.find((item) => Number(item.id) === Number(this.args[0]))
-      if (!row || !["pending", "retry"].includes(row.discord_status))
+      if (
+        !row ||
+        !["pending", "retry", "suppressed_not_test_recipient"].includes(row.discord_status)
+      )
         return { meta: { changes: 0 } }
       row.discord_status = "sending"
       row.discord_attempt_count = Number(row.discord_attempt_count || 0) + 1
       return { meta: { changes: 1 } }
     }
     if (this.sql.includes("SET discord_status = ?")) {
-      const id = Number(this.args[5])
+      const id = Number(this.args[6])
       const row = this.db.notifications.find((item) => Number(item.id) === id)
       if (!row) return { meta: { changes: 0 } }
       row.discord_status = String(this.args[0] || "")
       row.discord_channel_id = String(this.args[2] || "")
       row.discord_message_id = String(this.args[3] || "")
       row.discord_error = String(this.args[4] || "")
+      row.discord_next_attempt_at = String(this.args[5] || "")
       return { meta: { changes: 1 } }
     }
     throw new Error(`Unexpected notification SQL: ${this.sql}`)
@@ -104,6 +126,62 @@ class NotificationDb {
 
   prepare(sql) {
     return new NotificationStatement(this, sql)
+  }
+}
+
+class DeliveryReconciliationStatement {
+  constructor(db, sql) {
+    this.db = db
+    this.sql = String(sql || "")
+    this.args = []
+  }
+
+  bind(...args) {
+    this.args = args
+    return this
+  }
+
+  async run() {
+    if (!this.sql.includes("UPDATE icono_generation_requests")) {
+      throw new Error(`Unexpected reconciliation SQL: ${this.sql}`)
+    }
+    const ids = this.args.map(Number)
+    let changes = 0
+    for (const request of this.db.requests) {
+      if (ids.length && !ids.includes(Number(request.id))) continue
+      const notification = this.db.notifications.find(
+        (row) => Number(row.request_id) === Number(request.id),
+      )
+      if (request.status !== "delivery_pending" || notification?.discord_status !== "sent") continue
+      request.status = "fulfilled"
+      changes += 1
+    }
+    return { meta: { changes } }
+  }
+
+  async all() {
+    if (!this.sql.includes("FROM icono_generation_requests")) {
+      throw new Error(`Unexpected reconciliation SQL: ${this.sql}`)
+    }
+    const ids = this.args.map(Number)
+    return {
+      results: this.db.requests
+        .filter(
+          (request) => ids.includes(Number(request.id)) && request.status === "delivery_pending",
+        )
+        .map((request) => ({ id: request.id })),
+    }
+  }
+}
+
+class DeliveryReconciliationDb {
+  constructor({ requests, notifications }) {
+    this.requests = requests
+    this.notifications = notifications
+  }
+
+  prepare(sql) {
+    return new DeliveryReconciliationStatement(this, sql)
   }
 }
 
@@ -210,7 +288,7 @@ test("notification migration creates inbox rows atomically and never backfills u
 
 test("authenticated inbox returns exact fulfillment context and durable unread count", async () => {
   const db = new NotificationDb(
-    [notificationRow()],
+    [notificationRow({ discord_status: "sent" })],
     [
       {
         id: 51,
@@ -244,16 +322,81 @@ test("authenticated inbox returns exact fulfillment context and durable unread c
   assert.match(payload.notifications[0].image_url, /a{64}\/thumb\.webp$/)
 })
 
+test("a request stays waiting until Discord delivery is confirmed", async () => {
+  const db = new NotificationDb(
+    [notificationRow({ discord_status: "retry" })],
+    [
+      {
+        id: 42,
+        gene_symbol: "INS",
+        requester_user_id: BRINEDEW_USER_ID,
+        request_mode: "specific",
+        requested_vision_id: "anima-v1-4527",
+        request_kind: "new_candidate",
+        status: "delivery_pending",
+        created_at: "2026-07-16 13:50:00",
+      },
+    ],
+  )
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/notifications", {
+        headers: { Cookie: "session=test" },
+      }),
+      { ICONOPLASM_DB: db, GAME_SESSIONS: buildSessionBinding() },
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.unread_count, 0)
+  assert.deepEqual(payload.notifications, [])
+  assert.equal(payload.open_count, 1)
+  assert.deepEqual(
+    payload.open_requests.map((row) => row.request_id),
+    [42],
+  )
+})
+
+test("only a sent Discord outbox row can complete a delivery-pending request", async () => {
+  const request = { id: 42, status: "delivery_pending" }
+  const notification = notificationRow({ discord_status: "retry" })
+  const db = new DeliveryReconciliationDb({ requests: [request], notifications: [notification] })
+
+  const waiting = await reconcileDeliveredRequestFulfillments(
+    { ICONOPLASM_DB: db },
+    { requestIds: [42] },
+  )
+  assert.equal(waiting.finalized, 0)
+  assert.deepEqual(waiting.pending_request_ids, [42])
+  assert.equal(request.status, "delivery_pending")
+
+  notification.discord_status = "sent"
+  const delivered = await reconcileDeliveredRequestFulfillments(
+    { ICONOPLASM_DB: db },
+    { requestIds: [42] },
+  )
+  assert.equal(delivered.finalized, 1)
+  assert.deepEqual(delivered.pending_request_ids, [])
+  assert.equal(request.status, "fulfilled")
+})
+
 test("each user sees only their own inbox and waiting requests", async () => {
   const otherUserId = "757634039292362843"
   const db = new NotificationDb(
     [
-      notificationRow({ id: 7, request_id: 42, requester_user_id: BRINEDEW_USER_ID }),
+      notificationRow({
+        id: 7,
+        request_id: 42,
+        requester_user_id: BRINEDEW_USER_ID,
+        discord_status: "sent",
+      }),
       notificationRow({
         id: 8,
         request_id: 43,
         requester_user_id: otherUserId,
         gene_symbol: "NR3C2",
+        discord_status: "sent",
       }),
     ],
     [
@@ -323,11 +466,12 @@ test("each user sees only their own inbox and waiting requests", async () => {
 })
 
 test("read state is written only inside the authenticated requester's inbox", async () => {
-  const own = notificationRow({ id: 7 })
+  const own = notificationRow({ id: 7, discord_status: "sent" })
   const anotherUser = notificationRow({
     id: 8,
     request_id: 43,
     requester_user_id: "757634039292362843",
+    discord_status: "sent",
   })
   const db = new NotificationDb([own, anotherUser])
   const response =
@@ -432,6 +576,44 @@ test("Brinedew fulfillment sends one nonce-enforced DM and is retry-idempotent",
     assert.ok(calls[2].file.size > 0)
     assert.equal(row.discord_status, "sent")
     assert.equal(row.discord_message_id, "discord-message-1")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("explicit all-requesters mode delivers a held test-period notification", async () => {
+  const otherUserId = "757634039292362843"
+  const row = notificationRow({
+    requester_user_id: otherUserId,
+    discord_status: "suppressed_not_test_recipient",
+  })
+  const db = new NotificationDb([row])
+  const calls = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    const call = { url: String(url), init }
+    calls.push(call)
+    if (call.url.includes("storage.bunnycdn.com")) return validWebpResponse()
+    if (call.url.endsWith("/users/@me/channels")) {
+      call.json = JSON.parse(String(init?.body || "{}"))
+      return Response.json({ id: "dm-channel-1" })
+    }
+    return Response.json({ id: "discord-message-1" })
+  }
+  try {
+    const result = await deliverPendingRequestFulfillmentNotifications(
+      {
+        ...deliveryEnv(db),
+        ICONOPLASM_FULFILLMENT_DM_DELIVERY_MODE: "all_requesters",
+      },
+      { requestIds: [42] },
+    )
+
+    assert.equal(result.delivered, 1)
+    assert.equal(calls.length, 3)
+    assert.equal(calls[1].json.recipient_id, otherUserId)
+    assert.equal(row.discord_status, "sent")
+    assert.equal(row.discord_error, "")
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -697,4 +879,47 @@ test("notification routes stay explicitly classified by the fail-loud cost fence
 
   assert.match(worker, /family === "request_notifications"\) return "first_party_read"/)
   assert.match(worker, /family === "request_notifications_read"\) return "first_party_write"/)
+})
+
+test("workstation fulfillment fails loudly until every requester DM is sent", () => {
+  const worker = readFileSync(
+    new URL(
+      "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+      import.meta.url,
+    ),
+    "utf8",
+  )
+  const routeStart = worker.indexOf('path === "/api/iconoplasm/admin/requests/fulfill"')
+  const routeEnd = worker.indexOf('\n    if (path === "/api/iconoplasm/user-emulsion")', routeStart)
+  const route = worker.slice(routeStart, routeEnd)
+
+  assert.notEqual(routeStart, -1)
+  assert.notEqual(routeEnd, -1)
+  assert.match(route, /const delivery = await deliverPendingRequestFulfillmentNotifications/)
+  assert.match(route, /const settlement = await reconcileDeliveredRequestFulfillments/)
+  assert.match(route, /const deliveryComplete =/)
+  assert.match(route, /notification_delivery: delivery/)
+  assert.match(route, /notification_settlement: settlement/)
+  assert.match(route, /has not received the required Discord DM yet/)
+  assert.doesNotMatch(route, /ctx\?\.waitUntil\(delivery\)/)
+})
+
+test("delivery completion is an explicit state transition, not an optimistic status label", () => {
+  const migration = readFileSync(
+    new URL("../migrations-iconoplasm/0049_request_delivery_completion.sql", import.meta.url),
+    "utf8",
+  )
+  const notifications = readFileSync(
+    new URL("./iconoplasm-request-notifications.js", import.meta.url),
+    "utf8",
+  )
+
+  assert.match(migration, /'delivery_pending'/)
+  assert.match(migration, /WHEN OLD\.status = 'open' AND NEW\.status = 'delivery_pending'/)
+  assert.match(migration, /discord_next_attempt_at/)
+  assert.match(notifications, /reconcileDeliveredRequestFulfillments/)
+  assert.match(notifications, /WHERE status = 'delivery_pending'/)
+  assert.match(notifications, /n\.discord_status = 'sent'/)
+  assert.match(notifications, /discord_next_attempt_at <= CURRENT_TIMESTAMP/)
+  assert.doesNotMatch(notifications, /DISCORD_MAX_ATTEMPTS/)
 })
