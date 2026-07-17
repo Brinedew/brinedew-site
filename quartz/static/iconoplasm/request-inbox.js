@@ -16,9 +16,11 @@ export function createRequestInbox({
     loaded: false,
     loading: false,
     unread_count: 0,
+    ready_count: 0,
     open_count: 0,
+    cancelled_count: 0,
+    ready_requests: [],
     open_requests: [],
-    notifications: [],
     last_seen_notification_id: 0,
     active_group: "ready",
   }
@@ -72,9 +74,11 @@ export function createRequestInbox({
     state.loaded = false
     state.loading = false
     state.unread_count = 0
+    state.ready_count = 0
     state.open_count = 0
+    state.cancelled_count = 0
+    state.ready_requests = []
     state.open_requests = []
-    state.notifications = []
     state.last_seen_notification_id = 0
     state.active_group = "ready"
   }
@@ -84,14 +88,14 @@ export function createRequestInbox({
     if (!getCurrentUser() || state.loading) return Promise.resolve(null)
     state.loading = true
     if (!state.loaded) renderSidebar()
-    return fetchJSON("/api/iconoplasm/notifications?limit=25&fresh=" + Date.now(), {
+    return fetchJSON("/api/iconoplasm/notifications?limit=50&fresh=" + Date.now(), {
       credentials: "include",
       cache: "no-store",
     })
       .then(async function (payload) {
         if (!payload || !payload.ok || !payload.authenticated) return null
-        var notifications = Array.isArray(payload.notifications) ? payload.notifications : []
-        var firstImage = notifications.find(function (item) {
+        var readyRequests = Array.isArray(payload.ready_requests) ? payload.ready_requests : []
+        var firstImage = readyRequests.find(function (item) {
           return item && item.image_url
         })
         if (firstImage && typeof ensurePortraitSource === "function") {
@@ -99,23 +103,25 @@ export function createRequestInbox({
         }
         var firstLoad = !state.loaded
         var previousHighWater = state.last_seen_notification_id
-        var newestUnread = notifications.find(function (item) {
-          return item && item.unread && Number(item.id || 0) > previousHighWater
+        var newestUnread = readyRequests.find(function (item) {
+          return item && item.unread && Number(item.notification_id || 0) > previousHighWater
         })
         state.loaded = true
         state.unread_count = Math.max(0, Number(payload.unread_count || 0) || 0)
+        state.ready_count = Math.max(0, Number(payload.ready_count || 0) || 0)
         state.open_count = Math.max(0, Number(payload.open_count || 0) || 0)
+        state.cancelled_count = Math.max(0, Number(payload.cancelled_count || 0) || 0)
+        state.ready_requests = readyRequests
         state.open_requests = Array.isArray(payload.open_requests) ? payload.open_requests : []
-        state.notifications = notifications
         if (firstLoad) {
-          state.active_group = notifications.length
+          state.active_group = readyRequests.length
             ? "ready"
             : state.open_requests.length
               ? "waiting"
               : "ready"
         }
-        state.last_seen_notification_id = notifications.reduce(function (highest, item) {
-          return Math.max(highest, Number((item && item.id) || 0) || 0)
+        state.last_seen_notification_id = readyRequests.reduce(function (highest, item) {
+          return Math.max(highest, Number((item && item.notification_id) || 0) || 0)
         }, previousHighWater)
         renderSidebar()
         if (opts.announce && previousHighWater > 0 && newestUnread) {
@@ -215,8 +221,12 @@ export function createRequestInbox({
       (item.unread ? " icono-request-inbox__item--unread" : "") +
       '" href="' +
       escapeHtml(item.gene_url || "/") +
-      '" data-icono-request-notification-id="' +
-      escapeHtml(String(item.id || "")) +
+      '" data-icono-request-id="' +
+      escapeHtml(String(item.request_id || item.id || "")) +
+      '"' +
+      (item.notification_id
+        ? ' data-icono-request-notification-id="' + escapeHtml(String(item.notification_id)) + '"'
+        : "") +
       '">' +
       (imageUrl
         ? '<img src="' +
@@ -228,8 +238,8 @@ export function createRequestInbox({
       "</strong><em>ready</em></span>" +
       '<span class="icono-request-inbox__emulsion">' +
       escapeHtml(item.requested_emulsion_label || "Requested blot") +
-      "</span><small>Fulfilled " +
-      escapeHtml(ageLabel(item.created_at)) +
+      "</span><small>Ready " +
+      escapeHtml(ageLabel(item.fulfilled_at || item.created_at)) +
       "</small></span></a>"
     )
   }
@@ -259,9 +269,12 @@ export function createRequestInbox({
         '<span class="icono-request-inbox__loading">Checking…</span></div></div>'
       )
     }
-    var notifications = Array.isArray(state.notifications) ? state.notifications.slice(0, 8) : []
-    var openRequests = Array.isArray(state.open_requests) ? state.open_requests.slice(0, 4) : []
+    var readyRequests = Array.isArray(state.ready_requests) ? state.ready_requests : []
+    var openRequests = Array.isArray(state.open_requests) ? state.open_requests : []
     var unread = Math.max(0, Number(state.unread_count || 0) || 0)
+    var readyCount = Math.max(0, Number(state.ready_count || 0) || 0)
+    var openCount = Math.max(0, Number(state.open_count || 0) || 0)
+    var cancelledCount = Math.max(0, Number(state.cancelled_count || 0) || 0)
     var html =
       '<div class="icono-request-inbox">' +
       '<div class="icono-request-inbox__head"><span>Request inbox</span></div>' +
@@ -270,13 +283,20 @@ export function createRequestInbox({
     var readyContent = unread
       ? '<div class="icono-request-inbox__group-actions"><button type="button" data-icono-request-inbox-read-all>Mark all read</button></div>'
       : ""
-    for (var i = 0; i < notifications.length; i++) {
-      readyContent += fulfilledRequestMarkup(notifications[i] || {})
+    for (var i = 0; i < readyRequests.length; i++) {
+      readyContent += fulfilledRequestMarkup(readyRequests[i] || {})
     }
-    if (!notifications.length) {
+    if (!readyRequests.length) {
       readyContent +=
         '<div class="icono-request-inbox__empty"><strong>Nothing ready yet.</strong>' +
         "Finished requests will stay here.</div>"
+    } else if (readyCount > readyRequests.length) {
+      readyContent +=
+        '<div class="icono-request-inbox__limit-note">Showing the newest ' +
+        escapeHtml(String(readyRequests.length)) +
+        " of " +
+        escapeHtml(String(readyCount)) +
+        " ready requests.</div>"
     }
 
     var waitingContent = ""
@@ -287,10 +307,24 @@ export function createRequestInbox({
       waitingContent +=
         '<div class="icono-request-inbox__empty"><strong>Nothing waiting.</strong>' +
         "New requests appear here until they are ready.</div>"
+    } else if (openCount > openRequests.length) {
+      waitingContent +=
+        '<div class="icono-request-inbox__limit-note">Showing the oldest ' +
+        escapeHtml(String(openRequests.length)) +
+        " of " +
+        escapeHtml(String(openCount)) +
+        " waiting requests.</div>"
     }
-    html += requestGroupMarkup("ready", "Ready", notifications.length, unread, readyContent)
-    html += requestGroupMarkup("waiting", "Waiting", openRequests.length, 0, waitingContent)
-    return html + "</div></div>"
+    html += requestGroupMarkup("ready", "Ready", readyCount, unread, readyContent)
+    html += requestGroupMarkup("waiting", "Waiting", openCount, 0, waitingContent)
+    html += "</div>"
+    if (cancelledCount) {
+      html +=
+        '<div class="icono-request-inbox__cancelled-count">Cancelled <span>' +
+        escapeHtml(String(cancelledCount)) +
+        "</span></div>"
+    }
+    return html + "</div>"
   }
 
   function wire(stack) {

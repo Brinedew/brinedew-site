@@ -60,6 +60,19 @@ class NotificationStatement {
         ).length,
       }
     }
+    if (this.sql.includes("AS ready_count") && this.sql.includes("AS cancelled_count")) {
+      const requesterUserId = String(this.args[0] || "")
+      const rows = [...this.db.readyRequests, ...this.db.openRequests].filter(
+        (row) => row.requester_user_id === requesterUserId,
+      )
+      return {
+        ready_count: rows.filter((row) => row.status === "fulfilled").length,
+        open_count: rows.filter((row) => ["open", "delivery_pending"].includes(row.status)).length,
+        cancelled_count: this.db.cancelledRequests.filter(
+          (row) => row.requester_user_id === requesterUserId,
+        ).length,
+      }
+    }
     return null
   }
 
@@ -79,9 +92,13 @@ class NotificationStatement {
     }
     if (this.sql.includes("FROM icono_request_notifications n")) {
       const requesterUserId = String(this.args[0] || "")
+      const requestIds = this.args.slice(1).map(Number).filter(Boolean)
       return {
         results: this.db.notifications.filter(
-          (row) => row.requester_user_id === requesterUserId && row.discord_status === "sent",
+          (row) =>
+            row.requester_user_id === requesterUserId &&
+            row.discord_status === "sent" &&
+            (!requestIds.length || requestIds.includes(Number(row.request_id))),
         ),
       }
     }
@@ -94,10 +111,13 @@ class NotificationStatement {
             ) || ""
           : "",
       )
+      const source = this.sql.includes("gr.status = 'fulfilled'")
+        ? this.db.readyRequests
+        : this.db.openRequests
       return {
         results: requesterScoped
-          ? this.db.openRequests.filter((row) => row.requester_user_id === requesterUserId)
-          : this.db.openRequests,
+          ? source.filter((row) => row.requester_user_id === requesterUserId)
+          : source,
       }
     }
     return { results: [] }
@@ -144,9 +164,31 @@ class NotificationStatement {
 }
 
 class NotificationDb {
-  constructor(notifications = [], openRequests = []) {
+  constructor(notifications = [], openRequests = [], readyRequests = null, cancelledRequests = []) {
     this.notifications = notifications
     this.openRequests = openRequests
+    this.readyRequests = Array.isArray(readyRequests)
+      ? readyRequests
+      : notifications
+          .filter((row) => row.discord_status === "sent")
+          .map((row) => ({
+            id: row.request_id,
+            gene_symbol: row.gene_symbol,
+            requester_user_id: row.requester_user_id,
+            requester_username: "requester",
+            request_mode: row.request_mode,
+            requested_vision_id: row.requested_vision_id,
+            requested_emulsion_id: row.requested_emulsion_id,
+            requested_emulsion_label: row.requested_emulsion_label,
+            request_kind: row.request_kind,
+            status: "fulfilled",
+            created_at: row.created_at,
+            updated_at: row.created_at,
+            fulfilled_at: row.created_at,
+            fulfilled_asset_sha256: row.fulfilled_asset_sha256,
+            fulfilled_vision_id: row.fulfilled_vision_id,
+          }))
+    this.cancelledRequests = cancelledRequests
   }
 
   prepare(sql) {
@@ -340,11 +382,60 @@ test("authenticated inbox returns exact fulfillment context and durable unread c
   assert.equal(response.status, 200)
   assert.equal(payload.authenticated, true)
   assert.equal(payload.unread_count, 1)
+  assert.equal(payload.ready_count, 1)
   assert.equal(payload.open_count, 1)
-  assert.equal(payload.notifications[0].request_id, 42)
-  assert.equal(payload.notifications[0].gene_symbol, "INS")
-  assert.equal(payload.notifications[0].requested_emulsion_label, "A1-4527")
-  assert.match(payload.notifications[0].image_url, /a{64}\/thumb\.webp$/)
+  assert.equal(payload.ready_requests[0].request_id, 42)
+  assert.equal(payload.ready_requests[0].notification_id, 7)
+  assert.equal(payload.ready_requests[0].gene_symbol, "INS")
+  assert.equal(payload.ready_requests[0].requested_emulsion_label, "A1-4527")
+  assert.match(payload.ready_requests[0].image_url, /a{64}\/thumb\.webp$/)
+})
+
+test("request inbox keeps repeated submissions separate from delivery notices", async () => {
+  const sent = notificationRow({ request_id: 37, discord_status: "sent" })
+  const repeatedRequests = [37, 2, 1].map((id) => ({
+    id,
+    gene_symbol: "HPN",
+    requester_user_id: BRINEDEW_USER_ID,
+    requester_username: "brinedew",
+    request_mode: "random",
+    requested_vision_id: "",
+    request_kind: "new_candidate",
+    status: "fulfilled",
+    created_at: `2026-04-05 10:38:0${id === 37 ? 4 : id}`,
+    updated_at: "2026-07-16 11:45:32",
+    fulfilled_at: "2026-07-16 11:45:32",
+    fulfilled_asset_sha256: "a".repeat(64),
+    fulfilled_vision_id: "anima-v1-1",
+  }))
+  const db = new NotificationDb([sent], [], repeatedRequests, [
+    {
+      id: 35,
+      requester_user_id: BRINEDEW_USER_ID,
+      status: "cancelled",
+    },
+  ])
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/notifications", {
+        headers: { Cookie: "session=test" },
+      }),
+      { ICONOPLASM_DB: db, GAME_SESSIONS: buildSessionBinding() },
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.ready_count, 3)
+  assert.equal(payload.cancelled_count, 1)
+  assert.deepEqual(
+    payload.ready_requests.map((row) => row.request_id),
+    [37, 2, 1],
+  )
+  assert.equal(payload.ready_requests[0].notification_id, 7)
+  assert.equal(payload.ready_requests[1].notification_id, 0)
+  assert.equal(payload.ready_requests[2].notification_id, 0)
+  assert.ok(payload.ready_requests.every((row) => row.gene_symbol === "HPN"))
 })
 
 test("a request stays waiting until Discord delivery is confirmed", async () => {
@@ -375,7 +466,7 @@ test("a request stays waiting until Discord delivery is confirmed", async () => 
 
   assert.equal(response.status, 200)
   assert.equal(payload.unread_count, 0)
-  assert.deepEqual(payload.notifications, [])
+  assert.deepEqual(payload.ready_requests, [])
   assert.equal(payload.open_count, 1)
   assert.deepEqual(
     payload.open_requests.map((row) => row.request_id),
@@ -468,7 +559,7 @@ test("each user sees only their own inbox and waiting requests", async () => {
   const otherInbox = await otherResponse.json()
 
   assert.deepEqual(
-    brinedewInbox.notifications.map((row) => row.request_id),
+    brinedewInbox.ready_requests.map((row) => row.request_id),
     [42],
   )
   assert.deepEqual(
@@ -479,7 +570,7 @@ test("each user sees only their own inbox and waiting requests", async () => {
   assert.equal(brinedewInbox.open_count, 1)
 
   assert.deepEqual(
-    otherInbox.notifications.map((row) => row.request_id),
+    otherInbox.ready_requests.map((row) => row.request_id),
     [43],
   )
   assert.deepEqual(
@@ -773,7 +864,7 @@ test("request inbox UI uses server read state and bounded live refresh", () => {
   const head = readFileSync(new URL("../quartz/components/Head.tsx", import.meta.url), "utf8")
 
   assert.match(app, /import \{ createRequestInbox \} from "\.\/request-inbox\.js"/)
-  assert.match(inbox, /\/api\/iconoplasm\/notifications\?limit=25/)
+  assert.match(inbox, /\/api\/iconoplasm\/notifications\?limit=50/)
   assert.match(inbox, /\/api\/iconoplasm\/notifications\/read/)
   assert.match(inbox, /refreshTimer = window\.setInterval/)
   assert.match(inbox, /document\.visibilityState === "visible"/)
@@ -791,16 +882,20 @@ test("request inbox uses one-open Shoelace groups and an accessible unread dot",
     ok: true,
     authenticated: true,
     unread_count: 1,
+    ready_count: 1,
     open_count: 1,
-    notifications: [
+    cancelled_count: 0,
+    ready_requests: [
       {
         id: 7,
+        request_id: 42,
+        notification_id: 7,
         unread: true,
         gene_symbol: "INS",
         gene_url: "/gene/INS",
         image_url: "https://example.test/ins.webp",
         requested_emulsion_label: "Random default",
-        created_at: "2026-07-16 13:45:00",
+        fulfilled_at: "2026-07-16 13:45:00",
       },
     ],
     open_requests: [
@@ -825,6 +920,8 @@ test("request inbox uses one-open Shoelace groups and an accessible unread dot",
   assert.equal((initialMarkup.match(/<sl-details/g) || []).length, 2)
   assert.match(initialMarkup, /data-icono-request-group="ready" open/)
   assert.doesNotMatch(initialMarkup, /data-icono-request-group="waiting" open/)
+  assert.match(initialMarkup, /data-icono-request-id="42"/)
+  assert.match(initialMarkup, /data-icono-request-notification-id="7"/)
   assert.match(initialMarkup, /<sl-badge[^>]+variant="danger"[^>]+aria-hidden="true"/)
   assert.match(initialMarkup, /1 unread notification/)
 
@@ -869,6 +966,44 @@ test("request inbox uses one-open Shoelace groups and an accessible unread dot",
   assert.equal(waiting.hideCalls, 1)
   assert.match(inbox.panelMarkup(), /data-icono-request-group="ready" open/)
   assert.doesNotMatch(inbox.panelMarkup(), /data-icono-request-group="waiting" open/)
+})
+
+test("request inbox renders every returned request even when genes repeat", async () => {
+  const readyRequests = Array.from({ length: 20 }, (_, index) => ({
+    id: index + 1,
+    request_id: index + 1,
+    notification_id: index === 0 ? 7 : 0,
+    unread: index === 0,
+    gene_symbol: index < 3 ? "HPN" : `GENE${index}`,
+    gene_url: index < 3 ? "/gene/HPN" : `/gene/GENE${index}`,
+    image_url: `https://example.test/${index + 1}.webp`,
+    requested_emulsion_label: "Random default",
+    fulfilled_at: "2026-07-16 13:45:00",
+  }))
+  const inbox = createRequestInbox({
+    fetchJSON: async () => ({
+      ok: true,
+      authenticated: true,
+      unread_count: 1,
+      ready_count: 20,
+      open_count: 0,
+      cancelled_count: 1,
+      ready_requests: readyRequests,
+      open_requests: [],
+    }),
+    getCurrentUser: () => ({ id: BRINEDEW_USER_ID }),
+    renderSidebar() {},
+    escapeHtml: (value) => String(value ?? ""),
+  })
+  await inbox.refresh()
+
+  const markup = inbox.panelMarkup()
+  assert.equal((markup.match(/data-icono-request-id=/g) || []).length, 20)
+  assert.equal((markup.match(/data-icono-request-notification-id=/g) || []).length, 1)
+  assert.equal((markup.match(/<strong>HPN<\/strong>/g) || []).length, 3)
+  assert.match(markup, /data-icono-request-group="ready" open/)
+  assert.match(markup, />20<\/span>/)
+  assert.match(markup, /Cancelled <span>1<\/span>/)
 })
 
 test("every Shoelace component used by the request inbox has a deployable public entry", () => {
