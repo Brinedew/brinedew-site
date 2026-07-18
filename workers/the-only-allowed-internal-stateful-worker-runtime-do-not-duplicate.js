@@ -53,6 +53,7 @@ const STRUCTURE_CACHE_TARGET_RATIO = 0.9
 const DAILY_TARGET_SALT = "geneguessr-v2-939b5a0b"
 const DAILY_BOOTSTRAP_CACHE_PREFIX = "daily_bootstrap:"
 const DAILY_BOOTSTRAP_CACHE_TTL = 86400 // 24 hours
+const DAILY_BOOTSTRAP_STRUCTURE_VERIFICATION_TTL_MS = 5 * 60 * 1000
 
 const GENEGUESSR_HOST = "geneguessr.brinedew.bio"
 const BENCHMARK_HOST = "geneguessr-bench.brinedew.bio"
@@ -977,6 +978,7 @@ import {
   fetchProteinByUniprot,
   searchProteins,
   getEligibleProteinIds,
+  getDailySelectionProteinIds,
   pickDailyTarget,
   pickRandomProteinBalanced,
   getBlendedSimilarity,
@@ -988,11 +990,15 @@ import {
   resolveStructureRepresentation,
   buildStructureMetaFromStoredSource,
 } from "./lib/structure-utils.js"
-import { recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
+import { getDailyGuessAggregates, recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 import { getMolstarSharedSource } from "./lib/molstar-shared-bundle.js"
 import { extractAvatarUpstreamFromRequest } from "./lib/avatar-proxy.js"
-import { selectAvailableDailyTarget } from "./lib/daily-target-availability.js"
+import {
+  selectAvailableDailyTarget,
+  shouldReplaceRecordedDailyTarget,
+} from "./lib/daily-target-availability.js"
+import { isUsableStructureProbe } from "./lib/structure-probe-validation.js"
 
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
@@ -2747,7 +2753,7 @@ export default {
         console.log(`[CRON] Using admin override for ${tomorrowStr}: ${overrideId}`)
       } else {
         // 2. Use deterministic selection
-        const eligibleIds = await getEligibleProteinIds(env.DB)
+        const eligibleIds = await getDailySelectionProteinIds(env.DB)
         const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
         const selection = await pickDailyTarget(env.DB, eligibleIds, salt, tomorrowStr)
         targetProtein = selection?.protein
@@ -2774,7 +2780,7 @@ export default {
       // 3. Verify the exact canonical structure before committing tomorrow's
       // puzzle. Metadata presence is not availability: the 2026-07-17 IMMP2L
       // incident had a perfectly formed SWISS-MODEL URL that returned 404.
-      const eligibleIds = await getEligibleProteinIds(env.DB)
+      const eligibleIds = await getDailySelectionProteinIds(env.DB)
       const startIndex = Math.max(0, eligibleIds.indexOf(targetProtein.uniprot))
       const availableTarget = await selectAvailableDailyTarget({
         initialProtein: targetProtein,
@@ -2782,14 +2788,14 @@ export default {
         startIndex,
         loadProtein: (uniprot) => fetchProteinByUniprot(env.DB, uniprot),
         resolveStructureMeta: (protein) => getCanonicalStructureMeta(protein, env),
-        isStructureAvailable: async (structureMeta) => {
-          if (!(await isStructureMetaAvailable(env, structureMeta))) return false
-          return ensureStructureCachedWithPin(env, structureMeta, tomorrowStr)
-        },
-        isIneligibleFallback: isAlphaFoldOnlyProtein,
+        isStructureAvailable: (structureMeta, protein) =>
+          verifyDailyTargetStructure(env, structureMeta, protein, { pinUntil: tomorrowStr }),
+        isCandidateIneligible: source === "admin_override" ? () => false : isAlphaFoldOnlyProtein,
         maxCandidates: 10,
       })
       cronAudit.rejected.push(...availableTarget.rejected)
+      cronAudit.skipped_alpha_fold =
+        Number(cronAudit.skipped_alpha_fold || 0) + availableTarget.skippedIneligible
       targetProtein = availableTarget.protein
       const structureMeta = availableTarget.structureMeta
       if (!targetProtein || !structureMeta?.r2Key) {
@@ -4004,7 +4010,12 @@ async function setDailyBootstrapCache(
     structureMeta,
     audit: audit || null,
     cachedAt: Date.now(),
+    structureVerifiedAt: Date.now(),
   }
+  await putDailyBootstrapCachePayload(env, date, cacheKey, payload)
+}
+
+async function putDailyBootstrapCachePayload(env, date, cacheKey, payload) {
   try {
     // Calculate TTL to expire at end of day (UTC)
     const now = new Date()
@@ -4015,6 +4026,48 @@ async function setDailyBootstrapCache(
   } catch (e) {
     console.warn("Daily bootstrap cache write failed:", e)
   }
+}
+
+async function validateDailyBootstrapCache(env, date, origin, cached) {
+  if (!cached?.targetProtein?.uniprot || !cached?.structureMeta?.r2Key) {
+    return null
+  }
+
+  const verifiedAt = Number(cached.structureVerifiedAt || 0)
+  if (
+    Number.isFinite(verifiedAt) &&
+    verifiedAt > 0 &&
+    Date.now() - verifiedAt < DAILY_BOOTSTRAP_STRUCTURE_VERIFICATION_TTL_MS
+  ) {
+    return cached
+  }
+
+  const cacheKey = buildDailyBootstrapCacheKey(date, origin)
+  const currentProtein = await fetchProteinByUniprot(env.DB, cached.targetProtein.uniprot)
+  const sourceWasExplicitOverride = cached?.audit?.source === "override"
+  const currentMeta = currentProtein ? await getCanonicalStructureMeta(currentProtein, env) : null
+  const canonicalStillMatches = sameStructureMeta(currentMeta, cached.structureMeta)
+  const automaticSourceStillEligible =
+    sourceWasExplicitOverride || (currentProtein && !isAlphaFoldOnlyProtein(currentProtein))
+  const available =
+    canonicalStillMatches &&
+    automaticSourceStillEligible &&
+    (await verifyDailyTargetStructure(env, currentMeta, currentProtein))
+
+  if (!available) {
+    await env.KV.delete(cacheKey).catch(() => {})
+    console.warn(`[PERF] Daily bootstrap cache rejected for ${date}: target is no longer playable`)
+    return null
+  }
+
+  const refreshed = {
+    ...cached,
+    targetProtein: currentProtein,
+    structureMeta: currentMeta,
+    structureVerifiedAt: Date.now(),
+  }
+  await putDailyBootstrapCachePayload(env, date, cacheKey, refreshed)
+  return refreshed
 }
 
 function buildDailyBootstrapCacheKey(date, origin) {
@@ -4089,6 +4142,9 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     let cachedDaily = null
     if (!practiceMode) {
       cachedDaily = await getDailyBootstrapCache(env, today, url.origin)
+      if (cachedDaily) {
+        cachedDaily = await validateDailyBootstrapCache(env, today, url.origin, cachedDaily)
+      }
     }
 
     // Staging-only: If prod has already recorded today's actual pick, ensure our daily bootstrap cache
@@ -4428,8 +4484,40 @@ async function recordDailyPickOnce(env, date, uniprotId, audit) {
   try {
     const key = `puzzle_actual:${date}`
     const existing = await env.KV.get(key)
+    let replacedUnplayableUniprot = null
     if (existing) {
-      return
+      let existingRecord = null
+      try {
+        existingRecord = JSON.parse(existing)
+      } catch {
+        return
+      }
+      const existingUniprot = String(existingRecord?.uniprot_id || "")
+        .trim()
+        .toUpperCase()
+      const selectedUniprot = String(uniprotId || "")
+        .trim()
+        .toUpperCase()
+      if (existingUniprot === selectedUniprot) {
+        return
+      }
+
+      const guesses = await getDailyGuessAggregates(env.DB, { day: date, limit: 1 })
+      const canReplace =
+        guesses?.ok &&
+        shouldReplaceRecordedDailyTarget({
+          existingUniprot,
+          selectedUniprot,
+          rejected: audit?.rejected,
+          totalGuesses: guesses.totalGuesses,
+        })
+      if (!canReplace) {
+        console.warn(
+          `[TARGET-PICK] Refusing to replace recorded ${date} target ${existingUniprot} with ${selectedUniprot}`,
+        )
+        return
+      }
+      replacedUnplayableUniprot = existingUniprot
     }
     const record = {
       date,
@@ -4441,6 +4529,7 @@ async function recordDailyPickOnce(env, date, uniprotId, audit) {
         ? audit.skipped_alpha_fold
         : null,
       recorded_at: Date.now(),
+      replaced_unplayable_uniprot_id: replacedUnplayableUniprot,
     }
     const rejectedCount = Array.isArray(record.rejected) ? record.rejected.length : 0
     await env.KV.put(key, JSON.stringify(record), {
@@ -4452,6 +4541,11 @@ async function recordDailyPickOnce(env, date, uniprotId, audit) {
         recorded_at: record.recorded_at,
       },
     })
+    if (replacedUnplayableUniprot) {
+      console.warn(
+        `[TARGET-PICK] Replaced unplayable ${date} target ${replacedUnplayableUniprot} with ${record.uniprot_id} before any guesses`,
+      )
+    }
   } catch (err) {
     console.warn("Daily pick record write failed:", err)
   }
@@ -4809,7 +4903,9 @@ async function handleGuessSimilarity(request, env, corsHeaders) {
 }
 
 async function getDailyTargetProtein(env, options = {}) {
-  const eligibleIds = await getEligibleProteinIds(env.DB)
+  const eligibleIds = options.practice
+    ? await getEligibleProteinIds(env.DB)
+    : await getDailySelectionProteinIds(env.DB)
   if (!eligibleIds.length) {
     return null
   }
@@ -4817,6 +4913,7 @@ async function getDailyTargetProtein(env, options = {}) {
   let protein = null
   let startIdx = 0
   let balancedPick = null // Track surname info for practice mode
+  let explicitOverrideSelected = false
 
   const wantsAudit = Boolean(options.returnAudit)
   const audit = wantsAudit
@@ -4863,6 +4960,7 @@ async function getDailyTargetProtein(env, options = {}) {
       const overrideProtein = await fetchProteinByUniprot(env.DB, overrideId)
       if (overrideProtein) {
         protein = overrideProtein
+        explicitOverrideSelected = true
         startIdx = eligibleIds.indexOf(protein.uniprot)
         if (startIdx < 0) startIdx = 0
         if (audit) {
@@ -4870,6 +4968,41 @@ async function getDailyTargetProtein(env, options = {}) {
           audit.override_id = overrideId
           audit.skipped_alpha_fold = 0
         }
+      }
+    }
+
+    // A verified pre-warm pick is the production source of truth for the day.
+    // Read it before recomputing so an origin cache miss cannot reshuffle the
+    // target. The availability pass below may replace it only if the recorded
+    // structure has become unreachable and nobody has submitted a guess.
+    if (!protein) {
+      try {
+        const actualRaw = await env.KV.get(`puzzle_actual:${today}`)
+        if (actualRaw) {
+          const actual = JSON.parse(actualRaw)
+          const actualUniprot = String(actual?.uniprot_id || "")
+            .trim()
+            .toUpperCase()
+          if (actualUniprot) {
+            const actualProtein = await fetchProteinByUniprot(env.DB, actualUniprot)
+            if (actualProtein) {
+              protein = actualProtein
+              explicitOverrideSelected =
+                actual?.source === "override" || Boolean(actual?.override_id)
+              startIdx = eligibleIds.indexOf(actualProtein.uniprot)
+              if (startIdx < 0) startIdx = 0
+              if (audit) {
+                audit.source = actual?.source || "recorded_actual"
+                audit.override_id = actual?.override_id || null
+                audit.skipped_alpha_fold = Number.isFinite(actual?.skipped_alpha_fold)
+                  ? actual.skipped_alpha_fold
+                  : 0
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("GeneGuessr: failed to load recorded daily pick", err?.message || err)
       }
     }
 
@@ -4949,12 +5082,16 @@ async function getDailyTargetProtein(env, options = {}) {
       startIndex: startIdx,
       loadProtein: (uniprot) => fetchProteinByUniprot(env.DB, uniprot),
       resolveStructureMeta: (candidate) => getCanonicalStructureMeta(candidate, env),
-      isStructureAvailable: (structureMeta) => isStructureMetaAvailable(env, structureMeta),
-      isIneligibleFallback: isAlphaFoldOnlyProtein,
+      isStructureAvailable: (structureMeta, candidate) =>
+        verifyDailyTargetStructure(env, structureMeta, candidate),
+      isCandidateIneligible:
+        options.practice || explicitOverrideSelected ? () => false : isAlphaFoldOnlyProtein,
       maxCandidates: 10,
     })
     if (audit) {
       audit.rejected.push(...availableTarget.rejected)
+      audit.skipped_alpha_fold =
+        Number(audit.skipped_alpha_fold || 0) + availableTarget.skippedIneligible
     }
     protein = availableTarget.protein
 
@@ -6045,17 +6182,65 @@ async function isStructureMetaAvailable(env, meta) {
       method: "GET",
       headers: {
         "User-Agent": "GeneGuessr-Worker/1.0",
-        Range: "bytes=0-0",
+        Range: "bytes=0-65535",
       },
       signal: controller.signal,
     })
-    return upstreamResp.ok || upstreamResp.status === 206
+    if (!upstreamResp.ok && upstreamResp.status !== 206) {
+      return false
+    }
+    if (!upstreamResp.body) {
+      return false
+    }
+
+    const reader = upstreamResp.body.getReader()
+    try {
+      const first = await reader.read()
+      const probeBytes = first.value instanceof Uint8Array ? first.value : new Uint8Array()
+      return isUsableStructureProbe({
+        format: meta.format,
+        contentType: upstreamResp.headers.get("Content-Type"),
+        bytes: probeBytes,
+      })
+    } finally {
+      await reader.cancel().catch(() => {})
+    }
   } catch (err) {
     console.warn(`GeneGuessr: structure probe failed for ${meta.r2Key}`, err?.message || err)
     return false
   } finally {
     clearTimeout(timeout)
   }
+}
+
+async function verifyDailyTargetStructure(env, structureMeta, protein, options = {}) {
+  const uniprot = String(protein?.uniprot || "")
+    .trim()
+    .toUpperCase()
+  if (!uniprot || !structureMeta?.r2Key) {
+    return false
+  }
+
+  const reachable = await isStructureMetaAvailable(env, structureMeta)
+  const ready =
+    reachable && options.pinUntil
+      ? await ensureStructureCachedWithPin(env, structureMeta, options.pinUntil)
+      : reachable
+
+  try {
+    if (ready) {
+      await clearStructureFailure(env?.DB, uniprot)
+    } else {
+      await markStructureFailure(env?.DB, uniprot)
+    }
+  } catch (err) {
+    console.warn(
+      `GeneGuessr: failed to persist structure health for ${uniprot}`,
+      err?.message || err,
+    )
+  }
+
+  return ready
 }
 
 async function resolveStoredStructureMeta(protein, env) {
