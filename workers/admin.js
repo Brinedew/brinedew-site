@@ -1142,6 +1142,7 @@ export async function handleAdminCards(request, env) {
     const today = new Date().toISOString().slice(0, 10)
     let resolvedUniprot = null
     let audit = null
+    let actualJson = null
 
     // For the current day, override takes precedence (admin may change today's target).
     // For past days, prefer recorded actual (history shouldn't change with later overrides).
@@ -1162,7 +1163,7 @@ export async function handleAdminCards(request, env) {
     // Prefer recorded actual pick (history shouldn't change if overrides change later)
     if (!resolvedUniprot) {
       const actualKey = `puzzle_actual:${date}`
-      const actualJson = await env.KV.get(actualKey)
+      actualJson = await env.KV.get(actualKey)
       if (actualJson) {
         try {
           const record = JSON.parse(actualJson)

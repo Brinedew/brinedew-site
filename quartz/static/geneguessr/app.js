@@ -246,11 +246,22 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     }
   }
 
+  function reportUnhandledError(status, detail) {
+    // Once the game has rendered, background subsystems (most notably Mol*)
+    // must not be allowed to erase the playable clue and guess interface. The
+    // viewer has its own local error state; keep the rest of the game alive.
+    if (window.__geneguessrStatus === "rendered") {
+      console.error(`[Geneguessr] Non-fatal ${status}:`, detail)
+      return
+    }
+    reportError(status, detail)
+  }
+
   setStatus("script-loaded")
 
   window.addEventListener("error", (event) => {
     const message = event?.message ?? "Unknown runtime error"
-    reportError("runtime-error", message)
+    reportUnhandledError("runtime-error", message)
   })
 
   window.addEventListener("unhandledrejection", (event) => {
@@ -258,7 +269,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     const message =
       (reason && reason.message) ||
       (typeof reason === "string" ? reason : JSON.stringify(reason ?? null))
-    reportError("unhandled-rejection", message)
+    reportUnhandledError("unhandled-rejection", message)
   })
 
   function safeJsonParse(raw, options = {}) {
@@ -2672,6 +2683,16 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     const placeholder = document.getElementById(`${containerId}-placeholder`)
     const loadingEl = document.getElementById(`${containerId}-loading`)
     const errorEl = document.getElementById(`${containerId}-error`)
+    const showStructureError = (message) => {
+      container.replaceChildren()
+      const localError = document.createElement("div")
+      localError.className = "pg-structure-error"
+      localError.textContent = message
+      localError.hidden = false
+      container.appendChild(localError)
+      delete container.dataset.viewerLoaded
+      renderedViewers.delete(containerId)
+    }
     let structureInfo = viewerStructureInfo.get(containerId)
     timing("got DOM elements")
     console.debug(
@@ -2697,11 +2718,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
         "[Geneguessr] loadStructureViewerInContainer: structureInfo marked unavailable",
         containerId,
       )
-      if (errorEl) {
-        errorEl.textContent = "Structure unavailable."
-        errorEl.hidden = false
-      }
-      renderedViewers.delete(containerId) // Allow retry on next render
+      showStructureError("Structure unavailable. You can still play using the clues below.")
       return
     }
 
@@ -2711,11 +2728,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
         containerId,
         structureInfo,
       )
-      if (errorEl) {
-        errorEl.textContent = "Structure unavailable."
-        errorEl.hidden = false
-      }
-      renderedViewers.delete(containerId) // Allow retry on next render
+      showStructureError("Structure unavailable. You can still play using the clues below.")
       return
     }
 
@@ -2731,11 +2744,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
         containerId,
         structureInfo,
       )
-      if (errorEl) {
-        errorEl.textContent = "No 3D structure available for this protein."
-        errorEl.hidden = false
-      }
-      renderedViewers.delete(containerId) // Allow retry on next render
+      showStructureError("No 3D structure is available. You can still play using the clues below.")
       return
     }
 
@@ -2795,13 +2804,35 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
         timing("cache MISS - file too large to cache, using direct URL")
       }
     } else {
-      // No cacheKey means this structure wasn't pre-cached (common for target clue structures).
-      // Server-side target selection already validated that upstream sources are reachable,
-      // so this should succeed. If it fails, Mol* shows its error state gracefully.
-      timing("no cacheKey - passing URL to Mol* (will fetch on render)")
-      const timestampedUrl =
-        structureUrl + (structureUrl.includes("?") ? "&" : "?") + "_t=" + Date.now()
-      finalStructureUrl = timestampedUrl
+      // Target tokens intentionally omit the storage key. Fetch the bytes before
+      // handing them to Mol* so an HTTP 404/502 becomes a local viewer error,
+      // not an unhandled parser rejection that destroys the whole game.
+      timing("no cacheKey - validating target structure response")
+      try {
+        const resp = await fetch(structureUrl, {
+          cache: "no-store",
+          credentials: "include",
+        })
+        if (!resp.ok) {
+          throw new Error(`Structure request failed (${resp.status})`)
+        }
+        const arrayBuffer = await resp.arrayBuffer()
+        if (!arrayBuffer.byteLength) {
+          throw new Error("Structure response was empty")
+        }
+        const blob = new Blob([arrayBuffer], {
+          type: resp.headers.get("Content-Type") || "application/octet-stream",
+        })
+        finalStructureUrl = URL.createObjectURL(blob)
+        blobUrlToRevoke = finalStructureUrl
+        timing("target structure validated")
+      } catch (err) {
+        console.warn("Geneguessr: target structure request failed", err)
+        showStructureError(
+          "Could not load the 3D structure. You can still play using the clues below.",
+        )
+        return
+      }
     }
 
     // PDBe Molstar requires format: 'cif' with binary: true for BCIF files
@@ -2909,7 +2940,20 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
           if (finalizeOnce) return
           finalizeOnce = true
           if (!result?.ok) {
-            timing("loadComplete timeout (proceeding with fallback finalization)")
+            timing("loadComplete timeout")
+            try {
+              viewer.dispose?.()
+            } catch {
+              // ignore disposal failures after an incomplete load
+            }
+            activeViewers.delete(containerId)
+            if (blobUrlToRevoke) {
+              URL.revokeObjectURL(blobUrlToRevoke)
+            }
+            showStructureError(
+              "Could not load the 3D structure. You can still play using the clues below.",
+            )
+            return
           }
           finalizeViewerStyling()
         })
@@ -2917,7 +2961,18 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
           if (finalizeOnce) return
           finalizeOnce = true
           console.warn("Geneguessr: loadComplete wait failed", err)
-          finalizeViewerStyling()
+          try {
+            viewer.dispose?.()
+          } catch {
+            // ignore disposal failures after an incomplete load
+          }
+          activeViewers.delete(containerId)
+          if (blobUrlToRevoke) {
+            URL.revokeObjectURL(blobUrlToRevoke)
+          }
+          showStructureError(
+            "Could not load the 3D structure. You can still play using the clues below.",
+          )
         })
 
       const metadata = {
@@ -2931,12 +2986,12 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       // renderedViewers.add already called at function start
     } catch (err) {
       console.error("Geneguessr: Mol* render failed", err)
-      if (errorEl) {
-        errorEl.textContent = "Could not load 3D viewer. Please try again."
-        errorEl.hidden = false
+      if (blobUrlToRevoke) {
+        URL.revokeObjectURL(blobUrlToRevoke)
       }
-      if (placeholder) placeholder.hidden = false
-      renderedViewers.delete(containerId)
+      showStructureError(
+        "Could not load the 3D structure. You can still play using the clues below.",
+      )
     } finally {
       if (loadingEl) loadingEl.hidden = true
     }

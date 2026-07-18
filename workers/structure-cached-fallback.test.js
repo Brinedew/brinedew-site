@@ -168,6 +168,59 @@ test("structure-cached recovers SWISS-MODEL upstream from stored metadata withou
   }
 })
 
+test("uncached SWISS-MODEL PDB delivery adds the parser-required anonymous header", async () => {
+  const waits = []
+  const puts = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () =>
+    new Response("ATOM      1  N   GLY A   1      10.000  10.000  10.000\nEND\n", {
+      status: 200,
+      headers: { "Content-Type": "application/octet-stream" },
+    })
+
+  try {
+    const response = await worker.fetch(
+      new Request(
+        "https://geneguessr.brinedew.bio/api/structure-cached?key=swissmodel/Q9PDB_tpl_A.pdb",
+      ),
+      {
+        DB: createDb({
+          Q9PDB: {
+            uniprot: "Q9PDB",
+            structure_source: "swissmodel",
+            pdb_id: null,
+            alphafold_url: null,
+            swissmodel_url: "https://swissmodel.example/Q9PDB.pdb",
+            swissmodel_template: "tpl/A",
+          },
+        }),
+        STRUCTURES_BUCKET: {
+          async get() {
+            throw new Error("Please enable R2 through the Cloudflare Dashboard. (10042)")
+          },
+          async put(key, bytes, options) {
+            puts.push({ key, bytes: new Uint8Array(bytes), options })
+          },
+        },
+      },
+      createCtx(waits),
+    )
+
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get("content-type"), "chemical/x-pdb")
+    const body = await response.text()
+    assert.match(body, /^HEADER    MODEL/)
+    assert.match(body, /\nATOM      1/)
+
+    await Promise.allSettled(waits)
+    assert.equal(puts.length, 1)
+    assert.equal(puts[0].key, "swissmodel/Q9PDB_tpl_A.pdb")
+    assert.match(new TextDecoder().decode(puts[0].bytes), /^ATOM/)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("target structure endpoint uses the session-pinned target structure selection", async () => {
   // Regression guard for the 2026-05-19 Mol* crash.
   //
