@@ -8,6 +8,13 @@ draft: false
 
 # Iconoplasm Patch Notes
 
+## 0.4.8 - 2026-07-18
+
+- Added a versioned publication-alias overlay delivered through the existing catalog manifest.
+- Fixed highlighting for C/EBPβ, IL-1, p65, TGF-β, N1ICD, IL-1α, IL-1β, and cGAS.
+- Alias-only updates now reuse the cached base catalog instead of downloading the roughly 6 MB catalog again.
+- Fixed the five-minute catalog refresh timestamp so unchanged manifests no longer get probed on every page.
+
 ## 0.4.7 - 2026-05-22
 
 - added link to the extension header
