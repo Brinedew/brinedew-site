@@ -163,7 +163,7 @@ export function buildDiscordRecapContent(recap) {
   return content
 }
 
-async function buildDailySummaryData(env, day) {
+async function buildDailySummaryData(env, day, options = {}) {
   if (!isValidDay(day)) {
     return {
       ok: false,
@@ -172,7 +172,7 @@ async function buildDailySummaryData(env, day) {
     }
   }
 
-  const alreadyPosted = await readPostedMarker(env, day)
+  const alreadyPosted = options.ignorePostedMarker ? null : await readPostedMarker(env, day)
   if (alreadyPosted) {
     return {
       ok: true,
@@ -344,6 +344,107 @@ export async function postRecapToDiscord(env, { day, content, screenshotBytes })
   return {
     messageId,
     raw: parsed,
+  }
+}
+
+export async function editRecapOnDiscord(
+  env,
+  { day, channelId, messageId, content, screenshotBytes },
+) {
+  const botToken = env.DISCORD_BOT_TOKEN
+  if (!botToken) throw new Error("DISCORD_BOT_TOKEN not configured")
+  if (!channelId) throw new Error("Discord channel id not configured")
+  if (!messageId) throw new Error("Discord message id not configured")
+  if (!(screenshotBytes instanceof Uint8Array) || screenshotBytes.byteLength === 0) {
+    throw new Error("A corrected recap image is required")
+  }
+
+  const filename = `structure-${day}.png`
+  const form = new FormData()
+  form.append("payload_json", JSON.stringify({ content, attachments: [{ id: "0", filename }] }))
+  form.append("files[0]", new Blob([screenshotBytes], { type: "image/png" }), filename)
+
+  const controller = new AbortController()
+  const timeout = setTimeout(
+    () => controller.abort("discord_edit_timeout"),
+    DISCORD_POST_TIMEOUT_MS,
+  )
+  let response
+  try {
+    response = await fetch(
+      `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`,
+      {
+        method: "PATCH",
+        headers: { Authorization: `Bot ${botToken}` },
+        body: form,
+        signal: controller.signal,
+      },
+    )
+  } finally {
+    clearTimeout(timeout)
+  }
+
+  const bodyText = await response.text()
+  let parsed = null
+  try {
+    parsed = bodyText ? JSON.parse(bodyText) : null
+  } catch {
+    parsed = null
+  }
+  if (!response.ok) {
+    throw new Error(
+      `Discord recap edit failed (${response.status}): ${parsed?.message || bodyText || "unknown error"}`,
+    )
+  }
+  return { messageId: String(parsed?.id || messageId), raw: parsed }
+}
+
+export async function handleRepairPostedRecap(env, { day }) {
+  if (!isValidDay(day)) {
+    return { ok: false, error: "invalid_day", day }
+  }
+  const marker = await readPostedMarker(env, day)
+  if (!marker?.message_id) {
+    return { ok: false, error: "recap_not_posted", day }
+  }
+
+  const summary = await buildDailySummaryData(env, day, { ignorePostedMarker: true })
+  if (!summary.ok) {
+    return {
+      ok: false,
+      error: "summary_failed",
+      day,
+      status: summary.status,
+      details: summary.body?.error || "unknown_error",
+    }
+  }
+  const cached = await loadCachedRecapImage(env, day)
+  if (!cached?.bytes) {
+    return { ok: false, error: "recap_image_missing", day }
+  }
+
+  const content = buildDiscordRecapContent(summary.body)
+  const channelId = marker.channel_id || env.DISCORD_GENEGUESSR_CHANNEL_ID
+  const edited = await editRecapOnDiscord(env, {
+    day,
+    channelId,
+    messageId: marker.message_id,
+    content,
+    screenshotBytes: cached.bytes,
+  })
+  const updatedMarker = {
+    ...marker,
+    message_id: edited.messageId,
+    channel_id: channelId,
+    edited_at: Date.now(),
+  }
+  await env.KV.put(getPostedKey(day), JSON.stringify(updatedMarker))
+  return {
+    ok: true,
+    day,
+    message_id: edited.messageId,
+    edited_at: updatedMarker.edited_at,
+    screenshot_bytes: cached.bytes.byteLength,
   }
 }
 

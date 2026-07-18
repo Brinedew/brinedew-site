@@ -925,6 +925,7 @@ import {
   handlePostCatchupRecaps,
   handlePostDailyRecap,
   handlePostRecap,
+  handleRepairPostedRecap,
   handleRenderPage,
 } from "./discord.js"
 import { handleContactSubmission } from "./contact-form.js"
@@ -2341,6 +2342,27 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       const result = await handlePostDailyRecap(env, { day: day || undefined })
       return new Response(JSON.stringify(result), {
         status: result.ok ? 200 : 500,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    if (url.pathname === "/api/admin/repair-posted-recap" && request.method === "POST") {
+      if (!(await isAdmin(request, env))) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        })
+      }
+      let day = null
+      try {
+        const body = await request.json()
+        if (typeof body?.day === "string") day = body.day
+      } catch {
+        // Invalid input is reported by the handler.
+      }
+      const result = await handleRepairPostedRecap(env, { day })
+      return new Response(JSON.stringify(result), {
+        status: result.ok ? 200 : 409,
         headers: { "Content-Type": "application/json" },
       })
     }
