@@ -3787,13 +3787,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       cardParent && typeof cardParent.getBoundingClientRect === "function"
         ? cardParent.getBoundingClientRect()
         : null
-    var parentInset = parentRect
-      ? Math.max(0, parentRect.left, viewportWidth - parentRect.right)
-      : 0
+    var visibleParentLeft = parentRect ? Math.max(0, parentRect.left) : 0
+    var visibleParentRight = parentRect ? Math.min(viewportWidth, parentRect.right) : viewportWidth
+    var visibleParentWidth = Math.max(1, visibleParentRight - visibleParentLeft)
     var availableWidth =
       Math.min(
         cardParent && cardParent.clientWidth ? cardParent.clientWidth : Number.POSITIVE_INFINITY,
-        Math.max(1, viewportWidth - parentInset * 2),
+        visibleParentWidth,
       ) || window.innerWidth
     if (physicalWidth > 0 && availableWidth > 0) {
       var fitScale = Math.min(1.9, availableWidth / physicalWidth)
