@@ -92,6 +92,7 @@ export default (() => {
     accountGalleryWindowPromise: null,
     accountGalleryWindowUsed: false,
     geneDetailSymbol: "",
+    geneDetailSnapshotVersion: "",
     geneDetailData: null,
     geneDetailPromise: null,
     geneCardData: null,
@@ -114,30 +115,33 @@ export default (() => {
       }
       var startGeneDetailFetch = function () {
         if (bootstrap.geneDetailPromise) return bootstrap.geneDetailPromise
-        // The embedded payload is intentionally a lean first-paint card. It is
-        // not a gene-detail response: it omits essence, aliases and candidate
-        // blots. Always start the complete detail read, regardless of account
-        // state, and keep the two payload classes separate.
-        bootstrap.geneDetailPromise = fetch(
-          origin + "/api/iconoplasm/site/genes/" + encodeURIComponent(bootstrap.geneDetailSymbol),
-        )
-          .then(function (response) {
-            if (!response.ok) return null
-            return response.json().catch(function () {
+        if (isCompleteGeneDetail(embeddedGeneCard)) {
+          bootstrap.geneDetailData = embeddedGeneCard
+          bootstrap.geneDetailPromise = Promise.resolve(embeddedGeneCard)
+        } else {
+          bootstrap.geneDetailPromise = fetch(
+            origin +
+              "/api/iconoplasm/site/genes/" +
+              encodeURIComponent(bootstrap.geneDetailSymbol),
+          )
+            .then(function (response) {
+              if (!response.ok) return null
+              return response.json().catch(function () {
+                return null
+              })
+            })
+            .then(function (data) {
+              var completeData = isCompleteGeneDetail(data) ? data : null
+              bootstrap.geneDetailData = completeData
+              return completeData
+            })
+            .catch(function () {
               return null
             })
-          })
-          .then(function (data) {
-            var completeData = isCompleteGeneDetail(data) ? data : null
-            bootstrap.geneDetailData = completeData
-            return completeData
-          })
-          .catch(function () {
-            return null
-          })
-        // The lean card is still the earliest safe source for the portrait URL;
-        // using it here preserves first-paint performance without promoting it
-        // into the complete-detail cache.
+        }
+        // Use the embedded page payload as the earliest safe portrait source.
+        // Older cached HTML may still provide only a card projection, so retain
+        // the complete endpoint as the fallback without conflating the contracts.
         var portraitSeedPromise = embeddedGeneCard
           ? Promise.resolve(embeddedGeneCard)
           : bootstrap.geneDetailPromise
@@ -221,6 +225,9 @@ export default (() => {
           embeddedGeneCardPayload.symbol === bootstrap.geneDetailSymbol
         ) {
           embeddedGeneCard = embeddedGeneCardPayload.payload || null
+          bootstrap.geneDetailSnapshotVersion = String(
+            embeddedGeneCardPayload.snapshot_version || "",
+          )
         }
       } catch (_iconoEmbeddedGeneCardError) {}
       if (embeddedGeneCard) {

@@ -407,6 +407,12 @@ test("home account window does not wait for the admin badge probe", async () => 
     /if \(getRoute\(\)\.page === "home" && previousAdmin !== currentUserIsIconoAdmin\)/,
     "admin-only home modes still need a second render when the admin state changes",
   )
+  assert.doesNotMatch(
+    block,
+    /rerenderCurrentGeneRoute\(\)/,
+    "auth settlement must never rebuild account-independent public gene content",
+  )
+  assert.match(block, /refreshCurrentGeneInteractiveIslands\(\)/)
 })
 
 test("account collection single-flights duplicate window requests", async () => {
@@ -1479,6 +1485,7 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   )
 
   assert.match(head, /geneDetailSymbol: ""/)
+  assert.match(head, /geneDetailSnapshotVersion: ""/)
   assert.doesNotMatch(head, /function renderCriticalGene\(data\)/)
   assert.doesNotMatch(head, /icono-critical-gene/)
   assert.doesNotMatch(head, /data-icono-critical-gene/)
@@ -1502,7 +1509,11 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   )
   assert.match(internalWorker, /function insertIconoplasmGeneCardBootstrap\(html, injection\)/)
   assert.match(internalWorker, /iconoplasmStaticGeneLeadCardHtmlFromPayload/)
-  assert.match(internalWorker, /replaceIconoplasmStaticGeneLeadShell/)
+  assert.match(internalWorker, /replaceIconoplasmStaticGeneShell/)
+  assert.match(internalWorker, /iconoplasmStaticGenePageHtmlFromPayload/)
+  assert.match(internalWorker, /renderCandidateGalleryHtml\(cardPayload\)/)
+  assert.match(internalWorker, /contract: "GenePageBootstrapV1"/)
+  assert.match(internalWorker, /data-icono-server-rendered-gene="true"/)
   assert.match(internalWorker, /renderLabLabelCardHtml\(cardPayload/)
   assert.match(internalWorker, /function iconoplasmGeneHtmlCacheKey\(url, path, snapshotVersion\)/)
   assert.match(internalWorker, /const snapshot = String\(snapshotVersion \|\| ""\)\.trim\(\)/)
@@ -1511,7 +1522,11 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
     /key\.searchParams\.set\("snapshot", snapshot\)/,
     "gene HTML cache entries must be keyed by the live canonical detail asset, not only by symbol",
   )
-  assert.match(internalWorker, /function iconoplasmGeneDetailShellVersion\(cardPayload\)/)
+  assert.match(
+    internalWorker,
+    /function iconoplasmGeneDetailShellVersion\(cardPayload, responseEtag = ""\)/,
+  )
+  assert.match(internalWorker, /detailResponse\.headers\.get\("ETag"\)/)
   assert.match(
     internalWorker,
     /function addIconoplasmGeneShellHeaders\(headers, path\) \{[\s\S]*const next = new Headers\(headers\)[\s\S]*if \(!String\(path \|\| ""\)\.startsWith\("\/gene\/"\)\) return next/,
@@ -1529,7 +1544,7 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.match(head, /\^\\\\\/gene\\\\\/\(\[\^\/\?#\]\+\)/)
   assert.match(
     head,
-    /\/api\/iconoplasm\/site\/genes\/" \+ encodeURIComponent\(bootstrap\.geneDetailSymbol\)/,
+    /"\/api\/iconoplasm\/site\/genes\/" \+[\s\S]{0,120}encodeURIComponent\(bootstrap\.geneDetailSymbol\)/,
   )
   assert.match(head, /geneCardPromise: null/)
   assert.match(head, /getElementById\("iconoplasm-card-bootstrap"\)/)
@@ -1545,15 +1560,15 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
     /var isCompleteGeneDetail = function \(data\)[\s\S]*Array\.isArray\(data\.portrait_candidates\)/,
     "the head bootstrap must distinguish a complete gene detail from the lean first-paint card",
   )
-  assert.doesNotMatch(
+  assert.match(
     head,
-    /bootstrap\.geneDetailPromise = Promise\.resolve\(embeddedGeneCard\)/,
-    "a lean embedded card must never become the authoritative gene-detail promise",
+    /if \(isCompleteGeneDetail\(embeddedGeneCard\)\)[\s\S]*bootstrap\.geneDetailPromise = Promise\.resolve\(embeddedGeneCard\)/,
+    "the complete embedded page contract should satisfy the detail promise without a second read",
   )
   assert.match(
     head,
     /var portraitSeedPromise = embeddedGeneCard[\s\S]*Promise\.resolve\(embeddedGeneCard\)[\s\S]*bootstrap\.portraitSourcePromise = portraitSeedPromise/,
-    "the lean card may accelerate the portrait probe without poisoning complete detail",
+    "the embedded payload may accelerate the portrait probe while older sparse HTML stays repairable",
   )
   assert.match(head, /img\.fetchPriority = "high"/)
   assert.doesNotMatch(
@@ -1621,6 +1636,9 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   )
   assert.doesNotMatch(block, /Promise\.race\(\[[\s\S]*richGenePromise/)
   assert.match(block, /renderGeneContent\(contentEl, g\)/)
+  assert.match(block, /canAdoptServerContent/)
+  assert.match(block, /wireGeneContent\(contentEl, g\)/)
+  assert.match(block, /data-icono-gene-snapshot/)
   assert.doesNotMatch(block, /renderGeneResult\(\{ data: cachedGeneCard, source: "card" \}\)/)
   assert.match(block, /hasHeadStartedGene/)
   assert.match(
@@ -1652,28 +1670,70 @@ test("gene page visits record signed-in discovery without blocking first paint",
   assert.match(renderBlock, /recordGenePageVisitDiscovery\(g && g\.symbol \? g\.symbol : symbol\)/)
 })
 
-test("gene candidate gallery stays out of the first-load network lane", async () => {
+test("gene candidate data is present in the first response while images stay lazy", async () => {
   const app = await readFile(appPath, "utf8")
-  const contentStart = app.indexOf("function hasVisibleCandidateGallery(genePayload)")
+  const shared = await readFile(sharedCardPath, "utf8")
+  const internalWorker = await readFile(internalWorkerPath, "utf8")
+  const contentStart = app.indexOf("function renderGeneContent(container, g)")
   const contentEnd = app.indexOf("function render404(root)", contentStart)
-  assert.notEqual(contentStart, -1, "missing candidate gallery gate helper")
+  assert.notEqual(contentStart, -1, "missing renderGeneContent")
   assert.notEqual(contentEnd, -1, "missing renderGeneContent boundary")
   const block = app.slice(contentStart, contentEnd)
-  assert.match(block, /data-icono-deferred-candidates/)
-  assert.match(block, /new IntersectionObserver/)
-  assert.match(block, /rootMargin: "0px 0px"/)
-  assert.match(block, /candidateObserver\.observe\(candidateHost\)/)
-  assert.doesNotMatch(
-    block,
-    /window\.addEventListener\("scroll", startCandidateObserver/,
-    "candidate gallery observation must start immediately so short gene pages are not stuck waiting for an impossible scroll",
-  )
-  assert.match(
-    block,
-    /new IntersectionObserver[\s\S]*attachDeferredCandidateGallery\(container\)/,
-    "candidate gallery media must be viewport-gated before rendering its image tags",
-  )
-  assert.doesNotMatch(block, /heroPortrait\.addEventListener\("load", queueCandidateGallery/)
+  assert.match(block, /html \+= renderCandidateGallery\(g\)/)
+  assert.doesNotMatch(block, /data-icono-deferred-candidates|new IntersectionObserver/)
+  assert.match(shared, /function renderCandidateGalleryHtml\(geneDetail, options\)/)
+  assert.match(shared, /data-icono-public-candidates/)
+  assert.match(shared, /candidate blot" loading="lazy" decoding="async" fetchpriority="low"/)
+  assert.match(internalWorker, /renderCandidateGalleryHtml\(cardPayload\)/)
+  assert.match(internalWorker, /data-icono-gene-snapshot=/)
+})
+
+test("shared candidate renderer emits a complete, escaped public snapshot", async () => {
+  const vm = await import("node:vm")
+  const runtime = await readFile(generatedSharedCardRuntimePath, "utf8")
+  const sandbox = { console }
+  sandbox.globalThis = sandbox
+  vm.runInNewContext(runtime, sandbox)
+  const shared = sandbox.IconoplasmCardShared
+  assert.equal(typeof shared?.renderCandidateGalleryHtml, "function")
+
+  const html = shared.renderCandidateGalleryHtml({
+    symbol: "CD4",
+    portrait_candidates: [
+      {
+        is_current: true,
+        asset_sha256: "current",
+        medium_url: "https://example.test/current.webp",
+      },
+      {
+        asset_sha256: "candidate-a",
+        candidate_image_id: 18,
+        vision_id: "vision-a",
+        medium_url: "https://example.test/a.webp",
+        full_url: "https://example.test/a.png",
+        sample_label: "A1-18",
+        emulsion_id: "emulsion-1",
+        width: 800,
+        height: 1000,
+      },
+      {
+        asset_sha256: "candidate-b",
+        medium_url: "https://example.test/b.webp",
+        sample_label: "<unsafe>",
+      },
+      { asset_sha256: "missing-media" },
+    ],
+  })
+
+  assert.match(html, /data-icono-public-candidates/)
+  assert.equal((html.match(/class="icono-candidate-card"/g) || []).length, 2)
+  assert.match(html, /data-icono-candidate-vote-box="candidate-a"/)
+  assert.match(html, /data-icono-candidate-image-id="18"/)
+  assert.match(html, /data-icono-vision-id="vision-a"/)
+  assert.match(html, /data-icono-candidate-actions-island="candidate-a"/)
+  assert.match(html, /loading="lazy" decoding="async" fetchpriority="low"/)
+  assert.match(html, /&lt;unsafe&gt;/)
+  assert.doesNotMatch(html, /current\.webp|missing-media/)
 })
 
 test("gene route does not warm full-size portraits during first paint", async () => {
@@ -1693,6 +1753,7 @@ test("gene route does not warm full-size portraits during first paint", async ()
 
 test("gene candidate portraits stay out of the critical image lane", async () => {
   const app = await readFile(appPath, "utf8")
+  const shared = await readFile(sharedCardPath, "utf8")
   const start = app.indexOf("function renderCandidateGallery(genePayload)")
   const end = app.indexOf("function renderGene(root, symbol, options)", start)
   assert.notEqual(start, -1, "missing renderCandidateGallery")
@@ -1705,32 +1766,8 @@ test("gene candidate portraits stay out of the critical image lane", async () =>
     /candidate blot" loading="\s*\+\s*\(i < 2 \? "eager" : "lazy"\)/,
     "below-hero candidate images must not compete with the canonical portrait on first paint",
   )
-
-  const contentStart = app.indexOf("function renderGeneContent(container, g)")
-  const deferredStart = app.indexOf("function hasVisibleCandidateGallery(genePayload)")
-  const contentEnd = app.indexOf("function render404(root)", contentStart)
-  assert.notEqual(contentStart, -1, "missing renderGeneContent")
-  assert.notEqual(deferredStart, -1, "missing candidate gallery gate helper")
-  assert.notEqual(contentEnd, -1, "missing renderGeneContent boundary")
-  const contentBlock = app.slice(deferredStart, contentEnd)
-  assert.match(contentBlock, /data-icono-deferred-candidates/)
-  assert.match(
-    contentBlock,
-    /function attachDeferredCandidateGallery\(container\)[\s\S]*renderCandidateGallery\(genePayload\)/,
-  )
-  assert.match(contentBlock, /new IntersectionObserver/)
-  assert.match(contentBlock, /candidateObserver\.observe\(candidateHost\)/)
-  assert.doesNotMatch(
-    contentBlock,
-    /window\.addEventListener\("scroll", startCandidateObserver/,
-    "short gene pages still need the candidate placeholder observed without a scroll gesture",
-  )
-  assert.doesNotMatch(contentBlock, /heroPortrait\.addEventListener\("load", queueCandidateGallery/)
-  assert.ok(
-    contentBlock.indexOf("renderCandidateGallery(genePayload)") >
-      contentBlock.indexOf("function attachDeferredCandidateGallery"),
-    "candidate gallery should be attached behind the viewport gate, not inside the initial HTML",
-  )
+  assert.match(shared, /candidate blot" loading="lazy" decoding="async" fetchpriority="low"/)
+  assert.doesNotMatch(shared, /candidate blot" loading="eager"/)
 })
 
 test("gene request summary and image edit providers are single-flight route dependencies", async () => {

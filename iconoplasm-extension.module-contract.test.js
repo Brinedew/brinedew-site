@@ -1522,8 +1522,8 @@ test("Iconoplasm home keeps Discord actions in the starter-card flow", () => {
   )
   assert.match(
     appSource,
-    /function renderGeneContent\(container, g\)[\s\S]*data-icono-deferred-candidates[\s\S]*icono-gene-discord-card[\s\S]*buildDiscordActionCardMarkup\(\)/,
-    "gene pages should keep candidate panels deferred and still end with the same Discord action card",
+    /function renderGeneContent\(container, g\)[\s\S]*renderCandidateGallery\(g\)[\s\S]*icono-gene-discord-card[\s\S]*buildDiscordActionCardMarkup\(\)/,
+    "gene pages should include candidate panels in the initial content and still end with the same Discord action card",
   )
   assert.match(
     stylesSource,
@@ -1655,7 +1655,7 @@ test("DO NOT DELETE: print copy request opens a PNG image, not a modal", () => {
   )
   assert.match(
     appSource,
-    /wirePrintCopyRequests\(container, g\)/,
+    /function wireGeneContent\(container, genePayload\)[\s\S]*wirePrintCopyRequests\(container, genePayload\)/,
     "gene pages should prepare the PNG before the user clicks",
   )
   assert.match(

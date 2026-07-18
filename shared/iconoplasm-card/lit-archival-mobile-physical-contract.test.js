@@ -1325,8 +1325,8 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
   assert.match(app, /voteHtml: isImageOnlyVariant \? "" : labelVoteHtml/)
   assert.match(
     app,
-    /voteHtml:\s*!isImageOnlyVariant\s*\?\s*labelVoteBoxMarkup\(g, "data-icono-gene-vote-box", \{\s*showArrows: isMobileLabelReviewEnabled\(\),\s*\}\)\s*:\s*""/,
-    "the gene lead info-card must receive voting controls even when the portrait asset sha is absent from the first render",
+    /voteHtml:\s*!isImageOnlyVariant\s*\?\s*labelVoteBoxMarkup\(g, "data-icono-gene-vote-box", \{\s*showArrows: true,\s*\}\)\s*:\s*""/,
+    "the gene lead info-card must receive voting controls from viewport-independent markup even when the portrait asset sha is absent from the first render",
   )
   assert.match(
     head,
@@ -1388,7 +1388,7 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
   )
 })
 
-test("gene suggestions render before deferred candidate gallery and are fetched once per gene page", async () => {
+test("gene suggestions render before the initial candidate gallery and are fetched once per gene page", async () => {
   const app = await sourceText(appPath)
   assert.match(
     app,
@@ -1397,8 +1397,8 @@ test("gene suggestions render before deferred candidate gallery and are fetched 
   )
   assert.match(
     app,
-    /html \+= buildSuggestSectionMarkup\(g\.symbol\)[\s\S]*?html \+= "<div data-icono-deferred-candidates><\/div>"/,
-    "the suggestions section must render above the candidate gallery placeholder",
+    /html \+= "<div data-icono-suggest-island>" \+ buildSuggestSectionMarkup\(g\.symbol\) \+ "<\/div>"[\s\S]*?html \+= renderCandidateGallery\(g\)/,
+    "the suggestions section must render above the complete candidate gallery",
   )
   assert.match(
     app,
