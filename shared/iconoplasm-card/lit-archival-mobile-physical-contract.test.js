@@ -9,6 +9,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const appPath = path.join(repoRoot, "quartz", "static", "iconoplasm", "app.js")
 const headPath = path.join(repoRoot, "quartz", "components", "Head.tsx")
 const cssPath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-label.css")
+const voteCssPath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-vote.css")
 const pageCssPath = path.join(repoRoot, "quartz", "static", "iconoplasm", "styles.css")
 const runtimePath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-runtime.js")
 const litCardPath = path.join(repoRoot, "shared", "iconoplasm-card", "lit-archival-card.js")
@@ -1387,6 +1388,30 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
   assert.equal(
     /data-icono-mobile-sleeve-vote|icono-label-mobile-pocket-control/.test(app + css),
     false,
+  )
+})
+
+test("mobile vote arrows never affect the desktop label QC geometry", async () => {
+  const voteCss = await sourceText(voteCssPath)
+  const labelCss = await sourceText(cssPath)
+  const desktopArrowBlock = cssStandaloneBlockFor(
+    voteCss,
+    ".icono-vote-box--label .icono-vote-btn-arrow",
+  )
+  const mobileArrowBlock = cssBlockFor(
+    labelCss,
+    ".icono-card--variant-lab-label.icono-card--brick\n    .icono-label-mobile-peek-swipe\n    .icono-vote-btn-arrow",
+  )
+
+  assert.match(
+    desktopArrowBlock,
+    /display:\s*none;/,
+    "universal arrow markup must have zero intrinsic size in the desktop QC column",
+  )
+  assert.match(
+    mobileArrowBlock,
+    /display:\s*block;/,
+    "the responsive mobile peek is the only layout that opts the swipe arrows into view",
   )
 })
 
