@@ -1723,6 +1723,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         <div id="discord-image-warning"></div>
         <div class="form-actions" style="margin-top: 0.5rem;">
           <button type="button" id="btn-upload-day-image">Upload Selected Day Image</button>
+          <button type="button" id="btn-repair-posted-recap">Update Posted Recap</button>
           <button type="button" id="btn-upload-year-images">Upload Next 365 Days</button>
         </div>
         <div id="discord-image-message"></div>
@@ -3014,6 +3015,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       const uploadDayButton = document.getElementById('btn-upload-day-image');
       if (uploadDayButton) {
         uploadDayButton.addEventListener('click', uploadSelectedDayImage);
+      }
+
+      const repairPostedRecapButton = document.getElementById('btn-repair-posted-recap');
+      if (repairPostedRecapButton) {
+        repairPostedRecapButton.addEventListener('click', repairPostedRecap);
       }
 
       const uploadMonthButton = document.getElementById('btn-upload-month-images');
@@ -4671,6 +4677,38 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         console.error('Failed to upload selected-day recap image:', err);
         setRecapImageKnownState(day, false);
         setRecapImageMessage(err?.message || 'Failed to upload selected-day image.', 'error');
+      } finally {
+        setRecapButtonsBusy(false);
+      }
+    }
+
+    async function repairPostedRecap() {
+      if (recapUploadRunning) {
+        return;
+      }
+      const day = selectedDate || document.getElementById('override-date')?.value;
+      if (!day) {
+        setRecapImageMessage('Select a calendar day first.', 'error');
+        return;
+      }
+      setRecapButtonsBusy(true);
+      setRecapImageMessage('Rendering image and updating the posted recap for ' + day + '...', 'info');
+      try {
+        await renderAndUploadDayImage(day, { silent: true });
+        const response = await fetch(API_BASE + '/api/admin/repair-posted-recap', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ day })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.error || 'Failed to update posted recap');
+        }
+        setRecapImageMessage('Updated posted recap for ' + day + '.', 'success');
+      } catch (err) {
+        console.error('Failed to update posted recap:', err);
+        setRecapImageMessage(err?.message || 'Failed to update posted recap.', 'error');
       } finally {
         setRecapButtonsBusy(false);
       }
