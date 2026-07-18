@@ -112,7 +112,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var imageEditProvidersCache = Object.create(null)
   var imageEditProvidersPromise = Object.create(null)
   var homeMasonry = null
-  var candidateMasonry = null
   var portraitLightboxCleanup = null
   var activeGeneRenderId = 0
   var lastGenePageDiscoveryVisitKey = ""
@@ -1271,14 +1270,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     homeMasonry = null
   }
 
-  function destroyCandidateMasonry() {
-    if (!candidateMasonry) return
-    if (candidateMasonry.instance) {
-      candidateMasonry.instance.destroy()
-    }
-    candidateMasonry = null
-  }
-
   function applyHomeMasonryNow(container, newElements) {
     if (!container) return
     var Masonry = window.Masonry
@@ -1344,68 +1335,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       .then(function () {
         if (!container.isConnected) return
         applyHomeMasonryNow(container, newElements)
-      })
-      .catch(function (error) {
-        console.error("[Iconoplasm] failed to load Masonry:", error)
-      })
-  }
-
-  function applyCandidateMasonryNow(container) {
-    if (!container) return
-    var Masonry = window.Masonry
-    if (!Masonry) {
-      console.warn("[Iconoplasm] Masonry library not loaded")
-      return
-    }
-    if (candidateMasonry && candidateMasonry.container === container && candidateMasonry.instance) {
-      if (window.imagesLoaded) {
-        window.imagesLoaded(container, function () {
-          candidateMasonry.instance.layout()
-        })
-      } else {
-        candidateMasonry.instance.layout()
-      }
-      return
-    }
-    destroyCandidateMasonry()
-    if (!container.querySelector(".icono-candidate-grid-sizer")) {
-      var sizer = document.createElement("div")
-      sizer.className = "icono-candidate-grid-sizer"
-      container.insertBefore(sizer, container.firstChild)
-    }
-    if (!container.querySelector(".icono-candidate-gutter-sizer")) {
-      var gutter = document.createElement("div")
-      gutter.className = "icono-candidate-gutter-sizer"
-      container.insertBefore(gutter, container.children[1] || null)
-    }
-    var msnry = new Masonry(container, {
-      itemSelector: ".icono-candidate-card",
-      columnWidth: ".icono-candidate-grid-sizer",
-      gutter: ".icono-candidate-gutter-sizer",
-      percentPosition: true,
-      transitionDuration: 0,
-      initLayout: false,
-    })
-    candidateMasonry = {
-      container: container,
-      instance: msnry,
-    }
-    if (window.imagesLoaded) {
-      window.imagesLoaded(container, function () {
-        msnry.layout()
-      })
-      msnry.layout()
-    } else {
-      msnry.layout()
-    }
-  }
-
-  function applyCandidateMasonry(container) {
-    if (!container) return
-    void ensureMasonryLibs()
-      .then(function () {
-        if (!container.isConnected) return
-        applyCandidateMasonryNow(container)
       })
       .catch(function (error) {
         console.error("[Iconoplasm] failed to load Masonry:", error)
@@ -2168,9 +2097,23 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (!root) return
     if (opts.forceFresh) invalidateGeneDetail(route.symbol)
     destroyHomeMasonry()
-    destroyCandidateMasonry()
     renderGene(root, route.symbol, opts)
     refreshPortraitLightbox()
+  }
+
+  function refreshCurrentGeneInteractiveIslands() {
+    var route = getRoute()
+    if (route.page !== "gene") return
+    var content = document.getElementById("icono-gene-content")
+    if (!content) return
+    var bootstrap = window.__iconoplasmBootstrap || null
+    var genePayload =
+      content._iconoGenePayload ||
+      portraitDetailCache[normalizedSymbol(route.symbol)] ||
+      (bootstrap && bootstrap.geneDetailData) ||
+      null
+    if (!isCompleteGeneDetailPayload(genePayload, route.symbol)) return
+    wireGeneContent(content, genePayload)
   }
 
   function updateSharedUserState(user) {
@@ -2192,7 +2135,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       render()
     }
     if (getRoute().page === "gene" && previousHadUser !== !!currentUser) {
-      rerenderCurrentGeneRoute()
+      refreshCurrentGeneInteractiveIslands()
     }
     return fetchIconoplasmAdminState()
       .then(function (sessionState) {
@@ -2202,7 +2145,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           render()
         }
         if (getRoute().page === "gene" && previousAdmin !== !!currentUserIsIconoAdmin) {
-          rerenderCurrentGeneRoute()
+          refreshCurrentGeneInteractiveIslands()
         }
         return currentUser
       })
@@ -2213,7 +2156,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           render()
         }
         if (getRoute().page === "gene" && previousAdmin) {
-          rerenderCurrentGeneRoute()
+          refreshCurrentGeneInteractiveIslands()
         }
         return currentUser
       })
@@ -3338,7 +3281,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     // the same brick + mobile-review mode the home grid uses on mobile,
     // which gives big legible rows ("FULL NAME", "MISFIT/FIT", etc) plus
     // a tap-to-open dossier sheet.
-    var heroMobileReview = isLitCardVariant(cardVariant) && isMobileLabelReviewEnabled()
+    // Emit one deterministic lead-card DOM for server rendering and client adoption.
+    // Desktop hides the mobile peek with CSS; mobile uses the same sheet as its dossier.
+    // Viewport-dependent markup here would force a post-paint replacement on one device class.
+    var heroMobileReview = isLitCardVariant(cardVariant)
     var heroMode = heroMobileReview ? "brick" : "sheet"
     var bodyHtml = isLitCardVariant(cardVariant)
       ? buildArchivalBodyMarkup(detail || g, {
@@ -3349,7 +3295,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           portraitSrc: portraitUrl,
           voteHtml: !isImageOnlyVariant
             ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box", {
-                showArrows: isMobileLabelReviewEnabled(),
+                showArrows: true,
               })
             : "",
         })
@@ -3381,9 +3327,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       // can wire the peek/expand toggle. Static bricks are skipped by
       // the mobile-label wiring on purpose for grid-context cards we
       // don't want to expand; the hero is the page, so it should expand.
-      '<article class="icono-card icono-card--brick' +
-      (heroMobileReview ? "" : " icono-card--brick-static") +
-      " icono-gene-lead-card" +
+      '<article class="icono-card icono-card--brick icono-gene-lead-card' +
       archivalVariantClass(cardVariant) +
       '" style="--width:' +
       dims.width +
@@ -8055,7 +7999,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             emulsionToolbarMarkup +
             "</div>"
           : "") +
-        '<div class="icono-candidate-secondary-actions">' +
+        '<div class="icono-candidate-secondary-actions" data-icono-candidate-actions-island="' +
+        esc(assetSha) +
+        '">' +
         removeMarkup +
         editMarkup +
         // B-467: "Copy to gene" stays a <details>/<summary> for keyboard semantics, but the
@@ -8196,7 +8142,25 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         aliasCount: Array.isArray(g && g.aliases) ? g.aliases.length : 0,
       }
       renderIconoplasmSidebar()
-      renderGeneContent(contentEl, g)
+      var embeddedSnapshot =
+        bootstrap && bootstrap.geneDetailSymbol === resolvedSymbol
+          ? String(bootstrap.geneDetailSnapshotVersion || "")
+          : ""
+      var renderedSnapshot = String(
+        (contentEl && contentEl.getAttribute("data-icono-gene-snapshot")) || "",
+      )
+      var canAdoptServerContent = !!(
+        contentEl &&
+        contentEl.getAttribute("data-icono-server-rendered-gene") === "true" &&
+        embeddedSnapshot &&
+        renderedSnapshot === embeddedSnapshot &&
+        normalizedSymbol(contentEl.getAttribute("data-icono-gene-symbol")) === resolvedSymbol
+      )
+      if (canAdoptServerContent) {
+        wireGeneContent(contentEl, g)
+      } else {
+        renderGeneContent(contentEl, g)
+      }
       recordGenePageVisitDiscovery(g && g.symbol ? g.symbol : symbol)
     }
     firstGenePromise.then(renderGeneResult).catch(function (err) {
@@ -8222,68 +8186,107 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     })
   }
 
-  function hasVisibleCandidateGallery(genePayload) {
-    var candidates = Array.isArray(genePayload && genePayload.portrait_candidates)
-      ? genePayload.portrait_candidates
-      : []
-    for (var i = 0; i < candidates.length; i++) {
-      var item = candidates[i]
-      if (item && !item.is_current && candidatePortraitUrl(item, "medium")) return true
+  function hydrateServerCandidateActionIslands(container, genePayload) {
+    if (!container || !genePayload) return
+    var signature = currentUserIsIconoAdmin ? "admin" : "public"
+    var targets = Array.prototype.slice.call(
+      container.querySelectorAll("[data-icono-candidate-actions-island]"),
+    )
+    targets = targets.filter(function (target) {
+      return target.getAttribute("data-icono-candidate-actions-signature") !== signature
+    })
+    if (!targets.length) return
+    var wrapper = document.createElement("div")
+    wrapper.innerHTML = renderCandidateGallery(genePayload)
+    var sources = wrapper.querySelectorAll(".icono-candidate-secondary-actions")
+    var sourcesByAsset = new Map()
+    for (var i = 0; i < sources.length; i += 1) {
+      var sourceAsset = String(sources[i].getAttribute("data-icono-candidate-actions-island") || "")
+        .trim()
+        .toLowerCase()
+      if (sourceAsset) sourcesByAsset.set(sourceAsset, sources[i])
     }
-    return false
+    for (var j = 0; j < targets.length; j += 1) {
+      var targetAsset = String(targets[j].getAttribute("data-icono-candidate-actions-island") || "")
+        .trim()
+        .toLowerCase()
+      var source = sourcesByAsset.get(targetAsset)
+      targets[j].innerHTML = source ? source.innerHTML : ""
+      targets[j].setAttribute("data-icono-candidate-actions-signature", signature)
+    }
   }
 
-  function attachDeferredCandidateGallery(container) {
-    if (!container || !container.isConnected) return false
-    var host = container.querySelector("[data-icono-deferred-candidates]")
-    var genePayload = container._iconoDeferredCandidateGene
-    if (!host || !genePayload || !hasVisibleCandidateGallery(genePayload)) return false
-    host.outerHTML = renderCandidateGallery(genePayload)
+  function syncServerGenePortraitUrls(container, genePayload) {
+    if (!container || !genePayload) return
+    var leadImage = container.querySelector(
+      ".icono-gene-lead-card .iconoplasm-tooltip-portrait-img",
+    )
+    var leadButton = container.querySelector(".icono-gene-lead-card [data-icono-pswp]")
+    var leadMedium = publishedPortraitUrl(genePayload, "medium")
+    var leadFull = publishedPortraitUrl(genePayload, "full") || leadMedium
+    if (leadImage && leadMedium) leadImage.setAttribute("src", leadMedium)
+    if (leadButton && leadFull) leadButton.setAttribute("data-icono-pswp-src", leadFull)
+
+    var candidates = Array.isArray(genePayload.portrait_candidates)
+      ? genePayload.portrait_candidates.filter(function (item) {
+          return item && !item.is_current && candidatePortraitUrl(item, "medium")
+        })
+      : []
+    var cards = container.querySelectorAll(".icono-candidate-card")
+    for (var i = 0; i < cards.length; i += 1) {
+      var candidate = candidates[i]
+      if (!candidate) continue
+      var image = cards[i].querySelector(".icono-candidate-media img")
+      var button = cards[i].querySelector("[data-icono-pswp]")
+      var medium = candidatePortraitUrl(candidate, "medium")
+      var full = candidatePortraitUrl(candidate, "full") || medium
+      if (image && medium) image.setAttribute("src", medium)
+      if (button && full) button.setAttribute("data-icono-pswp-src", full)
+    }
+  }
+
+  function hydrateGeneInteractiveIslands(container, genePayload) {
+    if (!container || !genePayload) return
+    var authSignature = currentUser ? "signed-in" : "guest"
+    var adminSignature = currentUserIsIconoAdmin ? "admin" : "public"
+    var toolbarSignature = authSignature + ":" + adminSignature
+    var toolbarHost = container.querySelector("[data-icono-canonical-toolbar-island]")
+    if (
+      toolbarHost &&
+      toolbarHost.getAttribute("data-icono-island-signature") !== toolbarSignature
+    ) {
+      toolbarHost.innerHTML = renderCanonicalToolbarMarkup(genePayload)
+      toolbarHost.setAttribute("data-icono-island-signature", toolbarSignature)
+    }
+    var suggestHost = container.querySelector("[data-icono-suggest-island]")
+    if (suggestHost && suggestHost.getAttribute("data-icono-island-signature") !== authSignature) {
+      suggestHost.innerHTML = buildSuggestSectionMarkup(genePayload.symbol)
+      suggestHost.setAttribute("data-icono-island-signature", authSignature)
+    }
+    var discordHost = container.querySelector("[data-icono-discord-island]")
+    if (discordHost && discordHost.getAttribute("data-icono-island-signature") !== authSignature) {
+      discordHost.innerHTML = buildDiscordActionCardMarkup()
+      discordHost.setAttribute("data-icono-island-signature", authSignature)
+    }
+    hydrateServerCandidateActionIslands(container, genePayload)
+  }
+
+  function wireGeneContent(container, genePayload) {
+    if (!container || !genePayload) return
+    container._iconoGenePayload = genePayload
+    syncServerGenePortraitUrls(container, genePayload)
+    hydrateGeneInteractiveIslands(container, genePayload)
+    wireGeneVoteBox(container, genePayload)
     wireGeneEditImagePanel(container, genePayload)
+    wireGeneRequestPanel(container, genePayload)
+    wireGeneSuggestions(container, genePayload)
+    wirePrintCopyRequests(container, genePayload)
     wireCandidateVoteBoxes(container, genePayload)
     wireCandidateRemoveButtons(container, genePayload)
     wireCandidateCopyForms(container, genePayload)
-    applyCandidateMasonry(container.querySelector(".icono-candidate-grid"))
+    var leadCard = container.querySelector(".icono-gene-lead-card")
+    if (leadCard && isMobileLabelReviewEnabled()) wireMobileLabelCard(leadCard)
     refreshPortraitLightbox()
-    return true
-  }
-
-  function armDeferredCandidateGallery(container, genePayload) {
-    if (!container) return
-    container._iconoDeferredCandidateGene = genePayload
-    var candidateHost = container.querySelector("[data-icono-deferred-candidates]")
-    if (!candidateHost || candidateHost.getAttribute("data-icono-candidates-armed") === "true") {
-      return
-    }
-    candidateHost.setAttribute("data-icono-candidates-armed", "true")
-    if (candidateHost && "IntersectionObserver" in window) {
-      var candidateObserver = new IntersectionObserver(
-        function (entries) {
-          for (var i = 0; i < entries.length; i++) {
-            if (!entries[i].isIntersecting) continue
-            container._iconoCandidateGalleryIntent = true
-            if (attachDeferredCandidateGallery(container)) candidateObserver.disconnect()
-            break
-          }
-        },
-        { root: null, rootMargin: "0px 0px", threshold: 0 },
-      )
-      candidateObserver.observe(candidateHost)
-    } else {
-      window.setTimeout(function () {
-        container._iconoCandidateGalleryIntent = true
-        attachDeferredCandidateGallery(container)
-      }, 0)
-    }
-  }
-
-  function renderGeneDeferredPanels(container, g) {
-    if (!container || !g) return
-    container._iconoDeferredCandidateGene = g
-    wireGeneEditImagePanel(container, g)
-    if (container._iconoCandidateGalleryIntent) {
-      attachDeferredCandidateGallery(container)
-    }
   }
 
   /* ─── Gene page: resampling suggestions ─── */
@@ -8592,29 +8595,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function renderGeneContent(container, g) {
     var html = '<section class="icono-gene-lead">' + buildGeneLeadCardMarkup(g)
 
-    html += renderCanonicalToolbarMarkup(g)
+    html += "<div data-icono-canonical-toolbar-island>" + renderCanonicalToolbarMarkup(g) + "</div>"
     html += "</section>"
 
     // Resampling suggestions sit above the candidate blots.
-    html += buildSuggestSectionMarkup(g.symbol)
-    html += "<div data-icono-deferred-candidates></div>"
+    html += "<div data-icono-suggest-island>" + buildSuggestSectionMarkup(g.symbol) + "</div>"
+    html += renderCandidateGallery(g)
     html +=
-      '<section class="icono-gene-discord-card">' + buildDiscordActionCardMarkup() + "</section>"
+      '<section class="icono-gene-discord-card" data-icono-discord-island>' +
+      buildDiscordActionCardMarkup() +
+      "</section>"
 
     container.innerHTML = html
-    wireGeneVoteBox(container, g)
-    wireGeneEditImagePanel(container, g)
-    wireGeneRequestPanel(container, g)
-    wireGeneSuggestions(container, g)
-    wirePrintCopyRequests(container, g)
-    // B-476: the gene-lead mobile card starts closed. The portrait and infocard
-    // stay physically fixed; tapping expands only the viewport crop downward.
-    var leadCard = container.querySelector(".icono-gene-lead-card")
-    if (leadCard && isMobileLabelReviewEnabled()) {
-      wireMobileLabelCard(leadCard)
-    }
-    refreshPortraitLightbox()
-    armDeferredCandidateGallery(container, g)
+    wireGeneContent(container, g)
   }
 
   /* ─── Rendering: 404 ─── */
@@ -8743,7 +8736,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function restoreCachedHomeView(root, restoreState) {
     if (!root || !cachedHomeView || !restoreState) return false
-    destroyCandidateMasonry()
     root.textContent = ""
     root.appendChild(cachedHomeView.fragment)
     activeHomeHistorySnapshot = cachedHomeView.snapshot
@@ -8782,7 +8774,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       return
     }
     if (route.page === "gene") {
-      rerenderCurrentGeneRoute()
+      var leadCard = document.querySelector("#icono-gene-content .icono-gene-lead-card")
+      if (leadCard && nextMode) wireMobileLabelCard(leadCard)
+      if (leadCard) syncMobileLabelViewportGeometry(leadCard)
     }
   }
 
@@ -9308,7 +9302,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       destroyHomeMasonry()
     }
     lastRenderedPath = window.location.pathname + window.location.search
-    destroyCandidateMasonry()
     // Update page title
     if (route.page === "home") {
       document.title = "Iconoplasm - Gene character cards"

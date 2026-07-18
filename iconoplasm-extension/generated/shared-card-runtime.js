@@ -10293,6 +10293,72 @@
       var attrs = extraAttrs ? " " + extraAttrs : "";
       return '<div class="iconoplasm-tooltip-mobile-rowgrid iconoplasm-tooltip-mobile-rowgrid--skeleton"' + attrs + '><div class="iconoplasm-tooltip-mobile-row"><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character"><span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span></div><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular"><span class="iconoplasm-tooltip-skeleton-line"></span></div></div><div class="iconoplasm-tooltip-mobile-row"><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character"><span class="iconoplasm-tooltip-skeleton-line"></span></div><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular"><span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span></div></div><div class="iconoplasm-tooltip-mobile-row"><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character"><span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span></div><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular"><span class="iconoplasm-tooltip-skeleton-line"></span></div></div><div class="iconoplasm-tooltip-mobile-row"><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character"><span class="iconoplasm-tooltip-skeleton-line"></span></div><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular"><span class="iconoplasm-tooltip-skeleton-line"></span></div></div><div class="iconoplasm-tooltip-mobile-row"><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character"><span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span></div><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular"><span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span></div></div></div>';
     }
+    function candidatePortraitUrl(candidate, preferredSize, resolveUrl) {
+      var item = candidate || {};
+      var fullUrl = String(item.full_url || "").trim();
+      var mediumUrl = String(item.medium_url || "").trim();
+      var thumbUrl = String(item.thumb_url || "").trim();
+      var rawUrl = preferredSize === "medium" ? mediumUrl || thumbUrl || fullUrl : preferredSize === "thumb" ? thumbUrl || mediumUrl || fullUrl : fullUrl || mediumUrl || thumbUrl;
+      if (!rawUrl || typeof resolveUrl !== "function") return rawUrl;
+      try {
+        return String(resolveUrl(rawUrl) || rawUrl);
+      } catch (_error) {
+        return rawUrl;
+      }
+    }
+    function candidateEmulsionLabel(candidate) {
+      var item = candidate || {};
+      var emulsionId = String(item.emulsion_id || "").trim();
+      var label = String(item.emulsion_label || "").trim();
+      var artistId = String(item.artist_id || "").trim();
+      return emulsionId || label || (artistId ? "Emulsion " + artistId : "");
+    }
+    function renderCandidateGalleryHtml(geneDetail, options) {
+      var gene = geneDetail || {};
+      var opts = options || {};
+      var candidates = Array.isArray(gene.portrait_candidates) ? gene.portrait_candidates : [];
+      var visibleCandidates = [];
+      for (var i = 0; i < candidates.length; i += 1) {
+        var candidate = candidates[i];
+        if (!candidate || candidate.is_current) continue;
+        if (!candidatePortraitUrl(candidate, "medium", opts.resolvePortraitUrl)) continue;
+        visibleCandidates.push(candidate);
+      }
+      if (!visibleCandidates.length) return "";
+      var symbol = normalizedSymbol(gene.symbol || gene.canonical_symbol);
+      var gridClass = visibleCandidates.length === 1 ? "icono-candidate-grid icono-candidate-grid--single" : "icono-candidate-grid";
+      var html = '<section class="icono-candidate-gallery" data-icono-public-candidates><div class="icono-candidate-gallery-heading"><h2>Candidate blots</h2></div><div class="' + gridClass + '" data-icono-lightbox>';
+      for (var j = 0; j < visibleCandidates.length; j += 1) {
+        var item = visibleCandidates[j];
+        var mediumUrl = candidatePortraitUrl(item, "medium", opts.resolvePortraitUrl);
+        var fullUrl = candidatePortraitUrl(item, "full", opts.resolvePortraitUrl) || mediumUrl;
+        var width = Number(item.width || item.image_width || 4) || 4;
+        var height = Number(item.height || item.image_height || 5) || 5;
+        var assetSha = String(item.asset_sha256 || "").trim().toLowerCase();
+        var candidateImageId = Number(item.candidate_image_id || 0);
+        var visionId = String(item.vision_id || "").trim();
+        var sampleLabel = String(item.sample_label || "").trim();
+        var emulsionLabel = candidateEmulsionLabel(item);
+        var voteAttrs = 'data-icono-candidate-vote-box="' + escapeHtml(assetSha) + '"';
+        if (Number.isFinite(candidateImageId) && candidateImageId > 0) {
+          voteAttrs += ' data-icono-candidate-image-id="' + escapeHtml(String(Math.round(candidateImageId))) + '"';
+        }
+        if (visionId) voteAttrs += ' data-icono-vision-id="' + escapeHtml(visionId) + '"';
+        var toolbarMarkup = "";
+        if (sampleLabel || emulsionLabel) {
+          toolbarMarkup = '<div class="icono-candidate-toolbar-meta">';
+          if (sampleLabel) {
+            toolbarMarkup += '<div class="icono-candidate-toolbar-pair"><span>Sample</span><strong>' + escapeHtml(sampleLabel) + "</strong></div>";
+          }
+          if (emulsionLabel) {
+            toolbarMarkup += '<div class="icono-candidate-toolbar-pair"><span>Emulsion</span><strong>' + escapeHtml(emulsionLabel) + "</strong></div>";
+          }
+          toolbarMarkup += "</div>";
+        }
+        html += '<article class="icono-candidate-card" style="--width:' + escapeHtml(String(width)) + ";--height:" + escapeHtml(String(height)) + ';" data-icono-candidate-asset="' + escapeHtml(assetSha) + '"><button type="button" class="icono-candidate-media-button" data-icono-pswp data-icono-pswp-src="' + escapeHtml(fullUrl) + '" data-icono-pswp-alt="' + escapeHtml(symbol) + ' candidate blot" data-pswp-width="' + escapeHtml(String(width)) + '" data-pswp-height="' + escapeHtml(String(height)) + '" aria-label="Open candidate blot for ' + escapeHtml(symbol) + '"><span class="icono-candidate-media"><img src="' + escapeHtml(mediumUrl) + '" alt="' + escapeHtml(symbol) + ' candidate blot" loading="lazy" decoding="async" fetchpriority="low" width="' + escapeHtml(String(width)) + '" height="' + escapeHtml(String(height)) + '"></span></button><div class="icono-candidate-footer">' + voteBoxMarkup(voteAttrs) + toolbarMarkup + '<div class="icono-candidate-secondary-actions" data-icono-candidate-actions-island="' + escapeHtml(assetSha) + '" aria-label="Candidate actions"></div></div></article>';
+      }
+      return html + "</div></section>";
+    }
     function voteBoxMarkup(extraAttrs, options) {
       var attrs = extraAttrs ? " " + extraAttrs : "";
       var opts = options || {};
@@ -10594,6 +10660,7 @@
       renderTooltipMetaSkeletonHtml,
       renderTooltipMobileRowGridHtml,
       renderTooltipMobileSkeletonHtml,
+      renderCandidateGalleryHtml,
       voteBoxMarkup,
       setVoteBoxState,
       wireVoteBox,

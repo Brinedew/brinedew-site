@@ -231,17 +231,17 @@ test("edit blot controls rehydrate adjustment context when rich gene essence arr
   const refreshEnd = app.indexOf("function wireGeneEditImagePanel", refreshStart)
   const wireStart = app.indexOf("function wireGeneEditImagePanel")
   const wireEnd = app.indexOf("function wireGeneRequestPanel", wireStart)
-  const deferredStart = app.indexOf("function renderGeneDeferredPanels")
-  const deferredEnd = app.indexOf("function renderGeneContent", deferredStart)
+  const geneWireStart = app.indexOf("function wireGeneContent")
+  const geneWireEnd = app.indexOf("/* ─── Gene page: resampling suggestions", geneWireStart)
   assert.notEqual(refreshStart, -1)
   assert.notEqual(refreshEnd, -1)
   assert.notEqual(wireStart, -1)
   assert.notEqual(wireEnd, -1)
-  assert.notEqual(deferredStart, -1)
-  assert.notEqual(deferredEnd, -1)
+  assert.notEqual(geneWireStart, -1)
+  assert.notEqual(geneWireEnd, -1)
   const refreshGeneEditImageAdjustmentContext = app.slice(refreshStart, refreshEnd)
   const wireGeneEditImagePanel = app.slice(wireStart, wireEnd)
-  const renderGeneDeferredPanels = app.slice(deferredStart, deferredEnd)
+  const wireGeneContent = app.slice(geneWireStart, geneWireEnd)
 
   assert.match(
     refreshGeneEditImageAdjustmentContext,
@@ -256,7 +256,7 @@ test("edit blot controls rehydrate adjustment context when rich gene essence arr
     /refreshGeneEditImageAdjustmentContext\(container,\s*genePayload\)/,
   )
   assert.match(wireGeneEditImagePanel, /data-icono-edit-wired/)
-  assert.match(renderGeneDeferredPanels, /wireGeneEditImagePanel\(container,\s*g\)/)
+  assert.match(wireGeneContent, /wireGeneEditImagePanel\(container,\s*genePayload\)/)
 })
 
 test("edit blot mass adjustment accepts titan-scale gene essence mass", () => {
@@ -390,19 +390,28 @@ test("image-edit publish keeps a real publisher upvote and hydrates the vote UI"
   assert.match(wire, /handle\.ensureSnapshot\(\)/)
 })
 
-test("deferred candidate gallery wires candidate edit buttons after rendering cards", () => {
+test("server candidate action islands wire edit buttons without replacing public cards", () => {
   const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
-  const attachStart = app.indexOf("function attachDeferredCandidateGallery")
-  const attachEnd = app.indexOf("function armDeferredCandidateGallery", attachStart)
-  assert.notEqual(attachStart, -1)
-  assert.notEqual(attachEnd, -1)
-  const attachDeferredCandidateGallery = app.slice(attachStart, attachEnd)
+  const hydrateStart = app.indexOf("function hydrateServerCandidateActionIslands")
+  const hydrateEnd = app.indexOf("function syncServerGenePortraitUrls", hydrateStart)
+  const wireStart = app.indexOf("function wireGeneContent")
+  const wireEnd = app.indexOf("/* ─── Gene page: resampling suggestions", wireStart)
+  assert.notEqual(hydrateStart, -1)
+  assert.notEqual(hydrateEnd, -1)
+  assert.notEqual(wireStart, -1)
+  assert.notEqual(wireEnd, -1)
+  const hydrateCandidateActions = app.slice(hydrateStart, hydrateEnd)
+  const wireGeneContent = app.slice(wireStart, wireEnd)
 
   assert.match(
-    attachDeferredCandidateGallery,
-    /host\.outerHTML = renderCandidateGallery\(genePayload\)/,
+    hydrateCandidateActions,
+    /querySelectorAll\("\[data-icono-candidate-actions-island\]"\)/,
   )
-  assert.match(attachDeferredCandidateGallery, /wireGeneEditImagePanel\(container,\s*genePayload\)/)
+  assert.match(hydrateCandidateActions, /sourcesByAsset = new Map\(\)/)
+  assert.match(hydrateCandidateActions, /sourcesByAsset\.get\(targetAsset\)/)
+  assert.match(hydrateCandidateActions, /targets\[j\]\.innerHTML = source/)
+  assert.doesNotMatch(hydrateCandidateActions, /outerHTML/)
+  assert.match(wireGeneContent, /wireGeneEditImagePanel\(container,\s*genePayload\)/)
 })
 
 test("B-517 live Shoelace components can load icons under the production CSP", () => {
