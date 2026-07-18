@@ -74,7 +74,7 @@ const ICONOPLASM_GENE_FONT_PRELOAD_LINKS = [
   "</static/iconoplasm/fonts/Caveat-400.woff2>; rel=preload; as=font; type=font/woff2; crossorigin",
 ]
 const ICONOPLASM_HTML_SHELL_EDGE_CACHE_TTL_SECONDS = 300
-const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-07-18-complete-gene-detail-v1"
+const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-07-18-gene-page-bootstrap-v2"
 const ICONOPLASM_PUBLIC_NO_VARY_SEARCH =
   'params=("utm_source" "utm_medium" "utm_campaign" "utm_content" "utm_term" "fbclid" "gclid" "mc_cid" "mc_eid" "codex_verify")'
 
@@ -129,6 +129,7 @@ function iconoplasmStaticGeneSymbolFromPath(path) {
 
 function iconoplasmStaticGeneShellHtml(safeSymbol, safeLetter) {
   return `
+  <!-- iconoplasm-static-gene-shell:start -->
   <div class="icono-nav icono-static-shell-only"><a href="/" data-icono-nav>All genes</a></div>
   <div id="icono-gene-content" class="icono-static-shell-only">
     <section class="icono-gene-lead icono-gene-lead--static-shell">
@@ -150,7 +151,8 @@ function iconoplasmStaticGeneShellHtml(safeSymbol, safeLetter) {
         </div>
       </article>
     </section>
-  </div>`
+  </div>
+  <!-- iconoplasm-static-gene-shell:end -->`
 }
 
 function personalizeIconoplasmStaticGeneShell(html, path) {
@@ -168,14 +170,16 @@ function personalizeIconoplasmStaticGeneShell(html, path) {
   }
   const safeSymbol = escapeIconoplasmStaticShellText(symbol)
   const safeLetter = escapeIconoplasmStaticShellText(symbol.charAt(0) || "G")
-  let next = String(html)
-    .replace(/(<div\b[^>]*\bid=["']iconoplasm-root["'][^>]*)(>)/, (_match, open, close) => {
-      return `${open} data-icono-startup-route="gene"${close}`
-    })
-    .replace(/<div\b[^>]*\bclass="icono-nav icono-static-shell-only"[^>]*>[\s\S]*?<\/div>/gi, "")
-    .replace(/<div\b[^>]*\bid="icono-gene-content"[^>]*>[\s\S]*?<\/div>\s*(?=[\s]*<\/div>)/gi, "")
-    .replace(/(<[^>]*\bdata-icono-static-symbol\b[^>]*>)(.*?)(<\/[^>]+>)/g, `$1${safeSymbol}$3`)
-    .replace(/(<[^>]*\bdata-icono-static-letter\b[^>]*>)(.*?)(<\/[^>]+>)/g, `$1${safeLetter}$3`)
+  const genericShell = String(html).replace(
+    /\s*<!-- iconoplasm-static-gene-shell:start -->[\s\S]*?<!-- iconoplasm-static-gene-shell:end -->\s*/g,
+    "",
+  )
+  let next = genericShell.replace(
+    /(<div\b[^>]*\bid=["']iconoplasm-root["'][^>]*)(>)/,
+    (_match, open, close) => {
+      return `${open} data-icono-startup-route="gene"${close}${iconoplasmStaticGeneShellHtml(safeSymbol, safeLetter)}`
+    },
+  )
   return next
 }
 
@@ -191,9 +195,15 @@ function iconoplasmCanonicalAssetFromCardPayload(cardPayload) {
   return /^[a-f0-9]{64}$/.test(value) ? value : ""
 }
 
-function iconoplasmGeneDetailShellVersion(cardPayload) {
+function iconoplasmGeneDetailShellVersion(cardPayload, responseEtag = "") {
+  const etag = String(responseEtag || "")
+    .replace(/^W\//i, "")
+    .replace(/^"|"$/g, "")
+    .trim()
+    .toLowerCase()
+  if (/^[a-z0-9._:-]{8,160}$/.test(etag)) return `site-gene-detail-${etag}`
   const assetSha = iconoplasmCanonicalAssetFromCardPayload(cardPayload)
-  return assetSha ? `site-gene-detail-${assetSha}` : "site-gene-detail-no-published-portrait"
+  return assetSha ? `site-gene-detail-fallback-${assetSha}` : "site-gene-detail-fallback-empty"
 }
 
 function iconoplasmPublishedPortraitUrlFromCardPayload(cardPayload, preferredSize) {
@@ -228,7 +238,7 @@ function iconoplasmLabelVoteBoxMarkup(cardPayload) {
   return shared.voteBoxMarkup(attrs, {
     variant: "label",
     showScore: false,
-    showArrows: false,
+    showArrows: true,
   })
 }
 
@@ -271,16 +281,16 @@ function iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) {
   const bodyHtml =
     '<div class="iconoplasm-tooltip-body icono-label-mobile-info-card">' +
     shared.renderLabLabelCardHtml(cardPayload, {
-      mode: "sheet",
+      mode: "brick",
       layoutVariant: "lit-archival",
-      mobileReview: false,
+      mobileReview: true,
       portraitAlt: symbol + " blot",
       portraitSrc: portraitUrl,
       voteHtml: iconoplasmLabelVoteBoxMarkup(cardPayload),
     }) +
     "</div>"
   return (
-    '<article class="icono-card icono-card--brick icono-card--brick-static icono-gene-lead-card icono-card--variant-lab-label icono-card--variant-lit-archival" style="--width:' +
+    '<article class="icono-card icono-card--brick icono-gene-lead-card icono-card--variant-lab-label icono-card--variant-lit-archival" style="--width:' +
     escapeIconoplasmHtmlAttribute(String(dims.width)) +
     ";--height:" +
     escapeIconoplasmHtmlAttribute(String(dims.height)) +
@@ -295,11 +305,50 @@ function iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) {
   )
 }
 
-function replaceIconoplasmStaticGeneLeadShell(html, leadCardHtml) {
-  if (!leadCardHtml) return html
+function iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion) {
+  const shared = globalThis.IconoplasmCardShared
+  if (!shared || !cardPayload) return ""
+  const symbol = shared.normalizedSymbol(cardPayload.symbol || cardPayload.canonical_symbol)
+  if (!symbol) return ""
+  const portrait = cardPayload.portrait || {}
+  const emulsionLabel = String(
+    portrait.emulsion_id || portrait.emulsion_label || portrait.artist_id || "",
+  ).trim()
+  const canonicalMeta = emulsionLabel
+    ? '<div class="icono-candidate-toolbar-meta icono-canonical-toolbar-meta"><div class="icono-candidate-toolbar-pair icono-canonical-toolbar-pair"><span>Published</span><strong>' +
+      escapeIconoplasmStaticShellText(emulsionLabel) +
+      "</strong></div></div>"
+    : '<div class="icono-candidate-toolbar-meta icono-canonical-toolbar-meta"></div>'
+  const candidateGallery = shared.renderCandidateGalleryHtml(cardPayload)
+  return (
+    "<!-- iconoplasm-static-gene-shell:start -->" +
+    '<div class="icono-nav"><a href="/" data-icono-nav>All genes</a></div>' +
+    '<div id="icono-gene-content" data-icono-server-rendered-gene="true" data-icono-gene-symbol="' +
+    escapeIconoplasmHtmlAttribute(symbol) +
+    '" data-icono-gene-snapshot="' +
+    escapeIconoplasmHtmlAttribute(snapshotVersion) +
+    '">' +
+    '<section class="icono-gene-lead">' +
+    iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) +
+    '<div data-icono-canonical-toolbar-island><section class="icono-canonical-toolbar-shell"><div class="icono-gene-toolbar-rail" data-icono-canonical-rail><div class="icono-gene-edit-panel" aria-hidden="true"></div><section class="icono-gene-request-surface icono-gene-request-panel">' +
+    canonicalMeta +
+    '<div aria-hidden="true"></div></section></div></section></div>' +
+    "</section>" +
+    '<div data-icono-suggest-island><section class="icono-suggest" data-icono-suggest="' +
+    escapeIconoplasmHtmlAttribute(symbol) +
+    '"><div class="icono-suggest-lab">Suggestions<span data-icono-suggest-count></span></div><div class="icono-suggest-list" data-icono-suggest-list></div></section></div>' +
+    candidateGallery +
+    '<section class="icono-gene-discord-card" data-icono-discord-island></section>' +
+    "</div>" +
+    "<!-- iconoplasm-static-gene-shell:end -->"
+  )
+}
+
+function replaceIconoplasmStaticGeneShell(html, shellHtml) {
+  if (!shellHtml) return html
   return String(html).replace(
-    /(<section class="icono-gene-lead icono-gene-lead--static-shell">)[\s\S]*?(<\/section>\s*<\/div>)/,
-    `$1${leadCardHtml}$2`,
+    /<!-- iconoplasm-static-gene-shell:start -->[\s\S]*?<!-- iconoplasm-static-gene-shell:end -->/,
+    shellHtml,
   )
 }
 
@@ -313,14 +362,13 @@ async function iconoplasmGeneCardBootstrapInjection(request, env, ctx, path) {
   // must match the current D1 canonical exposed by /api/iconoplasm/site/genes.
   // Keep this routed through the Iconoplasm runtime endpoint rather than adding
   // a local SQL clone in the HTML worker.
-  if (request.method === "HEAD") return { injection: "", leadCardHtml: "", snapshotVersion: "" }
+  if (request.method === "HEAD") return { injection: "", shellHtml: "", snapshotVersion: "" }
   const symbol = iconoplasmStaticGeneSymbolFromPath(path)
-  if (!symbol) return { injection: "", leadCardHtml: "", snapshotVersion: "" }
+  if (!symbol) return { injection: "", shellHtml: "", snapshotVersion: "" }
   try {
     const apiUrl = new URL(request.url)
     apiUrl.pathname = `/api/iconoplasm/site/genes/${encodeURIComponent(symbol)}`
     apiUrl.search = ""
-    apiUrl.searchParams.set("fields", "symbol,full_name,color,portrait")
     apiUrl.hash = ""
     const detailResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -332,12 +380,14 @@ async function iconoplasmGeneCardBootstrapInjection(request, env, ctx, path) {
         ctx,
       )
     if (!detailResponse || !detailResponse.ok) {
-      return { injection: "", leadCardHtml: "", snapshotVersion: "" }
+      return { injection: "", shellHtml: "", snapshotVersion: "" }
     }
+    const detailEtag = detailResponse.headers.get("ETag") || ""
     const cardPayload = await detailResponse.json()
-    if (!cardPayload) return { injection: "", leadCardHtml: "", snapshotVersion: "" }
-    const snapshotVersion = iconoplasmGeneDetailShellVersion(cardPayload)
+    if (!cardPayload) return { injection: "", shellHtml: "", snapshotVersion: "" }
+    const snapshotVersion = iconoplasmGeneDetailShellVersion(cardPayload, detailEtag)
     const payload = {
+      contract: "GenePageBootstrapV1",
       symbol,
       snapshot_version: snapshotVersion,
       source: "site_gene_detail",
@@ -349,12 +399,12 @@ async function iconoplasmGeneCardBootstrapInjection(request, env, ctx, path) {
       // already chosen a portrait source. A server-injected preload cannot see
       // sessionStorage and would retry a dead source on every navigation.
       injection: `<script type="application/json" id="iconoplasm-card-bootstrap">${iconoplasmSafeJsonScriptPayload(payload)}</script>`,
-      leadCardHtml: iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload),
+      shellHtml: iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion),
       snapshotVersion,
     }
   } catch (error) {
     console.warn("Iconoplasm gene card bootstrap injection failed:", error)
-    return { injection: "", leadCardHtml: "", snapshotVersion: "" }
+    return { injection: "", shellHtml: "", snapshotVersion: "" }
   }
 }
 
@@ -475,8 +525,8 @@ async function iconoplasmCacheableHtmlShellResponse(
   let geneShell = preloadedGeneShell
   if (body && String(path || "").startsWith("/gene/")) {
     if (!geneShell) geneShell = await iconoplasmGeneCardBootstrapInjection(request, env, ctx, path)
-    if (geneShell && geneShell.leadCardHtml) {
-      body = replaceIconoplasmStaticGeneLeadShell(body, geneShell.leadCardHtml)
+    if (geneShell && geneShell.shellHtml) {
+      body = replaceIconoplasmStaticGeneShell(body, geneShell.shellHtml)
     }
     if (geneShell && geneShell.injection) {
       body = insertIconoplasmGeneCardBootstrap(body, geneShell.injection)
@@ -489,12 +539,11 @@ async function iconoplasmCacheableHtmlShellResponse(
     typeof caches !== "undefined" &&
     caches.default
   ) {
-    // This is only a short-lived HTML shell cache. It is not the canonical card
-    // freshness barrier. The embedded card above is still sourced through
-    // `/api/iconoplasm/cards/:symbol`, and the client immediately follows with
-    // the richer gene detail load. Do not stretch this TTL or turn it into a
-    // long-lived symbol-only card cache; the public card artifact and
-    // KV_GALLERY_VERSION barrier own canonical portrait freshness.
+    // This is only a short-lived HTML snapshot cache. The cache key includes the
+    // ETag of the complete site-gene-detail response, so changes to public facts,
+    // the canonical portrait, candidates, or vote projections select a new entry.
+    // Do not stretch this TTL or turn it into a symbol-only cache: D1 remains the
+    // freshness authority for the complete server-rendered snapshot.
     const geneCacheKey = iconoplasmGeneHtmlCacheKey(
       new URL(request.url),
       path,
