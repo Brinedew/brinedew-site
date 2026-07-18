@@ -15,6 +15,10 @@ const sharedCardCssPath = new URL(
   "../../../shared/iconoplasm-card/shared-card-label.css",
   import.meta.url,
 )
+const sharedVoteCssPath = new URL(
+  "../../../shared/iconoplasm-card/shared-card-vote.css",
+  import.meta.url,
+)
 const sharedCardPath = new URL(
   "../../../shared/iconoplasm-card/shared-card-runtime.js",
   import.meta.url,
@@ -785,6 +789,36 @@ test("Iconoplasm first visit defaults to light theme instead of system dark", as
     head,
     /var e=t\|\|\(ip\?'light':\(window\.matchMedia\('\(prefers-color-scheme: light\)'\)\.matches\?'light':'dark'\)\)/,
     "head first-paint theme bootstrap must default Iconoplasm visitors to light before CSS paints",
+  )
+})
+
+test("above-fold voting styles block first paint instead of flashing native buttons", async () => {
+  const head = await readFile(headPath, "utf8")
+  const sharedVoteCss = await readFile(sharedVoteCssPath, "utf8")
+  const marker = "iconoplasm/generated/shared-card-vote.css"
+  const markerIndex = head.indexOf(marker)
+  const linkStart = head.lastIndexOf("<link", markerIndex)
+  const linkEnd = head.indexOf("/>", markerIndex)
+
+  assert.notEqual(markerIndex, -1, "missing shared vote stylesheet")
+  assert.notEqual(linkStart, -1, "missing shared vote stylesheet link")
+  assert.notEqual(linkEnd, -1, "unclosed shared vote stylesheet link")
+  assert.equal(
+    head.indexOf(marker, markerIndex + marker.length),
+    -1,
+    "the vote stylesheet should have one canonical blocking link, not a duplicate noscript path",
+  )
+
+  const voteLink = head.slice(linkStart, linkEnd + 2)
+  assert.match(voteLink, /rel="stylesheet"/)
+  assert.doesNotMatch(voteLink, /media="print"/)
+  assert.doesNotMatch(voteLink, /data-icono-async-style/)
+  assert.match(sharedVoteCss, /\.icono-vote-box\s*\{/)
+  assert.match(sharedVoteCss, /\.icono-vote-box--label\s*\{/)
+  assert.match(
+    sharedVoteCss,
+    /\.icono-vote-box--label \.icono-vote-btn-arrow\s*\{[\s\S]*?display:\s*none;/,
+    "the render-blocking stylesheet must include the desktop arrow containment rule",
   )
 })
 
