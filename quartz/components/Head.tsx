@@ -730,24 +730,12 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
                 <>
                   <link
                     rel="stylesheet"
-                    media="print"
                     href={joinSegments(
                       root,
                       "static",
                       `iconoplasm/generated/shared-card-vote.css?v=${CACHE_BUST}`,
                     )}
-                    data-icono-async-style="true"
                   />
-                  <noscript>
-                    <link
-                      rel="stylesheet"
-                      href={joinSegments(
-                        root,
-                        "static",
-                        `iconoplasm/generated/shared-card-vote.css?v=${CACHE_BUST}`,
-                      )}
-                    />
-                  </noscript>
                   <link
                     rel="stylesheet"
                     href={joinSegments(
