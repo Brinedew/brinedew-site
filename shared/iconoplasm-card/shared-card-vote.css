@@ -195,6 +195,14 @@
   z-index: 1;
 }
 
+/* Arrow glyphs are a mobile swipe affordance. They stay in the universal label-card
+   markup so server and client renders are identical, but they must not contribute
+   intrinsic size to the desktop QC column. The mobile peek contract in
+   shared-card-label.css opts them back in inside its responsive boundary. */
+.icono-vote-box--label .icono-vote-btn-arrow {
+  display: none;
+}
+
 .icono-vote-box--label .icono-vote-btn-loop {
   position: absolute;
   inset: calc(-3 / 1220 * 100cqw) calc(-8 / 1220 * 100cqw);
