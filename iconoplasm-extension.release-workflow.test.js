@@ -66,8 +66,8 @@ test("store publish packaging goes through WXT browser targets", () => {
   )
   assert.match(
     wxtConfigText,
-    /browser === "firefox"[\s\S]*background = \{ scripts: \["service-worker\.js"\] \}/,
-    "WXT config should own the Firefox background-script manifest override",
+    /browser === "firefox"[\s\S]*background = \{ scripts: \["publication-alias-overlay\.js", "service-worker\.js"\] \}/,
+    "WXT config should load the shared alias-overlay runtime before the Firefox background script",
   )
   assert.match(
     wxtConfigText,

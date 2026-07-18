@@ -3,6 +3,20 @@ import test from "node:test"
 
 const storageState = new Map()
 const sessionState = new Map()
+const requestedOverlay = {
+  schema_version: 1,
+  version: "v1-test",
+  alias_count: 8,
+  by_symbol: {
+    CEBPB: ["C/EBPβ"],
+    CGAS: ["cGAS"],
+    IL1A: ["IL-1", "IL-1α"],
+    IL1B: ["IL-1β"],
+    NOTCH1: ["N1ICD"],
+    RELA: ["p65"],
+    TGFB1: ["TGF-β"],
+  },
+}
 
 function storageArea(state) {
   return {
@@ -50,6 +64,7 @@ globalThis.chrome = {
 globalThis.btoa = (value) => Buffer.from(String(value || ""), "binary").toString("base64")
 globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__ = {}
 
+await import("./publication-alias-overlay.js")
 await import("./service-worker.js")
 
 const hooks = globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__
@@ -159,5 +174,112 @@ test("100 extension portraits share one failed primary decision per tab", async 
     globalThis.fetch = originalFetch
     hooks.clearPortraitDataUrlCaches()
     await hooks.clearPortraitSourceStates()
+  }
+})
+
+test("alias-only manifest updates do not refetch the six-megabyte catalog artifact", async () => {
+  const originalFetch = globalThis.fetch
+  const baseGenes = Object.fromEntries(
+    Object.keys({
+      CEBPB: 1,
+      CGAS: 1,
+      IL1A: 1,
+      IL1B: 1,
+      NOTCH1: 1,
+      RELA: 1,
+      TGFB1: 1,
+    }).map((symbol) => [symbol, { n: symbol }]),
+  )
+  storageState.clear()
+  storageState.set("iconoplasm_genes", baseGenes)
+  storageState.set("iconoplasm_hash", "catalog-v2-portraits")
+  storageState.set("iconoplasm_gene_count", 7)
+  storageState.set("iconoplasm_schema_version", 4)
+  storageState.set("iconoplasm_portrait_base_url", "https://example.test/portraits")
+  storageState.set("iconoplasm_alias_overlay_version", "v1-old")
+  storageState.set("iconoplasm_alias_overlay_applied", {})
+
+  let manifestFetches = 0
+  let artifactFetches = 0
+  globalThis.fetch = async (input) => {
+    const url = String(input || "")
+    if (url.endsWith("/api/public/v1/catalog/manifest")) {
+      manifestFetches += 1
+      return Response.json({
+        build_version: "catalog-v2-portraits",
+        catalog_hash: "catalog",
+        artifact_url: "https://example.test/catalog.json",
+        portrait_base_url: "https://example.test/portraits",
+        artifact_schema_version: 4,
+        min_extension_version: "1.0.0",
+        gene_count: 7,
+        publication_aliases: requestedOverlay,
+      })
+    }
+    artifactFetches += 1
+    throw new Error(`Catalog artifact should not be fetched for an alias-only update: ${url}`)
+  }
+
+  try {
+    const result = await hooks.fetchGeneData()
+    const storedGenes = storageState.get("iconoplasm_genes")
+
+    assert.equal(result.gene_count, 7)
+    assert.equal(manifestFetches, 1)
+    assert.equal(artifactFetches, 0)
+    assert.equal(storageState.get("iconoplasm_alias_overlay_version"), "v1-test")
+    assert.deepEqual(storedGenes.RELA.a, ["p65"])
+    assert.deepEqual(storedGenes.IL1A.a, ["IL-1", "IL-1α"])
+  } finally {
+    globalThis.fetch = originalFetch
+    storageState.clear()
+  }
+})
+
+test("an overlay contract retry does not turn into a full artifact download", async () => {
+  const originalFetch = globalThis.fetch
+  storageState.clear()
+  storageState.set("iconoplasm_genes", { RELA: { n: "RELA", a: ["p65"] } })
+  storageState.set("iconoplasm_hash", "catalog-v2-portraits")
+  storageState.set("iconoplasm_gene_count", 1)
+  storageState.set("iconoplasm_last_fetch", "2020-01-01T00:00:00.000Z")
+  storageState.set("iconoplasm_schema_version", 4)
+  storageState.set("iconoplasm_portrait_base_url", "https://example.test/portraits")
+  storageState.set("iconoplasm_alias_overlay_version", "v1-test")
+  storageState.set("iconoplasm_alias_overlay_applied", { RELA: ["p65"] })
+  storageState.set("iconoplasm_contract_error", { code: "invalid_manifest" })
+
+  let artifactFetches = 0
+  globalThis.fetch = async (input) => {
+    const url = String(input || "")
+    if (url.endsWith("/api/public/v1/catalog/manifest")) {
+      return Response.json({
+        build_version: "catalog-v2-portraits",
+        catalog_hash: "catalog",
+        artifact_url: "https://example.test/catalog.json",
+        portrait_base_url: "https://example.test/portraits",
+        artifact_schema_version: 4,
+        min_extension_version: "1.0.0",
+        gene_count: 1,
+        publication_aliases: {
+          schema_version: 1,
+          version: "v1-test",
+          alias_count: 1,
+          by_symbol: { RELA: ["p65"] },
+        },
+      })
+    }
+    artifactFetches += 1
+    throw new Error(`Artifact must not be fetched while retrying an overlay error: ${url}`)
+  }
+
+  try {
+    const result = await hooks.ensureFreshGeneData()
+    assert.equal(artifactFetches, 0)
+    assert.deepEqual(result.genes.RELA.a, ["p65"])
+    assert.equal(storageState.has("iconoplasm_contract_error"), false)
+  } finally {
+    globalThis.fetch = originalFetch
+    storageState.clear()
   }
 })
