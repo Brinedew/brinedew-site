@@ -992,6 +992,7 @@ import { recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 import { getMolstarSharedSource } from "./lib/molstar-shared-bundle.js"
 import { extractAvatarUpstreamFromRequest } from "./lib/avatar-proxy.js"
+import { selectAvailableDailyTarget } from "./lib/daily-target-availability.js"
 
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
@@ -2738,6 +2739,7 @@ export default {
       }
       let targetProtein
       let source
+      let skippedAlphaFold = null
 
       if (overrideId) {
         targetProtein = await fetchProteinByUniprot(env.DB, overrideId)
@@ -2749,6 +2751,9 @@ export default {
         const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
         const selection = await pickDailyTarget(env.DB, eligibleIds, salt, tomorrowStr)
         targetProtein = selection?.protein
+        skippedAlphaFold = Number.isFinite(selection?.skippedAlphaFold)
+          ? selection.skippedAlphaFold
+          : null
         source = "computed"
         console.log(`[CRON] Computed target for ${tomorrowStr}: ${targetProtein?.uniprot}`)
       }
@@ -2758,33 +2763,48 @@ export default {
         return
       }
 
-      // 3. Get structure metadata
-      const structureMeta = await getCanonicalStructureMeta(targetProtein, env)
-      if (!structureMeta?.r2Key) {
-        console.error("[CRON] No structure meta for", targetProtein.uniprot)
-        return
-      }
-
-      // 4. Pre-cache structure in R2 with pinning metadata
-      const cached = await ensureStructureCachedWithPin(env, structureMeta, tomorrowStr)
-      if (cached) {
-        console.log(`[CRON] Structure cached: ${structureMeta.r2Key}, pinned until ${tomorrowStr}`)
-      } else {
-        console.warn(`[CRON] Failed to cache structure for ${targetProtein.uniprot}`)
-      }
-
-      // 5. Pre-warm bootstrap KV cache for tomorrow (for both origins)
-      const origins = [
-        "https://brinedew.bio",
-        "https://geneguessr.brinedew.bio",
-        "https://iconoplasm.brinedew.bio",
-      ]
       const cronAudit = {
         date: tomorrowStr,
         source: source === "admin_override" ? "override" : "computed",
         override_id: overrideId || null,
         rejected: [],
+        skipped_alpha_fold: skippedAlphaFold,
       }
+
+      // 3. Verify the exact canonical structure before committing tomorrow's
+      // puzzle. Metadata presence is not availability: the 2026-07-17 IMMP2L
+      // incident had a perfectly formed SWISS-MODEL URL that returned 404.
+      const eligibleIds = await getEligibleProteinIds(env.DB)
+      const startIndex = Math.max(0, eligibleIds.indexOf(targetProtein.uniprot))
+      const availableTarget = await selectAvailableDailyTarget({
+        initialProtein: targetProtein,
+        eligibleIds,
+        startIndex,
+        loadProtein: (uniprot) => fetchProteinByUniprot(env.DB, uniprot),
+        resolveStructureMeta: (protein) => getCanonicalStructureMeta(protein, env),
+        isStructureAvailable: async (structureMeta) => {
+          if (!(await isStructureMetaAvailable(env, structureMeta))) return false
+          return ensureStructureCachedWithPin(env, structureMeta, tomorrowStr)
+        },
+        isIneligibleFallback: isAlphaFoldOnlyProtein,
+        maxCandidates: 10,
+      })
+      cronAudit.rejected.push(...availableTarget.rejected)
+      targetProtein = availableTarget.protein
+      const structureMeta = availableTarget.structureMeta
+      if (!targetProtein || !structureMeta?.r2Key) {
+        console.error("[CRON] No reachable target structure for", tomorrowStr, cronAudit.rejected)
+        return
+      }
+
+      console.log(`[CRON] Structure verified: ${structureMeta.r2Key}, pinned until ${tomorrowStr}`)
+
+      // 4. Pre-warm bootstrap KV cache for tomorrow (for all public origins)
+      const origins = [
+        "https://brinedew.bio",
+        "https://geneguessr.brinedew.bio",
+        "https://iconoplasm.brinedew.bio",
+      ]
       for (const origin of origins) {
         const structureSelection = await buildTargetStructureSelection(targetProtein, env, {
           practiceMode: false,
@@ -3505,6 +3525,17 @@ async function handleStructureToken(request, env, corsHeaders) {
   }
 }
 
+function prependAnonymousPdbHeader(data) {
+  const original = data instanceof Uint8Array ? data : new Uint8Array(data)
+  const header = new TextEncoder().encode(
+    "HEADER    MODEL                                   01-JAN-00   0000\n",
+  )
+  const combined = new Uint8Array(header.byteLength + original.byteLength)
+  combined.set(header, 0)
+  combined.set(original, header.byteLength)
+  return combined
+}
+
 /**
  * Direct structure fetch by cacheKey (r2Key).
  * Returns structure with long cache headers since the URL is stable.
@@ -3795,14 +3826,51 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
       )
     }
 
-    // Clone the response - one for client, one for R2 cache
-    const [clientStream, cacheStream] = upstreamResp.body.tee()
-
-    // Fire-and-forget: cache to R2 in background
     const contentType =
       meta.format === "bcif"
         ? "application/octet-stream"
         : upstreamResp.headers.get("Content-Type") || "chemical/x-cif"
+
+    const isSwissModelPdb = cacheKey.startsWith("swissmodel/") && cacheKey.endsWith(".pdb")
+    if (isSwissModelPdb) {
+      // SWISS-MODEL PDB responses commonly omit HEADER, which Mol* requires.
+      // Buffer this bounded response so both cached and uncached delivery paths
+      // apply the same parser-safe normalization. This matters while R2 is
+      // disabled: every request is an upstream delivery.
+      const originalData = new Uint8Array(await upstreamResp.arrayBuffer())
+      if (originalData.byteLength > MAX_STRUCTURE_FILE_BYTES) {
+        return Response.json(
+          { error: "Structure too large", sizeBytes: originalData.byteLength },
+          { status: 413, headers: corsHeaders },
+        )
+      }
+
+      if (env?.STRUCTURES_BUCKET?.put) {
+        ctx.waitUntil(
+          env.STRUCTURES_BUCKET.put(cacheKey, originalData, {
+            httpMetadata: { contentType: "chemical/x-pdb" },
+          }).catch((err) => console.warn("[LAZY-CACHE] Background cache failed:", err)),
+        )
+      }
+
+      const responseHeaders = {
+        ...corsHeaders,
+        "Content-Type": "chemical/x-pdb",
+        "Cache-Control":
+          type === "target"
+            ? "private, no-store, must-revalidate"
+            : "public, max-age=604800, immutable",
+      }
+      if (type !== "target") {
+        responseHeaders["X-Cache"] = "UPSTREAM"
+        responseHeaders["X-Source"] = "swissmodel"
+        responseHeaders["X-Fetch-Ms"] = String(Date.now() - fetchStart)
+      }
+      return new Response(prependAnonymousPdbHeader(originalData), { headers: responseHeaders })
+    }
+
+    // Clone the response - one for client, one for R2 cache
+    const [clientStream, cacheStream] = upstreamResp.body.tee()
 
     // CRITICAL: Must use ctx.waitUntil(), NOT env.waitUntil()
     // `ctx` = execution context (has waitUntil), `env` = environment bindings (does not)
@@ -3827,11 +3895,6 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     } else {
       cacheStream.cancel().catch(() => {})
     }
-
-    // Stream to client immediately (don't wait for cache)
-    const isSwissModelPdb = cacheKey.startsWith("swissmodel/") && cacheKey.endsWith(".pdb")
-    // Note: SwissModel PDB header fix won't work here since we're streaming
-    // But SwissModel should always be pre-cached anyway (fallback above)
 
     // Only add timing headers for non-target requests (target headers could leak puzzle info)
     const responseHeaders = {
@@ -3875,14 +3938,8 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
   // We prepend a minimal anonymous HEADER that doesn't leak protein identity.
   const isSwissModelPdb = cacheKey.startsWith("swissmodel/") && cacheKey.endsWith(".pdb")
   if (isSwissModelPdb) {
-    // PDB HEADER format: cols 11-50=classification, 51-59=date, 63-66=id_code
-    // Using completely anonymous values that satisfy Mol* without revealing protein identity
-    const syntheticHeader = "HEADER    MODEL                                   01-JAN-00   0000\n"
     const originalData = await object.arrayBuffer()
-    const headerBytes = new TextEncoder().encode(syntheticHeader)
-    const combinedBuffer = new Uint8Array(headerBytes.length + originalData.byteLength)
-    combinedBuffer.set(headerBytes, 0)
-    combinedBuffer.set(new Uint8Array(originalData), headerBytes.length)
+    const combinedBuffer = prependAnonymousPdbHeader(originalData)
 
     const swissHeaders = {
       ...corsHeaders,
@@ -4881,44 +4938,39 @@ async function getDailyTargetProtein(env, options = {}) {
     }
   }
 
-  // Validate structure availability before committing to this pick.
-  // If upstream (SWISS-MODEL/AlphaFold/PDB) is down or URL is broken, try next candidate.
-  // This prevents serving a game with a broken structure viewer.
+  // Validate the exact canonical structure before committing to this pick.
+  // A stored URL is only metadata; it may still return 404 or 5xx. Preserve the
+  // curated source decision, reject the whole protein when that source is
+  // unreachable, and advance through the deterministic pool.
   if (protein && env) {
-    const MAX_ATTEMPTS = 10
-    let attempts = 0
-    let currentIdx = startIdx
-
-    while (attempts < MAX_ATTEMPTS) {
-      const structureMeta = await getCanonicalStructureMeta(protein, env)
-      if (structureMeta?.r2Key) {
-        console.log(
-          `[TARGET-PICK] ${protein.uniprot} validated with ${structureMeta.source} (${structureMeta.r2Key})`,
-        )
-        break
-      }
-
-      console.warn(`[TARGET-PICK] ${protein.uniprot} has no working structure, trying next`)
-      if (audit) {
-        audit.rejected.push({ uniprot_id: protein.uniprot, reason: "no_working_structure" })
-      }
-
-      // This protein's structure is unavailable - try next candidate
-      attempts++
-      currentIdx = (currentIdx + 1) % eligibleIds.length
-      const nextId = eligibleIds[currentIdx]
-      const nextProtein = await fetchProteinByUniprot(env.DB, nextId)
-      if (nextProtein && !isAlphaFoldOnlyProtein(nextProtein)) {
-        protein = nextProtein
-      }
+    const availableTarget = await selectAvailableDailyTarget({
+      initialProtein: protein,
+      eligibleIds,
+      startIndex: startIdx,
+      loadProtein: (uniprot) => fetchProteinByUniprot(env.DB, uniprot),
+      resolveStructureMeta: (candidate) => getCanonicalStructureMeta(candidate, env),
+      isStructureAvailable: (structureMeta) => isStructureMetaAvailable(env, structureMeta),
+      isIneligibleFallback: isAlphaFoldOnlyProtein,
+      maxCandidates: 10,
+    })
+    if (audit) {
+      audit.rejected.push(...availableTarget.rejected)
     }
+    protein = availableTarget.protein
 
-    if (attempts >= MAX_ATTEMPTS) {
+    if (!protein) {
       console.error(
-        `[TARGET-PICK] Failed to find protein with working structure after ${attempts} attempts`,
+        `[TARGET-PICK] Failed to find a reachable structure after ${availableTarget.rejected.length} candidates`,
       )
-    } else if (attempts > 0) {
-      console.log(`[TARGET-PICK] Skipped ${attempts} proteins with unavailable structures`)
+    } else {
+      console.log(
+        `[TARGET-PICK] ${protein.uniprot} verified with ${availableTarget.structureMeta.source} (${availableTarget.structureMeta.r2Key})`,
+      )
+      if (availableTarget.rejected.length > 0) {
+        console.log(
+          `[TARGET-PICK] Skipped ${availableTarget.rejected.length} proteins with unavailable structures`,
+        )
+      }
     }
   }
 
