@@ -2838,7 +2838,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         const rej = document.createElement('div');
         rej.className = 'section-block';
         const lines = rejected.slice(0, 10).map((r) => {
-          const gene = r?.gene || r?.hgnc || r?.symbol || 'Unknown';
+          const gene = r?.gene || r?.hgnc || r?.symbol || r?.uniprot_id || 'Unknown';
           const reason = r?.reason || '';
           return '<div class="clue-item"><span class="pill">rejected</span>' + escapeHtml(gene) + ' <span class="schedule-meta">(' + escapeHtml(reason) + ')</span></div>';
         }).join('');
