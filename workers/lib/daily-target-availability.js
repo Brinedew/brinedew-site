@@ -15,7 +15,7 @@ export async function selectAvailableDailyTarget({
   loadProtein,
   resolveStructureMeta,
   isStructureAvailable,
-  isIneligibleFallback = () => false,
+  isCandidateIneligible = () => false,
   maxCandidates = 10,
 }) {
   if (
@@ -26,7 +26,7 @@ export async function selectAvailableDailyTarget({
     typeof resolveStructureMeta !== "function" ||
     typeof isStructureAvailable !== "function"
   ) {
-    return { protein: null, structureMeta: null, rejected: [] }
+    return { protein: null, structureMeta: null, rejected: [], skippedIneligible: 0 }
   }
 
   const normalizedStart = Number.isInteger(startIndex) && startIndex >= 0 ? startIndex : 0
@@ -37,6 +37,7 @@ export async function selectAvailableDailyTarget({
   let cursor = normalizedStart % eligibleIds.length
   let checkedCandidates = 0
   let scannedIds = 0
+  let skippedIneligible = 0
 
   while (protein && checkedCandidates < candidateLimit) {
     const proteinId = String(protein.uniprot || "")
@@ -44,20 +45,24 @@ export async function selectAvailableDailyTarget({
       .toUpperCase()
     if (proteinId && !seen.has(proteinId)) {
       seen.add(proteinId)
-      checkedCandidates += 1
+      if (isCandidateIneligible(protein)) {
+        skippedIneligible += 1
+      } else {
+        checkedCandidates += 1
 
-      const structureMeta = await resolveStructureMeta(protein)
-      const available = Boolean(
-        structureMeta?.r2Key && (await isStructureAvailable(structureMeta, protein)),
-      )
-      if (available) {
-        return { protein, structureMeta, rejected }
+        const structureMeta = await resolveStructureMeta(protein)
+        const available = Boolean(
+          structureMeta?.r2Key && (await isStructureAvailable(structureMeta, protein)),
+        )
+        if (available) {
+          return { protein, structureMeta, rejected, skippedIneligible }
+        }
+
+        rejected.push({
+          uniprot_id: proteinId,
+          reason: structureMeta?.r2Key ? "structure_unreachable" : "no_structure_metadata",
+        })
       }
-
-      rejected.push({
-        uniprot_id: proteinId,
-        reason: structureMeta?.r2Key ? "structure_unreachable" : "no_structure_metadata",
-      })
     }
 
     protein = null
@@ -70,10 +75,36 @@ export async function selectAvailableDailyTarget({
       if (!nextId || seen.has(nextId)) continue
 
       const nextProtein = await loadProtein(nextId)
-      if (!nextProtein || isIneligibleFallback(nextProtein)) continue
+      if (!nextProtein) continue
       protein = nextProtein
     }
   }
 
-  return { protein: null, structureMeta: null, rejected }
+  return { protein: null, structureMeta: null, rejected, skippedIneligible }
+}
+
+export function shouldReplaceRecordedDailyTarget({
+  existingUniprot,
+  selectedUniprot,
+  rejected,
+  totalGuesses,
+}) {
+  const existing = String(existingUniprot || "")
+    .trim()
+    .toUpperCase()
+  const selected = String(selectedUniprot || "")
+    .trim()
+    .toUpperCase()
+  if (!existing || !selected || existing === selected || Number(totalGuesses) !== 0) {
+    return false
+  }
+  return Array.isArray(rejected)
+    ? rejected.some(
+        (entry) =>
+          String(entry?.uniprot_id || "")
+            .trim()
+            .toUpperCase() === existing &&
+          (entry?.reason === "structure_unreachable" || entry?.reason === "no_structure_metadata"),
+      )
+    : false
 }
