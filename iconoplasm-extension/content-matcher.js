@@ -1,10 +1,10 @@
 ;(function (root) {
   "use strict"
 
-  // Chesterton's fence: this matcher scores text against the published extension
-  // catalog only. If alias coverage or symbol metadata is wrong, fix the upstream
-  // workstation/export path at `d:\\Coding\\Datasets\\iconoplasm` instead of
-  // teaching the content script to guess missing biology facts on its own.
+  // Chesterton's fence: this matcher scores text against published data only. Broad
+  // HGNC coverage belongs in the workstation export; deliberately curated page
+  // labels belong in the website-owned publication-alias manifest overlay. Do not
+  // teach the content script to guess missing biology facts on its own.
 
   const LETTER_OR_NUMBER_RE = /[\p{L}\p{N}]/u
 

@@ -2,7 +2,7 @@
 
 This folder is the canonical unpacked Chrome extension root for Iconoplasm.
 
-Chesterton's fence: this folder is the runtime client, not the authoring workstation. If the published catalog, alias export, or Website Ops payload looks wrong, start in `D:\Coding\Iconoplasm` first. `D:\Coding\Datasets\iconoplasm` is the data/state root that the workstation reads from and writes to.
+Chesterton's fence: generated catalog facts and portraits are authored by the Iconoplasm workstation, but the deliberately small publication-alias overlay is website-owned. Edit `workers/iconoplasm-publication-aliases.js` for a curated page label; use Website Ops only for generated catalog or portrait state.
 
 Reason for the move:
 

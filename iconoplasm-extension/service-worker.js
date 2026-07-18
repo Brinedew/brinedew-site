@@ -1,10 +1,17 @@
 // Iconoplasm service worker
 // Symbol-first contract: gene symbols are canonical keys.
-// Chesterton's fence: this extension only consumes the published catalog artifact.
-// Do not treat `d:\\Coding\\Website\\iconoplasm-extension` as the source of truth
-// for aliases, publish state, or candidate facts. The local authoring/control-plane
-// lives at `d:\\Coding\\Datasets\\iconoplasm`, and Website Ops sync publishes the
-// snapshot this service worker reads.
+// Chesterton's fence: generated gene facts still come from the immutable catalog
+// artifact. The small human-curated publication alias overlay is intentionally
+// website-owned so an alias edit does not force a 19k-gene workstation sync or a
+// multi-megabyte catalog refetch.
+
+if (!globalThis.IconoplasmPublicationAliasOverlay && typeof importScripts === "function") {
+  importScripts("publication-alias-overlay.js")
+}
+const IconoPublicationAliasOverlay = globalThis.IconoplasmPublicationAliasOverlay
+if (!IconoPublicationAliasOverlay) {
+  throw new Error("Iconoplasm publication alias overlay runtime is required")
+}
 
 const HOST = "https://iconoplasm.brinedew.bio"
 const API_PUBLIC = `${HOST}/api/public/v1`
@@ -121,6 +128,7 @@ async function getStatus() {
     "iconoplasm_gene_count",
     "iconoplasm_last_fetch",
     "iconoplasm_schema_version",
+    "iconoplasm_alias_overlay_version",
     "iconoplasm_contract_error",
     "iconoplasm_min_extension_version",
   ])
@@ -129,6 +137,7 @@ async function getStatus() {
     geneCount: result.iconoplasm_gene_count || 0,
     lastFetch: result.iconoplasm_last_fetch || null,
     schemaVersion: result.iconoplasm_schema_version || null,
+    aliasOverlayVersion: result.iconoplasm_alias_overlay_version || null,
     contractError: result.iconoplasm_contract_error || null,
     minExtensionVersion: result.iconoplasm_min_extension_version || null,
   }
@@ -205,6 +214,8 @@ async function getStoredGeneSnapshot() {
     "iconoplasm_last_fetch",
     "iconoplasm_schema_version",
     "iconoplasm_portrait_base_url",
+    "iconoplasm_alias_overlay_version",
+    "iconoplasm_alias_overlay_applied",
     "iconoplasm_contract_error",
     "iconoplasm_min_extension_version",
   ])
@@ -243,11 +254,15 @@ function normalizePublishedManifest(rawManifest) {
       manifest.minimum_extension_version ||
       currentExtensionVersion(),
   ).trim()
+  const publicationAliases = IconoPublicationAliasOverlay.normalizePublishedAliasOverlay(
+    manifest.publication_aliases,
+  )
   if (
     !currentHash ||
     (!filename && !artifactUrl) ||
     !portraitBaseUrl ||
-    !Number.isFinite(schemaVersion)
+    !Number.isFinite(schemaVersion) ||
+    !publicationAliases
   ) {
     return null
   }
@@ -259,6 +274,7 @@ function normalizePublishedManifest(rawManifest) {
     schema_version: schemaVersion,
     gene_count: Number.isFinite(Number(manifest.gene_count)) ? Number(manifest.gene_count) : null,
     min_extension_version: minExtensionVersion || currentExtensionVersion(),
+    publication_aliases: publicationAliases,
   }
 }
 
@@ -294,6 +310,8 @@ async function invalidateStoredPublishedSnapshot({ code, message, minExtensionVe
     "iconoplasm_last_fetch",
     "iconoplasm_schema_version",
     "iconoplasm_portrait_base_url",
+    "iconoplasm_alias_overlay_version",
+    "iconoplasm_alias_overlay_applied",
   ])
   await rememberContractError({ code, message, minExtensionVersion })
 }
@@ -310,7 +328,10 @@ async function ensureFreshGeneData() {
     hasContractError || needsArtifactRebuild || isStaleFetch(stored.iconoplasm_last_fetch)
 
   if (needsRefresh) {
-    await fetchGeneData({ forceArtifactRefresh: needsArtifactRebuild || hasContractError })
+    // A manifest-overlay contract error is retried against the manifest only.
+    // The immutable artifact is already known-good and must not become a 6 MB
+    // retry penalty just because a small alias overlay was rejected.
+    await fetchGeneData({ forceArtifactRefresh: needsArtifactRebuild })
   }
 
   return getStoredGeneData()
@@ -571,6 +592,39 @@ function artifactUrl(manifest) {
   return `${API_PUBLIC}/catalog/${manifest.filename}?v=${cacheKey}`
 }
 
+function projectPublishedArtifactGenes(artifact) {
+  const lookup = {}
+  for (const gene of artifact.genes) {
+    const symbol = String(gene.s || "").toUpperCase()
+    if (!symbol) continue
+    const entry = {}
+    if (gene.c) entry.c = gene.c
+    if (gene.n) entry.n = gene.n
+    if (gene.u) entry.u = gene.u
+    if (Array.isArray(gene.a) && gene.a.length) entry.a = gene.a
+    if (gene.pt) entry.pt = gene.pt
+    if (gene.ph) entry.ph = gene.ph
+    lookup[symbol] = entry
+  }
+  return lookup
+}
+
+async function fetchPublishedArtifact(manifest) {
+  const url = artifactUrl(manifest)
+  if (!url) return { error: "missing_url", artifact: null }
+  const response = await fetch(url, {
+    headers: {
+      "X-Iconoplasm-Extension-Version": currentExtensionVersion(),
+    },
+  })
+  if (!response.ok) return { error: `http_${response.status}`, artifact: null }
+  const artifact = await response.json()
+  if (!artifact || !Array.isArray(artifact.genes)) {
+    return { error: "invalid_artifact", artifact: null }
+  }
+  return { error: "", artifact }
+}
+
 async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
   try {
     const manifest = await fetchManifest()
@@ -606,84 +660,86 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
       return null
     }
 
-    const stored = await chrome.storage.local.get(["iconoplasm_hash"])
-    if (!forceArtifactRefresh && stored.iconoplasm_hash === manifest.current_hash) {
+    const stored = await getStoredGeneSnapshot()
+    const storedGeneCount = getStoredGeneCount(stored.iconoplasm_genes)
+    const artifactChanged = stored.iconoplasm_hash !== manifest.current_hash
+    const aliasOverlayChanged =
+      String(stored.iconoplasm_alias_overlay_version || "") !==
+      String(manifest.publication_aliases.version || "")
+    const needsArtifact = forceArtifactRefresh || artifactChanged || storedGeneCount === 0
+    const fetchedAt = new Date().toISOString()
+
+    if (!needsArtifact && !aliasOverlayChanged) {
       await clearContractError()
       await chrome.storage.local.set({
+        iconoplasm_last_fetch: fetchedAt,
+        iconoplasm_schema_version: manifest.schema_version,
+        iconoplasm_portrait_base_url: manifest.portrait_base_url,
         iconoplasm_min_extension_version: manifest.min_extension_version,
       })
       return {
         schema_version: manifest.schema_version,
-        gene_count: manifest.gene_count || 0,
+        gene_count: manifest.gene_count || storedGeneCount,
       }
     }
 
-    const url = artifactUrl(manifest)
-    if (!url) {
-      await invalidateStoredPublishedSnapshot({
-        code: CONTRACT_ERROR_INVALID_MANIFEST,
-        minExtensionVersion: manifest.min_extension_version,
-        message: "Published catalog manifest is missing a usable artifact URL or filename.",
-      })
-      console.error("[Iconoplasm] Invalid artifact URL")
-      return null
+    let lookup = stored.iconoplasm_genes
+    let geneCount = manifest.gene_count || storedGeneCount
+    let previousApplied = stored.iconoplasm_alias_overlay_applied || {}
+
+    if (needsArtifact) {
+      const { artifact, error } = await fetchPublishedArtifact(manifest)
+      if (!artifact) {
+        if (error === "missing_url" || error === "invalid_artifact") {
+          await invalidateStoredPublishedSnapshot({
+            code: CONTRACT_ERROR_INVALID_MANIFEST,
+            minExtensionVersion: manifest.min_extension_version,
+            message:
+              error === "missing_url"
+                ? "Published catalog manifest is missing a usable artifact URL or filename."
+                : "Published catalog artifact is missing the genes array required by the extension runtime.",
+          })
+        }
+        console.error("[Iconoplasm] Artifact fetch failed:", error)
+        return null
+      }
+      lookup = projectPublishedArtifactGenes(artifact)
+      geneCount = artifact.gene_count || Object.keys(lookup).length
+      previousApplied = {}
     }
 
-    const artifactResp = await fetch(url, {
-      headers: {
-        "X-Iconoplasm-Extension-Version": currentExtensionVersion(),
-      },
-    })
-    if (!artifactResp.ok) {
-      console.error("[Iconoplasm] Artifact fetch failed:", artifactResp.status)
-      return null
-    }
-    const artifact = await artifactResp.json()
-    if (!artifact || !Array.isArray(artifact.genes)) {
-      await invalidateStoredPublishedSnapshot({
+    const overlayResult = IconoPublicationAliasOverlay.applyPublishedAliasOverlay(
+      lookup,
+      manifest.publication_aliases,
+      previousApplied,
+    )
+    if (overlayResult.errors.length) {
+      await rememberContractError({
         code: CONTRACT_ERROR_INVALID_MANIFEST,
         minExtensionVersion: manifest.min_extension_version,
-        message:
-          "Published catalog artifact is missing the genes array required by the extension runtime.",
+        message: `Published alias overlay is invalid: ${overlayResult.errors.join("; ")}`,
       })
-      console.error("[Iconoplasm] Artifact payload is missing genes[]")
+      console.error("[Iconoplasm] Alias overlay validation failed:", overlayResult.errors)
       return null
-    }
-
-    // Build symbol-keyed lookup map:
-    // { SYMBOL: { c?, n?, u?, a?, pt?, ph? } }
-    // Fence: keep this a pure projection of the published artifact. If a field is
-    // missing here, fix the workstation export in `d:\\Coding\\Datasets\\iconoplasm`
-    // or the website ingest, not this runtime cache.
-    const lookup = {}
-    for (const gene of artifact.genes) {
-      const symbol = String(gene.s || "").toUpperCase()
-      if (!symbol) continue
-      const entry = {}
-      if (gene.c) entry.c = gene.c
-      if (gene.n) entry.n = gene.n
-      if (gene.u) entry.u = gene.u
-      if (Array.isArray(gene.a) && gene.a.length) entry.a = gene.a
-      if (gene.pt) entry.pt = gene.pt
-      if (gene.ph) entry.ph = gene.ph
-      lookup[symbol] = entry
     }
 
     await chrome.storage.local.set({
-      iconoplasm_genes: lookup,
+      iconoplasm_genes: overlayResult.genes,
       iconoplasm_hash: manifest.current_hash,
-      iconoplasm_gene_count: artifact.gene_count || Object.keys(lookup).length,
-      iconoplasm_last_fetch: new Date().toISOString(),
+      iconoplasm_gene_count: geneCount,
+      iconoplasm_last_fetch: fetchedAt,
       iconoplasm_schema_version: manifest.schema_version,
       iconoplasm_portrait_base_url: manifest.portrait_base_url,
       iconoplasm_min_extension_version: manifest.min_extension_version,
+      iconoplasm_alias_overlay_version: manifest.publication_aliases.version,
+      iconoplasm_alias_overlay_applied: overlayResult.applied,
     })
-    clearPortraitDataUrlCaches()
+    if (needsArtifact) clearPortraitDataUrlCaches()
     await clearContractError()
 
     return {
       schema_version: manifest.schema_version,
-      gene_count: artifact.gene_count || Object.keys(lookup).length,
+      gene_count: geneCount,
     }
   } catch (err) {
     console.error("[Iconoplasm] Fetch error:", err)
@@ -700,5 +756,8 @@ if (globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__) {
     hasFreshPortraitDataUrlError,
     portraitSourceState,
     portraitErrorTtlMs: PORTRAIT_DATA_URL_ERROR_TTL_MS,
+    normalizePublishedManifest,
+    fetchGeneData,
+    ensureFreshGeneData,
   })
 }

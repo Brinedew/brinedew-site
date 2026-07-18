@@ -96,6 +96,7 @@ const runtimeFiles = [
   "popup.css",
   "popup.html",
   "popup.js",
+  "publication-alias-overlay.js",
   "service-worker.js",
   "site-bridge.js",
 ]
