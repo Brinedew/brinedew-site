@@ -126,8 +126,14 @@ function formatRecapDate(day) {
   return `${dayNum}${suffix} of ${month}, ${year}`
 }
 
-function buildDiscordRecapContent(recap) {
-  const { target, winners_count: winnersCount, top_guesses: topGuesses, day } = recap
+export function buildDiscordRecapContent(recap) {
+  const {
+    target,
+    winners_count: winnersCount,
+    total_guesses: totalGuesses,
+    top_guesses: topGuesses,
+    day,
+  } = recap
   const gene = target?.gene || "Unknown"
   const fullName = target?.full_name || ""
 
@@ -139,8 +145,10 @@ function buildDiscordRecapContent(recap) {
 
   if (winnersCount > 0) {
     content += `${winnersCount} player${winnersCount === 1 ? "" : "s"} solved it!\n\n`
+  } else if (totalGuesses > 0) {
+    content += "No solve was recorded.\n\n"
   } else {
-    content += "No one solved it!\n\n"
+    content += "No guesses were recorded.\n\n"
   }
 
   if (Array.isArray(topGuesses) && topGuesses.length > 0) {
