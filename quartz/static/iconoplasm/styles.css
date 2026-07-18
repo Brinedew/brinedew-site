@@ -3339,6 +3339,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   gap: 0.95rem;
   width: min(100%, 800px);
   margin: 0 auto 1.75rem;
+  container-type: inline-size;
 }
 
 .icono-card--brick-static {

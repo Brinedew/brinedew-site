@@ -9,6 +9,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const appPath = path.join(repoRoot, "quartz", "static", "iconoplasm", "app.js")
 const headPath = path.join(repoRoot, "quartz", "components", "Head.tsx")
 const cssPath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-label.css")
+const pageCssPath = path.join(repoRoot, "quartz", "static", "iconoplasm", "styles.css")
 const runtimePath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-runtime.js")
 const litCardPath = path.join(repoRoot, "shared", "iconoplasm-card", "lit-archival-card.js")
 const syncPath = path.join(repoRoot, "scripts", "sync-iconoplasm-shared.mjs")
@@ -505,9 +506,10 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
   assert.match(setupBlock, /document\.documentElement\.clientWidth/)
   assert.match(
     setupBlock,
-    /parentInset[\s\S]*viewportWidth - parentInset \* 2/,
-    "mobile fit scale must account for the parent column inset so the card does not crop off one browser edge",
+    /visibleParentLeft[\s\S]*visibleParentRight[\s\S]*visibleParentWidth/,
+    "mobile fit scale must use the parent's visible intersection without subtracting its viewport inset twice",
   )
+  assert.doesNotMatch(setupBlock, /parentInset|viewportWidth - parentInset \* 2/)
   assert.match(setupBlock, /availableWidth \/ physicalWidth/)
   assert.doesNotMatch(
     setupBlock,
@@ -1385,6 +1387,21 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
   assert.equal(
     /data-icono-mobile-sleeve-vote|icono-label-mobile-pocket-control/.test(app + css),
     false,
+  )
+})
+
+test("server-rendered gene hero reserves its measured closed mobile geometry", async () => {
+  const css = await sourceText(cssPath)
+  const pageCss = await sourceText(pageCssPath)
+  assert.match(
+    pageCss,
+    /\.icono-gene-lead\s*\{[\s\S]*?container-type:\s*inline-size/,
+    "the gene lead must expose a stable container width to the first-response card",
+  )
+  assert.match(
+    css,
+    /\.icono-gene-lead \.icono-card--variant-lab-label\.icono-card--brick\s*\{[\s\S]*?--icono-label-mobile-fit-scale:\s*clamp\([\s\S]*?100cqi[\s\S]*?--icono-label-mobile-dossier-top:[\s\S]*?var\(--height\) \/ var\(--width\)[\s\S]*?--icono-label-mobile-viewport-height:/,
+    "the edge-rendered hero should reserve the same portrait-ratio and viewport geometry that runtime measurement confirms",
   )
 })
 
