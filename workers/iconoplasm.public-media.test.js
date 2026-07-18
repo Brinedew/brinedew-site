@@ -408,6 +408,9 @@ test("public catalog manifest publishes explicit extension contract fields", asy
   assert.equal(payload?.catalog_hash, "catalog")
   assert.equal(payload?.build_version, "catalog-2026-04-16")
   assert.equal(payload?.portrait_base_url, "https://iconoplasm.brinedew.bio")
+  assert.match(payload?.publication_aliases?.version || "", /^v1-[a-f0-9]{16}$/)
+  assert.equal(payload?.publication_aliases?.by_symbol?.RELA?.includes("p65"), true)
+  assert.match(response.headers.get("etag") || "", /aliases-v1-/)
 })
 
 test("public media fails closed when THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE is missing", async () => {

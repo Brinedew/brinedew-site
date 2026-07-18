@@ -14,6 +14,11 @@ import {
   resolveIconoplasmFulfillmentDeliveryPolicy,
 } from "./iconoplasm-request-notifications.js"
 import { ICONOPLASM_WIKI_PAGEVIEWS } from "./iconoplasm-wiki-pageviews.js"
+import {
+  ICONOPLASM_PUBLICATION_ALIASES,
+  iconoplasmPublicationAliasManifest,
+  mergeIconoplasmPublicationAliasesIntoGene,
+} from "./iconoplasm-publication-aliases.js"
 import { normalizeIconoplasmHomeOrder } from "../quartz/static/iconoplasm/home-orders.js"
 import "../shared/iconoplasm-card/shared-card-runtime.js"
 
@@ -10390,6 +10395,7 @@ async function extensionManifestObj(url, env) {
   )
   const minExtensionVersion = env.ICONOPLASM_MIN_EXTENSION_VERSION || MIN_EXTENSION_VERSION
   const artifactSchemaVersion = 4
+  const publicationAliases = await iconoplasmPublicationAliasManifest()
   return {
     ...manifest,
     current_hash: buildVersion,
@@ -10399,7 +10405,17 @@ async function extensionManifestObj(url, env) {
     schema_version: artifactSchemaVersion,
     min_extension_version: minExtensionVersion,
     portrait_base_url: portraitBase(url, env),
+    publication_aliases: publicationAliases,
   }
+}
+
+function catalogManifestEtag(manifest) {
+  const buildVersion = String(manifest?.build_version || manifest?.current_hash || "").trim()
+  const aliasVersion = String(manifest?.publication_aliases?.version || "").trim()
+  const version = [buildVersion, aliasVersion ? `aliases-${aliasVersion}` : ""]
+    .filter(Boolean)
+    .join("-")
+  return version ? `"${version}"` : null
 }
 
 function publicApiPath(suffix = "") {
@@ -10808,6 +10824,7 @@ async function publicMetadataObj(url, env) {
       env.ICONOPLASM_MIN_EXTENSION_VERSION ||
       MIN_EXTENSION_VERSION,
     portrait_base_url: manifest.portrait_base_url || portraitBase(url, env),
+    publication_aliases: manifest.publication_aliases || null,
     urls: {
       metadata: publicUrl(url, "/metadata"),
       stats: publicUrl(url, "/stats"),
@@ -10942,9 +10959,11 @@ async function warmCatalogCache(env) {
   if (!baseHash) return
   const portraitAwareHash =
     buildPortraitAwareManifestHash(baseHash, await publishedPortraitFingerprint(env)) || baseHash
+  const publicationAliases = await iconoplasmPublicationAliasManifest()
+  const cacheHash = `${portraitAwareHash}:${publicationAliases.version}`
   const now = Date.now()
   if (
-    catalogCache.hash === portraitAwareHash &&
+    catalogCache.hash === cacheHash &&
     now - catalogCache.loadedAt < CATALOG_CACHE_TTL_MS &&
     catalogCache.bySymbol.size > 0
   ) {
@@ -10971,7 +10990,39 @@ async function warmCatalogCache(env) {
       if (key && !symbolByAlias.has(key)) symbolByAlias.set(key, s)
     }
   }
-  catalogCache.hash = portraitAwareHash
+
+  for (const [symbol, aliases] of Object.entries(ICONOPLASM_PUBLICATION_ALIASES.by_symbol)) {
+    // A generated catalog may legitimately predate a newly curated symbol. Do
+    // not take the entire public search API down during that deployment window;
+    // the extension rejects an overlay whose target is absent from its cache.
+    if (!bySymbol.has(symbol)) continue
+    for (const alias of aliases) {
+      const key = normalizeCatalogAliasLookupKey(alias)
+      if (key && bySymbol.has(key) && key !== symbol) {
+        throw new TypeError(
+          `Publication alias ${alias} for ${symbol} conflicts with canonical catalog symbol ${key}`,
+        )
+      }
+      const existingOwner = key ? symbolByAlias.get(key) : null
+      if (existingOwner && existingOwner !== symbol) {
+        throw new TypeError(
+          `Publication alias ${alias} for ${symbol} conflicts with catalog alias owned by ${existingOwner}`,
+        )
+      }
+    }
+
+    const gene = mergeIconoplasmPublicationAliasesIntoGene(
+      bySymbol.get(symbol),
+      symbol,
+      ICONOPLASM_PUBLICATION_ALIASES,
+    )
+    bySymbol.set(symbol, gene)
+    for (const alias of aliases) {
+      const key = normalizeCatalogAliasLookupKey(alias)
+      if (key) symbolByAlias.set(key, symbol)
+    }
+  }
+  catalogCache.hash = cacheHash
   catalogCache.loadedAt = now
   catalogCache.bySymbol = bySymbol
   catalogCache.symbolByUniprot = symbolByUniprot
@@ -23731,6 +23782,7 @@ async function handlePublicCatalogManifest(request, env) {
       env.ICONOPLASM_MIN_EXTENSION_VERSION ||
       MIN_EXTENSION_VERSION,
     portrait_base_url: manifest.portrait_base_url || portraitBase(url, env),
+    publication_aliases: manifest.publication_aliases || null,
     artifact_url: buildHash
       ? publicUrl(url, `/catalog/${publicCatalogArtifactFilename(buildHash)}`)
       : null,
@@ -23740,7 +23792,7 @@ async function handlePublicCatalogManifest(request, env) {
         : null,
     },
   }
-  const etag = payload.build_version ? `"${payload.build_version}"` : await etagFor(payload)
+  const etag = catalogManifestEtag(payload) || (await etagFor(payload))
   if (etagMatches(request.headers.get("If-None-Match"), etag)) {
     return new Response(null, {
       status: 304,
@@ -25762,7 +25814,7 @@ async function handleCatalogManifest(request, env) {
   if (!manifest)
     return json({ error: "Catalog manifest not found — run iconoplasm catalog publish" }, 404)
   const body = JSON.stringify(manifest)
-  const etag = manifest.current_hash ? `"${manifest.current_hash}"` : null
+  const etag = catalogManifestEtag(manifest)
   if (etag && etagMatches(request.headers.get("If-None-Match"), etag)) {
     return new Response(null, {
       status: 304,

@@ -14,7 +14,7 @@ export default defineConfig({
   manifest: ({ browser }) => {
     const manifest = readIconoplasmManifest()
     if (browser === "firefox") {
-      manifest.background = { scripts: ["service-worker.js"] }
+      manifest.background = { scripts: ["publication-alias-overlay.js", "service-worker.js"] }
     }
     if (browser !== "firefox") {
       delete manifest.browser_specific_settings
