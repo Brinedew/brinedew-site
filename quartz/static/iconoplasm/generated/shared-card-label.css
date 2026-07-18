@@ -1495,6 +1495,31 @@
       rotate(var(--icono-label-mobile-swipe-rotate, 0deg));
   }
 
+  /* The gene hero is already complete in the edge response, so its closed mobile
+     geometry must also be complete before JavaScript measures the physical card.
+     The nearest query container is `.icono-gene-lead`; its inline size gives the
+     same available-width result as the runtime geometry pass. The remaining math
+     is intrinsic to the portrait dimensions carried by the server-rendered card.
+     Runtime measurements still replace these values after fonts and account-only
+     controls settle, but the replacement is now sub-pixel instead of a visible jump. */
+  .icono-gene-lead .icono-card--variant-lab-label.icono-card--brick {
+    --icono-label-mobile-fit-scale: clamp(
+      0.78,
+      calc(100cqi / var(--icono-label-mobile-physical-width)),
+      1.9
+    );
+    --icono-label-mobile-dossier-top: calc(
+      1px + var(--icono-label-mobile-portrait-pad) +
+        (
+          var(--icono-label-mobile-physical-width) -
+            (2 * var(--icono-label-mobile-portrait-pad))
+        ) * var(--height) / var(--width) + 0.4rem
+    );
+    --icono-label-mobile-viewport-height: calc(
+      var(--icono-label-mobile-dossier-top) + 5.65rem
+    );
+  }
+
   .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"] {
     clip-path: inset(0);
     filter: none;
