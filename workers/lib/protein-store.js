@@ -11,6 +11,11 @@ const eligibleCache = {
   fetchedAt: 0,
   ttl: 5 * 60 * 1000,
 }
+const dailySelectionCache = {
+  ids: null,
+  fetchedAt: 0,
+  ttl: 5 * 60 * 1000,
+}
 let structureFailureTableEnsured = false
 
 function normalizeKey(uniprot) {
@@ -544,6 +549,32 @@ export async function getEligibleProteinIds(db) {
   return ids.slice()
 }
 
+export async function getDailySelectionProteinIds(db) {
+  const now = Date.now()
+  if (dailySelectionCache.ids && now - dailySelectionCache.fetchedAt < dailySelectionCache.ttl) {
+    return dailySelectionCache.ids.slice()
+  }
+
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT p.uniprot
+         FROM proteins p
+         WHERE p.structure_source IS NOT NULL
+           AND p.gene_summary IS NOT NULL
+         ORDER BY p.id ASC`,
+      )
+      .all()
+    const ids = (results || []).map((row) => row.uniprot)
+    dailySelectionCache.ids = ids
+    dailySelectionCache.fetchedAt = now
+    return ids.slice()
+  } catch (err) {
+    console.warn("GeneGuessr: D1 getDailySelectionProteinIds failed", err)
+    return []
+  }
+}
+
 // Cache for surname-based protein grouping (for balanced random selection)
 const surnameCache = {
   surnames: null, // Array of unique surnames
@@ -657,7 +688,9 @@ export async function pickRandomProteinBalanced(db) {
 
 export async function pickDailyTarget(db, eligibleIds, salt, date = new Date()) {
   const ids =
-    Array.isArray(eligibleIds) && eligibleIds.length ? eligibleIds : await getEligibleProteinIds(db)
+    Array.isArray(eligibleIds) && eligibleIds.length
+      ? eligibleIds
+      : await getDailySelectionProteinIds(db)
   if (!ids.length) {
     return null
   }

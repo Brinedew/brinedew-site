@@ -16,7 +16,7 @@ import {
 } from "./lib/discord-recap-images.js"
 import {
   fetchProteinByUniprot as loadProtein,
-  getEligibleProteinIds,
+  getDailySelectionProteinIds,
   pickDailyTarget,
   getBlendedSimilarity,
 } from "./lib/protein-store.js"
@@ -1072,7 +1072,7 @@ export async function handleAdminSchedule(request, env) {
     }
 
     if (missingDates.length) {
-      const eligibleIds = await getEligibleProteinIds(env.DB)
+      const eligibleIds = await getDailySelectionProteinIds(env.DB)
       const BATCH_SIZE = 16
       for (let i = 0; i < missingDates.length; i += BATCH_SIZE) {
         const batchDates = missingDates.slice(i, i + BATCH_SIZE)
@@ -1191,7 +1191,7 @@ export async function handleAdminCards(request, env) {
     }
 
     if (!resolvedUniprot) {
-      const eligibleIds = await getEligibleProteinIds(env.DB)
+      const eligibleIds = await getDailySelectionProteinIds(env.DB)
       const salt = env?.DAILY_TARGET_SALT || "geneguessr-v2-939b5a0b"
       const selection = await pickDailyTarget(env.DB, eligibleIds, salt, date)
       resolvedUniprot = selection?.protein?.uniprot || null
