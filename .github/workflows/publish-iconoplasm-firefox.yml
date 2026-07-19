@@ -25,6 +25,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   publish-firefox:
@@ -73,6 +74,11 @@ jobs:
           EXPECTED_VERSION: ${{ inputs.expected_version }}
         run: |
           node ./scripts/verify-iconoplasm-publisher-authority.mjs --expected="$env:EXPECTED_VERSION"
+
+      - name: Require successful Build and Test for this release commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node ./scripts/wait-for-iconoplasm-release-ci.mjs
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

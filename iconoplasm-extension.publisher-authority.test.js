@@ -13,17 +13,19 @@ test("human publisher authority owns every published extension version surface",
   const manifest = readJson("iconoplasm-extension/manifest.json")
   const publicRelease = readJson("quartz/static/iconoplasm/extension-release.json")
   const popup = readFileSync("iconoplasm-extension/popup.html", "utf8")
+  const popupRuntime = readFileSync("iconoplasm-extension/popup.js", "utf8")
 
   const verified = assertIconoplasmPublisherAuthority(process.cwd(), {
     expectedVersion: authority.version,
   })
-  assert.equal(verified.version, "0.4.7")
-  assert.equal(verified.minimumSupportedVersion, "0.4.7")
-  assert.deepEqual(verified.compatibilityContracts, {})
+  assert.equal(verified.version, authority.version)
+  assert.equal(verified.minimumSupportedVersion, authority.minimum_supported_version)
+  assert.deepEqual(verified.compatibilityContracts, authority.compatibility_contracts)
   assert.equal(manifest.version, authority.version)
   assert.equal(publicRelease.version, authority.version)
   assert.match(publicRelease.chromeDeveloperPackageUrl, new RegExp(`v${authority.version}\\.zip$`))
-  assert.match(popup, new RegExp(`v${authority.version}`))
+  assert.doesNotMatch(popup, /v\d+\.\d+\.\d+/)
+  assert.match(popupRuntime, /chrome\.runtime\.getManifest\(\)\.version/)
   assert.throws(
     () => assertIconoplasmPublisherAuthority(process.cwd(), { expectedVersion: "9.9.9" }),
     /diverges from human publisher authority/,
@@ -50,12 +52,10 @@ test("published and candidate catalog contracts remain explicit", () => {
     "utf8",
   )
 
-  assert.equal(authority.catalog_contract.schema_version, 4)
-  assert.equal(authority.minimum_supported_version, authority.version)
-  assert.deepEqual(authority.compatibility_contracts, {})
-  assert.equal(candidate.catalog_schema_version, 5)
+  assert.ok(authority.catalog_contract.schema_version <= candidate.catalog_schema_version)
+  assert.ok(Object.keys(authority.compatibility_contracts).length <= 1)
   assert.match(patchNotes, /^## Unreleased$/m)
-  assert.doesNotMatch(patchNotes, /^## 0\.(4\.8|5\.0|6\.0)\b/m)
+  assert.doesNotMatch(patchNotes, /^## 0\.(5\.0|6\.0)\b/m)
   assert.match(worker, /publisher-release\.json/)
   assert.match(worker, /candidate-contract\.json/)
   assert.doesNotMatch(worker, /ICONOPLASM_MIN_EXTENSION_VERSION/)

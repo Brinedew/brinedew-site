@@ -28,6 +28,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   publish-edge:
@@ -88,6 +89,11 @@ jobs:
           if (-not $manifest.background.service_worker) {
             throw "Edge MV3 package is missing background.service_worker."
           }
+
+      - name: Require successful Build and Test for this release commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node ./scripts/wait-for-iconoplasm-release-ci.mjs
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
