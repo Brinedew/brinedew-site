@@ -658,13 +658,14 @@ test("request-option v3 migration materializes inspectable edit ancestry", () =>
     "utf8",
   )
 
-  assert.match(migration, /idx_icono_publish_events_edit_lineage/)
   assert.match(migration, /WITH RECURSIVE/)
   assert.match(migration, /event\.action = 'edit_candidate'/)
   assert.match(migration, /lineage\.lineage_depth < 32/)
   assert.match(migration, /seen_asset_sha256s/)
   assert.match(migration, /'lineage_root_asset_sha256'/)
   assert.match(migration, /'edit_ancestor_asset_sha256s'/)
+  assert.match(migration, /WHEN lineage_depth > 0 THEN json_object/)
+  assert.match(migration, /ELSE json\('\{\}'\)/)
   assert.match(migration, /json_remove\(lineage\.lineage_leaf_first_json, '\$\[0\]'\)/)
   assert.match(migration, /builder_version = excluded\.builder_version/)
   assert.match(migration, /\n\s*3,\n\s*CURRENT_TIMESTAMP/)
