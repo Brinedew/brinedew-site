@@ -1,9 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Iconoplasm",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "description": "Highlights gene symbols on any page with hover cards, portraits, and gene colors. Track your discoveries as you browse.",
-  "permissions": ["storage"],
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
     "https://iconoplasm.brinedew.bio/*",
     "https://iconoplasmportraits.b-cdn.net/*"
@@ -12,7 +14,9 @@
     "gecko": {
       "id": "iconoplasm@brinedew.bio",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": [
+          "none"
+        ]
       }
     },
     "gecko_android": {
@@ -24,13 +28,23 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://iconoplasm.brinedew.bio/*", "https://staging.brinedew.bio/*"],
-      "js": ["site-bridge.js"],
+      "matches": [
+        "https://iconoplasm.brinedew.bio/*",
+        "https://staging.brinedew.bio/*"
+      ],
+      "js": [
+        "site-bridge.js"
+      ],
       "run_at": "document_start"
     },
     {
-      "matches": ["<all_urls>"],
-      "exclude_matches": ["https://iconoplasm.brinedew.bio/*", "https://staging.brinedew.bio/*"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "exclude_matches": [
+        "https://iconoplasm.brinedew.bio/*",
+        "https://staging.brinedew.bio/*"
+      ],
       "js": [
         "generated/rough.js",
         "generated/shared-card-runtime.js",
@@ -47,7 +61,11 @@
         "highlight-runtime.js",
         "content.js"
       ],
-      "css": ["generated/shared-card-vote.css", "generated/shared-card-label.css", "content.css"],
+      "css": [
+        "generated/shared-card-vote.css",
+        "generated/shared-card-label.css",
+        "content.css"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -66,7 +84,9 @@
         "fonts/SpecialElite-Regular.woff2",
         "fonts/Caveat-400.woff2"
       ],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "action": {

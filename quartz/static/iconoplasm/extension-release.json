@@ -1,7 +1,7 @@
 {
-  "version": "0.4.7",
-  "chromeDeveloperPackageUrl": "/static/iconoplasm/downloads/iconoplasm-extension-v0.4.7.zip",
+  "version": "0.4.8",
+  "chromeDeveloperPackageUrl": "/static/iconoplasm/downloads/iconoplasm-extension-v0.4.8.zip",
   "firefoxListingUrl": "https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/",
-  "edgeListingStatus": "live",
+  "edgeListingStatus": "pending",
   "edgeListingUrl": "https://microsoftedge.microsoft.com/addons/detail/ocfhohjhkflpmaiimgjfobdoogdfpmog"
 }

@@ -10,6 +10,8 @@ draft: false
 
 ## Unreleased
 
+## 0.4.8 - 2026-07-19
+
 - Store releases now keep the immediately previous extension/API contract supported during browser-store review, then retire it automatically at the following human-published release.
 - Portrait APIs now publish canonical first-party asset references instead of CDN-provider URLs.
 - The website and extension now use one tab-wide portrait delivery engine and one server-published delivery policy.
@@ -26,6 +28,10 @@ draft: false
 - Alias-only updates now reuse the cached base catalog instead of downloading the roughly 6 MB catalog again.
 - Fixed the five-minute catalog refresh timestamp so unchanged manifests no longer get probed on every page.
 
+* Firefox Android support
+* Faster alias updates
+* Resilient portrait loading when the CDN is unavailable
+* Mobile/card improvements.
 ## 0.4.7 - 2026-05-22
 
 - added link to the extension header
