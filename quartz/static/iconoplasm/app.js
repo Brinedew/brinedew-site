@@ -134,8 +134,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     version: "",
     installTab: "",
     release: {
-      version: "0.4.1",
-      chromeDeveloperPackageUrl: "/static/iconoplasm/downloads/iconoplasm-extension-v0.4.1.zip",
+      version: "0.6.0",
+      chromeDeveloperPackageUrl: "/static/iconoplasm/downloads/iconoplasm-extension-v0.6.0.zip",
       firefoxListingUrl: ICONO_EXTENSION_FIREFOX_LISTING_URL,
       edgeListingUrl: ICONO_EXTENSION_EDGE_LISTING_URL,
       edgeListingStatus: "live",
@@ -420,10 +420,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return d.innerHTML
   }
 
-  portraitDelivery.adopt(
-    window.__iconoplasmBootstrap && window.__iconoplasmBootstrap.portraitSourcePromise,
-  )
-
   var requestInbox = createRequestInbox({
     fetchJSON: fetchJSON,
     getCurrentUser: function () {
@@ -456,6 +452,15 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (preferredSize === "medium") return mediumUrl || thumbUrl || heroUrl
     if (preferredSize === "thumb") return thumbUrl || mediumUrl || heroUrl
     return heroUrl || mediumUrl || thumbUrl
+  }
+
+  function portraitAssetRefUrl(asset, preferredSize) {
+    var renditions = (asset && asset.renditions) || {}
+    var preferred = renditions[preferredSize] || null
+    var fallback = renditions.medium || renditions.full || renditions.thumb || null
+    return String(
+      (preferred && preferred.canonical_url) || (fallback && fallback.canonical_url) || "",
+    ).trim()
   }
 
   function publishedPortraitUrl(genePayload, preferredSize) {
@@ -5377,7 +5382,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         applyImageEditAspectRatio(dialog, source)
       }
       sourceImg.onload = syncNaturalRatio
-      sourceImg.src = source.image_url || ""
+      portraitDelivery.bind(sourceImg, source.image_url || "")
       sourceImg.alt = source.symbol + " " + source.source + " blot"
       if (sourceImg.complete) syncNaturalRatio()
     }
@@ -5479,13 +5484,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var result = dialog.querySelector("[data-icono-image-edit-result]")
     var before = dialog.querySelector("[data-icono-image-edit-before]")
     var after = dialog.querySelector("[data-icono-image-edit-after]")
-    if (before) before.src = source.image_url || ""
-    if (after)
-      after.src =
-        (job && job.result_urls && job.result_urls.medium) ||
-        (job && job.result_urls && job.result_urls.full) ||
-        (job && job.result_urls && job.result_urls.thumb) ||
-        ""
+    if (before) portraitDelivery.bind(before, source.image_url || "")
+    if (after) portraitDelivery.bind(after, portraitAssetRefUrl(job && job.result_asset, "medium"))
     applyImageEditAspectRatio(dialog, source)
     if (job.status === "failed") {
       imageEditSetStatus(String((job && job.error) || "Image edit failed."), "error")
@@ -6005,8 +6005,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
 
       function directResultUrl(job) {
-        var urls = (job && job.result_urls) || {}
-        return String(urls.medium || urls.full || urls.thumb || "").trim()
+        return portraitAssetRefUrl(job && job.result_asset, "medium")
       }
 
       function setDirectResultEmpty(empty) {
@@ -6020,7 +6019,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         requestDirectState.loading = true
         requestDirectState.job = null
         setDirectResultEmpty(true)
-        if (directImage) directImage.removeAttribute("src")
+        if (directImage) {
+          portraitDelivery.unbind(directImage)
+          directImage.removeAttribute("src")
+        }
         updateDirectGenerationButtons()
         setStatus("Generating candidate...", "")
         var body = {
@@ -6045,7 +6047,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               return
             }
             var url = directResultUrl(job)
-            if (directImage && url) directImage.src = url
+            if (directImage && url) portraitDelivery.bind(directImage, url)
             setDirectResultEmpty(!url)
             setStatus("Candidate generated.", "success")
           })

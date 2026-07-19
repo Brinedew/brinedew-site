@@ -267,7 +267,7 @@ function discordMessage(row) {
 
 function portraitCdnBase(env) {
   return boundedText(
-    env?.ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL || env?.ICONOPLASM_PORTRAIT_BASE_URL || "",
+    env?.ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL || "",
     2000,
   ).replace(/\/+$/, "")
 }

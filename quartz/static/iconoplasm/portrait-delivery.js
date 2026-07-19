@@ -1,209 +1,128 @@
-const DEFAULT_PRIMARY_ORIGIN = "https://iconoplasmportraits.b-cdn.net"
-const DEFAULT_FALLBACK_ORIGIN = "https://iconoplasm.brinedew.bio"
-const DEFAULT_TIMEOUT_MS = 2500
-const DEFAULT_SESSION_KEY = "iconoplasm.portrait-source.v1"
+import {
+  createPortraitDeliverySession,
+  normalizePortraitDeliveryPolicy,
+} from "./generated/portrait-delivery-core.js"
 
-function normalizeOrigin(value, fallback) {
+const SESSION_KEY = "iconoplasm.portrait-delivery.v2"
+
+function readSessionState(storage) {
+  if (!storage?.getItem) return null
   try {
-    return new URL(String(value || fallback)).origin
-  } catch (_) {
-    return fallback
+    return JSON.parse(storage.getItem(SESSION_KEY) || "null")
+  } catch (_error) {
+    return null
   }
 }
 
-function portraitPath(rawUrl, origins) {
-  const raw = String(rawUrl || "").trim()
-  if (!raw) return ""
-  try {
-    const parsed = new URL(raw, origins.fallback)
-    if (parsed.origin !== origins.primary && parsed.origin !== origins.fallback) return ""
-    if (!parsed.pathname.startsWith("/portraits/")) return ""
-    return parsed.pathname + parsed.search
-  } catch (_) {
-    return ""
-  }
-}
-
-export function createPortraitDelivery(options = {}) {
-  const origins = {
-    primary: normalizeOrigin(options.primaryOrigin, DEFAULT_PRIMARY_ORIGIN),
-    fallback: normalizeOrigin(options.fallbackOrigin, DEFAULT_FALLBACK_ORIGIN),
-  }
-  const timeoutMs = Math.max(1, Number(options.timeoutMs || DEFAULT_TIMEOUT_MS))
-  const storageKey = String(options.storageKey || DEFAULT_SESSION_KEY)
-  const storage = options.sessionStorageRef || globalThis.sessionStorage || null
-  const ImageCtor = options.ImageCtor || globalThis.Image
-  const setTimer = options.setTimeoutRef || globalThis.setTimeout
-  const clearTimer = options.clearTimeoutRef || globalThis.clearTimeout
-  let volatileState = { source: "", failed: [] }
-  let decisionPromise = null
-  let installedDocument = null
-
-  function readState() {
-    if (!storage || typeof storage.getItem !== "function") return volatileState
-    try {
-      const parsed = JSON.parse(storage.getItem(storageKey) || "null")
-      const source =
-        parsed && (parsed.source === "primary" || parsed.source === "fallback") ? parsed.source : ""
-      const failed = Array.isArray(parsed && parsed.failed)
-        ? parsed.failed.filter((item) => item === "primary" || item === "fallback")
-        : []
-      volatileState = { source, failed: Array.from(new Set(failed)) }
-    } catch (_) {
-      // A blocked or corrupt session store must not break portrait rendering.
-    }
-    return volatileState
-  }
-
-  function writeState(nextState) {
-    volatileState = {
-      source:
-        nextState.source === "primary" || nextState.source === "fallback" ? nextState.source : "",
-      failed: Array.from(new Set(Array.isArray(nextState.failed) ? nextState.failed : [])),
-    }
-    if (!storage || typeof storage.setItem !== "function") return
-    try {
-      storage.setItem(storageKey, JSON.stringify(volatileState))
-    } catch (_) {
-      // The in-memory state still protects this page when storage is unavailable.
-    }
-  }
-
-  function sourceUrl(path, source) {
-    if (!path) return ""
-    return (source === "fallback" ? origins.fallback : origins.primary) + path
-  }
-
-  function resolve(rawUrl) {
-    const path = portraitPath(rawUrl, origins)
-    if (!path) return String(rawUrl || "").trim()
-    const state = readState()
-    return sourceUrl(path, state.source || "primary")
-  }
-
-  function choose(source, failed = []) {
-    writeState({ source, failed })
-    return source
-  }
-
-  function adopt(externalDecision) {
-    if (!externalDecision || typeof externalDecision.then !== "function") return decisionPromise
-    if (readState().source || decisionPromise) return decisionPromise
-    decisionPromise = Promise.resolve(externalDecision)
-      .then((source) => {
-        if (source === "primary") return choose("primary", [])
-        if (source === "fallback") return choose("fallback", ["primary"])
-        return ""
-      })
-      .finally(() => {
-        decisionPromise = null
-      })
-    return decisionPromise
-  }
-
-  function ensure(rawUrl) {
-    const path = portraitPath(rawUrl, origins)
-    if (!path) return Promise.resolve(String(rawUrl || "").trim())
-    const existing = readState()
-    if (existing.source) return Promise.resolve(sourceUrl(path, existing.source))
-    if (decisionPromise) {
-      return decisionPromise.then(() => {
-        const decided = readState()
-        return decided.source ? sourceUrl(path, decided.source) : ensure(rawUrl)
-      })
-    }
-    if (typeof ImageCtor !== "function") {
-      choose("fallback", ["primary"])
-      return Promise.resolve(sourceUrl(path, "fallback"))
-    }
-
-    decisionPromise = new Promise((resolveDecision) => {
-      const probe = new ImageCtor()
+function imageProbe(ImageCtor, setTimer, clearTimer) {
+  return (url, timeoutMs) =>
+    new Promise((resolve) => {
+      if (typeof ImageCtor !== "function") return resolve(false)
+      const image = new ImageCtor()
       let settled = false
       let timer = 0
-      const settle = (source) => {
+      const settle = (result) => {
         if (settled) return
         settled = true
         if (timer) clearTimer(timer)
-        probe.onload = null
-        probe.onerror = null
-        choose(source, source === "fallback" ? ["primary"] : [])
-        resolveDecision(source)
+        image.onload = null
+        image.onerror = null
+        resolve(result)
       }
-      probe.decoding = "async"
-      probe.onload = () => settle("primary")
-      probe.onerror = () => settle("fallback")
+      image.decoding = "async"
+      image.fetchPriority = "high"
+      image.onload = () => settle(true)
+      image.onerror = () => settle(false)
       timer = setTimer(() => {
-        settle("fallback")
+        settle(false)
         try {
-          probe.src = ""
-        } catch (_) {}
+          image.src = ""
+        } catch (_error) {}
       }, timeoutMs)
-      probe.src = sourceUrl(path, "primary")
-    }).finally(() => {
-      decisionPromise = null
+      image.src = url
     })
+}
 
-    return decisionPromise.then(() => resolve(rawUrl))
+export function createPortraitDelivery(options = {}) {
+  const storage = options.sessionStorageRef ?? globalThis.sessionStorage ?? null
+  const bindings = new Map()
+  let installedDocument = null
+  let policyReady = Promise.resolve()
+  const session = createPortraitDeliverySession({
+    policy: options.policy,
+    initialState: readSessionState(storage),
+    probe:
+      options.probe ||
+      imageProbe(
+        options.ImageCtor ?? globalThis.Image,
+        options.setTimeoutRef ?? globalThis.setTimeout,
+        options.clearTimeoutRef ?? globalThis.clearTimeout,
+      ),
+    persist(state) {
+      try {
+        storage?.setItem?.(SESSION_KEY, JSON.stringify(state))
+      } catch (_error) {}
+      rewriteBindings()
+    },
+  })
+
+  function resolveAttributes(attributes) {
+    return Object.fromEntries(
+      Object.entries(attributes || {}).map(([name, rawUrl]) => [name, session.resolve(rawUrl)]),
+    )
   }
 
-  function markFailed(source) {
-    if (source !== "primary" && source !== "fallback") return readState()
-    const current = readState()
-    const failed = Array.from(new Set(current.failed.concat(source)))
-    const alternate = source === "primary" ? "fallback" : "primary"
-    const nextSource = failed.includes(alternate) ? current.source : alternate
-    writeState({ source: nextSource, failed })
-    return readState()
-  }
-
-  function sourceFromUrl(rawUrl) {
-    const value = String(rawUrl || "").trim()
-    if (!value) return ""
-    try {
-      const parsed = new URL(value, origins.fallback)
-      if (!parsed.pathname.startsWith("/portraits/")) return ""
-      if (parsed.origin === origins.primary) return "primary"
-      if (parsed.origin === origins.fallback) return "fallback"
-    } catch (_) {}
-    return ""
-  }
-
-  function rewriteAttribute(element, attribute, source) {
-    const raw = element.getAttribute(attribute)
-    const path = portraitPath(raw, origins)
-    if (!path || sourceFromUrl(raw) === source) return
-    element.setAttribute(attribute, sourceUrl(path, source))
-  }
-
-  function rewriteDocument(documentRef, source) {
-    const attributes = ["src", "data-icono-pswp-src", "data-icono-source-image-url"]
-    for (const attribute of attributes) {
-      const nodes = documentRef.querySelectorAll(`[${attribute}]`)
-      for (const node of nodes) rewriteAttribute(node, attribute, source)
+  function applyBinding(element, attributes) {
+    if (!element?.setAttribute) return
+    for (const [name, url] of Object.entries(resolveAttributes(attributes))) {
+      if (url) element.setAttribute(name, url)
+      else element.removeAttribute(name)
     }
   }
 
+  function rewriteBindings() {
+    for (const [element, attributes] of bindings) {
+      if (element?.isConnected === false) {
+        bindings.delete(element)
+        continue
+      }
+      applyBinding(element, attributes)
+    }
+  }
+
+  function pruneBindings() {
+    for (const element of bindings.keys()) {
+      if (element?.isConnected === false) bindings.delete(element)
+    }
+  }
+
+  function bind(element, rawUrlOrAttributes) {
+    pruneBindings()
+    const attributes =
+      typeof rawUrlOrAttributes === "string"
+        ? { src: rawUrlOrAttributes }
+        : { ...(rawUrlOrAttributes || {}) }
+    bindings.set(element, attributes)
+    applyBinding(element, attributes)
+    return element
+  }
+
+  function unbind(element) {
+    bindings.delete(element)
+  }
+
   function install(documentRef = globalThis.document) {
-    if (!documentRef || typeof documentRef.addEventListener !== "function") return () => {}
-    if (installedDocument === documentRef) return () => {}
+    if (!documentRef?.addEventListener || installedDocument === documentRef) return () => {}
     installedDocument = documentRef
     const onError = (event) => {
-      const target = event && event.target
-      if (!target || String(target.tagName || "").toUpperCase() !== "IMG") return
+      const target = event?.target
+      if (String(target?.tagName || "").toUpperCase() !== "IMG") return
       const failedUrl = target.currentSrc || target.getAttribute?.("src") || ""
-      const failedSource = sourceFromUrl(failedUrl)
-      const current = readState()
-      if (
-        !failedSource ||
-        failedSource !== current.source ||
-        current.failed.includes(failedSource)
-      ) {
-        return
+      const result = session.reportFailure(failedUrl)
+      if (result.changed || bindings.has(target)) rewriteBindings()
+      if (!bindings.has(target) && result.replacementUrl && result.replacementUrl !== failedUrl) {
+        target.setAttribute("src", result.replacementUrl)
       }
-      const next = markFailed(failedSource)
-      if (!next.source || next.source === failedSource) return
-      rewriteDocument(documentRef, next.source)
     }
     documentRef.addEventListener("error", onError, true)
     return () => {
@@ -212,16 +131,42 @@ export function createPortraitDelivery(options = {}) {
     }
   }
 
+  async function refreshPolicy(fetchRef = globalThis.fetch) {
+    if (typeof fetchRef !== "function") return session.policy()
+    policyReady = (async () => {
+      try {
+        const response = await fetchRef("/api/public/v1/metadata", { cache: "no-store" })
+        if (!response.ok) return session.policy()
+        const metadata = await response.json()
+        return session.configure(normalizePortraitDeliveryPolicy(metadata?.portrait_delivery))
+      } catch (_error) {
+        return session.policy()
+      }
+    })()
+    return policyReady
+  }
+
+  async function ensure(rawUrl) {
+    await policyReady
+    return session.ensure(rawUrl)
+  }
+
   return {
-    adopt,
+    bind,
+    configure: session.configure,
     ensure,
     install,
-    resolve,
-    markFailed,
-    state: readState,
-    origins: { ...origins },
-    timeoutMs,
+    origins: () => ({
+      accelerator: session.policy().accelerator.origin,
+      canonical: session.policy().canonical_origin,
+    }),
+    refreshPolicy,
+    reportFailure: session.reportFailure,
+    resolve: session.resolve,
+    state: session.state,
+    unbind,
   }
 }
 
 export const portraitDelivery = createPortraitDelivery()
+portraitDelivery.refreshPolicy()

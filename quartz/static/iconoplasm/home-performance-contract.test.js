@@ -1599,12 +1599,11 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
     /if \(isCompleteGeneDetail\(embeddedGeneCard\)\)[\s\S]*bootstrap\.geneDetailPromise = Promise\.resolve\(embeddedGeneCard\)/,
     "the complete embedded page contract should satisfy the detail promise without a second read",
   )
-  assert.match(
+  assert.doesNotMatch(
     head,
-    /var portraitSeedPromise = embeddedGeneCard[\s\S]*Promise\.resolve\(embeddedGeneCard\)[\s\S]*bootstrap\.portraitSourcePromise = portraitSeedPromise/,
-    "the embedded payload may accelerate the portrait probe while older sparse HTML stays repairable",
+    /portraitSourcePromise|iconoplasmportraits\.b-cdn\.net[\s\S]*new Image\(\)/,
+    "the head bootstrap must not carry a second portrait delivery state machine",
   )
-  assert.match(head, /img\.fetchPriority = "high"/)
   assert.doesNotMatch(
     internalWorker,
     /iconoplasmPortraitPreloadUrlFromCardPayload|<link rel="preload" as="image" href="\$\{escapeIconoplasmHtmlAttribute\(portraitUrl\)\}/,

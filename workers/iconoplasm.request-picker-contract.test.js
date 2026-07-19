@@ -308,13 +308,13 @@ test("new and edit image modal previews use candidate masonry-sized medium previ
   )
   assert.match(
     app,
-    /function directResultUrl\(job\)[^]*return String\(urls\.medium \|\| urls\.full \|\| urls\.thumb \|\| ""\)\.trim\(\)/,
+    /function directResultUrl\(job\)[^]*portraitAssetRefUrl\(job && job\.result_asset, "medium"\)/,
     "direct generation result should prefer the same medium rendition used by candidate masonry",
   )
   assert.match(
     app,
-    /if \(after\)\s*after\.src =\s*\(job && job\.result_urls && job\.result_urls\.medium\) \|\|\s*\(job && job\.result_urls && job\.result_urls\.full\) \|\|\s*\(job && job\.result_urls && job\.result_urls\.thumb\) \|\|\s*""/,
-    "edit comparison result should prefer medium with explicit full/thumb fallback",
+    /if \(after\) portraitDelivery\.bind\(after, portraitAssetRefUrl\(job && job\.result_asset, "medium"\)\)/,
+    "edit comparison result should bind the schema-1 asset reference through shared delivery",
   )
 })
 

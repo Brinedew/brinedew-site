@@ -115,7 +115,7 @@ function buildEnv(db, kvStore, putKeys) {
   return {
     ICONOPLASM_DB: db,
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
-    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     // Small shards (2 genes) + 1 shard/chunk so 5 genes drain across 3 chunks.
     ICONOPLASM_CARD_CATALOG_SHARD_SIZE: "2",
     ICONOPLASM_CARD_CATALOG_REBUILD_CHUNK_SIZE: "2",
