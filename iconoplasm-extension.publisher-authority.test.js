@@ -18,6 +18,8 @@ test("human publisher authority owns every published extension version surface",
     expectedVersion: authority.version,
   })
   assert.equal(verified.version, "0.4.7")
+  assert.equal(verified.minimumSupportedVersion, "0.4.7")
+  assert.deepEqual(verified.compatibilityContracts, {})
   assert.equal(manifest.version, authority.version)
   assert.equal(publicRelease.version, authority.version)
   assert.match(publicRelease.chromeDeveloperPackageUrl, new RegExp(`v${authority.version}\\.zip$`))
@@ -49,6 +51,8 @@ test("published and candidate catalog contracts remain explicit", () => {
   )
 
   assert.equal(authority.catalog_contract.schema_version, 4)
+  assert.equal(authority.minimum_supported_version, authority.version)
+  assert.deepEqual(authority.compatibility_contracts, {})
   assert.equal(candidate.catalog_schema_version, 5)
   assert.match(patchNotes, /^## Unreleased$/m)
   assert.doesNotMatch(patchNotes, /^## 0\.(4\.8|5\.0|6\.0)\b/m)
