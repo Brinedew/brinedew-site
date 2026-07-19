@@ -1,5 +1,7 @@
 # Iconoplasm Extension/API Compatibility
 
+For publication-alias ownership, performance invariants, maintenance, and rollback, read `../docs/ICONOPLASM_PUBLICATION_ALIASES.md`.
+
 ## Canonical ID policy
 
 - Canonical app key is **gene symbol** (`s` in artifact, `canonical_symbol` in API).

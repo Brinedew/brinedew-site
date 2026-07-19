@@ -2,14 +2,9 @@
 
 This folder is the canonical unpacked Chrome extension root for Iconoplasm.
 
-Chesterton's fence: generated catalog facts and portraits are authored by the Iconoplasm workstation, but the deliberately small publication-alias overlay is website-owned. Edit `workers/iconoplasm-publication-aliases.js` for a curated page label; use Website Ops only for generated catalog or portrait state.
+Generated catalog facts and portraits are authored by the Iconoplasm workstation. The small publication-alias overlay is website-owned. Edit `workers/iconoplasm-publication-aliases.js` for a curated page label; use Website Ops only for generated catalog or portrait state.
 
-Reason for the move:
-
-- keep the extension code easy to find from the website repo
-- keep the tooltip/frontpage design work close together
-- avoid losing track of the relevant files across two unrelated locations
-- keep a single source of truth for local Chrome testing and future store packaging
+The complete ownership, runtime, performance, maintenance, and rollback contract is in `../docs/ICONOPLASM_PUBLICATION_ALIASES.md`.
 
 ## Packaging the extension safely
 
@@ -66,8 +61,10 @@ Canonical path:
 What the GUI-confirmed Firefox + Edge release does:
 
 - bumps `iconoplasm-extension/manifest.json` to the next requested version
-- commits only the manifest version bump
-- pushes the version bump to `main`
+- prepends `content/wiki/Iconoplasm Patch Notes.md`
+- rebuilds the public Chrome developer package and updates its release metadata
+- commits the manifest, patch notes, release metadata, and public package
+- pushes the release commit to `main`
 - dispatches the Firefox workflow against that committed version
 - dispatches the Edge workflow against that committed version
 - builds the clean Firefox extension payload with `pnpm run package:iconoplasm-firefox`
@@ -95,8 +92,6 @@ Notes:
 - `manifest.json` now carries the Gecko ID `iconoplasm@brinedew.bio`, which Firefox signing requires
 - Edge Product ID is `b8547df3-4156-4b56-b7dc-3752347b6794`
 - the workflows are manual on purpose so a website push does not accidentally submit a store build
-- before this workflow existed, there was no Firefox store automation in this repo at all
-- before the Edge product was created in Partner Center, the Edge API could not publish Iconoplasm because Microsoft only exposes update APIs for existing products
 
 Chrome Web Store publishing remains human-dashboard only. Package with `pnpm run package:iconoplasm-extension`, then use the Chrome Web Store dashboard as a person; there is no automated Chrome publish runner here.
 

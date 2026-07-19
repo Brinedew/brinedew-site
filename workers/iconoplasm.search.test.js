@@ -518,27 +518,41 @@ test("catalog search ranks symbol matches before full names before aliases", asy
 
 test("catalog search resolves website-owned publication aliases", async () => {
   const artifact = buildCatalogArtifact()
-  artifact.genes.push({
-    s: "RELA",
-    n: "RELA proto-oncogene, NF-kB subunit",
-    c: "#4f6457",
-    tmh: false,
-    a: [],
-  })
+  artifact.genes.push(
+    {
+      s: "RELA",
+      n: "RELA proto-oncogene, NF-kB subunit",
+      c: "#4f6457",
+      tmh: false,
+      a: [],
+    },
+    {
+      s: "CCNH",
+      n: "CDK-activating cyclin component",
+      c: "#6b705c",
+      tmh: false,
+      a: [],
+    },
+  )
   artifact.gene_count = artifact.genes.length
   const env = buildEnv({ artifact })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildRequest("/api/public/v1/genes/search?q=p65&scope=catalog&limit=5"),
-      env,
-      {},
-    )
-  const payload = await response.json()
+  for (const [query, expectedSymbol] of [
+    ["p65", "RELA"],
+    ["Cyclin%20H", "CCNH"],
+  ]) {
+    const response =
+      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        buildRequest(`/api/public/v1/genes/search?q=${query}&scope=catalog&limit=5`),
+        env,
+        {},
+      )
+    const payload = await response.json()
 
-  assert.equal(response.status, 200)
-  assert.equal(payload?.genes?.[0]?.symbol, "RELA")
-  assert.equal(payload?.genes?.[0]?.matched_by, "alias")
+    assert.equal(response.status, 200)
+    assert.equal(payload?.genes?.[0]?.symbol, expectedSymbol)
+    assert.equal(payload?.genes?.[0]?.matched_by, "alias")
+  }
 })
 
 test("guest discovery search falls back to the starter trio instead of the full catalog", async () => {

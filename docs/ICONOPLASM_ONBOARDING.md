@@ -10,7 +10,9 @@ Iconoplasm is not one codebase pretending to be many things. It is two real syst
 
 ### 1. the workstation / control plane
 
-Path: `d:\Coding\Datasets\iconoplasm`
+Code: `d:\Coding\Iconoplasm`
+
+State and generated data: `d:\Coding\Datasets\iconoplasm`
 
 This is where local authoring happens.
 
@@ -37,14 +39,19 @@ It owns things like:
 - the only-allowed internal stateful runtime in `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`
 - the production D1 runtime tables
 - the shared settings/auth bridge that connects `brinedew.bio` and `iconoplasm.brinedew.bio`
+- the small, curated publication-alias overlay served in the catalog manifest
 
 If the question is “what does the live site know right now?”, stay in this repo and query remote D1.
 
 For canonical portrait changes and vote auto-promotion, also read `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`. That document explains why D1 publish state and the public card-catalog artifact must advance together.
 
+For gene-label matching and alias ownership, read `docs/ICONOPLASM_PUBLICATION_ALIASES.md` before editing the catalog, manifest, or extension cache path.
+
 ### 3. the browser extension
 
 The extension produces discovery events. The website displays the resulting shelf.
+
+The extension consumes generated biological aliases from the catalog and curated publication aliases from the Website manifest. It does not own either source list.
 
 Important consequence: if discovery behavior looks wrong on the site, do not assume it is only a frontend problem. The contract between extension, worker, and homepage matters.
 

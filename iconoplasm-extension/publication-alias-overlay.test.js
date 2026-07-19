@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { iconoplasmPublicationAliasManifest } from "../workers/iconoplasm-publication-aliases.js"
+
 await import("./publication-alias-overlay.js")
 await import("./content-matcher.js")
 
@@ -27,6 +29,27 @@ function baseGeneMap() {
     Object.keys(requestedOverlay.by_symbol).map((symbol) => [symbol, { n: symbol }]),
   )
 }
+
+test("every tracked publication alias is recognized by the real extension matcher", async () => {
+  const manifest = await iconoplasmPublicationAliasManifest()
+  const overlay = overlayApi.normalizePublishedAliasOverlay(manifest)
+  const genes = Object.fromEntries(
+    Object.keys(manifest.by_symbol).map((symbol) => [symbol, { n: symbol }]),
+  )
+  const result = overlayApi.applyPublishedAliasOverlay(genes, overlay)
+
+  assert.deepEqual(result.errors, [])
+  const matcher = matcherApi.createGeneMatcher(result.genes)
+  for (const [symbol, aliases] of Object.entries(manifest.by_symbol)) {
+    for (const alias of aliases) {
+      const matches = matcher.findMatches(`before ${alias} after`)
+      assert.ok(
+        matches.some((match) => match.symbol === symbol && match.text === alias),
+        `${alias} should match ${symbol}`,
+      )
+    }
+  }
+})
 
 test("manifest alias overlay makes every reported label match its canonical gene", () => {
   const overlay = overlayApi.normalizePublishedAliasOverlay(requestedOverlay)
