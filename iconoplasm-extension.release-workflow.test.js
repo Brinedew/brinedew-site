@@ -17,6 +17,7 @@ test("Firefox store publish workflow stays behind the human GUI gate", () => {
   assert.match(workflowText, /expected_version:/)
   assert.match(workflowText, /YES, I AM A HUMAN, PUBLISH ICONOPLASM/)
   assert.match(workflowText, /Iconoplasm GUI/)
+  assert.match(workflowText, /verify-iconoplasm-publisher-authority\.mjs/)
   assert.doesNotMatch(workflowText, /^on:\s*\n\s*push:/m)
 })
 
@@ -25,6 +26,7 @@ test("Edge store publish workflow stays behind the human GUI gate", () => {
   assert.match(edgeWorkflowText, /human_confirmation:/)
   assert.match(edgeWorkflowText, /expected_version:/)
   assert.match(edgeWorkflowText, /YES, I AM A HUMAN, PUBLISH ICONOPLASM/)
+  assert.match(edgeWorkflowText, /verify-iconoplasm-publisher-authority\.mjs/)
   assert.match(edgeWorkflowText, /EDGE_ADDONS_CLIENT_ID/)
   assert.match(edgeWorkflowText, /EDGE_ADDONS_API_KEY/)
   assert.match(edgeWorkflowText, /b8547df3-4156-4b56-b7dc-3752347b6794/)

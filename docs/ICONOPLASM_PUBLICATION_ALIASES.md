@@ -103,7 +103,7 @@ The extension is stricter because it owns a complete local catalog snapshot: an 
 
 The production deployment runs the same verifier after assigning the live Worker routes. It gives both the manifest and resolver a bounded propagation window, then fails the deployment run if the manifest payload differs from the tracked configuration or any alias resolves to the wrong canonical symbol.
 
-After extension 0.5.0 is installed, an alias-policy change does not require Website Ops, an extension version bump, a new package, or a browser-store submission. Clients receive the concrete dictionary from the manifest.
+An alias-policy change does not require Website Ops, an extension version bump, a new package, or a browser-store submission. The published compatibility artifact contains the concrete aliases older clients understand; candidate clients receive the inspectable dictionary from the manifest.
 
 ## Retracting an incorrect generated mapping
 

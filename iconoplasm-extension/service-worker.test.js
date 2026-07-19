@@ -231,7 +231,7 @@ test("schema-5 catalog assets remain inspectable canonical references in extensi
         artifact_url:
           "https://iconoplasm.brinedew.bio/api/public/v1/catalog/catalog.schema-5-test.json",
         artifact_schema_version: 5,
-        min_extension_version: "0.6.0",
+        min_extension_version: "0.4.7",
         gene_count: 1,
         portrait_delivery: portraitDeliveryPolicy,
         publication_aliases: {

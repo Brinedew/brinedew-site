@@ -90,7 +90,7 @@ source-selection rules.
 - Catalog artifact schema: 5
 - Immutable catalog URL contract token: `a5c1`
 - Published portrait snapshot schema: `v3`
-- Minimum extension version: 0.6.0
+- Minimum extension version: the version in `iconoplasm-extension/publisher-release.json` (currently 0.4.7)
 - Extension catalog portrait field: `p` (`PortraitAssetRefV1`)
 - Image-edit and candidate-generation result field: `result_asset`
 
@@ -120,13 +120,17 @@ generated website or extension copies.
 
 ## Verification
 
-1. Read live metadata and confirm schema 4, artifact schema 5, minimum extension
-   0.6.0, canonical origin, and enabled accelerator.
-2. Follow the live manifest's `artifact_url`. Confirm its URL contains `a5c1`,
-   its body is schema 5, portrait-bearing genes use `p`, and no gene contains
-   `pt` or `ph`.
-3. Confirm a public gene/media payload contains only first-party portrait URLs.
-4. On a healthy network, open two gene pages and verify portraits load from the
+1. Read live metadata without an extension header and confirm API schema 4,
+   candidate artifact schema 5, the publisher-authority minimum extension
+   version, canonical origin, and enabled accelerator.
+2. Read the manifest with the published extension version header. Confirm its
+   schema matches `publisher-release.json`, then follow its `artifact_url` and
+   confirm the artifact uses the fields that published version understands.
+3. Follow the candidate manifest's `artifact_url`. Confirm its URL contains
+   `a5c1`, its body is schema 5, portrait-bearing genes use `p`, and no gene
+   contains `pt` or `ph`.
+4. Confirm a public gene/media payload contains only first-party portrait URLs.
+5. On a healthy network, open two gene pages and verify portraits load from the
    accelerator after one tab-wide probe.
 5. In a browser where the accelerator is unreachable, verify one failed
    accelerator request followed by first-party portrait requests. Check image

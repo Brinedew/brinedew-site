@@ -12,15 +12,14 @@ import {
 } from "node:fs"
 import { join, resolve, relative } from "node:path"
 import { fileURLToPath } from "node:url"
+import { assertIconoplasmPublisherAuthority } from "./lib/iconoplasm-publisher-authority.mjs"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = resolve(__filename, "..", "..")
 const repoRoot = __dirname
 const extensionRoot = resolve(repoRoot, "iconoplasm-extension")
 const distRoot = resolve(extensionRoot, "dist")
-const manifestPath = resolve(extensionRoot, "manifest.json")
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8"))
-const packageVersion = String(manifest.version || "0.0.0").trim() || "0.0.0"
+const { manifest, version: packageVersion } = assertIconoplasmPublisherAuthority(repoRoot)
 
 function resolveTarget(argv) {
   for (const arg of argv) {

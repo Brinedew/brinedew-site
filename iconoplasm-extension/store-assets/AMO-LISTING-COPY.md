@@ -4,15 +4,16 @@
 
 Upload this Firefox package on the AMO "Upload Version" screen if the GUI/GitHub publish flow is not being used:
 
-- `D:\Coding\Website\iconoplasm-extension\dist\iconoplasm-firefox-v0.6.0.zip`
+- `D:\Coding\Website\iconoplasm-extension\dist\iconoplasm-firefox-v<PUBLISHER_VERSION>.zip`
 
 If AMO asks for source code, upload this file:
 
-- `D:\Coding\Website\iconoplasm-extension\dist\iconoplasm-firefox-source-v0.6.0.zip`
+- `D:\Coding\Website\iconoplasm-extension\dist\iconoplasm-firefox-source-v<PUBLISHER_VERSION>.zip`
 
 Store release guard:
 
 - normal Firefox publish starts from `D:\Coding\Iconoplasm` -> Website Ops -> Store publish
+- `<PUBLISHER_VERSION>` is the value in `iconoplasm-extension/publisher-release.json`; never infer or bump it during ordinary development
 - the publish button is labeled `Yes, I'm a human, publish Firefox`
 - the workflow requires the phrase `YES, I AM A HUMAN, PUBLISH ICONOPLASM`
 - do not let LLMs, scripts, scheduled jobs, or website deploy automation submit store releases
