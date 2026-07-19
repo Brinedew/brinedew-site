@@ -5,6 +5,7 @@ import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWo
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   mergePublishedPortraitRefsIntoArtifact,
+  projectPublishedCompatibilityArtifact,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
@@ -294,6 +295,33 @@ test("catalog hydration emits only schema-5 inspectable portrait assets", () => 
   assert.equal("p" in hydrated.genes[1], false)
 })
 
+test("published compatibility projection materializes aliases and legacy portrait paths", () => {
+  const sha = "c".repeat(64)
+  const projected = projectPublishedCompatibilityArtifact({
+    schema_version: 5,
+    genes: [
+      {
+        s: "RELA",
+        a: [],
+        p: {
+          schema_version: 1,
+          asset_sha256: sha,
+          renditions: {
+            medium: { path: `portraits/v1/cc/${sha}/medium.webp` },
+            full: { path: `portraits/v1/cc/${sha}/full.webp` },
+          },
+        },
+      },
+    ],
+  })
+
+  assert.equal(projected.schema_version, 4)
+  assert.equal(projected.genes[0].a.includes("p65"), true)
+  assert.equal(projected.genes[0].pt, `portraits/v1/cc/${sha}/medium.webp`)
+  assert.equal(projected.genes[0].ph, `portraits/v1/cc/${sha}/full.webp`)
+  assert.equal("p" in projected.genes[0], false)
+})
+
 test("public gene payload includes published portrait dimensions", async () => {
   const response =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
@@ -438,7 +466,7 @@ test("public catalog manifest publishes explicit extension contract fields", asy
   assert.equal(response.status, 200)
   assert.equal(payload?.artifact_schema_version, 5)
   assert.equal(payload?.schema_version, 5)
-  assert.equal(payload?.min_extension_version, "0.6.0")
+  assert.equal(payload?.min_extension_version, "0.4.7")
   assert.equal(payload?.catalog_hash, "catalog")
   assert.equal(payload?.build_version, "catalog-2026-04-16-a5c1")
   assert.match(payload?.artifact_url || "", /catalog\.catalog-2026-04-16-a5c1\.json$/)
@@ -456,6 +484,41 @@ test("public catalog manifest publishes explicit extension contract fields", asy
   assert.match(payload?.publication_aliases?.version || "", /^v1-[a-f0-9]{16}$/)
   assert.equal(payload?.publication_aliases?.by_symbol?.RELA?.includes("p65"), true)
   assert.match(response.headers.get("etag") || "", /aliases-v1-/)
+})
+
+test("published extension receives the publisher-declared compatibility contract", async () => {
+  const kv = buildCatalogResolveKv()
+  const env = buildEnv({ KV: kv })
+  const manifestResponse =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest", {
+        headers: { "X-Iconoplasm-Extension-Version": "0.4.7" },
+      }),
+      env,
+      {},
+    )
+  const manifest = await manifestResponse.json()
+
+  assert.equal(manifestResponse.status, 200)
+  assert.equal(manifest.schema_version, 4)
+  assert.equal(manifest.artifact_schema_version, 4)
+  assert.equal(manifest.min_extension_version, "0.4.7")
+  assert.equal(manifest.portrait_base_url, "https://iconoplasm.brinedew.bio")
+  assert.match(manifest.artifact_url || "", /-a4p047c1-/)
+
+  const artifactResponse =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request(manifest.artifact_url, {
+        headers: { "X-Iconoplasm-Extension-Version": "0.4.7" },
+      }),
+      env,
+      {},
+    )
+  const artifact = await artifactResponse.json()
+  assert.equal(artifactResponse.status, 200)
+  assert.equal(artifact.schema_version, 4)
+  assert.equal(Array.isArray(artifact.genes), true)
+  assert.equal(artifact.genes.some((gene) => "p" in gene), false)
 })
 
 test("public media fails closed when THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE is missing", async () => {

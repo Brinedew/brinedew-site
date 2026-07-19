@@ -1,25 +1,21 @@
 # Iconoplasm extension contract
 
-The current extension release is 0.6.0. It consumes:
+`publisher-release.json` is the authority for the version browsers can actually
+run. The published extension is 0.4.7 and receives catalog schema 4 from
+`GET /api/public/v1/catalog/manifest`. Its artifact contains concrete aliases
+and the `pt`/`ph` portrait paths it understands.
 
-- `GET /api/public/v1/catalog/manifest`
-- catalog artifact schema 5
-- `PortraitAssetRefV1` in each gene's optional `p` field
-- `PortraitDeliveryPolicyV1` in `portrait_delivery`
-- publication alias overlay schema 1
-- symbol-first gene routes at `/gene/<SYMBOL>`
+`candidate-contract.json` describes the unreleased source contract. The current
+candidate uses catalog schema 5, `PortraitAssetRefV1` in each gene's optional
+`p` field, `PortraitDeliveryPolicyV1`, and the publication alias dictionary.
 
-The manifest's `min_extension_version` is authoritative. The extension clears
-an incompatible cached catalog and reports a contract error instead of serving
-stale data.
+Ordinary development may change the candidate contract but must not change the
+extension version. The human-gated workstation publisher advances the manifest
+and publisher authority together when it creates a store release. Packaging and
+store workflows reject any version that differs from that authority.
 
-Catalog entries use `s` as the canonical symbol, with optional `c`, `n`, `u`,
-`a`, `tmh`, and `p` fields. The `p` object is inspectable and contains the asset
-SHA plus first-party canonical URLs for full, medium, and thumb renditions.
-
-Publication alias dictionary edits ship with the website manifest and do not
-require an extension package update. Protocol, permission, or runtime changes
-require a new extension release.
+Publication alias dictionary edits are projected into both contracts and do not
+require a store update. Protocol, permission, or packaged runtime changes do.
 
 For portrait architecture and operations, read
 `../docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md`.

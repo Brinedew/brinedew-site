@@ -134,8 +134,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     version: "",
     installTab: "",
     release: {
-      version: "0.6.0",
-      chromeDeveloperPackageUrl: "/static/iconoplasm/downloads/iconoplasm-extension-v0.6.0.zip",
+      version: "0.4.7",
+      chromeDeveloperPackageUrl: "/static/iconoplasm/downloads/iconoplasm-extension-v0.4.7.zip",
       firefoxListingUrl: ICONO_EXTENSION_FIREFOX_LISTING_URL,
       edgeListingUrl: ICONO_EXTENSION_EDGE_LISTING_URL,
       edgeListingStatus: "live",

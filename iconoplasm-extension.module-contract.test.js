@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { brotliDecompressSync } from "node:zlib"
 import vm from "node:vm"
 
@@ -431,13 +431,16 @@ test("DO NOT DELETE: Edge packaging has a first-class Chromium manifest target",
   )
 })
 
-test("DO NOT DELETE: extension version bumps have explicit npm entrypoints", () => {
+test("DO NOT DELETE: extension versions can advance only through publisher authority", () => {
   const packageJson = JSON.parse(readUtf8("./package.json"))
-  assert.equal(
-    packageJson.scripts["version:iconoplasm-extension:patch"],
-    "node ./scripts/bump-iconoplasm-extension-version.mjs --patch",
+  assert.equal(packageJson.scripts["version:iconoplasm-extension:patch"], undefined)
+  assert.equal(packageJson.scripts["version:iconoplasm-extension:minor"], undefined)
+  assert.equal(packageJson.scripts["version:iconoplasm-extension:major"], undefined)
+  assert.equal(existsSync(new URL("./scripts/bump-iconoplasm-extension-version.mjs", import.meta.url)), false)
+  assert.match(
+    packageJson.scripts["verify:iconoplasm-publisher-authority"],
+    /verify-iconoplasm-publisher-authority/,
   )
-  assert.match(readUtf8("./scripts/bump-iconoplasm-extension-version.mjs"), /--set=/)
 })
 
 test("DO NOT DELETE: content.js delegates split responsibilities to extension modules", () => {
