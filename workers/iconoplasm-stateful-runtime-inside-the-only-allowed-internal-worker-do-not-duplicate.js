@@ -9703,7 +9703,7 @@ function normalizeTextList(raw, { maxItems = 32, maxLen = 128 } = {}) {
   return out
 }
 
-function normalizeCatalogAliases(raw, { maxItems = 48, maxLen = 64 } = {}) {
+function normalizeCatalogAliases(raw, { maxItems = 48, maxLen = 64, allowSpaces = false } = {}) {
   const out = []
   const seen = new Set()
   const pushValue = (value) => {
@@ -9713,7 +9713,7 @@ function normalizeCatalogAliases(raw, { maxItems = 48, maxLen = 64 } = {}) {
       .replace(/[\u2010-\u2015\u2212]/g, "-")
       .replace(/\s+/g, " ")
       .trim()
-    if (!cleaned || cleaned.includes(" ")) return
+    if (!cleaned || (!allowSpaces && cleaned.includes(" "))) return
     const key = cleaned.toUpperCase()
     if (seen.has(key)) return
     seen.add(key)
@@ -9746,7 +9746,7 @@ function normalizeCatalogAliases(raw, { maxItems = 48, maxLen = 64 } = {}) {
 }
 
 function normalizeCatalogAliasLookupKey(raw) {
-  const aliases = normalizeCatalogAliases([raw], { maxItems: 1 })
+  const aliases = normalizeCatalogAliases([raw], { maxItems: 1, allowSpaces: true })
   return aliases.length ? String(aliases[0]).toUpperCase() : ""
 }
 
@@ -23612,7 +23612,7 @@ function scorePublicGeneSearchMatch(queryUpper, queryLower, symbol, gene) {
   const fullNameMatch = scorePublicGeneSearchValue(queryUpper, queryLower, fullName, "full_name")
   if (fullNameMatch) candidates.push(fullNameMatch)
 
-  for (const alias of normalizeCatalogAliases(gene?.a || [])) {
+  for (const alias of normalizeCatalogAliases(gene?.a || [], { allowSpaces: true })) {
     const aliasMatch = scorePublicGeneSearchValue(queryUpper, queryLower, alias, "alias")
     if (aliasMatch) candidates.push(aliasMatch)
   }

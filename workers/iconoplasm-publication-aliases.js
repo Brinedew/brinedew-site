@@ -5,7 +5,8 @@ const MAX_PUBLICATION_ALIAS_LENGTH = 64
 // Human-curated labels belong to the website release, not to a workstation
 // publication run. Keep this list small: the generated HGNC alias catalog still
 // owns broad synonym coverage; this overlay only admits labels that are useful
-// enough to instrument across arbitrary web pages.
+// enough to instrument across arbitrary web pages. Maintenance contract:
+// docs/ICONOPLASM_PUBLICATION_ALIASES.md
 const RAW_PUBLICATION_ALIASES_BY_SYMBOL = Object.freeze({
   BABAM2: Object.freeze(["BRE"]),
   CCNH: Object.freeze(["Cyclin H", "Cyclin-H"]),
