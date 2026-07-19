@@ -266,10 +266,7 @@ function discordMessage(row) {
 }
 
 function portraitCdnBase(env) {
-  return boundedText(
-    env?.ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL || "",
-    2000,
-  ).replace(/\/+$/, "")
+  return boundedText(env?.ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL || "", 2000).replace(/\/+$/, "")
 }
 
 function fulfilledPortraitUrl(env, row) {
