@@ -27766,10 +27766,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         // must fail loudly instead of declaring a silent fulfillment success.
         const delivery = await deliverPendingRequestFulfillmentNotifications(env, {
           requestIds: result.request_ids,
-          limit: Math.min(
-            result.request_ids.length,
-            ICONOPLASM_FULFILLMENT_DM_INLINE_LIMIT,
-          ),
+          limit: Math.min(result.request_ids.length, ICONOPLASM_FULFILLMENT_DM_INLINE_LIMIT),
         }).catch((error) => {
           console.error(
             "Iconoplasm fulfillment notification delivery failed:",
