@@ -7142,19 +7142,77 @@ async function publishImageEditCandidateAsset(env, job, userId) {
       normalizeUserId(userId),
     )
     .run()
+  const publishReason = `Published image edit job ${sanitizeText(job.id || "", 80) || ""}`
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason)
-     VALUES (?, ?, ?, 'edit_candidate', ?, ?)`,
+     SELECT ?, ?, ?, 'edit_candidate', ?, ?
+     WHERE NOT EXISTS (
+       SELECT 1
+       FROM icono_publish_events
+       WHERE gene_symbol = ?
+         AND action = 'edit_candidate'
+         AND reason = ?
+       LIMIT 1
+     )`,
   )
     .bind(
       symbol,
       normalizeSha256(job.source_asset_sha256 || "") || null,
       assetSha,
       normalizeUserId(userId),
-      `Published image edit job ${sanitizeText(job.id || "", 80) || ""}`,
+      publishReason,
+      symbol,
+      publishReason,
     )
     .run()
   return { ok: true, symbol, assetSha }
+}
+
+function publishFailurePayload({
+  code,
+  stage,
+  error,
+  job,
+  resultLabel,
+  candidateAdded = false,
+  voteRecorded = false,
+}) {
+  const safeResultLabel = sanitizeText(resultLabel || "", 40) || "generated image"
+  return {
+    ok: false,
+    code: sanitizeText(code || "PUBLISH_FAILED", 80) || "PUBLISH_FAILED",
+    error: sanitizeText(error || "Publishing could not be completed.", 240),
+    failure: {
+      operation: "publish_candidate",
+      stage: sanitizeText(stage || "unknown", 40) || "unknown",
+      retryable: true,
+      result_saved: true,
+      candidate_added: Boolean(candidateAdded),
+      vote_recorded: Boolean(voteRecorded),
+      preserved_message: `Your ${safeResultLabel} is saved.`,
+      next_action: "Retry Publish. The image will not be regenerated.",
+      job_id: sanitizeText(job?.id || "", 80) || null,
+    },
+  }
+}
+
+function publishFailureResponse({ status = 503, jobPayload, ...failure }) {
+  return json(
+    {
+      ...publishFailurePayload(failure),
+      job: jobPayload || null,
+    },
+    status,
+    { "Cache-Control": "no-store" },
+  )
+}
+
+function logPublishStageFailure(kind, stage, job, error) {
+  console.error(`[Iconoplasm] ${kind} publish failed during ${stage}:`, {
+    job_id: sanitizeText(job?.id || "", 80) || null,
+    gene_symbol: normalizeSymbol(job?.source_gene_symbol || job?.gene_symbol || "") || null,
+    error: String(error?.message || error || "Unknown publish error").slice(0, 2000),
+  })
 }
 
 function imageEditInheritedVoteItems(job, userId) {
@@ -7681,16 +7739,20 @@ async function publishCandidateGenerationAsset(env, job, userId) {
     // and rollbacks all need the same invariant.
     await rebuildUserEmulsionOptionRollupsBatch(env, [publishedEmulsionId])
   }
+  const publishReason = `Published direct image generation job ${sanitizeText(job.id || "", 80) || ""}`
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason)
-     VALUES (?, NULL, ?, 'generate_candidate', ?, ?)`,
+     SELECT ?, NULL, ?, 'generate_candidate', ?, ?
+     WHERE NOT EXISTS (
+       SELECT 1
+       FROM icono_publish_events
+       WHERE gene_symbol = ?
+         AND action = 'generate_candidate'
+         AND reason = ?
+       LIMIT 1
+     )`,
   )
-    .bind(
-      symbol,
-      assetSha,
-      normalizeUserId(userId),
-      `Published direct image generation job ${sanitizeText(job.id || "", 80) || ""}`,
-    )
+    .bind(symbol, assetSha, normalizeUserId(userId), publishReason, symbol, publishReason)
     .run()
   return { ok: true, symbol, assetSha, visionId: generatedVisionId }
 }
@@ -28660,23 +28722,100 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           json({ ok: false, error: "Image edit job is not ready to publish" }, 409),
         )
       }
-      const assetResult = await publishImageEditCandidateAsset(env, job, userId)
+      let assetResult
+      try {
+        assetResult = await publishImageEditCandidateAsset(env, job, userId)
+      } catch (error) {
+        logPublishStageFailure("image edit", "add_candidate", job, error)
+        return done(
+          "image_edit_publish_asset_503",
+          publishFailureResponse({
+            code: "IMAGE_EDIT_PUBLISH_CANDIDATE_FAILED",
+            stage: "add_candidate",
+            error: "Publishing stopped before the edited candidate could be added.",
+            job,
+            jobPayload: mapImageEditJobRow(job, portraitBase(url, env)),
+            resultLabel: "edited image",
+          }),
+        )
+      }
       if (!assetResult.ok) {
-        return done("image_edit_publish_400", json({ ok: false, error: assetResult.error }, 400))
+        return done(
+          "image_edit_publish_asset_409",
+          publishFailureResponse({
+            status: 409,
+            code: "IMAGE_EDIT_PUBLISH_CANDIDATE_INVALID",
+            stage: "add_candidate",
+            error: assetResult.error || "The edited image is not ready to add as a candidate.",
+            job,
+            jobPayload: mapImageEditJobRow(job, portraitBase(url, env)),
+            resultLabel: "edited image",
+          }),
+        )
       }
-      const voteResult = await applyImageEditInheritedVotes(env, ctx, job, userId)
+      let voteResult
+      try {
+        voteResult = await applyImageEditInheritedVotes(env, ctx, job, userId)
+      } catch (error) {
+        logPublishStageFailure("image edit", "record_votes", job, error)
+        return done(
+          "image_edit_publish_votes_502",
+          publishFailureResponse({
+            status: 502,
+            code: "IMAGE_EDIT_PUBLISH_VOTES_FAILED",
+            stage: "record_votes",
+            error: "The edited candidate was added, but its votes were not recorded.",
+            job,
+            jobPayload: mapImageEditJobRow(job, portraitBase(url, env)),
+            resultLabel: "edited image",
+            candidateAdded: true,
+          }),
+        )
+      }
       if (!voteResult.ok) {
-        return done("image_edit_publish_502", json({ ok: false, error: voteResult.error }, 502))
+        return done(
+          "image_edit_publish_votes_502",
+          publishFailureResponse({
+            status: 502,
+            code: "IMAGE_EDIT_PUBLISH_VOTES_FAILED",
+            stage: "record_votes",
+            error: "The edited candidate was added, but its votes were not recorded.",
+            job,
+            jobPayload: mapImageEditJobRow(job, portraitBase(url, env)),
+            resultLabel: "edited image",
+            candidateAdded: true,
+          }),
+        )
       }
-      await env.ICONOPLASM_DB.prepare(
-        `UPDATE icono_image_edit_jobs
-         SET published_at = CURRENT_TIMESTAMP,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-      )
-        .bind(job.id)
-        .run()
-      const publishedJob = await getImageEditJobForUser(env, { id: job.id, userId })
+      try {
+        await env.ICONOPLASM_DB.prepare(
+          `UPDATE icono_image_edit_jobs
+           SET published_at = CURRENT_TIMESTAMP,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+        )
+          .bind(job.id)
+          .run()
+      } catch (error) {
+        logPublishStageFailure("image edit", "confirm_publish", job, error)
+        return done(
+          "image_edit_publish_confirmation_503",
+          publishFailureResponse({
+            code: "IMAGE_EDIT_PUBLISH_CONFIRMATION_FAILED",
+            stage: "confirm_publish",
+            error: "The edited candidate and its votes were saved, but confirmation failed.",
+            job,
+            jobPayload: mapImageEditJobRow(job, portraitBase(url, env)),
+            resultLabel: "edited image",
+            candidateAdded: true,
+            voteRecorded: true,
+          }),
+        )
+      }
+      const publishedJob = {
+        ...job,
+        published_at: job.published_at || new Date().toISOString(),
+      }
       return done(
         "image_edit_jobs",
         json(
@@ -28969,29 +29108,100 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           json({ ok: false, error: "Candidate generation job is not ready to publish" }, 409),
         )
       }
-      const assetResult = await publishCandidateGenerationAsset(env, job, userId)
+      let assetResult
+      try {
+        assetResult = await publishCandidateGenerationAsset(env, job, userId)
+      } catch (error) {
+        logPublishStageFailure("generated candidate", "add_candidate", job, error)
+        return done(
+          "candidate_generation_publish_asset_503",
+          publishFailureResponse({
+            code: "CANDIDATE_PUBLISH_CANDIDATE_FAILED",
+            stage: "add_candidate",
+            error: "Publishing stopped before the generated candidate could be added.",
+            job,
+            jobPayload: mapCandidateGenerationJobRow(job, portraitBase(url, env)),
+            resultLabel: "generated image",
+          }),
+        )
+      }
       if (!assetResult.ok) {
         return done(
-          "candidate_generation_publish_400",
-          json({ ok: false, error: assetResult.error }, 400),
+          "candidate_generation_publish_asset_409",
+          publishFailureResponse({
+            status: 409,
+            code: "CANDIDATE_PUBLISH_CANDIDATE_INVALID",
+            stage: "add_candidate",
+            error: assetResult.error || "The generated image is not ready to add as a candidate.",
+            job,
+            jobPayload: mapCandidateGenerationJobRow(job, portraitBase(url, env)),
+            resultLabel: "generated image",
+          }),
         )
       }
-      const voteResult = await applyCandidateGenerationUserVote(env, ctx, job, userId)
+      let voteResult
+      try {
+        voteResult = await applyCandidateGenerationUserVote(env, ctx, job, userId)
+      } catch (error) {
+        logPublishStageFailure("generated candidate", "record_vote", job, error)
+        return done(
+          "candidate_generation_publish_vote_502",
+          publishFailureResponse({
+            status: 502,
+            code: "CANDIDATE_PUBLISH_VOTE_FAILED",
+            stage: "record_vote",
+            error: "The generated candidate was added, but your upvote was not recorded.",
+            job,
+            jobPayload: mapCandidateGenerationJobRow(job, portraitBase(url, env)),
+            resultLabel: "generated image",
+            candidateAdded: true,
+          }),
+        )
+      }
       if (!voteResult.ok) {
         return done(
-          "candidate_generation_publish_502",
-          json({ ok: false, error: voteResult.error }, 502),
+          "candidate_generation_publish_vote_502",
+          publishFailureResponse({
+            status: 502,
+            code: "CANDIDATE_PUBLISH_VOTE_FAILED",
+            stage: "record_vote",
+            error: "The generated candidate was added, but your upvote was not recorded.",
+            job,
+            jobPayload: mapCandidateGenerationJobRow(job, portraitBase(url, env)),
+            resultLabel: "generated image",
+            candidateAdded: true,
+          }),
         )
       }
-      await env.ICONOPLASM_DB.prepare(
-        `UPDATE icono_candidate_generation_jobs
-         SET published_at = CURRENT_TIMESTAMP,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-      )
-        .bind(job.id)
-        .run()
-      const publishedJob = await getCandidateGenerationJobForUser(env, { id: job.id, userId })
+      try {
+        await env.ICONOPLASM_DB.prepare(
+          `UPDATE icono_candidate_generation_jobs
+           SET published_at = CURRENT_TIMESTAMP,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+        )
+          .bind(job.id)
+          .run()
+      } catch (error) {
+        logPublishStageFailure("generated candidate", "confirm_publish", job, error)
+        return done(
+          "candidate_generation_publish_confirmation_503",
+          publishFailureResponse({
+            code: "CANDIDATE_PUBLISH_CONFIRMATION_FAILED",
+            stage: "confirm_publish",
+            error: "The generated candidate and your vote were saved, but confirmation failed.",
+            job,
+            jobPayload: mapCandidateGenerationJobRow(job, portraitBase(url, env)),
+            resultLabel: "generated image",
+            candidateAdded: true,
+            voteRecorded: true,
+          }),
+        )
+      }
+      const publishedJob = {
+        ...job,
+        published_at: job.published_at || new Date().toISOString(),
+      }
       return done(
         "candidate_generation_jobs",
         json(

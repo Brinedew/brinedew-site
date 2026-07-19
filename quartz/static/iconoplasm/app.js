@@ -186,6 +186,26 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return fetchJSON(path, requestInit)
   }
 
+  function publishFailureMessage(error, fallback) {
+    var payload = error && error.payload && typeof error.payload === "object" ? error.payload : null
+    var failure =
+      payload && payload.failure && typeof payload.failure === "object" ? payload.failure : null
+    var headline = String(
+      (payload && payload.error) || (error && error.message) || fallback || "Publishing failed.",
+    ).trim()
+    if (!failure) return headline
+
+    var lines = [headline]
+    var preserved = String(failure.preserved_message || "").trim()
+    var nextAction = String(failure.next_action || "").trim()
+    var code = String((payload && payload.code) || "").trim()
+    var jobId = String(failure.job_id || "").trim()
+    if (preserved && !lines.includes(preserved)) lines.push(preserved)
+    if (nextAction && !lines.includes(nextAction)) lines.push(nextAction)
+    if (code) lines.push("Reference: " + code + (jobId ? " · " + jobId : ""))
+    return lines.join("\n")
+  }
+
   var iconoplasmQueryInflight = new Map()
 
   function singleFlightQuery(key, producer) {
@@ -5572,7 +5592,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       })
       .catch(function (error) {
         state.loading = false
-        imageEditSetStatus(String((error && error.message) || "Could not publish edit."), "error")
+        if (error && error.payload && error.payload.job) state.job = error.payload.job
+        imageEditSetStatus(publishFailureMessage(error, "Could not publish edit."), "error")
         updateImageEditButtons()
       })
   }
@@ -6083,7 +6104,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             if (root) renderGene(root, symbol, { forceFresh: true })
           })
           .catch(function (error) {
-            setStatus(String((error && error.message) || "Could not publish candidate."), "error")
+            if (error && error.payload && error.payload.job) {
+              requestDirectState.job = error.payload.job
+            }
+            setStatus(publishFailureMessage(error, "Could not publish candidate."), "error")
           })
           .finally(function () {
             requestDirectState.loading = false
