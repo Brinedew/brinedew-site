@@ -8234,6 +8234,107 @@ function textPrefixUpperBound(prefix) {
   return ""
 }
 
+function generationRequestEmulsionFamilyId(raw) {
+  const emulsionId = sanitizeText(raw || "", 64) || ""
+  if (!emulsionId) return ""
+  return emulsionId.replace(/(?:-e)+$/gi, "") || emulsionId
+}
+
+function mergeGenerationRequestFamilyPreviews(members) {
+  const queues = (Array.isArray(members) ? members : []).map((member) =>
+    Array.isArray(member?.preview_assets) ? member.preview_assets : [],
+  )
+  const seenAssets = new Set()
+  const merged = []
+  let rank = 0
+  while (true) {
+    let found = false
+    for (const previews of queues) {
+      const preview = previews[rank]
+      if (!preview) continue
+      found = true
+      const assetSha = normalizeSha256(preview?.asset_sha256 || "") || ""
+      const identity = assetSha || JSON.stringify(preview)
+      if (seenAssets.has(identity)) continue
+      seenAssets.add(identity)
+      merged.push(preview)
+    }
+    if (!found) break
+    rank += 1
+  }
+  return merged
+}
+
+export function groupGenerationRequestVisionOptions(options) {
+  const groups = new Map()
+  for (const option of Array.isArray(options) ? options : []) {
+    const visionId = sanitizeVoteVisionId(option?.vision_id || "") || ""
+    if (!visionId) continue
+    const emulsionId = sanitizeText(option?.emulsion_id || "", 64) || ""
+    const familyId = generationRequestEmulsionFamilyId(emulsionId)
+    const key = familyId ? `emulsion:${familyId.toUpperCase()}` : `vision:${visionId}`
+    const members = groups.get(key) || []
+    members.push(option)
+    groups.set(key, members)
+  }
+
+  const grouped = []
+  for (const members of groups.values()) {
+    const first = members[0]
+    const familyId = generationRequestEmulsionFamilyId(first?.emulsion_id || "")
+    const canonical =
+      members.find(
+        (member) =>
+          familyId && String(member?.emulsion_id || "").toUpperCase() === familyId.toUpperCase(),
+      ) || first
+    const memberVisionIds = members
+      .map((member) => sanitizeVoteVisionId(member?.vision_id || "") || "")
+      .filter(Boolean)
+    const memberEmulsionIds = Array.from(
+      new Set(
+        members.map((member) => sanitizeText(member?.emulsion_id || "", 64) || "").filter(Boolean),
+      ),
+    )
+    const primaryLabel = familyId || canonical?.primary_label || canonical?.label || ""
+    grouped.push({
+      ...canonical,
+      label: primaryLabel,
+      primary_label: primaryLabel,
+      emulsion_id: familyId || canonical?.emulsion_id || "",
+      emulsion_family_id: familyId,
+      member_vision_ids: memberVisionIds,
+      member_emulsion_ids: memberEmulsionIds,
+      search_text: members
+        .flatMap((member) => [
+          member?.search_text,
+          member?.vision_id,
+          member?.emulsion_id,
+          member?.primary_label,
+          member?.secondary_label,
+        ])
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .join(" "),
+      image_count: members.reduce(
+        (total, member) => total + Math.max(0, Number(member?.image_count || 0) || 0),
+        0,
+      ),
+      live_count: members.reduce(
+        (total, member) => total + Math.max(0, Number(member?.live_count || 0) || 0),
+        0,
+      ),
+      score: members.reduce((total, member) => total + (Number(member?.score || 0) || 0), 0),
+      vote_h_index: members.reduce(
+        (strongest, member) =>
+          Math.max(strongest, Math.max(0, Number(member?.vote_h_index || 0) || 0)),
+        0,
+      ),
+      preview_assets: mergeGenerationRequestFamilyPreviews(members),
+    })
+  }
+  return grouped
+}
+
 function mapGenerationRequestVisionOptionRows(env, url, rows) {
   return (Array.isArray(rows) ? rows : [])
     .map((row) => {
@@ -8377,7 +8478,9 @@ async function listGenerationRequestVisionOptions(env, url) {
     url?.searchParams?.get("query") || "",
   )
   if (searchQuery) {
-    const emulsionPrefix = compactGenerationRequestOptionIdentityPrefix(searchQuery, "upper")
+    const emulsionPrefix = generationRequestEmulsionFamilyId(
+      compactGenerationRequestOptionIdentityPrefix(searchQuery, "upper"),
+    )
     const visionPrefix = compactGenerationRequestOptionIdentityPrefix(searchQuery, "lower")
     const artistPrefix = compactGenerationRequestOptionIdentityPrefix(searchQuery, "lower").replace(
       /^@+/,
@@ -8459,7 +8562,9 @@ async function listGenerationRequestVisionOptions(env, url) {
       )
       .all()
     return [
-      ...mapGenerationRequestVisionOptionRows(env, url, resp?.results || []),
+      ...groupGenerationRequestVisionOptions(
+        mapGenerationRequestVisionOptionRows(env, url, resp?.results || []),
+      ),
       ...(await sharedUserOptionsPromise),
     ]
   }
@@ -8485,7 +8590,9 @@ async function listGenerationRequestVisionOptions(env, url) {
      LIMIT 120`,
   ).all()
   return [
-    ...mapGenerationRequestVisionOptionRows(env, url, resp?.results || []),
+    ...groupGenerationRequestVisionOptions(
+      mapGenerationRequestVisionOptionRows(env, url, resp?.results || []),
+    ),
     ...(await sharedUserOptionsPromise),
   ]
 }
