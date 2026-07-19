@@ -56,6 +56,8 @@ const ICONOPLASM_CLAN_CATALOG_TOTAL = ICONOPLASM_CLAN_CATALOG_BY_NAME.size
 // This worker owns the public/community path only, so hot reads and writes should be
 // optimized for published assets, cheap ranking refreshes, and Cloudflare request economy.
 const API_SCHEMA_VERSION = 4
+const CATALOG_ARTIFACT_SCHEMA_VERSION = 5
+const CATALOG_ARTIFACT_VERSION_TOKEN = `a${CATALOG_ARTIFACT_SCHEMA_VERSION}`
 const PUBLIC_API_VERSION = "v1"
 const PUBLIC_API_PREFIX = `/api/public/${PUBLIC_API_VERSION}`
 const SITE_GENE_API_PREFIX = "/api/iconoplasm/site/genes"
@@ -754,7 +756,7 @@ const KV_GALLERY_PUBLISHED_ROWS_PREFIX = "iconoplasm:gallery-published-rows:"
 const KV_GALLERY_UNIQUENESS_ROWS_PREFIX = "iconoplasm:gallery-uniqueness-rows:"
 const KV_PUBLIC_STATS = "iconoplasm:public-stats:v1"
 const KV_SHARED_GENE_DISCOVERY_SYMBOLS = "iconoplasm:shared-gene-discovery-symbols:v1"
-const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = "iconoplasm:hydrated-catalog-artifact:"
+const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = `iconoplasm:hydrated-catalog-artifact:${CATALOG_ARTIFACT_VERSION_TOKEN}:`
 const KV_CARD_CATALOG_ARTIFACT_PREFIX = "iconoplasm:card-catalog:"
 // Watermark recorded after every successful card-catalog publish: which artifact
 // version is live and the max icono_publish_events.created_at it reflects. The
@@ -3169,7 +3171,7 @@ function portraitHashToken(raw) {
 export function buildPortraitAwareManifestHash(baseHash, portraitFingerprint) {
   const base = String(baseHash || "").trim()
   if (!base) return null
-  if (!portraitFingerprint) return base
+  if (!portraitFingerprint) return `${base}-${CATALOG_ARTIFACT_VERSION_TOKEN}`
   const count = Number(portraitFingerprint.published_count ?? portraitFingerprint.count ?? 0)
   const latest = portraitHashToken(
     portraitFingerprint.latest_updated_at ??
@@ -3177,10 +3179,10 @@ export function buildPortraitAwareManifestHash(baseHash, portraitFingerprint) {
       portraitFingerprint.content_hash ??
       "",
   )
-  if (!count && !latest) return base
+  if (!count && !latest) return `${base}-${CATALOG_ARTIFACT_VERSION_TOKEN}`
   return latest
-    ? `${base}-${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}-${count}-${latest}`
-    : `${base}-${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}-${count}`
+    ? `${base}-${CATALOG_ARTIFACT_VERSION_TOKEN}-${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}-${count}-${latest}`
+    : `${base}-${CATALOG_ARTIFACT_VERSION_TOKEN}-${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}-${count}`
 }
 
 function catalogBaseHash(rawHash) {
@@ -3211,7 +3213,7 @@ export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortra
     if (!assetSha) continue
     publishedBySymbol.set(symbol, { asset_sha256: assetSha })
   }
-  let changed = Number(artifact.schema_version || 0) !== 5
+  let changed = Number(artifact.schema_version || 0) !== CATALOG_ARTIFACT_SCHEMA_VERSION
   const nextGenes = genes.map((gene) => {
     if (!gene || typeof gene !== "object") return gene
     const symbol = normalizeSymbol(gene.s)
@@ -3237,7 +3239,7 @@ export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortra
   })
 
   if (!changed) return artifact
-  return { ...artifact, schema_version: 5, genes: nextGenes }
+  return { ...artifact, schema_version: CATALOG_ARTIFACT_SCHEMA_VERSION, genes: nextGenes }
 }
 
 async function queryPublishedPortraitFingerprint(env) {
@@ -10473,7 +10475,7 @@ async function extensionManifestObj(url, env) {
     await sharedPublishedPortraitFingerprint(env),
   )
   const minExtensionVersion = env.ICONOPLASM_MIN_EXTENSION_VERSION || MIN_EXTENSION_VERSION
-  const artifactSchemaVersion = 5
+  const artifactSchemaVersion = CATALOG_ARTIFACT_SCHEMA_VERSION
   const publicationAliases = await iconoplasmPublicationAliasManifest()
   return {
     ...manifest,
@@ -21797,6 +21799,15 @@ async function writeVersionedSharedJson(env, prefix, version, value) {
   }
 }
 
+function isCurrentCatalogArtifact(value) {
+  return (
+    value &&
+    typeof value === "object" &&
+    Number(value.schema_version || 0) === CATALOG_ARTIFACT_SCHEMA_VERSION &&
+    Array.isArray(value.genes)
+  )
+}
+
 async function hydratedCatalogArtifact(env, hash, { fresh = false } = {}) {
   if (!env?.KV || !hash) return null
   const requestedHash = String(hash || "").trim()
@@ -21817,7 +21828,7 @@ async function hydratedCatalogArtifact(env, hash, { fresh = false } = {}) {
   }
   if (!fresh) {
     const cached = await readVersionedSharedJson(env, KV_HYDRATED_CATALOG_ARTIFACT_PREFIX, cacheKey)
-    if (cached && typeof cached === "object") {
+    if (isCurrentCatalogArtifact(cached)) {
       hydratedCatalogArtifactCache.key = cacheKey
       hydratedCatalogArtifactCache.value = cached
       return cached
@@ -26011,7 +26022,7 @@ async function publishCatalogArtifact(env) {
   if (!env.KV) throw new Error("KV binding missing")
   const genes = await loadCatalogRowsForPublish(env)
   const artifact = {
-    schema_version: 5,
+    schema_version: CATALOG_ARTIFACT_SCHEMA_VERSION,
     generated_at: new Date().toISOString(),
     gene_count: genes.length,
     genes,
