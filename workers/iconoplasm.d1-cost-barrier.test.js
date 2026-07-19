@@ -304,7 +304,7 @@ test("DO NOT DELETE: catalog manifest reuses the shared portrait fingerprint cac
   assert.equal(first.status, 200)
   assert.equal(db.fingerprintReads, 1)
   const firstPayload = await first.json()
-  assert.match(firstPayload.artifact_url, /catalog\.costbarrier01-a5-v2-2-/)
+  assert.match(firstPayload.artifact_url, /catalog\.costbarrier01-a5c1-v2-2-/)
 
   resetIconoplasmRuntimeCachesForTest()
   const second = await handleIconoplasmGatewayRequest(
@@ -391,7 +391,13 @@ test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact
     { waitUntil() {} },
   )
   const manifestPayload = await manifestResponse.json()
-  const invalidCurrentCacheKey = `iconoplasm:hydrated-catalog-artifact:a5:${manifestPayload.build_version}`
+  const fingerprintEnvelope = JSON.parse(
+    kv.store.get("iconoplasm:published-portrait-fingerprint:v2"),
+  )
+  const portraitRefVersion = `v2-${fingerprintEnvelope.fingerprint.published_count}-${fingerprintEnvelope.fingerprint.latest}`
+  const incompletePortraitRefCacheKey = `iconoplasm:published-portrait-refs:${portraitRefVersion}`
+  kv.store.set(incompletePortraitRefCacheKey, "[]")
+  const invalidCurrentCacheKey = `iconoplasm:hydrated-catalog-artifact:a5c1:${manifestPayload.build_version}`
   kv.store.set(
     invalidCurrentCacheKey,
     JSON.stringify({
@@ -416,8 +422,10 @@ test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact
   assert.equal("pt" in firstPayload.genes[0], false)
   assert.equal(kv.getCounts.get(retiredCacheKey) || 0, 0)
   assert.equal(kv.getCounts.get(invalidCurrentCacheKey), 1)
+  assert.equal(kv.getCounts.get(incompletePortraitRefCacheKey), 1)
+  assert.equal(JSON.parse(kv.store.get(incompletePortraitRefCacheKey)).length, 2)
   const hydratedArtifactKeys = Array.from(kv.store.keys()).filter((key) =>
-    String(key).startsWith("iconoplasm:hydrated-catalog-artifact:a5:costbarrier01"),
+    String(key).startsWith("iconoplasm:hydrated-catalog-artifact:a5c1:costbarrier01"),
   )
   assert.equal(hydratedArtifactKeys.length > 0, true)
 
