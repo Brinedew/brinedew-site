@@ -10,6 +10,7 @@
   const IconoContentSettings = globalThis.IconoplasmContentSettings
   const IconoContentMatcher = globalThis.IconoplasmContentMatcher
   const IconoContentScanner = globalThis.IconoplasmContentScanner
+  const IconoContentLifecycle = globalThis.IconoplasmContentLifecycle
   const IconoContentTooltip = globalThis.IconoplasmContentTooltip
   const IconoContentPortraitCache = globalThis.IconoplasmContentPortraitCache
   const IconoContentDetailCache = globalThis.IconoplasmContentDetailCache
@@ -36,6 +37,14 @@
   }
   if (!IconoContentScanner || typeof IconoContentScanner.createPageScanner !== "function") {
     console.error("[Iconoplasm] content scanner missing: load content-scanner.js first")
+    return
+  }
+  if (
+    !IconoContentLifecycle ||
+    typeof IconoContentLifecycle.requestGeneData !== "function" ||
+    typeof IconoContentLifecycle.createMutationScanController !== "function"
+  ) {
+    console.error("[Iconoplasm] content lifecycle missing: load content-lifecycle.js first")
     return
   }
   if (!IconoContentTooltip || typeof IconoContentTooltip.createTooltipShell !== "function") {
@@ -101,6 +110,8 @@
   const GUEST_DISCOVERY_SYMBOL_MAX = 2000
   const GENE_DETAIL_VISIBLE_LIMIT = 16
   const PORTRAIT_VISIBLE_LIMIT = 8
+  const GENE_DATA_REQUEST_TIMEOUT_MS = 2000
+  const GENE_DATA_RETRY_DELAY_MS = 750
   // Fence: the hover card needs identity, accent color, synced essence, and the
   // published portrait metadata that powers both rendering and the vote box.
   // Do not ask the batch API for the full deluxe gene payload here unless the
@@ -501,9 +512,11 @@
   let portraitWarmScheduled = false
   let viewportWarmFrame = 0
   let visibilityScheduler = null
-  const mutationScanRoots = new Set()
-  let mutationScanScheduled = false
+  let mutationScanController = null
   let pageScanner = null
+  let initializationPromise = null
+  let initializationRetryTimer = 0
+  let initialized = false
   let effectiveBlocklist = new Set()
   let highlightMode = highlightRuntime.setMode("pill")
   let highlightVisibility = "always"
@@ -1029,8 +1042,14 @@
   }
 
   function shouldIgnoreMutationNode(node) {
-    if (!node || node.nodeType !== Node.ELEMENT_NODE) return true
-    const el = /** @type {Element} */ (node)
+    if (!node) return true
+    const el =
+      node.nodeType === Node.TEXT_NODE
+        ? node.parentElement
+        : node.nodeType === Node.ELEMENT_NODE
+          ? /** @type {Element} */ (node)
+          : null
+    if (!el) return true
     if (isEditableTextSurface(el)) return true
     if (el.classList && el.classList.contains("iconoplasm-tooltip")) return true
     if (el.closest && el.closest(".iconoplasm-tooltip")) return true
@@ -1045,29 +1064,6 @@
     return !!el.closest(
       "[contenteditable], textarea, input, select, [role='textbox'], [role=\"textbox\"]",
     )
-  }
-
-  function scheduleMutationScan() {
-    if (mutationScanScheduled) return
-    mutationScanScheduled = true
-    window.setTimeout(() => {
-      mutationScanScheduled = false
-      if (!mutationScanRoots.size) return
-
-      const roots = Array.from(mutationScanRoots)
-      mutationScanRoots.clear()
-      let didWrapGenes = false
-      for (const root of roots) {
-        if (scanPage(root) > 0) {
-          didWrapGenes = true
-        }
-      }
-      if (didWrapGenes) {
-        scheduleHighlightGeometryRefresh()
-        scheduleWarmVisiblePortraits()
-        scheduleWarmVisibleGeneDetails()
-      }
-    }, 0)
   }
 
   function setPortraitFallback(
@@ -1336,11 +1332,28 @@
   }
 
   // -- Init ----------------------------------------------------------
-  async function init() {
+  function scheduleInitializationRetry() {
+    if (initialized || initializationRetryTimer) return
+    initializationRetryTimer = window.setTimeout(() => {
+      initializationRetryTimer = 0
+      void init()
+    }, GENE_DATA_RETRY_DELAY_MS)
+  }
+
+  function init() {
     // Don't run on the Iconoplasm site itself -- it already shows gene
     // colors natively, and the extension just adds redundant underlines.
-    if (window.location.hostname === "iconoplasm.brinedew.bio") return
+    if (window.location.hostname === "iconoplasm.brinedew.bio" || initialized) {
+      return Promise.resolve()
+    }
+    if (initializationPromise) return initializationPromise
+    initializationPromise = initialize().finally(() => {
+      initializationPromise = null
+    })
+    return initializationPromise
+  }
 
+  async function initialize() {
     await Promise.all([
       loadHighlightMode(),
       loadHighlightVisibility(),
@@ -1352,8 +1365,10 @@
     // Both lists live in chrome.storage; defaults come from blocklist-defaults.js.
     effectiveBlocklist = await loadEffectiveBlocklist()
 
-    const payload = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: "GET_GENE_DATA" }, resolve)
+    const payload = await IconoContentLifecycle.requestGeneData(chrome, {
+      timeoutMs: GENE_DATA_REQUEST_TIMEOUT_MS,
+      setTimeoutFn: window.setTimeout.bind(window),
+      clearTimeoutFn: window.clearTimeout.bind(window),
     })
 
     // Backward compatibility:
@@ -1364,6 +1379,12 @@
     } else {
       geneMap = payload
     }
+    if (!geneMap || Object.keys(geneMap).length === 0) {
+      console.log("[Iconoplasm] Gene data unavailable. Retrying shortly.")
+      scheduleInitializationRetry()
+      return
+    }
+
     // Fence: candidate generation now lives in a dedicated matcher module. Keep content.js acting
     // as the page adapter that applies matches, not the place where lexical rules accrete forever.
     rebuildGeneMatcher(effectiveBlocklist)
@@ -1377,12 +1398,6 @@
       applyHighlightStyle,
       observeGeneElement,
     })
-
-    if (!geneMap || Object.keys(geneMap).length === 0) {
-      console.log("[Iconoplasm] No gene data yet. Retrying in 5s.")
-      setTimeout(init, 5000)
-      return
-    }
 
     console.log("[Iconoplasm] Loaded", Object.keys(geneMap).length, "genes. Scanning...")
     injectFonts()
@@ -1405,6 +1420,7 @@
       }
     })
     observeMutations()
+    initialized = true
   }
 
   // -- DOM scanning --------------------------------------------------
@@ -1414,16 +1430,20 @@
 
   // -- Mutation observer ---------------------------------------------
   function observeMutations() {
-    const observer = new MutationObserver((mutations) => {
-      for (const mut of mutations) {
-        for (const node of mut.addedNodes) {
-          if (shouldIgnoreMutationNode(node)) continue
-          mutationScanRoots.add(node)
-        }
-      }
-      scheduleMutationScan()
+    if (mutationScanController) return
+    mutationScanController = IconoContentLifecycle.createMutationScanController({
+      documentRef: document,
+      windowRef: window,
+      MutationObserverCtor: MutationObserver,
+      shouldIgnoreNode: shouldIgnoreMutationNode,
+      scanPage,
+      onScanComplete() {
+        scheduleHighlightGeometryRefresh()
+        scheduleWarmVisiblePortraits()
+        scheduleWarmVisibleGeneDetails()
+      },
     })
-    observer.observe(document.body, { childList: true, subtree: true })
+    mutationScanController.start()
   }
 
   // -- Tooltip -------------------------------------------------------

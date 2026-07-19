@@ -83,6 +83,7 @@ const runtimeFiles = [
   "content-settings.js",
   "content-matcher.js",
   "content-scanner.js",
+  "content-lifecycle.js",
   "content-tooltip.js",
   "content-portrait-cache.js",
   "content-detail-cache.js",
