@@ -93,7 +93,7 @@ The extension is stricter because it owns a complete local catalog snapshot: an 
    pnpm run verify:iconoplasm-publication-aliases
    ```
 
-The production deployment runs the same verifier after assigning the live Worker routes. It waits up to one minute for the expected overlay version, then fails the deployment run if the manifest payload differs from the tracked configuration or any alias resolves to the wrong canonical symbol.
+The production deployment runs the same verifier after assigning the live Worker routes. It gives both the manifest and resolver a bounded propagation window, then fails the deployment run if the manifest payload differs from the tracked configuration or any alias resolves to the wrong canonical symbol.
 
 An alias-only change does not require Website Ops, an extension version bump, a new extension package, or a browser-store submission. Extension 0.4.8 and newer receive it from the manifest.
 
