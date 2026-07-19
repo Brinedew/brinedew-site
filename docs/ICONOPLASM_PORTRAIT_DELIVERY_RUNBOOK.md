@@ -88,16 +88,18 @@ source-selection rules.
 
 - Public API schema: 4
 - Catalog artifact schema: 5
-- Immutable catalog URL contract token: `a5`
+- Immutable catalog URL contract token: `a5c1`
 - Minimum extension version: 0.6.0
 - Extension catalog portrait field: `p` (`PortraitAssetRefV1`)
 - Image-edit and candidate-generation result field: `result_asset`
 
-The catalog artifact schema is part of both its immutable URL and shared-cache
-namespace. A schema change therefore cannot reuse bytes cached under another
-contract. The catalog manifest ETag also includes the portrait delivery policy,
-so a policy change invalidates cached metadata without rebuilding the gene
-catalog.
+The catalog artifact schema and contract revision are part of both its
+immutable URL and shared-cache namespace. Any change that can alter catalog
+bytes must bump the contract revision, even when the JSON shape is unchanged.
+The published-portrait snapshot is accepted only when its row count matches its
+content fingerprint; partial or failed reads are never cached as valid empty
+state. The catalog manifest ETag also includes the portrait delivery policy, so
+a policy change invalidates cached metadata without rebuilding the gene catalog.
 
 ## Maintenance map
 
@@ -119,9 +121,9 @@ generated website or extension copies.
 
 1. Read live metadata and confirm schema 4, artifact schema 5, minimum extension
    0.6.0, canonical origin, and enabled accelerator.
-2. Follow the live manifest's `artifact_url`. Confirm its URL contains `a5`, its
-   body is schema 5, portrait-bearing genes use `p`, and no gene contains `pt`
-   or `ph`.
+2. Follow the live manifest's `artifact_url`. Confirm its URL contains `a5c1`,
+   its body is schema 5, portrait-bearing genes use `p`, and no gene contains
+   `pt` or `ph`.
 3. Confirm a public gene/media payload contains only first-party portrait URLs.
 4. On a healthy network, open two gene pages and verify portraits load from the
    accelerator after one tab-wide probe.
