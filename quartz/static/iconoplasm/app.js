@@ -186,14 +186,29 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return fetchJSON(path, requestInit)
   }
 
-  function publishFailureMessage(error, fallback) {
+  function publishFailureMessage(error, fallback, resultLabel) {
     var payload = error && error.payload && typeof error.payload === "object" ? error.payload : null
     var failure =
       payload && payload.failure && typeof payload.failure === "object" ? payload.failure : null
     var headline = String(
       (payload && payload.error) || (error && error.message) || fallback || "Publishing failed.",
     ).trim()
-    if (!failure) return headline
+    if (!failure) {
+      var status = Number(error && error.status) || 0
+      if (status === 409) return headline
+      var fallbackLines = [headline]
+      if (status === 401) {
+        fallbackLines.push("Log in, then press Publish again. Your image is saved.")
+      } else if (status === 404) {
+        fallbackLines.push("Reload this gene page before trying again. Your image is saved.")
+      } else {
+        fallbackLines.push("Your " + String(resultLabel || "image") + " is saved.")
+        fallbackLines.push(
+          "Check your connection, then retry Publish. The image will not be regenerated.",
+        )
+      }
+      return fallbackLines.join("\n")
+    }
 
     var lines = [headline]
     var preserved = String(failure.preserved_message || "").trim()
@@ -5593,7 +5608,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       .catch(function (error) {
         state.loading = false
         if (error && error.payload && error.payload.job) state.job = error.payload.job
-        imageEditSetStatus(publishFailureMessage(error, "Could not publish edit."), "error")
+        imageEditSetStatus(
+          publishFailureMessage(error, "Could not publish edit.", "edited image"),
+          "error",
+        )
         updateImageEditButtons()
       })
   }
@@ -6107,7 +6125,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             if (error && error.payload && error.payload.job) {
               requestDirectState.job = error.payload.job
             }
-            setStatus(publishFailureMessage(error, "Could not publish candidate."), "error")
+            setStatus(
+              publishFailureMessage(error, "Could not publish candidate.", "generated image"),
+              "error",
+            )
           })
           .finally(function () {
             requestDirectState.loading = false
