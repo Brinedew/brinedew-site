@@ -177,8 +177,16 @@ test("publish failures show what was preserved, the recovery action, and a refer
   assert.match(formatter, /failure\.next_action/)
   assert.match(formatter, /Reference:/)
   assert.match(formatter, /failure\.job_id/)
-  assert.match(imagePublish, /publishFailureMessage\(error, "Could not publish edit\."\)/)
-  assert.match(directPublish, /publishFailureMessage\(error, "Could not publish candidate\."\)/)
+  assert.match(formatter, /Check your connection, then retry Publish/)
+  assert.match(formatter, /The image will not be regenerated/)
+  assert.match(
+    imagePublish,
+    /publishFailureMessage\(error, "Could not publish edit\.", "edited image"\)/,
+  )
+  assert.match(
+    directPublish,
+    /publishFailureMessage\(error, "Could not publish candidate\.", "generated image"\)/,
+  )
   assert.match(imagePublish, /state\.job = error\.payload\.job/)
   assert.match(directPublish, /requestDirectState\.job = error\.payload\.job/)
   assert.match(css, /\.icono-image-edit-status\s*\{[^}]*white-space:\s*pre-line/s)
