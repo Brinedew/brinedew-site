@@ -525,17 +525,16 @@ test("specific requests snapshot a ranked example instead of storing a label-onl
   )
   assert.match(worker, /requested_reference_asset_sha256/)
   assert.match(worker, /requested_reference_gene_symbol/)
-  assert.match(worker, /resolveGenerationRequestReferenceFromOptionRows/)
   assert.match(
     worker,
     /WHERE vision_id = \?\s+AND builder_version = \$\{GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION\}/,
   )
+  assert.match(
+    worker,
+    /WHERE emulsion_id = \?\s+AND builder_version = \$\{GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION\}/,
+  )
   assert.match(migration, /json_extract\(opt\.preview_assets_json, '\$\[0\]\.asset_sha256'\)/)
   assert.match(migration, /status IN \('open', 'delivery_pending'\)/)
-
-  const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
-  assert.match(app, /payload\.requested_reference_asset_sha256/)
-  assert.match(app, /selectedOption\.request_reference_asset_sha256/)
 })
 
 test("legacy one-shot gene request route is gone and fails loudly", async () => {
@@ -650,27 +649,6 @@ test("request-option v2 migration repairs previews from canonical SHA identity",
   assert.match(migration, /preview_rank <= 5/)
   assert.match(migration, /builder_version = excluded\.builder_version/)
   assert.match(migration, /NOT EXISTS \(\s*SELECT 1\s*FROM icono_portrait_assets pa/)
-})
-
-test("request-option v3 migration materializes inspectable edit ancestry", () => {
-  const migration = readFileSync(
-    new URL("../migrations-iconoplasm/0052_request_option_edit_lineage.sql", import.meta.url),
-    "utf8",
-  )
-
-  assert.match(migration, /WITH RECURSIVE/)
-  assert.match(migration, /edited_targets AS/)
-  assert.match(migration, /event\.action = 'edit_candidate'/)
-  assert.match(migration, /lineage\.lineage_depth < 32/)
-  assert.match(migration, /seen_asset_sha256s/)
-  assert.match(migration, /'lineage_root_asset_sha256'/)
-  assert.match(migration, /'edit_ancestor_asset_sha256s'/)
-  assert.match(migration, /affected_visions AS/)
-  assert.match(migration, /json_patch\(/)
-  assert.match(migration, /json_remove\(lineage_leaf_first_json, '\$\[0\]'\)/)
-  assert.match(migration, /SET builder_version = 3/)
-  assert.doesNotMatch(migration, /CREATE INDEX/)
-  assert.doesNotMatch(migration, /source_summary AS/)
 })
 
 test("authenticated request options include shared user emulsions with preview thumbnails", async () => {

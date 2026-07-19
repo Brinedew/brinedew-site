@@ -6546,14 +6546,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           request_mode: requestedVisionId ? "specific" : "random",
           requested_vision_id: requestedVisionId || null,
         }
-        var selectedOption = requestOptionsByVisionId[requestedVisionId] || null
-        if (selectedOption && requestedVisionId) {
-          payload.requested_reference_asset_sha256 = String(
-            selectedOption.request_reference_asset_sha256 ||
-              ((selectedOption.preview_assets || [])[0] || {}).asset_sha256 ||
-              "",
-          ).trim()
-        }
         var button = form.querySelector('button[type="submit"]')
         if (button) {
           button.disabled = true
