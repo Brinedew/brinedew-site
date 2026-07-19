@@ -7830,6 +7830,23 @@ function serializeGenerationRequestPreviewAssetsJson(previewRows) {
         compareNullableTextAsc(left.asset_sha256, right.asset_sha256)
       )
     })
+    .map((row) => {
+      // Ordinary assets implicitly root to themselves. Persist ancestry only
+      // for edited descendants so this bounded read model stays compact.
+      const compact = {
+        vision_id: row.vision_id,
+        gene_symbol: row.gene_symbol,
+        asset_sha256: row.asset_sha256,
+        is_current: row.is_current,
+        preview_rank: row.preview_rank,
+      }
+      if (row.edit_ancestor_asset_sha256s.length) {
+        compact.lineage_root_asset_sha256 = row.lineage_root_asset_sha256
+        compact.lineage_depth = row.lineage_depth
+        compact.edit_ancestor_asset_sha256s = row.edit_ancestor_asset_sha256s
+      }
+      return compact
+    })
   return JSON.stringify(normalized)
 }
 

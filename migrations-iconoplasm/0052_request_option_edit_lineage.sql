@@ -1,9 +1,8 @@
 -- Give request-option previews explicit edit ancestry. Family strips can then
 -- replace an original with its edited descendant without conflating sibling
 -- edits or unrelated images that happen to share a gene or emulsion.
-
-CREATE INDEX IF NOT EXISTS idx_icono_publish_events_edit_lineage
-  ON icono_publish_events (gene_symbol, to_asset_sha256, action, id DESC);
+-- Store lineage keys only when an edit edge exists; ordinary assets implicitly
+-- root to themselves, so repeating empty ancestry on every preview wastes D1.
 
 WITH RECURSIVE
 source_summary AS (
@@ -135,15 +134,22 @@ preview_json AS (
   SELECT
     vision_id,
     json_group_array(
-      json_object(
-        'vision_id', vision_id,
-        'gene_symbol', gene_symbol,
-        'asset_sha256', asset_sha256,
-        'lineage_root_asset_sha256', lineage_root_asset_sha256,
-        'lineage_depth', lineage_depth,
-        'edit_ancestor_asset_sha256s', json(edit_ancestor_asset_sha256s),
-        'is_current', is_current,
-        'preview_rank', preview_rank
+      json_patch(
+        json_object(
+          'vision_id', vision_id,
+          'gene_symbol', gene_symbol,
+          'asset_sha256', asset_sha256,
+          'is_current', is_current,
+          'preview_rank', preview_rank
+        ),
+        CASE
+          WHEN lineage_depth > 0 THEN json_object(
+            'lineage_root_asset_sha256', lineage_root_asset_sha256,
+            'lineage_depth', lineage_depth,
+            'edit_ancestor_asset_sha256s', json(edit_ancestor_asset_sha256s)
+          )
+          ELSE json('{}')
+        END
       )
     ) AS preview_assets_json
   FROM (
