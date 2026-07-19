@@ -479,11 +479,10 @@
   const SKIP_TAGS = new Set(["SCRIPT","STYLE","TEXTAREA","INPUT","SELECT","CODE","PRE","NOSCRIPT","IFRAME","SVG","MATH","HEAD","TITLE","META","LINK"])
 
   // -- State ---------------------------------------------------------
-  let geneMap = null // { SYMBOL: { c?, n?, u?, a?, pt?, ph? } }
+  let geneMap = null // { SYMBOL: { c?, n?, u?, a?, p? } }
   let geneMatcher = null
   let tooltip = null
   let authToast = null
-  let portraitBaseUrl = ""
   let activeSymbol = null
   let hideTimer = null
   const discoveryTimerBySymbol = new Map()
@@ -1012,17 +1011,9 @@
   }
 
   function resolvePortraitUrl(gene) {
-    const key = gene.pt || gene.ph
-    if (!key) return ""
-    if (/^https?:\/\//i.test(key)) return key
-    const normalizedKey = key.replace(/^\/+/, "")
-    if (key.startsWith("/") || normalizedKey.startsWith("portraits/")) {
-      return "https://iconoplasm.brinedew.bio/" + normalizedKey
-    }
-    if (portraitBaseUrl) {
-      return portraitBaseUrl.replace(/\/+$/, "") + "/" + normalizedKey
-    }
-    return "https://iconoplasm.brinedew.bio/" + normalizedKey
+    const renditions = gene?.p?.renditions || {}
+    const rendition = renditions.medium || renditions.thumb || renditions.full || null
+    return String(rendition?.canonical_url || "").trim()
   }
 
   function deferPortraitWarm(task) {
@@ -1367,13 +1358,11 @@
 
     // Backward compatibility:
     // - old worker returned raw map
-    // - new worker returns { genes, portraitBaseUrl }
+    // The worker returns the schema-5 catalog projection and contract state.
     if (payload && payload.genes && typeof payload.genes === "object") {
       geneMap = payload.genes
-      portraitBaseUrl = payload.portraitBaseUrl || ""
     } else {
       geneMap = payload
-      portraitBaseUrl = ""
     }
     // Fence: candidate generation now lives in a dedicated matcher module. Keep content.js acting
     // as the page adapter that applies matches, not the place where lexical rules accrete forever.

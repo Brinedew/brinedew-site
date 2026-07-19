@@ -361,7 +361,7 @@ function buildEnv({
         return true
       },
     },
-    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     ...extraEnv,
   }
 }

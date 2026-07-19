@@ -598,7 +598,7 @@ function buildEnv({ jobs = [] } = {}, { bindGateway = true } = {}) {
   const gatewayEnv = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_DB: gatewayDb,
-    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: testKv(),
   }
   const env = {
@@ -1030,7 +1030,7 @@ test("queue finalization consumer rejects the old per-symbol message path", asyn
       ],
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
-    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: testKv(),
   }
   let acknowledged = false
@@ -1087,7 +1087,7 @@ test("scoped queue drain opt-in completes all durable phases in one delivery", a
       })),
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
-    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: testKv(),
   }
   let acknowledged = false
@@ -1148,7 +1148,7 @@ test("queue drain consumer preserves progress when self-reschedule fails", async
       })),
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
-    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: testKv(),
   }
   let acknowledged = false
@@ -1206,7 +1206,7 @@ test("queue drain message finalizes when only pending-finalize rows remain", asy
       })),
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
-    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: testKv(),
   }
   let acknowledged = false
@@ -1277,7 +1277,7 @@ test("scoped queue drain completes scoped pending-finalize rows while deferring 
       ],
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
-    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: kv,
   }
   let acknowledged = false
@@ -1345,7 +1345,7 @@ test("global queue drain bulk-completes ready pending-finalize rows during mixed
       ],
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
-    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: kv,
   }
   let acknowledged = false
@@ -1398,7 +1398,7 @@ test("scoped queue drain performs one global finalization when the whole ledger 
       })),
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
-    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: kv,
   }
 
@@ -1447,7 +1447,7 @@ test("queue drain finalizer chunks more than the read-model vision limit", async
       })),
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: buildFakeQueue(),
-    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: testKv(),
   }
 

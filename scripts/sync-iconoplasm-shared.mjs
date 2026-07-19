@@ -55,6 +55,21 @@ const binaryTargets = [
 
 const bundledTargets = [
   {
+    source: path.join(repoRoot, "shared", "iconoplasm-portrait", "portrait-delivery-core.js"),
+    outputs: [
+      path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "portrait-delivery-core.js"),
+    ],
+    format: "esm",
+  },
+  {
+    source: path.join(repoRoot, "shared", "iconoplasm-portrait", "portrait-delivery-core.js"),
+    outputs: [
+      path.join(repoRoot, "iconoplasm-extension", "generated", "portrait-delivery-core.js"),
+    ],
+    format: "iife",
+    globalName: "IconoplasmPortraitDelivery",
+  },
+  {
     source: path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-runtime.js"),
     outputs: [
       path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "shared-card-runtime.js"),
@@ -97,11 +112,12 @@ async function syncBinaryTarget({ source, outputs }) {
 
 await Promise.all(binaryTargets.map(syncBinaryTarget))
 
-async function bundleTarget({ source, outputs }) {
+async function bundleTarget({ source, outputs, format = "esm", globalName }) {
   const result = await esbuild.build({
     entryPoints: [source],
     bundle: true,
-    format: arguments[0]?.format || "esm",
+    format,
+    ...(globalName ? { globalName } : {}),
     platform: "browser",
     target: ["es2022"],
     minify: false,

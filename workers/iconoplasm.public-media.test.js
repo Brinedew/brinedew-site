@@ -4,6 +4,7 @@ import test from "node:test"
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  mergePublishedPortraitRefsIntoArtifact,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
@@ -268,6 +269,31 @@ test.after(() => {
   resetIconoplasmRuntimeCachesForTest()
 })
 
+test("catalog hydration emits only schema-5 inspectable portrait assets", () => {
+  const sha = "b".repeat(64)
+  const hydrated = mergePublishedPortraitRefsIntoArtifact(
+    {
+      schema_version: 4,
+      genes: [
+        { s: "A1BG", ph: "portraits/old-full.webp", pt: "portraits/old-medium.webp" },
+        { s: "TP53", ph: "portraits/stale.webp" },
+      ],
+    },
+    [{ symbol: "A1BG", asset_sha256: sha }],
+  )
+
+  assert.equal(hydrated.schema_version, 5)
+  assert.equal("ph" in hydrated.genes[0], false)
+  assert.equal("pt" in hydrated.genes[0], false)
+  assert.equal(hydrated.genes[0].p.asset_sha256, sha)
+  assert.equal(
+    hydrated.genes[0].p.renditions.medium.canonical_url,
+    `https://iconoplasm.brinedew.bio/portraits/v1/bb/${sha}/medium.webp`,
+  )
+  assert.equal("ph" in hydrated.genes[1], false)
+  assert.equal("p" in hydrated.genes[1], false)
+})
+
 test("public gene payload includes published portrait dimensions", async () => {
   const response =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
@@ -366,7 +392,9 @@ test("public media payload includes published portrait dimensions", async () => 
   const response =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
-      buildEnv(),
+      buildEnv({
+        ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+      }),
       {},
     )
   const payload = await response.json()
@@ -379,6 +407,11 @@ test("public media payload includes published portrait dimensions", async () => 
     /^https:\/\/iconoplasm\.brinedew\.bio\/portraits\//,
   )
   assert.equal(payload?.media?.info_url, "https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG")
+  assert.equal(payload?.media?.asset?.asset_sha256?.length, 64)
+  assert.match(
+    payload?.media?.asset?.renditions?.medium?.canonical_url || "",
+    /^https:\/\/iconoplasm\.brinedew\.bio\/portraits\//,
+  )
 })
 
 test("public catalog manifest publishes explicit extension contract fields", async () => {
@@ -386,6 +419,7 @@ test("public catalog manifest publishes explicit extension contract fields", asy
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
       buildEnv({
+        ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
         KV: {
           async get(key) {
             if (key !== "iconoplasm:catalog-manifest") return null
@@ -402,12 +436,22 @@ test("public catalog manifest publishes explicit extension contract fields", asy
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload?.artifact_schema_version, 4)
-  assert.equal(payload?.schema_version, 4)
-  assert.equal(payload?.min_extension_version, "0.3.0")
+  assert.equal(payload?.artifact_schema_version, 5)
+  assert.equal(payload?.schema_version, 5)
+  assert.equal(payload?.min_extension_version, "0.6.0")
   assert.equal(payload?.catalog_hash, "catalog")
   assert.equal(payload?.build_version, "catalog-2026-04-16")
-  assert.equal(payload?.portrait_base_url, "https://iconoplasm.brinedew.bio")
+  assert.deepEqual(payload?.portrait_delivery, {
+    version: 1,
+    canonical_origin: "https://iconoplasm.brinedew.bio",
+    accelerator: {
+      id: "bunny",
+      origin: "https://iconoplasmportraits.b-cdn.net",
+      enabled: true,
+    },
+    probe_timeout_ms: 2500,
+    decision_scope: "tab",
+  })
   assert.match(payload?.publication_aliases?.version || "", /^v1-[a-f0-9]{16}$/)
   assert.equal(payload?.publication_aliases?.by_symbol?.RELA?.includes("p65"), true)
   assert.match(response.headers.get("etag") || "", /aliases-v1-/)

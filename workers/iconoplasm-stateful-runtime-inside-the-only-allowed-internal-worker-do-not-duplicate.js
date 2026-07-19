@@ -23,6 +23,7 @@ import { normalizeIconoplasmHomeOrder } from "../quartz/static/iconoplasm/home-o
 import "../shared/iconoplasm-card/shared-card-runtime.js"
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
+const ICONOPLASM_CANONICAL_ORIGIN = `https://${ICONOPLASM_HOST}`
 // Server-side clan reference data. Keep this out of the browser bundle; the
 // public route below reveals clan metadata only when the signed-in user has
 // discovered at least one member of that clan.
@@ -54,7 +55,7 @@ const ICONOPLASM_CLAN_CATALOG_TOTAL = ICONOPLASM_CLAN_CATALOG_BY_NAME.size
 // candidates. Website Ops bulk sync is the boundary that publishes those assets here.
 // This worker owns the public/community path only, so hot reads and writes should be
 // optimized for published assets, cheap ranking refreshes, and Cloudflare request economy.
-const API_SCHEMA_VERSION = 3
+const API_SCHEMA_VERSION = 4
 const PUBLIC_API_VERSION = "v1"
 const PUBLIC_API_PREFIX = `/api/public/${PUBLIC_API_VERSION}`
 const SITE_GENE_API_PREFIX = "/api/iconoplasm/site/genes"
@@ -85,7 +86,7 @@ function resolveProviderPollConfig(env) {
     Number.isFinite(override) && override >= 0 ? override : ICONOPLASM_PROVIDER_POLL_INITIAL_WAIT_MS
   return { initialWait, interval, hardTimeout: ICONOPLASM_PROVIDER_POLL_HARD_TIMEOUT_MS }
 }
-const MIN_EXTENSION_VERSION = "0.3.0"
+const MIN_EXTENSION_VERSION = "0.6.0"
 const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
   openai: Object.freeze({
     provider_id: "openai",
@@ -2912,6 +2913,56 @@ function externalPortraitStorageWriteUrl(env, key) {
   return joinUrl(`https://${host}/${zone}`, key)
 }
 
+function portraitStorageRetryDelay(env, attempt) {
+  const configured = Number(env?.ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS)
+  const base = Number.isFinite(configured) ? Math.max(0, configured) : 125
+  const exponential = Math.min(2000, base * 2 ** Math.max(0, attempt - 1))
+  const jitter = exponential ? Math.floor(Math.random() * Math.max(1, exponential * 0.25)) : 0
+  return exponential + jitter
+}
+
+function portraitStorageRequestTimeout(env) {
+  const configured = Number(env?.ICONOPLASM_PORTRAIT_STORAGE_TIMEOUT_MS)
+  return Number.isFinite(configured) ? Math.max(250, Math.min(30_000, configured)) : 8000
+}
+
+function retryablePortraitStorageStatus(status) {
+  return status === 408 || status === 425 || status === 429 || status >= 500
+}
+
+async function fetchPortraitStorage(env, url, init, { operation, key }) {
+  const maxAttempts = 4
+  let lastError = null
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = typeof AbortController === "function" ? new AbortController() : null
+    const timer = setTimeout(() => controller?.abort(), portraitStorageRequestTimeout(env))
+    try {
+      const response = await fetch(url, {
+        ...init,
+        ...(controller ? { signal: controller.signal } : {}),
+      })
+      if (
+        response.ok ||
+        response.status === 404 ||
+        !retryablePortraitStorageStatus(response.status)
+      ) {
+        return response
+      }
+      await response.body?.cancel().catch(() => null)
+      lastError = new Error(`External portrait ${operation} failed (${response.status}) for ${key}`)
+    } catch (error) {
+      lastError = error
+    } finally {
+      clearTimeout(timer)
+    }
+    if (attempt < maxAttempts) {
+      const delay = portraitStorageRetryDelay(env, attempt)
+      if (delay) await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+  throw lastError || new Error(`External portrait ${operation} failed for ${key}`)
+}
+
 async function readPortraitStorageObject(env, key, { fallbackContentType = "image/webp" } = {}) {
   if (env.ICONOPLASM_PORTRAITS) {
     const object = await env.ICONOPLASM_PORTRAITS.get(key)
@@ -2925,9 +2976,14 @@ async function readPortraitStorageObject(env, key, { fallbackContentType = "imag
   const storageUrl = externalPortraitStorageWriteUrl(env, key)
   const storagePassword = externalPortraitStoragePassword(env)
   if (storageUrl && storagePassword) {
-    const response = await fetch(storageUrl, {
-      headers: { AccessKey: storagePassword },
-    })
+    const response = await fetchPortraitStorage(
+      env,
+      storageUrl,
+      {
+        headers: { AccessKey: storagePassword },
+      },
+      { operation: "GET", key },
+    )
     if (response.status === 404) return null
     if (!response.ok) {
       throw new Error(`External portrait storage fetch failed (${response.status}) for ${key}`)
@@ -2940,7 +2996,7 @@ async function readPortraitStorageObject(env, key, { fallbackContentType = "imag
   }
   const publicUrl = externalPortraitPublicUrl(env, key)
   if (!publicUrl) return null
-  const response = await fetch(publicUrl)
+  const response = await fetchPortraitStorage(env, publicUrl, {}, { operation: "GET", key })
   if (response.status === 404) return null
   if (!response.ok) {
     throw new Error(`External portrait fetch failed (${response.status}) for ${key}`)
@@ -2997,12 +3053,17 @@ async function headPortraitStorageObject(env, key) {
   const writeUrl = externalPortraitStorageWriteUrl(env, key)
   const password = externalPortraitStoragePassword(env)
   if (!writeUrl || !password) return null
-  const response = await fetch(writeUrl, {
-    method: "HEAD",
-    headers: {
-      AccessKey: password,
+  const response = await fetchPortraitStorage(
+    env,
+    writeUrl,
+    {
+      method: "HEAD",
+      headers: {
+        AccessKey: password,
+      },
     },
-  })
+    { operation: "HEAD", key },
+  )
   if (response.status === 404) return null
   if (!response.ok) {
     throw new Error(`External portrait HEAD failed (${response.status}) for ${key}`)
@@ -3010,7 +3071,7 @@ async function headPortraitStorageObject(env, key) {
   return { ok: true }
 }
 
-async function putPortraitStorageObject(
+export async function putPortraitStorageObject(
   env,
   key,
   bytes,
@@ -3030,15 +3091,20 @@ async function putPortraitStorageObject(
   if (!writeUrl || !password) {
     throw new Error("External portrait storage is not configured for writes")
   }
-  const response = await fetch(writeUrl, {
-    method: "PUT",
-    headers: {
-      AccessKey: password,
-      "Content-Type": contentType,
-      ...(cacheControl ? { "Cache-Control": cacheControl } : {}),
+  const response = await fetchPortraitStorage(
+    env,
+    writeUrl,
+    {
+      method: "PUT",
+      headers: {
+        AccessKey: password,
+        "Content-Type": contentType,
+        ...(cacheControl ? { "Cache-Control": cacheControl } : {}),
+      },
+      body: bytes,
     },
-    body: bytes,
-  })
+    { operation: "PUT", key },
+  )
   if (!response.ok) {
     throw new Error(`External portrait PUT failed (${response.status}) for ${key}`)
   }
@@ -3052,12 +3118,17 @@ async function deletePortraitStorageObject(env, key) {
   const writeUrl = externalPortraitStorageWriteUrl(env, key)
   const password = externalPortraitStoragePassword(env)
   if (!writeUrl || !password) return null
-  const response = await fetch(writeUrl, {
-    method: "DELETE",
-    headers: {
-      AccessKey: password,
+  const response = await fetchPortraitStorage(
+    env,
+    writeUrl,
+    {
+      method: "DELETE",
+      headers: {
+        AccessKey: password,
+      },
     },
-  })
+    { operation: "DELETE", key },
+  )
   if (response.status === 404) return null
   if (!response.ok) {
     throw new Error(`External portrait DELETE failed (${response.status}) for ${key}`)
@@ -3066,14 +3137,26 @@ async function deletePortraitStorageObject(env, key) {
 }
 
 function portraitBase(url, env) {
-  if (
-    typeof env.ICONOPLASM_PORTRAIT_BASE_URL === "string" &&
-    env.ICONOPLASM_PORTRAIT_BASE_URL.trim()
-  ) {
-    return env.ICONOPLASM_PORTRAIT_BASE_URL.trim()
+  // Public domain payloads are canonical and provider-independent. Acceleration
+  // is a delivery policy, never an asset identity or API URL contract.
+  return ICONOPLASM_CANONICAL_ORIGIN
+}
+
+function portraitDeliveryPolicy(url, env) {
+  const acceleratorOrigin = String(externalPortraitCdnBase(env) || "")
+    .trim()
+    .replace(/\/+$/, "")
+  return {
+    version: 1,
+    canonical_origin: ICONOPLASM_CANONICAL_ORIGIN,
+    accelerator: {
+      id: "bunny",
+      origin: acceleratorOrigin || "https://iconoplasmportraits.b-cdn.net",
+      enabled: Boolean(acceleratorOrigin),
+    },
+    probe_timeout_ms: 2500,
+    decision_scope: "tab",
   }
-  // R2 keys include the `portraits/` prefix, so the base is just the origin.
-  return url.origin
 }
 
 function portraitHashToken(raw) {
@@ -3118,47 +3201,43 @@ export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortra
   // unguarded hot-path operation for every request or every cold isolate.
   if (!artifact || typeof artifact !== "object") return artifact
   const genes = Array.isArray(artifact.genes) ? artifact.genes : null
-  if (!genes || !Array.isArray(publishedPortraits) || publishedPortraits.length === 0)
-    return artifact
+  if (!genes) return artifact
 
   const publishedBySymbol = new Map()
-  for (const row of publishedPortraits) {
+  for (const row of Array.isArray(publishedPortraits) ? publishedPortraits : []) {
     const symbol = normalizeSymbol(row?.symbol || row?.gene_symbol)
     if (!symbol) continue
-    // Chesterton's fence: the hydrated catalog is the public read contract for
-    // search, resolve, and extension refreshes. Keep it fed by the canonical
-    // portrait refs (`ph`/`pt`) we own now instead of quietly accepting old
-    // `r2_key_*` cargo from legacy snapshot shapes.
-    const heroRef = String(row?.ph || "").trim()
-    const thumbRef = String(row?.pt || "").trim()
-    if (!heroRef && !thumbRef) continue
-    publishedBySymbol.set(symbol, { ph: heroRef || null, pt: thumbRef || null })
+    const assetSha = normalizeSha256(row?.asset_sha256 || "")
+    if (!assetSha) continue
+    publishedBySymbol.set(symbol, { asset_sha256: assetSha })
   }
-  if (publishedBySymbol.size === 0) return artifact
-
-  let changed = false
+  let changed = Number(artifact.schema_version || 0) !== 5
   const nextGenes = genes.map((gene) => {
     if (!gene || typeof gene !== "object") return gene
     const symbol = normalizeSymbol(gene.s)
     const published = symbol ? publishedBySymbol.get(symbol) : null
-    if (!published) return gene
+    if (!published) {
+      if (!("ph" in gene) && !("pt" in gene)) return gene
+      changed = true
+      const { ph: _removedHero, pt: _removedThumb, ...current } = gene
+      return current
+    }
 
-    let nextGene = gene
-    if (published.ph && gene.ph !== published.ph) {
-      nextGene = nextGene === gene ? { ...gene } : nextGene
-      nextGene.ph = published.ph
-      changed = true
+    const nextPortrait = portraitAssetRef(ICONOPLASM_CANONICAL_ORIGIN, published.asset_sha256)
+    if (
+      !("ph" in gene) &&
+      !("pt" in gene) &&
+      JSON.stringify(gene.p || null) === JSON.stringify(nextPortrait)
+    ) {
+      return gene
     }
-    if (published.pt && gene.pt !== published.pt) {
-      nextGene = nextGene === gene ? { ...gene } : nextGene
-      nextGene.pt = published.pt
-      changed = true
-    }
-    return nextGene
+    changed = true
+    const { ph: _removedHero, pt: _removedThumb, ...current } = gene
+    return { ...current, p: nextPortrait }
   })
 
   if (!changed) return artifact
-  return { ...artifact, genes: nextGenes }
+  return { ...artifact, schema_version: 5, genes: nextGenes }
 }
 
 async function queryPublishedPortraitFingerprint(env) {
@@ -3280,8 +3359,7 @@ async function queryPublishedPortraitRefs(env) {
         if (!symbol || !assetSha) return null
         return {
           symbol,
-          ph: r2PortraitKey(assetSha, "full"),
-          pt: r2PortraitKey(assetSha, "medium"),
+          asset_sha256: assetSha,
         }
       })
       .filter(Boolean)
@@ -3323,6 +3401,35 @@ function adminPortraitUrl(base, assetSha256, rendition = "thumb") {
   const sha = normalizeSha256(assetSha256)
   if (!sha) return null
   return joinUrl(base, r2PortraitKey(sha, rendition))
+}
+
+function portraitAssetRef(base, assetSha256) {
+  const assetSha = normalizeSha256(assetSha256)
+  if (!assetSha) return null
+  const renditions = {}
+  for (const rendition of ["full", "medium", "thumb"]) {
+    const path = r2PortraitKey(assetSha, rendition)
+    renditions[rendition] = {
+      path,
+      canonical_url: joinUrl(base, path),
+    }
+  }
+  return {
+    schema_version: 1,
+    asset_sha256: assetSha,
+    renditions,
+  }
+}
+
+function portraitAssetUrl(asset, preferred = "medium") {
+  const renditions = asset?.renditions || {}
+  return (
+    renditions?.[preferred]?.canonical_url ||
+    renditions?.medium?.canonical_url ||
+    renditions?.full?.canonical_url ||
+    renditions?.thumb?.canonical_url ||
+    null
+  )
 }
 
 function normalizeSha256(raw) {
@@ -3874,18 +3981,9 @@ function accountGalleryImageOnlyCard(row, env, publishedPortraitRef = null) {
   const symbol = normalizeSymbol(row?.gene_symbol || "")
   if (!symbol) return null
   const base = portraitBase(new URL("https://iconoplasm.brinedew.bio/"), env)
-  const refHero = String(publishedPortraitRef?.ph || "").trim()
-  const refMedium = String(publishedPortraitRef?.pt || "").trim()
-  const refHeroUrl = refHero
-    ? /^https?:\/\//i.test(refHero)
-      ? refHero
-      : joinUrl(base, refHero)
-    : ""
-  const refMediumUrl = refMedium
-    ? /^https?:\/\//i.test(refMedium)
-      ? refMedium
-      : joinUrl(base, refMedium)
-    : ""
+  const publishedAsset = portraitAssetRef(base, publishedPortraitRef?.asset_sha256)
+  const refHeroUrl = portraitAssetUrl(publishedAsset, "full") || ""
+  const refMediumUrl = portraitAssetUrl(publishedAsset, "medium") || ""
   const assetSha = normalizeSha256(row?.asset_sha256 || "")
   const assetMediumUrl = assetSha ? adminPortraitUrl(base, assetSha, "medium") : ""
   const mediumUrl = refMediumUrl || assetMediumUrl || refHeroUrl
@@ -5172,13 +5270,6 @@ function mapImageEditJobRow(row, baseUrl = "") {
   const sourceAssetSha = normalizeSha256(row?.source_asset_sha256 || "") || ""
   const resultAssetSha = normalizeSha256(row?.result_asset_sha256 || "") || ""
   const status = sanitizeText(row?.status || "", 32) || ""
-  const resultUrls = resultAssetSha
-    ? {
-        full: adminPortraitUrl(baseUrl, resultAssetSha, "full"),
-        medium: adminPortraitUrl(baseUrl, resultAssetSha, "medium"),
-        thumb: adminPortraitUrl(baseUrl, resultAssetSha, "thumb"),
-      }
-    : null
   return {
     id,
     provider_id: normalizeImageEditProviderId(row?.provider_id || ""),
@@ -5204,7 +5295,7 @@ function mapImageEditJobRow(row, baseUrl = "") {
     status,
     error: sanitizeText(row?.error || "", 2000) || "",
     result_asset_sha256: resultAssetSha,
-    result_urls: resultUrls,
+    result_asset: portraitAssetRef(baseUrl, resultAssetSha),
     published: Boolean(row?.published_at),
     created_at: sanitizeText(row?.created_at || "", 64) || "",
     completed_at: sanitizeText(row?.completed_at || "", 64) || "",
@@ -7239,8 +7330,7 @@ function mapCandidateGenerationJobRow(row, baseUrl = "") {
     asset_sha256: asset.asset_sha256,
     is_current: Boolean(asset.is_current),
     preview_rank: Number(asset.preview_rank || 0) || 0,
-    medium_url: adminPortraitUrl(baseUrl, asset.asset_sha256 || "", "medium"),
-    thumb_url: adminPortraitUrl(baseUrl, asset.asset_sha256 || "", "thumb"),
+    asset: portraitAssetRef(baseUrl, asset.asset_sha256 || ""),
   }))
   return {
     id,
@@ -7266,13 +7356,7 @@ function mapCandidateGenerationJobRow(row, baseUrl = "") {
     error: sanitizeText(row?.error || "", 2000) || "",
     prompt: sanitizeText(row?.prompt || "", 8000) || "",
     result_asset_sha256: resultAssetSha,
-    result_urls: resultAssetSha
-      ? {
-          full: adminPortraitUrl(baseUrl, resultAssetSha, "full"),
-          medium: adminPortraitUrl(baseUrl, resultAssetSha, "medium"),
-          thumb: adminPortraitUrl(baseUrl, resultAssetSha, "thumb"),
-        }
-      : null,
+    result_asset: portraitAssetRef(baseUrl, resultAssetSha),
     published: Boolean(row?.published_at),
     created_at: sanitizeText(row?.created_at || "", 64) || "",
     completed_at: sanitizeText(row?.completed_at || "", 64) || "",
@@ -10382,19 +10466,14 @@ async function extensionManifestObj(url, env) {
   // Cost barrier: the public manifest is the extension's "what changed?" probe.
   // If this starts doing raw D1 work per request, extension traffic can amplify
   // the mistake globally. Keep it on the shared fingerprint cache.
-  // Chesterton's fence: publish the extension contract explicitly here instead of
-  // making the browser runtime infer it from mixed legacy fields and fallbacks.
-  // Earlier extension code guessed from `schema_version`, guessed from missing
-  // portrait_base_url, and then limped along on stale cache when the published
-  // shape drifted. That is exactly the kind of quiet mismatch that lets a broken
-  // release look healthy. Keep the manifest blunt about the artifact schema and
-  // minimum extension version so incompatible clients fail loud.
+  // This is the complete extension contract: artifact compatibility, minimum
+  // client version, aliases, and portrait delivery policy travel together.
   const buildVersion = buildPortraitAwareManifestHash(
     manifest.current_hash,
     await sharedPublishedPortraitFingerprint(env),
   )
   const minExtensionVersion = env.ICONOPLASM_MIN_EXTENSION_VERSION || MIN_EXTENSION_VERSION
-  const artifactSchemaVersion = 4
+  const artifactSchemaVersion = 5
   const publicationAliases = await iconoplasmPublicationAliasManifest()
   return {
     ...manifest,
@@ -10404,7 +10483,7 @@ async function extensionManifestObj(url, env) {
     artifact_schema_version: artifactSchemaVersion,
     schema_version: artifactSchemaVersion,
     min_extension_version: minExtensionVersion,
-    portrait_base_url: portraitBase(url, env),
+    portrait_delivery: portraitDeliveryPolicy(url, env),
     publication_aliases: publicationAliases,
   }
 }
@@ -10412,7 +10491,21 @@ async function extensionManifestObj(url, env) {
 function catalogManifestEtag(manifest) {
   const buildVersion = String(manifest?.build_version || manifest?.current_hash || "").trim()
   const aliasVersion = String(manifest?.publication_aliases?.version || "").trim()
-  const version = [buildVersion, aliasVersion ? `aliases-${aliasVersion}` : ""]
+  const delivery = manifest?.portrait_delivery || {}
+  const accelerator = delivery?.accelerator || {}
+  const deliveryVersion = [
+    delivery.version || 0,
+    delivery.canonical_origin || "",
+    accelerator.id || "",
+    accelerator.origin || "",
+    accelerator.enabled === false ? "off" : "on",
+    delivery.probe_timeout_ms || 0,
+  ].join(":")
+  const version = [
+    buildVersion,
+    aliasVersion ? `aliases-${aliasVersion}` : "",
+    deliveryVersion ? `delivery-${encodeURIComponent(deliveryVersion)}` : "",
+  ]
     .filter(Boolean)
     .join("-")
   return version ? `"${version}"` : null
@@ -10823,7 +10916,7 @@ async function publicMetadataObj(url, env) {
       manifest.min_extension_version ||
       env.ICONOPLASM_MIN_EXTENSION_VERSION ||
       MIN_EXTENSION_VERSION,
-    portrait_base_url: manifest.portrait_base_url || portraitBase(url, env),
+    portrait_delivery: manifest.portrait_delivery || portraitDeliveryPolicy(url, env),
     publication_aliases: manifest.publication_aliases || null,
     urls: {
       metadata: publicUrl(url, "/metadata"),
@@ -10842,7 +10935,7 @@ async function publicMetadataObj(url, env) {
       catalog_table: "ICONOPLASM_DB.icono_gene_catalog",
       essence_table: "ICONOPLASM_DB.icono_gene_essence",
       publish_state_table: "ICONOPLASM_DB.icono_publish_state",
-      portraits_bucket: "ICONOPLASM_PORTRAITS",
+      portrait_storage: "Bunny Storage via authenticated adapter",
       protein_source: "DB.proteins via UniProt",
     },
   }
@@ -10931,20 +11024,17 @@ function publicMediaEnvelope(url, symbol, portrait) {
   if (!assetSha) return null
   const width = optionalInt(portrait?.width)
   const height = optionalInt(portrait?.height)
+  const asset = portraitAssetRef(portraitBase(url), assetSha)
   return {
     id: assetSha,
     type: "portrait",
     symbol,
     checksum_sha256: assetSha,
-    canonical_url: portrait?.hero_url || portrait?.medium_url || portrait?.thumb_url || null,
+    canonical_url: portraitAssetUrl(asset, "full"),
     info_url: publicUrl(url, `/media/${encodeURIComponent(symbol)}`),
     ...(width != null ? { width } : {}),
     ...(height != null ? { height } : {}),
-    renditions: {
-      full: portrait?.hero_url || null,
-      medium: portrait?.medium_url || null,
-      thumb: portrait?.thumb_url || null,
-    },
+    asset,
     rights: "CC BY-NC-ND 4.0",
     license_url: "https://creativecommons.org/licenses/by-nc-nd/4.0/",
     attribution: "Brinedew / Iconoplasm",
@@ -23660,8 +23750,10 @@ function publicGeneSearchEntry(url, env, symbol, gene, match) {
     matched_value: match?.matched_value || null,
     match_rank: Number(match?.rank ?? 999),
   }
-  if (gene?.pt) entry.pt = joinUrl(base, gene.pt)
-  if (gene?.ph) entry.ph = joinUrl(base, gene.ph)
+  if (gene?.p) {
+    entry.pt = portraitAssetUrl(gene.p, "medium")
+    entry.ph = portraitAssetUrl(gene.p, "full")
+  }
   return entry
 }
 
@@ -23723,7 +23815,7 @@ async function handlePublicMetadata(request, env) {
   if (!metadata) {
     return json({ error: "Public catalog metadata not found — publish the catalog first" }, 404)
   }
-  const etag = metadata.build_version ? `"${metadata.build_version}"` : await etagFor(metadata)
+  const etag = catalogManifestEtag(metadata) || (await etagFor(metadata))
   if (etagMatches(request.headers.get("If-None-Match"), etag)) {
     return new Response(null, {
       status: 304,
@@ -23803,7 +23895,7 @@ async function handlePublicCatalogManifest(request, env) {
       manifest.min_extension_version ||
       env.ICONOPLASM_MIN_EXTENSION_VERSION ||
       MIN_EXTENSION_VERSION,
-    portrait_base_url: manifest.portrait_base_url || portraitBase(url, env),
+    portrait_delivery: manifest.portrait_delivery || portraitDeliveryPolicy(url, env),
     publication_aliases: manifest.publication_aliases || null,
     artifact_url: buildHash
       ? publicUrl(url, `/catalog/${publicCatalogArtifactFilename(buildHash)}`)
@@ -25919,7 +26011,7 @@ async function publishCatalogArtifact(env) {
   if (!env.KV) throw new Error("KV binding missing")
   const genes = await loadCatalogRowsForPublish(env)
   const artifact = {
-    schema_version: 4,
+    schema_version: 5,
     generated_at: new Date().toISOString(),
     gene_count: genes.length,
     genes,

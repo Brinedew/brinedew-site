@@ -5,7 +5,7 @@ import { renderIconoplasmArtistStylesHtml } from "./iconoplasm-artist-styles-htm
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const PUBLIC_API_VERSION = "v1"
-const API_SCHEMA_VERSION = 3
+const API_SCHEMA_VERSION = 4
 const PUBLIC_API_PREFIX = `/api/public/${PUBLIC_API_VERSION}`
 const SITE_GENE_API_PREFIX = "/api/iconoplasm/site/genes"
 const PUBLIC_DUMP_PREFIX = "public-dumps"

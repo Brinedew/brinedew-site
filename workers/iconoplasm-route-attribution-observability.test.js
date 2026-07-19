@@ -301,7 +301,7 @@ test("public handled routes emit request-count route logs without touching D1 li
         },
       ),
       {
-        ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+        ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
       },
       { waitUntil() {} },
     ),
