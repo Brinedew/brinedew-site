@@ -175,6 +175,9 @@ jobs:
             "geneguessr.brinedew.bio/*" \
             "iconoplasm.brinedew.bio/*"
 
+      - name: Verify Iconoplasm publication aliases (production)
+        run: pnpm run verify:iconoplasm-publication-aliases
+
       - name: Smoke test Discord OAuth bootstrap (production)
         run: |
           set -euo pipefail

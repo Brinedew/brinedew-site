@@ -177,8 +177,9 @@ function buildCatalogArtifact() {
   return {
     schema_version: 4,
     generated_at: "2026-04-05T00:00:00Z",
-    gene_count: 3,
+    gene_count: 4,
     genes: [
+      { s: "CCNH", n: "Cyclin H", c: "#6b705c", tmh: false, a: [] },
       { s: "INS", n: "Insulin", c: "#d85c57", tmh: false, a: ["INSULIN"] },
       { s: "PRL", n: "Prolactin", c: "#7a5861", tmh: false, a: [] },
       { s: "TP53", n: "Tumor protein p53", c: "#5f6e52", tmh: false, a: ["P53"] },
@@ -239,7 +240,7 @@ test("public resolve route works through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT
       new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifiers: ["P53", "INS"] }),
+        body: JSON.stringify({ identifiers: ["P53", "Cyclin H", "INS"] }),
       }),
       buildEnv(),
       {},
@@ -255,6 +256,7 @@ test("public resolve route works through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT
     })),
     [
       { requested: "P53", canonical_symbol: "TP53", matched_by: "alias" },
+      { requested: "Cyclin H", canonical_symbol: "CCNH", matched_by: "alias" },
       { requested: "INS", canonical_symbol: "INS", matched_by: "symbol" },
     ],
   )

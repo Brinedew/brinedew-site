@@ -28,6 +28,7 @@
     "watch": "pnpm run sync:iconoplasm-shared && node ./quartz/bootstrap-cli.mjs watch -d content",
     "check": "tsc --noEmit && pnpm exec prettier . --check",
     "benchmark:iconoplasm-extension": "node ./scripts/benchmark-iconoplasm-extension.mjs",
+    "verify:iconoplasm-publication-aliases": "node ./scripts/verify-iconoplasm-publication-aliases.mjs",
     "format": "pnpm exec prettier . --write",
     "test": "node scripts/run-tests.mjs",
     "profile": "0x -D prof ./quartz/bootstrap-cli.mjs build --concurrency=1",
