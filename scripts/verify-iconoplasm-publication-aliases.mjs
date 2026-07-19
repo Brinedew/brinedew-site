@@ -77,42 +77,58 @@ async function waitForPublishedOverlay(baseUrl, expectedOverlay) {
   )
 }
 
-async function verifyResolution(baseUrl, expectedOverlay) {
+function resolutionMismatches(payload, expectedPairs) {
+  const results = Array.isArray(payload?.results) ? payload.results : []
+  if (results.length !== expectedPairs.length) {
+    return [`received ${results.length} results for ${expectedPairs.length} curated aliases`]
+  }
+
+  return expectedPairs.flatMap((expected, index) => {
+    const result = results[index]
+    if (
+      result?.found === true &&
+      String(result?.requested || "") === expected.alias &&
+      String(result?.canonical_symbol || "") === expected.symbol
+    ) {
+      return []
+    }
+    return [
+      `${JSON.stringify(expected.alias)} expected ${expected.symbol}, received ` +
+        JSON.stringify(result || null),
+    ]
+  })
+}
+
+async function waitForResolution(baseUrl, expectedOverlay) {
   const expectedPairs = Object.entries(expectedOverlay.by_symbol).flatMap(([symbol, aliases]) =>
     aliases.map((alias) => ({ alias, symbol })),
   )
   const resolveUrl = new URL("/api/public/v1/resolve", baseUrl)
-  const { payload } = await fetchJson(resolveUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ identifiers: expectedPairs.map(({ alias }) => alias) }),
-  })
-  const results = Array.isArray(payload?.results) ? payload.results : []
-  if (results.length !== expectedPairs.length) {
-    fail(`resolve returned ${results.length} results for ${expectedPairs.length} curated aliases`)
-  }
+  let lastMismatches = []
 
-  for (let index = 0; index < expectedPairs.length; index += 1) {
-    const expected = expectedPairs[index]
-    const result = results[index]
-    if (
-      result?.found !== true ||
-      String(result?.requested || "") !== expected.alias ||
-      String(result?.canonical_symbol || "") !== expected.symbol
-    ) {
-      fail(
-        `resolve mismatch for ${JSON.stringify(expected.alias)}: expected ${expected.symbol}, ` +
-          `received ${JSON.stringify(result || null)}`,
-      )
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    const { payload } = await fetchJson(resolveUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifiers: expectedPairs.map(({ alias }) => alias) }),
+    })
+    lastMismatches = resolutionMismatches(payload, expectedPairs)
+    if (lastMismatches.length === 0) return expectedPairs.length
+    if (attempt < MAX_ATTEMPTS) {
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS))
     }
   }
-  return expectedPairs.length
+
+  fail(
+    `live resolver remained inconsistent after ${MAX_ATTEMPTS} attempts: ` +
+      lastMismatches.join("; "),
+  )
 }
 
 const expectedOverlay = await iconoplasmPublicationAliasManifest()
 const baseUrl = publicBaseUrl()
 const published = await waitForPublishedOverlay(baseUrl, expectedOverlay)
-const resolvedCount = await verifyResolution(baseUrl, expectedOverlay)
+const resolvedCount = await waitForResolution(baseUrl, expectedOverlay)
 const overlayBytes = Buffer.byteLength(JSON.stringify(expectedOverlay), "utf8")
 
 console.log(
