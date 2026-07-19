@@ -5,6 +5,11 @@ import { test } from "node:test"
 const workflowText = readFileSync(".github/workflows/publish-iconoplasm-firefox.yml", "utf8")
 const edgeWorkflowText = readFileSync(".github/workflows/publish-iconoplasm-edge.yml", "utf8")
 const readmeText = readFileSync("iconoplasm-extension/README.md", "utf8")
+const firefoxSourcePackageText = readFileSync(
+  "scripts/package-iconoplasm-firefox-source.mjs",
+  "utf8",
+)
+const amoSourceReadmeText = readFileSync("iconoplasm-extension/AMO-SOURCE-README.md", "utf8")
 
 test("Firefox store publish workflow stays behind the human GUI gate", () => {
   assert.match(workflowText, /workflow_dispatch:/)
@@ -74,6 +79,16 @@ test("store publish packaging goes through WXT browser targets", () => {
     /browser !== "firefox"[\s\S]*delete manifest\.browser_specific_settings/,
     "WXT config should own the Chromium-target removal of Firefox-only manifest fields",
   )
+})
+
+test("Firefox reviewer source package reproduces the pnpm/WXT build", () => {
+  assert.match(firefoxSourcePackageText, /"pnpm-lock\.yaml"/)
+  assert.match(firefoxSourcePackageText, /"pnpm-workspace\.yaml"/)
+  assert.match(firefoxSourcePackageText, /"wxt\.config\.ts"/)
+  assert.match(firefoxSourcePackageText, /"iconoplasm-extension\/publication-alias-overlay\.js"/)
+  assert.doesNotMatch(firefoxSourcePackageText, /"package-lock\.json"/)
+  assert.match(amoSourceReadmeText, /pnpm install --frozen-lockfile/)
+  assert.doesNotMatch(amoSourceReadmeText, /npm ci/)
 })
 
 test("Edge store publish workflow expands operation IDs into documented polling URLs", () => {

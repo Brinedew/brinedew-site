@@ -33,8 +33,15 @@ function baseGeneMap() {
 test("every tracked publication alias is recognized by the real extension matcher", async () => {
   const manifest = await iconoplasmPublicationAliasManifest()
   const overlay = overlayApi.normalizePublishedAliasOverlay(manifest)
+  const policySymbols = new Set([
+    ...Object.keys(manifest.by_symbol),
+    ...Object.keys(manifest.remove_by_symbol),
+  ])
   const genes = Object.fromEntries(
-    Object.keys(manifest.by_symbol).map((symbol) => [symbol, { n: symbol }]),
+    Array.from(policySymbols, (symbol) => [
+      symbol,
+      symbol === "CDH17" ? { n: symbol, a: ["HPT-1", "cadherin"] } : { n: symbol },
+    ]),
   )
   const result = overlayApi.applyPublishedAliasOverlay(genes, overlay)
 
@@ -49,6 +56,8 @@ test("every tracked publication alias is recognized by the real extension matche
       )
     }
   }
+  assert.deepEqual(result.genes.CDH17.a, ["HPT-1"])
+  assert.deepEqual(matcher.findMatches("a generic cadherin family protein"), [])
 })
 
 test("manifest alias overlay makes every reported label match its canonical gene", () => {
@@ -105,8 +114,56 @@ test("overlay bookkeeping never removes an alias that already belongs to the bas
   const first = overlayApi.applyPublishedAliasOverlay({ RELA: { a: ["p65"] } }, overlay)
   const second = overlayApi.applyPublishedAliasOverlay(first.genes, null, first.applied)
 
-  assert.deepEqual(first.applied, {})
+  assert.deepEqual(first.applied, { added_by_symbol: {}, removed_by_symbol: {} })
   assert.deepEqual(second.genes.RELA.a, ["p65"])
+})
+
+test("cadherin policy preserves specific labels and reverses without an artifact refetch", async () => {
+  const manifest = await iconoplasmPublicationAliasManifest()
+  const overlay = overlayApi.normalizePublishedAliasOverlay({
+    schema_version: manifest.schema_version,
+    version: manifest.version,
+    alias_count: manifest.by_symbol.CDH1.length + manifest.by_symbol.CDH2.length,
+    removal_count: manifest.removal_count,
+    by_symbol: { CDH1: manifest.by_symbol.CDH1, CDH2: manifest.by_symbol.CDH2 },
+    remove_by_symbol: manifest.remove_by_symbol,
+  })
+  const baseGenes = {
+    CDH1: { a: ["CD324"] },
+    CDH2: { a: ["NCAD"] },
+    CDH17: { a: ["HPT-1", "cadherin"] },
+  }
+  const applied = overlayApi.applyPublishedAliasOverlay(baseGenes, overlay)
+
+  assert.deepEqual(applied.errors, [])
+  assert.deepEqual(applied.genes.CDH17.a, ["HPT-1"])
+  const matcher = matcherApi.createGeneMatcher(applied.genes)
+  assert.deepEqual(
+    matcher
+      .findMatches(
+        "cadherin Cadherin cadherins Cadherins E-cadherin E-Cadherin E‑cadherin E–Cadherin E cadherins E Cadherins N-cadherin N-Cadherin N‑cadherins N–Cadherins N cadherins N Cadherins",
+      )
+      .map(({ text, symbol }) => `${text}:${symbol}`),
+    [
+      "E-cadherin:CDH1",
+      "E-Cadherin:CDH1",
+      "E‑cadherin:CDH1",
+      "E–Cadherin:CDH1",
+      "E cadherins:CDH1",
+      "E Cadherins:CDH1",
+      "N-cadherin:CDH2",
+      "N-Cadherin:CDH2",
+      "N‑cadherins:CDH2",
+      "N–Cadherins:CDH2",
+      "N cadherins:CDH2",
+      "N Cadherins:CDH2",
+    ],
+  )
+
+  const reverted = overlayApi.applyPublishedAliasOverlay(applied.genes, null, applied.applied)
+  assert.deepEqual(reverted.genes.CDH1.a, ["CD324"])
+  assert.deepEqual(reverted.genes.CDH2.a, ["NCAD"])
+  assert.deepEqual(reverted.genes.CDH17.a, ["HPT-1", "cadherin"])
 })
 
 test("malformed or ambiguous manifest overlays fail validation", () => {
@@ -125,6 +182,28 @@ test("malformed or ambiguous manifest overlays fail validation", () => {
       version: "v1-ambiguous",
       alias_count: 2,
       by_symbol: { RELA: ["p65"], RPRM: ["P65"] },
+    }),
+    null,
+  )
+  assert.equal(
+    overlayApi.normalizePublishedAliasOverlay({
+      schema_version: 1,
+      version: "v1-bad-removal-count",
+      alias_count: 0,
+      removal_count: 2,
+      by_symbol: {},
+      remove_by_symbol: { CDH17: ["cadherin"] },
+    }),
+    null,
+  )
+  assert.equal(
+    overlayApi.normalizePublishedAliasOverlay({
+      schema_version: 1,
+      version: "v1-conflicting-operation",
+      alias_count: 1,
+      removal_count: 1,
+      by_symbol: { CDH17: ["cadherin"] },
+      remove_by_symbol: { CDH17: ["Cadherin"] },
     }),
     null,
   )
