@@ -48,6 +48,7 @@ const includeFiles = [
 
 const includeDirs = [
   "shared/iconoplasm-card",
+  "shared/iconoplasm-portrait",
   "iconoplasm-extension/icons",
   "iconoplasm-extension/store-assets",
 ]

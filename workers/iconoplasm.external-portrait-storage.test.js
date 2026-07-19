@@ -2,12 +2,77 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
-import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  putPortraitStorageObject,
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const SHA = "4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212"
 const PORTRAIT_KEY = `portraits/v1/47/${SHA}/medium.webp`
 const DUMP_KEY = "public-dumps/catalog.abc123.jsonl"
 const CDN_BASE = "https://iconoplasmportraits.b-cdn.net"
+
+test("idempotent portrait PUT retries transient Bunny failures with the same payload", async () => {
+  const originalFetch = globalThis.fetch
+  const bodies = []
+  let attempts = 0
+  globalThis.fetch = async (_input, init) => {
+    attempts += 1
+    bodies.push(Array.from(new Uint8Array(init.body)))
+    if (attempts < 3) return new Response("temporary", { status: 503 })
+    return new Response(null, { status: 201 })
+  }
+
+  try {
+    await putPortraitStorageObject(
+      {
+        ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+        ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "iconoplasm-portraits",
+        ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-access-key",
+        ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: 0,
+      },
+      PORTRAIT_KEY,
+      Uint8Array.from([1, 2, 3, 4]),
+      { contentType: "image/webp" },
+    )
+    assert.equal(attempts, 3)
+    assert.deepEqual(bodies, [
+      [1, 2, 3, 4],
+      [1, 2, 3, 4],
+      [1, 2, 3, 4],
+    ])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("portrait PUT fails a permanent Bunny authorization error without retrying", async () => {
+  const originalFetch = globalThis.fetch
+  let attempts = 0
+  globalThis.fetch = async () => {
+    attempts += 1
+    return new Response("unauthorized", { status: 401 })
+  }
+
+  try {
+    await assert.rejects(
+      putPortraitStorageObject(
+        {
+          ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+          ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "iconoplasm-portraits",
+          ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "bad-key",
+          ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: 0,
+        },
+        PORTRAIT_KEY,
+        Uint8Array.from([1]),
+      ),
+      /PUT failed \(401\)/,
+    )
+    assert.equal(attempts, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
 
 function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
   return {

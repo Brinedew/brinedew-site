@@ -8,6 +8,13 @@ draft: false
 
 # Iconoplasm Patch Notes
 
+## 0.6.0 - 2026-07-19
+
+- Portrait APIs now publish canonical first-party asset references instead of CDN-provider URLs.
+- The website and extension now use one tab-wide portrait delivery engine and one server-published delivery policy.
+- Fixed newly generated edit and candidate previews failing after Bunny was already found unreachable in the tab.
+- Added bounded retry for transient Bunny Storage operations while permanent authorization/configuration errors fail immediately.
+
 ## 0.5.0 - 2026-07-19
 
 - Fixed the broad term `cadherin` incorrectly resolving to CDH17.

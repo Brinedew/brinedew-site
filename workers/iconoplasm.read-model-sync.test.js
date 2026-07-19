@@ -156,7 +156,7 @@ function buildEnv({ bindGateway = true } = {}) {
   const gatewayEnv = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_DB: gatewayDb,
-    ICONOPLASM_PORTRAIT_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: {
       store: new Map([["iconoplasm:gallery-version", "test-version"]]),
       async get(key) {

@@ -1,40 +1,25 @@
-# Iconoplasm Extension/API Compatibility
+# Iconoplasm extension contract
 
-For publication-alias ownership, performance invariants, maintenance, and rollback, read `../docs/ICONOPLASM_PUBLICATION_ALIASES.md`.
+The current extension release is 0.6.0. It consumes:
 
-## Canonical ID policy
-
-- Canonical app key is **gene symbol** (`s` in artifact, `canonical_symbol` in API).
-- UniProt (`u`) is optional metadata only.
-- User-facing page routes are symbol-first: `/gene/<SYMBOL>`.
-
-## Compatibility matrix
-
-| Extension version | Expected manifest route           | Artifact schema                                       | Publication aliases                              | Gene page links  |
-| ----------------- | --------------------------------- | ----------------------------------------------------- | ------------------------------------------------ | ---------------- |
-| `0.4.0`–`0.4.7`   | `/api/public/v1/catalog/manifest` | v4 (`s`,`c?`,`n`,`u`,`a?`,`tmh`,`pt?`,`ph?`)          | Generated artifact aliases only                  | `/gene/<symbol>` |
-| `0.4.8`           | `/api/public/v1/catalog/manifest` | v4 base artifact + optional manifest overlay schema 1 | Concrete Website-owned additions                 | `/gene/<symbol>` |
-| `0.5.0+`          | `/api/public/v1/catalog/manifest` | v4 base artifact + optional manifest overlay schema 1 | Concrete additions and ownership-scoped removals | `/gene/<symbol>` |
-
-## API surface (public cutover)
-
-- `GET /health`
-- `GET /api/public/v1/metadata`
-- `GET /api/public/v1/schema`
 - `GET /api/public/v1/catalog/manifest`
-- `GET /api/public/v1/catalog/catalog.<hash>.json`
-- `GET /api/public/v1/dumps/catalog.<hash>.jsonl`
-- `GET /api/public/v1/genes/:symbol` (symbol canonical only)
-- `POST /api/public/v1/genes/batch`
-- `POST /api/public/v1/resolve`
-- `GET /api/public/v1/changes?since=<ISO timestamp>`
-- `GET /api/public/v1/genes/search`
-- `GET /api/public/v1/gallery`
-- `GET /gene/:symbol`
+- catalog artifact schema 5
+- `PortraitAssetRefV1` in each gene's optional `p` field
+- `PortraitDeliveryPolicyV1` in `portrait_delivery`
+- publication alias overlay schema 1
+- symbol-first gene routes at `/gene/<SYMBOL>`
 
-## Cache behavior
+The manifest's `min_extension_version` is authoritative. The extension clears
+an incompatible cached catalog and reports a contract error instead of serving
+stale data.
 
-- Metadata + catalog manifest: short cache + ETag (`max-age=300`)
-- Gene API + batch + change feed: short cache (`max-age=120`)
-- Catalog artifact, JSONL dump, and portraits: immutable long cache (hash-addressed keys)
-- Human-curated publication aliases are inlined as a fully expanded dictionary in the catalog manifest. Alias-only releases reuse the cached base artifact and do not add a request or download the full catalog again.
+Catalog entries use `s` as the canonical symbol, with optional `c`, `n`, `u`,
+`a`, `tmh`, and `p` fields. The `p` object is inspectable and contains the asset
+SHA plus first-party canonical URLs for full, medium, and thumb renditions.
+
+Publication alias dictionary edits ship with the website manifest and do not
+require an extension package update. Protocol, permission, or runtime changes
+require a new extension release.
+
+For portrait architecture and operations, read
+`../docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md`.

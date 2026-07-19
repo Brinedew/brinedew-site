@@ -383,7 +383,8 @@ test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact
   const firstPayload = await first.json()
   assert.equal(first.status, 200)
   assert.equal(db.portraitRefReads, 1)
-  assert.equal(firstPayload.genes[0]?.pt != null || firstPayload.genes[0]?.ph != null, true)
+  assert.equal(firstPayload.schema_version, 5)
+  assert.equal(firstPayload.genes[0]?.p?.asset_sha256?.length, 64)
   const hydratedArtifactKeys = Array.from(kv.store.keys()).filter((key) =>
     String(key).startsWith("iconoplasm:hydrated-catalog-artifact:costbarrier01"),
   )
@@ -398,7 +399,8 @@ test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact
   const secondPayload = await second.json()
   assert.equal(second.status, 200)
   assert.equal(db.portraitRefReads, 1)
-  assert.equal(secondPayload.genes[0]?.pt != null || secondPayload.genes[0]?.ph != null, true)
+  assert.equal(secondPayload.schema_version, 5)
+  assert.equal(secondPayload.genes[0]?.p?.asset_sha256?.length, 64)
 })
 
 test("DO NOT DELETE: mobile card manifest reuses the in-isolate gallery version barrier", async () => {

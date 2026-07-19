@@ -97,7 +97,6 @@ export default (() => {
     geneDetailPromise: null,
     geneCardData: null,
     geneCardPromise: null,
-    portraitSourcePromise: null,
   }
   var geneMatch = /^\\/gene\\/([^/?#]+)/.exec(iconoplasmStartupPath)
   if (geneMatch && window.fetch) {
@@ -139,69 +138,6 @@ export default (() => {
               return null
             })
         }
-        // Use the embedded page payload as the earliest safe portrait source.
-        // Older cached HTML may still provide only a card projection, so retain
-        // the complete endpoint as the fallback without conflating the contracts.
-        var portraitSeedPromise = embeddedGeneCard
-          ? Promise.resolve(embeddedGeneCard)
-          : bootstrap.geneDetailPromise
-        bootstrap.portraitSourcePromise = portraitSeedPromise.then(function (data) {
-          try {
-            var storedDecision = JSON.parse(
-              window.sessionStorage.getItem("iconoplasm.portrait-source.v1") || "null",
-            )
-            if (
-              storedDecision &&
-              (storedDecision.source === "primary" || storedDecision.source === "fallback")
-            ) {
-              return storedDecision.source
-            }
-          } catch (_iconoPortraitDecisionReadError) {}
-          var portrait =
-            data &&
-            data.portrait &&
-            data.portrait.urls &&
-            (data.portrait.urls.medium || data.portrait.urls.full || data.portrait.urls.thumb)
-          if (!portrait) return ""
-          var primaryPortrait = portrait
-          try {
-            var parsedPortrait = new URL(portrait, origin)
-            if (parsedPortrait.pathname.indexOf("/portraits/") === 0) {
-              primaryPortrait =
-                "https://iconoplasmportraits.b-cdn.net" +
-                parsedPortrait.pathname +
-                parsedPortrait.search
-            }
-          } catch (_iconoPortraitUrlError) {}
-          return new Promise(function (resolvePortraitSource) {
-            var img = new Image()
-            var settled = false
-            var timer = 0
-            var settle = function (source) {
-              if (settled) return
-              settled = true
-              window.clearTimeout(timer)
-              img.onload = null
-              img.onerror = null
-              resolvePortraitSource(source)
-            }
-            img.decoding = "async"
-            img.fetchPriority = "high"
-            img.onload = function () {
-              settle("primary")
-            }
-            img.onerror = function () {
-              settle("fallback")
-            }
-            timer = window.setTimeout(function () {
-              settle("fallback")
-              try {
-                img.src = ""
-              } catch (_iconoPortraitAbortError) {}
-            }, 2500)
-            img.src = primaryPortrait
-          })
-        })
         return bootstrap.geneDetailPromise
       }
       var embeddedGeneCard = null

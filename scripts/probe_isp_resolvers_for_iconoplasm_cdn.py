@@ -31,15 +31,12 @@ DNS architecture (read this once, save hours next time):
     for everyone. This is the URL the worker's /portraits/ route serves at.
   - iconoplasmportraits.b-cdn.net is a Bunny pull zone. Bunny NS layer
     (ns1/2/3.bunnydns.com) returns a wildcard A record for any *.b-cdn.net.
-  - The project's worker at iconoplasm.brinedew.bio/portraits/... proxies
-    portrait bytes from Bunny's storage zone (storage.bunnycdn.com) when R2
-    is unavailable. This URL is reachable from any network because it's on
-    Cloudflare DNS.
-  - The fallback URL exists today. The user's ISP resolver returning NXDOMAIN
-    for the Bunny hostname does NOT affect the worker-origin URL. The
-    bug is the *manifest's* portrait_base_url which tells browsers to use
-    the Bunny pull zone directly. (See the discussion in the artifact folder
-    artifacts/image-bug-diagnosis-2026-06-26/ for the full evidence trail.)
+  - The canonical URL at iconoplasm.brinedew.bio/portraits/... reads portrait
+    bytes from Bunny's authenticated Storage API and is independently reachable
+    through Cloudflare DNS.
+  - The delivery policy may select the Bunny pull zone as an accelerator after
+    one successful tab-wide probe. Resolver failure must select the canonical
+    origin for that tab.
 
 Resolve iconoplasmportraits.b-cdn.net via the EXACT ISP resolvers this Windows
 host was using (2001:ee0:23::23, 2001:ee0:26::26, 123.23.23.23, 123.26.26.26).

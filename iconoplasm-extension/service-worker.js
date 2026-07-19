@@ -5,10 +5,19 @@
 // website-owned so an alias edit does not force a 19k-gene workstation sync or a
 // multi-megabyte catalog refetch.
 
-if (!globalThis.IconoplasmPublicationAliasOverlay && typeof importScripts === "function") {
-  importScripts("publication-alias-overlay.js")
+if (typeof importScripts === "function") {
+  if (!globalThis.IconoplasmPortraitDelivery) {
+    importScripts("generated/portrait-delivery-core.js")
+  }
+  if (!globalThis.IconoplasmPublicationAliasOverlay) {
+    importScripts("publication-alias-overlay.js")
+  }
 }
+const IconoPortraitDelivery = globalThis.IconoplasmPortraitDelivery
 const IconoPublicationAliasOverlay = globalThis.IconoplasmPublicationAliasOverlay
+if (!IconoPortraitDelivery) {
+  throw new Error("Iconoplasm portrait delivery runtime is required")
+}
 if (!IconoPublicationAliasOverlay) {
   throw new Error("Iconoplasm publication alias overlay runtime is required")
 }
@@ -20,19 +29,18 @@ const DATA_REFRESH_TTL_MS = 5 * 60 * 1000
 const PORTRAIT_DATA_URL_CACHE_LIMIT = 48
 const PORTRAIT_DATA_URL_ERROR_CACHE_LIMIT = 96
 const PORTRAIT_DATA_URL_ERROR_TTL_MS = 30 * 1000
-const PORTRAIT_SOURCE_TIMEOUT_MS = 2500
-const PORTRAIT_PRIMARY_ORIGIN = "https://iconoplasmportraits.b-cdn.net"
-const PORTRAIT_FALLBACK_ORIGIN = HOST
 const PORTRAIT_SOURCE_SESSION_KEY = "iconoplasm_portrait_source_by_tab"
-const REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION = 4
+const REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION = 5
 const CONTRACT_ERROR_INVALID_MANIFEST = "invalid_manifest"
 const CONTRACT_ERROR_INCOMPATIBLE_ARTIFACT = "incompatible_artifact"
 const CONTRACT_ERROR_INCOMPATIBLE_EXTENSION = "incompatible_extension"
 const portraitDataUrlCache = new Map()
 const portraitDataUrlErrorCache = new Map()
 const portraitSourceByTab = new Map()
-const portraitSourceDecisionByTab = new Map()
+const portraitDeliverySessionByTab = new Map()
+const portraitDeliverySessionPromiseByTab = new Map()
 let portraitSourceStateLoaded = false
+let portraitDeliveryPolicy = IconoPortraitDelivery.normalizePortraitDeliveryPolicy()
 
 chrome.runtime.onInstalled.addListener(() => {
   fetchGeneData()
@@ -46,7 +54,8 @@ if (chrome.tabs?.onRemoved?.addListener) {
   chrome.tabs.onRemoved.addListener(async (tabId) => {
     await loadPortraitSourceState()
     portraitSourceByTab.delete(portraitTabKey(tabId))
-    portraitSourceDecisionByTab.delete(portraitTabKey(tabId))
+    portraitDeliverySessionByTab.delete(portraitTabKey(tabId))
+    portraitDeliverySessionPromiseByTab.delete(portraitTabKey(tabId))
     const session = chrome.storage?.session
     if (!session?.set) return
     try {
@@ -195,13 +204,11 @@ async function fetchIconoplasmApi(msg) {
 async function getStoredGeneData() {
   const result = await chrome.storage.local.get([
     "iconoplasm_genes",
-    "iconoplasm_portrait_base_url",
     "iconoplasm_contract_error",
     "iconoplasm_min_extension_version",
   ])
   return {
     genes: result.iconoplasm_genes || null,
-    portraitBaseUrl: result.iconoplasm_portrait_base_url || "",
     contractError: result.iconoplasm_contract_error || null,
     minExtensionVersion: result.iconoplasm_min_extension_version || null,
   }
@@ -213,7 +220,7 @@ async function getStoredGeneSnapshot() {
     "iconoplasm_hash",
     "iconoplasm_last_fetch",
     "iconoplasm_schema_version",
-    "iconoplasm_portrait_base_url",
+    "iconoplasm_portrait_delivery",
     "iconoplasm_alias_overlay_version",
     "iconoplasm_alias_overlay_applied",
     "iconoplasm_contract_error",
@@ -244,7 +251,14 @@ function normalizePublishedManifest(rawManifest) {
     manifest.filename || (catalogHash ? `catalog.${catalogHash}.json` : ""),
   ).trim()
   const artifactUrl = String(manifest.artifact_url || "").trim()
-  const portraitBaseUrl = String(manifest.portrait_base_url || "").trim()
+  let portraitDelivery
+  try {
+    portraitDelivery = IconoPortraitDelivery.normalizePortraitDeliveryPolicy(
+      manifest.portrait_delivery,
+    )
+  } catch (_error) {
+    return null
+  }
   const schemaVersion = Number.parseInt(
     String(manifest.artifact_schema_version ?? manifest.schema_version ?? 0),
     10,
@@ -260,7 +274,6 @@ function normalizePublishedManifest(rawManifest) {
   if (
     !currentHash ||
     (!filename && !artifactUrl) ||
-    !portraitBaseUrl ||
     !Number.isFinite(schemaVersion) ||
     !publicationAliases
   ) {
@@ -270,7 +283,7 @@ function normalizePublishedManifest(rawManifest) {
     current_hash: currentHash,
     filename: filename || null,
     artifact_url: artifactUrl || null,
-    portrait_base_url: portraitBaseUrl,
+    portrait_delivery: portraitDelivery,
     schema_version: schemaVersion,
     gene_count: Number.isFinite(Number(manifest.gene_count)) ? Number(manifest.gene_count) : null,
     min_extension_version: minExtensionVersion || currentExtensionVersion(),
@@ -309,7 +322,7 @@ async function invalidateStoredPublishedSnapshot({ code, message, minExtensionVe
     "iconoplasm_gene_count",
     "iconoplasm_last_fetch",
     "iconoplasm_schema_version",
-    "iconoplasm_portrait_base_url",
+    "iconoplasm_portrait_delivery",
     "iconoplasm_alias_overlay_version",
     "iconoplasm_alias_overlay_applied",
   ])
@@ -321,7 +334,7 @@ async function ensureFreshGeneData() {
   const geneCount = getStoredGeneCount(stored.iconoplasm_genes)
   const hasPublishedCatalogSchema =
     Number(stored.iconoplasm_schema_version || 0) >= REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION &&
-    Boolean(stored.iconoplasm_portrait_base_url)
+    Boolean(stored.iconoplasm_portrait_delivery)
   const hasContractError = Boolean(stored.iconoplasm_contract_error)
   const needsArtifactRebuild = geneCount === 0 || !hasPublishedCatalogSchema
   const needsRefresh =
@@ -391,25 +404,11 @@ function clearPortraitDataUrlCaches() {
 
 async function clearPortraitSourceStates() {
   portraitSourceByTab.clear()
-  portraitSourceDecisionByTab.clear()
+  portraitDeliverySessionByTab.clear()
+  portraitDeliverySessionPromiseByTab.clear()
   portraitSourceStateLoaded = true
   const session = chrome.storage?.session
   if (session?.remove) await session.remove([PORTRAIT_SOURCE_SESSION_KEY])
-}
-
-function portraitPath(rawUrl) {
-  const value = String(rawUrl || "").trim()
-  if (!value) return ""
-  try {
-    const parsed = new URL(value, HOST)
-    if (parsed.origin !== PORTRAIT_PRIMARY_ORIGIN && parsed.origin !== PORTRAIT_FALLBACK_ORIGIN) {
-      return ""
-    }
-    if (!parsed.pathname.startsWith("/portraits/")) return ""
-    return parsed.pathname + parsed.search
-  } catch (_err) {
-    return ""
-  }
 }
 
 function portraitTabKey(tabId) {
@@ -417,11 +416,7 @@ function portraitTabKey(tabId) {
 }
 
 function normalizedPortraitState(value) {
-  const source = value?.source === "primary" || value?.source === "fallback" ? value.source : ""
-  const failed = Array.isArray(value?.failed)
-    ? Array.from(new Set(value.failed.filter((item) => item === "primary" || item === "fallback")))
-    : []
-  return { source, failed }
+  return IconoPortraitDelivery.normalizePortraitDeliveryState(value, portraitDeliveryPolicy)
 }
 
 async function loadPortraitSourceState() {
@@ -460,15 +455,18 @@ async function portraitSourceState(tabId) {
   return normalizedPortraitState(portraitSourceByTab.get(portraitTabKey(tabId)))
 }
 
-function portraitUrlForSource(path, source) {
-  return `${source === "fallback" ? PORTRAIT_FALLBACK_ORIGIN : PORTRAIT_PRIMARY_ORIGIN}${path}`
+function configurePortraitDeliveryPolicy(rawPolicy) {
+  portraitDeliveryPolicy = IconoPortraitDelivery.normalizePortraitDeliveryPolicy(rawPolicy)
+  for (const session of portraitDeliverySessionByTab.values())
+    session.configure(portraitDeliveryPolicy)
+  return portraitDeliveryPolicy
 }
 
 async function fetchPortraitBytes(resolvedUrl, cacheKey) {
   if (portraitDataUrlCache.has(cacheKey)) return portraitDataUrlCache.get(cacheKey)
   if (hasFreshPortraitDataUrlError(resolvedUrl)) return ""
   const controller = typeof AbortController === "function" ? new AbortController() : null
-  const timer = setTimeout(() => controller?.abort(), PORTRAIT_SOURCE_TIMEOUT_MS)
+  const timer = setTimeout(() => controller?.abort(), portraitDeliveryPolicy.probe_timeout_ms)
   try {
     const resp = await fetch(resolvedUrl, {
       headers: {
@@ -502,60 +500,55 @@ async function fetchPortraitBytes(resolvedUrl, cacheKey) {
   }
 }
 
-async function ensurePortraitSource(rawUrl, tabId) {
-  const path = portraitPath(rawUrl)
-  if (!path) return ""
+async function portraitDeliverySession(tabId) {
   const key = portraitTabKey(tabId)
-  const existing = await portraitSourceState(tabId)
-  if (existing.source) return existing.source
-  if (portraitSourceDecisionByTab.has(key)) return portraitSourceDecisionByTab.get(key)
-
-  const decision = (async () => {
-    const primaryUrl = portraitUrlForSource(path, "primary")
-    const dataUrl = await fetchPortraitBytes(primaryUrl, path)
-    if (dataUrl) {
-      await rememberPortraitSourceState(tabId, { source: "primary", failed: [] })
-      return "primary"
-    }
-    await rememberPortraitSourceState(tabId, { source: "fallback", failed: ["primary"] })
-    return "fallback"
-  })().finally(() => {
-    portraitSourceDecisionByTab.delete(key)
-  })
-  portraitSourceDecisionByTab.set(key, decision)
-  return decision
+  if (portraitDeliverySessionByTab.has(key)) return portraitDeliverySessionByTab.get(key)
+  if (portraitDeliverySessionPromiseByTab.has(key)) {
+    return portraitDeliverySessionPromiseByTab.get(key)
+  }
+  const loading = (async () => {
+    const initialState = await portraitSourceState(tabId)
+    const session = IconoPortraitDelivery.createPortraitDeliverySession({
+      policy: portraitDeliveryPolicy,
+      initialState,
+      probe: async (url) => {
+        const path = IconoPortraitDelivery.portraitPath(url, portraitDeliveryPolicy)
+        return Boolean(path && (await fetchPortraitBytes(url, path)))
+      },
+      persist(state) {
+        return rememberPortraitSourceState(tabId, state)
+      },
+    })
+    portraitDeliverySessionByTab.set(key, session)
+    return session
+  })().finally(() => portraitDeliverySessionPromiseByTab.delete(key))
+  portraitDeliverySessionPromiseByTab.set(key, loading)
+  return loading
 }
 
 async function fetchPortraitDataUrl(url, tabId) {
   const normalizedUrl = String(url || "").trim()
   if (!normalizedUrl) return { dataUrl: "", sourceUrl: "" }
-  const path = portraitPath(normalizedUrl)
+  const path = IconoPortraitDelivery.portraitPath(normalizedUrl, portraitDeliveryPolicy)
   if (!path) {
     const dataUrl = await fetchPortraitBytes(normalizedUrl, normalizedUrl)
     return { dataUrl, sourceUrl: normalizedUrl }
   }
 
-  const source = await ensurePortraitSource(normalizedUrl, tabId)
-  const resolvedUrl = portraitUrlForSource(path, source)
+  const session = await portraitDeliverySession(tabId)
+  const resolvedUrl = await session.ensure(normalizedUrl)
   let dataUrl = portraitDataUrlCache.get(path) || ""
   if (!dataUrl) dataUrl = await fetchPortraitBytes(resolvedUrl, path)
   if (dataUrl) return { dataUrl, sourceUrl: resolvedUrl }
 
-  const current = await portraitSourceState(tabId)
-  const failed = Array.from(new Set(current.failed.concat(source)))
-  const alternate = source === "primary" ? "fallback" : "primary"
-  if (failed.includes(alternate)) {
-    await rememberPortraitSourceState(tabId, { source, failed })
+  const failure = session.reportFailure(resolvedUrl)
+  if (!failure.changed || failure.state.state === "terminal_failure") {
     return { dataUrl: "", sourceUrl: resolvedUrl }
   }
-  await rememberPortraitSourceState(tabId, { source: alternate, failed })
-  const alternateUrl = portraitUrlForSource(path, alternate)
+  const alternateUrl = failure.replacementUrl
   dataUrl = await fetchPortraitBytes(alternateUrl, path)
   if (!dataUrl) {
-    await rememberPortraitSourceState(tabId, {
-      source: alternate,
-      failed: Array.from(new Set(failed.concat(alternate))),
-    })
+    session.reportFailure(alternateUrl)
   }
   return { dataUrl, sourceUrl: alternateUrl }
 }
@@ -602,8 +595,7 @@ function projectPublishedArtifactGenes(artifact) {
     if (gene.n) entry.n = gene.n
     if (gene.u) entry.u = gene.u
     if (Array.isArray(gene.a) && gene.a.length) entry.a = gene.a
-    if (gene.pt) entry.pt = gene.pt
-    if (gene.ph) entry.ph = gene.ph
+    if (gene.p && typeof gene.p === "object") entry.p = gene.p
     lookup[symbol] = entry
   }
   return lookup
@@ -632,6 +624,7 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
       console.error("[Iconoplasm] Manifest fetch failed")
       return null
     }
+    configurePortraitDeliveryPolicy(manifest.portrait_delivery)
 
     if (manifest.schema_version < REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION) {
       await invalidateStoredPublishedSnapshot({
@@ -674,7 +667,7 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
       await chrome.storage.local.set({
         iconoplasm_last_fetch: fetchedAt,
         iconoplasm_schema_version: manifest.schema_version,
-        iconoplasm_portrait_base_url: manifest.portrait_base_url,
+        iconoplasm_portrait_delivery: manifest.portrait_delivery,
         iconoplasm_min_extension_version: manifest.min_extension_version,
       })
       return {
@@ -729,7 +722,7 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
       iconoplasm_gene_count: geneCount,
       iconoplasm_last_fetch: fetchedAt,
       iconoplasm_schema_version: manifest.schema_version,
-      iconoplasm_portrait_base_url: manifest.portrait_base_url,
+      iconoplasm_portrait_delivery: manifest.portrait_delivery,
       iconoplasm_min_extension_version: manifest.min_extension_version,
       iconoplasm_alias_overlay_version: manifest.publication_aliases.version,
       iconoplasm_alias_overlay_applied: overlayResult.applied,

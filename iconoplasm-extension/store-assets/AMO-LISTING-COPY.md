@@ -4,11 +4,11 @@
 
 Upload this Firefox package on the AMO "Upload Version" screen if the GUI/GitHub publish flow is not being used:
 
-- `D:\Coding\Website\iconoplasm-extension\dist\iconoplasm-firefox-v0.4.1.zip`
+- `D:\Coding\Website\iconoplasm-extension\dist\iconoplasm-firefox-v0.6.0.zip`
 
 If AMO asks for source code, upload this file:
 
-- `D:\Coding\Website\iconoplasm-extension\dist\iconoplasm-firefox-source-v0.4.1.zip`
+- `D:\Coding\Website\iconoplasm-extension\dist\iconoplasm-firefox-source-v0.6.0.zip`
 
 Store release guard:
 

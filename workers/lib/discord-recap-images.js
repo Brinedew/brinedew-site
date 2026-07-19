@@ -27,7 +27,7 @@ export function buildDiscordRecapImageKey(day) {
 
 function bunnyCdnBase(env) {
   const raw = String(
-    env?.ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL || env?.ICONOPLASM_PORTRAIT_BASE_URL || "",
+    env?.ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL || "",
   ).trim()
   return raw ? raw.replace(/\/+$/, "") : ""
 }
