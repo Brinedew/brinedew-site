@@ -9,7 +9,7 @@ const expectedVersion = expectedArg ? expectedArg.slice("--expected=".length) : 
 try {
   const result = assertIconoplasmPublisherAuthority(repoRoot, { expectedVersion })
   console.log(
-    `[iconoplasm-publisher-authority] ${result.version} (catalog schema ${result.contractSchemaVersion}, revision ${result.contractRevision})`,
+    `[iconoplasm-publisher-authority] ${result.version} (minimum ${result.minimumSupportedVersion}; catalog schema ${result.contractSchemaVersion}, revision ${result.contractRevision})`,
   )
 } catch (error) {
   console.error(`[iconoplasm-publisher-authority] ${error.message}`)

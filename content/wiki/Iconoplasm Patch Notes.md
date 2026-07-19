@@ -10,6 +10,7 @@ draft: false
 
 ## Unreleased
 
+- Store releases now keep the immediately previous extension/API contract supported during browser-store review, then retire it automatically at the following human-published release.
 - Portrait APIs now publish canonical first-party asset references instead of CDN-provider URLs.
 - The website and extension now use one tab-wide portrait delivery engine and one server-published delivery policy.
 - Fixed newly generated edit and candidate previews failing after Bunny was already found unreachable in the tab.
