@@ -56,6 +56,19 @@ class FakeSearchStatement {
 
   async all() {
     if (
+      this.sql.includes("SELECT gene_symbol AS symbol") &&
+      this.sql.includes("current_asset_sha256 AS asset_sha256") &&
+      this.sql.includes("ORDER BY gene_symbol ASC")
+    ) {
+      return {
+        results: this.db.listPublishedPortraitRefs().map((row) => ({
+          symbol: row.symbol,
+          asset_sha256: row.asset_sha256,
+        })),
+      }
+    }
+
+    if (
       this.sql.includes("FROM icono_publish_state ps") &&
       this.sql.includes("LEFT JOIN icono_portrait_assets pa")
     ) {
@@ -444,7 +457,7 @@ test.after(() => {
   resetIconoplasmRuntimeCachesForTest()
 })
 
-test("catalog search refreshes canonical portraits even if gallery version does not bump", async () => {
+test("catalog search refreshes canonical portraits after the shared fingerprint expires", async () => {
   const env = buildEnv({
     publishedPortraits: [
       {
@@ -478,6 +491,10 @@ test("catalog search refreshes canonical portraits even if gallery version does 
       updated_at: "2026-04-05T00:00:01Z",
     },
   ])
+
+  // Expire the cross-isolate inventory cache. A runtime reset alone must not
+  // bypass the shared billing barrier used in production.
+  env.KV.entries.delete("iconoplasm:published-portrait-fingerprint:v3")
 
   resetIconoplasmRuntimeCachesForTest()
 

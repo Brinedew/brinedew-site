@@ -38,17 +38,23 @@ class FakeCostBarrierStatement {
   }
 
   async first() {
-    if (this.sql.includes("COUNT(*) AS published_count")) {
-      this.db.fingerprintReads += 1
-      return {
-        published_count: 2,
-        latest_updated_at: "2026-04-05T00:00:00Z",
-      }
-    }
     return null
   }
 
   async all() {
+    if (
+      this.sql.includes("FROM icono_publish_state") &&
+      !this.sql.includes("JOIN icono_portrait_assets")
+    ) {
+      this.db.fingerprintReads += 1
+      return {
+        results: [
+          { symbol: "A1BG", asset_sha256: "a".repeat(64) },
+          { symbol: "TP53", asset_sha256: "b".repeat(64) },
+        ],
+      }
+    }
+
     if (
       this.sql.includes("FROM icono_publish_state ps") &&
       this.sql.includes("LEFT JOIN icono_portrait_assets pa") &&
@@ -304,7 +310,7 @@ test("DO NOT DELETE: catalog manifest reuses the shared portrait fingerprint cac
   assert.equal(first.status, 200)
   assert.equal(db.fingerprintReads, 1)
   const firstPayload = await first.json()
-  assert.match(firstPayload.artifact_url, /catalog\.costbarrier01-a5c1-v2-2-/)
+  assert.match(firstPayload.artifact_url, /catalog\.costbarrier01-a5c1-v3-2-/)
 
   resetIconoplasmRuntimeCachesForTest()
   const second = await handleIconoplasmGatewayRequest(
@@ -313,6 +319,8 @@ test("DO NOT DELETE: catalog manifest reuses the shared portrait fingerprint cac
     { waitUntil() {} },
   )
   assert.equal(second.status, 200)
+  const secondPayload = await second.json()
+  assert.equal(secondPayload.build_version, firstPayload.build_version)
   assert.equal(db.fingerprintReads, 1)
 })
 
@@ -392,9 +400,9 @@ test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact
   )
   const manifestPayload = await manifestResponse.json()
   const fingerprintEnvelope = JSON.parse(
-    kv.store.get("iconoplasm:published-portrait-fingerprint:v2"),
+    kv.store.get("iconoplasm:published-portrait-fingerprint:v3"),
   )
-  const portraitRefVersion = `v2-${fingerprintEnvelope.fingerprint.published_count}-${fingerprintEnvelope.fingerprint.latest}`
+  const portraitRefVersion = `v3-${fingerprintEnvelope.fingerprint.published_count}-${fingerprintEnvelope.fingerprint.latest}`
   const incompletePortraitRefCacheKey = `iconoplasm:published-portrait-refs:${portraitRefVersion}`
   kv.store.set(incompletePortraitRefCacheKey, "[]")
   const invalidCurrentCacheKey = `iconoplasm:hydrated-catalog-artifact:a5c1:${manifestPayload.build_version}`

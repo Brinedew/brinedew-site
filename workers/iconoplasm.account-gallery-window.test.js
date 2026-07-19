@@ -281,18 +281,26 @@ function completeCardCatalogArtifact(symbols, version = "test-vm-version") {
 function buildEnv({ db = new FakeDb(), version = "test-vm-version" } = {}) {
   resetIconoplasmRuntimeCachesForTest()
   const symbols = ["INS", "PRL", "RHO", "TP53", "BRCA1"]
+  const portraitAssetSha = "7b".repeat(32)
+  const portraitFingerprint = {
+    published_count: symbols.length,
+    latest: portraitAssetSha,
+  }
   const kvStore = new Map([
     [
       `iconoplasm:card-catalog:${version}`,
       JSON.stringify(completeCardCatalogArtifact(symbols, version)),
     ],
     [
-      "iconoplasm:published-portrait-refs:v2-none",
+      "iconoplasm:published-portrait-fingerprint:v3",
+      JSON.stringify({ cached_at: Date.now(), fingerprint: portraitFingerprint }),
+    ],
+    [
+      `iconoplasm:published-portrait-refs:v3-${symbols.length}-${portraitAssetSha}`,
       JSON.stringify(
         symbols.map((symbol) => ({
           symbol,
-          ph: `portraits/v1/${"7b".repeat(32).slice(0, 2)}/${"7b".repeat(32)}/full.webp`,
-          pt: `portraits/v1/${"7b".repeat(32).slice(0, 2)}/${"7b".repeat(32)}/medium.webp`,
+          asset_sha256: portraitAssetSha,
         })),
       ),
     ],

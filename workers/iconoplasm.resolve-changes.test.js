@@ -45,6 +45,19 @@ class FakeChangesStatement {
 
   async all() {
     if (
+      this.sql.includes("SELECT gene_symbol AS symbol") &&
+      this.sql.includes("current_asset_sha256 AS asset_sha256") &&
+      this.sql.includes("ORDER BY gene_symbol ASC")
+    ) {
+      return {
+        results: this.db.listPublishedPortraitRefs().map((row) => ({
+          symbol: row.symbol,
+          asset_sha256: row.asset_sha256,
+        })),
+      }
+    }
+
+    if (
       this.sql.includes("FROM icono_publish_state ps") &&
       this.sql.includes("LEFT JOIN icono_portrait_assets pa")
     ) {

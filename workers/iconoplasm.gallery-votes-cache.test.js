@@ -24,6 +24,18 @@ class FakeVotesStatement {
   }
 
   async all() {
+    if (
+      this.sql.includes("SELECT gene_symbol AS symbol") &&
+      this.sql.includes("current_asset_sha256 AS asset_sha256") &&
+      this.sql.includes("ORDER BY gene_symbol ASC")
+    ) {
+      return {
+        results: this.db.rows
+          .map((row) => ({ symbol: row.symbol, asset_sha256: row.asset_sha256 }))
+          .sort((left, right) => left.symbol.localeCompare(right.symbol)),
+      }
+    }
+
     if (this.sql.includes("FROM icono_admin_gene_rollup gr")) {
       this.db.rollupReads += 1
       throw new Error("vote gallery should stay on the snapshot path")

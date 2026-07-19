@@ -89,6 +89,7 @@ source-selection rules.
 - Public API schema: 4
 - Catalog artifact schema: 5
 - Immutable catalog URL contract token: `a5c1`
+- Published portrait snapshot schema: `v3`
 - Minimum extension version: 0.6.0
 - Extension catalog portrait field: `p` (`PortraitAssetRefV1`)
 - Image-edit and candidate-generation result field: `result_asset`
