@@ -57,7 +57,14 @@ const bundledTargets = [
   {
     source: path.join(repoRoot, "shared", "iconoplasm-portrait", "portrait-delivery-core.js"),
     outputs: [
-      path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "portrait-delivery-core.js"),
+      path.join(
+        repoRoot,
+        "quartz",
+        "static",
+        "iconoplasm",
+        "generated",
+        "portrait-delivery-core.js",
+      ),
     ],
     format: "esm",
   },
