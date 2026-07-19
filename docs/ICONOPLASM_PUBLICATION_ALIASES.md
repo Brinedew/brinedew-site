@@ -24,19 +24,27 @@ The Website publishes the curated aliases inside the existing catalog manifest:
   "publication_aliases": {
     "schema_version": 1,
     "version": "v1-<content hash>",
-    "alias_count": 29,
+    "alias_count": 45,
+    "removal_count": 1,
     "by_symbol": {
       "RELA": ["p65"]
+    },
+    "remove_by_symbol": {
+      "CDH17": ["cadherin"]
     }
   }
 }
 ```
 
+`by_symbol` is the complete effective addition dictionary. Source code may use the generic Cartesian-product helper to keep a spelling family readable, but expansion happens before validation and publication. The manifest, server cache, extension cache, and live verifier all contain the concrete strings; consumers never interpret spelling rules.
+
+`remove_by_symbol` contains ownership-scoped retractions from the generated catalog. A retraction removes a string only when the named canonical gene currently owns it. It cannot globally block that spelling or erase a mapping owned by another gene.
+
 The overlay version is derived from the validated payload. The catalog-manifest ETag contains both the generated catalog build version and the overlay version, so either kind of change invalidates the short-lived manifest cache without changing the immutable catalog artifact URL.
 
 The stateful Website runtime merges the overlay into its in-memory gene views so public search and identifier resolution use the same curated labels as the extension. The cache key includes the overlay version.
 
-Extension 0.4.8 and newer validate and apply the overlay to their locally cached projection of the generated catalog. The extension records exactly which aliases came from the overlay. When an alias is changed or removed, the next manifest refresh removes only the previously applied overlay aliases and preserves aliases that belong to the generated catalog.
+The current extension validates and applies the overlay to its locally cached projection of the generated catalog. It records exact additions and retractions separately. On the next manifest refresh it reverses only the prior policy operations, applies the new concrete dictionary, and preserves unrelated generated aliases.
 
 ## Performance contract
 
@@ -59,7 +67,7 @@ The overlay validator enforces:
 - uppercase canonical symbols
 - non-empty alias arrays
 - exact, normalized alias strings of at most 64 characters
-- at most 500 aliases in the overlay
+- at most 500 total additions and retractions in the overlay
 - no alias shared by two canonical symbols after case and dash normalization
 - no collision with a different canonical symbol when the catalog symbols are available
 
@@ -67,11 +75,11 @@ The server checks curated aliases against generated canonical symbols and genera
 
 The extension is stricter because it owns a complete local catalog snapshot: an unknown target, ambiguity, or canonical collision rejects that overlay update. The previously stored gene map remains available, the contract error is surfaced, and retrying the overlay does not trigger a full catalog download.
 
-## Adding, changing, or removing an alias
+## Adding or changing a mapping
 
 1. Confirm the canonical target symbol exists in the published catalog.
-2. Edit only `RAW_PUBLICATION_ALIASES_BY_SYMBOL` in `workers/iconoplasm-publication-aliases.js`.
-3. Preserve the spelling, case, punctuation, Greek letters, and spacing that should match on real pages.
+2. Edit `RAW_PUBLICATION_ALIASES_BY_SYMBOL` in `workers/iconoplasm-publication-aliases.js`.
+3. Preserve every spelling, case, punctuation mark, Greek letter, and spacing form that should match on real pages. When several independent choices produce a spelling family, use `expandIconoplasmPublicationAliasForms`; its returned strings become ordinary dictionary entries in the published manifest.
 4. Run the focused contract tests:
 
    ```powershell
@@ -95,7 +103,13 @@ The extension is stricter because it owns a complete local catalog snapshot: an 
 
 The production deployment runs the same verifier after assigning the live Worker routes. It gives both the manifest and resolver a bounded propagation window, then fails the deployment run if the manifest payload differs from the tracked configuration or any alias resolves to the wrong canonical symbol.
 
-An alias-only change does not require Website Ops, an extension version bump, a new extension package, or a browser-store submission. Extension 0.4.8 and newer receive it from the manifest.
+After extension 0.5.0 is installed, an alias-policy change does not require Website Ops, an extension version bump, a new package, or a browser-store submission. Clients receive the concrete dictionary from the manifest.
+
+## Retracting an incorrect generated mapping
+
+Add the alias under its current canonical owner in `RAW_PUBLICATION_ALIAS_REMOVALS_BY_SYMBOL`. Do not add the same spelling to a blocklist: retractions are data corrections, and the spelling may later be valid for a different gene.
+
+If the label should resolve to another canonical gene, add that concrete mapping to `RAW_PUBLICATION_ALIASES_BY_SYMBOL` in the same release. Validation and live verification ensure that the old ownership is removed before the new ownership is applied.
 
 ## Rollback
 

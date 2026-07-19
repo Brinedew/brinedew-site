@@ -1,7 +1,8 @@
 import { iconoplasmPublicationAliasManifest } from "../workers/iconoplasm-publication-aliases.js"
+import extensionManifest from "../iconoplasm-extension/manifest.json" with { type: "json" }
 
 const DEFAULT_PUBLIC_BASE_URL = "https://iconoplasm.brinedew.bio"
-const EXTENSION_VERSION = "0.4.8"
+const EXTENSION_VERSION = String(extensionManifest.version || "").trim()
 const MAX_ATTEMPTS = 6
 const RETRY_DELAY_MS = 10_000
 const REQUEST_TIMEOUT_MS = 20_000
@@ -77,32 +78,52 @@ async function waitForPublishedOverlay(baseUrl, expectedOverlay) {
   )
 }
 
-function resolutionMismatches(payload, expectedPairs) {
+function aliasKey(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[\u2010-\u2015\u2212]/g, "-")
+    .replace(/\s+/g, " ")
+    .toUpperCase()
+}
+
+function resolutionMismatches(payload, expectedOperations) {
   const results = Array.isArray(payload?.results) ? payload.results : []
-  if (results.length !== expectedPairs.length) {
-    return [`received ${results.length} results for ${expectedPairs.length} curated aliases`]
+  if (results.length !== expectedOperations.length) {
+    return [
+      `received ${results.length} results for ${expectedOperations.length} curated alias operations`,
+    ]
   }
 
-  return expectedPairs.flatMap((expected, index) => {
+  return expectedOperations.flatMap((expected, index) => {
     const result = results[index]
-    if (
-      result?.found === true &&
-      String(result?.requested || "") === expected.alias &&
-      String(result?.canonical_symbol || "") === expected.symbol
-    ) {
+    const requestedMatches = String(result?.requested || "") === expected.alias
+    const symbolMatches = String(result?.canonical_symbol || "") === expected.expectedSymbol
+    const foundMatches = Boolean(result?.found) === Boolean(expected.expectedSymbol)
+    if (requestedMatches && symbolMatches && foundMatches) {
       return []
     }
     return [
-      `${JSON.stringify(expected.alias)} expected ${expected.symbol}, received ` +
+      `${JSON.stringify(expected.alias)} expected ${expected.expectedSymbol || "no mapping"}, received ` +
         JSON.stringify(result || null),
     ]
   })
 }
 
 async function waitForResolution(baseUrl, expectedOverlay) {
-  const expectedPairs = Object.entries(expectedOverlay.by_symbol).flatMap(([symbol, aliases]) =>
-    aliases.map((alias) => ({ alias, symbol })),
+  const mappedOperations = Object.entries(expectedOverlay.by_symbol).flatMap(([symbol, aliases]) =>
+    aliases.map((alias) => ({ alias, expectedSymbol: symbol })),
   )
+  const mappedOwnerByAlias = new Map(
+    mappedOperations.map(({ alias, expectedSymbol }) => [aliasKey(alias), expectedSymbol]),
+  )
+  const removedOperations = Object.entries(expectedOverlay.remove_by_symbol || {}).flatMap(
+    ([_removedSymbol, aliases]) =>
+      aliases.map((alias) => ({
+        alias,
+        expectedSymbol: mappedOwnerByAlias.get(aliasKey(alias)) || "",
+      })),
+  )
+  const expectedOperations = [...mappedOperations, ...removedOperations]
   const resolveUrl = new URL("/api/public/v1/resolve", baseUrl)
   let lastMismatches = []
 
@@ -110,10 +131,12 @@ async function waitForResolution(baseUrl, expectedOverlay) {
     const { payload } = await fetchJson(resolveUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifiers: expectedPairs.map(({ alias }) => alias) }),
+      body: JSON.stringify({ identifiers: expectedOperations.map(({ alias }) => alias) }),
     })
-    lastMismatches = resolutionMismatches(payload, expectedPairs)
-    if (lastMismatches.length === 0) return expectedPairs.length
+    lastMismatches = resolutionMismatches(payload, expectedOperations)
+    if (lastMismatches.length === 0) {
+      return { mappedCount: mappedOperations.length, removedCount: removedOperations.length }
+    }
     if (attempt < MAX_ATTEMPTS) {
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS))
     }
@@ -128,7 +151,7 @@ async function waitForResolution(baseUrl, expectedOverlay) {
 const expectedOverlay = await iconoplasmPublicationAliasManifest()
 const baseUrl = publicBaseUrl()
 const published = await waitForPublishedOverlay(baseUrl, expectedOverlay)
-const resolvedCount = await waitForResolution(baseUrl, expectedOverlay)
+const resolutionCounts = await waitForResolution(baseUrl, expectedOverlay)
 const overlayBytes = Buffer.byteLength(JSON.stringify(expectedOverlay), "utf8")
 
 console.log(
@@ -139,7 +162,8 @@ console.log(
       overlay_version: expectedOverlay.version,
       alias_count: expectedOverlay.alias_count,
       overlay_bytes: overlayBytes,
-      resolved_count: resolvedCount,
+      resolved_count: resolutionCounts.mappedCount,
+      removed_mapping_count: resolutionCounts.removedCount,
       manifest_etag: published.etag,
     },
     null,

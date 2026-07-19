@@ -30,7 +30,9 @@
       schema_version: 0,
       version: "",
       alias_count: 0,
+      removal_count: 0,
       by_symbol: {},
+      remove_by_symbol: {},
     }
   }
 
@@ -41,19 +43,25 @@
     const schemaVersion = Number.parseInt(String(rawOverlay.schema_version || 0), 10)
     const version = String(rawOverlay.version || "").trim()
     const rawBySymbol = rawOverlay.by_symbol
+    const rawRemoveBySymbol = rawOverlay.remove_by_symbol || {}
     if (
       schemaVersion !== SUPPORTED_SCHEMA_VERSION ||
       !version ||
       !rawBySymbol ||
       typeof rawBySymbol !== "object" ||
-      Array.isArray(rawBySymbol)
+      Array.isArray(rawBySymbol) ||
+      !rawRemoveBySymbol ||
+      typeof rawRemoveBySymbol !== "object" ||
+      Array.isArray(rawRemoveBySymbol)
     ) {
       return null
     }
 
     const bySymbol = {}
+    const removeBySymbol = {}
     const aliasOwners = new Map()
     let aliasCount = 0
+    let removalCount = 0
     for (const rawSymbol of Object.keys(rawBySymbol).sort()) {
       const symbol = normalizeSymbol(rawSymbol)
       const rawAliases = rawBySymbol[rawSymbol]
@@ -85,9 +93,45 @@
       bySymbol[symbol] = aliases
     }
 
+    for (const rawSymbol of Object.keys(rawRemoveBySymbol).sort()) {
+      const symbol = normalizeSymbol(rawSymbol)
+      const rawAliases = rawRemoveBySymbol[rawSymbol]
+      if (
+        !symbol ||
+        symbol !== rawSymbol ||
+        !Array.isArray(rawAliases) ||
+        rawAliases.length === 0
+      ) {
+        return null
+      }
+
+      const removals = []
+      const localRemovalKeys = new Set()
+      const localAdditionKeys = new Set((bySymbol[symbol] || []).map(aliasCollisionKey))
+      for (const rawAlias of rawAliases) {
+        const alias = normalizeAlias(rawAlias)
+        const key = aliasCollisionKey(alias)
+        if (!alias || alias !== rawAlias || !key || localAdditionKeys.has(key)) {
+          return null
+        }
+        if (localRemovalKeys.has(key)) continue
+        localRemovalKeys.add(key)
+        removals.push(alias)
+        removalCount += 1
+        if (aliasCount + removalCount > MAX_ALIAS_COUNT) return null
+      }
+      removeBySymbol[symbol] = removals
+    }
+
     if (
       Number.isFinite(Number(rawOverlay.alias_count)) &&
       Number(rawOverlay.alias_count) !== aliasCount
+    ) {
+      return null
+    }
+    if (
+      Number.isFinite(Number(rawOverlay.removal_count)) &&
+      Number(rawOverlay.removal_count) !== removalCount
     ) {
       return null
     }
@@ -95,15 +139,36 @@
       schema_version: schemaVersion,
       version,
       alias_count: aliasCount,
+      removal_count: removalCount,
       by_symbol: bySymbol,
+      remove_by_symbol: removeBySymbol,
     }
   }
 
-  function removePreviouslyAppliedAliases(geneMap, previousApplied) {
+  function normalizePreviousApplied(previousApplied) {
+    if (!previousApplied || typeof previousApplied !== "object") {
+      return { added_by_symbol: {}, removed_by_symbol: {} }
+    }
+    if (previousApplied.added_by_symbol || previousApplied.removed_by_symbol) {
+      return {
+        added_by_symbol:
+          previousApplied.added_by_symbol && typeof previousApplied.added_by_symbol === "object"
+            ? previousApplied.added_by_symbol
+            : {},
+        removed_by_symbol:
+          previousApplied.removed_by_symbol && typeof previousApplied.removed_by_symbol === "object"
+            ? previousApplied.removed_by_symbol
+            : {},
+      }
+    }
+    // Accept the unstructured additions shape during in-place cache migration.
+    return { added_by_symbol: previousApplied, removed_by_symbol: {} }
+  }
+
+  function revertPreviouslyAppliedPolicy(geneMap, previousApplied) {
     const safeGeneMap = geneMap && typeof geneMap === "object" ? geneMap : {}
-    const safeApplied =
-      previousApplied && typeof previousApplied === "object" ? previousApplied : {}
-    for (const [rawSymbol, rawAliases] of Object.entries(safeApplied)) {
+    const safeApplied = normalizePreviousApplied(previousApplied)
+    for (const [rawSymbol, rawAliases] of Object.entries(safeApplied.added_by_symbol)) {
       const symbol = normalizeSymbol(rawSymbol)
       const entry = safeGeneMap[symbol]
       if (!entry || !Array.isArray(entry.a) || !Array.isArray(rawAliases)) continue
@@ -112,16 +177,52 @@
       if (remaining.length) entry.a = remaining
       else delete entry.a
     }
+    for (const [rawSymbol, rawAliases] of Object.entries(safeApplied.removed_by_symbol)) {
+      const symbol = normalizeSymbol(rawSymbol)
+      const entry = safeGeneMap[symbol]
+      if (!entry || !Array.isArray(rawAliases)) continue
+      const aliases = Array.isArray(entry.a) ? [...entry.a] : []
+      const seen = new Set(aliases)
+      for (const alias of rawAliases) {
+        const normalized = normalizeAlias(alias)
+        if (!normalized || seen.has(normalized)) continue
+        seen.add(normalized)
+        aliases.push(normalized)
+      }
+      if (aliases.length) entry.a = aliases
+    }
     return safeGeneMap
   }
 
   function applyPublishedAliasOverlay(geneMap, overlay, previousApplied = {}) {
-    const safeGeneMap = removePreviouslyAppliedAliases(geneMap, previousApplied)
+    const safeGeneMap = revertPreviouslyAppliedPolicy(geneMap, previousApplied)
     const safeOverlay = overlay || emptyOverlay()
     const canonicalSymbols = new Set(Object.keys(safeGeneMap).map(normalizeSymbol).filter(Boolean))
-    const aliasOwners = new Map()
     const errors = []
+    const applied = { added_by_symbol: {}, removed_by_symbol: {} }
 
+    for (const [symbol, removals] of Object.entries(safeOverlay.remove_by_symbol || {})) {
+      const entry = safeGeneMap[symbol]
+      if (!entry) {
+        errors.push(`Unknown canonical alias-removal target: ${symbol}`)
+        continue
+      }
+      const removalKeys = new Set(removals.map(aliasCollisionKey).filter(Boolean))
+      const existingAliases = Array.isArray(entry.a) ? entry.a : []
+      const remainingAliases = []
+      for (const alias of existingAliases) {
+        if (removalKeys.has(aliasCollisionKey(alias))) {
+          if (!applied.removed_by_symbol[symbol]) applied.removed_by_symbol[symbol] = []
+          applied.removed_by_symbol[symbol].push(alias)
+        } else {
+          remainingAliases.push(alias)
+        }
+      }
+      if (remainingAliases.length) entry.a = remainingAliases
+      else delete entry.a
+    }
+
+    const aliasOwners = new Map()
     for (const [symbol, entry] of Object.entries(safeGeneMap)) {
       for (const alias of Array.isArray(entry && entry.a) ? entry.a : []) {
         const key = aliasCollisionKey(alias)
@@ -129,7 +230,6 @@
       }
     }
 
-    const applied = {}
     for (const [symbol, aliases] of Object.entries(safeOverlay.by_symbol || {})) {
       const entry = safeGeneMap[symbol]
       if (!entry) {
@@ -153,8 +253,8 @@
         if (exactAliases.has(alias)) continue
         exactAliases.add(alias)
         existingAliases.push(alias)
-        if (!applied[symbol]) applied[symbol] = []
-        applied[symbol].push(alias)
+        if (!applied.added_by_symbol[symbol]) applied.added_by_symbol[symbol] = []
+        applied.added_by_symbol[symbol].push(alias)
       }
       if (existingAliases.length) entry.a = existingAliases
     }

@@ -17,6 +17,17 @@ const requestedOverlay = {
     TGFB1: ["TGF-β"],
   },
 }
+const cadherinPolicy = {
+  schema_version: 1,
+  version: "v1-cadherin-policy",
+  alias_count: 4,
+  removal_count: 1,
+  by_symbol: {
+    CDH1: ["E-cadherin", "E-Cadherin"],
+    CDH2: ["N-cadherin", "N-Cadherin"],
+  },
+  remove_by_symbol: { CDH17: ["cadherin"] },
+}
 
 function storageArea(state) {
   return {
@@ -230,6 +241,62 @@ test("alias-only manifest updates do not refetch the six-megabyte catalog artifa
     assert.equal(storageState.get("iconoplasm_alias_overlay_version"), "v1-test")
     assert.deepEqual(storedGenes.RELA.a, ["p65"])
     assert.deepEqual(storedGenes.IL1A.a, ["IL-1", "IL-1α"])
+  } finally {
+    globalThis.fetch = originalFetch
+    storageState.clear()
+  }
+})
+
+test("mapping removals and specific cadherin labels update without refetching the catalog", async () => {
+  const originalFetch = globalThis.fetch
+  storageState.clear()
+  storageState.set("iconoplasm_genes", {
+    CDH1: { n: "cadherin 1", a: ["CD324"] },
+    CDH2: { n: "cadherin 2", a: ["NCAD"] },
+    CDH17: { n: "cadherin 17", a: ["HPT-1", "cadherin"] },
+  })
+  storageState.set("iconoplasm_hash", "catalog-v2-portraits")
+  storageState.set("iconoplasm_gene_count", 3)
+  storageState.set("iconoplasm_schema_version", 4)
+  storageState.set("iconoplasm_portrait_base_url", "https://example.test/portraits")
+  storageState.set("iconoplasm_alias_overlay_version", "v1-old")
+  storageState.set("iconoplasm_alias_overlay_applied", {})
+
+  let artifactFetches = 0
+  globalThis.fetch = async (input) => {
+    const url = String(input || "")
+    if (url.endsWith("/api/public/v1/catalog/manifest")) {
+      return Response.json({
+        build_version: "catalog-v2-portraits",
+        catalog_hash: "catalog",
+        artifact_url: "https://example.test/catalog.json",
+        portrait_base_url: "https://example.test/portraits",
+        artifact_schema_version: 4,
+        min_extension_version: "1.0.0",
+        gene_count: 3,
+        publication_aliases: cadherinPolicy,
+      })
+    }
+    artifactFetches += 1
+    throw new Error(`Catalog artifact should not be fetched for a policy-only update: ${url}`)
+  }
+
+  try {
+    await hooks.fetchGeneData()
+    const storedGenes = storageState.get("iconoplasm_genes")
+    const applied = storageState.get("iconoplasm_alias_overlay_applied")
+
+    assert.equal(artifactFetches, 0)
+    assert.deepEqual(storedGenes.CDH1.a, ["CD324", "E-cadherin", "E-Cadherin"])
+    assert.deepEqual(storedGenes.CDH2.a, ["NCAD", "N-cadherin", "N-Cadherin"])
+    assert.deepEqual(storedGenes.CDH17.a, ["HPT-1"])
+    assert.deepEqual(applied, {
+      added_by_symbol: {
+        CDH1: ["E-cadherin", "E-Cadherin"],
+        CDH2: ["N-cadherin", "N-Cadherin"],
+      },
+      removed_by_symbol: { CDH17: ["cadherin"] },
+    })
   } finally {
     globalThis.fetch = originalFetch
     storageState.clear()

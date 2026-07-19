@@ -8,6 +8,13 @@ draft: false
 
 # Iconoplasm Patch Notes
 
+## 0.5.0 - 2026-07-19
+
+- Fixed the broad term `cadherin` incorrectly resolving to CDH17.
+- Added complete, concrete mappings for E-cadherin/E-cadherins and N-cadherin/N-cadherins, including hyphen-or-space and lowercase-or-capitalized `cadherin` forms.
+- Website-owned alias policy can now retract an incorrect generated alias without downloading the catalog again or requiring another extension release.
+- The published API exposes every effective spelling as an inspectable dictionary; the extension does not execute remote matching rules.
+
 ## 0.4.8 - 2026-07-18
 
 - Added a versioned publication-alias overlay delivered through the existing catalog manifest.
