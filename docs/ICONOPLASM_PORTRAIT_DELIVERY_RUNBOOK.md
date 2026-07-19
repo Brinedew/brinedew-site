@@ -88,12 +88,16 @@ source-selection rules.
 
 - Public API schema: 4
 - Catalog artifact schema: 5
+- Immutable catalog URL contract token: `a5`
 - Minimum extension version: 0.6.0
 - Extension catalog portrait field: `p` (`PortraitAssetRefV1`)
 - Image-edit and candidate-generation result field: `result_asset`
 
-The catalog manifest ETag includes the portrait delivery policy, so a policy
-change invalidates cached metadata without rebuilding the gene catalog.
+The catalog artifact schema is part of both its immutable URL and shared-cache
+namespace. A schema change therefore cannot reuse bytes cached under another
+contract. The catalog manifest ETag also includes the portrait delivery policy,
+so a policy change invalidates cached metadata without rebuilding the gene
+catalog.
 
 ## Maintenance map
 
@@ -115,14 +119,17 @@ generated website or extension copies.
 
 1. Read live metadata and confirm schema 4, artifact schema 5, minimum extension
    0.6.0, canonical origin, and enabled accelerator.
-2. Confirm a public gene/media payload contains only first-party portrait URLs.
-3. On a healthy network, open two gene pages and verify portraits load from the
+2. Follow the live manifest's `artifact_url`. Confirm its URL contains `a5`, its
+   body is schema 5, portrait-bearing genes use `p`, and no gene contains `pt`
+   or `ph`.
+3. Confirm a public gene/media payload contains only first-party portrait URLs.
+4. On a healthy network, open two gene pages and verify portraits load from the
    accelerator after one tab-wide probe.
-4. In a browser where the accelerator is unreachable, verify one failed
+5. In a browser where the accelerator is unreachable, verify one failed
    accelerator request followed by first-party portrait requests. Check image
    `complete`, `naturalWidth`, and `naturalHeight`, not only HTTP status.
-5. Generate or edit a blot after the tab has selected canonical delivery and
+6. Generate or edit a blot after the tab has selected canonical delivery and
    confirm the new result loads first-party in the comparison modal.
-6. Verify the extension on a normal web page in the same two network states.
-7. Run the shared delivery, extension worker, public media, image-edit, storage,
+7. Verify the extension on a normal web page in the same two network states.
+8. Run the shared delivery, extension worker, public media, image-edit, storage,
    packaging, and build tests before deployment.

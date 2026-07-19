@@ -440,7 +440,8 @@ test("public catalog manifest publishes explicit extension contract fields", asy
   assert.equal(payload?.schema_version, 5)
   assert.equal(payload?.min_extension_version, "0.6.0")
   assert.equal(payload?.catalog_hash, "catalog")
-  assert.equal(payload?.build_version, "catalog-2026-04-16")
+  assert.equal(payload?.build_version, "catalog-2026-04-16-a5")
+  assert.match(payload?.artifact_url || "", /catalog\.catalog-2026-04-16-a5\.json$/)
   assert.deepEqual(payload?.portrait_delivery, {
     version: 1,
     canonical_origin: "https://iconoplasm.brinedew.bio",

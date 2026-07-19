@@ -303,6 +303,8 @@ test("DO NOT DELETE: catalog manifest reuses the shared portrait fingerprint cac
   )
   assert.equal(first.status, 200)
   assert.equal(db.fingerprintReads, 1)
+  const firstPayload = await first.json()
+  assert.match(firstPayload.artifact_url, /catalog\.costbarrier01-a5-v2-2-/)
 
   resetIconoplasmRuntimeCachesForTest()
   const second = await handleIconoplasmGatewayRequest(
@@ -373,6 +375,31 @@ test("DO NOT DELETE: vote gallery reuses the shared published gallery snapshot a
 test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact after isolate reset", async () => {
   const kv = new FakeSharedKv()
   const db = new FakeCostBarrierDb()
+  const retiredCacheKey = "iconoplasm:hydrated-catalog-artifact:costbarrier01"
+  kv.store.set(
+    retiredCacheKey,
+    JSON.stringify({
+      schema_version: 4,
+      gene_count: 1,
+      genes: [{ s: "A1BG", ph: "retired-full.webp", pt: "retired-medium.webp" }],
+    }),
+  )
+  resetIconoplasmRuntimeCachesForTest()
+  const manifestResponse = await handleIconoplasmGatewayRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
+    buildEnv(kv, db),
+    { waitUntil() {} },
+  )
+  const manifestPayload = await manifestResponse.json()
+  const invalidCurrentCacheKey = `iconoplasm:hydrated-catalog-artifact:a5:${manifestPayload.build_version}`
+  kv.store.set(
+    invalidCurrentCacheKey,
+    JSON.stringify({
+      schema_version: 4,
+      gene_count: 1,
+      genes: [{ s: "A1BG", ph: "retired-full.webp", pt: "retired-medium.webp" }],
+    }),
+  )
 
   resetIconoplasmRuntimeCachesForTest()
   const first = await handleIconoplasmGatewayRequest(
@@ -385,8 +412,12 @@ test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact
   assert.equal(db.portraitRefReads, 1)
   assert.equal(firstPayload.schema_version, 5)
   assert.equal(firstPayload.genes[0]?.p?.asset_sha256?.length, 64)
+  assert.equal("ph" in firstPayload.genes[0], false)
+  assert.equal("pt" in firstPayload.genes[0], false)
+  assert.equal(kv.getCounts.get(retiredCacheKey) || 0, 0)
+  assert.equal(kv.getCounts.get(invalidCurrentCacheKey), 1)
   const hydratedArtifactKeys = Array.from(kv.store.keys()).filter((key) =>
-    String(key).startsWith("iconoplasm:hydrated-catalog-artifact:costbarrier01"),
+    String(key).startsWith("iconoplasm:hydrated-catalog-artifact:a5:costbarrier01"),
   )
   assert.equal(hydratedArtifactKeys.length > 0, true)
 
