@@ -4351,7 +4351,6 @@ async function createGenerationRequest(
     requesterUsername = "",
     requestMode = "random",
     requestedVisionId = "",
-    requestedReferenceAssetSha256 = "",
     requestKind = "new_candidate",
     requestPrompt = "",
     sourceGeneSymbol = "",
@@ -4379,8 +4378,9 @@ async function createGenerationRequest(
   const sourceAssetNorm = normalizeSha256(sourceAssetSha256 || "") || ""
   let requestedReferenceAssetSha = ""
   let requestedReferenceGeneSymbol = ""
+  let resolvedVisionId = visionNorm
   if (mode === "specific") {
-    const optionRow = await env.ICONOPLASM_DB.prepare(
+    let optionRow = await env.ICONOPLASM_DB.prepare(
       `SELECT vision_id, emulsion_id, preview_assets_json
        FROM icono_generation_request_vision_option_rollup
        WHERE vision_id = ?
@@ -4389,40 +4389,33 @@ async function createGenerationRequest(
     )
       .bind(visionNorm)
       .first()
-    if (!optionRow) {
-      return {
-        ok: false,
-        error: "This emulsion is no longer available. Refresh the picker and choose again.",
-      }
-    }
-    const familyId = generationRequestEmulsionFamilyId(optionRow?.emulsion_id || "")
-    let familyRows = [optionRow]
-    if (familyId) {
-      const familyUpper = textPrefixUpperBound(familyId)
-      const familyResponse = await env.ICONOPLASM_DB.prepare(
+    const emulsionId = sanitizeText(optionRow?.emulsion_id || "", 64) || ""
+    const baseEmulsionId = generationRequestEmulsionFamilyId(emulsionId)
+    if (baseEmulsionId && baseEmulsionId.toUpperCase() !== emulsionId.toUpperCase()) {
+      const baseOptionRow = await env.ICONOPLASM_DB.prepare(
         `SELECT vision_id, emulsion_id, preview_assets_json
          FROM icono_generation_request_vision_option_rollup
-         WHERE builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
-           AND emulsion_id >= ?
-           AND emulsion_id < ?
-         ORDER BY emulsion_id ASC, vision_id ASC`,
+         WHERE emulsion_id = ?
+           AND builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
+         ORDER BY vision_id ASC
+         LIMIT 1`,
       )
-        .bind(familyId, familyUpper)
-        .all()
-      familyRows = Array.isArray(familyResponse?.results) ? familyResponse.results : []
+        .bind(baseEmulsionId)
+        .first()
+      if (baseOptionRow) optionRow = baseOptionRow
     }
-    const selectedReference = resolveGenerationRequestReferenceFromOptionRows(familyRows, {
-      requestedVisionId: visionNorm,
-      requestedReferenceAssetSha256,
-    })
+    resolvedVisionId = sanitizeVoteVisionId(optionRow?.vision_id || "") || visionNorm
+    const rankedReferences = parseGenerationRequestPreviewAssetsJson(
+      optionRow?.preview_assets_json || "[]",
+    )
+    const selectedReference = rankedReferences[0] || null
     requestedReferenceAssetSha = normalizeSha256(selectedReference?.asset_sha256 || "") || ""
     requestedReferenceGeneSymbol = normalizeSymbol(selectedReference?.gene_symbol || "") || ""
     if (!requestedReferenceAssetSha) {
       return {
         ok: false,
-        error: requestedReferenceAssetSha256
-          ? "This emulsion preview changed. Refresh the picker and choose it again."
-          : "This emulsion has no reproducible example blot. Refresh the picker and choose another emulsion.",
+        error:
+          "This emulsion has no reproducible example blot. Refresh the picker and choose another emulsion.",
       }
     }
   }
@@ -4452,7 +4445,7 @@ async function createGenerationRequest(
       sourceSymbolNorm,
       sourceAssetNorm,
       mode,
-      visionNorm,
+      resolvedVisionId,
       requestedReferenceAssetSha,
       requestedReferenceGeneSymbol,
     )
@@ -7786,35 +7779,10 @@ function generationRequestVisionOptionLabels(row) {
 function normalizeGenerationRequestPreviewAssetRow(row) {
   const assetSha = normalizeSha256(row?.asset_sha256 || "") || ""
   if (!assetSha) return null
-  let ancestorValues = row?.edit_ancestor_asset_sha256s
-  if (typeof ancestorValues === "string") {
-    try {
-      ancestorValues = JSON.parse(ancestorValues)
-    } catch {
-      ancestorValues = []
-    }
-  }
-  const editAncestorAssetShas = Array.from(
-    new Set(
-      (Array.isArray(ancestorValues) ? ancestorValues : [])
-        .map((value) => normalizeSha256(value || "") || "")
-        .filter((value) => value && value !== assetSha),
-    ),
-  ).slice(0, 32)
-  const lineageRootAssetSha =
-    normalizeSha256(row?.lineage_root_asset_sha256 || "") ||
-    editAncestorAssetShas[editAncestorAssetShas.length - 1] ||
-    assetSha
   return {
     vision_id: validAdminRollupVisionId(row?.vision_id || "") || "",
     gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
     asset_sha256: assetSha,
-    lineage_root_asset_sha256: lineageRootAssetSha,
-    lineage_depth: Math.max(
-      editAncestorAssetShas.length,
-      Math.min(32, Math.max(0, Number(row?.lineage_depth || 0) || 0)),
-    ),
-    edit_ancestor_asset_sha256s: editAncestorAssetShas,
     is_current: Number(row?.is_current || 0) > 0,
     preview_rank: Math.max(0, Number(row?.preview_rank || 0) || 0),
   }
@@ -7829,23 +7797,6 @@ function serializeGenerationRequestPreviewAssetsJson(previewRows) {
         Number(left.preview_rank || 0) - Number(right.preview_rank || 0) ||
         compareNullableTextAsc(left.asset_sha256, right.asset_sha256)
       )
-    })
-    .map((row) => {
-      // Ordinary assets implicitly root to themselves. Persist ancestry only
-      // for edited descendants so this bounded read model stays compact.
-      const compact = {
-        vision_id: row.vision_id,
-        gene_symbol: row.gene_symbol,
-        asset_sha256: row.asset_sha256,
-        is_current: row.is_current,
-        preview_rank: row.preview_rank,
-      }
-      if (row.edit_ancestor_asset_sha256s.length) {
-        compact.lineage_root_asset_sha256 = row.lineage_root_asset_sha256
-        compact.lineage_depth = row.lineage_depth
-        compact.edit_ancestor_asset_sha256s = row.edit_ancestor_asset_sha256s
-      }
-      return compact
     })
   return JSON.stringify(normalized)
 }
@@ -7880,9 +7831,6 @@ function materializeGenerationRequestPreviewAssetsForPublic(url, env, rawPreview
   return parseGenerationRequestPreviewAssetsJson(rawPreviewRows).map((row) => ({
     gene_symbol: row.gene_symbol,
     asset_sha256: row.asset_sha256,
-    lineage_root_asset_sha256: row.lineage_root_asset_sha256,
-    lineage_depth: row.lineage_depth,
-    edit_ancestor_asset_sha256s: row.edit_ancestor_asset_sha256s,
     is_current: Boolean(row.is_current),
     preview_rank: Number(row.preview_rank || 0) || 0,
     medium_url: adminPortraitUrl(base, row.asset_sha256 || "", "medium"),
@@ -7905,77 +7853,15 @@ async function fetchGenerationRequestVisionPreviewRowsForRollup(
   if (!cleanedVisionIds.length) return []
   const cleanedLimit = normalizeAdminVisionAssetLimit(perVisionLimit, 6, 12)
   const response = await env.ICONOPLASM_DB.prepare(
-    `WITH RECURSIVE incoming AS (
+    `WITH incoming AS (
        SELECT value AS vision_id
        FROM json_each(?)
-     ),
-     source_assets AS (
-       SELECT
-         pa.vision_id,
-         pa.gene_symbol,
-         pa.asset_sha256,
-         pa.created_at
-       FROM icono_portrait_assets pa
-       JOIN incoming i
-         ON i.vision_id = pa.vision_id
-       WHERE COALESCE(pa.asset_sha256, '') <> ''
-     ),
-     lineage_walk AS (
-       SELECT
-         pa.vision_id,
-         pa.gene_symbol,
-         pa.asset_sha256,
-         pa.asset_sha256 AS ancestor_asset_sha256,
-         0 AS lineage_depth,
-         json_array(pa.asset_sha256) AS lineage_leaf_first_json,
-         '|' || pa.asset_sha256 || '|' AS seen_asset_sha256s
-       FROM source_assets pa
-       UNION ALL
-       SELECT
-         lineage.vision_id,
-         lineage.gene_symbol,
-         lineage.asset_sha256,
-         event.from_asset_sha256,
-         lineage.lineage_depth + 1,
-         json_insert(lineage.lineage_leaf_first_json, '$[#]', event.from_asset_sha256),
-         lineage.seen_asset_sha256s || event.from_asset_sha256 || '|'
-       FROM lineage_walk lineage
-       JOIN icono_publish_events event
-         ON event.gene_symbol = lineage.gene_symbol
-        AND event.to_asset_sha256 = lineage.ancestor_asset_sha256
-        AND event.action = 'edit_candidate'
-       WHERE lineage.lineage_depth < 32
-         AND COALESCE(event.from_asset_sha256, '') <> ''
-         AND instr(
-           lineage.seen_asset_sha256s,
-           '|' || event.from_asset_sha256 || '|'
-         ) = 0
-         AND event.id = (
-           SELECT MAX(chosen.id)
-           FROM icono_publish_events chosen
-           WHERE chosen.gene_symbol = event.gene_symbol
-             AND chosen.to_asset_sha256 = event.to_asset_sha256
-             AND chosen.action = 'edit_candidate'
-         )
-     ),
-     lineage_choices AS (
-       SELECT
-         lineage.*,
-         ROW_NUMBER() OVER (
-           PARTITION BY lineage.vision_id, lineage.gene_symbol, lineage.asset_sha256
-           ORDER BY lineage.lineage_depth DESC, lineage.ancestor_asset_sha256 ASC
-         ) AS lineage_choice_rank
-       FROM lineage_walk lineage
      ),
      ranked_previews AS (
        SELECT
          pa.vision_id,
          pa.gene_symbol AS gene_symbol,
          pa.asset_sha256 AS asset_sha256,
-         lineage.ancestor_asset_sha256 AS lineage_root_asset_sha256,
-         lineage.lineage_depth,
-         json_remove(lineage.lineage_leaf_first_json, '$[0]')
-           AS edit_ancestor_asset_sha256s,
          CASE
            WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1
            ELSE 0
@@ -7992,25 +7878,20 @@ async function fetchGenerationRequestVisionPreviewRowsForRollup(
              COALESCE(pa.created_at, '') DESC,
              pa.asset_sha256 ASC
          ) AS preview_rank
-       FROM source_assets pa
-       JOIN lineage_choices lineage
-         ON lineage.vision_id = pa.vision_id
-        AND lineage.gene_symbol = pa.gene_symbol
-        AND lineage.asset_sha256 = pa.asset_sha256
-        AND lineage.lineage_choice_rank = 1
+       FROM icono_portrait_assets pa
+       JOIN incoming i
+         ON i.vision_id = pa.vision_id
        LEFT JOIN icono_publish_state ps
          ON ps.gene_symbol = pa.gene_symbol
        LEFT JOIN icono_vote_asset_summary vs
          ON vs.gene_symbol = pa.gene_symbol
         AND vs.asset_sha256 = pa.asset_sha256
+       WHERE COALESCE(pa.asset_sha256, '') <> ''
      )
      SELECT
        vision_id,
        gene_symbol,
        asset_sha256,
-       lineage_root_asset_sha256,
-       lineage_depth,
-       edit_ancestor_asset_sha256s,
        is_current,
        preview_rank
      FROM ranked_previews
@@ -8372,81 +8253,39 @@ function generationRequestEmulsionFamilyId(raw) {
   return emulsionId.replace(/(?:-e)+$/gi, "") || emulsionId
 }
 
-export function resolveGenerationRequestReferenceFromOptionRows(
-  rows,
-  { requestedVisionId = "", requestedReferenceAssetSha256 = "" } = {},
-) {
-  const visionId = sanitizeVoteVisionId(requestedVisionId || "") || ""
-  if (!visionId) return null
-  const options = (Array.isArray(rows) ? rows : [])
-    .map((row) => ({
-      vision_id: sanitizeVoteVisionId(row?.vision_id || "") || "",
-      emulsion_id: sanitizeText(row?.emulsion_id || "", 64) || "",
-      preview_assets: parseGenerationRequestPreviewAssetsJson(row?.preview_assets_json || "[]"),
-    }))
-    .filter((option) => option.vision_id)
-  const family = groupGenerationRequestVisionOptions(options).find((option) =>
-    (Array.isArray(option?.member_vision_ids) ? option.member_vision_ids : []).includes(visionId),
-  )
-  if (!family) return null
-  const previews = Array.isArray(family.preview_assets) ? family.preview_assets : []
-  const requestedAssetSha = normalizeSha256(requestedReferenceAssetSha256 || "") || ""
-  if (!requestedAssetSha) return previews[0] || null
-  return previews.find((preview) => preview.asset_sha256 === requestedAssetSha) || null
+function uniqueGenerationRequestPreviews(previews) {
+  const seenAssets = new Set()
+  return (Array.isArray(previews) ? previews : []).filter((preview) => {
+    const assetSha = normalizeSha256(preview?.asset_sha256 || "") || ""
+    const identity = assetSha || JSON.stringify(preview)
+    if (seenAssets.has(identity)) return false
+    seenAssets.add(identity)
+    return true
+  })
 }
 
-function mergeGenerationRequestFamilyPreviews(members) {
-  const queues = (Array.isArray(members) ? members : []).map((member) =>
-    Array.isArray(member?.preview_assets) ? member.preview_assets : [],
+function generationRequestFamilyCanonicalMember(members, familyId) {
+  const exactBase = (Array.isArray(members) ? members : []).find(
+    (member) =>
+      familyId && String(member?.emulsion_id || "").toUpperCase() === familyId.toUpperCase(),
   )
-  const representativeByAssetSha = new Map()
-  for (const preview of queues.flat()) {
-    const normalized = normalizeGenerationRequestPreviewAssetRow(preview)
-    if (!normalized) continue
-    const candidate = { ...preview, ...normalized }
-    const existing = representativeByAssetSha.get(normalized.asset_sha256)
-    if (
-      !existing ||
-      Number(normalized.is_current) > Number(existing.is_current) ||
-      (Number(normalized.is_current) === Number(existing.is_current) &&
-        Number(normalized.lineage_depth || 0) > Number(existing.lineage_depth || 0)) ||
-      (Number(normalized.is_current) === Number(existing.is_current) &&
-        Number(normalized.lineage_depth || 0) === Number(existing.lineage_depth || 0) &&
-        Number(normalized.preview_rank || 0) < Number(existing.preview_rank || 0))
-    ) {
-      representativeByAssetSha.set(normalized.asset_sha256, candidate)
-    }
-  }
-  // An edit replaces its own ancestors in the strip, but not sibling edits.
-  // The explicit ancestor arrays make that rule inspectable and keep distinct
-  // edits from the same source visible.
-  const supersededAssetShas = new Set()
-  for (const preview of representativeByAssetSha.values()) {
-    for (const ancestorAssetSha of preview.edit_ancestor_asset_sha256s) {
-      if (representativeByAssetSha.has(ancestorAssetSha)) {
-        supersededAssetShas.add(ancestorAssetSha)
-      }
-    }
-  }
-  const seenAssets = new Set()
-  const merged = []
-  let rank = 0
-  while (true) {
-    let found = false
-    for (const previews of queues) {
-      const preview = previews[rank]
-      if (!preview) continue
-      found = true
-      const assetSha = normalizeSha256(preview?.asset_sha256 || "") || ""
-      const identity = assetSha || JSON.stringify(preview)
-      if (seenAssets.has(identity) || supersededAssetShas.has(assetSha)) continue
-      seenAssets.add(identity)
-      merged.push(representativeByAssetSha.get(assetSha) || preview)
-    }
-    if (!found) break
-    rank += 1
-  }
-  return merged
+  if (exactBase) return exactBase
+  return Array.isArray(members) ? members[0] || null : null
+}
+
+function generationRequestFamilyMembers(groupMembers, familyId) {
+  return [...(Array.isArray(groupMembers) ? groupMembers : [])].sort((left, right) => {
+    const leftEmulsionId = sanitizeText(left?.emulsion_id || "", 64) || ""
+    const rightEmulsionId = sanitizeText(right?.emulsion_id || "", 64) || ""
+    const leftIsBase = familyId && leftEmulsionId.toUpperCase() === familyId.toUpperCase()
+    const rightIsBase = familyId && rightEmulsionId.toUpperCase() === familyId.toUpperCase()
+    return (
+      Number(rightIsBase) - Number(leftIsBase) ||
+      leftEmulsionId.length - rightEmulsionId.length ||
+      compareNullableTextAsc(leftEmulsionId, rightEmulsionId) ||
+      compareNullableTextAsc(left?.vision_id, right?.vision_id)
+    )
+  })
 }
 
 export function groupGenerationRequestVisionOptions(options) {
@@ -8466,23 +8305,9 @@ export function groupGenerationRequestVisionOptions(options) {
   for (const groupMembers of groups.values()) {
     const first = groupMembers[0]
     const familyId = generationRequestEmulsionFamilyId(first?.emulsion_id || "")
-    const members = [...groupMembers].sort((left, right) => {
-      const leftEmulsionId = sanitizeText(left?.emulsion_id || "", 64) || ""
-      const rightEmulsionId = sanitizeText(right?.emulsion_id || "", 64) || ""
-      const leftIsBase = familyId && leftEmulsionId.toUpperCase() === familyId.toUpperCase()
-      const rightIsBase = familyId && rightEmulsionId.toUpperCase() === familyId.toUpperCase()
-      return (
-        Number(rightIsBase) - Number(leftIsBase) ||
-        leftEmulsionId.length - rightEmulsionId.length ||
-        compareNullableTextAsc(leftEmulsionId, rightEmulsionId) ||
-        compareNullableTextAsc(left?.vision_id, right?.vision_id)
-      )
-    })
-    const canonical =
-      members.find(
-        (member) =>
-          familyId && String(member?.emulsion_id || "").toUpperCase() === familyId.toUpperCase(),
-      ) || first
+    const members = generationRequestFamilyMembers(groupMembers, familyId)
+    const canonical = generationRequestFamilyCanonicalMember(members, familyId)
+    if (!canonical) continue
     const memberVisionIds = members
       .map((member) => sanitizeVoteVisionId(member?.vision_id || "") || "")
       .filter(Boolean)
@@ -8492,7 +8317,10 @@ export function groupGenerationRequestVisionOptions(options) {
       ),
     )
     const primaryLabel = familyId || canonical?.primary_label || canonical?.label || ""
-    const mergedPreviews = mergeGenerationRequestFamilyPreviews(members)
+    // Edited `-e` members are searchable aliases for the base family, not
+    // additional picker content. When the base exists, it alone supplies the
+    // thumbnails, counts, strength, and immutable request reference.
+    const canonicalPreviews = uniqueGenerationRequestPreviews(canonical?.preview_assets)
     grouped.push({
       ...canonical,
       label: primaryLabel,
@@ -8501,8 +8329,6 @@ export function groupGenerationRequestVisionOptions(options) {
       emulsion_family_id: familyId,
       member_vision_ids: memberVisionIds,
       member_emulsion_ids: memberEmulsionIds,
-      request_reference_asset_sha256: mergedPreviews[0]?.asset_sha256 || "",
-      request_reference_gene_symbol: mergedPreviews[0]?.gene_symbol || "",
       search_text: members
         .flatMap((member) => [
           member?.search_text,
@@ -8514,21 +8340,7 @@ export function groupGenerationRequestVisionOptions(options) {
         .map((value) => String(value || "").trim())
         .filter(Boolean)
         .join(" "),
-      image_count: members.reduce(
-        (total, member) => total + Math.max(0, Number(member?.image_count || 0) || 0),
-        0,
-      ),
-      live_count: members.reduce(
-        (total, member) => total + Math.max(0, Number(member?.live_count || 0) || 0),
-        0,
-      ),
-      score: members.reduce((total, member) => total + (Number(member?.score || 0) || 0), 0),
-      vote_h_index: members.reduce(
-        (strongest, member) =>
-          Math.max(strongest, Math.max(0, Number(member?.vote_h_index || 0) || 0)),
-        0,
-      ),
-      preview_assets: mergedPreviews,
+      preview_assets: canonicalPreviews,
     })
   }
   return grouped
@@ -27706,8 +27518,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         requesterUsername: sessionUser.username || "",
         requestMode: p?.request_mode || p?.mode || "random",
         requestedVisionId: p?.requested_vision_id || p?.vision_id || "",
-        requestedReferenceAssetSha256:
-          p?.requested_reference_asset_sha256 || p?.reference_asset_sha256 || "",
         requestKind: p?.request_kind || p?.kind || "new_candidate",
         requestPrompt: p?.request_prompt || p?.prompt || "",
         sourceGeneSymbol:
