@@ -70,7 +70,9 @@ const PUBLISHED_CATALOG_SCHEMA_VERSION = Number(
 const PUBLISHED_CATALOG_CONTRACT_REVISION = Number(
   ICONOPLASM_PUBLISHER_RELEASE.catalog_contract.revision,
 )
-const PUBLISHED_CATALOG_VERSION_TOKEN = `a${PUBLISHED_CATALOG_SCHEMA_VERSION}p${PUBLISHED_EXTENSION_VERSION.replace(/\D/g, "")}c${PUBLISHED_CATALOG_CONTRACT_REVISION}`
+const PUBLISHED_COMPATIBILITY_CONTRACTS = Object.freeze(
+  ICONOPLASM_PUBLISHER_RELEASE.compatibility_contracts || {},
+)
 const PUBLIC_API_VERSION = "v1"
 const PUBLIC_API_PREFIX = `/api/public/${PUBLIC_API_VERSION}`
 const SITE_GENE_API_PREFIX = "/api/iconoplasm/site/genes"
@@ -101,7 +103,44 @@ function resolveProviderPollConfig(env) {
     Number.isFinite(override) && override >= 0 ? override : ICONOPLASM_PROVIDER_POLL_INITIAL_WAIT_MS
   return { initialWait, interval, hardTimeout: ICONOPLASM_PROVIDER_POLL_HARD_TIMEOUT_MS }
 }
-const MIN_EXTENSION_VERSION = PUBLISHED_EXTENSION_VERSION
+const MIN_EXTENSION_VERSION = String(ICONOPLASM_PUBLISHER_RELEASE.minimum_supported_version)
+const PUBLISHED_CATALOG_CONTRACTS_BY_VERSION = Object.freeze({
+  ...PUBLISHED_COMPATIBILITY_CONTRACTS,
+  [PUBLISHED_EXTENSION_VERSION]: Object.freeze({
+    schema_version: PUBLISHED_CATALOG_SCHEMA_VERSION,
+    revision: PUBLISHED_CATALOG_CONTRACT_REVISION,
+  }),
+})
+
+function publishedCatalogContractToken(version, contract) {
+  return `a${Number(contract?.schema_version)}p${String(version).replace(/\D/g, "")}c${Number(contract?.revision)}`
+}
+
+export function publishedCatalogContractForClientVersion(clientVersion) {
+  const version = String(clientVersion || "").trim()
+  const contract = PUBLISHED_CATALOG_CONTRACTS_BY_VERSION[version]
+  if (!contract) return null
+  return {
+    version,
+    schemaVersion: Number(contract.schema_version),
+    revision: Number(contract.revision),
+    token: publishedCatalogContractToken(version, contract),
+  }
+}
+
+function publishedCompatibilityContractForClientVersion(clientVersion) {
+  const contract = publishedCatalogContractForClientVersion(clientVersion)
+  return contract && contract.schemaVersion < CATALOG_ARTIFACT_SCHEMA_VERSION ? contract : null
+}
+
+function publishedCompatibilityContractForHash(hash) {
+  const hashTokens = new Set(String(hash || "").split("-"))
+  for (const version of Object.keys(PUBLISHED_CATALOG_CONTRACTS_BY_VERSION)) {
+    const contract = publishedCompatibilityContractForClientVersion(version)
+    if (contract && hashTokens.has(contract.token)) return contract
+  }
+  return null
+}
 const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
   openai: Object.freeze({
     provider_id: "openai",
@@ -770,7 +809,7 @@ const KV_GALLERY_UNIQUENESS_ROWS_PREFIX = "iconoplasm:gallery-uniqueness-rows:"
 const KV_PUBLIC_STATS = "iconoplasm:public-stats:v1"
 const KV_SHARED_GENE_DISCOVERY_SYMBOLS = "iconoplasm:shared-gene-discovery-symbols:v1"
 const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = `iconoplasm:hydrated-catalog-artifact:${CATALOG_ARTIFACT_VERSION_TOKEN}:`
-const KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX = `iconoplasm:published-compatibility-artifact:${PUBLISHED_CATALOG_VERSION_TOKEN}:`
+const KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX = "iconoplasm:published-compatibility-artifact:"
 const KV_CARD_CATALOG_ARTIFACT_PREFIX = "iconoplasm:card-catalog:"
 // Watermark recorded after every successful card-catalog publish: which artifact
 // version is live and the max icono_publish_events.created_at it reflects. The
@@ -3264,7 +3303,10 @@ export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortra
   return { ...artifact, schema_version: CATALOG_ARTIFACT_SCHEMA_VERSION, genes: nextGenes }
 }
 
-export function projectPublishedCompatibilityArtifact(artifact) {
+export function projectPublishedCompatibilityArtifact(
+  artifact,
+  targetSchemaVersion = PUBLISHED_CATALOG_SCHEMA_VERSION,
+) {
   if (!artifact || typeof artifact !== "object" || !Array.isArray(artifact.genes)) return null
   const genes = artifact.genes.map((rawGene) => {
     if (!rawGene || typeof rawGene !== "object") return rawGene
@@ -3273,6 +3315,7 @@ export function projectPublishedCompatibilityArtifact(artifact) {
       rawGene.s,
       ICONOPLASM_PUBLICATION_ALIASES,
     )
+    if (targetSchemaVersion >= 5) return gene
     const { p: portrait, ...compatible } = gene
     const mediumPath = String(portrait?.renditions?.medium?.path || "").trim()
     const fullPath = String(portrait?.renditions?.full?.path || "").trim()
@@ -3282,7 +3325,7 @@ export function projectPublishedCompatibilityArtifact(artifact) {
   })
   return {
     ...artifact,
-    schema_version: PUBLISHED_CATALOG_SCHEMA_VERSION,
+    schema_version: targetSchemaVersion,
     genes,
   }
 }
@@ -10528,13 +10571,6 @@ async function catalogManifestObj(env) {
   }
 }
 
-function servesPublishedCompatibilityContract(clientVersion) {
-  return (
-    String(clientVersion || "").trim() === PUBLISHED_EXTENSION_VERSION &&
-    PUBLISHED_CATALOG_SCHEMA_VERSION < CATALOG_ARTIFACT_SCHEMA_VERSION
-  )
-}
-
 async function extensionManifestObj(url, env, clientVersion = null) {
   const manifest = await catalogManifestObj(env)
   if (!manifest) return null
@@ -10544,22 +10580,22 @@ async function extensionManifestObj(url, env, clientVersion = null) {
   // This is the complete extension contract: artifact compatibility, minimum
   // client version, aliases, and portrait delivery policy travel together.
   const publicationAliases = await iconoplasmPublicationAliasManifest()
-  const compatibility = servesPublishedCompatibilityContract(clientVersion)
+  const compatibilityContract = publishedCompatibilityContractForClientVersion(clientVersion)
   const portraitFingerprint = await sharedPublishedPortraitFingerprint(env)
   const candidateBuildVersion = buildPortraitAwareManifestHash(
     manifest.current_hash,
     portraitFingerprint,
   )
   const aliasToken = portraitHashToken(publicationAliases.version) || "aliases"
-  const buildVersion = compatibility
+  const buildVersion = compatibilityContract
     ? `${buildContractAwareManifestHash(
         manifest.current_hash,
         portraitFingerprint,
-        PUBLISHED_CATALOG_VERSION_TOKEN,
+        compatibilityContract.token,
       )}-${aliasToken}`
     : candidateBuildVersion
-  const artifactSchemaVersion = compatibility
-    ? PUBLISHED_CATALOG_SCHEMA_VERSION
+  const artifactSchemaVersion = compatibilityContract
+    ? compatibilityContract.schemaVersion
     : CATALOG_ARTIFACT_SCHEMA_VERSION
   return {
     ...manifest,
@@ -10569,7 +10605,7 @@ async function extensionManifestObj(url, env, clientVersion = null) {
     artifact_schema_version: artifactSchemaVersion,
     schema_version: artifactSchemaVersion,
     min_extension_version: MIN_EXTENSION_VERSION,
-    ...(compatibility ? { portrait_base_url: ICONOPLASM_CANONICAL_ORIGIN } : {}),
+    ...(compatibilityContract ? { portrait_base_url: ICONOPLASM_CANONICAL_ORIGIN } : {}),
     portrait_delivery: portraitDeliveryPolicy(url, env),
     publication_aliases: publicationAliases,
   }
@@ -21942,23 +21978,22 @@ async function hydratedCatalogArtifact(env, hash, { fresh = false } = {}) {
   return hydrated
 }
 
-function isPublishedCompatibilityArtifact(value) {
+function isPublishedCompatibilityArtifact(value, contract) {
   return (
     value &&
     typeof value === "object" &&
-    Number(value.schema_version || 0) === PUBLISHED_CATALOG_SCHEMA_VERSION &&
+    Number(value.schema_version || 0) === contract?.schemaVersion &&
     Array.isArray(value.genes)
   )
 }
 
 function isPublishedCompatibilityHash(hash) {
-  return String(hash || "")
-    .split("-")
-    .includes(PUBLISHED_CATALOG_VERSION_TOKEN)
+  return Boolean(publishedCompatibilityContractForHash(hash))
 }
 
 async function publishedCompatibilityArtifact(env, requestedHash) {
-  if (!env?.KV || !requestedHash || !isPublishedCompatibilityHash(requestedHash)) return null
+  const contract = publishedCompatibilityContractForHash(requestedHash)
+  if (!env?.KV || !requestedHash || !contract) return null
   const hash = String(requestedHash).trim()
   const baseHash = catalogBaseHash(hash)
   if (!baseHash) return null
@@ -21968,7 +22003,7 @@ async function publishedCompatibilityArtifact(env, requestedHash) {
   const expectedHash = `${buildContractAwareManifestHash(
     baseHash,
     portraitFingerprint,
-    PUBLISHED_CATALOG_VERSION_TOKEN,
+    contract.token,
   )}-${aliasToken}`
   if (hash !== expectedHash) return null
 
@@ -21983,7 +22018,7 @@ async function publishedCompatibilityArtifact(env, requestedHash) {
     KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX,
     hash,
   )
-  if (isPublishedCompatibilityArtifact(cached)) {
+  if (isPublishedCompatibilityArtifact(cached, contract)) {
     publishedCompatibilityArtifactCache.key = hash
     publishedCompatibilityArtifactCache.value = cached
     return cached
@@ -21991,7 +22026,7 @@ async function publishedCompatibilityArtifact(env, requestedHash) {
 
   const candidateHash = buildPortraitAwareManifestHash(baseHash, portraitFingerprint)
   const candidate = await hydratedCatalogArtifact(env, candidateHash)
-  const compatible = projectPublishedCompatibilityArtifact(candidate)
+  const compatible = projectPublishedCompatibilityArtifact(candidate, contract.schemaVersion)
   if (!compatible) return null
   publishedCompatibilityArtifactCache.key = hash
   publishedCompatibilityArtifactCache.value = compatible

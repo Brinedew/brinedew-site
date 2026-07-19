@@ -6,8 +6,19 @@ import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   mergePublishedPortraitRefsIntoArtifact,
   projectPublishedCompatibilityArtifact,
+  publishedCatalogContractForClientVersion,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+
+test("published browser versions resolve through the inspectable authority contract", () => {
+  assert.deepEqual(publishedCatalogContractForClientVersion("0.4.7"), {
+    version: "0.4.7",
+    schemaVersion: 4,
+    revision: 1,
+    token: "a4p047c1",
+  })
+  assert.equal(publishedCatalogContractForClientVersion("0.4.6"), null)
+})
 
 class FakeStatement {
   constructor(db, sql) {

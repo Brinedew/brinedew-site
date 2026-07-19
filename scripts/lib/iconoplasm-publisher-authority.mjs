@@ -31,6 +31,10 @@ export function readIconoplasmPublisherAuthority(repoRoot) {
     throw new Error("Publisher authority was not declared by the human-gated Iconoplasm GUI")
   }
   const version = requireVersion(authority.version, "Publisher authority version")
+  const minimumSupportedVersion = requireVersion(
+    authority.minimum_supported_version,
+    "Publisher authority minimum supported version",
+  )
   const contractSchemaVersion = Number(authority.catalog_contract?.schema_version)
   const contractRevision = Number(authority.catalog_contract?.revision)
   if (!Number.isInteger(contractSchemaVersion) || contractSchemaVersion < 1) {
@@ -39,7 +43,42 @@ export function readIconoplasmPublisherAuthority(repoRoot) {
   if (!Number.isInteger(contractRevision) || contractRevision < 1) {
     throw new Error("Publisher authority catalog revision must be a positive integer")
   }
-  return { authority, authorityPath, version, contractSchemaVersion, contractRevision }
+  const compatibilityContracts = authority.compatibility_contracts
+  if (!compatibilityContracts || typeof compatibilityContracts !== "object") {
+    throw new Error("Publisher authority compatibility contracts must be an object")
+  }
+  for (const [compatibilityVersion, contract] of Object.entries(compatibilityContracts)) {
+    requireVersion(compatibilityVersion, "Compatibility contract version")
+    if (
+      !Number.isInteger(Number(contract?.schema_version)) ||
+      Number(contract.schema_version) < 1 ||
+      !Number.isInteger(Number(contract?.revision)) ||
+      Number(contract.revision) < 1
+    ) {
+      throw new Error(`Compatibility contract ${compatibilityVersion} is invalid`)
+    }
+  }
+  const compatibilityVersions = Object.keys(compatibilityContracts)
+  if (minimumSupportedVersion === version && compatibilityVersions.length !== 0) {
+    throw new Error("Publisher authority must not retain compatibility contracts without a rollout")
+  }
+  if (
+    minimumSupportedVersion !== version &&
+    (compatibilityVersions.length !== 1 || compatibilityVersions[0] !== minimumSupportedVersion)
+  ) {
+    throw new Error(
+      "Publisher authority must retain exactly the minimum supported version during a rollout",
+    )
+  }
+  return {
+    authority,
+    authorityPath,
+    version,
+    minimumSupportedVersion,
+    contractSchemaVersion,
+    contractRevision,
+    compatibilityContracts,
+  }
 }
 
 export function assertIconoplasmPublisherAuthority(repoRoot, { expectedVersion } = {}) {
