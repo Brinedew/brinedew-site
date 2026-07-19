@@ -911,10 +911,6 @@ const publishedPortraitRefsCache = {
   key: null,
   value: null,
 }
-const publishedPortraitFingerprintCache = {
-  loadedAt: 0,
-  value: null,
-}
 const sharedPublishedPortraitFingerprintCache = {
   loadedAt: 0,
   value: null,
@@ -925,7 +921,7 @@ const sharedPublishedPortraitFingerprintCache = {
 // enough to act like a real billing barrier, not a theatrical one.
 const PUBLISHED_PORTRAIT_FINGERPRINT_CACHE_TTL_MS = 5 * 60 * 1000
 
-const PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION = "v2"
+const PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION = "v3"
 const galleryPublishedRowsCache = {
   version: null,
   value: null,
@@ -3246,45 +3242,31 @@ export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortra
 async function queryPublishedPortraitFingerprint(env) {
   if (!env.ICONOPLASM_DB) return null
   try {
-    const row = await env.ICONOPLASM_DB.prepare(
-      `SELECT
-         COUNT(*) AS published_count,
-         GROUP_CONCAT(symbol_asset, '|') AS published_pairs
-       FROM (
-         SELECT gene_symbol || ':' || current_asset_sha256 AS symbol_asset
-         FROM icono_publish_state
-         WHERE current_asset_sha256 IS NOT NULL
-         ORDER BY gene_symbol ASC
-       )`,
-    ).first()
-    if (!row) return null
-    const publishedCount = Number(row.published_count ?? 0)
-    if (!publishedCount) {
+    const result = await env.ICONOPLASM_DB.prepare(
+      `SELECT gene_symbol AS symbol, current_asset_sha256 AS asset_sha256
+       FROM icono_publish_state
+       WHERE current_asset_sha256 IS NOT NULL
+       ORDER BY gene_symbol ASC`,
+    ).all()
+    const rawRows = Array.isArray(result?.results) ? result.results : []
+    const pairs = rawRows.map((row) => {
+      const symbol = normalizeSymbol(row?.symbol || row?.gene_symbol || "")
+      const assetSha = normalizeSha256(row?.asset_sha256 || row?.current_asset_sha256 || "")
+      if (!symbol || !assetSha) {
+        throw new TypeError("Published portrait fingerprint contains an invalid row")
+      }
+      return `${symbol}:${assetSha}`
+    })
+    if (!pairs.length) {
       return { published_count: 0, latest: null }
     }
     return {
-      published_count: publishedCount,
-      latest: await sha256Hex(String(row.published_pairs || "")),
+      published_count: pairs.length,
+      latest: await sha256Hex(pairs.join("|")),
     }
-  } catch {
-    return null
+  } catch (error) {
+    throw new Error("Published portrait fingerprint query failed", { cause: error })
   }
-}
-
-async function publishedPortraitFingerprint(env, { fresh = false } = {}) {
-  if (!env.ICONOPLASM_DB) return null
-  if (fresh) return queryPublishedPortraitFingerprint(env)
-  const now = Date.now()
-  if (
-    publishedPortraitFingerprintCache.loadedAt > 0 &&
-    now - publishedPortraitFingerprintCache.loadedAt < PUBLISHED_PORTRAIT_FINGERPRINT_CACHE_TTL_MS
-  ) {
-    return publishedPortraitFingerprintCache.value || null
-  }
-  const row = await queryPublishedPortraitFingerprint(env)
-  publishedPortraitFingerprintCache.loadedAt = now
-  publishedPortraitFingerprintCache.value = row || null
-  return row || null
 }
 
 async function sharedPublishedPortraitFingerprint(env, { fresh = false } = {}) {
@@ -3373,14 +3355,33 @@ async function queryPublishedPortraitRefs(env) {
 
 function publishedPortraitRefSnapshotMatchesFingerprint(rows, fingerprint) {
   if (!Array.isArray(rows)) return false
-  if (!fingerprint || typeof fingerprint !== "object") return true
-  const expectedCount = Number(fingerprint.published_count ?? fingerprint.count)
-  return !Number.isSafeInteger(expectedCount) || expectedCount < 0 || rows.length === expectedCount
+  if (fingerprint && typeof fingerprint === "object") {
+    const expectedCount = Number(fingerprint.published_count ?? fingerprint.count)
+    if (
+      Number.isSafeInteger(expectedCount) &&
+      expectedCount >= 0 &&
+      rows.length !== expectedCount
+    ) {
+      return false
+    }
+  }
+  for (const row of rows) {
+    if (
+      !normalizeSymbol(row?.symbol || row?.gene_symbol || "") ||
+      !normalizeSha256(row?.asset_sha256 || "")
+    ) {
+      return false
+    }
+  }
+  return true
 }
 
 async function publishedPortraitRefs(env, { fresh = false } = {}) {
   if (!env.ICONOPLASM_DB) return []
-  const fingerprint = await publishedPortraitFingerprint(env, fresh ? { fresh: true } : undefined)
+  const fingerprint = await sharedPublishedPortraitFingerprint(
+    env,
+    fresh ? { fresh: true } : undefined,
+  )
   const version = portraitSnapshotVersion(fingerprint)
   if (
     !fresh &&
@@ -3410,16 +3411,16 @@ async function publishedPortraitRefs(env, { fresh = false } = {}) {
   return rows
 }
 
-// Canonical R2 key for a portrait rendition.
+// Canonical storage key for a portrait rendition.
 // rendition: 'full' (<=1MP, gene page hero), 'medium' (512px long edge, extension/grid), 'thumb' (256x256 crop)
-function r2PortraitKey(sha256, rendition) {
+function portraitStorageKey(sha256, rendition) {
   return `portraits/v1/${sha256.slice(0, 2)}/${sha256}/${rendition}.webp`
 }
 
 function adminPortraitUrl(base, assetSha256, rendition = "thumb") {
   const sha = normalizeSha256(assetSha256)
   if (!sha) return null
-  return joinUrl(base, r2PortraitKey(sha, rendition))
+  return joinUrl(base, portraitStorageKey(sha, rendition))
 }
 
 function portraitAssetRef(base, assetSha256) {
@@ -3427,7 +3428,7 @@ function portraitAssetRef(base, assetSha256) {
   if (!assetSha) return null
   const renditions = {}
   for (const rendition of ["full", "medium", "thumb"]) {
-    const path = r2PortraitKey(assetSha, rendition)
+    const path = portraitStorageKey(assetSha, rendition)
     renditions[rendition] = {
       path,
       canonical_url: joinUrl(base, path),
@@ -6849,9 +6850,9 @@ async function writeImageEditRenditions(env, url, { assetSha256, bytes, contentT
   if (!sourceBytes.byteLength) throw new Error("Image edit result bytes are empty")
   const sourceContentType = sanitizeText(contentType || "", 80) || "application/octet-stream"
   const keys = {
-    full: r2PortraitKey(assetSha, "full"),
-    medium: r2PortraitKey(assetSha, "medium"),
-    thumb: r2PortraitKey(assetSha, "thumb"),
+    full: portraitStorageKey(assetSha, "full"),
+    medium: portraitStorageKey(assetSha, "medium"),
+    thumb: portraitStorageKey(assetSha, "thumb"),
   }
 
   if (isWebpContentType(sourceContentType)) {
@@ -7018,9 +7019,9 @@ async function publishImageEditCandidateAsset(env, job, userId) {
     .bind(
       symbol,
       assetSha,
-      String(job.result_r2_key_full || r2PortraitKey(assetSha, "full")),
-      String(job.result_r2_key_medium || r2PortraitKey(assetSha, "medium")),
-      String(job.result_r2_key_thumb || r2PortraitKey(assetSha, "thumb")),
+      String(job.result_r2_key_full || portraitStorageKey(assetSha, "full")),
+      String(job.result_r2_key_medium || portraitStorageKey(assetSha, "medium")),
+      String(job.result_r2_key_thumb || portraitStorageKey(assetSha, "thumb")),
       sanitizeText(job.result_mime || "", 80) || "image/webp",
       optionalInt(job.result_width),
       optionalInt(job.result_height),
@@ -7549,9 +7550,9 @@ async function publishCandidateGenerationAsset(env, job, userId) {
     .bind(
       symbol,
       assetSha,
-      String(job.result_r2_key_full || r2PortraitKey(assetSha, "full")),
-      String(job.result_r2_key_medium || r2PortraitKey(assetSha, "medium")),
-      String(job.result_r2_key_thumb || r2PortraitKey(assetSha, "thumb")),
+      String(job.result_r2_key_full || portraitStorageKey(assetSha, "full")),
+      String(job.result_r2_key_medium || portraitStorageKey(assetSha, "medium")),
+      String(job.result_r2_key_thumb || portraitStorageKey(assetSha, "thumb")),
       sanitizeText(job.result_mime || "", 80) || "image/webp",
       optionalInt(job.result_width),
       optionalInt(job.result_height),
@@ -11067,7 +11068,8 @@ async function warmCatalogCache(env) {
   const baseHash = catalogBaseHash(manifest.current_hash)
   if (!baseHash) return
   const portraitAwareHash =
-    buildPortraitAwareManifestHash(baseHash, await publishedPortraitFingerprint(env)) || baseHash
+    buildPortraitAwareManifestHash(baseHash, await sharedPublishedPortraitFingerprint(env)) ||
+    baseHash
   const publicationAliases = await iconoplasmPublicationAliasManifest()
   const cacheHash = `${portraitAwareHash}:${publicationAliases.version}`
   const now = Date.now()
@@ -12505,9 +12507,9 @@ async function inspectAdminAssetStorageRows(
 
     try {
       const keys = {
-        full: r2PortraitKey(assetSha, "full"),
-        medium: r2PortraitKey(assetSha, "medium"),
-        thumb: r2PortraitKey(assetSha, "thumb"),
+        full: portraitStorageKey(assetSha, "full"),
+        medium: portraitStorageKey(assetSha, "medium"),
+        thumb: portraitStorageKey(assetSha, "thumb"),
       }
       const [fullHead, mediumHead, thumbHead] = await Promise.all([
         headPortraitStorageObject(env, keys.full),
@@ -21764,8 +21766,6 @@ function clearGallerySnapshotCache() {
 function clearSharedD1CostCaches() {
   publishedPortraitRefsCache.key = null
   publishedPortraitRefsCache.value = null
-  publishedPortraitFingerprintCache.loadedAt = 0
-  publishedPortraitFingerprintCache.value = null
   sharedPublishedPortraitFingerprintCache.loadedAt = 0
   sharedPublishedPortraitFingerprintCache.value = null
   galleryPublishedRowsCache.version = null
@@ -32122,9 +32122,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
           const existingAsset = prefetchedExistingAssets.get(`${symbol}|${assetSha}`) || null
           const keys = {
-            full: r2PortraitKey(assetSha, "full"),
-            medium: r2PortraitKey(assetSha, "medium"),
-            thumb: r2PortraitKey(assetSha, "thumb"),
+            full: portraitStorageKey(assetSha, "full"),
+            medium: portraitStorageKey(assetSha, "medium"),
+            thumb: portraitStorageKey(assetSha, "thumb"),
           }
           const verifyStorage = coerceBoolean(
             item?.verify_storage ?? item?.verifyStorage,
