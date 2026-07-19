@@ -151,6 +151,40 @@ test("B-517 edit blot UI uses one dialog modal and the direct image-edit APIs", 
   assert.doesNotMatch(head, /data-shoelace=\{joinSegments/)
 })
 
+test("publish failures show what was preserved, the recovery action, and a reference", () => {
+  const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
+  const css = readFileSync(
+    new URL("../quartz/static/iconoplasm/styles.css", import.meta.url),
+    "utf8",
+  )
+  const formatterStart = app.indexOf("function publishFailureMessage")
+  const formatterEnd = app.indexOf("var iconoplasmQueryInflight", formatterStart)
+  const imagePublishStart = app.indexOf("function publishImageEditJob")
+  const imagePublishEnd = app.indexOf("function wireImageEditDialog", imagePublishStart)
+  const directPublishStart = app.indexOf("function publishDirectCandidateGeneration")
+  const directPublishEnd = app.indexOf("function closeResults", directPublishStart)
+  assert.notEqual(formatterStart, -1)
+  assert.notEqual(formatterEnd, -1)
+  assert.notEqual(imagePublishStart, -1)
+  assert.notEqual(imagePublishEnd, -1)
+  assert.notEqual(directPublishStart, -1)
+  assert.notEqual(directPublishEnd, -1)
+  const formatter = app.slice(formatterStart, formatterEnd)
+  const imagePublish = app.slice(imagePublishStart, imagePublishEnd)
+  const directPublish = app.slice(directPublishStart, directPublishEnd)
+
+  assert.match(formatter, /failure\.preserved_message/)
+  assert.match(formatter, /failure\.next_action/)
+  assert.match(formatter, /Reference:/)
+  assert.match(formatter, /failure\.job_id/)
+  assert.match(imagePublish, /publishFailureMessage\(error, "Could not publish edit\."\)/)
+  assert.match(directPublish, /publishFailureMessage\(error, "Could not publish candidate\."\)/)
+  assert.match(imagePublish, /state\.job = error\.payload\.job/)
+  assert.match(directPublish, /requestDirectState\.job = error\.payload\.job/)
+  assert.match(css, /\.icono-image-edit-status\s*\{[^}]*white-space:\s*pre-line/s)
+  assert.match(css, /\[data-icono-request-note\]\s*\{[^}]*white-space:\s*pre-line/s)
+})
+
 test("B-517 removes image provider secrets from browser settings storage", () => {
   const settings = readFileSync(
     new URL("../quartz/static/site-settings/app.js", import.meta.url),

@@ -916,6 +916,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.82rem;
   line-height: 1.25;
+  white-space: pre-line;
   color: color-mix(in srgb, var(--dark) 64%, var(--secondary) 36%);
 }
 
@@ -1411,6 +1412,11 @@ img-comparison-slider.rendered [slot="second"] {
 
 .icono-request-direct-status[data-tone="warn"] {
   color: color-mix(in srgb, var(--dark) 72%, var(--accent) 28%);
+}
+
+[data-icono-request-note] {
+  line-height: 1.4;
+  white-space: pre-line;
 }
 
 .icono-request-direct-generate,

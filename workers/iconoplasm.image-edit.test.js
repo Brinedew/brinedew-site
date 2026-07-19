@@ -294,6 +294,9 @@ class FakeStatement {
   }
 
   async run() {
+    if (this.db.runFailureSqlFragment && this.sql.includes(String(this.db.runFailureSqlFragment))) {
+      throw new Error(this.db.runFailureMessage || "Synthetic D1 write failure")
+    }
     if (this.sql.includes("INSERT OR IGNORE INTO iconoplasm_user_emulsion_versions")) {
       const row = {
         user_id: this.args[0],
@@ -495,12 +498,27 @@ class FakeStatement {
       return { meta: { changes: 1 } }
     }
     if (this.sql.includes("INSERT INTO icono_publish_events")) {
-      this.db.publishEvent = {
-        gene_symbol: this.args[0],
-        to_asset_sha256: this.args[2],
-        actor: this.args[3],
-        reason: this.args[4],
-      }
+      const imageEdit = this.sql.includes("'edit_candidate'")
+      const event = imageEdit
+        ? {
+            gene_symbol: this.args[0],
+            to_asset_sha256: this.args[2],
+            actor: this.args[3],
+            reason: this.args[4],
+          }
+        : {
+            gene_symbol: this.args[0],
+            to_asset_sha256: this.args[1],
+            actor: this.args[2],
+            reason: this.args[3],
+          }
+      const duplicate = this.db.publishEvents.some(
+        (existing) =>
+          existing.gene_symbol === event.gene_symbol && existing.reason === event.reason,
+      )
+      if (duplicate) return { meta: { changes: 0 } }
+      this.db.publishEvent = event
+      this.db.publishEvents.push(event)
       return { meta: { changes: 1 } }
     }
     if (this.sql.includes("INSERT INTO icono_image_votes")) {
@@ -600,6 +618,7 @@ class FakeDb {
     this.userEmulsionVersions = new Map()
     this.voteProjectionRows = []
     this.voteEvents = []
+    this.publishEvents = []
     this.geneContext = null
     this.geneComments = []
     this.geneCommentsLastId = 0
@@ -644,6 +663,12 @@ function buildVoteCoordinatorBinding(db) {
           }
           const payload = await request.json()
           if (new URL(request.url).pathname === "/vote/import") {
+            if (db.voteImportFailure) {
+              return new Response(JSON.stringify({ error: db.voteImportFailure }), {
+                status: 503,
+                headers: { "Content-Type": "application/json" },
+              })
+            }
             db.voteImportPayload = payload
             return new Response(
               JSON.stringify({
@@ -719,6 +744,50 @@ function buildEnv(db = new FakeDb(), session = { user_id: "user-1", username: "t
   }
 }
 
+function seedSucceededCandidateGenerationJob(db, id = "candidate-publish-test") {
+  const row = {
+    id,
+    user_id: "user-1",
+    provider_id: "openai",
+    gene_symbol: "A1BG",
+    request_mode: "novel",
+    reference_assets_json: "[]",
+    prompt_body_mode: "prose_sample",
+    status: "succeeded",
+    result_asset_sha256: "e".repeat(64),
+    result_r2_key_full: `portraits/v1/ee/${"e".repeat(64)}/full.webp`,
+    result_r2_key_medium: `portraits/v1/ee/${"e".repeat(64)}/medium.webp`,
+    result_r2_key_thumb: `portraits/v1/ee/${"e".repeat(64)}/thumb.webp`,
+    result_mime: "image/webp",
+    created_at: "2026-05-16T00:00:00.000Z",
+    completed_at: "2026-05-16T00:00:01.000Z",
+  }
+  db.candidateGenerationJobs.set(id, row)
+  return row
+}
+
+function seedSucceededImageEditJob(db, id = "image-edit-publish-test") {
+  const row = {
+    id,
+    user_id: "user-1",
+    provider_id: "openai",
+    source_gene_symbol: "A1BG",
+    source_asset_sha256: SOURCE_SHA,
+    adjustments_json: "[]",
+    status: "succeeded",
+    inherited_upvotes: 2,
+    result_asset_sha256: "f".repeat(64),
+    result_r2_key_full: `portraits/v1/ff/${"f".repeat(64)}/full.webp`,
+    result_r2_key_medium: `portraits/v1/ff/${"f".repeat(64)}/medium.webp`,
+    result_r2_key_thumb: `portraits/v1/ff/${"f".repeat(64)}/thumb.webp`,
+    result_mime: "image/webp",
+    created_at: "2026-05-16T00:00:00.000Z",
+    completed_at: "2026-05-16T00:00:01.000Z",
+  }
+  db.jobs.set(id, row)
+  return row
+}
+
 // Captures every promise handed to ctx.waitUntil so tests can await them.
 // Used by routes that have legitimate background work (vote projection,
 // comment mirror, etc.). The Krea image-edit and candidate-generation
@@ -765,6 +834,114 @@ async function createKreaImageEditJobAndAwait({ env, ctx, body, cookie = "sessio
   const created = await create.json()
   return { create, created }
 }
+
+test("candidate publish explains a vote-service failure and preserves the generated image", async () => {
+  const db = new FakeDb()
+  const job = seedSucceededCandidateGenerationJob(db)
+  db.voteImportFailure = "Synthetic vote coordinator outage"
+  const env = buildEnv(db)
+
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        `https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/candidate-generation/jobs/${job.id}/publish`,
+        { method: "POST", headers: { Cookie: "session=abc123" } },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 502)
+  assert.equal(payload.code, "CANDIDATE_PUBLISH_VOTE_FAILED")
+  assert.equal(payload.failure.stage, "record_vote")
+  assert.equal(payload.failure.result_saved, true)
+  assert.equal(payload.failure.candidate_added, true)
+  assert.equal(payload.failure.vote_recorded, false)
+  assert.match(payload.failure.preserved_message, /generated image is saved/i)
+  assert.match(payload.failure.next_action, /retry publish/i)
+  assert.match(payload.failure.next_action, /not be regenerated/i)
+  assert.equal(payload.failure.job_id, job.id)
+  assert.equal(payload.job.id, job.id)
+  assert.equal(payload.job.published, false)
+  assert.equal(db.publishedAsset.asset_sha256, job.result_asset_sha256)
+})
+
+test("image edit publish explains a candidate-write failure without losing the edit", async () => {
+  const db = new FakeDb()
+  const job = seedSucceededImageEditJob(db)
+  db.runFailureSqlFragment = "INSERT INTO icono_portrait_assets"
+  db.runFailureMessage = "Synthetic portrait write outage"
+  const env = buildEnv(db)
+
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        `https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs/${job.id}/publish`,
+        { method: "POST", headers: { Cookie: "session=abc123" } },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 503)
+  assert.equal(payload.code, "IMAGE_EDIT_PUBLISH_CANDIDATE_FAILED")
+  assert.equal(payload.failure.stage, "add_candidate")
+  assert.equal(payload.failure.result_saved, true)
+  assert.equal(payload.failure.candidate_added, false)
+  assert.equal(payload.failure.vote_recorded, false)
+  assert.match(payload.failure.preserved_message, /edited image is saved/i)
+  assert.match(payload.failure.next_action, /retry publish/i)
+  assert.equal(payload.job.id, job.id)
+  assert.equal(payload.job.published, false)
+  assert.equal(db.voteImportPayload, undefined)
+})
+
+test("image edit publish distinguishes a final confirmation failure", async () => {
+  const db = new FakeDb()
+  const job = seedSucceededImageEditJob(db, "image-edit-confirmation-test")
+  db.runFailureSqlFragment = "UPDATE icono_image_edit_jobs"
+  db.runFailureMessage = "Synthetic confirmation write outage"
+  const env = buildEnv(db)
+
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        `https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs/${job.id}/publish`,
+        { method: "POST", headers: { Cookie: "session=abc123" } },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 503)
+  assert.equal(payload.code, "IMAGE_EDIT_PUBLISH_CONFIRMATION_FAILED")
+  assert.equal(payload.failure.stage, "confirm_publish")
+  assert.equal(payload.failure.result_saved, true)
+  assert.equal(payload.failure.candidate_added, true)
+  assert.equal(payload.failure.vote_recorded, true)
+  assert.match(payload.error, /candidate and its votes were saved/i)
+  assert.equal(payload.job.published, false)
+  assert.equal(db.voteImportPayload.items.length, 3)
+  assert.equal(db.publishEvents.length, 1)
+
+  db.runFailureSqlFragment = ""
+  const retryResponse =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        `https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs/${job.id}/publish`,
+        { method: "POST", headers: { Cookie: "session=abc123" } },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+  const retryPayload = await retryResponse.json()
+  assert.equal(retryResponse.status, 200)
+  assert.equal(retryPayload.job.published, true)
+  assert.equal(db.publishEvents.length, 1, "a retry must not duplicate the publish audit event")
+})
 
 test("user emulsion settings store the current Discord-owned emulsion revision", async () => {
   const db = new FakeDb()
