@@ -57,7 +57,8 @@ const ICONOPLASM_CLAN_CATALOG_TOTAL = ICONOPLASM_CLAN_CATALOG_BY_NAME.size
 // optimized for published assets, cheap ranking refreshes, and Cloudflare request economy.
 const API_SCHEMA_VERSION = 4
 const CATALOG_ARTIFACT_SCHEMA_VERSION = 5
-const CATALOG_ARTIFACT_VERSION_TOKEN = `a${CATALOG_ARTIFACT_SCHEMA_VERSION}`
+const CATALOG_ARTIFACT_CONTRACT_REVISION = 1
+const CATALOG_ARTIFACT_VERSION_TOKEN = `a${CATALOG_ARTIFACT_SCHEMA_VERSION}c${CATALOG_ARTIFACT_CONTRACT_REVISION}`
 const PUBLIC_API_VERSION = "v1"
 const PUBLIC_API_PREFIX = `/api/public/${PUBLIC_API_VERSION}`
 const SITE_GENE_API_PREFIX = "/api/iconoplasm/site/genes"
@@ -3365,28 +3366,44 @@ async function queryPublishedPortraitRefs(env) {
         }
       })
       .filter(Boolean)
-  } catch {
-    return []
+  } catch (error) {
+    throw new Error("Published portrait snapshot query failed", { cause: error })
   }
+}
+
+function publishedPortraitRefSnapshotMatchesFingerprint(rows, fingerprint) {
+  if (!Array.isArray(rows)) return false
+  if (!fingerprint || typeof fingerprint !== "object") return true
+  const expectedCount = Number(fingerprint.published_count ?? fingerprint.count)
+  return !Number.isSafeInteger(expectedCount) || expectedCount < 0 || rows.length === expectedCount
 }
 
 async function publishedPortraitRefs(env, { fresh = false } = {}) {
   if (!env.ICONOPLASM_DB) return []
-  if (fresh) return queryPublishedPortraitRefs(env)
-  const version = portraitSnapshotVersion(await publishedPortraitFingerprint(env))
+  const fingerprint = await publishedPortraitFingerprint(env, fresh ? { fresh: true } : undefined)
+  const version = portraitSnapshotVersion(fingerprint)
   if (
+    !fresh &&
     publishedPortraitRefsCache.key === version &&
-    Array.isArray(publishedPortraitRefsCache.value)
+    publishedPortraitRefSnapshotMatchesFingerprint(publishedPortraitRefsCache.value, fingerprint)
   ) {
     return publishedPortraitRefsCache.value
   }
-  const cached = await readVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_REFS_PREFIX, version)
-  if (Array.isArray(cached)) {
-    publishedPortraitRefsCache.key = version
-    publishedPortraitRefsCache.value = cached
-    return cached
+  if (!fresh) {
+    const cached = await readVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_REFS_PREFIX, version)
+    if (publishedPortraitRefSnapshotMatchesFingerprint(cached, fingerprint)) {
+      publishedPortraitRefsCache.key = version
+      publishedPortraitRefsCache.value = cached
+      return cached
+    }
   }
   const rows = await queryPublishedPortraitRefs(env)
+  if (!publishedPortraitRefSnapshotMatchesFingerprint(rows, fingerprint)) {
+    const expectedCount = Number(fingerprint?.published_count ?? fingerprint?.count ?? 0)
+    throw new Error(
+      `Published portrait snapshot is incomplete: expected ${expectedCount}, received ${rows.length}`,
+    )
+  }
   publishedPortraitRefsCache.key = version
   publishedPortraitRefsCache.value = rows
   await writeVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_REFS_PREFIX, version, rows)
