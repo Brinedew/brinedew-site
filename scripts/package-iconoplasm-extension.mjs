@@ -19,6 +19,7 @@ const __dirname = resolve(__filename, "..", "..")
 const repoRoot = __dirname
 const extensionRoot = resolve(repoRoot, "iconoplasm-extension")
 const distRoot = resolve(extensionRoot, "dist")
+const manifestPath = resolve(extensionRoot, "manifest.json")
 const { manifest, version: packageVersion } = assertIconoplasmPublisherAuthority(repoRoot)
 
 function resolveTarget(argv) {
