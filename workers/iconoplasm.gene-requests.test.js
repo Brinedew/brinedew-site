@@ -659,16 +659,18 @@ test("request-option v3 migration materializes inspectable edit ancestry", () =>
   )
 
   assert.match(migration, /WITH RECURSIVE/)
+  assert.match(migration, /edited_targets AS/)
   assert.match(migration, /event\.action = 'edit_candidate'/)
   assert.match(migration, /lineage\.lineage_depth < 32/)
   assert.match(migration, /seen_asset_sha256s/)
   assert.match(migration, /'lineage_root_asset_sha256'/)
   assert.match(migration, /'edit_ancestor_asset_sha256s'/)
-  assert.match(migration, /WHEN lineage_depth > 0 THEN json_object/)
-  assert.match(migration, /ELSE json\('\{\}'\)/)
-  assert.match(migration, /json_remove\(lineage\.lineage_leaf_first_json, '\$\[0\]'\)/)
-  assert.match(migration, /builder_version = excluded\.builder_version/)
-  assert.match(migration, /\n\s*3,\n\s*CURRENT_TIMESTAMP/)
+  assert.match(migration, /affected_visions AS/)
+  assert.match(migration, /json_patch\(/)
+  assert.match(migration, /json_remove\(lineage_leaf_first_json, '\$\[0\]'\)/)
+  assert.match(migration, /SET builder_version = 3/)
+  assert.doesNotMatch(migration, /CREATE INDEX/)
+  assert.doesNotMatch(migration, /source_summary AS/)
 })
 
 test("authenticated request options include shared user emulsions with preview thumbnails", async () => {
