@@ -26,6 +26,10 @@ import "../shared/iconoplasm-card/shared-card-runtime.js"
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const ICONOPLASM_CANONICAL_ORIGIN = `https://${ICONOPLASM_HOST}`
+// One notification can spend three external subrequests (portrait, DM channel,
+// message). Keep a full invocation comfortably below the Free-plan ceiling of
+// 50; the workstation owns repeated slices until every exact request settles.
+const ICONOPLASM_FULFILLMENT_DM_INLINE_LIMIT = 10
 // Server-side clan reference data. Keep this out of the browser bundle; the
 // public route below reveals clan metadata only when the signed-in user has
 // discovered at least one member of that clan.
@@ -27762,11 +27766,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         // must fail loudly instead of declaring a silent fulfillment success.
         const delivery = await deliverPendingRequestFulfillmentNotifications(env, {
           requestIds: result.request_ids,
-          // One Drain publication owns up to 50 requests. The notification
-          // helper's cron-friendly default is 20, which silently left the
-          // tail of a 23-request publication pending and made the exact
-          // publication fail after every image had already finalized.
-          limit: result.request_ids.length,
+          limit: Math.min(
+            result.request_ids.length,
+            ICONOPLASM_FULFILLMENT_DM_INLINE_LIMIT,
+          ),
         }).catch((error) => {
           console.error(
             "Iconoplasm fulfillment notification delivery failed:",
@@ -27805,6 +27808,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               {
                 ...result,
                 ok: false,
+                code: "DISCORD_DELIVERY_PENDING",
                 error:
                   "Image publication succeeded, but at least one requester has not received the required Discord DM yet.",
                 notification_delivery: delivery,
