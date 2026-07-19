@@ -93,7 +93,7 @@ Generated files:
 
 ## platform note
 
-Supports both Desktop Firefox and Firefox for Android (strict_min_version 115.0+).
+Supports both Desktop Firefox and Firefox for Android 142 or newer.
 
 ## support
 
