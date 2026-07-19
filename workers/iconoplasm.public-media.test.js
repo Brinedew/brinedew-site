@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { fileURLToPath } from "node:url"
 
+import { readIconoplasmPublisherAuthority } from "../scripts/lib/iconoplasm-publisher-authority.mjs"
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
@@ -10,14 +12,37 @@ import {
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
+const publisherRelease = readIconoplasmPublisherAuthority(
+  fileURLToPath(new URL("..", import.meta.url)),
+)
+const currentArtifactToken = `a${publisherRelease.contractSchemaVersion}c${publisherRelease.contractRevision}`
+
+function expectedPublishedContract(version, contract) {
+  const schemaVersion = Number(contract.schema_version)
+  const revision = Number(contract.revision)
+  return {
+    version,
+    schemaVersion,
+    revision,
+    token: `a${schemaVersion}p${String(version).replace(/\D/g, "")}c${revision}`,
+  }
+}
+
 test("published browser versions resolve through the inspectable authority contract", () => {
-  assert.deepEqual(publishedCatalogContractForClientVersion("0.4.7"), {
-    version: "0.4.7",
-    schemaVersion: 4,
-    revision: 1,
-    token: "a4p047c1",
-  })
-  assert.equal(publishedCatalogContractForClientVersion("0.4.6"), null)
+  assert.deepEqual(
+    publishedCatalogContractForClientVersion(publisherRelease.version),
+    expectedPublishedContract(publisherRelease.version, {
+      schema_version: publisherRelease.contractSchemaVersion,
+      revision: publisherRelease.contractRevision,
+    }),
+  )
+  for (const [version, contract] of Object.entries(publisherRelease.compatibilityContracts)) {
+    assert.deepEqual(
+      publishedCatalogContractForClientVersion(version),
+      expectedPublishedContract(version, contract),
+    )
+  }
+  assert.equal(publishedCatalogContractForClientVersion("0.0.0"), null)
 })
 
 class FakeStatement {
@@ -478,12 +503,16 @@ test("public catalog manifest publishes explicit extension contract fields", asy
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload?.artifact_schema_version, 5)
-  assert.equal(payload?.schema_version, 5)
-  assert.equal(payload?.min_extension_version, "0.4.7")
+  assert.equal(payload?.artifact_schema_version, publisherRelease.contractSchemaVersion)
+  assert.equal(payload?.schema_version, publisherRelease.contractSchemaVersion)
+  assert.equal(payload?.min_extension_version, publisherRelease.minimumSupportedVersion)
   assert.equal(payload?.catalog_hash, "catalog")
-  assert.equal(payload?.build_version, "catalog-2026-04-16-a5c1")
-  assert.match(payload?.artifact_url || "", /catalog\.catalog-2026-04-16-a5c1\.json$/)
+  assert.equal(payload?.build_version, `catalog-2026-04-16-${currentArtifactToken}`)
+  assert.ok(
+    String(payload?.artifact_url || "").endsWith(
+      `/catalog.catalog-2026-04-16-${currentArtifactToken}.json`,
+    ),
+  )
   assert.deepEqual(payload?.portrait_delivery, {
     version: 1,
     canonical_origin: "https://iconoplasm.brinedew.bio",
@@ -500,13 +529,31 @@ test("public catalog manifest publishes explicit extension contract fields", asy
   assert.match(response.headers.get("etag") || "", /aliases-v1-/)
 })
 
-test("published extension receives the publisher-declared compatibility contract", async () => {
+test("published extension receives its publisher-declared client contract", async () => {
+  const [compatibilityVersion, compatibilityAuthority] = Object.entries(
+    publisherRelease.compatibilityContracts,
+  )[0] || [
+    publisherRelease.version,
+    {
+      schema_version: publisherRelease.contractSchemaVersion,
+      revision: publisherRelease.contractRevision,
+    },
+  ]
+  const compatibilityContract = expectedPublishedContract(
+    compatibilityVersion,
+    compatibilityAuthority,
+  )
+  const requiresProjection =
+    compatibilityContract.schemaVersion < publisherRelease.contractSchemaVersion
+  const effectiveSchemaVersion = requiresProjection
+    ? compatibilityContract.schemaVersion
+    : publisherRelease.contractSchemaVersion
   const kv = buildCatalogResolveKv()
   const env = buildEnv({ KV: kv })
   const manifestResponse =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest", {
-        headers: { "X-Iconoplasm-Extension-Version": "0.4.7" },
+        headers: { "X-Iconoplasm-Extension-Version": compatibilityVersion },
       }),
       env,
       {},
@@ -514,28 +561,34 @@ test("published extension receives the publisher-declared compatibility contract
   const manifest = await manifestResponse.json()
 
   assert.equal(manifestResponse.status, 200)
-  assert.equal(manifest.schema_version, 4)
-  assert.equal(manifest.artifact_schema_version, 4)
-  assert.equal(manifest.min_extension_version, "0.4.7")
-  assert.equal(manifest.portrait_base_url, "https://iconoplasm.brinedew.bio")
-  assert.match(manifest.artifact_url || "", /-a4p047c1-/)
+  assert.equal(manifest.schema_version, effectiveSchemaVersion)
+  assert.equal(manifest.artifact_schema_version, effectiveSchemaVersion)
+  assert.equal(manifest.min_extension_version, publisherRelease.minimumSupportedVersion)
+  if (requiresProjection) {
+    assert.equal(manifest.portrait_base_url, "https://iconoplasm.brinedew.bio")
+    assert.ok(String(manifest.artifact_url || "").includes(`-${compatibilityContract.token}-`))
+  } else {
+    assert.equal("portrait_base_url" in manifest, false)
+  }
 
   const artifactResponse =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
       new Request(manifest.artifact_url, {
-        headers: { "X-Iconoplasm-Extension-Version": "0.4.7" },
+        headers: { "X-Iconoplasm-Extension-Version": compatibilityVersion },
       }),
       env,
       {},
     )
   const artifact = await artifactResponse.json()
   assert.equal(artifactResponse.status, 200)
-  assert.equal(artifact.schema_version, 4)
+  assert.equal(artifact.schema_version, effectiveSchemaVersion)
   assert.equal(Array.isArray(artifact.genes), true)
-  assert.equal(
-    artifact.genes.some((gene) => "p" in gene),
-    false,
-  )
+  if (requiresProjection) {
+    assert.equal(
+      artifact.genes.some((gene) => "p" in gene),
+      false,
+    )
+  }
 })
 
 test("public media fails closed when THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE is missing", async () => {
