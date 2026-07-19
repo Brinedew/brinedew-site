@@ -518,7 +518,10 @@ test("published extension receives the publisher-declared compatibility contract
   assert.equal(artifactResponse.status, 200)
   assert.equal(artifact.schema_version, 4)
   assert.equal(Array.isArray(artifact.genes), true)
-  assert.equal(artifact.genes.some((gene) => "p" in gene), false)
+  assert.equal(
+    artifact.genes.some((gene) => "p" in gene),
+    false,
+  )
 })
 
 test("public media fails closed when THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE is missing", async () => {

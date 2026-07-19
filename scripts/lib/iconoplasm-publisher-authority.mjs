@@ -23,7 +23,9 @@ export function readIconoplasmPublisherAuthority(repoRoot) {
   const authorityPath = resolve(repoRoot, "iconoplasm-extension", "publisher-release.json")
   const authority = readJson(authorityPath, "Iconoplasm publisher authority")
   if (Number(authority.schema_version) !== 1) {
-    throw new Error(`Unsupported publisher authority schema ${JSON.stringify(authority.schema_version)}`)
+    throw new Error(
+      `Unsupported publisher authority schema ${JSON.stringify(authority.schema_version)}`,
+    )
   }
   if (authority.declared_by !== "iconoplasm-gui-human-release") {
     throw new Error("Publisher authority was not declared by the human-gated Iconoplasm GUI")

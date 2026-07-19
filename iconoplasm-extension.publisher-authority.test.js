@@ -32,7 +32,9 @@ test("ordinary repository work has no extension version writer", () => {
   const packageJson = readJson("package.json")
   assert.equal(existsSync("scripts/bump-iconoplasm-extension-version.mjs"), false)
   assert.equal(
-    Object.keys(packageJson.scripts).some((name) => name.startsWith("version:iconoplasm-extension")),
+    Object.keys(packageJson.scripts).some((name) =>
+      name.startsWith("version:iconoplasm-extension"),
+    ),
     false,
   )
 })

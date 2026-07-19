@@ -132,11 +132,11 @@ generated website or extension copies.
 4. Confirm a public gene/media payload contains only first-party portrait URLs.
 5. On a healthy network, open two gene pages and verify portraits load from the
    accelerator after one tab-wide probe.
-5. In a browser where the accelerator is unreachable, verify one failed
+6. In a browser where the accelerator is unreachable, verify one failed
    accelerator request followed by first-party portrait requests. Check image
    `complete`, `naturalWidth`, and `naturalHeight`, not only HTTP status.
-6. Generate or edit a blot after the tab has selected canonical delivery and
+7. Generate or edit a blot after the tab has selected canonical delivery and
    confirm the new result loads first-party in the comparison modal.
-7. Verify the extension on a normal web page in the same two network states.
-8. Run the shared delivery, extension worker, public media, image-edit, storage,
+8. Verify the extension on a normal web page in the same two network states.
+9. Run the shared delivery, extension worker, public media, image-edit, storage,
    packaging, and build tests before deployment.

@@ -436,7 +436,10 @@ test("DO NOT DELETE: extension versions can advance only through publisher autho
   assert.equal(packageJson.scripts["version:iconoplasm-extension:patch"], undefined)
   assert.equal(packageJson.scripts["version:iconoplasm-extension:minor"], undefined)
   assert.equal(packageJson.scripts["version:iconoplasm-extension:major"], undefined)
-  assert.equal(existsSync(new URL("./scripts/bump-iconoplasm-extension-version.mjs", import.meta.url)), false)
+  assert.equal(
+    existsSync(new URL("./scripts/bump-iconoplasm-extension-version.mjs", import.meta.url)),
+    false,
+  )
   assert.match(
     packageJson.scripts["verify:iconoplasm-publisher-authority"],
     /verify-iconoplasm-publisher-authority/,
