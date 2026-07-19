@@ -10,9 +10,12 @@ draft: false
 
 ## Unreleased
 
+## 0.4.9 - 2026-07-19
+
 - Fixed Firefox 0.4.8 starting without its portrait-delivery background dependency, which prevented the gene dictionary and all highlights from loading.
 - Corrected the Firefox Android minimum to the first version that supports the extension's required data-collection declaration.
 
+* hotfix
 ## 0.4.8 - 2026-07-19
 
 - Store releases now keep the immediately previous extension/API contract supported during browser-store review, then retire it automatically at the following human-published release.
