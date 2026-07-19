@@ -7,7 +7,7 @@ This archive is the source submission for the Firefox/AMO review of Iconoplasm.
 - the extension runtime source in `iconoplasm-extension/`
 - the shared card source in `shared/iconoplasm-card/`
 - the build scripts used to generate packaged output
-- `package.json` and `package-lock.json` so the reviewer can reproduce the build
+- `package.json`, `pnpm-lock.yaml`, and pnpm workspace configuration so the reviewer can reproduce the build
 
 ## why source code is attached
 
@@ -24,15 +24,16 @@ Expected environment used by the project:
 
 - OS: Windows 11 during authoring, but the build is plain Node and does not depend on a browser
 - Node: 22+
-- npm: 10.9.2+
+- pnpm: the version pinned in `package.json`
 
 AMO's default reviewer environment uses Ubuntu + Node 24, which should also work.
 
 From the repo root of this source package:
 
-1. `npm ci`
-2. `npm run sync:iconoplasm-shared`
-3. `npm run package:iconoplasm-firefox`
+1. `corepack enable`
+2. `pnpm install --frozen-lockfile`
+3. `pnpm run sync:iconoplasm-shared`
+4. `pnpm run package:iconoplasm-firefox`
 
 That produces the Firefox review payload at:
 
@@ -47,7 +48,7 @@ The unsigned Firefox package should match the extension version uploaded to AMO 
 Notes about the build:
 
 - `scripts/sync-iconoplasm-shared.mjs` regenerates the shared assets copied into the extension runtime.
-- `npm run package:iconoplasm-firefox` stages a Firefox-specific manifest and strips files that are not part of the AMO upload bundle.
+- `pnpm run package:iconoplasm-firefox` stages a Firefox-specific manifest and strips files that are not part of the AMO upload bundle.
 - The signed XPI is produced by AMO after upload; the local build reproduces the unsigned package submitted for review.
 
 ## reviewer notes

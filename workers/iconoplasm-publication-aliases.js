@@ -2,6 +2,43 @@ const PUBLICATION_ALIAS_SCHEMA_VERSION = 1
 const MAX_PUBLICATION_ALIAS_COUNT = 500
 const MAX_PUBLICATION_ALIAS_LENGTH = 64
 
+export function expandIconoplasmPublicationAliasForms({
+  parts,
+  separators = [""],
+  suffixes = [""],
+}) {
+  if (
+    !Array.isArray(parts) ||
+    parts.length === 0 ||
+    parts.some(
+      (alternatives) =>
+        !Array.isArray(alternatives) ||
+        alternatives.length === 0 ||
+        alternatives.some((value) => typeof value !== "string" || !value),
+    ) ||
+    !Array.isArray(separators) ||
+    separators.length === 0 ||
+    separators.some((value) => typeof value !== "string") ||
+    !Array.isArray(suffixes) ||
+    suffixes.length === 0 ||
+    suffixes.some((value) => typeof value !== "string")
+  ) {
+    throw new TypeError("Publication alias forms require explicit parts, separators, and suffixes")
+  }
+
+  let labels = [...parts[0]]
+  for (const alternatives of parts.slice(1)) {
+    labels = labels.flatMap((prefix) =>
+      separators.flatMap((separator) =>
+        alternatives.map((alternative) => `${prefix}${separator}${alternative}`),
+      ),
+    )
+  }
+  return Object.freeze([
+    ...new Set(suffixes.flatMap((suffix) => labels.map((label) => `${label}${suffix}`))),
+  ])
+}
+
 // Human-curated labels belong to the website release, not to a workstation
 // publication run. Keep this list small: the generated HGNC alias catalog still
 // owns broad synonym coverage; this overlay only admits labels that are useful
@@ -10,6 +47,16 @@ const MAX_PUBLICATION_ALIAS_LENGTH = 64
 const RAW_PUBLICATION_ALIASES_BY_SYMBOL = Object.freeze({
   BABAM2: Object.freeze(["BRE"]),
   CCNH: Object.freeze(["Cyclin H", "Cyclin-H"]),
+  CDH1: expandIconoplasmPublicationAliasForms({
+    parts: [["E"], ["cadherin", "Cadherin"]],
+    separators: ["-", " "],
+    suffixes: ["", "s"],
+  }),
+  CDH2: expandIconoplasmPublicationAliasForms({
+    parts: [["N"], ["cadherin", "Cadherin"]],
+    separators: ["-", " "],
+    suffixes: ["", "s"],
+  }),
   CDK1: Object.freeze(["Cdk1"]),
   CDKN1A: Object.freeze(["p21"]),
   CDKN1B: Object.freeze(["p27"]),
@@ -36,6 +83,12 @@ const RAW_PUBLICATION_ALIASES_BY_SYMBOL = Object.freeze({
   TP73: Object.freeze(["p73"]),
 })
 
+// Retractions are scoped to the canonical owner, so removing a broad source
+// alias cannot suppress a same-spelled label intentionally owned by another gene.
+const RAW_PUBLICATION_ALIAS_REMOVALS_BY_SYMBOL = Object.freeze({
+  CDH17: Object.freeze(["cadherin"]),
+})
+
 function normalizeSymbol(value) {
   return String(value || "")
     .trim()
@@ -58,7 +111,7 @@ function aliasCollisionKey(value) {
 
 export function validateIconoplasmPublicationAliases(
   rawAliases = RAW_PUBLICATION_ALIASES_BY_SYMBOL,
-  { canonicalSymbols = null } = {},
+  { canonicalSymbols = null, rawRemovals = RAW_PUBLICATION_ALIAS_REMOVALS_BY_SYMBOL } = {},
 ) {
   if (!rawAliases || typeof rawAliases !== "object" || Array.isArray(rawAliases)) {
     throw new TypeError("Iconoplasm publication aliases must be an object")
@@ -69,8 +122,10 @@ export function validateIconoplasmPublicationAliases(
       ? null
       : new Set(Array.from(canonicalSymbols, (symbol) => normalizeSymbol(symbol)).filter(Boolean))
   const aliasesBySymbol = {}
+  const removalsBySymbol = {}
   const aliasOwners = new Map()
   let aliasCount = 0
+  let removalCount = 0
 
   for (const rawSymbol of Object.keys(rawAliases).sort()) {
     const symbol = normalizeSymbol(rawSymbol)
@@ -119,10 +174,57 @@ export function validateIconoplasmPublicationAliases(
     aliasesBySymbol[symbol] = Object.freeze(aliases)
   }
 
+  if (!rawRemovals || typeof rawRemovals !== "object" || Array.isArray(rawRemovals)) {
+    throw new TypeError("Iconoplasm publication alias removals must be an object")
+  }
+  for (const rawSymbol of Object.keys(rawRemovals).sort()) {
+    const symbol = normalizeSymbol(rawSymbol)
+    if (!symbol || symbol !== rawSymbol) {
+      throw new TypeError(`Invalid canonical publication-alias removal symbol: ${rawSymbol}`)
+    }
+    if (canonicalSet && !canonicalSet.has(symbol)) {
+      throw new TypeError(`Unknown canonical publication-alias removal symbol: ${symbol}`)
+    }
+    const rawValues = rawRemovals[rawSymbol]
+    if (!Array.isArray(rawValues) || rawValues.length === 0) {
+      throw new TypeError(`Publication alias removals for ${symbol} must be a non-empty array`)
+    }
+
+    const removals = []
+    const localRemovalKeys = new Set()
+    const localAdditionKeys = new Set(
+      (aliasesBySymbol[symbol] || []).map(aliasCollisionKey).filter(Boolean),
+    )
+    for (const rawAlias of rawValues) {
+      const alias = normalizeAlias(rawAlias)
+      const key = aliasCollisionKey(alias)
+      if (!alias || alias !== rawAlias || !key) {
+        throw new TypeError(
+          `Invalid publication alias removal for ${symbol}: ${String(rawAlias || "")}`,
+        )
+      }
+      if (localAdditionKeys.has(key)) {
+        throw new TypeError(`Publication alias ${alias} cannot be added and removed for ${symbol}`)
+      }
+      if (localRemovalKeys.has(key)) continue
+      localRemovalKeys.add(key)
+      removals.push(alias)
+      removalCount += 1
+      if (aliasCount + removalCount > MAX_PUBLICATION_ALIAS_COUNT) {
+        throw new TypeError(
+          `Publication alias policy exceeds ${MAX_PUBLICATION_ALIAS_COUNT} operations`,
+        )
+      }
+    }
+    removalsBySymbol[symbol] = Object.freeze(removals)
+  }
+
   return Object.freeze({
     schema_version: PUBLICATION_ALIAS_SCHEMA_VERSION,
     alias_count: aliasCount,
+    removal_count: removalCount,
     by_symbol: Object.freeze(aliasesBySymbol),
+    remove_by_symbol: Object.freeze(removalsBySymbol),
   })
 }
 
@@ -148,17 +250,30 @@ export async function iconoplasmPublicationAliasManifest() {
   return publicationAliasManifestPromise
 }
 
-export function mergeIconoplasmPublicationAliasesIntoGene(gene, symbol, overlay) {
+export function applyIconoplasmPublicationAliasPolicyToGene(gene, symbol, overlay) {
   const canonicalSymbol = normalizeSymbol(symbol || gene?.s)
-  const aliases = overlay?.by_symbol?.[canonicalSymbol]
-  if (!gene || !Array.isArray(aliases) || aliases.length === 0) return gene
+  if (!gene) return gene
+  const additions = overlay?.by_symbol?.[canonicalSymbol]
+  const removals = overlay?.remove_by_symbol?.[canonicalSymbol]
+  if (
+    (!Array.isArray(additions) || additions.length === 0) &&
+    (!Array.isArray(removals) || removals.length === 0)
+  ) {
+    return gene
+  }
 
-  const mergedAliases = Array.isArray(gene.a) ? [...gene.a] : []
+  const removalKeys = new Set((removals || []).map(aliasCollisionKey).filter(Boolean))
+  const mergedAliases = (Array.isArray(gene.a) ? gene.a : []).filter(
+    (alias) => !removalKeys.has(aliasCollisionKey(alias)),
+  )
   const seen = new Set(mergedAliases)
-  for (const alias of aliases) {
+  for (const alias of additions || []) {
     if (seen.has(alias)) continue
     seen.add(alias)
     mergedAliases.push(alias)
   }
-  return { ...gene, a: mergedAliases }
+  const nextGene = { ...gene }
+  if (mergedAliases.length) nextGene.a = mergedAliases
+  else delete nextGene.a
+  return nextGene
 }

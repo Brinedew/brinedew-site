@@ -15,9 +15,9 @@ import {
 } from "./iconoplasm-request-notifications.js"
 import { ICONOPLASM_WIKI_PAGEVIEWS } from "./iconoplasm-wiki-pageviews.js"
 import {
+  applyIconoplasmPublicationAliasPolicyToGene,
   ICONOPLASM_PUBLICATION_ALIASES,
   iconoplasmPublicationAliasManifest,
-  mergeIconoplasmPublicationAliasesIntoGene,
 } from "./iconoplasm-publication-aliases.js"
 import { normalizeIconoplasmHomeOrder } from "../quartz/static/iconoplasm/home-orders.js"
 import "../shared/iconoplasm-card/shared-card-runtime.js"
@@ -10991,6 +10991,28 @@ async function warmCatalogCache(env) {
     }
   }
 
+  for (const [symbol, aliases] of Object.entries(ICONOPLASM_PUBLICATION_ALIASES.remove_by_symbol)) {
+    if (!bySymbol.has(symbol)) continue
+    for (const alias of aliases) {
+      const key = normalizeCatalogAliasLookupKey(alias)
+      const existingOwner = key ? symbolByAlias.get(key) : null
+      if (existingOwner && existingOwner !== symbol) {
+        throw new TypeError(
+          `Publication alias removal ${alias} for ${symbol} is owned by ${existingOwner}`,
+        )
+      }
+      if (key && existingOwner === symbol) symbolByAlias.delete(key)
+    }
+    bySymbol.set(
+      symbol,
+      applyIconoplasmPublicationAliasPolicyToGene(
+        bySymbol.get(symbol),
+        symbol,
+        ICONOPLASM_PUBLICATION_ALIASES,
+      ),
+    )
+  }
+
   for (const [symbol, aliases] of Object.entries(ICONOPLASM_PUBLICATION_ALIASES.by_symbol)) {
     // A generated catalog may legitimately predate a newly curated symbol. Do
     // not take the entire public search API down during that deployment window;
@@ -11011,7 +11033,7 @@ async function warmCatalogCache(env) {
       }
     }
 
-    const gene = mergeIconoplasmPublicationAliasesIntoGene(
+    const gene = applyIconoplasmPublicationAliasPolicyToGene(
       bySymbol.get(symbol),
       symbol,
       ICONOPLASM_PUBLICATION_ALIASES,

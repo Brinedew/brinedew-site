@@ -14,7 +14,10 @@ const zipPath = resolve(distRoot, `iconoplasm-firefox-source-v${packageVersion}.
 
 const includeFiles = [
   "package.json",
-  "package-lock.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  ".npmrc",
+  "wxt.config.ts",
   "scripts/sync-iconoplasm-shared.mjs",
   "scripts/package-iconoplasm-extension.mjs",
   "iconoplasm-extension/AMO-SOURCE-README.md",
@@ -38,6 +41,7 @@ const includeFiles = [
   "iconoplasm-extension/popup.css",
   "iconoplasm-extension/popup.html",
   "iconoplasm-extension/popup.js",
+  "iconoplasm-extension/publication-alias-overlay.js",
   "iconoplasm-extension/service-worker.js",
   "iconoplasm-extension/site-bridge.js",
 ]
@@ -104,6 +108,7 @@ function zipPayload() {
   const result = spawnSync("pwsh", ["-NoLogo", "-NoProfile", "-Command", command], {
     cwd: repoRoot,
     encoding: "utf8",
+    timeout: 120_000,
   })
 
   if (result.status !== 0) {
