@@ -32,6 +32,7 @@ const includeFiles = [
   "iconoplasm-extension/content-settings.js",
   "iconoplasm-extension/content-matcher.js",
   "iconoplasm-extension/content-scanner.js",
+  "iconoplasm-extension/content-lifecycle.js",
   "iconoplasm-extension/content-tooltip.js",
   "iconoplasm-extension/content-portrait-cache.js",
   "iconoplasm-extension/content-detail-cache.js",

@@ -26,6 +26,8 @@ const HOST = "https://iconoplasm.brinedew.bio"
 const API_PUBLIC = `${HOST}/api/public/v1`
 const API_CATALOG_MANIFEST = `${API_PUBLIC}/catalog/manifest`
 const DATA_REFRESH_TTL_MS = 5 * 60 * 1000
+const MANIFEST_FETCH_TIMEOUT_MS = 5 * 1000
+const ARTIFACT_FETCH_TIMEOUT_MS = 30 * 1000
 const PORTRAIT_DATA_URL_CACHE_LIMIT = 48
 const PORTRAIT_DATA_URL_ERROR_CACHE_LIMIT = 96
 const PORTRAIT_DATA_URL_ERROR_TTL_MS = 30 * 1000
@@ -41,13 +43,14 @@ const portraitDeliverySessionByTab = new Map()
 const portraitDeliverySessionPromiseByTab = new Map()
 let portraitSourceStateLoaded = false
 let portraitDeliveryPolicy = IconoPortraitDelivery.normalizePortraitDeliveryPolicy()
+let geneDataRefreshState = null
 
 chrome.runtime.onInstalled.addListener(() => {
-  fetchGeneData()
+  void refreshGeneData()
 })
 
 chrome.runtime.onStartup.addListener(() => {
-  fetchGeneData()
+  void refreshGeneData()
 })
 
 if (chrome.tabs?.onRemoved?.addListener) {
@@ -85,7 +88,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true
   }
   if (msg.type === "REFRESH_DATA") {
-    fetchGeneData({ forceArtifactRefresh: true }).then((result) =>
+    refreshGeneData({ forceArtifactRefresh: true }).then((result) =>
       sendResponse({
         ok: Boolean(result),
         count: result?.gene_count || 0,
@@ -340,14 +343,48 @@ async function ensureFreshGeneData() {
   const needsRefresh =
     hasContractError || needsArtifactRebuild || isStaleFetch(stored.iconoplasm_last_fetch)
 
+  const hasUsableCache = geneCount > 0 && hasPublishedCatalogSchema && !hasContractError
+  if (hasUsableCache) {
+    // Stale-while-revalidate is the page-start contract. A valid local catalog is
+    // immediately useful; network freshness must never hold every tab hostage.
+    if (needsRefresh) void refreshGeneData()
+    return {
+      genes: stored.iconoplasm_genes,
+      contractError: null,
+      minExtensionVersion: stored.iconoplasm_min_extension_version || null,
+    }
+  }
+
   if (needsRefresh) {
     // A manifest-overlay contract error is retried against the manifest only.
     // The immutable artifact is already known-good and must not become a 6 MB
     // retry penalty just because a small alias overlay was rejected.
-    await fetchGeneData({ forceArtifactRefresh: needsArtifactRebuild })
+    await refreshGeneData({ forceArtifactRefresh: needsArtifactRebuild })
   }
 
   return getStoredGeneData()
+}
+
+async function refreshGeneData({ forceArtifactRefresh = false } = {}) {
+  const wantsForcedArtifact = Boolean(forceArtifactRefresh)
+  if (geneDataRefreshState) {
+    const activeRefresh = geneDataRefreshState
+    const result = await activeRefresh.promise
+    if (!wantsForcedArtifact || activeRefresh.forceArtifactRefresh) return result
+    return refreshGeneData({ forceArtifactRefresh: true })
+  }
+
+  const refreshState = {
+    forceArtifactRefresh: wantsForcedArtifact,
+    promise: null,
+  }
+  refreshState.promise = fetchGeneData({ forceArtifactRefresh: wantsForcedArtifact }).finally(
+    () => {
+      if (geneDataRefreshState === refreshState) geneDataRefreshState = null
+    },
+  )
+  geneDataRefreshState = refreshState
+  return refreshState.promise
 }
 
 function arrayBufferToBase64(buffer) {
@@ -565,12 +602,36 @@ async function warmPortraitDataUrls(urls, tabId) {
   return results.filter((result) => Boolean(result?.dataUrl)).length
 }
 
-async function fetchManifest() {
-  const manifestResp = await fetch(API_CATALOG_MANIFEST, {
-    headers: {
-      "X-Iconoplasm-Extension-Version": currentExtensionVersion(),
-    },
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController()
+  let timeoutId
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort()
+      reject(new Error(`Iconoplasm request timed out after ${timeoutMs} ms`))
+    }, timeoutMs)
   })
+
+  try {
+    return await Promise.race([
+      fetch(url, { ...(options || {}), signal: controller.signal }),
+      timeoutPromise,
+    ])
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+async function fetchManifest() {
+  const manifestResp = await fetchWithTimeout(
+    API_CATALOG_MANIFEST,
+    {
+      headers: {
+        "X-Iconoplasm-Extension-Version": currentExtensionVersion(),
+      },
+    },
+    MANIFEST_FETCH_TIMEOUT_MS,
+  )
 
   if (!manifestResp.ok) {
     return null
@@ -604,11 +665,15 @@ function projectPublishedArtifactGenes(artifact) {
 async function fetchPublishedArtifact(manifest) {
   const url = artifactUrl(manifest)
   if (!url) return { error: "missing_url", artifact: null }
-  const response = await fetch(url, {
-    headers: {
-      "X-Iconoplasm-Extension-Version": currentExtensionVersion(),
+  const response = await fetchWithTimeout(
+    url,
+    {
+      headers: {
+        "X-Iconoplasm-Extension-Version": currentExtensionVersion(),
+      },
     },
-  })
+    ARTIFACT_FETCH_TIMEOUT_MS,
+  )
   if (!response.ok) return { error: `http_${response.status}`, artifact: null }
   const artifact = await response.json()
   if (!artifact || !Array.isArray(artifact.genes)) {
@@ -751,6 +816,8 @@ if (globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__) {
     portraitErrorTtlMs: PORTRAIT_DATA_URL_ERROR_TTL_MS,
     normalizePublishedManifest,
     fetchGeneData,
+    fetchWithTimeout,
+    refreshGeneData,
     ensureFreshGeneData,
   })
 }

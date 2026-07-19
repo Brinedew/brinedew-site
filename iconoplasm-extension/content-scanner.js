@@ -79,6 +79,9 @@
 
     function scanPage(rootNode) {
       if (!rootNode || typeof rootNode.nodeType !== "number") return 0
+      if (rootNode.nodeType === 3) {
+        return acceptScanNode(rootNode) === nodeFilter.FILTER_ACCEPT ? processTextNode(rootNode) : 0
+      }
       const walker = documentRef.createTreeWalker(rootNode, nodeFilter.SHOW_TEXT, {
         acceptNode: acceptScanNode,
       })

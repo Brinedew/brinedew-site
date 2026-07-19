@@ -422,3 +422,56 @@ test("an overlay contract retry does not turn into a full artifact download", as
     storageState.clear()
   }
 })
+
+test("a stale valid catalog returns immediately while one refresh runs in the background", async () => {
+  const originalFetch = globalThis.fetch
+  storageState.clear()
+  storageState.set("iconoplasm_genes", { TP53: { n: "tumor protein p53" } })
+  storageState.set("iconoplasm_hash", "catalog-stale")
+  storageState.set("iconoplasm_gene_count", 1)
+  storageState.set("iconoplasm_last_fetch", "2020-01-01T00:00:00.000Z")
+  storageState.set("iconoplasm_schema_version", 5)
+  storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
+  storageState.set("iconoplasm_alias_overlay_version", "v1-test")
+  storageState.set("iconoplasm_alias_overlay_applied", {})
+
+  let manifestFetches = 0
+  let releaseManifest
+  globalThis.fetch = () => {
+    manifestFetches += 1
+    return new Promise((resolve) => {
+      releaseManifest = resolve
+    })
+  }
+
+  try {
+    const first = await Promise.race([
+      hooks.ensureFreshGeneData(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("cache response blocked")), 50)),
+    ])
+    const second = await hooks.ensureFreshGeneData()
+
+    assert.deepEqual(first.genes.TP53, { n: "tumor protein p53" })
+    assert.deepEqual(second.genes.TP53, { n: "tumor protein p53" })
+    assert.equal(manifestFetches, 1, "concurrent tabs should share the same refresh")
+
+    releaseManifest(new Response("unavailable", { status: 503 }))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  } finally {
+    globalThis.fetch = originalFetch
+    storageState.clear()
+  }
+})
+
+test("catalog requests have a hard deadline even when fetch ignores abort", async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = () => new Promise(() => {})
+  try {
+    await assert.rejects(
+      hooks.fetchWithTimeout("https://example.test/hangs", {}, 10),
+      /timed out after 10 ms/,
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
