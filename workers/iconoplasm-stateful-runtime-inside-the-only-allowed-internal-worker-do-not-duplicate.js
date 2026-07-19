@@ -58,9 +58,7 @@ const ICONOPLASM_CLAN_CATALOG_TOTAL = ICONOPLASM_CLAN_CATALOG_BY_NAME.size
 // This worker owns the public/community path only, so hot reads and writes should be
 // optimized for published assets, cheap ranking refreshes, and Cloudflare request economy.
 const API_SCHEMA_VERSION = 4
-const CATALOG_ARTIFACT_SCHEMA_VERSION = Number(
-  ICONOPLASM_CANDIDATE_CONTRACT.catalog_schema_version,
-)
+const CATALOG_ARTIFACT_SCHEMA_VERSION = Number(ICONOPLASM_CANDIDATE_CONTRACT.catalog_schema_version)
 const CATALOG_ARTIFACT_CONTRACT_REVISION = Number(
   ICONOPLASM_CANDIDATE_CONTRACT.catalog_contract_revision,
 )
@@ -21997,12 +21995,7 @@ async function publishedCompatibilityArtifact(env, requestedHash) {
   if (!compatible) return null
   publishedCompatibilityArtifactCache.key = hash
   publishedCompatibilityArtifactCache.value = compatible
-  await writeVersionedSharedJson(
-    env,
-    KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX,
-    hash,
-    compatible,
-  )
+  await writeVersionedSharedJson(env, KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX, hash, compatible)
   return compatible
 }
 
@@ -24050,9 +24043,7 @@ async function handlePublicCatalogManifest(request, env) {
     gene_count: manifest.gene_count || null,
     artifact_schema_version: manifest.artifact_schema_version || manifest.schema_version || 1,
     min_extension_version: manifest.min_extension_version || MIN_EXTENSION_VERSION,
-    ...(manifest.portrait_base_url
-      ? { portrait_base_url: manifest.portrait_base_url }
-      : {}),
+    ...(manifest.portrait_base_url ? { portrait_base_url: manifest.portrait_base_url } : {}),
     portrait_delivery: manifest.portrait_delivery || portraitDeliveryPolicy(url, env),
     publication_aliases: manifest.publication_aliases || null,
     artifact_url: buildHash
