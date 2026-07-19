@@ -27762,6 +27762,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         // must fail loudly instead of declaring a silent fulfillment success.
         const delivery = await deliverPendingRequestFulfillmentNotifications(env, {
           requestIds: result.request_ids,
+          // One Drain publication owns up to 50 requests. The notification
+          // helper's cron-friendly default is 20, which silently left the
+          // tail of a 23-request publication pending and made the exact
+          // publication fail after every image had already finalized.
+          limit: result.request_ids.length,
         }).catch((error) => {
           console.error(
             "Iconoplasm fulfillment notification delivery failed:",
