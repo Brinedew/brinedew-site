@@ -10,9 +10,12 @@ draft: false
 
 ## Unreleased
 
+## 0.4.10 - 2026-07-19
+
 - Gene highlights now appear from the local catalog immediately while freshness checks run in the background.
 - Highlights now recover after pagination, virtualized-row text changes, and interrupted background startup.
 
+* hotfix
 ## 0.4.9 - 2026-07-19
 
 - Fixed Firefox 0.4.8 starting without its portrait-delivery background dependency, which prevented the gene dictionary and all highlights from loading.

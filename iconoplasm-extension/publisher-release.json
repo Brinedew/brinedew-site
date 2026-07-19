@@ -1,28 +1,28 @@
 {
   "schema_version": 1,
-  "version": "0.4.9",
-  "minimum_supported_version": "0.4.8",
+  "version": "0.4.10",
+  "minimum_supported_version": "0.4.9",
   "declared_by": "iconoplasm-gui-human-release",
-  "declared_at": "2026-07-19T07:44:11.648911Z",
-  "publisher_action_id": "f097ae40-bfff-440d-87b1-bb1003746872",
+  "declared_at": "2026-07-19T09:20:16.052036Z",
+  "publisher_action_id": "397e5192-cad5-4350-8b6e-262864bc99b0",
   "catalog_contract": {
     "schema_version": 5,
     "revision": 1
   },
   "compatibility_contracts": {
-    "0.4.8": {
+    "0.4.9": {
       "schema_version": 5,
       "revision": 1
     }
   },
   "stores": {
     "firefox": {
-      "version": "0.4.9",
+      "version": "0.4.10",
       "status": "submission_pending",
       "listing_url": "https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/"
     },
     "edge": {
-      "version": "0.4.9",
+      "version": "0.4.10",
       "status": "submission_pending",
       "listing_url": "https://microsoftedge.microsoft.com/addons/detail/ocfhohjhkflpmaiimgjfobdoogdfpmog"
     }
