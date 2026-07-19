@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { test } from "node:test"
+import vm from "node:vm"
 
 const workflowText = readFileSync(".github/workflows/publish-iconoplasm-firefox.yml", "utf8")
 const edgeWorkflowText = readFileSync(".github/workflows/publish-iconoplasm-edge.yml", "utf8")
@@ -18,6 +19,8 @@ test("Firefox store publish workflow stays behind the human GUI gate", () => {
   assert.match(workflowText, /YES, I AM A HUMAN, PUBLISH ICONOPLASM/)
   assert.match(workflowText, /Iconoplasm GUI/)
   assert.match(workflowText, /verify-iconoplasm-publisher-authority\.mjs/)
+  assert.match(workflowText, /wait-for-iconoplasm-release-ci\.mjs/)
+  assert.match(workflowText, /actions:\s*read/)
   assert.doesNotMatch(workflowText, /^on:\s*\n\s*push:/m)
 })
 
@@ -27,6 +30,8 @@ test("Edge store publish workflow stays behind the human GUI gate", () => {
   assert.match(edgeWorkflowText, /expected_version:/)
   assert.match(edgeWorkflowText, /YES, I AM A HUMAN, PUBLISH ICONOPLASM/)
   assert.match(edgeWorkflowText, /verify-iconoplasm-publisher-authority\.mjs/)
+  assert.match(edgeWorkflowText, /wait-for-iconoplasm-release-ci\.mjs/)
+  assert.match(edgeWorkflowText, /actions:\s*read/)
   assert.match(edgeWorkflowText, /EDGE_ADDONS_CLIENT_ID/)
   assert.match(edgeWorkflowText, /EDGE_ADDONS_API_KEY/)
   assert.match(edgeWorkflowText, /b8547df3-4156-4b56-b7dc-3752347b6794/)
@@ -73,14 +78,69 @@ test("store publish packaging goes through WXT browser targets", () => {
   )
   assert.match(
     wxtConfigText,
-    /browser === "firefox"[\s\S]*background = \{ scripts: \["publication-alias-overlay\.js", "service-worker\.js"\] \}/,
-    "WXT config should load the shared alias-overlay runtime before the Firefox background script",
+    /browser === "firefox"[\s\S]*"generated\/portrait-delivery-core\.js"[\s\S]*"publication-alias-overlay\.js"[\s\S]*"service-worker\.js"/,
+    "WXT config should load every Firefox background-page dependency before the service worker",
+  )
+  assert.match(
+    packageScriptText,
+    /function validatePackagedBackground\(\)[\s\S]*Firefox background dependency order is invalid/,
+    "packaging must validate the final Firefox manifest instead of trusting source configuration",
   )
   assert.match(
     wxtConfigText,
     /browser !== "firefox"[\s\S]*delete manifest\.browser_specific_settings/,
     "WXT config should own the Chromium-target removal of Firefox-only manifest fields",
   )
+})
+
+test("Firefox background-page scripts boot in dependency order without importScripts", () => {
+  const listeners = {
+    installed: [],
+    startup: [],
+    message: [],
+  }
+  const addListener = (collection) => (listener) => collection.push(listener)
+  const sandbox = {
+    URL,
+    chrome: {
+      runtime: {
+        getManifest: () => ({ version: "test" }),
+        onInstalled: { addListener: addListener(listeners.installed) },
+        onStartup: { addListener: addListener(listeners.startup) },
+        onMessage: { addListener: addListener(listeners.message) },
+      },
+      storage: {
+        local: {
+          get: async () => ({}),
+          set: async () => {},
+          remove: async () => {},
+        },
+        session: {
+          get: async () => ({}),
+          set: async () => {},
+        },
+      },
+    },
+  }
+  const scripts = [
+    "iconoplasm-extension/generated/portrait-delivery-core.js",
+    "iconoplasm-extension/publication-alias-overlay.js",
+    "iconoplasm-extension/service-worker.js",
+  ]
+
+  vm.runInNewContext(scripts.map((path) => readFileSync(path, "utf8")).join("\n"), sandbox)
+
+  assert.equal(
+    typeof sandbox.IconoplasmPortraitDelivery?.normalizePortraitDeliveryPolicy,
+    "function",
+  )
+  assert.equal(
+    typeof sandbox.IconoplasmPublicationAliasOverlay?.applyPublishedAliasOverlay,
+    "function",
+  )
+  assert.equal(listeners.installed.length, 1)
+  assert.equal(listeners.startup.length, 1)
+  assert.equal(listeners.message.length, 1)
 })
 
 test("Firefox reviewer source package reproduces the pnpm/WXT build", () => {

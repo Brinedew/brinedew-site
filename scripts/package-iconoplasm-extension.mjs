@@ -270,6 +270,31 @@ function runWxtZip() {
   copyFileSync(wxtZipPath, zipPath)
 }
 
+function validatePackagedBackground() {
+  const packagedManifestPath = resolve(stageRoot, "manifest.json")
+  const packagedManifest = JSON.parse(readFileSync(packagedManifestPath, "utf8"))
+  if (packageTarget === "firefox") {
+    const expectedScripts = [
+      "generated/portrait-delivery-core.js",
+      "publication-alias-overlay.js",
+      "service-worker.js",
+    ]
+    const actualScripts = packagedManifest.background?.scripts
+    if (JSON.stringify(actualScripts) !== JSON.stringify(expectedScripts)) {
+      fail(
+        `Firefox background dependency order is invalid: ${JSON.stringify(actualScripts || null)}`,
+      )
+    }
+    for (const script of expectedScripts) {
+      ensureExists(resolve(stageRoot, script), `Firefox background dependency ${script}`)
+    }
+    return
+  }
+  if (packagedManifest.background?.service_worker !== "service-worker.js") {
+    fail(`${packageTarget} package lost the MV3 service worker entrypoint`)
+  }
+}
+
 function main() {
   ensureExists(extensionRoot, "extension root")
   ensureExists(manifestPath, "manifest")
@@ -278,6 +303,7 @@ function main() {
   applyTargetSpecificOverrides()
   scanPayload(wxtPublicRoot)
   runWxtZip()
+  validatePackagedBackground()
   const stagedFiles = scanPayload(stageRoot)
 
   console.log(`[package-iconoplasm-extension] Created ${relative(repoRoot, zipPath)}`)

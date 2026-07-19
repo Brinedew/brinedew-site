@@ -14,7 +14,17 @@ export default defineConfig({
   manifest: ({ browser }) => {
     const manifest = readIconoplasmManifest()
     if (browser === "firefox") {
-      manifest.background = { scripts: ["publication-alias-overlay.js", "service-worker.js"] }
+      // Firefox implements MV3 background execution as a background page, where
+      // importScripts is unavailable. Declare every top-level service-worker
+      // dependency explicitly and in dependency order; otherwise the background
+      // script can fail before it registers the gene-data message listener.
+      manifest.background = {
+        scripts: [
+          "generated/portrait-delivery-core.js",
+          "publication-alias-overlay.js",
+          "service-worker.js",
+        ],
+      }
     }
     if (browser !== "firefox") {
       delete manifest.browser_specific_settings

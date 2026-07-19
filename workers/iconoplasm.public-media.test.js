@@ -308,23 +308,26 @@ test("catalog hydration emits only schema-5 inspectable portrait assets", () => 
 
 test("published compatibility projection materializes aliases and legacy portrait paths", () => {
   const sha = "c".repeat(64)
-  const projected = projectPublishedCompatibilityArtifact({
-    schema_version: 5,
-    genes: [
-      {
-        s: "RELA",
-        a: [],
-        p: {
-          schema_version: 1,
-          asset_sha256: sha,
-          renditions: {
-            medium: { path: `portraits/v1/cc/${sha}/medium.webp` },
-            full: { path: `portraits/v1/cc/${sha}/full.webp` },
+  const projected = projectPublishedCompatibilityArtifact(
+    {
+      schema_version: 5,
+      genes: [
+        {
+          s: "RELA",
+          a: [],
+          p: {
+            schema_version: 1,
+            asset_sha256: sha,
+            renditions: {
+              medium: { path: `portraits/v1/cc/${sha}/medium.webp` },
+              full: { path: `portraits/v1/cc/${sha}/full.webp` },
+            },
           },
         },
-      },
-    ],
-  })
+      ],
+    },
+    4,
+  )
 
   assert.equal(projected.schema_version, 4)
   assert.equal(projected.genes[0].a.includes("p65"), true)
