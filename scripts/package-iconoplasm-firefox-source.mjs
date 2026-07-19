@@ -1,15 +1,15 @@
 import { spawnSync } from "node:child_process"
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs"
 import { join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { assertIconoplasmPublisherAuthority } from "./lib/iconoplasm-publisher-authority.mjs"
 
 const __filename = fileURLToPath(import.meta.url)
 const repoRoot = resolve(__filename, "..", "..")
 const extensionRoot = resolve(repoRoot, "iconoplasm-extension")
 const distRoot = resolve(extensionRoot, "dist")
 const stageRoot = resolve(distRoot, "firefox-source-package")
-const manifest = JSON.parse(readFileSync(resolve(extensionRoot, "manifest.json"), "utf8"))
-const packageVersion = String(manifest.version || "0.0.0").trim() || "0.0.0"
+const { version: packageVersion } = assertIconoplasmPublisherAuthority(repoRoot)
 const zipPath = resolve(distRoot, `iconoplasm-firefox-source-v${packageVersion}.zip`)
 
 const includeFiles = [
@@ -20,9 +20,13 @@ const includeFiles = [
   "wxt.config.ts",
   "scripts/sync-iconoplasm-shared.mjs",
   "scripts/package-iconoplasm-extension.mjs",
+  "scripts/verify-iconoplasm-publisher-authority.mjs",
+  "scripts/lib/iconoplasm-publisher-authority.mjs",
   "iconoplasm-extension/AMO-SOURCE-README.md",
   "iconoplasm-extension/README.md",
   "iconoplasm-extension/manifest.json",
+  "iconoplasm-extension/publisher-release.json",
+  "iconoplasm-extension/candidate-contract.json",
   "iconoplasm-extension/blocklist-defaults.js",
   "iconoplasm-extension/content-api.js",
   "iconoplasm-extension/content-settings.js",

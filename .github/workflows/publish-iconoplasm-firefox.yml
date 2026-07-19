@@ -19,7 +19,7 @@ on:
         required: true
         type: string
       expected_version:
-        description: Expected iconoplasm-extension manifest version
+        description: Version declared by the human publisher authority
         required: true
         type: string
 
@@ -68,14 +68,11 @@ jobs:
             throw 'Missing GitHub secret AMO_JWT_SECRET'
           }
 
-      - name: Check requested version
+      - name: Verify human publisher authority
         env:
           EXPECTED_VERSION: ${{ inputs.expected_version }}
         run: |
-          $manifest = Get-Content iconoplasm-extension/manifest.json -Raw | ConvertFrom-Json
-          if ($manifest.version -ne $env:EXPECTED_VERSION) {
-            throw "Expected Iconoplasm extension version $env:EXPECTED_VERSION, got $($manifest.version)"
-          }
+          node ./scripts/verify-iconoplasm-publisher-authority.mjs --expected="$env:EXPECTED_VERSION"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
