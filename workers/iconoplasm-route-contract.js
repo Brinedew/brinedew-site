@@ -15,6 +15,7 @@ const GET = Object.freeze(["GET", "HEAD"])
 const POST = Object.freeze(["POST"])
 const GET_POST = Object.freeze(["GET", "HEAD", "POST"])
 const COMMENT_METHODS = Object.freeze(["GET", "HEAD", "POST", "PATCH", "DELETE"])
+const FAVORITE_ITEM_METHODS = Object.freeze(["PUT", "DELETE"])
 
 function exact(value) {
   return Object.freeze({ kind: "exact", value })
@@ -327,6 +328,26 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     auth: "authenticated-user",
     cache: "no-store",
     budgetFamily: "gene_request_options",
+    gatewayHandler: "iconoplasm_api",
+    rateLimit: null,
+  }),
+  contract({
+    id: "emulsion_favorites",
+    match: exact("/api/iconoplasm/emulsion-favorites"),
+    methods: GET,
+    auth: "authenticated-user",
+    cache: "no-store",
+    budgetFamily: "emulsion_favorites_read",
+    gatewayHandler: "iconoplasm_api",
+    rateLimit: null,
+  }),
+  contract({
+    id: "emulsion_favorite_item",
+    match: pattern(/^\/api\/iconoplasm\/emulsion-favorites\/([^/]+)$/, ["emulsion_id"]),
+    methods: FAVORITE_ITEM_METHODS,
+    auth: "authenticated-user",
+    cache: "no-store",
+    budgetFamily: "emulsion_favorites_write",
     gatewayHandler: "iconoplasm_api",
     rateLimit: null,
   }),

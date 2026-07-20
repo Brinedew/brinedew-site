@@ -14,6 +14,7 @@ import {
 } from "./home-orders.js"
 import { createRequestInbox } from "./request-inbox.js"
 import { portraitDelivery } from "./portrait-delivery.js"
+import { createEmulsionFavoriteStore, normalizeEmulsionFamilyId } from "./emulsion-favorites.js"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -75,6 +76,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var ICONO_EXTENSION_PRESENCE_EVENT = "iconoplasm-extension-presence"
   var ICONO_EXTENSION_PRESENCE_PING_EVENT = "iconoplasm-extension-presence-ping"
   var ICONO_EXTENSION_RELEASE_METADATA_URL = "/static/iconoplasm/extension-release.json"
+  var ICONO_REQUEST_TAB_STORAGE_KEY = "iconoplasm.new-candidate-tab"
   var ICONO_EXTENSION_FIREFOX_LISTING_URL =
     "https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/"
   var ICONO_EXTENSION_EDGE_LISTING_URL =
@@ -98,6 +100,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="m4.75 13.85-.6 2.5 2.5-.6 8.45-8.45a1.6 1.6 0 0 0 0-2.26l-.14-.14a1.6 1.6 0 0 0-2.26 0l-7.95 8.95Z" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/><path d="m11.8 5.8 2.4 2.4" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"/></svg>'
   var ICONO_PLUS_ICON =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="M10 4.5v11M4.5 10h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
+  var ICONO_STAR_ICON =
+    '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m10 2.9 2.15 4.35 4.8.7-3.47 3.38.82 4.77-4.3-2.26-4.3 2.26.82-4.77L3.05 7.95l4.8-.7L10 2.9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>'
   var portraitDetailCache = Object.create(null)
   var portraitDetailPromiseCache = Object.create(null)
   var geneCardArtifactCache = Object.create(null)
@@ -186,6 +190,137 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     })
     return fetchJSON(path, requestInit)
   }
+
+  var emulsionFavorites = createEmulsionFavoriteStore({
+    readFavorites: function () {
+      return fetchAuthedJSON("/api/iconoplasm/emulsion-favorites")
+    },
+    writeFavorite: function (emulsionId, isFavorite) {
+      return fetchAuthedJSON(
+        "/api/iconoplasm/emulsion-favorites/" + encodeURIComponent(emulsionId),
+        { method: isFavorite ? "PUT" : "DELETE" },
+      )
+    },
+  })
+
+  function renderEmulsionFavoriteButtonMarkup(rawEmulsionId, extraClass) {
+    var emulsionId = normalizeEmulsionFamilyId(rawEmulsionId)
+    if (!emulsionId) return ""
+    var isFavorite = emulsionFavorites.has(emulsionId)
+    var isPending = emulsionFavorites.isPending(emulsionId)
+    var authenticated = !!currentUser
+    var label = authenticated
+      ? (isFavorite ? "Remove " : "Add ") + emulsionId + " from favorites"
+      : "Log in to favorite " + emulsionId
+    return (
+      '<button type="button" class="icono-emulsion-favorite-button' +
+      (isFavorite ? " is-favorite" : "") +
+      (extraClass ? " " + esc(extraClass) : "") +
+      '" data-icono-emulsion-favorite="' +
+      esc(emulsionId) +
+      '" aria-pressed="' +
+      (isFavorite ? "true" : "false") +
+      '" aria-label="' +
+      esc(label) +
+      '"' +
+      (isPending ? ' disabled aria-busy="true"' : "") +
+      ">" +
+      ICONO_STAR_ICON +
+      '<span class="icono-visually-hidden">' +
+      esc(label) +
+      "</span></button>"
+    )
+  }
+
+  function syncEmulsionFavoriteButtons(root, changedId) {
+    var scope = root && root.querySelectorAll ? root : document
+    var buttons = scope.querySelectorAll("[data-icono-emulsion-favorite]")
+    for (var i = 0; i < buttons.length; i++) {
+      var button = buttons[i]
+      var emulsionId = normalizeEmulsionFamilyId(
+        button.getAttribute("data-icono-emulsion-favorite"),
+      )
+      if (!emulsionId || (changedId && emulsionId !== changedId)) continue
+      var favorite = emulsionFavorites.has(emulsionId)
+      var pending = emulsionFavorites.isPending(emulsionId)
+      button.classList.toggle("is-favorite", favorite)
+      button.setAttribute("aria-pressed", favorite ? "true" : "false")
+      button.disabled = pending
+      if (pending) button.setAttribute("aria-busy", "true")
+      else button.removeAttribute("aria-busy")
+      var label = currentUser
+        ? (favorite ? "Remove " : "Add ") + emulsionId + " from favorites"
+        : "Log in to favorite " + emulsionId
+      button.setAttribute("aria-label", label)
+      var hiddenLabel = button.querySelector(".icono-visually-hidden")
+      if (hiddenLabel) hiddenLabel.textContent = label
+    }
+  }
+
+  function announceEmulsionFavoriteStatus(message) {
+    var root = document.getElementById(ROOT_ID) || document.body
+    var status = document.getElementById("icono-emulsion-favorite-status")
+    if (!status) {
+      status = document.createElement("div")
+      status.id = "icono-emulsion-favorite-status"
+      status.className = "icono-visually-hidden"
+      status.setAttribute("role", "status")
+      status.setAttribute("aria-live", "polite")
+      root.appendChild(status)
+    }
+    status.textContent = ""
+    window.setTimeout(function () {
+      status.textContent = String(message || "")
+    }, 0)
+  }
+
+  function wireEmulsionFavoriteButtons(container) {
+    if (!container || container._iconoEmulsionFavoritesWired) return
+    container._iconoEmulsionFavoritesWired = true
+    container.addEventListener("click", function (event) {
+      var button = event.target.closest("[data-icono-emulsion-favorite]")
+      if (!button || !container.contains(button)) return
+      event.preventDefault()
+      event.stopPropagation()
+      var emulsionId = normalizeEmulsionFamilyId(
+        button.getAttribute("data-icono-emulsion-favorite"),
+      )
+      if (!emulsionId) return
+      if (!currentUser) {
+        window.location.href = voteLoginUrl()
+        return
+      }
+      emulsionFavorites
+        .toggle(emulsionId)
+        .then(function () {
+          announceEmulsionFavoriteStatus(
+            (emulsionFavorites.has(emulsionId) ? "Added " : "Removed ") +
+              emulsionId +
+              (emulsionFavorites.has(emulsionId) ? " to favorites." : " from favorites."),
+          )
+        })
+        .catch(function () {
+          var matching = document.querySelectorAll(
+            '[data-icono-emulsion-favorite="' + CSS.escape(emulsionId) + '"]',
+          )
+          for (var i = 0; i < matching.length; i++) {
+            matching[i].classList.add("has-save-error")
+          }
+          announceEmulsionFavoriteStatus(
+            "Could not save favorite. The previous state was restored.",
+          )
+          window.setTimeout(function () {
+            for (var i = 0; i < matching.length; i++) {
+              matching[i].classList.remove("has-save-error")
+            }
+          }, 1800)
+        })
+    })
+  }
+
+  emulsionFavorites.subscribe(function (state) {
+    syncEmulsionFavoriteButtons(document, state && state.changedId)
+  })
 
   function publishFailureMessage(error, fallback, resultLabel) {
     var payload = error && error.payload && typeof error.payload === "object" ? error.payload : null
@@ -562,7 +697,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-candidate-toolbar-pair icono-canonical-toolbar-pair">' +
       "<span>Published</span><strong>" +
       esc(emulsionInfo.primary) +
-      "</strong></div></div>"
+      "</strong>" +
+      renderEmulsionFavoriteButtonMarkup(
+        emulsionInfo.emulsionId,
+        "icono-emulsion-favorite-button--toolbar",
+      ) +
+      "</div></div>"
     )
   }
 
@@ -2167,17 +2307,29 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function updateSharedUserState(user) {
     var previousHadUser = !!currentUser
+    var previousUserId = String((currentUser && (currentUser.id || currentUser.user_id)) || "")
     var previousAdmin = !!currentUserIsIconoAdmin
     currentUser = user || null
+    var currentUserId = String((currentUser && (currentUser.id || currentUser.user_id)) || "")
     hasResolvedAuthState = true
     if (previousHadUser !== !!currentUser) {
       invalidateImageEditProviders()
     }
     if (currentUser) {
       requestInbox.start()
+      if (previousUserId !== currentUserId) emulsionFavorites.reset()
+      emulsionFavorites
+        .load()
+        .then(function () {
+          syncEmulsionFavoriteButtons(document)
+        })
+        .catch(function () {
+          announceEmulsionFavoriteStatus("Favorites could not be loaded.")
+        })
     } else {
       requestInbox.stop()
       requestInbox.reset()
+      emulsionFavorites.reset()
     }
     renderIconoplasmSidebar()
     if (getRoute().page === "home") {
@@ -4652,7 +4804,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return html
   }
 
-  function renderRequestOptionButtonMarkup(option, selectedVisionId, isRandom, optionAttribute) {
+  function renderRequestOptionButtonMarkup(
+    option,
+    selectedVisionId,
+    isRandom,
+    optionAttribute,
+    favoriteEnabled,
+  ) {
     var item = option || {}
     var attributeName = String(optionAttribute || "data-icono-request-option").trim()
     var optionValue = isRandom
@@ -4670,13 +4828,15 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         .replace(/[^a-z0-9_-]+/gi, "-")
         .replace(/^-+|-+$/g, "")
         .toLowerCase()
-    return (
+    var selectButton =
       '<button type="button" class="icono-request-option' +
       (isSelected ? " is-selected" : "") +
       (isRandom ? " is-random" : "") +
       '" id="' +
       optionId +
-      '" role="option" aria-selected="' +
+      '"' +
+      (favoriteEnabled ? "" : ' role="option"') +
+      ' aria-selected="' +
       (isSelected ? "true" : "false") +
       '" ' +
       esc(attributeName) +
@@ -4692,6 +4852,19 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       "</span>" +
       renderRequestOptionPreviewStripMarkup(item) +
       "</button>"
+    if (!favoriteEnabled) return selectButton
+    return (
+      '<div class="icono-request-option-row' +
+      (isRandom ? " is-random" : "") +
+      '" role="listitem">' +
+      selectButton +
+      (isRandom
+        ? ""
+        : renderEmulsionFavoriteButtonMarkup(
+            item.emulsion_family_id || item.emulsion_id,
+            "icono-emulsion-favorite-button--picker",
+          )) +
+      "</div>"
     )
   }
 
@@ -4763,9 +4936,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-search-wrapper icono-request-picker-search" data-icono-request-picker>' +
       '<input id="icono-request-query-' +
       esc(symbol) +
-      '" data-icono-request-query class="icono-search-input icono-request-picker-input" type="text" autocomplete="off" placeholder="' +
+      '" data-icono-request-query class="icono-search-input icono-request-picker-input" type="search" autocomplete="off" placeholder="' +
       esc(placeholder) +
-      '" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="icono-request-results-' +
+      '" role="searchbox" aria-expanded="false" aria-controls="icono-request-results-' +
       esc(symbol) +
       // Aria-label was "Search emulsion lane" — internal workflow jargon that
       // confuses screen-reader users. Mirror the placeholder copy instead.
@@ -4782,7 +4955,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       "</button>" +
       '<div class="icono-search-results icono-request-results" id="icono-request-results-' +
       esc(symbol) +
-      '" role="listbox" data-icono-request-results hidden></div>' +
+      '" role="list" aria-label="Emulsions" data-icono-request-results hidden></div>' +
       "</div>" +
       "</div>" +
       "</form>"
@@ -4823,16 +4996,35 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   }
 
   function renderRequestShellMarkup(symbol) {
+    var safeSymbol = normalizedSymbol(symbol)
     return (
       '<div class="icono-request-shell">' +
       '<div class="icono-request-actions">' +
+      '<div class="icono-request-tabs" role="tablist" aria-label="Generation method">' +
+      '<button type="button" class="icono-request-tab" id="icono-request-tab-free-' +
+      esc(safeSymbol) +
+      '" role="tab" aria-selected="true" aria-controls="icono-request-panel-free-' +
+      esc(safeSymbol) +
+      '" data-icono-request-tab="free">Free queue</button>' +
+      '<button type="button" class="icono-request-tab" id="icono-request-tab-api-' +
+      esc(safeSymbol) +
+      '" role="tab" aria-selected="false" tabindex="-1" aria-controls="icono-request-panel-api-' +
+      esc(safeSymbol) +
+      '" data-icono-request-tab="api">Image API</button>' +
+      "</div>" +
       '<div class="icono-request-lanes">' +
-      '<section class="icono-request-lane icono-request-lane--queue" data-icono-request-lane="queue">' +
-      '<div class="icono-request-lane-title">Free generation queue</div>' +
+      '<section class="icono-request-lane icono-request-lane--queue" id="icono-request-panel-free-' +
+      esc(safeSymbol) +
+      '" role="tabpanel" aria-labelledby="icono-request-tab-free-' +
+      esc(safeSymbol) +
+      '" data-icono-request-lane="free">' +
       renderRequestFormMarkup(symbol) +
       "</section>" +
-      '<section class="icono-request-lane icono-request-lane--api" data-icono-request-lane="api">' +
-      '<div class="icono-request-lane-title">Direct generation</div>' +
+      '<section class="icono-request-lane icono-request-lane--api" id="icono-request-panel-api-' +
+      esc(safeSymbol) +
+      '" role="tabpanel" aria-labelledby="icono-request-tab-api-' +
+      esc(safeSymbol) +
+      '" data-icono-request-lane="api" hidden>' +
       renderRequestDirectGenerationMarkup() +
       "</section>" +
       "</div>" +
@@ -4869,7 +5061,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-request-dialog-shell" data-icono-request-body>' +
       renderRequestShellMarkup(safeSymbol) +
       "</div>" +
-      '<div slot="footer" class="icono-request-direct-actions">' +
+      '<div class="icono-request-direct-actions" data-icono-request-direct-footer hidden>' +
       '<button type="button" class="icono-request-direct-generate" data-icono-request-image-generate disabled>Generate candidate</button>' +
       '<button type="button" class="icono-request-direct-publish" data-icono-request-image-publish hidden disabled>Publish candidate</button>' +
       "</div>" +
@@ -5718,11 +5910,74 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (!body) return
     var symbol = normalizedSymbol(genePayload.symbol)
     if (!symbol) return
+    body.innerHTML = renderRequestShellMarkup(symbol)
     var dialog = panel.querySelector("[data-icono-request-dialog]")
     var dialogOpenButton = panel.querySelector("[data-icono-request-dialog-open]")
+    var requestTabs = Array.from(body.querySelectorAll("[data-icono-request-tab]"))
+    var requestLanes = Array.from(body.querySelectorAll("[data-icono-request-lane]"))
+    var directFooter = dialog ? dialog.querySelector("[data-icono-request-direct-footer]") : null
+
+    function savedRequestTab() {
+      try {
+        return localStorage.getItem(ICONO_REQUEST_TAB_STORAGE_KEY) === "api" ? "api" : "free"
+      } catch (_error) {
+        return "free"
+      }
+    }
+
+    function activateRequestTab(tabName, options) {
+      var nextTab = tabName === "api" ? "api" : "free"
+      var config = options || {}
+      for (var i = 0; i < requestTabs.length; i++) {
+        var selected = requestTabs[i].getAttribute("data-icono-request-tab") === nextTab
+        requestTabs[i].setAttribute("aria-selected", selected ? "true" : "false")
+        requestTabs[i].tabIndex = selected ? 0 : -1
+        if (selected && config.focus) requestTabs[i].focus()
+      }
+      for (var j = 0; j < requestLanes.length; j++) {
+        requestLanes[j].hidden = requestLanes[j].getAttribute("data-icono-request-lane") !== nextTab
+      }
+      if (directFooter) {
+        directFooter.hidden = nextTab !== "api"
+        if (nextTab === "api") directFooter.setAttribute("slot", "footer")
+        else directFooter.removeAttribute("slot")
+      }
+      if (config.persist) {
+        try {
+          localStorage.setItem(ICONO_REQUEST_TAB_STORAGE_KEY, nextTab)
+        } catch (_error) {}
+      }
+      panel.dispatchEvent(
+        new CustomEvent("icono-request-tab-activate", { detail: { tab: nextTab } }),
+      )
+    }
+
+    for (var requestTabIndex = 0; requestTabIndex < requestTabs.length; requestTabIndex++) {
+      requestTabs[requestTabIndex].addEventListener("click", function (event) {
+        activateRequestTab(event.currentTarget.getAttribute("data-icono-request-tab"), {
+          persist: true,
+        })
+      })
+      requestTabs[requestTabIndex].addEventListener("keydown", function (event) {
+        var currentIndex = requestTabs.indexOf(event.currentTarget)
+        var nextIndex = currentIndex
+        if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % requestTabs.length
+        else if (event.key === "ArrowLeft")
+          nextIndex = (currentIndex - 1 + requestTabs.length) % requestTabs.length
+        else if (event.key === "Home") nextIndex = 0
+        else if (event.key === "End") nextIndex = requestTabs.length - 1
+        else return
+        event.preventDefault()
+        activateRequestTab(requestTabs[nextIndex].getAttribute("data-icono-request-tab"), {
+          focus: true,
+          persist: true,
+        })
+      })
+    }
 
     function openRequestDialog() {
       if (!dialog) return
+      activateRequestTab(savedRequestTab())
       if (typeof dialog.show === "function") dialog.show()
       else dialog.setAttribute("open", "open")
     }
@@ -5820,6 +6075,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var directUserEmulsionActiveIndex = -1
       var directUserEmulsionPickerOpen = false
       var refreshedSampleForDirectPrompt = false
+      var directTabInitialized = false
+
+      function initializeDirectTab() {
+        if (directTabInitialized) return
+        directTabInitialized = true
+        refreshDirectGenerationSamplePreview()
+        void loadDirectProviders()
+      }
 
       function renderDirectProviders() {
         if (!providerSelect) return
@@ -6254,6 +6517,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         return String((option && option.option_type) || "") === "user_emulsion"
       }
 
+      function isFavoriteRequestOption(option) {
+        return emulsionFavorites.has(
+          option && (option.emulsion_family_id || option.emulsion_id || ""),
+        )
+      }
+
       function filterRequestOptions(query, options, optionPredicate) {
         var cleanedQuery = String(query || "")
           .trim()
@@ -6278,9 +6547,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         matched.sort(function (a, b) {
           var scoreDiff = scoreRequestOption(a, cleanedQuery) - scoreRequestOption(b, cleanedQuery)
           if (scoreDiff) return scoreDiff
+          var favoriteDiff = Number(isFavoriteRequestOption(b)) - Number(isFavoriteRequestOption(a))
+          if (favoriteDiff) return favoriteDiff
           return compareRequestOptionStrength(a, b)
         })
-        return matched.slice(0, cleanedQuery ? 10 : 6)
+        if (cleanedQuery) return matched.slice(0, 10)
+        var favorites = matched.filter(isFavoriteRequestOption)
+        var others = matched.filter(function (option) {
+          return !isFavoriteRequestOption(option)
+        })
+        return favorites.concat(others.slice(0, 6))
       }
 
       function paintActiveOption() {
@@ -6298,19 +6574,48 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
       async function renderResultsList() {
         var renderQuery = queryInput.value
+        if (currentUser && !emulsionFavorites.isLoaded()) {
+          await emulsionFavorites.load().catch(function () {
+            return null
+          })
+        }
         var loadedOptions = await ensureRequestOptionsLoaded(renderQuery)
         if (queryInput.value !== renderQuery) {
           void renderResultsList()
           return
         }
         filteredOptions = filterRequestOptions(renderQuery, loadedOptions, isQueueRequestOption)
-        var html = renderRequestOptionButtonMarkup(null, hiddenInput.value, true)
+        var html = renderRequestOptionButtonMarkup(null, hiddenInput.value, true, null, true)
         if (filteredOptions.length) {
-          html += filteredOptions
-            .map(function (option) {
-              return renderRequestOptionButtonMarkup(option, hiddenInput.value, false)
-            })
-            .join("")
+          var hasQuery = !!String(renderQuery || "").trim()
+          var favoriteOptions = filteredOptions.filter(isFavoriteRequestOption)
+          var otherOptions = filteredOptions.filter(function (option) {
+            return !isFavoriteRequestOption(option)
+          })
+          if (hasQuery) {
+            html += filteredOptions
+              .map(function (option) {
+                return renderRequestOptionButtonMarkup(option, hiddenInput.value, false, null, true)
+              })
+              .join("")
+          } else {
+            if (favoriteOptions.length) {
+              html += '<div class="icono-request-option-group-label">Favorites</div>'
+            }
+            html += favoriteOptions
+              .map(function (option) {
+                return renderRequestOptionButtonMarkup(option, hiddenInput.value, false, null, true)
+              })
+              .join("")
+            if (otherOptions.length) {
+              html += '<div class="icono-request-option-group-label">Other emulsions</div>'
+            }
+            html += otherOptions
+              .map(function (option) {
+                return renderRequestOptionButtonMarkup(option, hiddenInput.value, false, null, true)
+              })
+              .join("")
+          }
         } else {
           html +=
             '<div class="icono-request-results-empty">No emulsions match that search. Try a workflow code, artist tag, or full vision ID.</div>'
@@ -6594,8 +6899,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       if (directPublishButton) {
         directPublishButton.addEventListener("click", publishDirectCandidateGeneration)
       }
-      refreshDirectGenerationSamplePreview()
-      void loadDirectProviders()
+      panel.addEventListener("icono-request-tab-activate", function (event) {
+        if (event.detail && event.detail.tab === "api") initializeDirectTab()
+      })
+      var selectedRequestTab = body.querySelector('[data-icono-request-tab][aria-selected="true"]')
+      if (
+        selectedRequestTab &&
+        selectedRequestTab.getAttribute("data-icono-request-tab") === "api"
+      ) {
+        initializeDirectTab()
+      }
       form.addEventListener("submit", function (event) {
         event.preventDefault()
         var requestedVisionId = String(hiddenInput.value || "").trim()
@@ -6673,8 +6986,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       })
     }
 
-    body.innerHTML = renderRequestShellMarkup(symbol)
-    void loadSummary().catch(function (error) {
+    function handleSummaryLoadError(error) {
       setStatus(
         "Request tools unavailable: " + String((error && error.message) || "Unknown error"),
         "error",
@@ -6692,6 +7004,34 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             esc(String((diagnosticError && diagnosticError.message) || "Diagnostics unavailable")) +
             "</div></details>"
         })
+    }
+
+    var freeTabLoaded = false
+    var freeTabLoading = null
+    function initializeFreeTab() {
+      if (freeTabLoaded || freeTabLoading) return freeTabLoading
+      setStatus("Loading free queue…")
+      freeTabLoading = loadSummary()
+        .then(function (state) {
+          freeTabLoaded = true
+          setStatus("")
+          return state
+        })
+        .catch(function (error) {
+          handleSummaryLoadError(error)
+          return null
+        })
+        .finally(function () {
+          freeTabLoading = null
+        })
+      return freeTabLoading
+    }
+
+    // Install the interaction model without fetching either workflow. Each
+    // tab owns its first backend read and keeps its DOM state when hidden.
+    wireAuthenticatedRequestForm({})
+    panel.addEventListener("icono-request-tab-activate", function (event) {
+      if (event.detail && event.detail.tab === "free") void initializeFreeTab()
     })
   }
 
@@ -8026,7 +8366,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var emulsionToolbarMarkup = emulsionInfo.primary
         ? '<div class="icono-candidate-toolbar-pair"><span>Emulsion</span><strong>' +
           esc(emulsionInfo.primary) +
-          "</strong></div>"
+          "</strong>" +
+          renderEmulsionFavoriteButtonMarkup(
+            emulsionInfo.emulsionId,
+            "icono-emulsion-favorite-button--toolbar",
+          ) +
+          "</div>"
         : ""
       var voteAttrs = 'data-icono-candidate-vote-box="' + esc(assetSha) + '"'
       if (Number.isFinite(candidateImageId) && candidateImageId > 0) {
@@ -8428,6 +8773,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     wireCandidateVoteBoxes(container, genePayload)
     wireCandidateRemoveButtons(container, genePayload)
     wireCandidateCopyForms(container, genePayload)
+    wireEmulsionFavoriteButtons(container)
     var leadCard = container.querySelector(".icono-gene-lead-card")
     if (leadCard && isMobileLabelReviewEnabled()) wireMobileLabelCard(leadCard)
     refreshPortraitLightbox()

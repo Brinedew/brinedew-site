@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs"
 const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
 const css = readFileSync(new URL("../quartz/static/iconoplasm/styles.css", import.meta.url), "utf8")
 
-test("Iconoplasm request picker uses an explicit combobox/listbox contract", () => {
+test("Iconoplasm request picker uses a searchable list with sibling favorite controls", () => {
   assert.match(
     app,
     /class="icono-search-input icono-request-picker-input"/,
@@ -26,18 +26,11 @@ test("Iconoplasm request picker uses an explicit combobox/listbox contract", () 
     /Search emulsion code or vision ID\. Leave blank for random\./,
     "request picker should not ship the old verbose placeholder copy",
   )
-  assert.match(app, /role="combobox"/, "request picker input should expose combobox semantics")
-  assert.match(
-    app,
-    /aria-autocomplete="list"/,
-    "request picker input should announce list autocomplete",
-  )
-  assert.match(
-    app,
-    /aria-haspopup="listbox"/,
-    "request picker input should announce a listbox popup",
-  )
-  assert.match(app, /role="listbox"/, "request picker popup should expose listbox semantics")
+  const queueMarkupStart = app.indexOf("function renderRequestFormMarkup")
+  const queueMarkupEnd = app.indexOf("function renderRequestDirectGenerationMarkup")
+  const queueMarkup = app.slice(queueMarkupStart, queueMarkupEnd)
+  assert.match(queueMarkup, /role="searchbox"/)
+  assert.match(queueMarkup, /role="list" aria-label="Emulsions"/)
   assert.match(
     css,
     /\.icono-request-results\[hidden\]\s*\{\s*display:\s*none;/,
@@ -45,8 +38,18 @@ test("Iconoplasm request picker uses an explicit combobox/listbox contract", () 
   )
   assert.match(
     app,
-    /role="option" aria-selected="/,
-    "request picker rows should expose option semantics",
+    /class="icono-request-option-row'[\s\S]{0,120}'" role="listitem"/,
+    "every selectable emulsion should be wrapped in a non-interactive list row",
+  )
+  assert.match(app, /data-icono-emulsion-favorite=/)
+  assert.match(
+    app,
+    /favoriteOptions\.length[\s\S]*>Favorites<[\s\S]*otherOptions\.length[\s\S]*>Other emulsions</,
+  )
+  assert.match(
+    app,
+    /var selectButton =[\s\S]*if \(!favoriteEnabled\) return selectButton[\s\S]*class="icono-request-option-row[\s\S]*selectButton \+[\s\S]*renderEmulsionFavoriteButtonMarkup/,
+    "favorite controls must be composed beside the completed selection button",
   )
   assert.match(
     app,
@@ -145,16 +148,43 @@ test("canonical blot toolbar keeps picker behind a modal trigger", () => {
   )
 })
 
-test("new candidate modal exposes separate free queue and configured image API generation paths", () => {
+test("new candidate modal tabs separate free queue and configured image API generation paths", () => {
   assert.match(
     app,
-    /data-icono-request-lane="queue"[\s\S]*Free generation queue[\s\S]*Queue free/,
+    /role="tablist" aria-label="Generation method"[\s\S]*data-icono-request-tab="free">Free queue[\s\S]*data-icono-request-tab="api">Image API/,
+    "request modal should expose the two workflows as tabs",
+  )
+  assert.match(
+    app,
+    /data-icono-request-lane="free"[\s\S]*Queue free/,
     "request modal should expose the free generation queue lane",
   )
   assert.match(
     app,
-    /data-icono-request-lane="api"[\s\S]*Direct generation[\s\S]*data-icono-request-image-generate[\s\S]*Generate candidate/,
+    /data-icono-request-lane="api"[\s\S]*data-icono-request-direct-panel[\s\S]*data-icono-request-image-generate[\s\S]*Generate candidate/,
     "request modal should expose a separate direct Image API lane",
+  )
+  assert.match(app, /ICONO_REQUEST_TAB_STORAGE_KEY = "iconoplasm\.new-candidate-tab"/)
+  assert.match(app, /localStorage\.setItem\(ICONO_REQUEST_TAB_STORAGE_KEY, nextTab\)/)
+  assert.match(app, /event\.key === "ArrowRight"/)
+  assert.match(app, /requestLanes\[j\]\.hidden =/)
+  const requestPanelStart = app.indexOf("function wireGeneRequestPanel")
+  const requestPanelEnd = app.indexOf("/* ─── Client-side router ─── */")
+  const requestPanel = app.slice(requestPanelStart, requestPanelEnd)
+  assert.ok(
+    requestPanel.indexOf("body.innerHTML = renderRequestShellMarkup(symbol)") <
+      requestPanel.indexOf('body.querySelectorAll("[data-icono-request-tab]")'),
+    "the shell must exist before tab listeners are attached so rendering cannot discard them",
+  )
+  assert.match(
+    requestPanel,
+    /function initializeFreeTab\(\)[\s\S]*loadSummary\(\)[\s\S]*event\.detail\.tab === "free"/,
+    "free queue data should load only when its tab is first activated",
+  )
+  assert.match(
+    requestPanel,
+    /function initializeDirectTab\(\)[\s\S]*loadDirectProviders\(\)[\s\S]*event\.detail\.tab === "api"/,
+    "Image API provider data should load only when its tab is first activated",
   )
   assert.match(
     css,
@@ -173,9 +203,11 @@ test("new candidate modal exposes separate free queue and configured image API g
   )
   assert.match(
     app,
-    /slot="footer" class="icono-request-direct-actions"[\s\S]*data-icono-request-image-generate[\s\S]*data-icono-request-image-publish/,
-    "direct generation should pin generate and publish in the dialog footer like Edit blot",
+    /class="icono-request-direct-actions" data-icono-request-direct-footer hidden[\s\S]*data-icono-request-image-generate[\s\S]*data-icono-request-image-publish/,
+    "direct generation actions should exist only for the Image API tab",
   )
+  assert.match(app, /directFooter\.setAttribute\("slot", "footer"\)/)
+  assert.match(app, /directFooter\.removeAttribute\("slot"\)/)
   assert.match(
     app,
     /data-icono-request-direct-result[\s\S]*class="icono-request-direct-controls"[\s\S]*data-icono-request-direct-preview/,

@@ -745,6 +745,10 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   width: 100%;
 }
 
+.icono-request-direct-actions[hidden] {
+  display: none;
+}
+
 .icono-request-direct-generate,
 .icono-request-direct-publish {
   appearance: none;
@@ -1219,6 +1223,41 @@ img-comparison-slider.rendered [slot="second"] {
   gap: 0.75rem;
 }
 
+.icono-request-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.32rem;
+  padding: 0.28rem;
+  border-radius: var(--icono-radius-lg);
+  background: color-mix(in srgb, var(--ui-border) 34%, var(--light) 66%);
+}
+
+.icono-request-tab {
+  appearance: none;
+  min-height: 2.75rem;
+  padding: 0.62rem 0.85rem;
+  border: 1px solid transparent;
+  border-radius: calc(var(--icono-radius-lg) - 3px);
+  background: transparent;
+  color: color-mix(in srgb, var(--dark) 66%, var(--secondary) 34%);
+  font-family: var(--icono-action-font) !important;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.icono-request-tab[aria-selected="true"] {
+  border-color: color-mix(in srgb, var(--ui-border) 76%, var(--dark) 24%);
+  background: var(--light);
+  color: var(--dark);
+  box-shadow: 0 2px 8px rgba(27, 18, 11, 0.08);
+}
+
+.icono-request-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 62%, transparent);
+  outline-offset: 2px;
+}
+
 .icono-request-lanes {
   display: grid;
   gap: 0.75rem;
@@ -1232,6 +1271,10 @@ img-comparison-slider.rendered [slot="second"] {
   border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
   border-radius: var(--icono-radius-lg);
   background: color-mix(in srgb, var(--light) 96%, white 4%);
+}
+
+.icono-request-lane[hidden] {
+  display: none;
 }
 
 .icono-request-lane-title {
@@ -1684,6 +1727,102 @@ img-comparison-slider.rendered [slot="second"] {
   text-align: left;
   cursor: pointer;
   transition: background 0.12s ease;
+}
+
+.icono-request-option-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.25rem;
+  align-items: stretch;
+  border-top: 1px solid color-mix(in srgb, var(--ui-border) 78%, transparent);
+}
+
+.icono-request-option-row.is-random {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.icono-request-option-row:first-child,
+.icono-request-option-group-label + .icono-request-option-row {
+  border-top: none;
+}
+
+.icono-request-option-row .icono-request-option {
+  min-width: 0;
+}
+
+.icono-request-option-group-label {
+  padding: 0.58rem 0.85rem 0.42rem;
+  border-top: 1px solid color-mix(in srgb, var(--ui-border) 78%, transparent);
+  color: color-mix(in srgb, var(--dark) 66%, var(--secondary) 34%);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.icono-emulsion-favorite-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  min-width: 2.75rem;
+  height: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: color-mix(in srgb, var(--dark) 54%, var(--light) 46%);
+  cursor: pointer;
+  transition:
+    transform 0.14s var(--icono-ease-out),
+    background-color 0.14s var(--icono-ease-out),
+    color 0.14s var(--icono-ease-out),
+    border-color 0.14s var(--icono-ease-out);
+}
+
+.icono-emulsion-favorite-button svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: transparent;
+}
+
+.icono-emulsion-favorite-button:hover,
+.icono-emulsion-favorite-button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--ui-border) 56%);
+  background: color-mix(in srgb, var(--accent) 10%, var(--light) 90%);
+  color: var(--dark);
+}
+
+.icono-emulsion-favorite-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 62%, transparent);
+  outline-offset: 2px;
+}
+
+.icono-emulsion-favorite-button.is-favorite {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--ui-border) 52%);
+  background: color-mix(in srgb, var(--accent) 18%, var(--light) 82%);
+  color: color-mix(in srgb, var(--dark) 72%, var(--accent) 28%);
+}
+
+.icono-emulsion-favorite-button.is-favorite svg {
+  fill: currentColor;
+}
+
+.icono-emulsion-favorite-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.icono-emulsion-favorite-button.has-save-error {
+  border-color: color-mix(in srgb, #b42318 74%, var(--ui-border) 26%);
+  color: color-mix(in srgb, #b42318 76%, var(--dark) 24%);
+}
+
+.icono-emulsion-favorite-button--picker {
+  align-self: center;
+  justify-self: center;
 }
 
 .icono-request-option + .icono-request-option {
@@ -3675,13 +3814,15 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 
 .icono-candidate-toolbar-pair {
   display: inline-grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.04rem;
   min-width: 0;
-  max-width: 8.8rem;
+  max-width: 12rem;
   line-height: 1;
 }
 
 .icono-candidate-toolbar-pair span {
+  grid-column: 1;
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.56rem;
   line-height: 1;
@@ -3691,6 +3832,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 }
 
 .icono-candidate-toolbar-pair strong {
+  grid-column: 1;
   overflow: hidden;
   color: var(--dark);
   font-family: "Special Elite", Georgia, serif;
@@ -3699,6 +3841,14 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   line-height: 1.12;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.icono-candidate-toolbar-pair .icono-emulsion-favorite-button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  width: 2.75rem;
+  min-width: 2.75rem;
 }
 
 .icono-candidate-secondary-actions {
