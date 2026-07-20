@@ -47,6 +47,7 @@ function contract(definition) {
 
 function iconoplasmApiContract(definition) {
   return contract({
+    apiHandler: null,
     cache: "no-store",
     gatewayHandler: "iconoplasm_api",
     rateLimit: null,
@@ -54,8 +55,9 @@ function iconoplasmApiContract(definition) {
   })
 }
 
-function adminApiContract(id, suffix, methods, budgetFamily = id) {
+function adminApiContract(id, suffix, methods, budgetFamily = id, apiHandler = null) {
   return iconoplasmApiContract({
+    apiHandler,
     id,
     match: exact(`/api/iconoplasm/admin${suffix}`),
     methods,
@@ -642,6 +644,7 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "/read-models/shared-discoveries",
     POST,
     "admin_read_models",
+    "admin_publication.shared_discoveries",
   ),
   adminApiContract("admin_card_vms_warm", "/card-vms/warm", POST),
   adminApiContract("admin_assets", "/assets", GET),
@@ -693,12 +696,30 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_finalization_enqueue",
   ),
   adminApiContract("admin_finalization_process", "/finalization/process", POST),
-  adminApiContract("admin_catalog_state", "/catalog/state", GET_POST, "admin_catalog"),
+  adminApiContract(
+    "admin_catalog_state",
+    "/catalog/state",
+    GET_POST,
+    "admin_catalog",
+    "admin_publication.catalog_state",
+  ),
   adminApiContract("admin_catalog_upsert", "/catalog/upsert", POST, "admin_catalog"),
   adminApiContract("admin_catalog_reconcile", "/catalog/reconcile", POST, "admin_catalog"),
-  adminApiContract("admin_catalog_publish", "/catalog/publish", POST, "admin_catalog"),
+  adminApiContract(
+    "admin_catalog_publish",
+    "/catalog/publish",
+    POST,
+    "admin_catalog",
+    "admin_publication.catalog_publish",
+  ),
   adminApiContract("admin_essence_upsert", "/essence/upsert", POST, "admin_essence"),
-  adminApiContract("admin_essence_state", "/essence/state", POST, "admin_essence"),
+  adminApiContract(
+    "admin_essence_state",
+    "/essence/state",
+    POST,
+    "admin_essence",
+    "admin_publication.essence_state",
+  ),
   adminApiContract("admin_cost_usage", "/cost/usage", GET),
   adminApiContract("admin_cost_snapshot", "/cost/snapshot", GET, "admin_cost_usage"),
   iconoplasmApiContract({
