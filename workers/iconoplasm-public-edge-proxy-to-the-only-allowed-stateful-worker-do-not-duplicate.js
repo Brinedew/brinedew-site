@@ -16,8 +16,6 @@ const ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
   "/__internal/iconoplasm/repair-canon-invariants"
 const ICONOPLASM_INTERNAL_STATEFUL_WORKER_ORIGIN_DO_NOT_DUPLICATE =
   "https://the-only-allowed-internal-stateful-worker-do-not-duplicate"
-const rlBuckets = new Map()
-const RL_WINDOW_MS = 60 * 1000
 
 export function isIconoplasmRequest(host) {
   return host === ICONOPLASM_HOST || String(host || "").startsWith("iconoplasm.")
@@ -216,49 +214,6 @@ function normalizeArtistStylesPageHtml(htmlSource) {
       "setStatus('Thanks. We got it.', 'ok');",
     )
     .replace("if (!data || !data.duplicate) {", "if (!data || data.accepted !== false) {")
-}
-
-function rateLimit(request, routeKey, maxPerMin) {
-  const ip = request.headers.get("CF-Connecting-IP") || "unknown"
-  const key = `${routeKey}:${ip}`
-  const now = Date.now()
-  const item = rlBuckets.get(key)
-  if (!item || now - item.start > RL_WINDOW_MS) {
-    const fresh = { start: now, count: 1 }
-    rlBuckets.set(key, fresh)
-    return {
-      retryAfterSeconds: null,
-      headers: {
-        "X-RateLimit-Limit": String(maxPerMin),
-        "X-RateLimit-Period": String(Math.floor(RL_WINDOW_MS / 1000)),
-        "X-RateLimit-Remaining": String(Math.max(0, maxPerMin - fresh.count)),
-        "X-RateLimit-Reset": String(Math.ceil(RL_WINDOW_MS / 1000)),
-      },
-    }
-  }
-  item.count += 1
-  const resetSeconds = Math.max(1, Math.ceil((RL_WINDOW_MS - (now - item.start)) / 1000))
-  if (item.count > maxPerMin) {
-    return {
-      retryAfterSeconds: resetSeconds,
-      headers: {
-        "X-RateLimit-Limit": String(maxPerMin),
-        "X-RateLimit-Period": String(Math.floor(RL_WINDOW_MS / 1000)),
-        "X-RateLimit-Remaining": "0",
-        "X-RateLimit-Reset": String(resetSeconds),
-        "Retry-After": String(resetSeconds),
-      },
-    }
-  }
-  return {
-    retryAfterSeconds: null,
-    headers: {
-      "X-RateLimit-Limit": String(maxPerMin),
-      "X-RateLimit-Period": String(Math.floor(RL_WINDOW_MS / 1000)),
-      "X-RateLimit-Remaining": String(Math.max(0, maxPerMin - item.count)),
-      "X-RateLimit-Reset": String(resetSeconds),
-    },
-  }
 }
 
 function isPublicCatalogArtifactPath(path) {
@@ -469,41 +424,14 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
     }
 
     if (path === publicApiPath("/schema")) {
-      const rl = rateLimit(request, "public_schema", 60)
-      if (rl.retryAfterSeconds) {
-        return done(
-          request,
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-        )
-      }
-      const response = handlePublicSchema()
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
-      return done(request, new Response(response.body, { status: response.status, headers }))
+      return done(request, handlePublicSchema())
     }
 
     if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) {
-      const rl = rateLimit(request, "public_catalog_dump", 60)
-      if (rl.retryAfterSeconds) {
-        return done(
-          request,
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-        )
-      }
       const response = env.ICONOPLASM_PORTRAITS
         ? await handlePublicCatalogJsonlDump(env, path)
         : await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
-      return done(request, new Response(response.body, { status: response.status, headers }))
+      return done(request, response)
     }
 
     if (path.startsWith("/portraits/")) {
