@@ -1023,8 +1023,6 @@ const adminReadModelState = {
   promise: null,
 }
 
-const rlBuckets = new Map()
-const RL_WINDOW_MS = 60 * 1000
 const RANDOM_ARTIST_METAVISION_RE = /^artist-random-[a-z0-9-]+$/i
 const LEGACY_ARTIST_VISION_RE = /^artist-(?!random-)[a-z0-9()_-]+$/i
 const CANONICAL_RANDOM_ARTIST_VARIANT_RE = /^[a-z0-9-]+-v\d+-\d+$/i
@@ -10571,49 +10569,6 @@ function etagMatches(ifNoneMatchValue, etag) {
   const normalize = (v) => String(v).replace(/^W\//, "")
   const target = normalize(etag)
   return candidates.some((v) => normalize(v) === target)
-}
-
-function rateLimit(request, routeKey, maxPerMin) {
-  const ip = request.headers.get("CF-Connecting-IP") || "unknown"
-  const key = `${routeKey}:${ip}`
-  const now = Date.now()
-  const item = rlBuckets.get(key)
-  if (!item || now - item.start > RL_WINDOW_MS) {
-    const fresh = { start: now, count: 1 }
-    rlBuckets.set(key, fresh)
-    return {
-      retryAfterSeconds: null,
-      headers: {
-        "X-RateLimit-Limit": String(maxPerMin),
-        "X-RateLimit-Period": String(Math.floor(RL_WINDOW_MS / 1000)),
-        "X-RateLimit-Remaining": String(Math.max(0, maxPerMin - fresh.count)),
-        "X-RateLimit-Reset": String(Math.ceil(RL_WINDOW_MS / 1000)),
-      },
-    }
-  }
-  item.count += 1
-  const resetSeconds = Math.max(1, Math.ceil((RL_WINDOW_MS - (now - item.start)) / 1000))
-  if (item.count > maxPerMin) {
-    return {
-      retryAfterSeconds: resetSeconds,
-      headers: {
-        "X-RateLimit-Limit": String(maxPerMin),
-        "X-RateLimit-Period": String(Math.floor(RL_WINDOW_MS / 1000)),
-        "X-RateLimit-Remaining": "0",
-        "X-RateLimit-Reset": String(resetSeconds),
-        "Retry-After": String(resetSeconds),
-      },
-    }
-  }
-  return {
-    retryAfterSeconds: null,
-    headers: {
-      "X-RateLimit-Limit": String(maxPerMin),
-      "X-RateLimit-Period": String(Math.floor(RL_WINDOW_MS / 1000)),
-      "X-RateLimit-Remaining": String(Math.max(0, maxPerMin - item.count)),
-      "X-RateLimit-Reset": String(resetSeconds),
-    },
-  }
 }
 
 function requestHeaderHost(request, headerName) {
@@ -26495,203 +26450,85 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     }
 
     if (path === publicApiPath("/metadata")) {
-      const rl = rateLimit(request, "public_metadata", 60)
-      if (rl.retryAfterSeconds) {
-        return done(
-          "public_metadata_rl",
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-          API_SCHEMA_VERSION,
-        )
-      }
       const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
         request,
         env,
       )
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
         "public_metadata",
-        new Response(response.body, { status: response.status, headers }),
+        new Response(response.body, { status: response.status, headers: response.headers }),
         API_SCHEMA_VERSION,
       )
     }
 
     if (path === publicApiPath("/stats")) {
-      const rl = rateLimit(request, "public_stats", 60)
-      if (rl.retryAfterSeconds) {
-        return done(
-          "public_stats_rl",
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-          API_SCHEMA_VERSION,
-        )
-      }
       const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
         request,
         env,
       )
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
         "public_stats",
-        new Response(response.body, { status: response.status, headers }),
+        new Response(response.body, { status: response.status, headers: response.headers }),
         API_SCHEMA_VERSION,
       )
     }
 
     if (path === publicApiPath("/schema")) {
-      const rl = rateLimit(request, "public_schema", 60)
-      if (rl.retryAfterSeconds) {
-        return done(
-          "public_schema_rl",
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-          API_SCHEMA_VERSION,
-        )
-      }
-      const response = handlePublicSchema()
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
-      return done(
-        "public_schema",
-        new Response(response.body, { status: response.status, headers }),
-        API_SCHEMA_VERSION,
-      )
+      return done("public_schema", handlePublicSchema(), API_SCHEMA_VERSION)
     }
 
     if (path === publicApiPath("/catalog/manifest")) {
-      const rl = rateLimit(request, "public_catalog_manifest", 60)
-      if (rl.retryAfterSeconds) {
-        return done(
-          "public_catalog_manifest_rl",
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-          API_SCHEMA_VERSION,
-        )
-      }
       const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
         request,
         env,
       )
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
         "public_catalog_manifest",
-        new Response(response.body, { status: response.status, headers }),
+        new Response(response.body, { status: response.status, headers: response.headers }),
         API_SCHEMA_VERSION,
       )
     }
 
     if (isPublicCatalogArtifactPath(path)) {
-      const rl = rateLimit(request, "public_catalog_artifact", 120)
-      if (rl.retryAfterSeconds) {
-        return done(
-          "public_catalog_artifact_rl",
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-          API_SCHEMA_VERSION,
-        )
-      }
       const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
         request,
         env,
       )
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
         "public_catalog_artifact",
-        new Response(response.body, { status: response.status, headers }),
+        new Response(response.body, { status: response.status, headers: response.headers }),
         API_SCHEMA_VERSION,
       )
     }
 
     if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) {
-      const rl = rateLimit(request, "public_catalog_dump", 60)
-      if (rl.retryAfterSeconds) {
-        return done(
-          "public_catalog_dump_rl",
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-          API_SCHEMA_VERSION,
-        )
-      }
-      const response = await handlePublicCatalogJsonlDump(env, path)
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
         "public_catalog_dump",
-        new Response(response.body, { status: response.status, headers }),
+        await handlePublicCatalogJsonlDump(env, path),
         API_SCHEMA_VERSION,
       )
     }
 
     if (path === publicApiPath("/gallery")) {
-      const rl = rateLimit(request, "public_gallery", 60)
-      if (rl.retryAfterSeconds) {
-        return done(
-          "public_gallery_rl",
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-          API_SCHEMA_VERSION,
-        )
-      }
       const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
         request,
         env,
       )
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
         "public_gallery",
-        new Response(response.body, { status: response.status, headers }),
+        new Response(response.body, { status: response.status, headers: response.headers }),
         API_SCHEMA_VERSION,
       )
     }
 
     if (path === publicApiPath("/genes/search")) {
-      const rl = rateLimit(request, "public_gene_search", 120)
-      if (rl.retryAfterSeconds) {
-        return done(
-          "public_gene_search_rl",
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-          API_SCHEMA_VERSION,
-        )
-      }
       const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
         request,
         env,
       )
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
         "public_gene_search",
-        new Response(response.body, { status: response.status, headers }),
+        new Response(response.body, { status: response.status, headers: response.headers }),
         API_SCHEMA_VERSION,
       )
     }
@@ -26704,106 +26541,49 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           API_SCHEMA_VERSION,
         )
       }
-      const rl = rateLimit(request, "public_gene_batch", 60)
-      if (rl.retryAfterSeconds) {
-        return done(
-          "public_gene_batch_rl",
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-          API_SCHEMA_VERSION,
-        )
-      }
       const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
         request,
         env,
       )
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
         "public_gene_batch",
-        new Response(response.body, { status: response.status, headers }),
+        new Response(response.body, { status: response.status, headers: response.headers }),
         API_SCHEMA_VERSION,
       )
     }
 
     if (path === publicApiPath("/resolve")) {
-      const rl = rateLimit(request, "public_resolve", 60)
-      if (rl.retryAfterSeconds) {
-        return done(
-          "public_resolve_rl",
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-          API_SCHEMA_VERSION,
-        )
-      }
       const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
         request,
         env,
       )
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
         "public_resolve",
-        new Response(response.body, { status: response.status, headers }),
+        new Response(response.body, { status: response.status, headers: response.headers }),
         API_SCHEMA_VERSION,
       )
     }
 
     if (path === publicApiPath("/changes")) {
-      const rl = rateLimit(request, "public_changes", 60)
-      if (rl.retryAfterSeconds) {
-        return done(
-          "public_changes_rl",
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-          API_SCHEMA_VERSION,
-        )
-      }
       const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
         request,
         env,
       )
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
         "public_changes",
-        new Response(response.body, { status: response.status, headers }),
+        new Response(response.body, { status: response.status, headers: response.headers }),
         API_SCHEMA_VERSION,
       )
     }
 
     if (path.startsWith(publicApiPath("/media/"))) {
-      const rl = rateLimit(request, "public_media", 120)
-      if (rl.retryAfterSeconds) {
-        return done(
-          "public_media_rl",
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-          API_SCHEMA_VERSION,
-        )
-      }
-      const rawSymbol = path.slice(publicApiPath("/media/").length)
       const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
         request,
         env,
       )
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
         "public_media",
-        new Response(response.body, { status: response.status, headers }),
+        new Response(response.body, { status: response.status, headers: response.headers }),
         API_SCHEMA_VERSION,
       )
     }
@@ -26816,27 +26596,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           API_SCHEMA_VERSION,
         )
       }
-      const rl = rateLimit(request, "site_gene", 120)
-      if (rl.retryAfterSeconds) {
-        return done(
-          "site_gene_rl",
-          json(
-            { error: "Rate limit exceeded", retry_after_seconds: rl.retryAfterSeconds },
-            429,
-            rl.headers,
-          ),
-          API_SCHEMA_VERSION,
-        )
-      }
       const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
         request,
         env,
       )
-      const headers = new Headers(response.headers)
-      for (const [key, value] of Object.entries(rl.headers)) headers.set(key, value)
       return done(
         "site_gene",
-        new Response(response.body, { status: response.status, headers }),
+        new Response(response.body, { status: response.status, headers: response.headers }),
         API_SCHEMA_VERSION,
       )
     }
@@ -30281,32 +30047,17 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
     if (path === "/api/iconoplasm/artist-blacklist-submissions" && request.method === "POST") {
       const adminSubmitter = await isIconoplasmAdmin(request, env)
-      const rl = adminSubmitter
-        ? { retryAfterSeconds: null, headers: {} }
-        : rateLimit(request, "artist_blacklist_submission", 5)
-      if (rl.retryAfterSeconds !== null) {
-        return done(
-          "artist_blacklist_submission_429",
-          json({ error: "Too many submissions. Try again in a minute." }, 429, {
-            "Cache-Control": "no-store",
-            ...rl.headers,
-          }),
-        )
-      }
       if (!env.ICONOPLASM_DB)
         return done(
           "artist_blacklist_submission_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500, { ...rl.headers }),
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
         )
 
       let p
       try {
         p = await request.json()
       } catch {
-        return done(
-          "artist_blacklist_submission_400",
-          json({ error: "Invalid JSON" }, 400, { ...rl.headers }),
-        )
+        return done("artist_blacklist_submission_400", json({ error: "Invalid JSON" }, 400))
       }
 
       const honeypot = sanitizeText(p?.website || "", 255) || ""
@@ -30315,7 +30066,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           "artist_blacklist_submission_bot",
           json({ ok: true, queued: false, ignored: true }, 200, {
             "Cache-Control": "no-store",
-            ...rl.headers,
           }),
         )
       }
@@ -30324,26 +30074,19 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         p?.artist_name_input || p?.artistNameInput || p?.artist_input || "",
       )
       if (!artistNameInput) {
-        return done(
-          "artist_blacklist_submission_400",
-          json({ error: "Missing artist tag" }, 400, { ...rl.headers }),
-        )
+        return done("artist_blacklist_submission_400", json({ error: "Missing artist tag" }, 400))
       }
       if (/\s/.test(artistNameInput)) {
         return done(
           "artist_blacklist_submission_400",
-          json({ error: "Artist tags cannot contain spaces. Example: @artist_(name)" }, 400, {
-            ...rl.headers,
-          }),
+          json({ error: "Artist tags cannot contain spaces. Example: @artist_(name)" }, 400),
         )
       }
       const artistTagInput = normalizeArtistTag(artistNameInput)
       if (!artistTagInput || artistTagInput !== artistNameInput) {
         return done(
           "artist_blacklist_submission_400",
-          json({ error: "Use the exact artist tag. Example: @artist_(name)" }, 400, {
-            ...rl.headers,
-          }),
+          json({ error: "Use the exact artist tag. Example: @artist_(name)" }, 400),
         )
       }
 
@@ -30355,7 +30098,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (turnstile.configured && !turnstile.passed) {
         return done(
           "artist_blacklist_submission_400",
-          json({ error: "Please complete the bot check and try again." }, 400, { ...rl.headers }),
+          json({ error: "Please complete the bot check and try again." }, 400),
         )
       }
 
@@ -30372,7 +30115,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!result) {
         return done(
           "artist_blacklist_submission_400",
-          json({ error: "Could not queue blacklist request." }, 400, { ...rl.headers }),
+          json({ error: "Could not queue blacklist request." }, 400),
         )
       }
       if (result.requesterLocked) {
@@ -30388,7 +30131,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               request: result.request,
             },
             200,
-            { "Cache-Control": "no-store", ...rl.headers },
+            { "Cache-Control": "no-store" },
           ),
         )
       }
@@ -30405,7 +30148,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             request: result.request,
           },
           200,
-          { "Cache-Control": "no-store", ...rl.headers },
+          { "Cache-Control": "no-store" },
         ),
       )
     }
