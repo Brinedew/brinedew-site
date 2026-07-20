@@ -561,6 +561,24 @@ test("gene shell preserves landmarks when adopting server-rendered content", asy
   assert.equal(serverContent.getAttribute("data-icono-server-rendered-gene"), "true")
 })
 
+test("clans progress header exposes the page title as a real heading", async () => {
+  const vm = await import("node:vm")
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("function clanHeadMarkup(data)")
+  const end = app.indexOf("var iconoClansObserver", start)
+  assert.notEqual(start, -1, "missing clans progress header")
+  assert.notEqual(end, -1, "missing clans progress header boundary")
+  const sandbox = {}
+  vm.runInNewContext(app.slice(start, end), sandbox)
+
+  const { document } = parseHTML(
+    `<div>${sandbox.clanHeadMarkup({ total_clans: 566, discovered_clan_count: 107, clans: [] })}</div>`,
+  )
+  assert.equal(document.querySelectorAll("h1").length, 1)
+  assert.equal(document.querySelector("h1")?.textContent, "Clans")
+  assert.match(document.documentElement.textContent, /107[\s\S]*566/)
+})
+
 test("desktop home collection masonry paints discovery rows before rich detail hydration", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function loadNextGalleryPage()")

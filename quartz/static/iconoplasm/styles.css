@@ -4413,6 +4413,9 @@ html[data-theme="dark"] .icono-card--brick {
   text-transform: uppercase;
   color: color-mix(in srgb, var(--secondary, var(--darkgray)) 70%, transparent);
 }
+.icono-clans-kicker {
+  margin: 0;
+}
 .icono-clans-sec {
   margin: 1.5rem 2px 0.7rem;
 }
