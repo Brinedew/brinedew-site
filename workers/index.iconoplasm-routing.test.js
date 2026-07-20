@@ -31,7 +31,14 @@ test("public edge proxies apex iconoplasm admin me to the only allowed stateful 
 
 test("public edge routes public iconoplasm traffic through the only allowed stateful worker", async () => {
   const calls = []
+  const rateLimitKeys = []
   const env = {
+    ICONOPLASM_RATE_LIMIT_60: {
+      async limit({ key }) {
+        rateLimitKeys.push(key)
+        return { success: true }
+      },
+    },
     THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: {
       async fetch(request) {
         calls.push({
@@ -53,6 +60,8 @@ test("public edge routes public iconoplasm traffic through the only allowed stat
   assert.equal(response.status, 200)
   assert.equal(payload?.ok, true)
   assert.equal(calls.length, 1)
+  assert.equal(rateLimitKeys.length, 1)
+  assert.match(rateLimitKeys[0], /^[a-f0-9]{64}$/)
   assert.equal(calls[0]?.url, "https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes")
   assert.equal(calls[0]?.method, "GET")
 })
