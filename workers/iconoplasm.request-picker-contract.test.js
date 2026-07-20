@@ -49,8 +49,8 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   assert.match(app, /data-icono-emulsion-favorite=/)
   assert.match(
     app,
-    /function init\(\)[\s\S]*wireEmulsionFavoriteButtons\(document\)/,
-    "favorite controls should use one persistent delegated listener across auth and route rerenders",
+    /function wireEmulsionFavoriteButtons\(container\)[\s\S]*wireEmulsionFavoriteButtons\(document\)[\s\S]*emulsionFavorites\.subscribe/,
+    "favorite controls should install one persistent delegated listener before route initialization",
   )
   assert.equal(
     Array.from(app.matchAll(/wireEmulsionFavoriteButtons\(container\)/g)).length,
