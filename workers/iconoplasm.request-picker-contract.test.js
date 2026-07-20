@@ -42,6 +42,11 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     "modal picker rows must stay inside the dialog panel so Shoelace's overlay cannot intercept them",
   )
   assert.match(
+    css,
+    /\.icono-request-dialog \.icono-request-inline-submit\s*\{[\s\S]*top:\s*0\.4rem;[\s\S]*min-height:\s*calc\(3\.15rem - 0\.8rem\);/,
+    "the queue submit button must stay in the search row instead of covering inline picker stars",
+  )
+  assert.match(
     app,
     /class="icono-request-option-row'[\s\S]{0,120}'" role="listitem"/,
     "every selectable emulsion should be wrapped in a non-interactive list row",
