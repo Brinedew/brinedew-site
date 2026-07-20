@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { readFileSync } from "node:fs"
+import { matchIconoplasmRouteContract } from "./iconoplasm-route-contract.js"
 
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
@@ -898,12 +899,13 @@ test("admin card VM warm endpoint keeps catalog warming behind admin auth", asyn
   assert.equal(response.status, 403)
 })
 
-test("mobile manifest route is wired before the generic /api/iconoplasm proxy", () => {
-  const start = source.indexOf('if (path === "/api/iconoplasm/mobile-card-manifest")')
-  const generic = source.indexOf('if (path.startsWith("/api/iconoplasm/"))')
-  assert.notEqual(start, -1, "missing mobile manifest route")
-  assert.notEqual(generic, -1, "missing generic iconoplasm route")
-  assert.ok(start < generic, "mobile manifest must not fall through to the legacy generic handler")
+test("mobile manifest route is owned by the declared gateway contract", () => {
+  const post = matchIconoplasmRouteContract("/api/iconoplasm/mobile-card-manifest", "POST")
+  const get = matchIconoplasmRouteContract("/api/iconoplasm/mobile-card-manifest", "GET")
+  assert.equal(post?.route.gatewayHandler, "mobile_card_manifest")
+  assert.equal(post?.route.budgetFamily, "mobile_card_manifest")
+  assert.equal(post?.methodAllowed, true)
+  assert.equal(get?.methodAllowed, false)
 })
 
 test("mobile manifest runtime block does not call per-gene KV or D1 composition", () => {
