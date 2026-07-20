@@ -198,7 +198,8 @@ test("production deploys invalidate cached Iconoplasm HTML shells by commit", ()
   )
   assert.match(
     deployWorkflow,
-    /wrangler deploy --config wrangler\.the-only-allowed-internal-stateful-worker-do-not-duplicate\.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:\$CACHE_BUST"/,
+    /Deploy the only allowed internal stateful worker \(production\)[\s\S]*ICONOPLASM_HTML_SHELL_CACHE_VERSION:\$CACHE_BUST-backend[\s\S]*Deploy production static site to Cloudflare Pages[\s\S]*Activate current Iconoplasm HTML shell cache version[\s\S]*ICONOPLASM_HTML_SHELL_CACHE_VERSION:\$CACHE_BUST"/,
+    "production should expose the final HTML cache key only after matching static assets are live",
   )
 })
 
