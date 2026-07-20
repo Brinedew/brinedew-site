@@ -143,7 +143,7 @@ jobs:
         run: pnpm exec wrangler d1 migrations apply iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 
       - name: Deploy the only allowed internal stateful worker (production)
-        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST"
+        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend"
 
       - name: Ensure Iconoplasm finalization Queue consumer is bound
         run: |
@@ -177,6 +177,13 @@ jobs:
       - name: Deploy production static site to Cloudflare Pages
         working-directory: .wrangler-pages
         run: pnpm exec wrangler pages deploy ../public --project-name brinedew-bio --branch main
+
+      # The stateful Worker must ship before browser code, but activating the final
+      # HTML-shell cache key before Pages is live lets production traffic populate
+      # that key with the previous deployment's asset URLs. Switch to the final key
+      # only after Pages confirms the new static deployment.
+      - name: Activate current Iconoplasm HTML shell cache version
+        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST"
 
       - name: Verify Iconoplasm publication aliases (production)
         run: pnpm run verify:iconoplasm-publication-aliases
