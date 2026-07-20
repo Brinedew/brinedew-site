@@ -1,9 +1,28 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 import { Script } from "node:vm"
 import { parseHTML } from "linkedom"
 
-import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
+import { ICONOPLASM_ADMIN_HTML as ICONOPLASM_ADMIN_SHELL } from "./iconoplasm-admin-html.js"
+
+const ICONOPLASM_ADMIN_CSS = readFileSync(
+  new URL("../quartz/static/iconoplasm/admin.css", import.meta.url),
+  "utf8",
+)
+const ICONOPLASM_ADMIN_RUNTIME = readFileSync(
+  new URL("../quartz/static/iconoplasm/admin.js", import.meta.url),
+  "utf8",
+)
+const ICONOPLASM_ADMIN_HTML = `${ICONOPLASM_ADMIN_SHELL}\n<style>${ICONOPLASM_ADMIN_CSS}</style>\n<script>${ICONOPLASM_ADMIN_RUNTIME}</script>`
+
+const STATEFUL_RUNTIME_SOURCE = readFileSync(
+  new URL(
+    "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
+    import.meta.url,
+  ),
+  "utf8",
+)
 
 test("admin styles sidebar stays focused on the blocklist request pipeline", () => {
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /pendingLocalRemovals/)
@@ -59,7 +78,7 @@ test("iconoplasm admin exposes the observability snapshot as a first-class tab",
   assert.match(ICONOPLASM_ADMIN_HTML, /Cloudflare drilldown/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /var OBSERVABILITY_SNAPSHOT = /)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /\/cost\/usage/)
-  assert.match(ICONOPLASM_ADMIN_HTML, /apiJson\('\/cost\/snapshot\?ts='/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /apiJson\(["']\/cost\/snapshot\?ts=["']/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Snapshot freshness/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Publication path/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Retired metrics/)
@@ -67,7 +86,7 @@ test("iconoplasm admin exposes the observability snapshot as a first-class tab",
   assert.match(ICONOPLASM_ADMIN_HTML, /id="cost-snapshot-trust-details"/)
   assert.match(
     ICONOPLASM_ADMIN_HTML,
-    /costSnapshotTrustDetails: document\.getElementById\('cost-snapshot-trust-details'\)/,
+    /costSnapshotTrustDetails: document\.getElementById\(["']cost-snapshot-trust-details["']\)/,
   )
   assert.match(ICONOPLASM_ADMIN_HTML, /renderObservabilityRunbook\(snapshot\)/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Snapshot unavailable · publication endpoint failed/)
@@ -88,7 +107,7 @@ test("iconoplasm admin exposes individual generation requests for debugging", ()
   assert.match(ICONOPLASM_ADMIN_HTML, /id="requests-list"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /id="requests-detail"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /refreshGenerationRequests/)
-  assert.match(ICONOPLASM_ADMIN_HTML, /apiJson\('\/requests\/history\?limit='/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /apiJson\(["']\/requests\/history\?limit=["']/)
   assert.match(ICONOPLASM_ADMIN_HTML, /requestResultMarkup/)
   assert.match(ICONOPLASM_ADMIN_HTML, /requestResultDetailMarkup/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Result image/)
@@ -96,6 +115,30 @@ test("iconoplasm admin exposes individual generation requests for debugging", ()
   assert.match(ICONOPLASM_ADMIN_HTML, /requestKindLabel/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Copy request JSON/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Raw request row/)
+})
+
+test("request history renders a bounded, keyboard-operable page", () => {
+  assert.match(ICONOPLASM_ADMIN_HTML, /requestPageSize: defaultRequestPageSize\(\)/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="requests-page-size"/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="requests-page-label">Page 1 of 1/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /rows\.slice\(pageStart, pageStart \+ pageSize\)/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /visibleRows\.map\(requestRowMarkup\)/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /data-request-id="[\s\S]*tabindex="0" aria-selected=/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /ev\.key !== ["']Enter["'] && ev\.key !== ["'] ["']/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Math\.min\(\s*500,[\s\S]*requestsLimit/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /loading="lazy" decoding="async"/)
+})
+
+test("iconoplasm admin never inherits the Molstar unsafe-eval exemption", () => {
+  assert.match(
+    STATEFUL_RUNTIME_SOURCE,
+    /host !== ICONOPLASM_HOST && \(path === "\/admin" \|\| path === "\/admin-v2"\)/,
+  )
+  assert.match(STATEFUL_RUNTIME_SOURCE, /allowInlineScripts = !isIconoplasmAdminSurface\(url\)/)
+  assert.match(
+    STATEFUL_RUNTIME_SOURCE,
+    /if \(allowInlineScripts\) scriptTokens\.push\("'unsafe-inline'"\)/,
+  )
 })
 
 test("iconoplasm admin exposes image edit checkmark prompt editing as its own tab", () => {
@@ -109,8 +152,8 @@ test("iconoplasm admin exposes image edit checkmark prompt editing as its own ta
   assert.match(ICONOPLASM_ADMIN_HTML, /id="prompt-template-editor"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /data-prompt-save/)
   assert.match(ICONOPLASM_ADMIN_HTML, /refreshImageEditPrompts/)
-  assert.match(ICONOPLASM_ADMIN_HTML, /apiJson\('\/image-edit-prompts'/)
-  assert.match(ICONOPLASM_ADMIN_HTML, /apiJson\('\/image-edit-prompts',\s*\{/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /apiJson\(["']\/image-edit-prompts["']/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /apiJson\(["']\/image-edit-prompts["'],\s*\{/)
 })
 
 test("iconoplasm admin trend chart explains the baked budget pace guide", () => {
@@ -154,10 +197,20 @@ test("iconoplasm admin keeps the observability chesterton fence comment", () => 
   assert.match(ICONOPLASM_ADMIN_HTML, /just a runbook/)
 })
 
-test("iconoplasm admin inline script parses", () => {
-  const match = ICONOPLASM_ADMIN_HTML.match(/<script>([\s\S]*?)<\/script>/)
-  assert.ok(match, "expected inline admin script in emitted HTML")
-  assert.doesNotThrow(() => new Script(match[1], { filename: "iconoplasm-admin-inline.js" }))
+test("iconoplasm admin shell loads external assets and its runtime parses", () => {
+  assert.match(
+    ICONOPLASM_ADMIN_SHELL,
+    /<link rel="stylesheet" href="\/static\/iconoplasm\/admin\.css" \/>/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_SHELL,
+    /<script src="\/static\/iconoplasm\/admin\.js" defer><\/script>/,
+  )
+  assert.doesNotMatch(ICONOPLASM_ADMIN_SHELL, /<style>/)
+  assert.doesNotMatch(ICONOPLASM_ADMIN_SHELL, /<script>/)
+  assert.doesNotThrow(
+    () => new Script(ICONOPLASM_ADMIN_RUNTIME, { filename: "iconoplasm-admin.js" }),
+  )
 })
 
 test("admin tabs expose a responsive keyboard tab contract", () => {
@@ -174,7 +227,7 @@ test("admin tabs expose a responsive keyboard tab contract", () => {
   assert.match(ICONOPLASM_ADMIN_HTML, /\.tab-btn \{[\s\S]*min-height: 44px/)
   assert.match(
     ICONOPLASM_ADMIN_HTML,
-    /\['ArrowLeft', 'ArrowRight', 'Home', 'End'\]\.includes\(ev\.key\)/,
+    /\[["']ArrowLeft["'], ["']ArrowRight["'], ["']Home["'], ["']End["']\]\.includes\(ev\.key\)/,
   )
   assert.match(ICONOPLASM_ADMIN_HTML, /nextTab\.focus\(\)/)
 })
@@ -183,7 +236,7 @@ test("admin tab lifecycle unmounts inactive render roots and aborts their reads"
   const scriptMatch = ICONOPLASM_ADMIN_HTML.match(/<script>([\s\S]*?)<\/script>/)
   assert.ok(scriptMatch)
   const script = scriptMatch[1]
-  const start = script.indexOf("var mountedAdminTab = ''")
+  const start = script.indexOf('var mountedAdminTab = ""')
   const end = script.indexOf("function esc(v)", start)
   assert.notEqual(start, -1)
   assert.notEqual(end, -1)
@@ -274,7 +327,7 @@ test("visions load a bounded summary page and reserve detail hydration for selec
   assert.match(ICONOPLASM_ADMIN_HTML, /<option value="8">8<\/option>/)
   assert.match(ICONOPLASM_ADMIN_HTML, /<option value="12" selected>12<\/option>/)
   assert.match(ICONOPLASM_ADMIN_HTML, /vision-previews\?vision_ids=[\s\S]*&limit=3/)
-  assert.match(ICONOPLASM_ADMIN_HTML, /esc\(label \+ ' preview'\) \+ '" loading="lazy"/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /esc\(label \+ ["'] preview["']\)[\s\S]{0,80}loading="lazy"/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /warmVisionNeighborhood|warmVisionDetail/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /preloadVisionAssets/)
   assert.match(

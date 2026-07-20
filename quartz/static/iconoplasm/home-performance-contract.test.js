@@ -59,7 +59,10 @@ test("Cloudflare Web Analytics automatic injection is consent-gated by worker HT
   assert.match(head, /brinedew_analytics_consent/)
   assert.match(head, /__brinedewAnalyticsConsentRequired !== true/)
   assert.match(head, /Allow cookieless Cloudflare Web Analytics/)
-  assert.match(internalWorker, /script-src[^"\n]*https:\/\/static\.cloudflareinsights\.com/)
+  assert.match(
+    internalWorker,
+    /scriptTokens\.push\([\s\S]{0,400}"https:\/\/static\.cloudflareinsights\.com"/,
+  )
   assert.match(internalWorker, /connect-src[^"\n]*https:\/\/cloudflareinsights\.com/)
   assert.match(internalWorker, /host === "iconoplasm\.brinedew\.bio"/)
   assert.match(internalWorker, /requestHasAnalyticsConsent\(request\)/)
