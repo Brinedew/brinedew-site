@@ -516,10 +516,51 @@ test("admin cost snapshot serves the baked observability payload without touchin
   assert.equal(payload?.ok, true)
   assert.equal(payload?.snapshot?.source?.mode, "out_of_band_snapshot")
   assert.equal(payload?.snapshot?.source?.analyticsTruth, "Cloudflare GraphQL analytics")
+  assert.ok(["fresh", "stale", "unavailable"].includes(payload?.snapshot?.freshness?.state))
+  assert.equal(payload?.snapshot?.publication?.state, "deploy_fallback")
+  assert.equal(payload?.snapshot?.retiredMetrics?.[0]?.state, "retired")
   assert.deepEqual(
     budgetNamespace.calls.map((call) => call.pathname),
     [],
   )
+})
+
+test("admin cost snapshot prefers the atomically published KV artifact", async () => {
+  const budgetNamespace = new FakeDailyBudgetNamespace()
+  const kvCalls = []
+  const publishedAt = new Date().toISOString()
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/cost/snapshot",
+        { headers: { "x-iconoplasm-admin-token": "founder-secret" } },
+      ),
+      {
+        ICONOPLASM_ADMIN_TOKEN: "founder-secret",
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
+        KV: {
+          async get(key) {
+            kvCalls.push(key)
+            return JSON.stringify({
+              generatedAt: publishedAt,
+              source: {
+                mode: "out_of_band_snapshot",
+                analyticsTruth: "Cloudflare GraphQL analytics",
+              },
+            })
+          },
+        },
+      },
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.snapshot?.generatedAt, publishedAt)
+  assert.equal(payload?.snapshot?.publication?.state, "published")
+  assert.equal(payload?.snapshot?.publication?.source, "kv")
+  assert.deepEqual(kvCalls, ["iconoplasm:observability-snapshot:v1"])
+  assert.deepEqual(budgetNamespace.calls, [])
 })
 
 test("admin mutation limiter policy reports the live limiter basis so Website Ops can fail closed", async () => {

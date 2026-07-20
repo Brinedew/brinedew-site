@@ -4,6 +4,8 @@ import { parseCookies } from "./auth.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
+import { iconoplasmCacheControl } from "./iconoplasm-cache-policy.js"
+import { iconoplasmObservabilitySnapshotForAdmin } from "./iconoplasm-observability-freshness.js"
 import { ICONOPLASM_CLAN_CATALOG } from "./generated/iconoplasm-clan-catalog.js"
 import { renderIconoplasmArtistStylesHtml } from "./iconoplasm-artist-styles-html.js"
 import {
@@ -811,6 +813,7 @@ const KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX = "iconoplasm:published-portrait-
 const KV_GALLERY_PUBLISHED_ROWS_PREFIX = "iconoplasm:gallery-published-rows:"
 const KV_GALLERY_UNIQUENESS_ROWS_PREFIX = "iconoplasm:gallery-uniqueness-rows:"
 const KV_PUBLIC_STATS = "iconoplasm:public-stats:v1"
+const KV_OBSERVABILITY_SNAPSHOT = "iconoplasm:observability-snapshot:v1"
 const KV_SHARED_GENE_DISCOVERY_SYMBOLS = "iconoplasm:shared-gene-discovery-symbols:v1"
 const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = `iconoplasm:hydrated-catalog-artifact:${CATALOG_ARTIFACT_VERSION_TOKEN}:`
 const KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX = "iconoplasm:published-compatibility-artifact:"
@@ -1212,6 +1215,37 @@ function remainingBudget(limit, used) {
   const parsedLimit = Number(limit)
   if (!Number.isFinite(parsedLimit) || parsedLimit <= 0) return null
   return Math.max(0, parsedLimit - Math.max(0, Number(used || 0) || 0))
+}
+
+async function readPublishedIconoplasmObservabilitySnapshot(env) {
+  if (env?.KV?.get) {
+    try {
+      const raw = await env.KV.get(KV_OBSERVABILITY_SNAPSHOT)
+      const parsed = typeof raw === "string" ? JSON.parse(raw) : raw
+      if (parsed && typeof parsed === "object" && parsed.generatedAt) {
+        return {
+          snapshot: parsed,
+          publication: { state: "published", source: "kv", key: KV_OBSERVABILITY_SNAPSHOT },
+        }
+      }
+      if (raw !== null && raw !== undefined) {
+        console.error("Iconoplasm observability KV snapshot is malformed; using deploy fallback")
+      }
+    } catch (error) {
+      console.error(
+        "Iconoplasm observability KV snapshot read failed; using deploy fallback",
+        error,
+      )
+    }
+  }
+  return {
+    snapshot: ICONOPLASM_OBSERVABILITY_SNAPSHOT,
+    publication: {
+      state: "deploy_fallback",
+      source: "worker_bundle",
+      key: KV_OBSERVABILITY_SNAPSHOT,
+    },
+  }
 }
 
 function iconoplasmCardCatalogBudgetSnapshotFromObservabilitySnapshot(snapshot) {
@@ -25586,17 +25620,18 @@ async function handleSiteGeneDetail(request, env, path) {
     url.searchParams.get("fields"),
   )
   const etag = await etagFor(payload)
+  const cacheControl = iconoplasmCacheControl("publicMutable")
   if (etagMatches(request.headers.get("If-None-Match"), etag)) {
     return new Response(null, {
       status: 304,
       headers: {
         ...corsHeaders(),
         ETag: etag,
-        "Cache-Control": "private, max-age=120",
+        "Cache-Control": cacheControl,
       },
     })
   }
-  return json(payload, 200, { ETag: etag, "Cache-Control": "private, max-age=120" })
+  return json(payload, 200, { ETag: etag, "Cache-Control": cacheControl })
 }
 
 async function listUserDiscoveredGeneSymbols(env, { userId, limit = 10000 } = {}) {
@@ -25635,8 +25670,8 @@ async function handlePublicGeneSearch(request, env) {
     return json({ genes: [], query: "", scope_applied: requestedScope }, 200, {
       "Cache-Control":
         requestedScope === "catalog" || requestedScope === "shared"
-          ? "public, max-age=30"
-          : "no-store",
+          ? iconoplasmCacheControl("publicSearch")
+          : iconoplasmCacheControl("sensitive"),
     })
   await warmCatalogCache(env)
   const limit = Math.max(
@@ -25683,7 +25718,9 @@ async function handlePublicGeneSearch(request, env) {
 
   const genes = matches.slice(0, limit)
   const cacheControl =
-    requestedScope === "catalog" || requestedScope === "shared" ? "public, max-age=30" : "no-store"
+    requestedScope === "catalog" || requestedScope === "shared"
+      ? iconoplasmCacheControl("publicSearch")
+      : iconoplasmCacheControl("sensitive")
   return json({ genes, query: qUpper, scope_applied: appliedScope }, 200, {
     "Cache-Control": cacheControl,
   })
@@ -25709,8 +25746,8 @@ async function handlePublicGallery(request, env, ctx) {
   )
   const cacheControl =
     order === "votes"
-      ? "public, max-age=5, stale-while-revalidate=25"
-      : "public, max-age=60, s-maxage=60"
+      ? iconoplasmCacheControl("publicGalleryVotes")
+      : iconoplasmCacheControl("publicGallery")
   const response = json(payload, 200, { "Cache-Control": cacheControl })
   if (cache && cacheKey) ctx.waitUntil(cache.put(cacheKey, response.clone()))
   return response
@@ -31292,12 +31329,16 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     if (path === "/api/iconoplasm/admin/cost/snapshot" && request.method === "GET") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_cost_snapshot_403", json({ error: "Unauthorized" }, 403))
+      const publishedSnapshot = await readPublishedIconoplasmObservabilitySnapshot(env)
       return done(
         "admin_cost_snapshot",
         json(
           {
             ok: true,
-            snapshot: ICONOPLASM_OBSERVABILITY_SNAPSHOT,
+            snapshot: {
+              ...iconoplasmObservabilitySnapshotForAdmin(publishedSnapshot.snapshot),
+              publication: publishedSnapshot.publication,
+            },
           },
           200,
           { "Cache-Control": "no-store" },
