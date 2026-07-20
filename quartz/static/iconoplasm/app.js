@@ -9263,7 +9263,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var discoveredCount = Number(data && data.discovered_clan_count) || revealed.length
     var pct = total > 0 ? Math.round((discoveredCount / total) * 100) : 0
     return (
-      '<div class="icono-clans-kicker">Clans</div>' +
+      '<h1 class="icono-clans-kicker">Clans</h1>' +
       '<div class="icono-clans-count">' +
       discoveredCount +
       "</div>" +
