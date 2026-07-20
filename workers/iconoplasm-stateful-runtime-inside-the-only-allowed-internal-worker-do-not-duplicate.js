@@ -855,6 +855,11 @@ const CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS = [
   "purge_legacy",
 ]
 const CARD_CATALOG_ARTIFACT_SCHEMA = "iconoplasm.cardCatalog.v1"
+// Changes whenever source records are mapped into public card fields differently.
+// D1 publication events only detect data changes; this revision makes a deployed
+// mapping change invalidate an otherwise-fresh artifact and forces a bounded
+// rebuild from D1 instead of silently reusing cards produced by older code.
+const CARD_CATALOG_BUILD_REVISION = 2
 const CARD_CATALOG_ARTIFACT_SHARD_SIZE = 750
 const CARD_CATALOG_ARTIFACT_CONTENT_VERSION_PREFIX = "ccv1"
 // Content-addressed shard storage (B-530). Shards are keyed by the sha256 of their
@@ -22250,7 +22255,15 @@ async function readCardCatalogRebuildCursor(env) {
     const raw = await env.KV.get(KV_CARD_CATALOG_REBUILD_CURSOR)
     if (!raw) return null
     const parsed = JSON.parse(raw)
-    return parsed && typeof parsed === "object" && parsed.active ? parsed : null
+    if (!parsed || typeof parsed !== "object" || !parsed.active) return null
+    if (Number(parsed.build_revision) !== CARD_CATALOG_BUILD_REVISION) {
+      // A deploy changed card mapping semantics while a staged rebuild was in
+      // progress. Its accumulated shards are now mixed-version and cannot be
+      // published safely; restart the bounded rebuild from the first symbol.
+      await clearCardCatalogRebuildCursor(env)
+      return null
+    }
+    return parsed
   } catch {
     return null
   }
@@ -22265,6 +22278,7 @@ async function writeCardCatalogRebuildCursor(
     KV_CARD_CATALOG_REBUILD_CURSOR,
     JSON.stringify({
       schema: "iconoplasm.cardCatalogRebuildCursor.v1",
+      build_revision: CARD_CATALOG_BUILD_REVISION,
       active: true,
       cursor_symbol: String(cursorSymbol || ""),
       started_event_at: startedEventAt ? String(startedEventAt) : null,
@@ -22643,6 +22657,17 @@ async function publishCardCatalogArtifactSmart(
     // No usable baseline manifest (genuinely cold / first run): build from scratch
     // via the one bounded, content-addressed path. The staging rebuild reads the
     // catalog symbols straight from D1, so it needs no prior artifact.
+    return runCardCatalogStagingRebuildChunk(env, {
+      requestUrl,
+      reserveGalleryVersionWrite,
+      previousVersion,
+      cursor: null,
+    })
+  }
+  if (Number(manifest.build_revision) !== CARD_CATALOG_BUILD_REVISION) {
+    // The database can be unchanged while a deployment changes how canonical
+    // records become public cards. Publication-event watermarks cannot observe
+    // that code change, so an older build revision must be rebuilt in full.
     return runCardCatalogStagingRebuildChunk(env, {
       requestUrl,
       reserveGalleryVersionWrite,
@@ -24365,7 +24390,9 @@ async function cardCatalogContentAddressedVersion(shardRefs) {
   // not 19k cards). Two catalogs with identical shard content get identical
   // versions, so a no-op republish short-circuits without rewriting anything.
   const ordered = shardRefs.map((ref) => String(ref?.content_hash || ""))
-  const hash = await sha256Hex(JSON.stringify(ordered))
+  const hash = await sha256Hex(
+    JSON.stringify({ build_revision: CARD_CATALOG_BUILD_REVISION, shard_hashes: ordered }),
+  )
   return `${CARD_CATALOG_ARTIFACT_CONTENT_VERSION_PREFIX}-${hash.slice(0, 32)}`
 }
 
@@ -24392,6 +24419,7 @@ function cardCatalogContentAddressedManifest({
     }))
   return {
     schema: CARD_CATALOG_ARTIFACT_SCHEMA,
+    build_revision: CARD_CATALOG_BUILD_REVISION,
     artifact_version: artifactVersion,
     snapshot_version: artifactVersion,
     artifact_validated_at: new Date().toISOString(),
