@@ -1631,7 +1631,10 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.match(internalWorker, /contract: "GenePageBootstrapV1"/)
   assert.match(internalWorker, /data-icono-server-rendered-gene="true"/)
   assert.match(internalWorker, /renderLabLabelCardHtml\(cardPayload/)
-  assert.match(internalWorker, /function iconoplasmGeneHtmlCacheKey\(url, path, snapshotVersion\)/)
+  assert.match(
+    internalWorker,
+    /function iconoplasmGeneHtmlCacheKey\(url, path, snapshotVersion, env\)/,
+  )
   assert.match(internalWorker, /const snapshot = String\(snapshotVersion \|\| ""\)\.trim\(\)/)
   assert.match(
     internalWorker,
