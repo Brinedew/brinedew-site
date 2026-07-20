@@ -4787,9 +4787,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function renderRequestOptionPreviewStripMarkup(option) {
     var previews = Array.isArray(option && option.preview_assets) ? option.preview_assets : []
-    if (!previews.length) {
-      return '<span class="icono-request-option-strip icono-request-option-strip--empty"><span class="icono-request-option-empty">No examples yet</span></span>'
-    }
+    if (!previews.length) return ""
     var html = '<span class="icono-request-option-strip">'
     for (var i = 0; i < previews.length && i < 5; i++) {
       var asset = previews[i] || {}

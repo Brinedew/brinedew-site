@@ -709,7 +709,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 
 .icono-request-dialog::part(panel) {
   max-height: min(48rem, calc(100vh - 2rem));
-  overflow: visible;
+  overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
   border-radius: var(--icono-radius-lg);
   background: color-mix(in srgb, var(--light) 98%, white 2%);
@@ -727,7 +727,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 }
 
 .icono-request-dialog::part(body) {
-  overflow: auto;
+  overflow: hidden;
   padding: 1rem 1.2rem 1.2rem;
 }
 
@@ -1714,13 +1714,16 @@ img-comparison-slider.rendered [slot="second"] {
   display: none;
 }
 
-/* Keep modal pickers inside the dialog panel. An absolutely positioned list
-   can paint beyond Shoelace's panel but remains underneath its overlay, so the
-   visible rows dismiss the dialog instead of receiving clicks. Inline lists
-   grow the dialog body and then use its existing bounded scroll area. */
+/* Keep modal pickers inside the dialog panel so their rows remain interactive.
+   Containment prevents the list's full scroll height from turning Shoelace's
+   dialog body into a second, mostly empty scroll surface. */
 .icono-request-dialog .icono-request-results {
   position: static;
   margin-top: 0.35rem;
+  min-height: 0;
+  max-height: min(22rem, calc(100dvh - 15rem));
+  contain: layout paint;
+  overscroll-behavior: contain;
 }
 
 /* The picker wrapper grows when its inline results open. Keep Queue free sized
