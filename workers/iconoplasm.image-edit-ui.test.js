@@ -162,7 +162,7 @@ test("publish failures show what was preserved, the recovery action, and a refer
   const imagePublishStart = app.indexOf("function publishImageEditJob")
   const imagePublishEnd = app.indexOf("function wireImageEditDialog", imagePublishStart)
   const directPublishStart = app.indexOf("function publishDirectCandidateGeneration")
-  const directPublishEnd = app.indexOf("function closeResults", directPublishStart)
+  const directPublishEnd = app.indexOf("function openResults", directPublishStart)
   assert.notEqual(formatterStart, -1)
   assert.notEqual(formatterEnd, -1)
   assert.notEqual(imagePublishStart, -1)
