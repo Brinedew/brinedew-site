@@ -45,6 +45,11 @@
   --icono-action-primary-text: oklch(96% 0.015 75);
 }
 
+#iconoplasm-root :where(a[href], button, input, select, [tabindex]):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 72%, white 28%);
+  outline-offset: 3px;
+}
+
 body[data-slug^="apps/iconoplasm"] .page-header,
 body[data-slug^="apps/iconoplasm"] .page-footer,
 body[data-slug^="apps/iconoplasm"] hr {
@@ -489,6 +494,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   cursor: pointer;
   text-decoration: none;
   color: var(--dark);
+  min-height: 44px;
   transition: background 0.12s ease;
 }
 
@@ -2024,7 +2030,7 @@ img-comparison-slider.rendered [slot="second"] {
 .icono-gallery-actions .icono-gallery-order select {
   border-color: transparent;
   background: transparent;
-  min-height: 2.4rem;
+  min-height: 44px;
 }
 .icono-gallery-actions .icono-gallery-order select:hover {
   background: color-mix(in srgb, var(--light) 60%, white 40%);
@@ -2032,7 +2038,7 @@ img-comparison-slider.rendered [slot="second"] {
 .icono-gallery-actions .icono-install-toggle {
   border-color: transparent;
   background: transparent;
-  min-height: 2.4rem;
+  min-height: 44px;
 }
 .icono-gallery-actions .icono-install-toggle:hover,
 .icono-gallery-actions .icono-install-toggle:focus-visible {
@@ -3119,6 +3125,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   color: color-mix(in srgb, var(--secondary, var(--darkgray)) 86%, var(--dark) 14%);
   cursor: pointer;
   user-select: none;
+  min-height: 44px;
 }
 
 .icono-collection-shared-toggle input {
@@ -3803,8 +3810,49 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   border: 0;
 }
 
-.icono-load-sentinel {
-  height: 1px;
+.icono-collection-pager {
+  display: grid;
+  grid-template-columns: minmax(9rem, auto) minmax(12rem, 1fr) minmax(9rem, auto);
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.25rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--dark) 10%, var(--ui-border) 90%);
+}
+
+.icono-collection-pager[hidden] {
+  display: none !important;
+}
+
+.icono-collection-pager button {
+  min-height: 44px;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--dark) 18%, var(--ui-border) 82%);
+  border-radius: var(--icono-radius-pill);
+  background: color-mix(in srgb, var(--light) 82%, white 18%);
+  color: var(--dark);
+  font:
+    600 0.82rem/1.1 "IBM Plex Mono",
+    monospace;
+  cursor: pointer;
+}
+
+.icono-collection-pager button:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--ui-border) 58%);
+  background: color-mix(in srgb, var(--light) 70%, white 30%);
+}
+
+.icono-collection-pager button:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+
+.icono-page-status {
+  text-align: center;
+  color: var(--secondary, var(--darkgray));
+  font:
+    0.78rem/1.35 "IBM Plex Mono",
+    monospace;
 }
 
 .pswp {
@@ -3978,6 +4026,19 @@ html[data-theme="dark"] .icono-card--brick {
 }
 
 @media (max-width: 600px) {
+  .icono-collection-pager {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .icono-page-status {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .icono-collection-pager button {
+    width: 100%;
+  }
+
   .icono-grid-sizer,
   .icono-card--masonry {
     width: calc(50% - 6px);

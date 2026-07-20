@@ -1736,6 +1736,7 @@
     font: inherit;
     appearance: none;
     cursor: pointer;
+    min-height: var(--icono-label-mobile-target-size, 44px);
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-toggle:focus-visible {
@@ -1834,7 +1835,7 @@
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-summary {
-    min-height: 0;
+    min-height: var(--icono-label-mobile-target-size, 44px);
     display: grid;
     grid-template-rows: calc(var(--icono-label-mobile-typewriter-size) * 1.14 * 2);
     gap: 0;
@@ -1842,6 +1843,14 @@
     min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
+    color: inherit;
+    text-decoration: none;
+    align-content: center;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-open-link:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--icono-label-pen) 70%, white 30%);
+    outline-offset: 2px;
   }
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-name-label {
@@ -1882,7 +1891,7 @@
 
   .icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn {
     position: relative;
-    min-height: 1.24rem;
+    min-height: var(--icono-label-mobile-target-size, 44px);
     display: block;
     width: 100%;
     min-width: 0;
