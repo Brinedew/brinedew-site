@@ -39,14 +39,13 @@ test("observability snapshot does not recover from Wrangler OAuth", () => {
   assert.doesNotMatch(source, /wrangler auth token|wrangler whoami/i)
 })
 
-test("observability snapshot workflow is not an hourly production deploy loop", () => {
+test("observability snapshot workflow publishes hourly without becoming a production deploy loop", () => {
   const source = read(".github/workflows/refresh-iconoplasm-observability-snapshot.yml")
   assert.match(source, /workflow_dispatch:/)
-  assert.doesNotMatch(
-    source,
-    /cron:\s*["']17 \* \* \* \*["']/,
-    "observability refresh must not redeploy the production Worker every hour on the free-plan budget",
-  )
+  assert.match(source, /cron:\s*["']17 \* \* \* \*["']/)
+  assert.match(source, /iconoplasm:observability-snapshot:v1/)
+  assert.match(source, /check-iconoplasm-cloudflare-budget-headroom\.mjs/)
+  assert.doesNotMatch(source, /wrangler deploy/)
 })
 
 test("production Iconoplasm maintenance is not an hourly free-plan cron", () => {
