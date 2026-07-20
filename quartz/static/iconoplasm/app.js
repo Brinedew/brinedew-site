@@ -4928,14 +4928,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function renderRequestFormMarkup(symbol, options) {
     var config = options || {}
     var disabledAttr = config.disabled ? ' disabled aria-disabled="true"' : ""
-    // Sentence-case the visible submit label so it sits next to the vote
-    // buttons (Approve / Reject / Remove) without looking like a typo.
-    // FAQ still reads naturally either way ("Tap New candidate to make...").
-    var submitLabel = String(config.submitLabel || "Queue free").trim() || "Queue free"
     // Public visitors should see "style", not the internal "emulsion" workflow term.
     var placeholder = String(config.placeholder || "pick an emulsion").trim() || "pick an emulsion"
     return (
-      '<form data-icono-request-form class="icono-request-form">' +
+      '<form id="icono-request-form-' +
+      esc(symbol) +
+      '" data-icono-request-form class="icono-request-form">' +
       '<div class="icono-search icono-search--toolbar icono-request-search">' +
       '<div class="icono-search-wrapper icono-request-picker-search" data-icono-request-picker>' +
       '<input id="icono-request-query-' +
@@ -4950,13 +4948,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       disabledAttr +
       ">" +
       '<input type="hidden" data-icono-request-vision value="">' +
-      '<button type="submit" class="icono-request-inline-submit" data-icono-request-inline-submit data-default-label="' +
-      esc(submitLabel) +
-      '"' +
-      disabledAttr +
-      ">" +
-      esc(submitLabel) +
-      "</button>" +
       '<div class="icono-search-results icono-request-results" id="icono-request-results-' +
       esc(symbol) +
       '" role="list" aria-label="Emulsions" data-icono-request-results hidden></div>' +
@@ -5065,9 +5056,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-request-dialog-shell" data-icono-request-body>' +
       renderRequestShellMarkup(safeSymbol) +
       "</div>" +
+      '<div class="icono-request-footer" slot="footer">' +
+      '<div class="icono-request-free-actions" data-icono-request-free-footer>' +
+      '<button type="submit" form="icono-request-form-' +
+      esc(safeSymbol) +
+      '" class="icono-request-free-submit" data-icono-request-free-submit data-default-label="Queue random">Queue random</button>' +
+      "</div>" +
       '<div class="icono-request-direct-actions" data-icono-request-direct-footer hidden>' +
       '<button type="button" class="icono-request-direct-generate" data-icono-request-image-generate disabled>Generate candidate</button>' +
       '<button type="button" class="icono-request-direct-publish" data-icono-request-image-publish hidden disabled>Publish candidate</button>' +
+      "</div>" +
       "</div>" +
       "</sl-dialog>"
     )
@@ -5919,7 +5917,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var dialogOpenButton = panel.querySelector("[data-icono-request-dialog-open]")
     var requestTabs = Array.from(body.querySelectorAll("[data-icono-request-tab]"))
     var requestLanes = Array.from(body.querySelectorAll("[data-icono-request-lane]"))
+    var freeFooter = dialog ? dialog.querySelector("[data-icono-request-free-footer]") : null
     var directFooter = dialog ? dialog.querySelector("[data-icono-request-direct-footer]") : null
+    var freeQueueAvailable = !!currentUser
 
     function savedRequestTab() {
       try {
@@ -5941,11 +5941,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       for (var j = 0; j < requestLanes.length; j++) {
         requestLanes[j].hidden = requestLanes[j].getAttribute("data-icono-request-lane") !== nextTab
       }
-      if (directFooter) {
-        directFooter.hidden = nextTab !== "api"
-        if (nextTab === "api") directFooter.setAttribute("slot", "footer")
-        else directFooter.removeAttribute("slot")
-      }
+      if (freeFooter) freeFooter.hidden = nextTab !== "free" || !freeQueueAvailable
+      if (directFooter) directFooter.hidden = nextTab !== "api"
       if (config.persist) {
         try {
           localStorage.setItem(ICONO_REQUEST_TAB_STORAGE_KEY, nextTab)
@@ -6038,6 +6035,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       if (form._iconoRequestFormWired) return
       form._iconoRequestFormWired = true
       var directPanel = body.querySelector("[data-icono-request-direct-panel]")
+      var queueSubmitButton = dialog
+        ? dialog.querySelector("[data-icono-request-free-submit]")
+        : null
       var providerSelect = body.querySelector("[data-icono-request-provider]")
       var directGenerateButton = dialog
         ? dialog.querySelector("[data-icono-request-image-generate]")
@@ -6417,14 +6417,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           })
       }
 
-      function closeResults() {
-        pickerOpen = false
-        activeIndex = -1
-        results.hidden = true
-        queryInput.setAttribute("aria-expanded", "false")
-        queryInput.removeAttribute("aria-activedescendant")
-      }
-
       function openResults() {
         pickerOpen = true
         results.hidden = false
@@ -6471,7 +6463,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           })
           .catch(function (error) {
             delete requestOptionsLoadingByQuery[queryKey]
-            closeResults()
             setStatus(String((error && error.message) || "Could not load emulsion lanes."), "error")
             throw error
           })
@@ -6578,12 +6569,22 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
       async function renderResultsList() {
         var renderQuery = queryInput.value
+        openResults()
+        results.setAttribute("aria-busy", "true")
         if (currentUser && !emulsionFavorites.isLoaded()) {
           await emulsionFavorites.load().catch(function () {
             return null
           })
         }
-        var loadedOptions = await ensureRequestOptionsLoaded(renderQuery)
+        var loadedOptions
+        try {
+          loadedOptions = await ensureRequestOptionsLoaded(renderQuery)
+        } catch (error) {
+          results.removeAttribute("aria-busy")
+          results.innerHTML =
+            '<div class="icono-request-results-empty">Could not load emulsions. Try again.</div>'
+          return
+        }
         if (queryInput.value !== renderQuery) {
           void renderResultsList()
           return
@@ -6625,14 +6626,27 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             '<div class="icono-request-results-empty">No emulsions match that search. Try a workflow code, artist tag, or full vision ID.</div>'
         }
         results.innerHTML = html
+        results.removeAttribute("aria-busy")
         paintActiveOption()
-        if (!pickerOpen) openResults()
       }
 
       function setSelection(option) {
         hiddenInput.value = option && option.vision_id ? String(option.vision_id) : ""
-        queryInput.value = option ? requestOptionPrimaryLabel(option) : ""
-        closeResults()
+        var selectedVisionId = String(hiddenInput.value || "").trim()
+        var optionButtons = results.querySelectorAll("[data-icono-request-option]")
+        for (var i = 0; i < optionButtons.length; i++) {
+          var selected =
+            String(optionButtons[i].getAttribute("data-icono-request-option") || "").trim() ===
+            selectedVisionId
+          optionButtons[i].classList.toggle("is-selected", selected)
+          optionButtons[i].setAttribute("aria-selected", selected ? "true" : "false")
+        }
+        if (queueSubmitButton) {
+          var queueLabel = option ? "Queue " + requestOptionPrimaryLabel(option) : "Queue random"
+          queueSubmitButton.textContent = queueLabel
+          queueSubmitButton.setAttribute("data-default-label", queueLabel)
+        }
+        openResults()
       }
 
       function closeDirectUserEmulsionResults() {
@@ -6765,7 +6779,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           return
         }
         if (event.key === "Escape") {
-          closeResults()
+          if (queryInput.value) {
+            event.preventDefault()
+            queryInput.value = ""
+            hiddenInput.value = ""
+            activeIndex = -1
+            void renderResultsList()
+          }
         }
       })
       results.addEventListener("click", function (event) {
@@ -6872,14 +6892,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         document.removeEventListener("click", panel._iconoRequestOutsideClickHandler)
       }
       panel._iconoRequestOutsideClickHandler = function (event) {
-        if (!picker.contains(event.target)) closeResults()
         if (directEmulsionPicker && !directEmulsionPicker.contains(event.target)) {
           closeDirectUserEmulsionResults()
         }
       }
       document.addEventListener("click", panel._iconoRequestOutsideClickHandler)
       queryInput.value = ""
-      closeResults()
       if (directEmulsionQuery) directEmulsionQuery.value = ""
       closeDirectUserEmulsionResults()
       if (providerSelect) {
@@ -6905,6 +6923,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
       panel.addEventListener("icono-request-tab-activate", function (event) {
         if (event.detail && event.detail.tab === "api") initializeDirectTab()
+        if (event.detail && event.detail.tab === "free") void renderResultsList()
       })
       var selectedRequestTab = body.querySelector('[data-icono-request-tab][aria-selected="true"]')
       if (
@@ -6922,7 +6941,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           request_mode: requestedVisionId ? "specific" : "random",
           requested_vision_id: requestedVisionId || null,
         }
-        var button = form.querySelector('button[type="submit"]')
+        var button = event.submitter || queueSubmitButton
         if (button) {
           button.disabled = true
           button.textContent = "Queueing..."
@@ -6951,7 +6970,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           .finally(function () {
             if (button) {
               button.disabled = false
-              button.textContent = String(button.getAttribute("data-default-label") || "Queue free")
+              button.textContent = String(
+                button.getAttribute("data-default-label") || "Queue random",
+              )
             }
           })
       })
@@ -6962,6 +6983,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       // this back into a one-shot endpoint that also hydrates picker options.
       return fetchGeneRequestSummary(symbol).then(function (state) {
         if (!state || !state.authenticated) {
+          freeQueueAvailable = false
+          if (freeFooter) freeFooter.hidden = true
           body.innerHTML =
             '<div class="icono-home-auth-copy">' +
             '<div class="icono-home-auth-kicker">request access</div>' +
@@ -6984,6 +7007,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             '<div data-icono-request-note hidden style="font-size:0.92rem;"></div>' +
             "</div>"
           return state
+        }
+        freeQueueAvailable = true
+        var selectedTab = body.querySelector('[data-icono-request-tab][aria-selected="true"]')
+        if (freeFooter) {
+          freeFooter.hidden =
+            !selectedTab || selectedTab.getAttribute("data-icono-request-tab") !== "free"
         }
         wireAuthenticatedRequestForm(state)
         return state
