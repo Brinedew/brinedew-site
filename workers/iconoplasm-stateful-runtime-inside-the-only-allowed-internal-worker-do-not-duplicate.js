@@ -4,6 +4,7 @@ import { parseCookies } from "./auth.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-routes.js"
+import { createIconoplasmAdminGalleryHandlers } from "./iconoplasm-admin-gallery-routes.js"
 import { createIconoplasmAdminPublicationHandlers } from "./iconoplasm-admin-publication-routes.js"
 import { createIconoplasmAdminReadModelHandlers } from "./iconoplasm-admin-read-model-routes.js"
 import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
@@ -26163,6 +26164,19 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     sanitizeText,
     stateSymbolMax: 25000,
   }),
+  ...createIconoplasmAdminGalleryHandlers({
+    fetchGallery: fetchAdminGallery,
+    fetchPublishStatus: cardCatalogPublishStatus,
+    invalidateGalleryCache,
+    isAdmin: isIconoplasmAdmin,
+    json,
+    normalizeFilter: normalizeAdminGalleryFilter,
+    normalizeLimit: normalizeAdminGalleryLimit,
+    normalizeMode: normalizeAdminGalleryMode,
+    normalizePage: normalizeAdminGalleryPage,
+    normalizeSort: normalizeAdminGallerySort,
+    sanitizeText,
+  }),
   ...createIconoplasmAdminPublicationHandlers({
     actor,
     coerceBoolean,
@@ -30392,70 +30406,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    if (
-      path === "/api/iconoplasm/admin/gallery/publish-status" &&
-      (request.method === "GET" || request.method === "HEAD")
-    ) {
-      // Cheap "is the gallery stale?" probe. Reads the publish watermark (KV) and
-      // runs ONE indexed icono_publish_events query for changes-since-publish — no
-      // whole-catalog scan. The success metric for the incremental-publish epic:
-      // changes_since_publish trends to ~0 within a cron cycle once B-531 lands.
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_gallery_publish_status_403", json({ error: "Unauthorized" }, 403))
-      const status = await cardCatalogPublishStatus(env)
-      return done(
-        "admin_gallery_publish_status",
-        json(status, 200, { "Cache-Control": "no-store" }),
-      )
-    }
-
-    if (path === "/api/iconoplasm/admin/gallery/refresh" && request.method === "POST") {
-      // Operator-triggered "republish the public card-catalog now" — the same
-      // incremental publish->version-flip the nightly cron runs, but on demand so a
-      // canon change can be pushed to the gallery without waiting ~17h. Returns the
-      // publish result plus the fresh publish-status so the operator sees whether
-      // changes_since_publish dropped to ~0. On budget/CPU failure invalidateGallery
-      // leaves the previous artifact live (no split-brain); report it, do not throw.
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_gallery_refresh_403", json({ error: "Unauthorized" }, 403))
-      if (!env.KV)
-        return done("admin_gallery_refresh_500", json({ error: "KV binding missing" }, 500))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_gallery_refresh_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-      // Optional per-call chunk-size override so the chunked rebuild (B-532) can be
-      // tuned against the real Worker CPU limit without a redeploy.
-      let refreshBody = {}
-      try {
-        refreshBody = (await request.json()) || {}
-      } catch {
-        refreshBody = {}
-      }
-      const chunkOverride = Number.parseInt(String(refreshBody?.chunk_size ?? ""), 10)
-      const refreshEnv =
-        Number.isFinite(chunkOverride) && chunkOverride > 0
-          ? { ...env, ICONOPLASM_CARD_CATALOG_REBUILD_CHUNK_SIZE: String(chunkOverride) }
-          : env
-      let result
-      try {
-        result = { ok: true, ...(await invalidateGalleryCache(refreshEnv)) }
-      } catch (error) {
-        result = {
-          ok: false,
-          skipped: true,
-          code: sanitizeText(String(error?.code || ""), 128) || "GALLERY_REFRESH_SKIPPED",
-          error: sanitizeText(String(error?.message || error), 500),
-        }
-      }
-      const status = await cardCatalogPublishStatus(refreshEnv)
-      return done(
-        "admin_gallery_refresh",
-        json({ ...result, publish_status: status }, 200, { "Cache-Control": "no-store" }),
-      )
-    }
-
     if (path === "/api/iconoplasm/admin/finalization/process" && request.method === "POST") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_finalization_process_403", json({ error: "Unauthorized" }, 403))
@@ -30638,45 +30588,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const sampleLimit = Number.parseInt(url.searchParams.get("sample_limit") || "25", 10)
       const audit = await fetchAdminPublicStatsAudit(env, { sampleLimit })
       return done("admin_public_stats_audit", json(audit, 200, { "Cache-Control": "no-store" }))
-    }
-
-    if (path === "/api/iconoplasm/admin/gallery" && request.method === "GET") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_gallery_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done("admin_gallery_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-
-      const page = normalizeAdminGalleryPage(url.searchParams.get("page") || "1")
-      const limit = normalizeAdminGalleryLimit(url.searchParams.get("limit") || "100")
-      const filter = normalizeAdminGalleryFilter(url.searchParams.get("filter") || "all")
-      const sort = normalizeAdminGallerySort(url.searchParams.get("sort") || "name")
-      const mode = normalizeAdminGalleryMode(url.searchParams.get("mode") || "live")
-      const query = String(url.searchParams.get("query") || url.searchParams.get("q") || "")
-
-      const gallery = await fetchAdminGallery(env, url, {
-        page,
-        limit,
-        filter,
-        sort,
-        mode,
-        query,
-      })
-      return done(
-        "admin_gallery",
-        json(
-          {
-            ok: true,
-            page: gallery.page,
-            limit: gallery.limit,
-            total: gallery.total,
-            count: gallery.count,
-            mode: gallery.mode,
-            rows: gallery.rows,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
     }
 
     const adminGeneMatch = path.match(/^\/api\/iconoplasm\/admin\/gene\/([^/]+)$/)
