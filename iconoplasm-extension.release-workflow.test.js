@@ -131,10 +131,7 @@ test("Firefox background-page scripts boot in dependency order without importScr
 
   vm.runInNewContext(scripts.map((path) => readFileSync(path, "utf8")).join("\n"), sandbox)
 
-  assert.equal(
-    sandbox.IconoplasmCatalogContract?.catalog?.schemaVersion,
-    5,
-  )
+  assert.equal(sandbox.IconoplasmCatalogContract?.catalog?.schemaVersion, 5)
   assert.equal(
     typeof sandbox.IconoplasmPortraitDelivery?.normalizePortraitDeliveryPolicy,
     "function",
