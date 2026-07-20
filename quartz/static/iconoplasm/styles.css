@@ -1738,8 +1738,8 @@ img-comparison-slider.rendered [slot="second"] {
   position: static;
   margin-top: 0.35rem;
   min-height: 0;
-  height: min(22rem, calc(100dvh - 15rem));
-  max-height: min(22rem, calc(100dvh - 15rem));
+  height: 22rem;
+  max-height: calc(100dvh - 15rem);
   contain: layout paint;
   overscroll-behavior: contain;
 }
