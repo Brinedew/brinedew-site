@@ -8,11 +8,15 @@ const explicitTestArgs = process.argv.slice(2)
 
 function trackedFiles() {
   try {
-    const output = execFileSync("git", ["ls-files", "-z"], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      maxBuffer: 16 * 1024 * 1024,
-    })
+    const output = execFileSync(
+      "git",
+      ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        maxBuffer: 16 * 1024 * 1024,
+      },
+    )
     return output.split("\0").filter(Boolean)
   } catch {
     return walk(process.cwd()).map((file) =>
