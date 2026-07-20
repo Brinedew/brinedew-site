@@ -1384,22 +1384,11 @@ function assertIconoplasmCardCatalogBudgetPreflight(env) {
 function iconoplasmBudgetRouteFamilyFromPath(path) {
   const declaredRoute = matchIconoplasmRouteContract(path)
   if (declaredRoute) return declaredRoute.route.budgetFamily
-  if (path === "/api/iconoplasm/discoveries/encounter") return "discoveries_encounter"
-  if (path === "/api/iconoplasm/discoveries/me") return "discoveries_me"
-  if (path === "/api/iconoplasm/account-gallery-window") return "account_gallery_window"
-  if (path === "/api/iconoplasm/discoveries/merge") return "discoveries_merge"
   if (path === "/api/iconoplasm/clans") return "clans_overview"
   if (/^\/api\/iconoplasm\/clans\/[^/]+\/members$/.test(path)) return "clans_overview"
   if (path === "/api/iconoplasm/comments") return "gene_comments"
   if (/^\/api\/iconoplasm\/comments\/gene\/[^/]+$/.test(path)) return "gene_comments"
   if (/^\/api\/iconoplasm\/genes\/[^/]+\/comments$/.test(path)) return "gene_comments"
-  if (path === "/api/iconoplasm/requests") return "gene_request_submit"
-  if (path === "/api/iconoplasm/requests/options") return "gene_request_options"
-  if (path === "/api/iconoplasm/notifications") return "request_notifications"
-  if (path === "/api/iconoplasm/notifications/read") return "request_notifications_read"
-  if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(path))
-    return "gene_request_summary"
-  if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+$/.test(path)) return "gene_request_state_gone"
   if (path === "/api/iconoplasm/image-edit/providers") return "image_edit_providers"
   if (path === "/api/iconoplasm/user-emulsion") return "user_emulsion"
   if (path === "/api/iconoplasm/image-edit/jobs") return "image_edit_jobs"
@@ -1409,7 +1398,6 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (/^\/api\/iconoplasm\/candidate-generation\/jobs\/[^/]+(?:\/publish)?$/.test(path))
     return "candidate_generation_jobs"
   if (path === "/api/iconoplasm/candidates/copy") return "candidate_copy"
-  if (path === "/api/iconoplasm/votes/me") return "votes_me"
   if (path === "/api/iconoplasm/votes/set") return "votes_set"
   if (path === "/api/iconoplasm/votes/snapshot") return "votes_snapshot"
   if (path === "/api/iconoplasm/artist-styles/search") return "artist_styles_search"
@@ -1470,12 +1458,6 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path === "/api/iconoplasm/admin/catalog/publish") return "admin_catalog_publish"
   if (path === "/api/iconoplasm/admin/essence/upsert") return "admin_essence_upsert"
   if (path === "/api/iconoplasm/admin/essence/state") return "admin_essence_state"
-  if (path === "/api/iconoplasm/admin/requests/history") return "admin_requests_history"
-  if (path === "/api/iconoplasm/admin/requests/open") return "admin_requests_open"
-  if (path === "/api/iconoplasm/admin/requests/drain-plan") return "admin_requests_drain_plan"
-  if (path === "/api/iconoplasm/admin/requests/fulfill") return "admin_requests_fulfill"
-  if (/^\/api\/iconoplasm\/admin\/requests\/gene\/[^/]+\/diagnostics$/.test(path))
-    return "admin_gene_request_diagnostics"
   if (path === "/api/iconoplasm/admin/cost/usage" || path === "/api/iconoplasm/admin/cost/snapshot")
     return "admin_cost_usage"
   if (path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
@@ -10901,14 +10883,6 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   }
   const declaredRoute = matchIconoplasmRouteContract(path, requestMethod)
   if (declaredRoute) return declaredRoute.methodAllowed
-  if (path === "/api/iconoplasm/votes/me")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/discoveries/encounter") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/discoveries/me")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/account-gallery-window")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/discoveries/merge") return requestMethod === "POST"
   if (path === "/api/iconoplasm/clans") return requestMethod === "GET" || requestMethod === "HEAD"
   if (/^\/api\/iconoplasm\/clans\/[^/]+\/members$/.test(path))
     return requestMethod === "GET" || requestMethod === "HEAD"
@@ -10925,23 +10899,6 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
     )
   if (path === "/api/iconoplasm/admin/me")
     return requestMethod === "GET" || requestMethod === "HEAD"
-  if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(path))
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/requests/options")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+$/.test(path))
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/requests") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/notifications")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/notifications/read") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/requests/history")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/requests/open")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/requests/drain-plan")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/requests/fulfill") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/image-edit-prompts")
     return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
   if (path === "/api/iconoplasm/image-edit/providers")
@@ -11015,8 +10972,6 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/api/iconoplasm/admin/overview")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/cost/usage" || path === "/api/iconoplasm/admin/cost/snapshot")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (/^\/api\/iconoplasm\/admin\/requests\/gene\/[^/]+\/diagnostics$/.test(path))
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/coverage")
     return requestMethod === "GET" || requestMethod === "HEAD"
@@ -25903,88 +25858,76 @@ async function mirrorGeneCommentToDiscord(request, env, ctx, { symbol, username,
   await postIconoplasmGeneCommentToDiscord(env, { symbol, username, body, imageBytes })
 }
 
+async function handlePublishedPortraitRoute(request, env, ctx, path) {
+  const key = path.replace(/^\/+/, "")
+  return cachedPortraitResponse(request, ctx, async () => {
+    const obj = await readPortraitStorageObject(env, key, {
+      fallbackContentType: "image/webp",
+    })
+    if (!obj && !env.ICONOPLASM_PORTRAITS && !canReadExternalPortraitStorage(env)) {
+      return json({ error: "Portrait bucket not configured" }, 404)
+    }
+    if (!obj) return json({ error: "Portrait not found" }, 404)
+    return new Response(obj.body, {
+      headers: {
+        "Content-Type": obj.contentType || "image/webp",
+        "Cache-Control": "public, max-age=31536000, immutable",
+        ETag: `"${obj.etag || key}"`,
+        "Access-Control-Allow-Origin": "*",
+      },
+    })
+  })
+}
+
+const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
+  public_metadata: ({ request, env }) => handlePublicMetadata(request, env),
+  public_stats: ({ request, env }) => handlePublicStats(request, env),
+  public_schema: ({ request }) => asHead(request, handlePublicSchema()),
+  public_catalog_manifest: ({ request, env }) => handlePublicCatalogManifest(request, env),
+  public_catalog_artifact: async ({ request, env, path }) =>
+    asHead(request, await handlePublicCatalogArtifact(env, path)),
+  public_catalog_dump: async ({ request, env, path }) =>
+    asHead(request, await handlePublicCatalogJsonlDump(env, path)),
+  public_gallery: ({ request, env, ctx }) => handlePublicGallery(request, env, ctx),
+  public_gene_search: ({ request, env }) => handlePublicGeneSearch(request, env),
+  public_gene_batch: ({ request, env }) => handlePublicGeneBatch(request, env),
+  mobile_card_manifest: ({ request, env }) => handleMobileCardManifest(request, env),
+  mobile_card_symbol: ({ match, request, env, ctx }) =>
+    handleMobileCardSymbol(request, env, ctx, decodeURIComponent(match.params.symbol || "")),
+  print_copy_png: ({ request, env, ctx, path }) =>
+    handleIconoplasmPrintCopyPng(request, env, ctx, iconoplasmPrintCopyPngSymbolFromPath(path)),
+  print_copy_render: ({ request, env, ctx, path }) =>
+    handleIconoplasmPrintCopyRender(
+      request,
+      env,
+      ctx,
+      iconoplasmPrintCopyRenderSymbolFromPath(path),
+    ),
+  public_gene_denied: ({ request }) =>
+    json(publicRichRouteDeniedPayload(new URL(request.url), "gene_detail"), 403, {
+      "Cache-Control": "no-store",
+    }),
+  public_resolve: ({ request, env }) => handlePublicResolve(request, env),
+  public_changes: ({ request, env }) => handlePublicChanges(request, env),
+  public_media: ({ match, request, env }) =>
+    handlePublicMedia(request, env, match.params.symbol || ""),
+  portrait: ({ request, env, ctx, path }) => handlePublishedPortraitRoute(request, env, ctx, path),
+  site_gene_detail: ({ request, env, path }) => handleSiteGeneDetail(request, env, path),
+})
+
+export const ICONOPLASM_DECLARED_GATEWAY_HANDLER_NAMES = Object.freeze(
+  Object.keys(ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY).sort(),
+)
+
 async function dispatchDeclaredIconoplasmGatewayRoute(match, request, env, ctx, path) {
   if (!match?.methodAllowed) return null
-  const handler = match.route.gatewayHandler
-  if (handler === "iconoplasm_api") return null
-
-  switch (handler) {
-    case "public_metadata":
-      return handlePublicMetadata(request, env)
-    case "public_stats":
-      return handlePublicStats(request, env)
-    case "public_schema":
-      return asHead(request, handlePublicSchema())
-    case "public_catalog_manifest":
-      return handlePublicCatalogManifest(request, env)
-    case "public_catalog_artifact":
-      return asHead(request, await handlePublicCatalogArtifact(env, path))
-    case "public_catalog_dump":
-      return asHead(request, await handlePublicCatalogJsonlDump(env, path))
-    case "public_gallery":
-      return handlePublicGallery(request, env, ctx)
-    case "public_gene_search":
-      return handlePublicGeneSearch(request, env)
-    case "public_gene_batch":
-      return handlePublicGeneBatch(request, env)
-    case "mobile_card_manifest":
-      return handleMobileCardManifest(request, env)
-    case "mobile_card_symbol":
-      return handleMobileCardSymbol(
-        request,
-        env,
-        ctx,
-        decodeURIComponent(match.params.symbol || ""),
-      )
-    case "print_copy_png":
-      return handleIconoplasmPrintCopyPng(
-        request,
-        env,
-        ctx,
-        iconoplasmPrintCopyPngSymbolFromPath(path),
-      )
-    case "print_copy_render":
-      return handleIconoplasmPrintCopyRender(
-        request,
-        env,
-        ctx,
-        iconoplasmPrintCopyRenderSymbolFromPath(path),
-      )
-    case "public_gene_denied":
-      return json(publicRichRouteDeniedPayload(new URL(request.url), "gene_detail"), 403, {
-        "Cache-Control": "no-store",
-      })
-    case "public_resolve":
-      return handlePublicResolve(request, env)
-    case "public_changes":
-      return handlePublicChanges(request, env)
-    case "public_media":
-      return handlePublicMedia(request, env, match.params.symbol || "")
-    case "portrait": {
-      const key = path.replace(/^\/+/, "")
-      return cachedPortraitResponse(request, ctx, async () => {
-        const obj = await readPortraitStorageObject(env, key, {
-          fallbackContentType: "image/webp",
-        })
-        if (!obj && !env.ICONOPLASM_PORTRAITS && !canReadExternalPortraitStorage(env)) {
-          return json({ error: "Portrait bucket not configured" }, 404)
-        }
-        if (!obj) return json({ error: "Portrait not found" }, 404)
-        return new Response(obj.body, {
-          headers: {
-            "Content-Type": obj.contentType || "image/webp",
-            "Cache-Control": "public, max-age=31536000, immutable",
-            ETag: `"${obj.etag || key}"`,
-            "Access-Control-Allow-Origin": "*",
-          },
-        })
-      })
-    }
-    case "site_gene_detail":
-      return handleSiteGeneDetail(request, env, path)
-    default:
-      throw new Error(`Unknown Iconoplasm gateway handler: ${String(handler || "")}`)
+  const handlerName = match.route.gatewayHandler
+  if (handlerName === "iconoplasm_api") return null
+  const handler = ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY[handlerName]
+  if (!handler) {
+    throw new Error(`Unknown Iconoplasm gateway handler: ${String(handlerName || "")}`)
   }
+  return handler({ match, request, env, ctx, path })
 }
 
 export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(

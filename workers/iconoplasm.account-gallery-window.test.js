@@ -6,6 +6,7 @@ import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { ICONOPLASM_ROUTE_CONTRACTS } from "./iconoplasm-route-contract.js"
 
 const source = readFileSync(
   new URL(
@@ -679,9 +680,7 @@ test("account gallery endpoint block reads cards from the published artifact, no
 })
 
 test("account gallery endpoint has an explicit budget class", () => {
-  assert.match(
-    source,
-    /if \(path === "\/api\/iconoplasm\/account-gallery-window"\) return "account_gallery_window"/,
-  )
+  const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === "account_gallery_window")
+  assert.equal(route?.budgetFamily, "account_gallery_window")
   assert.match(source, /if \(family === "account_gallery_window"\) return "first_party_read"/)
 })
