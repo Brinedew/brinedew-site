@@ -2,12 +2,15 @@ import { handleMe } from "./auth.js"
 import { isAdmin } from "./admin.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmArtistStylesHtml } from "./iconoplasm-artist-styles-html.js"
+import {
+  ICONOPLASM_API_SCHEMA_VERSION as API_SCHEMA_VERSION,
+  ICONOPLASM_PUBLIC_API_VERSION as PUBLIC_API_VERSION,
+  ICONOPLASM_SITE_GENE_API_PREFIX as SITE_GENE_API_PREFIX,
+  iconoplasmPublicApiPath as publicApiPath,
+  matchIconoplasmRouteContract,
+} from "./iconoplasm-route-contract.js"
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
-const PUBLIC_API_VERSION = "v1"
-const API_SCHEMA_VERSION = 4
-const PUBLIC_API_PREFIX = `/api/public/${PUBLIC_API_VERSION}`
-const SITE_GENE_API_PREFIX = "/api/iconoplasm/site/genes"
 const PUBLIC_DUMP_PREFIX = "public-dumps"
 const PUBLIC_DEFAULT_GENE_BATCH_LIMIT = 100
 const PUBLIC_MAX_GENE_BATCH_LIMIT = 250
@@ -104,14 +107,6 @@ function canAccessRichBatchRoute(request, env) {
   if (hasAdminToken(request, env)) return true
   if (hasExtensionClientHeader(request)) return true
   return hasTrustedIconoplasmBrowserOrigin(request)
-}
-
-function publicApiPath(suffix = "") {
-  const normalized = String(suffix || "")
-  if (!normalized) return PUBLIC_API_PREFIX
-  return normalized.startsWith("/")
-    ? `${PUBLIC_API_PREFIX}${normalized}`
-    : `${PUBLIC_API_PREFIX}/${normalized}`
 }
 
 function publicSchemaDoc() {
@@ -216,30 +211,14 @@ function normalizeArtistStylesPageHtml(htmlSource) {
     .replace("if (!data || !data.duplicate) {", "if (!data || data.accepted !== false) {")
 }
 
-function isPublicCatalogArtifactPath(path) {
-  return path.startsWith(publicApiPath("/catalog/catalog.")) && path.endsWith(".json")
-}
-
 function isPathHandledAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
   path,
   method = "GET",
 ) {
   const requestMethod = String(method || "GET").toUpperCase()
   if (!["GET", "HEAD", "POST"].includes(requestMethod)) return false
-  if (path === publicApiPath("/metadata")) return true
-  if (path === publicApiPath("/stats")) return true
-  if (path === publicApiPath("/catalog/manifest")) return true
-  if (isPublicCatalogArtifactPath(path)) return true
-  if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) return true
-  if (path === publicApiPath("/gallery")) return true
-  if (path === publicApiPath("/genes/search")) return true
-  if (path === publicApiPath("/genes/batch")) return requestMethod === "POST"
-  if (path.startsWith(publicApiPath("/genes/"))) return true
-  if (path === publicApiPath("/resolve")) return true
-  if (path === publicApiPath("/changes")) return true
-  if (path.startsWith(publicApiPath("/media/"))) return true
-  if (path.startsWith("/portraits/")) return true
-  if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) return true
+  const declaredRoute = matchIconoplasmRouteContract(path, requestMethod)
+  if (declaredRoute) return declaredRoute.methodAllowed
   if (path.startsWith("/api/iconoplasm/")) {
     if (path === "/api/iconoplasm/admin/me") return false
     if (path === "/api/iconoplasm/votes/me") return false

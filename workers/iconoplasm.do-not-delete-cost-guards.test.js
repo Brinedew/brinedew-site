@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { existsSync, readFileSync } from "node:fs"
+import { ICONOPLASM_ROUTE_CONTRACTS } from "./iconoplasm-route-contract.js"
 
 function DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
   path,
@@ -384,9 +385,12 @@ test("DO NOT DELETE: cost attribution should name request-picker and admin dashb
     /return "gene_request_submit"/,
     "request submit route should have its own named cost bucket",
   )
-  assert.match(
-    runtime,
-    /return "mobile_card_manifest"/,
+  const mobileManifest = ICONOPLASM_ROUTE_CONTRACTS.find(
+    (route) => route.id === "mobile_card_manifest",
+  )
+  assert.equal(
+    mobileManifest?.budgetFamily,
+    "mobile_card_manifest",
     "mobile card manifest should have its own named cost bucket",
   )
   assert.match(

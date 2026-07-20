@@ -1,0 +1,103 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+
+import {
+  ICONOPLASM_API_SCHEMA_VERSION,
+  ICONOPLASM_ROUTE_CONTRACTS,
+  matchIconoplasmRouteContract,
+} from "./iconoplasm-route-contract.js"
+import { resolveIconoplasmEdgeRateLimitPolicy } from "./iconoplasm-edge-rate-limit.js"
+import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+
+const PATTERN_EXAMPLES = Object.freeze({
+  public_catalog_artifact: "/api/public/v1/catalog/catalog.abc123.json",
+  public_catalog_dump: "/api/public/v1/dumps/catalog.abc123.jsonl",
+  mobile_card_symbol: "/api/iconoplasm/cards/TP53",
+  print_copy_png: "/api/iconoplasm/print-copy/TP53.png",
+  print_copy_render: "/api/iconoplasm/print-copy-render/TP53",
+  public_gene_detail: "/api/public/v1/genes/TP53",
+})
+
+function examplePath(route) {
+  if (route.match.kind === "exact") return route.match.value
+  if (route.match.kind === "prefix") return `${route.match.value}TP53`
+  return PATTERN_EXAMPLES[route.id]
+}
+
+test("Iconoplasm route contracts are complete, unique, immutable, and executable", () => {
+  const ids = new Set()
+  const methodPaths = new Set()
+
+  for (const route of ICONOPLASM_ROUTE_CONTRACTS) {
+    assert.equal(Object.isFrozen(route), true, `${route.id} must be immutable`)
+    assert.equal(ids.has(route.id), false, `duplicate route id: ${route.id}`)
+    ids.add(route.id)
+    assert.equal(route.schemaVersion, ICONOPLASM_API_SCHEMA_VERSION)
+    assert.equal(route.observabilityRoute, route.budgetFamily)
+    assert.ok(route.auth, `${route.id} must declare auth intent`)
+    assert.ok(route.cache, `${route.id} must declare cache intent`)
+    assert.ok(route.budgetFamily, `${route.id} must declare a budget family`)
+    assert.ok(route.gatewayHandler, `${route.id} must declare a gateway handler`)
+    assert.ok(route.methods.length > 0, `${route.id} must declare methods`)
+
+    const path = examplePath(route)
+    assert.ok(path, `${route.id} needs a contract test example`)
+    for (const method of route.methods) {
+      const key = `${method} ${path}`
+      assert.equal(methodPaths.has(key), false, `duplicate route contract: ${key}`)
+      methodPaths.add(key)
+      const match = matchIconoplasmRouteContract(path, method)
+      assert.equal(match?.route.id, route.id, `${key} must resolve to ${route.id}`)
+      assert.equal(match?.methodAllowed, true)
+    }
+  }
+})
+
+test("method admission and edge quota resolve from the same route contract", () => {
+  const getResolve = matchIconoplasmRouteContract("/api/public/v1/resolve", "GET")
+  assert.equal(getResolve?.route.id, "public_resolve")
+  assert.equal(getResolve?.methodAllowed, false)
+  assert.equal(
+    resolveIconoplasmEdgeRateLimitPolicy(
+      new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", { method: "GET" }),
+    ),
+    null,
+  )
+
+  for (const route of ICONOPLASM_ROUTE_CONTRACTS.filter((entry) => entry.rateLimit)) {
+    const policy = resolveIconoplasmEdgeRateLimitPolicy(
+      new Request(`https://iconoplasm.brinedew.bio${examplePath(route)}`, {
+        method: route.methods[0],
+      }),
+    )
+    assert.deepEqual(policy, route.rateLimit, `${route.id} quota must come from its route contract`)
+  }
+})
+
+test("the public schema route is admitted by the production stateful gateway", async () => {
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/public/v1/schema"),
+      {},
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.api_version, "v1")
+  assert.equal(payload.schema_version, ICONOPLASM_API_SCHEMA_VERSION)
+  assert.equal(response.headers.get("Cache-Control"), "public, max-age=3600")
+})
+
+test("declared route method mismatches return 405 with an Allow contract", async () => {
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/public/v1/schema", { method: "POST" }),
+      {},
+      { waitUntil() {} },
+    )
+
+  assert.equal(response.status, 405)
+  assert.equal(response.headers.get("Allow"), "GET, HEAD")
+  assert.deepEqual(await response.json(), { error: "Method not allowed" })
+})
