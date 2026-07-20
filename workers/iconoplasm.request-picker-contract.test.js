@@ -104,13 +104,30 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   )
   assert.match(
     app,
-    /function setSelection\(option\)[\s\S]*openResults\(\)/,
-    "choosing an emulsion should keep the filterable list open for correction without another click",
+    /var selectedRequestVisionIds = new Set\(\[""\]\)[\s\S]*function setSelection\(option\)[\s\S]*selectedRequestVisionIds\.add\(visionId\)[\s\S]*openResults\(\)/,
+    "each emulsion click should add to a persistent batch while keeping the list open",
   )
   assert.match(
     app,
-    /var queueLabel = option \? "Queue " \+ requestOptionPrimaryLabel\(option\) : "Queue random"/,
-    "the footer action should name the selected emulsion without replacing the search query",
+    /queueLabel = "Queue " \+ selectedVisionIds\.length \+ " candidates"/,
+    "the footer action should expose the exact batch size",
+  )
+  assert.match(app, /requested_vision_ids: requestedVisionIds/)
+  assert.match(app, /client_batch_id: crypto\.randomUUID\(\)/)
+  assert.match(
+    app,
+    /failedVisionIds[\s\S]*could not be queued and remain selected/,
+    "partial failures should preserve only the selections that still need attention",
+  )
+  assert.match(
+    app,
+    /favoriteEnabled \? ' aria-pressed="' : ' aria-selected="'/,
+    "multi-select row buttons should expose toggle state without misusing option semantics",
+  )
+  assert.match(
+    css,
+    /\.icono-request-option\.is-selected\s*\{[\s\S]*box-shadow:\s*inset 0 0 0 1px/,
+    "selected emulsions need a persistent visual state distinct from hover",
   )
   assert.doesNotMatch(
     css,

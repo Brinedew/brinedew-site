@@ -4323,6 +4323,7 @@ async function createGenerationRequest(
     requestPrompt = "",
     sourceGeneSymbol = "",
     sourceAssetSha256 = "",
+    clientRequestId = "",
   } = {},
 ) {
   if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
@@ -4344,6 +4345,10 @@ async function createGenerationRequest(
   }
   const sourceSymbolNorm = normalizeSymbol(sourceGeneSymbol || geneSymbol || "") || symbolNorm
   const sourceAssetNorm = normalizeSha256(sourceAssetSha256 || "") || ""
+  const clientRequestNorm = sanitizeText(clientRequestId || "", 180) || ""
+  if (clientRequestNorm && !/^[a-z0-9][a-z0-9._:-]*$/i.test(clientRequestNorm)) {
+    return { ok: false, error: "Invalid client request identifier" }
+  }
   let requestedReferenceAssetSha = ""
   let requestedReferenceGeneSymbol = ""
   let resolvedVisionId = visionNorm
@@ -4400,9 +4405,12 @@ async function createGenerationRequest(
        requested_vision_id,
        requested_reference_asset_sha256,
        requested_reference_gene_symbol,
+       client_request_id,
        status,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)
+     ON CONFLICT(requester_user_id, client_request_id) WHERE client_request_id <> ''
+     DO NOTHING`,
   )
     .bind(
       symbolNorm,
@@ -4416,9 +4424,23 @@ async function createGenerationRequest(
       resolvedVisionId,
       requestedReferenceAssetSha,
       requestedReferenceGeneSymbol,
+      clientRequestNorm,
     )
     .run()
-  const requestId = Number(insertResp?.meta?.last_row_id || 0)
+  let requestId =
+    Number(insertResp?.meta?.changes || 0) > 0 ? Number(insertResp?.meta?.last_row_id || 0) : 0
+  if (!requestId && clientRequestNorm) {
+    const existing = await env.ICONOPLASM_DB.prepare(
+      `SELECT id
+       FROM icono_generation_requests
+       WHERE requester_user_id = ?
+         AND client_request_id = ?
+       LIMIT 1`,
+    )
+      .bind(requesterNorm, clientRequestNorm)
+      .first()
+    requestId = Number(existing?.id || 0)
+  }
   const created = requestId
     ? await env.ICONOPLASM_DB.prepare(
         `SELECT gr.*, COALESCE(gc.full_name, '') AS full_name
@@ -4444,6 +4466,60 @@ async function createGenerationRequest(
   return {
     ok: true,
     request: mapped,
+  }
+}
+
+const ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT = 20
+
+async function createGenerationRequestBatch(
+  env,
+  { geneSymbol, requesterUserId, requesterUsername = "", requestedVisionIds, clientBatchId } = {},
+) {
+  const rawIds = Array.isArray(requestedVisionIds) ? requestedVisionIds : []
+  if (!rawIds.length) return { ok: false, error: "Choose at least one emulsion." }
+  if (rawIds.length > ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT) {
+    return {
+      ok: false,
+      error: `Choose no more than ${ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT} emulsions at once.`,
+    }
+  }
+  const batchId = sanitizeText(clientBatchId || "", 128) || ""
+  if (!batchId || !/^[a-z0-9][a-z0-9._:-]*$/i.test(batchId)) {
+    return { ok: false, error: "Missing or invalid batch identifier." }
+  }
+  const uniqueVisionIds = []
+  const seen = new Set()
+  for (const rawId of rawIds) {
+    const visionId = sanitizeVoteVisionId(rawId || "")
+    if (!visionId) return { ok: false, error: "One of the selected emulsions is invalid." }
+    if (seen.has(visionId)) continue
+    seen.add(visionId)
+    uniqueVisionIds.push(visionId)
+  }
+
+  const requests = []
+  const failures = []
+  for (let index = 0; index < uniqueVisionIds.length; index += 1) {
+    const visionId = uniqueVisionIds[index]
+    const result = await createGenerationRequest(env, {
+      geneSymbol,
+      requesterUserId,
+      requesterUsername,
+      requestMode: "specific",
+      requestedVisionId: visionId,
+      requestKind: "new_candidate",
+      sourceGeneSymbol: geneSymbol,
+      clientRequestId: `${batchId}:${index}`,
+    })
+    if (result.ok) requests.push(result.request || null)
+    else failures.push({ requested_vision_id: visionId, error: String(result.error || "Failed") })
+  }
+  return {
+    ok: requests.length > 0,
+    requests,
+    failures,
+    queued_count: requests.length,
+    failed_count: failures.length,
   }
 }
 
@@ -27274,6 +27350,44 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         p = await request.json()
       } catch {
         return done("create_generation_request_400", json({ error: "Invalid JSON" }, 400))
+      }
+      if (Array.isArray(p?.requested_vision_ids)) {
+        const batchResult = await createGenerationRequestBatch(env, {
+          geneSymbol: p?.symbol || p?.gene_symbol || "",
+          requesterUserId: sessionUser.user_id,
+          requesterUsername: sessionUser.username || "",
+          requestedVisionIds: p.requested_vision_ids,
+          clientBatchId: p?.client_batch_id || "",
+        })
+        if (!batchResult.ok) {
+          return done(
+            "create_generation_request_batch_400",
+            json(
+              {
+                ok: false,
+                error: String(batchResult.error || "Could not create requests"),
+                failures: batchResult.failures || [],
+              },
+              400,
+              { "Cache-Control": "no-store" },
+            ),
+          )
+        }
+        return done(
+          "create_generation_request_batch",
+          json(
+            {
+              ok: true,
+              requests: batchResult.requests,
+              failures: batchResult.failures,
+              queued_count: batchResult.queued_count,
+              failed_count: batchResult.failed_count,
+              message: `${batchResult.queued_count} candidate request${batchResult.queued_count === 1 ? "" : "s"} queued.`,
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
+        )
       }
       const result = await createGenerationRequest(env, {
         geneSymbol: p?.symbol || p?.gene_symbol || "",
