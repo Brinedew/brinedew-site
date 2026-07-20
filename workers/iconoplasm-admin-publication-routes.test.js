@@ -1,0 +1,151 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+
+import { createIconoplasmAdminPublicationHandlers } from "./iconoplasm-admin-publication-routes.js"
+
+function json(data, status = 200, headers = {}) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json", ...headers },
+  })
+}
+
+function publicationServices(overrides = {}) {
+  return {
+    actor: async () => "admin",
+    coerceBoolean: (value, fallback = false) => (value == null ? fallback : Boolean(value)),
+    fetchCatalogState: async () => ({ gene_count: 1, content_hash: "hash" }),
+    fetchCatalogStateRows: async () => [],
+    fetchEssenceStateRows: async () => [],
+    isAdmin: async () => true,
+    json,
+    mutationLimiterSnapshot: () => ({ active: true }),
+    normalizeCatalogPayloadItem: (item) => item,
+    normalizeEssencePayload: (item) => item,
+    normalizeSymbol: (value) =>
+      String(value || "")
+        .trim()
+        .toUpperCase(),
+    publishCatalogArtifact: async () => ({ ok: true }),
+    rebuildSharedGeneDiscoveryRollup: async () => ({ ok: true, count: 0 }),
+    sanitizeText: (value, limit) => String(value || "").slice(0, limit),
+    syncAdminReadModels: async () => ({ ok: true }),
+    upsertGeneEssence: async () => true,
+    ...overrides,
+  }
+}
+
+async function responseFrom(handler, { body = {}, env = {}, method = "POST" } = {}) {
+  return handler({
+    request: new Request("https://iconoplasm.brinedew.bio/internal-test", {
+      method,
+      ...(method === "GET" || method === "HEAD"
+        ? {}
+        : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+    }),
+    env,
+    done: async (_route, response) => response,
+  })
+}
+
+test("publication handler factory rejects incomplete composition roots", () => {
+  const services = publicationServices()
+  delete services.syncAdminReadModels
+  assert.throws(
+    () => createIconoplasmAdminPublicationHandlers(services),
+    /service is missing: syncAdminReadModels/,
+  )
+})
+
+test("publication handler registry is immutable and domain-complete", () => {
+  const handlers = createIconoplasmAdminPublicationHandlers(publicationServices())
+  assert.equal(Object.isFrozen(handlers), true)
+  assert.deepEqual(Object.keys(handlers).sort(), [
+    "admin_publication.catalog_publish",
+    "admin_publication.catalog_reconcile",
+    "admin_publication.catalog_state",
+    "admin_publication.catalog_upsert",
+    "admin_publication.essence_state",
+    "admin_publication.essence_upsert",
+    "admin_publication.shared_discoveries",
+  ])
+})
+
+test("catalog upsert owns its write boundary and can defer read models", async () => {
+  const writes = []
+  let readModelCalls = 0
+  const handlers = createIconoplasmAdminPublicationHandlers(
+    publicationServices({
+      syncAdminReadModels: async () => {
+        readModelCalls += 1
+      },
+    }),
+  )
+  const response = await responseFrom(handlers["admin_publication.catalog_upsert"], {
+    body: {
+      defer_read_models: true,
+      items: [
+        {
+          gene_symbol: "TP53",
+          full_name: "tumor protein p53",
+          uniprot: "P04637",
+          color_hex: "#35353C",
+          tmh: false,
+          aliases_json: "[]",
+        },
+      ],
+    },
+    env: {
+      ICONOPLASM_DB: {
+        prepare(sql) {
+          return {
+            bind(...args) {
+              return {
+                async run() {
+                  writes.push({ sql, args })
+                },
+              }
+            },
+          }
+        },
+      },
+    },
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("Cache-Control"), "no-store")
+  assert.equal(payload.processed, 1)
+  assert.equal(writes.length, 1)
+  assert.equal(readModelCalls, 0)
+})
+
+test("catalog reconcile deletes only explicit normalized symbols", async () => {
+  const deleted = []
+  const handlers = createIconoplasmAdminPublicationHandlers(publicationServices())
+  const response = await responseFrom(handlers["admin_publication.catalog_reconcile"], {
+    body: { delete_symbols: [" tp53 ", "TP53"], defer_read_models: true },
+    env: {
+      ICONOPLASM_DB: {
+        prepare(sql) {
+          return {
+            bind(symbol) {
+              return {
+                async run() {
+                  deleted.push({ sql, symbol })
+                },
+              }
+            },
+          }
+        },
+      },
+    },
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal((await response.json()).deleted, 1)
+  assert.deepEqual(
+    deleted.map((entry) => entry.symbol),
+    ["TP53"],
+  )
+})

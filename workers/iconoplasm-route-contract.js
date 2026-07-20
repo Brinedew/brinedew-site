@@ -703,8 +703,20 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_catalog",
     "admin_publication.catalog_state",
   ),
-  adminApiContract("admin_catalog_upsert", "/catalog/upsert", POST, "admin_catalog"),
-  adminApiContract("admin_catalog_reconcile", "/catalog/reconcile", POST, "admin_catalog"),
+  adminApiContract(
+    "admin_catalog_upsert",
+    "/catalog/upsert",
+    POST,
+    "admin_catalog",
+    "admin_publication.catalog_upsert",
+  ),
+  adminApiContract(
+    "admin_catalog_reconcile",
+    "/catalog/reconcile",
+    POST,
+    "admin_catalog",
+    "admin_publication.catalog_reconcile",
+  ),
   adminApiContract(
     "admin_catalog_publish",
     "/catalog/publish",
@@ -712,7 +724,13 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_catalog",
     "admin_publication.catalog_publish",
   ),
-  adminApiContract("admin_essence_upsert", "/essence/upsert", POST, "admin_essence"),
+  adminApiContract(
+    "admin_essence_upsert",
+    "/essence/upsert",
+    POST,
+    "admin_essence",
+    "admin_publication.essence_upsert",
+  ),
   adminApiContract(
     "admin_essence_state",
     "/essence/state",
