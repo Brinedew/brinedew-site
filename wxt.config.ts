@@ -20,6 +20,7 @@ export default defineConfig({
       // script can fail before it registers the gene-data message listener.
       manifest.background = {
         scripts: [
+          "generated/catalog-contract.js",
           "generated/portrait-delivery-core.js",
           "publication-alias-overlay.js",
           "service-worker.js",

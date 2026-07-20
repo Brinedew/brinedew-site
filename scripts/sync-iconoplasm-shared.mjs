@@ -2,9 +2,14 @@ import esbuild from "esbuild"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import {
+  assertIconoplasmPublisherAuthority,
+  renderIconoplasmCatalogContractRuntime,
+} from "./lib/iconoplasm-publisher-authority.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, "..")
+const publisherRelease = assertIconoplasmPublisherAuthority(repoRoot)
 
 const targets = [
   {
@@ -144,3 +149,16 @@ async function bundleTarget({ source, outputs, format = "esm", globalName }) {
 }
 
 await Promise.all(bundledTargets.map(bundleTarget))
+
+const catalogContractRuntimePath = path.join(
+  repoRoot,
+  "iconoplasm-extension",
+  "generated",
+  "catalog-contract.js",
+)
+await mkdir(path.dirname(catalogContractRuntimePath), { recursive: true })
+await writeFile(
+  catalogContractRuntimePath,
+  renderIconoplasmCatalogContractRuntime(publisherRelease),
+  "utf8",
+)

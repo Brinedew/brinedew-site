@@ -6,6 +6,9 @@
 // multi-megabyte catalog refetch.
 
 if (typeof importScripts === "function") {
+  if (!globalThis.IconoplasmCatalogContract) {
+    importScripts("generated/catalog-contract.js")
+  }
   if (!globalThis.IconoplasmPortraitDelivery) {
     importScripts("generated/portrait-delivery-core.js")
   }
@@ -13,6 +16,7 @@ if (typeof importScripts === "function") {
     importScripts("publication-alias-overlay.js")
   }
 }
+const IconoCatalogContract = globalThis.IconoplasmCatalogContract
 const IconoPortraitDelivery = globalThis.IconoplasmPortraitDelivery
 const IconoPublicationAliasOverlay = globalThis.IconoplasmPublicationAliasOverlay
 if (!IconoPortraitDelivery) {
@@ -20,6 +24,9 @@ if (!IconoPortraitDelivery) {
 }
 if (!IconoPublicationAliasOverlay) {
   throw new Error("Iconoplasm publication alias overlay runtime is required")
+}
+if (!IconoCatalogContract) {
+  throw new Error("Iconoplasm catalog contract runtime is required")
 }
 
 const HOST = "https://iconoplasm.brinedew.bio"
@@ -32,7 +39,18 @@ const PORTRAIT_DATA_URL_CACHE_LIMIT = 48
 const PORTRAIT_DATA_URL_ERROR_CACHE_LIMIT = 96
 const PORTRAIT_DATA_URL_ERROR_TTL_MS = 30 * 1000
 const PORTRAIT_SOURCE_SESSION_KEY = "iconoplasm_portrait_source_by_tab"
-const REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION = 5
+const REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION = Number(
+  IconoCatalogContract.catalog?.schemaVersion,
+)
+const REQUIRED_PUBLISHED_CATALOG_CONTRACT_REVISION = Number(IconoCatalogContract.catalog?.revision)
+if (
+  !Number.isInteger(REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION) ||
+  REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION < 1 ||
+  !Number.isInteger(REQUIRED_PUBLISHED_CATALOG_CONTRACT_REVISION) ||
+  REQUIRED_PUBLISHED_CATALOG_CONTRACT_REVISION < 1
+) {
+  throw new Error("Iconoplasm catalog contract runtime is invalid")
+}
 const CONTRACT_ERROR_INVALID_MANIFEST = "invalid_manifest"
 const CONTRACT_ERROR_INCOMPATIBLE_ARTIFACT = "incompatible_artifact"
 const CONTRACT_ERROR_INCOMPATIBLE_EXTENSION = "incompatible_extension"
@@ -140,6 +158,7 @@ async function getStatus() {
     "iconoplasm_gene_count",
     "iconoplasm_last_fetch",
     "iconoplasm_schema_version",
+    "iconoplasm_contract_revision",
     "iconoplasm_alias_overlay_version",
     "iconoplasm_contract_error",
     "iconoplasm_min_extension_version",
@@ -149,6 +168,7 @@ async function getStatus() {
     geneCount: result.iconoplasm_gene_count || 0,
     lastFetch: result.iconoplasm_last_fetch || null,
     schemaVersion: result.iconoplasm_schema_version || null,
+    contractRevision: result.iconoplasm_contract_revision || null,
     aliasOverlayVersion: result.iconoplasm_alias_overlay_version || null,
     contractError: result.iconoplasm_contract_error || null,
     minExtensionVersion: result.iconoplasm_min_extension_version || null,
@@ -223,6 +243,7 @@ async function getStoredGeneSnapshot() {
     "iconoplasm_hash",
     "iconoplasm_last_fetch",
     "iconoplasm_schema_version",
+    "iconoplasm_contract_revision",
     "iconoplasm_portrait_delivery",
     "iconoplasm_alias_overlay_version",
     "iconoplasm_alias_overlay_applied",
@@ -266,6 +287,10 @@ function normalizePublishedManifest(rawManifest) {
     String(manifest.artifact_schema_version ?? manifest.schema_version ?? 0),
     10,
   )
+  const contractRevision = Number.parseInt(
+    String(manifest.artifact_contract_revision ?? manifest.contract_revision ?? 0),
+    10,
+  )
   const minExtensionVersion = String(
     manifest.min_extension_version ||
       manifest.minimum_extension_version ||
@@ -278,6 +303,7 @@ function normalizePublishedManifest(rawManifest) {
     !currentHash ||
     (!filename && !artifactUrl) ||
     !Number.isFinite(schemaVersion) ||
+    !Number.isFinite(contractRevision) ||
     !publicationAliases
   ) {
     return null
@@ -288,6 +314,7 @@ function normalizePublishedManifest(rawManifest) {
     artifact_url: artifactUrl || null,
     portrait_delivery: portraitDelivery,
     schema_version: schemaVersion,
+    contract_revision: contractRevision,
     gene_count: Number.isFinite(Number(manifest.gene_count)) ? Number(manifest.gene_count) : null,
     min_extension_version: minExtensionVersion || currentExtensionVersion(),
     publication_aliases: publicationAliases,
@@ -325,6 +352,7 @@ async function invalidateStoredPublishedSnapshot({ code, message, minExtensionVe
     "iconoplasm_gene_count",
     "iconoplasm_last_fetch",
     "iconoplasm_schema_version",
+    "iconoplasm_contract_revision",
     "iconoplasm_portrait_delivery",
     "iconoplasm_alias_overlay_version",
     "iconoplasm_alias_overlay_applied",
@@ -336,7 +364,9 @@ async function ensureFreshGeneData() {
   const stored = await getStoredGeneSnapshot()
   const geneCount = getStoredGeneCount(stored.iconoplasm_genes)
   const hasPublishedCatalogSchema =
-    Number(stored.iconoplasm_schema_version || 0) >= REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION &&
+    Number(stored.iconoplasm_schema_version || 0) === REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION &&
+    Number(stored.iconoplasm_contract_revision || 0) ===
+      REQUIRED_PUBLISHED_CATALOG_CONTRACT_REVISION &&
     Boolean(stored.iconoplasm_portrait_delivery)
   const hasContractError = Boolean(stored.iconoplasm_contract_error)
   const needsArtifactRebuild = geneCount === 0 || !hasPublishedCatalogSchema
@@ -691,14 +721,20 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
     }
     configurePortraitDeliveryPolicy(manifest.portrait_delivery)
 
-    if (manifest.schema_version < REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION) {
+    if (
+      manifest.schema_version !== REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION ||
+      manifest.contract_revision !== REQUIRED_PUBLISHED_CATALOG_CONTRACT_REVISION
+    ) {
       await invalidateStoredPublishedSnapshot({
         code: CONTRACT_ERROR_INCOMPATIBLE_ARTIFACT,
         minExtensionVersion: manifest.min_extension_version,
         message:
-          "Published catalog artifact is older than the minimum schema this extension now requires.",
+          "Published catalog contract does not exactly match the schema and revision required by this extension.",
       })
-      console.error("[Iconoplasm] Published artifact schema is too old:", manifest.schema_version)
+      console.error("[Iconoplasm] Published catalog contract is incompatible:", {
+        schemaVersion: manifest.schema_version,
+        contractRevision: manifest.contract_revision,
+      })
       return null
     }
 
@@ -732,6 +768,7 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
       await chrome.storage.local.set({
         iconoplasm_last_fetch: fetchedAt,
         iconoplasm_schema_version: manifest.schema_version,
+        iconoplasm_contract_revision: manifest.contract_revision,
         iconoplasm_portrait_delivery: manifest.portrait_delivery,
         iconoplasm_min_extension_version: manifest.min_extension_version,
       })
@@ -787,6 +824,7 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
       iconoplasm_gene_count: geneCount,
       iconoplasm_last_fetch: fetchedAt,
       iconoplasm_schema_version: manifest.schema_version,
+      iconoplasm_contract_revision: manifest.contract_revision,
       iconoplasm_portrait_delivery: manifest.portrait_delivery,
       iconoplasm_min_extension_version: manifest.min_extension_version,
       iconoplasm_alias_overlay_version: manifest.publication_aliases.version,
