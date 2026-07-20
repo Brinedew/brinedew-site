@@ -1,84 +1,15 @@
+import { matchIconoplasmRouteContract } from "./iconoplasm-route-contract.js"
+
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
-const RATE_LIMIT_PERIOD_SECONDS = 60
-
-const BINDINGS = Object.freeze({
-  5: "ICONOPLASM_RATE_LIMIT_5",
-  60: "ICONOPLASM_RATE_LIMIT_60",
-  120: "ICONOPLASM_RATE_LIMIT_120",
-})
-
-function methods(...allowed) {
-  const accepted = new Set(allowed)
-  if (accepted.has("GET")) accepted.add("HEAD")
-  return (method) => accepted.has(method)
-}
-
-const read = methods("GET")
-const write = methods("POST")
-
-// This registry is the only owner of public Iconoplasm quota policy. The
-// stateful Worker must not recreate these checks: all production traffic enters
-// through the routed public edge Worker before crossing the service binding.
-const ICONOPLASM_EDGE_RATE_LIMIT_POLICIES = Object.freeze(
-  [
-    ["metadata", 60, (path, method) => read(method) && path === "/api/public/v1/metadata"],
-    ["stats", 60, (path, method) => read(method) && path === "/api/public/v1/stats"],
-    ["schema", 60, (path, method) => read(method) && path === "/api/public/v1/schema"],
-    [
-      "catalog_manifest",
-      60,
-      (path, method) => read(method) && path === "/api/public/v1/catalog/manifest",
-    ],
-    [
-      "catalog_artifact",
-      120,
-      (path, method) =>
-        read(method) &&
-        path.startsWith("/api/public/v1/catalog/catalog.") &&
-        path.endsWith(".json"),
-    ],
-    [
-      "catalog_dump",
-      60,
-      (path, method) =>
-        read(method) && path.startsWith("/api/public/v1/dumps/catalog.") && path.endsWith(".jsonl"),
-    ],
-    ["gallery", 60, (path, method) => read(method) && path === "/api/public/v1/gallery"],
-    ["gene_search", 120, (path, method) => read(method) && path === "/api/public/v1/genes/search"],
-    ["gene_batch", 60, (path, method) => write(method) && path === "/api/public/v1/genes/batch"],
-    ["resolve", 60, (path, method) => write(method) && path === "/api/public/v1/resolve"],
-    ["changes", 60, (path, method) => read(method) && path === "/api/public/v1/changes"],
-    ["media", 120, (path, method) => read(method) && path.startsWith("/api/public/v1/media/")],
-    [
-      "site_gene",
-      120,
-      (path, method) => read(method) && path.startsWith("/api/iconoplasm/site/genes/"),
-    ],
-    [
-      "artist_blocklist_submission",
-      5,
-      (path, method) => write(method) && path === "/api/iconoplasm/artist-blacklist-submissions",
-    ],
-  ].map(([id, limit, matches]) =>
-    Object.freeze({
-      id,
-      limit,
-      period: RATE_LIMIT_PERIOD_SECONDS,
-      binding: BINDINGS[limit],
-      matches,
-    }),
-  ),
-)
 
 export function resolveIconoplasmEdgeRateLimitPolicy(request) {
   const url = new URL(request.url)
   if (url.hostname.toLowerCase() !== ICONOPLASM_HOST) return null
   const method = String(request.method || "GET").toUpperCase()
   if (method === "OPTIONS") return null
-  return (
-    ICONOPLASM_EDGE_RATE_LIMIT_POLICIES.find((policy) => policy.matches(url.pathname, method)) ||
-    null
-  )
+  const match = matchIconoplasmRouteContract(url.pathname, method)
+  if (!match?.methodAllowed) return null
+  return match.route.rateLimit || null
 }
 
 async function actorPartitionKey(request, policy) {

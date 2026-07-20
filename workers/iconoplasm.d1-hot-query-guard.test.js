@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { readFileSync } from "node:fs"
+import { matchIconoplasmRouteContract } from "./iconoplasm-route-contract.js"
 
 const source = readFileSync(
   new URL(
@@ -60,18 +61,15 @@ test("DO NOT DELETE: discovery hover path keeps canonical discovery keys raw", (
 })
 
 test("DO NOT DELETE: per-symbol card endpoint stays KV-backed and version-barrier safe", () => {
-  const routeFamilies = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "function iconoplasmBudgetRouteFamilyFromPath",
-    "function iconoplasmBudgetClassFromRouteFamily",
-  )
-  assert.ok(routeFamilies.includes("/^\\/api\\/iconoplasm\\/cards\\/[^/]+$/"))
-
-  const pathHandler = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker",
-    "function missingTheOnlyAllowedStatefulWorkerResponse",
-  )
-  assert.ok(pathHandler.includes("/^\\/api\\/iconoplasm\\/cards\\/[^/]+$/"))
-  assert.match(pathHandler, /requestMethod === "GET" \|\| requestMethod === "HEAD"/)
+  const getContract = matchIconoplasmRouteContract("/api/iconoplasm/cards/TP53", "GET")
+  const headContract = matchIconoplasmRouteContract("/api/iconoplasm/cards/TP53", "HEAD")
+  const postContract = matchIconoplasmRouteContract("/api/iconoplasm/cards/TP53", "POST")
+  assert.equal(getContract?.route.id, "mobile_card_symbol")
+  assert.equal(getContract?.route.budgetFamily, "mobile_card_symbol")
+  assert.equal(getContract?.route.gatewayHandler, "mobile_card_symbol")
+  assert.equal(getContract?.methodAllowed, true)
+  assert.equal(headContract?.methodAllowed, true)
+  assert.equal(postContract?.methodAllowed, false)
 
   const budgetClass = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     "function iconoplasmBudgetClassFromRouteFamily",

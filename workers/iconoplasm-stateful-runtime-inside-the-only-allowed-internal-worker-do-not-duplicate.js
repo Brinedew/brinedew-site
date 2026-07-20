@@ -6,6 +6,14 @@ import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
 import { iconoplasmCacheControl } from "./iconoplasm-cache-policy.js"
 import { iconoplasmObservabilitySnapshotForAdmin } from "./iconoplasm-observability-freshness.js"
+import {
+  ICONOPLASM_API_SCHEMA_VERSION as API_SCHEMA_VERSION,
+  ICONOPLASM_PUBLIC_API_VERSION as PUBLIC_API_VERSION,
+  ICONOPLASM_PUBLIC_API_PREFIX as PUBLIC_API_PREFIX,
+  ICONOPLASM_SITE_GENE_API_PREFIX as SITE_GENE_API_PREFIX,
+  iconoplasmPublicApiPath as publicApiPath,
+  matchIconoplasmRouteContract,
+} from "./iconoplasm-route-contract.js"
 import { ICONOPLASM_CLAN_CATALOG } from "./generated/iconoplasm-clan-catalog.js"
 import { renderIconoplasmArtistStylesHtml } from "./iconoplasm-artist-styles-html.js"
 import {
@@ -63,7 +71,6 @@ const ICONOPLASM_CLAN_CATALOG_TOTAL = ICONOPLASM_CLAN_CATALOG_BY_NAME.size
 // candidates. Website Ops bulk sync is the boundary that publishes those assets here.
 // This worker owns the public/community path only, so hot reads and writes should be
 // optimized for published assets, cheap ranking refreshes, and Cloudflare request economy.
-const API_SCHEMA_VERSION = 4
 const CATALOG_ARTIFACT_SCHEMA_VERSION = Number(ICONOPLASM_CANDIDATE_CONTRACT.catalog_schema_version)
 const CATALOG_ARTIFACT_CONTRACT_REVISION = Number(
   ICONOPLASM_CANDIDATE_CONTRACT.catalog_contract_revision,
@@ -79,9 +86,6 @@ const PUBLISHED_CATALOG_CONTRACT_REVISION = Number(
 const PUBLISHED_COMPATIBILITY_CONTRACTS = Object.freeze(
   ICONOPLASM_PUBLISHER_RELEASE.compatibility_contracts || {},
 )
-const PUBLIC_API_VERSION = "v1"
-const PUBLIC_API_PREFIX = `/api/public/${PUBLIC_API_VERSION}`
-const SITE_GENE_API_PREFIX = "/api/iconoplasm/site/genes"
 const ICONOPLASM_PRINT_COPY_PNG_PREFIX = "/api/iconoplasm/print-copy"
 const ICONOPLASM_PRINT_COPY_RENDER_PREFIX = "/api/iconoplasm/print-copy-render"
 const ICONOPLASM_PRINT_COPY_RENDER_VERSION = "2026-05-24-browser-run-v1"
@@ -1373,23 +1377,8 @@ function assertIconoplasmCardCatalogBudgetPreflight(env) {
 }
 
 function iconoplasmBudgetRouteFamilyFromPath(path) {
-  if (path === publicApiPath("/metadata")) return "public_metadata"
-  if (path === publicApiPath("/stats")) return "public_stats"
-  if (path === publicApiPath("/catalog/manifest") || isPublicCatalogArtifactPath(path))
-    return "public_catalog"
-  if (path.startsWith(publicApiPath("/dumps/catalog."))) return "public_catalog_dump"
-  if (path === publicApiPath("/gallery")) return "public_gallery"
-  if (path === publicApiPath("/genes/search")) return "public_gene_search"
-  if (path === publicApiPath("/genes/batch")) return "public_gene_batch"
-  if (path === "/api/iconoplasm/mobile-card-manifest") return "mobile_card_manifest"
-  if (/^\/api\/iconoplasm\/cards\/[^/]+$/.test(path)) return "mobile_card_symbol"
-  if (iconoplasmPrintCopyPngSymbolFromPath(path)) return "print_copy_png"
-  if (iconoplasmPrintCopyRenderSymbolFromPath(path)) return "print_copy_render"
-  if (path.startsWith(publicApiPath("/genes/"))) return "public_gene_detail"
-  if (path === publicApiPath("/resolve")) return "public_resolve"
-  if (path === publicApiPath("/changes")) return "public_changes"
-  if (path.startsWith(publicApiPath("/media/"))) return "public_media"
-  if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) return "site_gene_detail"
+  const declaredRoute = matchIconoplasmRouteContract(path)
+  if (declaredRoute) return declaredRoute.route.budgetFamily
   if (path === "/api/iconoplasm/discoveries/encounter") return "discoveries_encounter"
   if (path === "/api/iconoplasm/discoveries/me") return "discoveries_me"
   if (path === "/api/iconoplasm/account-gallery-window") return "account_gallery_window"
@@ -10807,20 +10796,8 @@ function catalogManifestEtag(manifest) {
   return version ? `"${version}"` : null
 }
 
-function publicApiPath(suffix = "") {
-  const normalized = String(suffix || "")
-  if (!normalized) return PUBLIC_API_PREFIX
-  return normalized.startsWith("/")
-    ? `${PUBLIC_API_PREFIX}${normalized}`
-    : `${PUBLIC_API_PREFIX}/${normalized}`
-}
-
 function publicUrl(url, suffix = "") {
   return `${url.origin}${publicApiPath(suffix)}`
-}
-
-function isPublicCatalogArtifactPath(path) {
-  return path.startsWith(publicApiPath("/catalog/catalog.")) && path.endsWith(".json")
 }
 
 const ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE =
@@ -10889,27 +10866,8 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (path === "/blocklist/" || path === "/artist-styles" || path === "/artist-styles/") {
     return requestMethod === "GET" || requestMethod === "HEAD"
   }
-  if (path === publicApiPath("/metadata")) return true
-  if (path === publicApiPath("/stats")) return true
-  if (path === publicApiPath("/catalog/manifest")) return true
-  if (isPublicCatalogArtifactPath(path)) return true
-  if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) return true
-  if (path === publicApiPath("/gallery")) return true
-  if (path === publicApiPath("/genes/search")) return true
-  if (path === publicApiPath("/genes/batch")) return requestMethod === "POST"
-  if (path === "/api/iconoplasm/mobile-card-manifest") return requestMethod === "POST"
-  if (/^\/api\/iconoplasm\/cards\/[^/]+$/.test(path))
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (iconoplasmPrintCopyPngSymbolFromPath(path))
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (iconoplasmPrintCopyRenderSymbolFromPath(path))
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path.startsWith(publicApiPath("/genes/"))) return true
-  if (path === publicApiPath("/resolve")) return true
-  if (path === publicApiPath("/changes")) return true
-  if (path.startsWith(publicApiPath("/media/"))) return true
-  if (path.startsWith("/portraits/")) return true
-  if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) return true
+  const declaredRoute = matchIconoplasmRouteContract(path, requestMethod)
+  if (declaredRoute) return declaredRoute.methodAllowed
   if (path === "/api/iconoplasm/votes/me")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/discoveries/encounter") return requestMethod === "POST"
@@ -11009,7 +10967,6 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
     return requestMethod === "POST"
   if (path === "/api/iconoplasm/artist-styles/search")
     return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/artist-blacklist-submissions") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/artist-styles/remove") return requestMethod === "POST"
   if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/pending")
     return requestMethod === "GET" || requestMethod === "HEAD"
@@ -25903,6 +25860,90 @@ async function mirrorGeneCommentToDiscord(request, env, ctx, { symbol, username,
   await postIconoplasmGeneCommentToDiscord(env, { symbol, username, body, imageBytes })
 }
 
+async function dispatchDeclaredIconoplasmGatewayRoute(match, request, env, ctx, path) {
+  if (!match?.methodAllowed) return null
+  const handler = match.route.gatewayHandler
+  if (handler === "iconoplasm_api") return null
+
+  switch (handler) {
+    case "public_metadata":
+      return handlePublicMetadata(request, env)
+    case "public_stats":
+      return handlePublicStats(request, env)
+    case "public_schema":
+      return asHead(request, handlePublicSchema())
+    case "public_catalog_manifest":
+      return handlePublicCatalogManifest(request, env)
+    case "public_catalog_artifact":
+      return asHead(request, await handlePublicCatalogArtifact(env, path))
+    case "public_catalog_dump":
+      return asHead(request, await handlePublicCatalogJsonlDump(env, path))
+    case "public_gallery":
+      return handlePublicGallery(request, env, ctx)
+    case "public_gene_search":
+      return handlePublicGeneSearch(request, env)
+    case "public_gene_batch":
+      return handlePublicGeneBatch(request, env)
+    case "mobile_card_manifest":
+      return handleMobileCardManifest(request, env)
+    case "mobile_card_symbol":
+      return handleMobileCardSymbol(
+        request,
+        env,
+        ctx,
+        decodeURIComponent(match.params.symbol || ""),
+      )
+    case "print_copy_png":
+      return handleIconoplasmPrintCopyPng(
+        request,
+        env,
+        ctx,
+        iconoplasmPrintCopyPngSymbolFromPath(path),
+      )
+    case "print_copy_render":
+      return handleIconoplasmPrintCopyRender(
+        request,
+        env,
+        ctx,
+        iconoplasmPrintCopyRenderSymbolFromPath(path),
+      )
+    case "public_gene_denied":
+      return json(publicRichRouteDeniedPayload(new URL(request.url), "gene_detail"), 403, {
+        "Cache-Control": "no-store",
+      })
+    case "public_resolve":
+      return handlePublicResolve(request, env)
+    case "public_changes":
+      return handlePublicChanges(request, env)
+    case "public_media":
+      return handlePublicMedia(request, env, match.params.symbol || "")
+    case "portrait": {
+      const key = path.replace(/^\/+/, "")
+      return cachedPortraitResponse(request, ctx, async () => {
+        const obj = await readPortraitStorageObject(env, key, {
+          fallbackContentType: "image/webp",
+        })
+        if (!obj && !env.ICONOPLASM_PORTRAITS && !canReadExternalPortraitStorage(env)) {
+          return json({ error: "Portrait bucket not configured" }, 404)
+        }
+        if (!obj) return json({ error: "Portrait not found" }, 404)
+        return new Response(obj.body, {
+          headers: {
+            "Content-Type": obj.contentType || "image/webp",
+            "Cache-Control": "public, max-age=31536000, immutable",
+            ETag: `"${obj.etag || key}"`,
+            "Access-Control-Allow-Origin": "*",
+          },
+        })
+      })
+    }
+    case "site_gene_detail":
+      return handleSiteGeneDetail(request, env, path)
+    default:
+      throw new Error(`Unknown Iconoplasm gateway handler: ${String(handler || "")}`)
+  }
+}
+
 export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
   request,
   env,
@@ -25919,6 +25960,14 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
     if (request.method === "OPTIONS") {
       responseStatus = 204
       return new Response(null, { status: 204, headers: corsHeaders() })
+    }
+    const declaredRoute = matchIconoplasmRouteContract(path, request.method)
+    if (declaredRoute && !declaredRoute.methodAllowed) {
+      responseStatus = 405
+      return json({ error: "Method not allowed" }, 405, {
+        Allow: declaredRoute.route.methods.join(", "),
+        "Cache-Control": "no-store",
+      })
     }
     if (!isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, request.method)) {
       responseStatus = 404
@@ -26070,130 +26119,18 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       return response
     }
 
-    if (path === publicApiPath("/metadata")) {
-      const response = await handlePublicMetadata(request, meteredEnv)
-      responseStatus = response.status
-      return response
+    const declaredResponse = await dispatchDeclaredIconoplasmGatewayRoute(
+      declaredRoute,
+      request,
+      meteredEnv,
+      ctx,
+      path,
+    )
+    if (declaredResponse) {
+      responseStatus = declaredResponse.status
+      return declaredResponse
     }
-    if (path === publicApiPath("/stats")) {
-      const response = await handlePublicStats(request, meteredEnv)
-      responseStatus = response.status
-      return response
-    }
-    if (path === publicApiPath("/catalog/manifest")) {
-      const response = await handlePublicCatalogManifest(request, meteredEnv)
-      responseStatus = response.status
-      return response
-    }
-    if (isPublicCatalogArtifactPath(path)) {
-      const response = await handlePublicCatalogArtifact(meteredEnv, path)
-      responseStatus = response.status
-      return response
-    }
-    if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) {
-      routeLoggedByNestedHandler = true
-      const response =
-        await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-          request,
-          meteredEnv,
-          ctx,
-        )
-      responseStatus = response.status
-      return response
-    }
-    if (path.startsWith("/portraits/")) {
-      routeLoggedByNestedHandler = true
-      const response =
-        await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-          request,
-          meteredEnv,
-          ctx,
-        )
-      responseStatus = response.status
-      return response
-    }
-    if (path === publicApiPath("/gallery")) {
-      const response = await handlePublicGallery(request, meteredEnv, ctx)
-      responseStatus = response.status
-      return response
-    }
-    if (path === publicApiPath("/genes/search")) {
-      const response = await handlePublicGeneSearch(request, meteredEnv)
-      responseStatus = response.status
-      return response
-    }
-    if (path === publicApiPath("/genes/batch")) {
-      const response = await handlePublicGeneBatch(request, meteredEnv)
-      responseStatus = response.status
-      return response
-    }
-    if (path === "/api/iconoplasm/mobile-card-manifest") {
-      const response = await handleMobileCardManifest(request, meteredEnv)
-      responseStatus = response.status
-      return response
-    }
-    const mobileCardSymbolMatch = /^\/api\/iconoplasm\/cards\/([^/]+)$/.exec(path)
-    if (mobileCardSymbolMatch) {
-      const response = await handleMobileCardSymbol(
-        request,
-        meteredEnv,
-        ctx,
-        decodeURIComponent(mobileCardSymbolMatch[1] || ""),
-      )
-      responseStatus = response.status
-      return response
-    }
-    const printCopyPngSymbol = iconoplasmPrintCopyPngSymbolFromPath(path)
-    if (printCopyPngSymbol) {
-      const response = await handleIconoplasmPrintCopyPng(
-        request,
-        meteredEnv,
-        ctx,
-        printCopyPngSymbol,
-      )
-      responseStatus = response.status
-      return response
-    }
-    const printCopyRenderSymbol = iconoplasmPrintCopyRenderSymbolFromPath(path)
-    if (printCopyRenderSymbol) {
-      const response = await handleIconoplasmPrintCopyRender(
-        request,
-        meteredEnv,
-        ctx,
-        printCopyRenderSymbol,
-      )
-      responseStatus = response.status
-      return response
-    }
-    if (path.startsWith(publicApiPath("/genes/"))) {
-      const deniedUrl = new URL(request.url)
-      const response = json(publicRichRouteDeniedPayload(deniedUrl, "gene_detail"), 403, {
-        "Cache-Control": "no-store",
-      })
-      responseStatus = response.status
-      return response
-    }
-    if (path === publicApiPath("/resolve")) {
-      const response = await handlePublicResolve(request, meteredEnv)
-      responseStatus = response.status
-      return response
-    }
-    if (path === publicApiPath("/changes")) {
-      const response = await handlePublicChanges(request, meteredEnv)
-      responseStatus = response.status
-      return response
-    }
-    if (path.startsWith(publicApiPath("/media/"))) {
-      const rawSymbol = path.slice(publicApiPath("/media/").length)
-      const response = await handlePublicMedia(request, meteredEnv, rawSymbol)
-      responseStatus = response.status
-      return response
-    }
-    if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) {
-      const response = await handleSiteGeneDetail(request, meteredEnv, path)
-      responseStatus = response.status
-      return response
-    }
+
     if (path.startsWith("/api/iconoplasm/")) {
       const headers = new Headers(request.headers)
       headers.set(ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE, "1")
@@ -26483,196 +26420,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       return done(
         "iconoplasm_api_only_allowed_stateful_worker",
         new Response(response.body, { status: response.status, headers: response.headers }),
-      )
-    }
-
-    if (path === publicApiPath("/metadata")) {
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        env,
-      )
-      return done(
-        "public_metadata",
-        new Response(response.body, { status: response.status, headers: response.headers }),
-        API_SCHEMA_VERSION,
-      )
-    }
-
-    if (path === publicApiPath("/stats")) {
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        env,
-      )
-      return done(
-        "public_stats",
-        new Response(response.body, { status: response.status, headers: response.headers }),
-        API_SCHEMA_VERSION,
-      )
-    }
-
-    if (path === publicApiPath("/schema")) {
-      return done("public_schema", handlePublicSchema(), API_SCHEMA_VERSION)
-    }
-
-    if (path === publicApiPath("/catalog/manifest")) {
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        env,
-      )
-      return done(
-        "public_catalog_manifest",
-        new Response(response.body, { status: response.status, headers: response.headers }),
-        API_SCHEMA_VERSION,
-      )
-    }
-
-    if (isPublicCatalogArtifactPath(path)) {
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        env,
-      )
-      return done(
-        "public_catalog_artifact",
-        new Response(response.body, { status: response.status, headers: response.headers }),
-        API_SCHEMA_VERSION,
-      )
-    }
-
-    if (path.startsWith(publicApiPath("/dumps/catalog.")) && path.endsWith(".jsonl")) {
-      return done(
-        "public_catalog_dump",
-        await handlePublicCatalogJsonlDump(env, path),
-        API_SCHEMA_VERSION,
-      )
-    }
-
-    if (path === publicApiPath("/gallery")) {
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        env,
-      )
-      return done(
-        "public_gallery",
-        new Response(response.body, { status: response.status, headers: response.headers }),
-        API_SCHEMA_VERSION,
-      )
-    }
-
-    if (path === publicApiPath("/genes/search")) {
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        env,
-      )
-      return done(
-        "public_gene_search",
-        new Response(response.body, { status: response.status, headers: response.headers }),
-        API_SCHEMA_VERSION,
-      )
-    }
-
-    if (path === publicApiPath("/genes/batch")) {
-      if (!canAccessRichBatchRoute(request, env)) {
-        return done(
-          "public_gene_batch_denied",
-          json(publicRichRouteDeniedPayload(url, "gene_batch"), 403),
-          API_SCHEMA_VERSION,
-        )
-      }
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        env,
-      )
-      return done(
-        "public_gene_batch",
-        new Response(response.body, { status: response.status, headers: response.headers }),
-        API_SCHEMA_VERSION,
-      )
-    }
-
-    if (path === publicApiPath("/resolve")) {
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        env,
-      )
-      return done(
-        "public_resolve",
-        new Response(response.body, { status: response.status, headers: response.headers }),
-        API_SCHEMA_VERSION,
-      )
-    }
-
-    if (path === publicApiPath("/changes")) {
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        env,
-      )
-      return done(
-        "public_changes",
-        new Response(response.body, { status: response.status, headers: response.headers }),
-        API_SCHEMA_VERSION,
-      )
-    }
-
-    if (path.startsWith(publicApiPath("/media/"))) {
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        env,
-      )
-      return done(
-        "public_media",
-        new Response(response.body, { status: response.status, headers: response.headers }),
-        API_SCHEMA_VERSION,
-      )
-    }
-
-    if (path.startsWith(`${SITE_GENE_API_PREFIX}/`)) {
-      if (!hasTrustedIconoplasmBrowserOrigin(request) && !hasAdminToken(request, env)) {
-        return done(
-          "site_gene_denied",
-          json(publicRichRouteDeniedPayload(url, "gene_detail"), 403),
-          API_SCHEMA_VERSION,
-        )
-      }
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        env,
-      )
-      return done(
-        "site_gene",
-        new Response(response.body, { status: response.status, headers: response.headers }),
-        API_SCHEMA_VERSION,
-      )
-    }
-
-    if (path.startsWith(publicApiPath("/genes/"))) {
-      return done(
-        "public_gene_denied",
-        json(publicRichRouteDeniedPayload(url, "gene_detail"), 403),
-        API_SCHEMA_VERSION,
-      )
-    }
-
-    if (path.startsWith("/portraits/")) {
-      const key = path.replace(/^\/+/, "")
-      return done(
-        "portrait",
-        await cachedPortraitResponse(request, ctx, async () => {
-          const obj = await readPortraitStorageObject(env, key, {
-            fallbackContentType: "image/webp",
-          })
-          if (!obj && !env.ICONOPLASM_PORTRAITS && !canReadExternalPortraitStorage(env)) {
-            return json({ error: "Portrait bucket not configured" }, 404)
-          }
-          if (!obj) return json({ error: "Portrait not found" }, 404)
-          return new Response(obj.body, {
-            headers: {
-              "Content-Type": obj.contentType || "image/webp",
-              "Cache-Control": "public, max-age=31536000, immutable",
-              ETag: `"${obj.etag || key}"`,
-              "Access-Control-Allow-Origin": "*",
-            },
-          })
-        }),
       )
     }
 
