@@ -8161,6 +8161,49 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   /* ─── Rendering: Gene detail page ─── */
 
+  function genePageShellMarkup(includeSkeleton) {
+    return (
+      '<header class="icono-gene-page-header"><div class="icono-nav">' +
+      '<a href="/" data-icono-nav>' +
+      ICONO_ARROW_LEFT +
+      "All genes</a>" +
+      "</div></header>" +
+      '<main class="icono-gene-page-main" id="icono-main">' +
+      (includeSkeleton
+        ? '<div class="icono-gene-skeleton" id="icono-gene-loading">' +
+          buildBrickSkeletonCardMarkup() +
+          "</div>"
+        : "") +
+      '<div id="icono-gene-content"></div>' +
+      "</main>"
+    )
+  }
+
+  function ensureGenePageLandmarks(root) {
+    if (!root || root.querySelector(".icono-gene-page-main")) return
+    var nav = root.querySelector(".icono-nav")
+    var header = document.createElement("header")
+    header.className = "icono-gene-page-header"
+    if (nav && nav.parentNode === root) {
+      root.insertBefore(header, nav)
+      header.appendChild(nav)
+    } else {
+      header.innerHTML =
+        '<div class="icono-nav"><a href="/" data-icono-nav>' +
+        ICONO_ARROW_LEFT +
+        "All genes</a></div>"
+      root.insertBefore(header, root.firstChild)
+    }
+    var main = document.createElement("main")
+    main.className = "icono-gene-page-main"
+    main.id = "icono-main"
+    var loading = root.querySelector("#icono-gene-loading")
+    var content = root.querySelector("#icono-gene-content")
+    root.appendChild(main)
+    if (loading) main.appendChild(loading)
+    if (content) main.appendChild(content)
+  }
+
   function renderGene(root, symbol, options) {
     var opts = options || {}
     var renderId = ++activeGeneRenderId
@@ -8190,17 +8233,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
     renderIconoplasmSidebar()
     if (!hasHeadStartedGene) {
-      root.innerHTML =
-        '<div class="icono-nav">' +
-        '<a href="/" data-icono-nav>' +
-        ICONO_ARROW_LEFT +
-        "All genes</a>" +
-        "</div>" +
-        '<div class="icono-gene-skeleton" id="icono-gene-loading">' +
-        buildBrickSkeletonCardMarkup() +
-        "</div>" +
-        '<div id="icono-gene-content"></div>'
+      root.innerHTML = genePageShellMarkup(true)
     }
+    ensureGenePageLandmarks(root)
 
     var contentEl = document.getElementById("icono-gene-content")
     var loadingEl = document.getElementById("icono-gene-loading")
@@ -8233,24 +8268,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var g = result && result.data
       if (!g) throw new Error("Gene not found")
       if (!contentEl) {
-        root.innerHTML =
-          '<div class="icono-nav">' +
-          '<a href="/" data-icono-nav>' +
-          ICONO_ARROW_LEFT +
-          "All genes</a>" +
-          "</div>" +
-          '<div id="icono-gene-content"></div>'
+        root.innerHTML = genePageShellMarkup(false)
         contentEl = document.getElementById("icono-gene-content")
       }
       if (loadingEl) loadingEl.style.display = "none"
       if (!contentEl) {
-        root.innerHTML =
-          '<div class="icono-nav">' +
-          '<a href="/" data-icono-nav>' +
-          ICONO_ARROW_LEFT +
-          "All genes</a>" +
-          "</div>" +
-          '<div id="icono-gene-content"></div>'
+        root.innerHTML = genePageShellMarkup(false)
         contentEl = document.getElementById("icono-gene-content")
       }
       iconoSidebarState.gene = {
@@ -8739,10 +8762,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     lastGenePageDiscoveryVisitKey = ""
     renderIconoplasmSidebar()
     root.innerHTML =
-      '<div class="icono-empty">' +
+      '<main class="icono-page-main" id="icono-main"><div class="icono-empty">' +
       "<h2>Page not found</h2>" +
       '<p><a href="/" data-icono-nav>Back to Iconoplasm</a></p>' +
-      "</div>"
+      "</div></main>"
   }
 
   /* ─── Client-side navigation ─── */
@@ -9372,15 +9395,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     iconoSidebarState.page = "clans"
     renderIconoplasmSidebar()
     root.innerHTML =
-      '<div class="icono-nav"><a href="/" data-icono-nav>' +
+      '<header class="icono-clans-page-header"><div class="icono-nav"><a href="/" data-icono-nav>' +
       ICONO_ARROW_LEFT +
-      "Archive</a></div>" +
+      "Archive</a></div></header>" +
+      '<main class="icono-clans-page-main" id="icono-main">' +
       '<section class="icono-clans" id="icono-clans-content" aria-busy="true">' +
       '<div class="icono-clans-head" id="icono-clans-head"></div>' +
       '<div id="icono-clans-body">' +
       clansLoadingSkeletonMarkup() +
       "</div>" +
-      "</section>"
+      "</section></main>"
     fetchAuthedJSON("/api/iconoplasm/clans")
       .then(function (data) {
         renderClansData(data)
