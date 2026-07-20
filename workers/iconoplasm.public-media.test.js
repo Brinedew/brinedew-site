@@ -393,6 +393,10 @@ test("site gene payload includes published portrait dimensions for first-party b
   const payload = await response.json()
 
   assert.equal(response.status, 200)
+  assert.equal(
+    response.headers.get("Cache-Control"),
+    "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
+  )
   assert.equal(payload?.portrait?.status, "published")
   assert.equal(payload?.portrait?.width, 384)
   assert.equal(payload?.portrait?.height, 512)
@@ -423,17 +427,59 @@ test("site gene detail is identical for guest, Loweren, and every other account"
         {},
       )
     assert.equal(response.status, 200)
-    return response.json()
+    return { payload: await response.json(), cacheControl: response.headers.get("Cache-Control") }
   }
 
-  const guest = await read()
-  const loweren = await read("session=loweren-session")
-  const anotherAccount = await read("session=another-session")
+  const guestResult = await read()
+  const lowerenResult = await read("session=loweren-session")
+  const anotherAccountResult = await read("session=another-session")
+  const guest = guestResult.payload
+  const loweren = lowerenResult.payload
+  const anotherAccount = anotherAccountResult.payload
 
   assert.deepEqual(loweren, guest)
   assert.deepEqual(anotherAccount, guest)
+  assert.equal(
+    guestResult.cacheControl,
+    "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
+  )
+  assert.equal(lowerenResult.cacheControl, guestResult.cacheControl)
+  assert.equal(anotherAccountResult.cacheControl, guestResult.cacheControl)
   assert.equal(typeof guest.essence, "object")
   assert.ok(Array.isArray(guest.portrait_candidates))
+})
+
+test("site gene detail keeps the public cache policy on conditional responses", async () => {
+  const env = buildEnv()
+  const first =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+        headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
+      }),
+      env,
+      {},
+    )
+  const etag = first.headers.get("ETag")
+  assert.ok(etag)
+
+  resetIconoplasmRuntimeCachesForTest()
+  const conditional =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+        headers: {
+          Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
+          "If-None-Match": etag,
+        },
+      }),
+      env,
+      {},
+    )
+
+  assert.equal(conditional.status, 304)
+  assert.equal(
+    conditional.headers.get("Cache-Control"),
+    "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
+  )
 })
 
 test("site gene detail canonicalizes alias requests before rendering the gene payload", async () => {

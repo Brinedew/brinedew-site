@@ -144,6 +144,26 @@ doesNotMatchOrFail(
   /\bnpm\s+(ci|install|i|run)\b|\bnpx\b/,
   "Observability refresh workflow must not use npm/npx.",
 )
+includesOrFail(
+  refreshWorkflow,
+  'cron: "17 * * * *"',
+  "Observability snapshot publication must run hourly.",
+)
+includesOrFail(
+  refreshWorkflow,
+  "check-iconoplasm-cloudflare-budget-headroom.mjs",
+  "Observability snapshot publication must fail closed on KV budget pressure.",
+)
+includesOrFail(
+  refreshWorkflow,
+  "iconoplasm:observability-snapshot:v1",
+  "Observability snapshot publication must use the single atomic KV key.",
+)
+doesNotMatchOrFail(
+  refreshWorkflow,
+  /wrangler\s+deploy/,
+  "Hourly observability publication must not become a second Worker deploy path.",
+)
 
 assert.equal(packageJson.packageManager, "pnpm@11.0.9", "packageManager must pin pnpm.")
 assert.equal(packageJson.engines?.pnpm, ">=10.0.0", "engines must name pnpm, not npm.")

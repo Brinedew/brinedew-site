@@ -16,7 +16,7 @@ Run these from `d:\Coding\Website`.
 
 Use the remote database when the question is about production data:
 
-- `npx wrangler d1 execute iconoplasm --remote --command "..."`
+- `pnpm exec wrangler d1 execute iconoplasm --remote --command "..."`
 
 If you skip `--remote`, you are not looking at the live data.
 
@@ -54,7 +54,7 @@ Exception: do **not** JSON-aggregate giant full-catalog payloads just because it
 This is the query pattern used for the “top 100 shortest full names for genes marked as male” request.
 
 ```text
-npx wrangler d1 execute iconoplasm --remote --command "SELECT json_group_array(json_object('gene_symbol', gene_symbol, 'full_name', full_name, 'name_len', name_len)) AS rows_json FROM (SELECT gene_symbol, full_name, LENGTH(TRIM(full_name)) AS name_len FROM icono_gene_essence WHERE lower(trim(sex)) = 'male' AND trim(COALESCE(full_name, '')) <> '' ORDER BY name_len ASC, full_name COLLATE NOCASE ASC, gene_symbol ASC LIMIT 100);"
+pnpm exec wrangler d1 execute iconoplasm --remote --command "SELECT json_group_array(json_object('gene_symbol', gene_symbol, 'full_name', full_name, 'name_len', name_len)) AS rows_json FROM (SELECT gene_symbol, full_name, LENGTH(TRIM(full_name)) AS name_len FROM icono_gene_essence WHERE lower(trim(sex)) = 'male' AND trim(COALESCE(full_name, '')) <> '' ORDER BY name_len ASC, full_name COLLATE NOCASE ASC, gene_symbol ASC LIMIT 100);"
 ```
 
 What this does:
@@ -69,7 +69,7 @@ What this does:
 If you only need the count first, use the same filter without the list projection:
 
 ```text
-npx wrangler d1 execute iconoplasm --remote --command "SELECT COUNT(*) AS male_count FROM icono_gene_essence WHERE lower(trim(sex)) = 'male' AND trim(COALESCE(full_name, '')) <> '';"
+pnpm exec wrangler d1 execute iconoplasm --remote --command "SELECT COUNT(*) AS male_count FROM icono_gene_essence WHERE lower(trim(sex)) = 'male' AND trim(COALESCE(full_name, '')) <> '';"
 ```
 
 ## discovery questions
@@ -280,6 +280,25 @@ What **not** to do:
 - do **not** treat repeated retries as progress; they only replay candidate ingest without a trustworthy DO budget reading
 
 This guard is intentional. The problem to fix is telemetry/auth availability, not the existence of the guardrail.
+
+## observability snapshot publication and freshness
+
+The admin Observability tab is fed by Cloudflare GraphQL data collected out of band. The live admin request path must never query GraphQL, D1, or a Durable Object to explain its own telemetry.
+
+Publication contract:
+
+- `.github/workflows/refresh-iconoplasm-observability-snapshot.yml` runs at minute 17 every hour and can also be dispatched manually.
+- The generator writes one JSON snapshot, the workflow verifies current Cloudflare KV headroom, and one atomic KV write publishes `iconoplasm:observability-snapshot:v1`.
+- The authenticated `/api/iconoplasm/admin/cost/snapshot` endpoint reads that value and falls back to the snapshot bundled by the last production deploy. It remains `no-store` and does no analytics work.
+- The application-owned usage ledger is intentionally retired. Cloudflare GraphQL and product dashboards remain the source of operational truth.
+
+Freshness SLA:
+
+- `fresh`: at most 90 minutes old
+- `stale`: 91–240 minutes old
+- `unavailable`: older than 240 minutes or missing a valid generated-at timestamp
+
+A red scheduled workflow is the publication failure alert. If the admin shows `stale`, `unavailable`, or `deploy fallback`, inspect that workflow before touching runtime telemetry fences or increasing KV budgets.
 
 ### finalization has one production path
 

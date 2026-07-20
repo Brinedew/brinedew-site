@@ -1,9 +1,3 @@
-import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
-
-const ICONOPLASM_OBSERVABILITY_SNAPSHOT_JSON = JSON.stringify(
-  ICONOPLASM_OBSERVABILITY_SNAPSHOT,
-).replace(/</g, "\\u003c")
-
 export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 <html lang="en">
 <head>
@@ -2512,7 +2506,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       var API_BASE = '/api/iconoplasm/admin';
       var ADMIN_READ_TIMEOUT_MS = 12000;
       var ADMIN_WRITE_TIMEOUT_MS = 30000;
-      var OBSERVABILITY_SNAPSHOT = ${ICONOPLASM_OBSERVABILITY_SNAPSHOT_JSON};
       var state = {
         assets: [],
         overviewSummary: null,
@@ -4286,21 +4279,21 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function buildIntegritySignalSvg(report) {
-        var status = report && report.status ? report.status : {};
+        var freshness = report && report.freshness ? report.freshness : {};
         var d1 = report && report.d1 ? report.d1 : {};
         var currentDay = d1 && d1.currentDay ? d1.currentDay : {};
         var automation = report && report.automation ? report.automation : {};
         var expectedWindow = safeNum(automation.rollingWindowDays || d1.expectedWindowDays || 0);
         var filledWindow = safeNum(automation.filledWindowDays);
         var coverageScore = expectedWindow > 0 ? Math.min(100, Math.round((filledWindow / expectedWindow) * 100)) : 0;
-        var freshnessTone = costStateTone(status.level || 'neutral');
+        var freshnessTone = costStateTone(freshness.level || 'neutral');
         var freshnessScore = freshnessTone === 'ok' ? 100 : (freshnessTone === 'warn' ? 60 : (freshnessTone === 'danger' ? 24 : 48));
         return buildBandChartSvg([
           {
             label: 'Freshness',
-            note: String(status.detail || 'No baked freshness detail yet.'),
+            note: String(freshness.detail || 'No baked freshness detail yet.'),
             value: freshnessScore,
-            display: String(status.headline || 'unknown'),
+            display: String(freshness.headline || 'unknown'),
             tone: freshnessTone
           },
           {
@@ -5213,16 +5206,32 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function renderObservabilityRunbook(report) {
         if (!els.costDailyRouteBars) return;
-        var status = report && report.status ? report.status : {};
+        var freshness = report && report.freshness ? report.freshness : {};
         var d1 = report && report.d1 ? report.d1 : {};
         var currentDay = d1 && d1.currentDay ? d1.currentDay : {};
         var storage = d1 && d1.storage ? d1.storage : {};
         var automation = report && report.automation ? report.automation : {};
+        var publication = report && report.publication ? report.publication : {};
+        var retiredMetrics = Array.isArray(report && report.retiredMetrics) ? report.retiredMetrics : [];
         var rows = [
           {
             label: 'Snapshot freshness',
-            chip: renderCostStateChip(status.headline || 'unknown', costStateTone(status.level || 'neutral')),
-            note: report && report.generatedAt ? ('Baked ' + formatTimestampShort(report.generatedAt) + '.') : String(status.detail || 'No bake timestamp present.')
+            chip: renderCostStateChip(freshness.headline || 'unknown', costStateTone(freshness.level || 'neutral')),
+            note: String(freshness.detail || 'No bake timestamp present.')
+          },
+          {
+            label: 'Publication path',
+            chip: renderCostStateChip(publication.state === 'published' ? 'KV published' : 'deploy fallback', publication.state === 'published' ? 'ok' : 'warn'),
+            note: publication.state === 'published'
+              ? 'The hourly job published this snapshot through one atomic KV key.'
+              : 'The hourly KV artifact is unavailable; the Worker bundle snapshot is being used.'
+          },
+          {
+            label: 'Retired metrics',
+            chip: renderCostStateChip(retiredMetrics.length ? (String(retiredMetrics.length) + ' intentional') : 'none', 'neutral'),
+            note: retiredMetrics.length
+              ? retiredMetrics.map(function (item) { return String(item.label || item.id || 'metric') + ': ' + String(item.reason || 'retired'); }).join(' ')
+              : 'No metrics are marked as intentionally retired.'
           },
           {
             label: 'Window coverage',
@@ -5414,7 +5423,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       // are the operational source of truth for this account.
       function renderCostUsage(report) {
         var snapshot = report && typeof report === 'object' ? report : {};
-        var status = snapshot && snapshot.status ? snapshot.status : {};
+        var freshness = snapshot && snapshot.freshness ? snapshot.freshness : {};
         var d1 = snapshot && snapshot.d1 ? snapshot.d1 : {};
         var currentDay = d1 && d1.currentDay ? d1.currentDay : {};
         var cycleTotals = d1 && d1.cycleTotals ? d1.cycleTotals : {};
@@ -5452,8 +5461,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           els.costMetrics.innerHTML = [
             {
               label: 'Freshness',
-              value: String(status.headline || 'Unknown'),
-              note: snapshot.generatedAt ? formatTimestampShort(snapshot.generatedAt) : String(status.detail || 'No bake timestamp yet.')
+              value: String(freshness.headline || 'Unknown'),
+              note: String(freshness.detail || 'No bake timestamp yet.')
             },
             {
               label: 'Cycle',
@@ -5536,42 +5545,42 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       async function refreshCostUsage() {
         if (els.costRefresh) els.costRefresh.disabled = true;
-        var shouldRefetchBakedSnapshot = Boolean(state.costLoaded);
         if (els.costUpdatedAt) {
-          els.costUpdatedAt.textContent = shouldRefetchBakedSnapshot
+          els.costUpdatedAt.textContent = state.costLoaded
             ? 'Reloading baked Cloudflare snapshot…'
             : 'Loading baked Cloudflare snapshot…';
         }
         try {
-          var report = OBSERVABILITY_SNAPSHOT || {};
           // Chesterton's fence:
-          // This button must refresh only the already-baked snapshot payload.
+          // This request reads only the already-baked snapshot payload.
           // Pulling live telemetry here would recreate the exact budget hazard we
           // retired: admin observability generating its own observability load.
-          // So the manual reload hits a tiny authenticated endpoint that returns
-          // the baked snapshot constant with no D1, DO, or GraphQL work behind it.
-          if (shouldRefetchBakedSnapshot) {
-            var payload = await apiJson('/cost/snapshot?ts=' + encodeURIComponent(String(Date.now())), {
-              method: 'GET',
-              headers: {
-                'Cache-Control': 'no-store'
-              }
-            });
-            if (payload && payload.snapshot && typeof payload.snapshot === 'object') {
-              report = payload.snapshot;
-              OBSERVABILITY_SNAPSHOT = report;
+          // The authenticated endpoint reads one atomically-published KV value,
+          // with the deploy-time constant as a fallback. It performs no D1, DO,
+          // GraphQL, or Cloudflare analytics queries.
+          var payload = await apiJson('/cost/snapshot?ts=' + encodeURIComponent(String(Date.now())), {
+            method: 'GET',
+            headers: {
+              'Cache-Control': 'no-store'
             }
+          });
+          if (!payload || !payload.snapshot || typeof payload.snapshot !== 'object') {
+            throw new Error('Snapshot endpoint returned no snapshot payload.');
           }
+          var report = payload.snapshot;
           state.costLoaded = true;
           state.costReport = report;
           renderCostUsage(report);
           if (els.costUpdatedAt) {
-            els.costUpdatedAt.textContent = report && report.generatedAt
-              ? ('Snapshot baked at ' + report.generatedAt)
-              : 'Snapshot placeholder loaded. Run the out-of-band generator for fresh data.';
+            var freshness = report && report.freshness ? report.freshness : {};
+            var publication = report && report.publication ? report.publication : {};
+            els.costUpdatedAt.textContent = String(freshness.headline || 'Snapshot unavailable')
+              + (Number.isFinite(Number(freshness.ageMinutes)) ? (' · ' + String(freshness.ageMinutes) + ' min old') : '')
+              + (publication.state ? (' · ' + String(publication.state).replace('_', ' ')) : '');
           }
         } catch (err) {
           state.costLoaded = false;
+          if (els.costUpdatedAt) els.costUpdatedAt.textContent = 'Snapshot unavailable · publication endpoint failed';
           if (els.costMetrics) els.costMetrics.innerHTML = inlineFailureMarkup('Snapshot load failed', requestErrorMessage(err, 'Snapshot load failed.'));
           if (els.costReadTrend) els.costReadTrend.innerHTML = '';
           if (els.costD1WriteAdaptiveChart) els.costD1WriteAdaptiveChart.innerHTML = '';
