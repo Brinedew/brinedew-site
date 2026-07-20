@@ -24,6 +24,7 @@ const PATTERN_EXAMPLES = Object.freeze({
   public_gene_detail: "/api/public/v1/genes/TP53",
   gene_request_summary: "/api/iconoplasm/requests/gene/TP53/summary",
   gene_request_state_gone: "/api/iconoplasm/requests/gene/TP53",
+  emulsion_favorite_item: "/api/iconoplasm/emulsion-favorites/A1-255",
   admin_gene_request_diagnostics: "/api/iconoplasm/admin/requests/gene/TP53/diagnostics",
   clan_members: "/api/iconoplasm/clans/Kinase/members",
   gene_comments_legacy_read: "/api/iconoplasm/comments/gene/TP53",

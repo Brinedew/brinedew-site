@@ -27,7 +27,7 @@ export function isIconoplasmRequest(host) {
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers":
       "If-None-Match, Content-Type, X-Iconoplasm-Extension-Version, Authorization, X-Iconoplasm-Admin-Token",
     Vary: "Origin",
@@ -216,7 +216,7 @@ function isPathHandledAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotD
   method = "GET",
 ) {
   const requestMethod = String(method || "GET").toUpperCase()
-  if (!["GET", "HEAD", "POST"].includes(requestMethod)) return false
+  if (!["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"].includes(requestMethod)) return false
   const declaredRoute = matchIconoplasmRouteContract(path, requestMethod)
   if (declaredRoute) return declaredRoute.methodAllowed
   if (path.startsWith("/api/iconoplasm/")) {
@@ -391,7 +391,7 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
     if (request.method === "OPTIONS") {
       return done(request, new Response(null, { status: 204, headers: corsHeaders() }))
     }
-    if (!["GET", "HEAD", "POST"].includes(request.method)) {
+    if (!["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
       return done(request, json({ error: "Method not allowed" }, 405))
     }
 
