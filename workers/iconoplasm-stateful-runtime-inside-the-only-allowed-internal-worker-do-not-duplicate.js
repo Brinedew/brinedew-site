@@ -4,6 +4,7 @@ import { parseCookies } from "./auth.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { createIconoplasmAdminPublicationHandlers } from "./iconoplasm-admin-publication-routes.js"
+import { createIconoplasmAdminReadModelHandlers } from "./iconoplasm-admin-read-model-routes.js"
 import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
 import { iconoplasmCacheControl } from "./iconoplasm-cache-policy.js"
 import { iconoplasmObservabilitySnapshotForAdmin } from "./iconoplasm-observability-freshness.js"
@@ -26139,23 +26140,48 @@ async function publishCatalogArtifact(env) {
   }
 }
 
-const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = createIconoplasmAdminPublicationHandlers({
-  actor,
-  coerceBoolean,
-  fetchCatalogState,
-  fetchCatalogStateRows,
-  fetchEssenceStateRows,
-  isAdmin: isIconoplasmAdmin,
-  json,
-  mutationLimiterSnapshot: iconoplasmAdminMutationLimiterSnapshotFromEnv,
-  normalizeCatalogPayloadItem,
-  normalizeEssencePayload,
-  normalizeSymbol,
-  publishCatalogArtifact,
-  rebuildSharedGeneDiscoveryRollup,
-  sanitizeText,
-  syncAdminReadModels,
-  upsertGeneEssence,
+const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
+  ...createIconoplasmAdminPublicationHandlers({
+    actor,
+    coerceBoolean,
+    fetchCatalogState,
+    fetchCatalogStateRows,
+    fetchEssenceStateRows,
+    isAdmin: isIconoplasmAdmin,
+    json,
+    mutationLimiterSnapshot: iconoplasmAdminMutationLimiterSnapshotFromEnv,
+    normalizeCatalogPayloadItem,
+    normalizeEssencePayload,
+    normalizeSymbol,
+    publishCatalogArtifact,
+    rebuildSharedGeneDiscoveryRollup,
+    sanitizeText,
+    syncAdminReadModels,
+    upsertGeneEssence,
+  }),
+  ...createIconoplasmAdminReadModelHandlers({
+    bootstrapCompleteStatus: ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE,
+    cardArtifactUnavailableCode: CARD_ARTIFACT_UNAVAILABLE,
+    coerceBoolean,
+    currentMobileCardSnapshotVersion,
+    ensureBootstrapInitialized: ensureAdminReadModelBootstrapInitialized,
+    fetchBootstrapState: fetchAdminReadModelBootstrapState,
+    invalidateGalleryCache,
+    isAdmin: isIconoplasmAdmin,
+    json,
+    normalizeBootstrapSteps: normalizeAdminReadModelBootstrapSteps,
+    normalizeSymbol,
+    normalizeSymbolBatch: normalizeAdminReadModelSymbolBatch,
+    normalizeVisionBatch: normalizeAdminReadModelVisionBatch,
+    runBootstrapStep: runAdminReadModelBootstrapStep,
+    sanitizeText,
+    symbolRequestMax: ADMIN_READ_MODEL_SYNC_REQUEST_SYMBOL_MAX,
+    syncReadModels: syncAdminReadModels,
+    syncReadModelsAndInvalidateGallery: syncAdminReadModelsAndInvalidateGallery,
+    validVisionId: validAdminRollupVisionId,
+    visionRequestMax: ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX,
+    writeBootstrapState: writeAdminReadModelBootstrapState,
+  }),
 })
 
 export const ICONOPLASM_DECLARED_API_HANDLER_NAMES = Object.freeze(
@@ -30426,339 +30452,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           { "Cache-Control": "no-store" },
         ),
       )
-    }
-
-    if (path === "/api/iconoplasm/admin/read-models/sync" && request.method === "POST") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_read_models_sync_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_read_models_sync_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-
-      let p = {}
-      try {
-        p = await request.json()
-      } catch {
-        return done("admin_read_models_sync_400", json({ error: "Invalid JSON" }, 400))
-      }
-
-      const rawSymbols = Array.isArray(p?.symbols) ? p.symbols : []
-      const rawVisionIds = Array.isArray(p?.vision_ids ?? p?.visionIds)
-        ? (p.vision_ids ?? p.visionIds)
-        : []
-      if (rawSymbols.length > ADMIN_READ_MODEL_SYNC_REQUEST_SYMBOL_MAX)
-        return done(
-          "admin_read_models_sync_400",
-          json(
-            {
-              error: `Too many symbols (max ${ADMIN_READ_MODEL_SYNC_REQUEST_SYMBOL_MAX})`,
-            },
-            400,
-          ),
-        )
-      if (rawVisionIds.length > ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX)
-        return done(
-          "admin_read_models_sync_400",
-          json(
-            {
-              error: `Too many vision_ids (max ${ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX})`,
-            },
-            400,
-          ),
-        )
-
-      const symbols = Array.from(
-        new Set(rawSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)),
-      )
-      const visionIds = Array.from(
-        new Set(rawVisionIds.map((value) => validAdminRollupVisionId(value)).filter(Boolean)),
-      )
-      const fullVision = coerceBoolean(p?.full_vision ?? p?.fullVision, false)
-      const fullRebuild = coerceBoolean(p?.full_rebuild ?? p?.fullRebuild, false)
-      const skipVoteSummaries = coerceBoolean(p?.skip_vote_summaries ?? p?.skipVoteSummaries, false)
-      const skipGeneRollups = coerceBoolean(p?.skip_gene_rollups ?? p?.skipGeneRollups, false)
-      const skipVisionRollups = coerceBoolean(p?.skip_vision_rollups ?? p?.skipVisionRollups, false)
-      const skipDashboard = coerceBoolean(p?.skip_dashboard ?? p?.skipDashboard, false)
-      const invalidateGallery = coerceBoolean(p?.invalidate_gallery ?? p?.invalidateGallery, true)
-
-      // Bulk workstation sync now pushes the slow derived read-model refresh
-      // into this dedicated endpoint after reconcile chunks land. That keeps a
-      // fail-slow read-model rebuild from masquerading as one giant reconcile.
-      //
-      // Operational rule for the next person debugging the GUI Sync button:
-      // invalidate_gallery=false is a real budget control, not a cosmetic flag.
-      // The finalization queue uses this endpoint for vote summaries, gene
-      // rollups, vision rollups, and dashboard refreshes while intentionally
-      // deferring the global gallery/card-catalog KV publish until the durable
-      // ledger is drained. If a scoped phase starts publishing KV artifacts, KV
-      // writes fan out per scope and the panel may look "fresh" while the queue
-      // is still doing work. Keep scoped read-model refreshes D1-only and let
-      // the final ledger completion perform the single global publish.
-      const result = invalidateGallery
-        ? await syncAdminReadModelsAndInvalidateGallery(env, {
-            symbols,
-            visionIds,
-            fullVision,
-            fullRebuild,
-            skipVoteSummaries,
-            skipGeneRollups,
-            skipVisionRollups,
-            skipDashboard,
-          })
-        : await syncAdminReadModels(env, {
-            symbols,
-            visionIds,
-            fullVision,
-            fullRebuild,
-            skipVoteSummaries,
-            skipGeneRollups,
-            skipVisionRollups,
-            skipDashboard,
-          })
-
-      return done(
-        "admin_read_models_sync",
-        json(
-          {
-            ok: true,
-            symbols: Number(result?.symbols || 0),
-            visions: Number(result?.visions || 0),
-            partial: Boolean(result?.partial),
-            stop_reason: sanitizeText(result?.stop_reason || "", 255) || null,
-            deferred:
-              result?.deferred && typeof result.deferred === "object"
-                ? {
-                    symbols: Math.max(0, Number(result?.deferred?.symbols || 0) || 0),
-                    visions:
-                      result?.deferred?.visions === null || result?.deferred?.visions === undefined
-                        ? null
-                        : Math.max(0, Number(result?.deferred?.visions || 0) || 0),
-                    dashboard: Boolean(result?.deferred?.dashboard),
-                  }
-                : { symbols: 0, visions: 0, dashboard: false },
-            budget: result?.budget || null,
-            target_daily_percent:
-              result?.target_daily_percent === null || result?.target_daily_percent === undefined
-                ? null
-                : Number(result.target_daily_percent || 0) || null,
-            invalidate_gallery: invalidateGallery,
-            full_vision: fullVision,
-            full_rebuild: fullRebuild,
-            skip_vote_summaries: skipVoteSummaries,
-            skip_gene_rollups: skipGeneRollups,
-            skip_vision_rollups: skipVisionRollups,
-            skip_dashboard: skipDashboard,
-            card_catalog:
-              result?.card_catalog && typeof result.card_catalog === "object"
-                ? {
-                    artifact_version:
-                      sanitizeText(result.card_catalog.artifact_version || "", 128) || null,
-                    artifact_gene_count: Math.max(
-                      0,
-                      Number(result.card_catalog.artifact_gene_count || 0) || 0,
-                    ),
-                    catalog_gene_count: Math.max(
-                      0,
-                      Number(result.card_catalog.catalog_gene_count || 0) || 0,
-                    ),
-                    artifact_validated_at:
-                      sanitizeText(result.card_catalog.artifact_validated_at || "", 64) || null,
-                    source: "published_card_catalog",
-                  }
-                : null,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
-    if (path === "/api/iconoplasm/admin/card-vms/warm" && request.method === "POST") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_card_vms_warm_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_card_vms_warm_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-
-      let p = {}
-      try {
-        p = await request.json()
-      } catch {
-        return done("admin_card_vms_warm_400", json({ error: "Invalid JSON" }, 400))
-      }
-
-      const versionInfo = await currentMobileCardSnapshotVersion(env)
-      const requestedSnapshotVersion = sanitizeText(p?.version || "", 128) || ""
-      const snapshotVersion =
-        requestedSnapshotVersion && requestedSnapshotVersion === versionInfo.previous
-          ? versionInfo.previous
-          : versionInfo.current
-      const scope = String(p?.scope || "")
-        .trim()
-        .toLowerCase()
-      if (scope && scope !== "catalog") {
-        return done(
-          "admin_card_vms_warm_scope_409",
-          json(
-            {
-              ok: false,
-              code: "CARD_ARTIFACT_REQUIRES_FULL_CATALOG",
-              error:
-                "Card artifact publication has one valid scope: the full catalog. Symbol-scoped artifacts are not allowed because they make unrelated catalog genes look missing.",
-              supported_scope: "catalog",
-            },
-            409,
-            { "Cache-Control": "no-store" },
-          ),
-        )
-      }
-      if (Array.isArray(p?.symbols) && p.symbols.length) {
-        return done(
-          "admin_card_vms_warm_symbols_409",
-          json(
-            {
-              ok: false,
-              code: "CARD_ARTIFACT_REQUIRES_FULL_CATALOG",
-              error:
-                "Card artifact publication has one valid scope: the full catalog. Symbol-scoped artifacts are not allowed because they make unrelated catalog genes look missing.",
-              supported_scope: "catalog",
-            },
-            409,
-            { "Cache-Control": "no-store" },
-          ),
-        )
-      }
-      // Full-catalog publish goes through the one publish path
-      // (invalidateGalleryCache -> publishCardCatalogArtifactSmart): incremental or
-      // bounded staging rebuild, content-addressed, with the build-before-flip rail.
-      // A large delta returns mid-rebuild (done:false); call again to keep draining.
-      let invalidation
-      try {
-        invalidation = await invalidateGalleryCache(env)
-      } catch (error) {
-        const errorCode = sanitizeText(String(error?.code || ""), 128) || CARD_ARTIFACT_UNAVAILABLE
-        return done(
-          "admin_card_vms_warm_card_artifact_refused",
-          json(
-            {
-              ok: false,
-              code: errorCode,
-              error: sanitizeText(String(error?.message || error), 1000),
-              budget: error?.payload || null,
-              version: snapshotVersion,
-              scope: "catalog",
-            },
-            errorCode === "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED" ? 429 : 409,
-            { "Cache-Control": "no-store" },
-          ),
-        )
-      }
-      const publishResult = invalidation.card_catalog || {}
-      const rebuildInProgress = Boolean(publishResult.bootstrap_more)
-      return done(
-        "admin_card_vms_warm",
-        json(
-          {
-            ok: true,
-            scope: "catalog",
-            version: invalidation.version,
-            after: sanitizeText(p?.after || p?.cursor || "", 64) || "",
-            next_cursor: "",
-            done: !rebuildInProgress,
-            rebuild_in_progress: rebuildInProgress,
-            requested: publishResult.catalog_gene_count,
-            warmed: publishResult.artifact_gene_count,
-            missing: 0,
-            artifact_version: publishResult.artifact_version,
-            artifact_gene_count: publishResult.artifact_gene_count,
-            catalog_gene_count: publishResult.catalog_gene_count,
-            artifact_validated_at: publishResult.artifact_validated_at,
-            source: "published_card_catalog",
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
-    if (path === "/api/iconoplasm/admin/read-models/bootstrap") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_read_models_bootstrap_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_read_models_bootstrap_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-
-      if (request.method === "GET") {
-        const state = await fetchAdminReadModelBootstrapState(env)
-        return done(
-          "admin_read_models_bootstrap_get",
-          json({ ok: true, state }, 200, { "Cache-Control": "no-store" }),
-        )
-      }
-
-      if (request.method === "POST") {
-        let p = {}
-        try {
-          p = await request.json()
-        } catch {
-          return done("admin_read_models_bootstrap_400", json({ error: "Invalid JSON" }, 400))
-        }
-
-        const reset = coerceBoolean(p?.reset ?? p?.restart, false)
-        const steps = normalizeAdminReadModelBootstrapSteps(p?.steps)
-        const symbolBatch = normalizeAdminReadModelSymbolBatch(p?.symbol_batch ?? p?.symbolBatch)
-        const visionBatch = normalizeAdminReadModelVisionBatch(p?.vision_batch ?? p?.visionBatch)
-
-        let latest = null
-        let processedSymbols = 0
-        let processedVisions = 0
-        try {
-          for (let index = 0; index < steps; index++) {
-            latest = await runAdminReadModelBootstrapStep(env, {
-              reset: reset && index === 0,
-              symbolBatch,
-              visionBatch,
-            })
-            processedSymbols += Number(latest?.processed?.symbols || 0)
-            processedVisions += Number(latest?.processed?.visions || 0)
-            if (
-              !latest?.advanced ||
-              latest?.state?.status === ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE
-            )
-              break
-          }
-        } catch (error) {
-          const state = await ensureAdminReadModelBootstrapInitialized(env)
-          await writeAdminReadModelBootstrapState(env, {
-            ...state,
-            last_error: String(error?.message || error || "bootstrap failed").slice(0, 2000),
-          })
-          throw error
-        }
-
-        return done(
-          "admin_read_models_bootstrap_post",
-          json(
-            {
-              ok: true,
-              steps,
-              processed_symbols: processedSymbols,
-              processed_visions: processedVisions,
-              state: latest?.state || (await fetchAdminReadModelBootstrapState(env)),
-            },
-            200,
-            { "Cache-Control": "no-store" },
-          ),
-        )
-      }
-
-      return done("admin_read_models_bootstrap_405", json({ error: "Method not allowed" }, 405))
     }
 
     if (path === "/api/iconoplasm/admin/overview" && request.method === "GET") {
