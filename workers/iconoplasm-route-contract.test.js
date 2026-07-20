@@ -7,7 +7,10 @@ import {
   matchIconoplasmRouteContract,
 } from "./iconoplasm-route-contract.js"
 import { resolveIconoplasmEdgeRateLimitPolicy } from "./iconoplasm-edge-rate-limit.js"
-import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  ICONOPLASM_DECLARED_GATEWAY_HANDLER_NAMES,
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const PATTERN_EXAMPLES = Object.freeze({
   public_catalog_artifact: "/api/public/v1/catalog/catalog.abc123.json",
@@ -16,6 +19,9 @@ const PATTERN_EXAMPLES = Object.freeze({
   print_copy_png: "/api/iconoplasm/print-copy/TP53.png",
   print_copy_render: "/api/iconoplasm/print-copy-render/TP53",
   public_gene_detail: "/api/public/v1/genes/TP53",
+  gene_request_summary: "/api/iconoplasm/requests/gene/TP53/summary",
+  gene_request_state_gone: "/api/iconoplasm/requests/gene/TP53",
+  admin_gene_request_diagnostics: "/api/iconoplasm/admin/requests/gene/TP53/diagnostics",
 })
 
 function examplePath(route) {
@@ -51,6 +57,18 @@ test("Iconoplasm route contracts are complete, unique, immutable, and executable
       assert.equal(match?.methodAllowed, true)
     }
   }
+})
+
+test("every declared gateway handler has exactly one executable registry entry", () => {
+  const declaredHandlerNames = Array.from(
+    new Set(
+      ICONOPLASM_ROUTE_CONTRACTS.map((route) => route.gatewayHandler).filter(
+        (handlerName) => handlerName !== "iconoplasm_api",
+      ),
+    ),
+  ).sort()
+
+  assert.deepEqual(ICONOPLASM_DECLARED_GATEWAY_HANDLER_NAMES, declaredHandlerNames)
 })
 
 test("method admission and edge quota resolve from the same route contract", () => {

@@ -365,26 +365,19 @@ test("DO NOT DELETE: cost attribution should name request-picker and admin dashb
       "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
     )
 
-  assert.match(
-    runtime,
-    /return "gene_request_state_gone"/,
-    "legacy request-state route should stay tombstoned as an explicit removed bucket",
-  )
-  assert.match(
-    runtime,
-    /return "gene_request_summary"/,
-    "request summary route should have its own named cost bucket",
-  )
-  assert.match(
-    runtime,
-    /return "gene_request_options"/,
-    "request options route should have its own named cost bucket",
-  )
-  assert.match(
-    runtime,
-    /return "gene_request_submit"/,
-    "request submit route should have its own named cost bucket",
-  )
+  for (const routeId of [
+    "gene_request_state_gone",
+    "gene_request_summary",
+    "gene_request_options",
+    "gene_request_submit",
+  ]) {
+    const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === routeId)
+    assert.equal(
+      route?.budgetFamily,
+      routeId,
+      `${routeId} should stay an explicit declarative cost bucket`,
+    )
+  }
   const mobileManifest = ICONOPLASM_ROUTE_CONTRACTS.find(
     (route) => route.id === "mobile_card_manifest",
   )
@@ -408,16 +401,10 @@ test("DO NOT DELETE: cost attribution should name request-picker and admin dashb
     /return "admin_coverage"/,
     "admin coverage should not disappear into admin_other",
   )
-  assert.match(
-    runtime,
-    /return "admin_requests_open"/,
-    "admin request queue should not disappear into admin_other",
-  )
-  assert.match(
-    runtime,
-    /return "admin_requests_fulfill"/,
-    "admin request fulfillment should not disappear into admin_other",
-  )
+  for (const routeId of ["admin_requests_open", "admin_requests_fulfill"]) {
+    const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === routeId)
+    assert.equal(route?.budgetFamily, routeId, `${routeId} should not disappear into admin_other`)
+  }
   assert.match(
     runtime,
     /LEGACY_GENE_REQUEST_ROUTE_REMOVED/,
