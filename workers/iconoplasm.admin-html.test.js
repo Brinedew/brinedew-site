@@ -62,6 +62,7 @@ test("iconoplasm admin exposes the observability snapshot as a first-class tab",
   assert.match(ICONOPLASM_ADMIN_HTML, /Snapshot freshness/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Publication path/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Retired metrics/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /renderObservabilityRunbook\(snapshot\)/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Snapshot unavailable · publication endpoint failed/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Reloading baked Cloudflare snapshot…/)
   assert.match(ICONOPLASM_ADMIN_HTML, /refreshOverviewSummary\(\)/)

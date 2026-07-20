@@ -5536,6 +5536,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         if (els.costEventOverlayChart) els.costEventOverlayChart.innerHTML = buildIntegritySignalSvg(snapshot);
         if (els.costUnknownSeries) els.costUnknownSeries.innerHTML = buildUnknownSeriesSvg(snapshot);
         if (els.costRequestDistributionChart) els.costRequestDistributionChart.innerHTML = buildRequestDistributionSvg(snapshot);
+        renderObservabilityRunbook(snapshot);
         renderObservabilityQueryPack(snapshot);
       }
 
