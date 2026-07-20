@@ -8773,7 +8773,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     wireCandidateVoteBoxes(container, genePayload)
     wireCandidateRemoveButtons(container, genePayload)
     wireCandidateCopyForms(container, genePayload)
-    wireEmulsionFavoriteButtons(container)
     var leadCard = container.querySelector(".icono-gene-lead-card")
     if (leadCard && isMobileLabelReviewEnabled()) wireMobileLabelCard(leadCard)
     refreshPortraitLightbox()
@@ -9935,6 +9934,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function init() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
+    // Favorite controls are rendered and replaced by auth hydration, picker
+    // searches, and client-side navigation. One document-level delegated
+    // listener owns every current and future star without per-island rewiring.
+    wireEmulsionFavoriteButtons(document)
     portraitDelivery.install(document)
     startMobileLabelBreakpointObserver()
     startSharedIconoplasmSettingsAutoSync()
