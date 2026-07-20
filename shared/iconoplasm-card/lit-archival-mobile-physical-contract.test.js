@@ -66,6 +66,18 @@ test("iconoplasm app script still parses after infocard-only mobile pivot", () =
   assert.equal(result.status, 0, `app.js must parse\n${result.stderr}${result.stdout}`)
 })
 
+test("typed footer copy follows the card ink token in light and dark themes", async () => {
+  const css = await sourceText(cssPath)
+  const typedFooterBlock = cssStandaloneBlockFor(css, ".icono-label-footer-line--typed")
+
+  assert.match(typedFooterBlock, /color:\s*var\(--icono-label-ink\);/)
+  assert.doesNotMatch(
+    typedFooterBlock,
+    /color:\s*#[0-9a-f]{3,8}/i,
+    "typed footer copy must not pin light-theme brown ink in dark mode",
+  )
+})
+
 test("mobile archival renderer is infocard-only and has no sleeve or material atlas path", async () => {
   const app = await sourceText(appPath)
   const css = await sourceText(cssPath)
