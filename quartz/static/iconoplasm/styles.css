@@ -1723,6 +1723,15 @@ img-comparison-slider.rendered [slot="second"] {
   margin-top: 0.35rem;
 }
 
+/* The picker wrapper grows when its inline results open. Keep Queue free sized
+   to the search row instead of letting its percentage min-height cover the
+   star column below it. */
+.icono-request-dialog .icono-request-inline-submit {
+  top: 0.4rem;
+  transform: none;
+  min-height: calc(3.15rem - 0.8rem);
+}
+
 .icono-request-option {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
