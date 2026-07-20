@@ -813,7 +813,7 @@
         "</div></td>",
       "<td>" +
         requestKindPill(row.request_kind) +
-        '<div style="margin-top:4px;">' +
+        '<div class="request-status-stack">' +
         requestStatusPill(row.status) +
         "</div></td>",
       "<td><div>" +
@@ -1311,33 +1311,40 @@
     if (coverage) {
       var total = Math.max(1, Number(coverage.total || 0))
       var segments = [
-        { key: "zero", label: "0 candidates", color: "#c0392b" },
-        { key: "one", label: "1 candidate", color: "#e67e22" },
-        { key: "two_to_five", label: "2-5 candidates", color: "#7dcea0" },
-        { key: "six_plus", label: "6+ candidates", color: "#5dade2" },
+        { key: "zero", label: "0 candidates", className: "zero" },
+        { key: "one", label: "1 candidate", className: "one" },
+        { key: "two_to_five", label: "2-5 candidates", className: "two-to-five" },
+        { key: "six_plus", label: "6+ candidates", className: "six-plus" },
       ]
+      var segmentStart = 0
       els.overviewCoverage.innerHTML = [
-        '<div class="coverage-bar">',
+        '<svg class="coverage-bar" viewBox="0 0 ' +
+          esc(String(total)) +
+          ' 1" preserveAspectRatio="none" role="img" aria-label="Candidate coverage distribution">',
         segments
           .map(function (segment) {
             var value = Number(coverage[segment.key] || 0)
-            var width = (value / total) * 100
-            return (
-              '<div class="coverage-segment" style="width:' +
-              width +
-              "%; background:" +
-              segment.color +
-              '"></div>'
-            )
+            var rect =
+              '<rect class="coverage-segment coverage-segment--' +
+              segment.className +
+              '" x="' +
+              esc(String(segmentStart)) +
+              '" y="0" width="' +
+              esc(String(value)) +
+              '" height="1"><title>' +
+              esc(segment.label + ": " + value) +
+              "</title></rect>"
+            segmentStart += value
+            return rect
           })
           .join(""),
-        "</div>",
+        "</svg>",
         '<div class="coverage-legend">',
         segments
           .map(function (segment) {
             return [
               '<div class="coverage-row">',
-              '<span class="coverage-dot" style="background:' + segment.color + '"></span>',
+              '<span class="coverage-dot coverage-dot--' + segment.className + '"></span>',
               "<span>" + esc(segment.label) + "</span>",
               "<strong>" + esc(String(coverage[segment.key] || 0)) + "</strong>",
               "</div>",
@@ -1467,14 +1474,7 @@
       tooltip.setAttribute("aria-hidden", "true")
       els.costReadTrend.appendChild(tooltip)
     }
-    var hoverLine = els.costReadTrend.querySelector("[data-cost-trend-hover-line]")
-    if (!hoverLine) {
-      hoverLine = document.createElement("div")
-      hoverLine.className = "cost-chart-hover-line"
-      hoverLine.setAttribute("data-cost-trend-hover-line", "true")
-      els.costReadTrend.appendChild(hoverLine)
-    }
-    return { tooltip: tooltip, hoverLine: hoverLine }
+    return { tooltip: tooltip }
   }
 
   function hideCostTrendTooltip() {
@@ -1482,28 +1482,6 @@
     if (!chrome) return
     chrome.tooltip.classList.remove("is-visible")
     chrome.tooltip.setAttribute("aria-hidden", "true")
-    chrome.hoverLine.classList.remove("is-visible")
-  }
-
-  function positionCostTrendTooltip(event) {
-    var chrome = ensureCostTrendHoverChrome()
-    if (!chrome || !els.costReadTrend) return
-    var point = event && event.currentTarget
-    if (!point) return
-    var chartRect = els.costReadTrend.getBoundingClientRect()
-    var pointRect = point.getBoundingClientRect()
-    var x = pointRect.left - chartRect.left + pointRect.width / 2
-    var y = pointRect.top - chartRect.top + pointRect.height / 2
-    var tooltipWidth = chrome.tooltip.offsetWidth || 180
-    var tooltipHeight = chrome.tooltip.offsetHeight || 70
-    var left = Math.max(8, Math.min(chartRect.width - tooltipWidth - 8, x + 12))
-    var top = Math.max(8, Math.min(chartRect.height - tooltipHeight - 8, y - tooltipHeight - 12))
-    if (left + tooltipWidth > chartRect.width - 8) {
-      left = Math.max(8, x - tooltipWidth - 12)
-    }
-    chrome.tooltip.style.left = Math.round(left) + "px"
-    chrome.tooltip.style.top = Math.round(top) + "px"
-    chrome.hoverLine.style.left = Math.round(x) + "px"
   }
 
   function showCostTrendTooltip(event) {
@@ -1523,8 +1501,6 @@
     ].join("")
     chrome.tooltip.classList.add("is-visible")
     chrome.tooltip.setAttribute("aria-hidden", "false")
-    chrome.hoverLine.classList.add("is-visible")
-    positionCostTrendTooltip(event)
   }
 
   function bindCostTrendHover() {
@@ -1532,7 +1508,6 @@
     ensureCostTrendHoverChrome()
     els.costReadTrend.querySelectorAll('[data-cost-trend-point="true"]').forEach(function (point) {
       point.addEventListener("mouseenter", showCostTrendTooltip)
-      point.addEventListener("mousemove", positionCostTrendTooltip)
       point.addEventListener("focus", showCostTrendTooltip)
       point.addEventListener("blur", hideCostTrendTooltip)
       point.addEventListener("mouseleave", hideCostTrendTooltip)
@@ -1542,7 +1517,7 @@
   function costLabel(value) {
     return String(value || "unknown")
       .replaceAll("_", " ")
-      .replace(/w/g, function (char) {
+      .replace(/\b\w/g, function (char) {
         return char.toUpperCase()
       })
   }
@@ -2159,7 +2134,6 @@
       .map(function (row) {
         var label = costLabel(row && row.key)
         var value = safeNum(row && row.value)
-        var width = Math.max(6, Math.round((value / maxValue) * 100))
         var secondary = row && row.secondary ? String(row.secondary) : ""
         return [
           '<div class="cost-bar-row">',
@@ -2173,13 +2147,13 @@
             (secondary ? " · " + esc(secondary) : "") +
             "</div>",
           "</div>",
-          '<div class="cost-bar-track">',
-          '<div class="cost-bar-segment" style="width:' +
-            width +
-            "%; background:" +
-            esc((row && row.color) || (options && options.color) || "#b84a26") +
-            ';"></div>',
-          "</div>",
+          '<progress class="cost-bar-progress" max="' +
+            esc(String(maxValue)) +
+            '" value="' +
+            esc(String(value)) +
+            '" aria-label="' +
+            esc(label + ": " + compactMetricNumber(value)) +
+            '"></progress>',
           row && row.note ? '<div class="cost-subtle">' + esc(row.note) + "</div>" : "",
           "</div>",
         ].join("")
@@ -3023,11 +2997,13 @@
               esc(compactMetricNumber(row.limit)) +
               "</span>",
             "</div>",
-            '<div class="cost-budget-bar"><div class="cost-budget-fill' +
+            '<progress class="cost-budget-progress' +
               costFillToneClass(row.used, row.limit) +
-              '" style="width:' +
-              pct +
-              '%;"></div></div>',
+              '" max="100" value="' +
+              esc(String(pct)) +
+              '" aria-label="' +
+              esc(row.label + ": " + pct + "% used") +
+              '"></progress>',
             '<div class="small">' + esc(row.note) + "</div>",
             "</div>",
           ].join("")
@@ -5334,17 +5310,6 @@
     return rows.slice(start, start + pageSize)
   }
 
-  function previewAspectRatio(asset) {
-    var ratio = Number(asset && asset.aspect_ratio)
-    if (Number.isFinite(ratio) && ratio > 0) return Math.max(0.55, Math.min(2.2, ratio))
-    var width = Number(asset && asset.width)
-    var height = Number(asset && asset.height)
-    if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
-      return Math.max(0.55, Math.min(2.2, width / height))
-    }
-    return 1
-  }
-
   function findSelectedVisionAsset(detail) {
     var assets = Array.isArray(detail && detail.assets) ? detail.assets : []
     if (!assets.length) return null
@@ -5561,7 +5526,6 @@
     return [
       '<button class="vision-preview-button' + (active ? " is-active" : "") + '"',
       ' type="button"',
-      ' style="--thumb-ratio:' + esc(String(previewAspectRatio(asset))) + '"',
       ' data-vision-open="' + esc(visionId || "") + '"',
       ' data-vision-asset="' + esc(asset.asset_sha256 || "") + '"',
       ' title="' + esc(titleParts.join(" · ")) + '">',
@@ -5672,7 +5636,7 @@
         ? '<img src="' +
           esc(selectedAsset.medium_url) +
           '" alt="Selected artist example" loading="eager" fetchpriority="high" />'
-        : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No preview available</div>',
+        : '<div class="gallery-empty gallery-empty--media">No preview available</div>',
       "</div>",
       '<div class="vision-panel-nav">',
       '<button type="button" data-vision-nav="prev"' +
@@ -6062,8 +6026,7 @@
         )
       }
       if (els.visionStatsMeta) {
-        els.visionStatsMeta.innerHTML =
-          '<span style="color: var(--danger)">Vision stats unavailable.</span>'
+        els.visionStatsMeta.innerHTML = '<span class="text-danger">Vision stats unavailable.</span>'
       }
       if (els.stylesNotes) {
         els.stylesNotes.innerHTML =
@@ -6213,7 +6176,7 @@
           '" alt="Blot for ' +
           esc(a.gene_symbol || "") +
           '" loading="lazy" width="160" height="160" />'
-        : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No blot</div>',
+        : '<div class="gallery-empty gallery-empty--media">No blot</div>',
       "</div>",
       '<div class="gallery-card-meta">',
       '<div class="gallery-title">' + esc(a.gene_symbol || "") + "</div>",
@@ -6258,7 +6221,7 @@
           '" alt="Candidate blot for ' +
           esc(a.gene_symbol || "") +
           '" loading="lazy" width="160" height="160" />'
-        : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No blot</div>',
+        : '<div class="gallery-empty gallery-empty--media">No blot</div>',
       "</div>",
       '<div class="gallery-card-meta">',
       '<div class="gallery-title">' + esc(a.gene_symbol || "") + "</div>",
@@ -6308,7 +6271,7 @@
           '" alt="Canonical blot for ' +
           esc(a.gene_symbol || "") +
           '" loading="lazy" width="160" height="160" />'
-        : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No canonical blot</div>',
+        : '<div class="gallery-empty gallery-empty--media">No canonical blot</div>',
       "</div>",
       '<div class="gallery-media-label">Canonical</div>',
       "</div>",
@@ -6320,7 +6283,7 @@
           '" alt="Vote winner for ' +
           esc(a.gene_symbol || "") +
           '" loading="lazy" width="160" height="160" />'
-        : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No vote winner</div>',
+        : '<div class="gallery-empty gallery-empty--media">No vote winner</div>',
       "</div>",
       '<div class="gallery-media-label">Vote winner</div>',
       "</div>",
@@ -6375,7 +6338,7 @@
                 '" alt="Selected blot for ' +
                 esc(detail.gene_symbol || "") +
                 '" loading="lazy" width="320" height="320" />'
-              : '<div class="gallery-empty" style="min-height:100%; border:0; border-radius:0; padding:12px;">No preview</div>',
+              : '<div class="gallery-empty gallery-empty--media">No preview</div>',
             "</div>",
             '<div class="detail-hero-meta">',
             "<strong>" +
@@ -6526,7 +6489,7 @@
     var assets = filteredAssets()
     if (!assets.length) {
       els.body.innerHTML =
-        '<div class="gallery-empty" style="grid-column:1 / -1">Nothing matched this gallery slice.</div>'
+        '<div class="gallery-empty gallery-empty--full-row">Nothing matched this gallery slice.</div>'
       syncVisibleBatchActions()
       return
     }
@@ -6596,7 +6559,7 @@
     } catch (err) {
       if (isRequestCanceled(err)) return
       state.archiveLoaded = false
-      els.meta.innerHTML = '<span style="color: var(--danger)">Failed to load.</span>'
+      els.meta.innerHTML = '<span class="text-danger">Failed to load.</span>'
       setLog({ error: String(err.message || err), details: err.response || null })
     } finally {
       els.refresh.disabled = false

@@ -1074,13 +1074,16 @@ function isSiteSettingsBridgeRequest(request) {
 function buildContentSecurityPolicy(request) {
   let allowUnsafeEval = false
   let allowInlineScripts = true
+  let allowInlineStyles = true
   try {
     const url = new URL(request.url)
     allowUnsafeEval = shouldAllowUnsafeEval(url)
     allowInlineScripts = !isIconoplasmAdminSurface(url)
+    allowInlineStyles = !isIconoplasmAdminSurface(url)
   } catch {
     allowUnsafeEval = false
     allowInlineScripts = true
+    allowInlineStyles = true
   }
 
   const scriptTokens = ["script-src", "'self'"]
@@ -1093,6 +1096,7 @@ function buildContentSecurityPolicy(request) {
     "https://static.cloudflareinsights.com",
   )
   const scriptSrc = scriptTokens.join(" ")
+  const styleSrc = allowInlineStyles ? "style-src 'self' 'unsafe-inline'" : "style-src 'self'"
   const allowIconoplasmShoelaceDataIcons = (() => {
     try {
       return shouldAllowIconoplasmShoelaceDataIcons(new URL(request.url))
@@ -1112,7 +1116,7 @@ function buildContentSecurityPolicy(request) {
     ? "frame-src 'self' https://brinedew.bio https://*.brinedew.bio https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com"
     : "frame-src 'self' https://brinedew.bio https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com"
 
-  return `default-src 'self'; base-uri 'self'; object-src 'none'; ${frameAncestors}; img-src 'self' data: blob: https://cdn.discordapp.com https://iconoplasmportraits.b-cdn.net; font-src 'self' data:; style-src 'self' 'unsafe-inline'; ${scriptSrc}; ${connectSrc}; ${frameSrc}; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests`
+  return `default-src 'self'; base-uri 'self'; object-src 'none'; ${frameAncestors}; img-src 'self' data: blob: https://cdn.discordapp.com https://iconoplasmportraits.b-cdn.net; font-src 'self' data:; ${styleSrc}; ${scriptSrc}; ${connectSrc}; ${frameSrc}; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests`
 }
 
 function crossOriginResourcePolicyForRequest(request) {
