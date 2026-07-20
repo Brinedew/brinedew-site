@@ -48,7 +48,7 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   )
   assert.match(
     css,
-    /\.icono-request-dialog \.icono-request-results\s*\{[\s\S]*height:\s*min\(22rem, calc\(100dvh - 15rem\)\);/,
+    /\.icono-request-dialog \.icono-request-results\s*\{[\s\S]*height:\s*22rem;[\s\S]*max-height:\s*calc\(100dvh - 15rem\);/,
     "the Free queue picker should reserve its final height before options load",
   )
   assert.match(
