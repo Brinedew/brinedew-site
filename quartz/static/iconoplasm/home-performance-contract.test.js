@@ -529,6 +529,38 @@ test("home shell exposes landmarks, search semantics, and keyboard-owned paginat
   assert.equal(document.querySelector("#icono-load-sentinel"), null)
 })
 
+test("gene shell preserves landmarks when adopting server-rendered content", async () => {
+  const vm = await import("node:vm")
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("function genePageShellMarkup(includeSkeleton)")
+  const end = app.indexOf("function renderGene(root, symbol, options)", start)
+  assert.notEqual(start, -1, "missing gene page shell builder")
+  assert.notEqual(end, -1, "missing gene page shell boundary")
+  const { document } = parseHTML(
+    '<div id="server-root"><div class="icono-nav"><a href="/">All genes</a></div><div id="icono-gene-loading"></div><div id="icono-gene-content" data-icono-server-rendered-gene="true"></div></div>',
+  )
+  const sandbox = {
+    document,
+    ICONO_ARROW_LEFT: "←",
+    buildBrickSkeletonCardMarkup: () => '<article class="icono-card"></article>',
+  }
+  vm.runInNewContext(app.slice(start, end), sandbox)
+
+  const shell = parseHTML(`<div>${sandbox.genePageShellMarkup(true)}</div>`).document
+  assert.equal(shell.querySelectorAll("header").length, 1)
+  assert.equal(shell.querySelectorAll("main").length, 1)
+  assert.equal(shell.querySelector("main")?.id, "icono-main")
+  assert.ok(shell.querySelector("#icono-gene-content"))
+
+  const root = document.querySelector("#server-root")
+  const serverContent = document.querySelector("#icono-gene-content")
+  sandbox.ensureGenePageLandmarks(root)
+  assert.equal(root.querySelectorAll(":scope > header").length, 1)
+  assert.equal(root.querySelectorAll(":scope > main").length, 1)
+  assert.equal(serverContent.parentElement?.tagName, "MAIN")
+  assert.equal(serverContent.getAttribute("data-icono-server-rendered-gene"), "true")
+})
+
 test("desktop home collection masonry paints discovery rows before rich detail hydration", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function loadNextGalleryPage()")
@@ -1705,8 +1737,17 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.match(block, /hasHeadStartedGene/)
   assert.match(
     block,
-    /\(bootstrap\.geneDetailPromise \|\| bootstrap\.geneCardData \|\| bootstrap\.geneCardPromise\)[\s\S]*if \(!hasHeadStartedGene\) \{[\s\S]*buildBrickSkeletonCardMarkup\(\)/,
+    /\(bootstrap\.geneDetailPromise \|\| bootstrap\.geneCardData \|\| bootstrap\.geneCardPromise\)[\s\S]*if \(!hasHeadStartedGene\) \{\s*root\.innerHTML = genePageShellMarkup\(true\)/,
     "direct gene loads with head-started detail/card data must not wipe to a fake card or skeleton before real-card hydration",
+  )
+  const shellStart = app.indexOf("function genePageShellMarkup(includeSkeleton)")
+  const shellEnd = app.indexOf("function ensureGenePageLandmarks(root)", shellStart)
+  assert.notEqual(shellStart, -1, "missing semantic gene-page shell")
+  assert.notEqual(shellEnd, -1, "missing semantic gene-page shell boundary")
+  assert.match(
+    app.slice(shellStart, shellEnd),
+    /includeSkeleton[\s\S]*buildBrickSkeletonCardMarkup\(\)/,
+    "the semantic shell must still render the real-card skeleton for non-head-started gene loads",
   )
 })
 
