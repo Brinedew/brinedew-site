@@ -767,9 +767,12 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: min(11rem, 100%);
+  width: max-content;
+  max-width: 100%;
+  min-width: 11rem;
   min-height: var(--icono-action-height);
   padding: var(--icono-action-padding);
+  white-space: nowrap;
   border: 1px solid var(--icono-action-border);
   border-radius: var(--icono-radius-pill);
   background: var(--icono-action-secondary-bg);

@@ -129,6 +129,11 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     /\.icono-request-option\.is-selected\s*\{[\s\S]*box-shadow:\s*inset 0 0 0 1px/,
     "selected emulsions need a persistent visual state distinct from hover",
   )
+  assert.match(
+    css,
+    /\.icono-request-free-submit,[\s\S]*width:\s*max-content;[\s\S]*white-space:\s*nowrap;/,
+    "the counted batch action must stay on one line at mobile width",
+  )
   assert.doesNotMatch(
     css,
     /\.icono-emulsion-favorite-button\.is-favorite\s*\{[^}]*background:/,
