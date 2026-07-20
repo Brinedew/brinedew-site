@@ -333,7 +333,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       <div class="gallery-toolbar">
         <div class="gallery-toolbar-row">
-          <div class="controls" style="flex: 1 1 720px;">
+          <div class="controls controls--wide">
             <label>Search genes
               <input id="gallery-search" type="text" placeholder="Search genes..." />
             </label>
@@ -386,7 +386,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       <details>
         <summary>Reason (for the log)</summary>
-        <div class="controls" style="margin-top: 8px;">
+        <div class="controls controls--spaced-top">
           <label>Note
             <input id="action-reason" type="text" placeholder="Optional note about this change" />
           </label>
@@ -474,7 +474,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     <div class="panel" id="panel-activity" role="tabpanel" aria-labelledby="admin-tab-activity" hidden>
       <h2>Activity log</h2>
       <p class="small">Recent changes and admin actions.</p>
-      <div class="log-filters" style="margin-bottom: 12px;">
+      <div class="log-filters log-filters--spaced-bottom">
         <button class="toggle-pill active" type="button" data-log-filter="all">All actions</button>
         <button class="toggle-pill" type="button" data-log-filter="publish">Publish</button>
         <button class="toggle-pill" type="button" data-log-filter="reject">Reject</button>
@@ -482,7 +482,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         <button class="toggle-pill" type="button" data-log-filter="unpublish">Unpublish</button>
         <button class="toggle-pill" type="button" data-log-filter="unstale">Unstale</button>
       </div>
-      <div class="controls" style="margin-bottom: 12px;">
+      <div class="controls controls--spaced-bottom">
         <label>Filter log
           <input id="activity-filter" type="text" placeholder="publish, reject, TP53..." />
         </label>
