@@ -1024,8 +1024,9 @@ function shouldAllowUnsafeEval(url) {
   if (path.startsWith("/static/geneguessr/") || path.startsWith("/static/vendor/pdbe-molstar@")) {
     return true
   }
-  // Admin panel also loads Mol* for protein preview
-  if (path === "/admin" || path === "/admin-v2") {
+  // The general admin panels load Mol* for protein preview. Iconoplasm's admin
+  // has no evaluator or WASM runtime, so never inherit that host-wide exemption.
+  if (host !== ICONOPLASM_HOST && (path === "/admin" || path === "/admin-v2")) {
     return true
   }
   return (
@@ -1034,6 +1035,18 @@ function shouldAllowUnsafeEval(url) {
     path === "/apps/geneguessr/index" ||
     path === "/apps/geneguessr/index/" ||
     path === "/apps/geneguessr/render"
+  )
+}
+
+function isIconoplasmAdminSurface(url) {
+  const host = String(url?.hostname || "").toLowerCase()
+  const path = String(url?.pathname || "")
+  if (host === ICONOPLASM_HOST && path === "/admin") {
+    return true
+  }
+  return (
+    (host === "brinedew.bio" || host === "www.brinedew.bio") &&
+    (path === "/admin/iconoplasm" || path === "/admin/iconoplasm/")
   )
 }
 
@@ -1060,15 +1073,26 @@ function isSiteSettingsBridgeRequest(request) {
 
 function buildContentSecurityPolicy(request) {
   let allowUnsafeEval = false
+  let allowInlineScripts = true
   try {
-    allowUnsafeEval = shouldAllowUnsafeEval(new URL(request.url))
+    const url = new URL(request.url)
+    allowUnsafeEval = shouldAllowUnsafeEval(url)
+    allowInlineScripts = !isIconoplasmAdminSurface(url)
   } catch {
     allowUnsafeEval = false
+    allowInlineScripts = true
   }
 
-  const scriptSrc = allowUnsafeEval
-    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://challenges.cloudflare.com https://static.cloudflareinsights.com"
-    : "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://challenges.cloudflare.com https://static.cloudflareinsights.com"
+  const scriptTokens = ["script-src", "'self'"]
+  if (allowInlineScripts) scriptTokens.push("'unsafe-inline'")
+  if (allowUnsafeEval) scriptTokens.push("'unsafe-eval'")
+  scriptTokens.push(
+    "https://cdn.jsdelivr.net",
+    "https://cdnjs.cloudflare.com",
+    "https://challenges.cloudflare.com",
+    "https://static.cloudflareinsights.com",
+  )
+  const scriptSrc = scriptTokens.join(" ")
   const allowIconoplasmShoelaceDataIcons = (() => {
     try {
       return shouldAllowIconoplasmShoelaceDataIcons(new URL(request.url))
