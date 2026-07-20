@@ -38,8 +38,13 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   )
   assert.match(
     css,
-    /\.icono-request-dialog \.icono-request-results\s*\{[\s\S]*position:\s*static;/,
-    "modal picker rows must stay inside the dialog panel so Shoelace's overlay cannot intercept them",
+    /\.icono-request-dialog \.icono-request-results\s*\{[\s\S]*position:\s*static;[\s\S]*contain:\s*layout paint;/,
+    "modal picker rows must stay inside the dialog panel without expanding its scroll surface",
+  )
+  assert.match(
+    css,
+    /\.icono-request-dialog::part\(body\)\s*\{[\s\S]*overflow:\s*hidden;/,
+    "the dialog body must not become a second scroll container around the picker",
   )
   assert.match(
     css,
@@ -75,6 +80,11 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     app,
     /Random emulsion/,
     "request picker should present Random emulsion as the default first option",
+  )
+  assert.doesNotMatch(
+    app,
+    /No examples yet/,
+    "options without previews should stay compact instead of rendering useless placeholder copy",
   )
   assert.match(
     app,
