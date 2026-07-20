@@ -1714,6 +1714,15 @@ img-comparison-slider.rendered [slot="second"] {
   display: none;
 }
 
+/* Keep modal pickers inside the dialog panel. An absolutely positioned list
+   can paint beyond Shoelace's panel but remains underneath its overlay, so the
+   visible rows dismiss the dialog instead of receiving clicks. Inline lists
+   grow the dialog body and then use its existing bounded scroll area. */
+.icono-request-dialog .icono-request-results {
+  position: static;
+  margin-top: 0.35rem;
+}
+
 .icono-request-option {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

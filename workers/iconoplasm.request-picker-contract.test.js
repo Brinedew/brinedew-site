@@ -37,6 +37,11 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     "request picker popup must honor [hidden] so it cannot cover the Image API lane after selection",
   )
   assert.match(
+    css,
+    /\.icono-request-dialog \.icono-request-results\s*\{[\s\S]*position:\s*static;/,
+    "modal picker rows must stay inside the dialog panel so Shoelace's overlay cannot intercept them",
+  )
+  assert.match(
     app,
     /class="icono-request-option-row'[\s\S]{0,120}'" role="listitem"/,
     "every selectable emulsion should be wrapped in a non-interactive list row",
