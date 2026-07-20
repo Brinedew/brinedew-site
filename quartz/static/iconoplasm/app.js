@@ -7286,8 +7286,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       loadNextGalleryPage()
     }
 
-    // Every path replaces the current page. Cursors remain in pageStarts so users can
-    // traverse the whole collection without retaining the complete visit history in DOM.
+    // This is not a generic infinite-feed loader: classic gallery, account-window, and
+    // local discovery paths keep their distinct ordering and payload contracts. They share
+    // only the bounded-page behavior below. Every path replaces the current page, while
+    // pageStarts retains request cursors so the whole collection remains traversable.
     function loadNextGalleryPage() {
       if (renderDisposed) return
       if (!useClassicGallery && !hasResolvedAuthState) return
