@@ -318,6 +318,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     })
   }
 
+  // Favorite controls are rendered and replaced by auth hydration, picker
+  // searches, and client-side navigation. Install one delegated listener as
+  // soon as this module evaluates; unlike route initialization, it cannot be
+  // skipped when Quartz adopts an already server-rendered gene page.
+  wireEmulsionFavoriteButtons(document)
+
   emulsionFavorites.subscribe(function (state) {
     syncEmulsionFavoriteButtons(document, state && state.changedId)
   })
@@ -9934,10 +9940,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   function init() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
-    // Favorite controls are rendered and replaced by auth hydration, picker
-    // searches, and client-side navigation. One document-level delegated
-    // listener owns every current and future star without per-island rewiring.
-    wireEmulsionFavoriteButtons(document)
     portraitDelivery.install(document)
     startMobileLabelBreakpointObserver()
     startSharedIconoplasmSettingsAutoSync()
