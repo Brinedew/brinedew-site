@@ -177,6 +177,7 @@ test("staging rebuild drains a cold catalog across chunks, flips/watermarks only
   assert.equal(watermark.watermark_event_at, "2026-06-05 12:00:00")
 
   const manifest = JSON.parse(kvStore.get(`iconoplasm:card-catalog:${c3.version}`))
+  assert.equal(manifest.build_revision, 2)
   assert.equal(manifest.storage, "kv_card_catalog_content_addressed_shards")
   assert.equal(manifest.shard_count, 3)
   assert.equal(manifest.catalog_gene_count, 5)
@@ -207,6 +208,42 @@ test("re-running a completed rebuild with no changes writes zero new shards", as
     0,
     "no content-addressed shard writes on a no-op republish",
   )
+})
+
+test("a catalog built by an older mapper revision is rebuilt even when D1 is unchanged", async () => {
+  const db = new FakeDb()
+  const kvStore = new Map()
+  const env = buildEnv(db, kvStore, null)
+  const current = await drainCold(env)
+
+  // Repoint the release barrier at an otherwise-valid manifest produced by old
+  // mapping code. Its watermark is current and D1 has no publication events, so
+  // the build revision is the only signal capable of invalidating it.
+  const oldVersion = "ccv1-00000000000000000000000000000000"
+  const currentManifest = JSON.parse(kvStore.get(`iconoplasm:card-catalog:${current.version}`))
+  const oldManifest = {
+    ...currentManifest,
+    artifact_version: oldVersion,
+    snapshot_version: oldVersion,
+  }
+  delete oldManifest.build_revision
+  kvStore.set(`iconoplasm:card-catalog:${oldVersion}`, JSON.stringify(oldManifest))
+  kvStore.set("iconoplasm:gallery-version", JSON.stringify({ current: oldVersion }))
+  db.changedSymbols = []
+
+  const rebuildingEnv = buildEnv(db, kvStore, null)
+  rebuildingEnv.KV.get = async (key) => (kvStore.has(key) ? kvStore.get(key) : null)
+  const first = await invalidateIconoplasmGalleryCacheForTest(rebuildingEnv)
+  assert.equal(first.card_catalog.rebuild, true)
+  assert.equal(first.card_catalog.bootstrap_more, true)
+
+  let final = first
+  while (final.card_catalog.bootstrap_more) {
+    final = await invalidateIconoplasmGalleryCacheForTest(rebuildingEnv)
+  }
+  assert.notEqual(final.version, oldVersion)
+  const rebuiltManifest = JSON.parse(kvStore.get(`iconoplasm:card-catalog:${final.version}`))
+  assert.equal(rebuiltManifest.build_revision, 2)
 })
 
 test("public mobile-card read path resolves cards from a content-addressed artifact", async () => {
