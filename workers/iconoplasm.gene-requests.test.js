@@ -19,6 +19,12 @@ class FakeRequestStatement {
 
   async first() {
     if (
+      this.sql.includes("FROM icono_generation_request_vision_option_rollup") &&
+      this.sql.includes("emulsion_family_id = ?")
+    ) {
+      return String(this.args[0] || "") === "A1-93-19" ? { vision_id: "anima-v1-3001" } : null
+    }
+    if (
       this.sql.includes("COUNT(*) AS count") &&
       this.sql.includes("FROM icono_generation_requests gr")
     ) {
@@ -60,6 +66,12 @@ class FakeRequestStatement {
   }
 
   async all() {
+    if (this.sql.includes("FROM icono_user_emulsion_favorites")) {
+      const userId = String(this.args[0] || "")
+      return {
+        results: Array.from(this.db.favoriteRows.values()).filter((row) => row.user_id === userId),
+      }
+    }
     if (
       this.sql.includes("FROM iconoplasm_user_emulsion_versions") &&
       this.sql.includes("revision > 0")
@@ -104,6 +116,9 @@ class FakeRequestStatement {
       this.db.lastOptionRollupArgs = this.args
       if (this.db.failOptionRollupRead) {
         throw new Error("D1_ERROR: request picker rollup missing or unreadable")
+      }
+      if (this.sql.includes("JOIN json_each(?) favorite")) {
+        return { results: this.db.favoriteVisionRows }
       }
       if (this.db.queryVisionOptions && this.sql.includes("emulsion_id >= ?")) {
         const lower = String(this.args[0] || "")
@@ -302,6 +317,23 @@ class FakeRequestStatement {
   }
 
   async run() {
+    if (this.sql.includes("INSERT OR IGNORE INTO icono_user_emulsion_favorites")) {
+      const userId = String(this.args[0] || "")
+      const emulsionId = String(this.args[1] || "")
+      const key = `${userId}:${emulsionId}`
+      if (!this.db.favoriteRows.has(key)) {
+        this.db.favoriteRows.set(key, {
+          user_id: userId,
+          emulsion_family_id: emulsionId,
+          created_at: "2026-07-20T10:00:00Z",
+        })
+      }
+      return { success: true }
+    }
+    if (this.sql.includes("DELETE FROM icono_user_emulsion_favorites")) {
+      this.db.favoriteRows.delete(`${this.args[0]}:${this.args[1]}`)
+      return { success: true }
+    }
     throw new Error(`Unexpected SQL in fake DB run(): ${this.sql}`)
   }
 }
@@ -320,6 +352,10 @@ class FakeRequestDb {
     this.failOptionRollupRead = !!options.failOptionRollupRead
     this.lastOptionRollupArgs = []
     this.requestRows = Array.isArray(options.requestRows) ? options.requestRows : null
+    this.favoriteRows = new Map()
+    this.favoriteVisionRows = Array.isArray(options.favoriteVisionRows)
+      ? options.favoriteVisionRows
+      : []
   }
 
   prepare(sql) {
@@ -622,6 +658,136 @@ test("authenticated request options return rich emulsion rows from the dedicated
   assert.match(String(env.gatewayDb.lastOptionRollupSql || ""), /builder_version = 3/)
   assert.equal(env.gatewayDb.visionRollupReads, 0)
   assert.equal(env.gatewayDb.previewReads, 0)
+})
+
+test("request options include a favorite outside the normal ranked window and place it first", async () => {
+  const favoriteVisionRow = {
+    vision_id: "anima-v1-9999",
+    emulsion_id: "A1-9999",
+    emulsion_family_id: "A1-9999",
+    artist_tag: "anima",
+    artist_name: "Anima Archive",
+    workflow_id: "A1-",
+    workflow_label: "Anima v1",
+    prompt_version: "9",
+    variant_slot: "999",
+    image_count: 1,
+    live_count: 0,
+    score: 0,
+    vote_h_index: 0,
+    preview_assets_json: "[]",
+  }
+  const env = buildEnv({ dbOptions: { favoriteVisionRows: [favoriteVisionRow] } })
+  env.gatewayDb.favoriteRows.set("user-1:A1-9999", {
+    user_id: "user-1",
+    emulsion_family_id: "A1-9999",
+    created_at: "2026-07-20T10:00:00Z",
+  })
+  env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
+  env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
+    fetch(request) {
+      return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        request,
+        {
+          DB: env.gatewayDb,
+          ICONOPLASM_DB: env.gatewayDb,
+          GAME_SESSIONS: env.GAME_SESSIONS,
+        },
+        { waitUntil() {} },
+      )
+    },
+  }
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
+        headers: { Cookie: "session=abc123" },
+      }),
+      env,
+      {},
+    )
+  const payload = await response.json()
+  assert.equal(response.status, 200)
+  assert.equal(payload.favorite_count, 1)
+  assert.equal(payload.request_options[0]?.emulsion_id, "A1-9999")
+  assert.equal(payload.request_options[0]?.is_favorite, true)
+})
+
+test("authenticated emulsion favorites are private and idempotent", async () => {
+  const env = buildEnv()
+  env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
+  env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
+    fetch(request) {
+      return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        request,
+        {
+          DB: env.gatewayDb,
+          ICONOPLASM_DB: env.gatewayDb,
+          GAME_SESSIONS: env.GAME_SESSIONS,
+        },
+        { waitUntil() {} },
+      )
+    },
+  }
+  const request = (path, method = "GET") =>
+    handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request(`https://iconoplasm.brinedew.bio${path}`, {
+        method,
+        headers: { Cookie: "session=abc123" },
+      }),
+      env,
+      {},
+    )
+
+  assert.equal((await request("/api/iconoplasm/emulsion-favorites/A1-93-19-e", "PUT")).status, 200)
+  assert.equal((await request("/api/iconoplasm/emulsion-favorites/A1-93-19", "PUT")).status, 200)
+  var listResponse = await request("/api/iconoplasm/emulsion-favorites")
+  var listPayload = await listResponse.json()
+  assert.equal(listResponse.status, 200)
+  assert.deepEqual(listPayload.favorite_emulsion_ids, ["A1-93-19"])
+  assert.equal(listResponse.headers.get("Cache-Control"), "no-store")
+
+  assert.equal((await request("/api/iconoplasm/emulsion-favorites/A1-93-19", "DELETE")).status, 200)
+  assert.equal((await request("/api/iconoplasm/emulsion-favorites/A1-93-19", "DELETE")).status, 200)
+  listResponse = await request("/api/iconoplasm/emulsion-favorites")
+  listPayload = await listResponse.json()
+  assert.equal(listPayload.count, 0)
+})
+
+test("emulsion favorites reject anonymous reads and unknown additions", async () => {
+  const anonymousEnv = buildEnv()
+  const anonymousResponse =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/emulsion-favorites"),
+      anonymousEnv,
+      {},
+    )
+  assert.equal(anonymousResponse.status, 401)
+
+  const env = buildEnv()
+  env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
+  env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
+    fetch(request) {
+      return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        request,
+        {
+          DB: env.gatewayDb,
+          ICONOPLASM_DB: env.gatewayDb,
+          GAME_SESSIONS: env.GAME_SESSIONS,
+        },
+        { waitUntil() {} },
+      )
+    },
+  }
+  const missingResponse =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/emulsion-favorites/DOES-NOT-EXIST",
+        { method: "PUT", headers: { Cookie: "session=abc123" } },
+      ),
+      env,
+      {},
+    )
+  assert.equal(missingResponse.status, 404)
 })
 
 test("request-option v2 migration repairs previews from canonical SHA identity", () => {

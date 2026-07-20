@@ -21,6 +21,12 @@ import {
 import { ICONOPLASM_CLAN_CATALOG } from "./generated/iconoplasm-clan-catalog.js"
 import { renderIconoplasmArtistStylesHtml } from "./iconoplasm-artist-styles-html.js"
 import {
+  addFavoriteEmulsion,
+  listFavoriteEmulsionRows,
+  normalizeFavoriteEmulsionFamilyId,
+  removeFavoriteEmulsion,
+} from "./iconoplasm-emulsion-favorites.js"
+import {
   deliverPendingRequestFulfillmentNotifications,
   markRequestNotificationsRead as markRequestNotificationsReadForUser,
   reconcileDeliveredRequestFulfillments,
@@ -1417,6 +1423,8 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (family.startsWith("gene_request_")) return "first_party_request"
   if (family === "request_notifications") return "first_party_read"
   if (family === "request_notifications_read") return "first_party_write"
+  if (family === "emulsion_favorites_read") return "first_party_read"
+  if (family === "emulsion_favorites_write") return "first_party_write"
   if (family.startsWith("image_edit_")) return "first_party_write"
   if (family === "user_emulsion") return "first_party_write"
   if (family.startsWith("candidate_generation_")) return "first_party_write"
@@ -2499,7 +2507,7 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request) {
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers":
       "If-None-Match, Content-Type, X-Iconoplasm-Extension-Version, Authorization, X-Iconoplasm-Admin-Token",
     Vary: "Origin",
@@ -8041,6 +8049,7 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
       `INSERT INTO icono_generation_request_vision_option_rollup (
          vision_id,
          emulsion_id,
+         emulsion_family_id,
          workflow_id,
          workflow_label,
          prompt_version,
@@ -8054,9 +8063,10 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
          preview_assets_json,
          builder_version,
          updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
        ON CONFLICT(vision_id) DO UPDATE SET
          emulsion_id = excluded.emulsion_id,
+         emulsion_family_id = excluded.emulsion_family_id,
          workflow_id = excluded.workflow_id,
          workflow_label = excluded.workflow_label,
          prompt_version = excluded.prompt_version,
@@ -8074,6 +8084,7 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
       .bind(
         visionId,
         sanitizeText(row?.emulsion_id || "", 64) || "",
+        normalizeFavoriteEmulsionFamilyId(row?.emulsion_id || ""),
         sanitizeText(row?.workflow_id || "", 32) || "",
         sanitizeText(row?.workflow_label || "", 255) || "",
         sanitizeText(row?.prompt_version || "", 16) || "",
@@ -8439,7 +8450,7 @@ function mapSharedUserEmulsionOptionRows(env, url, userRows, rollupRows) {
     .filter(Boolean)
 }
 
-async function listSharedUserEmulsionOptions(env, url) {
+async function listSharedUserEmulsionOptions(env, url, favoriteEmulsionIds = []) {
   if (!env.DB || !env.ICONOPLASM_DB) return []
   const searchQuery = normalizeGenerationRequestOptionSearchQuery(
     url?.searchParams?.get("query") || "",
@@ -8479,6 +8490,36 @@ async function listSharedUserEmulsionOptions(env, url) {
     ).all()
     userRows = Array.isArray(resp?.results) ? resp.results : []
   }
+  const favoriteIds = Array.from(
+    new Set(
+      (Array.isArray(favoriteEmulsionIds) ? favoriteEmulsionIds : [])
+        .map(normalizeFavoriteEmulsionFamilyId)
+        .filter(Boolean),
+    ),
+  )
+  if (!searchQuery && favoriteIds.length) {
+    const favoriteResp = await env.DB.prepare(
+      `SELECT user_id, username, public_id, revision, emulsion_text, created_at
+       FROM iconoplasm_user_emulsion_versions
+       WHERE revision > 0
+         AND COALESCE(emulsion_text, '') <> ''
+         AND upper(public_id) IN (
+           SELECT value FROM json_each(?)
+         )
+       ORDER BY revision DESC, created_at DESC`,
+    )
+      .bind(JSON.stringify(favoriteIds))
+      .all()
+    const seenFavoriteRows = new Set(
+      userRows.map((row) => normalizeFavoriteEmulsionFamilyId(mapUserEmulsionVersionRow(row).id)),
+    )
+    for (const row of Array.isArray(favoriteResp?.results) ? favoriteResp.results : []) {
+      const id = normalizeFavoriteEmulsionFamilyId(mapUserEmulsionVersionRow(row).id)
+      if (!id || seenFavoriteRows.has(id)) continue
+      seenFavoriteRows.add(id)
+      userRows.push(row)
+    }
+  }
   const emulsionIds = Array.from(
     new Set(
       userRows
@@ -8504,9 +8545,66 @@ async function listSharedUserEmulsionOptions(env, url) {
   return mapSharedUserEmulsionOptionRows(env, url, userRows, rollupRows)
 }
 
-async function listGenerationRequestVisionOptions(env, url) {
+function annotateFavoriteGenerationRequestOptions(options, favoriteEmulsionIds) {
+  const favorites = new Set(
+    (Array.isArray(favoriteEmulsionIds) ? favoriteEmulsionIds : [])
+      .map(normalizeFavoriteEmulsionFamilyId)
+      .filter(Boolean),
+  )
+  return (Array.isArray(options) ? options : []).map((option) => ({
+    ...option,
+    is_favorite: favorites.has(
+      normalizeFavoriteEmulsionFamilyId(option?.emulsion_family_id || option?.emulsion_id || ""),
+    ),
+  }))
+}
+
+async function listFavoriteGenerationRequestVisionRows(env, favoriteEmulsionIds) {
   if (!env.ICONOPLASM_DB) return []
-  const sharedUserOptionsPromise = listSharedUserEmulsionOptions(env, url)
+  const favoriteIds = Array.from(
+    new Set(
+      (Array.isArray(favoriteEmulsionIds) ? favoriteEmulsionIds : [])
+        .map(normalizeFavoriteEmulsionFamilyId)
+        .filter(Boolean),
+    ),
+  )
+  if (!favoriteIds.length) return []
+  const response = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       rollup.vision_id,
+       rollup.emulsion_id,
+       rollup.emulsion_family_id,
+       rollup.artist_tag,
+       rollup.artist_name,
+       rollup.workflow_id,
+       rollup.workflow_label,
+       rollup.prompt_version,
+       rollup.variant_slot,
+       rollup.image_count,
+       rollup.live_count,
+       rollup.score,
+       rollup.vote_h_index,
+       rollup.preview_assets_json
+     FROM icono_generation_request_vision_option_rollup rollup
+     JOIN json_each(?) favorite
+       ON favorite.value = rollup.emulsion_family_id
+     WHERE rollup.builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
+     ORDER BY
+       favorite.key ASC,
+       rollup.vote_h_index DESC,
+       rollup.live_count DESC,
+       rollup.score DESC,
+       rollup.image_count DESC,
+       rollup.vision_id ASC`,
+  )
+    .bind(JSON.stringify(favoriteIds))
+    .all()
+  return Array.isArray(response?.results) ? response.results : []
+}
+
+async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds = []) {
+  if (!env.ICONOPLASM_DB) return []
+  const sharedUserOptionsPromise = listSharedUserEmulsionOptions(env, url, favoriteEmulsionIds)
   const searchQuery = normalizeGenerationRequestOptionSearchQuery(
     url?.searchParams?.get("query") || "",
   )
@@ -8594,15 +8692,20 @@ async function listGenerationRequestVisionOptions(env, url) {
         artistTagUpper,
       )
       .all()
-    return [
-      ...groupGenerationRequestVisionOptions(
-        mapGenerationRequestVisionOptionRows(env, url, resp?.results || []),
-      ),
-      ...(await sharedUserOptionsPromise),
-    ]
+    return annotateFavoriteGenerationRequestOptions(
+      [
+        ...groupGenerationRequestVisionOptions(
+          mapGenerationRequestVisionOptionRows(env, url, resp?.results || []),
+        ),
+        ...(await sharedUserOptionsPromise),
+      ],
+      favoriteEmulsionIds,
+    )
   }
-  const resp = await env.ICONOPLASM_DB.prepare(
-    `SELECT
+  const [favoriteRows, resp] = await Promise.all([
+    listFavoriteGenerationRequestVisionRows(env, favoriteEmulsionIds),
+    env.ICONOPLASM_DB.prepare(
+      `SELECT
        vision_id,
        emulsion_id,
        artist_tag,
@@ -8621,13 +8724,18 @@ async function listGenerationRequestVisionOptions(env, url) {
        AND builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
      ORDER BY vote_h_index DESC, live_count DESC, score DESC, image_count DESC, vision_id ASC
      LIMIT 120`,
-  ).all()
-  return [
-    ...groupGenerationRequestVisionOptions(
-      mapGenerationRequestVisionOptionRows(env, url, resp?.results || []),
-    ),
-    ...(await sharedUserOptionsPromise),
-  ]
+    ).all(),
+  ])
+  const groupedVisionOptions = groupGenerationRequestVisionOptions(
+    mapGenerationRequestVisionOptionRows(env, url, [
+      ...favoriteRows,
+      ...(Array.isArray(resp?.results) ? resp.results : []),
+    ]),
+  )
+  return annotateFavoriteGenerationRequestOptions(
+    [...groupedVisionOptions, ...(await sharedUserOptionsPromise)],
+    favoriteEmulsionIds,
+  )
 }
 
 async function generationRequestSummaryPayload(env, request, symbol) {
@@ -8655,6 +8763,56 @@ async function generationRequestSummaryPayload(env, request, symbol) {
   }
 }
 
+async function emulsionFamilyExistsForFavorite(env, emulsionFamilyId) {
+  const normalized = normalizeFavoriteEmulsionFamilyId(emulsionFamilyId)
+  if (!normalized) return false
+  if (env.ICONOPLASM_DB) {
+    const row = await env.ICONOPLASM_DB.prepare(
+      `SELECT vision_id
+       FROM icono_generation_request_vision_option_rollup
+       WHERE builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
+         AND emulsion_family_id = ?
+       LIMIT 1`,
+    )
+      .bind(normalized)
+      .first()
+    if (row?.vision_id) return true
+  }
+  if (env.DB) {
+    const row = await env.DB.prepare(
+      `SELECT public_id, revision
+       FROM iconoplasm_user_emulsion_versions
+       WHERE revision > 0
+         AND COALESCE(emulsion_text, '') <> ''
+         AND upper(public_id) = ?
+       LIMIT 1`,
+    )
+      .bind(normalized)
+      .first()
+    if (row) return true
+  }
+  return false
+}
+
+function favoriteEmulsionPayload(rows) {
+  const favorites = (Array.isArray(rows) ? rows : []).map((row) => ({
+    emulsion_id: normalizeFavoriteEmulsionFamilyId(row?.emulsion_family_id || ""),
+    created_at: String(row?.created_at || ""),
+  }))
+  return {
+    ok: true,
+    favorite_emulsion_ids: favorites.map((row) => row.emulsion_id),
+    favorites,
+    count: favorites.length,
+  }
+}
+
+async function listEmulsionFavoritesPayload(env, sessionUser) {
+  return favoriteEmulsionPayload(
+    await listFavoriteEmulsionRows(env.ICONOPLASM_DB, sessionUser?.user_id || ""),
+  )
+}
+
 async function generationRequestOptionsPayload(env, url, request) {
   const sessionUser = await iconoplasmSessionUser(request, env)
   if (!sessionUser?.user_id) {
@@ -8665,6 +8823,8 @@ async function generationRequestOptionsPayload(env, url, request) {
       error: "Please log in first to request new candidates.",
     }
   }
+  const favoriteRows = await listFavoriteEmulsionRows(env.ICONOPLASM_DB, sessionUser.user_id || "")
+  const favoriteEmulsionIds = favoriteRows.map((row) => row.emulsion_family_id)
   return {
     ok: true,
     authenticated: true,
@@ -8673,7 +8833,8 @@ async function generationRequestOptionsPayload(env, url, request) {
       id: normalizeUserId(sessionUser.user_id || "") || null,
       username: sessionUser.username || null,
     },
-    request_options: await listGenerationRequestVisionOptions(env, url),
+    favorite_count: favoriteEmulsionIds.length,
+    request_options: await listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds),
   }
 }
 
@@ -10798,7 +10959,7 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   // PATCH/DELETE are allowed through to the per-path rules below (each rule still
   // gates its own methods); only routes that explicitly accept them — e.g. editing
   // or deleting your own gene comment — return true.
-  if (!["GET", "HEAD", "POST", "PATCH", "DELETE"].includes(requestMethod)) return false
+  if (!["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"].includes(requestMethod)) return false
   if (path === "/health" || path === "/api/health") return true
   if (path === "/admin") return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/blocklist") return requestMethod === "GET" || requestMethod === "HEAD"
@@ -26290,7 +26451,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     // PATCH/DELETE are needed for editing/deleting your own gene comment; the
     // per-path gate (isIconoplasmPathHandled...) still restricts which routes
     // actually accept them.
-    if (!["GET", "HEAD", "POST", "PATCH", "DELETE"].includes(request.method))
+    if (!["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"].includes(request.method))
       return done("method", json({ error: "Method not allowed" }, 405))
 
     if (path === "/health" || path === "/api/health") {
@@ -26941,6 +27102,91 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         json(await generationRequestSummaryPayload(env, request, symbol), 200, {
           "Cache-Control": "no-store",
         }),
+      )
+    }
+
+    if (path === "/api/iconoplasm/emulsion-favorites" && request.method === "GET") {
+      if (!env.ICONOPLASM_DB)
+        return done("emulsion_favorites_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      if (!sessionUser?.user_id) {
+        return done(
+          "emulsion_favorites_401",
+          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log in first." }, 401, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      return done(
+        "emulsion_favorites",
+        json(await listEmulsionFavoritesPayload(env, sessionUser), 200, {
+          "Cache-Control": "no-store",
+        }),
+      )
+    }
+
+    const emulsionFavoriteMatch = path.match(/^\/api\/iconoplasm\/emulsion-favorites\/([^/]+)$/)
+    if (emulsionFavoriteMatch && (request.method === "PUT" || request.method === "DELETE")) {
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "emulsion_favorite_item_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      if (!sessionUser?.user_id) {
+        return done(
+          "emulsion_favorite_item_401",
+          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log in first." }, 401, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      let decodedEmulsionId = ""
+      try {
+        decodedEmulsionId = decodeURIComponent(emulsionFavoriteMatch[1])
+      } catch {
+        decodedEmulsionId = ""
+      }
+      const emulsionFamilyId = normalizeFavoriteEmulsionFamilyId(decodedEmulsionId)
+      if (!emulsionFamilyId) {
+        return done(
+          "emulsion_favorite_item_400",
+          json({ ok: false, code: "INVALID_EMULSION_ID", error: "Invalid emulsion ID." }, 400, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      if (request.method === "PUT") {
+        const exists = await emulsionFamilyExistsForFavorite(env, emulsionFamilyId)
+        if (!exists) {
+          return done(
+            "emulsion_favorite_item_404",
+            json({ ok: false, code: "EMULSION_NOT_FOUND", error: "Emulsion not found." }, 404, {
+              "Cache-Control": "no-store",
+            }),
+          )
+        }
+        await addFavoriteEmulsion(env.ICONOPLASM_DB, {
+          userId: sessionUser.user_id,
+          emulsionFamilyId,
+        })
+      } else {
+        await removeFavoriteEmulsion(env.ICONOPLASM_DB, {
+          userId: sessionUser.user_id,
+          emulsionFamilyId,
+        })
+      }
+      return done(
+        "emulsion_favorite_item",
+        json(
+          {
+            ok: true,
+            emulsion_id: emulsionFamilyId,
+            is_favorite: request.method === "PUT",
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
       )
     }
 

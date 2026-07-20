@@ -136,10 +136,6 @@ jobs:
           mkdir -p .wrangler-pages
           cp wrangler.pages.toml .wrangler-pages/wrangler.toml
 
-      - name: Deploy production static site to Cloudflare Pages
-        working-directory: .wrangler-pages
-        run: pnpm exec wrangler pages deploy ../public --project-name brinedew-bio --branch main
-
       - name: Apply Geneguessr D1 migrations (production)
         run: pnpm exec wrangler d1 migrations apply geneguessr --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 
@@ -174,6 +170,13 @@ jobs:
             "www.brinedew.bio/*" \
             "geneguessr.brinedew.bio/*" \
             "iconoplasm.brinedew.bio/*"
+
+      # Publish browser code last. Additive backend contracts are safe for the
+      # previous frontend, while the reverse order can expose controls whose
+      # migrations and authenticated handlers do not exist yet.
+      - name: Deploy production static site to Cloudflare Pages
+        working-directory: .wrangler-pages
+        run: pnpm exec wrangler pages deploy ../public --project-name brinedew-bio --branch main
 
       - name: Verify Iconoplasm publication aliases (production)
         run: pnpm run verify:iconoplasm-publication-aliases

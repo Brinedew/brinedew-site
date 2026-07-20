@@ -262,9 +262,10 @@ test("batched vision sync atomically refreshes the request-picker projection", a
   assert.ok(pickerDelete, "the dependent picker row must be invalidated in the same sync")
   assert.ok(pickerWrite, "the dependent picker row must be rebuilt before sync succeeds")
   assert.equal(pickerWrite.args[0], "anima-v1-18")
-  assert.equal(pickerWrite.args[8], 2)
+  assert.equal(pickerWrite.args[2], "A1-18")
   assert.equal(pickerWrite.args[9], 2)
-  assert.deepEqual(JSON.parse(pickerWrite.args[12]), [
+  assert.equal(pickerWrite.args[10], 2)
+  assert.deepEqual(JSON.parse(pickerWrite.args[13]), [
     {
       vision_id: "anima-v1-18",
       gene_symbol: "CD4",
@@ -273,7 +274,7 @@ test("batched vision sync atomically refreshes the request-picker projection", a
       preview_rank: 1,
     },
   ])
-  assert.equal(pickerWrite.args[13], 3)
+  assert.equal(pickerWrite.args[14], 3)
 })
 
 test("admin overview summary is scoped to canonical catalog rows", async () => {
