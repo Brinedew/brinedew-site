@@ -362,6 +362,7 @@ function mobilePeekTemplate(model) {
       class="icono-label-mobile-peek-toggle"
       data-icono-label-mobile-toggle
       aria-expanded="false"
+      aria-label="Show details for ${model.symbol}"
     >
       <span class="icono-label-mobile-peek-tab" aria-hidden="true">
         <span class="icono-label-mobile-peek-tab-symbol">${model.symbol}</span>
@@ -369,11 +370,16 @@ function mobilePeekTemplate(model) {
       <span class="icono-label-mobile-peek-topline">
         <span class="icono-label-mobile-peek-kicker">full name</span>
       </span>
-      <span class="icono-label-mobile-peek-summary">
-        <span class="icono-label-mobile-peek-name">${model.fullName}</span>
-      </span>
-      <span class="icono-label-mobile-peek-swipe">${voteShellTemplate(model.voteHtml)}</span>
     </div>
+    <a
+      class="icono-label-mobile-peek-summary icono-label-mobile-open-link"
+      href=${model.titleHref}
+      data-icono-nav
+      aria-label="Open ${model.symbol} gene page"
+    >
+      <span class="icono-label-mobile-peek-name">${model.fullName}</span>
+    </a>
+    <span class="icono-label-mobile-peek-swipe">${voteShellTemplate(model.voteHtml)}</span>
   </div>`
 }
 
