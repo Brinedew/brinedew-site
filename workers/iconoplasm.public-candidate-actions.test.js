@@ -19,10 +19,31 @@ class FakeStatement {
   }
 
   async first() {
-    if (this.sql.includes("WHERE gr.id = ?")) {
+    if (
+      this.sql.includes("FROM icono_generation_request_vision_option_rollup") &&
+      this.sql.includes("WHERE vision_id = ?")
+    ) {
       return {
-        id: this.db.lastRequestId || 1,
-        gene_symbol: this.db.lastGenerationRequest?.gene_symbol || "A1BG",
+        vision_id: this.args[0],
+        emulsion_id: `A1-${String(this.args[0]).replace(/\D+/g, "") || "1"}`,
+        preview_assets_json: JSON.stringify([{ asset_sha256: SOURCE_SHA, gene_symbol: "A1BG" }]),
+      }
+    }
+    if (
+      this.sql.includes("WHERE requester_user_id = ?") &&
+      this.sql.includes("client_request_id = ?")
+    ) {
+      const existing = this.db.generationRequests.find(
+        (item) =>
+          item.requester_user_id === this.args[0] && item.client_request_id === this.args[1],
+      )
+      return existing ? { id: existing.id } : null
+    }
+    if (this.sql.includes("WHERE gr.id = ?")) {
+      const stored = this.db.generationRequests.find((item) => item.id === Number(this.args[0]))
+      return {
+        id: stored?.id || this.db.lastRequestId || 1,
+        gene_symbol: stored?.gene_symbol || this.db.lastGenerationRequest?.gene_symbol || "A1BG",
         full_name: "alpha-1-B glycoprotein",
         requester_user_id: this.db.lastGenerationRequest?.requester_user_id || "user-1",
         requester_username: this.db.lastGenerationRequest?.requester_username || "tester",
@@ -89,8 +110,17 @@ class FakeStatement {
 
   async run() {
     if (this.sql.includes("INSERT INTO icono_generation_requests")) {
-      this.db.lastRequestId = 77
+      const clientRequestId = this.args[11] || ""
+      const existing = clientRequestId
+        ? this.db.generationRequests.find(
+            (item) =>
+              item.requester_user_id === this.args[1] && item.client_request_id === clientRequestId,
+          )
+        : null
+      if (existing) return { meta: { last_row_id: 0, changes: 0 } }
+      this.db.lastRequestId += 1
       this.db.lastGenerationRequest = {
+        id: this.db.lastRequestId,
         gene_symbol: this.args[0],
         requester_user_id: this.args[1],
         requester_username: this.args[2],
@@ -100,8 +130,10 @@ class FakeStatement {
         source_asset_sha256: this.args[6],
         request_mode: this.args[7],
         requested_vision_id: this.args[8],
+        client_request_id: clientRequestId,
       }
-      return { meta: { last_row_id: 77, changes: 1 } }
+      this.db.generationRequests.push(this.db.lastGenerationRequest)
+      return { meta: { last_row_id: this.db.lastRequestId, changes: 1 } }
     }
     if (this.sql.includes("INSERT INTO icono_portrait_assets")) {
       this.db.copyAssetInsert = {
@@ -150,6 +182,11 @@ class FakeStatement {
 }
 
 class FakeDb {
+  constructor() {
+    this.lastRequestId = 76
+    this.generationRequests = []
+  }
+
   prepare(sql) {
     return new FakeStatement(this, sql)
   }
@@ -248,6 +285,75 @@ test("edit blot requests preserve prompt and source canonical asset", async () =
   assert.equal(db.lastGenerationRequest.source_asset_sha256, SOURCE_SHA)
   assert.equal(payload.request.request_kind, "edit_image")
   assert.equal(payload.request.request_prompt, "Fix the hands but keep the same character concept.")
+})
+
+test("one request action queues a bounded idempotent emulsion batch", async () => {
+  const db = new FakeDb()
+  const requestBody = {
+    symbol: "A1BG",
+    request_kind: "new_candidate",
+    requested_vision_ids: ["anima-v1-101", "anima-v1-102", "anima-v1-103"],
+    client_batch_id: "batch-123",
+  }
+  const send = () =>
+    handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/requests",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: "session=abc123",
+          },
+          body: JSON.stringify(requestBody),
+        },
+      ),
+      buildEnv(db),
+      { waitUntil() {} },
+    )
+
+  const firstResponse = await send()
+  const firstPayload = await firstResponse.json()
+  assert.equal(firstResponse.status, 200)
+  assert.equal(firstPayload.queued_count, 3)
+  assert.equal(firstPayload.failed_count, 0)
+  assert.deepEqual(
+    db.generationRequests.map((item) => item.requested_vision_id),
+    requestBody.requested_vision_ids,
+  )
+
+  const retryResponse = await send()
+  const retryPayload = await retryResponse.json()
+  assert.equal(retryResponse.status, 200)
+  assert.equal(retryPayload.queued_count, 3)
+  assert.equal(db.generationRequests.length, 3, "retry must not duplicate queued work")
+})
+
+test("emulsion request batches reject more than twenty selections before writing", async () => {
+  const db = new FakeDb()
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/requests",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: "session=abc123",
+          },
+          body: JSON.stringify({
+            symbol: "A1BG",
+            requested_vision_ids: Array.from({ length: 21 }, (_, index) => `anima-v1-${index}`),
+            client_batch_id: "batch-too-large",
+          }),
+        },
+      ),
+      buildEnv(db),
+      { waitUntil() {} },
+    )
+
+  assert.equal(response.status, 400)
+  assert.equal(db.generationRequests.length, 0)
 })
 
 test("copy candidate endpoint adds target candidate and auto-checkmarks it", async () => {
