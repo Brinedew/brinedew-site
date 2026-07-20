@@ -2028,7 +2028,25 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
     /* ── responsive ── */
     @media (max-width: 900px) {
-      .page { padding: 16px 16px 40px; }
+      html, body { max-width: 100%; overflow-x: clip; }
+      .page { width: 100%; max-width: 100%; padding: 16px 16px 40px; overflow-x: clip; }
+      nav#admin-tabs {
+        position: static;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        min-height: 0;
+        padding: 8px 0;
+      }
+      .tab-btn {
+        width: 100%;
+        min-height: 44px;
+        padding: 9px 10px;
+        border-radius: 8px;
+      }
+      .panel.active,
+      .stack,
+      .table-wrap,
+      .table-toolbar { min-width: 0; max-width: 100%; }
       .split { grid-template-columns: 1fr; }
       .prompt-layout { grid-template-columns: 1fr; }
       .cost-grid { grid-template-columns: 1fr; }
@@ -2047,18 +2065,18 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <p>Blots first, bookkeeping second. This page steers the canonical blot shown in the extension. Votes auto-pick the canonical blot unless a manual override is active.</p>
     </header>
 
-    <nav id="admin-tabs">
-      <button class="tab-btn active" data-tab="overview">Home</button>
-      <button class="tab-btn" data-tab="costs">Observability</button>
-      <button class="tab-btn" data-tab="requests">Requests</button>
-      <button class="tab-btn" data-tab="prompts">Prompts</button>
-      <button class="tab-btn" data-tab="archive">Gallery</button>
-      <button class="tab-btn" data-tab="styles">Visions</button>
-      <button class="tab-btn" data-tab="activity">Log</button>
+    <nav id="admin-tabs" aria-label="Admin sections" role="tablist">
+      <button class="tab-btn active" id="admin-tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview" tabindex="0" data-tab="overview">Home</button>
+      <button class="tab-btn" id="admin-tab-costs" role="tab" aria-selected="false" aria-controls="panel-costs" tabindex="-1" data-tab="costs">Observability</button>
+      <button class="tab-btn" id="admin-tab-requests" role="tab" aria-selected="false" aria-controls="panel-requests" tabindex="-1" data-tab="requests">Requests</button>
+      <button class="tab-btn" id="admin-tab-prompts" role="tab" aria-selected="false" aria-controls="panel-prompts" tabindex="-1" data-tab="prompts">Prompts</button>
+      <button class="tab-btn" id="admin-tab-archive" role="tab" aria-selected="false" aria-controls="panel-archive" tabindex="-1" data-tab="archive">Gallery</button>
+      <button class="tab-btn" id="admin-tab-styles" role="tab" aria-selected="false" aria-controls="panel-styles" tabindex="-1" data-tab="styles">Visions</button>
+      <button class="tab-btn" id="admin-tab-activity" role="tab" aria-selected="false" aria-controls="panel-activity" tabindex="-1" data-tab="activity">Log</button>
     </nav>
 
     <!-- ── overview ── -->
-    <div class="panel active" id="panel-overview">
+    <div class="panel active" id="panel-overview" role="tabpanel" aria-labelledby="admin-tab-overview">
       <div class="metric-grid" id="overview-metrics"></div>
       <section class="coverage-card">
         <div class="section-head">
@@ -2085,7 +2103,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       </div>
     </div>
 
-    <div class="panel" id="panel-costs" style="display:none;">
+    <div class="panel" id="panel-costs" role="tabpanel" aria-labelledby="admin-tab-costs" hidden>
       <div class="cost-layout">
         <section class="cost-hero">
           <div class="cost-toolbar">
@@ -2197,7 +2215,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     </div>
 
     <!-- ── requests ── -->
-    <div class="panel" id="panel-requests" style="display:none;">
+    <div class="panel" id="panel-requests" role="tabpanel" aria-labelledby="admin-tab-requests" hidden>
       <div class="section-head">
         <div>
           <h2>Generation requests</h2>
@@ -2266,7 +2284,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     </div>
 
     <!-- -- prompts -- -->
-    <div class="panel" id="panel-prompts" style="display:none;">
+    <div class="panel" id="panel-prompts" role="tabpanel" aria-labelledby="admin-tab-prompts" hidden>
       <div class="section-head">
         <div>
           <h2>Image edit prompts</h2>
@@ -2341,7 +2359,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     </div>
 
     <!-- ── browse (archive) ── -->
-    <div class="panel" id="panel-archive" style="display:none;">
+    <div class="panel" id="panel-archive" role="tabpanel" aria-labelledby="admin-tab-archive" hidden>
       <div class="section-head">
         <div>
           <h2>Gallery</h2>
@@ -2413,7 +2431,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     </div>
 
     <!-- ── visions (styles) ── -->
-    <div class="panel" id="panel-styles">
+    <div class="panel" id="panel-styles" role="tabpanel" aria-labelledby="admin-tab-styles" hidden>
       <div class="split">
         <section class="stack">
           <h2>Vision scorecard</h2>
@@ -2423,8 +2441,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             <div class="table-pager">
               <label>Rows
                 <select id="vision-page-size">
+                  <option value="8">8</option>
+                  <option value="12" selected>12</option>
                   <option value="25">25</option>
-                  <option value="50" selected>50</option>
+                  <option value="50">50</option>
                   <option value="100">100</option>
                   <option value="250">250</option>
                 </select>
@@ -2487,7 +2507,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     </div>
 
     <!-- ── log (activity) ── -->
-    <div class="panel" id="panel-activity">
+    <div class="panel" id="panel-activity" role="tabpanel" aria-labelledby="admin-tab-activity" hidden>
       <h2>Activity log</h2>
       <p class="small">Recent changes and admin actions.</p>
       <div class="log-filters" style="margin-bottom: 12px;">
@@ -2514,6 +2534,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       var API_BASE = '/api/iconoplasm/admin';
       var ADMIN_READ_TIMEOUT_MS = 12000;
       var ADMIN_WRITE_TIMEOUT_MS = 30000;
+      function defaultVisionPageSize() {
+        return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 700px)').matches ? 8 : 12;
+      }
       var state = {
         assets: [],
         overviewSummary: null,
@@ -2536,12 +2559,11 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         promptsLoaded: false,
         promptMaxLength: 2400,
         visionPage: 1,
-        visionPageSize: 50,
+        visionPageSize: defaultVisionPageSize(),
         selectedVisionId: '',
         selectedVisionDetail: null,
         selectedVisionAssetSha: '',
         visionDetailCache: {},
-        warmingVisionDetailIds: {},
         preloadedImageUrls: {},
         visionPreviewRequestId: 0,
         visionDetailRequestId: 0,
@@ -2655,7 +2677,99 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         actionLog: document.getElementById('action-log')
       };
 
+      var mountedAdminTab = '';
+      var activeTabReadController = null;
+      var ADMIN_TAB_RENDER_ROOTS = {
+        overview: ['overview-metrics', 'overview-coverage', 'attention-list', 'overview-events'],
+        costs: [
+          'cost-context-strip', 'cost-metrics', 'cost-snapshot-trust-chart',
+          'cost-snapshot-trust-details', 'cost-read-trend', 'cost-d1-write-adaptive-chart',
+          'cost-worker-limiter-chart', 'cost-do-traffic-chart', 'cost-d1-query-volume-chart',
+          'cost-d1-response-bytes-chart', 'cost-d1-latency-chart', 'cost-d1-storage-chart',
+          'cost-do-activity-mix-chart', 'cost-product-small-multiples',
+          'cost-limit-ratio-heatmap', 'cost-sensor-coverage-matrix',
+          'cost-overage-magnitude-plot', 'cost-daily-burn-calendar', 'cost-queue-backlog-chart',
+          'cost-headroom-slope-chart', 'cost-snapshot-integrity-chart', 'cost-event-overlay-chart',
+          'cost-unknown-series', 'cost-request-distribution-chart', 'cost-top-routes'
+        ],
+        requests: ['requests-summary', 'requests-list', 'requests-detail'],
+        prompts: ['prompt-template-list'],
+        archive: ['gallery-grid', 'gallery-detail'],
+        styles: [
+          'vision-stats-list', 'vision-cleanup-panel', 'vision-quick-context',
+          'styles-pending', 'styles-notes'
+        ],
+        activity: ['activity-list']
+      };
+
+      function clearAdminTabRenderRoots(tab) {
+        (ADMIN_TAB_RENDER_ROOTS[tab] || []).forEach(function (id) {
+          var root = document.getElementById(id);
+          if (root) root.replaceChildren();
+        });
+      }
+
+      function unmountAdminTab(tab) {
+        if (!tab) return;
+        if (tab === 'styles') {
+          state.visionPreviewRequestId += 1;
+          state.visionDetailRequestId += 1;
+        }
+        clearAdminTabRenderRoots(tab);
+      }
+
+      function mountAdminTab(tab) {
+        if (tab === 'overview') {
+          renderOverview();
+          if (!state.overviewSummary || !state.overviewCoverage) refreshDerivedAdminViews();
+          return;
+        }
+        if (tab === 'costs') {
+          if (state.costReport) renderCostUsage(state.costReport);
+          else refreshCostUsage();
+          return;
+        }
+        if (tab === 'requests') {
+          if (state.requestsLoaded) renderGenerationRequests();
+          else refreshGenerationRequests();
+          return;
+        }
+        if (tab === 'prompts') {
+          if (state.promptsLoaded) renderImageEditPrompts();
+          else refreshImageEditPrompts();
+          return;
+        }
+        if (tab === 'archive') {
+          if (state.archiveLoaded) {
+            renderTable();
+            if (state.selectedGeneDetail) renderGeneDetail();
+          } else {
+            refreshAssets();
+          }
+          return;
+        }
+        if (tab === 'styles') {
+          renderVisionCleanupPanel();
+          renderVisionQuickActions();
+          if (state.visionStats.length) renderVisionStats();
+          else refreshVisionStats();
+          return;
+        }
+        if (tab === 'activity') {
+          if (state.overviewSummary) renderActivityFeed();
+          else refreshOverviewSummary();
+        }
+      }
+
       function setActiveTab(tab) {
+        if (!els.panels[tab]) return;
+        var changed = mountedAdminTab !== tab;
+        if (changed && activeTabReadController) activeTabReadController.abort();
+        if (changed && mountedAdminTab) unmountAdminTab(mountedAdminTab);
+        if (changed) {
+          activeTabReadController = typeof AbortController === 'function' ? new AbortController() : null;
+          mountedAdminTab = tab;
+        }
         state.activeTab = tab;
         if (window.location.hash !== '#' + tab && typeof history !== 'undefined' && history.replaceState) {
           history.replaceState(null, '', '#' + tab);
@@ -2665,32 +2779,21 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           if (!panel) return;
           if (key === tab) {
             panel.classList.add('active');
-            panel.style.display = '';
+            panel.hidden = false;
           } else {
             panel.classList.remove('active');
-            panel.style.display = 'none';
+            panel.hidden = true;
           }
         });
         if (els.tabs) {
           els.tabs.querySelectorAll('[data-tab]').forEach(function (btn) {
-            btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+            var selected = btn.getAttribute('data-tab') === tab;
+            btn.classList.toggle('active', selected);
+            btn.setAttribute('aria-selected', selected ? 'true' : 'false');
+            btn.setAttribute('tabindex', selected ? '0' : '-1');
           });
         }
-        if (tab === 'archive' && !state.archiveLoaded) {
-          refreshAssets();
-        }
-        if (tab === 'costs' && !state.costLoaded) {
-          refreshCostUsage();
-        }
-        if (tab === 'requests' && !state.requestsLoaded) {
-          refreshGenerationRequests();
-        }
-        if (tab === 'prompts' && !state.promptsLoaded) {
-          refreshImageEditPrompts();
-        }
-        if (tab === 'styles' && !state.visionStats.length) {
-          refreshVisionStats();
-        }
+        if (changed) mountAdminTab(tab);
       }
 
       function esc(v) {
@@ -2822,9 +2925,19 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         var timeoutMs = Number(opts.timeoutMs || (method === 'GET' ? ADMIN_READ_TIMEOUT_MS : ADMIN_WRITE_TIMEOUT_MS));
         var headers = Object.assign({}, opts.headers || {}, authHeaders());
         var controller = typeof AbortController === 'function' ? new AbortController() : null;
+        var ownerSignal = method === 'GET' && activeTabReadController ? activeTabReadController.signal : null;
+        var timedOut = false;
+        var abortOwnedRequest = function () {
+          if (controller) controller.abort();
+        };
         var timeoutId = null;
+        if (ownerSignal) {
+          if (ownerSignal.aborted) abortOwnedRequest();
+          else ownerSignal.addEventListener('abort', abortOwnedRequest, { once: true });
+        }
         if (controller && timeoutMs > 0) {
           timeoutId = window.setTimeout(function () {
+            timedOut = true;
             controller.abort();
           }, timeoutMs);
         }
@@ -2846,12 +2959,22 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           return data;
         } catch (err) {
           if (controller && controller.signal && controller.signal.aborted) {
+            if (!timedOut) {
+              var canceled = new Error('Request canceled because its admin tab was unmounted.');
+              canceled.code = 'ABORTED';
+              throw canceled;
+            }
             throw requestTimeoutError(path, timeoutMs);
           }
           throw err;
         } finally {
           if (timeoutId != null) window.clearTimeout(timeoutId);
+          if (ownerSignal) ownerSignal.removeEventListener('abort', abortOwnedRequest);
         }
+      }
+
+      function isRequestCanceled(err) {
+        return Boolean(err && err.code === 'ABORTED');
       }
 
       function setLog(v) {
@@ -2911,6 +3034,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function renderActivityFeed() {
+        if (state.activeTab !== 'activity') return;
         var query = String((els.activityFilter && els.activityFilter.value) || '').trim().toLowerCase();
         var events = (state.recentEvents || []).filter(function (evt) {
           if (state.activityActionFilter !== 'all' && String(evt.action || '').toLowerCase() !== state.activityActionFilter) return false;
@@ -3088,6 +3212,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function renderGenerationRequests() {
+        if (state.activeTab !== 'requests') return;
         if (!els.requestsList) return;
         var rows = filteredGenerationRequests();
         if (!rows.some(function (row) { return String(row.id || '') === String(state.selectedRequestId || ''); })) {
@@ -3113,6 +3238,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           state.requestsLoaded = true;
           renderGenerationRequests();
         } catch (err) {
+          if (isRequestCanceled(err)) return;
           var message = requestErrorMessage(err, 'Requests load failed.');
           els.requestsList.innerHTML = '<tr><td colspan="8"><strong>Requests failed.</strong><div class="small">' + esc(message) + '</div></td></tr>';
           if (els.requestsSummary) els.requestsSummary.innerHTML = '';
@@ -3171,6 +3297,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function renderImageEditPrompts() {
+        if (state.activeTab !== 'prompts') return;
         if (!els.promptTemplateList) return;
         renderImageEditPromptPrefix();
         renderImageEditPromptSuffix();
@@ -3214,6 +3341,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           renderImageEditPrompts();
           setPromptStatus('Prompts loaded.', 'success');
         } catch (err) {
+          if (isRequestCanceled(err)) return;
           var message = requestErrorMessage(err, 'Prompt templates failed to load.');
           els.promptTemplateList.innerHTML = inlineFailureMarkup('Prompts failed', message);
           setPromptStatus(message, 'error');
@@ -3342,6 +3470,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function renderOverviewSummary() {
+        if (state.activeTab !== 'overview') return;
         var summary = state.overviewSummary || {};
         els.overviewMetrics.innerHTML = [
           metricMarkup('Canonical set', summary.with_live, 'Genes with a canonical blot set.'),
@@ -3371,10 +3500,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         els.attentionList.innerHTML = notes.join('');
 
         els.overviewEvents.innerHTML = (state.recentEvents || []).slice(0, 12).map(overviewEventMarkup).join('') || '<article class="list-row"><div><strong>No recent activity.</strong></div><div></div></article>';
-        renderActivityFeed();
       }
 
       function renderOverviewCoverage() {
+        if (state.activeTab !== 'overview') return;
         var coverage = state.overviewCoverage || null;
         if (coverage) {
           var total = Math.max(1, Number(coverage.total || 0));
@@ -3421,7 +3550,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           state.overviewAttention = Array.isArray(data.attention) ? data.attention : [];
           state.recentEvents = Array.isArray(data.recent_events) ? data.recent_events : [];
           renderOverviewSummary();
+          renderActivityFeed();
         } catch (err) {
+          if (isRequestCanceled(err)) return;
           var message = requestErrorMessage(err, 'Overview load failed.');
           els.overviewMetrics.innerHTML = inlineFailureMarkup('Overview failed fast', message);
           els.attentionList.innerHTML = '<article class="list-row"><div><strong>Admin overview failed.</strong><div class="small">' + esc(message) + '</div></div><div></div></article>';
@@ -3435,6 +3566,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           state.overviewCoverage = await apiJson('/coverage', { method: 'GET' });
           renderOverviewCoverage();
         } catch (err) {
+          if (isRequestCanceled(err)) return;
           var message = requestErrorMessage(err, 'Coverage load failed.');
           els.overviewCoverage.innerHTML = inlineFailureMarkup('Coverage failed fast', message);
           setLog({ error: 'Coverage load failed', details: err.response || message });
@@ -3457,7 +3589,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function setVisionPage(page) {
-        var pageSize = Math.max(1, Number.parseInt(String(state.visionPageSize || 50), 10) || 50);
+        var pageSize = Math.max(1, Number.parseInt(String(state.visionPageSize || defaultVisionPageSize()), 10) || defaultVisionPageSize());
         var totalPages = Math.max(1, Math.ceil((state.visionStats || []).length / pageSize));
         state.visionPage = clampVisionPage(page, totalPages);
       }
@@ -5432,6 +5564,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       // Cloudflare Billing can be blank on the free plan; product quota pages
       // are the operational source of truth for this account.
       function renderCostUsage(report) {
+        if (state.activeTab !== 'costs') return;
         var snapshot = report && typeof report === 'object' ? report : {};
         var freshness = snapshot && snapshot.freshness ? snapshot.freshness : {};
         var d1 = snapshot && snapshot.d1 ? snapshot.d1 : {};
@@ -5590,6 +5723,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               + (publication.state ? (' · ' + String(publication.state).replace('_', ' ')) : '');
           }
         } catch (err) {
+          if (isRequestCanceled(err)) return;
           state.costLoaded = false;
           if (els.costUpdatedAt) els.costUpdatedAt.textContent = 'Snapshot unavailable · publication endpoint failed';
           if (els.costMetrics) els.costMetrics.innerHTML = inlineFailureMarkup('Snapshot load failed', requestErrorMessage(err, 'Snapshot load failed.'));
@@ -5641,21 +5775,15 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         } catch {}
       }
 
-      function preloadVisionAssets(assets) {
-        (Array.isArray(assets) ? assets : []).forEach(function (asset) {
-          if (!asset) return;
-          preloadImage(asset.medium_url || asset.thumb_url || asset.hero_url || '');
-        });
-      }
-
       function normalizeVisionId(value) {
         return String(value || '').trim();
       }
 
       function visionDetailLimitForRow(row) {
         var imageCount = Number(row && row.image_count || 0);
-        if (!Number.isFinite(imageCount) || imageCount <= 0) return 60;
-        return Math.max(24, Math.min(240, Math.round(imageCount)));
+        var boundedLimit = defaultVisionPageSize() === 8 ? 12 : 24;
+        if (!Number.isFinite(imageCount) || imageCount <= 0) return boundedLimit;
+        return Math.max(1, Math.min(boundedLimit, Math.round(imageCount)));
       }
 
       function sortedVisionRows() {
@@ -5677,7 +5805,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
       function visibleVisionRows() {
         var rows = sortedVisionRows();
-        var pageSize = Math.max(1, Number.parseInt(String(state.visionPageSize || 50), 10) || 50);
+        var pageSize = Math.max(1, Number.parseInt(String(state.visionPageSize || defaultVisionPageSize()), 10) || defaultVisionPageSize());
         var totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
         state.visionPage = clampVisionPage(state.visionPage, totalPages);
         var start = (state.visionPage - 1) * pageSize;
@@ -5747,49 +5875,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             return Object.assign({}, asset);
           })
         };
-        preloadVisionAssets(mergedDetail.assets);
         return mergedDetail;
-      }
-
-      function nearbyVisionRows(anchorVisionId, radius) {
-        var rows = visibleVisionRows();
-        if (!rows.length) return [];
-        var cleanedVisionId = normalizeVisionId(anchorVisionId);
-        var index = rows.findIndex(function (row) {
-          return normalizeVisionId(row && row.vision_id) === cleanedVisionId;
-        });
-        if (index < 0) index = 0;
-        var windowRadius = Math.max(0, Number.parseInt(String(radius || 0), 10) || 0);
-        var start = Math.max(0, index - windowRadius);
-        var end = Math.min(rows.length, index + windowRadius + 1);
-        return rows.slice(start, end);
-      }
-
-      async function warmVisionDetail(visionId, row) {
-        var cleanedVisionId = normalizeVisionId(visionId);
-        if (!cleanedVisionId) return;
-        if (state.visionDetailCache[cleanedVisionId]) {
-          preloadVisionAssets(state.visionDetailCache[cleanedVisionId].assets || []);
-          return;
-        }
-        if (state.warmingVisionDetailIds[cleanedVisionId]) return;
-        state.warmingVisionDetailIds[cleanedVisionId] = true;
-        try {
-          var limit = visionDetailLimitForRow(row);
-          var data = await apiJson('/votes/vision-detail?vision_id=' + encodeURIComponent(cleanedVisionId) + '&limit=' + encodeURIComponent(String(limit)), { method: 'GET' });
-          if (data && data.detail) {
-            writeVisionDetailCache(cleanedVisionId, data.detail);
-          }
-        } catch (err) {
-        } finally {
-          delete state.warmingVisionDetailIds[cleanedVisionId];
-        }
-      }
-
-      function warmVisionNeighborhood(anchorVisionId) {
-        nearbyVisionRows(anchorVisionId, 10).forEach(function (row) {
-          warmVisionDetail(row.vision_id, row);
-        });
       }
 
       function visionArtistId(value) {
@@ -5808,8 +5894,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         };
         state.selectedVisionAssetSha = String(assetSha || state.selectedVisionAssetSha || previewAssets[0].asset_sha256 || '');
         renderVisionCleanupPanel();
-        preloadVisionAssets(previewAssets);
-        warmVisionNeighborhood(row.vision_id);
         return true;
       }
 
@@ -5877,6 +5961,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function renderVisionQuickActions() {
+        if (state.activeTab !== 'styles') return;
         var context = currentVisionContext();
         var vision = context.vision;
         var asset = context.asset;
@@ -5926,7 +6011,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           ' data-vision-open="' + esc(visionId || '') + '"',
           ' data-vision-asset="' + esc(asset.asset_sha256 || '') + '"',
           ' title="' + esc(titleParts.join(' · ')) + '">',
-          '<img src="' + esc(asset.thumb_url) + '" alt="' + esc(label + ' preview') + '" loading="eager" />',
+          '<img src="' + esc(asset.thumb_url) + '" alt="' + esc(label + ' preview') + '" loading="lazy" />',
           '<span class="vision-preview-gene">' + esc(label) + '</span>',
           '</button>'
         ].join('');
@@ -5956,6 +6041,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function renderVisionCleanupPanel() {
+        if (state.activeTab !== 'styles') return;
         if (!els.visionCleanupPanel) return;
         var detail = state.selectedVisionDetail;
         if (!detail || !detail.vision) {
@@ -6100,18 +6186,15 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         renderVisionStats();
         var requestId = ++state.visionPreviewRequestId;
         try {
-          var data = await apiJson('/votes/vision-previews?vision_ids=' + encodeURIComponent(missingVisionIds.join(',')) + '&limit=6', { method: 'GET' });
+          var data = await apiJson('/votes/vision-previews?vision_ids=' + encodeURIComponent(missingVisionIds.join(',')) + '&limit=3', { method: 'GET' });
           if (requestId !== state.visionPreviewRequestId) return;
           (Array.isArray(data && data.rows) ? data.rows : []).forEach(function (row) {
             var visionId = String(row && row.vision_id || '');
             if (!visionId) return;
             state.visionPreviewMap[visionId] = Array.isArray(row.assets) ? row.assets : [];
-            preloadVisionAssets(state.visionPreviewMap[visionId]);
-          });
-          pageRows.slice(0, 10).forEach(function (row) {
-            warmVisionDetail(row.vision_id, row);
           });
         } catch (err) {
+          if (isRequestCanceled(err)) return;
           setLog({ error: 'Vision preview load failed', details: err.response || requestErrorMessage(err, 'Preview load failed.') });
         } finally {
           missingVisionIds.forEach(function (visionId) {
@@ -6144,7 +6227,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             renderVisionCleanupPanel();
           }
         }
-        warmVisionNeighborhood(cleanedVisionId);
         var requestId = ++state.visionDetailRequestId;
         try {
           var data = await apiJson('/votes/vision-detail?vision_id=' + encodeURIComponent(cleanedVisionId) + '&limit=' + encodeURIComponent(String(visionDetailLimitForRow(currentRow))), { method: 'GET' });
@@ -6156,6 +6238,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           }
           renderVisionCleanupPanel();
         } catch (err) {
+          if (isRequestCanceled(err)) return;
           if (requestId !== state.visionDetailRequestId) return;
           state.selectedVisionDetail = null;
           renderVisionStats();
@@ -6167,9 +6250,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function renderVisionStats() {
+        if (state.activeTab !== 'styles') return;
         var sortKey = state.visionSort.key;
         var rows = sortedVisionRows();
-        var pageSize = Math.max(1, Number.parseInt(String(state.visionPageSize || 50), 10) || 50);
+        var pageSize = Math.max(1, Number.parseInt(String(state.visionPageSize || defaultVisionPageSize()), 10) || defaultVisionPageSize());
         var totalRows = rows.length;
         var totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
         state.visionPage = clampVisionPage(state.visionPage, totalPages);
@@ -6234,7 +6318,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           state.visionStats = Array.isArray(data.rows) ? data.rows : [];
           state.visionPreviewMap = {};
           state.visionDetailCache = {};
-          state.warmingVisionDetailIds = {};
           state.preloadedImageUrls = {};
           state.loadingVisionPreviewIds = {};
           state.blacklistedStyles = Array.isArray(data.blacklisted) ? data.blacklisted : [];
@@ -6242,6 +6325,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           state.visionPage = 1;
           renderVisionStats();
         } catch (err) {
+          if (isRequestCanceled(err)) return;
           var message = requestErrorMessage(err, 'Vision stats failed.');
           if (els.visionStatsList) {
             els.visionStatsList.innerHTML = tableFailureMarkup('Vision scorecard failed fast', message, 8);
@@ -6431,6 +6515,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function renderGeneDetail() {
+        if (state.activeTab !== 'archive') return;
         var detail = state.selectedGeneDetail;
         if (!detail) {
           els.detail.innerHTML = [
@@ -6525,6 +6610,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function renderTable() {
+        if (state.activeTab !== 'archive') return;
         var assets = filteredAssets();
         if (!assets.length) {
           els.body.innerHTML = '<div class="gallery-empty" style="grid-column:1 / -1">Nothing matched this gallery slice.</div>';
@@ -6568,6 +6654,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             });
           }
         } catch (err) {
+          if (isRequestCanceled(err)) return;
           state.archiveLoaded = false;
           els.meta.innerHTML = '<span style="color: var(--danger)">Failed to load.</span>';
           setLog({ error: String(err.message || err), details: err.response || null });
@@ -6697,6 +6784,21 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             var btn = ev.target.closest('[data-tab]');
             if (!btn) return;
             setActiveTab(String(btn.getAttribute('data-tab') || 'overview'));
+          });
+          els.tabs.addEventListener('keydown', function (ev) {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(ev.key)) return;
+            var tabs = Array.from(els.tabs.querySelectorAll('[role="tab"]'));
+            if (!tabs.length) return;
+            var current = Math.max(0, tabs.indexOf(document.activeElement));
+            var next = current;
+            if (ev.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+            if (ev.key === 'ArrowRight') next = (current + 1) % tabs.length;
+            if (ev.key === 'Home') next = 0;
+            if (ev.key === 'End') next = tabs.length - 1;
+            ev.preventDefault();
+            var nextTab = tabs[next];
+            setActiveTab(String(nextTab.getAttribute('data-tab') || 'overview'));
+            nextTab.focus();
           });
         }
 
@@ -6873,7 +6975,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           }
 
           if (ev.target.closest('#vision-page-last')) {
-            setVisionPage(Math.max(1, Math.ceil((state.visionStats || []).length / Math.max(1, state.visionPageSize || 50))));
+            setVisionPage(Math.max(1, Math.ceil((state.visionStats || []).length / Math.max(1, state.visionPageSize || defaultVisionPageSize()))));
             renderVisionStats();
             return;
           }
@@ -7047,7 +7149,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         els.search.addEventListener('input', refreshAssets);
         if (els.visionPageSize) {
           els.visionPageSize.addEventListener('change', function () {
-            state.visionPageSize = Math.max(1, Number.parseInt(String(els.visionPageSize.value || '50'), 10) || 50);
+            state.visionPageSize = Math.max(1, Number.parseInt(String(els.visionPageSize.value || defaultVisionPageSize()), 10) || defaultVisionPageSize());
             state.visionPage = 1;
             renderVisionStats();
           });
@@ -7062,7 +7164,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           els.promptTemplateList.innerHTML = inlineFailureMarkup('Prompts not loaded', 'Open this tab to load image edit prompt templates.');
         }
         bindActions();
-        refreshDerivedAdminViews();
       }
 
       init();

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { Script } from "node:vm"
+import { parseHTML } from "linkedom"
 
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 
@@ -157,4 +158,127 @@ test("iconoplasm admin inline script parses", () => {
   const match = ICONOPLASM_ADMIN_HTML.match(/<script>([\s\S]*?)<\/script>/)
   assert.ok(match, "expected inline admin script in emitted HTML")
   assert.doesNotThrow(() => new Script(match[1], { filename: "iconoplasm-admin-inline.js" }))
+})
+
+test("admin tabs expose a responsive keyboard tab contract", () => {
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="admin-tabs" aria-label="Admin sections" role="tablist"/)
+  assert.match(
+    ICONOPLASM_ADMIN_HTML,
+    /id="admin-tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview"/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_HTML,
+    /id="panel-overview" role="tabpanel" aria-labelledby="admin-tab-overview"/,
+  )
+  assert.match(ICONOPLASM_ADMIN_HTML, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /\.tab-btn \{[\s\S]*min-height: 44px/)
+  assert.match(
+    ICONOPLASM_ADMIN_HTML,
+    /\['ArrowLeft', 'ArrowRight', 'Home', 'End'\]\.includes\(ev\.key\)/,
+  )
+  assert.match(ICONOPLASM_ADMIN_HTML, /nextTab\.focus\(\)/)
+})
+
+test("admin tab lifecycle unmounts inactive render roots and aborts their reads", () => {
+  const scriptMatch = ICONOPLASM_ADMIN_HTML.match(/<script>([\s\S]*?)<\/script>/)
+  assert.ok(scriptMatch)
+  const script = scriptMatch[1]
+  const start = script.indexOf("var mountedAdminTab = ''")
+  const end = script.indexOf("function esc(v)", start)
+  assert.notEqual(start, -1)
+  assert.notEqual(end, -1)
+
+  const tabs = ["overview", "costs", "requests", "prompts", "archive", "styles", "activity"]
+  const markup = [
+    '<nav id="admin-tabs">',
+    ...tabs.map((tab) => `<button role="tab" data-tab="${tab}">${tab}</button>`),
+    "</nav>",
+    ...tabs.map(
+      (tab) =>
+        `<div class="panel" id="panel-${tab}" hidden><div id="${tab === "overview" ? "overview-events" : tab === "styles" ? "vision-stats-list" : tab === "activity" ? "activity-list" : `root-${tab}`}"><img alt="retained" /></div></div>`,
+    ),
+  ].join("")
+  const { document } = parseHTML(markup)
+  const adminWindow = { location: { hash: "" } }
+  const calls = []
+  const state = {
+    activeTab: "",
+    overviewSummary: {},
+    overviewCoverage: {},
+    costReport: null,
+    requestsLoaded: false,
+    promptsLoaded: false,
+    archiveLoaded: false,
+    visionStats: [],
+    selectedGeneDetail: null,
+    visionPreviewRequestId: 0,
+    visionDetailRequestId: 0,
+  }
+  const sandbox = {
+    AbortController,
+    document,
+    window: adminWindow,
+    history: { replaceState: (_state, _title, hash) => (adminWindow.location.hash = hash) },
+    state,
+    els: {
+      tabs: document.querySelector("#admin-tabs"),
+      panels: Object.fromEntries(tabs.map((tab) => [tab, document.querySelector(`#panel-${tab}`)])),
+    },
+    renderOverview: () => calls.push("render-overview"),
+    refreshDerivedAdminViews: () => calls.push("refresh-overview"),
+    renderCostUsage: () => calls.push("render-costs"),
+    refreshCostUsage: () => calls.push("refresh-costs"),
+    renderGenerationRequests: () => calls.push("render-requests"),
+    refreshGenerationRequests: () => calls.push("refresh-requests"),
+    renderImageEditPrompts: () => calls.push("render-prompts"),
+    refreshImageEditPrompts: () => calls.push("refresh-prompts"),
+    renderTable: () => calls.push("render-archive"),
+    renderGeneDetail: () => calls.push("render-gene"),
+    refreshAssets: () => calls.push("refresh-archive"),
+    renderVisionStats: () => calls.push("render-styles"),
+    refreshVisionStats: () => calls.push("refresh-styles"),
+    renderVisionCleanupPanel: () => calls.push("render-vision-detail"),
+    renderVisionQuickActions: () => calls.push("render-vision-actions"),
+    renderActivityFeed: () => calls.push("render-activity"),
+    refreshOverviewSummary: () => calls.push("refresh-activity"),
+  }
+  new Script(script.slice(start, end), { filename: "iconoplasm-admin-tabs.js" }).runInNewContext(
+    sandbox,
+  )
+
+  sandbox.setActiveTab("overview")
+  const overviewController = sandbox.activeTabReadController
+  assert.equal(document.querySelector("#panel-overview").hidden, false)
+  assert.equal(
+    document.querySelector('[data-tab="overview"]').getAttribute("aria-selected"),
+    "true",
+  )
+
+  sandbox.setActiveTab("styles")
+  assert.equal(overviewController.signal.aborted, true)
+  assert.equal(document.querySelector("#panel-overview").hidden, true)
+  assert.equal(document.querySelector("#overview-events").children.length, 0)
+  assert.equal(document.querySelector("#panel-styles").hidden, false)
+  assert.equal(document.querySelector('[data-tab="styles"]').getAttribute("tabindex"), "0")
+  assert.ok(calls.includes("refresh-styles"))
+
+  document.querySelector("#vision-stats-list").innerHTML = '<img alt="vision" />'
+  sandbox.setActiveTab("activity")
+  assert.equal(document.querySelector("#vision-stats-list").children.length, 0)
+  assert.equal(state.visionPreviewRequestId, 1)
+  assert.equal(state.visionDetailRequestId, 1)
+})
+
+test("visions load a bounded summary page and reserve detail hydration for selection", () => {
+  assert.match(ICONOPLASM_ADMIN_HTML, /visionPageSize: defaultVisionPageSize\(\)/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /<option value="8">8<\/option>/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /<option value="12" selected>12<\/option>/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /vision-previews\?vision_ids=[\s\S]*&limit=3/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /esc\(label \+ ' preview'\) \+ '" loading="lazy"/)
+  assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /warmVisionNeighborhood|warmVisionDetail/)
+  assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /preloadVisionAssets/)
+  assert.match(
+    ICONOPLASM_ADMIN_HTML,
+    /var boundedLimit = defaultVisionPageSize\(\) === 8 \? 12 : 24/,
+  )
 })
