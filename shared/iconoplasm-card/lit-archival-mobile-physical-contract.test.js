@@ -948,7 +948,10 @@ test("mobile card uses the larger B-483 type scale instead of the tiny draft sca
     ".icono-card--variant-lab-label.icono-card--brick .icono-label-mobile-peek-swipe .icono-vote-btn",
   )
   assert.match(voteButtonBlock, /font-size:\s*var\(--icono-label-mobile-typewriter-size\);/)
-  assert.match(voteButtonBlock, /min-height:\s*1\.24rem;/)
+  assert.match(
+    voteButtonBlock,
+    /min-height:\s*var\(--icono-label-mobile-target-size, 44px\);/,
+  )
   assert.doesNotMatch(voteButtonBlock, /font-size:\s*0\.52rem;/)
   const voteArrowBlock = cssBlockFor(
     css,
@@ -1352,12 +1355,32 @@ test("mobile collapsed voting remains in the top infocard, not in a separate poc
   assert.match(
     litCard,
     /<div[\s\S]*role="button"[\s\S]*data-icono-label-mobile-toggle/,
-    "the mobile peek toggle must be a non-button interactive region so it can legally contain vote buttons",
+    "the mobile peek details control remains keyboard operable",
   )
   assert.equal(
     /<button[\s\S]*data-icono-label-mobile-toggle/.test(litCard),
     false,
-    "the mobile peek toggle must not be a button containing nested vote buttons",
+    "the mobile peek toggle must not become a button that contains nested controls",
+  )
+  assert.match(
+    litCard,
+    /data-icono-label-mobile-toggle[\s\S]*<\/div>\s*<a[\s\S]*icono-label-mobile-open-link[\s\S]*data-icono-nav[\s\S]*<span class="icono-label-mobile-peek-swipe"/,
+    "details, gene navigation, and voting must be sibling controls instead of nested interactives",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-open-link:focus-visible[\s\S]*outline:/,
+    "the visible mobile gene link needs an explicit keyboard focus treatment",
+  )
+  assert.match(
+    css,
+    /\.icono-label-mobile-peek-swipe \.icono-vote-btn[\s\S]*min-height:\s*var\(--icono-label-mobile-target-size, 44px\)/,
+    "mobile vote buttons must meet the primary touch-target budget",
+  )
+  assert.match(
+    app,
+    /--icono-label-mobile-target-size[\s\S]*Math\.ceil\(44 \/ activeFitScale\)/,
+    "scaled physical cards must compensate control geometry so the rendered target stays 44px",
   )
   assert.match(
     litCard,

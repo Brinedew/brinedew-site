@@ -10222,7 +10222,10 @@
     }
     function renderLabLabelMobilePeekHtml(model) {
       if (!(model.mode === "brick" && model.mobileReview)) return "";
-      return '<div class="icono-label-mobile-peek"><div role="button" tabindex="0" class="icono-label-mobile-peek-toggle" data-icono-label-mobile-toggle aria-expanded="false"><span class="icono-label-mobile-peek-tab" aria-hidden="true"><span class="icono-label-mobile-peek-tab-symbol">' + escapeHtml(model.symbol) + '</span></span><span class="icono-label-mobile-peek-topline"><span class="icono-label-mobile-peek-kicker">full name</span></span><span class="icono-label-mobile-peek-summary"><span class="icono-label-mobile-peek-name">' + escapeHtml(model.fullName) + '</span></span><span class="icono-label-mobile-peek-swipe">' + renderLabLabelVoteShell(model.voteHtml) + "</span></div></div>";
+      var href = String(model.titleHref || "").trim();
+      var summaryOpen = href ? '<a class="icono-label-mobile-peek-summary icono-label-mobile-open-link" href="' + escapeHtml(href) + '" data-icono-nav aria-label="Open ' + escapeHtml(model.symbol) + ' gene page">' : '<span class="icono-label-mobile-peek-summary">';
+      var summaryClose = href ? "</a>" : "</span>";
+      return '<div class="icono-label-mobile-peek"><div role="button" tabindex="0" class="icono-label-mobile-peek-toggle" data-icono-label-mobile-toggle aria-expanded="false" aria-label="Show details for ' + escapeHtml(model.symbol) + '"><span class="icono-label-mobile-peek-tab" aria-hidden="true"><span class="icono-label-mobile-peek-tab-symbol">' + escapeHtml(model.symbol) + '</span></span><span class="icono-label-mobile-peek-topline"><span class="icono-label-mobile-peek-kicker">full name</span></span></div>' + summaryOpen + '<span class="icono-label-mobile-peek-name">' + escapeHtml(model.fullName) + "</span>" + summaryClose + '<span class="icono-label-mobile-peek-swipe">' + renderLabLabelVoteShell(model.voteHtml) + "</span></div>";
     }
     function renderLabLabelImageOnlyCardHtml(model) {
       var href = String(model.titleHref || "").trim();

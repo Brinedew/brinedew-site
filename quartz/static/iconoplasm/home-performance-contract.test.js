@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises"
 import test from "node:test"
 import assert from "node:assert/strict"
+import { parseHTML } from "linkedom"
 
 const appPath = new URL("./app.js", import.meta.url)
 const homeOrdersPath = new URL("./home-orders.js", import.meta.url)
@@ -101,7 +102,7 @@ test("home collection counts use inventory stats, not a gallery-order probe", as
 test("home collection cards do not wait for public gallery counts before loading discoveries", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function ensureCollectionReady()")
-  const end = app.indexOf("function updateSentinelObserver()", start)
+  const end = app.indexOf("function maybeRestoreHomeScroll()", start)
   assert.notEqual(start, -1, "missing ensureCollectionReady")
   assert.notEqual(end, -1, "missing ensureCollectionReady boundary")
   const block = app.slice(start, end)
@@ -446,7 +447,7 @@ test("account collection single-flights duplicate window requests", async () => 
   )
 })
 
-test("account collection paints four cards first, then auto-prefills the next batch", async () => {
+test("home collection uses explicit bounded pages without automatic DOM growth", async () => {
   const app = await readFile(appPath, "utf8")
   const resetStart = app.indexOf("function resetGallery(order)")
   const resetEnd = app.indexOf("function loadNextGalleryPage()", resetStart)
@@ -454,50 +455,78 @@ test("account collection paints four cards first, then auto-prefills the next ba
   assert.notEqual(resetEnd, -1, "missing loadNextGalleryPage")
   const resetBlock = app.slice(resetStart, resetEnd)
 
-  assert.match(resetBlock, /currentAccountGalleryPrefillTarget\(\)/)
   assert.doesNotMatch(
     resetBlock,
-    /currentGalleryLimit\(\) \+ 48/,
-    "account-window first load must not schedule a hidden 48-card prefetch burst",
+    /backgroundPrefill|IntersectionObserver|icono-load-sentinel/,
+    "resetting the collection must not arm hidden background or viewport-driven page loads",
   )
   assert.match(app, /function currentAccountGalleryWindowLimit\(\)/)
   assert.match(
     app,
-    /function currentAccountGalleryWindowLimit\(\) \{[\s\S]*galleryState\.offset === 0 \? HOME_SKELETON_CARD_COUNT : HOME_COLLECTION_PAGE_SIZE/,
+    /function currentAccountGalleryWindowLimit\(\) \{[\s\S]*galleryState\.pageIndex === 0 \? HOME_SKELETON_CARD_COUNT : currentCollectionPageSize\(\)/,
     "account-window first load should fetch only the visible skeleton slots, not a whole page",
-  )
-  assert.match(app, /function currentAccountGalleryPrefillTarget\(\)/)
-  assert.match(
-    app,
-    /function currentAccountGalleryPrefillTarget\(\) \{[\s\S]*return HOME_COLLECTION_PAGE_SIZE/,
-    "account-window first paint should still auto-prefill one bounded page after the visible skeleton slots render",
   )
   assert.match(
     app,
     /var HOME_COLLECTION_INITIAL_PAGE_SIZE = 4/,
     "first collection paint should stay capped to the visible row",
   )
+  assert.match(app, /var HOME_COLLECTION_PAGE_SIZE = 12/)
+  assert.match(app, /var HOME_COLLECTION_MOBILE_PAGE_SIZE = 8/)
+  assert.match(app, /var GALLERY_PAGE_SIZE = 12/)
   assert.match(
     await readFile(headPath, "utf8"),
     /bootstrap\.accountGalleryWindowLimit = 4/,
     "head-started account window should not preload below-fold cards",
   )
+  assert.match(
+    app,
+    /function prepareResolvedPage\(\)[\s\S]*galleryState\.items = \[\][\s\S]*grid\.innerHTML = ""/,
+    "each page must replace the previous page's cards rather than append to its DOM",
+  )
+  assert.match(
+    app,
+    /function navigateCollectionPage\(direction\)[\s\S]*pageStarts\.push\([\s\S]*loadNextGalleryPage\(\{ force: true \}\)/,
+    "explicit pager navigation should retain request cursors while loading one replacement page",
+  )
+  const loaderStart = app.indexOf("function loadNextGalleryPage()")
+  const loaderEnd = app.indexOf("if (orderEl)", loaderStart)
+  const loader = app.slice(loaderStart, loaderEnd)
   assert.doesNotMatch(
-    app,
-    /galleryState\.offset < HOME_SKELETON_CARD_COUNT[\s\S]*loadNextGalleryPage\(\)/,
-    "an account with four visible cards still needs an automatic second batch",
+    loader,
+    /IntersectionObserver|backgroundPrefill|setTimeout\(function \(\) \{[\s\S]*loadNextGalleryPage/,
   )
-  assert.match(
-    app,
-    /rootMargin:\s*"160px 0px 160px 0px"/,
-    "infinite-scroll observation must not use a huge margin that preloads the next page during first paint",
+})
+
+test("home shell exposes landmarks, search semantics, and keyboard-owned pagination", async () => {
+  const vm = await import("node:vm")
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("function buildHomeShellMarkup(layout, cardVariant)")
+  const end = app.indexOf("function isLightColor", start)
+  assert.notEqual(start, -1, "missing home shell builder")
+  assert.notEqual(end, -1, "missing home shell builder boundary")
+  const sandbox = {
+    effectiveHomeGridLayout: () => "bricks",
+    homeCollectionOptionsMarkup: () => '<option value="newest">Newest</option>',
+    buildHomeSkeletonGridMarkup: () => '<article class="icono-card"></article>',
+    esc: (value) => String(value),
+  }
+  vm.runInNewContext(
+    `${app.slice(start, end)}; result = buildHomeShellMarkup("bricks", "simple")`,
+    sandbox,
   )
-  assert.match(
-    app,
-    /isFirstPage[\s\S]*galleryState\.offset < galleryState\.prefillTarget[\s\S]*backgroundPrefillTimer = window\.setTimeout[\s\S]*loadNextGalleryPage\(\)/,
-    "after the first visible account window, the next batch should load automatically without waiting for scroll",
-  )
-  assert.doesNotMatch(app, /armFirstAccountWindowScrollLoad/)
+  const { document } = parseHTML(`<div id="test-root">${sandbox.result}</div>`)
+
+  assert.equal(document.querySelectorAll("header").length, 1)
+  assert.equal(document.querySelectorAll("main").length, 1)
+  assert.equal(document.querySelector("main")?.id, "icono-main")
+  assert.equal(document.querySelector("#icono-q")?.getAttribute("aria-controls"), "icono-results")
+  assert.equal(document.querySelector("#icono-results")?.getAttribute("role"), "listbox")
+  assert.equal(document.querySelector("#icono-grid")?.getAttribute("tabindex"), "-1")
+  assert.equal(document.querySelector("#icono-collection-pager")?.tagName, "NAV")
+  assert.equal(document.querySelectorAll("#icono-collection-pager button").length, 2)
+  assert.equal(document.querySelector("#icono-page-status")?.getAttribute("aria-live"), "polite")
+  assert.equal(document.querySelector("#icono-load-sentinel"), null)
 })
 
 test("desktop home collection masonry paints discovery rows before rich detail hydration", async () => {
