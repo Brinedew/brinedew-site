@@ -4810,7 +4810,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function renderRequestOptionButtonMarkup(
     option,
-    selectedVisionId,
+    selectedVisionState,
     isRandom,
     optionAttribute,
     favoriteEnabled,
@@ -4824,7 +4824,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             ? item.user_emulsion_id || item.emulsion_id || ""
             : item.vision_id || "",
         ).trim()
-    var isSelected = String(selectedVisionId || "").trim() === optionValue
+    var isSelected =
+      selectedVisionState instanceof Set
+        ? selectedVisionState.has(optionValue)
+        : String(selectedVisionState || "").trim() === optionValue
     var primary = isRandom ? "Random emulsion" : requestOptionPrimaryLabel(item)
     var optionId =
       "icono-request-option-" +
@@ -4840,7 +4843,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       optionId +
       '"' +
       (favoriteEnabled ? "" : ' role="option"') +
-      ' aria-selected="' +
+      (favoriteEnabled ? ' aria-pressed="' : ' aria-selected="') +
       (isSelected ? "true" : "false") +
       '" ' +
       esc(attributeName) +
@@ -4852,6 +4855,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<span class="icono-request-option-title">' +
       esc(primary) +
       "</span>" +
+      '<span class="icono-request-option-selected-mark" aria-hidden="true">✓</span>' +
       "</span>" +
       "</span>" +
       renderRequestOptionPreviewStripMarkup(item) +
@@ -6070,6 +6074,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       var requestOptionsByQuery = Object.create(null)
       var requestOptionsLoadingByQuery = Object.create(null)
       var optionsLoaded = false
+      var selectedRequestVisionIds = new Set([""])
+      var requestSelectionLimit = 20
       var activeIndex = -1
       var filteredOptions = []
       var pickerOpen = false
@@ -6590,7 +6596,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           return
         }
         filteredOptions = filterRequestOptions(renderQuery, loadedOptions, isQueueRequestOption)
-        var html = renderRequestOptionButtonMarkup(null, hiddenInput.value, true, null, true)
+        var html = renderRequestOptionButtonMarkup(null, selectedRequestVisionIds, true, null, true)
         if (filteredOptions.length) {
           var hasQuery = !!String(renderQuery || "").trim()
           var favoriteOptions = filteredOptions.filter(isFavoriteRequestOption)
@@ -6600,7 +6606,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           if (hasQuery) {
             html += filteredOptions
               .map(function (option) {
-                return renderRequestOptionButtonMarkup(option, hiddenInput.value, false, null, true)
+                return renderRequestOptionButtonMarkup(
+                  option,
+                  selectedRequestVisionIds,
+                  false,
+                  null,
+                  true,
+                )
               })
               .join("")
           } else {
@@ -6609,7 +6621,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             }
             html += favoriteOptions
               .map(function (option) {
-                return renderRequestOptionButtonMarkup(option, hiddenInput.value, false, null, true)
+                return renderRequestOptionButtonMarkup(
+                  option,
+                  selectedRequestVisionIds,
+                  false,
+                  null,
+                  true,
+                )
               })
               .join("")
             if (otherOptions.length) {
@@ -6617,7 +6635,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             }
             html += otherOptions
               .map(function (option) {
-                return renderRequestOptionButtonMarkup(option, hiddenInput.value, false, null, true)
+                return renderRequestOptionButtonMarkup(
+                  option,
+                  selectedRequestVisionIds,
+                  false,
+                  null,
+                  true,
+                )
               })
               .join("")
           }
@@ -6630,22 +6654,51 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         paintActiveOption()
       }
 
-      function setSelection(option) {
-        hiddenInput.value = option && option.vision_id ? String(option.vision_id) : ""
-        var selectedVisionId = String(hiddenInput.value || "").trim()
+      function updateQueueSelectionControls() {
+        var selectedVisionIds = Array.from(selectedRequestVisionIds).filter(Boolean)
+        hiddenInput.value = selectedVisionIds.join(",")
         var optionButtons = results.querySelectorAll("[data-icono-request-option]")
         for (var i = 0; i < optionButtons.length; i++) {
-          var selected =
-            String(optionButtons[i].getAttribute("data-icono-request-option") || "").trim() ===
-            selectedVisionId
+          var optionVisionId = String(
+            optionButtons[i].getAttribute("data-icono-request-option") || "",
+          ).trim()
+          var selected = selectedRequestVisionIds.has(optionVisionId)
           optionButtons[i].classList.toggle("is-selected", selected)
-          optionButtons[i].setAttribute("aria-selected", selected ? "true" : "false")
+          optionButtons[i].setAttribute("aria-pressed", selected ? "true" : "false")
         }
         if (queueSubmitButton) {
-          var queueLabel = option ? "Queue " + requestOptionPrimaryLabel(option) : "Queue random"
+          var queueLabel = "Queue random"
+          if (selectedVisionIds.length === 1) {
+            var selectedOption = requestOptionsByVisionId[selectedVisionIds[0]] || null
+            queueLabel = selectedOption
+              ? "Queue " + requestOptionPrimaryLabel(selectedOption)
+              : "Queue 1 candidate"
+          } else if (selectedVisionIds.length > 1) {
+            queueLabel = "Queue " + selectedVisionIds.length + " candidates"
+          }
           queueSubmitButton.textContent = queueLabel
           queueSubmitButton.setAttribute("data-default-label", queueLabel)
         }
+      }
+
+      function setSelection(option) {
+        var visionId = String((option && option.vision_id) || "").trim()
+        if (!visionId) {
+          selectedRequestVisionIds.clear()
+          selectedRequestVisionIds.add("")
+        } else {
+          selectedRequestVisionIds.delete("")
+          if (selectedRequestVisionIds.has(visionId)) {
+            selectedRequestVisionIds.delete(visionId)
+          } else if (selectedRequestVisionIds.size >= requestSelectionLimit) {
+            setStatus("Choose up to " + requestSelectionLimit + " emulsions at once.", "error")
+            return
+          } else {
+            selectedRequestVisionIds.add(visionId)
+          }
+          if (!selectedRequestVisionIds.size) selectedRequestVisionIds.add("")
+        }
+        updateQueueSelectionControls()
         openResults()
       }
 
@@ -6745,7 +6798,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         void renderResultsList()
       })
       queryInput.addEventListener("input", function () {
-        hiddenInput.value = ""
         updateDirectGenerationButtons()
         activeIndex = -1
         void renderResultsList()
@@ -6782,7 +6834,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           if (queryInput.value) {
             event.preventDefault()
             queryInput.value = ""
-            hiddenInput.value = ""
             activeIndex = -1
             void renderResultsList()
           }
@@ -6934,17 +6985,26 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
       form.addEventListener("submit", function (event) {
         event.preventDefault()
-        var requestedVisionId = String(hiddenInput.value || "").trim()
-        var payload = {
-          symbol: symbol,
-          request_kind: "new_candidate",
-          request_mode: requestedVisionId ? "specific" : "random",
-          requested_vision_id: requestedVisionId || null,
-        }
+        var requestedVisionIds = Array.from(selectedRequestVisionIds).filter(Boolean)
+        var isBatch = requestedVisionIds.length > 0
+        var payload = isBatch
+          ? {
+              symbol: symbol,
+              request_kind: "new_candidate",
+              request_mode: "specific",
+              requested_vision_ids: requestedVisionIds,
+              client_batch_id: crypto.randomUUID(),
+            }
+          : {
+              symbol: symbol,
+              request_kind: "new_candidate",
+              request_mode: "random",
+              requested_vision_id: null,
+            }
         var button = event.submitter || queueSubmitButton
         if (button) {
           button.disabled = true
-          button.textContent = "Queueing..."
+          button.textContent = isBatch ? "Queueing " + requestedVisionIds.length + "…" : "Queueing…"
         }
         setStatus("", "")
         fetchJSON("/api/iconoplasm/requests", {
@@ -6955,9 +7015,43 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           },
           body: JSON.stringify(payload),
         })
-          .then(function () {
+          .then(function (responsePayload) {
+            var failures = Array.isArray(responsePayload && responsePayload.failures)
+              ? responsePayload.failures
+              : []
+            var failedVisionIds = new Set(
+              failures.map(function (failure) {
+                return String((failure && failure.requested_vision_id) || "").trim()
+              }),
+            )
+            selectedRequestVisionIds.clear()
+            failedVisionIds.forEach(function (visionId) {
+              if (visionId) selectedRequestVisionIds.add(visionId)
+            })
+            if (!selectedRequestVisionIds.size) selectedRequestVisionIds.add("")
+            updateQueueSelectionControls()
+            void renderResultsList()
             delete geneRequestSummaryCache[symbol]
-            setStatus("Queued for free generation.", "success")
+            var queuedCount = Math.max(
+              0,
+              Number(responsePayload && responsePayload.queued_count) ||
+                (isBatch ? requestedVisionIds.length : 1),
+            )
+            if (failures.length) {
+              setStatus(
+                "Queued " +
+                  queuedCount +
+                  "; " +
+                  failures.length +
+                  " could not be queued and remain selected.",
+                "error",
+              )
+            } else {
+              setStatus(
+                "Queued " + queuedCount + " candidate" + (queuedCount === 1 ? "." : "s."),
+                "success",
+              )
+            }
             void requestInbox.refresh()
             return fetchGeneRequestSummary(symbol, { forceFresh: true }).then(function (state) {
               wireAuthenticatedRequestForm(state)
