@@ -1384,22 +1384,12 @@ function assertIconoplasmCardCatalogBudgetPreflight(env) {
 function iconoplasmBudgetRouteFamilyFromPath(path) {
   const declaredRoute = matchIconoplasmRouteContract(path)
   if (declaredRoute) return declaredRoute.route.budgetFamily
-  if (path === "/api/iconoplasm/image-edit/providers") return "image_edit_providers"
-  if (path === "/api/iconoplasm/user-emulsion") return "user_emulsion"
-  if (path === "/api/iconoplasm/image-edit/jobs") return "image_edit_jobs"
-  if (/^\/api\/iconoplasm\/image-edit\/jobs\/[^/]+(?:\/publish)?$/.test(path))
-    return "image_edit_jobs"
-  if (path === "/api/iconoplasm/candidate-generation/jobs") return "candidate_generation_jobs"
-  if (/^\/api\/iconoplasm\/candidate-generation\/jobs\/[^/]+(?:\/publish)?$/.test(path))
-    return "candidate_generation_jobs"
-  if (path === "/api/iconoplasm/candidates/copy") return "candidate_copy"
   if (path === "/api/iconoplasm/artist-styles/search") return "artist_styles_search"
   if (path === "/api/iconoplasm/artist-blacklist-submissions") return "artist_blacklist_submission"
   if (path === "/api/iconoplasm/admin/me") return "admin_me"
   if (path === "/api/iconoplasm/admin/ingest") return "admin_ingest"
   if (path === "/api/iconoplasm/admin/reconcile") return "admin_reconcile"
   if (path === "/api/iconoplasm/admin/overview") return "admin_overview"
-  if (path === "/api/iconoplasm/admin/image-edit-prompts") return "admin_image_edit_prompts"
   if (path === "/api/iconoplasm/admin/mutation-limiter/policy")
     return "admin_mutation_limiter_policy"
   if (path === "/api/iconoplasm/admin/coverage") return "admin_coverage"
@@ -10877,23 +10867,6 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (declaredRoute) return declaredRoute.methodAllowed
   if (path === "/api/iconoplasm/admin/me")
     return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/image-edit-prompts")
-    return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
-  if (path === "/api/iconoplasm/image-edit/providers")
-    return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
-  if (path === "/api/iconoplasm/user-emulsion")
-    return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
-  if (path === "/api/iconoplasm/image-edit/jobs") return requestMethod === "POST"
-  if (/^\/api\/iconoplasm\/image-edit\/jobs\/[^/]+$/.test(path))
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (/^\/api\/iconoplasm\/image-edit\/jobs\/[^/]+\/publish$/.test(path))
-    return requestMethod === "POST"
-  if (path === "/api/iconoplasm/candidate-generation/jobs") return requestMethod === "POST"
-  if (/^\/api\/iconoplasm\/candidate-generation\/jobs\/[^/]+$/.test(path))
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (/^\/api\/iconoplasm\/candidate-generation\/jobs\/[^/]+\/publish$/.test(path))
-    return requestMethod === "POST"
-  if (path === "/api/iconoplasm/candidates/copy") return requestMethod === "POST"
   if (path === ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
     return requestMethod === "POST"
   if (path === ICONOPLASM_REFRESH_GALLERY_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
