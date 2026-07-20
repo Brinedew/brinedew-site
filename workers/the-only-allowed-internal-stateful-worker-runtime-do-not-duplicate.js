@@ -483,20 +483,27 @@ function injectAnalyticsConsentBootstrap(html, request) {
   return String(html).replace(/<head([^>]*)>/i, `<head$1>${bootstrap}`)
 }
 
-function iconoplasmHtmlShellCacheKey(url) {
+function iconoplasmHtmlShellCacheVersion(env) {
+  return (
+    String(env?.ICONOPLASM_HTML_SHELL_CACHE_VERSION || "").trim() ||
+    ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION
+  )
+}
+
+function iconoplasmHtmlShellCacheKey(url, env) {
   const key = new URL("https://iconoplasm.brinedew.bio/__edge-cache/iconoplasm-html-shell")
-  key.searchParams.set("version", ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION)
+  key.searchParams.set("version", iconoplasmHtmlShellCacheVersion(env))
   key.searchParams.set("staticOrigin", buildStaticSiteUrl(url, "/").origin)
   return new Request(key.toString(), { method: "GET" })
 }
 
-function iconoplasmGeneHtmlCacheKey(url, path, snapshotVersion) {
+function iconoplasmGeneHtmlCacheKey(url, path, snapshotVersion, env) {
   const symbol = iconoplasmStaticGeneSymbolFromPath(path)
   if (!symbol) return null
   const snapshot = String(snapshotVersion || "").trim()
   if (!snapshot) return null
   const key = new URL("https://iconoplasm.brinedew.bio/__edge-cache/iconoplasm-gene-html")
-  key.searchParams.set("version", ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION)
+  key.searchParams.set("version", iconoplasmHtmlShellCacheVersion(env))
   key.searchParams.set("staticOrigin", buildStaticSiteUrl(url, "/").origin)
   key.searchParams.set("symbol", symbol)
   key.searchParams.set("snapshot", snapshot)
@@ -549,6 +556,7 @@ async function iconoplasmCacheableHtmlShellResponse(
       new URL(request.url),
       path,
       geneShell?.snapshotVersion,
+      env,
     )
     if (geneCacheKey) {
       const cacheHeaders = new Headers(headers)
@@ -1828,7 +1836,12 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
 
       if (canUseHtmlShellEdgeCache) {
         const geneHtmlCacheKey = geneShellForHtmlCache?.snapshotVersion
-          ? iconoplasmGeneHtmlCacheKey(url, url.pathname, geneShellForHtmlCache.snapshotVersion)
+          ? iconoplasmGeneHtmlCacheKey(
+              url,
+              url.pathname,
+              geneShellForHtmlCache.snapshotVersion,
+              env,
+            )
           : null
         if (geneHtmlCacheKey) {
           const cachedGeneHtml = await caches.default.match(geneHtmlCacheKey)
@@ -1843,7 +1856,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
             })
           }
         }
-        const cachedShell = await caches.default.match(iconoplasmHtmlShellCacheKey(url))
+        const cachedShell = await caches.default.match(iconoplasmHtmlShellCacheKey(url, env))
         if (cachedShell) {
           const cachedHtml = request.method === "HEAD" ? "" : await cachedShell.text()
           return await iconoplasmCacheableHtmlShellResponse(
@@ -1921,7 +1934,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
           cacheHeaders.set("X-Iconoplasm-HTML-Shell-Cache", "STORED")
           ctx?.waitUntil(
             caches.default.put(
-              iconoplasmHtmlShellCacheKey(url),
+              iconoplasmHtmlShellCacheKey(url, env),
               new Response(html, {
                 status: response.status,
                 statusText: response.statusText,

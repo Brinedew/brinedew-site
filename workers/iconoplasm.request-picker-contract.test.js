@@ -4,6 +4,17 @@ import { readFileSync } from "node:fs"
 
 const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
 const css = readFileSync(new URL("../quartz/static/iconoplasm/styles.css", import.meta.url), "utf8")
+const internalWorker = readFileSync(
+  new URL(
+    "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
+    import.meta.url,
+  ),
+  "utf8",
+)
+const deployWorkflow = readFileSync(
+  new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
+  "utf8",
+)
 
 test("Iconoplasm request picker uses a searchable list with sibling favorite controls", () => {
   assert.match(
@@ -155,6 +166,17 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     app,
     /fetchJSON\("\/api\/iconoplasm\/requests\/gene\/" \+ encodeURIComponent\(symbol\),/,
     "gene page should not call the removed one-shot request-state route",
+  )
+})
+
+test("production deploys invalidate cached Iconoplasm HTML shells by commit", () => {
+  assert.match(
+    internalWorker,
+    /env\?\.ICONOPLASM_HTML_SHELL_CACHE_VERSION[\s\S]*iconoplasmHtmlShellCacheVersion\(env\)/,
+  )
+  assert.match(
+    deployWorkflow,
+    /wrangler deploy --config wrangler\.the-only-allowed-internal-stateful-worker-do-not-duplicate\.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:\$CACHE_BUST"/,
   )
 })
 
