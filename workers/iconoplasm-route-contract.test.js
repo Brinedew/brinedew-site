@@ -10,6 +10,7 @@ import { resolveIconoplasmEdgeRateLimitPolicy } from "./iconoplasm-edge-rate-lim
 import {
   ICONOPLASM_DECLARED_GATEWAY_HANDLER_NAMES,
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  iconoplasmD1BudgetAttributionFromRequest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const PATTERN_EXAMPLES = Object.freeze({
@@ -29,6 +30,7 @@ const PATTERN_EXAMPLES = Object.freeze({
   image_edit_job_publish: "/api/iconoplasm/image-edit/jobs/job-1/publish",
   candidate_generation_job: "/api/iconoplasm/candidate-generation/jobs/job-1",
   candidate_generation_job_publish: "/api/iconoplasm/candidate-generation/jobs/job-1/publish",
+  admin_gene_detail: "/api/iconoplasm/admin/gene/TP53",
 })
 
 function examplePath(route) {
@@ -83,6 +85,21 @@ test("every declared gateway handler has exactly one executable registry entry",
   ).sort()
 
   assert.deepEqual(ICONOPLASM_DECLARED_GATEWAY_HANDLER_NAMES, declaredHandlerNames)
+})
+
+test("every route contract resolves to an executable D1 budget classification", () => {
+  for (const route of ICONOPLASM_ROUTE_CONTRACTS) {
+    const attribution = iconoplasmD1BudgetAttributionFromRequest(
+      new Request(`https://iconoplasm.brinedew.bio${examplePath(route)}`, {
+        method: route.methods[0],
+      }),
+    )
+
+    assert.equal(attribution.route_family, route.budgetFamily, route.id)
+    assert.notEqual(attribution.budget_class, "non_iconoplasm", route.id)
+    assert.ok(attribution.actor_class, route.id)
+    assert.ok(attribution.source_class, route.id)
+  }
 })
 
 test("method admission and edge quota resolve from the same route contract", () => {
