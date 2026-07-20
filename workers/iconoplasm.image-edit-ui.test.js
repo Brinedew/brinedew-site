@@ -254,7 +254,7 @@ test("direct API generation can submit a selected shared user emulsion from its 
   assert.match(direct, /user_emulsion_id:\s*selectedDirectUserEmulsionId\(\)/)
 })
 
-test("request dialog opens idle instead of focusing and opening the emulsion picker", () => {
+test("request dialog reveals the Free queue list without stealing keyboard focus", () => {
   const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
   const openStart = app.indexOf("function openRequestDialog")
   const openEnd = app.indexOf("if (dialogOpenButton)", openStart)
@@ -265,6 +265,7 @@ test("request dialog opens idle instead of focusing and opening the emulsion pic
   assert.doesNotMatch(openRequestDialog, /data-icono-request-query/)
   assert.doesNotMatch(openRequestDialog, /\.focus\(/)
   assert.doesNotMatch(openRequestDialog, /requestAnimationFrame/)
+  assert.match(app, /event\.detail\.tab === "free"\) void renderResultsList\(\)/)
 })
 
 test("edit blot controls rehydrate adjustment context when rich gene essence arrives", () => {
