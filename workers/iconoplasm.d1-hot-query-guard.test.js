@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { readFileSync } from "node:fs"
-import { matchIconoplasmRouteContract } from "./iconoplasm-route-contract.js"
+import {
+  ICONOPLASM_ROUTE_CONTRACTS,
+  matchIconoplasmRouteContract,
+} from "./iconoplasm-route-contract.js"
 
 const source = readFileSync(
   new URL(
@@ -325,27 +328,26 @@ test("DO NOT DELETE: admin gallery pages must use read-model search columns and 
 })
 
 test("DO NOT DELETE: image edit routes stay authenticated, point-keyed, and off the generation request queue", () => {
-  const routeFamilies = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "function iconoplasmBudgetRouteFamilyFromPath",
-    "function iconoplasmBudgetClassFromRouteFamily",
-  )
-  assert.match(routeFamilies, /\/api\/iconoplasm\/image-edit\/providers/)
-  assert.match(routeFamilies, /\/api\/iconoplasm\/image-edit\/jobs/)
-  assert.match(routeFamilies, /\/api\/iconoplasm\/candidate-generation\/jobs/)
+  for (const routeId of [
+    "image_edit_providers",
+    "image_edit_jobs_create",
+    "image_edit_job",
+    "image_edit_job_publish",
+    "candidate_generation_jobs_create",
+    "candidate_generation_job",
+    "candidate_generation_job_publish",
+  ]) {
+    const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === routeId)
+    assert.ok(route, `${routeId} must stay in the declarative route contract`)
+    assert.match(String(route.auth), /authenticated/)
+    assert.match(route.budgetFamily, /^(?:image_edit|candidate_generation)_/)
+  }
   const budgetClass = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     "function iconoplasmBudgetClassFromRouteFamily",
     "function iconoplasmBudgetClassFromHistoricalRouteFamilyForReport",
   )
   assert.match(budgetClass, /family\.startsWith\("image_edit_"\)[\s\S]*first_party_write/)
   assert.match(budgetClass, /family\.startsWith\("candidate_generation_"\)[\s\S]*first_party_write/)
-
-  const allowlist = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker",
-    "function missingTheOnlyAllowedStatefulWorkerResponse",
-  )
-  assert.match(allowlist, /\/api\/iconoplasm\/image-edit\/providers/)
-  assert.match(allowlist, /\/api\/iconoplasm\/image-edit\/jobs/)
-  assert.match(allowlist, /\/api\/iconoplasm\/candidate-generation\/jobs/)
 
   const sourceLookup = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     "async function sourceImageEditAssetRow",

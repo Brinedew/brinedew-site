@@ -25,6 +25,10 @@ const PATTERN_EXAMPLES = Object.freeze({
   clan_members: "/api/iconoplasm/clans/Kinase/members",
   gene_comments_legacy_read: "/api/iconoplasm/comments/gene/TP53",
   gene_comments: "/api/iconoplasm/genes/TP53/comments",
+  image_edit_job: "/api/iconoplasm/image-edit/jobs/job-1",
+  image_edit_job_publish: "/api/iconoplasm/image-edit/jobs/job-1/publish",
+  candidate_generation_job: "/api/iconoplasm/candidate-generation/jobs/job-1",
+  candidate_generation_job_publish: "/api/iconoplasm/candidate-generation/jobs/job-1/publish",
 })
 
 function examplePath(route) {
