@@ -391,16 +391,14 @@ test("DO NOT DELETE: cost attribution should name request-picker and admin dashb
     /family === "mobile_card_manifest"\) return "first_party_read"/,
     "mobile card manifest should stay in the first-party read budget class",
   )
-  assert.match(
-    runtime,
-    /return "admin_overview"/,
-    "admin overview should not disappear into admin_other",
-  )
-  assert.match(
-    runtime,
-    /return "admin_coverage"/,
-    "admin coverage should not disappear into admin_other",
-  )
+  for (const routeId of ["admin_overview", "admin_coverage"]) {
+    const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === routeId)
+    assert.equal(
+      route?.budgetFamily,
+      routeId,
+      `${routeId} should stay an explicit declarative dashboard cost bucket`,
+    )
+  }
   for (const routeId of ["admin_requests_open", "admin_requests_fulfill"]) {
     const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === routeId)
     assert.equal(route?.budgetFamily, routeId, `${routeId} should not disappear into admin_other`)

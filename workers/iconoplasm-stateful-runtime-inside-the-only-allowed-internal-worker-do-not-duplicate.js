@@ -1384,70 +1384,6 @@ function assertIconoplasmCardCatalogBudgetPreflight(env) {
 function iconoplasmBudgetRouteFamilyFromPath(path) {
   const declaredRoute = matchIconoplasmRouteContract(path)
   if (declaredRoute) return declaredRoute.route.budgetFamily
-  if (path === "/api/iconoplasm/artist-styles/search") return "artist_styles_search"
-  if (path === "/api/iconoplasm/artist-blacklist-submissions") return "artist_blacklist_submission"
-  if (path === "/api/iconoplasm/admin/me") return "admin_me"
-  if (path === "/api/iconoplasm/admin/ingest") return "admin_ingest"
-  if (path === "/api/iconoplasm/admin/reconcile") return "admin_reconcile"
-  if (path === "/api/iconoplasm/admin/overview") return "admin_overview"
-  if (path === "/api/iconoplasm/admin/mutation-limiter/policy")
-    return "admin_mutation_limiter_policy"
-  if (path === "/api/iconoplasm/admin/coverage") return "admin_coverage"
-  if (path === "/api/iconoplasm/admin/public-stats/audit") return "admin_public_stats_audit"
-  if (path === "/api/iconoplasm/admin/canon-audit") return "admin_canon_audit"
-  if (path === "/api/iconoplasm/admin/read-models/bootstrap") return "admin_read_models_bootstrap"
-  if (path === "/api/iconoplasm/admin/card-vms/warm") return "admin_card_vms_warm"
-  if (path.startsWith("/api/iconoplasm/admin/catalog/")) return "admin_catalog"
-  if (path.startsWith("/api/iconoplasm/admin/essence/")) return "admin_essence"
-  if (path.startsWith("/api/iconoplasm/admin/read-models/")) return "admin_read_models"
-  if (path === "/api/iconoplasm/admin/assets/summary") return "admin_assets_summary"
-  if (path === "/api/iconoplasm/admin/assets/state") return "admin_assets_state"
-  if (path.startsWith("/api/iconoplasm/admin/assets")) return "admin_assets"
-  if (path === "/api/iconoplasm/admin/gallery/publish-status") return "admin_gallery_publish_status"
-  if (path === "/api/iconoplasm/admin/gallery/refresh") return "admin_gallery_refresh"
-  if (path === "/api/iconoplasm/admin/gallery") return "admin_gallery"
-  if (
-    [
-      "/api/iconoplasm/admin/publish",
-      "/api/iconoplasm/admin/clear-override",
-      "/api/iconoplasm/admin/reject",
-      "/api/iconoplasm/admin/rollback",
-      "/api/iconoplasm/admin/unpublish",
-      "/api/iconoplasm/admin/unstale",
-      "/api/iconoplasm/admin/unstale-batch",
-      "/api/iconoplasm/admin/purge-legacy",
-      "/api/iconoplasm/admin/remove-candidate",
-      "/api/iconoplasm/admin/restore-mis-rejected-candidates",
-      "/api/iconoplasm/admin/canon/repair",
-    ].includes(path)
-  )
-    return "admin_gallery_mutation"
-  if (/^\/api\/iconoplasm\/admin\/gene\/[^/]+$/.test(path)) return "admin_gene_detail"
-  if (path === "/api/iconoplasm/admin/local-removals/pending") return "admin_local_removals_pending"
-  if (path === "/api/iconoplasm/admin/local-removals/ack") return "admin_local_removals_ack"
-  if (path === "/api/iconoplasm/admin/artist-styles/remove") return "admin_artist_styles_remove"
-  if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/pending")
-    return "admin_artist_blacklist_pending"
-  if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/ack")
-    return "admin_artist_blacklist_ack"
-  if (path === "/api/iconoplasm/admin/finalization/pending") return "admin_finalization_pending"
-  if (path === "/api/iconoplasm/admin/finalization/enqueue") return "admin_finalization_enqueue"
-  if (path === "/api/iconoplasm/admin/finalization/kick") return "admin_finalization_enqueue"
-  if (path === "/api/iconoplasm/admin/finalization/process") return "admin_finalization_process"
-  if (path === "/api/iconoplasm/admin/catalog/state") return "admin_catalog_state"
-  if (path === "/api/iconoplasm/admin/catalog/upsert") return "admin_catalog_upsert"
-  if (path === "/api/iconoplasm/admin/catalog/reconcile") return "admin_catalog_reconcile"
-  if (path === "/api/iconoplasm/admin/catalog/publish") return "admin_catalog_publish"
-  if (path === "/api/iconoplasm/admin/essence/upsert") return "admin_essence_upsert"
-  if (path === "/api/iconoplasm/admin/essence/state") return "admin_essence_state"
-  if (path === "/api/iconoplasm/admin/cost/usage" || path === "/api/iconoplasm/admin/cost/snapshot")
-    return "admin_cost_usage"
-  if (path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
-    return "internal_repair"
-  if (path === ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
-    return "internal_vote_projection_refresh"
-  if (path === ICONOPLASM_REFRESH_GALLERY_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
-    return "internal_gallery_refresh"
   if (path.startsWith("/api/iconoplasm/admin/")) {
     throw new IconoplasmUnclassifiedHandledRouteError(path)
   }
@@ -1480,9 +1416,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     return family === "votes_me" ? "first_party_read" : "first_party_write"
   if (family === "artist_styles_search") return "public_read"
   if (family === "artist_blacklist_submission") return "public_submission"
-  if (family === "internal_repair") return "internal_maintenance"
-  if (family === "internal_vote_projection_refresh") return "internal_maintenance"
-  if (family === "internal_gallery_refresh") return "internal_maintenance"
+  if (family.startsWith("internal_")) return "internal_maintenance"
   if (
     family === "admin_overview" ||
     family === "admin_coverage" ||
@@ -1554,8 +1488,7 @@ function iconoplasmBudgetClassFromHistoricalRouteFamilyForReport(routeFamily) {
 }
 
 function iconoplasmBudgetSourceClassFromRequest(request, path, routeFamily) {
-  if (routeFamily === "internal_repair") return "internal_maintenance"
-  if (routeFamily === "internal_gallery_refresh") return "internal_maintenance"
+  if (routeFamily.startsWith("internal_")) return "internal_maintenance"
   if (path.startsWith("/api/iconoplasm/admin/")) {
     if (
       routeFamily === "admin_ingest" ||
@@ -1583,7 +1516,7 @@ function iconoplasmBudgetActorClassFromRequest(request, path) {
   return "anonymous_public"
 }
 
-function iconoplasmD1BudgetAttributionFromRequest(request) {
+export function iconoplasmD1BudgetAttributionFromRequest(request) {
   const path = new URL(request.url).pathname
   const routeFamily = iconoplasmBudgetRouteFamilyFromPath(path)
   return {
@@ -10865,90 +10798,6 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   }
   const declaredRoute = matchIconoplasmRouteContract(path, requestMethod)
   if (declaredRoute) return declaredRoute.methodAllowed
-  if (path === "/api/iconoplasm/admin/me")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
-    return requestMethod === "POST"
-  if (path === ICONOPLASM_REFRESH_GALLERY_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
-    return requestMethod === "POST"
-  if (path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
-    return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/finalization/pending")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/finalization/enqueue") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/finalization/kick") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/restore-mis-rejected-candidates")
-    return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/canon/repair") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/gallery/publish-status")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/gallery/refresh") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/finalization/process") return requestMethod === "POST"
-  if (path === ICONOPLASM_SYNC_FINALIZATION_PROCESS_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
-    return requestMethod === "POST"
-  if (path === "/api/iconoplasm/artist-styles/search")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/artist-styles/remove") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/pending")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/artist-blacklist-submissions/ack")
-    return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/read-models/sync") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/read-models/shared-discoveries")
-    return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/card-vms/warm") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/read-models/bootstrap") return true
-  if (path === "/api/iconoplasm/admin/mutation-limiter/policy")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/overview")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/cost/usage" || path === "/api/iconoplasm/admin/cost/snapshot")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/coverage")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/public-stats/audit")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/gallery")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (/^\/api\/iconoplasm\/admin\/gene\/[^/]+$/.test(path))
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/canon-audit")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/assets")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/assets/summary")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/assets/storage-audit") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/assets/repair-scope") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/assets/state")
-    return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
-  if (
-    [
-      "/api/iconoplasm/admin/publish",
-      "/api/iconoplasm/admin/clear-override",
-      "/api/iconoplasm/admin/reject",
-      "/api/iconoplasm/admin/rollback",
-      "/api/iconoplasm/admin/unpublish",
-      "/api/iconoplasm/admin/unstale",
-      "/api/iconoplasm/admin/unstale-batch",
-      "/api/iconoplasm/admin/purge-legacy",
-      "/api/iconoplasm/admin/remove-candidate",
-    ].includes(path)
-  ) {
-    return requestMethod === "POST"
-  }
-  if (path === "/api/iconoplasm/admin/local-removals/pending")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/local-removals/ack") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/catalog/state")
-    return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/catalog/upsert") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/catalog/reconcile") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/catalog/publish") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/essence/upsert") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/essence/state") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/ingest") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/reconcile") return requestMethod === "POST"
   return false
 }
 
