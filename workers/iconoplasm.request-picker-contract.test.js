@@ -11,10 +11,10 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     /class="icono-search-input icono-request-picker-input"/,
     "request picker should reuse the shared Iconoplasm search input styling",
   )
-  assert.match(
+  assert.doesNotMatch(
     app,
-    /class="icono-request-inline-submit"/,
-    "request picker should keep the submit control inside the search bar",
+    /data-icono-request-inline-submit/,
+    "the Free queue action should not compete with the search field",
   )
   assert.match(
     app,
@@ -48,8 +48,8 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   )
   assert.match(
     css,
-    /\.icono-request-dialog \.icono-request-inline-submit\s*\{[\s\S]*top:\s*0\.4rem;[\s\S]*min-height:\s*calc\(3\.15rem - 0\.8rem\);/,
-    "the queue submit button must stay in the search row instead of covering inline picker stars",
+    /\.icono-request-dialog \.icono-request-results\s*\{[\s\S]*height:\s*min\(22rem, calc\(100dvh - 15rem\)\);/,
+    "the Free queue picker should reserve its final height before options load",
   )
   assert.match(
     app,
@@ -85,6 +85,31 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     app,
     /No examples yet/,
     "options without previews should stay compact instead of rendering useless placeholder copy",
+  )
+  assert.match(
+    app,
+    /event\.detail\.tab === "free"\) void renderResultsList\(\)/,
+    "opening the Free queue tab should reveal its list without another search-field click",
+  )
+  assert.match(
+    app,
+    /function setSelection\(option\)[\s\S]*openResults\(\)/,
+    "choosing an emulsion should keep the filterable list open for correction without another click",
+  )
+  assert.match(
+    app,
+    /var queueLabel = option \? "Queue " \+ requestOptionPrimaryLabel\(option\) : "Queue random"/,
+    "the footer action should name the selected emulsion without replacing the search query",
+  )
+  assert.doesNotMatch(
+    css,
+    /\.icono-emulsion-favorite-button\.is-favorite\s*\{[^}]*background:/,
+    "favorite state should be carried by the star itself, not a circular chip",
+  )
+  assert.match(
+    css,
+    /\.icono-emulsion-favorite-button:hover svg path,[\s\S]*stroke-width:\s*2\.15;/,
+    "hover and keyboard focus should strengthen the star outline itself",
   )
   assert.match(
     app,
@@ -186,7 +211,7 @@ test("new candidate modal tabs separate free queue and configured image API gene
   )
   assert.match(
     app,
-    /data-icono-request-lane="free"[\s\S]*Queue free/,
+    /data-icono-request-lane="free"[\s\S]*Queue random/,
     "request modal should expose the free generation queue lane",
   )
   assert.match(
@@ -233,11 +258,11 @@ test("new candidate modal tabs separate free queue and configured image API gene
   )
   assert.match(
     app,
-    /class="icono-request-direct-actions" data-icono-request-direct-footer hidden[\s\S]*data-icono-request-image-generate[\s\S]*data-icono-request-image-publish/,
-    "direct generation actions should exist only for the Image API tab",
+    /class="icono-request-footer" slot="footer"[\s\S]*data-icono-request-free-footer[\s\S]*data-icono-request-free-submit[\s\S]*data-icono-request-direct-footer hidden[\s\S]*data-icono-request-image-generate[\s\S]*data-icono-request-image-publish/,
+    "both workflows should use the same persistent dialog footer position",
   )
-  assert.match(app, /directFooter\.setAttribute\("slot", "footer"\)/)
-  assert.match(app, /directFooter\.removeAttribute\("slot"\)/)
+  assert.match(app, /freeFooter\.hidden = nextTab !== "free"/)
+  assert.match(app, /directFooter\.hidden = nextTab !== "api"/)
   assert.match(
     app,
     /data-icono-request-direct-result[\s\S]*class="icono-request-direct-controls"[\s\S]*data-icono-request-direct-preview/,
@@ -403,8 +428,8 @@ test("direct generation result uses edit-modal geometry instead of a handmade si
   )
   assert.match(
     css,
-    /\.icono-request-direct-actions\s*\{[^}]*display:\s*flex[^}]*justify-content:\s*space-between/,
-    "generate and publish actions should live in the dialog footer, spaced like the edit dialog",
+    /\.icono-request-footer,[\s\S]*\.icono-request-direct-actions,[\s\S]*display:\s*flex[\s\S]*\.icono-request-footer,[\s\S]*\.icono-request-direct-actions\s*\{[^}]*justify-content:\s*space-between/,
+    "Free queue, generate, and publish actions should share the dialog footer geometry",
   )
   assert.match(
     css,
