@@ -26138,6 +26138,119 @@ async function publishCatalogArtifact(env) {
   }
 }
 
+async function handleAdminPublicationCatalogPublish({ request, env, done }) {
+  if (!(await isIconoplasmAdmin(request, env)))
+    return done("admin_catalog_publish_403", json({ error: "Unauthorized" }, 403))
+  if (!env.ICONOPLASM_DB)
+    return done("admin_catalog_publish_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+  if (!env.KV) return done("admin_catalog_publish_500", json({ error: "KV binding missing" }, 500))
+  try {
+    const result = await publishCatalogArtifact(env)
+    return done("admin_catalog_publish", json(result, 200, { "Cache-Control": "no-store" }))
+  } catch (error) {
+    return done(
+      "admin_catalog_publish_400",
+      json({ error: String(error?.message || error || "Catalog publish failed") }, 400),
+    )
+  }
+}
+
+async function handleAdminPublicationSharedDiscoveries({ request, env, done }) {
+  if (!(await isIconoplasmAdmin(request, env)))
+    return done("admin_read_models_shared_discoveries_403", json({ error: "Unauthorized" }, 403))
+  const result = await rebuildSharedGeneDiscoveryRollup(env)
+  if (!result.ok) {
+    return done(
+      "admin_read_models_shared_discoveries_500",
+      json({ ok: false, error: String(result.error || "Shared discovery rebuild failed") }, 500),
+    )
+  }
+  return done(
+    "admin_read_models_shared_discoveries",
+    json(result, 200, { "Cache-Control": "no-store" }),
+  )
+}
+
+async function handleAdminPublicationCatalogState({ request, env, done }) {
+  if (!(await isIconoplasmAdmin(request, env)))
+    return done("admin_catalog_state_403", json({ error: "Unauthorized" }, 403))
+  if (!env.ICONOPLASM_DB)
+    return done("admin_catalog_state_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+  if (request.method === "POST") {
+    let payload
+    try {
+      payload = await request.json()
+    } catch {
+      return done("admin_catalog_state_400", json({ error: "Invalid JSON" }, 400))
+    }
+    const rawSymbols = Array.isArray(payload?.symbols) ? payload.symbols : []
+    if (rawSymbols.length > 25000) {
+      return done("admin_catalog_state_400", json({ error: "Too many symbols (max 25000)" }, 400))
+    }
+    const rows = await fetchCatalogStateRows(env, rawSymbols.length ? rawSymbols : null)
+    return done(
+      "admin_catalog_state",
+      json({ ok: true, count: rows.length, rows }, 200, { "Cache-Control": "no-store" }),
+    )
+  }
+  const state = await fetchCatalogState(env)
+  return done(
+    "admin_catalog_state",
+    json(
+      {
+        ok: true,
+        gene_count: Number(state.gene_count || 0),
+        content_hash: String(state.content_hash || ""),
+      },
+      200,
+      { "Cache-Control": "no-store" },
+    ),
+  )
+}
+
+async function handleAdminPublicationEssenceState({ request, env, done }) {
+  if (!(await isIconoplasmAdmin(request, env)))
+    return done("admin_essence_state_403", json({ error: "Unauthorized" }, 403))
+  if (!env.ICONOPLASM_DB)
+    return done("admin_essence_state_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+
+  let payload
+  try {
+    payload = await request.json()
+  } catch {
+    return done("admin_essence_state_400", json({ error: "Invalid JSON" }, 400))
+  }
+  const rawSymbols = Array.isArray(payload?.symbols) ? payload.symbols : []
+  if (rawSymbols.length > 25000)
+    return done("admin_essence_state_400", json({ error: "Too many symbols (max 25000)" }, 400))
+
+  const rows = await fetchEssenceStateRows(env, rawSymbols.length ? rawSymbols : null)
+  return done(
+    "admin_essence_state",
+    json({ ok: true, count: rows.length, rows }, 200, { "Cache-Control": "no-store" }),
+  )
+}
+
+const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
+  "admin_publication.catalog_publish": handleAdminPublicationCatalogPublish,
+  "admin_publication.catalog_state": handleAdminPublicationCatalogState,
+  "admin_publication.essence_state": handleAdminPublicationEssenceState,
+  "admin_publication.shared_discoveries": handleAdminPublicationSharedDiscoveries,
+})
+
+export const ICONOPLASM_DECLARED_API_HANDLER_NAMES = Object.freeze(
+  Object.keys(ICONOPLASM_DECLARED_API_HANDLER_REGISTRY).sort(),
+)
+
+async function dispatchDeclaredIconoplasmApiRoute(match, request, env, ctx, done) {
+  if (!match?.methodAllowed || !match.route.apiHandler) return null
+  const handler = ICONOPLASM_DECLARED_API_HANDLER_REGISTRY[match.route.apiHandler]
+  if (!handler) {
+    throw new Error(`Unknown Iconoplasm API handler: ${String(match.route.apiHandler || "")}`)
+  }
+  return handler({ match, request, env, ctx, done })
+}
+
 export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
   request,
   env,
@@ -26190,6 +26303,15 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         new Response(response.body, { status: response.status, headers: response.headers }),
       )
     }
+
+    const declaredApiResponse = await dispatchDeclaredIconoplasmApiRoute(
+      matchIconoplasmRouteContract(path, request.method),
+      request,
+      env,
+      ctx,
+      done,
+    )
+    if (declaredApiResponse) return declaredApiResponse
 
     if (path === "/api/iconoplasm/votes/me" && request.method === "GET") {
       const sessionUser = await iconoplasmSessionUser(request, env)
@@ -30533,31 +30655,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    if (
-      path === "/api/iconoplasm/admin/read-models/shared-discoveries" &&
-      request.method === "POST"
-    ) {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done(
-          "admin_read_models_shared_discoveries_403",
-          json({ error: "Unauthorized" }, 403),
-        )
-      const result = await rebuildSharedGeneDiscoveryRollup(env)
-      if (!result.ok) {
-        return done(
-          "admin_read_models_shared_discoveries_500",
-          json(
-            { ok: false, error: String(result.error || "Shared discovery rebuild failed") },
-            500,
-          ),
-        )
-      }
-      return done(
-        "admin_read_models_shared_discoveries",
-        json(result, 200, { "Cache-Control": "no-store" }),
-      )
-    }
-
     if (path === "/api/iconoplasm/admin/card-vms/warm" && request.method === "POST") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_card_vms_warm_403", json({ error: "Unauthorized" }, 403))
@@ -31473,59 +31570,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    if (
-      path === "/api/iconoplasm/admin/catalog/state" &&
-      (request.method === "GET" || request.method === "POST")
-    ) {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_catalog_state_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_catalog_state_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-      if (request.method === "POST") {
-        let p
-        try {
-          p = await request.json()
-        } catch {
-          return done("admin_catalog_state_400", json({ error: "Invalid JSON" }, 400))
-        }
-        const rawSymbols = Array.isArray(p?.symbols) ? p.symbols : []
-        if (rawSymbols.length > 25000)
-          return done(
-            "admin_catalog_state_400",
-            json({ error: "Too many symbols (max 25000)" }, 400),
-          )
-        const rows = await fetchCatalogStateRows(env, rawSymbols.length ? rawSymbols : null)
-        return done(
-          "admin_catalog_state",
-          json(
-            {
-              ok: true,
-              count: rows.length,
-              rows,
-            },
-            200,
-            { "Cache-Control": "no-store" },
-          ),
-        )
-      }
-      const state = await fetchCatalogState(env)
-      return done(
-        "admin_catalog_state",
-        json(
-          {
-            ok: true,
-            gene_count: Number(state.gene_count || 0),
-            content_hash: String(state.content_hash || ""),
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
     if (path === "/api/iconoplasm/admin/catalog/upsert" && request.method === "POST") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_catalog_upsert_403", json({ error: "Unauthorized" }, 403))
@@ -31699,27 +31743,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    if (path === "/api/iconoplasm/admin/catalog/publish" && request.method === "POST") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_catalog_publish_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_catalog_publish_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-      if (!env.KV)
-        return done("admin_catalog_publish_500", json({ error: "KV binding missing" }, 500))
-      try {
-        const result = await publishCatalogArtifact(env)
-        return done("admin_catalog_publish", json(result, 200, { "Cache-Control": "no-store" }))
-      } catch (error) {
-        return done(
-          "admin_catalog_publish_400",
-          json({ error: String(error?.message || error || "Catalog publish failed") }, 400),
-        )
-      }
-    }
-
     if (path === "/api/iconoplasm/admin/essence/upsert" && request.method === "POST") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_essence_upsert_403", json({ error: "Unauthorized" }, 403))
@@ -31803,41 +31826,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             results,
           },
           invalid > 0 && processed === 0 ? 400 : 200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
-    if (path === "/api/iconoplasm/admin/essence/state" && request.method === "POST") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_essence_state_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_essence_state_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-
-      let p
-      try {
-        p = await request.json()
-      } catch {
-        return done("admin_essence_state_400", json({ error: "Invalid JSON" }, 400))
-      }
-
-      const rawSymbols = Array.isArray(p?.symbols) ? p.symbols : []
-      if (rawSymbols.length > 25000)
-        return done("admin_essence_state_400", json({ error: "Too many symbols (max 25000)" }, 400))
-
-      const rows = await fetchEssenceStateRows(env, rawSymbols.length ? rawSymbols : null)
-      return done(
-        "admin_essence_state",
-        json(
-          {
-            ok: true,
-            count: rows.length,
-            rows,
-          },
-          200,
           { "Cache-Control": "no-store" },
         ),
       )

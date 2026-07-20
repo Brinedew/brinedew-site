@@ -8,7 +8,9 @@ import {
 } from "./iconoplasm-route-contract.js"
 import { resolveIconoplasmEdgeRateLimitPolicy } from "./iconoplasm-edge-rate-limit.js"
 import {
+  ICONOPLASM_DECLARED_API_HANDLER_NAMES,
   ICONOPLASM_DECLARED_GATEWAY_HANDLER_NAMES,
+  handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate,
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   iconoplasmD1BudgetAttributionFromRequest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
@@ -87,6 +89,14 @@ test("every declared gateway handler has exactly one executable registry entry",
   assert.deepEqual(ICONOPLASM_DECLARED_GATEWAY_HANDLER_NAMES, declaredHandlerNames)
 })
 
+test("every declared API handler has exactly one executable registry entry", () => {
+  const declaredHandlerNames = Array.from(
+    new Set(ICONOPLASM_ROUTE_CONTRACTS.map((route) => route.apiHandler).filter(Boolean)),
+  ).sort()
+
+  assert.deepEqual(ICONOPLASM_DECLARED_API_HANDLER_NAMES, declaredHandlerNames)
+})
+
 test("every route contract resolves to an executable D1 budget classification", () => {
   for (const route of ICONOPLASM_ROUTE_CONTRACTS) {
     const attribution = iconoplasmD1BudgetAttributionFromRequest(
@@ -149,4 +159,44 @@ test("declared route method mismatches return 405 with an Allow contract", async
   assert.equal(response.status, 405)
   assert.equal(response.headers.get("Allow"), "GET, HEAD")
   assert.deepEqual(await response.json(), { error: "Method not allowed" })
+})
+
+test("declared API handlers execute HEAD through the contract instead of falling through", async () => {
+  const response = await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/catalog/state", {
+      method: "HEAD",
+      headers: {
+        "x-iconoplasm-admin-token": "founder-secret",
+        "x-iconoplasm-only-allowed-stateful-worker-internal": "1",
+      },
+    }),
+    {
+      ICONOPLASM_ADMIN_TOKEN: "founder-secret",
+      ICONOPLASM_DB: {
+        prepare() {
+          return {
+            async all() {
+              return {
+                results: [
+                  {
+                    gene_symbol: "TP53",
+                    full_name: "tumor protein p53",
+                    uniprot: "P04637",
+                    color_hex: "#35353C",
+                    tmh: 0,
+                    aliases_json: "[]",
+                  },
+                ],
+              }
+            },
+          }
+        },
+      },
+    },
+    { waitUntil() {} },
+  )
+
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("Cache-Control"), "no-store")
+  assert.equal(await response.text(), "")
 })
