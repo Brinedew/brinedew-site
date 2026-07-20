@@ -2106,6 +2106,14 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         <section class="cost-cockpit" aria-label="Cloudflare free-plan cockpit">
           <article class="cost-instrument cost-instrument--wide">
             <div class="cost-instrument-head">
+              <h2>Snapshot trust</h2>
+              <span>Freshness, publication, and intentional gaps</span>
+            </div>
+            <div class="cost-chart" id="cost-snapshot-trust-chart"></div>
+            <div class="cost-detail-grid" id="cost-snapshot-trust-details"></div>
+          </article>
+          <article class="cost-instrument cost-instrument--wide">
+            <div class="cost-instrument-head">
               <h2>D1 read ceiling</h2>
               <span id="cost-trend-meta">Waiting for data…</span>
             </div>
@@ -2564,6 +2572,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         costUpdatedAt: document.getElementById('cost-updated-at'),
         costContextStrip: document.getElementById('cost-context-strip'),
         costMetrics: document.getElementById('cost-metrics'),
+        costSnapshotTrustChart: document.getElementById('cost-snapshot-trust-chart'),
+        costSnapshotTrustDetails: document.getElementById('cost-snapshot-trust-details'),
         costTrendMeta: document.getElementById('cost-trend-meta'),
         costReadTrend: document.getElementById('cost-read-trend'),
         costD1WriteAdaptiveChart: document.getElementById('cost-d1-write-adaptive-chart'),
@@ -5205,7 +5215,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       }
 
       function renderObservabilityRunbook(report) {
-        if (!els.costDailyRouteBars) return;
+        if (!els.costSnapshotTrustDetails) return;
         var freshness = report && report.freshness ? report.freshness : {};
         var d1 = report && report.d1 ? report.d1 : {};
         var currentDay = d1 && d1.currentDay ? d1.currentDay : {};
@@ -5254,10 +5264,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             note: automation.runtimeTelemetryRequests === false ? 'request path untouched' : 'Runtime telemetry requests are enabled, which should not happen here.'
           }
         ];
-        if (els.costDailyRouteChart) {
-          els.costDailyRouteChart.innerHTML = buildIntegritySignalSvg(report);
+        if (els.costSnapshotTrustChart) {
+          els.costSnapshotTrustChart.innerHTML = buildIntegritySignalSvg(report);
         }
-        els.costDailyRouteBars.innerHTML = [
+        els.costSnapshotTrustDetails.innerHTML = [
           '<div class="cost-status-banner">',
           renderCostStateChip('trust checks', 'neutral'),
           '<strong>Can this baked view be trusted right now?</strong>',
@@ -5583,6 +5593,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           state.costLoaded = false;
           if (els.costUpdatedAt) els.costUpdatedAt.textContent = 'Snapshot unavailable · publication endpoint failed';
           if (els.costMetrics) els.costMetrics.innerHTML = inlineFailureMarkup('Snapshot load failed', requestErrorMessage(err, 'Snapshot load failed.'));
+          if (els.costSnapshotTrustChart) els.costSnapshotTrustChart.innerHTML = '';
+          if (els.costSnapshotTrustDetails) els.costSnapshotTrustDetails.innerHTML = '';
           if (els.costReadTrend) els.costReadTrend.innerHTML = '';
           if (els.costD1WriteAdaptiveChart) els.costD1WriteAdaptiveChart.innerHTML = '';
           if (els.costWorkerLimiterChart) els.costWorkerLimiterChart.innerHTML = '';
