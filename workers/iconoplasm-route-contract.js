@@ -13,6 +13,8 @@ export function iconoplasmPublicApiPath(suffix = "") {
 
 const GET = Object.freeze(["GET", "HEAD"])
 const POST = Object.freeze(["POST"])
+const GET_POST = Object.freeze(["GET", "HEAD", "POST"])
+const COMMENT_METHODS = Object.freeze(["GET", "HEAD", "POST", "PATCH", "DELETE"])
 
 function exact(value) {
   return Object.freeze({ kind: "exact", value })
@@ -39,6 +41,15 @@ function contract(definition) {
   return Object.freeze({
     schemaVersion: ICONOPLASM_API_SCHEMA_VERSION,
     observabilityRoute: definition.budgetFamily,
+    ...definition,
+  })
+}
+
+function iconoplasmApiContract(definition) {
+  return contract({
+    cache: "no-store",
+    gatewayHandler: "iconoplasm_api",
+    rateLimit: null,
     ...definition,
   })
 }
@@ -396,6 +407,138 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "admin_gene_request_diagnostics",
     gatewayHandler: "iconoplasm_api",
     rateLimit: null,
+  }),
+  iconoplasmApiContract({
+    id: "votes_set",
+    match: exact("/api/iconoplasm/votes/set"),
+    methods: POST,
+    auth: "first-party-or-extension",
+    budgetFamily: "votes_set",
+  }),
+  iconoplasmApiContract({
+    id: "votes_snapshot",
+    match: exact("/api/iconoplasm/votes/snapshot"),
+    methods: POST,
+    auth: "first-party-or-extension",
+    budgetFamily: "votes_snapshot",
+  }),
+  iconoplasmApiContract({
+    id: "admin_votes_import",
+    match: exact("/api/iconoplasm/admin/votes/import"),
+    methods: POST,
+    auth: "administrator",
+    budgetFamily: "admin_votes",
+  }),
+  iconoplasmApiContract({
+    id: "admin_votes_set",
+    match: exact("/api/iconoplasm/admin/votes/set"),
+    methods: POST,
+    auth: "administrator",
+    budgetFamily: "admin_votes",
+  }),
+  iconoplasmApiContract({
+    id: "admin_votes_snapshot",
+    match: exact("/api/iconoplasm/admin/votes/snapshot"),
+    methods: POST,
+    auth: "administrator",
+    budgetFamily: "admin_votes",
+  }),
+  iconoplasmApiContract({
+    id: "admin_votes_snapshots",
+    match: exact("/api/iconoplasm/admin/votes/snapshots"),
+    methods: POST,
+    auth: "administrator",
+    budgetFamily: "admin_votes",
+  }),
+  iconoplasmApiContract({
+    id: "admin_votes_ledger",
+    match: exact("/api/iconoplasm/admin/votes/ledger"),
+    methods: GET,
+    auth: "administrator",
+    budgetFamily: "admin_votes",
+  }),
+  iconoplasmApiContract({
+    id: "admin_votes_events",
+    match: exact("/api/iconoplasm/admin/votes/events"),
+    methods: GET,
+    auth: "administrator",
+    budgetFamily: "admin_votes",
+  }),
+  iconoplasmApiContract({
+    id: "admin_votes_vision_stats",
+    match: exact("/api/iconoplasm/admin/votes/vision-stats"),
+    methods: GET_POST,
+    auth: "administrator",
+    budgetFamily: "admin_votes",
+  }),
+  iconoplasmApiContract({
+    id: "admin_votes_vision_previews",
+    match: exact("/api/iconoplasm/admin/votes/vision-previews"),
+    methods: GET_POST,
+    auth: "administrator",
+    budgetFamily: "admin_votes",
+  }),
+  iconoplasmApiContract({
+    id: "admin_votes_vision_detail",
+    match: exact("/api/iconoplasm/admin/votes/vision-detail"),
+    methods: GET,
+    auth: "administrator",
+    budgetFamily: "admin_votes",
+  }),
+  iconoplasmApiContract({
+    id: "admin_votes_projection_refresh_pending",
+    match: exact("/api/iconoplasm/admin/votes/projection-refresh/pending"),
+    methods: GET,
+    auth: "administrator",
+    budgetFamily: "admin_votes",
+  }),
+  iconoplasmApiContract({
+    id: "admin_votes_projection_refresh_process",
+    match: exact("/api/iconoplasm/admin/votes/projection-refresh/process"),
+    methods: POST,
+    auth: "administrator",
+    budgetFamily: "admin_votes",
+  }),
+  iconoplasmApiContract({
+    id: "clans_overview",
+    match: exact("/api/iconoplasm/clans"),
+    methods: GET,
+    auth: "optional-user-session",
+    budgetFamily: "clans_overview",
+  }),
+  iconoplasmApiContract({
+    id: "clan_members",
+    match: pattern(/^\/api\/iconoplasm\/clans\/([^/]+)\/members$/, ["clan"]),
+    methods: GET,
+    auth: "optional-user-session",
+    budgetFamily: "clans_overview",
+  }),
+  iconoplasmApiContract({
+    id: "gene_comments_legacy_write",
+    match: exact("/api/iconoplasm/comments"),
+    methods: POST,
+    auth: "authenticated-user",
+    budgetFamily: "gene_comments",
+  }),
+  iconoplasmApiContract({
+    id: "gene_comments_legacy_read",
+    match: pattern(/^\/api\/iconoplasm\/comments\/gene\/([^/]+)$/, ["symbol"]),
+    methods: GET,
+    auth: "optional-user-session",
+    budgetFamily: "gene_comments",
+  }),
+  iconoplasmApiContract({
+    id: "gene_comments",
+    match: pattern(/^\/api\/iconoplasm\/genes\/([^/]+)\/comments$/, ["symbol"]),
+    methods: COMMENT_METHODS,
+    auth: Object.freeze({
+      GET: "optional-user-session",
+      HEAD: "optional-user-session",
+      POST: "authenticated-user",
+      PATCH: "authenticated-owner",
+      DELETE: "authenticated-owner",
+    }),
+    budgetFamily: "gene_comments",
   }),
   contract({
     id: "artist_blacklist_submission",
