@@ -149,6 +149,17 @@ class FakeIconoplasmDb {
           aliases_json: "[]",
         },
       ],
+      [
+        "PTEN",
+        {
+          gene_symbol: "PTEN",
+          full_name: "phosphatase and tensin homolog",
+          uniprot: "P60484",
+          color_hex: "#495254",
+          tmh: 0,
+          aliases_json: "[]",
+        },
+      ],
     ])
     this.published = new Map([
       [
@@ -171,6 +182,17 @@ class FakeIconoplasmDb {
           vision_id: "artist-random-v1",
           candidate_image_id: 4352,
           emulsion_id: "A1-4352",
+        },
+      ],
+      [
+        "PTEN",
+        {
+          asset_sha256: "c8".repeat(32),
+          width: 882,
+          height: 1134,
+          vision_id: "anima-v1-343",
+          candidate_image_id: 55228,
+          emulsion_id: "A1-343",
         },
       ],
     ])
@@ -229,6 +251,34 @@ class FakeIconoplasmDb {
           aesthetics_origin_json: JSON.stringify(["Insulin"]),
           politics_origin_json: JSON.stringify([]),
           family_surname: "INS",
+          family_members: 1,
+          family_feature: "",
+          manifestation: "",
+        },
+      ],
+      [
+        "PTEN",
+        {
+          full_name:
+            "Phosphatidylinositol 3,4,5-trisphosphate 3-phosphatase and dual-specificity protein phosphatase PTEN",
+          weight_kg: 47.2,
+          molecular_weight_kda: 47.2,
+          height_cm: 40,
+          sex: "female",
+          age: "25",
+          age_years: 25,
+          first_publication_year: 1995,
+          faction: "pro-control",
+          skin_hex: "#495254",
+          skin_name: "Diamond Grey",
+          tissue_tau: 0.21,
+          primary_tissue: "ubiquitous",
+          loeuf: 0.685,
+          constraint_percentile: 72.77,
+          aesthetics_json: JSON.stringify(["Electro Swing", "Metrosexual"]),
+          aesthetics_origin_json: JSON.stringify(["C2 domain", "Phosphatase"]),
+          politics_origin_json: JSON.stringify(["tumor suppressor"]),
+          family_surname: "PTEN",
           family_members: 1,
           family_feature: "",
           manifestation: "",
@@ -495,7 +545,7 @@ test("gallery invalidation reuses the card catalog artifact when public card mat
 
   assert.match(first.version, /^ccv1-[a-f0-9]{32}$/)
   assert.equal(first.card_catalog.reused_existing, false)
-  // Content-addressed: one shard blob (2 genes < shard size), one manifest, one flip.
+  // Content-addressed: one shard blob (3 genes < shard size), one manifest, one flip.
   assert.equal(putKeys.filter((key) => key.startsWith("iconoplasm:card-catalog-shard:")).length, 1)
   assert.equal(
     putKeys.filter((key) => key === `iconoplasm:card-catalog:${first.version}`).length,
@@ -807,6 +857,57 @@ test("admin card catalog publish preserves the molecular companion fields used b
   assert.equal(ins.payload.molecular_weight_kda, 12)
   assert.equal(ins.payload.first_publication_year, 1959)
   assert.equal(ins.payload.primary_tissue, "tissue-specific")
+})
+
+test("published cards and print-copy payloads keep the HGNC gene name when UniProt differs", async () => {
+  resetIconoplasmRuntimeCachesForTest()
+  const kvStore = new Map()
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer secret-admin-token",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ scope: "catalog" }),
+      }),
+      buildEnv({ kvStore, cardArtifact: null }),
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  const manifest = JSON.parse(kvStore.get(`iconoplasm:card-catalog:${payload.artifact_version}`))
+  const cards = manifest.shards.flatMap((metadata) => JSON.parse(kvStore.get(metadata.key)).cards)
+  const pten = cards.find((card) => card.symbol === "PTEN")
+
+  assert.ok(pten, "published artifact should contain PTEN")
+  assert.equal(pten.full_name, "phosphatase and tensin homolog")
+  assert.equal(pten.payload.full_name, "phosphatase and tensin homolog")
+  assert.equal(pten.payload.essence.name, "phosphatase and tensin homolog")
+  assert.doesNotMatch(
+    JSON.stringify(pten),
+    /Phosphatidylinositol 3,4,5-trisphosphate 3-phosphatase/,
+  )
+
+  kvStore.set("iconoplasm:gallery-version", payload.artifact_version)
+  resetIconoplasmRuntimeCachesForTest()
+  const printCopyRender =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        `https://iconoplasm.brinedew.bio/api/iconoplasm/print-copy-render/PTEN?v=${payload.artifact_version}&asset=${"c8".repeat(32)}`,
+      ),
+      buildEnv({
+        kvStore,
+        version: payload.artifact_version,
+        cardArtifact: null,
+      }),
+    )
+  const printCopyHtml = await printCopyRender.text()
+
+  assert.equal(printCopyRender.status, 200)
+  assert.match(printCopyHtml, /phosphatase and tensin homolog/)
+  assert.doesNotMatch(printCopyHtml, /Phosphatidylinositol 3,4,5-trisphosphate 3-phosphatase/)
 })
 
 test("admin card catalog publish does not count failed KV writes as published cards", async () => {

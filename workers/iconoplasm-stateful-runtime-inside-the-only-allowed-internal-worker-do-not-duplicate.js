@@ -22855,7 +22855,6 @@ function cardCatalogEssenceFromRow(row) {
     ...(row?.family_surname ? { family_surname: String(row.family_surname) } : {}),
     ...(row?.family_members != null ? { family_members: Number(row.family_members) } : {}),
     ...(row?.family_feature ? { family_feature: String(row.family_feature) } : {}),
-    ...(row?.essence_full_name ? { name: String(row.essence_full_name) } : {}),
   }
 }
 
@@ -22870,9 +22869,12 @@ function cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }) {
   const molecularWeightKda = optionalFloat(row?.molecular_weight_kda, { min: 0 })
   const firstPublicationYear = optionalInt(row?.first_publication_year)
   const primaryTissue = sanitizeText(row?.primary_tissue || "", 64) || ""
-  const essenceFullName = sanitizeText(row?.essence_full_name || "", 255)
   const catalogFullName = sanitizeText(row?.catalog_full_name || "", 255)
-  const fullName = essenceFullName || catalogFullName || symbol
+  // Public Iconoplasm cards represent genes, so their visible identity comes
+  // exclusively from the HGNC-backed catalog. The essence row describes the
+  // generated character and also carries an internal UniProt protein name;
+  // allowing that field to win made card/print titles disagree with gene pages.
+  const fullName = catalogFullName || symbol
   const portrait = assetSha
     ? {
         status: "published",
@@ -22955,7 +22957,6 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
        gc.full_name AS catalog_full_name,
        gc.color_hex,
        gc.tmh,
-       ge.full_name AS essence_full_name,
        ge.weight_kg,
        ge.molecular_weight_kda,
        ge.height_cm,
