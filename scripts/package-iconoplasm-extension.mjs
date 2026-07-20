@@ -276,6 +276,7 @@ function validatePackagedBackground() {
   const packagedManifest = JSON.parse(readFileSync(packagedManifestPath, "utf8"))
   if (packageTarget === "firefox") {
     const expectedScripts = [
+      "generated/catalog-contract.js",
       "generated/portrait-delivery-core.js",
       "publication-alias-overlay.js",
       "service-worker.js",

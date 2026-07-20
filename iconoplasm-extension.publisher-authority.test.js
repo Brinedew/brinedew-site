@@ -2,7 +2,10 @@ import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
-import { assertIconoplasmPublisherAuthority } from "./scripts/lib/iconoplasm-publisher-authority.mjs"
+import {
+  assertIconoplasmPublisherAuthority,
+  renderIconoplasmCatalogContractRuntime,
+} from "./scripts/lib/iconoplasm-publisher-authority.mjs"
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"))
@@ -53,10 +56,18 @@ test("published and candidate catalog contracts remain explicit", () => {
   )
 
   assert.ok(authority.catalog_contract.schema_version <= candidate.catalog_schema_version)
+  if (authority.catalog_contract.schema_version === candidate.catalog_schema_version) {
+    assert.ok(authority.catalog_contract.revision <= candidate.catalog_contract_revision)
+  }
   assert.ok(Object.keys(authority.compatibility_contracts).length <= 1)
   assert.match(patchNotes, /^## Unreleased$/m)
   assert.doesNotMatch(patchNotes, /^## 0\.(5\.0|6\.0)\b/m)
   assert.match(worker, /publisher-release\.json/)
   assert.match(worker, /candidate-contract\.json/)
   assert.doesNotMatch(worker, /ICONOPLASM_MIN_EXTENSION_VERSION/)
+  const verified = assertIconoplasmPublisherAuthority(process.cwd())
+  assert.equal(
+    readFileSync("iconoplasm-extension/generated/catalog-contract.js", "utf8"),
+    renderIconoplasmCatalogContractRuntime(verified),
+  )
 })

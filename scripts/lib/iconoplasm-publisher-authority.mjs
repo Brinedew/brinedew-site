@@ -21,7 +21,9 @@ function requireVersion(value, label) {
 
 export function readIconoplasmPublisherAuthority(repoRoot) {
   const authorityPath = resolve(repoRoot, "iconoplasm-extension", "publisher-release.json")
+  const candidatePath = resolve(repoRoot, "iconoplasm-extension", "candidate-contract.json")
   const authority = readJson(authorityPath, "Iconoplasm publisher authority")
+  const candidate = readJson(candidatePath, "Iconoplasm candidate contract")
   if (Number(authority.schema_version) !== 1) {
     throw new Error(
       `Unsupported publisher authority schema ${JSON.stringify(authority.schema_version)}`,
@@ -42,6 +44,26 @@ export function readIconoplasmPublisherAuthority(repoRoot) {
   }
   if (!Number.isInteger(contractRevision) || contractRevision < 1) {
     throw new Error("Publisher authority catalog revision must be a positive integer")
+  }
+  const candidateSchemaVersion = Number(candidate.catalog_schema_version)
+  const candidateContractRevision = Number(candidate.catalog_contract_revision)
+  if (
+    Number(candidate.schema_version) !== 1 ||
+    !Number.isInteger(candidateSchemaVersion) ||
+    candidateSchemaVersion < 1 ||
+    !Number.isInteger(candidateContractRevision) ||
+    candidateContractRevision < 1
+  ) {
+    throw new Error("Iconoplasm candidate contract is invalid")
+  }
+  if (
+    candidateSchemaVersion < contractSchemaVersion ||
+    (candidateSchemaVersion === contractSchemaVersion &&
+      candidateContractRevision < contractRevision)
+  ) {
+    throw new Error(
+      `Candidate catalog contract ${candidateSchemaVersion}.${candidateContractRevision} is older than human publisher authority ${contractSchemaVersion}.${contractRevision}`,
+    )
   }
   const compatibilityContracts = authority.compatibility_contracts
   if (!compatibilityContracts || typeof compatibilityContracts !== "object") {
@@ -73,12 +95,33 @@ export function readIconoplasmPublisherAuthority(repoRoot) {
   return {
     authority,
     authorityPath,
+    candidate,
+    candidatePath,
     version,
     minimumSupportedVersion,
     contractSchemaVersion,
     contractRevision,
     compatibilityContracts,
   }
+}
+
+export function renderIconoplasmCatalogContractRuntime(release) {
+  return [
+    "/* GENERATED FILE. Edit iconoplasm-extension/candidate-contract.json and publisher-release.json, then rerun pnpm run sync:iconoplasm-shared. */",
+    "globalThis.IconoplasmCatalogContract = Object.freeze({",
+    "  schemaVersion: 1,",
+    '  publicApiVersion: "v1",',
+    "  catalog: Object.freeze({",
+    `    schemaVersion: ${release.contractSchemaVersion},`,
+    `    revision: ${release.contractRevision},`,
+    "  }),",
+    "  extension: Object.freeze({",
+    `    version: ${JSON.stringify(release.version)},`,
+    `    minimumSupportedVersion: ${JSON.stringify(release.minimumSupportedVersion)},`,
+    "  }),",
+    "})",
+    "",
+  ].join("\n")
 }
 
 export function assertIconoplasmPublisherAuthority(repoRoot, { expectedVersion } = {}) {

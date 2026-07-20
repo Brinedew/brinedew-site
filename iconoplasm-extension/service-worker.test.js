@@ -88,6 +88,7 @@ globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__ = {}
 globalThis.IconoplasmPortraitDelivery =
   await import("../shared/iconoplasm-portrait/portrait-delivery-core.js")
 
+await import("./generated/catalog-contract.js")
 await import("./publication-alias-overlay.js")
 await import("./service-worker.js")
 
@@ -231,6 +232,7 @@ test("schema-5 catalog assets remain inspectable canonical references in extensi
         artifact_url:
           "https://iconoplasm.brinedew.bio/api/public/v1/catalog/catalog.schema-5-test.json",
         artifact_schema_version: 5,
+        artifact_contract_revision: 1,
         min_extension_version: "0.4.7",
         gene_count: 1,
         portrait_delivery: portraitDeliveryPolicy,
@@ -260,6 +262,47 @@ test("schema-5 catalog assets remain inspectable canonical references in extensi
   }
 })
 
+test("the extension rejects a catalog revision it was not packaged to understand", async () => {
+  const originalFetch = globalThis.fetch
+  storageState.clear()
+  let artifactFetches = 0
+  globalThis.fetch = async (input) => {
+    const url = String(input || "")
+    if (url.endsWith("/api/public/v1/catalog/manifest")) {
+      return Response.json({
+        build_version: "future-revision",
+        artifact_url:
+          "https://iconoplasm.brinedew.bio/api/public/v1/catalog/catalog.future-revision.json",
+        artifact_schema_version: 5,
+        artifact_contract_revision: 2,
+        min_extension_version: "1.0.0",
+        gene_count: 1,
+        portrait_delivery: portraitDeliveryPolicy,
+        publication_aliases: {
+          schema_version: 1,
+          version: "v1-empty",
+          alias_count: 0,
+          removal_count: 0,
+          by_symbol: {},
+          remove_by_symbol: {},
+        },
+      })
+    }
+    artifactFetches += 1
+    throw new Error(`Incompatible contract must not fetch its artifact: ${url}`)
+  }
+
+  try {
+    const result = await hooks.fetchGeneData({ forceArtifactRefresh: true })
+    assert.equal(result, null)
+    assert.equal(artifactFetches, 0)
+    assert.equal(storageState.get("iconoplasm_contract_error")?.code, "incompatible_artifact")
+  } finally {
+    globalThis.fetch = originalFetch
+    storageState.clear()
+  }
+})
+
 test("alias-only manifest updates do not refetch the six-megabyte catalog artifact", async () => {
   const originalFetch = globalThis.fetch
   const baseGenes = Object.fromEntries(
@@ -278,6 +321,7 @@ test("alias-only manifest updates do not refetch the six-megabyte catalog artifa
   storageState.set("iconoplasm_hash", "catalog-v2-portraits")
   storageState.set("iconoplasm_gene_count", 7)
   storageState.set("iconoplasm_schema_version", 5)
+  storageState.set("iconoplasm_contract_revision", 1)
   storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
   storageState.set("iconoplasm_alias_overlay_version", "v1-old")
   storageState.set("iconoplasm_alias_overlay_applied", {})
@@ -294,6 +338,7 @@ test("alias-only manifest updates do not refetch the six-megabyte catalog artifa
         artifact_url: "https://example.test/catalog.json",
         portrait_delivery: portraitDeliveryPolicy,
         artifact_schema_version: 5,
+        artifact_contract_revision: 1,
         min_extension_version: "1.0.0",
         gene_count: 7,
         publication_aliases: requestedOverlay,
@@ -330,6 +375,7 @@ test("mapping removals and specific cadherin labels update without refetching th
   storageState.set("iconoplasm_hash", "catalog-v2-portraits")
   storageState.set("iconoplasm_gene_count", 3)
   storageState.set("iconoplasm_schema_version", 5)
+  storageState.set("iconoplasm_contract_revision", 1)
   storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
   storageState.set("iconoplasm_alias_overlay_version", "v1-old")
   storageState.set("iconoplasm_alias_overlay_applied", {})
@@ -344,6 +390,7 @@ test("mapping removals and specific cadherin labels update without refetching th
         artifact_url: "https://example.test/catalog.json",
         portrait_delivery: portraitDeliveryPolicy,
         artifact_schema_version: 5,
+        artifact_contract_revision: 1,
         min_extension_version: "1.0.0",
         gene_count: 3,
         publication_aliases: cadherinPolicy,
@@ -383,6 +430,7 @@ test("an overlay contract retry does not turn into a full artifact download", as
   storageState.set("iconoplasm_gene_count", 1)
   storageState.set("iconoplasm_last_fetch", "2020-01-01T00:00:00.000Z")
   storageState.set("iconoplasm_schema_version", 5)
+  storageState.set("iconoplasm_contract_revision", 1)
   storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
   storageState.set("iconoplasm_alias_overlay_version", "v1-test")
   storageState.set("iconoplasm_alias_overlay_applied", { RELA: ["p65"] })
@@ -398,6 +446,7 @@ test("an overlay contract retry does not turn into a full artifact download", as
         artifact_url: "https://example.test/catalog.json",
         portrait_delivery: portraitDeliveryPolicy,
         artifact_schema_version: 5,
+        artifact_contract_revision: 1,
         min_extension_version: "1.0.0",
         gene_count: 1,
         publication_aliases: {
@@ -431,6 +480,7 @@ test("a stale valid catalog returns immediately while one refresh runs in the ba
   storageState.set("iconoplasm_gene_count", 1)
   storageState.set("iconoplasm_last_fetch", "2020-01-01T00:00:00.000Z")
   storageState.set("iconoplasm_schema_version", 5)
+  storageState.set("iconoplasm_contract_revision", 1)
   storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
   storageState.set("iconoplasm_alias_overlay_version", "v1-test")
   storageState.set("iconoplasm_alias_overlay_applied", {})

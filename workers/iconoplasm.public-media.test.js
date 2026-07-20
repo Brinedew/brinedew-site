@@ -15,7 +15,11 @@ import {
 const publisherRelease = readIconoplasmPublisherAuthority(
   fileURLToPath(new URL("..", import.meta.url)),
 )
-const currentArtifactToken = `a${publisherRelease.contractSchemaVersion}c${publisherRelease.contractRevision}`
+const candidateContract = {
+  schemaVersion: Number(publisherRelease.candidate.catalog_schema_version),
+  revision: Number(publisherRelease.candidate.catalog_contract_revision),
+}
+const currentArtifactToken = `a${candidateContract.schemaVersion}c${candidateContract.revision}`
 
 function expectedPublishedContract(version, contract) {
   const schemaVersion = Number(contract.schema_version)
@@ -336,6 +340,7 @@ test("published compatibility projection materializes aliases and legacy portrai
   const projected = projectPublishedCompatibilityArtifact(
     {
       schema_version: 5,
+      contract_revision: 1,
       genes: [
         {
           s: "RELA",
@@ -351,14 +356,24 @@ test("published compatibility projection materializes aliases and legacy portrai
         },
       ],
     },
-    4,
+    { schemaVersion: 4, revision: 1 },
   )
 
   assert.equal(projected.schema_version, 4)
+  assert.equal(projected.contract_revision, 1)
   assert.equal(projected.genes[0].a.includes("p65"), true)
   assert.equal(projected.genes[0].pt, `portraits/v1/cc/${sha}/medium.webp`)
   assert.equal(projected.genes[0].ph, `portraits/v1/cc/${sha}/full.webp`)
   assert.equal("p" in projected.genes[0], false)
+})
+
+test("compatibility projection fails closed for an undeclared contract revision", () => {
+  const projected = projectPublishedCompatibilityArtifact(
+    { schema_version: 5, contract_revision: 2, genes: [{ s: "TP53" }] },
+    { schemaVersion: 5, revision: 1 },
+  )
+
+  assert.equal(projected, null)
 })
 
 test("public gene payload includes published portrait dimensions", async () => {
@@ -549,8 +564,9 @@ test("public catalog manifest publishes explicit extension contract fields", asy
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload?.artifact_schema_version, publisherRelease.contractSchemaVersion)
-  assert.equal(payload?.schema_version, publisherRelease.contractSchemaVersion)
+  assert.equal(payload?.artifact_schema_version, candidateContract.schemaVersion)
+  assert.equal(payload?.artifact_contract_revision, candidateContract.revision)
+  assert.equal(payload?.schema_version, candidateContract.schemaVersion)
   assert.equal(payload?.min_extension_version, publisherRelease.minimumSupportedVersion)
   assert.equal(payload?.catalog_hash, "catalog")
   assert.equal(payload?.build_version, `catalog-2026-04-16-${currentArtifactToken}`)
@@ -590,10 +606,15 @@ test("published extension receives its publisher-declared client contract", asyn
     compatibilityAuthority,
   )
   const requiresProjection =
-    compatibilityContract.schemaVersion < publisherRelease.contractSchemaVersion
+    compatibilityContract.schemaVersion < candidateContract.schemaVersion ||
+    (compatibilityContract.schemaVersion === candidateContract.schemaVersion &&
+      compatibilityContract.revision < candidateContract.revision)
   const effectiveSchemaVersion = requiresProjection
     ? compatibilityContract.schemaVersion
-    : publisherRelease.contractSchemaVersion
+    : candidateContract.schemaVersion
+  const effectiveContractRevision = requiresProjection
+    ? compatibilityContract.revision
+    : candidateContract.revision
   const kv = buildCatalogResolveKv()
   const env = buildEnv({ KV: kv })
   const manifestResponse =
@@ -609,6 +630,7 @@ test("published extension receives its publisher-declared client contract", asyn
   assert.equal(manifestResponse.status, 200)
   assert.equal(manifest.schema_version, effectiveSchemaVersion)
   assert.equal(manifest.artifact_schema_version, effectiveSchemaVersion)
+  assert.equal(manifest.artifact_contract_revision, effectiveContractRevision)
   assert.equal(manifest.min_extension_version, publisherRelease.minimumSupportedVersion)
   if (requiresProjection) {
     assert.equal(manifest.portrait_base_url, "https://iconoplasm.brinedew.bio")
