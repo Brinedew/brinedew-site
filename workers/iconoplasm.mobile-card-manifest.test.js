@@ -16,6 +16,10 @@ const source = readFileSync(
   ),
   "utf8",
 )
+const readModelRouteSource = readFileSync(
+  new URL("./iconoplasm-admin-read-model-routes.js", import.meta.url),
+  "utf8",
+)
 const appSource = readFileSync(
   new URL("../quartz/static/iconoplasm/app.js", import.meta.url),
   "utf8",
@@ -949,7 +953,10 @@ test("gallery invalidation publishes a validated card catalog before flipping th
   assert.match(source, /async function runCardCatalogStagingRebuildChunk/)
   assert.match(source, /CARD_CATALOG_ARTIFACT_SCHEMA/)
   assert.match(source, /ICONOPLASM_STARTER_GENE_SYMBOLS/)
-  assert.match(source, /\/api\/iconoplasm\/admin\/card-vms\/warm/)
+  assert.equal(
+    matchIconoplasmRouteContract("/api/iconoplasm/admin/card-vms/warm", "POST")?.route?.apiHandler,
+    "admin_read_models.card_artifacts_warm",
+  )
   assert.match(source, /await warmCatalogCache\(env\)/)
   assert.match(source, /Array\.from\(catalogCache\.bySymbol\.keys\(\)\)/)
   // Build-before-flip invariant: the card-catalog artifact (incremental or full,
@@ -963,8 +970,8 @@ test("gallery invalidation publishes a validated card catalog before flipping th
   assert.match(source, /async function publishCardCatalogArtifactSmart/)
   assert.match(source, /return runCardCatalogStagingRebuildChunk\(env, \{/)
   assert.match(source, /CARD_CATALOG_CONTENT_ADDRESSED_STORAGE/)
-  assert.match(source, /CARD_ARTIFACT_REQUIRES_FULL_CATALOG/)
-  assert.match(source, /published_card_catalog/)
+  assert.match(readModelRouteSource, /CARD_ARTIFACT_REQUIRES_FULL_CATALOG/)
+  assert.match(readModelRouteSource, /published_card_catalog/)
   // The legacy version-keyed full publisher and its writer are gone — assert they
   // can't creep back as a parallel path.
   assert.doesNotMatch(source, /async function publishCardCatalogArtifact\(/)
