@@ -1317,7 +1317,7 @@
 }
 
 .icono-label-footer-line--typed {
-  color: #34241b;
+  color: var(--icono-label-ink);
   font-family: "Special Elite";
   font-size: calc(12 / 1220 * 100cqw);
   line-height: 0.98;
