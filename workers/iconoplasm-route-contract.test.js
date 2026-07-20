@@ -22,6 +22,9 @@ const PATTERN_EXAMPLES = Object.freeze({
   gene_request_summary: "/api/iconoplasm/requests/gene/TP53/summary",
   gene_request_state_gone: "/api/iconoplasm/requests/gene/TP53",
   admin_gene_request_diagnostics: "/api/iconoplasm/admin/requests/gene/TP53/diagnostics",
+  clan_members: "/api/iconoplasm/clans/Kinase/members",
+  gene_comments_legacy_read: "/api/iconoplasm/comments/gene/TP53",
+  gene_comments: "/api/iconoplasm/genes/TP53/comments",
 })
 
 function examplePath(route) {
@@ -41,6 +44,13 @@ test("Iconoplasm route contracts are complete, unique, immutable, and executable
     assert.equal(route.schemaVersion, ICONOPLASM_API_SCHEMA_VERSION)
     assert.equal(route.observabilityRoute, route.budgetFamily)
     assert.ok(route.auth, `${route.id} must declare auth intent`)
+    if (typeof route.auth === "object") {
+      assert.deepEqual(
+        Object.keys(route.auth).sort(),
+        [...route.methods].sort(),
+        `${route.id} must declare auth intent for every method`,
+      )
+    }
     assert.ok(route.cache, `${route.id} must declare cache intent`)
     assert.ok(route.budgetFamily, `${route.id} must declare a budget family`)
     assert.ok(route.gatewayHandler, `${route.id} must declare a gateway handler`)

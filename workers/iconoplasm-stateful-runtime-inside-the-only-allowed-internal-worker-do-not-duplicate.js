@@ -1384,11 +1384,6 @@ function assertIconoplasmCardCatalogBudgetPreflight(env) {
 function iconoplasmBudgetRouteFamilyFromPath(path) {
   const declaredRoute = matchIconoplasmRouteContract(path)
   if (declaredRoute) return declaredRoute.route.budgetFamily
-  if (path === "/api/iconoplasm/clans") return "clans_overview"
-  if (/^\/api\/iconoplasm\/clans\/[^/]+\/members$/.test(path)) return "clans_overview"
-  if (path === "/api/iconoplasm/comments") return "gene_comments"
-  if (/^\/api\/iconoplasm\/comments\/gene\/[^/]+$/.test(path)) return "gene_comments"
-  if (/^\/api\/iconoplasm\/genes\/[^/]+\/comments$/.test(path)) return "gene_comments"
   if (path === "/api/iconoplasm/image-edit/providers") return "image_edit_providers"
   if (path === "/api/iconoplasm/user-emulsion") return "user_emulsion"
   if (path === "/api/iconoplasm/image-edit/jobs") return "image_edit_jobs"
@@ -1398,8 +1393,6 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (/^\/api\/iconoplasm\/candidate-generation\/jobs\/[^/]+(?:\/publish)?$/.test(path))
     return "candidate_generation_jobs"
   if (path === "/api/iconoplasm/candidates/copy") return "candidate_copy"
-  if (path === "/api/iconoplasm/votes/set") return "votes_set"
-  if (path === "/api/iconoplasm/votes/snapshot") return "votes_snapshot"
   if (path === "/api/iconoplasm/artist-styles/search") return "artist_styles_search"
   if (path === "/api/iconoplasm/artist-blacklist-submissions") return "artist_blacklist_submission"
   if (path === "/api/iconoplasm/admin/me") return "admin_me"
@@ -1417,7 +1410,6 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   if (path.startsWith("/api/iconoplasm/admin/catalog/")) return "admin_catalog"
   if (path.startsWith("/api/iconoplasm/admin/essence/")) return "admin_essence"
   if (path.startsWith("/api/iconoplasm/admin/read-models/")) return "admin_read_models"
-  if (path.startsWith("/api/iconoplasm/admin/votes/")) return "admin_votes"
   if (path === "/api/iconoplasm/admin/assets/summary") return "admin_assets_summary"
   if (path === "/api/iconoplasm/admin/assets/state") return "admin_assets_state"
   if (path.startsWith("/api/iconoplasm/admin/assets")) return "admin_assets"
@@ -10883,20 +10875,6 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   }
   const declaredRoute = matchIconoplasmRouteContract(path, requestMethod)
   if (declaredRoute) return declaredRoute.methodAllowed
-  if (path === "/api/iconoplasm/clans") return requestMethod === "GET" || requestMethod === "HEAD"
-  if (/^\/api\/iconoplasm\/clans\/[^/]+\/members$/.test(path))
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/comments") return requestMethod === "POST"
-  if (/^\/api\/iconoplasm\/comments\/gene\/[^/]+$/.test(path))
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (/^\/api\/iconoplasm\/genes\/[^/]+\/comments$/.test(path))
-    return (
-      requestMethod === "GET" ||
-      requestMethod === "HEAD" ||
-      requestMethod === "POST" ||
-      requestMethod === "PATCH" ||
-      requestMethod === "DELETE"
-    )
   if (path === "/api/iconoplasm/admin/me")
     return requestMethod === "GET" || requestMethod === "HEAD"
   if (path === "/api/iconoplasm/admin/image-edit-prompts")
@@ -10916,26 +10894,6 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   if (/^\/api\/iconoplasm\/candidate-generation\/jobs\/[^/]+\/publish$/.test(path))
     return requestMethod === "POST"
   if (path === "/api/iconoplasm/candidates/copy") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/votes/set") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/votes/snapshot") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/votes/import") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/votes/set") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/votes/snapshot") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/votes/snapshots") return requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/votes/ledger")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/votes/events")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/votes/vision-stats")
-    return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/votes/vision-previews")
-    return requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "POST"
-  if (path === "/api/iconoplasm/admin/votes/vision-detail")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/votes/projection-refresh/pending")
-    return requestMethod === "GET" || requestMethod === "HEAD"
-  if (path === "/api/iconoplasm/admin/votes/projection-refresh/process")
-    return requestMethod === "POST"
   if (path === ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
     return requestMethod === "POST"
   if (path === ICONOPLASM_REFRESH_GALLERY_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER)
