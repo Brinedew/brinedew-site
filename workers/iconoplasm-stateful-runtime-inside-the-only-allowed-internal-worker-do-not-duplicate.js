@@ -3,6 +3,7 @@ import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
+import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-routes.js"
 import { createIconoplasmAdminPublicationHandlers } from "./iconoplasm-admin-publication-routes.js"
 import { createIconoplasmAdminReadModelHandlers } from "./iconoplasm-admin-read-model-routes.js"
 import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
@@ -26141,6 +26142,27 @@ async function publishCatalogArtifact(env) {
 }
 
 const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
+  ...createIconoplasmAdminAssetHandlers({
+    adminPortraitUrl,
+    buildSummaryScope: buildAdminAssetSummaryScope,
+    fetchAssetStateRows,
+    fetchRepairScope: fetchAdminAssetRepairScope,
+    fetchStorageAudit: fetchAdminAssetStorageAudit,
+    fetchSummaryCounts: fetchAdminAssetSummaryCounts,
+    isAdmin: isIconoplasmAdmin,
+    json,
+    normalizeMaintenanceLimit: normalizeAdminAssetMaintenanceLimit,
+    normalizeMaintenanceSymbols: normalizeAdminAssetMaintenanceSymbols,
+    normalizeArtistTag,
+    normalizeAssetStatus,
+    normalizeSha256,
+    normalizeSymbol,
+    optionalInt,
+    portraitBase,
+    readPublicStatsProjection,
+    sanitizeText,
+    stateSymbolMax: 25000,
+  }),
   ...createIconoplasmAdminPublicationHandlers({
     actor,
     coerceBoolean,
@@ -30787,339 +30809,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           200,
           { "Cache-Control": "no-store" },
         ),
-      )
-    }
-
-    if (path === "/api/iconoplasm/admin/assets" && request.method === "GET") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_assets_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done("admin_assets_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-      const status = (url.searchParams.get("status") || "all").toLowerCase()
-      const stale = (url.searchParams.get("stale") || "all").toLowerCase()
-      const legacy = (url.searchParams.get("legacy") || "all").toLowerCase()
-      const symbolQuery = normalizeSymbol(url.searchParams.get("symbol") || "")
-      const limit = Math.max(
-        1,
-        Math.min(250, Number.parseInt(url.searchParams.get("limit") || "50", 10)),
-      )
-      const whereParts = []
-      const params = []
-      if (symbolQuery) {
-        whereParts.push("pa.gene_symbol=?")
-        params.push(symbolQuery)
-      }
-      if (status !== "all") {
-        whereParts.push("lower(pa.status)=?")
-        params.push(status)
-      }
-      if (stale === "yes") whereParts.push("COALESCE(is_stale, 0) = 1")
-      else if (stale === "no") whereParts.push("COALESCE(is_stale, 0) = 0")
-      if (legacy === "yes") whereParts.push("COALESCE(is_legacy, 0) = 1")
-      else if (legacy === "no") whereParts.push("COALESCE(is_legacy, 0) = 0")
-      const where = whereParts.length ? `WHERE ${whereParts.join(" AND ")}` : ""
-      const stmt = env.ICONOPLASM_DB.prepare(
-        `WITH vote_agg AS (
-           SELECT
-             gene_symbol AS gene_symbol,
-             asset_sha256 AS asset_sha256,
-             SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
-             SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END) AS downvotes,
-             SUM(vote_value) AS score
-           FROM icono_image_votes
-           GROUP BY gene_symbol, asset_sha256
-         )
-         SELECT
-           pa.gene_symbol,
-           pa.asset_sha256,
-           pa.status,
-           pa.autopick_eligible,
-           COALESCE(pa.is_stale, 0) AS is_stale,
-           COALESCE(pa.is_legacy, 0) AS is_legacy,
-           pa.vision_id,
-           pa.artist_tag,
-           pa.artist_name,
-           pa.created_by,
-           pa.created_at,
-           COALESCE(v.upvotes, 0) AS image_upvotes,
-           COALESCE(v.downvotes, 0) AS image_downvotes,
-           COALESCE(v.score, 0) AS image_score,
-           CASE
-             WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1
-             ELSE 0
-           END AS is_current,
-           COALESCE(ps.admin_override, 0) AS admin_override,
-           0 AS is_vote_leader
-         FROM icono_portrait_assets pa
-         LEFT JOIN vote_agg v
-          ON v.gene_symbol = pa.gene_symbol
-         AND v.asset_sha256 = pa.asset_sha256
-         LEFT JOIN icono_publish_state ps
-          ON ps.gene_symbol = pa.gene_symbol
-         ${where}
-         ORDER BY
-           is_current DESC,
-           COALESCE(v.score, 0) DESC,
-           COALESCE(v.upvotes, 0) DESC,
-           pa.created_at DESC
-         LIMIT ?`,
-      ).bind(...params, limit)
-      const { results } = await stmt.all()
-      const base = portraitBase(url, env)
-      const assets = (results || []).map((r) => ({
-        ...r,
-        is_stale: Number(r?.is_stale || 0) > 0,
-        is_legacy: Number(r?.is_legacy || 0) > 0,
-        is_current: Number(r?.is_current || 0) > 0,
-        admin_override: Number(r?.admin_override || 0) > 0,
-        is_vote_leader: Number(r?.is_vote_leader || 0) > 0,
-        image_upvotes: Number(r?.image_upvotes || 0),
-        image_downvotes: Number(r?.image_downvotes || 0),
-        image_score: Number(r?.image_score || 0),
-        // Chesterton's fence: admin asset lists are part of the operator's
-        // source of truth during cutover. If this route keeps echoing copied
-        // storage keys, people will treat those keys as authoritative again
-        // and reintroduce the exact blob-contract ambiguity B-430 is removing.
-        hero_url: adminPortraitUrl(base, r?.asset_sha256, "full"),
-        medium_url: adminPortraitUrl(base, r?.asset_sha256, "medium"),
-        thumb_url: adminPortraitUrl(base, r?.asset_sha256, "thumb"),
-      }))
-      return done(
-        "admin_assets",
-        json({ assets, count: assets.length }, 200, { "Cache-Control": "no-store" }),
-      )
-    }
-
-    if (path === "/api/iconoplasm/admin/assets/summary" && request.method === "GET") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_assets_summary_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_assets_summary_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-      const refresh = ["1", "true", "yes"].includes(
-        String(url.searchParams.get("refresh") || "")
-          .trim()
-          .toLowerCase(),
-      )
-      const summaryRow = await fetchAdminAssetSummaryCounts(env, { refresh })
-      const publicStats = await readPublicStatsProjection(env)
-      const scopes = buildAdminAssetSummaryScope(summaryRow, publicStats)
-      return done(
-        "admin_assets_summary",
-        json(
-          {
-            ok: true,
-            refreshed: refresh,
-            public_scope: scopes.public_scope,
-            ledger_scope: scopes.ledger_scope,
-            candidate_assets: Number(summaryRow?.candidate_assets || 0),
-            catalog_candidate_assets: Number(scopes.public_scope.catalog_candidate_assets || 0),
-            auditable_assets: Number(summaryRow?.auditable_assets || 0),
-            catalog_auditable_assets: Number(scopes.public_scope.catalog_auditable_assets || 0),
-            stale_assets: Number(summaryRow?.stale_assets || 0),
-            legacy_assets: Number(summaryRow?.legacy_assets || 0),
-            published_live_portraits: Number(summaryRow?.published_live_portraits || 0),
-            catalog_published_live_portraits: Number(
-              scopes.public_scope.catalog_published_live_portraits || 0,
-            ),
-            audited_assets: Number(summaryRow?.audited_assets || 0),
-            verified_renderable_images: Number(summaryRow?.verified_renderable_images || 0),
-            storage_audit_coverage_percent: Number(summaryRow?.storage_audit_coverage_percent || 0),
-            storage_incomplete_assets: Number(summaryRow?.storage_incomplete_assets || 0),
-            broken_live_images: Number(summaryRow?.broken_live_images || 0),
-            renderable_live_confirmed: Number(summaryRow?.renderable_live_confirmed || 0),
-            unverified_live_portraits: Number(summaryRow?.unverified_live_portraits || 0),
-            renderable_live_exact_known: Boolean(summaryRow?.renderable_live_exact_known),
-            last_exact_audit_total:
-              summaryRow?.last_exact_audit_total === null ||
-              summaryRow?.last_exact_audit_total === undefined
-                ? null
-                : Number(summaryRow?.last_exact_audit_total || 0),
-            last_exact_audit_at: sanitizeText(summaryRow?.last_exact_audit_at || "", 64) || null,
-            storage_queue_backlog_assets: Number(summaryRow?.storage_queue_backlog_assets || 0),
-            storage_queue_seeded_complete: Boolean(summaryRow?.storage_queue_seeded_complete),
-            storage_audit_status_note:
-              sanitizeText(summaryRow?.storage_audit_status_note || "", 2000) ||
-              "Website storage truth has not been computed yet.",
-            updated_at: sanitizeText(summaryRow?.updated_at || "", 64) || null,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
-    if (path === "/api/iconoplasm/admin/assets/storage-audit" && request.method === "POST") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_assets_storage_audit_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_assets_storage_audit_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-
-      let p
-      try {
-        p = await request.json()
-      } catch {
-        return done("admin_assets_storage_audit_400", json({ error: "Invalid JSON" }, 400))
-      }
-
-      let requestedSymbols = []
-      let limit = 100
-      const mode = sanitizeText(p?.mode || "backlog-batch", 64).toLowerCase() || "backlog-batch"
-      try {
-        requestedSymbols = normalizeAdminAssetMaintenanceSymbols(p?.symbols, 5000)
-        limit = normalizeAdminAssetMaintenanceLimit(p?.limit, 100, 500)
-      } catch (error) {
-        return done(
-          "admin_assets_storage_audit_400",
-          json({ error: String(error?.message || error || "Invalid storage audit scope") }, 400),
-        )
-      }
-
-      const audit = await fetchAdminAssetStorageAudit(env, {
-        requestedSymbols,
-        limit,
-      })
-
-      return done(
-        "admin_assets_storage_audit",
-        json(
-          {
-            ok: true,
-            mode,
-            requested_symbols: requestedSymbols.length,
-            count: Array.isArray(audit?.rows) ? audit.rows.length : 0,
-            audited_assets: Number(audit?.summary?.audited_assets || 0),
-            assets: Array.isArray(audit?.rows) ? audit.rows : [],
-            summary: audit?.summary || {},
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
-    if (path === "/api/iconoplasm/admin/assets/repair-scope" && request.method === "POST") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_assets_repair_scope_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_assets_repair_scope_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-
-      let p
-      try {
-        p = await request.json()
-      } catch {
-        return done("admin_assets_repair_scope_400", json({ error: "Invalid JSON" }, 400))
-      }
-
-      let requestedSymbols = []
-      let limit = 50
-      const mode = sanitizeText(p?.mode || "backlog-batch", 64).toLowerCase() || "backlog-batch"
-      try {
-        requestedSymbols = normalizeAdminAssetMaintenanceSymbols(p?.symbols, 5000)
-        limit = normalizeAdminAssetMaintenanceLimit(p?.limit, 50, 250)
-      } catch (error) {
-        return done(
-          "admin_assets_repair_scope_400",
-          json({ error: String(error?.message || error || "Invalid repair scope") }, 400),
-        )
-      }
-
-      const repairScope = await fetchAdminAssetRepairScope(env, {
-        requestedSymbols,
-        limit,
-      })
-
-      return done(
-        "admin_assets_repair_scope",
-        json(
-          {
-            ok: true,
-            mode,
-            requested_symbols: requestedSymbols.length,
-            scanned_assets: Number(repairScope?.scanned_assets || 0),
-            count: Array.isArray(repairScope?.rows) ? repairScope.rows.length : 0,
-            assets: Array.isArray(repairScope?.rows) ? repairScope.rows : [],
-            summary: repairScope?.summary || {},
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
-    if (
-      path === "/api/iconoplasm/admin/assets/state" &&
-      (request.method === "GET" || request.method === "POST")
-    ) {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_assets_state_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done("admin_assets_state_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-      if (request.method === "GET") {
-        return done(
-          "admin_assets_state_400",
-          json(
-            {
-              error:
-                "Unscoped asset state is disabled because the full asset ledger can exceed the Worker CPU budget. Use POST with a bounded symbols list.",
-              code: "ICONOPLASM_ASSET_STATE_SCOPE_REQUIRED",
-            },
-            400,
-            { "Cache-Control": "no-store" },
-          ),
-        )
-      }
-      let requestedSymbols = null
-      if (request.method === "POST") {
-        let p
-        try {
-          p = await request.json()
-        } catch {
-          return done("admin_assets_state_400", json({ error: "Invalid JSON" }, 400))
-        }
-        const rawSymbols = Array.isArray(p?.symbols) ? p.symbols : []
-        if (rawSymbols.length > 25000)
-          return done(
-            "admin_assets_state_400",
-            json({ error: "Too many symbols (max 25000)" }, 400),
-          )
-        requestedSymbols = rawSymbols
-      }
-      const assets = (await fetchAssetStateRows(env, requestedSymbols))
-        .map((row) => ({
-          symbol: normalizeSymbol(row?.gene_symbol || ""),
-          asset_sha256: normalizeSha256(row?.asset_sha256 || ""),
-          candidate_image_id: optionalInt(row?.candidate_image_id),
-          vision_id: sanitizeText(row?.vision_id || "", 255) || "",
-          emulsion_id: sanitizeText(row?.emulsion_id || "", 64) || "",
-          workflow_id: sanitizeText(row?.workflow_id || "", 32) || "",
-          workflow_label: sanitizeText(row?.workflow_label || "", 255) || "",
-          workflow_path: sanitizeText(row?.workflow_path || "", 512) || "",
-          prompt_version: sanitizeText(row?.prompt_version || "", 16) || "",
-          variant_slot: sanitizeText(row?.variant_slot || "", 32) || "",
-          sample_label: sanitizeText(row?.sample_label || "", 64) || null,
-          sample_number: optionalInt(row?.sample_number),
-          sample_text_hash: normalizeSha256(row?.sample_text_hash || "") || null,
-          artist_tag: normalizeArtistTag(row?.artist_tag || "") || "",
-          artist_name: sanitizeText(row?.artist_name || "", 255) || "",
-          status: normalizeAssetStatus(row?.status || "", "draft"),
-          is_stale: Number(row?.is_stale || 0) > 0,
-          image_upvotes: Number(row?.image_upvotes || 0),
-          image_downvotes: Number(row?.image_downvotes || 0),
-          image_score: Number(row?.image_score || 0),
-        }))
-        .filter((row) => row.symbol && row.asset_sha256)
-      return done(
-        "admin_assets_state",
-        json({ ok: true, count: assets.length, assets }, 200, { "Cache-Control": "no-store" }),
       )
     }
 
