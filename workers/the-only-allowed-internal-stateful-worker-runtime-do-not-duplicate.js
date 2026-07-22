@@ -1,4 +1,12 @@
 import "../shared/iconoplasm-card/shared-card-runtime.js"
+import { normalizeIconoplasmPublishedGeneRecord } from "./iconoplasm-gene-discovery.js"
+import {
+  handleIconoplasmGeneDiscoveryDocument,
+  iconoplasmGeneCanonicalRedirect,
+  iconoplasmGeneDiscoveryStateForPath,
+  iconoplasmGeneUnavailableResponse,
+  iconoplasmGeneNotFoundResponse,
+} from "./iconoplasm-gene-discovery-worker.js"
 
 // CORS headers for frontend access - supports both main domain and subdomain
 function getCorsHeaders(origin, requestHost = "") {
@@ -75,7 +83,7 @@ const ICONOPLASM_GENE_FONT_PRELOAD_LINKS = [
   "</static/iconoplasm/fonts/Caveat-400.woff2>; rel=preload; as=font; type=font/woff2; crossorigin",
 ]
 const ICONOPLASM_HTML_SHELL_EDGE_CACHE_TTL_SECONDS = 300
-const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-07-20-generation-modal-v3"
+const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-07-22-gene-discovery-v1"
 const ICONOPLASM_PUBLIC_NO_VARY_SEARCH =
   'params=("utm_source" "utm_medium" "utm_campaign" "utm_content" "utm_term" "fbclid" "gclid" "mc_cid" "mc_eid" "codex_verify")'
 
@@ -84,15 +92,16 @@ const PRACTICE_RESOLVE_MAX_INPUTS = 10000
 // Keep this low enough to avoid `too many SQL variables`-style failures when users paste 100+ symbols.
 const PRACTICE_RESOLVE_SQL_CHUNK = 100
 
-function addIconoplasmGeneShellHeaders(headers, path) {
+function addIconoplasmGeneShellHeaders(headers, path, { indexable = false } = {}) {
   const next = new Headers(headers)
   if (!String(path || "").startsWith("/gene/")) return next
-  // ARCHITECTURE FENCE [IPD-002]: labelled card facts improve non-visual
-  // comprehension, but generated gene cards remain noindex detail routes until
-  // they have standalone explanatory content and an explicit discovery migration.
+  // ARCHITECTURE FENCE [IPD-003]: response headers, HTML metadata, archive
+  // membership, and sitemap membership must use the same published-catalog
+  // eligibility decision. Never change only one discovery surface.
   for (const link of ICONOPLASM_GENE_FONT_PRELOAD_LINKS) next.append("Link", link)
   next.set("No-Vary-Search", ICONOPLASM_PUBLIC_NO_VARY_SEARCH)
-  next.set("X-Robots-Tag", "noindex, follow, noarchive")
+  if (indexable) next.delete("X-Robots-Tag")
+  else next.set("X-Robots-Tag", "noindex, follow, noarchive")
   return next
 }
 
@@ -118,7 +127,7 @@ function iconoplasmSafeJsonScriptPayload(value) {
 }
 
 function iconoplasmStaticGeneSymbolFromPath(path) {
-  const match = /^\/gene\/([^/?#]+)/.exec(String(path || ""))
+  const match = /^\/gene\/([^/?#]+)\/?$/.exec(String(path || ""))
   if (!match) return null
   try {
     return decodeURIComponent(match[1] || "")
@@ -357,6 +366,14 @@ function replaceIconoplasmStaticGeneShell(html, shellHtml) {
   )
 }
 
+function injectIconoplasmGeneIndexNavigationLink(html, path) {
+  if (String(path || "") !== "/" || String(html || "").includes('href="/genes"')) return html
+  return String(html).replace(
+    /(<nav\b[^>]*\bdata-icono-page-switcher(?:=["'][^"']*["'])?[^>]*>[\s\S]*?)(<\/nav>)/i,
+    '$1<a href="/genes" class="icono-page-tab" data-icono-switch="reference">Gene index</a>$2',
+  )
+}
+
 async function iconoplasmGeneCardBootstrapInjection(request, env, ctx, path) {
   // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
   // Search terms: PRL split-brain, gene page bootstrap, canonical blot,
@@ -367,9 +384,27 @@ async function iconoplasmGeneCardBootstrapInjection(request, env, ctx, path) {
   // must match the current D1 canonical exposed by /api/iconoplasm/site/genes.
   // Keep this routed through the Iconoplasm runtime endpoint rather than adding
   // a local SQL clone in the HTML worker.
-  if (request.method === "HEAD") return { injection: "", shellHtml: "", snapshotVersion: "" }
+  if (request.method === "HEAD") {
+    return {
+      injection: "",
+      shellHtml: "",
+      snapshotVersion: "",
+      cardPayload: null,
+      profileComplete: false,
+      status: 200,
+    }
+  }
   const symbol = iconoplasmStaticGeneSymbolFromPath(path)
-  if (!symbol) return { injection: "", shellHtml: "", snapshotVersion: "" }
+  if (!symbol) {
+    return {
+      injection: "",
+      shellHtml: "",
+      snapshotVersion: "",
+      cardPayload: null,
+      profileComplete: false,
+      status: 404,
+    }
+  }
   try {
     const apiUrl = new URL(request.url)
     apiUrl.pathname = `/api/iconoplasm/site/genes/${encodeURIComponent(symbol)}`
@@ -385,12 +420,34 @@ async function iconoplasmGeneCardBootstrapInjection(request, env, ctx, path) {
         ctx,
       )
     if (!detailResponse || !detailResponse.ok) {
-      return { injection: "", shellHtml: "", snapshotVersion: "" }
+      return {
+        injection: "",
+        shellHtml: "",
+        snapshotVersion: "",
+        cardPayload: null,
+        profileComplete: false,
+        status: detailResponse?.status || 503,
+      }
     }
     const detailEtag = detailResponse.headers.get("ETag") || ""
     const cardPayload = await detailResponse.json()
-    if (!cardPayload) return { injection: "", shellHtml: "", snapshotVersion: "" }
+    if (!cardPayload) {
+      return {
+        injection: "",
+        shellHtml: "",
+        snapshotVersion: "",
+        cardPayload: null,
+        profileComplete: false,
+        status: 503,
+      }
+    }
     const snapshotVersion = iconoplasmGeneDetailShellVersion(cardPayload, detailEtag)
+    const shellHtml = iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion)
+    const profileComplete =
+      shellHtml.includes('class="icono-card-semantic-profile"') &&
+      shellHtml.includes(
+        `aria-label="Character profile for ${escapeIconoplasmHtmlAttribute(symbol)}"`,
+      )
     const payload = {
       contract: "GenePageBootstrapV1",
       symbol,
@@ -404,12 +461,22 @@ async function iconoplasmGeneCardBootstrapInjection(request, env, ctx, path) {
       // already chosen a portrait source. A server-injected preload cannot see
       // sessionStorage and would retry a dead source on every navigation.
       injection: `<script type="application/json" id="iconoplasm-card-bootstrap">${iconoplasmSafeJsonScriptPayload(payload)}</script>`,
-      shellHtml: iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion),
+      shellHtml,
       snapshotVersion,
+      cardPayload,
+      profileComplete,
+      status: profileComplete ? 200 : 503,
     }
   } catch (error) {
     console.warn("Iconoplasm gene card bootstrap injection failed:", error)
-    return { injection: "", shellHtml: "", snapshotVersion: "" }
+    return {
+      injection: "",
+      shellHtml: "",
+      snapshotVersion: "",
+      cardPayload: null,
+      profileComplete: false,
+      status: 503,
+    }
   }
 }
 
@@ -523,26 +590,34 @@ async function iconoplasmCacheableHtmlShellResponse(
   path,
   cacheStatus,
   preloadedGeneShell = null,
+  geneDiscovery = null,
 ) {
-  const headers = addIconoplasmGeneShellHeaders(response.headers, path)
+  const indexable = Boolean(geneDiscovery?.indexable)
+  const headers = addIconoplasmGeneShellHeaders(response.headers, path, { indexable })
   // The cached object is the generic rewritten shell in caches.default. The response
   // returned to browsers is route-tailored, so Cloudflare's outer HTTP cache must
   // not store it and replay a home shell for /gene/* or vice versa.
   headers.set("Cache-Control", "no-store")
   headers.set("X-Iconoplasm-HTML-Shell-Cache", cacheStatus)
   let body = response.status === 204 ? null : personalizeIconoplasmStaticGeneShell(html, path)
-  if (body && String(path || "").startsWith("/gene/")) {
-    body = rewriteIconoplasmGeneDiscoveryMetadata(body, path)
-  }
+  body = body ? injectIconoplasmGeneIndexNavigationLink(body, path) : body
   let geneShell = preloadedGeneShell
   if (body && String(path || "").startsWith("/gene/")) {
     if (!geneShell) geneShell = await iconoplasmGeneCardBootstrapInjection(request, env, ctx, path)
+    if (request.method === "GET" && indexable && !geneShell?.profileComplete) {
+      return iconoplasmGeneUnavailableResponse(request.method)
+    }
     if (geneShell && geneShell.shellHtml) {
       body = replaceIconoplasmStaticGeneShell(body, geneShell.shellHtml)
     }
     if (geneShell && geneShell.injection) {
       body = insertIconoplasmGeneCardBootstrap(body, geneShell.injection)
     }
+    body = rewriteIconoplasmGeneDiscoveryMetadata(body, path, {
+      record: geneDiscovery?.record,
+      cardPayload: geneShell?.cardPayload,
+      indexable,
+    })
   }
   if (
     body &&
@@ -747,13 +822,6 @@ function buildGeneguessrSubdomainSitemapXml() {
   ])
 }
 
-function buildIconoplasmSubdomainSitemapXml() {
-  return buildSubdomainSitemapXml([
-    { loc: `https://${ICONOPLASM_HOST}/`, changefreq: "daily", priority: "1.0" },
-    { loc: `https://${ICONOPLASM_HOST}/privacy`, changefreq: "monthly", priority: "0.3" },
-  ])
-}
-
 function buildGeneguessrSubdomainLlmsTxt() {
   return `# GeneGuessr
 
@@ -764,24 +832,6 @@ GeneGuessr is a daily protein guessing game. Players infer the target gene from 
 - [GeneGuessr](https://${GENEGUESSR_HOST}/): Daily protein guessing game
 - [Privacy Policy](https://${GENEGUESSR_HOST}/privacy): Data handling for gameplay and login
 - [Sitemap](https://${GENEGUESSR_HOST}/sitemap.xml): Crawlable GeneGuessr URLs
-`
-}
-
-function buildIconoplasmSubdomainLlmsTxt() {
-  return `# Iconoplasm
-
-Iconoplasm turns human gene symbols into memorable character cards called blots. It includes a web catalog and a browser extension for recognizing genes while reading papers, databases, and other biology pages.
-
-## Core links
-
-- [Iconoplasm](https://${ICONOPLASM_HOST}/): Search and browse human gene character cards
-- [Iconoplasm FAQ](https://brinedew.bio/wiki/iconoplasm-faq): Project background and use cases
-- [Privacy Policy](https://${ICONOPLASM_HOST}/privacy): Data handling for the website and extension
-- [Sitemap](https://${ICONOPLASM_HOST}/sitemap.xml): Crawlable Iconoplasm URLs
-
-## Indexing note
-
-Individual gene-card URLs are intentionally not listed here or in the XML sitemap until they have enough standalone explanatory content to be useful search results.
 `
 }
 
@@ -812,13 +862,40 @@ function rewritePrivacyCanonicalMetadata(html, host) {
   return next
 }
 
-export function rewriteIconoplasmGeneDiscoveryMetadata(html, path) {
+function iconoplasmGeneMetaDescription(record, cardPayload) {
+  const gene = normalizeIconoplasmPublishedGeneRecord(record)
+  const essence =
+    cardPayload?.essence && typeof cardPayload.essence === "object" ? cardPayload.essence : {}
+  const traits = []
+  if (essence.sex) traits.push(String(essence.sex).toLowerCase())
+  if (essence.age || essence.age_years) traits.push(`age ${essence.age || essence.age_years}`)
+  if (essence.weight_kg) traits.push(`${Math.round(Number(essence.weight_kg))} kg`)
+  if (Array.isArray(essence.aesthetics) && essence.aesthetics[0]) {
+    traits.push(`${essence.aesthetics[0]} aesthetic`)
+  }
+  if (essence.politics || essence.faction) {
+    traits.push(`${essence.politics || essence.faction} alignment`)
+  }
+  const identity = gene.fullName ? `${gene.symbol} (${gene.fullName})` : gene.symbol
+  const detail = traits.length ? `: ${traits.join(", ")}` : ""
+  return `${identity} Iconoplasm character profile${detail}.`
+}
+
+export function rewriteIconoplasmGeneDiscoveryMetadata(
+  html,
+  path,
+  { record = null, cardPayload = null, indexable = false } = {},
+) {
   const symbol = iconoplasmStaticGeneSymbolFromPath(path)
   if (!symbol) return html
+  const gene = normalizeIconoplasmPublishedGeneRecord(record)
   const geneUrl = `https://${ICONOPLASM_HOST}/gene/${encodeURIComponent(symbol)}`
-  const safeTitle = escapeIconoplasmStaticShellText(`${symbol} - Iconoplasm gene card`)
+  const title = gene.fullName
+    ? `${symbol} — ${gene.fullName} | Iconoplasm character profile`
+    : `${symbol} | Iconoplasm character profile`
+  const safeTitle = escapeIconoplasmStaticShellText(title)
   const safeDescription = escapeIconoplasmHtmlAttribute(
-    `Iconoplasm gene card for ${symbol}. This visual card is available for sharing and app navigation, but is not indexed as a standalone search result yet.`,
+    iconoplasmGeneMetaDescription(record, cardPayload),
   )
   let next = String(html || "")
   next = replaceOrInsertHeadMarkup(next, /<title>[\s\S]*?<\/title>/i, `<title>${safeTitle}</title>`)
@@ -827,11 +904,15 @@ export function rewriteIconoplasmGeneDiscoveryMetadata(html, path) {
     /<meta\b[^>]*\bname=["']description["'][^>]*>/i,
     `<meta name="description" content="${safeDescription}">`,
   )
-  next = replaceOrInsertHeadMarkup(
-    next,
-    /<meta\b[^>]*\bname=["']robots["'][^>]*>/i,
-    `<meta name="robots" content="noindex,follow,noarchive">`,
-  )
+  if (indexable) {
+    next = next.replace(/\s*<meta\b[^>]*\bname=["']robots["'][^>]*>\s*/gi, "\n")
+  } else {
+    next = replaceOrInsertHeadMarkup(
+      next,
+      /<meta\b[^>]*\bname=["']robots["'][^>]*>/i,
+      `<meta name="robots" content="noindex,follow,noarchive">`,
+    )
+  }
   next = replaceOrInsertHeadMarkup(
     next,
     /<link\b[^>]*\brel=["']canonical["'][^>]*>/i,
@@ -846,6 +927,16 @@ export function rewriteIconoplasmGeneDiscoveryMetadata(html, path) {
     next,
     /<meta\b[^>]*\b(?:property|name)=["']twitter:url["'][^>]*>/i,
     `<meta name="twitter:url" content="${geneUrl}">`,
+  )
+  next = replaceOrInsertHeadMarkup(
+    next,
+    /<meta\b[^>]*\b(?:property|name)=["']og:title["'][^>]*>/i,
+    `<meta property="og:title" content="${escapeIconoplasmHtmlAttribute(title)}">`,
+  )
+  next = replaceOrInsertHeadMarkup(
+    next,
+    /<meta\b[^>]*\b(?:property|name)=["']og:description["'][^>]*>/i,
+    `<meta property="og:description" content="${safeDescription}">`,
   )
   return next.replace(
     /<script\b[^>]*\btype=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>\s*/gi,
@@ -1694,9 +1785,9 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         )
       }
 
-      // Host-scoped crawler files. Do not proxy these from the generic Pages build:
-      // Iconoplasm needs its own sitemap and LLM map, and gene-card routes are
-      // intentionally excluded until they have standalone explanatory content.
+      // Host-scoped crawler documents and the server-rendered gene reference.
+      // These all consume one immutable-catalog snapshot so eligibility cannot
+      // drift between archive HTML, sitemap XML, and llms.txt.
       if (request.method === "GET" || request.method === "HEAD") {
         if (url.pathname === "/robots.txt") {
           return new Response(
@@ -1710,28 +1801,34 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
           )
         }
 
-        if (url.pathname === "/sitemap.xml") {
-          return new Response(
-            request.method === "HEAD" ? null : buildIconoplasmSubdomainSitemapXml(),
-            {
-              headers: {
-                "Content-Type": "application/xml; charset=utf-8",
-                "Cache-Control": "max-age=600",
-              },
-            },
-          )
+        if (
+          url.pathname === "/sitemap.xml" ||
+          url.pathname === "/llms.txt" ||
+          url.pathname === "/genes" ||
+          url.pathname === "/genes/" ||
+          url.pathname.startsWith("/genes/") ||
+          url.pathname === "/sitemaps/pages.xml" ||
+          url.pathname.startsWith("/sitemaps/genes/")
+        ) {
+          return handleIconoplasmGeneDiscoveryDocument(request, env, url.pathname)
         }
+      }
 
-        if (url.pathname === "/llms.txt") {
-          return new Response(
-            request.method === "HEAD" ? null : buildIconoplasmSubdomainLlmsTxt(),
-            {
-              headers: {
-                "Content-Type": "text/plain; charset=utf-8",
-                "Cache-Control": "max-age=600",
-              },
-            },
-          )
+      let geneDiscovery = null
+      if (
+        (request.method === "GET" || request.method === "HEAD") &&
+        url.pathname.startsWith("/gene/")
+      ) {
+        geneDiscovery = await iconoplasmGeneDiscoveryStateForPath(env, url.pathname)
+        if (geneDiscovery.kind === "unavailable") {
+          return iconoplasmGeneUnavailableResponse(request.method)
+        }
+        if (geneDiscovery.kind === "unknown") {
+          return iconoplasmGeneNotFoundResponse(request.method)
+        }
+        const canonicalPath = `/gene/${encodeURIComponent(geneDiscovery.canonicalSymbol)}`
+        if (geneDiscovery.kind === "alias" || url.pathname !== canonicalPath) {
+          return iconoplasmGeneCanonicalRedirect(url, geneDiscovery.canonicalSymbol)
         }
       }
 
@@ -1852,7 +1949,9 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         if (geneHtmlCacheKey) {
           const cachedGeneHtml = await caches.default.match(geneHtmlCacheKey)
           if (cachedGeneHtml) {
-            const headers = addIconoplasmGeneShellHeaders(cachedGeneHtml.headers, url.pathname)
+            const headers = addIconoplasmGeneShellHeaders(cachedGeneHtml.headers, url.pathname, {
+              indexable: Boolean(geneDiscovery?.indexable),
+            })
             headers.set("Cache-Control", "no-store")
             headers.set("X-Iconoplasm-HTML-Shell-Cache", "HIT-GENE")
             return new Response(request.method === "HEAD" ? null : cachedGeneHtml.body, {
@@ -1874,6 +1973,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
             url.pathname,
             "HIT",
             geneShellForHtmlCache,
+            geneDiscovery,
           )
         }
       }
@@ -1958,6 +2058,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
           url.pathname,
           "MISS",
           geneShellForHtmlCache,
+          geneDiscovery,
         )
       }
 

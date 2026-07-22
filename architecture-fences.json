@@ -50,38 +50,54 @@
       ]
     },
     {
-      "id": "IPD-002",
-      "title": "Gene-card semantics are accessible equivalence, not an SEO expansion",
-      "decision": "Every generated Iconoplasm gene card exposes one labelled semantic text equivalent of the visible card facts while `/gene/*` remains noindex and absent from the sitemap and llms.txt.",
-      "reason": "People can infer relationships from the visual card, but assistive technology and DOM-reading agents need explicit labels. Making those generated detail pages indexable would instead create a low-value 20,000-page search corpus.",
-      "change_control": "Turning generated gene routes into indexable standalone content requires an explicit product and discovery migration that updates this registry, the semantics runbook, renderer, robots headers, sitemap and llms policy, and behavioral tests together.",
+      "id": "IPD-003",
+      "title": "Gene discovery is eligibility-gated and range-stable",
+      "decision": "Complete canonical profiles are indexable through one published-catalog predicate, while aliases redirect, incomplete profiles remain noindex, unknown symbols return 404, and the crawlable archive uses frozen self-locating prefix ranges rather than numeric pages.",
+      "reason": "Agents need explicit card mappings and a link path they can choose from a known symbol. Frozen ranges provide that path without guessing, while the shared eligibility gate prevents arbitrary application shells or incomplete cards from becoming an unbounded search corpus.",
+      "change_control": "Gene response headers, HTML metadata, archive membership, sitemap membership, llms.txt, renderer semantics, tests, instructions, and runbook must change atomically. Range boundaries may change only through an explicit biological-inventory migration; routine catalog publications must never rebalance them.",
       "runbook": "docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md",
+      "linear_issue": "B-666",
       "additional_required_marker_categories": [],
       "markers": [
         {
           "category": "instructions",
           "file": "AGENTS.md",
-          "token": "ARCHITECTURE FENCE [IPD-002]"
+          "token": "ARCHITECTURE FENCE [IPD-003]"
         },
         {
           "category": "runbook",
           "file": "docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md",
-          "token": "ARCHITECTURE FENCE [IPD-002]"
+          "token": "ARCHITECTURE FENCE [IPD-003]"
         },
         {
           "category": "source",
           "file": "shared/iconoplasm-card/shared-card-runtime.js",
-          "token": "ARCHITECTURE FENCE [IPD-002]"
+          "token": "ARCHITECTURE FENCE [IPD-003]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm-gene-discovery.js",
+          "token": "ARCHITECTURE FENCE [IPD-003]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm-gene-discovery-worker.js",
+          "token": "ARCHITECTURE FENCE [IPD-003]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+          "token": "ARCHITECTURE FENCE [IPD-003]"
         },
         {
           "category": "source",
           "file": "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
-          "token": "ARCHITECTURE FENCE [IPD-002]"
+          "token": "ARCHITECTURE FENCE [IPD-003]"
         },
         {
           "category": "test",
-          "file": "workers/seo-discovery.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-002]"
+          "file": "workers/iconoplasm-gene-discovery.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-003]"
         }
       ]
     }

@@ -1367,10 +1367,19 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
     /function iconoplasmGeneDetailShellVersion\(cardPayload, responseEtag = ""\)/,
   )
   assert.match(internalWorker, /detailResponse\.headers\.get\("ETag"\)/)
+  const geneHeaderStart = internalWorker.indexOf("function addIconoplasmGeneShellHeaders")
+  const geneHeaderEnd = internalWorker.indexOf("\n}\n", geneHeaderStart)
+  assert.notEqual(geneHeaderStart, -1, "missing gene header policy")
+  assert.notEqual(geneHeaderEnd, -1, "missing gene header policy boundary")
+  const geneHeaderBlock = internalWorker.slice(geneHeaderStart, geneHeaderEnd)
   assert.match(
-    internalWorker,
-    /function addIconoplasmGeneShellHeaders\(headers, path\) \{[\s\S]*const next = new Headers\(headers\)[\s\S]*if \(!String\(path \|\| ""\)\.startsWith\("\/gene\/"\)\) return next/,
+    geneHeaderBlock,
+    /const next = new Headers\(headers\)/,
     "home/root shell responses must clone upstream immutable Headers before setting Cache-Control",
+  )
+  assert.match(
+    geneHeaderBlock,
+    /if \(!String\(path \|\| ""\)\.startsWith\("\/gene\/"\)\) return next/,
   )
   assert.match(internalWorker, /HIT-GENE/)
   assert.match(internalWorker, /window\.__iconoplasmBootstrap/)

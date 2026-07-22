@@ -18,12 +18,14 @@ one network's DNS result into a global accelerator disable. Read
 `docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md` before changing portrait policy,
 storage, CDN configuration, preconnects, or fallback behavior.
 
-**ARCHITECTURE FENCE [IPD-002]** — An Iconoplasm gene card's labelled semantic
-profile is the accessible equivalent of its visual card, not a reason to turn
-roughly 20,000 generated gene routes into SEO landing pages. Preserve the
-noindex response and the omission of `/gene/*` from the sitemap and `llms.txt`.
-Read `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md` before changing the
-gene-card renderer, generated gene HTML, robots metadata, sitemap, or `llms.txt`.
+**ARCHITECTURE FENCE [IPD-003]** — Iconoplasm gene discovery is one atomic
+published-catalog contract. Complete canonical profiles are indexable; aliases
+redirect permanently; incomplete profiles stay noindex; unknown symbols are
+real 404s. The `/genes` archive uses frozen, self-locating prefix ranges—never
+numeric pagination or automatic count rebalancing. Preserve the visual card and
+its one-to-one hidden semantic equivalent. Read
+`docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md` before changing the renderer,
+gene HTML, range map, robots metadata, archive, sitemap, or `llms.txt`.
 
 ## "Site is broken" runbook
 
