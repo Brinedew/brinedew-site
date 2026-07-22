@@ -238,7 +238,11 @@ export function createCollectionFeedController(options) {
     }
     touchPayload(segment)
     if (shouldMount) {
-      options.onSegmentMounted?.(segment, cardElements(segment))
+      segment.mountReady = Promise.resolve(
+        options.onSegmentMounted?.(segment, cardElements(segment)),
+      ).catch((error) => {
+        options.onError?.(error)
+      })
       win.requestAnimationFrame(() => {
         if (!segment.mounted) return
         const measured = segment.element.getBoundingClientRect().height
@@ -276,7 +280,11 @@ export function createCollectionFeedController(options) {
       const next = createMountedElement(segment)
       old.replaceWith(next)
       touchPayload(segment)
-      options.onSegmentMounted?.(segment, cardElements(segment))
+      segment.mountReady = Promise.resolve(
+        options.onSegmentMounted?.(segment, cardElements(segment)),
+      ).catch((error) => {
+        options.onError?.(error)
+      })
       restoreAnchor(anchor)
       enforceMountLimit()
     } catch (error) {

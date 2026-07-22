@@ -1476,11 +1476,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   }
 
   function applyHomeMasonryNow(container, newElements) {
-    if (!container) return
+    if (!container) return Promise.resolve()
     var Masonry = window.Masonry
     if (!Masonry) {
       console.warn("[Iconoplasm] Masonry library not loaded")
-      return
+      return Promise.resolve()
     }
     var mountedMasonry = homeMasonryInstances.get(container)
     if (mountedMasonry && mountedMasonry.instance) {
@@ -1490,13 +1490,15 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         instance.appended(newElements)
       }
       if (window.imagesLoaded) {
-        window.imagesLoaded(container, function () {
-          instance.layout()
+        return new Promise(function (resolve) {
+          window.imagesLoaded(container, function () {
+            instance.layout()
+            resolve()
+          })
         })
-      } else {
-        instance.layout()
       }
-      return
+      instance.layout()
+      return Promise.resolve()
     }
     destroyHomeMasonry(container)
     // Insert sizer elements if not already present
@@ -1525,22 +1527,26 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       instance: msnry,
     })
     if (window.imagesLoaded) {
-      window.imagesLoaded(container, function () {
-        msnry.layout()
+      var ready = new Promise(function (resolve) {
+        window.imagesLoaded(container, function () {
+          msnry.layout()
+          resolve()
+        })
       })
       // also do an eager layout so things aren't invisible while images load
       msnry.layout()
-    } else {
-      msnry.layout()
+      return ready
     }
+    msnry.layout()
+    return Promise.resolve()
   }
 
   function applyHomeMasonry(container, newElements) {
-    if (!container) return
-    void ensureMasonryLibs()
+    if (!container) return Promise.resolve()
+    return ensureMasonryLibs()
       .then(function () {
         if (!container.isConnected) return
-        applyHomeMasonryNow(container, newElements)
+        return applyHomeMasonryNow(container, newElements)
       })
       .catch(function (error) {
         console.error("[Iconoplasm] failed to load Masonry:", error)
@@ -7568,16 +7574,17 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       if (segment.failures.length) appendMobileDataFailureTiles(inner, segment.failures)
       galleryState.items = itemsFromCards(cards)
       if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
-        applyHomeMasonry(inner, cards)
-        void hydrateBrickCards(cards).then(function () {
-          if (inner.isConnected) applyHomeMasonry(inner)
+        return applyHomeMasonry(inner, cards).then(function () {
+          return hydrateBrickCards(cards).then(function () {
+            if (inner.isConnected) return applyHomeMasonry(inner)
+          })
         })
       } else {
         warmBrickCardImages(segment.items)
         wireBrickVoteBoxes(cards)
         wireMobileLabelCards(cards)
         refreshPortraitLightbox()
-        void hydrateBrickCards(cards)
+        return hydrateBrickCards(cards)
       }
     }
 
@@ -7640,14 +7647,26 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         }
         syncCollectionChrome()
         if (restoreState && restoreState.anchorGene) {
-          var restoreGene = String(restoreState.anchorGene).toUpperCase()
-          window.requestAnimationFrame(function () {
-            var card = feed.querySelector('[data-icono-symbol="' + CSS.escape(restoreGene) + '"]')
-            if (!card) return
-            var delta = card.getBoundingClientRect().top - Number(restoreState.anchorTop || 0)
-            if (Math.abs(delta) > 0.5) window.scrollBy(0, delta)
-          })
+          var pendingRestore = {
+            gene: String(restoreState.anchorGene).toUpperCase(),
+            top: Number(restoreState.anchorTop || 0),
+          }
           restoreState = null
+          Promise.resolve(segment.mountReady).then(function () {
+            var correctAnchor = function () {
+              if (disposed) return
+              var card = feed.querySelector(
+                '[data-icono-symbol="' + CSS.escape(pendingRestore.gene) + '"]',
+              )
+              if (!card) return
+              var delta = card.getBoundingClientRect().top - pendingRestore.top
+              if (Math.abs(delta) > 0.5) window.scrollBy(0, delta)
+            }
+            window.requestAnimationFrame(function () {
+              correctAnchor()
+              window.requestAnimationFrame(correctAnchor)
+            })
+          })
         }
       },
       onStateChange: updateFeedHistory,

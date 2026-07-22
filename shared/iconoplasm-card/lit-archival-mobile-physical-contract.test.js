@@ -968,7 +968,10 @@ test("same-session archive return restores an exact virtual segment without cach
     /feedController\.reset\(\{ offset: startOffset, cursor: startCursor, page: startPage \}\)/,
   )
   assert.match(app, /restoreState && restoreState\.anchorGene/)
-  assert.match(app, /getBoundingClientRect\(\)\.top - Number\(restoreState\.anchorTop/)
+  assert.match(
+    app,
+    /Promise\.resolve\(segment\.mountReady\)[\s\S]*getBoundingClientRect\(\)\.top - pendingRestore\.top/,
+  )
 })
 
 test("mobile card uses the larger B-483 type scale instead of the tiny draft scale", async () => {
