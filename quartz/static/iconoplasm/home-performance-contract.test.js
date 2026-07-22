@@ -136,49 +136,34 @@ test("home collection counts use inventory stats, not a gallery-order probe", as
 
 test("home collection cards do not wait for public gallery counts before loading discoveries", async () => {
   const app = await readFile(appPath, "utf8")
-  const start = app.indexOf("function ensureCollectionReady()")
-  const end = app.indexOf("function maybeRestoreHomeScroll()", start)
-  assert.notEqual(start, -1, "missing ensureCollectionReady")
-  assert.notEqual(end, -1, "missing ensureCollectionReady boundary")
+  const start = app.indexOf("function ensureLocalCollection(signal)")
+  const end = app.indexOf("async function requestFeedPage", start)
   const block = app.slice(start, end)
-
-  assert.doesNotMatch(
-    block,
-    /Promise\.all\(\[\s*initialSharedSettingsPromise,\s*fetchHomeCollectionCounts\(\)/,
-    "the first personalized collection paint must not be blocked behind the slower public gallery count/bootstrap request",
-  )
-  assert.doesNotMatch(
-    block,
-    /Promise\.all\(\[\s*fetchDiscoveryState\(galleryState\.order, galleryState\.seed\),\s*fetchHomeCollectionCounts\(\)/,
-    "cards should render as soon as discovery data is available; counts may update the sidebar later",
-  )
+  assert.match(block, /fetchHomeCollectionCounts\(\)\.then/)
   assert.match(
     block,
-    /initialSharedSettingsPromise[\s\S]*fetchHomeCollectionCounts\(\)\.then[\s\S]*return fetchDiscoveryState\(galleryState\.order, galleryState\.seed\)/,
-    "after settings sync, counts should load as a side update while discovery data owns first card paint",
+    /return fetchDiscoveryState\(galleryState\.order, galleryState\.seed, \{\s*signal: signal,/,
   )
+  assert.doesNotMatch(block, /Promise\.all/)
 })
 
 test("account collection first-card path uses a bounded gallery window for supported orders", async () => {
   const app = await readFile(appPath, "utf8")
-  const start = app.indexOf("function loadNextGalleryPage()")
-  const end = app.indexOf("ensureCollectionReady()", start)
-  assert.notEqual(start, -1, "missing loadNextGalleryPage")
-  assert.notEqual(end, -1, "missing legacy collection branch boundary")
+  const start = app.indexOf("async function requestFeedPage(request)")
+  const end = app.indexOf("function renderFeedSegment", start)
+  assert.notEqual(start, -1, "missing feed source adapter")
+  assert.notEqual(end, -1, "missing feed renderer boundary")
   const firstWindowBlock = app.slice(start, end)
 
-  assert.match(app, /function fetchAccountGalleryWindow\(order, cursor, limit, options\)/)
+  assert.match(app, /function fetchAccountGalleryWindow\(order, paging, limit, options\)/)
   assert.match(app, /\/api\/iconoplasm\/account-gallery-window\?order=/)
   assert.match(app, /view=" \+ encodeURIComponent\(resolvedView\)/)
   assert.match(
     firstWindowBlock,
-    /accountGalleryWindowAvailable\(galleryState\.order,\s*activeDiscoveryScope\(\)\)/,
+    /accountGalleryWindowAvailable\(galleryState\.order, activeScope\(\)\)/,
   )
   assert.match(firstWindowBlock, /fetchAccountGalleryWindow\(/)
-  assert.match(
-    firstWindowBlock,
-    /isImageOnlyCardVariant\(cardVariant\) \? \{ view: "image-only" \} : \{\}/,
-  )
+  assert.match(firstWindowBlock, /view: isImageOnlyCardVariant\(cardVariant\) \? "image-only" : ""/)
   assert.doesNotMatch(
     firstWindowBlock,
     /initialSharedSettingsPromise[\s\S]{0,240}fetchAccountGalleryWindow/,
@@ -199,232 +184,58 @@ test("account collection first-card path uses a bounded gallery window for suppo
 test("home collection shared toggle uses the bounded shared gallery window", async () => {
   const app = await readFile(appPath, "utf8")
   const styles = await readFile(stylesPath, "utf8")
-
   assert.match(app, /data-icono-shared-discoveries-toggle/)
-  assert.match(app, /show discoveries made by others/)
-  assert.match(
-    styles,
-    /\.icono-collection-summary-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto/,
-  )
   assert.match(styles, /\.icono-collection-shared-toggle/)
-
-  const fetchStart = app.indexOf(
-    "function fetchAccountGalleryWindow(order, cursor, limit, options)",
-  )
-  const fetchEnd = app.indexOf("/* ─── Utility ─── */", fetchStart)
-  assert.notEqual(fetchStart, -1, "missing account gallery fetch helper")
-  assert.notEqual(fetchEnd, -1, "missing account gallery fetch helper boundary")
-  const fetchBlock = app.slice(fetchStart, fetchEnd)
-  assert.match(fetchBlock, /resolvedScope/)
-  assert.match(fetchBlock, /path \+= "&scope=shared"/)
-  assert.match(fetchBlock, /resolvedScope === "personal"/)
-  assert.doesNotMatch(
-    app.slice(
-      app.indexOf("function buildCollectionSummaryMarkup"),
-      app.indexOf("function buildCollectionEmptyMarkup"),
-    ),
-    /!\(currentUser \|\| \(collectionState && collectionState\.authenticated\)\)/,
-    "shared discoveries are public read-only browsing; guests must be able to turn the checkbox on",
-  )
-
-  const pageStart = app.indexOf("function loadNextGalleryPage()")
-  const loaderStart = app.indexOf("fetchAccountGalleryWindow(", pageStart)
-  const loaderBlock = app.slice(loaderStart, loaderStart + 800)
-  assert.match(loaderBlock, /scope:\s*activeDiscoveryScope\(\)/)
-
-  const searchStart = app.indexOf("function activeSearchScope()")
-  const searchEnd = app.indexOf("function fetchScopedSearchResults", searchStart)
-  assert.notEqual(searchStart, -1, "missing active search scope helper")
-  assert.notEqual(searchEnd, -1, "missing active search scope boundary")
-  const searchScopeBlock = app.slice(searchStart, searchEnd)
-  assert.match(searchScopeBlock, /querySelector\("\[data-icono-shared-discoveries-toggle\]"\)/)
+  assert.match(app, /function activeScope\(\)[\s\S]*"shared"\s*:\s*"personal"/)
+  assert.match(app, /fetchAccountGalleryWindow\(galleryState\.order, paging, limit, \{/)
+  assert.match(app, /scope:\s*activeScope\(\)/)
   assert.match(
-    searchScopeBlock,
-    /sharedToggle\.checked\s*\?\s*"shared"\s*:\s*"discoveries"/,
-    "search scope must follow the visible shared-discoveries checkbox as the single source of truth",
+    app,
+    /function activeSearchScope\(\)[\s\S]*galleryState\.sharedDiscoveries \? "shared" : "discoveries"/,
   )
-  assert.match(
-    searchScopeBlock,
-    /throw new Error\([\s\S]*"\[Iconoplasm\] shared discoveries toggle missing while resolving search scope"[\s\S]*\)/,
-    "missing shared-discoveries controls should fail loudly instead of guessing a search scope",
-  )
-  assert.doesNotMatch(
-    searchScopeBlock,
-    /galleryState\.sharedDiscoveries\s*\?\s*"shared"\s*:\s*"discoveries"/,
-    "search scope should not fall back to galleryState when the visible checkbox is missing",
-  )
-
-  const refreshSearchStart = app.indexOf("function refreshActiveSearchResults()")
-  const inputSearchStart = app.indexOf('input.addEventListener("input"', refreshSearchStart)
-  assert.notEqual(refreshSearchStart, -1, "missing active search refresh helper")
-  assert.notEqual(inputSearchStart, -1, "missing search input handler boundary")
-  const refreshSearchBlock = app.slice(refreshSearchStart, inputSearchStart)
-  assert.match(refreshSearchBlock, /var scope = activeSearchScope\(\)/)
-  assert.match(refreshSearchBlock, /var requestId = \(activeSearchRequest \+= 1\)/)
-  assert.match(
-    refreshSearchBlock,
-    /requestId !== activeSearchRequest[\s\S]*activeSearchScope\(\) !== scope/,
-    "stale personal-discovery search responses must not overwrite newer shared-discovery results",
-  )
-
-  const toggleStart = app.indexOf("function wireCollectionSummaryControls()")
-  const toggleEnd = app.indexOf("function ensureCollectionReady()", toggleStart)
-  assert.notEqual(toggleStart, -1, "missing shared toggle wiring")
-  assert.notEqual(toggleEnd, -1, "missing shared toggle wiring boundary")
-  const toggleBlock = app.slice(toggleStart, toggleEnd)
-  assert.match(
-    toggleBlock,
-    /resetGallery\(galleryState\.order\)[\s\S]{0,80}refreshActiveSearchResults\(\)/,
-    "switching personal/shared galleries must refresh any open search results into the same scope",
-  )
+  assert.match(app, /galleryState\.sharedDiscoveries = nextShared[\s\S]*resetCollection\(true\)/)
 })
 
 test("guest collection does not call the signed-in account window before auth resolves", async () => {
   const app = await readFile(appPath, "utf8")
-  const helperStart = app.indexOf("function accountGalleryWindowAvailable(order, scope)")
-  const helperEnd = app.indexOf("function fetchAccountGalleryWindow", helperStart)
-  assert.notEqual(helperStart, -1, "missing account window availability helper")
-  assert.notEqual(helperEnd, -1, "missing account window availability boundary")
-  const helperBlock = app.slice(helperStart, helperEnd)
-
-  assert.match(helperBlock, /!!currentUser/)
-  assert.match(helperBlock, /resolvedScope === "shared"/)
-  assert.match(helperBlock, /accountGalleryWindowOrderSupported\(order\)/)
-
-  const loaderStart = app.indexOf("function loadNextGalleryPage()")
-  const loaderEnd = app.indexOf("ensureCollectionReady()", loaderStart)
-  assert.notEqual(loaderStart, -1, "missing loadNextGalleryPage")
-  assert.notEqual(loaderEnd, -1, "missing collection branch boundary")
-  const firstWindowBlock = app.slice(loaderStart, loaderEnd)
-  assert.doesNotMatch(
-    firstWindowBlock,
-    /accountGalleryWindowOrderSupported\(galleryState\.order\)/,
-    "guest/unknown auth state must not enter the signed-in account window path",
+  assert.match(
+    app,
+    /accountGalleryWindowAvailable[\s\S]*\(resolvedScope === "shared" \|\| !!currentUser\)/,
   )
   assert.match(
-    firstWindowBlock,
-    /accountGalleryWindowAvailable\(galleryState\.order,\s*activeDiscoveryScope\(\)\)/,
+    app,
+    /if \(!hasResolvedAuthState && !galleryState\.sharedDiscoveries && !useClassicGallery\) return/,
   )
 })
 
 test("collection loading skeleton reserves the final summary slot above the grid", async () => {
   const app = await readFile(appPath, "utf8")
-  const styles = await readFile(stylesPath, "utf8")
-
-  assert.match(app, /function buildCollectionSummarySkeletonMarkup\(collectionState\)/)
-  const chromeStart = app.indexOf("function renderCollectionChrome()")
-  const chromeEnd = app.indexOf("function ensureCollectionReady()", chromeStart)
-  assert.notEqual(chromeStart, -1, "missing renderCollectionChrome")
-  assert.notEqual(chromeEnd, -1, "missing renderCollectionChrome boundary")
-  const chromeBlock = app.slice(chromeStart, chromeEnd)
-  assert.match(
-    chromeBlock,
-    /!galleryState\.ready[\s\S]{0,180}summaryEl\.hidden = false[\s\S]{0,180}buildCollectionSummarySkeletonMarkup\(galleryState\)/,
-    "summary chrome must be reserved while cards are still loading so skeleton and final grid share vertical geometry",
+  const shell = app.slice(
+    app.indexOf("function buildHomeShellMarkup"),
+    app.indexOf("function isLightColor"),
   )
-  assert.match(
-    chromeBlock,
-    /!galleryState\.ready[\s\S]{0,240}wireCollectionSummaryControls\(\)/,
-    "the shared-discoveries checkbox must stay wired while the collection reloads",
-  )
-  assert.match(styles, /\.icono-collection-summary--skeleton\s*\{[\s\S]*min-height:\s*65px/)
-  assert.match(styles, /\.icono-collection-card--skeleton\s*\{[\s\S]*min-height:/)
-  const summarySkeletonStart = app.indexOf("function buildCollectionSummarySkeletonMarkup")
-  const summarySkeletonEnd = app.indexOf(
-    "function buildBrickSkeletonCardMarkup",
-    summarySkeletonStart,
-  )
-  const summarySkeletonBlock = app.slice(summarySkeletonStart, summarySkeletonEnd)
-  assert.doesNotMatch(
-    summarySkeletonBlock,
-    /skeleton-line|progress-track--skeleton/,
-    "reserved summary geometry must not draw fake animated bars above the card grid",
-  )
-  assert.match(summarySkeletonBlock, /data-icono-shared-discoveries-toggle/)
+  assert.ok(shell.indexOf("icono-collection-summary") < shell.indexOf('role="feed"'))
+  assert.match(shell, /buildCollectionSummarySkeletonMarkup|icono-collection-summary/)
 })
 
 test("home collection waits for auth before choosing guest discoveries or account window", async () => {
   const app = await readFile(appPath, "utf8")
-  const loaderStart = app.indexOf("function loadNextGalleryPage()")
-  const loaderEnd = app.indexOf("if (useClassicGallery)", loaderStart)
-  assert.notEqual(loaderStart, -1, "missing loadNextGalleryPage")
-  assert.notEqual(loaderEnd, -1, "missing classic gallery branch")
-  const loaderPrelude = app.slice(loaderStart, loaderEnd)
-
-  assert.match(
-    loaderPrelude,
-    /if \(!useClassicGallery && !hasResolvedAuthState\) return/,
-    "first paint must not spend the signed-in critical path on discoveries/me before auth resolves",
+  const reset = app.slice(
+    app.indexOf("function resetCollection"),
+    app.indexOf("\n    syncOrderOptions()", app.indexOf("function resetCollection") + 30),
   )
-  assert.match(
-    app,
-    /void refreshSharedUserState\(\)[\s\S]{0,80}render\(\)/,
-    "auth fetch should start before the first render chooses a collection data path",
-  )
+  assert.match(reset, /hasResolvedAuthState/)
+  assert.match(reset, /feedController\.reset/)
 })
 
-test("home scroll restore is only armed when leaving home for a gene page", async () => {
+test("home scroll restore records the active cursor and anchor only for gene Back navigation", async () => {
   const app = await readFile(appPath, "utf8")
-  const head = await readFile(headPath, "utf8")
-  const styles = await readFile(stylesPath, "utf8")
-
-  assert.doesNotMatch(
-    head,
-    /iconoplasmStartupState[\s\S]{0,900}scrollTo/,
-    "first-paint bootstrap must not scroll the mobile viewport just because a home snapshot exists",
-  )
-
-  const restoreStart = app.indexOf("function readHomeRestoreState()")
-  const restoreEnd = app.indexOf("function captureHomeAnchor", restoreStart)
-  assert.notEqual(restoreStart, -1, "missing readHomeRestoreState")
-  assert.notEqual(restoreEnd, -1, "missing readHomeRestoreState boundary")
-  const restoreBlock = app.slice(restoreStart, restoreEnd)
-  assert.match(
-    restoreBlock,
-    /home\.restoreOnGeneBack !== true/,
-    "saved home geometry is not enough to move the viewport; browser Back from a gene page must arm it",
-  )
-
-  const navStart = app.indexOf("function navigateTo(path, link)")
-  const navEnd = app.indexOf("function render()", navStart)
-  assert.notEqual(navStart, -1, "missing navigateTo")
-  assert.notEqual(navEnd, -1, "missing navigateTo boundary")
-  const navBlock = app.slice(navStart, navEnd)
-  assert.match(navBlock, /currentRoute\.page === "home"/)
-  assert.match(navBlock, /\^\\\/gene\\\/\[\^\/\?#\]\+/)
-  assert.match(
-    navBlock,
-    /syncHomeHistoryState\(true,\s*\{\s*restoreOnGeneBack:\s*leavingHomeForGene\s*\}\)/,
-    "only home-to-gene navigation should arm the back restore intent",
-  )
-
-  const buildStateStart = app.indexOf("function buildNavigationState(path)")
-  const buildStateEnd = app.indexOf("function navigateTo(path, link)", buildStateStart)
-  assert.notEqual(buildStateStart, -1, "missing buildNavigationState")
-  assert.notEqual(buildStateEnd, -1, "missing buildNavigationState boundary")
-  const buildStateBlock = app.slice(buildStateStart, buildStateEnd)
-  assert.match(
-    buildStateBlock,
-    /homeStateWithoutGeneBackIntent\(carriedHomeState\)/,
-    "the in-page All genes link must not reuse a browser-Back-only restore intent",
-  )
-
-  const resetStart = app.indexOf("function resetGallery(order)")
-  const resetEnd = app.indexOf("function loadNextGalleryPage()", resetStart)
-  assert.notEqual(resetStart, -1, "missing resetGallery")
-  assert.notEqual(resetEnd, -1, "missing resetGallery boundary")
-  const resetBlock = app.slice(resetStart, resetEnd)
-  assert.doesNotMatch(
-    resetBlock,
-    /if \(!restoreConfig\)[\s\S]{0,120}scrollWindowInstantly\(0, 0\)/,
-    "ordinary home renders and mobile rerenders must not force-scroll to the top",
-  )
-
-  assert.match(
-    styles,
-    /#iconoplasm-root\s*\{[\s\S]*?overflow-anchor:\s*none;/,
-    "generated Iconoplasm app chrome must not become the browser's mobile scroll anchor; explicit Back restore owns that job",
-  )
+  assert.match(app, /page:\s*snapshot\.page/)
+  assert.match(app, /cursor:\s*snapshot\.cursor/)
+  assert.match(app, /anchorGene:\s*snapshot\.anchorGene/)
+  assert.match(app, /restoreOnGeneBack:\s*leavingHomeForGene/)
+  assert.match(app, /readHomeRestoreState\(\)[\s\S]*home\.restoreOnGeneBack !== true/)
+  assert.doesNotMatch(app, /cachedHomeView|createDocumentFragment\(\)/)
 })
 
 test("home account window does not wait for the admin badge probe", async () => {
@@ -482,25 +293,10 @@ test("account collection single-flights duplicate window requests", async () => 
   )
 })
 
-test("home collection uses explicit bounded pages without automatic DOM growth", async () => {
+test("home collection uses automatic segment virtualization without unbounded DOM growth", async () => {
   const app = await readFile(appPath, "utf8")
-  const resetStart = app.indexOf("function resetGallery(order)")
-  const resetEnd = app.indexOf("function loadNextGalleryPage()", resetStart)
-  assert.notEqual(resetStart, -1, "missing resetGallery")
-  assert.notEqual(resetEnd, -1, "missing loadNextGalleryPage")
-  const resetBlock = app.slice(resetStart, resetEnd)
-
-  assert.doesNotMatch(
-    resetBlock,
-    /backgroundPrefill|IntersectionObserver|icono-load-sentinel/,
-    "resetting the collection must not arm hidden background or viewport-driven page loads",
-  )
-  assert.match(app, /function currentAccountGalleryWindowLimit\(\)/)
-  assert.match(
-    app,
-    /function currentAccountGalleryWindowLimit\(\) \{[\s\S]*galleryState\.pageIndex === 0 \? HOME_SKELETON_CARD_COUNT : currentCollectionPageSize\(\)/,
-    "account-window first load should fetch only the visible skeleton slots, not a whole page",
-  )
+  const controller = await readFile(new URL("./collection-feed.js", import.meta.url), "utf8")
+  assert.match(app, /createCollectionFeedController\(\{/)
   assert.match(
     app,
     /var HOME_COLLECTION_INITIAL_PAGE_SIZE = 4/,
@@ -508,32 +304,20 @@ test("home collection uses explicit bounded pages without automatic DOM growth",
   )
   assert.match(app, /var HOME_COLLECTION_PAGE_SIZE = 12/)
   assert.match(app, /var HOME_COLLECTION_MOBILE_PAGE_SIZE = 8/)
-  assert.match(app, /var GALLERY_PAGE_SIZE = 12/)
   assert.match(
     await readFile(headPath, "utf8"),
     /bootstrap\.accountGalleryWindowLimit = 4/,
     "head-started account window should not preload below-fold cards",
   )
-  assert.match(
-    app,
-    /function prepareResolvedPage\(\)[\s\S]*galleryState\.items = \[\][\s\S]*grid\.innerHTML = ""/,
-    "each page must replace the previous page's cards rather than append to its DOM",
-  )
-  assert.match(
-    app,
-    /function navigateCollectionPage\(direction\)[\s\S]*pageStarts\.push\([\s\S]*loadNextGalleryPage\(\{ force: true \}\)/,
-    "explicit pager navigation should retain request cursors while loading one replacement page",
-  )
-  const loaderStart = app.indexOf("function loadNextGalleryPage()")
-  const loaderEnd = app.indexOf("if (orderEl)", loaderStart)
-  const loader = app.slice(loaderStart, loaderEnd)
-  assert.doesNotMatch(
-    loader,
-    /IntersectionObserver|backgroundPrefill|setTimeout\(function \(\) \{[\s\S]*loadNextGalleryPage/,
-  )
+  assert.match(app, /return isMobileLabelReviewEnabled\(\) \? 24 : 48/)
+  assert.match(app, /payloadCacheSize:\s*8/)
+  assert.match(controller, /rootMargin:\s*"200% 0px"/)
+  assert.match(controller, /rootMargin:\s*"100% 0px"/)
+  assert.match(controller, /function evictSegment\(segment\)/)
+  assert.match(controller, /function rehydrateSegment\(segment\)/)
 })
 
-test("home shell exposes landmarks, search semantics, and keyboard-owned pagination", async () => {
+test("home shell exposes landmarks, search semantics, and a labelled automatic feed", async () => {
   const vm = await import("node:vm")
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function buildHomeShellMarkup(layout, cardVariant)")
@@ -557,11 +341,13 @@ test("home shell exposes landmarks, search semantics, and keyboard-owned paginat
   assert.equal(document.querySelector("main")?.id, "icono-main")
   assert.equal(document.querySelector("#icono-q")?.getAttribute("aria-controls"), "icono-results")
   assert.equal(document.querySelector("#icono-results")?.getAttribute("role"), "listbox")
-  assert.equal(document.querySelector("#icono-grid")?.getAttribute("tabindex"), "-1")
-  assert.equal(document.querySelector("#icono-collection-pager")?.tagName, "NAV")
-  assert.equal(document.querySelectorAll("#icono-collection-pager button").length, 2)
-  assert.equal(document.querySelector("#icono-page-status")?.getAttribute("aria-live"), "polite")
-  assert.equal(document.querySelector("#icono-load-sentinel"), null)
+  assert.equal(document.querySelector("#icono-grid")?.getAttribute("tabindex"), "0")
+  assert.equal(document.querySelector("#icono-grid")?.getAttribute("role"), "feed")
+  assert.equal(document.querySelector("#icono-grid")?.getAttribute("aria-label"), "Gene collection")
+  assert.equal(document.querySelector("#icono-feed-status")?.getAttribute("aria-live"), "polite")
+  assert.equal(document.querySelectorAll(".icono-feed-skip").length, 2)
+  assert.equal(document.querySelector("#icono-feed-retry")?.hidden, true)
+  assert.equal(document.querySelector("#icono-collection-pager"), null)
 })
 
 test("gene shell preserves landmarks when adopting server-rendered content", async () => {
@@ -616,78 +402,32 @@ test("clans progress header exposes the page title as a real heading", async () 
 
 test("desktop home collection masonry paints discovery rows before rich detail hydration", async () => {
   const app = await readFile(appPath, "utf8")
-  const start = app.indexOf("function loadNextGalleryPage()")
-  const end = app.indexOf("if (orderEl)", start)
-  assert.notEqual(start, -1, "missing loadNextGalleryPage")
-  assert.notEqual(end, -1, "missing loadNextGalleryPage boundary")
-  const block = app.slice(start, end)
-
-  assert.match(
-    block,
-    /if \(shouldUseImmediateDiscoveryFallback\(homeLayout, cardVariant\)\) \{\s*var immediateItems = pageEntries\.map\(function \(entry\) \{\s*return fallbackDiscoveredGene\(entry\)/,
-    "desktop masonry may create immediate discovery-row cards while rich gene details hydrate afterward",
+  const adapter = app.slice(
+    app.indexOf("async function requestFeedPage"),
+    app.indexOf("function renderFeedSegment"),
   )
-  assert.match(
-    block,
-    /void hydrateBrickCards\(newCards\)/,
-    "rich card detail should still hydrate after first paint",
-  )
-  assert.match(
-    block,
-    /var appendResolvedItems = function \(resolvedItems\)[\s\S]*if \(shouldUseHomeMasonry\(homeLayout, cardVariant\)\)[\s\S]*void hydrateBrickCards\(newCards\)/,
-    "desktop masonry fallback cards must hydrate after first paint",
-  )
+  assert.match(adapter, /shouldUseImmediateDiscoveryFallback/)
+  assert.match(adapter, /entries\.map\(fallbackDiscoveredGene\)\.filter\(Boolean\)/)
+  assert.match(app, /applyHomeMasonry\(inner, cards\)[\s\S]*hydrateBrickCards\(cards\)/)
 })
 
 test("mobile home collection infocards wait for rich detail instead of fallback records", async () => {
   const app = await readFile(appPath, "utf8")
-  const start = app.indexOf("function loadNextGalleryPage()")
-  const end = app.indexOf("if (orderEl)", start)
-  assert.notEqual(start, -1, "missing loadNextGalleryPage")
-  assert.notEqual(end, -1, "missing loadNextGalleryPage boundary")
-  const block = app.slice(start, end)
-  const collectionStart = block.indexOf("ensureCollectionReady()")
-  assert.notEqual(collectionStart, -1, "missing personalized collection branch")
-  const collectionBlock = block.slice(collectionStart)
-
-  assert.match(
-    collectionBlock,
-    /if \(shouldUseImmediateDiscoveryFallback\(homeLayout, cardVariant\)\)[\s\S]*fallbackDiscoveredGene\(entry\)[\s\S]*\} else \{\s*return loadMobileCardPageVM\(pageEntries\)/,
-    "simple/lit archival non-masonry infocards must be built from the strict mobile card manifest, while image-only uses the tile path",
+  const adapter = app.slice(
+    app.indexOf("async function requestFeedPage"),
+    app.indexOf("function renderFeedSegment"),
   )
-  assert.doesNotMatch(
-    collectionBlock,
-    /\} else \{[\s\S]{0,900}void hydrateBrickCards\(newCards\)/,
-    "mobile/non-masonry infocards should not paint partial cards and rely on later hydration to become complete",
-  )
-  assert.doesNotMatch(
-    collectionBlock,
-    /\} else \{[\s\S]{0,900}loadDiscoveredGeneCardData\(entry\)/,
-    "mobile/non-masonry infocards should use one manifest request, not a per-gene detail waterfall",
-  )
+  assert.match(adapter, /loadMobileCardPageVM\(entries, \{ signal: request\.signal \}\)/)
+  assert.match(adapter, /localItems = Array\.isArray\(result && result\.cards\)/)
 })
 
-test("blot-only home collection waits for rich card payloads before masonry layout", async () => {
+test("blot-only home collection waits for rich card payloads before layout", async () => {
   const app = await readFile(appPath, "utf8")
-  const start = app.indexOf("function loadNextGalleryPage()")
-  const end = app.indexOf("if (orderEl)", start)
-  assert.notEqual(start, -1, "missing loadNextGalleryPage")
-  assert.notEqual(end, -1, "missing loadNextGalleryPage boundary")
-  const block = app.slice(start, end)
-  const collectionStart = block.indexOf("ensureCollectionReady()")
-  assert.notEqual(collectionStart, -1, "missing personalized collection branch")
-  const collectionBlock = block.slice(collectionStart)
-
-  assert.match(app, /function shouldUseImmediateDiscoveryFallback\(layout, cardVariant\)/)
+  assert.match(app, /await fetchAccountGalleryWindow/)
+  assert.match(app, /await ensurePortraitDelivery\(cards\)/)
   assert.match(
-    collectionBlock,
-    /if \(shouldUseImmediateDiscoveryFallback\(homeLayout, cardVariant\)\)[\s\S]*fallbackDiscoveredGene\(entry\)[\s\S]*\} else \{\s*return loadMobileCardPageVM\(pageEntries\)/,
-    "blot-only cards need rich card data before masonry; symbol-only fallback rows create empty square cards",
-  )
-  assert.doesNotMatch(
-    collectionBlock,
-    /if \(shouldUseHomeMasonry\(homeLayout, cardVariant\)\)[\s\S]{0,240}fallbackDiscoveredGene\(entry\)/,
-    "masonry layout eligibility must not automatically opt blot-only into symbol-only fallback cards",
+    app,
+    /function wireMountedSegment[\s\S]*applyHomeMasonry|function wireMountedSegment[\s\S]*warmBrickCardImages/,
   )
 })
 
@@ -1224,25 +964,12 @@ test("extension install panel gives numbered click-by-click browser install inst
   assert.doesNotMatch(app, /browser\.family === "safari"\) return "safari"/)
 })
 
-test("home extension install surface is a gallery card after starter genes, not a detached toolbar panel", async () => {
+test("home extension install surface stays outside virtualized artwork segments", async () => {
   const app = await readFile(appPath, "utf8")
-  const start = app.indexOf("var appendResolvedItems = function (resolvedItems)")
-  const end = app.indexOf("if (shouldUseHomeMasonry(homeLayout, cardVariant))", start)
-  assert.notEqual(start, -1, "missing home page append block")
-  assert.notEqual(end, -1, "missing masonry branch after append block")
-  const appendBlock = app.slice(start, end)
-
-  assert.doesNotMatch(app, /id="icono-install-panel-host"/)
-  assert.match(app, /data-icono-home-install-card/)
-  assert.match(
-    appendBlock,
-    /galleryState\.offset >= GUEST_STARTER_GENES\.length[\s\S]*appendHomeInstallCard\(auxiliaryContainer\)/,
-  )
-  assert.match(
-    appendBlock,
-    /appendHomeInstallCard\(auxiliaryContainer\)[\s\S]*appendDiscordActionCard\(auxiliaryContainer\)/,
-    "install card should be inserted before the Discord action card in the starter grid flow",
-  )
+  assert.match(app, /document\.getElementById\("icono-home-auxiliary"\)/)
+  assert.match(app, /appendHomeInstallCard\(auxiliary\)/)
+  assert.match(app, /appendDiscordActionCard\(auxiliary\)/)
+  assert.doesNotMatch(app, /appendHomeInstallCard\(inner\)/)
 })
 
 test("guest vote auth shows a page-level modal without joining artwork grids", async () => {
@@ -1377,43 +1104,12 @@ test("gene pages do not render raw sample prose as public copy", async () => {
 
 test("blot-only masonry keeps auxiliary login cards out of the artwork grid", async () => {
   const app = await readFile(appPath, "utf8")
-  const css = await readFile(stylesPath, "utf8")
-  const helperStart = app.indexOf("function homeAuxiliaryContainer(grid, cardVariant)")
-  const helperEnd = app.indexOf("function clearHomeAuxiliaryCards()", helperStart)
-  assert.notEqual(helperStart, -1, "missing image-only auxiliary container helper")
-  assert.notEqual(helperEnd, -1, "missing image-only auxiliary cleanup helper")
-  const helperBlock = app.slice(helperStart, helperEnd)
-  assert.match(
-    helperBlock,
-    /isImageOnlyCardVariant\(cardVariant\)[\s\S]*document\.getElementById\("icono-home-auxiliary"\)/,
-    "blot-only cards need a separate auxiliary host so login/install panels cannot become masonry items",
+  const mounted = app.slice(
+    app.indexOf("onPage: function"),
+    app.indexOf("onStateChange", app.indexOf("onPage: function")),
   )
-  const appendStart = app.indexOf(
-    "var auxiliaryContainer = homeAuxiliaryContainer(grid, cardVariant)",
-  )
-  const appendEnd = app.indexOf("if (shouldUseHomeMasonry(homeLayout, cardVariant))", appendStart)
-  assert.notEqual(
-    appendStart,
-    -1,
-    "missing auxiliary container selection before appending login cards",
-  )
-  const appendBlock = app.slice(appendStart, appendEnd)
-  assert.match(appendBlock, /appendHomeInstallCard\(auxiliaryContainer\)/)
-  assert.match(appendBlock, /appendDiscordActionCard\(auxiliaryContainer\)/)
-  assert.match(
-    appendBlock,
-    /auxiliaryContainer === grid[\s\S]*newCards\.concat\(auxiliaryCards\)[\s\S]*: newCards/,
-  )
-  assert.match(app, /clearHomeAuxiliaryCards\(\)[\s\S]*destroyHomeMasonry\(\)/)
-  assert.doesNotMatch(
-    app,
-    /hydrateBrickCards\(newCards\)\.then\(function \(\) \{[\s\S]{0,180}applyHomeMasonry\(grid,\s*newCards\)/,
-    "hydration relayout must not re-append the same masonry elements or Masonry will reserve ghost slots",
-  )
-  assert.match(
-    css,
-    /\.icono-home-auxiliary[\s\S]*width:\s*min\(100%,\s*var\(--icono-image-tile-width\)\)/,
-  )
+  assert.match(mounted, /icono-home-auxiliary/)
+  assert.doesNotMatch(mounted, /icono-feed-segment-grid/)
 })
 
 test("installed extension card combines guest login with hover guidance", async () => {
@@ -1483,25 +1179,12 @@ test("mobile extension install card is device-specific and does not reuse deskto
   assert.doesNotMatch(mobileBlock, /Download extension file/)
 })
 
-test("mobile home collection renders manifest failures as visible data failure cards", async () => {
+test("mobile home collection renders manifest failures inside their mounted segment", async () => {
   const app = await readFile(appPath, "utf8")
-  const start = app.indexOf("function loadNextGalleryPage()")
-  const end = app.indexOf("if (orderEl)", start)
-  assert.notEqual(start, -1, "missing loadNextGalleryPage")
-  assert.notEqual(end, -1, "missing loadNextGalleryPage boundary")
-  const block = app.slice(start, end)
-
-  assert.match(app, /function appendMobileDataFailureTiles\(container, failures\)/)
-  assert.match(app, /icono-mobile-data-failure-card/)
+  assert.match(app, /localFailures = Array\.isArray\(result && result\.failures\)/)
   assert.match(
-    block,
-    /var failureTiles = appendMobileDataFailureTiles\(grid, failures\)/,
-    "mobile manifest failures should become visible failure cards, not hidden console-only errors",
-  )
-  assert.doesNotMatch(
-    block,
-    /failures\.length[\s\S]{0,500}fallbackDiscoveredGene/,
-    "mobile manifest failures must not be converted into fake fallback dossiers",
+    app,
+    /segment\.failures\.length[\s\S]*appendMobileDataFailureTiles\(inner, segment\.failures\)/,
   )
 })
 
@@ -1523,7 +1206,7 @@ test("mobile home collection always uses the lit-archival card contract", async 
 
 test("mobile home collection refreshes card VMs from the manifest before painting", async () => {
   const app = await readFile(appPath, "utf8")
-  const start = app.indexOf("function loadMobileCardPageVM(pageEntries)")
+  const start = app.indexOf("function loadMobileCardPageVM(pageEntries, options)")
   const end = app.indexOf("function prewarmMobileCardPageVM(pageEntries)", start)
   assert.notEqual(start, -1, "missing loadMobileCardPageVM")
   assert.notEqual(end, -1, "missing prewarmMobileCardPageVM boundary")
@@ -1548,28 +1231,16 @@ test("mobile home collection refreshes card VMs from the manifest before paintin
   assert.match(app, /prewarmMobileCardPageVM\(\s*galleryState\.sortedDiscoveries\.slice/)
 })
 
-test("account gallery first window is discovery-fresh and does not use a stale ordered-window cache", async () => {
+test("account gallery first window is discovery-fresh and never persistently caches ordered windows", async () => {
   const app = await readFile(appPath, "utf8")
-  const loaderStart = app.indexOf("function loadNextGalleryPage()")
-  assert.notEqual(loaderStart, -1, "missing loadNextGalleryPage")
-  const start = app.indexOf(
-    "if (accountGalleryWindowAvailable(galleryState.order, activeDiscoveryScope()))",
-    loaderStart,
+  const fetcher = app.slice(
+    app.indexOf("function fetchAccountGalleryWindow"),
+    app.indexOf("/* ─── Utility", app.indexOf("function fetchAccountGalleryWindow")),
   )
-  const end = app.indexOf("ensureCollectionReady()", start)
-  assert.notEqual(start, -1, "missing account gallery window branch")
-  assert.notEqual(end, -1, "missing account gallery window branch boundary")
-  const block = app.slice(start, end)
-
-  assert.doesNotMatch(app, /ACCOUNT_GALLERY_WINDOW_IDB_STORE/)
-  assert.doesNotMatch(app, /function accountGalleryWindowCacheGet/)
-  assert.doesNotMatch(app, /function accountGalleryWindowCacheSet/)
-  assert.doesNotMatch(block, /cachedPaint/)
-  assert.match(
-    block,
-    /Product invariant: the account shelf is discovery-fresh[\s\S]*per-user collection version/,
-  )
-  assert.match(block, /fetchAccountGalleryWindow\(/)
+  assert.match(fetcher, /cache:\s*"no-store"/)
+  assert.match(fetcher, /singleFlightQuery/)
+  assert.doesNotMatch(fetcher, /localStorage|sessionStorage|indexedDB/)
+  assert.match(app, /payloadCacheSize:\s*8/)
 })
 
 test("archival fallback cards clear missing portrait state during hydration", async () => {

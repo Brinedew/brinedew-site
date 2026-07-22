@@ -15,6 +15,7 @@ import {
 import { createRequestInbox } from "./request-inbox.js"
 import { portraitDelivery } from "./portrait-delivery.js"
 import { createEmulsionFavoriteStore, normalizeEmulsionFamilyId } from "./emulsion-favorites.js"
+import { createCollectionFeedController } from "./collection-feed.js"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -45,7 +46,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   /* ─── Constants ─── */
   var ROOT_ID = "iconoplasm-root"
   var DEBOUNCE_MS = 200
-  var GALLERY_PAGE_SIZE = 12
   var GALLERY_INITIAL_PAGE_SIZE = 4
   var GALLERY_DEFAULT_ORDER = ICONOPLASM_GALLERY_DEFAULT_ORDER
   var HOME_COLLECTION_PAGE_SIZE = 12
@@ -116,7 +116,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var geneRequestSummaryCache = Object.create(null)
   var imageEditProvidersCache = Object.create(null)
   var imageEditProvidersPromise = Object.create(null)
-  var homeMasonry = null
+  var homeMasonryInstances = new Map()
   var portraitLightboxCleanup = null
   var activeGeneRenderId = 0
   var lastGenePageDiscoveryVisitKey = ""
@@ -395,13 +395,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       })
   }
 
-  function fetchDiscoveryState(order, seed) {
+  function fetchDiscoveryState(order, seed, init) {
     var resolvedOrder = normalizeHomeCollectionOrder(order || HOME_COLLECTION_DEFAULT_ORDER)
     var path = "/api/iconoplasm/discoveries/me?order=" + encodeURIComponent(resolvedOrder)
     if (resolvedOrder === "random" && seed) {
       path += "&seed=" + encodeURIComponent(String(seed))
     }
-    return fetchAuthedJSON(path)
+    return fetchAuthedJSON(path, init)
   }
 
   function fetchHomeCollectionCounts() {
@@ -492,10 +492,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     )
   }
 
-  function fetchAccountGalleryWindow(order, cursor, limit, options) {
+  function fetchAccountGalleryWindow(order, paging, limit, options) {
     var opts = options || {}
     var resolvedOrder = normalizeHomeCollectionOrder(order || HOME_COLLECTION_DEFAULT_ORDER)
-    var resolvedCursor = String(cursor || "").trim()
+    var resolvedAfter = String((paging && paging.after) || "").trim()
+    var resolvedBefore = String((paging && paging.before) || "").trim()
+    if (resolvedAfter && resolvedBefore) {
+      return Promise.reject(new Error("Account gallery accepts either after or before, not both."))
+    }
     var resolvedLimit = Math.max(1, Math.min(48, Number(limit || 24) || 24))
     var resolvedView = String(opts.view || "").trim()
     var resolvedScope =
@@ -515,13 +519,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (resolvedView) {
       path += "&view=" + encodeURIComponent(resolvedView)
     }
-    if (resolvedCursor) {
-      path += "&cursor=" + encodeURIComponent(resolvedCursor)
+    if (resolvedAfter) {
+      path += "&after=" + encodeURIComponent(resolvedAfter)
+    } else if (resolvedBefore) {
+      path += "&before=" + encodeURIComponent(resolvedBefore)
     }
     var singleFlightKey = [
       "account-gallery-window",
       resolvedOrder,
-      resolvedCursor,
+      resolvedAfter,
+      resolvedBefore,
       resolvedLimit,
       resolvedView,
       resolvedScope,
@@ -537,7 +544,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         Math.max(1, Math.min(48, Number(bootstrap.accountGalleryWindowLimit || 48) || 48)) &&
       resolvedView === "image-only" &&
       resolvedScope === "personal" &&
-      !resolvedCursor
+      !resolvedAfter &&
+      !resolvedBefore
     ) {
       return Promise.resolve(bootstrap.accountGalleryWindowData)
     }
@@ -550,7 +558,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         Math.max(1, Math.min(48, Number(bootstrap.accountGalleryWindowLimit || 48) || 48)) &&
       resolvedView === "image-only" &&
       resolvedScope === "personal" &&
-      !resolvedCursor
+      !resolvedAfter &&
+      !resolvedBefore
     ) {
       bootstrap.accountGalleryWindowUsed = true
       var bootstrapWindowPromise = bootstrap.accountGalleryWindowPromise
@@ -559,7 +568,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             bootstrap.accountGalleryWindowData = data
           }
           if (data && data.ok && data.view === "image-only") return data
-          return fetchAccountGalleryWindow(order, cursor, limit, options)
+          return fetchAccountGalleryWindow(order, paging, limit, options)
         })
         .finally(function () {
           if (iconoplasmQueryInflight.get(singleFlightKey) === bootstrapWindowPromise) {
@@ -569,9 +578,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       iconoplasmQueryInflight.set(singleFlightKey, bootstrapWindowPromise)
       return bootstrapWindowPromise
     }
-    return singleFlightQuery(singleFlightKey, function () {
+    var produceWindowRequest = function () {
       var requestInit = {
         cache: "no-store",
+        signal: opts.signal,
         headers: {
           "Cache-Control": "no-store",
         },
@@ -586,7 +596,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           return fetchAuthedJSON(path, requestInit)
         })
       })
-    })
+    }
+    return opts.signal
+      ? produceWindowRequest()
+      : singleFlightQuery(singleFlightKey, produceWindowRequest)
   }
 
   /* ─── Utility ─── */
@@ -1449,12 +1462,17 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     // no-op; layout is handled by Masonry instance
   }
 
-  function destroyHomeMasonry() {
-    if (!homeMasonry) return
-    if (homeMasonry.instance) {
-      homeMasonry.instance.destroy()
+  function destroyHomeMasonry(container) {
+    if (container) {
+      var mounted = homeMasonryInstances.get(container)
+      if (mounted && mounted.instance) mounted.instance.destroy()
+      homeMasonryInstances.delete(container)
+      return
     }
-    homeMasonry = null
+    homeMasonryInstances.forEach(function (mounted) {
+      if (mounted && mounted.instance) mounted.instance.destroy()
+    })
+    homeMasonryInstances.clear()
   }
 
   function applyHomeMasonryNow(container, newElements) {
@@ -1464,9 +1482,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       console.warn("[Iconoplasm] Masonry library not loaded")
       return
     }
-    if (homeMasonry && homeMasonry.container === container && homeMasonry.instance) {
+    var mountedMasonry = homeMasonryInstances.get(container)
+    if (mountedMasonry && mountedMasonry.instance) {
       // Masonry already running — append new items if provided, then relayout
-      var instance = homeMasonry.instance
+      var instance = mountedMasonry.instance
       if (newElements && newElements.length) {
         instance.appended(newElements)
       }
@@ -1479,7 +1498,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       }
       return
     }
-    destroyHomeMasonry()
+    destroyHomeMasonry(container)
     // Insert sizer elements if not already present
     if (!container.querySelector(".icono-grid-sizer")) {
       var sizer = document.createElement("div")
@@ -1501,10 +1520,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       transitionDuration: 0,
       initLayout: false,
     })
-    homeMasonry = {
+    homeMasonryInstances.set(container, {
       container: container,
       instance: msnry,
-    }
+    })
     if (window.imagesLoaded) {
       window.imagesLoaded(container, function () {
         msnry.layout()
@@ -1762,7 +1781,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     } catch (_) {}
   }
 
-  function loadMobileCardPageVM(pageEntries) {
+  function loadMobileCardPageVM(pageEntries, options) {
     // The manifest endpoint is the single source of truth for gallery card
     // freshness. Persistent browser storage is write-through only here: Edge can
     // keep old IndexedDB rows for weeks, so a fully cached local page must still
@@ -1785,6 +1804,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         layout: "mobile-dossier-v1",
         symbols: symbols,
       }),
+      signal: options && options.signal,
     }).then(function (manifest) {
       if (!manifest || manifest.schema !== "iconoplasm.mobileCardManifest.v1") {
         throw new Error("Mobile card manifest schema mismatch")
@@ -2056,18 +2076,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       '<div class="icono-collection-summary-host" id="icono-collection-summary" hidden></div>' +
       '<div class="icono-empty" id="icono-empty" hidden></div>' +
       "</div>" +
-      '<div class="icono-loading" id="icono-loading" hidden aria-live="polite"></div>' +
-      '<div class="icono-grid" id="icono-grid" data-layout="' +
+      '<a class="icono-feed-skip" href="#icono-feed-after">Skip past gene collection</a>' +
+      '<div class="icono-feed" id="icono-grid" aria-busy="true" role="feed" aria-label="Gene collection" tabindex="0">' +
+      '<section class="icono-feed-segment" role="presentation"><div class="icono-grid" data-layout="' +
       esc(resolvedLayout) +
-      '" aria-busy="true" role="region" aria-label="Gene collection" tabindex="-1">' +
+      '">' +
       buildHomeSkeletonGridMarkup(layout, cardVariant) +
-      "</div>" +
+      "</div></section></div>" +
       '<div class="icono-home-auxiliary" id="icono-home-auxiliary" hidden></div>' +
-      '<nav class="icono-collection-pager" id="icono-collection-pager" aria-label="Collection pages" hidden>' +
-      '<button type="button" id="icono-page-prev">Previous genes</button>' +
-      '<span class="icono-page-status" id="icono-page-status" role="status" aria-live="polite"></span>' +
-      '<button type="button" id="icono-page-next">Next genes</button>' +
-      "</nav>" +
+      '<div class="icono-feed-state"><span id="icono-feed-status" role="status" aria-live="polite"></span>' +
+      '<button type="button" id="icono-feed-retry" hidden>Retry</button></div>' +
+      '<span id="icono-feed-after" tabindex="-1"></span>' +
+      '<a class="icono-feed-skip" href="#icono-grid">Back to gene collection</a>' +
       "</main>"
     )
   }
@@ -7239,1035 +7259,558 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       settings &&
       settings.showAllGenes
     )
-    var pendingRestoreState = restoreState || null
-    var activeRestoreState = pendingRestoreState
+    var initialUrl = new URL(window.location.href)
+    var restoredScope = String(
+      (restoreState && restoreState.scope) || initialUrl.searchParams.get("scope"),
+    )
+    var restoredOrder = String(
+      (restoreState && restoreState.order) || initialUrl.searchParams.get("order"),
+    )
+    if (
+      !restoreState &&
+      (initialUrl.searchParams.has("after") ||
+        initialUrl.searchParams.has("offset") ||
+        initialUrl.searchParams.has("anchor"))
+    ) {
+      restoreState = {
+        page: Math.max(1, Number(initialUrl.searchParams.get("page") || 1) || 1),
+        cursor: String(initialUrl.searchParams.get("after") || ""),
+        offset: Math.max(0, Number(initialUrl.searchParams.get("offset") || 0) || 0),
+        anchorGene: String(initialUrl.searchParams.get("anchor") || ""),
+        anchorTop: Number(initialUrl.searchParams.get("anchorOffset") || 0) || 0,
+        seed: String(initialUrl.searchParams.get("seed") || ""),
+      }
+    }
+    var galleryState = {
+      order: useClassicGallery
+        ? restoredOrder || GALLERY_DEFAULT_ORDER
+        : normalizeHomeCollectionOrder(restoredOrder || HOME_COLLECTION_DEFAULT_ORDER),
+      seed: String((restoreState && restoreState.seed) || ""),
+      total: 0,
+      publishedTotal: 0,
+      discoveredCount: 0,
+      authenticated: !!currentUser,
+      ready: useClassicGallery,
+      sharedDiscoveries: !useClassicGallery && restoredScope === "shared",
+      discoveryEntries: [],
+      sortedDiscoveries: [],
+      items: [],
+      showAllGenes: useClassicGallery,
+    }
+    var disposed = false
+    var localReadyPromise = null
+    var latestFeedSnapshot = null
+    if (galleryState.order === "random" && !galleryState.seed) {
+      galleryState.seed = Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+    }
+
     iconoSidebarState.page = "home"
     iconoSidebarState.homeLayout = homeGridLayout
-    iconoSidebarState.total = 0
-    iconoSidebarState.publishedTotal = 0
     iconoSidebarState.gene = null
-    renderIconoplasmSidebar()
-    var hasExistingShell =
-      root.querySelector("#icono-grid") &&
-      root.querySelector("#icono-q") &&
-      root.querySelector("#icono-order")
-    if (!hasExistingShell) {
-      root.innerHTML = buildHomeShellMarkup(homeLayout, cardVariant)
-    }
+    root.innerHTML = buildHomeShellMarkup(homeLayout, cardVariant)
     loadInstallReleaseMetadata()
     renderHomeInstallCta()
     syncPublicInventoryStat()
     probeForIconoplasmExtensionPresence()
 
-    var grid = document.getElementById("icono-grid")
-    var loading = document.getElementById("icono-loading")
+    var feed = document.getElementById("icono-grid")
+    var statusEl = document.getElementById("icono-feed-status")
+    var retryButton = document.getElementById("icono-feed-retry")
     var countEl = document.getElementById("icono-gene-count")
-    var orderLabelEl = document.getElementById("icono-order-label")
     var summaryEl = document.getElementById("icono-collection-summary")
     var emptyEl = document.getElementById("icono-empty")
-    var pagerEl = document.getElementById("icono-collection-pager")
-    var previousPageButton = document.getElementById("icono-page-prev")
-    var nextPageButton = document.getElementById("icono-page-next")
-    var pageStatusEl = document.getElementById("icono-page-status")
     var input = document.getElementById("icono-q")
     var resultsEl = document.getElementById("icono-results")
     var orderEl = document.getElementById("icono-order")
-    var activeGalleryRequest = 0
-    var renderDisposed = false
-    var galleryState = {
-      order: useClassicGallery ? GALLERY_DEFAULT_ORDER : HOME_COLLECTION_DEFAULT_ORDER,
-      offset: 0,
-      total: 0,
-      publishedTotal: 0,
-      loading: false,
-      hasMore: false,
-      seed: "",
-      items: [],
-      windowCursor: "",
-      discoveredCount: 0,
-      pageIndex: 0,
-      pageStarts: [{ offset: 0, cursor: "" }],
-      pageLoadFailed: false,
-      focusGridAfterLoad: false,
-      ready: false,
-      readyPromise: null,
-      authenticated: false,
-      showAllGenes: useClassicGallery,
-      sharedDiscoveries: !!(pendingRestoreState && pendingRestoreState.sharedDiscoveries),
-      discoveryEntries: [],
-      sortedDiscoveries: [],
-    }
-    var scrollRestored = !activeRestoreState
+    var activeSearchRequest = 0
+    var searchTimer = null
+    var activeSearchIndex = -1
+    var currentSearchResults = []
 
-    function newRandomSeed() {
-      return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-    }
-
-    function activeDefaultOrder() {
-      return useClassicGallery ? GALLERY_DEFAULT_ORDER : HOME_COLLECTION_DEFAULT_ORDER
-    }
-
-    function activeDiscoveryScope() {
+    function activeScope() {
       return galleryState.sharedDiscoveries ? "shared" : "personal"
     }
 
-    function activeOrderMarkup() {
-      if (useClassicGallery) return galleryOptionsMarkup()
-      return galleryState.sharedDiscoveries
-        ? sharedDiscoveryOptionsMarkup()
-        : homeCollectionOptionsMarkup()
-    }
-
-    function syncHomeModeChrome() {
-      if (orderLabelEl) orderLabelEl.textContent = "Sort"
-      if (!orderEl) return
-      var previousValue = String(orderEl.value || "").trim()
-      orderEl.innerHTML = activeOrderMarkup()
-      var nextValue = useClassicGallery
-        ? normalizeHomeCollectionOrder(
-            previousValue || GALLERY_DEFAULT_ORDER,
-            GALLERY_DEFAULT_ORDER,
-          )
-        : normalizeHomeCollectionOrder(previousValue || HOME_COLLECTION_DEFAULT_ORDER)
-      var hasValue = false
-      for (var i = 0; i < orderEl.options.length; i++) {
-        if (orderEl.options[i].value === nextValue) {
-          hasValue = true
-          break
-        }
-      }
-      orderEl.value = hasValue ? nextValue : activeDefaultOrder()
-    }
-
-    syncHomeModeChrome()
-
-    function currentAccountGalleryWindowLimit() {
-      return galleryState.pageIndex === 0 ? HOME_SKELETON_CARD_COUNT : currentCollectionPageSize()
-    }
-
-    function currentCollectionPageSize() {
+    function collectionPageSize() {
       return isMobileLabelReviewEnabled()
         ? HOME_COLLECTION_MOBILE_PAGE_SIZE
         : HOME_COLLECTION_PAGE_SIZE
     }
 
-    function currentGalleryLimit() {
-      if (useClassicGallery) {
-        if (galleryState.pageIndex === 0) return GALLERY_INITIAL_PAGE_SIZE
-        return isMobileLabelReviewEnabled() ? HOME_COLLECTION_MOBILE_PAGE_SIZE : GALLERY_PAGE_SIZE
-      }
-      if (accountGalleryWindowAvailable(galleryState.order, activeDiscoveryScope())) {
-        return currentAccountGalleryWindowLimit()
-      }
-      if (galleryState.pageIndex === 0) return HOME_COLLECTION_INITIAL_PAGE_SIZE
-      return currentCollectionPageSize()
+    function mountedCardLimit() {
+      return isMobileLabelReviewEnabled() ? 24 : 48
     }
 
-    function setLoadingState(message, show) {
-      var text = String(message || "").trim()
-      loading.textContent = text
-      loading.hidden = !(show && text)
+    function syncOrderOptions() {
+      orderEl.innerHTML = useClassicGallery
+        ? galleryOptionsMarkup()
+        : galleryState.sharedDiscoveries
+          ? sharedDiscoveryOptionsMarkup()
+          : homeCollectionOptionsMarkup()
+      var allowed = Array.from(orderEl.options).some(function (option) {
+        return option.value === galleryState.order
+      })
+      if (!allowed)
+        galleryState.order = useClassicGallery
+          ? GALLERY_DEFAULT_ORDER
+          : HOME_COLLECTION_DEFAULT_ORDER
+      orderEl.value = galleryState.order
     }
 
-    function syncHeroCount() {
-      if (useClassicGallery) {
-        var galleryPublishedCount = Number(galleryState.publishedTotal || 0)
-        var galleryTotalCount = Number(galleryState.total || 0)
-        iconoSidebarState.total = galleryTotalCount
-        iconoSidebarState.publishedTotal = galleryPublishedCount
-        renderIconoplasmSidebar()
-        if (!countEl) return
-        if (!galleryTotalCount && !galleryPublishedCount) {
-          countEl.textContent = "Loading gallery..."
-          return
-        }
-        countEl.textContent =
-          galleryTotalCount.toLocaleString() +
-          " human genes, " +
-          galleryPublishedCount.toLocaleString() +
-          " AI blots"
-        return
-      }
-      if (!galleryState.ready) {
-        if (countEl) countEl.textContent = "Loading your collection..."
-        return
-      }
-      var discoveredCount = Number(galleryState.discoveryEntries.length || 0)
-      if (!discoveredCount) discoveredCount = Number(galleryState.discoveredCount || 0)
-      var publishedCount = Number(galleryState.publishedTotal || 0)
-      var totalCount = Number(galleryState.total || 0)
-      iconoSidebarState.total = discoveredCount
-      iconoSidebarState.publishedTotal = totalCount
+    function syncCounts() {
+      var discovered = Math.max(galleryState.discoveredCount, galleryState.discoveryEntries.length)
+      iconoSidebarState.total = useClassicGallery ? galleryState.total : discovered
+      iconoSidebarState.publishedTotal = useClassicGallery
+        ? galleryState.publishedTotal
+        : galleryState.total
       renderIconoplasmSidebar()
       if (!countEl) return
-      if (totalCount > 0) {
-        countEl.textContent =
-          discoveredCount.toLocaleString() +
-          " discovered of " +
-          totalCount.toLocaleString() +
-          " human genes"
-        return
-      }
-      if (discoveredCount > 0) {
-        countEl.textContent = discoveredCount.toLocaleString() + " discovered genes"
-        return
-      }
-      countEl.textContent = galleryState.authenticated
-        ? "No discovered genes yet"
-        : "Sign in to keep a synced collection"
-    }
-
-    function renderCollectionChrome() {
       if (useClassicGallery) {
-        if (summaryEl) {
-          summaryEl.hidden = true
-          summaryEl.innerHTML = ""
-        }
-        if (emptyEl) {
-          emptyEl.hidden = true
-          emptyEl.innerHTML = ""
-        }
-        if (grid) grid.hidden = false
-        if (orderEl) orderEl.disabled = false
-        renderCollectionPager()
+        countEl.textContent = galleryState.total
+          ? galleryState.total.toLocaleString() +
+            " human genes, " +
+            galleryState.publishedTotal.toLocaleString() +
+            " AI blots"
+          : "Loading gallery..."
+      } else if (galleryState.total) {
+        countEl.textContent =
+          discovered.toLocaleString() +
+          " discovered of " +
+          galleryState.total.toLocaleString() +
+          " human genes"
+      } else if (discovered) {
+        countEl.textContent = discovered.toLocaleString() + " discovered genes"
+      } else {
+        countEl.textContent = galleryState.authenticated
+          ? "No discovered genes yet"
+          : "Sign in to keep a synced collection"
+      }
+    }
+
+    function syncCollectionChrome() {
+      syncCounts()
+      if (useClassicGallery) {
+        summaryEl.hidden = true
+        emptyEl.hidden = true
+        orderEl.disabled = false
         return
       }
-      if (summaryEl) {
-        if (!galleryState.ready) {
-          summaryEl.hidden = false
-          summaryEl.innerHTML = buildCollectionSummarySkeletonMarkup(galleryState)
-          wireCollectionSummaryControls()
-        } else {
-          summaryEl.hidden = false
-          summaryEl.innerHTML = buildCollectionSummaryMarkup(galleryState)
-          wireCollectionSummaryControls()
-        }
-      }
-      var hasItems =
-        !!galleryState.sortedDiscoveries.length ||
-        !!galleryState.items.length ||
-        Number(galleryState.discoveredCount || 0) > 0
-      if (emptyEl) {
-        if (!galleryState.ready || hasItems) {
-          emptyEl.hidden = true
-          emptyEl.innerHTML = ""
-        } else {
-          emptyEl.hidden = false
-          emptyEl.innerHTML = buildCollectionEmptyMarkup(galleryState)
-        }
-      }
-      if (grid) grid.hidden = galleryState.ready && !hasItems
-      if (orderEl)
-        orderEl.disabled =
-          !galleryState.ready ||
-          Math.max(
-            Number(galleryState.discoveredCount || 0) || 0,
-            galleryState.sortedDiscoveries.length,
-            galleryState.items.length,
-          ) < 2
-      renderCollectionPager()
-    }
-
-    function collectionTotal() {
-      return Math.max(
-        0,
-        Number(galleryState.discoveredCount || 0) || 0,
-        Number(galleryState.total || 0) || 0,
-        galleryState.sortedDiscoveries.length,
-      )
-    }
-
-    function renderCollectionPager() {
-      if (!pagerEl || !previousPageButton || !nextPageButton || !pageStatusEl) return
-      var hasPrevious = galleryState.pageIndex > 0
-      var hasNext = !!galleryState.hasMore
-      var showPager = hasPrevious || hasNext || galleryState.pageLoadFailed
-      pagerEl.hidden = !showPager
-      previousPageButton.disabled = galleryState.loading || !hasPrevious
-      nextPageButton.disabled = galleryState.loading || (!galleryState.pageLoadFailed && !hasNext)
-      nextPageButton.textContent = galleryState.pageLoadFailed ? "Retry page" : "Next genes"
-      var currentStart = galleryState.pageStarts[galleryState.pageIndex] || { offset: 0 }
-      var first = Math.max(0, Number(currentStart.offset || 0) || 0)
-      var last = Math.max(first, Number(galleryState.offset || 0) || 0)
-      var total = collectionTotal()
-      if (galleryState.pageLoadFailed) {
-        pageStatusEl.textContent = "Page " + (galleryState.pageIndex + 1) + " failed to load"
-      } else if (!galleryState.ready || galleryState.loading) {
-        pageStatusEl.textContent = "Loading page " + (galleryState.pageIndex + 1)
-      } else if (last > first) {
-        pageStatusEl.textContent =
-          "Showing " +
-          (first + 1).toLocaleString() +
-          "–" +
-          last.toLocaleString() +
-          (total > 0 ? " of " + total.toLocaleString() : "")
-      } else {
-        pageStatusEl.textContent = "Page " + (galleryState.pageIndex + 1)
-      }
-    }
-
-    function replaceGridWithPageSkeleton() {
-      destroyHomeMasonry()
-      if (typeof grid._iconoPrefetchCleanup === "function") grid._iconoPrefetchCleanup()
-      galleryState.items = []
-      clearHomeAuxiliaryCards()
-      grid.hidden = false
-      grid.setAttribute("data-layout", homeGridLayout)
-      grid.setAttribute("aria-busy", "true")
-      grid.innerHTML = buildHomeSkeletonGridMarkup(homeLayout, cardVariant)
-    }
-
-    function prepareResolvedPage() {
-      destroyHomeMasonry()
-      if (typeof grid._iconoPrefetchCleanup === "function") grid._iconoPrefetchCleanup()
-      galleryState.items = []
-      clearHomeAuxiliaryCards()
-      grid.innerHTML = ""
-      grid.hidden = false
-      grid.setAttribute("data-layout", homeGridLayout)
-      grid.setAttribute("aria-busy", "false")
-    }
-
-    function finishPageRender() {
-      galleryState.pageLoadFailed = false
-      renderCollectionChrome()
-      setLoadingState("", false)
-      syncHomeHistoryState(false)
-      maybeRestoreHomeScroll()
-      if (galleryState.focusGridAfterLoad) {
-        galleryState.focusGridAfterLoad = false
-        window.requestAnimationFrame(function () {
-          var cardLinks = grid.querySelectorAll("a[href]")
-          var firstCardLink = null
-          for (var i = 0; i < cardLinks.length; i++) {
-            if (cardLinks[i].getClientRects().length > 0) {
-              firstCardLink = cardLinks[i]
-              break
-            }
+      summaryEl.hidden = false
+      summaryEl.innerHTML = galleryState.ready
+        ? buildCollectionSummaryMarkup(galleryState)
+        : buildCollectionSummarySkeletonMarkup(galleryState)
+      var toggle = summaryEl.querySelector("[data-icono-shared-discoveries-toggle]")
+      if (toggle) {
+        toggle.addEventListener("change", function () {
+          var nextShared = !!toggle.checked
+          if (nextShared === galleryState.sharedDiscoveries) return
+          galleryState.sharedDiscoveries = nextShared
+          if (nextShared && !accountGalleryWindowOrderSupported(galleryState.order)) {
+            galleryState.order = HOME_COLLECTION_DEFAULT_ORDER
           }
-          var focusTarget = firstCardLink || grid
-          focusTarget.focus({ preventScroll: true })
-          grid.scrollIntoView({ block: "start", behavior: "auto" })
+          resetCollection(true)
+          refreshSearchResults()
         })
       }
-      if (orderEl && orderEl.value !== galleryState.order) orderEl.value = galleryState.order
+      var hasItems = galleryState.discoveredCount > 0 || galleryState.discoveryEntries.length > 0
+      emptyEl.hidden = !galleryState.ready || hasItems
+      emptyEl.innerHTML = emptyEl.hidden ? "" : buildCollectionEmptyMarkup(galleryState)
+      orderEl.disabled = galleryState.ready && !hasItems
     }
 
-    function failPageRender(message, errorLabel, err) {
-      galleryState.pageLoadFailed = true
-      grid.innerHTML = ""
-      grid.setAttribute("aria-busy", "false")
-      setLoadingState(message, true)
-      renderCollectionPager()
-      console.error(errorLabel, err)
-    }
-
-    function wireCollectionSummaryControls() {
-      if (!summaryEl) return
-      var toggle = summaryEl.querySelector("[data-icono-shared-discoveries-toggle]")
-      if (!toggle) return
-      toggle.addEventListener("change", function () {
-        var nextShared = !!toggle.checked
-        if (galleryState.sharedDiscoveries === nextShared) return
-        galleryState.sharedDiscoveries = nextShared
-        if (nextShared && !accountGalleryWindowOrderSupported(galleryState.order)) {
-          galleryState.order = HOME_COLLECTION_DEFAULT_ORDER
-        }
-        syncHomeModeChrome()
-        resetGallery(galleryState.order)
-        refreshActiveSearchResults()
-      })
-    }
-
-    function ensureCollectionReady() {
-      if (renderDisposed) return Promise.resolve()
-      if (useClassicGallery) {
-        galleryState.ready = true
-        galleryState.authenticated = !!currentUser
-        renderCollectionChrome()
-        return Promise.resolve()
-      }
-      if (galleryState.ready) return Promise.resolve()
-      if (galleryState.readyPromise) return galleryState.readyPromise
-      // The shared settings bridge populates iconoplasm.brinedew.bio from the canonical
-      // settings host on brinedew.bio. Wait for that first sync before the initial
-      // discoveries request, otherwise a fresh load can race ahead with stale defaults
-      // and silently drop admin-only flags like show_all=1.
-      galleryState.readyPromise = initialSharedSettingsPromise
+    function ensureLocalCollection(signal) {
+      if (galleryState.ready && galleryState.sortedDiscoveries.length) return Promise.resolve()
+      if (localReadyPromise) return localReadyPromise
+      localReadyPromise = initialSharedSettingsPromise
         .then(function () {
-          if (renderDisposed) return { discoveryData: {}, countData: {} }
           fetchHomeCollectionCounts().then(function (countData) {
-            if (renderDisposed || !galleryState.ready) return
+            if (disposed) return
             galleryState.total = Math.max(0, Number((countData && countData.total) || 0) || 0)
             galleryState.publishedTotal = Math.max(
               0,
               Number((countData && countData.publishedTotal) || 0) || 0,
             )
-            syncHeroCount()
-            renderCollectionChrome()
+            syncCollectionChrome()
           })
-          return fetchDiscoveryState(galleryState.order, galleryState.seed).then(
-            function (discoveryData) {
-              return {
-                discoveryData: discoveryData || {},
-                countData: {},
-              }
-            },
-          )
+          return fetchDiscoveryState(galleryState.order, galleryState.seed, {
+            signal: signal,
+          })
         })
-        .then(function (results) {
-          if (renderDisposed) return
-          var discoveryData = results.discoveryData || {}
-          var countData = results.countData || {}
+        .then(function (discoveryData) {
+          if (disposed) return
+          discoveryData = discoveryData || {}
           galleryState.authenticated = !!discoveryData.authenticated
-          galleryState.showAllGenes = !!discoveryData.show_all_applied
-          galleryState.order = normalizeHomeCollectionOrder(
-            discoveryData.order || galleryState.order,
-            galleryState.order,
-          )
           galleryState.seed =
-            galleryState.order === "random"
-              ? String(discoveryData.seed || galleryState.seed || "").trim()
-              : ""
+            galleryState.order === "random" ? String(discoveryData.seed || galleryState.seed) : ""
           galleryState.discoveryEntries = normalizeDiscoveryEntries(
             galleryState.authenticated ? discoveryData.discoveries : guestStarterDiscoveryEntries(),
           )
-          galleryState.total = Math.max(0, Number(countData.total || 0) || 0)
-          galleryState.publishedTotal = Math.max(0, Number(countData.publishedTotal || 0) || 0)
           galleryState.sortedDiscoveries = galleryState.discoveryEntries.slice()
-          galleryState.hasMore = galleryState.sortedDiscoveries.length > 0
+          galleryState.discoveredCount = galleryState.sortedDiscoveries.length
           galleryState.ready = true
-          syncHeroCount()
-          renderCollectionChrome()
-          renderCollectionPager()
+          syncCollectionChrome()
         })
         .finally(function () {
-          galleryState.readyPromise = null
+          localReadyPromise = null
         })
-      return galleryState.readyPromise
+      return localReadyPromise
     }
 
-    function maybeRestoreHomeScroll() {
-      if (!activeRestoreState || scrollRestored) return
-      scrollRestored = true
-      var targetY = Math.max(0, Number(activeRestoreState.scrollY || 0) || 0)
-      window.requestAnimationFrame(function () {
-        scrollWindowInstantly(0, targetY)
-        syncHomeHistoryState(true)
-        if (activeRestoreState.focusSymbol) {
-          window.requestAnimationFrame(function () {
-            var cards = grid.querySelectorAll(".icono-card[data-icono-symbol]")
-            for (var i = 0; i < cards.length; i++) {
-              var card = cards[i]
-              if (
-                String(card.getAttribute("data-icono-symbol") || "")
-                  .trim()
-                  .toUpperCase() !== activeRestoreState.focusSymbol
-              ) {
-                continue
-              }
-              var rect = card.getBoundingClientRect()
-              window.scrollBy(0, Math.round(rect.top - Number(activeRestoreState.focusTop || 0)))
-              break
-            }
-          })
-        }
-      })
-    }
-
-    function snapshotHomeState() {
-      return {
-        order: galleryState.order,
-        sharedDiscoveries: !!galleryState.sharedDiscoveries,
-        restoreSession: ICONO_ARCHIVE_RESTORE_SESSION,
-        seed: galleryState.seed,
-        loadedCount: galleryState.offset,
-        pageIndex: galleryState.pageIndex,
-        pageStarts: galleryState.pageStarts.map(function (page) {
-          return {
-            offset: Math.max(0, Number(page.offset || 0) || 0),
-            cursor: String(page.cursor || ""),
-          }
-        }),
-        scrollY: Math.max(0, Math.round(window.scrollY || window.pageYOffset || 0)),
-        focusSymbol: pendingHomeAnchor ? pendingHomeAnchor.focusSymbol : "",
-        focusTop: pendingHomeAnchor ? pendingHomeAnchor.focusTop : 0,
-      }
-    }
-
-    function resetGallery(order) {
-      var resolvedOrder = useClassicGallery
-        ? String(order || GALLERY_DEFAULT_ORDER).trim() || GALLERY_DEFAULT_ORDER
-        : normalizeHomeCollectionOrder(order || HOME_COLLECTION_DEFAULT_ORDER)
-      var restoreConfig =
-        pendingRestoreState &&
-        pendingRestoreState.order === resolvedOrder &&
-        !!pendingRestoreState.sharedDiscoveries === !!galleryState.sharedDiscoveries
-          ? pendingRestoreState
-          : null
-      pendingRestoreState = null
-      activeRestoreState = restoreConfig
-      scrollRestored = !restoreConfig
-      galleryState.order = resolvedOrder
-      galleryState.offset = 0
-      galleryState.loading = false
-      galleryState.total = 0
-      galleryState.publishedTotal = 0
-      galleryState.ready = useClassicGallery ? true : false
-      galleryState.readyPromise = null
-      galleryState.authenticated = !!currentUser
-      galleryState.showAllGenes = useClassicGallery
-      galleryState.sharedDiscoveries = !useClassicGallery && !!galleryState.sharedDiscoveries
-      galleryState.discoveryEntries = []
-      galleryState.sortedDiscoveries = []
-      galleryState.hasMore = useClassicGallery
-        ? true
-        : galleryState.ready
-          ? galleryState.discoveryEntries.length > 0
-          : false
-      galleryState.seed = useClassicGallery
-        ? restoreConfig && restoreConfig.seed
-          ? restoreConfig.seed
-          : galleryState.order === "random"
-            ? newRandomSeed()
-            : ""
-        : galleryState.order === "random"
-          ? restoreConfig && restoreConfig.seed
-            ? restoreConfig.seed
-            : newRandomSeed()
-          : ""
-      galleryState.items = []
-      var restoredPageStarts =
-        restoreConfig && Array.isArray(restoreConfig.pageStarts)
-          ? restoreConfig.pageStarts
-              .map(function (page) {
-                if (!page || typeof page !== "object") return null
-                var offset = Number(page.offset || 0)
-                if (!Number.isFinite(offset) || offset < 0) return null
-                return { offset: Math.round(offset), cursor: String(page.cursor || "") }
-              })
-              .filter(Boolean)
-          : []
-      if (!restoredPageStarts.length || restoredPageStarts[0].offset !== 0) {
-        restoredPageStarts = [{ offset: 0, cursor: "" }]
-      }
-      var restoredPageIndex = Math.max(
-        0,
-        Math.min(
-          restoredPageStarts.length - 1,
-          Math.round(Number((restoreConfig && restoreConfig.pageIndex) || 0) || 0),
-        ),
-      )
-      galleryState.pageStarts = restoredPageStarts
-      galleryState.pageIndex = restoredPageIndex
-      galleryState.offset = restoredPageStarts[restoredPageIndex].offset
-      galleryState.windowCursor = restoredPageStarts[restoredPageIndex].cursor
-      galleryState.discoveredCount = 0
-      galleryState.pageLoadFailed = false
-      galleryState.focusGridAfterLoad = false
-      grid.setAttribute("data-layout", homeGridLayout)
-      grid.setAttribute("aria-busy", "true")
-      grid.hidden = false
-      grid.innerHTML = buildHomeSkeletonGridMarkup(homeLayout, cardVariant)
-      clearHomeAuxiliaryCards()
-      destroyHomeMasonry()
-      if (typeof grid._iconoPrefetchCleanup === "function") {
-        grid._iconoPrefetchCleanup()
-      }
-      if (summaryEl) {
-        summaryEl.hidden = useClassicGallery
-        summaryEl.innerHTML = useClassicGallery ? "" : buildCollectionSummarySkeletonMarkup()
-      }
-      if (emptyEl) {
-        emptyEl.hidden = true
-        emptyEl.innerHTML = ""
-      }
-      if (orderEl) orderEl.value = resolvedOrder
-      setLoadingState("", false)
-      syncHeroCount()
-      renderCollectionChrome()
-      renderCollectionPager()
-      syncHomeHistoryState(false)
-      loadNextGalleryPage()
-    }
-
-    // This is not a generic infinite-feed loader: classic gallery, account-window, and
-    // local discovery paths keep their distinct ordering and payload contracts. They share
-    // only the bounded-page behavior below. Every path replaces the current page, while
-    // pageStarts retains request cursors so the whole collection remains traversable.
-    function loadNextGalleryPage() {
-      if (renderDisposed) return
-      if (!useClassicGallery && !hasResolvedAuthState) return
-      var options = arguments.length ? arguments[0] : null
-      var force = !!(options && options.force)
-      if (galleryState.loading || (!force && galleryState.ready && !galleryState.hasMore)) return
-      galleryState.loading = true
-      galleryState.pageLoadFailed = false
-      setLoadingState("", false)
-      replaceGridWithPageSkeleton()
-      renderCollectionPager()
-      var pageLimit = currentGalleryLimit()
-      var pageStartOffset = galleryState.offset
-
-      var requestId = ++activeGalleryRequest
+    async function requestFeedPage(request) {
+      var direction = request.direction
+      var offset = Math.max(0, Number(request.offset || 0) || 0)
+      var limit = request.limit
       if (useClassicGallery) {
         var path =
           "/api/public/v1/gallery?order=" +
           encodeURIComponent(galleryState.order) +
           "&limit=" +
-          encodeURIComponent(String(pageLimit)) +
+          encodeURIComponent(String(limit)) +
           "&offset=" +
-          encodeURIComponent(String(galleryState.offset))
-        if (galleryState.seed) {
-          path += "&seed=" + encodeURIComponent(galleryState.seed)
+          encodeURIComponent(String(offset))
+        if (galleryState.seed) path += "&seed=" + encodeURIComponent(galleryState.seed)
+        var data = await fetchJSON(path, { signal: request.signal })
+        var galleryItems = Array.isArray(data.items) ? data.items : []
+        await ensurePortraitDelivery(galleryItems)
+        galleryState.total = Math.max(0, Number(data.total || 0) || 0)
+        galleryState.publishedTotal = Math.max(0, Number(data.published_total || 0) || 0)
+        galleryState.ready = true
+        syncCollectionChrome()
+        return {
+          items: galleryItems,
+          startIndex: offset,
+          total: galleryState.total,
+          hasMore: !!data.has_more,
+          hasPrevious: offset > 0,
+          snapshotVersion: data.snapshot_version,
         }
-
-        var requestPromise = consumeBootstrapGallery(
-          galleryState.order,
-          pageLimit,
-          galleryState.offset,
-        )
-        if (!requestPromise) {
-          requestPromise = fetchJSON(path)
-        }
-
-        requestPromise
-          .then(async function (data) {
-            if (renderDisposed || requestId !== activeGalleryRequest) return
-            var items = Array.isArray(data && data.items) ? data.items : []
-            galleryState.order = String((data && data.order) || galleryState.order)
-            galleryState.seed = String((data && data.seed) || galleryState.seed || "")
-            galleryState.total = Number((data && data.total) || galleryState.total || 0)
-            galleryState.publishedTotal = Number(
-              (data && data.published_total) || galleryState.publishedTotal || 0,
-            )
-            galleryState.hasMore = Boolean(data && data.has_more)
-            galleryState.ready = true
-            prepareResolvedPage()
-            if (items.length) {
-              await ensurePortraitDelivery(items)
-              var newCards = appendGrid(grid, items, 0, homeLayout, cardVariant)
-              galleryState.items = items.slice()
-              galleryState.offset = pageStartOffset + items.length
-              if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
-                applyHomeMasonry(grid, newCards)
-                setupOrderedPortraitPrefetch(grid, galleryState.items)
-                void hydrateBrickCards(newCards).then(function () {
-                  warmBrickCardImages(galleryState.items)
-                  applyHomeMasonry(grid)
-                })
-              } else {
-                destroyHomeMasonry()
-                warmBrickCardImages(items)
-                wireBrickVoteBoxes(newCards)
-                wireMobileLabelCards(newCards)
-                refreshPortraitLightbox()
-                void hydrateBrickCards(newCards)
-              }
-            }
-            syncHeroCount()
-            finishPageRender()
-          })
-          .catch(function (err) {
-            if (renderDisposed || requestId !== activeGalleryRequest) return
-            failPageRender("Failed to load portraits.", "[Iconoplasm] gallery load error:", err)
-          })
-          .finally(function () {
-            if (!renderDisposed && requestId === activeGalleryRequest) {
-              galleryState.loading = false
-              renderCollectionPager()
-            }
-          })
-        return
       }
-      if (accountGalleryWindowAvailable(galleryState.order, activeDiscoveryScope())) {
-        var renderAccountGalleryWindow = async function (data) {
-          if (!data || renderDisposed || requestId !== activeGalleryRequest) return false
-          var cards = Array.isArray(data && data.cards)
-            ? data.view === "image-only"
-              ? data.cards
-              : data.cards.map(function (vm) {
-                  return mobileCardPayloadFromVM(vm)
-                })
-            : []
-          var failures = Array.isArray(data && data.missing)
-            ? data.missing.map(function (symbol) {
-                return { symbol: normalizedSymbol(symbol), reason: "manifest_missing" }
-              })
-            : []
-          var itemRows = Array.isArray(data && data.items) ? data.items : []
-          var discoveryRows = []
-          for (var i = 0; i < itemRows.length; i++) {
-            if (itemRows[i] && itemRows[i].discovery) discoveryRows.push(itemRows[i].discovery)
-          }
-          galleryState.ready = true
-          galleryState.authenticated = !!data.authenticated
-          galleryState.sharedDiscoveries = String((data && data.scope) || "") === "shared"
-          galleryState.order = normalizeHomeCollectionOrder(data.order || galleryState.order)
-          galleryState.discoveredCount = Math.max(
-            0,
-            Number((data && data.discovered_count) || galleryState.discoveredCount || 0) || 0,
-          )
-          galleryState.discoveryEntries = discoveryRows.slice()
-          galleryState.sortedDiscoveries = discoveryRows.slice()
-          galleryState.hasMore = !!(data && data.has_more)
-          galleryState.windowCursor = String((data && data.next_cursor) || "")
-          prepareResolvedPage()
-          if (cards.length) {
-            await ensurePortraitDelivery(cards)
-            var newCards = appendGrid(grid, cards, 0, homeLayout, cardVariant)
-            galleryState.items = cards.slice()
-            if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
-              applyHomeMasonry(grid, newCards)
-              setupOrderedPortraitPrefetch(grid, galleryState.items)
-            } else {
-              destroyHomeMasonry()
-              warmBrickCardImages(galleryState.items)
-              wireBrickVoteBoxes(newCards)
-              wireMobileLabelCards(newCards)
-              refreshPortraitLightbox()
-            }
-          }
-          if (failures.length) {
-            console.error("[Iconoplasm] account gallery window VM failures:", failures)
-            appendMobileDataFailureTiles(grid, failures)
-          }
-          galleryState.offset =
-            pageStartOffset + Math.max(itemRows.length, cards.length + failures.length)
-          syncHeroCount()
-          finishPageRender()
-          return true
-        }
-        // Product invariant: the account shelf is discovery-fresh, especially for the
-        // default newest-first order. Do not paint this ordered window from browser
-        // storage unless the server first provides a per-user collection version that
-        // changes on every discovery encounter/merge.
-        fetchAccountGalleryWindow(
-          galleryState.order,
-          galleryState.windowCursor,
-          pageLimit,
-          Object.assign(
-            { scope: activeDiscoveryScope() },
-            isImageOnlyCardVariant(cardVariant) ? { view: "image-only" } : {},
-          ),
-        )
-          .then(function (data) {
-            if (!data || renderDisposed || requestId !== activeGalleryRequest) return
-            return renderAccountGalleryWindow(data)
-          })
-          .catch(function (err) {
-            if (renderDisposed || requestId !== activeGalleryRequest) return
-            if (err && err.status === 409) {
-              failPageRender(
-                "This sort needs a prepared account order index.",
-                "[Iconoplasm] account gallery window load error:",
-                err,
-              )
-            } else {
-              failPageRender(
-                "Failed to load your collection window.",
-                "[Iconoplasm] account gallery window load error:",
-                err,
-              )
-            }
-          })
-          .finally(function () {
-            if (!renderDisposed && requestId === activeGalleryRequest) {
-              galleryState.loading = false
-              renderCollectionPager()
-            }
-          })
-        return
-      }
-      ensureCollectionReady()
-        .then(function () {
-          if (renderDisposed || requestId !== activeGalleryRequest) return
-          var pageEntries = galleryState.sortedDiscoveries.slice(
-            pageStartOffset,
-            pageStartOffset + pageLimit,
-          )
-          galleryState.hasMore =
-            pageStartOffset + pageEntries.length < galleryState.sortedDiscoveries.length
-          if (!pageEntries.length) {
-            prepareResolvedPage()
-            galleryState.offset = pageStartOffset
-            syncHeroCount()
-            finishPageRender()
-            return
-          }
-          var appendResolvedItems = function (resolvedItems) {
-            return (async function () {
-              await ensurePortraitDelivery(resolvedItems)
-              if (renderDisposed || requestId !== activeGalleryRequest) return
-              prepareResolvedPage()
-              galleryState.offset = pageStartOffset + pageEntries.length
-              galleryState.items = resolvedItems.slice()
-              if (resolvedItems.length) {
-                var newCards = appendGrid(grid, resolvedItems, 0, homeLayout, cardVariant)
-                var installCard = null
-                var discordActionCard = null
-                var auxiliaryContainer = homeAuxiliaryContainer(grid, cardVariant)
-                if (galleryState.offset >= GUEST_STARTER_GENES.length) {
-                  installCard = appendHomeInstallCard(auxiliaryContainer)
-                }
-                if (galleryState.offset >= GUEST_STARTER_GENES.length) {
-                  discordActionCard = appendDiscordActionCard(auxiliaryContainer)
-                }
-                var auxiliaryCards = []
-                if (installCard) auxiliaryCards.push(installCard)
-                if (discordActionCard) auxiliaryCards.push(discordActionCard)
-                var masonryNewCards =
-                  auxiliaryContainer === grid && auxiliaryCards.length
-                    ? newCards.concat(auxiliaryCards)
-                    : newCards
-                if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
-                  applyHomeMasonry(grid, masonryNewCards)
-                  setupOrderedPortraitPrefetch(grid, galleryState.items)
-                  void hydrateBrickCards(newCards).then(function () {
-                    warmBrickCardImages(galleryState.items)
-                    applyHomeMasonry(grid)
-                  })
-                } else {
-                  destroyHomeMasonry()
-                  warmBrickCardImages(galleryState.items)
-                  wireBrickVoteBoxes(newCards)
-                  wireMobileLabelCards(newCards)
-                  refreshPortraitLightbox()
-                  prewarmMobileCardPageVM(
-                    galleryState.sortedDiscoveries.slice(
-                      galleryState.offset,
-                      galleryState.offset + currentGalleryLimit(),
-                    ),
-                  )
-                }
-              }
-              syncHeroCount()
-              finishPageRender()
-            })()
-          }
-          if (shouldUseImmediateDiscoveryFallback(homeLayout, cardVariant)) {
-            var immediateItems = pageEntries.map(function (entry) {
-              return fallbackDiscoveredGene(entry)
+
+      if (accountGalleryWindowAvailable(galleryState.order, activeScope())) {
+        var paging =
+          direction === "backward" ? { before: request.cursor } : { after: request.cursor }
+        var accountData = await fetchAccountGalleryWindow(galleryState.order, paging, limit, {
+          scope: activeScope(),
+          view: isImageOnlyCardVariant(cardVariant) ? "image-only" : "",
+          signal: request.signal,
+        })
+        var cards = Array.isArray(accountData.cards)
+          ? accountData.view === "image-only"
+            ? accountData.cards
+            : accountData.cards.map(mobileCardPayloadFromVM)
+          : []
+        var accountFailures = Array.isArray(accountData.missing)
+          ? accountData.missing.map(function (symbol) {
+              return { symbol: normalizedSymbol(symbol), reason: "manifest_missing" }
             })
-            return appendResolvedItems(immediateItems.filter(Boolean))
-          } else {
-            return loadMobileCardPageVM(pageEntries).then(function (result) {
-              var richItems = Array.isArray(result && result.cards) ? result.cards : []
-              var failures = Array.isArray(result && result.failures) ? result.failures : []
-              return appendResolvedItems(richItems.filter(Boolean)).then(function () {
-                if (failures.length) {
-                  console.error("[Iconoplasm] mobile card manifest failures:", failures)
-                  var failureTiles = appendMobileDataFailureTiles(grid, failures)
-                  if (failureTiles.length) {
-                    grid.setAttribute("aria-busy", "false")
-                  }
-                  renderCollectionPager()
-                }
+          : []
+        await ensurePortraitDelivery(cards)
+        galleryState.authenticated = !!accountData.authenticated
+        galleryState.discoveredCount = Math.max(0, Number(accountData.discovered_count || 0) || 0)
+        galleryState.discoveryEntries = Array.isArray(accountData.items)
+          ? accountData.items
+              .map(function (item) {
+                return item.discovery
               })
-            })
-          }
-        })
-        .catch(function (err) {
-          if (renderDisposed || requestId !== activeGalleryRequest) return
-          failPageRender(
-            "Failed to load your collection.",
-            "[Iconoplasm] collection load error:",
-            err,
-          )
-        })
-        .finally(function () {
-          if (!renderDisposed && requestId === activeGalleryRequest) {
-            galleryState.loading = false
-            renderCollectionPager()
-          }
-        })
-    }
-
-    function navigateCollectionPage(direction) {
-      if (galleryState.loading) return
-      if (direction > 0 && galleryState.pageLoadFailed) {
-        galleryState.focusGridAfterLoad = true
-        loadNextGalleryPage({ force: true })
-        return
+              .filter(Boolean)
+          : []
+        galleryState.ready = true
+        syncCollectionChrome()
+        return {
+          items: cards,
+          failures: accountFailures,
+          startIndex: offset,
+          total: galleryState.discoveredCount,
+          discoveredCount: galleryState.discoveredCount,
+          hasPrevious: !!accountData.has_previous,
+          previousCursor: accountData.previous_cursor,
+          hasMore: !!accountData.has_more,
+          nextCursor: accountData.next_cursor,
+        }
       }
-      if (direction > 0) {
-        if (!galleryState.hasMore) return
-        galleryState.pageStarts = galleryState.pageStarts.slice(0, galleryState.pageIndex + 1)
-        galleryState.pageStarts.push({
-          offset: galleryState.offset,
-          cursor: galleryState.windowCursor,
-        })
-        galleryState.pageIndex += 1
+
+      await ensureLocalCollection(request.signal)
+      var entries = galleryState.sortedDiscoveries.slice(offset, offset + limit)
+      var localItems
+      var localFailures = []
+      if (shouldUseImmediateDiscoveryFallback(homeLayout, cardVariant)) {
+        localItems = entries.map(fallbackDiscoveredGene).filter(Boolean)
       } else {
-        if (galleryState.pageIndex === 0) return
-        galleryState.pageIndex -= 1
+        var result = await loadMobileCardPageVM(entries, { signal: request.signal })
+        localItems = Array.isArray(result && result.cards) ? result.cards.filter(Boolean) : []
+        localFailures = Array.isArray(result && result.failures) ? result.failures : []
       }
-      var pageStart = galleryState.pageStarts[galleryState.pageIndex]
-      galleryState.offset = pageStart.offset
-      galleryState.windowCursor = pageStart.cursor
-      galleryState.hasMore = true
-      galleryState.pageLoadFailed = false
-      galleryState.focusGridAfterLoad = true
-      syncHomeHistoryState(true)
-      loadNextGalleryPage({ force: true })
+      await ensurePortraitDelivery(localItems)
+      prewarmMobileCardPageVM(
+        galleryState.sortedDiscoveries.slice(offset + limit, offset + limit * 2),
+      )
+      return {
+        items: localItems,
+        failures: localFailures,
+        startIndex: offset,
+        total: galleryState.sortedDiscoveries.length,
+        discoveredCount: galleryState.sortedDiscoveries.length,
+        hasPrevious: offset > 0,
+        hasMore: offset + entries.length < galleryState.sortedDiscoveries.length,
+      }
     }
 
-    if (previousPageButton) {
-      previousPageButton.addEventListener("click", function () {
-        navigateCollectionPage(-1)
-      })
+    function renderFeedSegment(segmentElement, items, startIndex) {
+      var inner = document.createElement("div")
+      inner.className = "icono-grid icono-feed-segment-grid"
+      inner.setAttribute("data-layout", homeGridLayout)
+      segmentElement.appendChild(inner)
+      appendGrid(inner, items, startIndex, homeLayout, cardVariant)
     }
-    if (nextPageButton) {
-      nextPageButton.addEventListener("click", function () {
-        navigateCollectionPage(1)
+
+    function wireMountedSegment(segment, cards) {
+      var inner = segment.element.querySelector(".icono-feed-segment-grid")
+      if (segment.failures.length) appendMobileDataFailureTiles(inner, segment.failures)
+      galleryState.items = itemsFromCards(cards)
+      if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
+        applyHomeMasonry(inner, cards)
+        void hydrateBrickCards(cards).then(function () {
+          if (inner.isConnected) applyHomeMasonry(inner)
+        })
+      } else {
+        warmBrickCardImages(segment.items)
+        wireBrickVoteBoxes(cards)
+        wireMobileLabelCards(cards)
+        refreshPortraitLightbox()
+        void hydrateBrickCards(cards)
+      }
+    }
+
+    function itemsFromCards(cards) {
+      return Array.from(cards || []).map(function (card) {
+        return { symbol: card.getAttribute("data-icono-symbol") || "" }
       })
     }
 
-    if (orderEl) {
-      orderEl.addEventListener("change", function () {
-        resetGallery(orderEl.value || activeDefaultOrder())
-      })
+    function updateFeedHistory(snapshot) {
+      latestFeedSnapshot = snapshot
+      writeCollectionUrl(false)
     }
 
+    function syncCrawlableNextLink(payload, segment) {
+      var link = document.head.querySelector("link[data-icono-feed-next]")
+      if (segment.direction !== "forward" || !payload.hasMore) {
+        if (segment.direction === "forward" && link) link.remove()
+        return
+      }
+      if (!link) {
+        link = document.createElement("link")
+        link.rel = "next"
+        link.setAttribute("data-icono-feed-next", "")
+        document.head.appendChild(link)
+      }
+      var nextUrl = new URL(window.location.href)
+      nextUrl.searchParams.set("page", String(segment.page + 1))
+      nextUrl.searchParams.set("offset", String(segment.startIndex + segment.count))
+      var nextCursor = String(payload.nextCursor || payload.next_cursor || "")
+      if (nextCursor) nextUrl.searchParams.set("after", nextCursor)
+      else nextUrl.searchParams.delete("after")
+      nextUrl.searchParams.delete("anchor")
+      nextUrl.searchParams.delete("anchorOffset")
+      link.href = nextUrl.href
+    }
+
+    var feedController = createCollectionFeedController({
+      feed: feed,
+      status: statusEl,
+      retryButton: retryButton,
+      initialPageSize: HOME_COLLECTION_INITIAL_PAGE_SIZE,
+      pageSize: collectionPageSize,
+      mountedCardLimit: mountedCardLimit,
+      payloadCacheSize: 8,
+      requestPage: requestFeedPage,
+      renderSegment: renderFeedSegment,
+      onSegmentMounted: wireMountedSegment,
+      onSegmentUnmount: function (_segment, element) {
+        var inner = element.querySelector(".icono-feed-segment-grid")
+        if (inner) destroyHomeMasonry(inner)
+      },
+      onPage: function (_payload, segment) {
+        syncCrawlableNextLink(_payload, segment)
+        if (segment.startIndex === 0) {
+          var auxiliary = document.getElementById("icono-home-auxiliary")
+          auxiliary.hidden = false
+          appendHomeInstallCard(auxiliary)
+          appendDiscordActionCard(auxiliary)
+        }
+        syncCollectionChrome()
+        if (restoreState && restoreState.anchorGene) {
+          var restoreGene = String(restoreState.anchorGene).toUpperCase()
+          window.requestAnimationFrame(function () {
+            var card = feed.querySelector('[data-icono-symbol="' + CSS.escape(restoreGene) + '"]')
+            if (!card) return
+            var delta = card.getBoundingClientRect().top - Number(restoreState.anchorTop || 0)
+            if (Math.abs(delta) > 0.5) window.scrollBy(0, delta)
+          })
+          restoreState = null
+        }
+      },
+      onStateChange: updateFeedHistory,
+      onError: function (error) {
+        console.error("[Iconoplasm] collection feed error:", error)
+      },
+    })
+
+    function snapshotHomeState() {
+      var snapshot = latestFeedSnapshot || feedController.snapshot()
+      return {
+        restoreSession: ICONO_ARCHIVE_RESTORE_SESSION,
+        order: galleryState.order,
+        scope: activeScope(),
+        sharedDiscoveries: galleryState.sharedDiscoveries,
+        seed: galleryState.seed,
+        page: snapshot.page || 1,
+        cursor: snapshot.cursor || "",
+        offset: snapshot.offset || 0,
+        anchorGene: snapshot.anchorGene || "",
+        anchorTop: Number(snapshot.anchorTop || 0),
+        scrollY: Math.max(0, Math.round(window.scrollY || 0)),
+      }
+    }
+
+    function writeCollectionUrl(push) {
+      var url = new URL(window.location.href)
+      url.searchParams.set("order", galleryState.order)
+      if (galleryState.seed) url.searchParams.set("seed", galleryState.seed)
+      else url.searchParams.delete("seed")
+      if (galleryState.sharedDiscoveries) url.searchParams.set("scope", "shared")
+      else url.searchParams.delete("scope")
+      var snapshot = snapshotHomeState()
+      url.searchParams.set("page", String(snapshot.page || 1))
+      if (snapshot.cursor) url.searchParams.set("after", snapshot.cursor)
+      else url.searchParams.delete("after")
+      url.searchParams.set("offset", String(Math.max(0, Number(snapshot.offset || 0) || 0)))
+      url.searchParams.delete("cursor")
+      if (snapshot.anchorGene) url.searchParams.set("anchor", snapshot.anchorGene)
+      else url.searchParams.delete("anchor")
+      if (snapshot.anchorGene) {
+        url.searchParams.set("anchorOffset", String(Math.round(Number(snapshot.anchorTop || 0))))
+      } else {
+        url.searchParams.delete("anchorOffset")
+      }
+      var state = Object.assign({}, window.history.state || {}, {
+        iconoplasm: true,
+        iconoplasmPage: "home",
+        iconoplasmHome: snapshot,
+      })
+      window.history[push ? "pushState" : "replaceState"](state, "", url.pathname + url.search)
+    }
+
+    function resetCollection(pushHistory) {
+      destroyHomeMasonry()
+      clearHomeAuxiliaryCards()
+      galleryState.ready = useClassicGallery
+      galleryState.discoveryEntries = []
+      galleryState.sortedDiscoveries = []
+      galleryState.items = []
+      galleryState.discoveredCount = 0
+      localReadyPromise = null
+      latestFeedSnapshot = { page: 1, cursor: "", offset: 0, anchorGene: "", anchorTop: 0 }
+      syncOrderOptions()
+      syncCollectionChrome()
+      if (pushHistory) writeCollectionUrl(true)
+      var startOffset = Math.max(0, Number((restoreState && restoreState.offset) || 0) || 0)
+      var startCursor = String((restoreState && restoreState.cursor) || "")
+      var startPage = Math.max(1, Number((restoreState && restoreState.page) || 1) || 1)
+      if (!hasResolvedAuthState && !galleryState.sharedDiscoveries && !useClassicGallery) return
+      void feedController.reset({ offset: startOffset, cursor: startCursor, page: startPage })
+    }
+
+    syncOrderOptions()
+    syncCollectionChrome()
     activeHomeHistorySnapshot = snapshotHomeState
-    var handleHomeScroll = function () {
-      syncHomeHistoryState(false)
-    }
-    window.addEventListener("scroll", handleHomeScroll, { passive: true })
     activeHomeRenderCleanup = function () {
-      renderDisposed = true
-      activeGalleryRequest += 1
-      galleryState.loading = false
-      galleryState.readyPromise = null
-      window.removeEventListener("scroll", handleHomeScroll)
-      if (handleSearchOutsideClick) {
-        document.removeEventListener("click", handleSearchOutsideClick)
-        handleSearchOutsideClick = null
-      }
+      disposed = true
+      activeSearchRequest += 1
+      clearTimeout(searchTimer)
+      feedController.dispose()
+      destroyHomeMasonry()
+      var nextLink = document.head.querySelector("link[data-icono-feed-next]")
+      if (nextLink) nextLink.remove()
+      document.removeEventListener("click", handleSearchOutsideClick)
     }
-
-    resetGallery(pendingRestoreState ? pendingRestoreState.order : activeDefaultOrder())
+    orderEl.addEventListener("change", function () {
+      galleryState.order = useClassicGallery
+        ? String(orderEl.value || GALLERY_DEFAULT_ORDER)
+        : normalizeHomeCollectionOrder(orderEl.value || HOME_COLLECTION_DEFAULT_ORDER)
+      galleryState.seed =
+        galleryState.order === "random"
+          ? Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+          : ""
+      restoreState = null
+      resetCollection(true)
+    })
+    resetCollection(false)
 
     function activeSearchScope() {
       if (useClassicGallery) return "catalog"
-      var sharedToggle =
-        summaryEl && summaryEl.querySelector("[data-icono-shared-discoveries-toggle]")
-      if (!sharedToggle) {
-        throw new Error(
-          "[Iconoplasm] shared discoveries toggle missing while resolving search scope",
-        )
-      }
-      return sharedToggle.checked ? "shared" : "discoveries"
+      return galleryState.sharedDiscoveries ? "shared" : "discoveries"
     }
 
-    function fetchScopedSearchResults(query) {
-      var path =
-        "/api/public/v1/genes/search?q=" +
-        encodeURIComponent(query) +
-        "&limit=12&scope=" +
-        encodeURIComponent(activeSearchScope())
-      return fetchAuthedJSON(path)
-    }
-
-    // Search with debounce
-    var timer = null
-    var activeIndex = -1
-    var currentResults = []
-    var activeSearchRequest = 0
-    var handleSearchOutsideClick = null
-
-    function refreshActiveSearchResults() {
-      if (!input || !resultsEl) return
-      if (renderDisposed) return
-      var q = input.value.trim()
+    function refreshSearchResults() {
+      if (disposed) return
+      var query = input.value.trim()
       var scope = activeSearchScope()
-      var requestId = (activeSearchRequest += 1)
-      clearTimeout(timer)
-      activeIndex = -1
-      if (!q) {
-        currentResults = []
+      var requestId = ++activeSearchRequest
+      clearTimeout(searchTimer)
+      activeSearchIndex = -1
+      if (!query) {
+        currentSearchResults = []
         resultsEl.innerHTML = ""
         input.setAttribute("aria-expanded", "false")
-        input.removeAttribute("aria-activedescendant")
         return
       }
-      fetchScopedSearchResults(q)
+      fetchAuthedJSON(
+        "/api/public/v1/genes/search?q=" +
+          encodeURIComponent(query) +
+          "&limit=12&scope=" +
+          encodeURIComponent(scope),
+      )
         .then(function (data) {
-          if (
-            requestId !== activeSearchRequest ||
-            input.value.trim() !== q ||
-            activeSearchScope() !== scope
-          ) {
-            return
-          }
-          currentResults = data.genes || []
-          renderSearchResults(resultsEl, currentResults)
+          if (requestId !== activeSearchRequest || input.value.trim() !== query) return
+          currentSearchResults = data.genes || []
+          renderSearchResults(resultsEl, currentSearchResults)
         })
         .catch(function () {
-          if (
-            requestId !== activeSearchRequest ||
-            input.value.trim() !== q ||
-            activeSearchScope() !== scope
-          ) {
-            return
-          }
-          currentResults = []
+          if (requestId !== activeSearchRequest) return
+          currentSearchResults = []
           resultsEl.innerHTML = ""
           input.setAttribute("aria-expanded", "false")
-          input.removeAttribute("aria-activedescendant")
         })
     }
 
     input.addEventListener("input", function () {
-      var q = input.value.trim()
-      clearTimeout(timer)
-      activeIndex = -1
-      if (!q) {
-        activeSearchRequest += 1
-        currentResults = []
-        resultsEl.innerHTML = ""
-        return
-      }
-      timer = setTimeout(function () {
-        refreshActiveSearchResults()
-      }, DEBOUNCE_MS)
+      clearTimeout(searchTimer)
+      searchTimer = window.setTimeout(refreshSearchResults, DEBOUNCE_MS)
     })
-
-    // Keyboard navigation in search dropdown
-    input.addEventListener("keydown", function (e) {
+    input.addEventListener("keydown", function (event) {
       var items = resultsEl.querySelectorAll(".icono-search-result")
-      if (!items.length) {
-        return
-      }
-      if (e.key === "ArrowDown") {
-        e.preventDefault()
-        activeIndex = Math.min(activeIndex + 1, items.length - 1)
-        highlightResult(items, activeIndex)
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault()
-        activeIndex = Math.max(activeIndex - 1, -1)
-        highlightResult(items, activeIndex)
-      } else if (e.key === "Enter") {
-        e.preventDefault()
-        if (activeIndex >= 0 && currentResults[activeIndex]) {
-          navigateTo("/gene/" + encodeURIComponent(currentResults[activeIndex].symbol))
-        } else if (currentResults[0]) {
-          navigateTo("/gene/" + encodeURIComponent(currentResults[0].symbol))
-        }
-      } else if (e.key === "Escape") {
+      if (event.key === "ArrowDown" && items.length) {
+        event.preventDefault()
+        activeSearchIndex = Math.min(activeSearchIndex + 1, items.length - 1)
+        highlightResult(items, activeSearchIndex)
+      } else if (event.key === "ArrowUp" && items.length) {
+        event.preventDefault()
+        activeSearchIndex = Math.max(activeSearchIndex - 1, -1)
+        highlightResult(items, activeSearchIndex)
+      } else if (event.key === "Enter" && currentSearchResults.length) {
+        event.preventDefault()
+        var selected = currentSearchResults[Math.max(0, activeSearchIndex)]
+        navigateTo("/gene/" + encodeURIComponent(selected.symbol))
+      } else if (event.key === "Escape") {
         resultsEl.innerHTML = ""
-        activeIndex = -1
         input.setAttribute("aria-expanded", "false")
-        input.removeAttribute("aria-activedescendant")
       }
     })
-
-    // Close search results when clicking outside
-    handleSearchOutsideClick = function (e) {
-      if (!e.target.closest(".icono-search-wrapper")) {
+    function handleSearchOutsideClick(event) {
+      if (!event.target.closest(".icono-search-wrapper")) {
         resultsEl.innerHTML = ""
         input.setAttribute("aria-expanded", "false")
-        input.removeAttribute("aria-activedescendant")
       }
     }
     document.addEventListener("click", handleSearchOutsideClick)
@@ -9284,7 +8827,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var activeHomeRenderCleanup = null
   var queuedHomeHistorySync = null
   var pendingHomeAnchor = null
-  var cachedHomeView = null
   var mobileLabelReviewMode = false
   var mobileLabelBreakpointObserverStarted = false
   var queuedMobileLabelBreakpointRefresh = false
@@ -9361,49 +8903,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
   }
 
-  function cacheActiveHomeView(root) {
-    if (!root || !activeHomeHistorySnapshot || !root.querySelector("#icono-grid")) return false
-    var fragment = document.createDocumentFragment()
-    while (root.firstChild) {
-      fragment.appendChild(root.firstChild)
-    }
-    cachedHomeView = {
-      fragment: fragment,
-      cleanup: activeHomeRenderCleanup,
-      snapshot: activeHomeHistorySnapshot,
-      scrollY: Math.max(0, Math.round(window.scrollY || window.pageYOffset || 0)),
-    }
-    activeHomeHistorySnapshot = null
-    activeHomeRenderCleanup = null
-    return true
-  }
-
-  function discardCachedHomeView() {
-    if (!cachedHomeView) return
-    var cleanup = cachedHomeView.cleanup
-    cachedHomeView = null
-    if (typeof cleanup === "function") {
-      cleanup()
-    }
-  }
-
-  function restoreCachedHomeView(root, restoreState) {
-    if (!root || !cachedHomeView || !restoreState) return false
-    root.textContent = ""
-    root.appendChild(cachedHomeView.fragment)
-    activeHomeHistorySnapshot = cachedHomeView.snapshot
-    activeHomeRenderCleanup = cachedHomeView.cleanup
-    var targetY = Math.max(0, Number(restoreState.scrollY || cachedHomeView.scrollY || 0) || 0)
-    cachedHomeView = null
-    lastRenderedPath = window.location.pathname + window.location.search
-    iconoSidebarState.page = "home"
-    renderIconoplasmSidebar()
-    refreshPortraitLightbox()
-    scrollWindowInstantly(0, targetY)
-    syncHomeHistoryState(true)
-    return true
-  }
-
   function reconcileMobileLabelBreakpoint() {
     if (typeof window === "undefined") return
     var nextMode = isMobileLabelReviewEnabled()
@@ -9471,32 +8970,23 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (home.restoreSession !== ICONO_ARCHIVE_RESTORE_SESSION) return null
     if (home.restoreOnGeneBack !== true) return null
     var order = normalizeHomeCollectionOrder(home.order || HOME_COLLECTION_DEFAULT_ORDER)
-    var loadedCount = Number(home.loadedCount || 0)
-    var pageIndex = Number(home.pageIndex || 0)
+    var page = Number(home.page || 1)
+    var offset = Number(home.offset || 0)
     var scrollY = Number(home.scrollY || 0)
-    if (!(loadedCount > 0 || pageIndex > 0 || scrollY > 0)) return null
-    var pageStarts = Array.isArray(home.pageStarts)
-      ? home.pageStarts
-          .map(function (page) {
-            if (!page || typeof page !== "object") return null
-            var offset = Number(page.offset || 0)
-            if (!Number.isFinite(offset) || offset < 0) return null
-            return { offset: Math.round(offset), cursor: String(page.cursor || "") }
-          })
-          .filter(Boolean)
-      : []
+    if (!(offset > 0 || page > 1 || scrollY > 0 || home.anchorGene)) return null
     return {
       order: order,
+      scope: home.scope === "shared" ? "shared" : "personal",
       sharedDiscoveries: !!home.sharedDiscoveries,
       restoreSession: ICONO_ARCHIVE_RESTORE_SESSION,
       seed: String(home.seed || ""),
-      loadedCount: Number.isFinite(loadedCount) ? Math.max(0, Math.round(loadedCount)) : 0,
-      pageIndex: Number.isFinite(pageIndex) ? Math.max(0, Math.round(pageIndex)) : 0,
-      pageStarts: pageStarts,
+      page: Number.isFinite(page) ? Math.max(1, Math.round(page)) : 1,
+      cursor: String(home.cursor || ""),
+      offset: Number.isFinite(offset) ? Math.max(0, Math.round(offset)) : 0,
       scrollY: Number.isFinite(scrollY) ? Math.max(0, Math.round(scrollY)) : 0,
-      focusSymbol: String(home.focusSymbol || ""),
-      focusTop: Number.isFinite(Number(home.focusTop || 0))
-        ? Math.round(Number(home.focusTop || 0))
+      anchorGene: String(home.anchorGene || home.focusSymbol || ""),
+      anchorTop: Number.isFinite(Number(home.anchorTop || home.focusTop || 0))
+        ? Number(home.anchorTop || home.focusTop || 0)
         : 0,
     }
   }
@@ -9957,18 +9447,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     mobileLabelReviewMode = isMobileLabelReviewEnabled()
     var route = getRoute()
     var homeRestoreState = route.page === "home" ? readHomeRestoreState() : null
-    if (route.page === "home" && restoreCachedHomeView(root, homeRestoreState)) {
-      document.title = "Iconoplasm - Gene character cards"
-      return
-    }
-    if (route.page === "home" && cachedHomeView && !homeRestoreState) {
-      discardCachedHomeView()
-    }
-    var cachedCurrentHome = route.page !== "home" ? cacheActiveHomeView(root) : false
-    if (!cachedCurrentHome) {
-      clearActiveHomeRenderState()
-      destroyHomeMasonry()
-    }
+    clearActiveHomeRenderState()
+    destroyHomeMasonry()
     lastRenderedPath = window.location.pathname + window.location.search
     // Update page title
     if (route.page === "home") {

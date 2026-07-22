@@ -1506,8 +1506,8 @@ test("Iconoplasm home keeps Discord actions in the starter-card flow", () => {
   assert.doesNotMatch(appSource, /Log in with Discord to track discovered genes/)
   assert.match(
     appSource,
-    /galleryState\.offset >= GUEST_STARTER_GENES\.length[\s\S]*appendDiscordActionCard\(auxiliaryContainer\)/,
-    "Discord action card should be appended after the three starter gene cards render without forcing every card variant into the same grid host",
+    /segment\.startIndex === 0[\s\S]*getElementById\("icono-home-auxiliary"\)[\s\S]*appendDiscordActionCard\(auxiliary\)/,
+    "Discord action card should be appended beside the first feed segment without joining the virtualized artwork grid",
   )
   assert.match(
     appSource,

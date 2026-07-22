@@ -64,9 +64,13 @@ test("home orders are shared across paths, not proof of one gallery feed", () =>
   assert.match(appSource, /function accountGalleryWindowOrderSupported\(order\)/)
   assert.match(appSource, /return resolved === "newest" \|\| resolved === "symbol"/)
   assert.match(appSource, /fetchAccountGalleryWindow\(/)
-  assert.match(appSource, /fetchDiscoveryState\(galleryState\.order, galleryState\.seed\)/)
-  assert.match(appSource, /loadMobileCardPageVM\(pageEntries\)/)
-  assert.match(appSource, /This is not a generic infinite-feed loader/)
+  assert.match(
+    appSource,
+    /fetchDiscoveryState\(galleryState\.order, galleryState\.seed, \{\s*signal: signal,/,
+  )
+  assert.match(appSource, /loadMobileCardPageVM\(entries, \{ signal: request\.signal \}\)/)
+  assert.match(appSource, /async function requestFeedPage\(request\)/)
+  assert.match(appSource, /accountGalleryWindowAvailable[\s\S]*ensureLocalCollection/)
 })
 
 test("worker comments pin public gallery, account windows, and published card artifacts as distinct paths", () => {
