@@ -3482,7 +3482,7 @@
       daily: singleQuotaPoint(
         d1Storage.observedAt,
         d1Storage.databaseSizeBytes,
-        5 * 1024 * 1024 * 1024,
+        d1Storage.databaseLimitBytes,
       ),
     }
     byKey.pages_functions = {

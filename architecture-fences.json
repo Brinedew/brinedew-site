@@ -100,6 +100,90 @@
           "token": "ARCHITECTURE FENCE [IPD-003]"
         }
       ]
+    },
+    {
+      "id": "IPD-004",
+      "title": "Queue wakeups follow durable due times",
+      "decision": "Cloudflare Queue messages wake durable ledger work only when it is runnable; unfinished future work is delayed until the earliest next_attempt_at and is never polled by immediate replacement messages.",
+      "reason": "A single future retry otherwise creates an ack/read/delete/send feedback loop that consumes the daily Queue allowance without doing work. Short polling caps also spend retry attempts and can dead-letter a message before its durable backoff expires.",
+      "change_control": "Queue topology, durable status accounting, retry delays, consumer configuration, behavioral tests, instructions, and the runbook must change atomically. Any replacement must prove a bounded number of billable operations while no work is due.",
+      "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
+      "linear_issue": "B-667",
+      "additional_required_marker_categories": ["config", "deploy"],
+      "markers": [
+        {
+          "category": "instructions",
+          "file": "AGENTS.md",
+          "token": "ARCHITECTURE FENCE [IPD-004]"
+        },
+        {
+          "category": "runbook",
+          "file": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
+          "token": "ARCHITECTURE FENCE [IPD-004]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+          "token": "ARCHITECTURE FENCE [IPD-004]"
+        },
+        {
+          "category": "config",
+          "file": "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+          "token": "ARCHITECTURE FENCE [IPD-004]"
+        },
+        {
+          "category": "test",
+          "file": "scripts/architecture-fences.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-004]"
+        },
+        {
+          "category": "deploy",
+          "file": ".github/workflows/deploy-quartz.yml",
+          "token": "ARCHITECTURE FENCE [IPD-004]"
+        }
+      ]
+    },
+    {
+      "id": "IPD-005",
+      "title": "The primary Iconoplasm D1 is bounded operational state",
+      "decision": "The primary D1 stays below an 80% target of its 500,000,000-byte per-database wall by storing immutable profile prose once and moving publish events older than 30 days to a separately bound cold audit D1 after row-level verification.",
+      "reason": "Duplicated manifestation prose and an unbounded 297,818-row publish ledger filled the database and stopped all writes. The old dashboard compared the database to the unrelated 5 GB account allowance, so it reported roughly 10% usage at the per-database hard limit.",
+      "change_control": "Large payload placement, read-model columns, append-only ledgers, retention, archive bindings, capacity thresholds, observability, migrations, tests, instructions, runbook, and deploy enforcement must change atomically. Cold history may be removed from the hot database only after verified archival.",
+      "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
+      "linear_issue": "B-667",
+      "additional_required_marker_categories": ["config", "deploy"],
+      "markers": [
+        {
+          "category": "instructions",
+          "file": "AGENTS.md",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        },
+        {
+          "category": "runbook",
+          "file": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm-publish-event-archive.js",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        },
+        {
+          "category": "config",
+          "file": "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        },
+        {
+          "category": "test",
+          "file": "scripts/architecture-fences.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        },
+        {
+          "category": "deploy",
+          "file": ".github/workflows/deploy-quartz.yml",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        }
+      ]
     }
   ]
 }

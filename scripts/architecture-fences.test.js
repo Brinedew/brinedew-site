@@ -127,3 +127,37 @@ test("IPD-001 keeps Bunny primary on healthy tabs and canonical as the one-probe
     /<link rel="preconnect" href="https:\/\/iconoplasmportraits\.b-cdn\.net" \/>/,
   )
 })
+
+// ARCHITECTURE FENCE [IPD-004]
+test("IPD-004 keeps ledger wakeups due-time aware", () => {
+  const runtime = readRepositoryFile(
+    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+  )
+  assert.match(runtime, /queueDelaySecondsUntil\(drainResult\?\.next_attempt_at\)/)
+  assert.match(runtime, /voteProjectionQueueRetryDelaySeconds/)
+  assert.doesNotMatch(runtime, /Math\.min\(300, secondsUntilDue\)/)
+})
+
+// ARCHITECTURE FENCE [IPD-005]
+test("IPD-005 uses the per-database wall and a verified cold archive", () => {
+  const config = readRepositoryFile(
+    "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+  )
+  const admin = readRepositoryFile("quartz/static/iconoplasm/admin.js")
+  const archive = readRepositoryFile("workers/iconoplasm-publish-event-archive.js")
+  const snapshotGenerator = readRepositoryFile(
+    "scripts/generate-iconoplasm-observability-snapshot.mjs",
+  )
+  assert.match(
+    config,
+    /ICONOPLASM_D1_DATABASE_STORAGE_HARD_LIMIT_BYTES_DO_NOT_SET_CASUALLY = "500000000"/,
+  )
+  assert.match(config, /binding = "ICONOPLASM_AUDIT_DB"/)
+  assert.match(admin, /d1Storage\.databaseLimitBytes/)
+  assert.doesNotMatch(admin, /d1Storage\.databaseSizeBytes,\s*5 \* 1024 \* 1024 \* 1024/)
+  assert.match(snapshotGenerator, /\/d1\/database\/\$\{databaseId\}/)
+  assert.match(snapshotGenerator, /databaseMetadata\?\.file_size/)
+  assert.match(snapshotGenerator, /"d1_control_plane"/)
+  assert.match(archive, /Publish-event archive verification failed/)
+  assert.match(archive, /DELETE FROM icono_publish_events/)
+})

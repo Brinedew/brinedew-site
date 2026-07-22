@@ -34,6 +34,23 @@ Archive/Clans switcher; feed skip links stay clipped until keyboard focus. Read
 `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md` before changing the renderer,
 gene HTML, range map, robots metadata, archive, sitemap, or `llms.txt`.
 
+**ARCHITECTURE FENCE [IPD-004]** — Iconoplasm Queue messages are due-time
+wakeups for durable ledgers, not polling tokens. Unfinished future work must be
+delayed until its ledger `next_attempt_at`; never immediately replace a message
+merely because `remaining > 0`, and never cap a long durable backoff to a short
+retry loop. Read `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` before
+changing Queue consumers, retry delays, ledger status counts, or self-draining
+background work.
+
+**ARCHITECTURE FENCE [IPD-005]** — the primary Iconoplasm D1 is bounded
+operational state. Its Free-plan wall is 500,000,000 bytes per database, not the
+5 GB account allowance. Keep manifestation prose authoritative only in gene
+essence, keep the admin rollup copy empty, and archive publish events older than
+30 days to the cold audit D1 only after ID verification. Read
+`docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` before adding large
+columns, materialized payloads, append-only ledgers, retention jobs, D1 bindings,
+capacity charts, or bulk reconciliation paths.
+
 ## "Site is broken" runbook
 
 When a user reports "site broken" or "images not loading" or any visual regression, the first 30 minutes are dominated by the wrong kind of investigation (DNS-layer forensics, status-page checks, Git blame) when the actual answer is almost always on the user's network or in a project-owned fallback that already exists. The pattern that wastes hours is:

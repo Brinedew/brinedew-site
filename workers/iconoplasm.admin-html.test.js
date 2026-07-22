@@ -74,6 +74,11 @@ test("iconoplasm admin exposes the observability snapshot as a first-class tab",
   assert.match(ICONOPLASM_ADMIN_HTML, /id="cost-sensor-coverage-matrix"/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /id="cost-request-distribution-chart"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /quotaCeilingSeries\(snapshot\)/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /d1Storage\.databaseLimitBytes/)
+  assert.doesNotMatch(
+    ICONOPLASM_ADMIN_HTML,
+    /d1Storage\.databaseSizeBytes,\s*5 \* 1024 \* 1024 \* 1024/,
+  )
   assert.match(ICONOPLASM_ADMIN_HTML, /buildQuotaCeilingTimelineSvg/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Cloudflare drilldown/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /var OBSERVABILITY_SNAPSHOT = /)
