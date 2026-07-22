@@ -360,12 +360,20 @@ test("home shell exposes landmarks, search semantics, and a labelled automatic f
   assert.equal(document.querySelector("#icono-collection-pager"), null)
 })
 
-test("feed skip links keep a 44px keyboard and touch target", async () => {
+test("feed skip links stay clipped until keyboard focus and then expose a 44px target", async () => {
   const styles = await readFile(stylesPath, "utf8")
   const start = styles.indexOf(".icono-feed-skip {")
   const end = styles.indexOf("}", start)
+  const focusStart = styles.indexOf(".icono-feed-skip:focus {")
+  const focusEnd = styles.indexOf("}", focusStart)
   assert.notEqual(start, -1, "missing feed skip-link styles")
-  assert.match(styles.slice(start, end), /min-height:\s*44px/)
+  assert.notEqual(focusStart, -1, "missing focused feed skip-link styles")
+  assert.match(styles.slice(start, end), /width:\s*1px/)
+  assert.match(styles.slice(start, end), /height:\s*1px/)
+  assert.match(styles.slice(start, end), /clip-path:\s*inset\(50%\)/)
+  assert.match(styles.slice(focusStart, focusEnd), /position:\s*fixed/)
+  assert.match(styles.slice(focusStart, focusEnd), /min-height:\s*44px/)
+  assert.match(styles.slice(focusStart, focusEnd), /clip-path:\s*none/)
 })
 
 test("gene shell preserves landmarks when adopting server-rendered content", async () => {

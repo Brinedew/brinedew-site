@@ -442,7 +442,8 @@ test("known incomplete gene shells remain noindex", async () => {
   assert.match(responseHtml, /<meta name="robots" content="noindex,follow,noarchive">/)
 })
 
-test("the existing homepage navigation links the raw server archive", async () => {
+// ARCHITECTURE FENCE [IPD-003]
+test("homepage discovery links the raw archive without adding immersive navigation chrome", async () => {
   globalThis.fetch = async () =>
     htmlResponse(
       `<!doctype html><html><head><title>Iconoplasm</title></head><body><nav class="icono-page-switcher" data-icono-page-switcher="true"><a href="/">Archive</a><a href="/clans">Clans</a></nav><div id="iconoplasm-root"></div></body></html>`,
@@ -454,9 +455,16 @@ test("the existing homepage navigation links the raw server archive", async () =
     { waitUntil() {} },
   )
   const html = await response.text()
+  const contentSource = await readFile(
+    new URL("../content/apps/iconoplasm/index.md", import.meta.url),
+    "utf8",
+  )
 
-  assert.match(html, /href="\/genes"[^>]*>Gene index<\/a>/)
-  assert.doesNotMatch(html, /href="\/genes"[^>]*data-icono-nav/)
+  assert.doesNotMatch(html, />Gene index<\/a>/)
+  assert.match(
+    contentSource,
+    /class="sr-only"[\s\S]*href="https:\/\/iconoplasm\.brinedew\.bio\/genes" tabindex="-1">published human gene cards<\/a>/,
+  )
 })
 
 test("gene hydration preserves and refreshes the canonical profile title", async () => {
