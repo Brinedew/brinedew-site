@@ -113,7 +113,7 @@ test("DO NOT DELETE: deferred vote cards do not prime vote snapshots on visibili
   for (const [label, source] of sources) {
     assert.match(
       source,
-      /if \(cfg\.deferSnapshot\) \{[\s\S]*?return \{ ensureSnapshot/,
+      /if \(cfg\.deferSnapshot\) \{[\s\S]*?return \{[\s\S]*?ensureSnapshot(?:\s*:|,)/,
       `${label} should keep an explicit deferred snapshot branch`,
     )
     assert.doesNotMatch(

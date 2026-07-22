@@ -2,7 +2,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
 ;(function (global) {
   "use strict"
 
-  var ICONO_SHARED_RUNTIME_VERSION = "20260722a"
+  var ICONO_SHARED_RUNTIME_VERSION = "20260722b"
   var forceSiteOwnership = !!(global && global.__iconoSiteOwnsSharedRuntime)
   var existingShared = global && global.IconoplasmCardShared ? global.IconoplasmCardShared : null
   var existingMeta =
@@ -1956,15 +1956,28 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
 
   function wireVoteBox(box, config) {
     if (!box) return null
-    if (box.getAttribute("data-icono-vote-wired") === "true") return null
     var cfg = config || {}
+    var boxes = [box]
+    var mirrorBoxes = Array.isArray(cfg.mirrorBoxes) ? cfg.mirrorBoxes : []
+    for (var mirrorIndex = 0; mirrorIndex < mirrorBoxes.length; mirrorIndex++) {
+      var mirrorBox = mirrorBoxes[mirrorIndex]
+      if (!mirrorBox || boxes.indexOf(mirrorBox) >= 0) continue
+      boxes.push(mirrorBox)
+    }
+    // A responsive card may render the same action in more than one presentation slot. Those
+    // nodes are views of one candidate, not independent voting components. One controller owns
+    // the snapshot, pending state, and mutation so a breakpoint or hydration swap cannot reveal
+    // a stale or unwired copy.
+    if (box.getAttribute("data-icono-vote-wired") === "true") return null
     var symbol = normalizedSymbol(cfg.symbol)
     var assetSha = String(cfg.assetSha || "")
       .trim()
       .toLowerCase()
     var visionId = String(cfg.visionId || "").trim()
     if (!symbol || !assetSha) return null
-    box.setAttribute("data-icono-vote-wired", "true")
+    for (var boxIndex = 0; boxIndex < boxes.length; boxIndex++) {
+      boxes[boxIndex].setAttribute("data-icono-vote-wired", "true")
+    }
     var state = {
       authenticated: !!cfg.authenticated,
       pending: false,
@@ -1983,11 +1996,11 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     if (cfg.initialSnapshot) state.snapshot = cloneSnapshot(cfg.initialSnapshot)
     var candidateImageId = Number(cfg.candidateImageId || 0)
     if (!Number.isFinite(candidateImageId) || candidateImageId <= 0) candidateImageId = 0
-    var upBtn = box.querySelector("[data-icono-vote-up]")
-    var downBtn = box.querySelector("[data-icono-vote-down]")
-
     function render() {
-      setVoteBoxState(box, state)
+      for (var renderIndex = 0; renderIndex < boxes.length; renderIndex++) {
+        setVoteBoxState(boxes[renderIndex], state)
+      }
+      if (typeof cfg.onState === "function") cfg.onState(state, boxes)
     }
 
     function notifySnapshot() {
@@ -2071,7 +2084,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
         })
     }
 
-    function submitVote(voteValue) {
+    function submitVote(voteValue, sourceBox) {
       // Source: C:\Users\Admin\.codex\skills\optimize\SKILL.md (Optimistic UI) +
       // C:\Users\Admin\.codex\skills\polish\SKILL.md (Interaction states).
       // Keep the selected vote lit on click, not after the network round-trip. This is shared
@@ -2136,7 +2149,9 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
               writeStoredVoteSnapshot(candidateRef, state.snapshot)
               state.authenticated = false
               notifySnapshot()
-              if (typeof cfg.onAuthRequired === "function") cfg.onAuthRequired(err)
+              if (typeof cfg.onAuthRequired === "function") {
+                cfg.onAuthRequired(err, sourceBox || box)
+              }
               return
             }
             // A lost response is ambiguous: the coordinator may already have
@@ -2163,17 +2178,23 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       return snapshotPrimePromise
     }
 
-    if (upBtn) {
-      upBtn.addEventListener("click", function (event) {
-        event.stopPropagation()
-        submitVote(1)
-      })
-    }
-    if (downBtn) {
-      downBtn.addEventListener("click", function (event) {
-        event.stopPropagation()
-        submitVote(-1)
-      })
+    for (var listenerIndex = 0; listenerIndex < boxes.length; listenerIndex++) {
+      ;(function (viewBox) {
+        var upBtn = viewBox.querySelector("[data-icono-vote-up]")
+        var downBtn = viewBox.querySelector("[data-icono-vote-down]")
+        if (upBtn) {
+          upBtn.addEventListener("click", function (event) {
+            event.stopPropagation()
+            submitVote(1, viewBox)
+          })
+        }
+        if (downBtn) {
+          downBtn.addEventListener("click", function (event) {
+            event.stopPropagation()
+            submitVote(-1, viewBox)
+          })
+        }
+      })(boxes[listenerIndex])
     }
 
     render()
@@ -2181,11 +2202,23 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     if (cfg.deferSnapshot) {
       // Cost fence: defer means "no personalized snapshot request until the user actually
       // tries to vote". Priming on hover/visibility recreated the same per-card request flood.
-      return { ensureSnapshot: ensureSnapshot, setSnapshot: setSnapshot, state: state }
+      return {
+        boxes: boxes,
+        ensureSnapshot: ensureSnapshot,
+        setSnapshot: setSnapshot,
+        state: state,
+        submitVote: submitVote,
+      }
     }
 
     ensureSnapshot()
-    return { ensureSnapshot: ensureSnapshot, setSnapshot: setSnapshot, state: state }
+    return {
+      boxes: boxes,
+      ensureSnapshot: ensureSnapshot,
+      setSnapshot: setSnapshot,
+      state: state,
+      submitVote: submitVote,
+    }
   }
 
   startRoughLoopObserver()

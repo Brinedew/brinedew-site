@@ -3613,13 +3613,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (!card) return
     if (!isArchivalCardVariant(card.getAttribute("data-icono-card-variant"))) return
     var assetSha = brickVoteAssetSha(genePayload)
-    var box = card.querySelector("[data-icono-brick-vote-box]")
-    if (!box || !assetSha) return
+    var boxes = Array.prototype.slice.call(card.querySelectorAll("[data-icono-brick-vote-box]"))
+    if (!boxes.length || !assetSha) return
+    var box = boxes[0]
     // Archival brick hydration replaces `.iconoplasm-tooltip-body` wholesale after detail fetch.
-    // That DOM swap discards the initial vote listeners that were attached when the card first
-    // entered the gallery. Rewire the replacement box immediately so swipe-review still submits
-    // after the card has hydrated, after returning to the gallery, and after any later body swap.
-    wireVoteBox(box, card.getAttribute("data-icono-symbol"), assetSha, {
+    // That DOM swap discards the initial vote controller and both responsive views. Rewire all
+    // replacement views to one controller immediately so the visible breakpoint always submits
+    // after hydration, after returning to the gallery, and after any later body swap.
+    wireVoteBoxGroup(boxes, card.getAttribute("data-icono-symbol"), assetSha, {
       deferSnapshot: true,
       visionId: box.getAttribute("data-icono-vision-id") || brickVoteVisionId(genePayload) || "",
       candidateImageId:
@@ -3807,13 +3808,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       candidateImageId: opts.candidateImageId || 0,
       deferSnapshot: !!opts.deferSnapshot,
       initialSnapshot: opts.initialSnapshot || null,
+      mirrorBoxes: Array.isArray(opts.mirrorBoxes) ? opts.mirrorBoxes : [],
       authenticated: !!opts.authenticated,
       apiBaseUrl: API,
       onSnapshot: function (snapshot, state) {
         if (typeof opts.onSnapshot === "function") opts.onSnapshot(snapshot, state)
       },
-      onAuthRequired: function () {
-        showVoteLoginPopup(box)
+      onAuthRequired: function (_error, sourceBox) {
+        showVoteLoginPopup(sourceBox || box)
       },
       onVoteCommitted: function (data, state) {
         if (typeof opts.onVoteCommitted === "function") {
@@ -3892,11 +3894,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     for (var i = 0; i < items.length; i++) {
       var card = items[i]
       if (!card || !card.classList || !card.classList.contains("icono-card--brick")) continue
-      var box = card.querySelector("[data-icono-brick-vote-box]")
-      if (!box) continue
-      ;(function (brickCard, voteBox) {
-        wireVoteBox(
-          voteBox,
+      var boxes = Array.prototype.slice.call(card.querySelectorAll("[data-icono-brick-vote-box]"))
+      if (!boxes.length) continue
+      ;(function (brickCard, voteBoxes) {
+        var voteBox = voteBoxes[0]
+        wireVoteBoxGroup(
+          voteBoxes,
           brickCard.getAttribute("data-icono-symbol"),
           voteBox.getAttribute("data-icono-brick-vote-box"),
           {
@@ -3911,7 +3914,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
             },
           },
         )
-      })(card, box)
+      })(card, boxes)
     }
   }
 
@@ -4438,41 +4441,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var opts = options || {}
     var targets = Array.isArray(boxes) ? boxes.filter(Boolean) : []
     if (!targets.length || !symbol || !assetSha) return null
-    var handles = []
-    var syncing = false
-
-    function synchronize(sourceHandle, snapshot, state) {
-      if (syncing) return
-      syncing = true
-      for (var i = 0; i < handles.length; i++) {
-        var handle = handles[i]
-        if (handle === sourceHandle || typeof handle.setSnapshot !== "function") continue
-        handle.setSnapshot(snapshot, {
-          authenticated: !!(state && state.authenticated),
-          notify: false,
-        })
-      }
-      syncing = false
-      if (typeof opts.onSnapshot === "function") opts.onSnapshot(snapshot, state)
-    }
-
-    for (var i = 0; i < targets.length; i++) {
-      ;(function (box) {
-        var handle = null
-        handle = wireVoteBox(box, symbol, assetSha, {
-          deferSnapshot: true,
-          visionId: opts.visionId || "",
-          candidateImageId: opts.candidateImageId || 0,
-          onSnapshot: function (snapshot, state) {
-            synchronize(handle, snapshot, state)
-          },
-          onVoteCommitted: opts.onVoteCommitted,
-          onError: opts.onError,
-        })
-        if (handle) handles.push(handle)
-      })(targets[i])
-    }
-    if (!handles.length) return null
+    var handle = wireVoteBox(targets[0], symbol, assetSha, {
+      deferSnapshot: opts.deferSnapshot !== false,
+      mirrorBoxes: targets.slice(1),
+      visionId: opts.visionId || "",
+      candidateImageId: opts.candidateImageId || 0,
+      onSnapshot: opts.onSnapshot,
+      onVoteCommitted: opts.onVoteCommitted,
+      onError: opts.onError,
+    })
+    if (!handle) return null
     return {
       candidateRef: "a:" + symbol + "|" + String(assetSha).toLowerCase(),
       item: {
@@ -4482,7 +4460,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         vision_id: opts.visionId || "",
         candidate_image_id: Number(opts.candidateImageId || 0) || undefined,
       },
-      handles: handles,
+      handles: [handle],
     }
   }
 
