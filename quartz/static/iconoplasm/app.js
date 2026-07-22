@@ -1490,12 +1490,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         instance.appended(newElements)
       }
       if (window.imagesLoaded) {
-        return new Promise(function (resolve) {
-          window.imagesLoaded(container, function () {
-            instance.layout()
-            resolve()
-          })
+        window.imagesLoaded(container, function () {
+          instance.layout()
         })
+        instance.layout()
+        return Promise.resolve()
       }
       instance.layout()
       return Promise.resolve()
@@ -1527,15 +1526,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       instance: msnry,
     })
     if (window.imagesLoaded) {
-      var ready = new Promise(function (resolve) {
-        window.imagesLoaded(container, function () {
-          msnry.layout()
-          resolve()
-        })
+      window.imagesLoaded(container, function () {
+        msnry.layout()
       })
       // also do an eager layout so things aren't invisible while images load
       msnry.layout()
-      return ready
+      return Promise.resolve()
     }
     msnry.layout()
     return Promise.resolve()
