@@ -350,16 +350,43 @@ test("archival cards expose one labelled accessible equivalent of the visual cha
 
   assert.match(profile, /aria-label="Character profile for TP53"/)
   assert.match(profile, /<h2>Character profile for TP53<\/h2>/)
-  assert.match(profile, /<dt>Gene name<\/dt><dd>tumor protein p53<\/dd>/)
-  assert.match(profile, /<dt>Character sex<\/dt><dd>female<\/dd>/)
-  assert.match(profile, /<dt>Character age<\/dt><dd>44 y\.o\.<\/dd>/)
-  assert.match(profile, /<dt>Character mass<\/dt><dd>44 kg<\/dd>/)
+  assert.match(profile, /<dt>Gene identity<\/dt><dd>TP53 — tumor protein p53<\/dd>/)
   assert.match(
     profile,
-    /<dt>PFAM clan and character aesthetic<\/dt><dd>p53-like — Kingcore<\/dd>/,
+    /<dt>Card color mapping<\/dt><dd>Hex color: #35353C → Card color name: Shearwater Black<\/dd>/,
   )
-  assert.match(profile, /<dt>Molecular alignment<\/dt><dd>tumor suppressor<\/dd>/)
-  assert.match(profile, /<dt>Character alignment<\/dt><dd>pro-control<\/dd>/)
+  assert.match(
+    profile,
+    /<dt>Letter-to-hue mapping<\/dt><dd>Letter: T → Hue: purple<\/dd>/,
+  )
+  assert.match(
+    profile,
+    /<dt>HPA tau-to-vibrance mapping<\/dt><dd>HPA tau: 0\.26 → Character vibrance: low vibrance<\/dd>/,
+  )
+  assert.match(
+    profile,
+    /<dt>gnomAD LOEUF-to-shade mapping<\/dt><dd>gnomAD LOEUF: 0\.449 → Character shade: dark shade<\/dd>/,
+  )
+  assert.match(
+    profile,
+    /<dt>Molecular category-to-character sex mapping<\/dt><dd>Molecular category: transmembrane → Character sex: female<\/dd>/,
+  )
+  assert.match(
+    profile,
+    /<dt>First-noted-to-character-age mapping<\/dt><dd>First noted: 1976 → Character age: 44 y\.o\.<\/dd>/,
+  )
+  assert.match(
+    profile,
+    /<dt>Molecular-mass-to-character-mass mapping<\/dt><dd>Molecular mass: 44 kDa → Character mass: 44 kg<\/dd>/,
+  )
+  assert.match(
+    profile,
+    /<dt>PFAM-clan-to-character-aesthetic mapping<\/dt><dd>PFAM clan: p53-like → Character aesthetic: Kingcore<\/dd>/,
+  )
+  assert.match(
+    profile,
+    /<dt>Molecular-alignment-to-character-alignment mapping<\/dt><dd>Molecular alignment: tumor suppressor → Character alignment: pro-control<\/dd>/,
+  )
   assert.doesNotMatch(profile, /\b(?:aria-hidden|hidden)\b/)
 
   const semanticProfileCss = cssStandaloneBlockFor(css, ".icono-card-semantic-profile")
