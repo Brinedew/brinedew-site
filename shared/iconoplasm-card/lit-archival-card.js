@@ -120,11 +120,14 @@ function penLoopSvgMarkup(className, presetName) {
   )
 }
 
+// ARCHITECTURE FENCE [IPD-003]: match the shared string renderer's accessible
+// mapping contract. These alternatives are non-interactive printed decoration;
+// the containing field names the resolved molecular and character values.
 function optionTemplate(value, selected, extraClass, loopPreset) {
   var classes = "icono-label-option"
   if (extraClass) classes += " " + extraClass
   if (selected) classes += " is-selected"
-  return html`<span class=${classes}
+  return html`<span aria-hidden="true" class=${classes}
     ><span class="icono-label-option-copy" data-icono-rough-copy="true">${value}</span>${selected
       ? unsafeHTML(penLoopSvgMarkup("icono-label-option-loop", loopPreset))
       : nothing}</span
@@ -151,7 +154,11 @@ function categoryFieldTemplate(selectedCategory) {
   var categoryKey = String(selectedCategory || "")
     .trim()
     .toLowerCase()
-  return html`<div class="icono-label-category-grid">
+  return html`<div
+    class="icono-label-category-grid"
+    role="img"
+    aria-label=${"Molecular category: " + (categoryKey || "not specified")}
+  >
     <div class="icono-label-category-option icono-label-category-option--transmembrane">
       ${optionTemplate(
         "TRANSMEMBRANE",
@@ -177,7 +184,9 @@ function sexNoteTemplate(sexNote, selectedCategory) {
   var noteClass =
     "icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-" +
     (categoryKey || "unselected")
-  return html`<div class=${noteClass}>${note}</div>`
+  return html`<div role="note" aria-label=${"Character sex: " + note} class=${noteClass}>
+    ${note}
+  </div>`
 }
 
 function alignmentFieldTemplate(molecularAlignment, politicalNote) {
@@ -193,8 +202,14 @@ function alignmentFieldTemplate(molecularAlignment, politicalNote) {
   else if (isOncogene) noteClass += " icono-label-hand-note--politics-oncogene"
   else if (isTumorSuppressor) noteClass += " icono-label-hand-note--politics-tumor-suppressor"
   else noteClass += " icono-label-hand-note--politics-neutral"
-  return html`<div class="icono-label-alignment-grid">
+  return html`<div
+    class="icono-label-alignment-grid"
+    role="group"
+    aria-label="Molecular alignment to character alignment mapping"
+  >
     <div
+      role="img"
+      aria-label=${"Molecular alignment: " + (molecularKey || "neither")}
       class=${"icono-label-selector-row icono-label-selector-row--alignment" +
       (isNeither ? " is-neither" : "")}
     >
@@ -204,7 +219,13 @@ function alignmentFieldTemplate(molecularAlignment, politicalNote) {
         ? html`<span class="icono-label-alignment-strike" aria-hidden="true"></span>`
         : nothing}
     </div>
-    <div class=${noteClass}>${politicalNote}</div>
+    <div
+      role="note"
+      aria-label=${"Character alignment: " + (politicalNote || "not specified")}
+      class=${noteClass}
+    >
+      ${politicalNote}
+    </div>
   </div>`
 }
 
