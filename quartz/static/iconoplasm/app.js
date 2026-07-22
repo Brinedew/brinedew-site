@@ -1534,16 +1534,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (!instance || typeof instance.layout !== "function") return Promise.resolve()
     return new Promise(function (resolve) {
       var settled = false
+      var fallbackTimer = 0
       var finish = function () {
         if (settled) return
         settled = true
-        window.requestAnimationFrame(resolve)
+        if (fallbackTimer) window.clearTimeout(fallbackTimer)
+        resolve()
       }
       if (typeof instance.once === "function") instance.once("layoutComplete", finish)
+      fallbackTimer = window.setTimeout(finish, 100)
       instance.layout()
-      window.requestAnimationFrame(function () {
-        window.requestAnimationFrame(finish)
-      })
     })
   }
 
@@ -7586,11 +7586,18 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       if (segment.failures.length) appendMobileDataFailureTiles(inner, segment.failures)
       galleryState.items = itemsFromCards(cards)
       if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
-        return applyHomeMasonry(inner, cards).then(function () {
-          return hydrateBrickCards(cards).then(function () {
+        var layoutReady = applyHomeMasonry(inner, cards)
+        void layoutReady
+          .then(function () {
+            return hydrateBrickCards(cards)
+          })
+          .then(function () {
             if (inner.isConnected) return applyHomeMasonry(inner)
           })
-        })
+          .catch(function (error) {
+            console.error("[Iconoplasm] mounted feed hydration failed:", error)
+          })
+        return layoutReady
       } else {
         warmBrickCardImages(segment.items)
         wireBrickVoteBoxes(cards)
@@ -7680,10 +7687,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               }
               pendingHomeRestoreState = null
             }
-            window.requestAnimationFrame(function () {
-              correctAnchor()
-              window.requestAnimationFrame(correctAnchor)
-            })
+            correctAnchor()
+            runAfterNextPaint(correctAnchor)
           })
         }
       },
@@ -8884,6 +8889,21 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     } catch (_err) {
       window.scrollTo(x, y)
     }
+  }
+
+  function runAfterNextPaint(callback) {
+    var settled = false
+    var frame = 0
+    var timer = 0
+    var run = function () {
+      if (settled) return
+      settled = true
+      if (frame) window.cancelAnimationFrame(frame)
+      if (timer) window.clearTimeout(timer)
+      callback()
+    }
+    frame = window.requestAnimationFrame(run)
+    timer = window.setTimeout(run, 100)
   }
 
   function replaceHistoryStatePatch(patch) {

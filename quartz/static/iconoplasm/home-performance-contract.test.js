@@ -241,6 +241,8 @@ test("home scroll restore records the active cursor and anchor only for gene Bac
   )
   assert.match(app, /restoreState = restoreState \|\| pendingHomeRestoreState/)
   assert.match(app, /instance\.once\("layoutComplete", finish\)/)
+  assert.match(app, /var layoutReady = applyHomeMasonry\(inner, cards\)/)
+  assert.match(app, /correctAnchor\(\)[\s\S]*runAfterNextPaint\(correctAnchor\)/)
   assert.match(app, /restoreOnGeneBack:\s*leavingHomeForGene/)
   assert.match(app, /readHomeRestoreState\(\)[\s\S]*home\.restoreOnGeneBack !== true/)
   assert.doesNotMatch(app, /cachedHomeView|createDocumentFragment\(\)/)
