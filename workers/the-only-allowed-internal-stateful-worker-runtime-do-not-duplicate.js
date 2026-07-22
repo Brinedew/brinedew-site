@@ -83,7 +83,7 @@ const ICONOPLASM_GENE_FONT_PRELOAD_LINKS = [
   "</static/iconoplasm/fonts/Caveat-400.woff2>; rel=preload; as=font; type=font/woff2; crossorigin",
 ]
 const ICONOPLASM_HTML_SHELL_EDGE_CACHE_TTL_SECONDS = 300
-const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-07-22-gene-discovery-v1"
+const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-07-22-immersive-discovery-v2"
 const ICONOPLASM_PUBLIC_NO_VARY_SEARCH =
   'params=("utm_source" "utm_medium" "utm_campaign" "utm_content" "utm_term" "fbclid" "gclid" "mc_cid" "mc_eid" "codex_verify")'
 
@@ -366,14 +366,6 @@ function replaceIconoplasmStaticGeneShell(html, shellHtml) {
   )
 }
 
-function injectIconoplasmGeneIndexNavigationLink(html, path) {
-  if (String(path || "") !== "/" || String(html || "").includes('href="/genes"')) return html
-  return String(html).replace(
-    /(<nav\b[^>]*\bdata-icono-page-switcher(?:=["'][^"']*["'])?[^>]*>[\s\S]*?)(<\/nav>)/i,
-    '$1<a href="/genes" class="icono-page-tab" data-icono-switch="reference">Gene index</a>$2',
-  )
-}
-
 async function iconoplasmGeneCardBootstrapInjection(request, env, ctx, path) {
   // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
   // Search terms: PRL split-brain, gene page bootstrap, canonical blot,
@@ -600,7 +592,6 @@ async function iconoplasmCacheableHtmlShellResponse(
   headers.set("Cache-Control", "no-store")
   headers.set("X-Iconoplasm-HTML-Shell-Cache", cacheStatus)
   let body = response.status === 204 ? null : personalizeIconoplasmStaticGeneShell(html, path)
-  body = body ? injectIconoplasmGeneIndexNavigationLink(body, path) : body
   let geneShell = preloadedGeneShell
   if (body && String(path || "").startsWith("/gene/")) {
     if (!geneShell) geneShell = await iconoplasmGeneCardBootstrapInjection(request, env, ctx, path)
