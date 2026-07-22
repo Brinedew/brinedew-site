@@ -8,6 +8,8 @@ import { CustomOgImagesEmitterName } from "../../.quartz/plugins"
 import { getPublicUrlForSlug, isNoIndexFile } from "../util/crawlability"
 import { buildAiSearchJsonLd, serializeJsonLd } from "../util/aiSearchMetadata"
 import iconoplasmFontContract from "../../shared/iconoplasm-card/font-contract.json"
+import { readFileSync } from "node:fs"
+import path from "node:path"
 
 // Build-time cache buster - always include a fresh timestamp so production HTML
 // points at the latest static assets even when environment-level cache vars linger.
@@ -17,22 +19,93 @@ const CACHE_BUST = `${Date.now()}-${
   "build"
 }`
 
-function renderIconoplasmCriticalFontFaces(): string {
-  return iconoplasmFontContract.fonts
-    .map(
-      (font) => `@font-face {
-  font-family: "${font.family}";
-  src: url("/static/iconoplasm/fonts/${font.stem}-critical.woff2") format("woff2");
-  font-weight: ${font.weight};
+const siteNetworkFontFaces = `
+@font-face {
+  font-family: "Crimson Pro";
+  src: url("/static/fonts/CrimsonPro-VariableFont_wght.woff2") format("woff2");
+  font-weight: 300 900;
   font-style: normal;
-  font-display: ${iconoplasmFontContract.display};
-  unicode-range: ${iconoplasmFontContract.criticalUnicodeRange};
-}`,
-    )
-    .join("\n")
+  font-display: swap;
+}
+@font-face {
+  font-family: "Crimson Pro";
+  src: url("/static/fonts/CrimsonPro-Italic-VariableFont_wght.woff2") format("woff2");
+  font-weight: 300 900;
+  font-style: italic;
+  font-display: swap;
+}`
+
+function renderIconoplasmEmbeddedFontBootstrap(): string {
+  const fontDirectory = path.resolve(process.cwd(), "shared", "iconoplasm-card", "fonts")
+  const embeddedFonts = [
+    ...iconoplasmFontContract.shellFonts,
+    ...iconoplasmFontContract.fonts.map((font) => ({ ...font, style: "normal" })),
+  ].map((font) => ({
+    family: font.family,
+    weight: String(font.weight),
+    style: font.style,
+    data: readFileSync(path.join(fontDirectory, font.embeddedFile)).toString("base64"),
+  }))
+
+  return `(() => {
+  var root = document.documentElement
+  root.classList.add("icono-fonts-loading")
+  var startedAt = window.performance && typeof window.performance.now === "function"
+    ? window.performance.now()
+    : Date.now()
+  var settled = false
+  var reveal = function (state) {
+    var finishedAt = window.performance && typeof window.performance.now === "function"
+      ? window.performance.now()
+      : Date.now()
+    root.classList.remove("icono-fonts-loading")
+    root.setAttribute("data-icono-fonts", state)
+    root.setAttribute("data-icono-fonts-duration-ms", String(Math.max(0, Math.round(finishedAt - startedAt))))
+  }
+  var timer = window.setTimeout(function () {
+    if (settled) return
+    settled = true
+    reveal("fallback")
+  }, ${iconoplasmFontContract.websiteDelivery.revealTimeoutMs})
+  try {
+    if (!("FontFace" in window) || !document.fonts || typeof document.fonts.add !== "function") {
+      throw new Error("CSS Font Loading API unavailable")
+    }
+    var definitions = ${JSON.stringify(embeddedFonts)}
+    var faces = definitions.map(function (definition) {
+      var binary = window.atob(definition.data)
+      var bytes = new Uint8Array(binary.length)
+      for (var index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index)
+      }
+      return new FontFace(definition.family, bytes.buffer, {
+        weight: definition.weight,
+        style: definition.style,
+      })
+    })
+    Promise.all(faces.map(function (face) { return face.load() })).then(function (loadedFaces) {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timer)
+      loadedFaces.forEach(function (face) { document.fonts.add(face) })
+      reveal("ready")
+    }, function () {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timer)
+      reveal("fallback")
+    })
+  } catch (_fontBootstrapError) {
+    if (!settled) {
+      settled = true
+      window.clearTimeout(timer)
+      reveal("fallback")
+    }
+  }
+})()`
 }
 
-const iconoplasmCriticalFontFaces = renderIconoplasmCriticalFontFaces()
+const iconoplasmEmbeddedFontBootstrap = renderIconoplasmEmbeddedFontBootstrap()
 
 export default (() => {
   const Head: QuartzComponent = ({
@@ -373,11 +446,18 @@ export default (() => {
         />
         <meta name="description" content={description} />
         <meta name="robots" content={robotsDirective} />
+        {usesIconoplasmLabelFonts ? (
+          <>
+            <style>{`html.icono-fonts-loading body { visibility: hidden !important; }`}</style>
+            <script dangerouslySetInnerHTML={{ __html: iconoplasmEmbeddedFontBootstrap }} />
+          </>
+        ) : (
+          <style>{siteNetworkFontFaces}</style>
+        )}
         {isIconoplasm && (
           <style
             dangerouslySetInnerHTML={{
               __html: `
-${iconoplasmCriticalFontFaces}
 .icono-card--variant-lab-label,
 .iconoplasm-tooltip--variant-lab-label {
   --icono-label-paper: color-mix(in srgb, var(--light, #f4ede5) 92%, #d4cab8 8%);
@@ -547,23 +627,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
             href="/static/fonts/xenon/MonaspaceXenon-Var.woff2"
             crossOrigin="anonymous"
           />
-        )}
-        {usesIconoplasmLabelFonts && (
-          <>
-            {iconoplasmFontContract.fonts
-              .filter((font) => font.preload)
-              .map((font) => (
-                <link
-                  key={font.stem}
-                  rel="preload"
-                  as="font"
-                  type="font/woff2"
-                  href={`/static/iconoplasm/fonts/${font.stem}-critical.woff2`}
-                  crossOrigin="anonymous"
-                  fetchPriority="high"
-                />
-              ))}
-          </>
         )}
         {!isIconoplasm && (
           <link rel="preload" as="image" href="/static/logo-mask.png" fetchpriority="high" />

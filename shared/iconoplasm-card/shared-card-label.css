@@ -12,9 +12,9 @@
    This is a fixed printed sheet on desktop, not a fluid border system. Use hard track
    sizes and only switch layouts at a real breakpoint instead of scaling the plate. */
 
-/* Font faces are generated from font-contract.json by sync-iconoplasm-shared.mjs.
-   Keeping delivery policy outside this artboard CSS prevents the inline first-paint
-   contract and the website/extension stylesheets from drifting apart. */
+/* Font delivery is generated from font-contract.json. The website installs embedded
+   FontFace objects before revealing its shell; the extension generates packaged
+   @font-face rules. This artboard stylesheet owns typography use, not transport. */
 
 @property --icono-label-info-card-pull-y {
   syntax: "<length-percentage>";
