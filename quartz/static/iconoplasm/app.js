@@ -9501,10 +9501,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       return
     }
 
-    var link = e.target.closest("a[data-icono-nav]")
+    var link = e.target.closest("a[data-icono-nav], [role='feed'] a[href^='/gene/']")
     if (!link) return
     var href = link.getAttribute("href")
-    if (!href || href.startsWith("http")) return
+    if (!href || href.startsWith("http") || link.getAttribute("target") === "_blank") return
     e.preventDefault()
     navigateTo(href, link)
   })
