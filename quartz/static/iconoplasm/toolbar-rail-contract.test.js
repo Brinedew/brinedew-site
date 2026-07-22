@@ -79,10 +79,10 @@ test("Iconoplasm archive progress summary is one compact status rail", async () 
 
 test("Iconoplasm collection summary has no duplicate hero count plaque", async () => {
   const app = await sourceText(appPath)
-  const syncStart = app.indexOf("function syncHeroCount()")
-  const syncEnd = app.indexOf("function renderCollectionChrome()", syncStart)
-  assert.notEqual(syncStart, -1, "missing syncHeroCount")
-  assert.notEqual(syncEnd, -1, "missing syncHeroCount boundary")
+  const syncStart = app.indexOf("function syncCounts()")
+  const syncEnd = app.indexOf("function syncCollectionChrome()", syncStart)
+  assert.notEqual(syncStart, -1, "missing syncCounts")
+  assert.notEqual(syncEnd, -1, "missing syncCounts boundary")
   const syncBlock = app.slice(syncStart, syncEnd)
 
   assert.doesNotMatch(
@@ -92,7 +92,7 @@ test("Iconoplasm collection summary has no duplicate hero count plaque", async (
   )
   assert.doesNotMatch(
     syncBlock,
-    /function syncHeroCount\(\) \{\s*if \(!countEl\) return/,
+    /function syncCounts\(\) \{\s*if \(!countEl\) return/,
     "removing the hero count must not short-circuit sidebar state updates",
   )
   assert.match(

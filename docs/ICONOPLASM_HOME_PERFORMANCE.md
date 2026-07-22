@@ -6,6 +6,16 @@ The signed-in account shelf is a discovery-fresh product surface. The default or
 
 Browser storage may cache immutable card view-models keyed by snapshot version. It must not cache the ordered account window unless the server first provides a per-user collection version that changes on every discovery encounter and merge.
 
+## Virtual Feed Contract
+
+The homepage is an automatic, cursor-backed feed, but its data sources remain distinct. Personal and shared `newest`/`symbol` orders use the bidirectional account-window v2 contract; other discovery orders use bounded slices of the discovery metadata already loaded for that mode; classic full-catalog mode uses versioned gallery windows. Never flatten these paths into one universal sequence.
+
+The browser keeps the first paint to four cards, then requests 8 cards per mobile segment or 12 per desktop segment. It may mount at most 24 mobile cards or 48 desktop cards. Distant measured segments become height-preserving spacers and can be rehydrated in either direction. Only eight segment payloads may remain in memory, and ordered account windows must not be persisted.
+
+Automatic progress uses `history.replaceState`; explicit scope and sort changes use `pushState`. A saved route state contains the active cursor, segment page, anchor gene, and intra-segment offset so Back can restore the exact neighborhood without caching a complete DOM fragment.
+
+The protected controller contract is `quartz/static/iconoplasm/collection-feed.test.js`. It covers loading boundaries, request joining and cancellation, feed semantics, keyboard traversal, forward and backward recycling, the mounted-card and payload caps after 100+ batches, retry behavior, and catalog snapshot changes.
+
 ## Gallery Card Freshness
 
 Undesired optimization: do not let browser storage decide that a gallery card page is fresh enough to paint before the page has checked the current backend manifest.

@@ -9538,7 +9538,7 @@ async function listUserGeneDiscoveries(
   )
 }
 
-const ACCOUNT_GALLERY_WINDOW_SCHEMA = "iconoplasm.accountGalleryWindow.v1"
+const ACCOUNT_GALLERY_WINDOW_SCHEMA = "iconoplasm.accountGalleryWindow.v2"
 const ACCOUNT_GALLERY_WINDOW_LIMIT_MAX = 48
 const ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS = new Set(["newest", "symbol"])
 
@@ -9573,30 +9573,57 @@ function decodeAccountGalleryCursor(raw) {
   }
 }
 
-function accountGalleryWindowCursorForRow(row, order) {
+function accountGalleryWindowCursorForRow(row, order, scope) {
   const symbol = normalizeSymbol(row?.gene_symbol || "")
   if (!symbol) return null
   if (order === "symbol") {
     return {
+      version: 2,
       order,
+      scope,
       symbol,
     }
   }
   return {
+    version: 2,
     order: "newest",
+    scope,
     first_discovered_at: sanitizeText(row?.first_discovered_at || "", 64) || "",
     symbol,
   }
 }
 
+function validateAccountGalleryCursor(raw, order, scope) {
+  if (!raw) return { ok: true, value: null }
+  const value = decodeAccountGalleryCursor(raw)
+  if (!value || value.version !== 2) {
+    return { ok: false, code: "MALFORMED_CURSOR", error: "Cursor is malformed or obsolete." }
+  }
+  if (value.order !== order || value.scope !== scope) {
+    return {
+      ok: false,
+      code: "CURSOR_CONTEXT_MISMATCH",
+      error: "Cursor does not belong to the requested order and scope.",
+    }
+  }
+  const symbol = normalizeSymbol(value.symbol || "")
+  const time = sanitizeText(value.first_discovered_at || "", 64)
+  if (!symbol || (order === "newest" && !time)) {
+    return { ok: false, code: "MALFORMED_CURSOR", error: "Cursor boundary is incomplete." }
+  }
+  return { ok: true, value: { ...value, symbol, first_discovered_at: time } }
+}
+
 async function listUserGeneDiscoveryWindow(
   env,
-  { userId, limit = 24, order = "newest", cursor = null } = {},
+  { userId, limit = 24, order = "newest", after = "", before = "", cursorValue = null } = {},
 ) {
-  if (!env.ICONOPLASM_DB) return { rows: [], hasMore: false, nextCursor: "" }
+  if (!env.ICONOPLASM_DB) {
+    return { rows: [], hasPrevious: false, hasMore: false, previousCursor: "", nextCursor: "" }
+  }
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) {
-    return { rows: [], hasMore: false, nextCursor: "" }
+    return { rows: [], hasPrevious: false, hasMore: false, previousCursor: "", nextCursor: "" }
   }
   const resolvedOrder = normalizeIconoplasmHomeOrder(order, "newest")
   if (!ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS.has(resolvedOrder)) {
@@ -9612,7 +9639,8 @@ async function listUserGeneDiscoveryWindow(
     Math.min(ACCOUNT_GALLERY_WINDOW_LIMIT_MAX, Number.parseInt(String(limit || "24"), 10) || 24),
   )
   const fetchLimit = cleanedLimit + 1
-  const decodedCursor = decodeAccountGalleryCursor(cursor)
+  const decodedCursor = cursorValue
+  const backward = Boolean(before)
   const selectSql = `SELECT
        d.*,
        COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(d.gene_symbol)) AS full_name,
@@ -9634,36 +9662,32 @@ async function listUserGeneDiscoveryWindow(
      WHERE d.user_id = ?`
   let rowsResult
   if (resolvedOrder === "symbol") {
-    const cursorSymbol =
-      decodedCursor && decodedCursor.order === "symbol"
-        ? normalizeSymbol(decodedCursor.symbol || "")
-        : ""
-    const whereCursor = cursorSymbol ? " AND d.gene_symbol > ?" : ""
+    const cursorSymbol = decodedCursor ? normalizeSymbol(decodedCursor.symbol || "") : ""
+    const whereCursor = cursorSymbol
+      ? backward
+        ? " AND d.gene_symbol < ?"
+        : " AND d.gene_symbol > ?"
+      : ""
     const sql = `${selectSql}${whereCursor}
-     ORDER BY d.gene_symbol ASC
+     ORDER BY d.gene_symbol ${backward ? "DESC" : "ASC"}
      LIMIT ?`
     const statement = env.ICONOPLASM_DB.prepare(sql)
     rowsResult = cursorSymbol
       ? await statement.bind(userIdNorm, cursorSymbol, fetchLimit).all()
       : await statement.bind(userIdNorm, fetchLimit).all()
   } else {
-    const cursorTime =
-      decodedCursor && decodedCursor.order === "newest"
-        ? sanitizeText(
-            decodedCursor.first_discovered_at || decodedCursor.last_encountered_at || "",
-            64,
-          )
-        : ""
-    const cursorSymbol =
-      decodedCursor && decodedCursor.order === "newest"
-        ? normalizeSymbol(decodedCursor.symbol || "")
-        : ""
+    const cursorTime = decodedCursor
+      ? sanitizeText(decodedCursor.first_discovered_at || "", 64)
+      : ""
+    const cursorSymbol = decodedCursor ? normalizeSymbol(decodedCursor.symbol || "") : ""
     const whereCursor =
       cursorTime && cursorSymbol
-        ? " AND (d.first_discovered_at < ? OR (d.first_discovered_at = ? AND d.gene_symbol > ?))"
+        ? backward
+          ? " AND (d.first_discovered_at > ? OR (d.first_discovered_at = ? AND d.gene_symbol < ?))"
+          : " AND (d.first_discovered_at < ? OR (d.first_discovered_at = ? AND d.gene_symbol > ?))"
         : ""
     const sql = `${selectSql}${whereCursor}
-     ORDER BY d.first_discovered_at DESC, d.gene_symbol ASC
+     ORDER BY d.first_discovered_at ${backward ? "ASC" : "DESC"}, d.gene_symbol ${backward ? "DESC" : "ASC"}
      LIMIT ?`
     const statement = env.ICONOPLASM_DB.prepare(sql)
     rowsResult =
@@ -9675,13 +9699,25 @@ async function listUserGeneDiscoveryWindow(
     mapGeneDiscoveryRow,
   )
   const pageRows = allRows.slice(0, cleanedLimit)
-  const hasMore = allRows.length > cleanedLimit
+  if (backward) pageRows.reverse()
+  const hasRequestedMore = allRows.length > cleanedLimit
+  const hasPrevious = backward ? hasRequestedMore : Boolean(after)
+  const hasMore = backward ? Boolean(before) : hasRequestedMore
+  const firstRow = pageRows[0] || null
   const lastRow = pageRows[pageRows.length - 1] || null
   return {
     rows: pageRows,
+    hasPrevious,
     hasMore,
+    previousCursor: hasPrevious
+      ? encodeAccountGalleryCursor(
+          accountGalleryWindowCursorForRow(firstRow, resolvedOrder, "personal"),
+        )
+      : "",
     nextCursor: hasMore
-      ? encodeAccountGalleryCursor(accountGalleryWindowCursorForRow(lastRow, resolvedOrder))
+      ? encodeAccountGalleryCursor(
+          accountGalleryWindowCursorForRow(lastRow, resolvedOrder, "personal"),
+        )
       : "",
     unsupportedOrder: "",
   }
@@ -9689,9 +9725,11 @@ async function listUserGeneDiscoveryWindow(
 
 async function listSharedGeneDiscoveryWindow(
   env,
-  { limit = 24, order = "newest", cursor = null } = {},
+  { limit = 24, order = "newest", after = "", before = "", cursorValue = null } = {},
 ) {
-  if (!env.ICONOPLASM_DB) return { rows: [], hasMore: false, nextCursor: "" }
+  if (!env.ICONOPLASM_DB) {
+    return { rows: [], hasPrevious: false, hasMore: false, previousCursor: "", nextCursor: "" }
+  }
   const resolvedOrder = normalizeIconoplasmHomeOrder(order, "newest")
   if (!ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS.has(resolvedOrder)) {
     return {
@@ -9706,7 +9744,8 @@ async function listSharedGeneDiscoveryWindow(
     Math.min(ACCOUNT_GALLERY_WINDOW_LIMIT_MAX, Number.parseInt(String(limit || "24"), 10) || 24),
   )
   const fetchLimit = cleanedLimit + 1
-  const decodedCursor = decodeAccountGalleryCursor(cursor)
+  const decodedCursor = cursorValue
+  const backward = Boolean(before)
   const selectSql = `SELECT
        r.gene_symbol,
        r.first_non_admin_discovered_at AS first_discovered_at,
@@ -9737,36 +9776,32 @@ async function listSharedGeneDiscoveryWindow(
      WHERE r.non_admin_discoverer_count > 0`
   let rowsResult
   if (resolvedOrder === "symbol") {
-    const cursorSymbol =
-      decodedCursor && decodedCursor.order === "symbol"
-        ? normalizeSymbol(decodedCursor.symbol || "")
-        : ""
-    const whereCursor = cursorSymbol ? " AND r.gene_symbol > ?" : ""
+    const cursorSymbol = decodedCursor ? normalizeSymbol(decodedCursor.symbol || "") : ""
+    const whereCursor = cursorSymbol
+      ? backward
+        ? " AND r.gene_symbol < ?"
+        : " AND r.gene_symbol > ?"
+      : ""
     const sql = `${selectSql}${whereCursor}
-     ORDER BY r.gene_symbol ASC
+     ORDER BY r.gene_symbol ${backward ? "DESC" : "ASC"}
      LIMIT ?`
     const statement = env.ICONOPLASM_DB.prepare(sql)
     rowsResult = cursorSymbol
       ? await statement.bind(cursorSymbol, fetchLimit).all()
       : await statement.bind(fetchLimit).all()
   } else {
-    const cursorTime =
-      decodedCursor && decodedCursor.order === "newest"
-        ? sanitizeText(
-            decodedCursor.first_discovered_at || decodedCursor.last_encountered_at || "",
-            64,
-          )
-        : ""
-    const cursorSymbol =
-      decodedCursor && decodedCursor.order === "newest"
-        ? normalizeSymbol(decodedCursor.symbol || "")
-        : ""
+    const cursorTime = decodedCursor
+      ? sanitizeText(decodedCursor.first_discovered_at || "", 64)
+      : ""
+    const cursorSymbol = decodedCursor ? normalizeSymbol(decodedCursor.symbol || "") : ""
     const whereCursor =
       cursorTime && cursorSymbol
-        ? " AND (r.first_non_admin_discovered_at < ? OR (r.first_non_admin_discovered_at = ? AND r.gene_symbol > ?))"
+        ? backward
+          ? " AND (r.first_non_admin_discovered_at > ? OR (r.first_non_admin_discovered_at = ? AND r.gene_symbol < ?))"
+          : " AND (r.first_non_admin_discovered_at < ? OR (r.first_non_admin_discovered_at = ? AND r.gene_symbol > ?))"
         : ""
     const sql = `${selectSql}${whereCursor}
-     ORDER BY r.first_non_admin_discovered_at DESC, r.gene_symbol ASC
+     ORDER BY r.first_non_admin_discovered_at ${backward ? "ASC" : "DESC"}, r.gene_symbol ${backward ? "DESC" : "ASC"}
      LIMIT ?`
     const statement = env.ICONOPLASM_DB.prepare(sql)
     rowsResult =
@@ -9778,13 +9813,25 @@ async function listSharedGeneDiscoveryWindow(
     mapGeneDiscoveryRow,
   )
   const pageRows = allRows.slice(0, cleanedLimit)
-  const hasMore = allRows.length > cleanedLimit
+  if (backward) pageRows.reverse()
+  const hasRequestedMore = allRows.length > cleanedLimit
+  const hasPrevious = backward ? hasRequestedMore : Boolean(after)
+  const hasMore = backward ? Boolean(before) : hasRequestedMore
+  const firstRow = pageRows[0] || null
   const lastRow = pageRows[pageRows.length - 1] || null
   return {
     rows: pageRows,
+    hasPrevious,
     hasMore,
+    previousCursor: hasPrevious
+      ? encodeAccountGalleryCursor(
+          accountGalleryWindowCursorForRow(firstRow, resolvedOrder, "shared"),
+        )
+      : "",
     nextCursor: hasMore
-      ? encodeAccountGalleryCursor(accountGalleryWindowCursorForRow(lastRow, resolvedOrder))
+      ? encodeAccountGalleryCursor(
+          accountGalleryWindowCursorForRow(lastRow, resolvedOrder, "shared"),
+        )
       : "",
     unsupportedOrder: "",
   }
@@ -25913,6 +25960,7 @@ async function handlePublicGallery(request, env, ctx) {
     url.searchParams.get("offset"),
     url.searchParams.get("seed"),
   )
+  payload.snapshot_version = await currentGalleryVersion(env)
   const cacheControl =
     order === "votes"
       ? iconoplasmCacheControl("publicGalleryVotes")
@@ -26974,6 +27022,37 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           ),
         )
       }
+      const after = String(url.searchParams.get("after") || "").trim()
+      const before = String(url.searchParams.get("before") || "").trim()
+      if (url.searchParams.has("cursor") || (after && before)) {
+        return done(
+          "account_gallery_window_cursor_400",
+          json(
+            {
+              ok: false,
+              code: "INVALID_CURSOR_ARGUMENTS",
+              error: url.searchParams.has("cursor")
+                ? "The legacy cursor parameter is not supported. Use after or before."
+                : "Pass at most one of after or before.",
+            },
+            400,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
+      const cursorValidation = validateAccountGalleryCursor(
+        after || before,
+        requestedOrder,
+        requestedScope,
+      )
+      if (!cursorValidation.ok) {
+        return done(
+          "account_gallery_window_cursor_400",
+          json({ ok: false, code: cursorValidation.code, error: cursorValidation.error }, 400, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
       const sessionUser = await accountWindowStage("acct_session", () =>
         iconoplasmSessionUser(request, env),
       )
@@ -26992,6 +27071,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               items: [],
               cards: [],
               missing: [],
+              has_previous: false,
+              previous_cursor: "",
               has_more: false,
               next_cursor: "",
               diagnostics: {
@@ -27031,7 +27112,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               listSharedGeneDiscoveryWindow(env, {
                 order: requestedOrder,
                 limit: cleanedLimit,
-                cursor: url.searchParams.get("cursor") || "",
+                after,
+                before,
+                cursorValue: cursorValidation.value,
               }),
             )
           : accountWindowStage("acct_window", () =>
@@ -27039,7 +27122,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                 userId,
                 order: requestedOrder,
                 limit: cleanedLimit,
-                cursor: url.searchParams.get("cursor") || "",
+                after,
+                before,
+                cursorValue: cursorValidation.value,
               }),
             )
       const discoveredCountPromise =
@@ -27098,6 +27183,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               })),
               cards,
               missing: [],
+              has_previous: !!windowData.hasPrevious,
+              previous_cursor: windowData.previousCursor || "",
               has_more: !!windowData.hasMore,
               next_cursor: windowData.nextCursor || "",
               diagnostics: {
@@ -27177,6 +27264,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             items,
             cards,
             missing,
+            has_previous: !!windowData.hasPrevious,
+            previous_cursor: windowData.previousCursor || "",
             has_more: !!windowData.hasMore,
             next_cursor: windowData.nextCursor || "",
             diagnostics: {
