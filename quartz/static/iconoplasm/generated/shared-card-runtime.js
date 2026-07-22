@@ -9308,7 +9308,7 @@
   // shared/iconoplasm-card/shared-card-runtime.js
   (function(global) {
     "use strict";
-    var ICONO_SHARED_RUNTIME_VERSION = "20260722a";
+    var ICONO_SHARED_RUNTIME_VERSION = "20260722b";
     var forceSiteOwnership = !!(global && global.__iconoSiteOwnsSharedRuntime);
     var existingShared = global && global.IconoplasmCardShared ? global.IconoplasmCardShared : null;
     var existingMeta = existingShared && existingShared.__meta && typeof existingShared.__meta === "object" ? existingShared.__meta : null;
@@ -10448,13 +10448,22 @@
     }
     function wireVoteBox(box, config) {
       if (!box) return null;
-      if (box.getAttribute("data-icono-vote-wired") === "true") return null;
       var cfg = config || {};
+      var boxes = [box];
+      var mirrorBoxes = Array.isArray(cfg.mirrorBoxes) ? cfg.mirrorBoxes : [];
+      for (var mirrorIndex = 0; mirrorIndex < mirrorBoxes.length; mirrorIndex++) {
+        var mirrorBox = mirrorBoxes[mirrorIndex];
+        if (!mirrorBox || boxes.indexOf(mirrorBox) >= 0) continue;
+        boxes.push(mirrorBox);
+      }
+      if (box.getAttribute("data-icono-vote-wired") === "true") return null;
       var symbol = normalizedSymbol(cfg.symbol);
       var assetSha = String(cfg.assetSha || "").trim().toLowerCase();
       var visionId = String(cfg.visionId || "").trim();
       if (!symbol || !assetSha) return null;
-      box.setAttribute("data-icono-vote-wired", "true");
+      for (var boxIndex = 0; boxIndex < boxes.length; boxIndex++) {
+        boxes[boxIndex].setAttribute("data-icono-vote-wired", "true");
+      }
       var state = {
         authenticated: !!cfg.authenticated,
         pending: false,
@@ -10473,10 +10482,11 @@
       if (cfg.initialSnapshot) state.snapshot = cloneSnapshot(cfg.initialSnapshot);
       var candidateImageId = Number(cfg.candidateImageId || 0);
       if (!Number.isFinite(candidateImageId) || candidateImageId <= 0) candidateImageId = 0;
-      var upBtn = box.querySelector("[data-icono-vote-up]");
-      var downBtn = box.querySelector("[data-icono-vote-down]");
       function render() {
-        setVoteBoxState(box, state);
+        for (var renderIndex = 0; renderIndex < boxes.length; renderIndex++) {
+          setVoteBoxState(boxes[renderIndex], state);
+        }
+        if (typeof cfg.onState === "function") cfg.onState(state, boxes);
       }
       function notifySnapshot() {
         if (typeof cfg.onSnapshot === "function") {
@@ -10551,7 +10561,7 @@
           render();
         });
       }
-      function submitVote(voteValue) {
+      function submitVote(voteValue, sourceBox) {
         var ready = cfg.deferSnapshot && !snapshotPrimed ? ensureSnapshot().catch(function() {
           return null;
         }) : Promise.resolve();
@@ -10604,7 +10614,9 @@
               writeStoredVoteSnapshot(candidateRef, state.snapshot);
               state.authenticated = false;
               notifySnapshot();
-              if (typeof cfg.onAuthRequired === "function") cfg.onAuthRequired(err);
+              if (typeof cfg.onAuthRequired === "function") {
+                cfg.onAuthRequired(err, sourceBox || box);
+              }
               return;
             }
             notifySnapshot();
@@ -10625,24 +10637,43 @@
         });
         return snapshotPrimePromise;
       }
-      if (upBtn) {
-        upBtn.addEventListener("click", function(event) {
-          event.stopPropagation();
-          submitVote(1);
-        });
-      }
-      if (downBtn) {
-        downBtn.addEventListener("click", function(event) {
-          event.stopPropagation();
-          submitVote(-1);
-        });
+      for (var listenerIndex = 0; listenerIndex < boxes.length; listenerIndex++) {
+        ;
+        (function(viewBox) {
+          var upBtn = viewBox.querySelector("[data-icono-vote-up]");
+          var downBtn = viewBox.querySelector("[data-icono-vote-down]");
+          if (upBtn) {
+            upBtn.addEventListener("click", function(event) {
+              event.stopPropagation();
+              submitVote(1, viewBox);
+            });
+          }
+          if (downBtn) {
+            downBtn.addEventListener("click", function(event) {
+              event.stopPropagation();
+              submitVote(-1, viewBox);
+            });
+          }
+        })(boxes[listenerIndex]);
       }
       render();
       if (cfg.deferSnapshot) {
-        return { ensureSnapshot, setSnapshot, state };
+        return {
+          boxes,
+          ensureSnapshot,
+          setSnapshot,
+          state,
+          submitVote
+        };
       }
       ensureSnapshot();
-      return { ensureSnapshot, setSnapshot, state };
+      return {
+        boxes,
+        ensureSnapshot,
+        setSnapshot,
+        state,
+        submitVote
+      };
     }
     startRoughLoopObserver();
     global.IconoplasmCardShared = {

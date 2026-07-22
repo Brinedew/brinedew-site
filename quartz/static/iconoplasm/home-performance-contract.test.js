@@ -1973,7 +1973,7 @@ test("direct candidate image API panel stays compact and hides transport details
   assert.match(styles, /\.icono-request-direct-publish\[hidden\]\s*\{/)
 })
 
-test("gene votes batch initial snapshots, synchronize responsive copies, and keep cards stable", async () => {
+test("gene votes batch initial snapshots and give responsive copies one controller", async () => {
   const app = await readFile(appPath, "utf8")
 
   const candidateWireStart = app.indexOf("function wireCandidateVoteBoxes")
@@ -1995,8 +1995,13 @@ test("gene votes batch initial snapshots, synchronize responsive copies, and kee
   const groupStart = app.indexOf("function wireVoteBoxGroup")
   const groupEnd = app.indexOf("function primeGeneVoteBoxGroups", groupStart)
   const groupBlock = app.slice(groupStart, groupEnd)
-  assert.match(groupBlock, /handle\.setSnapshot\(snapshot/)
-  assert.match(groupBlock, /notify: false/)
+  assert.match(groupBlock, /wireVoteBox\(targets\[0\], symbol, assetSha/)
+  assert.match(groupBlock, /mirrorBoxes: targets\.slice\(1\)/)
+  assert.equal(
+    (groupBlock.match(/wireVoteBox\(/g) || []).length,
+    1,
+    "responsive views must not create independent vote controllers",
+  )
 
   const primeStart = app.indexOf("function primeGeneVoteBoxGroups")
   const primeEnd = app.indexOf("function wireGeneVoteControls", primeStart)
