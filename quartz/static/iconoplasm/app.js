@@ -7250,6 +7250,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   /* ─── Rendering: Home page ─── */
 
   function renderHome(root, restoreState) {
+    restoreState = restoreState || pendingHomeRestoreState
     lastGenePageDiscoveryVisitKey = ""
     var homeLayout = resolveHomeLayout()
     var cardVariant = resolveCardVariant()
@@ -7282,6 +7283,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         anchorTop: Number(initialUrl.searchParams.get("anchorOffset") || 0) || 0,
         seed: String(initialUrl.searchParams.get("seed") || ""),
       }
+    }
+    if (restoreState && (restoreState.anchorGene || Number(restoreState.offset || 0) > 0)) {
+      pendingHomeRestoreState = restoreState
     }
     var galleryState = {
       order: useClassicGallery
@@ -7410,6 +7414,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           if (nextShared && !accountGalleryWindowOrderSupported(galleryState.order)) {
             galleryState.order = HOME_COLLECTION_DEFAULT_ORDER
           }
+          restoreState = null
+          pendingHomeRestoreState = null
           resetCollection(true)
           refreshSearchResults()
         })
@@ -7662,6 +7668,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
                   Math.max(0, Number(window.scrollY || 0) + delta),
                 )
               }
+              pendingHomeRestoreState = null
             }
             window.requestAnimationFrame(function () {
               correctAnchor()
@@ -7766,6 +7773,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           ? Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
           : ""
       restoreState = null
+      pendingHomeRestoreState = null
       resetCollection(true)
     })
     resetCollection(false)
@@ -8848,6 +8856,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   var lastRenderedPath = null
   var activeHomeHistorySnapshot = null
   var activeHomeRenderCleanup = null
+  var pendingHomeRestoreState = null
   var queuedHomeHistorySync = null
   var pendingHomeAnchor = null
   var mobileLabelReviewMode = false
