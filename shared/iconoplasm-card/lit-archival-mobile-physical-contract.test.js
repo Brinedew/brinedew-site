@@ -303,6 +303,71 @@ test("real seven-clan KALRN infocard projects PFAM lanes into a 4 plus 3 column 
   assert.notEqual(html.slice(rightColumnIndex).indexOf("SH3"), -1)
 })
 
+// ARCHITECTURE FENCE [IPD-002]
+test("archival cards expose one labelled accessible equivalent of the visual character facts", async () => {
+  const [shared, css] = await Promise.all([
+    import(pathToFileURL(runtimePath).href),
+    sourceText(cssPath),
+  ])
+  const sharedRuntime = shared.IconoCardShared || globalThis.IconoplasmCardShared
+  const fixture = {
+    symbol: "TP53",
+    full_name: "tumor protein p53",
+    color: "#35353C",
+    tissue_tau: 0.26,
+    loeuf: 0.449,
+    first_publication_year: 1976,
+    portrait: { emulsion_id: "A1-15527-e" },
+    essence: {
+      age_years: 44,
+      aesthetics: ["Kingcore"],
+      aesthetics_origin: ["p53-like"],
+      family_feature: "DNA damage response",
+      family_members: 2,
+      family_surname: "TP",
+      politics: "pro-control",
+      politics_origin: "tumor suppressor",
+      sex: "female",
+      sex_origin: "transmembrane",
+      weight_kg: 44,
+    },
+  }
+
+  const html = sharedRuntime.renderLabLabelCardHtml(fixture, {
+    includeCharacterProfile: true,
+    layoutVariant: "lit-archival",
+  })
+  assert.doesNotMatch(
+    sharedRuntime.renderLabLabelCardHtml(fixture, { layoutVariant: "lit-archival" }),
+    /icono-card-semantic-profile/,
+    "bounded gallery cards must not duplicate their visual card facts unless a page opts in",
+  )
+  const profileStart = html.indexOf('<section class="icono-card-semantic-profile"')
+  assert.notEqual(profileStart, -1, "the card must carry an accessible fact profile")
+  const profileEnd = html.indexOf("</section>", profileStart)
+  assert.notEqual(profileEnd, -1, "the accessible fact profile must close its semantic section")
+  const profile = html.slice(profileStart, profileEnd + "</section>".length)
+
+  assert.match(profile, /aria-label="Character profile for TP53"/)
+  assert.match(profile, /<h2>Character profile for TP53<\/h2>/)
+  assert.match(profile, /<dt>Gene name<\/dt><dd>tumor protein p53<\/dd>/)
+  assert.match(profile, /<dt>Character sex<\/dt><dd>female<\/dd>/)
+  assert.match(profile, /<dt>Character age<\/dt><dd>44 y\.o\.<\/dd>/)
+  assert.match(profile, /<dt>Character mass<\/dt><dd>44 kg<\/dd>/)
+  assert.match(
+    profile,
+    /<dt>PFAM clan and character aesthetic<\/dt><dd>p53-like — Kingcore<\/dd>/,
+  )
+  assert.match(profile, /<dt>Molecular alignment<\/dt><dd>tumor suppressor<\/dd>/)
+  assert.match(profile, /<dt>Character alignment<\/dt><dd>pro-control<\/dd>/)
+  assert.doesNotMatch(profile, /\b(?:aria-hidden|hidden)\b/)
+
+  const semanticProfileCss = cssStandaloneBlockFor(css, ".icono-card-semantic-profile")
+  assert.match(semanticProfileCss, /position:\s*absolute;/)
+  assert.match(semanticProfileCss, /clip-path:\s*inset\(50%\);/)
+  assert.doesNotMatch(semanticProfileCss, /(?:display|visibility)\s*:/)
+})
+
 test("real five-clan DMD infocard renders as four left lanes and one right lane", async () => {
   const shared = await import(pathToFileURL(runtimePath).href)
   const sharedRuntime = shared.IconoCardShared || globalThis.IconoplasmCardShared

@@ -87,6 +87,9 @@ const PRACTICE_RESOLVE_SQL_CHUNK = 100
 function addIconoplasmGeneShellHeaders(headers, path) {
   const next = new Headers(headers)
   if (!String(path || "").startsWith("/gene/")) return next
+  // ARCHITECTURE FENCE [IPD-002]: labelled card facts improve non-visual
+  // comprehension, but generated gene cards remain noindex detail routes until
+  // they have standalone explanatory content and an explicit discovery migration.
   for (const link of ICONOPLASM_GENE_FONT_PRELOAD_LINKS) next.append("Link", link)
   next.set("No-Vary-Search", ICONOPLASM_PUBLIC_NO_VARY_SEARCH)
   next.set("X-Robots-Tag", "noindex, follow, noarchive")
@@ -285,6 +288,7 @@ function iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) {
       mode: "brick",
       layoutVariant: "lit-archival",
       mobileReview: true,
+      includeCharacterProfile: true,
       portraitAlt: symbol + " blot",
       portraitSrc: portraitUrl,
       voteHtml: iconoplasmLabelVoteBoxMarkup(cardPayload),
