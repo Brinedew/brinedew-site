@@ -7656,7 +7656,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
               )
               if (!card) return
               var delta = card.getBoundingClientRect().top - pendingRestore.top
-              if (Math.abs(delta) > 0.5) window.scrollBy(0, delta)
+              if (Math.abs(delta) > 0.5) {
+                scrollWindowInstantly(
+                  Number(window.scrollX || 0),
+                  Math.max(0, Number(window.scrollY || 0) + delta),
+                )
+              }
             }
             window.requestAnimationFrame(function () {
               correctAnchor()
