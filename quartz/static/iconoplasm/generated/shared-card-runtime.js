@@ -9841,11 +9841,11 @@
     function blankFallback(value) {
       return String(value || "").trim() || " ";
     }
-    function renderLabLabelOptionHtml(value, selected, extraClass, loopPreset) {
+    function renderLabLabelOptionHtml(selected, extraClass, loopPreset) {
       var classes = "icono-label-option";
       if (extraClass) classes += " " + extraClass;
       if (selected) classes += " is-selected";
-      return '<span aria-hidden="true" class="' + classes + '"><span class="icono-label-option-copy" data-icono-rough-copy="true">' + escapeHtml(value) + "</span>" + (selected ? iconoPenLoopSvg("icono-label-option-loop", loopPreset) : "") + "</span>";
+      return '<span aria-hidden="true" class="' + classes + '"><span class="icono-label-option-copy" data-icono-rough-copy="true"></span>' + (selected ? iconoPenLoopSvg("icono-label-option-loop", loopPreset) : "") + "</span>";
     }
     function renderLabLabelVoteShell(voteHtml) {
       return String(voteHtml || "").trim() ? voteHtml : '<div class="icono-label-qc-empty"></div>';
@@ -9853,11 +9853,14 @@
     function renderLabLabelCategoryFieldHtml(selectedCategory, sexNote) {
       var categoryKey = String(selectedCategory || "").trim().toLowerCase();
       return '<div class="icono-label-category-grid" role="img" aria-label="Molecular category: ' + escapeHtml(categoryKey || "not specified") + '"><div class="icono-label-category-option icono-label-category-option--transmembrane">' + renderLabLabelOptionHtml(
-        "TRANSMEMBRANE",
         categoryKey === "transmembrane",
-        "",
+        "icono-label-option--transmembrane",
         "category-transmembrane"
-      ) + '</div><div class="icono-label-category-option icono-label-category-option--soluble">' + renderLabLabelOptionHtml("SOLUBLE", categoryKey === "soluble", "", "category-soluble") + "</div></div>";
+      ) + '</div><div class="icono-label-category-option icono-label-category-option--soluble">' + renderLabLabelOptionHtml(
+        categoryKey === "soluble",
+        "icono-label-option--soluble",
+        "category-soluble"
+      ) + "</div></div>";
     }
     function renderLabLabelSexNoteHtml(sexNote, selectedCategory) {
       var note = String(sexNote || "").trim().toLowerCase();
@@ -9876,10 +9879,9 @@
       else if (isOncogene) noteClass += " icono-label-hand-note--politics-oncogene";
       else if (isTumorSuppressor) noteClass += " icono-label-hand-note--politics-tumor-suppressor";
       else noteClass += " icono-label-hand-note--politics-neutral";
-      return '<div class="icono-label-alignment-grid" role="group" aria-label="Molecular alignment to character alignment mapping"><div role="img" aria-label="Molecular alignment: ' + escapeHtml(molecularKey || "neither") + '" class="icono-label-selector-row icono-label-selector-row--alignment' + (isNeither ? " is-neither" : "") + '">' + renderLabLabelOptionHtml("ONCOGENE", isOncogene, "", "alignment-oncogene") + renderLabLabelOptionHtml(
-        "TUMOR SUPPRESSOR",
+      return '<div class="icono-label-alignment-grid" role="group" aria-label="Molecular alignment to character alignment mapping"><div role="img" aria-label="Molecular alignment: ' + escapeHtml(molecularKey || "neither") + '" class="icono-label-selector-row icono-label-selector-row--alignment' + (isNeither ? " is-neither" : "") + '">' + renderLabLabelOptionHtml(isOncogene, "icono-label-option--oncogene", "alignment-oncogene") + renderLabLabelOptionHtml(
         isTumorSuppressor,
-        "",
+        "icono-label-option--tumor-suppressor",
         "alignment-tumor-suppressor"
       ) + (isNeither ? '<span class="icono-label-alignment-strike" aria-hidden="true"></span>' : "") + '</div><div role="note" aria-label="Character alignment: ' + escapeHtml(politicalNote || "not specified") + '" class="' + noteClass + '">' + escapeHtml(politicalNote || "") + "</div></div>";
     }

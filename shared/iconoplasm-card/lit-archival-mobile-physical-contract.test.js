@@ -380,7 +380,29 @@ test("archival cards expose one labelled accessible equivalent of the visual cha
     4,
     "the two category and two alignment alternatives must remain visual-only ink",
   )
+  assert.doesNotMatch(
+    html,
+    />(?:TRANSMEMBRANE|SOLUBLE|ONCOGENE|TUMOR SUPPRESSOR)</,
+    "decorative alternatives must not survive as peer DOM text",
+  )
   assert.doesNotMatch(html, /aria-(?:checked|selected)=/)
+
+  assert.match(
+    css,
+    /\.icono-label-option--transmembrane \.icono-label-option-copy::before\s*\{\s*content:\s*"TRANSMEMBRANE";/,
+  )
+  assert.match(
+    css,
+    /\.icono-label-option--soluble \.icono-label-option-copy::before\s*\{\s*content:\s*"SOLUBLE";/,
+  )
+  assert.match(
+    css,
+    /\.icono-label-option--oncogene \.icono-label-option-copy::before\s*\{\s*content:\s*"ONCOGENE";/,
+  )
+  assert.match(
+    css,
+    /\.icono-label-option--tumor-suppressor \.icono-label-option-copy::before\s*\{\s*content:\s*"TUMOR SUPPRESSOR";/,
+  )
 
   assert.match(litCard, /<span aria-hidden="true" class=\$\{classes\}/)
   assert.match(litCard, /aria-label=\$\{"Molecular category: "/)
@@ -394,6 +416,10 @@ test("archival cards expose one labelled accessible equivalent of the visual cha
   assert.match(
     geneShellRuntime,
     /icono-label-selector-row icono-label-selector-row--alignment is-neither" aria-hidden="true"/,
+  )
+  assert.doesNotMatch(
+    geneShellRuntime,
+    />(?:TRANSMEMBRANE|SOLUBLE|ONCOGENE|TUMOR SUPPRESSOR)</,
   )
 
   assert.match(profile, /aria-label="Character profile for TP53"/)

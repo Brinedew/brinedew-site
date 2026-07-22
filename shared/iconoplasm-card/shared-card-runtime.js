@@ -683,7 +683,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
   // molecular value, while the handwritten note exposes the mapped character
   // value. Keeping the alternatives aria-hidden prevents agents from treating
   // selected and unselected labels as equally true.
-  function renderLabLabelOptionHtml(value, selected, extraClass, loopPreset) {
+  function renderLabLabelOptionHtml(selected, extraClass, loopPreset) {
     var classes = "icono-label-option"
     if (extraClass) classes += " " + extraClass
     if (selected) classes += " is-selected"
@@ -691,9 +691,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '<span aria-hidden="true" class="' +
       classes +
       '">' +
-      '<span class="icono-label-option-copy" data-icono-rough-copy="true">' +
-      escapeHtml(value) +
-      "</span>" +
+      '<span class="icono-label-option-copy" data-icono-rough-copy="true"></span>' +
       (selected ? iconoPenLoopSvg("icono-label-option-loop", loopPreset) : "") +
       "</span>"
     )
@@ -713,14 +711,17 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '">' +
       '<div class="icono-label-category-option icono-label-category-option--transmembrane">' +
       renderLabLabelOptionHtml(
-        "TRANSMEMBRANE",
         categoryKey === "transmembrane",
-        "",
+        "icono-label-option--transmembrane",
         "category-transmembrane",
       ) +
       "</div>" +
       '<div class="icono-label-category-option icono-label-category-option--soluble">' +
-      renderLabLabelOptionHtml("SOLUBLE", categoryKey === "soluble", "", "category-soluble") +
+      renderLabLabelOptionHtml(
+        categoryKey === "soluble",
+        "icono-label-option--soluble",
+        "category-soluble",
+      ) +
       "</div>" +
       "</div>"
     )
@@ -765,11 +766,10 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '" class="icono-label-selector-row icono-label-selector-row--alignment' +
       (isNeither ? " is-neither" : "") +
       '">' +
-      renderLabLabelOptionHtml("ONCOGENE", isOncogene, "", "alignment-oncogene") +
+      renderLabLabelOptionHtml(isOncogene, "icono-label-option--oncogene", "alignment-oncogene") +
       renderLabLabelOptionHtml(
-        "TUMOR SUPPRESSOR",
         isTumorSuppressor,
-        "",
+        "icono-label-option--tumor-suppressor",
         "alignment-tumor-suppressor",
       ) +
       (isNeither ? '<span class="icono-label-alignment-strike" aria-hidden="true"></span>' : "") +
