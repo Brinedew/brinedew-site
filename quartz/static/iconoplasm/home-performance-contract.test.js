@@ -360,6 +360,14 @@ test("home shell exposes landmarks, search semantics, and a labelled automatic f
   assert.equal(document.querySelector("#icono-collection-pager"), null)
 })
 
+test("feed skip links keep a 44px keyboard and touch target", async () => {
+  const styles = await readFile(stylesPath, "utf8")
+  const start = styles.indexOf(".icono-feed-skip {")
+  const end = styles.indexOf("}", start)
+  assert.notEqual(start, -1, "missing feed skip-link styles")
+  assert.match(styles.slice(start, end), /min-height:\s*44px/)
+})
+
 test("gene shell preserves landmarks when adopting server-rendered content", async () => {
   const vm = await import("node:vm")
   const app = await readFile(appPath, "utf8")

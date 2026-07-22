@@ -4089,6 +4089,10 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   position: absolute;
   z-index: 20;
   left: 1rem;
+  display: inline-flex;
+  min-height: 44px;
+  box-sizing: border-box;
+  align-items: center;
   padding: 0.7rem 0.9rem;
   border: 1px solid var(--ui-border);
   border-radius: var(--icono-radius-pill);
