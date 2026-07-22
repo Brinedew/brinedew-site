@@ -927,6 +927,7 @@ const ICONOPLASM_VOTE_PROJECTION_QUEUE_DISABLED_ENV = "ICONOPLASM_VOTE_PROJECTIO
 const ICONOPLASM_VOTE_PROJECTION_QUEUE_MESSAGE_KIND = "process_vote_projection_refresh"
 const ICONOPLASM_SYNC_FINALIZATION_QUEUE_FREE_DAILY_OPERATION_LIMIT = 10_000
 const ICONOPLASM_SYNC_FINALIZATION_QUEUE_DRAIN_BATCH_LIMIT = 100
+const ICONOPLASM_QUEUE_MAX_DELAY_SECONDS = 24 * 60 * 60
 const ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
   "ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY"
 const ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
@@ -16435,19 +16436,16 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
        leader_created_at,
        updated_at
      )
-     WITH publish_info AS (
-       SELECT
-         i.gene_symbol,
-         gc.full_name,
-         ge.manifestation,
-         lower(COALESCE(ps.current_asset_sha256, '')) AS current_asset_sha256,
-         COALESCE(ps.admin_override, 0) AS admin_override
-       FROM incoming i
-       LEFT JOIN icono_gene_catalog gc
-         ON gc.gene_symbol = i.gene_symbol
-       LEFT JOIN icono_gene_essence ge
-         ON ge.gene_symbol = i.gene_symbol
-       LEFT JOIN icono_publish_state ps
+      WITH publish_info AS (
+        SELECT
+          i.gene_symbol,
+          gc.full_name,
+          lower(COALESCE(ps.current_asset_sha256, '')) AS current_asset_sha256,
+          COALESCE(ps.admin_override, 0) AS admin_override
+        FROM incoming i
+        LEFT JOIN icono_gene_catalog gc
+          ON gc.gene_symbol = i.gene_symbol
+        LEFT JOIN icono_publish_state ps
          ON ps.gene_symbol = i.gene_symbol
      ),
      asset_base AS (
@@ -16553,7 +16551,7 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
        COALESCE(NULLIF(TRIM(pi.full_name), ''), pi.gene_symbol) AS full_name,
        pi.gene_symbol AS search_symbol,
        upper(COALESCE(NULLIF(TRIM(pi.full_name), ''), pi.gene_symbol)) AS search_full_name,
-       COALESCE(pi.manifestation, '') AS manifestation,
+        '' AS manifestation,
        NULLIF(pi.current_asset_sha256, '') AS current_asset_sha256,
        CASE
          WHEN NULLIF(pi.current_asset_sha256, '') IS NOT NULL
@@ -16864,18 +16862,15 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
     `SELECT
        ? AS gene_symbol,
        gc.full_name,
-       ge.manifestation,
        lower(COALESCE(ps.current_asset_sha256, '')) AS current_asset_sha256,
        COALESCE(ps.admin_override, 0) AS admin_override
      FROM (SELECT 1) seed
      LEFT JOIN icono_gene_catalog gc
        ON gc.gene_symbol = ?
-     LEFT JOIN icono_gene_essence ge
-       ON ge.gene_symbol = ?
      LEFT JOIN icono_publish_state ps
        ON ps.gene_symbol = ?`,
   )
-    .bind(symbol, symbol, symbol, symbol)
+    .bind(symbol, symbol, symbol)
     .first()
 
   const assetResp = await env.ICONOPLASM_DB.prepare(
@@ -17028,7 +17023,7 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
       rollupFullName,
       symbol,
       rollupFullName.toUpperCase(),
-      sanitizeText(info?.manifestation || "", 4000) || "",
+      "",
       currentAssetSha,
       currentAssetMissing ? 1 : 0,
       Number(info?.admin_override || 0) > 0 ? 1 : 0,
@@ -17500,19 +17495,16 @@ async function bulkRebuildAdminReadModels(env) {
        UNION
        SELECT gene_symbol FROM icono_publish_state
      ),
-     publish_info AS (
-       SELECT
-         s.gene_symbol,
-         gc.full_name,
-         ge.manifestation,
-         lower(COALESCE(ps.current_asset_sha256, '')) AS current_asset_sha256,
-         COALESCE(ps.admin_override, 0) AS admin_override
-       FROM all_symbols s
-       LEFT JOIN icono_gene_catalog gc
-         ON gc.gene_symbol = s.gene_symbol
-       LEFT JOIN icono_gene_essence ge
-         ON ge.gene_symbol = s.gene_symbol
-       LEFT JOIN icono_publish_state ps
+      publish_info AS (
+        SELECT
+          s.gene_symbol,
+          gc.full_name,
+          lower(COALESCE(ps.current_asset_sha256, '')) AS current_asset_sha256,
+          COALESCE(ps.admin_override, 0) AS admin_override
+        FROM all_symbols s
+        LEFT JOIN icono_gene_catalog gc
+          ON gc.gene_symbol = s.gene_symbol
+        LEFT JOIN icono_publish_state ps
          ON ps.gene_symbol = s.gene_symbol
      ),
      asset_base AS (
@@ -17616,7 +17608,7 @@ async function bulkRebuildAdminReadModels(env) {
        COALESCE(NULLIF(TRIM(pi.full_name), ''), pi.gene_symbol) AS full_name,
        pi.gene_symbol AS search_symbol,
        upper(COALESCE(NULLIF(TRIM(pi.full_name), ''), pi.gene_symbol)) AS search_full_name,
-       COALESCE(pi.manifestation, '') AS manifestation,
+        '' AS manifestation,
        NULLIF(pi.current_asset_sha256, '') AS current_asset_sha256,
        CASE
          WHEN NULLIF(pi.current_asset_sha256, '') IS NOT NULL
@@ -18239,7 +18231,7 @@ async function recordVoteProjectionRefreshFailure(
         "vote projection refresh failed",
     )
     .run()
-  return true
+  return { ok: true, next_attempt_at: nextAttemptAt }
 }
 
 function iconoplasmVoteProjectionQueueDisabled(env) {
@@ -18671,10 +18663,10 @@ function normalizeVoteProjectionRefreshQueueMessage(rawMessage) {
 }
 
 function voteProjectionQueueRetryDelaySeconds(rawNextAttemptAt, nowMs = Date.now()) {
-  const nextMs = Date.parse(String(rawNextAttemptAt || ""))
-  if (!Number.isFinite(nextMs)) return 30
-  const secondsUntilDue = Math.ceil((nextMs - nowMs) / 1000)
-  return Math.max(30, Math.min(300, secondsUntilDue))
+  // ARCHITECTURE FENCE [IPD-004]: retry delivery is a wakeup for due work, not
+  // a five-minute poll. Capping a one-hour ledger backoff at five minutes burns
+  // retries and can dead-letter the message before the job is runnable.
+  return queueDelaySecondsUntil(rawNextAttemptAt, nowMs, 30)
 }
 
 async function processVoteProjectionRefreshQueueMessage(env, rawMessage) {
@@ -18837,6 +18829,7 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
   )
   const resultBySymbol = new Map(batchResults.map((result) => [result.symbol, result]))
   const recordedFailureSymbols = new Set()
+  const retryAtBySymbol = new Map()
   for (const entry of dueEntries) {
     const result =
       resultBySymbol.get(entry.job.symbol) ||
@@ -18851,16 +18844,21 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
     retrying += 1
     if (result?.symbol && !recordedFailureSymbols.has(result.symbol)) {
       recordedFailureSymbols.add(result.symbol)
-      await recordVoteProjectionRefreshFailure(env, {
+      const recordedFailure = await recordVoteProjectionRefreshFailure(env, {
         symbol: result.symbol,
         actorId: result.actor_id || entry.queueMessage.actor_id,
         reason: result.reason || entry.queueMessage.reason,
         error: new Error(result.error || "vote projection refresh failed"),
         attemptCount: Number(result.attempts || entry.job.attempts || 0),
       })
+      retryAtBySymbol.set(result.symbol, recordedFailure?.next_attempt_at || "")
     }
     if (typeof entry.message?.retry === "function") {
-      entry.message.retry({ delaySeconds: 30 })
+      entry.message.retry({
+        delaySeconds: voteProjectionQueueRetryDelaySeconds(
+          retryAtBySymbol.get(result?.symbol) || "",
+        ),
+      })
     } else {
       throw new Error(result?.error || "vote projection Queue failed")
     }
@@ -19106,7 +19104,17 @@ function buildSyncFinalizationDrainQueueMessage({
   }
 }
 
-async function sendSyncFinalizationDrainQueueMessage(env, message) {
+function queueDelaySecondsUntil(rawNextAttemptAt, nowMs = Date.now(), fallbackSeconds = 120) {
+  const nextAttemptMs = Date.parse(String(rawNextAttemptAt || ""))
+  const fallback = Math.max(1, Math.min(ICONOPLASM_QUEUE_MAX_DELAY_SECONDS, fallbackSeconds))
+  if (!Number.isFinite(nextAttemptMs)) return fallback
+  return Math.max(
+    1,
+    Math.min(ICONOPLASM_QUEUE_MAX_DELAY_SECONDS, Math.ceil((nextAttemptMs - nowMs) / 1000)),
+  )
+}
+
+async function sendSyncFinalizationDrainQueueMessage(env, message, { delaySeconds = 0 } = {}) {
   const queue = iconoplasmSyncFinalizationQueueBinding(env)
   if (!queue) {
     return {
@@ -19116,9 +19124,19 @@ async function sendSyncFinalizationDrainQueueMessage(env, message) {
     }
   }
   const safeMessage = buildSyncFinalizationDrainQueueMessage(message)
+  const safeDelaySeconds = Math.max(
+    0,
+    Math.min(
+      ICONOPLASM_QUEUE_MAX_DELAY_SECONDS,
+      Number.parseInt(String(delaySeconds || 0), 10) || 0,
+    ),
+  )
   try {
-    await queue.send(safeMessage)
-    return { ok: true, message: safeMessage }
+    await queue.send(
+      safeMessage,
+      safeDelaySeconds > 0 ? { delaySeconds: safeDelaySeconds } : undefined,
+    )
+    return { ok: true, message: safeMessage, delay_seconds: safeDelaySeconds }
   } catch (error) {
     const detail = String(error?.message || error || "").slice(0, 2000)
     console.warn(
@@ -19974,16 +19992,30 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
       const nextSymbols = Array.isArray(drainResult?.reschedule_symbols)
         ? drainResult.reschedule_symbols
         : symbols
-      sentNext = await sendSyncFinalizationDrainQueueMessage(env, {
-        runId,
-        symbols: nextSymbols,
-        drainScopedPhases: maxPasses > 1,
-      })
+      // ARCHITECTURE FENCE [IPD-004]: an unfinished ledger is not necessarily
+      // runnable. A replacement Queue message must follow the ledger's earliest
+      // due time; immediately polling a future retry consumed the entire daily
+      // Queue allowance during the 2026-07-22 D1-capacity incident.
+      const nextDelaySeconds = drainResult?.partial
+        ? 15 * 60
+        : Math.max(0, Number(drainResult?.runnable || 0) || 0) > 0
+          ? 0
+          : queueDelaySecondsUntil(drainResult?.next_attempt_at)
+      sentNext = await sendSyncFinalizationDrainQueueMessage(
+        env,
+        {
+          runId,
+          symbols: nextSymbols,
+          drainScopedPhases: maxPasses > 1,
+        },
+        { delaySeconds: nextDelaySeconds },
+      )
       if (!sentNext?.ok) {
         console.warn("Iconoplasm sync finalization Queue self-reschedule deferred", {
           run_id: runId,
           symbols: nextSymbols.length,
           remaining,
+          delay_seconds: nextDelaySeconds,
           error: sanitizeText(
             String(
               sentNext?.detail || sentNext?.error || sentNext?.code || "unknown Queue send failure",
@@ -20316,10 +20348,9 @@ async function processPendingSyncFinalizationJobs(
     !partial && finalizeIfDrained
       ? await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbols: scopedSymbols })
       : { ok: true, finalized: 0, remaining: 0 }
-  const remaining = await countSyncFinalizationJobs(env, {
-    whereSql: `status <> ?
-      AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-    bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED, scopedEnabled, scopedSymbolsJson],
+  const pendingWork = await summarizePendingSyncFinalizationWork(env, {
+    symbols: scopedSymbols,
+    nowIso: new Date().toISOString(),
   })
   return {
     ok: true,
@@ -20330,9 +20361,58 @@ async function processPendingSyncFinalizationJobs(
     budget: partial ? partialBudget : null,
     recovered_stale_running: Math.max(0, Number(staleRecovery?.recovered || 0) || 0),
     finalized: Math.max(0, Number(finalizeResult?.finalized || 0) || 0),
-    remaining: Math.max(remaining, Number(finalizeResult?.remaining || 0) || 0),
+    remaining: Math.max(pendingWork.remaining, Number(finalizeResult?.remaining || 0) || 0),
+    runnable: pendingWork.runnable,
+    next_attempt_at: pendingWork.next_attempt_at,
     reschedule_symbols: finalizeResult?.broaden_next_drain ? [] : scopedSymbols,
     results,
+  }
+}
+
+async function summarizePendingSyncFinalizationWork(
+  env,
+  { symbols = null, nowIso = new Date().toISOString() } = {},
+) {
+  const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
+  const scopedSymbolsJson = JSON.stringify(scopedSymbols)
+  const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       COUNT(*) AS remaining,
+       SUM(CASE
+         WHEN status IN (?, ?)
+          AND phase <> ?
+          AND next_attempt_at <= ? THEN 1
+         ELSE 0
+       END) AS runnable,
+       MIN(CASE
+         WHEN status IN (?, ?)
+          AND phase <> ?
+          AND next_attempt_at > ? THEN next_attempt_at
+         ELSE NULL
+       END) AS next_attempt_at
+     FROM icono_sync_finalization_jobs
+     WHERE status <> ?
+       AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
+  )
+    .bind(
+      ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
+      ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
+      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+      nowIso,
+      ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
+      ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
+      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+      nowIso,
+      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+      scopedEnabled,
+      scopedSymbolsJson,
+    )
+    .first()
+  return {
+    remaining: Math.max(0, Number(row?.remaining || 0) || 0),
+    runnable: Math.max(0, Number(row?.runnable || 0) || 0),
+    next_attempt_at: sanitizeText(row?.next_attempt_at || "", 64) || null,
   }
 }
 
@@ -21228,9 +21308,9 @@ async function fetchAdminGallery(
     const allResp = await env.ICONOPLASM_DB.prepare(
       `
        SELECT
-         pa.gene_symbol AS gene_symbol,
-         gr.full_name,
-         gr.manifestation,
+          pa.gene_symbol AS gene_symbol,
+          gr.full_name,
+          ge.manifestation,
          pa.asset_sha256 AS asset_sha256,
          COALESCE(pa.status, 'draft') AS status,
          COALESCE(pa.autopick_eligible, 1) AS autopick_eligible,
@@ -21256,8 +21336,10 @@ async function fetchAdminGallery(
        LEFT JOIN icono_vote_asset_summary vs
          ON vs.gene_symbol = pa.gene_symbol
         AND vs.asset_sha256 = pa.asset_sha256
-       LEFT JOIN icono_admin_gene_rollup gr
-         ON gr.gene_symbol = pa.gene_symbol
+        LEFT JOIN icono_admin_gene_rollup gr
+          ON gr.gene_symbol = pa.gene_symbol
+        LEFT JOIN icono_gene_essence ge
+          ON ge.gene_symbol = pa.gene_symbol
        ${whereClause}
        ORDER BY ${orderClause}
        LIMIT ? OFFSET ?`,
@@ -21349,9 +21431,9 @@ async function fetchAdminGallery(
   const resp = await env.ICONOPLASM_DB.prepare(
     `
      SELECT
-       gr.gene_symbol AS gene_symbol,
-       gr.full_name,
-       gr.manifestation,
+        gr.gene_symbol AS gene_symbol,
+        gr.full_name,
+        ge.manifestation,
        gr.candidate_count,
        gr.approved_count,
        gr.rejected_count,
@@ -21380,7 +21462,9 @@ async function fetchAdminGallery(
        gr.leader_downvotes,
        gr.leader_score,
        gr.current_asset_missing AS has_mismatch
-     FROM icono_admin_gene_rollup gr
+      FROM icono_admin_gene_rollup gr
+      LEFT JOIN icono_gene_essence ge
+        ON ge.gene_symbol = gr.gene_symbol
      ${whereClause}
      ORDER BY ${orderClause}
      LIMIT ? OFFSET ?`,
@@ -21461,14 +21545,16 @@ async function fetchAdminGeneDetail(env, url, rawSymbol) {
 
   const info = await env.ICONOPLASM_DB.prepare(
     `SELECT
-       gene_symbol,
-       full_name,
-       manifestation,
-       current_asset_sha256 AS live_sha,
-       admin_override,
-       updated_at AS live_updated_at
-     FROM icono_admin_gene_rollup
-     WHERE gene_symbol = ?`,
+       gr.gene_symbol,
+       gr.full_name,
+       ge.manifestation,
+       gr.current_asset_sha256 AS live_sha,
+       gr.admin_override,
+       gr.updated_at AS live_updated_at
+     FROM icono_admin_gene_rollup gr
+     LEFT JOIN icono_gene_essence ge
+       ON ge.gene_symbol = gr.gene_symbol
+     WHERE gr.gene_symbol = ?`,
   )
     .bind(symbol)
     .first()

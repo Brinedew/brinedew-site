@@ -1,0 +1,77 @@
+# Iconoplasm capacity and background-work runbook
+
+This runbook records the two architectural decisions exposed by the 2026-07-22
+finalization incident. They are separate invariants and must not be collapsed
+into “the Queue was noisy.”
+
+## ARCHITECTURE FENCE [IPD-004]: Queue wakeups follow due work
+
+The durable D1 ledger owns whether work exists and when it may run. A Queue
+message is only a wakeup. “Unfinished” does not mean “runnable now.”
+
+- Finalization replacement messages use the earliest future `next_attempt_at`.
+- Partial work stopped by a budget barrier sleeps before checking again.
+- Vote projection retries use the durable retry time, not a short polling cap.
+- Empty polling loops are prohibited. One future job may own at most one delayed
+  wakeup per delivery; it must not continuously ack and replace itself.
+- Cloudflare Queue retries are billable reads. A retry delay is part of the cost
+  model, not merely latency tuning.
+
+When changing a background consumer, test all four states: no job, runnable job,
+future job, and failed job whose durable backoff was just advanced. The future
+case must prove that no immediate replacement is sent.
+
+## ARCHITECTURE FENCE [IPD-005]: the primary D1 is bounded operational state
+
+The Free-plan wall is **500,000,000 bytes per D1 database**. The separate 5 GB
+account allowance is not the denominator for a single database. The operational
+target is 80% (400,000,000 bytes) so maintenance still has room to write and
+delete.
+
+The primary `iconoplasm` D1 stores current relational state and bounded hot
+history. It must not accumulate either of these:
+
+- a second copy of immutable gene-profile prose in a read model;
+- unbounded historical publish events.
+
+`icono_gene_essence` remains the canonical manifestation source.
+`icono_admin_gene_rollup.manifestation` is deliberately kept empty during the
+rolling schema transition; bounded admin result queries join the canonical row.
+
+Publish events remain hot for 30 days. Scheduled maintenance copies a bounded
+batch to `ICONOPLASM_AUDIT_DB`, verifies every event ID in the cold database,
+and only then deletes those IDs from the primary database. A failed copy or
+verification leaves the hot rows untouched. The archive operation is idempotent
+because the original event ID is the cold primary key.
+
+## Incident evidence
+
+At 2026-07-22 15:05 UTC:
+
+- primary D1: 499,994,624 bytes;
+- publish event ledger: 297,818 rows;
+- duplicated rollup manifestation values: 19,110 rows;
+- finalization Queue: the 10,000 daily operation allowance exhausted;
+- root job failure: `D1_ERROR: Exceeded maximum DB size`.
+
+Recovery copied and verified all 297,818 events in `iconoplasm-audit`, then
+removed 297,118 events older than 2026-06-22 from the hot database. Clearing the
+duplicated rollup payload reduced the primary database to 393,740,288 bytes.
+The canonical gene essence was not removed or changed.
+
+The pre-recovery SQL export is retained in the incident artifact archive and is
+recoverable in addition to D1 Time Travel. Linear issue B-667 owns the incident,
+root-cause analysis, release evidence, and any future migration.
+
+## Capacity response
+
+- Below 80%: normal operation; nightly archival keeps history bounded.
+- At or above 80%: observability status is warning; investigate table growth
+  before bulk publication or reconciliation.
+- At or above 100%: observability status is critical; stop bulk work, preserve a
+  Time Travel/export recovery point, archive cold rows, and remove duplicated or
+  obsolete materializations before resuming.
+
+Never “fix” a capacity incident by deleting history without a verified archive,
+changing the dashboard denominator, disabling the Queue, or adding a faster
+poll. Those actions hide or amplify the failure.

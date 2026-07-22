@@ -242,6 +242,53 @@ class FakeStatement {
 
   async first() {
     this.db.calls.push({ method: "first", sql: this.sql, args: this.args })
+    if (
+      this.sql.includes("COUNT(*) AS remaining") &&
+      this.sql.includes("FROM icono_sync_finalization_jobs")
+    ) {
+      const [
+        queuedStatus,
+        retryingStatus,
+        excludedPhase,
+        nowIso,
+        ,
+        ,
+        ,
+        ,
+        completedStatus,
+        scopedEnabled,
+        scopedSymbolsJson,
+      ] = this.args
+      const scopedSymbols =
+        Number(scopedEnabled || 0) > 0
+          ? new Set(JSON.parse(String(scopedSymbolsJson || "[]")))
+          : null
+      const rows = [...this.db.jobs.values()].filter(
+        (row) =>
+          row.status !== completedStatus &&
+          (!scopedSymbols || scopedSymbols.has(String(row.gene_symbol || ""))),
+      )
+      const runnable = rows.filter(
+        (row) =>
+          (row.status === queuedStatus || row.status === retryingStatus) &&
+          row.phase !== excludedPhase &&
+          String(row.next_attempt_at || "") <= String(nowIso || ""),
+      ).length
+      const futureAttempts = rows
+        .filter(
+          (row) =>
+            (row.status === queuedStatus || row.status === retryingStatus) &&
+            row.phase !== excludedPhase &&
+            String(row.next_attempt_at || "") > String(nowIso || ""),
+        )
+        .map((row) => String(row.next_attempt_at || ""))
+        .sort()
+      return {
+        remaining: rows.length,
+        runnable,
+        next_attempt_at: futureAttempts[0] || null,
+      }
+    }
     if (this.sql.includes("FROM icono_gene_catalog")) {
       const symbol = String(this.args[0] || "TP53")
         .trim()
@@ -612,9 +659,11 @@ function buildEnv({ jobs = [] } = {}, { bindGateway = true } = {}) {
 function buildFakeQueue({ failMessage = "" } = {}) {
   return {
     sent: [],
-    async send(message) {
+    sendOptions: [],
+    async send(message, options) {
       if (failMessage) throw new Error(failMessage)
       this.sent.push(message)
+      this.sendOptions.push(options || null)
     },
   }
 }
@@ -1314,6 +1363,48 @@ test("scoped queue drain completes scoped pending-finalize rows while deferring 
   assert.equal(env.ICONOPLASM_DB.jobs.get("EGFR")?.phase, "vote_summaries")
   assert.equal(queue.sent.length, 1)
   assert.deepEqual(queue.sent[0]?.symbols, [])
+  assert.ok(Number(queue.sendOptions[0]?.delaySeconds || 0) > 0)
+})
+
+test("future retry rows schedule one due-time wakeup instead of an immediate Queue spin", async () => {
+  const queue = buildFakeQueue()
+  const futureAttempt = new Date(Date.now() + 45 * 60 * 1000).toISOString()
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: [
+        {
+          gene_symbol: "TP53",
+          status: "retrying",
+          phase: "reconcile",
+          attempts: 6,
+          next_attempt_at: futureAttempt,
+          requested_at: new Date().toISOString(),
+        },
+      ],
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+  }
+
+  const result = await handleIconoplasmSyncFinalizationQueue(
+    {
+      messages: [
+        {
+          body: { kind: "drain_finalization_ledger", run_id: "capacity-incident" },
+          ack() {},
+          retry() {},
+        },
+      ],
+    },
+    env,
+    { waitUntil() {} },
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(result.processed, 0)
+  assert.equal(queue.sent.length, 1)
+  assert.ok(queue.sendOptions[0].delaySeconds >= 44 * 60)
+  assert.ok(queue.sendOptions[0].delaySeconds <= 45 * 60)
 })
 
 test("global queue drain bulk-completes ready pending-finalize rows during mixed ledger work without KV publish", async () => {

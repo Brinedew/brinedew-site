@@ -377,6 +377,12 @@ async function loadWranglerConfig(rootDir, envName) {
     rowsWrittenHardMonthlyBudget: asNumber(
       vars.ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY,
     ),
+    databaseStorageHardLimitBytes: asNumber(
+      vars.ICONOPLASM_D1_DATABASE_STORAGE_HARD_LIMIT_BYTES_DO_NOT_SET_CASUALLY,
+    ),
+    databaseStorageTargetPercent: asNumber(
+      vars.ICONOPLASM_D1_DATABASE_STORAGE_TARGET_PERCENT_DO_NOT_SET_CASUALLY,
+    ),
   }
 }
 
@@ -397,6 +403,23 @@ async function callGraphQL(apiToken, query, variables) {
     throw new Error(`Cloudflare GraphQL query failed: ${JSON.stringify(payload, null, 2)}`)
   }
   return payload
+}
+
+async function fetchD1DatabaseMetadata({ apiToken, accountId, databaseId }) {
+  const payload = await fetchCloudflareJson(
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+      },
+    },
+    { operation: "D1 database metadata query" },
+  )
+  if (payload?.success === false || !payload?.result) {
+    throw new Error(`D1 database metadata query failed: ${JSON.stringify(payload, null, 2)}`)
+  }
+  return payload.result
 }
 
 function unixMsAtUtcDateStart(dateInput) {
@@ -916,9 +939,14 @@ async function fetchD1Snapshot({ apiToken, accountId, config }) {
     startDate: cycle.cycleStartDate,
     endDate: cycle.cycleEndDate,
   }
-  const [analyticsPayload, storagePayload] = await Promise.all([
+  const [analyticsPayload, storagePayload, databaseMetadata] = await Promise.all([
     callGraphQL(apiToken, D1_DAILY_QUERY, variables),
     callGraphQL(apiToken, D1_STORAGE_QUERY, variables),
+    fetchD1DatabaseMetadata({
+      apiToken,
+      accountId,
+      databaseId: config.databaseId,
+    }),
   ])
   const analyticsAccount = firstAccount(analyticsPayload)
   const storageAccount = firstAccount(storagePayload)
@@ -1045,6 +1073,23 @@ async function fetchD1Snapshot({ apiToken, accountId, config }) {
   const storageRow = Array.isArray(storageAccount.d1StorageAdaptiveGroups)
     ? storageAccount.d1StorageAdaptiveGroups[0] || null
     : null
+  const analyticsDatabaseSizeBytes = storageRow
+    ? asNumber(storageRow?.max?.databaseSizeBytes)
+    : null
+  const controlPlaneDatabaseSizeBytes = asNumber(databaseMetadata?.file_size)
+  const databaseSizeBytes =
+    controlPlaneDatabaseSizeBytes > 0 ? controlPlaneDatabaseSizeBytes : analyticsDatabaseSizeBytes
+  const databaseLimitBytes = Number(config.databaseStorageHardLimitBytes || 0)
+  if (!Number.isFinite(databaseLimitBytes) || databaseLimitBytes <= 0) {
+    throw new Error(
+      "ICONOPLASM_D1_DATABASE_STORAGE_HARD_LIMIT_BYTES_DO_NOT_SET_CASUALLY is required",
+    )
+  }
+  const databaseTargetPercent = Math.max(
+    1,
+    Math.min(100, Number(config.databaseStorageTargetPercent || 80)),
+  )
+  const databaseTargetBytes = Math.floor(databaseLimitBytes * (databaseTargetPercent / 100))
   return {
     cycleKey: cycle.cycleKey,
     cycleStartDate: cycle.cycleStartDate,
@@ -1092,7 +1137,25 @@ async function fetchD1Snapshot({ apiToken, accountId, config }) {
       p90QueryBatchTimeMs: roundMetric(avg(daily.map((row) => row.p90QueryBatchTimeMs))),
     },
     storage: {
-      databaseSizeBytes: storageRow ? asNumber(storageRow?.max?.databaseSizeBytes) : null,
+      // ARCHITECTURE FENCE [IPD-005]: this denominator is the per-database
+      // Free-plan wall, not the account-wide 5 GB allowance. The old 5 GB chart
+      // rendered a full 500 MB database as 10% utilized and hid the incident.
+      // Current capacity comes from D1 control-plane metadata; the daily
+      // analytics bucket can lag destructive maintenance and is trend-only.
+      databaseSizeBytes,
+      controlPlaneDatabaseSizeBytes:
+        controlPlaneDatabaseSizeBytes > 0 ? controlPlaneDatabaseSizeBytes : null,
+      analyticsDatabaseSizeBytes,
+      sizeSource: controlPlaneDatabaseSizeBytes > 0 ? "d1_control_plane" : "analytics_fallback",
+      databaseLimitBytes,
+      databaseTargetBytes,
+      databaseTargetPercent,
+      usagePercent:
+        databaseSizeBytes == null
+          ? null
+          : roundMetric((databaseSizeBytes / databaseLimitBytes) * 100),
+      targetBreached: databaseSizeBytes == null ? null : databaseSizeBytes >= databaseTargetBytes,
+      hardLimitBreached: databaseSizeBytes == null ? null : databaseSizeBytes >= databaseLimitBytes,
       observedAt: storageRow?.dimensions?.date || null,
     },
     daily,
@@ -1448,6 +1511,8 @@ async function main() {
   // GraphQL here is operational trend data, not billing truth. Keep billing
   // truth in Cloudflare Billing, but keep budget/attribution facts in this
   // snapshot so the UI does not devolve into link soup.
+  const storageHardLimitBreached = Boolean(d1.storage?.hardLimitBreached)
+  const storageTargetBreached = Boolean(d1.storage?.targetBreached)
   const snapshot = {
     schemaVersion: 3,
     generatedAt: new Date().toISOString(),
@@ -1459,11 +1524,25 @@ async function main() {
       note: "The admin UI reads this baked snapshot instead of calling runtime telemetry endpoints.",
     },
     status: {
-      level: d1.lastDailyBucket ? "ok" : "warning",
-      headline: d1.lastDailyBucket ? "Snapshot ready" : "No D1 analytics buckets returned",
-      detail: d1.lastDailyBucket
-        ? "This view is baked from Cloudflare analytics outside the request path."
-        : "Cloudflare returned no D1 analytics rows for the requested window.",
+      level: storageHardLimitBreached
+        ? "critical"
+        : storageTargetBreached || !d1.lastDailyBucket
+          ? "warning"
+          : "ok",
+      headline: storageHardLimitBreached
+        ? "D1 database storage limit reached"
+        : storageTargetBreached
+          ? "D1 database storage target breached"
+          : d1.lastDailyBucket
+            ? "Snapshot ready"
+            : "No D1 analytics buckets returned",
+      detail: storageHardLimitBreached
+        ? "The operational database cannot safely accept more growth. Archive cold history and remove duplicated payloads before running bulk work."
+        : storageTargetBreached
+          ? `The operational database is above its ${d1.storage.databaseTargetPercent}% capacity target; investigate growth before the hard limit becomes an outage.`
+          : d1.lastDailyBucket
+            ? "This view is baked from Cloudflare analytics outside the request path."
+            : "Cloudflare returned no D1 analytics rows for the requested window.",
     },
     d1: {
       databaseId: config.databaseId,
@@ -1487,6 +1566,8 @@ async function main() {
       dailyBurstMultiplier: config.dailyBurstMultiplier,
       rowsReadHardMonthlyBudget: config.rowsReadHardMonthlyBudget,
       rowsWrittenHardMonthlyBudget: config.rowsWrittenHardMonthlyBudget,
+      databaseStorageHardLimitBytes: config.databaseStorageHardLimitBytes,
+      databaseStorageTargetPercent: config.databaseStorageTargetPercent,
     },
     coverage: {
       bakedD1DailyTrend: true,

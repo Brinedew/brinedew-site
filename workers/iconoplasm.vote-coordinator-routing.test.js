@@ -1392,7 +1392,11 @@ test("vote projection Queue retries instead of acking jobs whose D1 backoff is n
   assert.equal(result?.skipped, 1)
   assert.equal(acked, 0, "backoff-delayed jobs must not lose their only Queue message")
   assert.equal(retryCalls.length, 1)
-  assert.ok(retryCalls[0]?.delaySeconds >= 30)
+  assert.equal(
+    retryCalls[0]?.delaySeconds,
+    24 * 60 * 60,
+    "future ledger work must sleep at the Queue limit instead of polling every five minutes",
+  )
 })
 
 test("vote projection promotes newer asset when score and upvotes tie", async () => {
