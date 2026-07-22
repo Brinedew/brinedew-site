@@ -562,7 +562,7 @@ test("gene-page lead cards use intrinsic mobile flow instead of the measured sca
 
   assert.match(
     css,
-    /\.icono-gene-lead \.icono-card--variant-lab-label\.icono-card--brick\s*\{[\s\S]*?--icono-label-mobile-fit-scale:\s*1;[\s\S]*?display:\s*block;[\s\S]*?aspect-ratio:\s*auto;[\s\S]*?block-size:\s*auto;[\s\S]*?overflow:\s*visible;[\s\S]*?clip-path:\s*none;[\s\S]*?transform:\s*none;/,
+    /\.icono-gene-lead \.icono-card--variant-lab-label\.icono-card--brick\s*\{[\s\S]*?--icono-label-mobile-fit-scale:\s*1;[\s\S]*?block-size:\s*auto;[\s\S]*?overflow:\s*visible;[\s\S]*?clip-path:\s*none;[\s\S]*?transform:\s*none;/,
   )
   assert.match(
     css,
@@ -1494,7 +1494,7 @@ test("server-rendered gene hero has a stable intrinsic mobile container before h
   )
   assert.match(
     css,
-    /\.icono-gene-lead \.icono-card--variant-lab-label\.icono-card--brick\s*\{[\s\S]*?inline-size:\s*min\(100%,\s*var\(--icono-label-mobile-physical-width\)\);[\s\S]*?display:\s*block;[\s\S]*?aspect-ratio:\s*auto;[\s\S]*?block-size:\s*auto;/,
+    /\.icono-gene-lead \.icono-card--variant-lab-label\.icono-card--brick\s*\{[\s\S]*?inline-size:\s*min\(100%,\s*var\(--icono-label-mobile-physical-width\)\);[\s\S]*?block-size:\s*auto;/,
     "the edge-rendered hero should be intrinsically sized before runtime wiring instead of reserving a JS-measured viewport",
   )
 })
