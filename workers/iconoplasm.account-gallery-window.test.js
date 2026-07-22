@@ -68,24 +68,39 @@ class FakeStatement {
     if (this.sql.includes("FROM icono_shared_gene_discoveries r")) {
       const limit = Number(this.args[this.args.length - 1] || 24)
       let rows = this.db.sharedRows().map((row) => this.db.enrich(row))
-      if (this.sql.includes("ORDER BY r.gene_symbol ASC")) {
+      if (this.sql.includes("ORDER BY r.gene_symbol")) {
         const cursor = this.args.length === 2 ? String(this.args[0] || "").toUpperCase() : ""
+        const backward = this.sql.includes("ORDER BY r.gene_symbol DESC")
         rows = rows
-          .filter((row) => !cursor || row.gene_symbol > cursor)
-          .sort((left, right) => String(left.gene_symbol).localeCompare(String(right.gene_symbol)))
+          .filter(
+            (row) => !cursor || (backward ? row.gene_symbol < cursor : row.gene_symbol > cursor),
+          )
+          .sort((left, right) =>
+            backward
+              ? String(right.gene_symbol).localeCompare(String(left.gene_symbol))
+              : String(left.gene_symbol).localeCompare(String(right.gene_symbol)),
+          )
       } else {
         const hasCursor = this.args.length === 4
         const cursorTime = hasCursor ? String(this.args[0] || "") : ""
         const cursorSymbol = hasCursor ? String(this.args[2] || "").toUpperCase() : ""
+        const backward = this.sql.includes("first_non_admin_discovered_at ASC")
         rows = rows
           .filter((row) => {
             if (!hasCursor) return true
-            if (String(row.first_discovered_at || "") < cursorTime) return true
-            return (
-              String(row.first_discovered_at || "") === cursorTime && row.gene_symbol > cursorSymbol
-            )
+            const time = String(row.first_discovered_at || "")
+            if (backward)
+              return time > cursorTime || (time === cursorTime && row.gene_symbol < cursorSymbol)
+            return time < cursorTime || (time === cursorTime && row.gene_symbol > cursorSymbol)
           })
           .sort((left, right) => {
+            if (backward) {
+              return (
+                String(left.first_discovered_at || "").localeCompare(
+                  String(right.first_discovered_at || ""),
+                ) || String(right.gene_symbol).localeCompare(String(left.gene_symbol))
+              )
+            }
             return (
               String(right.first_discovered_at || "").localeCompare(
                 String(left.first_discovered_at || ""),
@@ -103,24 +118,39 @@ class FakeStatement {
     let rows = this.db.rows
       .filter((row) => row.user_id === userId)
       .map((row) => this.db.enrich(row))
-    if (this.sql.includes("ORDER BY d.gene_symbol ASC")) {
+    if (this.sql.includes("ORDER BY d.gene_symbol")) {
       const cursor = this.args.length === 3 ? String(this.args[1] || "").toUpperCase() : ""
+      const backward = this.sql.includes("ORDER BY d.gene_symbol DESC")
       rows = rows
-        .filter((row) => !cursor || row.gene_symbol > cursor)
-        .sort((left, right) => String(left.gene_symbol).localeCompare(String(right.gene_symbol)))
+        .filter(
+          (row) => !cursor || (backward ? row.gene_symbol < cursor : row.gene_symbol > cursor),
+        )
+        .sort((left, right) =>
+          backward
+            ? String(right.gene_symbol).localeCompare(String(left.gene_symbol))
+            : String(left.gene_symbol).localeCompare(String(right.gene_symbol)),
+        )
     } else {
       const hasCursor = this.args.length === 5
       const cursorTime = hasCursor ? String(this.args[1] || "") : ""
       const cursorSymbol = hasCursor ? String(this.args[3] || "").toUpperCase() : ""
+      const backward = this.sql.includes("d.first_discovered_at ASC")
       rows = rows
         .filter((row) => {
           if (!hasCursor) return true
-          if (String(row.first_discovered_at || "") < cursorTime) return true
-          return (
-            String(row.first_discovered_at || "") === cursorTime && row.gene_symbol > cursorSymbol
-          )
+          const time = String(row.first_discovered_at || "")
+          if (backward)
+            return time > cursorTime || (time === cursorTime && row.gene_symbol < cursorSymbol)
+          return time < cursorTime || (time === cursorTime && row.gene_symbol > cursorSymbol)
         })
         .sort((left, right) => {
+          if (backward) {
+            return (
+              String(left.first_discovered_at || "").localeCompare(
+                String(right.first_discovered_at || ""),
+              ) || String(right.gene_symbol).localeCompare(String(left.gene_symbol))
+            )
+          }
           return (
             String(right.first_discovered_at || "").localeCompare(
               String(left.first_discovered_at || ""),
@@ -339,7 +369,7 @@ test("account gallery window returns strict rich cards for newest without full s
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload.schema, "iconoplasm.accountGalleryWindow.v1")
+  assert.equal(payload.schema, "iconoplasm.accountGalleryWindow.v2")
   assert.equal(payload.order, "newest")
   assert.deepEqual(
     payload.cards.map((card) => card.symbol),
@@ -620,7 +650,7 @@ test("account gallery window paginates symbol order with a stable cursor", async
   const second =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
-        `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&limit=2&cursor=${encodeURIComponent(firstPayload.next_cursor)}`,
+        `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&limit=2&after=${encodeURIComponent(firstPayload.next_cursor)}`,
         { headers: { Cookie: "session=abc" } },
       ),
       env,
@@ -635,6 +665,123 @@ test("account gallery window paginates symbol order with a stable cursor", async
     secondPayload.cards.map((card) => card.symbol),
     ["PRL", "RHO"],
   )
+  assert.equal(secondPayload.has_previous, true)
+  assert.ok(secondPayload.previous_cursor)
+
+  const previous =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&limit=2&before=${encodeURIComponent(secondPayload.previous_cursor)}`,
+        { headers: { Cookie: "session=abc" } },
+      ),
+      env,
+    )
+  const previousPayload = await previous.json()
+  assert.deepEqual(
+    previousPayload.cards.map((card) => card.symbol),
+    ["BRCA1", "INS"],
+  )
+  assert.equal(previousPayload.has_previous, false)
+  assert.equal(previousPayload.has_more, true)
+})
+
+test("account gallery window traverses newest order forward and backward", async () => {
+  const env = buildEnv()
+  const request = async (query) => {
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=2${query}`,
+          { headers: { Cookie: "session=abc" } },
+        ),
+        env,
+      )
+    assert.equal(response.status, 200)
+    return response.json()
+  }
+  const first = await request("")
+  const second = await request(`&after=${encodeURIComponent(first.next_cursor)}`)
+  const previous = await request(`&before=${encodeURIComponent(second.previous_cursor)}`)
+
+  assert.deepEqual(
+    first.cards.map((card) => card.symbol),
+    ["TP53", "BRCA1"],
+  )
+  assert.deepEqual(
+    second.cards.map((card) => card.symbol),
+    ["INS", "PRL"],
+  )
+  assert.deepEqual(
+    previous.cards.map((card) => card.symbol),
+    ["TP53", "BRCA1"],
+  )
+  assert.equal(previous.has_previous, false)
+  assert.equal(previous.has_more, true)
+})
+
+test("shared account gallery window traverses symbol order forward and backward", async () => {
+  const env = buildEnv()
+  const request = async (query) => {
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&scope=shared&limit=2${query}`,
+        ),
+        env,
+      )
+    assert.equal(response.status, 200)
+    return response.json()
+  }
+  const first = await request("")
+  const second = await request(`&after=${encodeURIComponent(first.next_cursor)}`)
+  const previous = await request(`&before=${encodeURIComponent(second.previous_cursor)}`)
+
+  assert.deepEqual(
+    first.cards.map((card) => card.symbol),
+    ["BRCA1", "INS"],
+  )
+  assert.deepEqual(
+    second.cards.map((card) => card.symbol),
+    ["PRL", "RHO"],
+  )
+  assert.deepEqual(
+    previous.cards.map((card) => card.symbol),
+    ["BRCA1", "INS"],
+  )
+  assert.equal(previous.has_previous, false)
+  assert.equal(previous.has_more, true)
+})
+
+test("account gallery window rejects malformed, mismatched, and legacy cursors explicitly", async () => {
+  const env = buildEnv()
+  const first =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&limit=2",
+        {
+          headers: { Cookie: "session=abc" },
+        },
+      ),
+      env,
+    )
+  const cursor = (await first.json()).next_cursor
+  const urls = [
+    "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&after=not-base64",
+    `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&after=${encodeURIComponent(cursor)}`,
+    `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&scope=shared&after=${encodeURIComponent(cursor)}`,
+    `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&cursor=${encodeURIComponent(cursor)}`,
+    `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&after=${encodeURIComponent(cursor)}&before=${encodeURIComponent(cursor)}`,
+  ]
+  for (const url of urls) {
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(url, { headers: { Cookie: "session=abc" } }),
+        env,
+      )
+    const payload = await response.json()
+    assert.equal(response.status, 400)
+    assert.match(payload.code, /CURSOR|INVALID/)
+  }
 })
 
 test("account gallery window rejects metric orders until a real order index exists", async () => {
