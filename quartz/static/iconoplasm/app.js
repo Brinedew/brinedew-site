@@ -3530,6 +3530,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           mode: heroMode,
           layoutVariant: litLayoutVariantForCard(cardVariant),
           mobileReview: heroMobileReview,
+          includeCharacterProfile: true,
           portraitAlt: g.symbol + " blot",
           portraitSrc: portraitUrl,
           voteHtml: !isImageOnlyVariant

@@ -18,6 +18,13 @@ one network's DNS result into a global accelerator disable. Read
 `docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md` before changing portrait policy,
 storage, CDN configuration, preconnects, or fallback behavior.
 
+**ARCHITECTURE FENCE [IPD-002]** — An Iconoplasm gene card's labelled semantic
+profile is the accessible equivalent of its visual card, not a reason to turn
+roughly 20,000 generated gene routes into SEO landing pages. Preserve the
+noindex response and the omission of `/gene/*` from the sitemap and `llms.txt`.
+Read `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md` before changing the
+gene-card renderer, generated gene HTML, robots metadata, sitemap, or `llms.txt`.
+
 ## "Site is broken" runbook
 
 When a user reports "site broken" or "images not loading" or any visual regression, the first 30 minutes are dominated by the wrong kind of investigation (DNS-layer forensics, status-page checks, Git blame) when the actual answer is almost always on the user's network or in a project-owned fallback that already exists. The pattern that wastes hours is:
