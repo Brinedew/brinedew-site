@@ -685,6 +685,8 @@ function buildVoteCoordinatorBinding(db) {
                   user_id: item.user_id,
                   current_vote_value: 0,
                   final_vote_value: item.vote_value,
+                  changed: true,
+                  mutation_id: `${payload.symbol}:${item.user_id}`,
                 })),
               }),
               { status: 200, headers: { "Content-Type": "application/json" } },
@@ -3078,8 +3080,9 @@ test("image edit jobs call the provider, write renditions, and publish with inhe
       ).length,
       6,
     )
-    assert.equal(db.voteProjectionRows.length, 7)
-    assert.equal(db.voteRefreshTouched, true)
+    assert.equal(published.vote_inheritance.projection_outbox_pending, 7)
+    assert.equal(db.voteProjectionRows.length, 0)
+    assert.notEqual(db.voteRefreshTouched, true)
   } finally {
     globalThis.fetch = originalFetch
   }

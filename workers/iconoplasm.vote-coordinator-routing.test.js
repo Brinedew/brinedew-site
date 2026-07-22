@@ -1,11 +1,63 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import {
+  IconoplasmVoteCoordinator,
   handleIconoplasmQueue,
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   handleIconoplasmVoteProjectionQueue,
+  resolveDesiredVoteValue,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+
+class DurableObjectSqlForTest {
+  constructor() {
+    this.db = new DatabaseSync(":memory:")
+  }
+
+  exec(sql, ...bindings) {
+    const source = String(sql || "")
+    let rows = []
+    if (bindings.length) {
+      rows = this.db.prepare(source).all(...bindings)
+    } else if (/^\s*(SELECT|PRAGMA|WITH)\b/i.test(source) && !source.trim().includes(";")) {
+      rows = this.db.prepare(source).all()
+    } else {
+      this.db.exec(source)
+    }
+    return { toArray: () => rows }
+  }
+}
+
+function fakeVoteCoordinatorState() {
+  const sql = new DurableObjectSqlForTest()
+  const alarms = []
+  const state = {
+    storage: {
+      sql,
+      transactionSync(callback) {
+        sql.db.exec("BEGIN IMMEDIATE")
+        try {
+          const result = callback()
+          sql.db.exec("COMMIT")
+          return result
+        } catch (error) {
+          sql.db.exec("ROLLBACK")
+          throw error
+        }
+      },
+      async setAlarm(timestamp) {
+        alarms.push(timestamp)
+      },
+    },
+    blockConcurrencyWhile(callback) {
+      this.ready = Promise.resolve().then(callback)
+      return this.ready
+    },
+  }
+  return { state, alarms }
+}
 
 class RecordingStatement {
   constructor(db, sql) {
@@ -73,6 +125,14 @@ class RecordingDb {
 
   prepare(sql) {
     return new RecordingStatement(this, sql)
+  }
+
+  async batch(statements) {
+    const results = []
+    for (const statement of Array.isArray(statements) ? statements : []) {
+      results.push(await statement.run())
+    }
+    return results
   }
 }
 
@@ -178,6 +238,128 @@ function healthyBudgetSnapshot() {
   }
 }
 
+test("desired vote commands are idempotent under identical retry", () => {
+  assert.equal(resolveDesiredVoteValue(0, 1), 1)
+  assert.equal(resolveDesiredVoteValue(1, 1), 1)
+  assert.equal(resolveDesiredVoteValue(-1, -1), -1)
+  assert.equal(resolveDesiredVoteValue(1, 0), 0)
+})
+
+test("vote-event mutation migration deduplicates replayed audit events", () => {
+  const db = new DatabaseSync(":memory:")
+  db.exec(
+    readFileSync(
+      new URL("../migrations-iconoplasm/0020_add_vote_event_feed.sql", import.meta.url),
+      "utf8",
+    ),
+  )
+  db.exec(
+    readFileSync(
+      new URL("../migrations-iconoplasm/0056_vote_event_mutation_id.sql", import.meta.url),
+      "utf8",
+    ),
+  )
+  const insert = db.prepare(
+    `INSERT INTO icono_vote_events (
+       gene_symbol, asset_sha256, vision_id, candidate_ref, user_id, vote_value, mutation_id
+     ) VALUES ('TP53', ?, '', ?, 'user_123', 1, 'TP53:1')
+     ON CONFLICT(mutation_id) WHERE mutation_id IS NOT NULL DO NOTHING`,
+  )
+  const assetSha = "a".repeat(64)
+  insert.run(assetSha, `a:TP53|${assetSha}`)
+  insert.run(assetSha, `a:TP53|${assetSha}`)
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM icono_vote_events").get().count, 1)
+})
+
+test("VoteCoordinator stores one transactional outbox mutation for an identical retry", async () => {
+  const { state } = fakeVoteCoordinatorState()
+  const coordinator = new IconoplasmVoteCoordinator(state, {})
+  await state.ready
+  const assetSha = "f".repeat(64)
+  coordinator.setMeta("symbol", "TP53")
+  coordinator.setMeta("bootstrapped", "1")
+  const ensuredAsset = coordinator.ensureAssetSummaryRow(assetSha, {
+    visionId: "anima-v1-1",
+    candidateImageId: 41,
+  })
+
+  const first = coordinator.applyVoteMutation({
+    assetSha256: assetSha,
+    userId: "user_123",
+    requestedVoteValue: 1,
+    visionId: "anima-v1-1",
+    candidateImageId: 41,
+    ensuredAsset,
+  })
+  const retry = coordinator.applyVoteMutation({
+    assetSha256: assetSha,
+    userId: "user_123",
+    requestedVoteValue: 1,
+    visionId: "anima-v1-1",
+    candidateImageId: 41,
+    ensuredAsset,
+  })
+
+  assert.equal(first.changed, true)
+  assert.equal(first.final_vote_value, 1)
+  assert.equal(first.snapshot.image_upvotes, 1)
+  assert.equal(retry.changed, false)
+  assert.equal(retry.final_vote_value, 1)
+  assert.equal(retry.snapshot.image_upvotes, 1)
+  assert.equal(coordinator.pendingOutboxRows(10).length, 1)
+  assert.equal(coordinator.pendingOutboxRows(10)[0].mutation_id, first.mutation_id)
+})
+
+test("VoteCoordinator outbox survives a partial D1 handoff and replays with one mutation identity", async (t) => {
+  t.mock.method(console, "error", () => {})
+  let failProjectionJob = true
+  const db = new RecordingDb({
+    runHandler: ({ sql }) => {
+      if (failProjectionJob && /INSERT INTO icono_vote_projection_refresh_jobs/i.test(sql)) {
+        throw new Error("simulated D1 projection-job failure")
+      }
+      return null
+    },
+  })
+  const queue = fakeQueue()
+  const { state } = fakeVoteCoordinatorState()
+  const coordinator = new IconoplasmVoteCoordinator(state, {
+    ICONOPLASM_DB: db,
+    ICONOPLASM_VOTE_PROJECTION_QUEUE: queue,
+  })
+  await state.ready
+  const assetSha = "e".repeat(64)
+  coordinator.setMeta("symbol", "SOX4")
+  coordinator.setMeta("bootstrapped", "1")
+  const ensuredAsset = coordinator.ensureAssetSummaryRow(assetSha, {
+    visionId: "anima-v1-9",
+    candidateImageId: 99,
+  })
+  const mutation = coordinator.applyVoteMutation({
+    assetSha256: assetSha,
+    userId: "user_123",
+    requestedVoteValue: 1,
+    visionId: "anima-v1-9",
+    candidateImageId: 99,
+    ensuredAsset,
+  })
+
+  const firstDrain = await coordinator.drainVoteOutbox()
+  assert.equal(firstDrain.ok, false)
+  assert.equal(coordinator.pendingOutboxRows(10).length, 1)
+
+  failProjectionJob = false
+  const retryDrain = await coordinator.drainVoteOutbox()
+  assert.equal(retryDrain.ok, true)
+  assert.equal(coordinator.pendingOutboxRows(10).length, 0)
+  assert.equal(queue.messages.length, 1)
+  const eventWrites = db.calls.filter((call) => /INSERT INTO icono_vote_events/i.test(call.sql))
+  assert.equal(eventWrites.length, 2)
+  assert.equal(eventWrites[0].args.at(-1), mutation.mutation_id)
+  assert.equal(eventWrites[1].args.at(-1), mutation.mutation_id)
+  assert.match(eventWrites[0].sql, /ON CONFLICT\(mutation_id\)/)
+})
+
 test("public vote set is routed through the vote coordinator instead of reading current vote state from D1", async () => {
   const assetSha = "a".repeat(64)
   const coordinator = new FakeVoteCoordinatorBinding({
@@ -190,6 +372,8 @@ test("public vote set is routed through the vote coordinator instead of reading 
         candidate_image_id: 41,
         current_vote_value: 0,
         final_vote_value: 1,
+        changed: true,
+        mutation_id: "TP53:1",
         snapshot: {
           image_upvotes: 1,
           image_downvotes: 0,
@@ -271,7 +455,16 @@ test("public vote set is routed through the vote coordinator instead of reading 
   assert.equal(payload?.ok, true)
   assert.equal(coordinator.calls.length, 1)
   assert.equal(coordinator.calls[0]?.pathname, "/vote/set")
-  assert.equal(queue.messages.length, 1)
+  assert.equal(queue.messages.length, 0)
+  assert.equal(payload?.projection_refresh?.durable, true)
+  assert.equal(payload?.projection_refresh?.mode, "durable_outbox")
+  assert.equal(payload?.projection_refresh?.mutation_id, "TP53:1")
+  assert.equal(
+    db.calls.some((call) =>
+      /icono_image_votes|icono_vote_events|vote_projection_refresh_jobs/i.test(call.sql),
+    ),
+    false,
+  )
   assert.equal(
     db.calls.some(
       (call) =>
@@ -284,7 +477,7 @@ test("public vote set is routed through the vote coordinator instead of reading 
   )
 })
 
-test("public vote set queues projection drain without background canonical promotion", async () => {
+test("public vote set returns after durable coordinator outbox commit without inline projection", async () => {
   const assetSha = "d".repeat(64)
   const coordinator = new FakeVoteCoordinatorBinding({
     "/vote/set": () =>
@@ -296,6 +489,8 @@ test("public vote set queues projection drain without background canonical promo
         candidate_image_id: 49076,
         current_vote_value: 0,
         final_vote_value: 1,
+        changed: true,
+        mutation_id: "SOCS1:1",
         snapshot: {
           image_upvotes: 1,
           image_downvotes: 0,
@@ -347,13 +542,9 @@ test("public vote set queues projection drain without background canonical promo
   assert.equal(response.status, 200)
   assert.equal(payload?.ok, true)
   assert.equal(ctx.promises.length, 0)
-  assert.equal(queue.messages.length, 1)
-  assert.deepEqual(queue.messages[0], {
-    kind: "process_vote_projection_refresh",
-    symbol: "SOCS1",
-    actor_id: "user_123",
-    reason: "vote_auto_promote",
-  })
+  assert.equal(queue.messages.length, 0)
+  assert.equal(payload?.projection_refresh?.mode, "durable_outbox")
+  assert.equal(payload?.projection_refresh?.mutation_id, "SOCS1:1")
   assert.equal(
     db.calls.some((call) => /INSERT INTO icono_publish_state/i.test(call.sql)),
     false,
@@ -710,12 +901,17 @@ test("vote projection rolls back canonical promotion when read-model projection 
       ctx,
     )
   const payload = await response.json()
-  assert.equal(queue.messages.length, 1)
+  assert.equal(queue.messages.length, 0)
   await handleIconoplasmVoteProjectionQueue(
     {
       messages: [
         {
-          body: queue.messages[0],
+          body: {
+            kind: "process_vote_projection_refresh",
+            symbol: "PRL",
+            actor_id: "user_123",
+            reason: "vote_auto_promote",
+          },
           ack() {},
           retry() {},
         },
@@ -1455,6 +1651,57 @@ test("public vote snapshot can run from the vote coordinator without a D1 bindin
   assert.equal(payload?.snapshot?.vision_id, "anima-v1-2")
 })
 
+test("public gene vote snapshots use one coordinator batch request", async () => {
+  const firstAsset = "1".repeat(64)
+  const secondAsset = "2".repeat(64)
+  const coordinator = new FakeVoteCoordinatorBinding({
+    "/vote/snapshots": ({ body }) =>
+      Response.json({
+        ok: true,
+        snapshots: body.items.map((item, index) => ({
+          candidate_ref: item.candidate_ref,
+          symbol: item.symbol,
+          asset_sha256: item.asset_sha256,
+          snapshot: {
+            image_upvotes: index + 1,
+            image_downvotes: 0,
+            image_score: index + 1,
+            user_vote: 0,
+            candidate_ref: item.candidate_ref,
+          },
+        })),
+      }),
+  })
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/votes/snapshots",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: [
+              { symbol: "TP53", asset_sha256: firstAsset },
+              { symbol: "TP53", asset_sha256: secondAsset },
+            ],
+          }),
+        },
+      ),
+      {
+        ICONOPLASM_VOTE_COORDINATORS: coordinator,
+        GAME_SESSIONS: fakeSessions(null),
+      },
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.snapshots.length, 2)
+  assert.equal(coordinator.calls.length, 1)
+  assert.equal(coordinator.calls[0].pathname, "/vote/snapshots")
+  assert.equal(coordinator.calls[0].body.items.length, 2)
+})
+
 test("admin vote import is routed through the vote coordinator batch endpoint", async () => {
   const assetSha = "c".repeat(64)
   const coordinator = new FakeVoteCoordinatorBinding({
@@ -1475,6 +1722,8 @@ test("admin vote import is routed through the vote coordinator batch endpoint", 
             user_id: "local_admin",
             current_vote_value: 0,
             final_vote_value: 1,
+            changed: true,
+            mutation_id: "A1BG:1",
           },
         ],
         asset_summaries: [
@@ -1553,7 +1802,8 @@ test("admin vote import is routed through the vote coordinator batch endpoint", 
   assert.equal(payload?.upserted, 1)
   assert.equal(coordinator.calls.length, 1)
   assert.equal(coordinator.calls[0]?.pathname, "/vote/import")
-  assert.equal(queue.messages.length, 1)
+  assert.equal(queue.messages.length, 0)
+  assert.equal(payload?.projection_refresh_queued, 1)
   assert.equal(
     db.calls.some(
       (call) =>

@@ -2810,6 +2810,7 @@ async function appendVoteEvent(
     candidateImageId = null,
     userId,
     voteValue,
+    mutationId = "",
   },
 ) {
   if (!env?.ICONOPLASM_DB) return
@@ -2823,6 +2824,7 @@ async function appendVoteEvent(
     voteAssetIdentity(safeSymbol, safeAssetSha)
   const safeVisionId = sanitizeVoteVisionId(visionId || "")
   const safeCandidateImageId = optionalInt(candidateImageId)
+  const safeMutationId = sanitizeText(mutationId || "", 255) || null
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_vote_events (
        gene_symbol,
@@ -2832,8 +2834,10 @@ async function appendVoteEvent(
        candidate_image_id,
        user_id,
        vote_value,
+       mutation_id,
        created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(mutation_id) WHERE mutation_id IS NOT NULL DO NOTHING`,
   )
     .bind(
       safeSymbol,
@@ -2843,6 +2847,7 @@ async function appendVoteEvent(
       safeCandidateImageId,
       safeUserId,
       safeVoteValue,
+      safeMutationId,
     )
     .run()
 }
@@ -7294,41 +7299,21 @@ async function applyImageEditInheritedVotes(env, ctx, job, userId) {
   if (!symbol || !assetSha) return { ok: false, error: "Missing vote target" }
   const items = imageEditInheritedVoteItems(job, userId)
   if (!items.length) return { ok: true, inherited_upvotes: 0, projected: 0 }
-  const coordinatorImport = await iconoplasmVoteCoordinatorImportVotes(env, { symbol, items })
-  if (!coordinatorImport?.ok) return { ok: false, error: "Vote coordinator import failed" }
-  let projected = 0
-  for (const row of Array.isArray(coordinatorImport.results) ? coordinatorImport.results : []) {
-    await projectVoteCoordinatorLedgerRow(env, {
-      symbol,
-      assetSha256: row?.asset_sha256,
-      visionId: row?.vision_id,
-      candidateImageId: row?.candidate_image_id,
-      userId: row?.user_id,
-      voteValue: row?.final_vote_value,
-    })
-    await appendVoteEvent(env, {
-      symbol,
-      assetSha256: row?.asset_sha256,
-      visionId: row?.vision_id,
-      candidateRef: row?.candidate_ref,
-      candidateImageId: row?.candidate_image_id,
-      userId: row?.user_id,
-      voteValue: row?.final_vote_value,
-    })
-    projected += 1
-  }
-  const projectionRefresh = await scheduleVoteProjectionRefresh(env, ctx, {
+  const coordinatorImport = await iconoplasmVoteCoordinatorImportVotes(env, {
     symbol,
-    actorId: normalizeUserId(userId),
+    items,
     reason: "image_edit_publish_inherited_votes",
   })
+  if (!coordinatorImport?.ok) return { ok: false, error: "Vote coordinator import failed" }
+  const projectionOutboxPending = (
+    Array.isArray(coordinatorImport.results) ? coordinatorImport.results : []
+  ).filter((row) => row?.changed).length
   return {
     ok: true,
     inherited_upvotes: Math.max(0, Math.floor(Number(job?.inherited_upvotes || 0) || 0)),
     imported_votes: items.length,
     user_upvote: true,
-    projected,
-    projection_refresh: projectionRefresh,
+    projection_outbox_pending: projectionOutboxPending,
   }
 }
 
@@ -7815,40 +7800,20 @@ async function applyCandidateGenerationUserVote(env, ctx, job, userId) {
       vote_value: 1,
     },
   ]
-  const coordinatorImport = await iconoplasmVoteCoordinatorImportVotes(env, { symbol, items })
-  if (!coordinatorImport?.ok) return { ok: false, error: "Vote coordinator import failed" }
-  let projected = 0
-  for (const row of Array.isArray(coordinatorImport.results) ? coordinatorImport.results : []) {
-    await projectVoteCoordinatorLedgerRow(env, {
-      symbol,
-      assetSha256: row?.asset_sha256,
-      visionId: row?.vision_id,
-      candidateImageId: row?.candidate_image_id,
-      userId: row?.user_id,
-      voteValue: row?.final_vote_value,
-    })
-    await appendVoteEvent(env, {
-      symbol,
-      assetSha256: row?.asset_sha256,
-      visionId: row?.vision_id,
-      candidateRef: row?.candidate_ref,
-      candidateImageId: row?.candidate_image_id,
-      userId: row?.user_id,
-      voteValue: row?.final_vote_value,
-    })
-    projected += 1
-  }
-  const projectionRefresh = await scheduleVoteProjectionRefresh(env, ctx, {
+  const coordinatorImport = await iconoplasmVoteCoordinatorImportVotes(env, {
     symbol,
-    actorId: normalizeUserId(userId),
+    items,
     reason: "candidate_generation_publish_user_vote",
   })
+  if (!coordinatorImport?.ok) return { ok: false, error: "Vote coordinator import failed" }
+  const projectionOutboxPending = (
+    Array.isArray(coordinatorImport.results) ? coordinatorImport.results : []
+  ).filter((row) => row?.changed).length
   return {
     ok: true,
     imported_votes: items.length,
     user_upvote: true,
-    projected,
-    projection_refresh: projectionRefresh,
+    projection_outbox_pending: projectionOutboxPending,
   }
 }
 
@@ -13905,6 +13870,7 @@ async function iconoplasmVoteCoordinatorSnapshotsBatch(env, { items, userId } = 
       asset_sha256: assetSha,
       candidate_ref: normalizeCandidateRef(rawItem?.candidate_ref || "", symbol, assetSha) || "",
       vision_id: sanitizeVoteVisionId(rawItem?.vision_id || ""),
+      candidate_image_id: optionalInt(rawItem?.candidate_image_id),
     })
     groups.set(symbol, current)
   }
@@ -13925,7 +13891,7 @@ async function iconoplasmVoteCoordinatorSnapshotsBatch(env, { items, userId } = 
 
 async function iconoplasmVoteCoordinatorSetVote(
   env,
-  { symbol, assetSha256, visionId, candidateImageId, userId, requestedVoteValue } = {},
+  { symbol, assetSha256, visionId, candidateImageId, userId, requestedVoteValue, reason } = {},
 ) {
   const safeSymbol = normalizeSymbol(symbol)
   const safeAssetSha = normalizeSha256(assetSha256)
@@ -13939,10 +13905,11 @@ async function iconoplasmVoteCoordinatorSetVote(
     candidate_image_id: optionalInt(candidateImageId),
     user_id: normalizeUserId(userId || ""),
     vote_value: Number(requestedVoteValue || 0),
+    reason: voteProjectionRefreshJobReason(reason || "vote_auto_promote"),
   })
 }
 
-async function iconoplasmVoteCoordinatorImportVotes(env, { symbol, items = [] } = {}) {
+async function iconoplasmVoteCoordinatorImportVotes(env, { symbol, items = [], reason } = {}) {
   const safeSymbol = normalizeSymbol(symbol)
   if (!safeSymbol) return null
   const stub = iconoplasmVoteCoordinatorStub(env, safeSymbol)
@@ -13950,6 +13917,7 @@ async function iconoplasmVoteCoordinatorImportVotes(env, { symbol, items = [] } 
   return iconoplasmVoteCoordinatorJson(stub, "/vote/import", {
     symbol: safeSymbol,
     items: Array.isArray(items) ? items : [],
+    reason: voteProjectionRefreshJobReason(reason || "vote_import_auto_promote"),
   })
 }
 
@@ -14025,7 +13993,27 @@ export class IconoplasmVoteCoordinator {
           vote_count INTEGER NOT NULL DEFAULT 0,
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS vote_outbox (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          mutation_id TEXT UNIQUE,
+          asset_sha256 TEXT NOT NULL,
+          vision_id TEXT NOT NULL DEFAULT '',
+          candidate_image_id INTEGER,
+          user_id TEXT NOT NULL,
+          vote_value INTEGER NOT NULL CHECK (vote_value IN (-1, 0, 1)),
+          reason TEXT NOT NULL DEFAULT 'vote_auto_promote',
+          attempts INTEGER NOT NULL DEFAULT 0,
+          last_error TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          delivered_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_vote_outbox_pending
+          ON vote_outbox (delivered_at, id);
       `)
+      const pendingOutbox = this.state.storage.sql
+        .exec(`SELECT 1 AS pending FROM vote_outbox WHERE delivered_at IS NULL LIMIT 1`)
+        .toArray()[0]
+      if (pendingOutbox) await this.armOutboxAlarm(1)
     })
   }
 
@@ -14044,6 +14032,111 @@ export class IconoplasmVoteCoordinator {
 
   getMeta(key) {
     return this.sqlFirst(`SELECT value FROM meta WHERE key = ?`, String(key || ""))?.value || ""
+  }
+
+  async armOutboxAlarm(delayMs = 1) {
+    const delay = Math.max(1, Number(delayMs || 1) || 1)
+    await this.state.storage.setAlarm(Date.now() + delay)
+  }
+
+  pendingOutboxRows(limit = 50) {
+    const safeLimit = Math.max(1, Math.min(100, Number(limit || 50) || 50))
+    return this.state.storage.sql
+      .exec(
+        `SELECT
+           id,
+           mutation_id,
+           asset_sha256,
+           vision_id,
+           candidate_image_id,
+           user_id,
+           vote_value,
+           reason,
+           attempts
+         FROM vote_outbox
+         WHERE delivered_at IS NULL
+         ORDER BY id ASC
+         LIMIT ?`,
+        safeLimit,
+      )
+      .toArray()
+  }
+
+  async deliverOutboxRow(row) {
+    const symbol = normalizeSymbol(this.getMeta("symbol"))
+    const mutationId = sanitizeText(row?.mutation_id || "", 255)
+    const assetSha = normalizeSha256(row?.asset_sha256 || "")
+    const userId = normalizeUserId(row?.user_id || "")
+    const voteValue = normalizeVoteValue(row?.vote_value)
+    if (!symbol || !mutationId || !assetSha || !userId || voteValue == null) {
+      throw new Error("Invalid VoteCoordinator outbox row")
+    }
+
+    await projectVoteCoordinatorLedgerRow(this.env, {
+      symbol,
+      assetSha256: assetSha,
+      visionId: row?.vision_id,
+      candidateImageId: row?.candidate_image_id,
+      userId,
+      voteValue,
+    })
+    await appendVoteEvent(this.env, {
+      symbol,
+      assetSha256: assetSha,
+      visionId: row?.vision_id,
+      candidateRef: voteAssetIdentity(symbol, assetSha),
+      candidateImageId: row?.candidate_image_id,
+      userId,
+      voteValue,
+      mutationId,
+    })
+    const projection = await scheduleVoteProjectionRefresh(this.env, null, {
+      symbol,
+      actorId: userId,
+      reason: row?.reason || "vote_auto_promote",
+    })
+    if (!projection?.durable) {
+      throw new Error("Vote projection refresh job was not durably enqueued")
+    }
+    this.state.storage.sql.exec(
+      `UPDATE vote_outbox
+       SET delivered_at = CURRENT_TIMESTAMP,
+           last_error = ''
+       WHERE id = ?
+         AND delivered_at IS NULL`,
+      Number(row.id),
+    )
+  }
+
+  async drainVoteOutbox() {
+    const rows = this.pendingOutboxRows(50)
+    for (const row of rows) {
+      try {
+        await this.deliverOutboxRow(row)
+      } catch (error) {
+        const attempts = Math.max(0, Number(row?.attempts || 0) || 0) + 1
+        this.state.storage.sql.exec(
+          `UPDATE vote_outbox
+           SET attempts = ?,
+               last_error = ?
+           WHERE id = ?
+             AND delivered_at IS NULL`,
+          attempts,
+          sanitizeText(String(error?.message || error || "outbox delivery failed"), 2000),
+          Number(row.id),
+        )
+        const delayMs = Math.min(60_000, Math.max(1_000, 2 ** Math.min(attempts, 6) * 1_000))
+        await this.armOutboxAlarm(delayMs)
+        return { ok: false, delivered: 0, pending: rows.length, error: String(error) }
+      }
+    }
+    const remaining = this.pendingOutboxRows(1).length
+    if (remaining) await this.armOutboxAlarm(1)
+    return { ok: true, delivered: rows.length, pending: remaining }
+  }
+
+  async alarm() {
+    await this.drainVoteOutbox()
   }
 
   async lookupAssetMetadata(symbol, assetSha256) {
@@ -14173,7 +14266,7 @@ export class IconoplasmVoteCoordinator {
     visionId = "",
     candidateImageId = null,
     ensuredAsset = null,
-    toggleOffWhenSame = true,
+    reason = "vote_auto_promote",
   } = {}) {
     const safeAssetSha = normalizeSha256(assetSha256)
     const safeUserId = normalizeUserId(userId || "")
@@ -14194,18 +14287,32 @@ export class IconoplasmVoteCoordinator {
           safeAssetSha,
         ) || null
       const currentVoteValue = Number(currentRow?.vote_value || 0)
-      const finalVoteValue =
-        safeRequestedVoteValue === 0
-          ? 0
-          : toggleOffWhenSame && currentVoteValue === safeRequestedVoteValue
-            ? 0
-            : safeRequestedVoteValue
+      const finalVoteValue = resolveDesiredVoteValue(currentVoteValue, safeRequestedVoteValue)
       const resolvedVisionId = sanitizeVoteVisionId(
         visionId || currentRow?.vision_id || ensuredAsset?.vision_id || "",
       )
       const resolvedCandidateImageId = optionalInt(
         candidateImageId ?? currentRow?.candidate_image_id ?? ensuredAsset?.candidate_image_id,
       )
+      const currentVisionId = sanitizeVoteVisionId(currentRow?.vision_id || "")
+      const currentCandidateImageId = optionalInt(currentRow?.candidate_image_id)
+      const changed =
+        currentVoteValue !== finalVoteValue ||
+        (finalVoteValue !== 0 &&
+          (currentVisionId !== resolvedVisionId ||
+            currentCandidateImageId !== resolvedCandidateImageId))
+
+      if (!changed) {
+        return {
+          changed: false,
+          mutation_id: null,
+          current_vote_value: currentVoteValue,
+          final_vote_value: finalVoteValue,
+          resolved_vision_id: resolvedVisionId,
+          candidate_image_id: resolvedCandidateImageId,
+          snapshot: this.snapshotForAsset(safeAssetSha, safeUserId, resolvedVisionId),
+        }
+      }
 
       if (finalVoteValue === 0) {
         this.state.storage.sql.exec(
@@ -14233,6 +14340,31 @@ export class IconoplasmVoteCoordinator {
           sanitizeText(currentRow?.created_at || "", 64) || null,
         )
       }
+
+      this.state.storage.sql.exec(
+        `INSERT INTO vote_outbox (
+           asset_sha256,
+           vision_id,
+           candidate_image_id,
+           user_id,
+           vote_value,
+           reason,
+           created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        safeAssetSha,
+        resolvedVisionId,
+        resolvedCandidateImageId,
+        safeUserId,
+        finalVoteValue,
+        voteProjectionRefreshJobReason(reason),
+      )
+      const outboxId = Number(this.sqlFirst(`SELECT last_insert_rowid() AS id`)?.id || 0)
+      const mutationId = `${normalizeSymbol(this.getMeta("symbol"))}:${outboxId}`
+      this.state.storage.sql.exec(
+        `UPDATE vote_outbox SET mutation_id = ? WHERE id = ?`,
+        mutationId,
+        outboxId,
+      )
 
       const assetDelta = voteDeltaFromTransition(currentVoteValue, finalVoteValue)
       this.ensureAssetSummaryRow(safeAssetSha, {
@@ -14288,6 +14420,8 @@ export class IconoplasmVoteCoordinator {
       }
 
       return {
+        changed: true,
+        mutation_id: mutationId,
         current_vote_value: currentVoteValue,
         final_vote_value: finalVoteValue,
         resolved_vision_id: resolvedVisionId,
@@ -14528,6 +14662,10 @@ export class IconoplasmVoteCoordinator {
         payload?.vision_id || "",
         payload?.candidate_image_id,
       )
+      // Schedule durable delivery before committing the vote/outbox transaction.
+      // Durable Objects serialize the alarm behind this request, so it cannot
+      // observe the outbox until the transaction below has settled.
+      await this.armOutboxAlarm(1)
       const result = this.applyVoteMutation({
         assetSha256: assetSha,
         userId,
@@ -14535,7 +14673,7 @@ export class IconoplasmVoteCoordinator {
         visionId: payload?.vision_id || "",
         candidateImageId: payload?.candidate_image_id,
         ensuredAsset,
-        toggleOffWhenSame: true,
+        reason: payload?.reason || "vote_auto_promote",
       })
       return Response.json({
         ok: true,
@@ -14558,6 +14696,7 @@ export class IconoplasmVoteCoordinator {
       let upserted = 0
       let deleted = 0
       let invalid = 0
+      await this.armOutboxAlarm(1)
 
       for (const raw of items) {
         const assetSha = normalizeSha256(raw?.asset_sha256 || "")
@@ -14580,7 +14719,7 @@ export class IconoplasmVoteCoordinator {
           visionId: raw?.vision_id || "",
           candidateImageId: raw?.candidate_image_id,
           ensuredAsset,
-          toggleOffWhenSame: false,
+          reason: raw?.reason || payload?.reason || "vote_import_auto_promote",
         })
         if (result.final_vote_value === 0) {
           deleted += 1
@@ -14596,6 +14735,8 @@ export class IconoplasmVoteCoordinator {
           user_id: userId,
           current_vote_value: result.current_vote_value,
           final_vote_value: result.final_vote_value,
+          changed: result.changed,
+          mutation_id: result.mutation_id,
         })
       }
 
@@ -15495,6 +15636,15 @@ export class IconoplasmSyncGovernor {
     }
     return Response.json({ ok: true, governor: await this.storedState() })
   }
+}
+
+export function resolveDesiredVoteValue(currentVoteValue, requestedVoteValue) {
+  const current = normalizeVoteValue(currentVoteValue)
+  const requested = normalizeVoteValue(requestedVoteValue)
+  if (current == null || requested == null) throw new Error("Invalid vote transition")
+  // The API is a desired-state command, not a toggle command. Replaying an
+  // identical request must therefore be a no-op instead of reversing the vote.
+  return requested
 }
 
 function voteDeltaFromTransition(currentVoteValue, nextVoteValue) {
@@ -17760,21 +17910,28 @@ async function projectVoteCoordinatorLedgerRow(
   const safeVoteValue = normalizeVoteValue(voteValue)
   if (!safeSymbol || !safeAssetSha || !safeUserId || safeVoteValue == null) return false
 
-  await env.ICONOPLASM_DB.prepare(
-    `DELETE FROM icono_image_votes
-     WHERE gene_symbol = ?
-       AND asset_sha256 = ?
-       AND user_id = ?`,
-  )
-    .bind(safeSymbol, safeAssetSha, safeUserId)
-    .run()
-
-  if (safeVoteValue === 0) return true
+  if (safeVoteValue === 0) {
+    await env.ICONOPLASM_DB.prepare(
+      `DELETE FROM icono_image_votes
+       WHERE gene_symbol = ?
+         AND asset_sha256 = ?
+         AND user_id = ?`,
+    )
+      .bind(safeSymbol, safeAssetSha, safeUserId)
+      .run()
+    return true
+  }
 
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_image_votes (
        candidate_ref, gene_symbol, asset_sha256, vision_id, candidate_image_id, user_id, vote_value, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT(gene_symbol, asset_sha256, user_id) DO UPDATE SET
+       candidate_ref = excluded.candidate_ref,
+       vision_id = excluded.vision_id,
+       candidate_image_id = excluded.candidate_image_id,
+       vote_value = excluded.vote_value,
+       updated_at = CURRENT_TIMESTAMP`,
   )
     .bind(
       voteAssetIdentity(safeSymbol, safeAssetSha),
@@ -17797,16 +17954,18 @@ async function replaceVoteAssetSummaryForSymbolFromCoordinatorState(
   const safeSymbol = normalizeSymbol(symbol)
   if (!safeSymbol) return 0
 
-  await env.ICONOPLASM_DB.prepare(`DELETE FROM icono_vote_asset_summary WHERE gene_symbol = ?`)
-    .bind(safeSymbol)
-    .run()
-
+  const statements = [
+    env.ICONOPLASM_DB.prepare(`DELETE FROM icono_vote_asset_summary WHERE gene_symbol = ?`).bind(
+      safeSymbol,
+    ),
+  ]
   let written = 0
   for (const rawRow of Array.isArray(assetSummaries) ? assetSummaries : []) {
     const assetSha = normalizeSha256(rawRow?.asset_sha256 || "")
     if (!assetSha) continue
-    await env.ICONOPLASM_DB.prepare(
-      `INSERT INTO icono_vote_asset_summary (
+    statements.push(
+      env.ICONOPLASM_DB.prepare(
+        `INSERT INTO icono_vote_asset_summary (
          gene_symbol,
          asset_sha256,
          candidate_ref,
@@ -17817,9 +17976,8 @@ async function replaceVoteAssetSummaryForSymbolFromCoordinatorState(
          score,
          vote_count,
          updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-    )
-      .bind(
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      ).bind(
         safeSymbol,
         assetSha,
         voteAssetIdentity(safeSymbol, assetSha),
@@ -17829,10 +17987,13 @@ async function replaceVoteAssetSummaryForSymbolFromCoordinatorState(
         Math.max(0, Number(rawRow?.downvotes || 0) || 0),
         Number(rawRow?.score || 0) || 0,
         Math.max(0, Number(rawRow?.vote_count || 0) || 0),
-      )
-      .run()
+      ),
+    )
     written += 1
   }
+  // D1 batch executes transactionally. A failed insert can no longer strand an
+  // empty or half-populated summary after the delete succeeds.
+  await env.ICONOPLASM_DB.batch(statements)
   return written
 }
 
@@ -18050,8 +18211,8 @@ async function rollbackVoteAutoPromoteAfterProjectionFailure(
       2000,
     ) || "Auto-promote rollback after failed read-model projection"
 
-  const rollbackResult = previousAssetSha
-    ? await env.ICONOPLASM_DB.prepare(
+  const rollbackStatement = previousAssetSha
+    ? env.ICONOPLASM_DB.prepare(
         `UPDATE icono_publish_state
          SET current_asset_sha256 = ?,
              admin_override = 0,
@@ -18060,10 +18221,8 @@ async function rollbackVoteAutoPromoteAfterProjectionFailure(
          WHERE gene_symbol = ?
            AND current_asset_sha256 = ?
            AND COALESCE(admin_override, 0) = 0`,
-      )
-        .bind(previousAssetSha, actorNorm, symbolNorm, promotedAssetSha)
-        .run()
-    : await env.ICONOPLASM_DB.prepare(
+      ).bind(previousAssetSha, actorNorm, symbolNorm, promotedAssetSha)
+    : env.ICONOPLASM_DB.prepare(
         `UPDATE icono_publish_state
          SET current_asset_sha256 = NULL,
              admin_override = 0,
@@ -18072,15 +18231,21 @@ async function rollbackVoteAutoPromoteAfterProjectionFailure(
          WHERE gene_symbol = ?
            AND current_asset_sha256 = ?
            AND COALESCE(admin_override, 0) = 0`,
-      )
-        .bind(actorNorm, symbolNorm, promotedAssetSha)
-        .run()
+      ).bind(actorNorm, symbolNorm, promotedAssetSha)
 
-  const changed = Number(rollbackResult?.meta?.changes ?? rollbackResult?.changes ?? 0) > 0
-  if (!changed) return { ok: true, changed: false, code: "STATE_ALREADY_CHANGED" }
-
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_publish_events (
+  const previousPromotedStatus =
+    sanitizeText(autoPromote?.to_asset_previous_status || "", 32) || "draft"
+  const rollbackBatch = await env.ICONOPLASM_DB.batch([
+    rollbackStatement,
+    env.ICONOPLASM_DB.prepare(
+      `UPDATE icono_portrait_assets
+       SET status = ?
+       WHERE gene_symbol = ?
+         AND asset_sha256 = ?
+         AND changes() > 0`,
+    ).bind(previousPromotedStatus, symbolNorm, promotedAssetSha),
+    env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_publish_events (
        gene_symbol,
        from_asset_sha256,
        to_asset_sha256,
@@ -18088,10 +18253,14 @@ async function rollbackVoteAutoPromoteAfterProjectionFailure(
        actor,
        reason,
        created_at
-     ) VALUES (?, ?, ?, 'rollback', ?, ?, CURRENT_TIMESTAMP)`,
-  )
-    .bind(symbolNorm, promotedAssetSha, previousAssetSha || null, actorNorm, rollbackReason)
-    .run()
+     )
+     SELECT ?, ?, ?, 'rollback', ?, ?, CURRENT_TIMESTAMP
+     WHERE changes() > 0`,
+    ).bind(symbolNorm, promotedAssetSha, previousAssetSha || null, actorNorm, rollbackReason),
+  ])
+  const rollbackResult = Array.isArray(rollbackBatch) ? rollbackBatch[0] : null
+  const changed = Number(rollbackResult?.meta?.changes ?? rollbackResult?.changes ?? 0) > 0
+  if (!changed) return { ok: true, changed: false, code: "STATE_ALREADY_CHANGED" }
   await rebuildGeneRollupForSymbol(env, symbolNorm)
   return {
     ok: true,
@@ -20234,29 +20403,24 @@ async function autoPromoteTopVotedPortraitFromCoordinatorState(
 
   const actorNorm = normalizeUserId(actorId || "vote_auto")
   const eventReason = String(reason || "vote_auto_promote").slice(0, 2000) || "vote_auto_promote"
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at, admin_override)
+  await env.ICONOPLASM_DB.batch([
+    env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at, admin_override)
      VALUES (?, ?, ?, CURRENT_TIMESTAMP, 0)
      ON CONFLICT(gene_symbol) DO UPDATE SET
        current_asset_sha256 = excluded.current_asset_sha256,
        admin_override = 0,
        updated_by = excluded.updated_by,
        updated_at = CURRENT_TIMESTAMP`,
-  )
-    .bind(symbolNorm, topAsset.asset_sha256, actorNorm)
-    .run()
-
-  await env.ICONOPLASM_DB.prepare(
-    `UPDATE icono_portrait_assets
+    ).bind(symbolNorm, topAsset.asset_sha256, actorNorm),
+    env.ICONOPLASM_DB.prepare(
+      `UPDATE icono_portrait_assets
      SET status = 'approved'
      WHERE gene_symbol = ?
        AND asset_sha256 = ?`,
-  )
-    .bind(symbolNorm, topAsset.asset_sha256)
-    .run()
-
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_publish_events (
+    ).bind(symbolNorm, topAsset.asset_sha256),
+    env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_publish_events (
        gene_symbol,
        from_asset_sha256,
        to_asset_sha256,
@@ -20265,9 +20429,8 @@ async function autoPromoteTopVotedPortraitFromCoordinatorState(
        reason,
        created_at
      ) VALUES (?, ?, ?, 'publish', ?, ?, CURRENT_TIMESTAMP)`,
-  )
-    .bind(symbolNorm, currentAssetSha || null, topAsset.asset_sha256, actorNorm, eventReason)
-    .run()
+    ).bind(symbolNorm, currentAssetSha || null, topAsset.asset_sha256, actorNorm, eventReason),
+  ])
 
   return {
     ok: true,
@@ -20275,6 +20438,7 @@ async function autoPromoteTopVotedPortraitFromCoordinatorState(
     code: "PROMOTED",
     from_asset_sha256: currentAssetSha || null,
     to_asset_sha256: topAsset.asset_sha256,
+    to_asset_previous_status: sanitizeText(topAsset.status || "", 32) || "draft",
     image_score: Number(topAsset.score || 0),
     image_upvotes: Number(topAsset.upvotes || 0),
     image_downvotes: Number(topAsset.downvotes || 0),
@@ -29092,6 +29256,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         candidateImageId: copyResult.candidate_image_id,
         userId,
         requestedVoteValue: 1,
+        reason: "candidate_copy_auto_checkmark",
       })
       if (!coordinatorWrite?.ok) {
         return done("candidate_copy_502", json({ error: "Vote coordinator write failed" }, 502))
@@ -29100,28 +29265,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         copyResult.target_gene_symbol,
         copyResult.asset_sha256,
       )
-      await projectVoteCoordinatorLedgerRow(env, {
-        symbol: copyResult.target_gene_symbol,
-        assetSha256: copyResult.asset_sha256,
-        visionId: coordinatorWrite.resolved_vision_id,
-        candidateImageId: coordinatorWrite.candidate_image_id,
-        userId,
-        voteValue: coordinatorWrite.final_vote_value,
-      })
-      await appendVoteEvent(env, {
-        symbol: copyResult.target_gene_symbol,
-        assetSha256: copyResult.asset_sha256,
-        visionId: coordinatorWrite.resolved_vision_id,
-        candidateRef: assetCandidateRef,
-        candidateImageId: coordinatorWrite.candidate_image_id,
-        userId,
-        voteValue: coordinatorWrite.final_vote_value,
-      })
-      const projectionRefresh = await scheduleVoteProjectionRefresh(env, ctx, {
-        symbol: copyResult.target_gene_symbol,
-        actorId: userId,
-        reason: "candidate_copy_auto_checkmark",
-      })
       return done(
         "candidate_copy",
         json(
@@ -29139,7 +29282,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             },
             auto_promote: {
               deferred: true,
-              queued: Boolean(projectionRefresh?.queued),
+              queued: Boolean(coordinatorWrite?.changed),
+              mode: "durable_outbox",
+              mutation_id: coordinatorWrite?.mutation_id || null,
             },
             message: `Copied to ${copyResult.target_gene_symbol} and checkmarked.`,
           },
@@ -29210,42 +29355,22 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         candidateImageId,
         userId,
         requestedVoteValue: requested,
+        reason: "vote_auto_promote",
       })
       if (!coordinatorWrite?.ok) {
         return done("votes_set_502", json({ error: "Vote coordinator write failed" }, 502))
       }
-      // Order matters:
-      // 1. write the live vote to the per-symbol coordinator,
-      // 2. project that settled state into D1 compatibility tables,
-      // 3. enqueue the projection refresh that may auto-promote the canonical
-      //    portrait and refresh the D1 read models consumed by rich gene detail.
-      // Do not reintroduce a "look at all historical vote rows, then decide"
-      // step here. That old design made one public vote pay for the entire past.
-      // Also do not make the vote response claim the canonical image changed
-      // unless the projection actually completed; the canonical read path is the
-      // canonical/detail contract, not the immediate vote request body.
-      await projectVoteCoordinatorLedgerRow(env, {
-        symbol,
-        assetSha256: assetSha,
-        visionId: coordinatorWrite.resolved_vision_id,
-        candidateImageId: coordinatorWrite.candidate_image_id,
-        userId,
-        voteValue: coordinatorWrite.final_vote_value,
-      })
-      await appendVoteEvent(env, {
-        symbol,
-        assetSha256: assetSha,
-        visionId: coordinatorWrite.resolved_vision_id,
-        candidateRef: assetCandidateRef,
-        candidateImageId: coordinatorWrite.candidate_image_id,
-        userId,
-        voteValue: coordinatorWrite.final_vote_value,
-      })
-      const projectionRefresh = await scheduleVoteProjectionRefresh(env, ctx, {
-        symbol,
-        actorId: userId,
-        reason: "vote_auto_promote",
-      })
+      // The coordinator transaction has already committed both the authoritative
+      // desired state and its projection intent. Nothing after this point may turn
+      // that successful commit into an HTTP failure. The coordinator alarm owns
+      // idempotent D1/event/Queue delivery from here.
+      const projectionRefresh = {
+        ok: true,
+        durable: true,
+        queued: Boolean(coordinatorWrite?.changed),
+        mode: "durable_outbox",
+        mutation_id: coordinatorWrite?.mutation_id || null,
+      }
       const snapshot =
         coordinatorWrite.snapshot ||
         (await iconoVoteSnapshot(env, {
@@ -29269,7 +29394,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             auto_promote: {
               deferred: true,
               queued: Boolean(projectionRefresh?.queued),
-              mode: projectionRefresh?.mode || "best_effort",
+              mode: projectionRefresh.mode,
             },
             projection_refresh: projectionRefresh,
           },
@@ -29329,6 +29454,64 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             symbol,
             asset_sha256: assetSha,
             snapshot,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/votes/snapshots" && request.method === "POST") {
+      if (!iconoplasmVoteCoordinatorBinding(env))
+        return done(
+          "votes_snapshots_500",
+          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
+        )
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("votes_snapshots_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const rawItems = Array.isArray(p?.items) ? p.items : []
+      if (rawItems.length < 1 || rawItems.length > 500) {
+        return done(
+          "votes_snapshots_400",
+          json({ error: "items must contain between 1 and 500 vote targets" }, 400),
+        )
+      }
+      const items = rawItems
+        .map((raw) => {
+          const symbol = normalizeSymbol(raw?.symbol || raw?.gene_symbol || "")
+          const assetSha = normalizeSha256(raw?.asset_sha256 || raw?.sha256 || "")
+          if (!symbol || !assetSha) return null
+          return {
+            symbol,
+            asset_sha256: assetSha,
+            candidate_ref:
+              normalizeCandidateRef(raw?.candidate_ref || "", symbol, assetSha) ||
+              voteAssetIdentity(symbol, assetSha),
+            vision_id: sanitizeVoteVisionId(raw?.vision_id || ""),
+            candidate_image_id: optionalInt(raw?.candidate_image_id ?? raw?.emulsion_id),
+          }
+        })
+        .filter(Boolean)
+      if (items.length !== rawItems.length) {
+        return done(
+          "votes_snapshots_400",
+          json({ error: "Every item requires a valid symbol and asset_sha256" }, 400),
+        )
+      }
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      const userId = sessionUser?.user_id ? normalizeUserId(sessionUser.user_id) : "__guest__"
+      const snapshots = await iconoVoteSnapshotsBatch(env, { items, userId })
+      return done(
+        "votes_snapshots",
+        json(
+          {
+            ok: true,
+            authenticated: Boolean(sessionUser?.user_id),
+            snapshots,
           },
           200,
           { "Cache-Control": "no-store" },
@@ -29402,6 +29585,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         const coordinatorImport = await iconoplasmVoteCoordinatorImportVotes(env, {
           symbol,
           items: groupItems,
+          reason: "vote_import_auto_promote",
         })
         if (!coordinatorImport?.ok) {
           return done(
@@ -29412,33 +29596,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         upserted += Math.max(0, Number(coordinatorImport?.upserted || 0) || 0)
         deleted += Math.max(0, Number(coordinatorImport?.deleted || 0) || 0)
         invalid += Math.max(0, Number(coordinatorImport?.invalid || 0) || 0)
-        for (const row of Array.isArray(coordinatorImport?.results)
-          ? coordinatorImport.results
-          : []) {
-          await projectVoteCoordinatorLedgerRow(env, {
-            symbol,
-            assetSha256: row?.asset_sha256,
-            visionId: row?.vision_id,
-            candidateImageId: row?.candidate_image_id,
-            userId: row?.user_id,
-            voteValue: row?.final_vote_value,
-          })
-          await appendVoteEvent(env, {
-            symbol,
-            assetSha256: row?.asset_sha256,
-            visionId: row?.vision_id,
-            candidateRef: row?.candidate_ref,
-            candidateImageId: row?.candidate_image_id,
-            userId: row?.user_id,
-            voteValue: row?.final_vote_value,
-          })
+        if (
+          (Array.isArray(coordinatorImport?.results) ? coordinatorImport.results : []).some(
+            (row) => row?.changed,
+          )
+        ) {
+          projectionRefreshQueued += 1
         }
-        const projectionRefresh = await scheduleVoteProjectionRefresh(env, ctx, {
-          symbol,
-          actorId: "admin_import",
-          reason: "vote_import_auto_promote",
-        })
-        if (projectionRefresh?.queued) projectionRefreshQueued += 1
       }
       return done(
         "admin_votes_import",
@@ -29520,35 +29684,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         candidateImageId,
         userId,
         requestedVoteValue: requested,
+        reason: "admin_vote_auto_promote",
       })
       if (!coordinatorWrite?.ok) {
         return done("admin_votes_set_502", json({ error: "Vote coordinator write failed" }, 502))
       }
-      // Keep admin writes on the same architecture as public writes. If the
-      // admin route starts reading the raw vote ledger inline again, somebody
-      // will eventually cargo-cult that pattern back into public traffic.
-      await projectVoteCoordinatorLedgerRow(env, {
-        symbol,
-        assetSha256: assetSha,
-        visionId: coordinatorWrite.resolved_vision_id,
-        candidateImageId: coordinatorWrite.candidate_image_id,
-        userId,
-        voteValue: coordinatorWrite.final_vote_value,
-      })
-      await appendVoteEvent(env, {
-        symbol,
-        assetSha256: assetSha,
-        visionId: coordinatorWrite.resolved_vision_id,
-        candidateRef: assetCandidateRef,
-        candidateImageId: coordinatorWrite.candidate_image_id,
-        userId,
-        voteValue: coordinatorWrite.final_vote_value,
-      })
-      const projectionRefresh = await scheduleVoteProjectionRefresh(env, ctx, {
-        symbol,
-        actorId: userId,
-        reason: "admin_vote_auto_promote",
-      })
+      const projectionRefresh = {
+        ok: true,
+        durable: true,
+        queued: Boolean(coordinatorWrite?.changed),
+        mode: "durable_outbox",
+        mutation_id: coordinatorWrite?.mutation_id || null,
+      }
       const snapshot =
         coordinatorWrite.snapshot ||
         (await iconoVoteSnapshot(env, {
@@ -29572,7 +29719,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             auto_promote: {
               deferred: true,
               queued: Boolean(projectionRefresh?.queued),
-              mode: projectionRefresh?.mode || "best_effort",
+              mode: projectionRefresh.mode,
             },
             projection_refresh: projectionRefresh,
           },

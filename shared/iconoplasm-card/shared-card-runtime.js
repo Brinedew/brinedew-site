@@ -2,7 +2,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
 ;(function (global) {
   "use strict"
 
-  var ICONO_SHARED_RUNTIME_VERSION = "20260402a"
+  var ICONO_SHARED_RUNTIME_VERSION = "20260722a"
   var forceSiteOwnership = !!(global && global.__iconoSiteOwnsSharedRuntime)
   var existingShared = global && global.IconoplasmCardShared ? global.IconoplasmCardShared : null
   var existingMeta =
@@ -1966,7 +1966,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     if (!symbol || !assetSha) return null
     box.setAttribute("data-icono-vote-wired", "true")
     var state = {
-      authenticated: false,
+      authenticated: !!cfg.authenticated,
       pending: false,
       snapshot: {
         image_upvotes: 0,
@@ -1975,11 +1975,12 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
         user_vote: 0,
       },
     }
-    var snapshotPrimed = false
+    var snapshotPrimed = !!cfg.initialSnapshot
     var snapshotPrimePromise = null
     var candidateRef = "a:" + symbol + "|" + assetSha
     var storedSnapshot = readStoredVoteSnapshot(candidateRef)
     if (storedSnapshot) state.snapshot = cloneSnapshot(storedSnapshot)
+    if (cfg.initialSnapshot) state.snapshot = cloneSnapshot(cfg.initialSnapshot)
     var candidateImageId = Number(cfg.candidateImageId || 0)
     if (!Number.isFinite(candidateImageId) || candidateImageId <= 0) candidateImageId = 0
     var upBtn = box.querySelector("[data-icono-vote-up]")
@@ -1993,6 +1994,20 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       if (typeof cfg.onSnapshot === "function") {
         cfg.onSnapshot(state.snapshot, state)
       }
+    }
+
+    function setSnapshot(snapshot, options) {
+      var opts = options || {}
+      state.snapshot = cloneSnapshot(snapshot)
+      if (Object.prototype.hasOwnProperty.call(opts, "authenticated")) {
+        state.authenticated = !!opts.authenticated
+      }
+      snapshotPrimed = true
+      state.pending = false
+      writeStoredVoteSnapshot(candidateRef, state.snapshot)
+      render()
+      if (opts.notify !== false) notifySnapshot()
+      return state.snapshot
     }
 
     function cloneSnapshot(snapshot) {
@@ -2113,19 +2128,23 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
             }
           })
           .catch(function (err) {
-            state.snapshot = previousSnapshot
-            writeStoredVoteSnapshot(candidateRef, state.snapshot)
             if (
               Number((err && err.status) || 0) === 401 ||
               (err && err.payload && err.payload.code === "AUTH_REQUIRED")
             ) {
+              state.snapshot = previousSnapshot
+              writeStoredVoteSnapshot(candidateRef, state.snapshot)
               state.authenticated = false
               notifySnapshot()
               if (typeof cfg.onAuthRequired === "function") cfg.onAuthRequired(err)
               return
             }
+            // A lost response is ambiguous: the coordinator may already have
+            // committed the desired state. Keep the optimistic state visible and
+            // reconcile with authority instead of falsely rolling the vote back.
             notifySnapshot()
             if (typeof cfg.onError === "function") cfg.onError("set", err)
+            return refreshSnapshot()
           })
           .finally(function () {
             state.pending = false
@@ -2162,11 +2181,11 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     if (cfg.deferSnapshot) {
       // Cost fence: defer means "no personalized snapshot request until the user actually
       // tries to vote". Priming on hover/visibility recreated the same per-card request flood.
-      return { ensureSnapshot: ensureSnapshot }
+      return { ensureSnapshot: ensureSnapshot, setSnapshot: setSnapshot, state: state }
     }
 
     ensureSnapshot()
-    return { ensureSnapshot: ensureSnapshot }
+    return { ensureSnapshot: ensureSnapshot, setSnapshot: setSnapshot, state: state }
   }
 
   startRoughLoopObserver()
