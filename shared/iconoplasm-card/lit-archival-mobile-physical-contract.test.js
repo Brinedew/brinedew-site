@@ -551,8 +551,8 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
   const head = await sourceText(headPath)
   assert.match(
     head,
-    /@media \(max-width: 720px\)[\s\S]*icono-gene-lead-card[\s\S]*\.iconoplasm-tooltip-portrait[\s\S]*\.iconoplasm-tooltip-body[\s\S]*height: auto;/,
-    "critical mobile CSS must release the desktop 100% height before geometry measurement",
+    /@media \(min-width: 407px\) and \(max-width: 720px\)[\s\S]*icono-gene-lead-card[\s\S]*\.iconoplasm-tooltip-portrait[\s\S]*\.iconoplasm-tooltip-body[\s\S]*height: auto;/,
+    "critical mobile CSS must release the desktop 100% height only once the card can upscale",
   )
   assert.doesNotMatch(
     head,

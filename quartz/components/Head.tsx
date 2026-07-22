@@ -518,6 +518,8 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
     width: min(100%, 390px);
     grid-template-columns: 1fr;
   }
+}
+@media (min-width: 407px) and (max-width: 720px) {
   .icono-gene-lead-card.icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-portrait,
   .icono-gene-lead-card.icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-body,
   .icono-gene-lead--static-shell .iconoplasm-tooltip-portrait,
