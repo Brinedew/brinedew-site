@@ -2,7 +2,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
 ;(function (global) {
   "use strict"
 
-  var ICONO_SHARED_RUNTIME_VERSION = "20260722c"
+  var ICONO_SHARED_RUNTIME_VERSION = "20260722d"
   var forceSiteOwnership = !!(global && global.__iconoSiteOwnsSharedRuntime)
   var existingShared = global && global.IconoplasmCardShared ? global.IconoplasmCardShared : null
   var existingMeta =
@@ -1304,6 +1304,8 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
   // labels aligned with the card renderer; do not make per-gene pages indexable
   // just because their facts are easier for assistive and agent tooling to read.
   function buildLabLabelSemanticCharacterFacts(geneDetail, model) {
+    var safeGeneDetail = asObject(geneDetail)
+    var safeEssence = asObject(safeGeneDetail.essence)
     var safeModel = asObject(model)
     var facts = []
     var micrographics = resolveLabLabelSpecimenMicrographicsModel(geneDetail)
@@ -1315,28 +1317,86 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       facts.push({ label: safeLabel, value: safeValue })
     }
 
-    add("Gene symbol", safeModel.symbol)
-    add("Gene name", safeModel.fullName)
-    add(
-      "Card color",
-      micrographics.colorName
-        ? (micrographics.color || "UNFILED") + " (" + micrographics.colorName + ")"
-        : micrographics.color || "UNFILED",
+    function addMapping(label, sourceLabel, sourceValue, targetLabel, targetValue) {
+      var safeSourceLabel = String(sourceLabel || "").trim()
+      var safeSourceValue = String(sourceValue || "").trim()
+      var safeTargetLabel = String(targetLabel || "").trim()
+      var safeTargetValue = String(targetValue || "").trim()
+      if (!safeSourceLabel || !safeSourceValue || !safeTargetLabel || !safeTargetValue) return
+      add(
+        label,
+        safeSourceLabel +
+          ": " +
+          safeSourceValue +
+          " → " +
+          safeTargetLabel +
+          ": " +
+          safeTargetValue,
+      )
+    }
+
+    add("Gene identity", safeModel.symbol + " — " + safeModel.fullName)
+    addMapping(
+      "Card color mapping",
+      "Hex color",
+      micrographics.color,
+      "Card color name",
+      micrographics.colorName,
     )
-    add("Card letter", micrographics.firstLetter)
-    add("Letter hue", micrographics.hueLabel)
-    add("HPA tau", micrographics.tau)
-    add("HPA tau interpretation", micrographics.saturationLabel)
-    add("gnomAD LOEUF", micrographics.loeuf)
-    add("gnomAD LOEUF interpretation", micrographics.lightnessLabel)
+    addMapping("Letter-to-hue mapping", "Letter", micrographics.firstLetter, "Hue", micrographics.hueLabel)
+    addMapping(
+      "HPA tau-to-vibrance mapping",
+      "HPA tau",
+      micrographics.tau,
+      "Character vibrance",
+      micrographics.saturationLabel,
+    )
+    addMapping(
+      "gnomAD LOEUF-to-shade mapping",
+      "gnomAD LOEUF",
+      micrographics.loeuf,
+      "Character shade",
+      micrographics.lightnessLabel,
+    )
     add("Emulsion number", safeModel.serial)
-    add("Family", safeModel.displayedFamily)
-    add("Family trait", safeModel.displayedFamilyFeature)
-    add("Character category", safeModel.selectedCategory)
-    add("Character sex", safeModel.sexNote)
-    add("First noted", safeModel.firstNoted)
-    add("Character age", safeModel.ageNote)
-    if (safeModel.handwrittenWeight) add("Character mass", safeModel.handwrittenWeight + " kg")
+    addMapping(
+      "Gene family-to-character trait mapping",
+      "Gene family",
+      safeModel.displayedFamily,
+      "Character family trait",
+      safeModel.displayedFamilyFeature,
+    )
+    addMapping(
+      "Molecular category-to-character sex mapping",
+      "Molecular category",
+      safeModel.selectedCategory,
+      "Character sex",
+      safeModel.sexNote,
+    )
+    addMapping(
+      "First-noted-to-character-age mapping",
+      "First noted",
+      safeModel.firstNoted,
+      "Character age",
+      safeModel.ageNote,
+    )
+
+    var molecularMassKda = firstPositiveNumber(
+      safeGeneDetail.molecular_weight_kda,
+      safeEssence.molecular_weight_kda,
+    )
+    var molecularMassText = molecularMassKda
+      ? String(Math.round(molecularMassKda)) + " kDa"
+      : safeModel.handwrittenWeight
+        ? safeModel.handwrittenWeight + " kDa"
+        : ""
+    addMapping(
+      "Molecular-mass-to-character-mass mapping",
+      "Molecular mass",
+      molecularMassText,
+      "Character mass",
+      safeModel.handwrittenWeight ? safeModel.handwrittenWeight + " kg" : "",
+    )
 
     var stylePairs = Array.isArray(safeModel.stylePairs) ? safeModel.stylePairs : []
     for (var i = 0; i < stylePairs.length; i++) {
@@ -1344,7 +1404,13 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       var clan = String(pair.origin || "").trim()
       var aesthetic = String(pair.note || "").trim()
       if (clan && aesthetic) {
-        add("PFAM clan and character aesthetic", clan + " — " + aesthetic)
+        addMapping(
+          "PFAM-clan-to-character-aesthetic mapping",
+          "PFAM clan",
+          clan,
+          "Character aesthetic",
+          aesthetic,
+        )
       } else if (clan) {
         add("PFAM clan", clan)
       } else if (aesthetic) {
@@ -1352,8 +1418,13 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       }
     }
 
-    add("Molecular alignment", safeModel.molecularAlignment)
-    add("Character alignment", safeModel.politicalNote)
+    addMapping(
+      "Molecular-alignment-to-character-alignment mapping",
+      "Molecular alignment",
+      safeModel.molecularAlignment,
+      "Character alignment",
+      safeModel.politicalNote,
+    )
     return facts
   }
 
