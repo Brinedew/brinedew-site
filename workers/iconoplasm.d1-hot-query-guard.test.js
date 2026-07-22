@@ -181,14 +181,19 @@ test("DO NOT DELETE: public vote hot paths keep raw asset-key predicates", () =>
     "single-vote writes should go through the per-gene coordinator",
   )
   assert.match(
-    voteSetRoute,
-    /projectVoteCoordinatorLedgerRow\(/,
-    "single-vote writes should project the compatibility ledger from coordinator state",
+    coordinatorClass,
+    /CREATE TABLE IF NOT EXISTS vote_outbox/,
+    "the coordinator transaction should persist projection intent beside the vote",
   )
   assert.match(
+    coordinatorClass,
+    /deliverOutboxRow[\s\S]*projectVoteCoordinatorLedgerRow\([\s\S]*appendVoteEvent\([\s\S]*scheduleVoteProjectionRefresh\(/,
+    "the durable outbox drain should own compatibility, audit, and read-model handoff",
+  )
+  assert.doesNotMatch(
     voteSetRoute,
-    /scheduleVoteProjectionRefresh\(/,
-    "single-vote writes should defer symbol-wide read-model refresh through the projection queue",
+    /projectVoteCoordinatorLedgerRow\(|appendVoteEvent\(|scheduleVoteProjectionRefresh\(/,
+    "a successful coordinator commit must not be turned into a request failure by downstream projection",
   )
   assert.doesNotMatch(
     voteSetRoute,

@@ -1973,53 +1973,34 @@ test("direct candidate image API panel stays compact and hides transport details
   assert.match(styles, /\.icono-request-direct-publish\[hidden\]\s*\{/)
 })
 
-test("candidate upvote polls fresh rich detail before rerendering the gene page", async () => {
+test("gene votes batch initial snapshots, synchronize responsive copies, and keep cards stable", async () => {
   const app = await readFile(appPath, "utf8")
-
-  assert.match(
-    app,
-    /VOTE_PROJECTION_REFRESH_DELAYS_MS = \[600, 1200, 2000, 3200, 5000, 8000, 13000\]/,
-  )
-  assert.match(app, /function fetchGeneDetail\(symbol, options\)/)
-
-  const pollStart = app.indexOf("function refreshGeneWhenCanonicalDetailMatchesVote")
-  const pollEnd = app.indexOf("function refreshGeneAfterCandidateVote", pollStart)
-  assert.notEqual(pollStart, -1, "missing canonical-detail polling function")
-  assert.notEqual(pollEnd, -1, "missing canonical-detail polling function boundary")
-  const pollBlock = app.slice(pollStart, pollEnd)
-  assert.match(pollBlock, /fetchGeneDetail\(key, \{ forceFresh: true \}\)/)
-  assert.match(pollBlock, /printCopyCurrentAssetSha\(genePayload\)/)
-  assert.match(pollBlock, /currentAssetSha === expectedAssetSha/)
-  assert.match(pollBlock, /rerenderCurrentGeneRoute\(\{ forceFresh: true \}\)/)
-  assert.doesNotMatch(
-    pollBlock,
-    /fetchFreshGeneCardArtifact|\/api\/iconoplasm\/cards/,
-    "candidate vote refresh must not wait for the KV card catalog artifact",
-  )
-
-  const candidateRefreshStart = app.indexOf("function refreshGeneAfterCandidateVote")
-  const candidateRefreshEnd = app.indexOf("function wireBrickVoteBoxes", candidateRefreshStart)
-  assert.notEqual(candidateRefreshStart, -1, "missing candidate-vote refresh function")
-  assert.notEqual(candidateRefreshEnd, -1, "missing candidate-vote refresh boundary")
-  const candidateRefreshBlock = app.slice(candidateRefreshStart, candidateRefreshEnd)
-  assert.doesNotMatch(
-    candidateRefreshBlock,
-    /window\.setTimeout\(function \(\) \{[\s\S]*rerenderCurrentGeneRoute\(\{ forceFresh: true \}\)[\s\S]*\}, 900\)/,
-    "candidate upvotes must not rely on a one-shot 900ms refresh that can miss Queue publication",
-  )
-  assert.match(
-    candidateRefreshBlock,
-    /refreshGeneWhenCanonicalDetailMatchesVote\(symbol, votedAssetSha\)/,
-  )
 
   const candidateWireStart = app.indexOf("function wireCandidateVoteBoxes")
   const candidateWireEnd = app.indexOf("function wireCandidateRemoveButtons", candidateWireStart)
   assert.notEqual(candidateWireStart, -1, "missing candidate vote wiring")
   assert.notEqual(candidateWireEnd, -1, "missing candidate vote wiring boundary")
   const candidateWireBlock = app.slice(candidateWireStart, candidateWireEnd)
-  assert.match(candidateWireBlock, /var candidateAssetSha = voteBox\.getAttribute/)
-  assert.match(
-    candidateWireBlock,
-    /refreshGeneAfterCandidateVote\(symbol, data, state, \{ assetSha: candidateAssetSha \}\)/,
-  )
+  assert.match(candidateWireBlock, /var candidateAssetSha = box\.getAttribute/)
+  assert.match(candidateWireBlock, /wireVoteBoxGroup\(\[box\], symbol, candidateAssetSha/)
+  assert.doesNotMatch(candidateWireBlock, /handle\.ensureSnapshot\(\)/)
+  assert.doesNotMatch(candidateWireBlock, /refreshGeneAfterCandidateVote/)
+
+  const leadWireStart = app.indexOf("function wireGeneVoteBox")
+  const leadWireEnd = app.indexOf("function wireCandidateVoteBoxes", leadWireStart)
+  const leadWireBlock = app.slice(leadWireStart, leadWireEnd)
+  assert.match(leadWireBlock, /querySelectorAll\("\[data-icono-gene-vote-box\]"\)/)
+  assert.match(leadWireBlock, /wireVoteBoxGroup\(boxes, symbol, portrait\.asset_sha256/)
+
+  const groupStart = app.indexOf("function wireVoteBoxGroup")
+  const groupEnd = app.indexOf("function primeGeneVoteBoxGroups", groupStart)
+  const groupBlock = app.slice(groupStart, groupEnd)
+  assert.match(groupBlock, /handle\.setSnapshot\(snapshot/)
+  assert.match(groupBlock, /notify: false/)
+
+  const primeStart = app.indexOf("function primeGeneVoteBoxGroups")
+  const primeEnd = app.indexOf("function wireGeneVoteControls", primeStart)
+  const primeBlock = app.slice(primeStart, primeEnd)
+  assert.match(primeBlock, /fetchJSON\("\/api\/iconoplasm\/votes\/snapshots"/)
+  assert.equal((primeBlock.match(/fetchJSON\(/g) || []).length, 1)
 })

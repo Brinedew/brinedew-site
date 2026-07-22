@@ -3806,7 +3806,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       visionId: opts.visionId || "",
       candidateImageId: opts.candidateImageId || 0,
       deferSnapshot: !!opts.deferSnapshot,
+      initialSnapshot: opts.initialSnapshot || null,
+      authenticated: !!opts.authenticated,
       apiBaseUrl: API,
+      onSnapshot: function (snapshot, state) {
+        if (typeof opts.onSnapshot === "function") opts.onSnapshot(snapshot, state)
+      },
       onAuthRequired: function () {
         showVoteLoginPopup(box)
       },
@@ -3822,22 +3827,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         }
       },
     })
-  }
-
-  function refreshGeneAfterVoteAutoPromote(symbol, voteResponse) {
-    // A vote request is not allowed to promise "canonical changed" just because
-    // the user clicked. Canonical publication is complete only after the
-    // VoteCoordinator projection has updated D1, rebuilt read models, published
-    // the public card artifact, and flipped KV_GALLERY_VERSION. Older responses
-    // may contain `changed`; deferred responses deliberately do not. When a
-    // completed promotion is reported, force the gene route through the fresh
-    // backend path instead of trusting the in-page card artifact cache.
-    var autoPromote = voteResponse && voteResponse.auto_promote
-    if (!autoPromote || !autoPromote.changed) return
-    var route = getRoute()
-    if (route.page !== "gene") return
-    if (normalizedSymbol(route.symbol) !== normalizedSymbol(symbol)) return
-    rerenderCurrentGeneRoute({ forceFresh: true })
   }
 
   function cancelVoteProjectionRefreshPoll(symbol) {
@@ -3896,27 +3885,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     }
 
     scheduleNext()
-  }
-
-  function refreshGeneAfterCandidateVote(symbol, voteResponse, voteState, options) {
-    refreshGeneAfterVoteAutoPromote(symbol, voteResponse)
-    var route = getRoute()
-    if (route.page !== "gene") return
-    if (normalizedSymbol(route.symbol) !== normalizedSymbol(symbol)) return
-    var userVote = Number(
-      (voteState && voteState.snapshot && voteState.snapshot.user_vote) ||
-        (voteResponse && voteResponse.snapshot && voteResponse.snapshot.user_vote) ||
-        0,
-    )
-    if (userVote !== 1) return
-    var votedAssetSha =
-      normalizedAssetSha(options && options.assetSha) ||
-      normalizedAssetSha(voteResponse && voteResponse.asset_sha256) ||
-      normalizedAssetSha(
-        (voteResponse && voteResponse.snapshot && voteResponse.snapshot.asset_sha256) || "",
-      )
-    if (!votedAssetSha) return
-    refreshGeneWhenCanonicalDetailMatchesVote(symbol, votedAssetSha)
   }
 
   function wireBrickVoteBoxes(cards) {
@@ -4429,48 +4397,139 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   }
 
   function wireGeneVoteBox(container, genePayload) {
-    var box = container.querySelector("[data-icono-vote-box]")
-    if (!box) return
+    var boxes = Array.prototype.slice.call(container.querySelectorAll("[data-icono-gene-vote-box]"))
+    if (!boxes.length) {
+      var fallbackBox = container.querySelector("[data-icono-vote-box]")
+      if (fallbackBox) boxes.push(fallbackBox)
+    }
+    if (!boxes.length) return null
     var symbol = String((genePayload && genePayload.symbol) || "")
       .trim()
       .toUpperCase()
     var portrait = (genePayload && genePayload.portrait) || {}
-    wireVoteBox(box, symbol, portrait.asset_sha256, {
+    return wireVoteBoxGroup(boxes, symbol, portrait.asset_sha256, {
       deferSnapshot: true,
       visionId: portrait.vision_id || "",
       candidateImageId: portrait.candidate_image_id || 0,
-      onVoteCommitted: function (data) {
-        refreshGeneAfterVoteAutoPromote(symbol, data)
-      },
     })
   }
 
   function wireCandidateVoteBoxes(container, genePayload) {
-    if (!container || !genePayload) return
+    if (!container || !genePayload) return []
     var symbol = String(genePayload.symbol || "")
       .trim()
       .toUpperCase()
     var boxes = container.querySelectorAll("[data-icono-candidate-vote-box]")
+    var groups = []
     for (var i = 0; i < boxes.length; i++) {
       var box = boxes[i]
-      ;(function (voteBox) {
-        var candidateAssetSha = voteBox.getAttribute("data-icono-candidate-vote-box")
-        var handle = wireVoteBox(voteBox, symbol, candidateAssetSha, {
-          deferSnapshot: true,
-          visionId: voteBox.getAttribute("data-icono-vision-id") || "",
-          candidateImageId: voteBox.getAttribute("data-icono-candidate-image-id") || 0,
-          onVoteCommitted: function (data, state) {
-            refreshGeneAfterCandidateVote(symbol, data, state, { assetSha: candidateAssetSha })
-          },
-        })
-        // Prime deferred snapshots immediately on gene candidates. Without this,
-        // a publisher who already has a real upvote from image-edit publish sees
-        // a blank checkmark, and the first click toggles that endorsement off.
-        if (handle && typeof handle.ensureSnapshot === "function") {
-          handle.ensureSnapshot()
-        }
-      })(box)
+      var candidateAssetSha = box.getAttribute("data-icono-candidate-vote-box")
+      var group = wireVoteBoxGroup([box], symbol, candidateAssetSha, {
+        deferSnapshot: true,
+        visionId: box.getAttribute("data-icono-vision-id") || "",
+        candidateImageId: box.getAttribute("data-icono-candidate-image-id") || 0,
+      })
+      if (group) groups.push(group)
     }
+    return groups
+  }
+
+  function wireVoteBoxGroup(boxes, symbol, assetSha, options) {
+    var opts = options || {}
+    var targets = Array.isArray(boxes) ? boxes.filter(Boolean) : []
+    if (!targets.length || !symbol || !assetSha) return null
+    var handles = []
+    var syncing = false
+
+    function synchronize(sourceHandle, snapshot, state) {
+      if (syncing) return
+      syncing = true
+      for (var i = 0; i < handles.length; i++) {
+        var handle = handles[i]
+        if (handle === sourceHandle || typeof handle.setSnapshot !== "function") continue
+        handle.setSnapshot(snapshot, {
+          authenticated: !!(state && state.authenticated),
+          notify: false,
+        })
+      }
+      syncing = false
+      if (typeof opts.onSnapshot === "function") opts.onSnapshot(snapshot, state)
+    }
+
+    for (var i = 0; i < targets.length; i++) {
+      ;(function (box) {
+        var handle = null
+        handle = wireVoteBox(box, symbol, assetSha, {
+          deferSnapshot: true,
+          visionId: opts.visionId || "",
+          candidateImageId: opts.candidateImageId || 0,
+          onSnapshot: function (snapshot, state) {
+            synchronize(handle, snapshot, state)
+          },
+          onVoteCommitted: opts.onVoteCommitted,
+          onError: opts.onError,
+        })
+        if (handle) handles.push(handle)
+      })(targets[i])
+    }
+    if (!handles.length) return null
+    return {
+      candidateRef: "a:" + symbol + "|" + String(assetSha).toLowerCase(),
+      item: {
+        candidate_ref: "a:" + symbol + "|" + String(assetSha).toLowerCase(),
+        symbol: symbol,
+        asset_sha256: String(assetSha).toLowerCase(),
+        vision_id: opts.visionId || "",
+        candidate_image_id: Number(opts.candidateImageId || 0) || undefined,
+      },
+      handles: handles,
+    }
+  }
+
+  function primeGeneVoteBoxGroups(groups) {
+    var voteGroups = (Array.isArray(groups) ? groups : []).filter(Boolean)
+    if (!voteGroups.length) return Promise.resolve()
+    var uniqueItems = []
+    var seen = Object.create(null)
+    for (var i = 0; i < voteGroups.length; i++) {
+      var group = voteGroups[i]
+      if (!group.item || seen[group.candidateRef]) continue
+      seen[group.candidateRef] = true
+      uniqueItems.push(group.item)
+    }
+    return fetchJSON("/api/iconoplasm/votes/snapshots", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: uniqueItems }),
+    })
+      .then(function (data) {
+        var snapshots = Array.isArray(data && data.snapshots) ? data.snapshots : []
+        var byCandidate = Object.create(null)
+        for (var i = 0; i < snapshots.length; i++) {
+          var row = snapshots[i]
+          if (row && row.candidate_ref) byCandidate[row.candidate_ref] = row.snapshot
+        }
+        for (var i = 0; i < voteGroups.length; i++) {
+          var group = voteGroups[i]
+          var snapshot = byCandidate[group.candidateRef]
+          var handle = group.handles && group.handles[0]
+          if (snapshot && handle && typeof handle.setSnapshot === "function") {
+            handle.setSnapshot(snapshot, { authenticated: !!data.authenticated })
+          }
+        }
+      })
+      .catch(function (err) {
+        console.error("[Iconoplasm] batched vote snapshot error:", err)
+      })
+  }
+
+  function wireGeneVoteControls(container, genePayload) {
+    var groups = []
+    var leadGroup = wireGeneVoteBox(container, genePayload)
+    if (leadGroup) groups.push(leadGroup)
+    groups = groups.concat(wireCandidateVoteBoxes(container, genePayload))
+    primeGeneVoteBoxGroups(groups)
   }
 
   function wireCandidateRemoveButtons(container, genePayload) {
@@ -8892,12 +8951,11 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     container._iconoGenePayload = genePayload
     syncServerGenePortraitUrls(container, genePayload)
     hydrateGeneInteractiveIslands(container, genePayload)
-    wireGeneVoteBox(container, genePayload)
+    wireGeneVoteControls(container, genePayload)
     wireGeneEditImagePanel(container, genePayload)
     wireGeneRequestPanel(container, genePayload)
     wireGeneSuggestions(container, genePayload)
     wirePrintCopyRequests(container, genePayload)
-    wireCandidateVoteBoxes(container, genePayload)
     wireCandidateRemoveButtons(container, genePayload)
     wireCandidateCopyForms(container, genePayload)
     var leadCard = container.querySelector(".icono-gene-lead-card")
