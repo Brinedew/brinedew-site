@@ -11,8 +11,11 @@ The card deliberately presents facts as a compact physical label: a person can
 associate a handwritten note, selected field, and molecular origin at a glance.
 DOM readers and AI browsing agents instead received an unlabeled stream of text.
 The shared renderer now emits one semantic profile using a heading and a
-definition list. It carries the exact card facts (including character and
-molecular distinctions) without adding visual duplication.
+definition list. Every two-part visual field is one explicit directional
+mapping—for example, molecular category → character sex and PFAM clan →
+character aesthetic—so non-visual readers never have to infer a relationship
+from nearby text. It carries the exact card facts without adding visual
+duplication.
 
 ## Boundaries that must move together
 
