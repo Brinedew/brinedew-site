@@ -142,10 +142,14 @@ test("portrait fetch failures back off briefly but recover after the error TTL",
   }
 })
 
-test("100 extension portraits bypass the disabled accelerator", async () => {
+test("100 extension portraits share one failed primary decision per tab", async () => {
   const originalFetch = globalThis.fetch
   let primaryFetches = 0
   let fallbackFetches = 0
+  let releasePrimary
+  const primaryGate = new Promise((resolve) => {
+    releasePrimary = resolve
+  })
 
   await hooks.clearPortraitSourceStates()
   hooks.clearPortraitDataUrlCaches()
@@ -153,6 +157,7 @@ test("100 extension portraits bypass the disabled accelerator", async () => {
     const url = String(input || "")
     if (url.startsWith("https://iconoplasmportraits.b-cdn.net/")) {
       primaryFetches += 1
+      await primaryGate
       return new Response("unavailable", { status: 503 })
     }
     if (url.startsWith("https://iconoplasm.brinedew.bio/portraits/")) {
@@ -172,9 +177,12 @@ test("100 extension portraits bypass the disabled accelerator", async () => {
         42,
       ),
     )
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.equal(primaryFetches, 1)
+    releasePrimary()
     const results = await Promise.all(requests)
 
-    assert.equal(primaryFetches, 0)
+    assert.equal(primaryFetches, 1)
     assert.equal(fallbackFetches, 100)
     assert.ok(
       results.every(

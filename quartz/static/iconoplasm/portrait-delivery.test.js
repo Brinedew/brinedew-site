@@ -76,11 +76,15 @@ function fakeImage() {
   }
 }
 
-test("default delivery uses the canonical origin without a failed accelerator request", async () => {
+test("an explicitly disabled accelerator uses the canonical origin without a probe", async () => {
   const controlled = controlledImages()
   const delivery = createPortraitDelivery({
     sessionStorageRef: memoryStorage(),
     ImageCtor: controlled.ImageCtor,
+    policy: {
+      ...enabledAcceleratorPolicy,
+      accelerator: { ...enabledAcceleratorPolicy.accelerator, enabled: false },
+    },
   })
 
   const resolved = await delivery.ensure(

@@ -581,7 +581,7 @@ test("public catalog manifest publishes explicit extension contract fields", asy
     accelerator: {
       id: "bunny",
       origin: "https://iconoplasmportraits.b-cdn.net",
-      enabled: false,
+      enabled: true,
     },
     probe_timeout_ms: 2500,
     decision_scope: "tab",
