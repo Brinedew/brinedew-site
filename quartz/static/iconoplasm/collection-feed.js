@@ -56,6 +56,7 @@ export function createCollectionFeedController(options) {
   let mountObserver = null
   let resizeObserver = null
   let scrollFrame = 0
+  let backwardArmed = true
 
   const forwardSentinel = doc.createElement("div")
   forwardSentinel.className = "icono-feed-sentinel"
@@ -464,6 +465,7 @@ export function createCollectionFeedController(options) {
     previousCursor = ""
     hasMore = true
     hasPrevious = false
+    backwardArmed = !(Number(resetOptions?.offset || 0) > 0)
     stopped = false
     lastFailure = null
     retryButton.hidden = true
@@ -521,7 +523,13 @@ export function createCollectionFeedController(options) {
     prefetchObserver = new IntersectionObserverImpl(
       (entries) => {
         for (const entry of entries) {
+          if (entry.target === backwardSentinel && !entry.isIntersecting) {
+            backwardArmed = true
+            continue
+          }
           if (!entry.isIntersecting) continue
+          if (entry.target === backwardSentinel && !backwardArmed) continue
+          if (entry.target === backwardSentinel) backwardArmed = false
           void load(entry.target === backwardSentinel ? "backward" : "forward")
         }
       },
