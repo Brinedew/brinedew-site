@@ -3938,6 +3938,20 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
 
   function syncMobileLabelViewportGeometry(card) {
     if (!card || typeof window === "undefined" || !isMobileLabelReviewEnabled()) return
+    if (card.classList && card.classList.contains("icono-gene-lead-card")) {
+      // The gene hero is a normal page section, not a gallery card that needs to
+      // masquerade as a fixed physical object. Feeding its measured height back
+      // into its own scaled wrapper created a positive feedback loop at the
+      // mobile breakpoint: the portrait stretched to the old outer height, the
+      // next measurement grew the outer height again, and the vote strip ended
+      // up thousands of pixels below an overflow-clipped card. Keep the lead
+      // card intrinsically sized; CSS owns its collapsed/expanded flow.
+      card.style.removeProperty("--icono-label-mobile-dossier-top")
+      card.style.removeProperty("--icono-label-mobile-viewport-height")
+      card.style.removeProperty("--icono-label-mobile-fit-scale")
+      card.style.setProperty("--icono-label-mobile-target-size", "44px")
+      return
+    }
     var cardParent = card.parentElement
     var computedCard =
       typeof window.getComputedStyle === "function" ? window.getComputedStyle(card) : null

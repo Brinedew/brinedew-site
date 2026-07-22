@@ -3144,6 +3144,60 @@
     letter-spacing: 0.07em;
   }
 
+  /* Gene pages are long-form documents, not a swipe deck. Keep their lead card
+     in normal document flow on mobile. The generic gallery-card implementation
+     below this breakpoint intentionally scales and clips a fixed physical sheet,
+     but applying that mechanism to the gene hero made its own measured height
+     feed back into the portrait and wrapper. The resulting multi-thousand-pixel
+     shell placed the vote strip outside the clipping boundary after resize or
+     hover. This intrinsic lead-card boundary removes that circular dependency. */
+  .icono-gene-lead .icono-card--variant-lab-label.icono-card--brick {
+    --icono-label-mobile-fit-scale: 1;
+    inline-size: min(100%, var(--icono-label-mobile-physical-width));
+    block-size: auto;
+    overflow: visible;
+    clip-path: none;
+    filter: drop-shadow(0 0.16rem 0.18rem rgba(53, 38, 27, 0.16));
+    transform: none;
+  }
+
+  .icono-gene-lead
+    .icono-card--variant-lab-label.icono-card--brick
+    .icono-mobile-card-physical-object {
+    inline-size: 100%;
+    block-size: auto;
+    transform: none;
+  }
+
+  .icono-gene-lead
+    .icono-card--variant-lab-label.icono-card--brick
+    .iconoplasm-tooltip-portrait {
+    block-size: auto;
+    min-block-size: 0;
+  }
+
+  .icono-gene-lead
+    .icono-card--variant-lab-label.icono-card--brick
+    .iconoplasm-tooltip-body {
+    position: static;
+    inset: auto;
+    block-size: auto;
+    grid-template-rows: auto auto;
+    filter: none;
+  }
+
+  .icono-gene-lead
+    .icono-card--variant-lab-label.icono-card--brick
+    .icono-label-dossier-shell {
+    display: none;
+  }
+
+  .icono-gene-lead
+    .icono-card--variant-lab-label.icono-card--brick[data-icono-mobile-expanded="true"]
+    .icono-label-dossier-shell {
+    display: block;
+  }
+
   .icono-card--variant-neo-drab.icono-card--brick {
     --icono-label-paper: #111813;
     --icono-label-paper-2: #263342;
