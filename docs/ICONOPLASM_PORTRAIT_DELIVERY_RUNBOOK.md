@@ -49,6 +49,24 @@ cache objects.
 
 ## Browser delivery policy
 
+### Why Bunny is primary
+
+**ARCHITECTURE FENCE [IPD-001]** — Bunny is not a disposable mirror. It is the
+healthy-path delivery layer chosen so browser portrait reads go directly to the
+CDN instead of consuming a Cloudflare Worker request for every image. The
+canonical first-party route is the correctness fallback and stable public
+identity, not the normal delivery path for healthy tabs.
+
+An `ERR_NAME_NOT_RESOLVED` from one browser or ISP is evidence for that tab to
+select canonical delivery. It is not evidence that Bunny Storage, the Bunny
+pull zone, or Bunny globally is unhealthy. Do not disable the accelerator from
+one regional probe.
+
+Retiring or replacing Bunny is allowed only as an explicit architecture
+migration. Update `architecture-fences.json`, this runbook, both policy decision
+sites, production and staging configuration, behavioral tests, and the
+deploy-blocking guard together.
+
 `GET /api/public/v1/metadata` and
 `GET /api/public/v1/catalog/manifest` publish `PortraitDeliveryPolicyV1`:
 

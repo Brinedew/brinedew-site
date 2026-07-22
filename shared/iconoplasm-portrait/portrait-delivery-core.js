@@ -1,3 +1,9 @@
+// ARCHITECTURE FENCE [IPD-001]
+// Bunny is intentionally the healthy-tab default: direct portrait reads avoid
+// spending the Cloudflare Worker budget. A resolver failure on one network is
+// why the one-probe canonical fallback exists; it is not a reason to disable
+// Bunny globally. See architecture-fences.json and the portrait runbook before
+// changing this default.
 export const DEFAULT_PORTRAIT_DELIVERY_POLICY = Object.freeze({
   version: 1,
   canonical_origin: "https://iconoplasm.brinedew.bio",

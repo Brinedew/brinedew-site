@@ -3147,6 +3147,11 @@ function portraitBase(url, env) {
 }
 
 function portraitDeliveryPolicy(url, env) {
+  // ARCHITECTURE FENCE [IPD-001]
+  // The configured Bunny origin is the zero-Worker-cost healthy path. Keep it
+  // enabled when configured; the shared one-probe state machine owns regional
+  // DNS failure fallback. Disabling it here moves every portrait read onto the
+  // first-party Worker and reverses B-430/B-642/B-649.
   const acceleratorOrigin = String(externalPortraitCdnBase(env) || "")
     .trim()
     .replace(/\/+$/, "")

@@ -82,8 +82,11 @@ jobs:
       - name: Bake Iconoplasm observability snapshot (production)
         run: node scripts/generate-iconoplasm-observability-snapshot.mjs --env production
 
-      - name: Verify Iconoplasm Worker budget guards
+      - name: Verify Iconoplasm architecture and Worker budget guards
         run: |
+          # ARCHITECTURE FENCE [IPD-001]: production must not deploy a global
+          # Bunny disable based on one network's resolver failure. This focused
+          # test runs in the deploy job itself; parallel CI is not the release gate.
           # This block must stay before deploy. The Iconoplasm sync fix is not
           # just Worker code; it is the guarantee that the canonical GitHub path
           # cannot overwrite the live Worker with a version that reintroduces
@@ -91,6 +94,7 @@ jobs:
           # Node package-manager installs. If a future deploy fails here, assume the
           # guardrail caught real drift until the code proves otherwise.
           pnpm test -- \
+            scripts/architecture-fences.test.js \
             workers/iconoplasm.d1-cost-barrier.test.js \
             workers/iconoplasm.d1-hot-query-guard.test.js \
             workers/iconoplasm.do-not-delete-cost-guards.test.js \
