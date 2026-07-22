@@ -1066,6 +1066,25 @@
   text-transform: uppercase;
 }
 
+/* ARCHITECTURE FENCE [IPD-003]: these four strings are decorative printed
+ * legends. Keep them out of DOM text so browsing agents receive only the
+ * resolved accessible mapping exposed by the parent fields. */
+.icono-label-option--transmembrane .icono-label-option-copy::before {
+  content: "TRANSMEMBRANE";
+}
+
+.icono-label-option--soluble .icono-label-option-copy::before {
+  content: "SOLUBLE";
+}
+
+.icono-label-option--oncogene .icono-label-option-copy::before {
+  content: "ONCOGENE";
+}
+
+.icono-label-option--tumor-suppressor .icono-label-option-copy::before {
+  content: "TUMOR SUPPRESSOR";
+}
+
 .icono-label-option-loop {
   position: absolute;
   top: 0;

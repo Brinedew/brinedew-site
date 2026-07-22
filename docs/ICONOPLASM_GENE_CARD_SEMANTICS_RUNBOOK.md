@@ -23,8 +23,10 @@ not interactive controls and not a list of equally true facts. The renderer
 therefore hides each printed alternative from the accessibility tree, names the
 resolved molecular value on the visual selector, and names the handwritten
 character result as a note. Do not model these strips as radio buttons, tabs, or
-peer text. The semantic profile remains the complete non-visual reference for
-the directional mapping.
+peer text. The four decorative legends are emitted as CSS ink rather than DOM
+text because browsing agents may flatten DOM content without honoring ARIA; the
+semantic profile remains the complete non-visual reference for the directional
+mapping.
 
 ## Boundaries that must move together
 

@@ -123,12 +123,12 @@ function penLoopSvgMarkup(className, presetName) {
 // ARCHITECTURE FENCE [IPD-003]: match the shared string renderer's accessible
 // mapping contract. These alternatives are non-interactive printed decoration;
 // the containing field names the resolved molecular and character values.
-function optionTemplate(value, selected, extraClass, loopPreset) {
+function optionTemplate(selected, extraClass, loopPreset) {
   var classes = "icono-label-option"
   if (extraClass) classes += " " + extraClass
   if (selected) classes += " is-selected"
   return html`<span aria-hidden="true" class=${classes}
-    ><span class="icono-label-option-copy" data-icono-rough-copy="true">${value}</span>${selected
+    ><span class="icono-label-option-copy" data-icono-rough-copy="true"></span>${selected
       ? unsafeHTML(penLoopSvgMarkup("icono-label-option-loop", loopPreset))
       : nothing}</span
   >`
@@ -161,14 +161,17 @@ function categoryFieldTemplate(selectedCategory) {
   >
     <div class="icono-label-category-option icono-label-category-option--transmembrane">
       ${optionTemplate(
-        "TRANSMEMBRANE",
         categoryKey === "transmembrane",
-        "",
+        "icono-label-option--transmembrane",
         "category-transmembrane",
       )}
     </div>
     <div class="icono-label-category-option icono-label-category-option--soluble">
-      ${optionTemplate("SOLUBLE", categoryKey === "soluble", "", "category-soluble")}
+      ${optionTemplate(
+        categoryKey === "soluble",
+        "icono-label-option--soluble",
+        "category-soluble",
+      )}
     </div>
   </div>`
 }
@@ -213,8 +216,12 @@ function alignmentFieldTemplate(molecularAlignment, politicalNote) {
       class=${"icono-label-selector-row icono-label-selector-row--alignment" +
       (isNeither ? " is-neither" : "")}
     >
-      ${optionTemplate("ONCOGENE", isOncogene, "", "alignment-oncogene")}
-      ${optionTemplate("TUMOR SUPPRESSOR", isTumorSuppressor, "", "alignment-tumor-suppressor")}
+      ${optionTemplate(isOncogene, "icono-label-option--oncogene", "alignment-oncogene")}
+      ${optionTemplate(
+        isTumorSuppressor,
+        "icono-label-option--tumor-suppressor",
+        "alignment-tumor-suppressor",
+      )}
       ${isNeither
         ? html`<span class="icono-label-alignment-strike" aria-hidden="true"></span>`
         : nothing}

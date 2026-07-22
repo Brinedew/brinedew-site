@@ -26,7 +26,9 @@ numeric pagination or automatic count rebalancing. Preserve the visual card and
 its one-to-one hidden semantic equivalent. Printed selector alternatives are
 visual ink, not controls or peer facts: their accessibility representation must
 name the resolved molecular value and mapped character value while hiding the
-unused printed alternatives. Crawler discovery belongs in the
+unused printed alternatives. Render those alternative words as CSS ink, not DOM
+text, because browsing agents may flatten DOM content without honoring ARIA.
+Crawler discovery belongs in the
 existing non-visual homepage description, not as new chrome in the immersive
 Archive/Clans switcher; feed skip links stay clipped until keyboard focus. Read
 `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md` before changing the renderer,
