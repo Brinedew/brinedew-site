@@ -29,6 +29,10 @@ class FakeIntersectionObserver {
   intersect(target) {
     this.callback([{ target, isIntersecting: true }])
   }
+
+  leave(target) {
+    this.callback([{ target, isIntersecting: false }])
+  }
 }
 
 class FakeResizeObserver {
@@ -197,6 +201,10 @@ test("loads backward from a restored cursor when the top boundary approaches", a
   })
   await setup.controller.reset({ offset: 8, cursor: "restored-page", page: 3 })
   const topSentinel = setup.feed.querySelector('[data-icono-feed-sentinel="backward"]')
+  prefetchObserver().intersect(topSentinel)
+  await nextTask()
+  assert.equal(requests.length, 1)
+  prefetchObserver().leave(topSentinel)
   prefetchObserver().intersect(topSentinel)
   await nextTask()
   assert.equal(requests.length, 2)
