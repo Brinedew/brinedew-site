@@ -92,37 +92,37 @@ test("typed footer copy follows the card ink token in light and dark themes", as
   )
 })
 
-test("first-paint label fonts use Firefox's bounded no-late-swap policy", async () => {
+test("first-paint fonts are embedded and revealed as one bounded transaction", async () => {
   const css = await sourceText(generatedCssPath)
   const head = await sourceText(headPath)
   const contract = JSON.parse(await sourceText(fontContractPath))
 
-  assert.equal(contract.display, "optional")
-  assert.doesNotMatch(css, /font-display:\s*(?:block|swap)\s*;/)
-  assert.doesNotMatch(head, /font-display:\s*(?:block|swap)\s*;/)
-  assert.match(head, /font-display:\s*\$\{iconoplasmFontContract\.display\}/)
-  assert.match(head, /fetchPriority="high"/)
+  assert.equal(contract.websiteDelivery.strategy, "embedded-fontface-api")
+  assert.ok(contract.websiteDelivery.revealTimeoutMs > 0)
+  assert.ok(contract.websiteDelivery.revealTimeoutMs < 1000)
+  assert.equal(contract.extensionDisplay, "block")
+  assert.doesNotMatch(css, /(?:^|\n)@font-face\s*\{/)
+  assert.doesNotMatch(head, /\/static\/iconoplasm\/fonts\//)
+  assert.match(head, /readFileSync\([\s\S]*\.toString\("base64"\)/)
+  assert.match(head, /html\.icono-fonts-loading body \{ visibility: hidden !important; \}/)
+  assert.match(head, /new FontFace\(/)
+  assert.match(head, /Promise\.all\(faces\.map/)
+  assert.match(head, /loadedFaces\.forEach\(function \(face\) \{ document\.fonts\.add\(face\) \}\)/)
+  assert.match(head, /root\.setAttribute\("data-icono-fonts", state\)/)
+  assert.match(head, /root\.setAttribute\("data-icono-fonts-duration-ms"/)
+  assert.match(head, /reveal\("ready"\)/)
+  assert.match(head, /reveal\("fallback"\)/)
+  assert.match(head, /if \(settled\) return/)
 
-  for (const font of contract.fonts) {
-    assert.match(
-      css,
-      new RegExp(
-        `${font.stem}-critical\\.woff2[\\s\\S]{0,180}font-display:\\s*optional[\\s\\S]{0,100}unicode-range:\\s*U\\+0000-007F`,
-      ),
+  let embeddedBytes = 0
+  for (const font of [...contract.shellFonts, ...contract.fonts]) {
+    const embeddedFont = await readFile(
+      path.join(repoRoot, "shared", "iconoplasm-card", "fonts", font.embeddedFile),
     )
-    assert.match(
-      css,
-      new RegExp(
-        `${font.stem}\\.woff2[\\s\\S]{0,180}font-display:\\s*optional[\\s\\S]{0,100}unicode-range:\\s*U\\+0080-10FFFF`,
-      ),
-    )
+    assert.ok(embeddedFont.byteLength > 0, `${font.embeddedFile} must contain font data`)
+    embeddedBytes += embeddedFont.byteLength
   }
-
-  assert.deepEqual(
-    contract.fonts.filter((font) => font.preload).map((font) => font.stem),
-    ["IBMPlexMono-Regular", "LeagueSpartan-800", "SpecialElite-Regular"],
-    "only above-fold faces may compete for first-paint bandwidth",
-  )
+  assert.ok(embeddedBytes < 240_000, `embedded font payload grew to ${embeddedBytes} bytes`)
 })
 
 test("mobile voting copy uses a Firefox-safe flex row with a non-shrinking arrow", async () => {
