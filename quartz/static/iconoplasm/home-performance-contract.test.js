@@ -233,6 +233,7 @@ test("home scroll restore records the active cursor and anchor only for gene Bac
   assert.match(app, /page:\s*snapshot\.page/)
   assert.match(app, /cursor:\s*snapshot\.cursor/)
   assert.match(app, /anchorGene:\s*snapshot\.anchorGene/)
+  assert.match(app, /feedController\.snapshot\(pendingCard\)/)
   assert.match(app, /restoreOnGeneBack:\s*leavingHomeForGene/)
   assert.match(app, /readHomeRestoreState\(\)[\s\S]*home\.restoreOnGeneBack !== true/)
   assert.doesNotMatch(app, /cachedHomeView|createDocumentFragment\(\)/)
