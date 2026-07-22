@@ -1032,6 +1032,27 @@ test("gene lit-archival first paint uses the same physical geometry as the hydra
   }
 })
 
+test("gene lead critical CSS and hydrated card switch layouts at the same breakpoint", async () => {
+  const sharedCardCss = await readFile(sharedCardCssPath, "utf8")
+  const head = await readFile(headPath, "utf8")
+
+  assert.match(
+    sharedCardCss,
+    /@media \(max-width:\s*720px\)[\s\S]*?\.icono-gene-lead\s+\.icono-card--variant-lab-label\.icono-card--brick\s*\{[\s\S]*?display:\s*block;[\s\S]*?aspect-ratio:\s*auto;/,
+    "hydrated gene leads must enter intrinsic mobile flow at 720px",
+  )
+  assert.match(
+    head,
+    /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.icono-gene-lead-card\.icono-card--variant-lab-label\.icono-card--brick,[\s\S]*?display:\s*block;[\s\S]*?aspect-ratio:\s*auto;[\s\S]*?height:\s*auto;[\s\S]*?overflow:\s*visible;/,
+    "critical gene-lead CSS must reserve the same intrinsic mobile geometry before hydration",
+  )
+  assert.doesNotMatch(
+    head,
+    /@media \(max-width:\s*760px\)\s*\{[\s\S]{0,240}?\.icono-gene-lead-card\.icono-card--variant-lab-label/,
+    "critical CSS must not create a 721-760px single-column state while the shared card is still desktop",
+  )
+})
+
 test("website simple cards use the same symbol typography contract as blot-only cards", async () => {
   const styles = await readFile(stylesPath, "utf8")
   const symbolStart = styles.indexOf(".icono-card--brick .iconoplasm-tooltip-symbol {")
