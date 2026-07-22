@@ -9308,7 +9308,7 @@
   // shared/iconoplasm-card/shared-card-runtime.js
   (function(global) {
     "use strict";
-    var ICONO_SHARED_RUNTIME_VERSION = "20260722b";
+    var ICONO_SHARED_RUNTIME_VERSION = "20260722c";
     var forceSiteOwnership = !!(global && global.__iconoSiteOwnsSharedRuntime);
     var existingShared = global && global.IconoplasmCardShared ? global.IconoplasmCardShared : null;
     var existingMeta = existingShared && existingShared.__meta && typeof existingShared.__meta === "object" ? existingShared.__meta : null;
@@ -9975,7 +9975,7 @@
       if (!Number.isFinite(n)) return "";
       return n.toFixed(Math.max(0, Number(digits || 0))).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
     }
-    function renderLabLabelSpecimenMicrographicsHtml(geneDetail) {
+    function resolveLabLabelSpecimenMicrographicsModel(geneDetail) {
       var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {};
       var color = String(safeGeneDetail.color || "").trim().toUpperCase();
       var hsv = hexToHsv(color);
@@ -10032,15 +10032,32 @@
         "mid shade",
         "light shade"
       );
+      return {
+        color,
+        colorName,
+        firstLetter,
+        hueLabel,
+        lightnessLabel,
+        loeuf: loeuf || "n/a",
+        saturationLabel,
+        tau: tau || "n/a"
+      };
+    }
+    function renderLabLabelSpecimenMicrographicsHtml(geneDetail) {
+      var micrographics = resolveLabLabelSpecimenMicrographicsModel(geneDetail);
       var metrics = ["letter", "HPA tau", "gnomAD LOEUF"];
-      var values = [firstLetter, tau || "n/a", loeuf || "n/a"];
-      var handNotes = [hueLabel, saturationLabel, lightnessLabel];
+      var values = [micrographics.firstLetter, micrographics.tau, micrographics.loeuf];
+      var handNotes = [
+        micrographics.hueLabel,
+        micrographics.saturationLabel,
+        micrographics.lightnessLabel
+      ];
       var decompositionHtml = "";
       for (var i = 0; i < metrics.length; i++) {
         var rowClass = " icono-label-specimen-cell--row-" + String(i + 1);
         decompositionHtml += '<span class="icono-label-specimen-cell icono-label-specimen-cell--metric' + rowClass + '"><span class="icono-label-specimen-metric">' + escapeHtml(metrics[i]) + '</span></span><span class="icono-label-specimen-cell icono-label-specimen-cell--value' + rowClass + '"><span class="icono-label-specimen-metric-value">' + escapeHtml(values[i]) + '</span></span><span class="icono-label-specimen-cell icono-label-specimen-cell--hand' + rowClass + '"><span class="icono-label-specimen-hand-analysis">' + escapeHtml(handNotes[i]) + "</span></span>";
       }
-      return '<div class="icono-label-specimen-micro"><div class="icono-label-specimen-color-row"><span class="icono-label-specimen-swatch-hex"><span class="icono-label-specimen-swatch" style="background:' + escapeHtml(color || "#000000") + '"></span><span class="icono-label-specimen-metric-value">' + escapeHtml(color || "UNFILED") + "</span></span>" + (colorName ? '<span class="icono-label-specimen-color-name">' + escapeHtml(colorName) + "</span>" : "") + '</div><div class="icono-label-specimen-decomposition">' + decompositionHtml + "</div></div>";
+      return '<div class="icono-label-specimen-micro"><div class="icono-label-specimen-color-row"><span class="icono-label-specimen-swatch-hex"><span class="icono-label-specimen-swatch" style="background:' + escapeHtml(micrographics.color || "#000000") + '"></span><span class="icono-label-specimen-metric-value">' + escapeHtml(micrographics.color || "UNFILED") + "</span></span>" + (micrographics.colorName ? '<span class="icono-label-specimen-color-name">' + escapeHtml(micrographics.colorName) + "</span>" : "") + '</div><div class="icono-label-specimen-decomposition">' + decompositionHtml + "</div></div>";
     }
     function renderLabLabelSpecimenFooterHtml(geneDetail) {
       return '<div class="icono-label-specimen-footer"><div class="icono-label-specimen-notes"><div class="icono-label-specimen-note">emulsion note / glass plate spectral analysis</div></div>' + renderLabLabelSpecimenMicrographicsHtml(geneDetail) + "</div>";
@@ -10196,6 +10213,64 @@
         voteHtml: String(opts.voteHtml || "")
       };
     }
+    function buildLabLabelSemanticCharacterFacts(geneDetail, model) {
+      var safeModel = asObject(model);
+      var facts = [];
+      var micrographics = resolveLabLabelSpecimenMicrographicsModel(geneDetail);
+      function add(label, value) {
+        var safeLabel = String(label || "").trim();
+        var safeValue = String(value || "").trim();
+        if (!safeLabel || !safeValue) return;
+        facts.push({ label: safeLabel, value: safeValue });
+      }
+      add("Gene symbol", safeModel.symbol);
+      add("Gene name", safeModel.fullName);
+      add(
+        "Card color",
+        micrographics.colorName ? (micrographics.color || "UNFILED") + " (" + micrographics.colorName + ")" : micrographics.color || "UNFILED"
+      );
+      add("Card letter", micrographics.firstLetter);
+      add("Letter hue", micrographics.hueLabel);
+      add("HPA tau", micrographics.tau);
+      add("HPA tau interpretation", micrographics.saturationLabel);
+      add("gnomAD LOEUF", micrographics.loeuf);
+      add("gnomAD LOEUF interpretation", micrographics.lightnessLabel);
+      add("Emulsion number", safeModel.serial);
+      add("Family", safeModel.displayedFamily);
+      add("Family trait", safeModel.displayedFamilyFeature);
+      add("Character category", safeModel.selectedCategory);
+      add("Character sex", safeModel.sexNote);
+      add("First noted", safeModel.firstNoted);
+      add("Character age", safeModel.ageNote);
+      if (safeModel.handwrittenWeight) add("Character mass", safeModel.handwrittenWeight + " kg");
+      var stylePairs = Array.isArray(safeModel.stylePairs) ? safeModel.stylePairs : [];
+      for (var i = 0; i < stylePairs.length; i++) {
+        var pair = asObject(stylePairs[i]);
+        var clan = String(pair.origin || "").trim();
+        var aesthetic = String(pair.note || "").trim();
+        if (clan && aesthetic) {
+          add("PFAM clan and character aesthetic", clan + " \u2014 " + aesthetic);
+        } else if (clan) {
+          add("PFAM clan", clan);
+        } else if (aesthetic) {
+          add("Character aesthetic", aesthetic);
+        }
+      }
+      add("Molecular alignment", safeModel.molecularAlignment);
+      add("Character alignment", safeModel.politicalNote);
+      return facts;
+    }
+    function renderLabLabelSemanticCharacterProfileHtml(geneDetail, model) {
+      var facts = buildLabLabelSemanticCharacterFacts(geneDetail, model);
+      if (!facts.length) return "";
+      var symbol = String(asObject(model).symbol || "gene").trim() || "gene";
+      var html = '<section class="icono-card-semantic-profile" aria-label="Character profile for ' + escapeHtml(symbol) + '"><h2>Character profile for ' + escapeHtml(symbol) + "</h2><p>Accessible text equivalent of the visual Iconoplasm character card.</p><dl>";
+      for (var i = 0; i < facts.length; i++) {
+        var fact = facts[i];
+        html += "<dt>" + escapeHtml(fact.label) + "</dt><dd>" + escapeHtml(fact.value) + "</dd>";
+      }
+      return html + "</dl></section>";
+    }
     function modelOpensInNewTab(model) {
       return String(model && model.titleLinkAttrs || "").indexOf('target="_blank"') >= 0;
     }
@@ -10244,13 +10319,15 @@
       return '<div class="icono-image-only-link">' + mediaHtml + overlayHtml + "</div>";
     }
     function renderLabLabelCardHtml(geneDetail, options) {
-      var model = resolveArchivalCardModel(geneDetail, options);
+      var opts = options || {};
+      var model = resolveArchivalCardModel(geneDetail, opts);
       if (model.layoutVariant === "image-only") return renderLabLabelImageOnlyCardHtml(model);
       var sheetHtml = renderLabLabelSheetHtml(model);
+      var semanticProfileHtml = opts.includeCharacterProfile ? renderLabLabelSemanticCharacterProfileHtml(geneDetail, model) : "";
       if (model.mode === "brick" && model.mobileReview) {
-        return renderLabLabelMobilePeekHtml(model) + '<div class="icono-label-dossier-shell" data-icono-label-dossier-shell><div class="icono-label-dossier-sheet">' + sheetHtml + "</div></div>";
+        return semanticProfileHtml + renderLabLabelMobilePeekHtml(model) + '<div class="icono-label-dossier-shell" data-icono-label-dossier-shell><div class="icono-label-dossier-sheet">' + sheetHtml + "</div></div>";
       }
-      return sheetHtml;
+      return sheetHtml + semanticProfileHtml;
     }
     function renderLitArchivalCardHtml(geneDetail, options) {
       var model = resolveArchivalCardModel(geneDetail, options);
@@ -10698,11 +10775,13 @@
       labLabelDisplayName,
       portraitDimensions,
       resolveArchivalCardModel,
+      buildLabLabelSemanticCharacterFacts,
       buildTooltipTraitOriginRows,
       collectTooltipMetaRows,
       renderLabLabelPortraitMediaHtml,
       renderLabLabelSpecimenFooterHtml,
       renderLabLabelSpecimenRailHtml,
+      renderLabLabelSemanticCharacterProfileHtml,
       renderLabLabelCardHtml,
       renderLitArchivalCardHtml,
       renderTooltipMetaRowsHtml,

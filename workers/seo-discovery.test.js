@@ -231,7 +231,8 @@ test("GeneGuessr exposes short privacy canonical and host sitemap", async () => 
   assert.equal(legacy.headers.get("location"), "https://geneguessr.brinedew.bio/privacy")
 })
 
-test("Iconoplasm gene shells are noindex until they have standalone explanatory content", () => {
+// ARCHITECTURE FENCE [IPD-002]
+test("Iconoplasm gene shells are noindex until they have standalone explanatory content", async () => {
   const html = rewriteIconoplasmGeneDiscoveryMetadata(
     `<!doctype html>
 <html>
@@ -256,4 +257,27 @@ test("Iconoplasm gene shells are noindex until they have standalone explanatory 
     /<link rel="canonical" href="https:\/\/iconoplasm\.brinedew\.bio\/gene\/TP53">/,
   )
   assert.doesNotMatch(html, /SoftwareApplication/)
+
+  globalThis.fetch = async (url) => {
+    const requestUrl = new URL(String(url))
+    assert.equal(requestUrl.pathname, "/apps/iconoplasm/index")
+    return htmlResponse(`<!doctype html>
+<html>
+  <head>
+    <title>Iconoplasm - Mnemonics for genes</title>
+    <meta name="robots" content="index,follow">
+  </head>
+  <body><div id="iconoplasm-root"></div></body>
+</html>`)
+  }
+
+  const response = await worker.fetch(
+    new Request("https://iconoplasm.brinedew.bio/gene/TP53"),
+    {},
+    { waitUntil() {} },
+  )
+  const responseHtml = await response.text()
+
+  assert.equal(response.headers.get("x-robots-tag"), "noindex, follow, noarchive")
+  assert.match(responseHtml, /<meta name="robots" content="noindex,follow,noarchive">/)
 })

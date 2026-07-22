@@ -2,7 +2,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
 ;(function (global) {
   "use strict"
 
-  var ICONO_SHARED_RUNTIME_VERSION = "20260722b"
+  var ICONO_SHARED_RUNTIME_VERSION = "20260722c"
   var forceSiteOwnership = !!(global && global.__iconoSiteOwnsSharedRuntime)
   var existingShared = global && global.IconoplasmCardShared ? global.IconoplasmCardShared : null
   var existingMeta =
@@ -899,7 +899,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       .replace(/(\.\d*?)0+$/, "$1")
   }
 
-  function renderLabLabelSpecimenMicrographicsHtml(geneDetail) {
+  function resolveLabLabelSpecimenMicrographicsModel(geneDetail) {
     var safeGeneDetail = geneDetail && typeof geneDetail === "object" ? geneDetail : {}
     var color = String(safeGeneDetail.color || "")
       .trim()
@@ -966,9 +966,27 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       "mid shade",
       "light shade",
     )
+    return {
+      color: color,
+      colorName: colorName,
+      firstLetter: firstLetter,
+      hueLabel: hueLabel,
+      lightnessLabel: lightnessLabel,
+      loeuf: loeuf || "n/a",
+      saturationLabel: saturationLabel,
+      tau: tau || "n/a",
+    }
+  }
+
+  function renderLabLabelSpecimenMicrographicsHtml(geneDetail) {
+    var micrographics = resolveLabLabelSpecimenMicrographicsModel(geneDetail)
     var metrics = ["letter", "HPA tau", "gnomAD LOEUF"]
-    var values = [firstLetter, tau || "n/a", loeuf || "n/a"]
-    var handNotes = [hueLabel, saturationLabel, lightnessLabel]
+    var values = [micrographics.firstLetter, micrographics.tau, micrographics.loeuf]
+    var handNotes = [
+      micrographics.hueLabel,
+      micrographics.saturationLabel,
+      micrographics.lightnessLabel,
+    ]
     var decompositionHtml = ""
     for (var i = 0; i < metrics.length; i++) {
       var rowClass = " icono-label-specimen-cell--row-" + String(i + 1)
@@ -997,14 +1015,16 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '<div class="icono-label-specimen-color-row">' +
       '<span class="icono-label-specimen-swatch-hex">' +
       '<span class="icono-label-specimen-swatch" style="background:' +
-      escapeHtml(color || "#000000") +
+      escapeHtml(micrographics.color || "#000000") +
       '"></span>' +
       '<span class="icono-label-specimen-metric-value">' +
-      escapeHtml(color || "UNFILED") +
+      escapeHtml(micrographics.color || "UNFILED") +
       "</span>" +
       "</span>" +
-      (colorName
-        ? '<span class="icono-label-specimen-color-name">' + escapeHtml(colorName) + "</span>"
+      (micrographics.colorName
+        ? '<span class="icono-label-specimen-color-name">' +
+          escapeHtml(micrographics.colorName) +
+          "</span>"
         : "") +
       "</div>" +
       '<div class="icono-label-specimen-decomposition">' +
@@ -1279,6 +1299,83 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     }
   }
 
+  // ARCHITECTURE FENCE [IPD-002]: this is a text equivalent of the existing
+  // visual card, not a second gene-page product. Keep the facts and their
+  // labels aligned with the card renderer; do not make per-gene pages indexable
+  // just because their facts are easier for assistive and agent tooling to read.
+  function buildLabLabelSemanticCharacterFacts(geneDetail, model) {
+    var safeModel = asObject(model)
+    var facts = []
+    var micrographics = resolveLabLabelSpecimenMicrographicsModel(geneDetail)
+
+    function add(label, value) {
+      var safeLabel = String(label || "").trim()
+      var safeValue = String(value || "").trim()
+      if (!safeLabel || !safeValue) return
+      facts.push({ label: safeLabel, value: safeValue })
+    }
+
+    add("Gene symbol", safeModel.symbol)
+    add("Gene name", safeModel.fullName)
+    add(
+      "Card color",
+      micrographics.colorName
+        ? (micrographics.color || "UNFILED") + " (" + micrographics.colorName + ")"
+        : micrographics.color || "UNFILED",
+    )
+    add("Card letter", micrographics.firstLetter)
+    add("Letter hue", micrographics.hueLabel)
+    add("HPA tau", micrographics.tau)
+    add("HPA tau interpretation", micrographics.saturationLabel)
+    add("gnomAD LOEUF", micrographics.loeuf)
+    add("gnomAD LOEUF interpretation", micrographics.lightnessLabel)
+    add("Emulsion number", safeModel.serial)
+    add("Family", safeModel.displayedFamily)
+    add("Family trait", safeModel.displayedFamilyFeature)
+    add("Character category", safeModel.selectedCategory)
+    add("Character sex", safeModel.sexNote)
+    add("First noted", safeModel.firstNoted)
+    add("Character age", safeModel.ageNote)
+    if (safeModel.handwrittenWeight) add("Character mass", safeModel.handwrittenWeight + " kg")
+
+    var stylePairs = Array.isArray(safeModel.stylePairs) ? safeModel.stylePairs : []
+    for (var i = 0; i < stylePairs.length; i++) {
+      var pair = asObject(stylePairs[i])
+      var clan = String(pair.origin || "").trim()
+      var aesthetic = String(pair.note || "").trim()
+      if (clan && aesthetic) {
+        add("PFAM clan and character aesthetic", clan + " — " + aesthetic)
+      } else if (clan) {
+        add("PFAM clan", clan)
+      } else if (aesthetic) {
+        add("Character aesthetic", aesthetic)
+      }
+    }
+
+    add("Molecular alignment", safeModel.molecularAlignment)
+    add("Character alignment", safeModel.politicalNote)
+    return facts
+  }
+
+  function renderLabLabelSemanticCharacterProfileHtml(geneDetail, model) {
+    var facts = buildLabLabelSemanticCharacterFacts(geneDetail, model)
+    if (!facts.length) return ""
+    var symbol = String(asObject(model).symbol || "gene").trim() || "gene"
+    var html =
+      '<section class="icono-card-semantic-profile" aria-label="Character profile for ' +
+      escapeHtml(symbol) +
+      '">' +
+      "<h2>Character profile for " +
+      escapeHtml(symbol) +
+      "</h2>" +
+      "<p>Accessible text equivalent of the visual Iconoplasm character card.</p><dl>"
+    for (var i = 0; i < facts.length; i++) {
+      var fact = facts[i]
+      html += "<dt>" + escapeHtml(fact.label) + "</dt><dd>" + escapeHtml(fact.value) + "</dd>"
+    }
+    return html + "</dl></section>"
+  }
+
   function modelOpensInNewTab(model) {
     return String((model && model.titleLinkAttrs) || "").indexOf('target="_blank"') >= 0
   }
@@ -1511,11 +1608,16 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     // Canonical archival card contract for static HTML, the Worker shell, and the optional
     // Lit host. If field mapping changes, do it in resolveArchivalCardModel(...) instead of
     // splitting by shell or surface again.
-    var model = resolveArchivalCardModel(geneDetail, options)
+    var opts = options || {}
+    var model = resolveArchivalCardModel(geneDetail, opts)
     if (model.layoutVariant === "image-only") return renderLabLabelImageOnlyCardHtml(model)
     var sheetHtml = renderLabLabelSheetHtml(model)
+    var semanticProfileHtml = opts.includeCharacterProfile
+      ? renderLabLabelSemanticCharacterProfileHtml(geneDetail, model)
+      : ""
     if (model.mode === "brick" && model.mobileReview) {
       return (
+        semanticProfileHtml +
         renderLabLabelMobilePeekHtml(model) +
         '<div class="icono-label-dossier-shell" data-icono-label-dossier-shell>' +
         '<div class="icono-label-dossier-sheet">' +
@@ -1524,7 +1626,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
         "</div>"
       )
     }
-    return sheetHtml
+    return sheetHtml + semanticProfileHtml
   }
 
   function renderLitArchivalCardHtml(geneDetail, options) {
@@ -2245,11 +2347,13 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     labLabelDisplayName: labLabelDisplayName,
     portraitDimensions: portraitDimensions,
     resolveArchivalCardModel: resolveArchivalCardModel,
+    buildLabLabelSemanticCharacterFacts: buildLabLabelSemanticCharacterFacts,
     buildTooltipTraitOriginRows: buildTooltipTraitOriginRows,
     collectTooltipMetaRows: collectTooltipMetaRows,
     renderLabLabelPortraitMediaHtml: renderLabLabelPortraitMediaHtml,
     renderLabLabelSpecimenFooterHtml: renderLabLabelSpecimenFooterHtml,
     renderLabLabelSpecimenRailHtml: renderLabLabelSpecimenRailHtml,
+    renderLabLabelSemanticCharacterProfileHtml: renderLabLabelSemanticCharacterProfileHtml,
     renderLabLabelCardHtml: renderLabLabelCardHtml,
     renderLitArchivalCardHtml: renderLitArchivalCardHtml,
     renderTooltipMetaRowsHtml: renderTooltipMetaRowsHtml,

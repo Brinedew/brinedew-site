@@ -24,6 +24,23 @@
   initial-value: 0px;
 }
 
+/* A single semantic equivalent keeps the visual card compact while giving assistive
+   technology and DOM-reading agents labelled character facts. Do not use display:none,
+   visibility:hidden, hidden, or aria-hidden here: those would erase the equivalent from
+   the accessibility tree as well as from non-visual readers. */
+.icono-card-semantic-profile {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .icono-card--variant-lab-label,
 .iconoplasm-tooltip--variant-lab-label,
 .icono-card--variant-image-only,
