@@ -7,6 +7,7 @@ const appPath = new URL("./app.js", import.meta.url)
 const homeOrdersPath = new URL("./home-orders.js", import.meta.url)
 const stylesPath = new URL("./styles.css", import.meta.url)
 const headPath = new URL("../../components/Head.tsx", import.meta.url)
+const customCssPath = new URL("../custom.css", import.meta.url)
 const iconoplasmIndexPath = new URL("../../../content/apps/iconoplasm/index.md", import.meta.url)
 const internalWorkerPath = new URL(
   "../../../workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
@@ -34,18 +35,24 @@ const generatedSharedCardRuntimePath = new URL(
   import.meta.url,
 )
 
-test("Iconoplasm fonts are small at first paint and immutable after release", async () => {
+test("Iconoplasm font paint is in-memory, bounded, and independent of preload timing", async () => {
   const head = await readFile(headPath, "utf8")
+  const customCss = await readFile(customCssPath, "utf8")
   const sharedCardCss = await readFile(generatedSharedCardCssPath, "utf8")
   const fontContract = JSON.parse(await readFile(fontContractPath, "utf8"))
   const internalWorker = await readFile(internalWorkerPath, "utf8")
 
-  assert.equal(fontContract.display, "optional")
-  assert.doesNotMatch(`${head}\n${sharedCardCss}`, /font-display:\s*(?:block|swap)\s*;/)
-  assert.match(head, /iconoplasmFontContract\.fonts/)
-  assert.match(head, /fetchPriority="high"/)
-  assert.match(sharedCardCss, /unicode-range:\s*U\+0000-007F/)
-  assert.match(sharedCardCss, /unicode-range:\s*U\+0080-10FFFF/)
+  assert.equal(fontContract.websiteDelivery.strategy, "embedded-fontface-api")
+  assert.ok(fontContract.websiteDelivery.revealTimeoutMs < 1000)
+  assert.doesNotMatch(sharedCardCss, /(?:^|\n)@font-face\s*\{/)
+  assert.doesNotMatch(customCss, /font-family:\s*"Crimson Pro";[\s\S]{0,240}font-display:/)
+  assert.match(head, /const siteNetworkFontFaces =/)
+  assert.match(head, /usesIconoplasmLabelFonts \? \(/)
+  assert.match(head, /iconoplasmEmbeddedFontBootstrap/)
+  assert.match(head, /new FontFace\(/)
+  assert.match(head, /document\.fonts\.add\(face\)/)
+  assert.match(head, /websiteDelivery\.revealTimeoutMs/)
+  assert.doesNotMatch(head, /href=\{`\/static\/iconoplasm\/fonts/)
   assert.match(
     internalWorker,
     /url\.searchParams\.has\("v"\)[\s\S]{0,120}woff2\?\|ttf\|otf\|eot/,

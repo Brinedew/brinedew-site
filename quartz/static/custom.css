@@ -8,21 +8,8 @@
   order: -1;
 }
 
-/* Self-hosted font faces - TOP of file */
-@font-face {
-  font-family: "Crimson Pro";
-  src: url("/static/fonts/CrimsonPro-VariableFont_wght.woff2") format("woff2");
-  font-weight: 300 900;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Crimson Pro";
-  src: url("/static/fonts/CrimsonPro-Italic-VariableFont_wght.woff2") format("woff2");
-  font-weight: 300 900;
-  font-style: italic;
-  font-display: swap;
-}
+/* Crimson Pro is declared in Head.tsx. Iconoplasm installs embedded FontFace
+   objects before reveal; other pages receive the normal network-backed faces. */
 @font-face {
   font-family: "Monaspace Xenon Web";
   src: url("/static/fonts/xenon/MonaspaceXenon-Var.woff2") format("woff2");

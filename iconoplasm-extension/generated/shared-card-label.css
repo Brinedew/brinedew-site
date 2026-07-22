@@ -2,29 +2,10 @@
 
 @font-face {
   font-family: "IBM Plex Mono";
-  src: url("../fonts/IBMPlexMono-Regular-critical.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: optional;
-  unicode-range: U+0000-007F;
-}
-
-@font-face {
-  font-family: "IBM Plex Mono";
   src: url("../fonts/IBMPlexMono-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
-  font-display: optional;
-  unicode-range: U+0080-10FFFF;
-}
-
-@font-face {
-  font-family: "IBM Plex Mono";
-  src: url("../fonts/IBMPlexMono-Medium-critical.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: optional;
-  unicode-range: U+0000-007F;
+  font-display: block;
 }
 
 @font-face {
@@ -32,17 +13,7 @@
   src: url("../fonts/IBMPlexMono-Medium.woff2") format("woff2");
   font-weight: 500;
   font-style: normal;
-  font-display: optional;
-  unicode-range: U+0080-10FFFF;
-}
-
-@font-face {
-  font-family: "League Spartan";
-  src: url("../fonts/LeagueSpartan-800-critical.woff2") format("woff2");
-  font-weight: 800;
-  font-style: normal;
-  font-display: optional;
-  unicode-range: U+0000-007F;
+  font-display: block;
 }
 
 @font-face {
@@ -50,17 +21,7 @@
   src: url("../fonts/LeagueSpartan-800.woff2") format("woff2");
   font-weight: 800;
   font-style: normal;
-  font-display: optional;
-  unicode-range: U+0080-10FFFF;
-}
-
-@font-face {
-  font-family: "Special Elite";
-  src: url("../fonts/SpecialElite-Regular-critical.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: optional;
-  unicode-range: U+0000-007F;
+  font-display: block;
 }
 
 @font-face {
@@ -68,17 +29,7 @@
   src: url("../fonts/SpecialElite-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
-  font-display: optional;
-  unicode-range: U+0080-10FFFF;
-}
-
-@font-face {
-  font-family: "Caveat";
-  src: url("../fonts/Caveat-400-critical.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: optional;
-  unicode-range: U+0000-007F;
+  font-display: block;
 }
 
 @font-face {
@@ -86,8 +37,7 @@
   src: url("../fonts/Caveat-400.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
-  font-display: optional;
-  unicode-range: U+0080-10FFFF;
+  font-display: block;
 }
 
 /* Shared Iconoplasm lab-label card variant.
@@ -104,9 +54,9 @@
    This is a fixed printed sheet on desktop, not a fluid border system. Use hard track
    sizes and only switch layouts at a real breakpoint instead of scaling the plate. */
 
-/* Font faces are generated from font-contract.json by sync-iconoplasm-shared.mjs.
-   Keeping delivery policy outside this artboard CSS prevents the inline first-paint
-   contract and the website/extension stylesheets from drifting apart. */
+/* Font delivery is generated from font-contract.json. The website installs embedded
+   FontFace objects before revealing its shell; the extension generates packaged
+   @font-face rules. This artboard stylesheet owns typography use, not transport. */
 
 @property --icono-label-info-card-pull-y {
   syntax: "<length-percentage>";

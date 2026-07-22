@@ -22,49 +22,35 @@ const targets = [
   },
   {
     source: path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-label.css"),
-    prefix: renderIconoplasmFontFaceCss("../fonts/", true),
     outputs: [
       path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "shared-card-label.css"),
-      path.join(repoRoot, "iconoplasm-extension", "generated", "shared-card-label.css"),
     ],
+  },
+  {
+    source: path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-label.css"),
+    prefix: renderIconoplasmExtensionFontFaceCss("../fonts/"),
+    outputs: [path.join(repoRoot, "iconoplasm-extension", "generated", "shared-card-label.css")],
   },
 ]
 
-function renderIconoplasmFontFaceCss(baseUrl, includeFull) {
+function renderIconoplasmExtensionFontFaceCss(baseUrl) {
   return (
     iconoplasmFontContract.fonts
-      .flatMap((font) => {
-        const faces = [
-          renderFontFace(
-            font,
-            `${font.stem}-critical.woff2`,
-            iconoplasmFontContract.criticalUnicodeRange,
-          ),
-        ]
-        if (includeFull) {
-          faces.push(
-            renderFontFace(font, `${font.stem}.woff2`, iconoplasmFontContract.fullUnicodeRange),
-          )
-        }
-        return faces
-      })
-      .join("\n\n") + "\n\n"
-  )
-
-  function renderFontFace(font, fileName, unicodeRange) {
-    return `@font-face {
+      .map(
+        (font) => `@font-face {
   font-family: "${font.family}";
-  src: url("${baseUrl}${fileName}") format("woff2");
+  src: url("${baseUrl}${font.stem}.woff2") format("woff2");
   font-weight: ${font.weight};
   font-style: normal;
-  font-display: ${iconoplasmFontContract.display};
-  unicode-range: ${unicodeRange};
-}`
-  }
+  font-display: ${iconoplasmFontContract.extensionDisplay};
+}`,
+      )
+      .join("\n\n") + "\n\n"
+  )
 }
 
 const fontTargets = iconoplasmFontContract.fonts
-  .flatMap((font) => [`${font.stem}.woff2`, `${font.stem}-critical.woff2`])
+  .map((font) => `${font.stem}.woff2`)
   .map((name) => ({
     source: path.join(repoRoot, "shared", "iconoplasm-card", "fonts", name),
     outputs: [
