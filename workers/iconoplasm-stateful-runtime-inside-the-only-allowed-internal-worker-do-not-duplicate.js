@@ -3150,16 +3150,13 @@ function portraitDeliveryPolicy(url, env) {
   const acceleratorOrigin = String(externalPortraitCdnBase(env) || "")
     .trim()
     .replace(/\/+$/, "")
-  const acceleratorEnabled = /^(1|true|yes)$/i.test(
-    String(env?.ICONOPLASM_PORTRAIT_ACCELERATOR_ENABLED || "").trim(),
-  )
   return {
     version: 1,
     canonical_origin: ICONOPLASM_CANONICAL_ORIGIN,
     accelerator: {
       id: "bunny",
       origin: acceleratorOrigin || "https://iconoplasmportraits.b-cdn.net",
-      enabled: Boolean(acceleratorOrigin) && acceleratorEnabled,
+      enabled: Boolean(acceleratorOrigin),
     },
     probe_timeout_ms: 2500,
     decision_scope: "tab",
