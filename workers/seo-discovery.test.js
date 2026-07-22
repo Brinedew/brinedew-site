@@ -15,6 +15,7 @@ const originalFetch = globalThis.fetch
 const rootRobotsSource = new URL("../content/robots.txt", import.meta.url)
 const appsIndexSource = new URL("../content/apps/index.md", import.meta.url)
 const geneguessrStaticAppSource = new URL("../quartz/static/geneguessr/app.js", import.meta.url)
+const iconoplasmStaticAppSource = new URL("../quartz/static/iconoplasm/app.js", import.meta.url)
 const headComponentSource = new URL("../quartz/components/Head.tsx", import.meta.url)
 const deployWorkflowSource = new URL("../.github/workflows/deploy-quartz.yml", import.meta.url)
 const publicWorkerWranglerSource = new URL("../wrangler.toml", import.meta.url)
@@ -456,4 +457,13 @@ test("the existing homepage navigation links the raw server archive", async () =
 
   assert.match(html, /href="\/genes"[^>]*>Gene index<\/a>/)
   assert.doesNotMatch(html, /href="\/genes"[^>]*data-icono-nav/)
+})
+
+test("gene hydration preserves and refreshes the canonical profile title", async () => {
+  const source = await readFile(iconoplasmStaticAppSource, "utf8")
+
+  assert.doesNotMatch(source, /route\.symbol \+ " - Iconoplasm"/)
+  assert.match(source, /function geneProfileDocumentTitle\(gene, fallbackSymbol\)/)
+  assert.match(source, /document\.title = geneProfileDocumentTitle\(g, symbol\)/)
+  assert.match(source, /!document\.title\.endsWith\(" \| Iconoplasm character profile"\)/)
 })

@@ -8304,6 +8304,14 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (content) main.appendChild(content)
   }
 
+  function geneProfileDocumentTitle(gene, fallbackSymbol) {
+    var symbol = normalizedSymbol(gene && gene.symbol ? gene.symbol : fallbackSymbol)
+    var fullName = String((gene && gene.full_name) || "").trim()
+    return fullName
+      ? symbol + " — " + fullName + " | Iconoplasm character profile"
+      : symbol + " | Iconoplasm character profile"
+  }
+
   function renderGene(root, symbol, options) {
     var opts = options || {}
     var renderId = ++activeGeneRenderId
@@ -8367,6 +8375,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       if (renderId !== activeGeneRenderId) return
       var g = result && result.data
       if (!g) throw new Error("Gene not found")
+      document.title = geneProfileDocumentTitle(g, symbol)
       if (!contentEl) {
         root.innerHTML = genePageShellMarkup(false)
         contentEl = document.getElementById("icono-gene-content")
@@ -9532,7 +9541,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (route.page === "home") {
       document.title = "Iconoplasm - Gene character cards"
     } else if (route.page === "gene") {
-      document.title = route.symbol + " - Iconoplasm"
+      // A direct gene response already owns the full canonical title. Preserve
+      // it through hydration; SPA navigation upgrades this temporary title as
+      // soon as the same shared card payload resolves below.
+      if (!document.title.endsWith(" | Iconoplasm character profile")) {
+        document.title = geneProfileDocumentTitle(null, route.symbol)
+      }
     } else if (route.page === "clans") {
       document.title = "Clans - Iconoplasm"
     } else {
