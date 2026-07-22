@@ -678,12 +678,17 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     return String(value || "").trim() || " "
   }
 
+  // ARCHITECTURE FENCE [IPD-003]: the printed alternatives are visual ink, not
+  // separate facts or interactive controls. Their parent exposes the resolved
+  // molecular value, while the handwritten note exposes the mapped character
+  // value. Keeping the alternatives aria-hidden prevents agents from treating
+  // selected and unselected labels as equally true.
   function renderLabLabelOptionHtml(value, selected, extraClass, loopPreset) {
     var classes = "icono-label-option"
     if (extraClass) classes += " " + extraClass
     if (selected) classes += " is-selected"
     return (
-      '<span class="' +
+      '<span aria-hidden="true" class="' +
       classes +
       '">' +
       '<span class="icono-label-option-copy" data-icono-rough-copy="true">' +
@@ -703,7 +708,9 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       .trim()
       .toLowerCase()
     return (
-      '<div class="icono-label-category-grid">' +
+      '<div class="icono-label-category-grid" role="img" aria-label="Molecular category: ' +
+      escapeHtml(categoryKey || "not specified") +
+      '">' +
       '<div class="icono-label-category-option icono-label-category-option--transmembrane">' +
       renderLabLabelOptionHtml(
         "TRANSMEMBRANE",
@@ -728,7 +735,9 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       .trim()
       .toLowerCase()
     return (
-      '<div class="icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-' +
+      '<div role="note" aria-label="Character sex: ' +
+      escapeHtml(note) +
+      '" class="icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-' +
       escapeHtml(categoryKey || "unselected") +
       '">' +
       escapeHtml(note) +
@@ -750,8 +759,10 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     else if (isTumorSuppressor) noteClass += " icono-label-hand-note--politics-tumor-suppressor"
     else noteClass += " icono-label-hand-note--politics-neutral"
     return (
-      '<div class="icono-label-alignment-grid">' +
-      '<div class="icono-label-selector-row icono-label-selector-row--alignment' +
+      '<div class="icono-label-alignment-grid" role="group" aria-label="Molecular alignment to character alignment mapping">' +
+      '<div role="img" aria-label="Molecular alignment: ' +
+      escapeHtml(molecularKey || "neither") +
+      '" class="icono-label-selector-row icono-label-selector-row--alignment' +
       (isNeither ? " is-neither" : "") +
       '">' +
       renderLabLabelOptionHtml("ONCOGENE", isOncogene, "", "alignment-oncogene") +
@@ -763,7 +774,9 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       ) +
       (isNeither ? '<span class="icono-label-alignment-strike" aria-hidden="true"></span>' : "") +
       "</div>" +
-      '<div class="' +
+      '<div role="note" aria-label="Character alignment: ' +
+      escapeHtml(politicalNote || "not specified") +
+      '" class="' +
       noteClass +
       '">' +
       escapeHtml(politicalNote || "") +

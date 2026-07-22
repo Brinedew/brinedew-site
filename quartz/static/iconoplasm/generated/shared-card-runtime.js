@@ -9845,14 +9845,14 @@
       var classes = "icono-label-option";
       if (extraClass) classes += " " + extraClass;
       if (selected) classes += " is-selected";
-      return '<span class="' + classes + '"><span class="icono-label-option-copy" data-icono-rough-copy="true">' + escapeHtml(value) + "</span>" + (selected ? iconoPenLoopSvg("icono-label-option-loop", loopPreset) : "") + "</span>";
+      return '<span aria-hidden="true" class="' + classes + '"><span class="icono-label-option-copy" data-icono-rough-copy="true">' + escapeHtml(value) + "</span>" + (selected ? iconoPenLoopSvg("icono-label-option-loop", loopPreset) : "") + "</span>";
     }
     function renderLabLabelVoteShell(voteHtml) {
       return String(voteHtml || "").trim() ? voteHtml : '<div class="icono-label-qc-empty"></div>';
     }
     function renderLabLabelCategoryFieldHtml(selectedCategory, sexNote) {
       var categoryKey = String(selectedCategory || "").trim().toLowerCase();
-      return '<div class="icono-label-category-grid"><div class="icono-label-category-option icono-label-category-option--transmembrane">' + renderLabLabelOptionHtml(
+      return '<div class="icono-label-category-grid" role="img" aria-label="Molecular category: ' + escapeHtml(categoryKey || "not specified") + '"><div class="icono-label-category-option icono-label-category-option--transmembrane">' + renderLabLabelOptionHtml(
         "TRANSMEMBRANE",
         categoryKey === "transmembrane",
         "",
@@ -9863,7 +9863,7 @@
       var note = String(sexNote || "").trim().toLowerCase();
       if (!note) return "";
       var categoryKey = String(selectedCategory || "").trim().toLowerCase();
-      return '<div class="icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-' + escapeHtml(categoryKey || "unselected") + '">' + escapeHtml(note) + "</div>";
+      return '<div role="note" aria-label="Character sex: ' + escapeHtml(note) + '" class="icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-' + escapeHtml(categoryKey || "unselected") + '">' + escapeHtml(note) + "</div>";
     }
     function renderLabLabelAlignmentFieldHtml(molecularAlignment, politicalNote) {
       var molecularKey = String(molecularAlignment || "").trim().toLowerCase();
@@ -9876,12 +9876,12 @@
       else if (isOncogene) noteClass += " icono-label-hand-note--politics-oncogene";
       else if (isTumorSuppressor) noteClass += " icono-label-hand-note--politics-tumor-suppressor";
       else noteClass += " icono-label-hand-note--politics-neutral";
-      return '<div class="icono-label-alignment-grid"><div class="icono-label-selector-row icono-label-selector-row--alignment' + (isNeither ? " is-neither" : "") + '">' + renderLabLabelOptionHtml("ONCOGENE", isOncogene, "", "alignment-oncogene") + renderLabLabelOptionHtml(
+      return '<div class="icono-label-alignment-grid" role="group" aria-label="Molecular alignment to character alignment mapping"><div role="img" aria-label="Molecular alignment: ' + escapeHtml(molecularKey || "neither") + '" class="icono-label-selector-row icono-label-selector-row--alignment' + (isNeither ? " is-neither" : "") + '">' + renderLabLabelOptionHtml("ONCOGENE", isOncogene, "", "alignment-oncogene") + renderLabLabelOptionHtml(
         "TUMOR SUPPRESSOR",
         isTumorSuppressor,
         "",
         "alignment-tumor-suppressor"
-      ) + (isNeither ? '<span class="icono-label-alignment-strike" aria-hidden="true"></span>' : "") + '</div><div class="' + noteClass + '">' + escapeHtml(politicalNote || "") + "</div></div>";
+      ) + (isNeither ? '<span class="icono-label-alignment-strike" aria-hidden="true"></span>' : "") + '</div><div role="note" aria-label="Character alignment: ' + escapeHtml(politicalNote || "not specified") + '" class="' + noteClass + '">' + escapeHtml(politicalNote || "") + "</div></div>";
     }
     function renderLabLabelTitleHtml(symbol, fullName, options) {
       var opts = options || {};

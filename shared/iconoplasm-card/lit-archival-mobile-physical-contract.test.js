@@ -27,6 +27,11 @@ const voteCssPath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-car
 const pageCssPath = path.join(repoRoot, "quartz", "static", "iconoplasm", "styles.css")
 const runtimePath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-runtime.js")
 const litCardPath = path.join(repoRoot, "shared", "iconoplasm-card", "lit-archival-card.js")
+const geneShellRuntimePath = path.join(
+  repoRoot,
+  "workers",
+  "the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
+)
 const syncPath = path.join(repoRoot, "scripts", "sync-iconoplasm-shared.mjs")
 
 async function sourceText(filePath) {
@@ -305,9 +310,11 @@ test("real seven-clan KALRN infocard projects PFAM lanes into a 4 plus 3 column 
 
 // ARCHITECTURE FENCE [IPD-003]
 test("archival cards expose one labelled accessible equivalent of the visual character facts", async () => {
-  const [shared, css] = await Promise.all([
+  const [shared, css, litCard, geneShellRuntime] = await Promise.all([
     import(pathToFileURL(runtimePath).href),
     sourceText(cssPath),
+    sourceText(litCardPath),
+    sourceText(geneShellRuntimePath),
   ])
   const sharedRuntime = shared.IconoCardShared || globalThis.IconoplasmCardShared
   const fixture = {
@@ -347,6 +354,47 @@ test("archival cards expose one labelled accessible equivalent of the visual cha
   const profileEnd = html.indexOf("</section>", profileStart)
   assert.notEqual(profileEnd, -1, "the accessible fact profile must close its semantic section")
   const profile = html.slice(profileStart, profileEnd + "</section>".length)
+
+  assert.match(
+    html,
+    /class="icono-label-category-grid" role="img" aria-label="Molecular category: transmembrane"/,
+  )
+  assert.match(
+    html,
+    /role="note" aria-label="Character sex: female" class="icono-label-hand-note icono-label-hand-note--sex/,
+  )
+  assert.match(
+    html,
+    /class="icono-label-alignment-grid" role="group" aria-label="Molecular alignment to character alignment mapping"/,
+  )
+  assert.match(
+    html,
+    /role="img" aria-label="Molecular alignment: tumor suppressor" class="icono-label-selector-row/,
+  )
+  assert.match(
+    html,
+    /role="note" aria-label="Character alignment: pro-control" class="icono-label-hand-note icono-label-hand-note--politics/,
+  )
+  assert.equal(
+    (html.match(/<span aria-hidden="true" class="icono-label-option/g) || []).length,
+    4,
+    "the two category and two alignment alternatives must remain visual-only ink",
+  )
+  assert.doesNotMatch(html, /aria-(?:checked|selected)=/)
+
+  assert.match(litCard, /<span aria-hidden="true" class=\$\{classes\}/)
+  assert.match(litCard, /aria-label=\$\{"Molecular category: "/)
+  assert.match(litCard, /aria-label=\$\{"Molecular alignment: "/)
+  assert.match(litCard, /aria-label=\$\{"Character alignment: "/)
+  assert.match(
+    geneShellRuntime,
+    /icono-label-category-grid" aria-hidden="true"/,
+    "the value-less loading shell must not expose unresolved printed choices",
+  )
+  assert.match(
+    geneShellRuntime,
+    /icono-label-selector-row icono-label-selector-row--alignment is-neither" aria-hidden="true"/,
+  )
 
   assert.match(profile, /aria-label="Character profile for TP53"/)
   assert.match(profile, /<h2>Character profile for TP53<\/h2>/)

@@ -17,6 +17,15 @@ character aesthetic—so non-visual readers never have to infer a relationship
 from nearby text. It carries the exact card facts without adding visual
 duplication.
 
+Printed selector strips require an additional boundary. Labels such as
+`ONCOGENE` / `TUMOR SUPPRESSOR` and `TRANSMEMBRANE` / `SOLUBLE` are visual ink,
+not interactive controls and not a list of equally true facts. The renderer
+therefore hides each printed alternative from the accessibility tree, names the
+resolved molecular value on the visual selector, and names the handwritten
+character result as a note. Do not model these strips as radio buttons, tabs, or
+peer text. The semantic profile remains the complete non-visual reference for
+the directional mapping.
+
 ## Boundaries that must move together
 
 The semantic profile is rendered by
@@ -69,6 +78,11 @@ profile together, then run the semantic-card and SEO discovery tests. Keep the
 profile a normal semantic `<section>` with labelled `<dt>` and `<dd>` pairs;
 never use `display: none`, `hidden`, `visibility: hidden`, or `aria-hidden`,
 because those erase it from the accessibility tree.
+
+For printed selector alternatives, the inverse rule applies: keep the rendered
+ink visually unchanged but `aria-hidden`, and put the resolved value on the
+noninteractive parent field. Never use selection-state ARIA intended for real
+controls on decorative label stock.
 
 Indexability changes are atomic discovery migrations: revise this fence, the
 range contract, sitemap and `llms.txt`, robots headers, metadata, tests, and
