@@ -970,7 +970,7 @@ test("same-session archive return restores an exact virtual segment without cach
   assert.match(app, /restoreState && restoreState\.anchorGene/)
   assert.match(
     app,
-    /Promise\.resolve\(segment\.mountReady\)[\s\S]*getBoundingClientRect\(\)\.top - pendingRestore\.top/,
+    /Promise\.resolve\(segment\.mountReady\)[\s\S]*getBoundingClientRect\(\)\.top - pendingRestore\.top[\s\S]*scrollWindowInstantly/,
   )
 })
 
