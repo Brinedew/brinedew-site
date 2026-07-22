@@ -9,6 +9,20 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const appPath = path.join(repoRoot, "quartz", "static", "iconoplasm", "app.js")
 const headPath = path.join(repoRoot, "quartz", "components", "Head.tsx")
 const cssPath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-label.css")
+const generatedCssPath = path.join(
+  repoRoot,
+  "quartz",
+  "static",
+  "iconoplasm",
+  "generated",
+  "shared-card-label.css",
+)
+const fontContractPath = path.join(
+  repoRoot,
+  "shared",
+  "iconoplasm-card",
+  "font-contract.json",
+)
 const voteCssPath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-vote.css")
 const pageCssPath = path.join(repoRoot, "quartz", "static", "iconoplasm", "styles.css")
 const runtimePath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-runtime.js")
@@ -75,6 +89,66 @@ test("typed footer copy follows the card ink token in light and dark themes", as
     typedFooterBlock,
     /color:\s*#[0-9a-f]{3,8}/i,
     "typed footer copy must not pin light-theme brown ink in dark mode",
+  )
+})
+
+test("first-paint label fonts use Firefox's bounded no-late-swap policy", async () => {
+  const css = await sourceText(generatedCssPath)
+  const head = await sourceText(headPath)
+  const contract = JSON.parse(await sourceText(fontContractPath))
+
+  assert.equal(contract.display, "optional")
+  assert.doesNotMatch(css, /font-display:\s*(?:block|swap)\s*;/)
+  assert.doesNotMatch(head, /font-display:\s*(?:block|swap)\s*;/)
+  assert.match(head, /font-display:\s*\$\{iconoplasmFontContract\.display\}/)
+  assert.match(head, /fetchPriority="high"/)
+
+  for (const font of contract.fonts) {
+    assert.match(
+      css,
+      new RegExp(
+        `${font.stem}-critical\\.woff2[\\s\\S]{0,180}font-display:\\s*optional[\\s\\S]{0,100}unicode-range:\\s*U\\+0000-007F`,
+      ),
+    )
+    assert.match(
+      css,
+      new RegExp(
+        `${font.stem}\\.woff2[\\s\\S]{0,180}font-display:\\s*optional[\\s\\S]{0,100}unicode-range:\\s*U\\+0080-10FFFF`,
+      ),
+    )
+  }
+
+  assert.deepEqual(
+    contract.fonts.filter((font) => font.preload).map((font) => font.stem),
+    ["IBMPlexMono-Regular", "LeagueSpartan-800", "SpecialElite-Regular"],
+    "only above-fold faces may compete for first-paint bandwidth",
+  )
+})
+
+test("mobile voting copy uses a Firefox-safe flex row with a non-shrinking arrow", async () => {
+  const css = await sourceText(cssPath)
+  const copy = cssBlockFor(css, ".icono-vote-btn-copy {")
+  const stack = cssBlockFor(css, ".icono-vote-btn-copy-stack {")
+  const arrow = cssBlockFor(css, ".icono-vote-btn-arrow {")
+
+  assert.match(copy, /flex:\s*1 1 auto\s*;/)
+  assert.match(copy, /min-width:\s*0\s*;/)
+  assert.match(stack, /display:\s*flex\s*;/)
+  assert.match(stack, /min-width:\s*0\s*;/)
+  assert.doesNotMatch(stack, /grid-template-columns/)
+  assert.match(arrow, /flex:\s*0 0 1\.44rem\s*;/)
+})
+
+test("lab-label vote ink remains legible when legacy theme attributes disagree", async () => {
+  const css = await sourceText(cssPath)
+
+  assert.match(
+    css,
+    /\.icono-card--variant-lab-label\.icono-card--brick \.icono-vote-box--label,[\s\S]{0,500}--icono-vote-ink:\s*var\(--icono-label-ink\)\s*;/,
+  )
+  assert.match(
+    css,
+    /\.icono-card--variant-lab-label\.icono-card--brick \.icono-vote-box--label \.icono-vote-btn,[\s\S]{0,650}color:\s*var\(--icono-vote-ink\)\s*;/,
   )
 })
 

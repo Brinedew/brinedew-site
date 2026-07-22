@@ -16,6 +16,11 @@ const sharedCardCssPath = new URL(
   "../../../shared/iconoplasm-card/shared-card-label.css",
   import.meta.url,
 )
+const generatedSharedCardCssPath = new URL("./generated/shared-card-label.css", import.meta.url)
+const fontContractPath = new URL(
+  "../../../shared/iconoplasm-card/font-contract.json",
+  import.meta.url,
+)
 const sharedVoteCssPath = new URL(
   "../../../shared/iconoplasm-card/shared-card-vote.css",
   import.meta.url,
@@ -28,6 +33,26 @@ const generatedSharedCardRuntimePath = new URL(
   "./generated/shared-card-runtime.js",
   import.meta.url,
 )
+
+test("Iconoplasm fonts are small at first paint and immutable after release", async () => {
+  const head = await readFile(headPath, "utf8")
+  const sharedCardCss = await readFile(generatedSharedCardCssPath, "utf8")
+  const fontContract = JSON.parse(await readFile(fontContractPath, "utf8"))
+  const internalWorker = await readFile(internalWorkerPath, "utf8")
+
+  assert.equal(fontContract.display, "optional")
+  assert.doesNotMatch(`${head}\n${sharedCardCss}`, /font-display:\s*(?:block|swap)\s*;/)
+  assert.match(head, /iconoplasmFontContract\.fonts/)
+  assert.match(head, /fetchPriority="high"/)
+  assert.match(sharedCardCss, /unicode-range:\s*U\+0000-007F/)
+  assert.match(sharedCardCss, /unicode-range:\s*U\+0080-10FFFF/)
+  assert.match(
+    internalWorker,
+    /url\.searchParams\.has\("v"\)[\s\S]{0,120}woff2\?\|ttf\|otf\|eot/,
+    "unversioned font requests must enter the worker's immutable asset cache policy",
+  )
+  assert.match(internalWorker, /Cache-Control", "public, max-age=31536000, immutable"/)
+})
 
 test("public gallery default order is newly discovered genes first", async () => {
   const homeOrders = await readFile(homeOrdersPath, "utf8")

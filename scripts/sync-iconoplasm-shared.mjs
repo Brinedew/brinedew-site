@@ -6,6 +6,7 @@ import {
   assertIconoplasmPublisherAuthority,
   renderIconoplasmCatalogContractRuntime,
 } from "./lib/iconoplasm-publisher-authority.mjs"
+import iconoplasmFontContract from "../shared/iconoplasm-card/font-contract.json" with { type: "json" }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, "..")
@@ -21,6 +22,7 @@ const targets = [
   },
   {
     source: path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-label.css"),
+    prefix: renderIconoplasmFontFaceCss("../fonts/", true),
     outputs: [
       path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "shared-card-label.css"),
       path.join(repoRoot, "iconoplasm-extension", "generated", "shared-card-label.css"),
@@ -28,24 +30,48 @@ const targets = [
   },
 ]
 
-const fontTargets = [
-  "IBMPlexMono-Regular.woff2",
-  "IBMPlexMono-Medium.woff2",
-  "LeagueSpartan-800.woff2",
-  "SpecialElite-Regular.woff2",
-  "Caveat-400.woff2",
-  "IBMPlexMono-Regular-critical.woff2",
-  "IBMPlexMono-Medium-critical.woff2",
-  "LeagueSpartan-800-critical.woff2",
-  "SpecialElite-Regular-critical.woff2",
-  "Caveat-400-critical.woff2",
-].map((name) => ({
-  source: path.join(repoRoot, "shared", "iconoplasm-card", "fonts", name),
-  outputs: [
-    path.join(repoRoot, "quartz", "static", "iconoplasm", "fonts", name),
-    path.join(repoRoot, "iconoplasm-extension", "fonts", name),
-  ],
-}))
+function renderIconoplasmFontFaceCss(baseUrl, includeFull) {
+  return (
+    iconoplasmFontContract.fonts
+      .flatMap((font) => {
+        const faces = [
+          renderFontFace(
+            font,
+            `${font.stem}-critical.woff2`,
+            iconoplasmFontContract.criticalUnicodeRange,
+          ),
+        ]
+        if (includeFull) {
+          faces.push(
+            renderFontFace(font, `${font.stem}.woff2`, iconoplasmFontContract.fullUnicodeRange),
+          )
+        }
+        return faces
+      })
+      .join("\n\n") + "\n\n"
+  )
+
+  function renderFontFace(font, fileName, unicodeRange) {
+    return `@font-face {
+  font-family: "${font.family}";
+  src: url("${baseUrl}${fileName}") format("woff2");
+  font-weight: ${font.weight};
+  font-style: normal;
+  font-display: ${iconoplasmFontContract.display};
+  unicode-range: ${unicodeRange};
+}`
+  }
+}
+
+const fontTargets = iconoplasmFontContract.fonts
+  .flatMap((font) => [`${font.stem}.woff2`, `${font.stem}-critical.woff2`])
+  .map((name) => ({
+    source: path.join(repoRoot, "shared", "iconoplasm-card", "fonts", name),
+    outputs: [
+      path.join(repoRoot, "quartz", "static", "iconoplasm", "fonts", name),
+      path.join(repoRoot, "iconoplasm-extension", "fonts", name),
+    ],
+  }))
 
 const binaryTargets = [
   ...fontTargets,
@@ -99,15 +125,16 @@ const bundledTargets = [
   },
 ]
 
-async function syncTarget({ source, outputs }) {
+async function syncTarget({ source, prefix = "", outputs }) {
   const content = await readFile(source, "utf8")
+  const relativeSource = path.relative(repoRoot, source).replaceAll("\\", "/")
   const banner = source.endsWith(".css")
-    ? `/* GENERATED FILE. Edit ${path.relative(repoRoot, source).replaceAll("\\", "/")} and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\n`
+    ? `/* GENERATED FILE. Edit ${relativeSource}${prefix ? " and shared/iconoplasm-card/font-contract.json" : ""} and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\n`
     : `/* GENERATED FILE. Edit ${path.relative(repoRoot, source).replaceAll("\\", "/")} and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\n`
 
   for (const output of outputs) {
     await mkdir(path.dirname(output), { recursive: true })
-    await writeFile(output, banner + content, "utf8")
+    await writeFile(output, banner + prefix + content, "utf8")
   }
 }
 
