@@ -38,7 +38,7 @@ var IconoplasmPortraitDelivery = (() => {
     accelerator: Object.freeze({
       id: "bunny",
       origin: "https://iconoplasmportraits.b-cdn.net",
-      enabled: true
+      enabled: false
     }),
     probe_timeout_ms: 2500,
     decision_scope: "tab"
@@ -60,7 +60,7 @@ var IconoplasmPortraitDelivery = (() => {
     const rawAccelerator = raw.accelerator && typeof raw.accelerator === "object" ? raw.accelerator : {};
     const fallbackAccelerator = fallback.accelerator || DEFAULT_PORTRAIT_DELIVERY_POLICY.accelerator;
     const acceleratorOrigin = normalizedOrigin(rawAccelerator.origin, fallbackAccelerator.origin);
-    const acceleratorEnabled = rawAccelerator.enabled !== false && Boolean(acceleratorOrigin);
+    const acceleratorEnabled = (rawAccelerator.enabled ?? fallbackAccelerator.enabled) === true && Boolean(acceleratorOrigin);
     const timeout = Number(raw.probe_timeout_ms ?? fallback.probe_timeout_ms);
     if (!canonicalOrigin)
       throw new Error("Portrait delivery policy requires an HTTPS canonical_origin");
@@ -94,8 +94,7 @@ var IconoplasmPortraitDelivery = (() => {
     try {
       const parsed = new URL(value, normalizedPolicy.canonical_origin);
       const allowedOrigins = /* @__PURE__ */ new Set([normalizedPolicy.canonical_origin]);
-      if (normalizedPolicy.accelerator.enabled)
-        allowedOrigins.add(normalizedPolicy.accelerator.origin);
+      if (normalizedPolicy.accelerator.origin) allowedOrigins.add(normalizedPolicy.accelerator.origin);
       if (!allowedOrigins.has(parsed.origin) || !parsed.pathname.startsWith("/portraits/")) return "";
       return parsed.pathname + parsed.search;
     } catch (_error) {
@@ -109,8 +108,7 @@ var IconoplasmPortraitDelivery = (() => {
     try {
       const origin = new URL(String(rawUrl || ""), normalizedPolicy.canonical_origin).origin;
       if (origin === normalizedPolicy.canonical_origin) return "canonical";
-      if (normalizedPolicy.accelerator.enabled && origin === normalizedPolicy.accelerator.origin)
-        return "accelerator";
+      if (origin === normalizedPolicy.accelerator.origin) return "accelerator";
     } catch (_error) {
     }
     return "";

@@ -3,6 +3,15 @@ import test from "node:test"
 
 import { createPortraitDelivery } from "./portrait-delivery.js"
 
+const enabledAcceleratorPolicy = {
+  canonical_origin: "https://iconoplasm.brinedew.bio",
+  accelerator: {
+    id: "bunny",
+    origin: "https://iconoplasmportraits.b-cdn.net",
+    enabled: true,
+  },
+}
+
 function memoryStorage() {
   const values = new Map()
   return {
@@ -67,11 +76,28 @@ function fakeImage() {
   }
 }
 
+test("default delivery uses the canonical origin without a failed accelerator request", async () => {
+  const controlled = controlledImages()
+  const delivery = createPortraitDelivery({
+    sessionStorageRef: memoryStorage(),
+    ImageCtor: controlled.ImageCtor,
+  })
+
+  const resolved = await delivery.ensure(
+    "https://iconoplasm.brinedew.bio/portraits/v1/canonical.webp",
+  )
+
+  assert.equal(resolved, "https://iconoplasm.brinedew.bio/portraits/v1/canonical.webp")
+  assert.equal(controlled.images.length, 0)
+  assert.deepEqual(delivery.state(), { state: "canonical", failed: ["accelerator"] })
+})
+
 test("one failed accelerator probe switches 100 simultaneous portraits to canonical URLs", async () => {
   const controlled = controlledImages()
   const delivery = createPortraitDelivery({
     sessionStorageRef: memoryStorage(),
     ImageCtor: controlled.ImageCtor,
+    policy: enabledAcceleratorPolicy,
   })
   const requests = Array.from({ length: 100 }, (_, index) =>
     delivery.ensure(`https://iconoplasm.brinedew.bio/portraits/v1/${index}.webp`),
@@ -91,6 +117,7 @@ test("one successful accelerator probe releases every portrait to Bunny", async 
   const delivery = createPortraitDelivery({
     sessionStorageRef: memoryStorage(),
     ImageCtor: controlled.ImageCtor,
+    policy: enabledAcceleratorPolicy,
   })
   const requests = Array.from({ length: 100 }, (_, index) =>
     delivery.ensure(`https://iconoplasm.brinedew.bio/portraits/v1/${index}.webp`),
@@ -112,6 +139,7 @@ test("the source decision survives reloads in the same tab", async () => {
   const first = createPortraitDelivery({
     sessionStorageRef: storage,
     ImageCtor: controlled.ImageCtor,
+    policy: enabledAcceleratorPolicy,
   })
   const initial = first.ensure("https://iconoplasm.brinedew.bio/portraits/v1/a.webp")
   await Promise.resolve()
@@ -121,6 +149,7 @@ test("the source decision survives reloads in the same tab", async () => {
   const reload = createPortraitDelivery({
     sessionStorageRef: storage,
     ImageCtor: controlledImages().ImageCtor,
+    policy: enabledAcceleratorPolicy,
   })
   assert.equal(
     await reload.ensure("https://iconoplasm.brinedew.bio/portraits/v1/b.webp"),
@@ -133,6 +162,7 @@ test("a late accelerator URL is rebound after the tab already chose canonical de
   const delivery = createPortraitDelivery({
     sessionStorageRef: memoryStorage(),
     ImageCtor: controlled.ImageCtor,
+    policy: enabledAcceleratorPolicy,
   })
   const initial = delivery.ensure("https://iconoplasm.brinedew.bio/portraits/v1/before.webp")
   await Promise.resolve()
@@ -151,7 +181,11 @@ test("a late accelerator URL is rebound after the tab already chose canonical de
 })
 
 test("both failed sources enter terminal failure without flipping forever", () => {
-  const delivery = createPortraitDelivery({ sessionStorageRef: memoryStorage(), ImageCtor: null })
+  const delivery = createPortraitDelivery({
+    sessionStorageRef: memoryStorage(),
+    ImageCtor: null,
+    policy: enabledAcceleratorPolicy,
+  })
   delivery.reportFailure("https://iconoplasmportraits.b-cdn.net/portraits/v1/a.webp")
   delivery.reportFailure("https://iconoplasm.brinedew.bio/portraits/v1/a.webp")
   assert.deepEqual(delivery.state(), {

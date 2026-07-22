@@ -424,7 +424,6 @@ export default (() => {
         {isIconoplasm && (
           <>
             <link rel="preconnect" href="https://brinedew.bio" />
-            <link rel="preconnect" href="https://iconoplasmportraits.b-cdn.net" />
           </>
         )}
         <link
