@@ -512,27 +512,11 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   display: grid;
   grid-template-rows: 29.97% 10.09% 43.85% 8.2% 7.89%;
 }
-@media (max-width: 720px) {
+@media (max-width: 760px) {
   .icono-gene-lead-card.icono-card--variant-lab-label.icono-card--brick,
   .icono-gene-lead--static-shell .icono-gene-lead-card {
     width: min(100%, 390px);
-    inline-size: min(100%, 390px);
-    display: block;
     grid-template-columns: 1fr;
-    aspect-ratio: auto;
-    height: auto;
-    overflow: visible;
-  }
-  .icono-gene-lead-card .icono-mobile-card-physical-object {
-    display: block;
-    width: 100%;
-    height: auto;
-  }
-  .icono-gene-lead-card.icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-portrait,
-  .icono-gene-lead-card.icono-card--variant-lab-label.icono-card--brick .iconoplasm-tooltip-body,
-  .icono-gene-lead--static-shell .iconoplasm-tooltip-portrait,
-  .icono-gene-lead--static-shell .iconoplasm-tooltip-body {
-    height: auto;
   }
 }
 `,
