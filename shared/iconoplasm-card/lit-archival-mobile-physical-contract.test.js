@@ -517,7 +517,7 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
   assert.match(setupBlock, /--icono-label-mobile-physical-width/)
   assert.match(
     setupBlock,
-    /card\.clientWidth\s*\?\s*card\.clientWidth\s*:\s*Number\.POSITIVE_INFINITY/,
+    /card\.offsetWidth\s*\?\s*card\.offsetWidth\s*:\s*Number\.POSITIVE_INFINITY/,
     "mobile fit must be bounded by the rendered card, not the wider page column",
   )
   assert.match(setupBlock, /cardParent\.clientWidth/)
@@ -547,6 +547,18 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
     "geometry measured after CSS zoom must be normalized back into physical card pixels before writing CSS vars",
   )
   assert.match(setupBlock, /--icono-label-mobile-fit-scale/)
+
+  const head = await sourceText(headPath)
+  assert.match(
+    head,
+    /@media \(max-width: 720px\)[\s\S]*icono-gene-lead-card[\s\S]*\.iconoplasm-tooltip-portrait[\s\S]*\.iconoplasm-tooltip-body[\s\S]*height: auto;/,
+    "critical mobile CSS must release the desktop 100% height before geometry measurement",
+  )
+  assert.doesNotMatch(
+    head,
+    /@media \(max-width: 760px\)[\s\S]*icono-gene-lead-card/,
+    "critical and hydrated lead-card breakpoints must not disagree",
+  )
 })
 
 test("mobile Iconoplasm page removes nested padding that creates dead card gutters", async () => {
