@@ -698,6 +698,15 @@ function buildIconoplasmSubdomainRobotsTxt() {
 
 async function runScheduledIconoplasmMaintenance(env, ctx) {
   try {
+    const archiveResult = await archiveColdIconoplasmPublishEvents(env)
+    console.log("[CRON] Iconoplasm cold publish-event archive result:", archiveResult)
+  } catch (error) {
+    // Archiving has its own failure domain. A cold-copy failure must preserve the
+    // hot rows and stay loud, but it must not suppress canon repair or gallery
+    // publication that do not depend on the archive database.
+    console.error("[CRON] Iconoplasm cold publish-event archive failed:", error)
+  }
+  try {
     const voteProjectionResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request(
@@ -1006,6 +1015,7 @@ import {
   deliverPendingRequestFulfillmentNotifications,
   reconcileDeliveredRequestFulfillments,
 } from "./iconoplasm-request-notifications.js"
+import { archiveColdIconoplasmPublishEvents } from "./iconoplasm-publish-event-archive.js"
 import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate } from "./benchmark/the-only-allowed-benchmark-stateful-runtime-do-not-duplicate.js"
 
 export { IconoplasmVoteCoordinator }
