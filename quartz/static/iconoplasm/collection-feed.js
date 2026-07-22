@@ -287,19 +287,25 @@ export function createCollectionFeedController(options) {
     }
   }
 
-  function emitState() {
-    if (typeof options.onStateChange !== "function") return
-    const anchor = firstVisibleCard()
+  function snapshotForAnchor(anchor) {
     const index = anchor ? cardIndex(anchor) : 0
     const segment = segments.find(
       (entry) => index >= entry.startIndex && index < entry.startIndex + entry.count,
     )
-    options.onStateChange({
+    return {
       page: segment ? segment.page : 1,
       cursor: segment?.requestCursor || "",
       offset: segment?.requestOffset || 0,
       anchorGene: anchor ? cardSymbol(anchor) : "",
       anchorTop: anchor ? anchor.getBoundingClientRect().top : 0,
+    }
+  }
+
+  function emitState() {
+    if (typeof options.onStateChange !== "function") return
+    const state = snapshotForAnchor(firstVisibleCard())
+    options.onStateChange({
+      ...state,
       loadedCount: segments.reduce((sum, entry) => sum + entry.count, 0),
       total,
       discoveredCount,
@@ -556,19 +562,11 @@ export function createCollectionFeedController(options) {
     loadNext: () => load("forward"),
     loadPrevious: () => load("backward"),
     retry,
-    snapshot: () => {
-      let latest = null
-      if (typeof options.onStateChange === "function") {
-        const anchor = firstVisibleCard()
-        latest = {
-          page: segments.find((segment) => segment.element?.contains(anchor))?.page || 1,
-          cursor:
-            segments.find((segment) => segment.element?.contains(anchor))?.requestCursor || "",
-          anchorGene: anchor ? cardSymbol(anchor) : "",
-          anchorTop: anchor ? anchor.getBoundingClientRect().top : 0,
-        }
-      }
-      return latest || { page: 1, cursor: "", anchorGene: "", anchorTop: 0 }
+    snapshot: (target = null) => {
+      const targetCard = target?.matches?.(".icono-card[data-icono-feed-card]")
+        ? target
+        : target?.closest?.(".icono-card[data-icono-feed-card]")
+      return snapshotForAnchor(targetCard || firstVisibleCard())
     },
     debugState: () => ({
       loading,

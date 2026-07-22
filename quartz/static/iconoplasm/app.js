@@ -7657,7 +7657,10 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     })
 
     function snapshotHomeState() {
-      var snapshot = latestFeedSnapshot || feedController.snapshot()
+      var pendingCard = pendingHomeAnchor && pendingHomeAnchor.card
+      var snapshot = pendingCard
+        ? feedController.snapshot(pendingCard)
+        : latestFeedSnapshot || feedController.snapshot()
       return {
         restoreSession: ICONO_ARCHIVE_RESTORE_SESSION,
         order: galleryState.order,
@@ -9015,6 +9018,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (!symbol) return
     var rect = card.getBoundingClientRect()
     pendingHomeAnchor = {
+      card: card,
       focusSymbol: symbol,
       focusTop: Math.round(rect.top),
     }
