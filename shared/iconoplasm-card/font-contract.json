@@ -1,0 +1,37 @@
+{
+  "display": "optional",
+  "criticalUnicodeRange": "U+0000-007F",
+  "fullUnicodeRange": "U+0080-10FFFF",
+  "fonts": [
+    {
+      "family": "IBM Plex Mono",
+      "stem": "IBMPlexMono-Regular",
+      "weight": 400,
+      "preload": true
+    },
+    {
+      "family": "IBM Plex Mono",
+      "stem": "IBMPlexMono-Medium",
+      "weight": 500,
+      "preload": false
+    },
+    {
+      "family": "League Spartan",
+      "stem": "LeagueSpartan-800",
+      "weight": 800,
+      "preload": true
+    },
+    {
+      "family": "Special Elite",
+      "stem": "SpecialElite-Regular",
+      "weight": 400,
+      "preload": true
+    },
+    {
+      "family": "Caveat",
+      "stem": "Caveat-400",
+      "weight": 400,
+      "preload": false
+    }
+  ]
+}

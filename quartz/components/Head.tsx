@@ -7,6 +7,7 @@ import { unescapeHTML } from "../util/escape"
 import { CustomOgImagesEmitterName } from "../../.quartz/plugins"
 import { getPublicUrlForSlug, isNoIndexFile } from "../util/crawlability"
 import { buildAiSearchJsonLd, serializeJsonLd } from "../util/aiSearchMetadata"
+import iconoplasmFontContract from "../../shared/iconoplasm-card/font-contract.json"
 
 // Build-time cache buster - always include a fresh timestamp so production HTML
 // points at the latest static assets even when environment-level cache vars linger.
@@ -15,6 +16,23 @@ const CACHE_BUST = `${Date.now()}-${
   (typeof process !== "undefined" && process.env?.VERCEL_GIT_COMMIT_SHA) ||
   "build"
 }`
+
+function renderIconoplasmCriticalFontFaces(): string {
+  return iconoplasmFontContract.fonts
+    .map(
+      (font) => `@font-face {
+  font-family: "${font.family}";
+  src: url("/static/iconoplasm/fonts/${font.stem}-critical.woff2") format("woff2");
+  font-weight: ${font.weight};
+  font-style: normal;
+  font-display: ${iconoplasmFontContract.display};
+  unicode-range: ${iconoplasmFontContract.criticalUnicodeRange};
+}`,
+    )
+    .join("\n")
+}
+
+const iconoplasmCriticalFontFaces = renderIconoplasmCriticalFontFaces()
 
 export default (() => {
   const Head: QuartzComponent = ({
@@ -359,41 +377,7 @@ export default (() => {
           <style
             dangerouslySetInnerHTML={{
               __html: `
-@font-face {
-  font-family: "IBM Plex Mono";
-  src: url("/static/iconoplasm/fonts/IBMPlexMono-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: block;
-}
-@font-face {
-  font-family: "IBM Plex Mono";
-  src: url("/static/iconoplasm/fonts/IBMPlexMono-Medium.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: block;
-}
-@font-face {
-  font-family: "League Spartan";
-  src: url("/static/iconoplasm/fonts/LeagueSpartan-800.woff2") format("woff2");
-  font-weight: 800;
-  font-style: normal;
-  font-display: block;
-}
-@font-face {
-  font-family: "Special Elite";
-  src: url("/static/iconoplasm/fonts/SpecialElite-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Caveat";
-  src: url("/static/iconoplasm/fonts/Caveat-400.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: block;
-}
+${iconoplasmCriticalFontFaces}
 .icono-card--variant-lab-label,
 .iconoplasm-tooltip--variant-lab-label {
   --icono-label-paper: color-mix(in srgb, var(--light, #f4ede5) 92%, #d4cab8 8%);
@@ -566,41 +550,19 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
         )}
         {usesIconoplasmLabelFonts && (
           <>
-            <link
-              rel="preload"
-              as="font"
-              type="font/woff2"
-              href="/static/iconoplasm/fonts/IBMPlexMono-Regular.woff2"
-              crossOrigin="anonymous"
-            />
-            <link
-              rel="preload"
-              as="font"
-              type="font/woff2"
-              href="/static/iconoplasm/fonts/IBMPlexMono-Medium.woff2"
-              crossOrigin="anonymous"
-            />
-            <link
-              rel="preload"
-              as="font"
-              type="font/woff2"
-              href="/static/iconoplasm/fonts/LeagueSpartan-800.woff2"
-              crossOrigin="anonymous"
-            />
-            <link
-              rel="preload"
-              as="font"
-              type="font/woff2"
-              href="/static/iconoplasm/fonts/SpecialElite-Regular.woff2"
-              crossOrigin="anonymous"
-            />
-            <link
-              rel="preload"
-              as="font"
-              type="font/woff2"
-              href="/static/iconoplasm/fonts/Caveat-400.woff2"
-              crossOrigin="anonymous"
-            />
+            {iconoplasmFontContract.fonts
+              .filter((font) => font.preload)
+              .map((font) => (
+                <link
+                  key={font.stem}
+                  rel="preload"
+                  as="font"
+                  type="font/woff2"
+                  href={`/static/iconoplasm/fonts/${font.stem}-critical.woff2`}
+                  crossOrigin="anonymous"
+                  fetchPriority="high"
+                />
+              ))}
           </>
         )}
         {!isIconoplasm && (
