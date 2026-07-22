@@ -1299,10 +1299,10 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     }
   }
 
-  // ARCHITECTURE FENCE [IPD-002]: this is a text equivalent of the existing
-  // visual card, not a second gene-page product. Keep the facts and their
-  // labels aligned with the card renderer; do not make per-gene pages indexable
-  // just because their facts are easier for assistive and agent tooling to read.
+  // ARCHITECTURE FENCE [IPD-003]: this is the non-visual equivalent of the
+  // existing card, not extra SEO prose. Keep every labelled mapping aligned
+  // with the visible card renderer. Gene discovery eligibility is decided by
+  // the published-catalog contract, never by inventing a second prose product.
   function buildLabLabelSemanticCharacterFacts(geneDetail, model) {
     var safeGeneDetail = asObject(geneDetail)
     var safeEssence = asObject(safeGeneDetail.essence)

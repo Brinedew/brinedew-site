@@ -958,6 +958,9 @@ const ICONOPLASM_SYNC_GOVERNOR_MAX_BATCH_PERMITS = 250
 
 const catalogCache = {
   hash: null,
+  catalogHash: null,
+  generatedAt: null,
+  genes: Object.freeze([]),
   bySymbol: new Map(),
   symbolByUniprot: new Map(),
   symbolByAlias: new Map(),
@@ -11423,10 +11426,55 @@ async function warmCatalogCache(env) {
     }
   }
   catalogCache.hash = cacheHash
+  catalogCache.catalogHash = baseHash
+  catalogCache.generatedAt = artifact.generated_at || manifest.generated_at || null
+  catalogCache.genes = Object.freeze(Array.from(bySymbol.values()))
   catalogCache.loadedAt = now
   catalogCache.bySymbol = bySymbol
   catalogCache.symbolByUniprot = symbolByUniprot
   catalogCache.symbolByAlias = symbolByAlias
+}
+
+// ARCHITECTURE FENCE [IPD-003]
+// Public gene discovery is a read model over the same immutable, versioned KV
+// artifact used by the extension and gallery. Archive and sitemap routes import
+// this seam so they can never grow an accidental whole-inventory D1 query.
+export async function readIconoplasmPublishedGeneDiscoveryCatalog(env) {
+  await warmCatalogCache(env)
+  if (!catalogCache.hash || catalogCache.bySymbol.size === 0) return null
+  return {
+    version: catalogCache.hash,
+    catalogHash: catalogCache.catalogHash,
+    generatedAt: catalogCache.generatedAt,
+    genes: catalogCache.genes,
+  }
+}
+
+export async function resolveIconoplasmPublishedGeneDiscoveryRecord(env, rawIdentifier) {
+  await warmCatalogCache(env)
+  if (!catalogCache.hash || catalogCache.bySymbol.size === 0) {
+    return { kind: "unavailable", record: null, canonicalSymbol: "" }
+  }
+  const requestedSymbol = normalizeSymbol(rawIdentifier)
+  if (requestedSymbol && catalogCache.bySymbol.has(requestedSymbol)) {
+    return {
+      kind: "canonical",
+      record: catalogCache.bySymbol.get(requestedSymbol),
+      canonicalSymbol: requestedSymbol,
+      version: catalogCache.hash,
+    }
+  }
+  const aliasKey = normalizeCatalogAliasLookupKey(rawIdentifier)
+  const canonicalSymbol = aliasKey ? catalogCache.symbolByAlias.get(aliasKey) : ""
+  if (canonicalSymbol && catalogCache.bySymbol.has(canonicalSymbol)) {
+    return {
+      kind: "alias",
+      record: catalogCache.bySymbol.get(canonicalSymbol),
+      canonicalSymbol,
+      version: catalogCache.hash,
+    }
+  }
+  return { kind: "unknown", record: null, canonicalSymbol: "", version: catalogCache.hash }
 }
 
 function normalizeCatalogPayloadItem(rawItem) {
@@ -22249,6 +22297,9 @@ function clearSharedD1CostCaches() {
 // are what keep public traffic off D1.
 export function resetIconoplasmRuntimeCachesForTest() {
   catalogCache.hash = null
+  catalogCache.catalogHash = null
+  catalogCache.generatedAt = null
+  catalogCache.genes = Object.freeze([])
   catalogCache.bySymbol = new Map()
   catalogCache.symbolByUniprot = new Map()
   catalogCache.symbolByAlias = new Map()
@@ -26610,8 +26661,12 @@ async function publishCatalogArtifact(env) {
   await env.KV.put(KV_CATALOG_MANIFEST, JSON.stringify(manifest))
 
   catalogCache.hash = null
+  catalogCache.catalogHash = null
+  catalogCache.generatedAt = null
+  catalogCache.genes = Object.freeze([])
   catalogCache.bySymbol = new Map()
   catalogCache.symbolByUniprot = new Map()
+  catalogCache.symbolByAlias = new Map()
   catalogCache.loadedAt = 0
   await invalidateGalleryCache(env)
 
