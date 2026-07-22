@@ -228,6 +228,8 @@ function buildVoteCoordinatorBinding(db) {
               resolved_vision_id: payload.vision_id || "",
               candidate_image_id: payload.candidate_image_id || null,
               final_vote_value: payload.vote_value,
+              changed: true,
+              mutation_id: `${payload.symbol}:1`,
               snapshot: {
                 asset_sha256: payload.asset_sha256,
                 user_vote: payload.vote_value,
@@ -389,8 +391,9 @@ test("copy candidate endpoint adds target candidate and auto-checkmarks it", asy
   assert.equal(db.voteCoordinatorSetPayload.symbol, "INS")
   assert.equal(db.voteCoordinatorSetPayload.asset_sha256, SOURCE_SHA)
   assert.equal(db.voteCoordinatorSetPayload.vote_value, 1)
-  assert.equal(db.voteProjection.gene_symbol, "INS")
-  assert.equal(db.voteProjection.vote_value, 1)
+  assert.equal(db.voteProjection, undefined)
+  assert.equal(payload.auto_promote.mode, "durable_outbox")
+  assert.equal(payload.auto_promote.mutation_id, "INS:1")
   assert.equal(payload.target_url, "/gene/INS")
 })
 

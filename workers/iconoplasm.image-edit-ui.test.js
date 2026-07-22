@@ -430,7 +430,9 @@ test("image-edit publish keeps a real publisher upvote and hydrates the vote UI"
   assert.match(seed, /iconoplasm\.vote\.a:/)
   assert.match(seed, /user_vote:\s*1/)
   assert.match(seed, /refreshGeneWhenCanonicalDetailMatchesVote\(symbol,\s*assetSha\)/)
-  assert.match(wire, /handle\.ensureSnapshot\(\)/)
+  assert.doesNotMatch(wire, /handle\.ensureSnapshot\(\)/)
+  assert.match(wire, /fetchJSON\("\/api\/iconoplasm\/votes\/snapshots"/)
+  assert.match(wire, /handle\.setSnapshot\(snapshot/)
 })
 
 test("server candidate action islands wire edit buttons without replacing public cards", () => {

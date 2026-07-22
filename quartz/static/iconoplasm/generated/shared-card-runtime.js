@@ -9308,7 +9308,7 @@
   // shared/iconoplasm-card/shared-card-runtime.js
   (function(global) {
     "use strict";
-    var ICONO_SHARED_RUNTIME_VERSION = "20260402a";
+    var ICONO_SHARED_RUNTIME_VERSION = "20260722a";
     var forceSiteOwnership = !!(global && global.__iconoSiteOwnsSharedRuntime);
     var existingShared = global && global.IconoplasmCardShared ? global.IconoplasmCardShared : null;
     var existingMeta = existingShared && existingShared.__meta && typeof existingShared.__meta === "object" ? existingShared.__meta : null;
@@ -10456,7 +10456,7 @@
       if (!symbol || !assetSha) return null;
       box.setAttribute("data-icono-vote-wired", "true");
       var state = {
-        authenticated: false,
+        authenticated: !!cfg.authenticated,
         pending: false,
         snapshot: {
           image_upvotes: 0,
@@ -10465,11 +10465,12 @@
           user_vote: 0
         }
       };
-      var snapshotPrimed = false;
+      var snapshotPrimed = !!cfg.initialSnapshot;
       var snapshotPrimePromise = null;
       var candidateRef = "a:" + symbol + "|" + assetSha;
       var storedSnapshot = readStoredVoteSnapshot(candidateRef);
       if (storedSnapshot) state.snapshot = cloneSnapshot(storedSnapshot);
+      if (cfg.initialSnapshot) state.snapshot = cloneSnapshot(cfg.initialSnapshot);
       var candidateImageId = Number(cfg.candidateImageId || 0);
       if (!Number.isFinite(candidateImageId) || candidateImageId <= 0) candidateImageId = 0;
       var upBtn = box.querySelector("[data-icono-vote-up]");
@@ -10481,6 +10482,19 @@
         if (typeof cfg.onSnapshot === "function") {
           cfg.onSnapshot(state.snapshot, state);
         }
+      }
+      function setSnapshot(snapshot, options) {
+        var opts = options || {};
+        state.snapshot = cloneSnapshot(snapshot);
+        if (Object.prototype.hasOwnProperty.call(opts, "authenticated")) {
+          state.authenticated = !!opts.authenticated;
+        }
+        snapshotPrimed = true;
+        state.pending = false;
+        writeStoredVoteSnapshot(candidateRef, state.snapshot);
+        render();
+        if (opts.notify !== false) notifySnapshot();
+        return state.snapshot;
       }
       function cloneSnapshot(snapshot) {
         var safe = snapshot || {};
@@ -10585,9 +10599,9 @@
               }
             }
           }).catch(function(err) {
-            state.snapshot = previousSnapshot;
-            writeStoredVoteSnapshot(candidateRef, state.snapshot);
             if (Number(err && err.status || 0) === 401 || err && err.payload && err.payload.code === "AUTH_REQUIRED") {
+              state.snapshot = previousSnapshot;
+              writeStoredVoteSnapshot(candidateRef, state.snapshot);
               state.authenticated = false;
               notifySnapshot();
               if (typeof cfg.onAuthRequired === "function") cfg.onAuthRequired(err);
@@ -10595,6 +10609,7 @@
             }
             notifySnapshot();
             if (typeof cfg.onError === "function") cfg.onError("set", err);
+            return refreshSnapshot();
           }).finally(function() {
             state.pending = false;
             render();
@@ -10624,10 +10639,10 @@
       }
       render();
       if (cfg.deferSnapshot) {
-        return { ensureSnapshot };
+        return { ensureSnapshot, setSnapshot, state };
       }
       ensureSnapshot();
-      return { ensureSnapshot };
+      return { ensureSnapshot, setSnapshot, state };
     }
     startRoughLoopObserver();
     global.IconoplasmCardShared = {
