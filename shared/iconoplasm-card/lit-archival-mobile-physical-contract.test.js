@@ -303,7 +303,7 @@ test("real seven-clan KALRN infocard projects PFAM lanes into a 4 plus 3 column 
   assert.notEqual(html.slice(rightColumnIndex).indexOf("SH3"), -1)
 })
 
-// ARCHITECTURE FENCE [IPD-002]
+// ARCHITECTURE FENCE [IPD-003]
 test("archival cards expose one labelled accessible equivalent of the visual character facts", async () => {
   const [shared, css] = await Promise.all([
     import(pathToFileURL(runtimePath).href),
