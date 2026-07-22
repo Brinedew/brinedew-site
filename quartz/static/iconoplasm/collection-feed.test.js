@@ -206,6 +206,27 @@ test("loads backward from a restored cursor when the top boundary approaches", a
   setup.controller.dispose()
 })
 
+test("snapshots the exact card chosen for gene navigation", async () => {
+  const setup = fixture()
+  await setup.controller.reset()
+  await setup.controller.loadNext()
+  const spacer = setup.feed.querySelector('.icono-feed-spacer[data-icono-feed-start="4"]')
+  const mountObserver = FakeIntersectionObserver.instances.find(
+    (candidate) => candidate.options.rootMargin === "100% 0px",
+  )
+  mountObserver.intersect(spacer)
+  await nextTask()
+  const target = setup.feed.querySelector('[data-icono-symbol="G8"]')
+  const snapshot = setup.controller.snapshot(target)
+
+  assert.equal(snapshot.page, 2)
+  assert.equal(snapshot.cursor, "cursor-1")
+  assert.equal(snapshot.offset, 4)
+  assert.equal(snapshot.anchorGene, "G8")
+  assert.equal(snapshot.anchorTop, 800)
+  setup.controller.dispose()
+})
+
 test("aborts obsolete work when the feed resets", async () => {
   const signals = []
   const setup = fixture({
