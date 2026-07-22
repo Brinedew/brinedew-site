@@ -544,6 +544,40 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
   assert.match(setupBlock, /--icono-label-mobile-fit-scale/)
 })
 
+test("gene-page lead cards use intrinsic mobile flow instead of the measured scale-and-clip shell", async () => {
+  const app = await sourceText(appPath)
+  const css = await sourceText(cssPath)
+  const geometryStart = app.indexOf("function syncMobileLabelViewportGeometry")
+  const genericGeometryStart = app.indexOf("var cardParent = card.parentElement", geometryStart)
+  assert.notEqual(geometryStart, -1, "missing mobile viewport geometry helper")
+  assert.notEqual(genericGeometryStart, -1, "missing generic gallery-card geometry boundary")
+  const leadBoundary = app.slice(geometryStart, genericGeometryStart)
+
+  assert.match(leadBoundary, /classList\.contains\("icono-gene-lead-card"\)/)
+  assert.match(leadBoundary, /removeProperty\("--icono-label-mobile-dossier-top"\)/)
+  assert.match(leadBoundary, /removeProperty\("--icono-label-mobile-viewport-height"\)/)
+  assert.match(leadBoundary, /removeProperty\("--icono-label-mobile-fit-scale"\)/)
+  assert.match(leadBoundary, /--icono-label-mobile-target-size["'],\s*["']44px/)
+  assert.match(leadBoundary, /return/)
+
+  assert.match(
+    css,
+    /\.icono-gene-lead \.icono-card--variant-lab-label\.icono-card--brick\s*\{[\s\S]*?--icono-label-mobile-fit-scale:\s*1;[\s\S]*?block-size:\s*auto;[\s\S]*?overflow:\s*visible;[\s\S]*?clip-path:\s*none;[\s\S]*?transform:\s*none;/,
+  )
+  assert.match(
+    css,
+    /\.icono-gene-lead[\s\S]*?\.icono-mobile-card-physical-object\s*\{[\s\S]*?inline-size:\s*100%;[\s\S]*?block-size:\s*auto;[\s\S]*?transform:\s*none;/,
+  )
+  assert.match(
+    css,
+    /\.icono-gene-lead[\s\S]*?\.iconoplasm-tooltip-body\s*\{[\s\S]*?position:\s*static;[\s\S]*?block-size:\s*auto;/,
+  )
+  assert.match(
+    css,
+    /\.icono-gene-lead[\s\S]*?\.icono-label-dossier-shell\s*\{[\s\S]*?display:\s*none;[\s\S]*?data-icono-mobile-expanded="true"[\s\S]*?\.icono-label-dossier-shell\s*\{[\s\S]*?display:\s*block;/,
+  )
+})
+
 test("mobile Iconoplasm page removes nested padding that creates dead card gutters", async () => {
   const styles = await sourceText(path.join(repoRoot, "quartz/static/iconoplasm/styles.css"))
   assert.match(
@@ -1450,7 +1484,7 @@ test("mobile vote arrows never affect the desktop label QC geometry", async () =
   )
 })
 
-test("server-rendered gene hero reserves its measured closed mobile geometry", async () => {
+test("server-rendered gene hero has a stable intrinsic mobile container before hydration", async () => {
   const css = await sourceText(cssPath)
   const pageCss = await sourceText(pageCssPath)
   assert.match(
@@ -1460,8 +1494,8 @@ test("server-rendered gene hero reserves its measured closed mobile geometry", a
   )
   assert.match(
     css,
-    /\.icono-gene-lead \.icono-card--variant-lab-label\.icono-card--brick\s*\{[\s\S]*?--icono-label-mobile-fit-scale:\s*clamp\([\s\S]*?100cqi[\s\S]*?--icono-label-mobile-dossier-top:[\s\S]*?var\(--height\) \/ var\(--width\)[\s\S]*?--icono-label-mobile-viewport-height:/,
-    "the edge-rendered hero should reserve the same portrait-ratio and viewport geometry that runtime measurement confirms",
+    /\.icono-gene-lead \.icono-card--variant-lab-label\.icono-card--brick\s*\{[\s\S]*?inline-size:\s*min\(100%,\s*var\(--icono-label-mobile-physical-width\)\);[\s\S]*?block-size:\s*auto;/,
+    "the edge-rendered hero should be intrinsically sized before runtime wiring instead of reserving a JS-measured viewport",
   )
 })
 
