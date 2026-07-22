@@ -1770,8 +1770,10 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
           headers: request.headers,
         })
         const assetHeaders = new Headers(assetResp.headers)
-        // Versioned CSS/JS/fonts are immutable — cache aggressively to avoid SPA flash
-        if (url.searchParams.has("v")) {
+        // Build-versioned assets and stable font binaries are immutable. Font requests do
+        // not carry the CSS cache key, so key them by their release filename instead of
+        // forcing every browser navigation through a conditional revalidation.
+        if (url.searchParams.has("v") || /\.(?:woff2?|ttf|otf|eot)$/i.test(url.pathname)) {
           assetHeaders.set("Cache-Control", "public, max-age=31536000, immutable")
         }
         return new Response(request.method === "HEAD" ? null : assetResp.body, {
