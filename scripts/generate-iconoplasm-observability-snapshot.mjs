@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url"
 
 import toml from "toml"
 
+import { fetchCloudflareJson } from "./lib/cloudflare-json.mjs"
+
 const GRAPHQL_ENDPOINT = "https://api.cloudflare.com/client/v4/graphql"
 const LOOKBACK_DAYS = 14
 const D1_DAILY_QUERY = `query IconoplasmD1Daily($accountTag: string, $databaseId: string, $startDate: Date, $endDate: Date) {
@@ -379,16 +381,19 @@ async function loadWranglerConfig(rootDir, envName) {
 }
 
 async function callGraphQL(apiToken, query, variables) {
-  const response = await fetch(GRAPHQL_ENDPOINT, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiToken}`,
-      "Content-Type": "application/json",
+  const payload = await fetchCloudflareJson(
+    GRAPHQL_ENDPOINT,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query, variables }),
     },
-    body: JSON.stringify({ query, variables }),
-  })
-  const payload = await response.json()
-  if (!response.ok || (Array.isArray(payload?.errors) && payload.errors.length)) {
+    { operation: "Cloudflare GraphQL query" },
+  )
+  if (Array.isArray(payload?.errors) && payload.errors.length) {
     throw new Error(`Cloudflare GraphQL query failed: ${JSON.stringify(payload, null, 2)}`)
   }
   return payload
@@ -401,7 +406,7 @@ function unixMsAtUtcDateStart(dateInput) {
 }
 
 async function callWorkersObservabilityTelemetryQuery({ apiToken, accountId, body }) {
-  const response = await fetch(
+  const payload = await fetchCloudflareJson(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/observability/telemetry/query`,
     {
       method: "POST",
@@ -411,13 +416,8 @@ async function callWorkersObservabilityTelemetryQuery({ apiToken, accountId, bod
       },
       body: JSON.stringify(body),
     },
+    { operation: "Workers Observability query" },
   )
-  const payload = await response.json()
-  if (!response.ok) {
-    throw new Error(
-      `Workers Observability query failed (${response.status}): ${JSON.stringify(payload, null, 2)}`,
-    )
-  }
   if (payload?.success === false) {
     throw new Error(
       `Workers Observability API reported failure: ${JSON.stringify(payload, null, 2)}`,
