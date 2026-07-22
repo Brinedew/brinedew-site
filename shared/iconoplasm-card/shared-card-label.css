@@ -3154,8 +3154,6 @@
   .icono-gene-lead .icono-card--variant-lab-label.icono-card--brick {
     --icono-label-mobile-fit-scale: 1;
     inline-size: min(100%, var(--icono-label-mobile-physical-width));
-    display: block;
-    aspect-ratio: auto;
     block-size: auto;
     overflow: visible;
     clip-path: none;
