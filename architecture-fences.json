@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "baseline_marker_categories": ["instructions", "runbook", "source", "test"],
+  "fences": [
+    {
+      "id": "IPD-001",
+      "title": "Bunny is the healthy-path portrait accelerator",
+      "decision": "Healthy browser tabs load content-addressed portrait bytes directly from Bunny; one failed real-image probe selects the canonical first-party fallback for that tab.",
+      "reason": "Direct Bunny delivery avoids charging every healthy portrait read to the Cloudflare Worker budget. A resolver failure on one network is the reason the fallback exists, not evidence that Bunny should be disabled globally.",
+      "change_control": "Retiring or replacing Bunny requires an explicit architecture migration that updates this registry, the delivery runbook, source policy, production and staging configuration, behavioral tests, and deploy guard in one reviewed change.",
+      "runbook": "docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md",
+      "linear_issue": "B-649",
+      "additional_required_marker_categories": ["config", "deploy"],
+      "markers": [
+        {
+          "category": "instructions",
+          "file": "AGENTS.md",
+          "token": "ARCHITECTURE FENCE [IPD-001]"
+        },
+        {
+          "category": "runbook",
+          "file": "docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md",
+          "token": "ARCHITECTURE FENCE [IPD-001]"
+        },
+        {
+          "category": "source",
+          "file": "shared/iconoplasm-portrait/portrait-delivery-core.js",
+          "token": "ARCHITECTURE FENCE [IPD-001]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+          "token": "ARCHITECTURE FENCE [IPD-001]"
+        },
+        {
+          "category": "config",
+          "file": "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+          "token": "ARCHITECTURE FENCE [IPD-001]"
+        },
+        {
+          "category": "test",
+          "file": "scripts/architecture-fences.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-001]"
+        },
+        {
+          "category": "deploy",
+          "file": ".github/workflows/deploy-quartz.yml",
+          "token": "ARCHITECTURE FENCE [IPD-001]"
+        }
+      ]
+    }
+  ]
+}

@@ -2,6 +2,22 @@
 
 This `AGENTS.md` is loaded automatically when work happens inside `D:\Coding\Website\`. Root `D:\Coding\AGENTS.md` rules still apply — these are project-specific additions.
 
+## Architecture fence registry
+
+Before changing a non-obvious cost, ownership, fallback, or release decision,
+read `architecture-fences.json` and `docs/ARCHITECTURE_FENCES.md`. Registered
+fences are deliberately enforced in instructions, runbooks, source,
+configuration, tests, and deployment. A fence may be replaced, but only by an
+explicit migration that updates all registered enforcement points together.
+
+**ARCHITECTURE FENCE [IPD-001]** — Bunny is Iconoplasm's healthy-path portrait
+accelerator because direct delivery avoids charging each image to the
+Cloudflare Worker budget. The first real image probes once per tab; a regional
+DNS failure selects the canonical first-party fallback for that tab. Never turn
+one network's DNS result into a global accelerator disable. Read
+`docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md` before changing portrait policy,
+storage, CDN configuration, preconnects, or fallback behavior.
+
 ## "Site is broken" runbook
 
 When a user reports "site broken" or "images not loading" or any visual regression, the first 30 minutes are dominated by the wrong kind of investigation (DNS-layer forensics, status-page checks, Git blame) when the actual answer is almost always on the user's network or in a project-owned fallback that already exists. The pattern that wastes hours is:
