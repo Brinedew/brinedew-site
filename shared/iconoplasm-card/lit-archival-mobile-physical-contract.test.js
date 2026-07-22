@@ -515,6 +515,11 @@ test("mobile viewport geometry computes a fit scale before measuring the sheet",
   const setupBlock = app.slice(geometryStart, geometryEnd)
   assert.match(setupBlock, /card\.scrollWidth\s*\|\|\s*card\.offsetWidth/)
   assert.match(setupBlock, /--icono-label-mobile-physical-width/)
+  assert.match(
+    setupBlock,
+    /card\.clientWidth\s*\?\s*card\.clientWidth\s*:\s*Number\.POSITIVE_INFINITY/,
+    "mobile fit must be bounded by the rendered card, not the wider page column",
+  )
   assert.match(setupBlock, /cardParent\.clientWidth/)
   assert.match(setupBlock, /document\.documentElement\.clientWidth/)
   assert.match(

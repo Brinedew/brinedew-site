@@ -3971,6 +3971,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var visibleParentWidth = Math.max(1, visibleParentRight - visibleParentLeft)
     var availableWidth =
       Math.min(
+        card.clientWidth ? card.clientWidth : Number.POSITIVE_INFINITY,
         cardParent && cardParent.clientWidth ? cardParent.clientWidth : Number.POSITIVE_INFINITY,
         visibleParentWidth,
       ) || window.innerWidth
