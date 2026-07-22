@@ -373,7 +373,10 @@ export function createCollectionFeedController(options) {
     if (direction === "backward" && segments.length && !hasPrevious) return null
     const requestGeneration = generation
     const initial = segments.length === 0
-    const limit = currentPageSize(initial)
+    const restoring =
+      initial &&
+      (Boolean(requestOptions?.cursor) || Math.max(0, Number(requestOptions?.offset || 0)) > 0)
+    const limit = currentPageSize(initial && !restoring)
     const request = {
       direction,
       cursor:
@@ -394,7 +397,7 @@ export function createCollectionFeedController(options) {
           : segments.length
             ? (segments[segments.length - 1].page || segments.length) + 1
             : 1),
-      initial,
+      initial: initial && !restoring,
     }
     const controller = new AbortController()
     activeRequest = controller
