@@ -200,6 +200,7 @@ test("loads backward from a restored cursor when the top boundary approaches", a
     },
   })
   await setup.controller.reset({ offset: 8, cursor: "restored-page", page: 3 })
+  assert.equal(requests[0].limit, 12)
   const topSentinel = setup.feed.querySelector('[data-icono-feed-sentinel="backward"]')
   prefetchObserver().intersect(topSentinel)
   await nextTask()
