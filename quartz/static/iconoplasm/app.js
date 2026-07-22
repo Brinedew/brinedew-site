@@ -1493,11 +1493,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
         window.imagesLoaded(container, function () {
           instance.layout()
         })
-        instance.layout()
-        return Promise.resolve()
       }
-      instance.layout()
-      return Promise.resolve()
+      return waitForMasonryLayout(instance)
     }
     destroyHomeMasonry(container)
     // Insert sizer elements if not already present
@@ -1529,12 +1526,25 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       window.imagesLoaded(container, function () {
         msnry.layout()
       })
-      // also do an eager layout so things aren't invisible while images load
-      msnry.layout()
-      return Promise.resolve()
     }
-    msnry.layout()
-    return Promise.resolve()
+    return waitForMasonryLayout(msnry)
+  }
+
+  function waitForMasonryLayout(instance) {
+    if (!instance || typeof instance.layout !== "function") return Promise.resolve()
+    return new Promise(function (resolve) {
+      var settled = false
+      var finish = function () {
+        if (settled) return
+        settled = true
+        window.requestAnimationFrame(resolve)
+      }
+      if (typeof instance.once === "function") instance.once("layoutComplete", finish)
+      instance.layout()
+      window.requestAnimationFrame(function () {
+        window.requestAnimationFrame(finish)
+      })
+    })
   }
 
   function applyHomeMasonry(container, newElements) {
