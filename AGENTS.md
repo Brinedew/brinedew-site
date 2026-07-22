@@ -23,7 +23,9 @@ published-catalog contract. Complete canonical profiles are indexable; aliases
 redirect permanently; incomplete profiles stay noindex; unknown symbols are
 real 404s. The `/genes` archive uses frozen, self-locating prefix ranges—never
 numeric pagination or automatic count rebalancing. Preserve the visual card and
-its one-to-one hidden semantic equivalent. Read
+its one-to-one hidden semantic equivalent. Crawler discovery belongs in the
+existing non-visual homepage description, not as new chrome in the immersive
+Archive/Clans switcher; feed skip links stay clipped until keyboard focus. Read
 `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md` before changing the renderer,
 gene HTML, range map, robots metadata, archive, sitemap, or `llms.txt`.
 

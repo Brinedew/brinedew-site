@@ -9486,8 +9486,9 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       })
   }
 
-  // Desktop switcher lives in the (phone-hidden) Quartz left sidebar, so mount a
-  // compact copy above the app content for mobile. Same segmented styling.
+  // ARCHITECTURE FENCE [IPD-003]: Desktop and mobile switchers are part of the
+  // immersive application, not the crawler frontier. Keep them Archive/Clans;
+  // the existing non-visual homepage description owns the ordinary /genes link.
   function ensureMobilePageSwitcher() {
     var root = document.getElementById(ROOT_ID)
     if (!root || !root.parentNode) return
@@ -9498,22 +9499,8 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     bar.setAttribute("aria-label", "Iconoplasm sections")
     bar.innerHTML =
       '<a href="/" class="icono-page-tab" data-icono-nav data-icono-switch="archive">Archive</a>' +
-      '<a href="/clans" class="icono-page-tab" data-icono-nav data-icono-switch="clans">Clans</a>' +
-      '<a href="/genes" class="icono-page-tab" data-icono-switch="reference">Gene index</a>'
+      '<a href="/clans" class="icono-page-tab" data-icono-nav data-icono-switch="clans">Clans</a>'
     root.parentNode.insertBefore(bar, root)
-  }
-
-  function ensureGeneIndexPageSwitcherLinks() {
-    var switchers = document.querySelectorAll("[data-icono-page-switcher]")
-    for (var i = 0; i < switchers.length; i++) {
-      if (switchers[i].querySelector('a[href="/genes"]')) continue
-      var link = document.createElement("a")
-      link.href = "/genes"
-      link.className = "icono-page-tab"
-      link.setAttribute("data-icono-switch", "reference")
-      link.textContent = "Gene index"
-      switchers[i].appendChild(link)
-    }
   }
 
   function syncPageSwitcher(route) {
@@ -9568,7 +9555,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
       refreshPortraitLightbox()
     }
     ensureMobilePageSwitcher()
-    ensureGeneIndexPageSwitcherLinks()
     syncPageSwitcher(route)
   }
 

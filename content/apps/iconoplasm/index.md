@@ -12,7 +12,7 @@ tags:
 
 <h1 class="sr-only">Iconoplasm - gene character cards and browser extension</h1>
 
-<p class="sr-only">Iconoplasm turns human gene symbols into memorable character cards called blots. Search by gene symbol or name, browse published human gene cards, and use the browser extension to recognize genes while reading papers, databases, and other biology pages.</p>
+<!-- ARCHITECTURE FENCE [IPD-003]: this existing non-visual description owns the crawler frontier. Do not add /genes as visible application chrome. -->
+<p class="sr-only">Iconoplasm turns human gene symbols into memorable character cards called blots. Search by gene symbol or name, browse <a href="https://iconoplasm.brinedew.bio/genes" tabindex="-1">published human gene cards</a>, and use the browser extension to recognize genes while reading papers, databases, and other biology pages.</p>
 
 <div id="iconoplasm-root" data-static="/static/iconoplasm"></div>
-

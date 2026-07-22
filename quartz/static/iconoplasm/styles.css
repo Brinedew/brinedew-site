@@ -4085,28 +4085,48 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   background: color-mix(in srgb, var(--light) 70%, white 30%);
 }
 
+/* ARCHITECTURE FENCE [IPD-003]: these are keyboard escape hatches, not visual
+   gallery chrome. Keep them accessibility-tree-visible but physically clipped
+   until focus exposes the complete control. */
 .icono-feed-skip {
   position: absolute;
   z-index: 20;
-  left: 1rem;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+  left: 0;
   display: inline-flex;
-  min-height: 44px;
   box-sizing: border-box;
   align-items: center;
-  padding: 0.7rem 0.9rem;
-  border: 1px solid var(--ui-border);
   border-radius: var(--icono-radius-pill);
   background: var(--light);
   color: var(--dark);
   font:
     600 0.78rem/1.2 "IBM Plex Mono",
     monospace;
-  transform: translateY(-180%);
-  transition: transform 0.14s var(--icono-ease-out);
 }
 
 .icono-feed-skip:focus {
-  transform: translateY(0);
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  width: auto;
+  height: auto;
+  min-height: 44px;
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  overflow: visible;
+  clip: auto;
+  clip-path: none;
+  white-space: normal;
+  border: 1px solid var(--ui-border);
 }
 
 .pswp {

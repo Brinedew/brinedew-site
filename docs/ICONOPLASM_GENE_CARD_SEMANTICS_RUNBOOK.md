@@ -36,6 +36,14 @@ a real 404 instead of the application shell.
 The same predicate owns response headers, HTML metadata, `/genes` membership,
 gene sitemap shards, and tests. Never update just one of those surfaces.
 
+The homepage link frontier must not become visible application chrome. Its
+ordinary `/genes` anchor lives inside the homepage's existing `sr-only`
+description, where it is useful to accessibility-tree and crawler readers
+without adding a third destination to the immersive Archive/Clans switcher.
+Likewise, the feed's before/after links are keyboard affordances: keep them
+clipped at rest and reveal the full 44px control only while focused. Moving
+either surface into the default visual composition is an immersion regression.
+
 ## Frozen range contract
 
 `workers/iconoplasm-gene-discovery.js` contains the deliberate range table for
