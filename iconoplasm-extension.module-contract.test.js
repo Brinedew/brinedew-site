@@ -1490,8 +1490,8 @@ test("Iconoplasm home keeps Discord actions in the starter-card flow", () => {
 
   assert.match(
     appSource,
-    /from "\.\.\/shared\/sidebar-shell\.js\?v=20260509a"/,
-    "Iconoplasm should request a fresh sidebar module version when it imports newly exported sidebar values",
+    /from "\.\.\/shared\/sidebar-shell\.js\?v=[a-f0-9]{16}"/,
+    "Iconoplasm should import the shared sidebar through its immutable content hash",
   )
   assert.doesNotMatch(
     appSource,

@@ -20,7 +20,7 @@ import {
   hasSharedSessionPresenceHint,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=20260509a"
+} from "../shared/sidebar-shell.js?v=ec70a3b0941d0a38"
 import "./vendor/img-comparison-slider.js?v=20260516b517"
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
