@@ -89,3 +89,17 @@ test("production workflow assigns Iconoplasm only to the stateful route owner", 
   assert.match(statefulAssignment, /geneguessr-api/)
   assert.match(statefulAssignment, /iconoplasm\.brinedew\.bio\/\*/)
 })
+
+test("production hands off the existing route before Wrangler reconciles stateful triggers", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
+    "utf8",
+  )
+  const handoffIndex = workflow.indexOf("Hand off Iconoplasm route to the prepared stateful worker")
+  const statefulDeployIndex = workflow.indexOf(
+    "Deploy the only allowed internal stateful worker (production)",
+  )
+
+  assert.ok(handoffIndex > 0)
+  assert.ok(statefulDeployIndex > handoffIndex)
+})
