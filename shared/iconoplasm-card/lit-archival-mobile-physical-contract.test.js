@@ -144,6 +144,37 @@ test("mobile voting copy uses a Firefox-safe flex row with a non-shrinking arrow
   assert.match(arrow, /flex:\s*0 0 1\.44rem\s*;/)
 })
 
+test("rough loops measure CSS-generated selector legends by their real character count", async () => {
+  const runtime = await sourceText(runtimePath)
+  const helperStart = runtime.indexOf("  function iconoCssGeneratedContentText")
+  const helperEnd = runtime.indexOf("  function iconoMeasureRoughLoop", helperStart)
+  assert.notEqual(helperStart, -1, "missing generated-content measurement helper")
+  assert.notEqual(helperEnd, -1, "missing rough-loop measurement function")
+
+  const helperSource = runtime.slice(helperStart, helperEnd)
+  const roughLoopCopyText = Function(
+    "global",
+    `${helperSource}\nreturn iconoRoughLoopCopyText`,
+  )({
+    getComputedStyle(_target, pseudo) {
+      return { content: pseudo === "::before" ? '"TUMOR SUPPRESSOR"' : "none" }
+    },
+  })
+
+  assert.equal(
+    roughLoopCopyText({ textContent: "" }),
+    "TUMOR SUPPRESSOR",
+    "CSS-generated legends must not collapse to the one-character padding fallback",
+  )
+  assert.equal(
+    roughLoopCopyText({ textContent: "FIT" }),
+    "FIT",
+    "ordinary DOM text must remain the primary measurement source",
+  )
+  assert.match(runtime, /var text = iconoRoughLoopCopyText\(target\)/)
+  assert.doesNotMatch(runtime, /var text = String\(target\.textContent \|\| ""\)\.trim\(\)/)
+})
+
 test("lab-label vote ink remains legible when legacy theme attributes disagree", async () => {
   const css = await sourceText(cssPath)
 
