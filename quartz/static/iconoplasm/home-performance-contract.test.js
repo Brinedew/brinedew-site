@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import test from "node:test"
 import assert from "node:assert/strict"
@@ -9,6 +10,7 @@ const appPath = new URL("./app.js", import.meta.url)
 const homeOrdersPath = new URL("./home-orders.js", import.meta.url)
 const stylesPath = new URL("./styles.css", import.meta.url)
 const headPath = new URL("../../components/Head.tsx", import.meta.url)
+const sidebarShellPath = new URL("../shared/sidebar-shell.js", import.meta.url)
 const customCssPath = new URL("../custom.css", import.meta.url)
 const iconoplasmIndexPath = new URL("../../../content/apps/iconoplasm/index.md", import.meta.url)
 const internalWorkerPath = new URL(
@@ -143,6 +145,20 @@ test("anonymous homepage bootstrap skips session and settings traffic", async ()
   assert.match(app, /if \(hasSharedSessionPresenceHint\(\)\)/)
   assert.doesNotMatch(app, /startSharedIconoplasmSettings|syncSharedIconoplasmSettings/)
   assert.doesNotMatch(app, /\/api\/iconoplasm\/admin\/me/)
+})
+
+test("shared sidebar imports use the module content hash as their immutable cache key", async () => {
+  const [app, sidebarShell] = await Promise.all([
+    readFile(appPath, "utf8"),
+    readFile(sidebarShellPath),
+  ])
+  const contentHash = createHash("sha256").update(sidebarShell).digest("hex").slice(0, 16)
+
+  assert.match(
+    app,
+    new RegExp(`\\.\\./shared/sidebar-shell\\.js\\?v=${contentHash}`),
+    "changing the shared sidebar module must also change its immutable import URL",
+  )
 })
 
 test("guest collection state resolves locally without an auth or discovery read", async () => {
