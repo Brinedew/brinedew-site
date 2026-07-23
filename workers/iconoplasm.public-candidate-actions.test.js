@@ -53,6 +53,8 @@ class FakeStatement {
         source_asset_sha256: this.db.lastGenerationRequest?.source_asset_sha256 || "",
         request_mode: this.db.lastGenerationRequest?.request_mode || "random",
         requested_vision_id: this.db.lastGenerationRequest?.requested_vision_id || "",
+        request_batch_id: this.db.lastGenerationRequest?.request_batch_id || "",
+        request_batch_size: this.db.lastGenerationRequest?.request_batch_size || 1,
         status: "open",
         created_at: "2026-04-25T12:00:00Z",
         updated_at: "2026-04-25T12:00:00Z",
@@ -131,6 +133,8 @@ class FakeStatement {
         request_mode: this.args[7],
         requested_vision_id: this.args[8],
         client_request_id: clientRequestId,
+        request_batch_id: this.args[12],
+        request_batch_size: this.args[13],
       }
       this.db.generationRequests.push(this.db.lastGenerationRequest)
       return { meta: { last_row_id: this.db.lastRequestId, changes: 1 } }
@@ -323,6 +327,8 @@ test("one request action queues a bounded idempotent emulsion batch", async () =
     db.generationRequests.map((item) => item.requested_vision_id),
     requestBody.requested_vision_ids,
   )
+  assert.ok(db.generationRequests.every((item) => item.request_batch_id === "batch-123"))
+  assert.ok(db.generationRequests.every((item) => item.request_batch_size === 3))
 
   const retryResponse = await send()
   const retryPayload = await retryResponse.json()
