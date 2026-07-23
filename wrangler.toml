@@ -51,8 +51,7 @@ routes = [
   { pattern = "brinedew.bio/*", zone_name = "brinedew.bio" },
   { pattern = "brinedew.bio/api/*", zone_name = "brinedew.bio" },
   { pattern = "www.brinedew.bio/*", zone_name = "brinedew.bio" },
-  { pattern = "geneguessr.brinedew.bio/*", zone_name = "brinedew.bio" },
-  { pattern = "iconoplasm.brinedew.bio/*", zone_name = "brinedew.bio" }
+  { pattern = "geneguessr.brinedew.bio/*", zone_name = "brinedew.bio" }
 ]
 
 # Keep observability logs explicitly enabled across CLI deployments.
@@ -71,31 +70,14 @@ enabled = false
 persist = true
 head_sampling_rate = 1
 
-# Repo-wide hard boundary:
+# Shared-host hard boundary:
 # this routed public worker is not allowed to hold D1, KV, R2, or session
-# bindings at all. It must stay a dumb edge shell and forward everything to the
-# one internal worker that is allowed to touch state.
+# bindings at all. It stays a dumb edge shell for Brinedew and GeneGuessr.
+# Iconoplasm owns a direct asset-first route on the existing stateful worker, so
+# this service binding is no longer an unavoidable second hop for that hostname.
 [[services]]
 binding = "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE"
 service = "geneguessr-api"
-
-# Anonymous Iconoplasm API abuse control. These counters are local to each
-# Cloudflare location and eventually consistent; they are not billing ledgers.
-# Namespace IDs are unique account-wide so quota classes cannot share counters.
-[[ratelimits]]
-name = "ICONOPLASM_RATE_LIMIT_5"
-namespace_id = "655005"
-simple = { limit = 5, period = 60 }
-
-[[ratelimits]]
-name = "ICONOPLASM_RATE_LIMIT_60"
-namespace_id = "655060"
-simple = { limit = 60, period = 60 }
-
-[[ratelimits]]
-name = "ICONOPLASM_RATE_LIMIT_120"
-namespace_id = "655120"
-simple = { limit = 120, period = 60 }
 
 [env.staging]
 name = "the-only-allowed-public-edge-worker-that-must-not-touch-state-staging"
@@ -111,20 +93,3 @@ routes = [{ pattern = "staging.brinedew.bio/*", zone_name = "brinedew.bio" }]
 [[env.staging.services]]
 binding = "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE"
 service = "geneguessr-api-staging"
-
-# Bindings are non-inheritable. Staging uses separate namespaces so tests and
-# preview traffic can never consume production capacity.
-[[env.staging.ratelimits]]
-name = "ICONOPLASM_RATE_LIMIT_5"
-namespace_id = "1655005"
-simple = { limit = 5, period = 60 }
-
-[[env.staging.ratelimits]]
-name = "ICONOPLASM_RATE_LIMIT_60"
-namespace_id = "1655060"
-simple = { limit = 60, period = 60 }
-
-[[env.staging.ratelimits]]
-name = "ICONOPLASM_RATE_LIMIT_120"
-namespace_id = "1655120"
-simple = { limit = 120, period = 60 }

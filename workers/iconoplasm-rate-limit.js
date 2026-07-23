@@ -2,7 +2,7 @@ import { matchIconoplasmRouteContract } from "./iconoplasm-route-contract.js"
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 
-export function resolveIconoplasmEdgeRateLimitPolicy(request) {
+export function resolveIconoplasmRateLimitPolicy(request) {
   const url = new URL(request.url)
   if (url.hostname.toLowerCase() !== ICONOPLASM_HOST) return null
   const method = String(request.method || "GET").toUpperCase()
@@ -52,8 +52,8 @@ function problemResponse(status, payload, headers = {}) {
   })
 }
 
-export async function enforceIconoplasmRateLimitAtPublicEdge(request, env) {
-  const policy = resolveIconoplasmEdgeRateLimitPolicy(request)
+export async function enforceIconoplasmRateLimit(request, env) {
+  const policy = resolveIconoplasmRateLimitPolicy(request)
   if (!policy) return { policy: null, response: null, headers: new Headers() }
 
   const headers = policyHeaders(policy)

@@ -176,7 +176,16 @@ jobs:
             "brinedew.bio/*" \
             "brinedew.bio/api/*" \
             "www.brinedew.bio/*" \
-            "geneguessr.brinedew.bio/*" \
+            "geneguessr.brinedew.bio/*"
+
+      # ARCHITECTURE FENCE [IPD-007]: Iconoplasm's matching static assets bypass Worker execution. Dynamic
+      # misses go directly to the stateful runtime, removing the old second
+      # public-proxy invocation without creating another state holder.
+      - name: Reassign Iconoplasm route to the stateful worker
+        run: |
+          node scripts/reassign-cloudflare-worker-routes.mjs \
+            brinedew.bio \
+            geneguessr-api \
             "iconoplasm.brinedew.bio/*"
 
       # Publish browser code last. Additive backend contracts are safe for the

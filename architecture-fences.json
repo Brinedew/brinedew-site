@@ -225,6 +225,48 @@
           "token": "ARCHITECTURE FENCE [IPD-006]"
         }
       ]
+    },
+    {
+      "id": "IPD-007",
+      "title": "Iconoplasm is static-first with one dynamic Worker invocation",
+      "decision": "The Iconoplasm custom hostname is owned directly by the existing stateful Worker, where matching build artifacts are served by Workers Static Assets before Worker execution and dynamic misses enter that Worker exactly once.",
+      "reason": "On the Free plan, the former wildcard public proxy charged one public and one internal invocation for every request, including more than one hundred static dependencies on a normal page. Asset-first delivery removes static traffic from the Worker quota and direct dynamic routing removes the redundant proxy invocation without changing vote authority or adding a state holder.",
+      "change_control": "Route ownership, static bundle construction and limits, security headers, rate-limit ownership, stateful bindings, deployment order, tests, instructions, and this runbook must change atomically. A replacement must be selected from current production evidence and prove equal or lower Worker use while preserving complete gene first paint and strongly ordered votes; this fence is not authority by tradition.",
+      "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
+      "linear_issue": "B-670",
+      "additional_required_marker_categories": ["config", "deploy"],
+      "markers": [
+        {
+          "category": "instructions",
+          "file": "AGENTS.md",
+          "token": "ARCHITECTURE FENCE [IPD-007]"
+        },
+        {
+          "category": "runbook",
+          "file": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
+          "token": "ARCHITECTURE FENCE [IPD-007]"
+        },
+        {
+          "category": "source",
+          "file": "scripts/prepare-iconoplasm-edge-assets.mjs",
+          "token": "ARCHITECTURE FENCE [IPD-007]"
+        },
+        {
+          "category": "config",
+          "file": "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+          "token": "ARCHITECTURE FENCE [IPD-007]"
+        },
+        {
+          "category": "test",
+          "file": "workers/iconoplasm-static-first-routing.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-007]"
+        },
+        {
+          "category": "deploy",
+          "file": ".github/workflows/deploy-quartz.yml",
+          "token": "ARCHITECTURE FENCE [IPD-007]"
+        }
+      ]
     }
   ]
 }

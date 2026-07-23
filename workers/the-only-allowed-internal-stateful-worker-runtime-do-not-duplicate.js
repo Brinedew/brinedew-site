@@ -7,6 +7,10 @@ import {
   iconoplasmGeneUnavailableResponse,
   iconoplasmGeneNotFoundResponse,
 } from "./iconoplasm-gene-discovery-worker.js"
+import {
+  enforceIconoplasmRateLimit,
+  withIconoplasmRateLimitHeaders,
+} from "./iconoplasm-rate-limit.js"
 
 // CORS headers for frontend access - supports both main domain and subdomain
 function getCorsHeaders(origin, requestHost = "") {
@@ -2792,7 +2796,17 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
 
 export default {
   async fetch(request, env, ctx) {
-    return handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, env, ctx)
+    // Rate limiting belongs at the one runtime that actually owns these
+    // routes. Enforcing here applies exactly once to direct custom-domain and
+    // service-binding traffic and cannot be bypassed by changing entry hosts.
+    const rateLimit = await enforceIconoplasmRateLimit(request, env)
+    if (rateLimit.response) return rateLimit.response
+    const response = await handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      request,
+      env,
+      ctx,
+    )
+    return withIconoplasmRateLimitHeaders(response, rateLimit.headers)
   },
 
   async queue(batch, env, ctx) {

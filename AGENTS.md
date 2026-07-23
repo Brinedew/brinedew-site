@@ -62,6 +62,17 @@ not a hundred-image contact sheet. Read
 creation, fulfillment triggers, Discord delivery, attachment limits, or
 delivery reconciliation.
 
+**ARCHITECTURE FENCE [IPD-007]** — Iconoplasm is static-first and has one
+dynamic Worker invocation. Matching files on `iconoplasm.brinedew.bio` must be
+served by Workers Static Assets before Worker execution; dynamic misses route
+directly to the existing stateful Worker, never through the shared public
+proxy. Rate limits live on that route owner. Read
+`docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` and Linear B-670
+before changing Iconoplasm route ownership, asset bindings, bundle generation,
+rate-limit placement, or production deploy order. This fence records evidence,
+not tradition: replace it when a fully costed alternative proves better and
+updates every enforcement point atomically.
+
 ## "Site is broken" runbook
 
 When a user reports "site broken" or "images not loading" or any visual regression, the first 30 minutes are dominated by the wrong kind of investigation (DNS-layer forensics, status-page checks, Git blame) when the actual answer is almost always on the user's network or in a project-owned fallback that already exists. The pattern that wastes hours is:

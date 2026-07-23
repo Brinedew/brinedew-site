@@ -135,7 +135,7 @@ The source-of-truth relationship is:
 
 - D1 `icono_publish_state` decides the current portrait.
 - `/api/iconoplasm/cards/:symbol` serves the published full-catalog card artifact from KV, selected through `KV_GALLERY_VERSION`.
-- The public edge worker must not add a symbol-only Cache API entry in front of `/api/iconoplasm/cards/:symbol`. It has no KV binding and cannot key by `KV_GALLERY_VERSION`, so the stateful worker owns the version-aware card cache.
+- The shared public edge worker must not add a symbol-only Cache API entry in front of `/api/iconoplasm/cards/:symbol`. Iconoplasm's custom hostname now routes directly to the asset-first stateful worker; shared-host requests can still cross the proxy, which has no KV binding and cannot key by `KV_GALLERY_VERSION`. The stateful worker owns the version-aware card cache in both cases.
 
 The public card endpoint must not fall back to D1 composition. If it did, a popular card route could multiply D1 reads across isolates and colos.
 

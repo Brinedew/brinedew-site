@@ -6,7 +6,7 @@ import {
   ICONOPLASM_ROUTE_CONTRACTS,
   matchIconoplasmRouteContract,
 } from "./iconoplasm-route-contract.js"
-import { resolveIconoplasmEdgeRateLimitPolicy } from "./iconoplasm-edge-rate-limit.js"
+import { resolveIconoplasmRateLimitPolicy } from "./iconoplasm-rate-limit.js"
 import {
   ICONOPLASM_DECLARED_API_HANDLER_NAMES,
   ICONOPLASM_DECLARED_GATEWAY_HANDLER_NAMES,
@@ -118,14 +118,14 @@ test("method admission and edge quota resolve from the same route contract", () 
   assert.equal(getResolve?.route.id, "public_resolve")
   assert.equal(getResolve?.methodAllowed, false)
   assert.equal(
-    resolveIconoplasmEdgeRateLimitPolicy(
+    resolveIconoplasmRateLimitPolicy(
       new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", { method: "GET" }),
     ),
     null,
   )
 
   for (const route of ICONOPLASM_ROUTE_CONTRACTS.filter((entry) => entry.rateLimit)) {
-    const policy = resolveIconoplasmEdgeRateLimitPolicy(
+    const policy = resolveIconoplasmRateLimitPolicy(
       new Request(`https://iconoplasm.brinedew.bio${examplePath(route)}`, {
         method: route.methods[0],
       }),
