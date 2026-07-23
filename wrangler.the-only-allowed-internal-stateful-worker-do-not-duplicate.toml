@@ -1,6 +1,8 @@
 # This is the only worker in the repo that is allowed to hold dangerous state
-# bindings. Public workers must call it through an absurdly explicit service
-# binding instead of regaining D1/KV/R2/session power themselves.
+# bindings. Shared public workers call it through an absurdly explicit service
+# binding instead of regaining D1/KV/R2/session power themselves. Iconoplasm
+# routes here directly because matching static assets short-circuit before
+# Worker execution and a proxy hop would double-meter every dynamic request.
 #
 # The Cloudflare script name intentionally stays `geneguessr-api` so the existing
 # secret set and GameSession durable object ownership remain attached during the
@@ -14,6 +16,29 @@ compatibility_flags = ["nodejs_compat"]
 # production routes; this worker is only publicly reachable via service binding.
 workers_dev = true
 preview_urls = false
+
+# ARCHITECTURE FENCE [IPD-007]: Iconoplasm is static-first on the Free plan. Matching files are served by
+# Cloudflare's asset layer without invoking this Worker; only dynamic misses
+# enter the stateful runtime. Direct ownership also removes the previous second
+# public-proxy invocation from every dynamic request.
+routes = [{ pattern = "iconoplasm.brinedew.bio/*", zone_name = "brinedew.bio" }]
+
+[assets]
+directory = "./public-iconoplasm-edge"
+not_found_handling = "none"
+run_worker_first = [
+  "/api/*",
+  "/portraits/*",
+  "/admin*",
+  "/blocklist*",
+  "/artist-styles*",
+  "/health",
+  "/gene/*",
+  "/genes*",
+  "/sitemap*",
+  "/robots.txt",
+  "/llms.txt"
+]
 
 [observability]
 enabled = false
@@ -54,6 +79,24 @@ database_id = "43f485e3-a933-4345-b2f4-7c5ec1aaee6f"
 [[kv_namespaces]]
 binding = "KV"
 id = "7d59f063885e415ab3df5301393a114d"
+
+# Anonymous Iconoplasm API abuse control. These counters are local to each
+# Cloudflare location and eventually consistent; they are not billing ledgers.
+# They live on the route-owning Worker so every dynamic request is limited once.
+[[ratelimits]]
+name = "ICONOPLASM_RATE_LIMIT_5"
+namespace_id = "655005"
+simple = { limit = 5, period = 60 }
+
+[[ratelimits]]
+name = "ICONOPLASM_RATE_LIMIT_60"
+namespace_id = "655060"
+simple = { limit = 60, period = 60 }
+
+[[ratelimits]]
+name = "ICONOPLASM_RATE_LIMIT_120"
+namespace_id = "655120"
+simple = { limit = 120, period = 60 }
 
 [[durable_objects.bindings]]
 name = "GAME_SESSIONS"
@@ -197,6 +240,23 @@ database_id = "35ffab39-8835-4610-97e1-b3fc78f73c41"
 binding = "KV"
 id = "b0394946bccf4cd3afd9e1ff6de2bedc"
 preview_id = "b0394946bccf4cd3afd9e1ff6de2bedc"
+
+# Bindings are non-inheritable. Staging uses separate namespaces so tests and
+# preview traffic can never consume production capacity.
+[[env.staging.ratelimits]]
+name = "ICONOPLASM_RATE_LIMIT_5"
+namespace_id = "1655005"
+simple = { limit = 5, period = 60 }
+
+[[env.staging.ratelimits]]
+name = "ICONOPLASM_RATE_LIMIT_60"
+namespace_id = "1655060"
+simple = { limit = 60, period = 60 }
+
+[[env.staging.ratelimits]]
+name = "ICONOPLASM_RATE_LIMIT_120"
+namespace_id = "1655120"
+simple = { limit = 120, period = 60 }
 
 [[env.staging.kv_namespaces]]
 binding = "PROD_KV"
