@@ -9308,7 +9308,7 @@
   // shared/iconoplasm-card/shared-card-runtime.js
   (function(global) {
     "use strict";
-    var ICONO_SHARED_RUNTIME_VERSION = "20260722d";
+    var ICONO_SHARED_RUNTIME_VERSION = "20260723a";
     var forceSiteOwnership = !!(global && global.__iconoSiteOwnsSharedRuntime);
     var existingShared = global && global.IconoplasmCardShared ? global.IconoplasmCardShared : null;
     var existingMeta = existingShared && existingShared.__meta && typeof existingShared.__meta === "object" ? existingShared.__meta : null;
@@ -9394,13 +9394,35 @@
       var target = loopSvg.parentElement.querySelector("[data-icono-rough-copy]");
       return target || null;
     }
+    function iconoCssGeneratedContentText(target, pseudo) {
+      if (!target || !global || typeof global.getComputedStyle !== "function") return "";
+      var serialized = "";
+      try {
+        serialized = String(global.getComputedStyle(target, pseudo).content || "").trim();
+      } catch (_error) {
+        return "";
+      }
+      if (!serialized || serialized === "none" || serialized === "normal") return "";
+      var quote = serialized.charAt(0);
+      if (quote !== '"' && quote !== "'" || serialized.charAt(serialized.length - 1) !== quote) {
+        return "";
+      }
+      return serialized.slice(1, -1).replace(/\\([0-9a-f]{1,6})\s?/gi, function(_match, hex) {
+        return String.fromCodePoint(parseInt(hex, 16));
+      }).replace(/\\(?:\r\n|\r|\n)/g, "").replace(/\\(.)/g, "$1");
+    }
+    function iconoRoughLoopCopyText(target) {
+      var directText = String(target && target.textContent || "").trim();
+      if (directText) return directText;
+      return (iconoCssGeneratedContentText(target, "::before") + iconoCssGeneratedContentText(target, "::after")).trim();
+    }
     function iconoMeasureRoughLoop(loopSvg, preset) {
       var target = iconoRoughLoopTarget(loopSvg);
       var host = loopSvg && loopSvg.parentElement ? loopSvg.parentElement : null;
       if (!target || !host || typeof target.getBoundingClientRect !== "function") return null;
       var hostRect = host.getBoundingClientRect();
       var targetRect = target.getBoundingClientRect();
-      var text = String(target.textContent || "").trim();
+      var text = iconoRoughLoopCopyText(target);
       var charCount = Math.max(text.length, 1);
       var textWidth = Math.max(targetRect.width, 1);
       var textHeight = Math.max(targetRect.height, 1);
