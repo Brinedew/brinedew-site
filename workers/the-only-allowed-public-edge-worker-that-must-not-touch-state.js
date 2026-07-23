@@ -1,8 +1,3 @@
-import {
-  enforceIconoplasmRateLimitAtPublicEdge,
-  withIconoplasmRateLimitHeaders,
-} from "./iconoplasm-edge-rate-limit.js"
-
 const THE_ONLY_ALLOWED_STATEFUL_WORKER_BINDING_DO_NOT_DUPLICATE =
   "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE"
 
@@ -35,9 +30,6 @@ export async function handleRequestByProxyingToTheOnlyAllowedStatefulWorkerDoNot
     return missingTheOnlyAllowedStatefulWorkerResponse()
   }
 
-  const rateLimit = await enforceIconoplasmRateLimitAtPublicEdge(request, env)
-  if (rateLimit.response) return rateLimit.response
-
   // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
   // Search terms: PRL split-brain, public edge card cache, canonical blot,
   // logged-out stale card, KV_GALLERY_VERSION.
@@ -64,7 +56,7 @@ export async function handleRequestByProxyingToTheOnlyAllowedStatefulWorkerDoNot
         redirect: "manual",
       }),
     )
-    return withIconoplasmRateLimitHeaders(response, rateLimit.headers)
+    return response
   } catch {
     return Response.json(
       {

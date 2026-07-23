@@ -85,7 +85,7 @@ The `iconoplasm-admin` token must be able to:
 - deploy Workers scripts for `geneguessr-api` and `the-only-allowed-public-edge-worker-that-must-not-touch-state`
 - deploy Cloudflare Pages project `brinedew-bio`
 - apply D1 migrations for `geneguessr` and `iconoplasm`
-- update worker routes for `brinedew.bio`, including `iconoplasm.brinedew.bio/*`
+- update Worker routes for `brinedew.bio`; the shared public Worker owns the apex, www, and GeneGuessr routes, while `geneguessr-api` owns the asset-first `iconoplasm.brinedew.bio/*` route
 - read Cloudflare GraphQL analytics, D1 usage, Workers usage, Durable Objects usage, Queues state, and observability data used by B-507 budget gates
 
 If the token needs replacement, replace `iconoplasm-admin`, update `CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN`, update local `CLOUDFLARE_API_TOKEN`, then rerun the production workflow. Do not create a parallel token and do not commit raw Cloudflare tokens.

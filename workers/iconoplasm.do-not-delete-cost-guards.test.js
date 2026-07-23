@@ -189,7 +189,7 @@ test("DO NOT DELETE: Website/wrangler.toml must not quietly regain direct state 
   )
 })
 
-test("DO NOT DELETE: public workers must proxy to the one allowed internal stateful worker", () => {
+test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directly to the one stateful worker", () => {
   const publicEdge =
     DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
       "./the-only-allowed-public-edge-worker-that-must-not-touch-state.js",
@@ -262,6 +262,16 @@ test("DO NOT DELETE: public workers must proxy to the one allowed internal state
   )
   assert.match(
     internalWrangler,
+    /routes = \[\{ pattern = "iconoplasm\.brinedew\.bio\/\*"/,
+    "Iconoplasm should route directly to the existing stateful worker instead of paying for a second proxy invocation",
+  )
+  assert.match(
+    internalWrangler,
+    /\[assets\][\s\S]*directory = "\.\/public-iconoplasm-edge"[\s\S]*not_found_handling = "none"/,
+    "matching Iconoplasm files must bypass Worker execution through the asset-first binding",
+  )
+  assert.match(
+    internalWrangler,
     /\[\[migrations\]\][\s\S]*tag = "v1"[\s\S]*new_sqlite_classes = \["GameSession"\][\s\S]*\[\[migrations\]\][\s\S]*tag = "v2"[\s\S]*new_sqlite_classes = \["IconoplasmVoteCoordinator"\][\s\S]*\[\[migrations\]\][\s\S]*tag = "v3"[\s\S]*new_sqlite_classes = \["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"\]/,
     "internal stateful worker should preserve the old durable objects and add the hard daily budget kill switch as its own migration tag",
   )
@@ -311,7 +321,7 @@ test("DO NOT DELETE: the only allowed internal stateful worker should stay non-p
   assert.match(
     internalWrangler,
     /\[env\.staging\][\s\S]*?preview_urls = false/,
-    "staging internal worker should also stay off preview URLs so we do not publish the internal state worker by accident",
+    "staging internal worker should stay off preview URLs; production exposure is limited to the explicit Iconoplasm custom-domain route",
   )
 })
 
@@ -320,9 +330,9 @@ test("DO NOT DELETE: the only allowed internal stateful worker should stay non-p
 //   1. Run D1 migrations through the internal stateful worker config
 //      (the public edge worker has no D1 binding — see wrangler.toml comments)
 //   2. Deploy the internal stateful worker (geneguessr-api) first
-//   3. Deploy the public edge worker with routes from wrangler.toml
-//      (routes deploy atomically with the script — no separate upload-then-reassign)
-//   4. Reassign routes as a safety-net no-op (logs "Route already points at..." if fine)
+//   3. Deploy the shared public edge worker with only apex/www/GeneGuessr routes
+//   4. Reassign shared routes to the public worker and the Iconoplasm route to
+//      the asset-first stateful worker as explicit final-state verification
 //
 // This replaces the old two-step approach (upload-only config + separate reassign script)
 // which had a window where wrangler deploy with no routes key would clear existing
@@ -355,7 +365,12 @@ test("DO NOT DELETE: production deploy wiring must use the internal stateful wor
   assert.match(
     workflow,
     /Reassign production routes to the public edge worker[\s\S]*?node scripts\/reassign-cloudflare-worker-routes\.mjs[\s\S]*?the-only-allowed-public-edge-worker-that-must-not-touch-state/,
-    "production workflow should explicitly reassign the zone routes away from the legacy geneguessr-api script",
+    "production workflow should explicitly assign only shared routes to the public proxy",
+  )
+  assert.match(
+    workflow,
+    /Reassign Iconoplasm route to the stateful worker[\s\S]*?reassign-cloudflare-worker-routes\.mjs[\s\S]*?geneguessr-api[\s\S]*?iconoplasm\.brinedew\.bio\/\*/,
+    "production workflow should explicitly assign Iconoplasm to the asset-first stateful worker",
   )
 })
 

@@ -10,10 +10,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # Bump actions/checkout @v6 -> @v7 (2026 current major). Wrangler is
-      # installed via the devDependency at package.json (wrangler 4.x) in
-      # other workflows; this benchmark workflow uses a global install so
-      # the runner shell is reproducible without a checkout install step.
+      # Bump actions/checkout @v6 -> @v7 (2026 current major). The benchmark
+      # service binds to the production runtime, whose deploy now includes the
+      # generated Iconoplasm static asset bundle, so this workflow uses the same
+      # pnpm/build path as the canonical production workflow.
       - name: Checkout repository
         uses: actions/checkout@v7
 
@@ -22,8 +22,20 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install Wrangler CLI
-        run: npm install -g wrangler@4
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm config set minimumReleaseAge 1440
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+
+      - name: Install Quartz plugins
+        run: node ./quartz/bootstrap-cli.mjs plugin install --from-config
+
+      - name: Build site and Iconoplasm static asset bundle
+        run: pnpm run build
 
       - name: Apply D1 migrations
         env:
@@ -31,7 +43,7 @@ jobs:
         run: |
           echo "Applying D1 migrations..."
           set +e
-          OUTPUT=$(wrangler d1 migrations apply geneguessr --remote --config workers/benchmark/the-only-allowed-benchmark-migrations-do-not-deploy.toml 2>&1)
+          OUTPUT=$(pnpm exec wrangler d1 migrations apply geneguessr --remote --config workers/benchmark/the-only-allowed-benchmark-migrations-do-not-deploy.toml 2>&1)
           STATUS=$?
           set -e
           echo "$OUTPUT"
@@ -49,14 +61,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
         run: |
           echo "Deploying the only allowed internal stateful worker..."
-          wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+          pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 
       - name: Upload public benchmark edge worker script without routes
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
         run: |
           echo "Uploading public benchmark edge worker script..."
-          wrangler deploy --config workers/benchmark/the-only-allowed-public-benchmark-edge-worker-upload-only.toml
+          pnpm exec wrangler deploy --config workers/benchmark/the-only-allowed-public-benchmark-edge-worker-upload-only.toml
 
       - name: Reassign benchmark route to the public benchmark edge worker
         env:

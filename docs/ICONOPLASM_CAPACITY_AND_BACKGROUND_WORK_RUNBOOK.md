@@ -1,8 +1,9 @@
 # Iconoplasm capacity and background-work runbook
 
-This runbook records the two architectural decisions exposed by the 2026-07-22
-finalization incident. They are separate invariants and must not be collapsed
-into “the Queue was noisy.”
+This runbook records the capacity decisions exposed by the 2026-07-22
+finalization incident and the 2026-07-23 shoutout review. They are separate
+invariants and must not be collapsed into “the Queue was noisy” or “traffic was
+high.”
 
 ## ARCHITECTURE FENCE [IPD-004]: Queue wakeups follow due work
 
@@ -43,6 +44,41 @@ batch to `ICONOPLASM_AUDIT_DB`, verifies every event ID in the cold database,
 and only then deletes those IDs from the primary database. A failed copy or
 verification leaves the hot rows untouched. The archive operation is idempotent
 because the original event ID is the cold primary key.
+
+## ARCHITECTURE FENCE [IPD-007]: static-first, one dynamic Worker
+
+`iconoplasm.brinedew.bio/*` belongs directly to `geneguessr-api`. Matching
+homepage, privacy, JavaScript, CSS, font, icon, and download files are served by
+Workers Static Assets before Worker code executes. Dynamic misses such as
+`/api/*`, `/gene/*`, crawler documents, admin routes, and portrait fallback
+enter the existing stateful Worker once.
+
+The shared public proxy must not reclaim the Iconoplasm hostname. Production
+telemetry on the Free plan showed nearly one public invocation for every
+internal invocation, so the proxy doubled the metered request count. A normal
+Iconoplasm page also requested more than one hundred static dependencies. Cache
+API hits inside a Worker do not solve that cost; matching assets must bypass the
+Worker.
+
+The generated bundle must:
+
+- be built deterministically from the current Quartz output;
+- remain below 20,000 files and 25 MiB per file;
+- carry the same CSP, clickjacking, MIME, referrer, permissions, and transport
+  headers as the previous Worker-served responses;
+- keep dynamic gene pages on the Worker so complete first paint, alias
+  redirects, unknown-symbol 404s, and crawl eligibility remain correct.
+
+Rate limiting belongs in the stateful route owner, where direct and shared-host
+dynamic requests cannot accidentally bypass it or be charged twice. Voting
+authority remains the per-gene VoteCoordinator Durable Object; never move
+immediate ranking truth to eventually consistent KV to make this routing shape
+look simpler.
+
+Linear B-670 contains the live telemetry, user journeys, 22 ranked scenarios,
+research synthesis, rejected alternatives, and zero-spend constraint. Treat
+that evidence as revisable. Do not treat this fence—or an older issue—as
+authority when newer production evidence proves a better complete design.
 
 ## Incident evidence
 
