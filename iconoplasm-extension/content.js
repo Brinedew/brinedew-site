@@ -624,6 +624,18 @@
     visibleLimit: GENE_DETAIL_VISIBLE_LIMIT,
     delayMs: 20,
     deferTask: deferGeneDetailWarm,
+    // ARCHITECTURE FENCE [IPD-008]: public detail is immutable inside the
+    // published card snapshot. Reuse it across pages instead of paying the
+    // Worker and KV read plane again for the same gene.
+    storageApi: chrome.storage.local,
+    persistentLimit: 512,
+    getRevision: async () => {
+      const stored = await chrome.storage.local.get([
+        "iconoplasm_card_snapshot_version",
+        "iconoplasm_hash",
+      ])
+      return stored.iconoplasm_card_snapshot_version || stored.iconoplasm_hash || ""
+    },
     onResolvedBatch: onGeneDetailWarmBatch,
     onError: (err) => {
       console.error("[Iconoplasm] extension gene detail batch fetch error:", err)

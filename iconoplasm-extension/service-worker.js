@@ -160,6 +160,7 @@ async function getStatus() {
     "iconoplasm_schema_version",
     "iconoplasm_contract_revision",
     "iconoplasm_alias_overlay_version",
+    "iconoplasm_card_snapshot_version",
     "iconoplasm_contract_error",
     "iconoplasm_min_extension_version",
   ])
@@ -170,6 +171,7 @@ async function getStatus() {
     schemaVersion: result.iconoplasm_schema_version || null,
     contractRevision: result.iconoplasm_contract_revision || null,
     aliasOverlayVersion: result.iconoplasm_alias_overlay_version || null,
+    cardSnapshotVersion: result.iconoplasm_card_snapshot_version || null,
     contractError: result.iconoplasm_contract_error || null,
     minExtensionVersion: result.iconoplasm_min_extension_version || null,
   }
@@ -245,6 +247,7 @@ async function getStoredGeneSnapshot() {
     "iconoplasm_schema_version",
     "iconoplasm_contract_revision",
     "iconoplasm_portrait_delivery",
+    "iconoplasm_card_snapshot_version",
     "iconoplasm_alias_overlay_version",
     "iconoplasm_alias_overlay_applied",
     "iconoplasm_contract_error",
@@ -318,6 +321,7 @@ function normalizePublishedManifest(rawManifest) {
     gene_count: Number.isFinite(Number(manifest.gene_count)) ? Number(manifest.gene_count) : null,
     min_extension_version: minExtensionVersion || currentExtensionVersion(),
     publication_aliases: publicationAliases,
+    card_snapshot_version: String(manifest.card_snapshot_version || "").trim() || null,
   }
 }
 
@@ -771,6 +775,7 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
         iconoplasm_contract_revision: manifest.contract_revision,
         iconoplasm_portrait_delivery: manifest.portrait_delivery,
         iconoplasm_min_extension_version: manifest.min_extension_version,
+        iconoplasm_card_snapshot_version: manifest.card_snapshot_version,
       })
       return {
         schema_version: manifest.schema_version,
@@ -827,6 +832,7 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
       iconoplasm_contract_revision: manifest.contract_revision,
       iconoplasm_portrait_delivery: manifest.portrait_delivery,
       iconoplasm_min_extension_version: manifest.min_extension_version,
+      iconoplasm_card_snapshot_version: manifest.card_snapshot_version,
       iconoplasm_alias_overlay_version: manifest.publication_aliases.version,
       iconoplasm_alias_overlay_applied: overlayResult.applied,
     })

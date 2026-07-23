@@ -4,6 +4,7 @@ export var COMMUNITY_URL = "https://discord.com/invite/kx8FVzUrpf"
 var AUTH_BRIDGE_CHANNEL = "brinedew-shared-auth-bridge"
 var AUTH_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260309e"
 var AUTH_BRIDGE_TIMEOUT_MS = 4000
+var SHARED_SESSION_PRESENCE_COOKIE = "brinedew_session_present"
 var authBridgePromise = null
 var authBridgeIframe = null
 var authBridgeRequestId = 0
@@ -33,6 +34,32 @@ function currentOrigin() {
 
 function currentHost() {
   return String((typeof window !== "undefined" && window.location.hostname) || "").toLowerCase()
+}
+
+export function hasSharedSessionPresenceHint() {
+  try {
+    return String(document.cookie || "")
+      .split(/;\s*/)
+      .some(function (segment) {
+        return segment === SHARED_SESSION_PRESENCE_COOKIE + "=1"
+      })
+  } catch (_err) {
+    return false
+  }
+}
+
+function clearSharedSessionPresenceHint() {
+  try {
+    document.cookie = SHARED_SESSION_PRESENCE_COOKIE + "=; Path=/; Secure; SameSite=Lax; Max-Age=0"
+    var host = currentHost()
+    if (host === "brinedew.bio" || host.endsWith(".brinedew.bio")) {
+      document.cookie =
+        SHARED_SESSION_PRESENCE_COOKIE +
+        "=; Path=/; Secure; SameSite=Lax; Max-Age=0; Domain=.brinedew.bio"
+    }
+  } catch (_err) {
+    // A stale hint only causes one failed auth probe; it never grants access.
+  }
 }
 
 function isCanonicalAuthHost(host) {
@@ -115,7 +142,10 @@ export async function fetchAuthenticatedUser(options) {
     var response = await fetch(authBase + "/api/auth/me", {
       credentials: "include",
     })
-    if (!response.ok) return null
+    if (!response.ok) {
+      if (response.status === 401) clearSharedSessionPresenceHint()
+      return null
+    }
     var payload = await response.json().catch(function () {
       return null
     })

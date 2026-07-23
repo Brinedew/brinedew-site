@@ -112,18 +112,18 @@ test("Iconoplasm collection summary has no duplicate hero count plaque", async (
   )
 })
 
-test("Iconoplasm hero inventory stat uses explicit public stats, not portrait hash counts", async () => {
+test("Iconoplasm hero inventory stat uses release metadata without an API request", async () => {
   const app = await sourceText(appPath)
   const css = await sourceText(cssPath)
 
   assert.match(app, /id="icono-public-inventory-stat"/)
-  assert.match(app, /function fetchPublicInventoryStats\(\)/)
-  assert.match(app, /\/api\/public\/v1\/stats/)
-  assert.match(app, /toISOString\(\)\.slice\(0,\s*10\)/)
-  assert.match(app, /generated_candidate_blot_count/)
-  assert.match(app, /canonical_blot_count/)
-  assert.doesNotMatch(app, /portrait_hash[\s\S]{0,160}generated_candidate_blot_count/)
-  assert.doesNotMatch(app, /generated_candidate_blot_count[\s\S]{0,160}portrait_hash/)
+  assert.match(app, /var ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT = 19023/)
+  assert.match(
+    app,
+    /statEl\.textContent = ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT\.toLocaleString\(\) \+ " genes"/,
+  )
+  assert.doesNotMatch(app, /\/api\/public\/v1\/stats/)
+  assert.doesNotMatch(app, /generated_candidate_blot_count|canonical_blot_count/)
 
   const statBlock = cssBlockFor(css, ".icono-hero .stat")
   assert.match(statBlock, /font-variant-numeric:\s*tabular-nums;/)

@@ -24610,6 +24610,7 @@ async function handlePublicCatalogManifest(request, env) {
     return json({ error: "Public catalog manifest not found — publish the catalog first" }, 404)
   }
   const portraitFingerprint = await sharedPublishedPortraitFingerprint(env)
+  const cardSnapshot = await currentMobileCardSnapshotVersion(env)
   const buildHash = String(manifest.current_hash || "").trim() || null
   const catalogHash = catalogBaseHash(buildHash)
   const payload = {
@@ -24636,6 +24637,7 @@ async function handlePublicCatalogManifest(request, env) {
     ...(manifest.portrait_base_url ? { portrait_base_url: manifest.portrait_base_url } : {}),
     portrait_delivery: manifest.portrait_delivery || portraitDeliveryPolicy(url, env),
     publication_aliases: manifest.publication_aliases || null,
+    card_snapshot_version: String(cardSnapshot.current || "").trim() || null,
     artifact_url: buildHash
       ? publicUrl(url, `/catalog/${publicCatalogArtifactFilename(buildHash)}`)
       : null,
@@ -24690,19 +24692,32 @@ async function handlePublicGeneBatch(request, env) {
       PUBLIC_DEFAULT_GENE_BATCH_LIMIT,
   ).slice(0, PUBLIC_MAX_GENE_BATCH_LIMIT)
   const fields = body.fields || null
+  const versionInfo = await currentMobileCardSnapshotVersion(env)
+  const snapshotVersion = String(versionInfo.current || "").trim()
   if (!symbols.length) {
     return json({
       api_version: PUBLIC_API_VERSION,
       schema_version: API_SCHEMA_VERSION,
+      snapshot_version: snapshotVersion,
       genes: [],
       missing: [],
     })
   }
-  const url = new URL(request.url)
+  // ARCHITECTURE FENCE [IPD-008]: extension hover reads use the published card
+  // artifact. D1 is the authoring source, not the public per-page read plane.
+  const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, symbols)
+  if (!artifact) {
+    return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+      "Cache-Control": "no-store",
+      "X-Iconoplasm-Data-Source": "artifact-unavailable",
+      "X-Iconoplasm-VM-Version": snapshotVersion,
+    })
+  }
   const records = []
   const missing = []
   for (const symbol of symbols) {
-    const record = await geneRecord(env, url, symbol, { fields })
+    const card = artifact.bySymbol.get(symbol)
+    const record = card && card.payload && typeof card.payload === "object" ? card.payload : null
     if (!record) {
       missing.push(symbol)
       continue
@@ -24713,12 +24728,17 @@ async function handlePublicGeneBatch(request, env) {
     {
       api_version: PUBLIC_API_VERSION,
       schema_version: API_SCHEMA_VERSION,
+      snapshot_version: snapshotVersion,
       canonical_key: "symbol",
       genes: records,
       missing,
     },
     200,
-    { "Cache-Control": "public, max-age=120" },
+    {
+      "Cache-Control": "public, max-age=120",
+      "X-Iconoplasm-Data-Source": "published-card-catalog",
+      "X-Iconoplasm-VM-Version": snapshotVersion,
+    },
   )
 }
 
