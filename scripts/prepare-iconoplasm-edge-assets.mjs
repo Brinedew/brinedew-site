@@ -12,13 +12,6 @@ const targetRoot = path.join(repoRoot, "public-iconoplasm-edge")
 const maxAssetFiles = 20_000
 const maxAssetBytes = 25 * 1024 * 1024
 
-if (
-  path.dirname(targetRoot) !== repoRoot ||
-  path.basename(targetRoot) !== "public-iconoplasm-edge"
-) {
-  throw new Error(`Refusing to replace unexpected asset directory: ${targetRoot}`)
-}
-
 const iconoplasmCsp = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -69,42 +62,14 @@ async function ensureFile(filePath) {
   if (!info.isFile()) throw new Error(`Expected a file: ${filePath}`)
 }
 
-await ensureFile(path.join(publicRoot, "apps", "iconoplasm", "index.html"))
-await ensureFile(path.join(publicRoot, "apps", "iconoplasm", "privacy.html"))
-await ensureFile(path.join(publicRoot, "favicon.ico"))
-
-await rm(targetRoot, { recursive: true, force: true })
-await mkdir(targetRoot, { recursive: true })
-
-await cp(path.join(publicRoot, "static"), path.join(targetRoot, "static"), {
-  recursive: true,
-  force: true,
-})
-
-const rootEntries = await readdir(publicRoot, { withFileTypes: true })
-for (const entry of rootEntries.sort((left, right) => left.name.localeCompare(right.name))) {
-  if (!entry.isFile()) continue
-  if (!/\.(?:css|js)$/i.test(entry.name) && entry.name !== "favicon.ico") continue
-  await copyFile(path.join(publicRoot, entry.name), path.join(targetRoot, entry.name))
-}
-
-const sourceHome = await readFile(path.join(publicRoot, "apps", "iconoplasm", "index.html"), "utf8")
-const standaloneHome = sourceHome.replaceAll("../../apps/iconoplasm/privacy", "/privacy")
-await writeFile(path.join(targetRoot, "index.html"), standaloneHome, "utf8")
-await copyFile(
-  path.join(publicRoot, "apps", "iconoplasm", "privacy.html"),
-  path.join(targetRoot, "privacy.html"),
-)
-await writeFile(path.join(targetRoot, "_headers"), headersFile, "utf8")
-
-async function inspectTree(directory) {
+async function inspectTree(directory, bundleRoot) {
   let fileCount = 0
   let totalBytes = 0
   let largest = { path: "", bytes: 0 }
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const fullPath = path.join(directory, entry.name)
     if (entry.isDirectory()) {
-      const child = await inspectTree(fullPath)
+      const child = await inspectTree(fullPath, bundleRoot)
       fileCount += child.fileCount
       totalBytes += child.totalBytes
       if (child.largest.bytes > largest.bytes) largest = child.largest
@@ -116,7 +81,7 @@ async function inspectTree(directory) {
     totalBytes += info.size
     if (info.size > largest.bytes) {
       largest = {
-        path: path.relative(targetRoot, fullPath).replaceAll(path.sep, "/"),
+        path: path.relative(bundleRoot, fullPath).replaceAll(path.sep, "/"),
         bytes: info.size,
       }
     }
@@ -124,23 +89,72 @@ async function inspectTree(directory) {
   return { fileCount, totalBytes, largest }
 }
 
-const report = await inspectTree(targetRoot)
-if (report.fileCount > maxAssetFiles) {
-  throw new Error(
-    `Iconoplasm asset bundle has ${report.fileCount} files; Cloudflare allows ${maxAssetFiles}`,
+export async function prepareIconoplasmEdgeAssets({
+  sourceRoot = publicRoot,
+  outputRoot = targetRoot,
+} = {}) {
+  const resolvedSource = path.resolve(sourceRoot)
+  const resolvedOutput = path.resolve(outputRoot)
+  if (
+    path.dirname(resolvedOutput) !== path.dirname(resolvedSource) ||
+    path.basename(resolvedOutput) !== "public-iconoplasm-edge"
+  ) {
+    throw new Error(`Refusing to replace unexpected asset directory: ${resolvedOutput}`)
+  }
+
+  await ensureFile(path.join(resolvedSource, "apps", "iconoplasm", "index.html"))
+  await ensureFile(path.join(resolvedSource, "apps", "iconoplasm", "privacy.html"))
+  await ensureFile(path.join(resolvedSource, "favicon.ico"))
+
+  await rm(resolvedOutput, { recursive: true, force: true })
+  await mkdir(resolvedOutput, { recursive: true })
+
+  await cp(path.join(resolvedSource, "static"), path.join(resolvedOutput, "static"), {
+    recursive: true,
+    force: true,
+  })
+
+  const rootEntries = await readdir(resolvedSource, { withFileTypes: true })
+  for (const entry of rootEntries.sort((left, right) => left.name.localeCompare(right.name))) {
+    if (!entry.isFile()) continue
+    if (!/\.(?:css|js)$/i.test(entry.name) && entry.name !== "favicon.ico") continue
+    await copyFile(path.join(resolvedSource, entry.name), path.join(resolvedOutput, entry.name))
+  }
+
+  const sourceHome = await readFile(
+    path.join(resolvedSource, "apps", "iconoplasm", "index.html"),
+    "utf8",
   )
-}
-if (report.largest.bytes > maxAssetBytes) {
-  throw new Error(
-    `Iconoplasm asset ${report.largest.path} is ${report.largest.bytes} bytes; Cloudflare allows ${maxAssetBytes}`,
+  const standaloneHome = sourceHome.replaceAll("../../apps/iconoplasm/privacy", "/privacy")
+  await writeFile(path.join(resolvedOutput, "index.html"), standaloneHome, "utf8")
+  await copyFile(
+    path.join(resolvedSource, "apps", "iconoplasm", "privacy.html"),
+    path.join(resolvedOutput, "privacy.html"),
   )
+  await writeFile(path.join(resolvedOutput, "_headers"), headersFile, "utf8")
+
+  const report = await inspectTree(resolvedOutput, resolvedOutput)
+  if (report.fileCount > maxAssetFiles) {
+    throw new Error(
+      `Iconoplasm asset bundle has ${report.fileCount} files; Cloudflare allows ${maxAssetFiles}`,
+    )
+  }
+  if (report.largest.bytes > maxAssetBytes) {
+    throw new Error(
+      `Iconoplasm asset ${report.largest.path} is ${report.largest.bytes} bytes; Cloudflare allows ${maxAssetBytes}`,
+    )
+  }
+  return report
 }
 
-console.log(
-  JSON.stringify({
-    output: path.relative(repoRoot, targetRoot).replaceAll(path.sep, "/"),
-    file_count: report.fileCount,
-    total_bytes: report.totalBytes,
-    largest_file: report.largest,
-  }),
-)
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const report = await prepareIconoplasmEdgeAssets()
+  console.log(
+    JSON.stringify({
+      output: path.relative(repoRoot, targetRoot).replaceAll(path.sep, "/"),
+      file_count: report.fileCount,
+      total_bytes: report.totalBytes,
+      largest_file: report.largest,
+    }),
+  )
+}
