@@ -3,10 +3,9 @@
 `publisher-release.json` is the complete, inspectable authority for browser
 releases. `version` and `catalog_contract` identify the newest human-authorized
 package. `minimum_supported_version` and `compatibility_contracts` define the
-only older package the API must still serve. The published extension is 0.4.7
-and receives catalog schema 4 from `GET /api/public/v1/catalog/manifest`. Its
-artifact contains concrete aliases and the `pt`/`ph` portrait paths it
-understands.
+only older package the API must still serve. The current human-authorized
+package is 0.4.10 and the compatibility floor is 0.4.9. Both receive catalog
+schema 5 from `GET /api/public/v1/catalog/manifest`.
 
 `candidate-contract.json` describes the unreleased source contract. The current
 candidate uses catalog schema 5, `PortraitAssetRefV1` in each gene's optional
@@ -26,6 +25,13 @@ documented or supported indefinitely.
 
 Publication alias dictionary edits are projected into both contracts and do not
 require a store update. Protocol, permission, or packaged runtime changes do.
+
+The manifest may also expose `card_snapshot_version`. It is an immutable
+publication boundary, not a new catalog schema: extensions that understand it
+invalidate their bounded persistent hover-detail cache when it changes, while
+older extensions safely ignore it. `POST /api/public/v1/genes/batch` projects
+records from that published card snapshot and echoes `snapshot_version`;
+transient failures are never durable negative-cache entries.
 
 For portrait architecture and operations, read
 `../docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md`.

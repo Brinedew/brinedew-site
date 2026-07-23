@@ -80,6 +80,41 @@ research synthesis, rejected alternatives, and zero-spend constraint. Treat
 that evidence as revisable. Do not treat this fence—or an older issue—as
 authority when newer production evidence proves a better complete design.
 
+## ARCHITECTURE FENCE [IPD-008]: public reads scale with publications and sessions
+
+Anonymous startup uses static files and published immutable artifacts. It must
+not spend dynamic requests on cross-subdomain settings, authentication,
+discoveries, inventory counts, or admin-state probes. The fixed 19,023-gene
+catalog count is release metadata, and guest starter discoveries are local
+product state.
+
+The readable `brinedew_session_present` cookie is only a request-suppression
+hint. It contains no user ID, role, or secret and grants no authority. Only the
+HttpOnly session cookie authenticates a request. When the hint is present, the
+homepage may make one direct `/api/auth/me` request to the Iconoplasm route
+owner; a 401 clears the stale hint. This deliberately avoids charging every
+lurker for an auth check.
+
+Extension hover detail is immutable within a published card snapshot:
+
+- the catalog manifest exposes `card_snapshot_version`;
+- public gene batches read the corresponding published card artifact, not D1;
+- installed extensions keep a bounded local detail cache keyed by that version;
+- a version change invalidates the cache;
+- only an explicit `missing` result is negative-cached, and transient failures
+  remain retryable.
+
+The batch endpoint still costs one Worker invocation on a cache miss. Persistence
+changes the unit of cost from page navigation to unique gene detail per
+publication snapshot, while the published artifact removes D1 read pressure.
+Writes, votes, authenticated account feeds, and complete gene HTML remain
+dynamic and keep their existing authority.
+
+Linear B-671 contains the first-principles user journeys, sustained daily-budget
+model, regional Bunny evidence, implementation, tests, and live verification.
+Re-evaluate those inputs after material product or Cloudflare-plan changes; do
+not substitute a requests-per-second threshold for daily capacity.
+
 ## Incident evidence
 
 At 2026-07-22 15:05 UTC:

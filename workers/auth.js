@@ -9,6 +9,20 @@ const DISCORD_OAUTH = "https://discord.com/oauth2/authorize"
 const DISCORD_TOKEN = "https://discord.com/api/v10/oauth2/token"
 const DISCORD_CLIENT_ID_FALLBACK = "1438111252730875984"
 const INVALID_ENV_MARKERS = new Set(["", "undefined", "null"])
+export const SHARED_SESSION_PRESENCE_COOKIE = "brinedew_session_present"
+const SHARED_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+
+export function sharedSessionPresenceCookie({
+  present,
+  cookieDomain = "",
+  maxAge = SHARED_SESSION_MAX_AGE_SECONDS,
+} = {}) {
+  const domain = String(cookieDomain || "").trim()
+  const domainAttr = domain ? `; Domain=${domain}` : ""
+  return `${SHARED_SESSION_PRESENCE_COOKIE}=${present ? "1" : ""}; Path=/; Secure; SameSite=Lax; Max-Age=${
+    present ? Math.max(0, Number(maxAge) || SHARED_SESSION_MAX_AGE_SECONDS) : 0
+  }${domainAttr}`
+}
 
 function readEnvString(value) {
   if (typeof value !== "string") return ""
@@ -451,6 +465,10 @@ export async function handleCallback(request, env) {
     "Set-Cookie",
     `session=${sessionId}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${30 * 24 * 60 * 60}${cookieDomainAttr}`,
   ) // 30 days
+  // This marker contains no identity or authority. Static pages use it only to
+  // avoid asking /api/auth/me for every anonymous visitor. The HttpOnly session
+  // cookie remains the sole authentication credential.
+  headers.append("Set-Cookie", sharedSessionPresenceCookie({ present: true, cookieDomain }))
   const returnTo = normalizeReturnToUrl(oauthData?.return_to, url)
   // Normalize to trailing-slash and preserve cookie visibility across environments.
   // Staging/dev must stay same-origin to retain host-only session cookies.
@@ -587,6 +605,7 @@ export async function handleLogout(request, env) {
     "Set-Cookie",
     `session=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0${cookieDomainAttr}`,
   )
+  headers.append("Set-Cookie", sharedSessionPresenceCookie({ present: false, cookieDomain }))
 
   return new Response(null, {
     status: 204,

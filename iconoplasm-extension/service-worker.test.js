@@ -229,6 +229,7 @@ test("schema-5 catalog assets remain inspectable canonical references in extensi
     if (url.endsWith("/api/public/v1/catalog/manifest")) {
       return Response.json({
         build_version: "schema-5-test",
+        card_snapshot_version: "ccv1-schema-5-test",
         artifact_url:
           "https://iconoplasm.brinedew.bio/api/public/v1/catalog/catalog.schema-5-test.json",
         artifact_schema_version: 5,
@@ -256,6 +257,7 @@ test("schema-5 catalog assets remain inspectable canonical references in extensi
     const result = await hooks.fetchGeneData({ forceArtifactRefresh: true })
     assert.equal(result.gene_count, 1)
     assert.deepEqual(storageState.get("iconoplasm_genes").A1BG.p, asset)
+    assert.equal(storageState.get("iconoplasm_card_snapshot_version"), "ccv1-schema-5-test")
   } finally {
     globalThis.fetch = originalFetch
     storageState.clear()
@@ -334,6 +336,7 @@ test("alias-only manifest updates do not refetch the six-megabyte catalog artifa
       manifestFetches += 1
       return Response.json({
         build_version: "catalog-v2-portraits",
+        card_snapshot_version: "ccv1-alias-only",
         catalog_hash: "catalog",
         artifact_url: "https://example.test/catalog.json",
         portrait_delivery: portraitDeliveryPolicy,
@@ -356,6 +359,7 @@ test("alias-only manifest updates do not refetch the six-megabyte catalog artifa
     assert.equal(manifestFetches, 1)
     assert.equal(artifactFetches, 0)
     assert.equal(storageState.get("iconoplasm_alias_overlay_version"), "v1-test")
+    assert.equal(storageState.get("iconoplasm_card_snapshot_version"), "ccv1-alias-only")
     assert.deepEqual(storedGenes.RELA.a, ["p65"])
     assert.deepEqual(storedGenes.IL1A.a, ["IL-1", "IL-1α"])
   } finally {
