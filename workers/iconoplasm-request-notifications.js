@@ -290,15 +290,15 @@ function fulfilledPortraitUrl(env, row) {
   const sha = assetSha(row?.fulfilled_asset_sha256)
   const base = portraitCdnBase(env)
   if (!sha || !base) return ""
-  return `${base}/portraits/v1/${sha.slice(0, 2)}/${sha}/medium.webp`
+  return `${base}/portraits/v1/${sha.slice(0, 2)}/${sha}/full.webp`
 }
 
 function fulfilledPortraitRequest(env, row) {
   const sha = assetSha(row?.fulfilled_asset_sha256)
   if (!sha) return null
-  // Discord is a preview surface. Medium renditions preserve the mosaic while
-  // bounding Worker memory and upload time; the gene link is authoritative.
-  const key = `portraits/v1/${sha.slice(0, 2)}/${sha}/medium.webp`
+  // Preserve the full rendition users received before batching. The ten-file,
+  // per-file, and aggregate byte ceilings bound Worker memory independently.
+  const key = `portraits/v1/${sha.slice(0, 2)}/${sha}/full.webp`
   const storageZone = boundedText(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE, 255)
   const storagePassword = boundedText(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD, 2000)
   if (storageZone && storagePassword) {
