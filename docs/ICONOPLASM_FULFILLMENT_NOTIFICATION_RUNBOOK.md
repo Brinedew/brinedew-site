@@ -33,10 +33,11 @@ unique `legacy-request:{id}` batches; never guess old grouping from row order or
 completion time.
 
 `workers/iconoplasm-request-notifications.js` selects only complete group
-leaders, claims every outbox row in the group, downloads no more than ten
-medium renditions, posts one nonce-enforced multipart DM, and applies the same
-delivery result to every row. Reconciliation can mark each associated request
-fulfilled only after that shared Discord receipt is confirmed.
+leaders, claims every outbox row in the group, downloads no more than ten full
+renditions, posts one nonce-enforced multipart DM, and applies the same delivery
+result to every row. The per-file 10 MiB guard and 24 MiB aggregate guard bound
+memory without reducing image quality. Reconciliation can mark each associated
+request fulfilled only after that shared Discord receipt is confirmed.
 
 ## Failure rules
 

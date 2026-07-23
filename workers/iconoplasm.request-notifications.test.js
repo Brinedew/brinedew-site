@@ -889,7 +889,7 @@ test("Brinedew fulfillment sends one nonce-enforced DM and is retry-idempotent",
     assert.equal(calls.length, 3)
     assert.match(
       calls[0].url,
-      new RegExp(`/iconoplasm-portraits/portraits/v1/aa/${"a".repeat(64)}/medium\\.webp$`),
+      new RegExp(`/iconoplasm-portraits/portraits/v1/aa/${"a".repeat(64)}/full\\.webp$`),
     )
     assert.equal(calls[0].init.headers.AccessKey, "test-storage-access-key")
     assert.equal(calls[1].json.recipient_id, BRINEDEW_USER_ID)

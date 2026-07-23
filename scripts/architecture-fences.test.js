@@ -175,7 +175,7 @@ test("IPD-006 preserves durable per-gene batches and bounded Discord receipts", 
   assert.match(delivery, /DISCORD_ATTACHMENT_BATCH_MAX_BYTES/)
   assert.match(delivery, /request_batch_id/)
   assert.match(delivery, /request_batch_size/)
-  assert.match(delivery, /medium\.webp/)
+  assert.match(delivery, /full\.webp/)
   assert.match(runtime, /requestBatchId: batchId/)
   assert.match(runtime, /requestBatchSize: uniqueVisionIds\.length/)
   assert.match(migration, /legacy-request:/)
