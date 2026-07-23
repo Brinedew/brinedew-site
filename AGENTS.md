@@ -55,7 +55,7 @@ capacity charts, or bulk reconciliation paths.
 unit, partitioned by gene. Persist `request_batch_id`; never infer a batch from
 timestamps, adjacent IDs, or whichever fulfillments happen to share a cron run.
 Wait until every request in that batch-and-gene is ready, then send one receipt
-with at most ten medium-resolution preview attachments and the authoritative
+with at most ten full-resolution preview attachments and the authoritative
 gene-page link. A hundred candidates still means one receipt, not ten DMs and
 not a hundred-image contact sheet. Read
 `docs/ICONOPLASM_FULFILLMENT_NOTIFICATION_RUNBOOK.md` before changing request
