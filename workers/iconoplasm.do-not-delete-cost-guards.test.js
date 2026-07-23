@@ -359,6 +359,11 @@ test("DO NOT DELETE: production deploy wiring must use the internal stateful wor
   )
   assert.match(
     workflow,
+    /Hand off Iconoplasm route to the prepared stateful worker[\s\S]*?geneguessr-api[\s\S]*?iconoplasm\.brinedew\.bio\/\*[\s\S]*?Deploy the only allowed internal stateful worker \(production\)/,
+    "Cloudflare route ownership must move to the prepared stateful target before Wrangler reconciles the route declared by that script",
+  )
+  assert.match(
+    workflow,
     /Upload public edge worker script with routes \(production\)[\s\S]*?wrangler deploy/,
     "production workflow should deploy the public edge worker script after the internal stateful worker, with routes from wrangler.toml as the single source of truth",
   )

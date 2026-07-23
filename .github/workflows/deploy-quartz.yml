@@ -150,6 +150,18 @@ jobs:
       - name: Apply Iconoplasm D1 migrations (production)
         run: pnpm exec wrangler d1 migrations apply iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 
+      # ARCHITECTURE FENCE [IPD-007]: Cloudflare will not let `wrangler deploy`
+      # claim a route still owned by another script. The stateful script is
+      # uploaded before trigger reconciliation and is also the existing
+      # service-binding target, so hand the route to that prepared target
+      # before asking Wrangler to reconcile its declared route.
+      - name: Hand off Iconoplasm route to the prepared stateful worker
+        run: |
+          node scripts/reassign-cloudflare-worker-routes.mjs \
+            brinedew.bio \
+            geneguessr-api \
+            "iconoplasm.brinedew.bio/*"
+
       - name: Deploy the only allowed internal stateful worker (production)
         run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend"
 
