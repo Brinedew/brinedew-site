@@ -51,6 +51,17 @@ essence, keep the admin rollup copy empty, and archive publish events older than
 columns, materialized payloads, append-only ledgers, retention jobs, D1 bindings,
 capacity charts, or bulk reconciliation paths.
 
+**ARCHITECTURE FENCE [IPD-006]** — a Free Queue action is the Discord delivery
+unit, partitioned by gene. Persist `request_batch_id`; never infer a batch from
+timestamps, adjacent IDs, or whichever fulfillments happen to share a cron run.
+Wait until every request in that batch-and-gene is ready, then send one receipt
+with at most ten medium-resolution preview attachments and the authoritative
+gene-page link. A hundred candidates still means one receipt, not ten DMs and
+not a hundred-image contact sheet. Read
+`docs/ICONOPLASM_FULFILLMENT_NOTIFICATION_RUNBOOK.md` before changing request
+creation, fulfillment triggers, Discord delivery, attachment limits, or
+delivery reconciliation.
+
 ## "Site is broken" runbook
 
 When a user reports "site broken" or "images not loading" or any visual regression, the first 30 minutes are dominated by the wrong kind of investigation (DNS-layer forensics, status-page checks, Git blame) when the actual answer is almost always on the user's network or in a project-owned fallback that already exists. The pattern that wastes hours is:

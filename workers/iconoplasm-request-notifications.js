@@ -13,10 +13,16 @@ const ICONOPLASM_FULFILLMENT_DM_ALL_REQUESTERS_MODE = "all_requesters"
 const DISCORD_API_BASE = "https://discord.com/api/v10"
 const DISCORD_RETRY_BASE_SECONDS = 15 * 60
 const DISCORD_RETRY_MAX_SECONDS = 24 * 60 * 60
-// Discord's default per-file upload limit is 10 MiB. Portrait full renditions
-// are capped far below that in normal operation, but reject oversized or bogus
-// CDN responses before buffering them into a multipart request.
+// ARCHITECTURE FENCE [IPD-006]: Discord accepts at most ten attachments on a
+// message. A fulfillment DM is a batch receipt with a bounded preview mosaic,
+// not a lossless transport for every generated portrait.
+export const DISCORD_MAX_ATTACHMENTS_PER_MESSAGE = 10
+// Discord's default per-file upload limit is 10 MiB. Reject oversized or bogus
+// preview responses before buffering them into a multipart request.
 const DISCORD_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
+// Keep one Worker invocation well below its memory ceiling even if a malformed
+// rendition is individually under Discord's per-file limit.
+const DISCORD_ATTACHMENT_BATCH_MAX_BYTES = 24 * 1024 * 1024
 
 function boundedText(value, maxLength) {
   const text = String(value || "").trim()
@@ -254,9 +260,20 @@ function discordEmulsionLine(row) {
   return resolved ? `Emulsion: **Random** (resolved to ${resolved})` : "Emulsion: **Random**"
 }
 
-function discordMessage(row) {
-  const symbol = geneSymbol(row?.gene_symbol) || "your gene"
-  const isEdit = requestKind(row?.request_kind) === "edit_image"
+function discordMessage(rows, previewCount) {
+  const group = Array.isArray(rows) ? rows : []
+  const row = group[0] || {}
+  const total = group.length
+  const symbol = geneSymbol(row.gene_symbol) || "your gene"
+  const isEdit = requestKind(row.request_kind) === "edit_image"
+  if (total > 1) {
+    const noun = isEdit ? "blot edits" : "candidate blots"
+    return [
+      `Your ${total} free queue ${noun} for **${symbol}** are ready.`,
+      `Showing ${previewCount} of ${total} previews.`,
+      `Review all ${total} here: <https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(symbol)}>`,
+    ].join("\n")
+  }
   return [
     isEdit ? "Your free queue edit request is ready." : "Your free queue request is ready.",
     `Gene: **${symbol}**`,
@@ -273,13 +290,15 @@ function fulfilledPortraitUrl(env, row) {
   const sha = assetSha(row?.fulfilled_asset_sha256)
   const base = portraitCdnBase(env)
   if (!sha || !base) return ""
-  return `${base}/portraits/v1/${sha.slice(0, 2)}/${sha}/full.webp`
+  return `${base}/portraits/v1/${sha.slice(0, 2)}/${sha}/medium.webp`
 }
 
 function fulfilledPortraitRequest(env, row) {
   const sha = assetSha(row?.fulfilled_asset_sha256)
   if (!sha) return null
-  const key = `portraits/v1/${sha.slice(0, 2)}/${sha}/full.webp`
+  // Discord is a preview surface. Medium renditions preserve the mosaic while
+  // bounding Worker memory and upload time; the gene link is authoritative.
+  const key = `portraits/v1/${sha.slice(0, 2)}/${sha}/medium.webp`
   const storageZone = boundedText(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE, 255)
   const storagePassword = boundedText(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD, 2000)
   if (storageZone && storagePassword) {
@@ -416,10 +435,19 @@ async function loadFulfilledPortraitAttachment(env, row) {
     filename,
     description: `${symbol} ${requestLabel} from Iconoplasm's free generation queue`,
     blob: new Blob([bytes], { type: "image/webp" }),
+    byte_length: bytes.byteLength,
   }
 }
 
-async function setDiscordState(env, notificationId, status, fields = {}) {
+async function setDiscordState(env, notificationIds, status, fields = {}) {
+  const ids = Array.from(
+    new Set(
+      (Array.isArray(notificationIds) ? notificationIds : [notificationIds])
+        .map(positiveInteger)
+        .filter(Boolean),
+    ),
+  ).slice(0, 500)
+  if (!ids.length) return
   const nextAttemptAt =
     status === "retry"
       ? boundedText(fields.nextAttemptAt, 64) || nextDiscordRetryAt(fields.attemptCount)
@@ -432,7 +460,7 @@ async function setDiscordState(env, notificationId, status, fields = {}) {
          discord_message_id = ?,
          discord_error = ?,
          discord_next_attempt_at = ?
-     WHERE id = ?`,
+     WHERE id IN (${ids.map(() => "?").join(",")})`,
   )
     .bind(
       status,
@@ -441,7 +469,7 @@ async function setDiscordState(env, notificationId, status, fields = {}) {
       boundedText(fields.messageId, 255),
       boundedText(fields.error, 1000),
       nextAttemptAt,
-      notificationId,
+      ...ids,
     )
     .run()
 }
@@ -517,13 +545,33 @@ export async function deliverPendingRequestFulfillmentNotifications(
     ? ["pending", "retry", "suppressed_not_test_recipient"]
     : ["pending", "retry"]
   const statusPlaceholders = deliverableStatuses.map(() => "?").join(",")
+  const sameBatch = (left, right) => `
+    ${left}.requester_user_id = ${right}.requester_user_id
+    AND ${left}.request_batch_id = ${right}.request_batch_id
+    AND ${left}.gene_symbol = ${right}.gene_symbol
+    AND ${left}.request_kind = ${right}.request_kind`
   const where = [
     `n.discord_status IN (${statusPlaceholders})`,
     "(n.discord_next_attempt_at IS NULL OR n.discord_next_attempt_at <= CURRENT_TIMESTAMP)",
+    `n.id = (
+      SELECT MIN(leader.id)
+      FROM icono_request_notifications leader
+      WHERE ${sameBatch("leader", "n")}
+    )`,
+    `n.request_batch_size = (
+      SELECT COUNT(*)
+      FROM icono_request_notifications completed
+      WHERE ${sameBatch("completed", "n")}
+    )`,
   ]
   const params = [...deliverableStatuses]
   if (ids.length) {
-    where.push(`n.request_id IN (${ids.map(() => "?").join(",")})`)
+    where.push(`EXISTS (
+      SELECT 1
+      FROM icono_request_notifications scoped
+      WHERE ${sameBatch("scoped", "n")}
+        AND scoped.request_id IN (${ids.map(() => "?").join(",")})
+    )`)
     params.push(...ids)
   }
   const rowsResponse = await env.ICONOPLASM_DB.prepare(
@@ -536,17 +584,57 @@ export async function deliverPendingRequestFulfillmentNotifications(
     .bind(...params, safeLimit)
     .all()
 
-  const result = { ok: true, considered: 0, delivered: 0, suppressed: 0, failed: 0, unknown: 0 }
-  for (const row of Array.isArray(rowsResponse?.results) ? rowsResponse.results : []) {
-    const notificationId = positiveInteger(row?.id)
-    const requesterId = userId(row?.requester_user_id)
-    if (!notificationId || !requesterId) continue
+  const result = {
+    ok: true,
+    considered: 0,
+    considered_requests: 0,
+    delivered: 0,
+    delivered_requests: 0,
+    suppressed: 0,
+    failed: 0,
+    unknown: 0,
+  }
+  for (const leader of Array.isArray(rowsResponse?.results) ? rowsResponse.results : []) {
+    const leaderId = positiveInteger(leader?.id)
+    const requesterId = userId(leader?.requester_user_id)
+    const batchId = boundedText(leader?.request_batch_id, 128)
+    const symbol = geneSymbol(leader?.gene_symbol)
+    const kind = requestKind(leader?.request_kind)
+    const expectedSize = Math.max(
+      1,
+      Math.min(500, positiveInteger(leader?.request_batch_size) || 1),
+    )
+    if (!leaderId || !requesterId || !batchId || !symbol) continue
+
+    const groupResponse = await env.ICONOPLASM_DB.prepare(
+      `SELECT n.*
+       FROM icono_request_notifications n
+       WHERE n.requester_user_id = ?
+         AND n.request_batch_id = ?
+         AND n.gene_symbol = ?
+         AND n.request_kind = ?
+       ORDER BY n.id ASC
+       LIMIT 501`,
+    )
+      .bind(requesterId, batchId, symbol, kind)
+      .all()
+    const rows = Array.isArray(groupResponse?.results) ? groupResponse.results : []
+    if (
+      rows.length !== expectedSize ||
+      rows.length > 500 ||
+      rows.some((row) => !deliverableStatuses.includes(String(row?.discord_status || "")))
+    ) {
+      continue
+    }
+    const notificationIds = rows.map((row) => positiveInteger(row?.id)).filter(Boolean)
+    if (notificationIds.length !== rows.length) continue
     result.considered += 1
+    result.considered_requests += rows.length
 
     // The default is deliberately test-only. No non-test requester can reach
     // token lookup or Discord unless production delivery is explicitly enabled.
     if (!allRequesters && requesterId !== ICONOPLASM_FULFILLMENT_DM_TEST_RECIPIENT_ID) {
-      await setDiscordState(env, notificationId, "suppressed_not_test_recipient", {
+      await setDiscordState(env, notificationIds, "suppressed_not_test_recipient", {
         error: "Discord test delivery is restricted to the Brinedew account.",
       })
       result.suppressed += 1
@@ -559,28 +647,44 @@ export async function deliverPendingRequestFulfillmentNotifications(
            discord_attempt_count = discord_attempt_count + 1,
            discord_last_attempt_at = CURRENT_TIMESTAMP,
            discord_error = ''
-       WHERE id = ?
+       WHERE id IN (${notificationIds.map(() => "?").join(",")})
          AND discord_status IN (${statusPlaceholders})`,
     )
-      .bind(notificationId, ...deliverableStatuses)
+      .bind(...notificationIds, ...deliverableStatuses)
       .run()
-    if (Number(claim?.meta?.changes || 0) !== 1) continue
+    if (Number(claim?.meta?.changes || 0) !== notificationIds.length) continue
 
     const botToken = String(env?.DISCORD_BOT_TOKEN || "").trim()
     if (!botToken) {
-      await setDiscordState(env, notificationId, "retry", {
+      await setDiscordState(env, notificationIds, "retry", {
         error: "DISCORD_BOT_TOKEN is not configured.",
-        attemptCount: Number(row?.discord_attempt_count || 0) + 1,
+        attemptCount: Number(leader?.discord_attempt_count || 0) + 1,
       })
       result.failed += 1
       continue
     }
 
-    const attachment = await loadFulfilledPortraitAttachment(env, row)
-    if (!attachment.ok) {
-      await setDiscordState(env, notificationId, attachment.retryable ? "retry" : "failed", {
-        error: attachment.error,
-        attemptCount: Number(row?.discord_attempt_count || 0) + 1,
+    const attachments = []
+    let attachmentBytes = 0
+    let attachmentFailure = null
+    for (const row of rows.slice(0, DISCORD_MAX_ATTACHMENTS_PER_MESSAGE)) {
+      const attachment = await loadFulfilledPortraitAttachment(env, row)
+      if (!attachment.ok) {
+        attachmentFailure = attachment
+        break
+      }
+      if (attachmentBytes + attachment.byte_length > DISCORD_ATTACHMENT_BATCH_MAX_BYTES) break
+      attachments.push(attachment)
+      attachmentBytes += attachment.byte_length
+    }
+    if (attachmentFailure || !attachments.length) {
+      const failure = attachmentFailure || {
+        retryable: false,
+        error: "Fulfilled portrait previews exceed the bounded Discord batch upload budget.",
+      }
+      await setDiscordState(env, notificationIds, failure.retryable ? "retry" : "failed", {
+        error: failure.error,
+        attemptCount: Number(leader?.discord_attempt_count || 0) + 1,
       })
       result.failed += 1
       continue
@@ -597,18 +701,18 @@ export async function deliverPendingRequestFulfillmentNotifications(
       channelId = boundedText(payload?.id, 255)
       if (!response.ok || !channelId) {
         const retryable = response.status === 429 || response.status >= 500
-        await setDiscordState(env, notificationId, retryable ? "retry" : "failed", {
+        await setDiscordState(env, notificationIds, retryable ? "retry" : "failed", {
           error: `Discord DM channel failed (${response.status}): ${boundedText(payload?.message, 500)}`,
-          attemptCount: Number(row?.discord_attempt_count || 0) + 1,
+          attemptCount: Number(leader?.discord_attempt_count || 0) + 1,
         })
         result.failed += 1
         continue
       }
     } catch (error) {
       // Opening a channel has no user-visible side effect, so retry is safe.
-      await setDiscordState(env, notificationId, "retry", {
+      await setDiscordState(env, notificationIds, "retry", {
         error: `Discord DM channel network failure: ${boundedText(error?.message || error || "unknown", 500)}`,
-        attemptCount: Number(row?.discord_attempt_count || 0) + 1,
+        attemptCount: Number(leader?.discord_attempt_count || 0) + 1,
       })
       result.failed += 1
       continue
@@ -616,21 +720,21 @@ export async function deliverPendingRequestFulfillmentNotifications(
 
     try {
       const messagePayload = {
-        content: discordMessage(row),
-        nonce: `icono-fulfillment-${notificationId}`,
+        content: discordMessage(rows, attachments.length),
+        nonce: `icono-batch-${leaderId}`,
         enforce_nonce: true,
         allowed_mentions: { parse: [] },
-        attachments: [
-          {
-            id: 0,
-            filename: attachment.filename,
-            description: attachment.description,
-          },
-        ],
+        attachments: attachments.map((attachment, index) => ({
+          id: index,
+          filename: attachment.filename,
+          description: attachment.description,
+        })),
       }
       const form = new FormData()
       form.append("payload_json", JSON.stringify(messagePayload))
-      form.append("files[0]", attachment.blob, attachment.filename)
+      attachments.forEach((attachment, index) => {
+        form.append(`files[${index}]`, attachment.blob, attachment.filename)
+      })
       const response = await fetch(
         `${DISCORD_API_BASE}/channels/${encodeURIComponent(channelId)}/messages`,
         {
@@ -644,24 +748,25 @@ export async function deliverPendingRequestFulfillmentNotifications(
       if (!response.ok) {
         const status =
           response.status === 429 ? "retry" : response.status >= 500 ? "unknown" : "failed"
-        await setDiscordState(env, notificationId, status, {
+        await setDiscordState(env, notificationIds, status, {
           channelId,
           error: `Discord message failed (${response.status}): ${boundedText(payload?.message, 500)}`,
-          attemptCount: Number(row?.discord_attempt_count || 0) + 1,
+          attemptCount: Number(leader?.discord_attempt_count || 0) + 1,
         })
         if (status === "unknown") result.unknown += 1
         else result.failed += 1
         continue
       }
-      await setDiscordState(env, notificationId, "sent", {
+      await setDiscordState(env, notificationIds, "sent", {
         channelId,
         messageId: boundedText(payload?.id, 255),
       })
       result.delivered += 1
+      result.delivered_requests += rows.length
     } catch (error) {
       // A failed response read after POST is ambiguous. Do not retry and risk
       // a duplicate DM; the durable website inbox remains authoritative.
-      await setDiscordState(env, notificationId, "unknown", {
+      await setDiscordState(env, notificationIds, "unknown", {
         channelId,
         error: `Discord message delivery outcome unknown: ${boundedText(error?.message || error || "unknown", 500)}`,
       })

@@ -7,6 +7,7 @@ import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
+  DISCORD_MAX_ATTACHMENTS_PER_MESSAGE,
   deliverPendingRequestFulfillmentNotifications,
   reconcileDeliveredRequestFulfillments,
   resolveIconoplasmFulfillmentDeliveryPolicy,
@@ -78,14 +79,44 @@ class NotificationStatement {
   async all() {
     if (
       this.sql.includes("FROM icono_request_notifications n") &&
-      this.sql.includes("discord_status IN")
+      this.sql.includes("SELECT MIN(leader.id)")
     ) {
       const deliverableStatuses = this.args.filter((value) =>
         ["pending", "retry", "suppressed_not_test_recipient"].includes(String(value || "")),
       )
+      const groups = new Map()
+      for (const row of this.db.notifications) {
+        const key = [
+          row.requester_user_id,
+          row.request_batch_id,
+          row.gene_symbol,
+          row.request_kind,
+        ].join("|")
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key).push(row)
+      }
       return {
-        results: this.db.notifications.filter((row) =>
-          deliverableStatuses.includes(row.discord_status),
+        results: Array.from(groups.values())
+          .filter(
+            (rows) =>
+              rows.length === Number(rows[0].request_batch_size || 1) &&
+              deliverableStatuses.includes(rows[0].discord_status),
+          )
+          .map((rows) => rows.sort((a, b) => Number(a.id) - Number(b.id))[0]),
+      }
+    }
+    if (
+      this.sql.includes("FROM icono_request_notifications n") &&
+      this.sql.includes("n.request_batch_id = ?")
+    ) {
+      const [requesterUserId, requestBatchId, geneSymbol, kind] = this.args
+      return {
+        results: this.db.notifications.filter(
+          (row) =>
+            row.requester_user_id === requesterUserId &&
+            row.request_batch_id === requestBatchId &&
+            row.gene_symbol === geneSymbol &&
+            row.request_kind === kind,
         ),
       }
     }
@@ -133,26 +164,35 @@ class NotificationStatement {
       return { meta: { changes } }
     }
     if (this.sql.includes("discord_attempt_count = discord_attempt_count + 1")) {
-      const row = this.db.notifications.find((item) => Number(item.id) === Number(this.args[0]))
-      if (
-        !row ||
-        !["pending", "retry", "suppressed_not_test_recipient"].includes(row.discord_status)
-      )
-        return { meta: { changes: 0 } }
-      row.discord_status = "sending"
-      row.discord_attempt_count = Number(row.discord_attempt_count || 0) + 1
-      return { meta: { changes: 1 } }
+      const ids = this.args
+        .filter((value) => !["pending", "retry", "suppressed_not_test_recipient"].includes(value))
+        .map(Number)
+      let changes = 0
+      for (const row of this.db.notifications) {
+        if (
+          !ids.includes(Number(row.id)) ||
+          !["pending", "retry", "suppressed_not_test_recipient"].includes(row.discord_status)
+        )
+          continue
+        row.discord_status = "sending"
+        row.discord_attempt_count = Number(row.discord_attempt_count || 0) + 1
+        changes += 1
+      }
+      return { meta: { changes } }
     }
     if (this.sql.includes("SET discord_status = ?")) {
-      const id = Number(this.args[6])
-      const row = this.db.notifications.find((item) => Number(item.id) === id)
-      if (!row) return { meta: { changes: 0 } }
-      row.discord_status = String(this.args[0] || "")
-      row.discord_channel_id = String(this.args[2] || "")
-      row.discord_message_id = String(this.args[3] || "")
-      row.discord_error = String(this.args[4] || "")
-      row.discord_next_attempt_at = String(this.args[5] || "")
-      return { meta: { changes: 1 } }
+      const ids = this.args.slice(6).map(Number)
+      let changes = 0
+      for (const row of this.db.notifications) {
+        if (!ids.includes(Number(row.id))) continue
+        row.discord_status = String(this.args[0] || "")
+        row.discord_channel_id = String(this.args[2] || "")
+        row.discord_message_id = String(this.args[3] || "")
+        row.discord_error = String(this.args[4] || "")
+        row.discord_next_attempt_at = String(this.args[5] || "")
+        changes += 1
+      }
+      return { meta: { changes } }
     }
     throw new Error(`Unexpected notification SQL: ${this.sql}`)
   }
@@ -342,6 +382,8 @@ function notificationRow(overrides = {}) {
     read_at: null,
     discord_status: "pending",
     discord_attempt_count: 0,
+    request_batch_id: "legacy-request:42",
+    request_batch_size: 1,
     ...overrides,
   }
 }
@@ -522,6 +564,16 @@ test("notification migration creates inbox rows atomically and never backfills u
     requestKindMigration,
     /INSERT[\s\S]+SELECT[\s\S]+FROM icono_generation_requests/i,
   )
+
+  const batchMigration = readFileSync(
+    new URL("../migrations-iconoplasm/0058_request_notification_batches.sql", import.meta.url),
+    "utf8",
+  )
+  assert.match(batchMigration, /ADD COLUMN request_batch_id/)
+  assert.match(batchMigration, /ADD COLUMN request_batch_size/)
+  assert.match(batchMigration, /NEW\.request_batch_id/)
+  assert.match(batchMigration, /NEW\.request_batch_size/)
+  assert.match(batchMigration, /legacy-request:/)
 })
 
 test("authenticated inbox returns exact fulfillment context and durable unread count", async () => {
@@ -837,13 +889,13 @@ test("Brinedew fulfillment sends one nonce-enforced DM and is retry-idempotent",
     assert.equal(calls.length, 3)
     assert.match(
       calls[0].url,
-      new RegExp(`/iconoplasm-portraits/portraits/v1/aa/${"a".repeat(64)}/full\\.webp$`),
+      new RegExp(`/iconoplasm-portraits/portraits/v1/aa/${"a".repeat(64)}/medium\\.webp$`),
     )
     assert.equal(calls[0].init.headers.AccessKey, "test-storage-access-key")
     assert.equal(calls[1].json.recipient_id, BRINEDEW_USER_ID)
     assert.ok(calls[2].form instanceof FormData)
     assert.equal(calls[2].init.headers["Content-Type"], undefined)
-    assert.equal(calls[2].json.nonce, "icono-fulfillment-7")
+    assert.equal(calls[2].json.nonce, "icono-batch-7")
     assert.equal(calls[2].json.enforce_nonce, true)
     assert.deepEqual(calls[2].json.allowed_mentions, { parse: [] })
     assert.equal(
@@ -867,6 +919,116 @@ test("Brinedew fulfillment sends one nonce-enforced DM and is retry-idempotent",
     assert.ok(calls[2].file.size > 0)
     assert.equal(row.discord_status, "sent")
     assert.equal(row.discord_message_id, "discord-message-1")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+// ARCHITECTURE FENCE [IPD-006]
+test("one ten-candidate action spanning two genes sends exactly two Discord messages", async () => {
+  const rows = Array.from({ length: 10 }, (_, index) => {
+    const isIns = index < 5
+    const requestId = 100 + index
+    return notificationRow({
+      id: requestId,
+      request_id: requestId,
+      gene_symbol: isIns ? "INS" : "TP53",
+      request_batch_id: "two-gene-action",
+      request_batch_size: 5,
+      fulfilled_asset_sha256: (index + 1).toString(16).padStart(64, "0"),
+    })
+  })
+  const db = new NotificationDb(rows)
+  const messages = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("storage.bunnycdn.com")) return validWebpResponse()
+    if (String(url).endsWith("/users/@me/channels")) return Response.json({ id: "dm-channel-1" })
+    messages.push(JSON.parse(String(init?.body?.get("payload_json") || "{}")))
+    return Response.json({ id: `discord-message-${messages.length}` })
+  }
+  try {
+    const result = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db), {
+      requestIds: rows.map((row) => row.request_id),
+    })
+
+    assert.equal(result.delivered, 2)
+    assert.equal(result.delivered_requests, 10)
+    assert.equal(messages.length, 2)
+    assert.deepEqual(
+      messages.map((message) => message.attachments.length),
+      [5, 5],
+    )
+    assert.match(messages[0].content, /5 free queue candidate blots for \*\*INS\*\*/)
+    assert.match(messages[1].content, /5 free queue candidate blots for \*\*TP53\*\*/)
+    assert.ok(rows.every((row) => row.discord_status === "sent"))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("a hundred-candidate batch remains one Discord receipt with ten previews", async () => {
+  const rows = Array.from({ length: 100 }, (_, index) => {
+    const requestId = 200 + index
+    return notificationRow({
+      id: requestId,
+      request_id: requestId,
+      gene_symbol: "TP53",
+      request_batch_id: "hundred-candidate-action",
+      request_batch_size: 100,
+      fulfilled_asset_sha256: (index + 1).toString(16).padStart(64, "0"),
+    })
+  })
+  const db = new NotificationDb(rows)
+  let message
+  let storageFetches = 0
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("storage.bunnycdn.com")) {
+      storageFetches += 1
+      return validWebpResponse()
+    }
+    if (String(url).endsWith("/users/@me/channels")) return Response.json({ id: "dm-channel-1" })
+    message = JSON.parse(String(init?.body?.get("payload_json") || "{}"))
+    return Response.json({ id: "discord-message-100" })
+  }
+  try {
+    const result = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db))
+
+    assert.equal(DISCORD_MAX_ATTACHMENTS_PER_MESSAGE, 10)
+    assert.equal(result.delivered, 1)
+    assert.equal(result.delivered_requests, 100)
+    assert.equal(storageFetches, 10)
+    assert.equal(message.attachments.length, 10)
+    assert.match(message.content, /Showing 10 of 100 previews/)
+    assert.match(message.content, /Review all 100 here/)
+    assert.ok(rows.every((row) => row.discord_status === "sent"))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("an incomplete batch waits instead of fragmenting into multiple messages", async () => {
+  const rows = [
+    notificationRow({
+      id: 300,
+      request_id: 300,
+      request_batch_id: "partially-fulfilled-action",
+      request_batch_size: 2,
+    }),
+  ]
+  const db = new NotificationDb(rows)
+  const originalFetch = globalThis.fetch
+  let fetchCalls = 0
+  globalThis.fetch = async () => {
+    fetchCalls += 1
+    throw new Error("Discord must not be called for an incomplete batch")
+  }
+  try {
+    const result = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db))
+    assert.equal(result.considered, 0)
+    assert.equal(fetchCalls, 0)
+    assert.equal(rows[0].discord_status, "pending")
   } finally {
     globalThis.fetch = originalFetch
   }
