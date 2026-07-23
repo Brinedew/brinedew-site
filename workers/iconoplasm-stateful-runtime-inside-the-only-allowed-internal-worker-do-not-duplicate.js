@@ -4338,6 +4338,8 @@ async function createGenerationRequest(
     sourceGeneSymbol = "",
     sourceAssetSha256 = "",
     clientRequestId = "",
+    requestBatchId = "",
+    requestBatchSize = 1,
   } = {},
 ) {
   if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
@@ -4363,6 +4365,11 @@ async function createGenerationRequest(
   if (clientRequestNorm && !/^[a-z0-9][a-z0-9._:-]*$/i.test(clientRequestNorm)) {
     return { ok: false, error: "Invalid client request identifier" }
   }
+  const batchIdNorm = sanitizeText(requestBatchId || "", 128) || `single-${crypto.randomUUID()}`
+  if (!/^[a-z0-9][a-z0-9._:-]*$/i.test(batchIdNorm)) {
+    return { ok: false, error: "Invalid request batch identifier" }
+  }
+  const batchSizeNorm = Math.max(1, Math.min(500, Math.trunc(Number(requestBatchSize) || 1)))
   let requestedReferenceAssetSha = ""
   let requestedReferenceGeneSymbol = ""
   let resolvedVisionId = visionNorm
@@ -4420,9 +4427,11 @@ async function createGenerationRequest(
        requested_reference_asset_sha256,
        requested_reference_gene_symbol,
        client_request_id,
+       request_batch_id,
+       request_batch_size,
        status,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)
      ON CONFLICT(requester_user_id, client_request_id) WHERE client_request_id <> ''
      DO NOTHING`,
   )
@@ -4439,6 +4448,8 @@ async function createGenerationRequest(
       requestedReferenceAssetSha,
       requestedReferenceGeneSymbol,
       clientRequestNorm,
+      batchIdNorm,
+      batchSizeNorm,
     )
     .run()
   let requestId =
@@ -4524,9 +4535,25 @@ async function createGenerationRequestBatch(
       requestKind: "new_candidate",
       sourceGeneSymbol: geneSymbol,
       clientRequestId: `${batchId}:${index}`,
+      requestBatchId: batchId,
+      requestBatchSize: uniqueVisionIds.length,
     })
     if (result.ok) requests.push(result.request || null)
     else failures.push({ requested_vision_id: visionId, error: String(result.error || "Failed") })
+  }
+  if (requests.length && requests.length !== uniqueVisionIds.length) {
+    const requestIds = requests.map((request) => Number(request?.id || 0)).filter(Boolean)
+    if (requestIds.length) {
+      await env.ICONOPLASM_DB.prepare(
+        `UPDATE icono_generation_requests
+         SET request_batch_size = ?
+         WHERE requester_user_id = ?
+           AND request_batch_id = ?
+           AND id IN (${requestIds.map(() => "?").join(",")})`,
+      )
+        .bind(requestIds.length, normalizeUserId(requesterUserId || ""), batchId, ...requestIds)
+        .run()
+    }
   }
   return {
     ok: requests.length > 0,
