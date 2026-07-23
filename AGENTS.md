@@ -73,6 +73,19 @@ rate-limit placement, or production deploy order. This fence records evidence,
 not tradition: replace it when a fully costed alternative proves better and
 updates every enforcement point atomically.
 
+**ARCHITECTURE FENCE [IPD-008]** — anonymous Iconoplasm startup and extension
+hover detail use the published read plane. A guest homepage must not probe
+authentication, settings, discoveries, inventory statistics, admin state, or
+D1. The readable shared-session marker carries no identity or authority; it may
+only gate one direct authenticated-user lookup, while the HttpOnly session
+cookie remains the credential. Extension detail batches project immutable
+published card artifacts and persist a bounded cache keyed by the card snapshot
+version; they must not compose public hover cards from D1 or turn transient
+failures into durable “missing gene” records. Read
+`docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` and Linear B-671
+before changing anonymous bootstrap, the session-presence hint, catalog/card
+publication metadata, public batch reads, or extension detail caching.
+
 ## "Site is broken" runbook
 
 When a user reports "site broken" or "images not loading" or any visual regression, the first 30 minutes are dominated by the wrong kind of investigation (DNS-layer forensics, status-page checks, Git blame) when the actual answer is almost always on the user's network or in a project-owned fallback that already exists. The pattern that wastes hours is:

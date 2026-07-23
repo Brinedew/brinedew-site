@@ -3,6 +3,8 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { parseHTML } from "linkedom"
 
+// ARCHITECTURE FENCE [IPD-008]: anonymous bootstrap must stay on the published read plane.
+
 const appPath = new URL("./app.js", import.meta.url)
 const homeOrdersPath = new URL("./home-orders.js", import.meta.url)
 const stylesPath = new URL("./styles.css", import.meta.url)
@@ -113,38 +115,56 @@ test("Cloudflare Web Analytics automatic injection is consent-gated by worker HT
   )
 })
 
-test("home collection counts use inventory stats, not a gallery-order probe", async () => {
+test("anonymous home collection counts are static and spend no API request", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function fetchHomeCollectionCounts()")
-  const end = app.indexOf("function normalizePublicInventoryStats", start)
+  const end = app.indexOf("function syncPublicInventoryStat", start)
   assert.notEqual(start, -1, "missing fetchHomeCollectionCounts")
   assert.notEqual(end, -1, "missing fetchHomeCollectionCounts boundary")
   const block = app.slice(start, end)
 
-  assert.match(block, /fetchPublicInventoryStats\(\)/)
+  assert.match(block, /ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT/)
+  assert.match(block, /Promise\.resolve/)
+  assert.doesNotMatch(block, /\/api\//)
   assert.doesNotMatch(
     block,
     /\/api\/public\/v1\/gallery\?order=/,
-    "signed-in resorting must not trigger a public gallery count probe",
-  )
-  assert.doesNotMatch(
-    block,
-    /consumeBootstrapGallery\(/,
-    "collection counts should not consume or race the initial gallery bootstrap payload",
+    "static inventory counts must not probe the gallery",
   )
 })
 
-test("home collection cards do not wait for public gallery counts before loading discoveries", async () => {
+test("anonymous homepage bootstrap skips session and settings traffic", async () => {
+  const [app, head] = await Promise.all([readFile(appPath, "utf8"), readFile(headPath, "utf8")])
+
+  assert.match(head, /segment === "brinedew_session_present=1"/)
+  assert.match(head, /bootstrap\.authPromise = hasSharedSessionPresence/)
+  assert.match(head, /fetch\(origin \+ "\/api\/auth\/me"/)
+  assert.doesNotMatch(head, /fetch\("https:\/\/brinedew\.bio\/api\/auth\/me"/)
+  assert.match(app, /if \(hasSharedSessionPresenceHint\(\)\)/)
+  assert.doesNotMatch(app, /startSharedIconoplasmSettings|syncSharedIconoplasmSettings/)
+  assert.doesNotMatch(app, /\/api\/iconoplasm\/admin\/me/)
+})
+
+test("guest collection state resolves locally without an auth or discovery read", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function ensureLocalCollection(signal)")
   const end = app.indexOf("async function requestFeedPage", start)
   const block = app.slice(start, end)
-  assert.match(block, /fetchHomeCollectionCounts\(\)\.then/)
   assert.match(
     block,
-    /return fetchDiscoveryState\(galleryState\.order, galleryState\.seed, \{\s*signal: signal,/,
+    /if \(!currentUser && !galleryState\.sharedDiscoveries\)[\s\S]*guestStarterDiscoveryEntries\(\)/,
   )
-  assert.doesNotMatch(block, /Promise\.all/)
+  const guestStart = block.indexOf("if (!currentUser && !galleryState.sharedDiscoveries)")
+  const firstLocalPromise = block.indexOf(
+    "localReadyPromise = initialSharedSettingsPromise",
+    guestStart,
+  )
+  const secondLocalPromise = block.indexOf(
+    "localReadyPromise = initialSharedSettingsPromise",
+    firstLocalPromise + 1,
+  )
+  const guestBranch = block.slice(guestStart, secondLocalPromise)
+  assert.doesNotMatch(guestBranch, /fetchDiscoveryState|fetchHomeCollectionCounts|\/api\//)
 })
 
 test("account collection first-card path uses a bounded gallery window for supported orders", async () => {
@@ -248,25 +268,19 @@ test("home scroll restore records the active cursor and anchor only for gene Bac
   assert.doesNotMatch(app, /cachedHomeView|createDocumentFragment\(\)/)
 })
 
-test("home account window does not wait for the admin badge probe", async () => {
+test("auth payload owns the admin bit without a second admin session probe", async () => {
   const app = await readFile(appPath, "utf8")
   const stateStart = app.indexOf("function updateSharedUserState(user)")
   const stateEnd = app.indexOf("function refreshSharedUserState()", stateStart)
   assert.notEqual(stateStart, -1, "missing shared user state updater")
   assert.notEqual(stateEnd, -1, "missing shared user state updater boundary")
   const block = app.slice(stateStart, stateEnd)
-  const firstHomeRender = block.indexOf('if (getRoute().page === "home")')
-  const adminProbe = block.indexOf("fetchIconoplasmAdminState()")
-  assert.ok(firstHomeRender > -1, "home should render immediately after auth resolves")
-  assert.ok(adminProbe > -1, "admin state still needs to be probed")
-  assert.ok(
-    firstHomeRender < adminProbe,
-    "signed-in gallery fetch must start before the non-critical admin badge request resolves",
-  )
+  assert.match(block, /currentUserIsIconoAdmin = !!\(currentUser && currentUser\.is_admin\)/)
+  assert.doesNotMatch(block, /fetchIconoplasmAdminState|\/api\/iconoplasm\/admin\/me/)
   assert.match(
     block,
-    /if \(getRoute\(\)\.page === "home" && previousAdmin !== currentUserIsIconoAdmin\)/,
-    "admin-only home modes still need a second render when the admin state changes",
+    /getRoute\(\)\.page === "gene"[\s\S]*previousAdmin !== currentUserIsIconoAdmin/,
+    "admin-only gene islands still refresh when the authenticated user changes",
   )
   assert.doesNotMatch(
     block,

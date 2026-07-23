@@ -12,6 +12,8 @@ import {
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
+// ARCHITECTURE FENCE [IPD-008]: public hover batches project card artifacts without D1.
+
 const publisherRelease = readIconoplasmPublisherAuthority(
   fileURLToPath(new URL("..", import.meta.url)),
 )
@@ -267,6 +269,56 @@ function buildCatalogResolveKv() {
   })
 }
 
+function buildPublishedCardReadKv() {
+  const version = "test-card-v1"
+  const payload = {
+    api_version: "v1",
+    schema_version: 1,
+    canonical_key: "symbol",
+    canonical_symbol: "A1BG",
+    symbol: "A1BG",
+    full_name: "alpha-1-B glycoprotein",
+    color: "#dd8c9d",
+    essence: {
+      name: "alpha-1-B glycoprotein",
+      sex: "Female",
+      sex_origin: ["Soluble"],
+    },
+    portrait: {
+      status: "published",
+      medium_url:
+        "https://iconoplasm.brinedew.bio/portraits/v1/47/4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212/medium.webp",
+    },
+    snapshot_version: version,
+  }
+  return new FakeKV({
+    "iconoplasm:gallery-version": JSON.stringify({
+      current: version,
+      previous: null,
+      status: "active",
+    }),
+    [`iconoplasm:card-catalog:${version}`]: JSON.stringify({
+      schema: "iconoplasm.cardCatalog.v1",
+      artifact_version: version,
+      snapshot_version: version,
+      catalog_gene_count: 1,
+      card_count: 1,
+      cards: [
+        {
+          __complete: true,
+          schema_version: "iconoplasm.mobileCard.v1",
+          snapshot_version: version,
+          symbol: "A1BG",
+          full_name: payload.full_name,
+          portrait: payload.portrait,
+          field_status: { symbol: "present", portrait: "present" },
+          payload,
+        },
+      ],
+    }),
+  })
+}
+
 function buildSessionBinding(sessions) {
   return {
     idFromName(name) {
@@ -380,7 +432,7 @@ test("public gene payload includes published portrait dimensions", async () => {
   const response =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/A1BG"),
-      buildEnv(),
+      buildEnv({ KV: buildPublishedCardReadKv() }),
       {},
     )
   const payload = await response.json()
@@ -402,7 +454,7 @@ test("site gene payload includes published portrait dimensions for first-party b
           Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
         },
       }),
-      buildEnv(),
+      buildEnv({ KV: buildPublishedCardReadKv() }),
       {},
     )
   const payload = await response.json()
@@ -725,13 +777,15 @@ test("public gene batch is limited to first-party clients and extension traffic"
         },
         body: JSON.stringify({ symbols: ["A1BG"] }),
       }),
-      buildEnv(),
+      buildEnv({ KV: buildPublishedCardReadKv() }),
       {},
     )
   const extensionPayload = await extensionResponse.json()
   assert.equal(extensionResponse.status, 200)
+  assert.equal(extensionPayload?.snapshot_version, "test-card-v1")
   assert.equal(Array.isArray(extensionPayload?.genes), true)
   assert.equal(extensionPayload?.genes?.[0]?.symbol, "A1BG")
+  assert.equal(extensionResponse.headers.get("x-iconoplasm-data-source"), "published-card-catalog")
 })
 
 test("public gene batch honors lean field projection for extension traffic", async () => {
@@ -748,7 +802,7 @@ test("public gene batch honors lean field projection for extension traffic", asy
           fields: ["symbol", "full_name", "color", "essence", "portrait"],
         }),
       }),
-      buildEnv(),
+      buildEnv({ KV: buildPublishedCardReadKv() }),
       {},
     )
   const payload = await response.json()

@@ -285,18 +285,25 @@ export default (() => {
   }
   if ((iconoplasmStartupPath === "/" || iconoplasmStartupPath === "") && window.fetch) {
     bootstrap.accountGalleryWindowLimit = 4
-    bootstrap.authPromise = fetch("https://brinedew.bio/api/auth/me", {
-      credentials: "include",
-    })
-      .then(function (response) {
-        if (!response.ok) return null
-        return response.json().catch(function () {
-          return null
+    var hasSharedSessionPresence = String(document.cookie || "")
+      .split(/;\s*/)
+      .some(function (segment) {
+        return segment === "brinedew_session_present=1"
+      })
+    bootstrap.authPromise = hasSharedSessionPresence
+      ? fetch(origin + "/api/auth/me", {
+          credentials: "include",
         })
-      })
-      .catch(function () {
-        return null
-      })
+          .then(function (response) {
+            if (!response.ok) return null
+            return response.json().catch(function () {
+              return null
+            })
+          })
+          .catch(function () {
+            return null
+          })
+      : Promise.resolve(null)
     bootstrap.accountGalleryWindowPromise = bootstrap.authPromise
       .then(function (payload) {
         if (!payload || !payload.authenticated || !payload.user) return null

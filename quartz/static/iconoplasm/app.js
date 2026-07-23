@@ -1,8 +1,4 @@
-import {
-  readIconoplasmSettings,
-  startSharedIconoplasmSettingsAutoSync,
-  syncSharedIconoplasmSettings,
-} from "../site-preferences.js?v=20260520stylecookie"
+import { readIconoplasmSettings } from "../site-preferences.js?v=20260520stylecookie"
 import {
   HOME_COLLECTION_ORDERS,
   normalizeDiscoveryEntries,
@@ -21,14 +17,16 @@ import {
   buildSharedUserPanelMarkup,
   COMMUNITY_URL,
   fetchAuthenticatedUser,
+  hasSharedSessionPresenceHint,
   mountSidebarStack,
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=20260509a"
 import "./vendor/img-comparison-slider.js?v=20260516b517"
 
-var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function () {
-  return null
-})
+// ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
+// appearance settings. Loading the cross-subdomain bridge during anonymous
+// startup would turn a static homepage into a metered Worker request.
+var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 ;(function () {
   "use strict"
 
@@ -380,21 +378,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     return promise
   }
 
-  function fetchIconoplasmAdminState() {
-    return fetch(API + "/api/iconoplasm/admin/me", {
-      credentials: "include",
-    })
-      .then(function (response) {
-        if (!response.ok) return { authenticated: false, is_admin: false, user: null }
-        return response.json().catch(function () {
-          return { authenticated: false, is_admin: false, user: null }
-        })
-      })
-      .catch(function () {
-        return { authenticated: false, is_admin: false, user: null }
-      })
-  }
-
   function fetchDiscoveryState(order, seed, init) {
     var resolvedOrder = normalizeHomeCollectionOrder(order || HOME_COLLECTION_DEFAULT_ORDER)
     var path = "/api/iconoplasm/discoveries/me?order=" + encodeURIComponent(resolvedOrder)
@@ -405,75 +388,17 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
   }
 
   function fetchHomeCollectionCounts() {
-    return fetchPublicInventoryStats()
-      .then(function (stats) {
-        return {
-          total: Number((stats && stats.geneCount) || 0),
-          publishedTotal: Number((stats && stats.canonicalBlotCount) || 0),
-        }
-      })
-      .catch(function () {
-        return { total: 0, publishedTotal: 0 }
-      })
-  }
-
-  function normalizePublicInventoryStats(data) {
-    var geneCount = Math.max(0, Number((data && data.gene_count) || 0) || 0)
-    var candidateCount = Math.max(
-      0,
-      Number((data && data.generated_candidate_blot_count) || 0) || 0,
-    )
-    var canonicalCount = Math.max(0, Number((data && data.canonical_blot_count) || 0) || 0)
-    if (!geneCount || !candidateCount || !canonicalCount) return null
-    return {
-      geneCount: geneCount,
-      generatedCandidateBlotCount: candidateCount,
-      canonicalBlotCount: canonicalCount,
-      updatedAt: String((data && data.updated_at) || "").trim(),
-    }
-  }
-
-  function publicInventoryStatsCopy(stats) {
-    if (!stats) return ""
-    return (
-      stats.geneCount.toLocaleString() +
-      " genes · " +
-      stats.generatedCandidateBlotCount.toLocaleString() +
-      " AI blots"
-    )
-  }
-
-  var publicInventoryStatsDay = ""
-  var publicInventoryStatsPromise = null
-
-  function fetchPublicInventoryStats() {
-    var today = new Date().toISOString().slice(0, 10)
-    if (publicInventoryStatsPromise && publicInventoryStatsDay === today) {
-      return publicInventoryStatsPromise
-    }
-    publicInventoryStatsDay = today
-    publicInventoryStatsPromise = fetchJSON("/api/public/v1/stats?day=" + encodeURIComponent(today))
-      .then(normalizePublicInventoryStats)
-      .catch(function () {
-        publicInventoryStatsPromise = null
-        return null
-      })
-    return publicInventoryStatsPromise
+    return Promise.resolve({
+      total: ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT,
+      publishedTotal: 0,
+    })
   }
 
   function syncPublicInventoryStat() {
     var statEl = document.getElementById("icono-public-inventory-stat")
     if (!statEl) return
-    fetchPublicInventoryStats().then(function (stats) {
-      var copy = publicInventoryStatsCopy(stats)
-      if (!copy) {
-        statEl.hidden = true
-        statEl.textContent = ""
-        return
-      }
-      statEl.textContent = copy
-      statEl.hidden = false
-    })
+    statEl.textContent = ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT.toLocaleString() + " genes"
+    statEl.hidden = false
   }
 
   function accountGalleryWindowOrderSupported(order) {
@@ -2348,6 +2273,7 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     var previousUserId = String((currentUser && (currentUser.id || currentUser.user_id)) || "")
     var previousAdmin = !!currentUserIsIconoAdmin
     currentUser = user || null
+    currentUserIsIconoAdmin = !!(currentUser && currentUser.is_admin)
     var currentUserId = String((currentUser && (currentUser.id || currentUser.user_id)) || "")
     hasResolvedAuthState = true
     if (previousHadUser !== !!currentUser) {
@@ -2373,32 +2299,13 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (getRoute().page === "home") {
       render()
     }
-    if (getRoute().page === "gene" && previousHadUser !== !!currentUser) {
+    if (
+      getRoute().page === "gene" &&
+      (previousHadUser !== !!currentUser || previousAdmin !== currentUserIsIconoAdmin)
+    ) {
       refreshCurrentGeneInteractiveIslands()
     }
-    return fetchIconoplasmAdminState()
-      .then(function (sessionState) {
-        currentUserIsIconoAdmin = !!(sessionState && sessionState.is_admin)
-        renderIconoplasmSidebar()
-        if (getRoute().page === "home" && previousAdmin !== currentUserIsIconoAdmin) {
-          render()
-        }
-        if (getRoute().page === "gene" && previousAdmin !== !!currentUserIsIconoAdmin) {
-          refreshCurrentGeneInteractiveIslands()
-        }
-        return currentUser
-      })
-      .catch(function () {
-        currentUserIsIconoAdmin = false
-        renderIconoplasmSidebar()
-        if (getRoute().page === "home" && previousAdmin) {
-          render()
-        }
-        if (getRoute().page === "gene" && previousAdmin) {
-          refreshCurrentGeneInteractiveIslands()
-        }
-        return currentUser
-      })
+    return Promise.resolve(currentUser)
   }
 
   function refreshSharedUserState() {
@@ -2412,12 +2319,12 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
           return updateSharedUserState(payload.user)
         })
         .catch(function () {
-          return fetchAuthenticatedUser().then(function (user) {
+          return fetchAuthenticatedUser({ authBase: API }).then(function (user) {
             return updateSharedUserState(user)
           })
         })
     }
-    return fetchAuthenticatedUser()
+    return fetchAuthenticatedUser({ authBase: API })
       .then(function (user) {
         return updateSharedUserState(user)
       })
@@ -7440,6 +7347,24 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     function ensureLocalCollection(signal) {
       if (galleryState.ready && galleryState.sortedDiscoveries.length) return Promise.resolve()
       if (localReadyPromise) return localReadyPromise
+      if (!currentUser && !galleryState.sharedDiscoveries) {
+        localReadyPromise = initialSharedSettingsPromise
+          .then(function () {
+            if (disposed) return
+            galleryState.total = ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT
+            galleryState.publishedTotal = 0
+            galleryState.authenticated = false
+            galleryState.discoveryEntries = guestStarterDiscoveryEntries()
+            galleryState.sortedDiscoveries = galleryState.discoveryEntries.slice()
+            galleryState.discoveredCount = galleryState.sortedDiscoveries.length
+            galleryState.ready = true
+            syncCollectionChrome()
+          })
+          .finally(function () {
+            localReadyPromise = null
+          })
+        return localReadyPromise
+      }
       localReadyPromise = initialSharedSettingsPromise
         .then(function () {
           fetchHomeCollectionCounts().then(function (countData) {
@@ -9659,7 +9584,6 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     if (!root) return
     portraitDelivery.install(document)
     startMobileLabelBreakpointObserver()
-    startSharedIconoplasmSettingsAutoSync()
     var currentState = readHistoryState()
     if (
       currentState &&
@@ -9670,7 +9594,16 @@ var initialSharedSettingsPromise = syncSharedIconoplasmSettings().catch(function
     } else {
       replaceHistoryStatePatch({})
     }
-    void refreshSharedUserState()
+    // ARCHITECTURE FENCE [IPD-008]: anonymous startup is static. The readable
+    // marker carries no authority; it only tells us whether spending one direct
+    // auth lookup is potentially useful.
+    if (hasSharedSessionPresenceHint()) {
+      void refreshSharedUserState()
+    } else {
+      hasResolvedAuthState = true
+      currentUser = null
+      currentUserIsIconoAdmin = false
+    }
     render()
   }
 

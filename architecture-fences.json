@@ -267,6 +267,58 @@
           "token": "ARCHITECTURE FENCE [IPD-007]"
         }
       ]
+    },
+    {
+      "id": "IPD-008",
+      "title": "Anonymous startup and extension hover use the published read plane",
+      "decision": "Anonymous homepage startup avoids auth, settings, discovery, inventory, and admin probes; authenticated startup is gated by a non-authoritative session-presence hint. Extension hover batches read immutable published card artifacts and persist a bounded cache keyed by card snapshot version.",
+      "reason": "The shoutout risk is sustained daily request and D1 consumption, not an implausible per-user burst. Moving immutable reads to publication artifacts and amortizing them across browsing sessions keeps lurkers and power users from multiplying stateful work by page navigation.",
+      "change_control": "Anonymous bootstrap, session-presence semantics, catalog and card publication metadata, public batch projection, extension cache invalidation, tests, instructions, and this runbook must change atomically. The readable marker must never carry identity or authority, and transient public-read failures must remain retryable.",
+      "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
+      "linear_issue": "B-671",
+      "additional_required_marker_categories": [],
+      "markers": [
+        {
+          "category": "instructions",
+          "file": "AGENTS.md",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "runbook",
+          "file": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "source",
+          "file": "quartz/static/iconoplasm/app.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "source",
+          "file": "iconoplasm-extension/content.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "test",
+          "file": "quartz/static/iconoplasm/home-performance-contract.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "test",
+          "file": "iconoplasm-extension/content-detail-cache.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "test",
+          "file": "workers/iconoplasm.public-media.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        }
+      ]
     }
   ]
 }
