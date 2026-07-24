@@ -6,6 +6,7 @@ import {
   sharedSessionPresenceCookie,
   SHARED_SESSION_PRESENCE_COOKIE,
 } from "./auth.js"
+import worker from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 
 test("the readable session marker carries presence only, never identity or authority", () => {
   const cookie = sharedSessionPresenceCookie({
@@ -39,4 +40,16 @@ test("logout clears both the credential and the anonymous-startup presence hint"
   assert.match(combined, /session=;[^ \n]*|session=;/)
   assert.match(combined, new RegExp(`${SHARED_SESSION_PRESENCE_COOKIE}=;`))
   assert.match(combined, /Max-Age=0/)
+})
+
+test("the stateful security boundary makes every auth response non-cacheable", async () => {
+  const response = await worker.fetch(
+    new Request("https://brinedew.bio/api/auth/me"),
+    {},
+    { waitUntil() {} },
+  )
+
+  assert.equal(response.status, 401)
+  assert.deepEqual(await response.json(), { authenticated: false })
+  assert.equal(response.headers.get("Cache-Control"), "no-store")
 })
