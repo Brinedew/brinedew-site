@@ -1,4 +1,5 @@
 import esbuild from "esbuild"
+import { createHash } from "node:crypto"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -175,3 +176,31 @@ await writeFile(
   renderIconoplasmCatalogContractRuntime(publisherRelease),
   "utf8",
 )
+
+async function syncSidebarShellImportVersions() {
+  const sidebarShellPath = path.join(repoRoot, "quartz", "static", "shared", "sidebar-shell.js")
+  const sidebarShell = await readFile(sidebarShellPath)
+  const version = createHash("sha256").update(sidebarShell).digest("hex").slice(0, 16)
+  const consumers = [
+    path.join(repoRoot, "quartz", "static", "shared", "auth-sidebar.mjs"),
+    path.join(repoRoot, "quartz", "static", "iconoplasm", "app.js"),
+    path.join(repoRoot, "quartz", "static", "geneguessr", "app.js"),
+    path.join(repoRoot, "quartz", "static", "site-settings", "app.js"),
+  ]
+
+  for (const consumer of consumers) {
+    const source = await readFile(consumer, "utf8")
+    const next = source.replace(
+      /(["'])(\.\.\/shared\/|\.\/)sidebar-shell\.js(?:\?v=[a-f0-9]+)?\1/g,
+      `$1$2sidebar-shell.js?v=${version}$1`,
+    )
+    if (next === source && !source.includes(`sidebar-shell.js?v=${version}`)) {
+      throw new Error(
+        `Unable to synchronize sidebar-shell import in ${path.relative(repoRoot, consumer)}`,
+      )
+    }
+    await writeFile(consumer, next, "utf8")
+  }
+}
+
+await syncSidebarShellImportVersions()

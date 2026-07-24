@@ -3,6 +3,7 @@ import { QuartzComponent, QuartzComponentProps } from "./types"
 import BodyConstructor from "./Body"
 import {
   CSSResource,
+  isKatexJsResource,
   JSResource,
   JSResourceToScriptElement,
   StaticResources,
@@ -361,6 +362,10 @@ export function renderPage(
   }
 
   const lang = componentData.fileData.frontmatter?.lang ?? cfg.locale?.split("-")[0] ?? "en"
+  const isIconoplasmPage =
+    slug.replace(/\/index(?:\.html)?$/, "") === "apps/iconoplasm" ||
+    componentData.fileData.frontmatter?.title ===
+      "Iconoplasm - Visual Mnemonics for Molecular Cell Biology"
   const direction = i18n(cfg.locale).direction ?? "ltr"
   // During local dev (--serve), the dev server serves from root without the
   // baseUrl subpath, so basePath must be empty to avoid broken links.
@@ -397,6 +402,7 @@ export function renderPage(
       </body>
       {pageResources.js
         .filter((resource) => resource.loadTime === "afterDOMReady")
+        .filter((resource) => !isIconoplasmPage || !isKatexJsResource(resource))
         .map((res) => JSResourceToScriptElement(res, true))}
     </html>
   )
