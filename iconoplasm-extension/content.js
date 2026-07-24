@@ -450,6 +450,7 @@
   function resetSimpleTooltipPortrait(portrait) {
     if (!portrait) {
       return {
+        portrait: null,
         portraitImg: null,
         portraitFallback: null,
         portraitStatus: null,
@@ -477,7 +478,7 @@
     fade.className = "iconoplasm-tooltip-portrait-fade"
 
     portrait.append(portraitImg, portraitFallback, fade)
-    return { portraitImg, portraitFallback, portraitStatus, portraitSymbol, fade }
+    return { portrait, portraitImg, portraitFallback, portraitStatus, portraitSymbol, fade }
   }
 
   // -- Disambiguation blocklist --------------------------------------
@@ -1335,6 +1336,22 @@
     }
   }
 
+  function loadSimpleTooltipPortrait({ symbol, summaryGene, geneDetail, portraitRefs }) {
+    if (!portraitRefs || !portraitRefs.portraitImg) return Promise.resolve()
+    // Fence: the published catalog is enough to discover and color symbols, but an older cached
+    // snapshot may not carry portrait renditions. The rich frame variants already recover from
+    // that state when the authoritative detail record arrives. Simple must follow the same
+    // contract instead of freezing its first "Portrait pending" render forever.
+    return loadTooltipPortrait({
+      symbol,
+      portrait: portraitRefs.portrait,
+      portraitImg: portraitRefs.portraitImg,
+      portraitFallback: portraitRefs.portraitFallback,
+      portraitStatus: portraitRefs.portraitStatus,
+      portraitSrc: buildTooltipFramePortraitSrc(summaryGene, geneDetail),
+    })
+  }
+
   // -- Font ownership ------------------------------------------------
   // generated/shared-card-label.css owns the extension font faces. Keep this
   // helper as a no-op compatibility hook so content init stays simple without
@@ -1870,20 +1887,14 @@
     // Fill tooltip content
     const portrait = tooltip.querySelector(".iconoplasm-tooltip-portrait")
     const portraitRefs = usesFrameRenderer ? null : resetSimpleTooltipPortrait(portrait)
-    const portraitImg = portraitRefs ? portraitRefs.portraitImg : null
     const fade = portraitRefs ? portraitRefs.fade : null
-    const portraitFallback = portraitRefs ? portraitRefs.portraitFallback : null
-    const portraitStatus = portraitRefs ? portraitRefs.portraitStatus : null
     const portraitSymbol = portraitRefs ? portraitRefs.portraitSymbol : null
     if (!usesFrameRenderer) {
-      const portraitSrc = resolvePortraitUrl(gene)
-      loadTooltipPortrait({
+      void loadSimpleTooltipPortrait({
         symbol,
-        portrait,
-        portraitImg,
-        portraitFallback,
-        portraitStatus,
-        portraitSrc,
+        summaryGene: gene,
+        geneDetail: geneDetailCache.has(symbol) ? geneDetailCache.get(symbol) : null,
+        portraitRefs,
       })
       if (portraitSymbol) portraitSymbol.textContent = symbol
     }
@@ -1904,6 +1915,14 @@
       renderTooltipBody(activeGeneSummary, null, true)
       hoverGeneDetailPromise.then((geneDetail) => {
         if (activeSymbol === hoverSymbol && geneDetail) {
+          if (portraitRefs) {
+            void loadSimpleTooltipPortrait({
+              symbol: hoverSymbol,
+              summaryGene: activeGeneSummary,
+              geneDetail,
+              portraitRefs,
+            })
+          }
           renderTooltipBody(activeGeneSummary, geneDetail, false)
           wireRenderedTooltipVoteBox(geneDetail)
         } else if (activeSymbol === hoverSymbol) {
