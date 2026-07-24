@@ -24,17 +24,12 @@ export const FREE_DAILY_LIMITS = Object.freeze({
 
 export const SHIPPED_SHAPE = Object.freeze({
   publishedGenes: 19_023,
-  cardArtifactShards: 26,
   cardBatchSize: 8,
   extensionDetailCacheEntries: 512,
-  fiveMinuteIntervalsInEightHours: 96,
-  fiveMinuteIntervalsInDay: 288,
+  fiveMinuteWindowsInEightHours: 96,
   homepageStarterShards: 3,
   candidatesPerGene: Object.freeze({
     average: 2.958,
-    p50: 2,
-    p95: 5,
-    p99: 12,
     maximum: 44,
   }),
 })
@@ -43,9 +38,9 @@ function cost(overrides = {}) {
   return Object.freeze({ ...ZERO_COST, ...overrides })
 }
 
-export function addCosts(...costs) {
+export function addCosts(...items) {
   const total = { ...ZERO_COST }
-  for (const item of costs) {
+  for (const item of items) {
     for (const resource of Object.keys(total)) {
       total[resource] += Number(item?.[resource] || 0)
     }
@@ -61,122 +56,170 @@ export function scaleCost(item, multiplier) {
   return total
 }
 
-export function quotaReserve(ratio, limits = FREE_DAILY_LIMITS) {
-  const reserve = { ...ZERO_COST }
-  for (const resource of Object.keys(reserve)) {
-    reserve[resource] = Number(limits?.[resource] || 0) * ratio
-  }
-  return reserve
-}
-
 export function firstUserOverLimit(perUser, base = ZERO_COST, limits = FREE_DAILY_LIMITS) {
-  const candidates = []
-  for (const [resource, limit] of Object.entries(limits)) {
-    const increment = Number(perUser?.[resource] || 0)
-    const alreadyUsed = Number(base?.[resource] || 0)
-    if (increment <= 0) continue
-    const remaining = limit - alreadyUsed
-    candidates.push({
-      resource,
-      firstUserOver: remaining < 0 ? 0 : Math.floor(remaining / increment) + 1,
+  return Object.entries(limits)
+    .flatMap(([resource, limit]) => {
+      const increment = Number(perUser?.[resource] || 0)
+      if (increment <= 0) return []
+      const remaining = Number(limit) - Number(base?.[resource] || 0)
+      return [
+        {
+          resource,
+          firstUserOver: remaining < 0 ? 0 : Math.floor(remaining / increment) + 1,
+        },
+      ]
     })
-  }
-  candidates.sort(
-    (left, right) =>
-      left.firstUserOver - right.firstUserOver || left.resource.localeCompare(right.resource),
-  )
-  return candidates
+    .sort(
+      (left, right) =>
+        left.firstUserOver - right.firstUserOver || left.resource.localeCompare(right.resource),
+    )
 }
 
-export const JOURNEY_COSTS = Object.freeze({
-  fixedScheduledControlPlane: cost({
-    // 96 quarter-hour + 3 daily Worker Cron Trigger activations.
+export const ATOMIC_COSTS = Object.freeze({
+  scheduledMinimum: cost({
+    // 96 quarter-hour + 3 daily Worker cron activations.
     workerRequests: 99,
-    // Hourly observability snapshot publication from GitHub Actions.
+    // Hourly observability publication. The hourly shared-discovery publisher
+    // adds at most 24 KV reads and only writes when its symbol set changed.
     kvWrites: 24,
   }),
-
   anonymousHomepageCold: cost({
     workerRequests: 1,
     kvReads: 1 + 1 + SHIPPED_SHAPE.homepageStarterShards,
   }),
-
   anonymousSearchCold: cost({
     workerRequests: 1,
     kvReads: 3,
   }),
-
-  signedOutGenePageAverage: cost({
-    workerRequests: 4,
-    kvReads: 4,
-    d1RowsRead: 4 + SHIPPED_SHAPE.candidatesPerGene.average,
-    durableObjectRequests: 1,
-    durableObjectRowsWritten: SHIPPED_SHAPE.candidatesPerGene.average,
-  }),
-
-  signedOutGenePageMaximum: cost({
-    workerRequests: 4,
-    kvReads: 4,
-    d1RowsRead: 4 + SHIPPED_SHAPE.candidatesPerGene.maximum,
-    durableObjectRequests: 1,
-    durableObjectRowsWritten: SHIPPED_SHAPE.candidatesPerGene.maximum,
-  }),
-
-  signedOutExtensionEightHoursMaximum: cost({
-    // 96 manifest refreshes + 96 guest discovery/auth checks + 64 detail batches.
-    workerRequests: 96 + 96 + 64,
-    // Each manifest can cost 3 reads. Each maximally scattered batch can cost 10.
-    kvReads: 96 * 3 + 64 * 10,
-  }),
-
-  signedInExtensionEightHoursMaximum: cost({
-    // 96 manifest refreshes + 64 detail batches + 1 state read + 512 encounters.
-    workerRequests: 96 + 64 + 1 + SHIPPED_SHAPE.extensionDetailCacheEntries,
-    kvReads: 96 * 3 + 64 * 10,
-    // One discovery row and one shared rollup row per unique encounter.
-    d1RowsWritten: SHIPPED_SHAPE.extensionDetailCacheEntries * 2,
-    durableObjectRequests: SHIPPED_SHAPE.extensionDetailCacheEntries,
-  }),
-
-  signedInSiteVisibleEightHours: cost({
-    workerRequests: 8 * 60,
-  }),
-
-  coldDisjointSharedDiscoveries: cost({
-    // This cost applies only while each symbol is absent from shared discovery state.
-    kvWrites: SHIPPED_SHAPE.extensionDetailCacheEntries,
-  }),
-
-  bunnyFailureExtensionPortraitFallback: cost({
-    // One first-party fallback request for every unique portrait.
-    workerRequests: SHIPPED_SHAPE.extensionDetailCacheEntries,
-  }),
 })
 
-export const SCENARIOS = Object.freeze({
-  tenThousandOneVisitLurkers: scaleCost(JOURNEY_COSTS.anonymousHomepageCold, 10_000),
+export function websiteExplorerCost({
+  searches = 5,
+  genePages = 3,
+  candidatesPerGene = SHIPPED_SHAPE.candidatesPerGene.average,
+} = {}) {
+  const safeSearches = Math.max(0, Number(searches) || 0)
+  const safeGenePages = Math.max(0, Number(genePages) || 0)
+  const safeCandidates = Math.max(0, Number(candidatesPerGene) || 0)
+  return addCosts(
+    ATOMIC_COSTS.anonymousHomepageCold,
+    scaleCost(ATOMIC_COSTS.anonymousSearchCold, safeSearches),
+    cost({
+      // Dynamic document + vote snapshot + comments. Anonymous discovery POSTs
+      // are suppressed because they cannot create a server-side shelf.
+      workerRequests: safeGenePages * 3,
+      kvReads: safeGenePages * 4,
+      d1RowsRead: safeGenePages * (4 + safeCandidates),
+      durableObjectRequests: safeGenePages,
+    }),
+  )
+}
 
-  signedOutExplorerAverage: addCosts(
-    JOURNEY_COSTS.anonymousHomepageCold,
-    scaleCost(JOURNEY_COSTS.anonymousSearchCold, 5),
-    scaleCost(JOURNEY_COSTS.signedOutGenePageAverage, 3),
-  ),
-
-  signedOutExplorerMaximumCandidates: addCosts(
-    JOURNEY_COSTS.anonymousHomepageCold,
-    scaleCost(JOURNEY_COSTS.anonymousSearchCold, 5),
-    scaleCost(JOURNEY_COSTS.signedOutGenePageMaximum, 3),
-  ),
-})
-
-export function fingerprintRefreshCost({ activeHours = 8, concurrentColdIsolates = 1 } = {}) {
-  const boundaries = (activeHours * 60) / 5
+export function coldGeneCoordinatorCost({
+  genes = 1,
+  candidatesPerGene = SHIPPED_SHAPE.candidatesPerGene.average,
+} = {}) {
+  const safeGenes = Math.max(0, Number(genes) || 0)
+  const safeCandidates = Math.max(0, Number(candidatesPerGene) || 0)
   return cost({
-    kvReads: boundaries * concurrentColdIsolates,
-    kvWrites: boundaries * concurrentColdIsolates,
-    d1RowsRead: boundaries * concurrentColdIsolates * SHIPPED_SHAPE.publishedGenes,
+    durableObjectRowsWritten: safeGenes * (2 + safeCandidates * 2),
   })
 }
+
+function boundedRefreshCount(events, activeMinutes) {
+  const safeEvents = Math.max(0, Math.floor(Number(events) || 0))
+  if (!safeEvents) return 0
+  const windows = Math.max(1, Math.ceil(Math.max(0, Number(activeMinutes) || 0) / 5))
+  return Math.min(safeEvents, windows)
+}
+
+export function extensionReaderCost({
+  activeMinutes = 480,
+  pageLoads = 32,
+  qualifiedHovers = 32,
+  uniqueGeneDetails = 512,
+  detailBatchFill = SHIPPED_SHAPE.cardBatchSize,
+  signedIn = false,
+  newDiscoveries = signedIn ? uniqueGeneDetails : 0,
+  repeatedEncounters = 0,
+  portraitFallbacks = 0,
+} = {}) {
+  const safeDetails = Math.max(0, Math.floor(Number(uniqueGeneDetails) || 0))
+  const safeFill = Math.max(
+    1,
+    Math.min(SHIPPED_SHAPE.cardBatchSize, Math.floor(Number(detailBatchFill) || 1)),
+  )
+  const manifestRefreshes = boundedRefreshCount(pageLoads, activeMinutes)
+  const authRefreshes = boundedRefreshCount(qualifiedHovers, activeMinutes)
+  const detailBatches = Math.ceil(safeDetails / safeFill)
+  const safeNewDiscoveries = signedIn ? Math.max(0, Math.floor(Number(newDiscoveries) || 0)) : 0
+  const safeRepeatedEncounters = signedIn
+    ? Math.max(0, Math.floor(Number(repeatedEncounters) || 0))
+    : 0
+  const encounters = safeNewDiscoveries + safeRepeatedEncounters
+
+  return cost({
+    workerRequests:
+      manifestRefreshes +
+      authRefreshes +
+      detailBatches +
+      encounters +
+      Math.max(0, Math.floor(Number(portraitFallbacks) || 0)),
+    // Manifest reads include version/delivery metadata; a detail batch may read
+    // its manifest plus eight content-addressed card shards.
+    kvReads: manifestRefreshes * 3 + detailBatches * 10,
+    // Two indexed point reads: existence before mutation and the returned row.
+    d1RowsRead: encounters * 2,
+    // Conservative schema-derived write units. A new personal discovery touches
+    // its table plus four indexes; the shared rollup touches its table plus two
+    // indexes. Existing encounters do not add the personal primary-key entry.
+    d1RowsWritten: safeNewDiscoveries * 8 + safeRepeatedEncounters * 7,
+  })
+}
+
+export function notificationInboxCost({ openMinutes = 0, focusReturns = 0 } = {}) {
+  const safeOpenMinutes = Math.max(0, Math.floor(Number(openMinutes) || 0))
+  const safeFocusReturns = Math.max(0, Math.floor(Number(focusReturns) || 0))
+  return cost({
+    // One startup/focus read remains useful. Minute polling exists only while a
+    // generation request is actually open.
+    workerRequests: 1 + safeFocusReturns + safeOpenMinutes,
+  })
+}
+
+export function votingCost({ votes = 1 } = {}) {
+  const safeVotes = Math.max(0, Math.floor(Number(votes) || 0))
+  return cost({
+    workerRequests: safeVotes,
+    durableObjectRequests: safeVotes,
+    // Worst case: user vote, image summary, two vision summaries, outbox,
+    // mutation sequence/meta, and alarm storage.
+    durableObjectRowsWritten: safeVotes * 8,
+    // Conservative projection envelope including indexed D1 rows.
+    d1RowsWritten: safeVotes * 12,
+    // One write, read, and delete for each successfully delivered Queue message.
+    queueOperations: safeVotes * 3,
+  })
+}
+
+export const SCENARIOS = Object.freeze({
+  tenThousandOneVisitLurkers: scaleCost(ATOMIC_COSTS.anonymousHomepageCold, 10_000),
+  websiteExplorerAverage: websiteExplorerCost(),
+  websiteExplorerMaximumCandidates: websiteExplorerCost({
+    candidatesPerGene: SHIPPED_SHAPE.candidatesPerGene.maximum,
+  }),
+  extensionDensePaper: extensionReaderCost(),
+  extensionScatteredMaximum: extensionReaderCost({
+    pageLoads: 512,
+    qualifiedHovers: 512,
+    detailBatchFill: 1,
+  }),
+  signedInDensePaper: extensionReaderCost({ signedIn: true }),
+  hundredVoteContributor: votingCost({ votes: 100 }),
+  coldCatalogCoordinatorBootstrap: coldGeneCoordinatorCost({
+    genes: SHIPPED_SHAPE.publishedGenes,
+  }),
+})
 
 function formatNumber(value) {
   return Number.isInteger(value)
@@ -187,49 +230,25 @@ function formatNumber(value) {
 function printCapacity(label, perUser, base = ZERO_COST) {
   const first = firstUserOverLimit(perUser, base)[0]
   console.log(
-    `${label}: ${first.resource} first exceeds its free daily limit at user ${formatNumber(first.firstUserOver)}.`,
+    `${label}: ${first.resource} first exceeds at user ${formatNumber(first.firstUserOver)}.`,
   )
 }
 
 export function printReport() {
-  console.log("Iconoplasm first-principles capacity model")
-  console.log("No observed request counters are inputs.\n")
-
-  printCapacity("Anonymous cold homepage sessions", JOURNEY_COSTS.anonymousHomepageCold)
+  console.log("Iconoplasm action-derived capacity model")
+  console.log("No historical traffic counters are inputs.\n")
+  printCapacity("One-visit homepage visitors", ATOMIC_COSTS.anonymousHomepageCold)
+  printCapacity("Curious website explorers", SCENARIOS.websiteExplorerAverage)
+  printCapacity("Dense-paper extension readers", SCENARIOS.extensionDensePaper)
   printCapacity(
-    "Signed-out explorers (average candidate shape)",
-    SCENARIOS.signedOutExplorerAverage,
-  )
-  printCapacity(
-    "Signed-out explorers (maximum candidate shape)",
-    SCENARIOS.signedOutExplorerMaximumCandidates,
-  )
-  printCapacity(
-    "Signed-out eight-hour extension users",
-    JOURNEY_COSTS.signedOutExtensionEightHoursMaximum,
-  )
-  printCapacity(
-    "Signed-out eight-hour extension users after 10,000 one-visit lurkers",
-    JOURNEY_COSTS.signedOutExtensionEightHoursMaximum,
+    "Dense-paper extension readers after 10,000 homepage visitors",
+    SCENARIOS.extensionDensePaper,
     SCENARIOS.tenThousandOneVisitLurkers,
   )
-  printCapacity(
-    "Signed-in eight-hour extension users",
-    JOURNEY_COSTS.signedInExtensionEightHoursMaximum,
-  )
-  printCapacity(
-    "Signed-out eight-hour extension users after lurkers plus 20% other-account reserve",
-    JOURNEY_COSTS.signedOutExtensionEightHoursMaximum,
-    addCosts(SCENARIOS.tenThousandOneVisitLurkers, quotaReserve(0.2)),
-  )
-
-  const threeRacerRefresh = fingerprintRefreshCost({
-    activeHours: 8,
-    concurrentColdIsolates: 3,
-  })
-  console.log(
-    `Three cold fingerprint refresh racers over eight active hours read ${formatNumber(threeRacerRefresh.d1RowsRead)} D1 rows (${formatNumber(FREE_DAILY_LIMITS.d1RowsRead)} limit).`,
-  )
+  printCapacity("Maximally scattered extension readers", SCENARIOS.extensionScatteredMaximum)
+  printCapacity("Signed-in dense-paper readers", SCENARIOS.signedInDensePaper)
+  printCapacity("100-vote contributors", SCENARIOS.hundredVoteContributor)
+  printCapacity("Cold gene coordinator bootstraps", coldGeneCoordinatorCost())
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

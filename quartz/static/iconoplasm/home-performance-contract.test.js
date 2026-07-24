@@ -7,6 +7,7 @@ import { parseHTML } from "linkedom"
 // ARCHITECTURE FENCE [IPD-008]: anonymous bootstrap must stay on the published read plane.
 
 const appPath = new URL("./app.js", import.meta.url)
+const requestInboxPath = new URL("./request-inbox.js", import.meta.url)
 const homeOrdersPath = new URL("./home-orders.js", import.meta.url)
 const stylesPath = new URL("./styles.css", import.meta.url)
 const headPath = new URL("../../components/Head.tsx", import.meta.url)
@@ -1598,6 +1599,11 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
 test("gene page visits record signed-in discovery without blocking first paint", async () => {
   const app = await readFile(appPath, "utf8")
   assert.match(app, /function recordGenePageVisitDiscovery\(symbol\)/)
+  assert.match(
+    app,
+    /if \(!key \|\| !hasSharedSessionPresenceHint\(\)\) return/,
+    "signed-out gene visits must not spend a Worker request on a discovery that cannot persist",
+  )
   assert.match(app, /lastGenePageDiscoveryVisitKey/)
   assert.match(app, /\/api\/iconoplasm\/discoveries\/encounter/)
   assert.match(app, /source: "gene_page_visit"/)
@@ -1615,6 +1621,14 @@ test("gene page visits record signed-in discovery without blocking first paint",
     "discovery recording must be queued after the gene UI render, not before first paint",
   )
   assert.match(renderBlock, /recordGenePageVisitDiscovery\(g && g\.symbol \? g\.symbol : symbol\)/)
+})
+
+test("request inbox polls only while a generation request is open", async () => {
+  const inbox = await readFile(requestInboxPath, "utf8")
+  assert.doesNotMatch(inbox, /setInterval\(/)
+  assert.match(inbox, /state\.open_count <= 0/)
+  assert.match(inbox, /setTimeout\(function \(\) \{[\s\S]*refresh\(\{ announce: true \}\)/)
+  assert.match(inbox, /visibilityState !== "visible"/)
 })
 
 test("gene candidate data is present in the first response while images stay lazy", async () => {

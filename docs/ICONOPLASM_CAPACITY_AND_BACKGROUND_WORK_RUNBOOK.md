@@ -113,16 +113,28 @@ Extension hover detail is immutable within a published card snapshot:
 - only an explicit `missing` result is negative-cached, and transient failures
   remain retryable.
 
+Catalog portrait fingerprints and portrait-reference snapshots are publication
+artifacts too. Catalog publication writes them before advertising the version.
+Public manifest, search, and artifact reads consume the published metadata even
+after its former five-minute timestamp; they never scan D1 or write KV to
+"repair" it. Missing or corrupt publication state returns a retryable 503.
+
 The batch endpoint still costs one Worker invocation on a cache miss. Persistence
 changes the unit of cost from page navigation to unique gene detail per
 publication snapshot, while the published artifact removes D1 read pressure.
 Writes, votes, authenticated account feeds, and complete gene HTML remain
 dynamic and keep their existing authority.
 
-Linear B-671 contains the first-principles user journeys, sustained daily-budget
-model, regional Bunny evidence, implementation, tests, and live verification.
-Re-evaluate those inputs after material product or Cloudflare-plan changes; do
-not substitute a requests-per-second threshold for daily capacity.
+Discovery follows the same product boundary:
+
+- a signed-out website gene visit does not post a server discovery that cannot
+  be retained;
+- signed-in encounters update the personal row and increment the shared rollup
+  in constant time;
+- the hourly publication tick, not a reader request, owns the shared-discovery
+  KV snapshot; and
+- the signed-in request inbox polls each minute only while a generation request
+  is open, with one-shot refreshes on startup, focus, and visibility return.
 
 The canonical launch calculation is
 `docs/ICONOPLASM_FIRST_PRINCIPLES_CAPACITY_MODEL.md`, backed by
@@ -130,10 +142,12 @@ The canonical launch calculation is
 request counters are incident evidence only. They are prohibited as forecast
 inputs after a material architecture change.
 
-The model also owns the hardening anomaly ledger. Any read path that mutates
-state, whole-catalog recomputation triggered by public reads, unbounded
-polling, or homegrown distributed cache behavior must be recorded there with
-its exact resource ceiling and permanent correction.
+That document also owns the product/freshness contract and remaining hardening
+ledger. Any read path that mutates state, whole-catalog recomputation triggered
+by public reads, unbounded polling, or homegrown distributed cache behavior must
+be recorded there with its exact resource ceiling and permanent correction.
+Linear may track remaining implementation, but a stale issue is not architectural
+authority.
 
 ## Incident evidence
 

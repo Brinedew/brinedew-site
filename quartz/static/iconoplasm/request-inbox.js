@@ -153,25 +153,45 @@ export function createRequestInbox({
   }
 
   function stop() {
-    if (refreshTimer) window.clearInterval(refreshTimer)
+    if (refreshTimer) window.clearTimeout(refreshTimer)
     refreshTimer = 0
+  }
+
+  function scheduleOpenRequestRefresh() {
+    stop()
+    if (
+      !getCurrentUser() ||
+      state.open_count <= 0 ||
+      typeof document === "undefined" ||
+      document.visibilityState !== "visible"
+    ) {
+      return
+    }
+    refreshTimer = window.setTimeout(function () {
+      refreshTimer = 0
+      void refresh({ announce: true }).finally(scheduleOpenRequestRefresh)
+    }, 60000)
+  }
+
+  function refreshForLifecycle(options) {
+    stop()
+    return refresh(options).finally(scheduleOpenRequestRefresh)
   }
 
   function start() {
     stop()
     if (!getCurrentUser()) return
-    void refresh()
-    refreshTimer = window.setInterval(function () {
-      if (document.visibilityState === "visible") void refresh({ announce: true })
-    }, 60000)
+    void refreshForLifecycle()
     if (lifecycleWired) return
     lifecycleWired = true
     window.addEventListener("focus", function () {
-      if (getCurrentUser()) void refresh({ announce: true })
+      if (getCurrentUser()) void refreshForLifecycle({ announce: true })
     })
     document.addEventListener("visibilitychange", function () {
       if (getCurrentUser() && document.visibilityState === "visible") {
-        void refresh({ announce: true })
+        void refreshForLifecycle({ announce: true })
+      } else {
+        stop()
       }
     })
   }
@@ -388,5 +408,5 @@ export function createRequestInbox({
     }
   }
 
-  return { panelMarkup, refresh, reset, start, stop, wire }
+  return { panelMarkup, refresh: refreshForLifecycle, reset, start, stop, wire }
 }

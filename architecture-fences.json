@@ -285,7 +285,7 @@
       "reason": "The shoutout risk is sustained daily request and D1 consumption, not an implausible per-user burst. Moving immutable reads to publication artifacts and amortizing them across browsing sessions keeps lurkers and power users from multiplying stateful work by page navigation.",
       "change_control": "Anonymous bootstrap, session-presence semantics, catalog and card publication metadata, public batch projection, extension cache invalidation, tests, instructions, and this runbook must change atomically. The readable marker must never carry identity or authority, and transient public-read failures must remain retryable.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
-      "linear_issue": "B-671",
+      "linear_issue": "B-673",
       "additional_required_marker_categories": [],
       "markers": [
         {

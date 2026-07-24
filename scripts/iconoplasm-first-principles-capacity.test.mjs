@@ -2,93 +2,93 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
-  FREE_DAILY_LIMITS,
-  JOURNEY_COSTS,
+  ATOMIC_COSTS,
   SCENARIOS,
-  addCosts,
-  fingerprintRefreshCost,
+  coldGeneCoordinatorCost,
+  extensionReaderCost,
   firstUserOverLimit,
-  quotaReserve,
+  notificationInboxCost,
+  votingCost,
+  websiteExplorerCost,
 } from "./iconoplasm-first-principles-capacity.mjs"
 
 function first(perUser, base) {
   return firstUserOverLimit(perUser, base)[0]
 }
 
-test("anonymous homepage capacity is derived from one Worker and five KV reads", () => {
-  assert.equal(JOURNEY_COSTS.anonymousHomepageCold.workerRequests, 1)
-  assert.equal(JOURNEY_COSTS.anonymousHomepageCold.kvReads, 5)
-  assert.deepEqual(first(JOURNEY_COSTS.anonymousHomepageCold), {
+test("anonymous homepage cost is derived from the published starter-card path", () => {
+  assert.equal(ATOMIC_COSTS.anonymousHomepageCold.workerRequests, 1)
+  assert.equal(ATOMIC_COSTS.anonymousHomepageCold.kvReads, 5)
+  assert.deepEqual(first(ATOMIC_COSTS.anonymousHomepageCold), {
     resource: "kvReads",
     firstUserOver: 20_001,
   })
 })
 
-test("10,000 lurkers leave KV capacity for 53 maximum signed-out extension users", () => {
-  assert.equal(SCENARIOS.tenThousandOneVisitLurkers.workerRequests, 10_000)
-  assert.equal(SCENARIOS.tenThousandOneVisitLurkers.kvReads, 50_000)
-  assert.deepEqual(
-    first(JOURNEY_COSTS.signedOutExtensionEightHoursMaximum, SCENARIOS.tenThousandOneVisitLurkers),
-    {
-      resource: "kvReads",
-      firstUserOver: 54,
-    },
-  )
+test("website exploration no longer assigns writes to vote snapshot reads", () => {
+  const maximum = websiteExplorerCost({ candidatesPerGene: 44 })
+  assert.equal(maximum.workerRequests, 15)
+  assert.equal(maximum.durableObjectRequests, 3)
+  assert.equal(maximum.durableObjectRowsWritten, 0)
+  assert.deepEqual(first(maximum), {
+    resource: "kvReads",
+    firstUserOver: 3_126,
+  })
 })
 
-test("other account traffic is an explicit reserve assumption, never a historical baseline", () => {
-  assert.deepEqual(
-    first(
-      JOURNEY_COSTS.signedOutExtensionEightHoursMaximum,
-      addCosts(SCENARIOS.tenThousandOneVisitLurkers, quotaReserve(0.2)),
-    ),
-    {
-      resource: "kvReads",
-      firstUserOver: 33,
-    },
-  )
-})
-
-test("fixed scheduled work is derived from configured triggers", () => {
-  assert.equal(JOURNEY_COSTS.fixedScheduledControlPlane.workerRequests, 99)
-  assert.equal(JOURNEY_COSTS.fixedScheduledControlPlane.kvWrites, 24)
-})
-
-test("maximum-candidate website exploration first exceeds DO writes at user 758", () => {
-  assert.deepEqual(first(SCENARIOS.signedOutExplorerMaximumCandidates), {
+test("cold coordinator writes are one-time per gene and separate from page views", () => {
+  assert.equal(coldGeneCoordinatorCost().durableObjectRowsWritten, 7.916)
+  assert.deepEqual(first(coldGeneCoordinatorCost()), {
     resource: "durableObjectRowsWritten",
-    firstUserOver: 758,
+    firstUserOver: 12_633,
+  })
+  assert.ok(SCENARIOS.coldCatalogCoordinatorBootstrap.durableObjectRowsWritten > 100_000)
+})
+
+test("extension refreshes are caused by pages and qualified hovers, not an idle timer", () => {
+  const oneLongPage = extensionReaderCost({
+    activeMinutes: 480,
+    pageLoads: 1,
+    qualifiedHovers: 1,
+    uniqueGeneDetails: 8,
+    detailBatchFill: 8,
+  })
+  assert.equal(oneLongPage.workerRequests, 3)
+  assert.equal(oneLongPage.kvReads, 13)
+})
+
+test("dense-paper and scattered extension behavior expose different ceilings", () => {
+  assert.deepEqual(first(SCENARIOS.extensionDensePaper), {
+    resource: "kvReads",
+    firstUserOver: 136,
+  })
+  assert.deepEqual(first(SCENARIOS.extensionScatteredMaximum), {
+    resource: "kvReads",
+    firstUserOver: 19,
+  })
+  assert.deepEqual(first(SCENARIOS.extensionDensePaper, SCENARIOS.tenThousandOneVisitLurkers), {
+    resource: "kvReads",
+    firstUserOver: 68,
   })
 })
 
-test("signed-in extension discovery exceeds D1 writes at user 98", () => {
-  assert.deepEqual(first(JOURNEY_COSTS.signedInExtensionEightHoursMaximum), {
+test("signed-in discovery strain is D1 write units, not Durable Object requests", () => {
+  assert.equal(SCENARIOS.signedInDensePaper.durableObjectRequests, 0)
+  assert.equal(SCENARIOS.signedInDensePaper.d1RowsWritten, 4_096)
+  assert.deepEqual(first(SCENARIOS.signedInDensePaper), {
     resource: "d1RowsWritten",
-    firstUserOver: 98,
+    firstUserOver: 25,
   })
 })
 
-test("three concurrent fingerprint refresh racers exceed D1 reads in eight hours", () => {
-  const twoRacers = fingerprintRefreshCost({ activeHours: 8, concurrentColdIsolates: 2 })
-  const threeRacers = fingerprintRefreshCost({
-    activeHours: 8,
-    concurrentColdIsolates: 3,
-  })
-  const oneRacerAllDay = fingerprintRefreshCost({
-    activeHours: 24,
-    concurrentColdIsolates: 1,
-  })
-
-  assert.ok(twoRacers.d1RowsRead < FREE_DAILY_LIMITS.d1RowsRead)
-  assert.ok(threeRacers.d1RowsRead > FREE_DAILY_LIMITS.d1RowsRead)
-  assert.ok(oneRacerAllDay.d1RowsRead > FREE_DAILY_LIMITS.d1RowsRead)
-  assert.equal(threeRacers.d1RowsRead, 5_478_624)
-  assert.equal(oneRacerAllDay.d1RowsRead, 5_478_624)
+test("idle inboxes perform one read while active jobs retain minute freshness", () => {
+  assert.equal(notificationInboxCost().workerRequests, 1)
+  assert.equal(notificationInboxCost({ openMinutes: 480 }).workerRequests, 481)
 })
 
-test("a cold disjoint shared-discovery set exceeds KV writes at user two", () => {
-  assert.deepEqual(first(JOURNEY_COSTS.coldDisjointSharedDiscoveries), {
-    resource: "kvWrites",
-    firstUserOver: 2,
+test("Queue operations are the first conservative ceiling for heavy voters", () => {
+  assert.deepEqual(first(votingCost({ votes: 100 })), {
+    resource: "queueOperations",
+    firstUserOver: 34,
   })
 })

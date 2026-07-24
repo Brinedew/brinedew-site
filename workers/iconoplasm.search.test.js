@@ -404,6 +404,29 @@ function buildCatalogArtifact() {
   }
 }
 
+function publishPortraitFixture(kv, rows = []) {
+  const refs = (Array.isArray(rows) ? rows : []).map((row) => ({
+    symbol: String(row?.symbol || row?.gene_symbol || "")
+      .trim()
+      .toUpperCase(),
+    asset_sha256: String(row?.asset_sha256 || ""),
+  }))
+  const latest = refs.map((row) => row.asset_sha256.slice(0, 12)).join("") || "emptypublication"
+  const fingerprint = { published_count: refs.length, latest }
+  kv.entries.set(
+    "iconoplasm:published-portrait-fingerprint:v3",
+    JSON.stringify({
+      schema: "iconoplasm.publishedPortraitFingerprint.v1",
+      published_at: "2026-04-05T00:00:00.000Z",
+      fingerprint,
+    }),
+  )
+  kv.entries.set(
+    `iconoplasm:published-portrait-refs:v3-${fingerprint.published_count}-${fingerprint.latest}`,
+    JSON.stringify(refs),
+  )
+}
+
 function buildEnv({
   sessions = {},
   publishedPortraits = [],
@@ -434,6 +457,7 @@ function buildEnv({
     GAME_SESSIONS: new FakeGameSessions(sessions),
     ...overrides,
   }
+  publishPortraitFixture(gatewayEnv.KV, publishedPortraits)
   const env = {
     ...gatewayEnv,
     ICONOPLASM_DB: null,
@@ -457,7 +481,7 @@ test.after(() => {
   resetIconoplasmRuntimeCachesForTest()
 })
 
-test("catalog search refreshes canonical portraits after the shared fingerprint expires", async () => {
+test("catalog search changes portraits only after the publisher replaces its snapshot", async () => {
   const env = buildEnv({
     publishedPortraits: [
       {
@@ -492,9 +516,7 @@ test("catalog search refreshes canonical portraits after the shared fingerprint 
     },
   ])
 
-  // Expire the cross-isolate inventory cache. A runtime reset alone must not
-  // bypass the shared billing barrier used in production.
-  env.KV.entries.delete("iconoplasm:published-portrait-fingerprint:v3")
+  publishPortraitFixture(env.KV, Array.from(env.gatewayDb.publishedPortraits.values()))
 
   resetIconoplasmRuntimeCachesForTest()
 

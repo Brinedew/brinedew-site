@@ -266,6 +266,12 @@ function buildCatalogResolveKv() {
         },
       ],
     }),
+    "iconoplasm:published-portrait-fingerprint:v3": JSON.stringify({
+      schema: "iconoplasm.publishedPortraitFingerprint.v1",
+      published_at: "2026-05-21T00:00:00.000Z",
+      fingerprint: { published_count: 0, latest: null },
+    }),
+    "iconoplasm:published-portrait-refs:v3-none": "[]",
   })
 }
 
@@ -602,12 +608,22 @@ test("public catalog manifest publishes explicit extension contract fields", asy
         ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
         KV: {
           async get(key) {
-            if (key !== "iconoplasm:catalog-manifest") return null
-            return JSON.stringify({
-              current_hash: "catalog-2026-04-16",
-              generated_at: "2026-04-16T16:30:00.000Z",
-              gene_count: 19001,
-            })
+            if (key === "iconoplasm:catalog-manifest") {
+              return JSON.stringify({
+                current_hash: "catalog-2026-04-16",
+                generated_at: "2026-04-16T16:30:00.000Z",
+                gene_count: 19001,
+              })
+            }
+            if (key === "iconoplasm:published-portrait-fingerprint:v3") {
+              return JSON.stringify({
+                schema: "iconoplasm.publishedPortraitFingerprint.v1",
+                published_at: "2026-04-16T16:30:00.000Z",
+                fingerprint: { published_count: 0, latest: null },
+              })
+            }
+            if (key === "iconoplasm:published-portrait-refs:v3-none") return "[]"
+            return null
           },
         },
       }),
