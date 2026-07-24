@@ -143,26 +143,23 @@ The frontend's `formatTierLabel()` in `sidebar-shell.js` already renders tiers o
 
 ---
 
-## Cost / limits quantification (measured 2026-06-03)
+## Cost and limits
 
-Plan: **Workers Paid** ($5/mo base). Limits below are monthly *included*
-allowances (overage is billed, not blocked) plus the repo's own tighter D1
-budget (`wrangler.*.toml [vars]`). Usage pulled from the Cloudflare GraphQL
-Analytics API for the current billing cycle (started May 7).
+The former table here mixed a June 2026 paid-plan snapshot with changing
+architecture and later account conditions. It is historical incident evidence,
+not planning authority, and has been removed so it cannot be mistaken for a
+current recommendation.
 
-| Resource | Included / budget | Current actual | Headroom |
-|----------|-------------------|----------------|----------|
-| Workers requests | 10M/mo (~333k/day) | 22k–63k/day | ~5× under peak |
-| Workers CPU | 30M CPU-ms/mo | far under | vast |
-| Cron triggers | 5 per Worker (hard cap) | 2 used (`55 23`, `3 0`) | 3 free |
-| KV reads | 10M/mo | 1.2k–2.8k/day (proj 0.3%/mo) | huge |
-| KV writes | 1M/mo | 0.2k–1.4k/day (proj 2.7%/mo) | huge |
-| KV storage | 1 GB | small | n/a |
-| D1 rows read | 25B/mo (self-budget 24B) | proj **8.1B = 33.9%** | per-day fair share 800M; peak day 70M | 
-| D1 rows written | 50M/mo (self-budget 40M) | proj **10.3M = 25.6%** | tightest resource; peak day 1.13M (sync) |
-| D1 storage | 5 GB | 669 MB (13.4%) | 4.3 GB free |
-| Durable Objects requests | 1M/mo (~33k/day) | 0.6k–5.1k/day | ~6× under peak |
-| DO duration | 400k GB-s/mo | ~10.5 GB-s/day | ~0.08% |
+Use `docs/ICONOPLASM_FIRST_PRINCIPLES_CAPACITY_MODEL.md` for action-derived
+limits. Historical usage may reveal an unmodeled path, but it may not forecast a
+changed runtime or justify paid capacity.
+
+The shared stateful Worker currently uses four of Cloudflare's five cron slots:
+
+- `55 23 * * *`: sole full Iconoplasm maintenance owner plus GeneGuessr pre-warm;
+- `3 0 * * *`: GeneGuessr recap and catch-up only;
+- `6 12 * * *`: GeneGuessr feed;
+- `*/15 * * * *`: cheap Iconoplasm gallery publication check only.
 | Queues ops | 1M/mo | untouched by Discord features | n/a |
 | Browser Rendering | ~10 hr/mo (paid) | gene-card render: 1 per (gene, canonical version), cached | far under |
 | Bunny CDN | usage-billed | recap = ~1 MB/day storage + ~1 MB/day egress | ~$0.01/GB |

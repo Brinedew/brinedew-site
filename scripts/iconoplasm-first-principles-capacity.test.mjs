@@ -9,6 +9,7 @@ import {
   firstUserOverLimit,
   notificationInboxCost,
   votingCost,
+  websiteGuestDiscoveryMergeCost,
   websiteExplorerCost,
 } from "./iconoplasm-first-principles-capacity.mjs"
 
@@ -34,6 +35,17 @@ test("website exploration no longer assigns writes to vote snapshot reads", () =
     resource: "kvReads",
     firstUserOver: 3_126,
   })
+})
+
+test("website guest shelf retains the catalog but each login session has a bounded merge envelope", () => {
+  const maximum = websiteGuestDiscoveryMergeCost()
+  assert.equal(maximum.workerRequests, 1)
+  assert.equal(maximum.d1RowsWritten, 1_600)
+  assert.deepEqual(first(maximum), {
+    resource: "d1RowsWritten",
+    firstUserOver: 63,
+  })
+  assert.equal(websiteGuestDiscoveryMergeCost({ discoveries: 20_000 }).d1RowsWritten, 1_600)
 })
 
 test("cold coordinator writes are one-time per gene and separate from page views", () => {

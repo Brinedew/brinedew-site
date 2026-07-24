@@ -4,6 +4,10 @@ If you are new to Iconoplasm, start here.
 
 This is the short version of how the system is split up, what the homepage is supposed to do, and which mistakes not to repeat.
 
+First read `docs/ICONOPLASM_PRODUCT_OPERATING_MODEL.md`. It defines the users,
+memory loop, discovery behavior, and freshness rules. This document explains the
+implementation shape; it does not redefine the product.
+
 ## what lives where
 
 Iconoplasm is not one codebase pretending to be many things. It is two real systems with a browser extension attached.
@@ -133,7 +137,13 @@ There is a starter trio:
 
 ### signed-out visitors
 
-Guests can be shown the starter trio as a lightweight, browser-only introduction to the shelf idea.
+Guests see the starter trio as a lightweight introduction to the shelf idea.
+Opening any dossier adds that gene to a compact browser-local shelf capable of
+retaining the full 19,023-gene catalog. Signed-out browsing does not post a
+discovery request. Each authenticated browser session merges at most 200
+pending visits into the personal shelf; only the successful batch is removed
+locally. Starter genes do not join that merge unless the guest actually opens
+their dossiers.
 
 ### signed-in users
 
@@ -147,12 +157,12 @@ Do **not** fix that by painting different text in the browser while leaving the 
 
 When the homepage loads, check this table first.
 
-| situation                            | expected route                           |
-| ------------------------------------ | ---------------------------------------- |
-| signed out                           | public gallery counts + guest starter UI |
-| signed in, normal user               | `/api/iconoplasm/discoveries/me`         |
-| signed in, admin, classic toggle off | `/api/iconoplasm/discoveries/me`         |
-| signed in, admin, classic toggle on  | `/api/public/v1/gallery`                 |
+| situation                            | expected route                                          |
+| ------------------------------------ | ------------------------------------------------------- |
+| signed out                           | no account route; local starter + visited-dossier shelf |
+| signed in, normal user               | `/api/iconoplasm/discoveries/me`                        |
+| signed in, admin, classic toggle off | `/api/iconoplasm/discoveries/me`                        |
+| signed in, admin, classic toggle on  | `/api/public/v1/gallery`                                |
 
 If the wrong route is firing, you are debugging the wrong problem.
 

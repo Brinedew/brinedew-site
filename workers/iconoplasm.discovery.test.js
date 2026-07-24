@@ -832,3 +832,30 @@ test("discoveries merge upserts guest-local symbols into the signed-in account",
   const stored = env.gatewayDb.listDiscoveries("user-123")
   assert.equal(stored.length, 6)
 })
+
+test("discoveries merge enforces the same 200-symbol ceiling as the browser client", async () => {
+  const env = buildEnv({
+    sessions: {
+      "session:abc": { user_id: "user-123", username: "alex" },
+    },
+  })
+  const symbols = Array.from({ length: 250 }, (_value, index) => `GENE${index}`)
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/merge", {
+        method: "POST",
+        headers: {
+          Cookie: "session=abc",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ symbols }),
+      }),
+      env,
+      {},
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.merged_count, 200)
+  assert.equal(env.gatewayDb.listDiscoveries("user-123").length, 203)
+})

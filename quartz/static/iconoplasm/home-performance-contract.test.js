@@ -221,7 +221,7 @@ test("guest collection state resolves locally without an auth or discovery read"
   const block = app.slice(start, end)
   assert.match(
     block,
-    /if \(!currentUser && !galleryState\.sharedDiscoveries\)[\s\S]*guestStarterDiscoveryEntries\(\)/,
+    /if \(!currentUser && !galleryState\.sharedDiscoveries\)[\s\S]*guestDiscoveryEntries\(\)/,
   )
   const guestStart = block.indexOf("if (!currentUser && !galleryState.sharedDiscoveries)")
   const firstLocalPromise = block.indexOf(
@@ -1596,14 +1596,26 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   )
 })
 
-test("gene page visits record signed-in discovery without blocking first paint", async () => {
+test("gene page visits persist locally for guests and use the server only after auth", async () => {
   const app = await readFile(appPath, "utf8")
   assert.match(app, /function recordGenePageVisitDiscovery\(symbol\)/)
   assert.match(
     app,
-    /if \(!key \|\| !hasSharedSessionPresenceHint\(\)\) return/,
-    "signed-out gene visits must not spend a Worker request on a discovery that cannot persist",
+    /if \(!currentUser\) \{\s*websiteGuestDiscoveries\.remember\(key\)\s*return\s*\}/,
+    "signed-out gene visits must stay in the full-catalog local shelf without a Worker request",
   )
+  assert.match(app, /function mergeWebsiteGuestDiscoveriesIfSignedIn\(\)/)
+  assert.match(
+    app,
+    /websiteGuestDiscoveries\.pendingSymbols\(websiteGuestDiscoveryMergeRemaining\)/,
+  )
+  assert.match(
+    app,
+    /websiteGuestDiscoveryMergeRemaining - pendingSymbols\.length/,
+    "each browser session must stop after one bounded merge batch",
+  )
+  assert.match(app, /\/api\/iconoplasm\/discoveries\/merge/)
+  assert.match(app, /websiteGuestDiscoveries\.remove\(pendingSymbols\)/)
   assert.match(app, /lastGenePageDiscoveryVisitKey/)
   assert.match(app, /\/api\/iconoplasm\/discoveries\/encounter/)
   assert.match(app, /source: "gene_page_visit"/)

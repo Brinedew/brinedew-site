@@ -72,7 +72,9 @@ const BENCHMARK_HOST = "geneguessr-bench.brinedew.bio"
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const STATIC_SITE_ORIGIN_PROD = "https://brinedew-bio.pages.dev"
 const STATIC_SITE_ORIGIN_STAGING = "https://brinedew-bio-staging.pages.dev"
-const ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS = new Set(["55 23 * * *", "3 0 * * *"])
+// One owner only. The 00:03 trigger belongs to GeneGuessr recap delivery and
+// must not silently repeat Iconoplasm's full maintenance eight minutes later.
+const ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS = new Set(["55 23 * * *"])
 const MOLSTAR_VENDOR_ALLOWED_PREFIXES = [
   "/static/vendor/pdbe-molstar@3.8.0/",
   "/static/vendor/pdbe-molstar@3.7.1/",
