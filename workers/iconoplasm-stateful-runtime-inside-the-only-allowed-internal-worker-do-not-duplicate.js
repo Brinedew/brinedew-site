@@ -3344,8 +3344,23 @@ async function queryPublishedPortraitFingerprint(env) {
 
 async function sharedPublishedPortraitFingerprint(env, { fresh = false } = {}) {
   if (!env.ICONOPLASM_DB) return null
-  if (fresh) return queryPublishedPortraitFingerprint(env)
   const now = Date.now()
+  if (fresh) {
+    const row = await queryPublishedPortraitFingerprint(env)
+    sharedPublishedPortraitFingerprintCache.loadedAt = now
+    sharedPublishedPortraitFingerprintCache.value = row || null
+    if (row && env?.KV) {
+      await env.KV.put(
+        `${KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX}${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}`,
+        JSON.stringify({
+          schema: "iconoplasm.publishedPortraitFingerprint.v1",
+          published_at: new Date(now).toISOString(),
+          fingerprint: row,
+        }),
+      )
+    }
+    return row || null
+  }
   if (
     sharedPublishedPortraitFingerprintCache.loadedAt > 0 &&
     now - sharedPublishedPortraitFingerprintCache.loadedAt <
@@ -3360,37 +3375,22 @@ async function sharedPublishedPortraitFingerprint(env, { fresh = false } = {}) {
       )
       if (raw) {
         const parsed = JSON.parse(raw)
-        const cachedAt = Number(parsed?.cached_at || 0)
-        if (
-          parsed?.fingerprint &&
-          typeof parsed.fingerprint === "object" &&
-          cachedAt > 0 &&
-          now - cachedAt < PUBLISHED_PORTRAIT_FINGERPRINT_CACHE_TTL_MS
-        ) {
+        if (parsed?.fingerprint && typeof parsed.fingerprint === "object") {
           sharedPublishedPortraitFingerprintCache.loadedAt = now
           sharedPublishedPortraitFingerprintCache.value = parsed.fingerprint
           return parsed.fingerprint
         }
       }
     } catch {
-      // Shared fingerprint cache is a billing barrier, not the source of truth.
-      // If it fails we fall back to the direct D1 probe below.
+      // Publication metadata is a required read-plane artifact. A visitor must
+      // never repair it by scanning the full D1 publish state.
     }
   }
-  const row = await queryPublishedPortraitFingerprint(env)
-  sharedPublishedPortraitFingerprintCache.loadedAt = now
-  sharedPublishedPortraitFingerprintCache.value = row || null
-  if (row && env?.KV) {
-    try {
-      await env.KV.put(
-        `${KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX}${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}`,
-        JSON.stringify({ cached_at: now, fingerprint: row }),
-      )
-    } catch {
-      // Same story: KV write-through failing should not break the live request.
-    }
-  }
-  return row || null
+  // Do not negative-cache missing publication metadata. A publisher may repair
+  // it immediately, and the next retry should be able to observe that KV write.
+  sharedPublishedPortraitFingerprintCache.loadedAt = 0
+  sharedPublishedPortraitFingerprintCache.value = null
+  return null
 }
 
 async function queryPublishedPortraitRefs(env) {
@@ -3455,6 +3455,11 @@ async function publishedPortraitRefs(env, { fresh = false } = {}) {
     env,
     fresh ? { fresh: true } : undefined,
   )
+  if (!fresh && !fingerprint) {
+    const error = new Error("Published portrait fingerprint is unavailable")
+    error.code = "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE"
+    throw error
+  }
   const version = portraitSnapshotVersion(fingerprint)
   if (
     !fresh &&
@@ -3470,6 +3475,9 @@ async function publishedPortraitRefs(env, { fresh = false } = {}) {
       publishedPortraitRefsCache.value = cached
       return cached
     }
+    const error = new Error("Published portrait reference snapshot is unavailable")
+    error.code = "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE"
+    throw error
   }
   const rows = await queryPublishedPortraitRefs(env)
   if (!publishedPortraitRefSnapshotMatchesFingerprint(rows, fingerprint)) {
@@ -9281,16 +9289,11 @@ async function recordGeneDiscoveryEncounter(
   }
 
   const row = await readDiscoveryRow()
-  const sharedRefresh = await refreshSharedGeneDiscoveryRollupForGene(env, {
+  await recordSharedGeneDiscoveryEncounter(env, {
     geneSymbol: geneSymbolNorm,
+    created: !existing,
+    isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm),
   })
-  if (
-    !existing &&
-    sharedRefresh?.refreshed &&
-    !iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
-  ) {
-    await addSharedGeneDiscoverySymbolToCache(env, geneSymbolNorm)
-  }
 
   return {
     ok: true,
@@ -9321,11 +9324,11 @@ function normalizeSharedDiscoverySymbolList(value) {
   )
 }
 
-async function readSharedGeneDiscoverySymbolsFromD1(env, { limit = 10000 } = {}) {
+async function readSharedGeneDiscoverySymbolsFromD1(env, { limit = 20000 } = {}) {
   if (!env.ICONOPLASM_DB) return []
   const cleanedLimit = Math.max(
     1,
-    Math.min(10000, Number.parseInt(String(limit || "10000"), 10) || 10000),
+    Math.min(20000, Number.parseInt(String(limit || "20000"), 10) || 20000),
   )
   const rows = await env.ICONOPLASM_DB.prepare(
     `SELECT gene_symbol
@@ -9372,55 +9375,20 @@ async function readSharedGeneDiscoverySymbols(env) {
   return symbols
 }
 
-async function addSharedGeneDiscoverySymbolToCache(env, geneSymbol) {
-  if (!env.KV) return
-  const symbol = normalizeSymbol(geneSymbol || "")
-  if (!symbol) return
-  let symbols = []
-  try {
-    const raw = await env.KV.get(KV_SHARED_GENE_DISCOVERY_SYMBOLS)
-    symbols = normalizeSharedDiscoverySymbolList(raw ? JSON.parse(raw) : null)
-  } catch {
-    symbols = []
-  }
-  if (!symbols.length) {
-    symbols = await readSharedGeneDiscoverySymbolsFromD1(env)
-  }
-  if (!symbols.includes(symbol)) symbols.push(symbol)
-  await writeSharedGeneDiscoverySymbolCache(env, symbols)
-}
-
-async function refreshSharedGeneDiscoveryRollupForGene(env, { geneSymbol } = {}) {
+async function recordSharedGeneDiscoveryEncounter(
+  env,
+  { geneSymbol, created = false, isAdmin = false } = {},
+) {
   if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
   const geneSymbolNorm = normalizeSymbol(geneSymbol || "")
   if (!geneSymbolNorm) return { ok: false, error: "Missing or invalid gene symbol" }
-  const adminUserId = iconoplasmConfiguredAdminUserId(env)
-  const adminPredicate = adminUserId ? "AND user_id <> ?" : ""
-  const args = adminUserId ? [geneSymbolNorm, adminUserId] : [geneSymbolNorm]
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       gene_symbol,
-       MIN(first_discovered_at) AS first_non_admin_discovered_at,
-       MAX(last_encountered_at) AS latest_non_admin_encountered_at,
-       COUNT(*) AS non_admin_discoverer_count,
-       COALESCE(SUM(encounter_count), 0) AS non_admin_encounter_count
-     FROM icono_gene_discoveries
-     WHERE gene_symbol = ?
-       ${adminPredicate}
-     GROUP BY gene_symbol
-     LIMIT 1`,
-  )
-    .bind(...args)
-    .first()
-  if (!row?.gene_symbol || Number(row.non_admin_discoverer_count || 0) <= 0) {
-    await env.ICONOPLASM_DB.prepare(
-      `DELETE FROM icono_shared_gene_discoveries
-       WHERE gene_symbol = ?`,
-    )
-      .bind(geneSymbolNorm)
-      .run()
-    return { ok: true, refreshed: false }
-  }
+  if (isAdmin) return { ok: true, refreshed: false }
+
+  // This is an encounter counter, not an analytical report. Re-aggregating all
+  // discoverers of a popular gene here made the nth TP53 hover scan n personal
+  // rows, so a synchronized audience produced quadratic D1 reads. The personal
+  // row above already tells us whether this is a new discoverer; keep the
+  // shared rollup O(1) by applying that fact atomically.
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_shared_gene_discoveries (
        gene_symbol,
@@ -9429,23 +9397,40 @@ async function refreshSharedGeneDiscoveryRollupForGene(env, { geneSymbol } = {})
        non_admin_discoverer_count,
        non_admin_encounter_count,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ) VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, 1, CURRENT_TIMESTAMP)
      ON CONFLICT(gene_symbol) DO UPDATE SET
-       first_non_admin_discovered_at = excluded.first_non_admin_discovered_at,
-       latest_non_admin_encountered_at = excluded.latest_non_admin_encountered_at,
-       non_admin_discoverer_count = excluded.non_admin_discoverer_count,
-       non_admin_encounter_count = excluded.non_admin_encounter_count,
+       latest_non_admin_encountered_at = CURRENT_TIMESTAMP,
+       non_admin_discoverer_count =
+         icono_shared_gene_discoveries.non_admin_discoverer_count + ?,
+       non_admin_encounter_count =
+         icono_shared_gene_discoveries.non_admin_encounter_count + 1,
        updated_at = CURRENT_TIMESTAMP`,
   )
-    .bind(
-      geneSymbolNorm,
-      sanitizeText(row.first_non_admin_discovered_at || "", 64),
-      sanitizeText(row.latest_non_admin_encountered_at || "", 64),
-      Math.max(0, Number(row.non_admin_discoverer_count || 0) || 0),
-      Math.max(0, Number(row.non_admin_encounter_count || 0) || 0),
-    )
+    .bind(geneSymbolNorm, created ? 1 : 0)
     .run()
   return { ok: true, refreshed: true }
+}
+
+export async function publishSharedGeneDiscoverySymbols(env) {
+  if (!env?.KV || !env?.ICONOPLASM_DB) {
+    return { ok: false, skipped: true, reason: "bindings_missing" }
+  }
+  const nextSymbols = await readSharedGeneDiscoverySymbolsFromD1(env, { limit: 20000 })
+  let currentSymbols = []
+  try {
+    const raw = await env.KV.get(KV_SHARED_GENE_DISCOVERY_SYMBOLS)
+    currentSymbols = normalizeSharedDiscoverySymbolList(raw ? JSON.parse(raw) : null)
+  } catch {
+    currentSymbols = []
+  }
+  const unchanged =
+    currentSymbols.length === nextSymbols.length &&
+    currentSymbols.every((symbol, index) => symbol === nextSymbols[index])
+  if (unchanged) {
+    return { ok: true, changed: false, symbol_count: nextSymbols.length }
+  }
+  await writeSharedGeneDiscoverySymbolCache(env, nextSymbols)
+  return { ok: true, changed: true, symbol_count: nextSymbols.length }
 }
 
 async function rebuildSharedGeneDiscoveryRollup(env) {
@@ -10964,6 +10949,11 @@ async function extensionManifestObj(url, env, clientVersion = null) {
   const publicationAliases = await iconoplasmPublicationAliasManifest()
   const compatibilityContract = publishedCompatibilityContractForClientVersion(clientVersion)
   const portraitFingerprint = await sharedPublishedPortraitFingerprint(env)
+  if (!portraitFingerprint) {
+    const error = new Error("Published portrait fingerprint is unavailable")
+    error.code = "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE"
+    throw error
+  }
   const candidateBuildVersion = buildPortraitAwareManifestHash(
     manifest.current_hash,
     portraitFingerprint,
@@ -14891,12 +14881,6 @@ export class IconoplasmVoteCoordinator {
       if (!assetSha) {
         return Response.json({ error: "Missing or invalid asset_sha256" }, { status: 400 })
       }
-      await this.ensureAssetSummaryFromMetadata(
-        symbol,
-        assetSha,
-        payload?.vision_id || "",
-        payload?.candidate_image_id,
-      )
       return Response.json({
         ok: true,
         symbol,
@@ -14914,12 +14898,6 @@ export class IconoplasmVoteCoordinator {
         const symbol = await this.ensureBootstrapped(rawItem?.symbol || "")
         const assetSha = normalizeSha256(rawItem?.asset_sha256 || "")
         if (!assetSha) continue
-        await this.ensureAssetSummaryFromMetadata(
-          symbol,
-          assetSha,
-          rawItem?.vision_id || "",
-          rawItem?.candidate_image_id,
-        )
         const snapshot = this.snapshotForAsset(assetSha, userId, rawItem?.vision_id || "")
         out.push({
           candidate_ref: snapshot.candidate_ref,
@@ -24605,7 +24583,16 @@ function handlePublicSchema() {
 
 async function handlePublicCatalogManifest(request, env) {
   const url = new URL(request.url)
-  const manifest = await extensionManifestObj(url, env, extVersion(request))
+  let manifest
+  try {
+    manifest = await extensionManifestObj(url, env, extVersion(request))
+  } catch (error) {
+    if (error?.code !== "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE") throw error
+    return json({ error: "Published catalog metadata is temporarily unavailable" }, 503, {
+      "Cache-Control": "no-store",
+      "Retry-After": "60",
+    })
+  }
   if (!manifest) {
     return json({ error: "Public catalog manifest not found — publish the catalog first" }, 404)
   }
@@ -26658,7 +26645,16 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
 async function handleCatalogManifest(request, env) {
   if (!env.KV) return json({ error: "KV binding missing" }, 500)
   const url = new URL(request.url)
-  const manifest = await extensionManifestObj(url, env, extVersion(request))
+  let manifest
+  try {
+    manifest = await extensionManifestObj(url, env, extVersion(request))
+  } catch (error) {
+    if (error?.code !== "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE") throw error
+    return json({ error: "Published catalog metadata is temporarily unavailable" }, 503, {
+      "Cache-Control": "no-store",
+      "Retry-After": "60",
+    })
+  }
   if (!manifest)
     return json({ error: "Catalog manifest not found — run iconoplasm catalog publish" }, 404)
   const body = JSON.stringify(manifest)
@@ -26688,9 +26684,18 @@ async function handleCatalogArtifact(env, path) {
   // hoc whole-artifact hydration per cold isolate. Use the shared hydrated
   // artifact snapshot keyed by the portrait-aware build hash so immutable URLs
   // change whenever the canonical portrait changes.
-  const hydrated = isPublishedCompatibilityHash(hash)
-    ? await publishedCompatibilityArtifact(env, hash)
-    : await hydratedCatalogArtifact(env, hash)
+  let hydrated
+  try {
+    hydrated = isPublishedCompatibilityHash(hash)
+      ? await publishedCompatibilityArtifact(env, hash)
+      : await hydratedCatalogArtifact(env, hash)
+  } catch (error) {
+    if (error?.code !== "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE") throw error
+    return json({ error: "Published catalog artifact is temporarily unavailable" }, 503, {
+      "Cache-Control": "no-store",
+      "Retry-After": "60",
+    })
+  }
   if (!hydrated) return json({ error: "Artifact not found" }, 404)
   const responseBody = JSON.stringify(hydrated)
   return new Response(responseBody, {

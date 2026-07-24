@@ -50,10 +50,18 @@ test("observability snapshot workflow publishes hourly without becoming a produc
 
 test("production Iconoplasm maintenance is not an hourly free-plan cron", () => {
   const source = read("wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml")
+  const runtime = read(
+    "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
+  )
   assert.doesNotMatch(
     source,
     /crons\s*=\s*\[[^\]]*["']17 \* \* \* \*["']/s,
     "hourly maintenance cron can burn Cloudflare free-plan budget before humans wake up",
+  )
+  assert.doesNotMatch(
+    runtime,
+    /["']17 \* \* \* \*["']/,
+    "runtime must not retain a homemade handler for a cron that configuration cannot fire",
   )
 })
 
@@ -76,6 +84,7 @@ test("frequent gallery-refresh cron is gallery-only, never the heavy maintenance
   assert.match(wrangler, /crons\s*=\s*\[[^\]]*["']\*\/15 \* \* \* \*["']/s)
   assert.match(runtime, /cronExpr === "\*\/15 \* \* \* \*"/)
   assert.match(runtime, /runScheduledIconoplasmGalleryRefresh/)
+  assert.match(runtime, /publishSharedGeneDiscoverySymbols/)
   // ...and must NOT be in the heavy maintenance set (vote projection + canon repair),
   // or the frequent tick would burn free-plan budget every 15 minutes.
   const maintenanceSet = /ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS = new Set\(\[([^\]]*)\]\)/s.exec(

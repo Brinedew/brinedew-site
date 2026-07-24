@@ -1,290 +1,281 @@
-# Iconoplasm first-principles launch capacity
+# Iconoplasm product and first-principles capacity model
 
-Status: **the stated 10,000-lurker plus 100-serious-user launch target is not
-safe on the current architecture at $0**.
+This is the launch model for Iconoplasm. It deliberately does **not** extrapolate
+historical Cloudflare counters: the routing, publication, extension cache, and
+discovery-write architecture changed too much for old traffic to be a useful
+denominator.
 
-This is a request-graph model, not a traffic extrapolation. No current or
-historical request counter is an input. Observed counters may diagnose an
-incident, but architecture has changed too much for them to forecast launch.
+The model starts with what a person is trying to do, maps each action to the
+shipped request path, and then asks which independent free-tier allowance fails
+first.
 
-The spending constraint is also an input: **$0 of new Cloudflare spend and no
-dependency on paying the existing account debt**. A paid-plan recommendation
-is invalid unless the debt and billing state are resolved separately and
-Vladimir explicitly changes that constraint.
+## Product model
 
-The executable source of the arithmetic is
-`scripts/iconoplasm-first-principles-capacity.mjs`. Its test locks the threshold
-calculations against accidental hand-waving.
+Iconoplasm is a mnemonic world for human genes, inspired by extreme mnemonics.
+It is for life-science students and preclinical researchers who can remember a
+character, story, and social relationship more easily than an isolated molecular
+fact.
 
-## Fixed inputs
+The important surfaces are not interchangeable:
 
-### Provider daily ceilings
+1. **Extension tooltip:** recognition while reading a paper or biology database.
+   It must appear quickly, stay visually stable while the reader is on that page,
+   and link to the deeper dossier.
+2. **Gene dossier:** explanation, candidate comparison, and canon selection. It
+   is the one passive page where live vote state belongs.
+3. **Personal Archive and Clans:** the reader's memory trail and progress through
+   the world. A discovery belongs here only when it can actually be retained.
+4. **Shared discoveries:** a social overlay showing which genes other people
+   encountered. It is not the user's personal shelf and need not update within a
+   single hover.
+5. **Authoring:** a signed-in researcher brings their own model/API access,
+   creates or edits a character interpretation, publishes it as a candidate, and
+   lets the community compare it.
+6. **Frozen gene archive:** a stable reference and crawl path over the 19,023
+   complete human-gene profiles. It is not an infinite activity feed.
 
-| Resource                           | Free daily ceiling |
-| ---------------------------------- | -----------------: |
-| Worker requests, account-wide      |            100,000 |
-| Workers KV reads                   |            100,000 |
-| Workers KV writes                  |              1,000 |
-| D1 rows read                       |          5,000,000 |
-| D1 rows written                    |            100,000 |
-| Durable Object requests            |            100,000 |
-| Durable Object SQLite rows written |            100,000 |
-| Queue operations                   |             10,000 |
+## When a viewer should see something change
 
-Other hard walls remain relevant but do not determine the user-count scenarios
-below: 10 ms Worker CPU per request, 128 MB per isolate, 50 subrequests per
-invocation, 500 MB per D1 database, and 5 GB D1 storage across the account.
+| Event                    | Person who caused it                   | Other open gene pages                           | Archive / extension / new visits                         |
+| ------------------------ | -------------------------------------- | ----------------------------------------------- | -------------------------------------------------------- |
+| Vote button pressed      | Optimistic score immediately           | Dossier projection converges in seconds         | Next published snapshot, at most about 15 minutes        |
+| Candidate wins canon     | Dossier follows the projected winner   | Fresh dossier reads see the winner              | Archive and extension move together at the next snapshot |
+| New personal discovery   | Personal shelf can update immediately  | Not applicable                                  | Persists for the signed-in person                        |
+| New shared discovery     | No need to interrupt the reader        | No need to mutate an open page                  | Shared overlay updates at the next hourly publication    |
+| Catalog/card publication | Current reading context stays coherent | Existing page is not rewritten under the viewer | New page contexts use the new immutable version          |
 
-Official ceiling sources:
-[Workers](https://developers.cloudflare.com/workers/platform/limits/),
-[KV](https://developers.cloudflare.com/kv/platform/limits/),
-[D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/),
-[D1 limits](https://developers.cloudflare.com/d1/platform/limits/),
-[Durable Objects](https://developers.cloudflare.com/durable-objects/platform/pricing/),
-and [Queues](https://developers.cloudflare.com/queues/platform/pricing/).
+This separation is intentional. Immediate feedback is for a person's own action.
+Passive pages should not swap portraits under somebody who is trying to memorize
+one. Global readers converge at an explicit publication boundary.
 
-### Shipped structural shape
+## Provider ceilings
 
-- 19,023 published genes.
-- 26 immutable card-artifact shards, normally 750 genes per shard.
-- Eight genes per extension detail batch.
-- 512 persistent extension detail-cache entries per publication snapshot.
-- The three guest starter genes live in three different shards.
-- Non-rejected portrait candidates per gene: average 2.958, p95 5, p99 12,
-  maximum 44.
+As of 2026-07-24, the independent Workers Free daily ceilings used by the model
+are:
 
-These are artifact/schema measurements. They describe what the shipped code
-must touch; they are not measurements of audience behavior.
+| Resource                           | Free allowance |
+| ---------------------------------- | -------------: |
+| Worker / Pages Function requests   |    100,000/day |
+| Workers KV reads                   |    100,000/day |
+| Workers KV writes                  |      1,000/day |
+| D1 rows read                       |  5,000,000/day |
+| D1 rows written                    |    100,000/day |
+| Durable Object requests            |    100,000/day |
+| SQLite Durable Object rows read    |  5,000,000/day |
+| SQLite Durable Object rows written |    100,000/day |
+| Queue operations                   |     10,000/day |
 
-### Fixed code-scheduled work
+Static asset requests are free and unlimited when they do not invoke Worker
+code. A Queue message normally costs three operations: write, read, and delete.
+On the free plan, exceeding one of these product-specific allowances causes that
+operation to fail until the 00:00 UTC reset; it does not create a surprise
+overage charge.
 
-The deployed configuration creates 96 quarter-hour Cron Trigger activations and
-three daily activations: **99 Worker requests/day** before users. The hourly
-observability workflow also spends **24 KV writes/day**. These are known from
-configuration, not inferred from telemetry.
+Sources:
 
-The D1/KV/Queue work performed inside a tick is state-dependent. It is modeled
-with its cause—dirty publication, pending notification, vote projection, or
-finalization—not disguised as an observed baseline. A clean best-case scenario
-therefore includes the 99 activations and 24 writes but does not invent rows for
-empty jobs.
+- <https://developers.cloudflare.com/workers/platform/pricing/>
+- <https://developers.cloudflare.com/kv/platform/pricing/>
+- <https://developers.cloudflare.com/d1/platform/pricing/>
+- <https://developers.cloudflare.com/durable-objects/platform/pricing/>
+- <https://developers.cloudflare.com/queues/platform/pricing/>
 
-## Atomic journey costs
+## Action-derived costs
 
-All rows assume a cold isolate/cache when a maximum is being claimed. “Healthy
-Bunny” means portrait bytes come directly from Bunny CDN and do not invoke the
-Cloudflare Worker.
+The executable model is
+`scripts/iconoplasm-first-principles-capacity.mjs`.
 
-| Journey                                                | Worker | KV read | KV write |    D1 read rows |   D1 write rows |     DO requests |   DO write rows |
-| ------------------------------------------------------ | -----: | ------: | -------: | --------------: | --------------: | --------------: | --------------: |
-| Anonymous cold homepage                                |      1 |       5 |        0 |               0 |               0 |               0 |               0 |
-| One cold distinct search                               |      1 |       3 |        0 |               0 |               0 |               0 |               0 |
-| One signed-out gene page, average candidates           |      4 |       4 |        0 |           6.958 |               0 |               1 |           2.958 |
-| One signed-out gene page, maximum candidates           |      4 |       4 |        0 |              48 |               0 |               1 |              44 |
-| Signed-out extension, 8 active hours, 512 unique genes |    256 |     928 |        0 |             0\* |               0 |               0 |               0 |
-| Signed-in extension, 8 active hours, 512 unique genes  |    673 |     928 |    0\*\* |             0\* |           1,024 |             512 |               0 |
-| Signed-in website left visible for 8 hours             |    480 |       0 |        0 | route-dependent |               0 | route-dependent |               0 |
-| Fixed scheduled control plane, one day                 |     99 |       0 |       24 | route-dependent | route-dependent | route-dependent | route-dependent |
+### Homepage visit
 
-\* The portrait-fingerprint refresh anomaly is modeled separately because its
-cost is global and race-dependent, not honestly attributable to one user.
+A browser that runs the current homepage application loads the published card
+manifest and the three starter-card shards:
 
-\*\* A newly shared discovery also writes KV. In a cold/disjoint shared state,
-512 unique genes cost 512 writes per user; the second such user exceeds the
-1,000-write ceiling. In mature overlapping state, this cost approaches zero.
-Both assumptions must stay visible.
+- 1 Worker request;
+- 5 KV reads.
 
-The four Worker requests for a gene-page visit are the HTML document, vote
-snapshot, comments, and discovery encounter. The HTML path reads primary D1
-twice for the catalog row, once for portrait state, once for essence, and once
-per candidate. Client bootstrap prevents a duplicate detail fetch.
+The HTML, CSS, JavaScript, fonts, and images are static assets and do not spend
+Worker requests.
 
-## User behavior scenarios and first failure
+### Curious website explorer
 
-“First over” means the first whole user whose complete journey would exceed the
-ceiling. The preceding user count is below it; operating exactly at a ceiling
-is not safe headroom.
+The representative explorer opens the homepage, performs five searches, and
+opens three gene dossiers:
 
-| Assumption                                                          | First resource over | First whole user over |
-| ------------------------------------------------------------------- | ------------------- | --------------------: |
-| Homepage only, one cold session each                                | KV reads            |                20,001 |
-| Explorer: home + 5 cold searches + 3 gene pages, average candidates | KV reads            |                 3,126 |
-| Same explorer, three 44-candidate genes                             | DO rows written     |                   758 |
-| Signed-out extension, 8 active hours, 512 unique genes              | KV reads            |                   108 |
-| Same extension after 10,000 one-visit homepage lurkers              | KV reads            |                    54 |
-| Signed-in extension, 8 active hours, mature shared-discovery state  | D1 rows written     |                    98 |
-| Signed-in extension, cold/disjoint shared-discovery state           | KV writes           |                     2 |
+- 15 Worker requests;
+- 32 KV reads;
+- 3 Durable Object snapshot requests;
+- about 21 D1 rows read at the average 2.958 candidates per gene, or 144 at the
+  shipped maximum of 44 candidates.
 
-All rows above use the best-case assumption that unrelated Brinedew/GeneGuessr
-traffic consumes none of the shared account quota. Because the Worker allowance
-is account-wide, that is a floor, not headroom. Other account demand must be an
-explicit reserve assumption:
+Snapshot reads no longer rewrite Durable Object summary rows. A signed-out gene
+page no longer posts a discovery that the server is guaranteed to reject.
 
-| Other-account KV reserve | First serious signed-out extension user over after 10,000 lurkers |
-| -----------------------: | ----------------------------------------------------------------: |
-|                       0% |                                                                54 |
-|                      20% |                                                                33 |
-|                      50% |                                                                 1 |
+The first lifetime read of a gene's vote coordinator is different: it imports
+that gene's existing assets and votes into the Durable Object once. With one
+vision per candidate, the conservative write shape is `2 + 2*candidates`
+(symbol/bootstrap metadata plus asset and vision summaries). At the catalog
+average, a completely cold sweep crosses the 100,000 Durable Object row-write
+allowance around gene 12,633. Repeated views of already-bootstrapped genes do not
+repeat these writes.
 
-The reserve table is deliberately not estimated from yesterday. It lets the
-decision-maker choose an explicit isolation/headroom policy and see the result.
+### Extension reader
 
-The explicit 10,000-lurker plus 100-serious-extension-user target therefore
-costs, before search and gene-page exploration:
+Extension cost is a function of behavior, not elapsed wall-clock time:
 
-- signed-out extension users: 35,600 Worker requests and **142,800 KV reads**;
-- signed-in extension users: 77,300 Worker requests, **142,800 KV reads**, and
-  **102,400 D1 rows written**;
-- if those 100 signed-in users also leave the site visible for eight hours:
-  **125,300 Worker requests**.
+```text
+manifest refreshes = min(page loads, five-minute windows)
+auth/discovery checks = min(qualified 900 ms hovers, five-minute windows)
+detail batches = ceil(unique gene details / actual batch fill)
 
-The fixed scheduled control plane adds 99 Worker requests and 24 KV writes to
-each total. It does not change which resource fails first.
+Worker requests =
+  manifest refreshes + auth checks + detail batches + signed-in encounters
 
-The target fails first-principles checks even when Bunny is healthy. It is not
-made safe by the crawler block.
+KV reads = 3 * manifest refreshes + 10 * detail batches
+```
+
+There is no five-minute idle timer. A long-open page with no new content-script
+request does not manufacture 96 manifest requests.
+
+Two deliberately different eight-hour assumptions are retained:
+
+- **Dense-paper reader:** 32 content pages, 32 qualified hover windows, 512
+  unique genes, eight useful genes per detail batch.
+- **Maximally scattered reader:** 512 one-gene page contexts, 512 qualified
+  hover windows, 512 unique genes, one useful gene per batch. This is a stress
+  boundary, not a normal scientist.
+
+### Signed-in discovery
+
+A signed-in encounter performs indexed point reads and constant-time writes:
+
+- personal discovery insert/update;
+- one atomic shared-rollup increment.
+
+The model conservatively counts eight D1 write units for a new discovery and
+seven for a repeat because D1 also counts affected index rows. Discovery does
+**not** use a Durable Object.
+
+The previous implementation re-aggregated every discoverer of the same gene on
+every encounter. For `n` people discovering TP53 together, that produced roughly
+`n(n+1)/2` rollup rows read. It has been replaced with an O(1) increment.
+
+The shared symbol list is now published on the hour by the existing control
+plane. At the full 19,023-gene end state, its deliberate upper bound is 456,552
+D1 rows read/day plus 24 KV reads/day; it writes KV only when the symbol set
+changed. User hovers no longer race through a whole-list KV read/modify/write.
+
+### Request inbox
+
+An idle signed-in tab performs one initial notification read, plus explicit
+focus/visibility refreshes. Minute polling runs only while the account actually
+has an open generation request, preserving the expected one-to-two-minute
+fulfilment feedback without charging a forgotten tab all day.
+
+### Voting
+
+For a conservative independent upper envelope, one vote is modeled as:
+
+- 1 Worker request;
+- 1 Durable Object request;
+- up to 8 Durable Object row writes;
+- up to 12 indexed D1 projection writes;
+- 3 Queue operations.
+
+Production batching can make this cheaper. The capacity decision uses the
+unbatched boundary so it does not depend on lucky coalescing.
+
+## What breaks first
+
+All counts below are the **first user whose full daily behavior crosses a free
+allowance**, starting from zero unless the row names the 10,000-visitor base.
+
+| Independent behavior                                  | First allowance to fail     | First user over |
+| ----------------------------------------------------- | --------------------------- | --------------: |
+| Homepage only                                         | KV reads                    |          20,001 |
+| Curious website explorer                              | KV reads                    |           3,126 |
+| Dense-paper extension reader, signed out              | KV reads                    |             136 |
+| Same, after 10,000 homepage visitors                  | KV reads                    |              68 |
+| Maximally scattered extension reader                  | KV reads                    |              19 |
+| Signed-in dense-paper reader with 512 new discoveries | D1 rows written             |              25 |
+| Contributor casting 100 votes/day                     | Queue operations            |              34 |
+| One visible tab with an open request for eight hours  | Worker requests             |             208 |
+| Completely cold, disjoint gene coordinator bootstraps | Durable Object rows written |     gene 12,633 |
+
+### Scott Alexander shoutout shapes
+
+These are not forecasts. They are envelopes that make the hidden assumption
+visible:
+
+| Audience behavior                                     | Result                                           |
+| ----------------------------------------------------- | ------------------------------------------------ |
+| 10,000 people open the homepage once                  | 10,000 Worker requests and 50,000 KV reads; safe |
+| Those 10,000 also behave like curious explorers       | KV reads fail around explorer 3,126              |
+| 10,000 homepage visitors plus dense extension readers | reader 68 crosses the remaining KV allowance     |
+| 25 signed-in readers each discover 512 new genes      | the 25th crosses the D1 write allowance          |
+| 34 contributors each cast 100 votes                   | the 34th crosses the Queue allowance             |
+
+The hot take is simple: anonymous shoutout traffic is not intrinsically scary.
+Deep extension use, signed-in discovery writes, and heavy voting are separate
+failure domains and fail at much smaller engaged-user counts. “Upgrade Workers”
+would mask these shapes, not correct them.
 
 ## Independent maximum-strain assumptions
 
-### Portrait CDN failure
+### Portrait accelerator failure
 
-If Bunny is unavailable and every unique portrait falls back to the
-first-party route, a 512-gene extension session adds up to 512 Worker requests
-per user. A 44-candidate gene page adds up to 44. Healthy-CDN and failed-CDN
-scenarios must never be averaged together.
+If Bunny fails for a reader, each unique portrait may add one first-party Worker
+request. The dense 512-gene extension shape adds up to 512 Worker requests per
+reader. KV still fails before Workers in the current dense and scattered
+scenarios, but the Worker margin becomes much smaller.
 
-### Search crawler
+### Dynamic crawler
 
-GPTBot and ClaudeBot are blocked before Worker execution. A permitted search
-crawler fetching every gene document without JavaScript still costs 19,023
-Worker requests. Under a cold-isolate upper bound it can also cost 57,069 KV
-reads. That is structurally affordable alone but consumes material capacity
-when combined with humans.
+Training crawlers are blocked before Worker execution. An allowed search or
+user-directed crawler that intentionally opens dynamic gene dossiers behaves
+like dossier traffic, not free static traffic. At the 44-candidate boundary,
+25,000 anonymous dossier views consume about 75,000 Worker requests and all
+100,000 KV reads. A first-ever sweep across distinct gene coordinators can fail
+earlier on Durable Object row writes, around 12,633 average-shaped genes; that
+cost is one-time per gene, not per crawler revisit.
 
-### Unknown or adversarial automation
+### Other applications on the account
 
-An unblocked actor can consume the account-wide 100,000-Worker-request allowance
-regardless of application rate limits, because an application rate-limit check
-already entered the Worker. Protection for this failure mode belongs before the
-Worker at Cloudflare's edge.
+The 100,000 Worker limit is account-wide. Other Workers and Pages Functions can
+be represented as an explicit base vector in `firstUserOverLimit`; they are not
+silently inferred from yesterday's counter. This is the only honest use of
+current account data in a first-principles launch decision.
 
-## Hardening anomaly ledger
+## Remaining hardening ledger
 
-### H-1 — vote snapshot “read” rewrites Durable Object rows
+Portrait fingerprint and reference metadata are now publisher-owned immutable
+artifacts. Public readers never reconstruct them from D1. Missing or corrupt
+publication returns a retryable 503 instead of turning a visitor into an
+infrastructure repair job.
 
-**Status: launch blocker. Homemade state-repair behavior is on a read path.**
+### R-1 — duplicate nightly maintenance needs a declared owner
 
-`/vote/snapshots` calls `ensureAssetSummaryFromMetadata`, which reaches
-`ensureAssetSummaryRow`. That method performs `INSERT ... ON CONFLICT DO UPDATE`
-and changes `updated_at` even when the asset already exists. Merely viewing a
-gene therefore writes one `asset_summary` row per candidate.
+Full Iconoplasm maintenance runs at both 23:55 and 00:03 UTC. If the second run
+is intentional recovery, it needs a tested no-op/recovery contract. Otherwise
+one trigger should own it. The unreachable hourly selector that was not present
+in Wrangler configuration has been removed.
 
-First-principles consequence:
+### R-2 — website guest discoveries are not a real feature
 
-- repeating a 44-candidate gene page: user/page 2,273 exceeds 100,000 DO row
-  writes;
-- the three-gene maximum explorer: user 758 exceeds the same ceiling.
+The extension stores guest discoveries locally and merges them after sign-in.
+The website does not. The guaranteed-failing guest POST has been removed, but a
+product decision remains: either website browsing is intentionally preview-only
+for guests, or it should use the same local shelf/merge contract as the
+extension.
 
-Permanent correction: snapshot reads must be side-effect free. Missing summary
-repair belongs on candidate/vote mutation or an explicit bounded repair job,
-with a test proving repeat snapshot reads execute no storage write.
+## Rule for future recommendations
 
-### H-2 — five-minute fingerprint refresh performs a whole-catalog D1 scan
+Historical counters may validate that a modeled path is occurring and reveal
+unmodeled traffic. They may not be used to extrapolate launch capacity across an
+architecture change. Any recommendation to pay, raise a limit, or change a
+publication cadence must name:
 
-**Status: launch blocker. This is a homemade distributed cache without
-single-flight ownership.**
-
-When the shared portrait fingerprint is stale, a read request scans 19,023
-published rows, hashes them, and writes one shared KV key. Concurrent cold
-isolates can all do the same work.
-
-| Active window | Concurrent cold refreshers per 5-minute boundary |               D1 rows read |
-| ------------- | -----------------------------------------------: | -------------------------: |
-| 8 hours       |                                                1 |                  1,826,208 |
-| 8 hours       |                                                2 |                  3,652,416 |
-| 8 hours       |                                                3 | **5,478,624 — over limit** |
-| 24 hours      |                                                1 | **5,478,624 — over limit** |
-
-Permanent correction: publication must write immutable fingerprint/version
-metadata once. Public reads consume that metadata and never reconstruct it by
-scanning D1.
-
-### H-3 — homepage card hydration rereads multiple immutable shards
-
-**Status: capacity blocker for the combined target, not data corruption.**
-
-An anonymous cold homepage spends five KV reads: gallery version, catalog
-manifest, and three starter shards. Ten thousand one-visit lurkers spend half
-the daily KV-read allowance before extension traffic begins.
-
-Permanent correction: publish one tiny starter-card artifact or serve the
-starter payload with the static release. Do not add more D1 reads or a per-user
-cache workaround.
-
-### H-4 — signed-in discovery writes two D1 rows per unique hover
-
-**Status: capacity blocker; authority is valid, write amplification is not.**
-
-Each unique signed-in encounter writes the personal discovery and the shared
-rollup. One hundred users filling a 512-entry cache write about 102,400 D1 rows
-before other account writes. The shared-discovery KV mirror can independently
-exceed its 1,000-write ceiling when discoveries are cold and disjoint.
-
-Permanent correction requires separating durable personal truth from a bounded
-publication/aggregation path. Dropping either authority or accuracy to make the
-chart green would be a kludge.
-
-### H-5 — minute polling turns an idle signed-in tab into traffic
-
-**Status: anomalous background load.**
-
-The signed-in request inbox polls once per minute while visible. One tab open
-for eight hours costs 480 Worker requests; 100 such users cost 48,000. The
-appropriate correction is event/visibility-aware bounded refresh behavior, not
-a larger arbitrary polling interval.
-
-### H-6 — full maintenance is deliberately fired twice eight minutes apart
-
-**Status: homemade redundancy; not yet a proven launch blocker.**
-
-Both `55 23 * * *` and `3 0 * * *` are members of
-`ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS`. Each runs archive, vote projection,
-canon repair, and gallery refresh. The two triggers also own unrelated
-GeneGuessr pre-warm and recap responsibilities, so the shared clock causes full
-Iconoplasm maintenance to run twice.
-
-This may be intentional recovery redundancy, but its cost bound and reason are
-not explicit. Permanent correction: give maintenance one clear owner, or
-document and test the second run as a no-op recovery pass with exact maximum
-D1/KV/Queue work.
-
-### H-7 — an unreachable hourly maintenance selector remains in runtime code
-
-**Status: anomalous dead configuration, no current production quota cost.**
-
-`ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS` still includes `17 * * * *`, while the
-deployed Worker Cron Trigger list does not. A separate GitHub Actions workflow
-uses that schedule for observability publication. Keeping the same expression
-in the Worker maintenance set obscures ownership and can accidentally turn a
-future trigger change into hourly heavy maintenance.
-
-Permanent correction: remove the dead selector or make schedule ownership a
-single validated configuration. Do not rely on two files accidentally
-disagreeing.
-
-## What historical counters may and may not do
-
-Historical counters may establish that GPTBot/ClaudeBot caused the 2026-07-24
-incident and verify that the edge block stopped that incident. They may not be
-used to estimate Scott Alexander traffic, serious-user behavior, or capacity of
-the changed architecture.
-
-The model changes only when one of these changes:
-
-1. a provider ceiling;
-2. the shipped request graph;
-3. artifact/catalog shape;
-4. a stated user-behavior assumption;
-5. the $0 spending constraint.
-
-Any recommendation must name the changed input and rerun the executable model.
+1. the user behavior;
+2. the requests and storage operations caused by that behavior;
+3. the first independent allowance to fail;
+4. the first user/action count over that allowance;
+5. what the viewer sees when it fails; and
+6. whether payment fixes a legitimate workload or merely subsidizes a kludge.

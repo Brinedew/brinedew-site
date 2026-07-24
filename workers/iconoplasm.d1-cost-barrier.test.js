@@ -154,6 +154,12 @@ class FakeSharedKv {
     this.version = version
     this.getCounts = new Map()
     const mobileCards = [completeMobileCard("A1BG", version), completeMobileCard("TP53", version)]
+    const fingerprint = { published_count: 2, latest: "publisherownedv1" }
+    const portraitRefVersion = `v3-${fingerprint.published_count}-${fingerprint.latest}`
+    const portraitRefs = [
+      { symbol: "A1BG", asset_sha256: "a".repeat(64) },
+      { symbol: "TP53", asset_sha256: "b".repeat(64) },
+    ]
     this.store = new Map([
       [
         "iconoplasm:catalog-manifest",
@@ -165,6 +171,18 @@ class FakeSharedKv {
           gene_count: 2,
         }),
       ],
+      [
+        "iconoplasm:published-portrait-fingerprint:v3",
+        JSON.stringify({
+          schema: "iconoplasm.publishedPortraitFingerprint.v1",
+          // Deliberately ancient. Publication metadata is immutable until the
+          // publisher replaces it; readers do not reinterpret age as authority
+          // to rebuild it from D1.
+          published_at: "2000-01-01T00:00:00.000Z",
+          fingerprint,
+        }),
+      ],
+      [`iconoplasm:published-portrait-refs:${portraitRefVersion}`, JSON.stringify(portraitRefs)],
       [
         `iconoplasm:catalog:${hash}`,
         JSON.stringify({
@@ -297,7 +315,7 @@ function buildEnv(sharedKv, db) {
   return env
 }
 
-test("DO NOT DELETE: catalog manifest reuses the shared portrait fingerprint cache across isolate resets", async () => {
+test("DO NOT DELETE: catalog manifest never rebuilds publisher-owned fingerprint metadata", async () => {
   const kv = new FakeSharedKv()
   const db = new FakeCostBarrierDb()
 
@@ -308,7 +326,7 @@ test("DO NOT DELETE: catalog manifest reuses the shared portrait fingerprint cac
     { waitUntil() {} },
   )
   assert.equal(first.status, 200)
-  assert.equal(db.fingerprintReads, 1)
+  assert.equal(db.fingerprintReads, 0)
   const firstPayload = await first.json()
   assert.match(firstPayload.artifact_url, /catalog\.costbarrier01-a5c1-v3-2-/)
 
@@ -321,10 +339,36 @@ test("DO NOT DELETE: catalog manifest reuses the shared portrait fingerprint cac
   assert.equal(second.status, 200)
   const secondPayload = await second.json()
   assert.equal(secondPayload.build_version, firstPayload.build_version)
-  assert.equal(db.fingerprintReads, 1)
+  assert.equal(db.fingerprintReads, 0)
 })
 
-test("DO NOT DELETE: search warm-up reuses shared portrait refs instead of rescanning D1 after isolate reset", async () => {
+test("DO NOT DELETE: missing publication metadata is retryable without a D1 repair or isolate reset", async () => {
+  const kv = new FakeSharedKv()
+  const db = new FakeCostBarrierDb()
+  const key = "iconoplasm:published-portrait-fingerprint:v3"
+  const published = kv.store.get(key)
+  kv.store.delete(key)
+  resetIconoplasmRuntimeCachesForTest()
+
+  const missing = await handleIconoplasmGatewayRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
+    buildEnv(kv, db),
+    { waitUntil() {} },
+  )
+  assert.equal(missing.status, 503)
+  assert.equal(db.fingerprintReads, 0)
+
+  kv.store.set(key, published)
+  const repaired = await handleIconoplasmGatewayRequest(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
+    buildEnv(kv, db),
+    { waitUntil() {} },
+  )
+  assert.equal(repaired.status, 200)
+  assert.equal(db.fingerprintReads, 0)
+})
+
+test("DO NOT DELETE: search consumes publisher-owned portrait refs across isolate resets", async () => {
   const kv = new FakeSharedKv()
   const db = new FakeCostBarrierDb()
 
@@ -335,7 +379,7 @@ test("DO NOT DELETE: search warm-up reuses shared portrait refs instead of resca
     { waitUntil() {} },
   )
   assert.equal(first.status, 200)
-  assert.equal(db.portraitRefReads, 1)
+  assert.equal(db.portraitRefReads, 0)
 
   resetIconoplasmRuntimeCachesForTest()
   const second = await handleIconoplasmGatewayRequest(
@@ -344,7 +388,7 @@ test("DO NOT DELETE: search warm-up reuses shared portrait refs instead of resca
     { waitUntil() {} },
   )
   assert.equal(second.status, 200)
-  assert.equal(db.portraitRefReads, 1)
+  assert.equal(db.portraitRefReads, 0)
 })
 
 test("DO NOT DELETE: vote gallery reuses the shared published gallery snapshot after isolate reset", async () => {
@@ -380,7 +424,7 @@ test("DO NOT DELETE: vote gallery reuses the shared published gallery snapshot a
   assert.equal(db.galleryPublishedReads, 1)
 })
 
-test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact after isolate reset", async () => {
+test("DO NOT DELETE: corrupt portrait publication fails retryably instead of repairing from D1", async () => {
   const kv = new FakeSharedKv()
   const db = new FakeCostBarrierDb()
   const retiredCacheKey = "iconoplasm:hydrated-catalog-artifact:costbarrier01"
@@ -422,20 +466,13 @@ test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact
     { waitUntil() {} },
   )
   const firstPayload = await first.json()
-  assert.equal(first.status, 200)
-  assert.equal(db.portraitRefReads, 1)
-  assert.equal(firstPayload.schema_version, 5)
-  assert.equal(firstPayload.genes[0]?.p?.asset_sha256?.length, 64)
-  assert.equal("ph" in firstPayload.genes[0], false)
-  assert.equal("pt" in firstPayload.genes[0], false)
+  assert.equal(first.status, 503)
+  assert.equal(db.portraitRefReads, 0)
+  assert.match(firstPayload.error, /temporarily unavailable/)
   assert.equal(kv.getCounts.get(retiredCacheKey) || 0, 0)
   assert.equal(kv.getCounts.get(invalidCurrentCacheKey), 1)
   assert.equal(kv.getCounts.get(incompletePortraitRefCacheKey), 1)
-  assert.equal(JSON.parse(kv.store.get(incompletePortraitRefCacheKey)).length, 2)
-  const hydratedArtifactKeys = Array.from(kv.store.keys()).filter((key) =>
-    String(key).startsWith("iconoplasm:hydrated-catalog-artifact:a5c1:costbarrier01"),
-  )
-  assert.equal(hydratedArtifactKeys.length > 0, true)
+  assert.equal(JSON.parse(kv.store.get(incompletePortraitRefCacheKey)).length, 0)
 
   resetIconoplasmRuntimeCachesForTest()
   const second = await handleIconoplasmGatewayRequest(
@@ -444,10 +481,9 @@ test("DO NOT DELETE: public catalog artifact reuses the shared hydrated artifact
     { waitUntil() {} },
   )
   const secondPayload = await second.json()
-  assert.equal(second.status, 200)
-  assert.equal(db.portraitRefReads, 1)
-  assert.equal(secondPayload.schema_version, 5)
-  assert.equal(secondPayload.genes[0]?.p?.asset_sha256?.length, 64)
+  assert.equal(second.status, 503)
+  assert.equal(db.portraitRefReads, 0)
+  assert.match(secondPayload.error, /temporarily unavailable/)
 })
 
 test("DO NOT DELETE: mobile card manifest reuses the in-isolate gallery version barrier", async () => {

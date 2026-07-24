@@ -72,7 +72,7 @@ const BENCHMARK_HOST = "geneguessr-bench.brinedew.bio"
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const STATIC_SITE_ORIGIN_PROD = "https://brinedew-bio.pages.dev"
 const STATIC_SITE_ORIGIN_STAGING = "https://brinedew-bio-staging.pages.dev"
-const ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS = new Set(["17 * * * *", "55 23 * * *", "3 0 * * *"])
+const ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS = new Set(["55 23 * * *", "3 0 * * *"])
 const MOLSTAR_VENDOR_ALLOWED_PREFIXES = [
   "/static/vendor/pdbe-molstar@3.8.0/",
   "/static/vendor/pdbe-molstar@3.7.1/",
@@ -1048,6 +1048,7 @@ import {
   IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
   IconoplasmSyncGovernor,
   handleIconoplasmQueue,
+  publishSharedGeneDiscoverySymbols,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   deliverPendingRequestFulfillmentNotifications,
@@ -2886,10 +2887,17 @@ export default {
       // These jobs share a clock, not a failure domain. Drain the durable outbox
       // even when the unrelated gallery refresh fails, while preserving the
       // gallery job's existing fail-loud behavior.
-      const [galleryRefresh, notificationDelivery] = await Promise.allSettled([
-        runScheduledIconoplasmGalleryRefresh(env, ctx),
-        deliverPendingRequestFulfillmentNotifications(env, { limit: 20 }),
-      ])
+      const scheduledMinute = new Date(Number(event?.scheduledTime || Date.now())).getUTCMinutes()
+      const sharedDiscoveryPublicationPromise =
+        scheduledMinute === 0
+          ? publishSharedGeneDiscoverySymbols(env)
+          : Promise.resolve({ ok: true, skipped: true, reason: "not_hour_boundary" })
+      const [galleryRefresh, notificationDelivery, sharedDiscoveryPublication] =
+        await Promise.allSettled([
+          runScheduledIconoplasmGalleryRefresh(env, ctx),
+          deliverPendingRequestFulfillmentNotifications(env, { limit: 20 }),
+          sharedDiscoveryPublicationPromise,
+        ])
       if (notificationDelivery.status === "fulfilled") {
         const notificationSettlement = await reconcileDeliveredRequestFulfillments(env)
         if (notificationDelivery.value.considered) {
@@ -2906,11 +2914,24 @@ export default {
           ),
         )
       }
+      if (sharedDiscoveryPublication.status === "fulfilled") {
+        if (sharedDiscoveryPublication.value.changed) {
+          console.log(
+            "[CRON] Iconoplasm shared discovery publication:",
+            sharedDiscoveryPublication.value,
+          )
+        }
+      } else {
+        console.error(
+          "[CRON] Iconoplasm shared discovery publication failed:",
+          String(
+            sharedDiscoveryPublication.reason?.message ||
+              sharedDiscoveryPublication.reason ||
+              "unknown error",
+          ),
+        )
+      }
       if (galleryRefresh.status === "rejected") throw galleryRefresh.reason
-      return
-    }
-
-    if (cronExpr === "17 * * * *") {
       return
     }
 
