@@ -193,6 +193,22 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   assert.equal(robots.status, 200)
   assert.match(robots.headers.get("content-type") || "", /text\/plain/)
   assert.match(robotsText, /Sitemap: https:\/\/iconoplasm\.brinedew\.bio\/sitemap\.xml/)
+  assert.match(robotsText, /User-agent: GPTBot\s+Disallow: \//)
+  assert.match(robotsText, /User-agent: ClaudeBot\s+Disallow: \//)
+  for (const searchAgent of [
+    "OAI-SearchBot",
+    "ChatGPT-User",
+    "Claude-SearchBot",
+    "Claude-User",
+    "PerplexityBot",
+    "Perplexity-User",
+  ]) {
+    assert.match(
+      robotsText,
+      new RegExp(`User-agent: ${searchAgent}\\s+Allow: /\\s+Disallow: /api/`),
+      searchAgent,
+    )
+  }
   assert.doesNotMatch(robotsText, /\bsearch:\s*yes\b/)
   assert.doesNotMatch(robotsText, /\bCrawl-delay\b/i)
 

@@ -660,11 +660,45 @@ async function iconoplasmCacheableHtmlShellResponse(
 }
 
 function buildPublicSubdomainRobotsTxt(host) {
+  // ARCHITECTURE FENCE [IPD-003]: the crawl frontier exists for search and
+  // user-directed retrieval, not unlimited model-training ingestion. The WAF
+  // enforces this before Worker execution; robots.txt mirrors the same intent
+  // for cooperative crawlers while preserving OAI/Claude/Perplexity search.
   return `# robots.txt for ${host}
 #
 # Notes:
 # - Non-standard directives are not valid robots.txt and break parsers.
 # - Google ignores crawler-rate fields here, so keep rate control outside robots.txt.
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /api/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /api/
+
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /api/
+
+User-agent: Claude-User
+Allow: /
+Disallow: /api/
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /api/
+
+User-agent: Perplexity-User
+Allow: /
+Disallow: /api/
 
 User-agent: *
 Allow: /

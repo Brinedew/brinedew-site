@@ -47,6 +47,29 @@ a real 404 instead of the application shell.
 The same predicate owns response headers, HTML metadata, `/genes` membership,
 gene sitemap shards, and tests. Never update just one of those surfaces.
 
+The crawl frontier exists for search indexing and user-directed retrieval, not
+for unbounded model-training ingestion. On 2026-07-24, GPTBot and ClaudeBot
+generated more than 81,000 requests before 08:00 UTC by walking the new
+19,023-gene frontier and first-party portraits. That crossed the account's
+75,000-request warning threshold before the Scott Alexander referral.
+
+The project therefore separates bot purposes:
+
+- GPTBot and ClaudeBot are model-training crawlers. A project-owned Cloudflare
+  WAF rule blocks them on `iconoplasm.brinedew.bio` before Worker execution.
+- OAI-SearchBot, Claude-SearchBot, and PerplexityBot remain allowed so public
+  profiles can be indexed for AI search.
+- ChatGPT-User, Claude-User, and Perplexity-User remain allowed for
+  user-directed retrieval.
+- `robots.txt` mirrors the same policy for cooperative crawlers. It is not the
+  cost barrier; the WAF rule is.
+
+`cloudflare/iconoplasm-crawler-policy.json` is the declarative policy and
+`scripts/reconcile-iconoplasm-crawler-policy.mjs` applies it idempotently during
+production deploys without replacing unrelated custom rules. Do not enable
+Cloudflare's blanket "block all AI crawlers" setting: it would also remove the
+search and assistant agents this discovery contract exists to serve.
+
 The homepage link frontier must not become visible application chrome. Its
 ordinary `/genes` anchor lives inside the homepage's existing `sr-only`
 description, where it is useful to accessibility-tree and crawler readers
