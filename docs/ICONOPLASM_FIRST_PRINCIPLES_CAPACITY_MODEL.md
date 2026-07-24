@@ -107,7 +107,21 @@ opens three gene dossiers:
   shipped maximum of 44 candidates.
 
 Snapshot reads no longer rewrite Durable Object summary rows. A signed-out gene
-page no longer posts a discovery that the server is guaranteed to reject.
+page keeps its dossier visit in a compact browser-local shelf and spends no
+discovery request. The website shelf can retain all 19,023 deliberately visited
+genes.
+
+When that reader later signs in, each authenticated browser session performs at
+most one 200-symbol merge. One maximum batch therefore adds:
+
+- 1 Worker request;
+- at most 200 discovery upserts;
+- at most about 1,600 conservatively modeled D1 write units.
+
+The merge is a bounded conversion of retained user intent, not anonymous
+background traffic. A failed merge leaves the local shelf intact for retry. An
+extreme full-catalog guest shelf takes 96 authenticated sessions to drain at
+this conservative batch size; it never becomes a single 19,023-row write burst.
 
 The first lifetime read of a gene's vote coordinator is different: it imports
 that gene's existing assets and votes into the Durable Object once. With one
@@ -244,27 +258,28 @@ be represented as an explicit base vector in `firstUserOverLimit`; they are not
 silently inferred from yesterday's counter. This is the only honest use of
 current account data in a first-principles launch decision.
 
-## Remaining hardening ledger
+## Hardening decisions closed in B-673
 
 Portrait fingerprint and reference metadata are now publisher-owned immutable
 artifacts. Public readers never reconstruct them from D1. Missing or corrupt
 publication returns a retryable 503 instead of turning a visitor into an
 infrastructure repair job.
 
-### R-1 — duplicate nightly maintenance needs a declared owner
+### R-1 — nightly maintenance has one declared owner
 
-Full Iconoplasm maintenance runs at both 23:55 and 00:03 UTC. If the second run
-is intentional recovery, it needs a tested no-op/recovery contract. Otherwise
-one trigger should own it. The unreachable hourly selector that was not present
-in Wrangler configuration has been removed.
+The 23:55 UTC trigger is the sole full Iconoplasm maintenance owner. The 00:03
+trigger remains configured because it owns GeneGuessr recap/catch-up delivery,
+but it no longer runs Iconoplasm maintenance. The runtime set, Wrangler comment,
+and test all enforce that separation.
 
-### R-2 — website guest discoveries are not a real feature
+### R-2 — website guest discovery is browser-local until login
 
-The extension stores guest discoveries locally and merges them after sign-in.
-The website does not. The guaranteed-failing guest POST has been removed, but a
-product decision remains: either website browsing is intentionally preview-only
-for guests, or it should use the same local shelf/merge contract as the
-extension.
+The website now keeps deliberately visited dossiers in a compact local shelf
+that can retain all 19,023 catalog genes. Starter genes remain onboarding
+examples; only actually visited dossiers enter the pending merge. Each
+authenticated browser session merges at most 200 pending symbols and clears
+only that successful batch locally. Signed-out browsing never spends a
+discovery Worker request.
 
 ## Rule for future recommendations
 

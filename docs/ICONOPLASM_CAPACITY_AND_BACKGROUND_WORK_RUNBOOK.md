@@ -94,8 +94,11 @@ authority when newer production evidence proves a better complete design.
 Anonymous startup uses static files and published immutable artifacts. It must
 not spend dynamic requests on cross-subdomain settings, authentication,
 discoveries, inventory counts, or admin-state probes. The fixed 19,023-gene
-catalog count is release metadata, and guest starter discoveries are local
-product state.
+catalog count is release metadata. Guest starter discoveries and the compact
+website guest shelf are local product state. The shelf can retain all 19,023
+deliberately visited dossier symbols in `localStorage`; it never posts while
+signed out. Each authenticated browser session merges at most 200 pending
+symbols and clears only that batch after a successful response.
 
 The readable `brinedew_session_present` cookie is only a request-suppression
 hint. It contains no user ID, role, or secret and grants no authority. Only the
@@ -127,8 +130,10 @@ dynamic and keep their existing authority.
 
 Discovery follows the same product boundary:
 
-- a signed-out website gene visit does not post a server discovery that cannot
-  be retained;
+- a signed-out website gene visit is retained in the full-catalog local shelf without
+  a Worker request;
+- each authenticated browser session merges at most 200 pending symbols and
+  preserves the remainder, or the whole batch on any failed response;
 - signed-in encounters update the personal row and increment the shared rollup
   in constant time;
 - the hourly publication tick, not a reader request, owns the shared-discovery
@@ -142,10 +147,12 @@ The canonical launch calculation is
 request counters are incident evidence only. They are prohibited as forecast
 inputs after a material architecture change.
 
-That document also owns the product/freshness contract and remaining hardening
-ledger. Any read path that mutates state, whole-catalog recomputation triggered
-by public reads, unbounded polling, or homegrown distributed cache behavior must
-be recorded there with its exact resource ceiling and permanent correction.
+The canonical product/freshness contract is
+`docs/ICONOPLASM_PRODUCT_OPERATING_MODEL.md`. The capacity model owns resource
+envelopes. Any read path that mutates state, whole-catalog recomputation
+triggered by public reads, unbounded polling, or homegrown distributed cache
+behavior must be recorded with its exact resource ceiling and permanent
+correction.
 Linear may track remaining implementation, but a stale issue is not architectural
 authority.
 

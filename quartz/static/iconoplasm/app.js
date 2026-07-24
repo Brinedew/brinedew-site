@@ -13,6 +13,11 @@ import { portraitDelivery } from "./portrait-delivery.js"
 import { createEmulsionFavoriteStore, normalizeEmulsionFamilyId } from "./emulsion-favorites.js"
 import { createCollectionFeedController } from "./collection-feed.js"
 import {
+  createWebsiteGuestDiscoveryStore,
+  WEBSITE_GUEST_DISCOVERY_MAX_ENTRIES,
+  WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
+} from "./guest-discovery-store.js"
+import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
   COMMUNITY_URL,
@@ -118,12 +123,24 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var portraitLightboxCleanup = null
   var activeGeneRenderId = 0
   var lastGenePageDiscoveryVisitKey = ""
+  var websiteGuestDiscoveryMergePromise = null
+  var websiteGuestDiscoveryMergeRemaining = WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE
   var currentUser = null
   var currentUserIsIconoAdmin = false
   var masonryLibsPromise = null
   var photoSwipeModulePromise = null
   var hasResolvedAuthState = false
   var voteLoginPromptVisible = false
+  var websiteGuestDiscoveries = createWebsiteGuestDiscoveryStore({
+    storage: (function () {
+      try {
+        return window.localStorage
+      } catch (_error) {
+        return null
+      }
+    })(),
+    maxEntries: WEBSITE_GUEST_DISCOVERY_MAX_ENTRIES,
+  })
   var iconoSidebarState = {
     page: "home",
     homeLayout: HOME_LAYOUT_DEFAULT,
@@ -1206,15 +1223,18 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function recordGenePageVisitDiscovery(symbol) {
     var key = normalizedSymbol(symbol)
-    // A gene-page visit is only a durable discovery for a signed-in shelf.
-    // Guests neither have a server-side shelf nor receive a local merge from
-    // this website path, so posting here only creates a guaranteed 401 Worker
-    // invocation. The readable cookie is merely a probe gate; the endpoint
-    // remains the authority.
-    if (!key || !hasSharedSessionPresenceHint()) return
+    if (!key) return
     var visitKey = window.location.pathname + "|" + key
     if (lastGenePageDiscoveryVisitKey === visitKey) return
     lastGenePageDiscoveryVisitKey = visitKey
+    // A dossier visit is a deliberate discovery. Signed-out visits stay in the
+    // browser-local shelf and cost no Worker request. If an auth lookup
+    // is still resolving, the login path merges this entry after authority is
+    // established.
+    if (!currentUser) {
+      websiteGuestDiscoveries.remember(key)
+      return
+    }
     window.setTimeout(function () {
       fetchAuthedJSON("/api/iconoplasm/discoveries/encounter", {
         method: "POST",
@@ -1226,6 +1246,40 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         }),
       }).catch(function () {})
     }, 0)
+  }
+
+  function mergeWebsiteGuestDiscoveriesIfSignedIn() {
+    if (!currentUser) return Promise.resolve(null)
+    if (websiteGuestDiscoveryMergePromise) return websiteGuestDiscoveryMergePromise
+    if (websiteGuestDiscoveryMergeRemaining <= 0) return Promise.resolve(null)
+    var pendingSymbols = websiteGuestDiscoveries.pendingSymbols(websiteGuestDiscoveryMergeRemaining)
+    if (!pendingSymbols.length) return Promise.resolve(null)
+    websiteGuestDiscoveryMergePromise = fetchAuthedJSON("/api/iconoplasm/discoveries/merge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbols: pendingSymbols }),
+      cache: "no-store",
+    })
+      .then(function (payload) {
+        if (!payload || payload.ok !== true || payload.authenticated !== true) return null
+        websiteGuestDiscoveries.remove(pendingSymbols)
+        websiteGuestDiscoveryMergeRemaining = Math.max(
+          0,
+          websiteGuestDiscoveryMergeRemaining - pendingSymbols.length,
+        )
+        return payload
+      })
+      .catch(function (error) {
+        console.warn(
+          "[Iconoplasm] website guest discovery merge retained for retry:",
+          String((error && error.message) || error || "unknown error"),
+        )
+        return null
+      })
+      .finally(function () {
+        websiteGuestDiscoveryMergePromise = null
+      })
+    return websiteGuestDiscoveryMergePromise
   }
 
   function invalidateImageEditProviders() {
@@ -1542,15 +1596,22 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return html
   }
 
-  function guestStarterDiscoveryEntries() {
+  function guestDiscoveryEntries() {
     // Guests need a starter trio so the collection mechanic begins with a recognizable shape
     // instead of a blank wall. Keep these concrete and culturally familiar rather than only
     // biomed-famous.
-    return normalizeDiscoveryEntries(
-      GUEST_STARTER_GENES.map(function (entry) {
-        return Object.assign({ encounter_count: 1 }, entry)
+    var localEntries = websiteGuestDiscoveries.listEntries()
+    var localSymbols = new Set(
+      localEntries.map(function (entry) {
+        return normalizedSymbol(entry && entry.gene_symbol)
       }),
     )
+    var starterEntries = GUEST_STARTER_GENES.filter(function (entry) {
+      return !localSymbols.has(normalizedSymbol(entry && entry.gene_symbol))
+    }).map(function (entry) {
+      return Object.assign({ encounter_count: 1 }, entry)
+    })
+    return normalizeDiscoveryEntries(localEntries.concat(starterEntries))
   }
 
   function fallbackDiscoveredGene(entry) {
@@ -1832,6 +1893,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var totalCopy = totalCount.toLocaleString()
     var sharedChecked = !!(collectionState && collectionState.sharedDiscoveries)
     var sharedDisabled = false
+    var guestStorageCopy =
+      collectionState && !collectionState.authenticated
+        ? " · dossier visits stay in this browser until you sign in"
+        : ""
     return (
       '<section class="icono-collection-summary icono-collection-summary--single" aria-label="Collection progress">' +
       '<article class="icono-collection-card icono-collection-card--archive">' +
@@ -1840,6 +1905,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       esc(discoveredCount.toLocaleString()) +
       " genes found out of " +
       esc(totalCopy) +
+      esc(guestStorageCopy) +
       "</div>" +
       '<label class="icono-collection-shared-toggle">' +
       '<input type="checkbox" data-icono-shared-discoveries-toggle' +
@@ -1863,13 +1929,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function buildCollectionEmptyMarkup(collectionState) {
     var isAuthenticated = !!(currentUser || (collectionState && collectionState.authenticated))
-    var title = isAuthenticated ? "No genes discovered yet" : "Your collection starts after login"
+    var title = isAuthenticated ? "No genes discovered yet" : "Your browser shelf is empty"
     var body = isAuthenticated
       ? "Hover a gene in the extension for about a second, then come back here. Your shelf will fill itself in."
-      : "Signed-out browsing can search the starter trio, but portable discoveries only sync once you sign in."
+      : "Open a gene dossier and it will stay in this browser until you sign in."
     var support = isAuthenticated
       ? "You can still search any symbol above while the first discoveries come in."
-      : "That keeps guest browsing light, and it prevents your unlocks from evaporating the moment a tab disappears."
+      : "Sign in when you want to carry those discoveries across browsers and devices."
     var actions =
       '<div class="icono-empty-actions">' +
       (isAuthenticated
@@ -2310,7 +2376,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     ) {
       refreshCurrentGeneInteractiveIslands()
     }
-    return Promise.resolve(currentUser)
+    return mergeWebsiteGuestDiscoveriesIfSignedIn().then(function (merged) {
+      if (merged && currentUser && getRoute().page === "home") render()
+      return currentUser
+    })
   }
 
   function refreshSharedUserState() {
@@ -7359,7 +7428,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             galleryState.total = ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT
             galleryState.publishedTotal = 0
             galleryState.authenticated = false
-            galleryState.discoveryEntries = guestStarterDiscoveryEntries()
+            galleryState.discoveryEntries = guestDiscoveryEntries()
             galleryState.sortedDiscoveries = galleryState.discoveryEntries.slice()
             galleryState.discoveredCount = galleryState.sortedDiscoveries.length
             galleryState.ready = true
@@ -7392,7 +7461,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           galleryState.seed =
             galleryState.order === "random" ? String(discoveryData.seed || galleryState.seed) : ""
           galleryState.discoveryEntries = normalizeDiscoveryEntries(
-            galleryState.authenticated ? discoveryData.discoveries : guestStarterDiscoveryEntries(),
+            galleryState.authenticated ? discoveryData.discoveries : guestDiscoveryEntries(),
           )
           galleryState.sortedDiscoveries = galleryState.discoveryEntries.slice()
           galleryState.discoveredCount = galleryState.sortedDiscoveries.length

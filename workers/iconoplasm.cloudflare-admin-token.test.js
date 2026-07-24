@@ -65,13 +65,23 @@ test("production Iconoplasm maintenance is not an hourly free-plan cron", () => 
   )
 })
 
-test("configured production maintenance crons also drain stranded vote projections", () => {
+test("23:55 is the sole production owner of full Iconoplasm maintenance", () => {
   const source = read(
     "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
   )
   assert.match(source, /ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS/)
-  assert.match(source, /"55 23 \* \* \*"/)
-  assert.match(source, /"3 0 \* \* \*"/)
+  const maintenanceSet = /ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS = new Set\(\[([^\]]*)\]\)/s.exec(
+    source,
+  )
+  assert.ok(maintenanceSet, "maintenance cron set must be present")
+  assert.match(maintenanceSet[1], /"55 23 \* \* \*"/)
+  assert.doesNotMatch(
+    maintenanceSet[1],
+    /"3 0 \* \* \*"/,
+    "the GeneGuessr recap trigger must not repeat full Iconoplasm maintenance",
+  )
+  assert.match(source, /cronExpr === "3 0 \* \* \*"/)
+  assert.match(source, /handlePostDailyRecap/)
   assert.match(source, /process-vote-projection-refresh/)
 })
 

@@ -204,12 +204,12 @@ DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 #bucket_name = "iconoplasm-portraits"
 
 [triggers]
-# "55 23" + "3 0" run the full nightly maintenance (vote projection + canon repair
-# + gallery refresh). "*/15" is a cheap gallery-refresh-ONLY tick so a canonical
-# change (e.g. a vote auto-promote) reaches the public/guest gallery within ~15min
-# instead of waiting for the nightly run. Clean ticks are ~free (one indexed
-# changes-since query + reuse); a tick only flips the version when something
-# actually changed, and content-addressed shard-level publish keeps that cheap.
+# "55 23" is the sole full Iconoplasm maintenance owner (vote projection + canon
+# repair + gallery refresh) and also pre-warms tomorrow's GeneGuessr target.
+# "3 0" posts/catches up GeneGuessr recaps; it must not repeat Iconoplasm
+# maintenance. "6 12" posts the GeneGuessr feed. "*/15" is a cheap Iconoplasm
+# gallery-refresh-only tick so a canon change reaches public clients within
+# ~15min. Clean ticks reuse the published version.
 crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "*/15 * * * *"]
 
 [env.staging]

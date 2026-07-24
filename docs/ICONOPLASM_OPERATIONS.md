@@ -106,7 +106,7 @@ Why this shape matters:
 Two rules matter here:
 
 1. Signed-in personal shelf mode comes from `icono_gene_discoveries` through `/api/iconoplasm/discoveries/me`.
-2. Signed-in users should never have a real zero-state shelf. The starter trio (`INS`, `LEP`, `GCG`) is part of the contract.
+2. Signed-in users should never have a real zero-state shelf. The starter trio (`INS`, `RHO`, `PRL`) is part of the contract.
 
 So if an authenticated user appears to have zero discoveries, do not assume the UI is allowed to show that. Check whether the worker failed to seed or return the starter rows.
 

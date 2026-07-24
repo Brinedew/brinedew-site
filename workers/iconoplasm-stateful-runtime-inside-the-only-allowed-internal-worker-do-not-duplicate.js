@@ -40,6 +40,7 @@ import {
   iconoplasmPublicationAliasManifest,
 } from "./iconoplasm-publication-aliases.js"
 import { normalizeIconoplasmHomeOrder } from "../quartz/static/iconoplasm/home-orders.js"
+import { WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE } from "../quartz/static/iconoplasm/guest-discovery-contract.js"
 import ICONOPLASM_PUBLISHER_RELEASE from "../iconoplasm-extension/publisher-release.json" with { type: "json" }
 import ICONOPLASM_CANDIDATE_CONTRACT from "../iconoplasm-extension/candidate-contract.json" with { type: "json" }
 import "../shared/iconoplasm-card/shared-card-runtime.js"
@@ -9943,7 +9944,10 @@ async function mergeGuestGeneDiscoveries(env, { userId, symbols = [] } = {}) {
     return { ok: false, error: "Authentication required" }
   }
   await ensureStarterGeneDiscoveries(env, { userId: userIdNorm })
-  const requestedSymbols = normalizeRequestedSymbols(symbols, 2000)
+  const requestedSymbols = normalizeRequestedSymbols(
+    symbols,
+    WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
+  )
   if (!requestedSymbols.length) {
     return {
       ok: true,

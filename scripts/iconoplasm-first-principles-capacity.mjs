@@ -28,6 +28,8 @@ export const SHIPPED_SHAPE = Object.freeze({
   extensionDetailCacheEntries: 512,
   fiveMinuteWindowsInEightHours: 96,
   homepageStarterShards: 3,
+  websiteGuestDiscoveryMaxEntries: 19_023,
+  websiteGuestDiscoveryMergeBatchSize: 200,
   candidatesPerGene: Object.freeze({
     average: 2.958,
     maximum: 44,
@@ -113,6 +115,25 @@ export function websiteExplorerCost({
       durableObjectRequests: safeGenePages,
     }),
   )
+}
+
+export function websiteGuestDiscoveryMergeCost({
+  discoveries = SHIPPED_SHAPE.websiteGuestDiscoveryMergeBatchSize,
+} = {}) {
+  const safeDiscoveries = Math.max(
+    0,
+    Math.min(
+      SHIPPED_SHAPE.websiteGuestDiscoveryMergeBatchSize,
+      Math.floor(Number(discoveries) || 0),
+    ),
+  )
+  return cost({
+    workerRequests: safeDiscoveries > 0 ? 1 : 0,
+    d1RowsRead: safeDiscoveries * 2,
+    // Same conservative schema-derived envelope as a new signed-in discovery:
+    // personal row/indexes plus the constant-time shared rollup/indexes.
+    d1RowsWritten: safeDiscoveries * 8,
+  })
 }
 
 export function coldGeneCoordinatorCost({
@@ -208,6 +229,7 @@ export const SCENARIOS = Object.freeze({
   websiteExplorerMaximumCandidates: websiteExplorerCost({
     candidatesPerGene: SHIPPED_SHAPE.candidatesPerGene.maximum,
   }),
+  websiteGuestShelfMaximumMerge: websiteGuestDiscoveryMergeCost(),
   extensionDensePaper: extensionReaderCost(),
   extensionScatteredMaximum: extensionReaderCost({
     pageLoads: 512,
@@ -239,6 +261,7 @@ export function printReport() {
   console.log("No historical traffic counters are inputs.\n")
   printCapacity("One-visit homepage visitors", ATOMIC_COSTS.anonymousHomepageCold)
   printCapacity("Curious website explorers", SCENARIOS.websiteExplorerAverage)
+  printCapacity("Maximum website guest-shelf merges", SCENARIOS.websiteGuestShelfMaximumMerge)
   printCapacity("Dense-paper extension readers", SCENARIOS.extensionDensePaper)
   printCapacity(
     "Dense-paper extension readers after 10,000 homepage visitors",
