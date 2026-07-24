@@ -281,7 +281,7 @@
     {
       "id": "IPD-008",
       "title": "Anonymous startup and extension hover use the published read plane",
-      "decision": "Anonymous homepage startup avoids auth, settings, discovery, inventory, and admin probes; authenticated startup is gated by a non-authoritative session-presence hint. Extension hover batches read immutable published card artifacts and persist a bounded cache keyed by card snapshot version.",
+      "decision": "Anonymous homepage startup avoids auth, settings, inventory, and admin probes; authenticated startup is gated by a non-authoritative session-presence hint. Signed-out dossier visits persist across the full 19,023-gene browser-local shelf; an authenticated browser session merges at most 200 pending symbols and retains the remainder for later sessions. Extension hover batches read immutable published card artifacts and persists a bounded cache keyed by card snapshot version.",
       "reason": "The shoutout risk is sustained daily request and D1 consumption, not an implausible per-user burst. Moving immutable reads to publication artifacts and amortizing them across browsing sessions keeps lurkers and power users from multiplying stateful work by page navigation.",
       "change_control": "Anonymous bootstrap, session-presence semantics, catalog and card publication metadata, public batch projection, extension cache invalidation, tests, instructions, and this runbook must change atomically. The readable marker must never carry identity or authority, and transient public-read failures must remain retryable.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
