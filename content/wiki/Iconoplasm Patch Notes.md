@@ -10,6 +10,10 @@ draft: false
 
 ## Unreleased
 
+## 0.4.11 - 2026-07-24
+
+* Fixed simple hover mode not displaying portraits in MS Edge browser
+* Fixed "on hover" option not hiding color pills
 ## 0.4.10 - 2026-07-19
 
 - Gene highlights now appear from the local catalog immediately while freshness checks run in the background.
