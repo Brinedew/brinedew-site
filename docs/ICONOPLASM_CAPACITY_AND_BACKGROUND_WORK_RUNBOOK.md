@@ -60,6 +60,15 @@ Iconoplasm page also requested more than one hundred static dependencies. Cache
 API hits inside a Worker do not solve that cost; matching assets must bypass the
 Worker.
 
+Service-binding requests to the stateful Worker also pass through its
+asset-first dispatcher. Consequently, the shared Brinedew/GeneGuessr edge must
+serve its own hostname-sensitive root, index, and privacy HTML documents
+directly from the canonical Pages deployment. Otherwise the stateful Worker's
+Iconoplasm `index.html` or `privacy.html` captures those paths before
+host-aware Worker code runs. This exception is stateless and document-only:
+the public edge must not gain state bindings, reclaim the Iconoplasm hostname,
+or absorb APIs, authenticated reads, draft checks, or other dynamic behavior.
+
 The generated bundle must:
 
 - be built deterministically from the current Quartz output;

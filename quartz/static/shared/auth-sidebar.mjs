@@ -2,7 +2,7 @@ import {
   mountSidebarStack,
   wireSharedUserPanel,
   buildSharedUserPanelMarkup,
-} from "./sidebar-shell.js"
+} from "./sidebar-shell.js?v=ec70a3b0941d0a38"
 
 async function init() {
   const sidebar = document.querySelector(".right.sidebar")

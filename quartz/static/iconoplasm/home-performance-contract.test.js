@@ -10,7 +10,12 @@ const appPath = new URL("./app.js", import.meta.url)
 const homeOrdersPath = new URL("./home-orders.js", import.meta.url)
 const stylesPath = new URL("./styles.css", import.meta.url)
 const headPath = new URL("../../components/Head.tsx", import.meta.url)
+const renderPagePath = new URL("../../components/renderPage.tsx", import.meta.url)
+const resourcesPath = new URL("../../util/resources.tsx", import.meta.url)
 const sidebarShellPath = new URL("../shared/sidebar-shell.js", import.meta.url)
+const authSidebarPath = new URL("../shared/auth-sidebar.mjs", import.meta.url)
+const geneguessrAppPath = new URL("../geneguessr/app.js", import.meta.url)
+const settingsAppPath = new URL("../site-settings/app.js", import.meta.url)
 const customCssPath = new URL("../custom.css", import.meta.url)
 const iconoplasmIndexPath = new URL("../../../content/apps/iconoplasm/index.md", import.meta.url)
 const internalWorkerPath = new URL(
@@ -157,17 +162,55 @@ test("anonymous homepage bootstrap skips session and settings traffic", async ()
 })
 
 test("shared sidebar imports use the module content hash as their immutable cache key", async () => {
-  const [app, sidebarShell] = await Promise.all([
+  const [app, authSidebar, geneguessrApp, settingsApp, sidebarShell] = await Promise.all([
     readFile(appPath, "utf8"),
+    readFile(authSidebarPath, "utf8"),
+    readFile(geneguessrAppPath, "utf8"),
+    readFile(settingsAppPath, "utf8"),
     readFile(sidebarShellPath),
   ])
   const contentHash = createHash("sha256").update(sidebarShell).digest("hex").slice(0, 16)
 
+  for (const [name, source] of [
+    ["Iconoplasm", app],
+    ["GeneGuessr", geneguessrApp],
+    ["Settings", settingsApp],
+    ["generic auth sidebar", authSidebar],
+  ]) {
+    assert.match(
+      source,
+      new RegExp(`(?:\\.\\./shared/|\\./)sidebar-shell\\.js\\?v=${contentHash}`),
+      `${name} must import the shared sidebar with its content hash`,
+    )
+  }
+})
+
+test("each app page has exactly one account UI owner", async () => {
+  const head = await readFile(headPath, "utf8")
+
+  assert.match(head, /const isGeneguessr =/)
+  assert.match(head, /const isSettings =/)
   assert.match(
-    app,
-    new RegExp(`\\.\\./shared/sidebar-shell\\.js\\?v=${contentHash}`),
-    "changing the shared sidebar module must also change its immutable import URL",
+    head,
+    /!isIconoplasm && !isGeneguessr && !isSettings && \(/,
+    "the generic auth sidebar must not load beside an app-owned account panel",
   )
+})
+
+test("KaTeX browser resources are localized before CSP enforcement", async () => {
+  const [head, renderPage, resources] = await Promise.all([
+    readFile(headPath, "utf8"),
+    readFile(renderPagePath, "utf8"),
+    readFile(resourcesPath, "utf8"),
+  ])
+
+  assert.match(resources, /KATEX_CDN_CSS/)
+  assert.match(resources, /KATEX_CDN_COPY_TEX/)
+  assert.match(resources, /\/static\/vendor\/katex\/katex\.min\.css\?v=/)
+  assert.match(resources, /\/static\/vendor\/katex\/contrib\/copy-tex\.min\.js\?v=/)
+  assert.match(head, /isKatexCssResource/)
+  assert.match(head, /isKatexJsResource/)
+  assert.match(renderPage, /!isIconoplasmPage \|\| !isKatexJsResource\(resource\)/)
 })
 
 test("guest collection state resolves locally without an auth or discovery read", async () => {

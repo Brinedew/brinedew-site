@@ -23,16 +23,55 @@ export type CSSResource = {
   spaPreserve?: boolean
 }
 
-export function JSResourceToScriptElement(resource: JSResource, preserve?: boolean): JSX.Element {
-  const scriptType = resource.moduleType ?? "application/javascript"
-  const spaPreserve = preserve ?? resource.spaPreserve
+const KATEX_VENDOR_VERSION = "0.16.21"
+const KATEX_CDN_CSS =
+  /^https:\/\/cdn\.jsdelivr\.net\/npm\/katex@[^/]+\/dist\/katex\.min\.css(?:\?.*)?$/i
+const KATEX_CDN_COPY_TEX =
+  /^https:\/\/cdn\.jsdelivr\.net\/npm\/katex@[^/]+\/dist\/contrib\/copy-tex\.min\.js(?:\?.*)?$/i
 
-  if (resource.contentType === "external") {
+export function isKatexCssResource(resource: CSSResource): boolean {
+  return (
+    (!resource.inline && KATEX_CDN_CSS.test(resource.content)) ||
+    resource.content.includes("/static/vendor/katex/")
+  )
+}
+
+export function isKatexJsResource(resource: JSResource): boolean {
+  return (
+    resource.contentType === "external" &&
+    (KATEX_CDN_COPY_TEX.test(resource.src) || resource.src.includes("/static/vendor/katex/"))
+  )
+}
+
+function selfHostedJsResource(resource: JSResource): JSResource {
+  if (resource.contentType !== "external" || !KATEX_CDN_COPY_TEX.test(resource.src)) {
+    return resource
+  }
+  return {
+    ...resource,
+    src: `/static/vendor/katex/contrib/copy-tex.min.js?v=${KATEX_VENDOR_VERSION}`,
+  }
+}
+
+function selfHostedCssResource(resource: CSSResource): CSSResource {
+  if (resource.inline || !KATEX_CDN_CSS.test(resource.content)) return resource
+  return {
+    ...resource,
+    content: `/static/vendor/katex/katex.min.css?v=${KATEX_VENDOR_VERSION}`,
+  }
+}
+
+export function JSResourceToScriptElement(resource: JSResource, preserve?: boolean): JSX.Element {
+  const resolved = selfHostedJsResource(resource)
+  const scriptType = resolved.moduleType ?? "application/javascript"
+  const spaPreserve = preserve ?? resolved.spaPreserve
+
+  if (resolved.contentType === "external") {
     return (
-      <script key={resource.src} src={resource.src} type={scriptType} data-persist={spaPreserve} />
+      <script key={resolved.src} src={resolved.src} type={scriptType} data-persist={spaPreserve} />
     )
   } else {
-    const content = resource.script
+    const content = resolved.script
     return (
       <script
         key={randomUUID()}
@@ -45,14 +84,15 @@ export function JSResourceToScriptElement(resource: JSResource, preserve?: boole
 }
 
 export function CSSResourceToStyleElement(resource: CSSResource, preserve?: boolean): JSX.Element {
-  const spaPreserve = preserve ?? resource.spaPreserve
-  if (resource.inline ?? false) {
-    return <style dangerouslySetInnerHTML={{ __html: resource.content }} />
+  const resolved = selfHostedCssResource(resource)
+  const spaPreserve = preserve ?? resolved.spaPreserve
+  if (resolved.inline ?? false) {
+    return <style dangerouslySetInnerHTML={{ __html: resolved.content }} />
   } else {
     return (
       <link
-        key={resource.content}
-        href={resource.content}
+        key={resolved.content}
+        href={resolved.content}
         rel="stylesheet"
         type="text/css"
         data-persist={spaPreserve}

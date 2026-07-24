@@ -217,7 +217,60 @@ jobs:
       - name: Verify Iconoplasm publication aliases (production)
         run: pnpm run verify:iconoplasm-publication-aliases
 
-      - name: Smoke test Discord OAuth bootstrap (production)
+      - name: Smoke test production host ownership and browser bootstraps
+        run: |
+          set -euo pipefail
+          smoke_dir="$(mktemp -d)"
+
+          fetch_document() {
+            local name="$1"
+            local url="$2"
+            curl \
+              --fail \
+              --location \
+              --max-time 30 \
+              --retry 5 \
+              --retry-all-errors \
+              --silent \
+              --show-error \
+              --dump-header "$smoke_dir/$name.headers" \
+              --output "$smoke_dir/$name.html" \
+              "$url"
+          }
+
+          fetch_document brinedew "https://brinedew.bio/?v=$CACHE_BUST"
+          fetch_document geneguessr "https://geneguessr.brinedew.bio/?v=$CACHE_BUST"
+          fetch_document iconoplasm "https://iconoplasm.brinedew.bio/?v=$CACHE_BUST"
+          fetch_document settings "https://brinedew.bio/settings/index?v=$CACHE_BUST"
+
+          grep -Fq 'data-slug="index"' "$smoke_dir/brinedew.html"
+          grep -Fq 'data-slug="apps/geneguessr/index"' "$smoke_dir/geneguessr.html"
+          grep -Fq 'data-slug="apps/iconoplasm/index"' "$smoke_dir/iconoplasm.html"
+          grep -Fq 'data-slug="settings/index"' "$smoke_dir/settings.html"
+          grep -Fiq 'X-Brinedew-Static-Route: public-edge' "$smoke_dir/brinedew.headers"
+          grep -Fiq 'X-Brinedew-Static-Route: public-edge' "$smoke_dir/geneguessr.headers"
+
+          for html in "$smoke_dir"/*.html; do
+            if grep -Fq 'cdn.jsdelivr.net/npm/katex' "$html"; then
+              echo "Production HTML still references CSP-blocked jsDelivr KaTeX: $html" >&2
+              exit 1
+            fi
+          done
+
+          if grep -Fq 'auth-sidebar.mjs' "$smoke_dir/geneguessr.html" ||
+             grep -Fq 'auth-sidebar.mjs' "$smoke_dir/iconoplasm.html" ||
+             grep -Fq 'auth-sidebar.mjs' "$smoke_dir/settings.html"; then
+            echo "An app-owned account surface also loaded the generic auth sidebar." >&2
+            exit 1
+          fi
+
+          grep -Fq '.split(";")' "$smoke_dir/iconoplasm.html"
+          if grep -Fq '.split(/;s*/)' "$smoke_dir/iconoplasm.html"; then
+            echo "Iconoplasm emitted the unsafe session-marker cookie parser." >&2
+            exit 1
+          fi
+
+      - name: Smoke test Discord OAuth entry and anonymous session contract
         run: |
           set -euo pipefail
           headers_file="$(mktemp)"
@@ -243,3 +296,12 @@ jobs:
             echo "Discord OAuth redirect has invalid client_id in production." >&2
             exit 1
           fi
+
+          me_headers="$(mktemp)"
+          me_body="$(mktemp)"
+          curl --fail --silent --show-error \
+            --dump-header "$me_headers" \
+            --output "$me_body" \
+            "https://brinedew.bio/api/auth/me"
+          grep -Eq '"authenticated"[[:space:]]*:[[:space:]]*false' "$me_body"
+          grep -Fiq 'Cache-Control: no-store' "$me_headers"
