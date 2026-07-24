@@ -1206,7 +1206,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function recordGenePageVisitDiscovery(symbol) {
     var key = normalizedSymbol(symbol)
-    if (!key) return
+    // A gene-page visit is only a durable discovery for a signed-in shelf.
+    // Guests neither have a server-side shelf nor receive a local merge from
+    // this website path, so posting here only creates a guaranteed 401 Worker
+    // invocation. The readable cookie is merely a probe gate; the endpoint
+    // remains the authority.
+    if (!key || !hasSharedSessionPresenceHint()) return
     var visitKey = window.location.pathname + "|" + key
     if (lastGenePageDiscoveryVisitKey === visitKey) return
     lastGenePageDiscoveryVisitKey = visitKey

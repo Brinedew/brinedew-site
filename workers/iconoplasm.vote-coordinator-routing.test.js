@@ -273,7 +273,7 @@ test("vote-event mutation migration deduplicates replayed audit events", () => {
 
 test("VoteCoordinator stores one transactional outbox mutation for an identical retry", async () => {
   const { state } = fakeVoteCoordinatorState()
-  const coordinator = new IconoplasmVoteCoordinator(state, {})
+  const coordinator = new IconoplasmVoteCoordinator(state, { ICONOPLASM_DB: {} })
   await state.ready
   const assetSha = "f".repeat(64)
   coordinator.setMeta("symbol", "TP53")
@@ -308,6 +308,44 @@ test("VoteCoordinator stores one transactional outbox mutation for an identical 
   assert.equal(retry.snapshot.image_upvotes, 1)
   assert.equal(coordinator.pendingOutboxRows(10).length, 1)
   assert.equal(coordinator.pendingOutboxRows(10)[0].mutation_id, first.mutation_id)
+})
+
+test("VoteCoordinator snapshot reads do not rewrite asset summaries", async () => {
+  const { state } = fakeVoteCoordinatorState()
+  const coordinator = new IconoplasmVoteCoordinator(state, { ICONOPLASM_DB: {} })
+  await state.ready
+  const assetSha = "d".repeat(64)
+  coordinator.setMeta("symbol", "TP53")
+  coordinator.setMeta("bootstrapped", "1")
+  coordinator.ensureAssetSummaryRow(assetSha, {
+    visionId: "anima-v1-1",
+    candidateImageId: 41,
+  })
+  state.storage.sql.db
+    .prepare("UPDATE asset_summary SET updated_at = ? WHERE asset_sha256 = ?")
+    .run("2000-01-01T00:00:00Z", assetSha)
+
+  const response = await coordinator.fetch(
+    new Request("https://vote-coordinator/vote/snapshot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        symbol: "TP53",
+        asset_sha256: assetSha,
+        user_id: "user-123",
+        vision_id: "anima-v1-1",
+        candidate_image_id: 41,
+      }),
+    }),
+  )
+  const payload = await response.json()
+  const stored = state.storage.sql.db
+    .prepare("SELECT updated_at FROM asset_summary WHERE asset_sha256 = ?")
+    .get(assetSha)
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.snapshot.image_score, 0)
+  assert.equal(stored.updated_at, "2000-01-01T00:00:00Z")
 })
 
 test("VoteCoordinator outbox survives a partial D1 handoff and replays with one mutation identity", async (t) => {

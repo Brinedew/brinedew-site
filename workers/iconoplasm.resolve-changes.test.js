@@ -236,6 +236,14 @@ function buildEnv(overrides = {}, { bindGateway = true } = {}) {
         gene_count: artifact.gene_count,
       }),
       [`iconoplasm:catalog:${hash}`]: JSON.stringify(artifact),
+      "iconoplasm:published-portrait-fingerprint:v3": JSON.stringify({
+        schema: "iconoplasm.publishedPortraitFingerprint.v1",
+        published_at: "2026-04-05T00:00:00.000Z",
+        fingerprint: { published_count: 1, latest: "resolveportraitv1" },
+      }),
+      "iconoplasm:published-portrait-refs:v3-1-resolveportraitv1": JSON.stringify([
+        { symbol: "PRL", asset_sha256: "a".repeat(64) },
+      ]),
     }),
     ICONOPLASM_DB: gatewayDb,
     ...overrides,

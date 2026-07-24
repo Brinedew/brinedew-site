@@ -101,6 +101,19 @@ class FakeKv {
     if (key === `iconoplasm:catalog:${this.hash}`) {
       return JSON.stringify(this.artifact)
     }
+    if (key === "iconoplasm:published-portrait-fingerprint:v3") {
+      return JSON.stringify({
+        schema: "iconoplasm.publishedPortraitFingerprint.v1",
+        published_at: "2026-04-04T10:00:00.000Z",
+        fingerprint: { published_count: 2, latest: "galleryvotesv1" },
+      })
+    }
+    if (key === "iconoplasm:published-portrait-refs:v3-2-galleryvotesv1") {
+      return JSON.stringify([
+        { symbol: "A1BG", asset_sha256: "b".repeat(64) },
+        { symbol: "TP53", asset_sha256: "a".repeat(64) },
+      ])
+    }
     return null
   }
 }

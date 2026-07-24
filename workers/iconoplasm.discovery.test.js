@@ -2,7 +2,10 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
-import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  publishSharedGeneDiscoverySymbols,
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 function sortSymbols(values) {
   return (Array.isArray(values) ? values : []).slice().sort()
@@ -22,13 +25,6 @@ class FakeDiscoveryStatement {
 
   async first() {
     this.db.calls.push({ method: "first", sql: this.sql, args: this.args })
-    if (
-      this.sql.includes("FROM icono_gene_discoveries") &&
-      this.sql.includes("COUNT(*) AS non_admin_discoverer_count")
-    ) {
-      const [geneSymbol, adminUserId = ""] = this.args
-      return this.db.sharedDiscoveryAggregate(geneSymbol, adminUserId)
-    }
     if (this.sql.includes("FROM icono_gene_discoveries")) {
       const [userId, geneSymbol] = this.args
       return this.db.getDiscovery(userId, geneSymbol)
@@ -51,7 +47,11 @@ class FakeDiscoveryStatement {
       return { success: true, meta: { changes: 1 } }
     }
     if (this.sql.includes("INSERT INTO icono_shared_gene_discoveries")) {
-      this.db.upsertSharedDiscovery(this.args)
+      if (this.sql.includes("VALUES (?, CURRENT_TIMESTAMP")) {
+        this.db.recordSharedDiscoveryEncounter(this.args)
+      } else {
+        this.db.upsertSharedDiscovery(this.args)
+      }
       return { success: true, meta: { changes: 1 } }
     }
     throw new Error(`Unexpected SQL in fake discovery DB run(): ${this.sql}`)
@@ -222,30 +222,6 @@ class FakeDiscoveryDb {
     return row ? this.enrichDiscoveryRow(row) : null
   }
 
-  sharedDiscoveryAggregate(geneSymbol, adminUserId = "") {
-    const symbol = String(geneSymbol || "").toUpperCase()
-    const admin = String(adminUserId || "")
-    const rows = Array.from(this.rows.values()).filter(
-      (row) => row.gene_symbol === symbol && (!admin || row.user_id !== admin),
-    )
-    if (!rows.length) return null
-    return {
-      gene_symbol: symbol,
-      first_non_admin_discovered_at: rows
-        .map((row) => String(row.first_discovered_at || ""))
-        .sort()[0],
-      latest_non_admin_encountered_at: rows
-        .map((row) => String(row.last_encountered_at || ""))
-        .sort()
-        .at(-1),
-      non_admin_discoverer_count: rows.length,
-      non_admin_encounter_count: rows.reduce(
-        (sum, row) => sum + (Number(row.encounter_count || 0) || 0),
-        0,
-      ),
-    }
-  }
-
   deleteSharedDiscovery(geneSymbol) {
     if (geneSymbol == null) {
       this.sharedRows.clear()
@@ -270,6 +246,21 @@ class FakeDiscoveryDb {
       latest_non_admin_encountered_at: String(latestNonAdminEncounteredAt || ""),
       non_admin_discoverer_count: Number(nonAdminDiscovererCount || 0) || 0,
       non_admin_encounter_count: Number(nonAdminEncounterCount || 0) || 0,
+    })
+  }
+
+  recordSharedDiscoveryEncounter(args) {
+    const [geneSymbol, discovererIncrement] = args
+    const symbol = String(geneSymbol || "").toUpperCase()
+    const existing = this.sharedRows.get(symbol)
+    const timestamp = this.now()
+    const increment = existing ? Math.max(0, Number(discovererIncrement || 0) || 0) : 1
+    this.sharedRows.set(symbol, {
+      gene_symbol: symbol,
+      first_non_admin_discovered_at: existing?.first_non_admin_discovered_at || timestamp,
+      latest_non_admin_encountered_at: timestamp,
+      non_admin_discoverer_count: Number(existing?.non_admin_discoverer_count || 0) + increment,
+      non_admin_encounter_count: Number(existing?.non_admin_encounter_count || 0) + 1,
     })
   }
 
@@ -545,6 +536,81 @@ test("discovery encounter increments count instead of duplicating the row", asyn
   assert.equal(stored?.encounter_count, 2)
   assert.equal(stored?.first_discovered_at, firstPayload?.discovery?.first_discovered_at)
   assert.equal(stored?.last_dwell_ms, 1200)
+  assert.deepEqual(env.gatewayDb.sharedRows.get("TP53"), {
+    gene_symbol: "TP53",
+    first_non_admin_discovered_at: "2025-04-01T00:00:02Z",
+    latest_non_admin_encountered_at: "2025-04-01T00:00:04Z",
+    non_admin_discoverer_count: 1,
+    non_admin_encounter_count: 2,
+  })
+  assert.equal(
+    env.gatewayDb.calls.filter((call) =>
+      call.sql.includes("COUNT(*) AS non_admin_discoverer_count"),
+    ).length,
+    0,
+  )
+})
+
+test("popular-gene discovery rollup increments without rescanning earlier discoverers", async () => {
+  const env = buildEnv({
+    sessions: {
+      "session:first": { user_id: "user-first", username: "first" },
+      "session:second": { user_id: "user-second", username: "second" },
+    },
+  })
+
+  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    buildEncounterRequest({ cookie: "session=first", symbol: "TP53" }),
+    env,
+    {},
+  )
+  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    buildEncounterRequest({ cookie: "session=second", symbol: "TP53" }),
+    env,
+    {},
+  )
+
+  const shared = env.gatewayDb.sharedRows.get("TP53")
+  assert.equal(shared?.non_admin_discoverer_count, 2)
+  assert.equal(shared?.non_admin_encounter_count, 2)
+  assert.equal(
+    env.gatewayDb.calls.some((call) => call.sql.includes("COUNT(*) AS non_admin_discoverer_count")),
+    false,
+  )
+})
+
+test("shared discovery symbols publish once per changed snapshot", async () => {
+  const db = new FakeDiscoveryDb()
+  db.sharedRows.set("BRCA1", {
+    gene_symbol: "BRCA1",
+    non_admin_discoverer_count: 1,
+  })
+  db.sharedRows.set("TP53", {
+    gene_symbol: "TP53",
+    non_admin_discoverer_count: 2,
+  })
+  const values = new Map()
+  const writes = []
+  const env = {
+    ICONOPLASM_DB: db,
+    KV: {
+      async get(key) {
+        return values.get(String(key)) || null
+      },
+      async put(key, value) {
+        values.set(String(key), String(value))
+        writes.push({ key: String(key), value: String(value) })
+      },
+    },
+  }
+
+  const first = await publishSharedGeneDiscoverySymbols(env)
+  const second = await publishSharedGeneDiscoverySymbols(env)
+
+  assert.deepEqual(first, { ok: true, changed: true, symbol_count: 2 })
+  assert.deepEqual(second, { ok: true, changed: false, symbol_count: 2 })
+  assert.equal(writes.length, 1)
+  assert.deepEqual(JSON.parse(writes[0].value).symbols, ["BRCA1", "TP53"])
 })
 
 test("discoveries me returns the signed-in user's discovered symbols", async () => {
