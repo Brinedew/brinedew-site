@@ -286,9 +286,9 @@ export default (() => {
   if ((iconoplasmStartupPath === "/" || iconoplasmStartupPath === "") && window.fetch) {
     bootstrap.accountGalleryWindowLimit = 4
     var hasSharedSessionPresence = String(document.cookie || "")
-      .split(/;\s*/)
+      .split(";")
       .some(function (segment) {
-        return segment === "brinedew_session_present=1"
+        return segment.trim() === "brinedew_session_present=1"
       })
     bootstrap.authPromise = hasSharedSessionPresence
       ? fetch(origin + "/api/auth/me", {
