@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "zoneName": "brinedew.bio",
+  "hostname": "iconoplasm.brinedew.bio",
+  "rulesetName": "Brinedew custom firewall rules",
+  "ruleRef": "iconoplasm_training_crawler_budget_guard",
+  "ruleDescription": "Block Iconoplasm model-training crawlers before Worker execution",
+  "action": "block",
+  "expression": "(http.host eq \"iconoplasm.brinedew.bio\" and (http.user_agent contains \"GPTBot\" or http.user_agent contains \"ClaudeBot\"))",
+  "blockedTrainingCrawlers": ["GPTBot", "ClaudeBot"],
+  "allowedSearchCrawlers": ["OAI-SearchBot", "Claude-SearchBot", "PerplexityBot"],
+  "allowedUserAgents": ["ChatGPT-User", "Claude-User", "Perplexity-User"]
+}

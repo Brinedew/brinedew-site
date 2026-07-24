@@ -33,6 +33,11 @@ existing non-visual homepage description, not as new chrome in the immersive
 Archive/Clans switcher; feed skip links stay clipped until keyboard focus. Read
 `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md` before changing the renderer,
 gene HTML, range map, robots metadata, archive, sitemap, or `llms.txt`.
+Model-training crawlers are not the search contract: GPTBot and ClaudeBot are
+blocked by a project-owned WAF rule before Worker execution, while OpenAI,
+Anthropic, and Perplexity search/user agents remain allowed. The WAF policy,
+robots.txt, deploy reconciliation, documentation, and tests must change
+together.
 
 **ARCHITECTURE FENCE [IPD-004]** — Iconoplasm Queue messages are due-time
 wakeups for durable ledgers, not polling tokens. Unfinished future work must be

@@ -103,7 +103,9 @@ jobs:
             workers/iconoplasm.sync-finalization-queue.test.js \
             workers/iconoplasm-publish-event-archive.test.js \
             workers/iconoplasm.admin-html.test.js \
-            workers/iconoplasm.card-catalog-budget-preflight.test.js
+            workers/iconoplasm.card-catalog-budget-preflight.test.js \
+            workers/seo-discovery.test.js \
+            scripts/reconcile-iconoplasm-crawler-policy.test.js
           node scripts/assert-iconoplasm-worker-budget-guards.mjs
 
       - name: Build Quartz site
@@ -149,6 +151,13 @@ jobs:
 
       - name: Apply Iconoplasm D1 migrations (production)
         run: pnpm exec wrangler d1 migrations apply iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+
+      # ARCHITECTURE FENCE [IPD-003]: training ingestion is not the search
+      # discovery contract. This WAF rule executes before the Worker and keeps
+      # GPTBot/ClaudeBot from spending the daily request allowance while
+      # OAI/Claude/Perplexity search and user-directed agents stay reachable.
+      - name: Reconcile Iconoplasm training-crawler budget guard
+        run: node scripts/reconcile-iconoplasm-crawler-policy.mjs brinedew.bio
 
       # ARCHITECTURE FENCE [IPD-007]: Cloudflare will not let `wrangler deploy`
       # claim a route still owned by another script. The stateful script is
