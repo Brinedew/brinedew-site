@@ -140,7 +140,7 @@ There is a starter trio:
 Guests see the starter trio as a lightweight introduction to the shelf idea.
 Opening any dossier adds that gene to a compact browser-local shelf capable of
 retaining the full 19,023-gene catalog. Signed-out browsing does not post a
-discovery request. Each authenticated browser session merges at most 200
+discovery request. Each authenticated page session merges at most 200
 pending visits into the personal shelf; only the successful batch is removed
 locally. Starter genes do not join that merge unless the guest actually opens
 their dossiers.

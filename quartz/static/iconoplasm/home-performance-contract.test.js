@@ -1612,7 +1612,7 @@ test("gene page visits persist locally for guests and use the server only after 
   assert.match(
     app,
     /websiteGuestDiscoveryMergeRemaining - pendingSymbols\.length/,
-    "each browser session must stop after one bounded merge batch",
+    "each page session must stop after one bounded merge batch",
   )
   assert.match(app, /\/api\/iconoplasm\/discoveries\/merge/)
   assert.match(app, /websiteGuestDiscoveries\.remove\(pendingSymbols\)/)
