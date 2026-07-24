@@ -138,7 +138,16 @@ test("anonymous home collection counts are static and spend no API request", asy
 test("anonymous homepage bootstrap skips session and settings traffic", async () => {
   const [app, head] = await Promise.all([readFile(appPath, "utf8"), readFile(headPath, "utf8")])
 
-  assert.match(head, /segment === "brinedew_session_present=1"/)
+  assert.match(
+    head,
+    /\.split\(";"\)[\s\S]{0,120}segment\.trim\(\) === "brinedew_session_present=1"/,
+    "the emitted bootstrap must tolerate the spaces browsers place between cookie pairs",
+  )
+  assert.doesNotMatch(
+    head,
+    /\.split\(\/;\\s\*\/\)/,
+    "regex escapes inside the bootstrap template literal are stripped during emission",
+  )
   assert.match(head, /bootstrap\.authPromise = hasSharedSessionPresence/)
   assert.match(head, /fetch\(origin \+ "\/api\/auth\/me"/)
   assert.doesNotMatch(head, /fetch\("https:\/\/brinedew\.bio\/api\/auth\/me"/)
