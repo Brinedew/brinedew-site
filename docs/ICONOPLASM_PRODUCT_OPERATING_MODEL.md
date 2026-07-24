@@ -57,7 +57,7 @@ factions.
 - Website: opening a gene dossier is deliberate enough to count. Signed-out
   dossier visits remain in a compact browser-local shelf that can retain the
   full 19,023-gene catalog. They cost no Worker request. Each authenticated
-  browser session merges at most 200 pending symbols; only that successful batch
+  page session merges at most 200 pending symbols; only that successful batch
   is cleared locally, and the remainder stays for later sessions.
 - The INS/RHO/PRL starter trio is onboarding, not evidence that the guest
   actually discovered those genes. A starter joins the pending login merge only

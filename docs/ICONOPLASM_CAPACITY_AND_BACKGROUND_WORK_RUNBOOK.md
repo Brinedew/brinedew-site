@@ -97,7 +97,7 @@ discoveries, inventory counts, or admin-state probes. The fixed 19,023-gene
 catalog count is release metadata. Guest starter discoveries and the compact
 website guest shelf are local product state. The shelf can retain all 19,023
 deliberately visited dossier symbols in `localStorage`; it never posts while
-signed out. Each authenticated browser session merges at most 200 pending
+signed out. Each authenticated page session merges at most 200 pending
 symbols and clears only that batch after a successful response.
 
 The readable `brinedew_session_present` cookie is only a request-suppression
@@ -132,7 +132,7 @@ Discovery follows the same product boundary:
 
 - a signed-out website gene visit is retained in the full-catalog local shelf without
   a Worker request;
-- each authenticated browser session merges at most 200 pending symbols and
+- each authenticated page session merges at most 200 pending symbols and
   preserves the remainder, or the whole batch on any failed response;
 - signed-in encounters update the personal row and increment the shared rollup
   in constant time;
