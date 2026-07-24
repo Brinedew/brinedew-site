@@ -124,6 +124,17 @@ model, regional Bunny evidence, implementation, tests, and live verification.
 Re-evaluate those inputs after material product or Cloudflare-plan changes; do
 not substitute a requests-per-second threshold for daily capacity.
 
+The canonical launch calculation is
+`docs/ICONOPLASM_FIRST_PRINCIPLES_CAPACITY_MODEL.md`, backed by
+`scripts/iconoplasm-first-principles-capacity.mjs`. Current and historical
+request counters are incident evidence only. They are prohibited as forecast
+inputs after a material architecture change.
+
+The model also owns the hardening anomaly ledger. Any read path that mutates
+state, whole-catalog recomputation triggered by public reads, unbounded
+polling, or homegrown distributed cache behavior must be recorded there with
+its exact resource ceiling and permanent correction.
+
 ## Incident evidence
 
 At 2026-07-22 15:05 UTC:
