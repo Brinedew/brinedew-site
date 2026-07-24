@@ -795,6 +795,25 @@ test("DO NOT DELETE: simple card portrait warmup decodes hover-neighbor images",
   )
 })
 
+test("DO NOT DELETE: simple hover portraits recover from catalog snapshots without portrait metadata", () => {
+  const source = readUtf8("./iconoplasm-extension/content.js")
+  assert.match(
+    source,
+    /function loadSimpleTooltipPortrait\(\{[\s\S]*portraitSrc:\s*buildTooltipFramePortraitSrc\(summaryGene,\s*geneDetail\)/,
+    "simple cards must resolve portraits from hydrated detail before falling back to the catalog summary",
+  )
+  assert.match(
+    source,
+    /loadSimpleTooltipPortrait\(\{[\s\S]*geneDetail:\s*geneDetailCache\.has\(symbol\)\s*\?\s*geneDetailCache\.get\(symbol\)\s*:\s*null[\s\S]*portraitRefs/,
+    "warm detail records should feed the simple portrait on the first hover render",
+  )
+  assert.match(
+    source,
+    /hoverGeneDetailPromise\.then\(\(geneDetail\)\s*=>\s*\{[\s\S]*if\s*\(portraitRefs\)\s*\{[\s\S]*loadSimpleTooltipPortrait\(\{[\s\S]*geneDetail,[\s\S]*portraitRefs/,
+    "a cold simple hover must rehydrate its portrait when authoritative detail arrives",
+  )
+})
+
 test("DO NOT DELETE: extension runtime typography uses Iconoplasm fonts, not legacy site fonts", () => {
   const contentCss = readUtf8("./iconoplasm-extension/content.css")
   const popupCss = readUtf8("./iconoplasm-extension/popup.css")
