@@ -299,9 +299,14 @@ jobs:
 
           me_headers="$(mktemp)"
           me_body="$(mktemp)"
-          curl --fail --silent --show-error \
+          me_status="$(curl --silent --show-error \
             --dump-header "$me_headers" \
             --output "$me_body" \
-            "https://brinedew.bio/api/auth/me"
+            --write-out '%{http_code}' \
+            "https://brinedew.bio/api/auth/me")"
+          if [ "$me_status" != "401" ]; then
+            echo "Expected anonymous /api/auth/me to return 401, got $me_status" >&2
+            exit 1
+          fi
           grep -Eq '"authenticated"[[:space:]]*:[[:space:]]*false' "$me_body"
           grep -Fiq 'Cache-Control: no-store' "$me_headers"
