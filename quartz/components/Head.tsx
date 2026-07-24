@@ -1,6 +1,11 @@
 import { i18n } from "../i18n"
 import { FullSlug, getFileExtension, joinSegments, pathToRoot } from "../util/path"
-import { CSSResourceToStyleElement, JSResourceToScriptElement } from "../util/resources"
+import {
+  CSSResourceToStyleElement,
+  isKatexCssResource,
+  isKatexJsResource,
+  JSResourceToScriptElement,
+} from "../util/resources"
 import { googleFontHref, googleFontSubsetHref } from "../util/theme"
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { unescapeHTML } from "../util/escape"
@@ -8,6 +13,7 @@ import { CustomOgImagesEmitterName } from "../../.quartz/plugins"
 import { getPublicUrlForSlug, isNoIndexFile } from "../util/crawlability"
 import { buildAiSearchJsonLd, serializeJsonLd } from "../util/aiSearchMetadata"
 import iconoplasmFontContract from "../../shared/iconoplasm-card/font-contract.json"
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 
@@ -18,6 +24,12 @@ const CACHE_BUST = `${Date.now()}-${
   (typeof process !== "undefined" && process.env?.VERCEL_GIT_COMMIT_SHA) ||
   "build"
 }`
+const authSidebarAssetHash = createHash("sha256")
+  .update(
+    readFileSync(path.resolve(process.cwd(), "quartz", "static", "shared", "auth-sidebar.mjs")),
+  )
+  .digest("hex")
+  .slice(0, 16)
 
 const siteNetworkFontFaces = `
 @font-face {
@@ -128,6 +140,9 @@ export default (() => {
     const isIconoplasm =
       normalizedSlug === "apps/iconoplasm" ||
       fileData.frontmatter?.title === "Iconoplasm - Visual Mnemonics for Molecular Cell Biology"
+    const isGeneguessr =
+      normalizedSlug === "apps/geneguessr" || fileData.frontmatter?.title === "Geneguessr"
+    const isSettings = normalizedSlug === "settings" || fileData.frontmatter?.title === "Settings"
     const usesIconoplasmLabelFonts =
       isIconoplasm || normalizedSlug === "settings" || fileData.frontmatter?.title === "Settings"
     const iconoplasmBootstrapScript = isIconoplasm
@@ -341,17 +356,8 @@ export default (() => {
   window.__iconoplasmBootstrap = bootstrap
 })()`
       : null
-    const pageCss = isIconoplasm
-      ? css.filter((resource) => !resource.content.includes("/static/vendor/katex/"))
-      : css
-    const pageJs = isIconoplasm
-      ? js.filter(
-          (resource) =>
-            !(
-              resource.contentType === "external" && resource.src.includes("/static/vendor/katex/")
-            ),
-        )
-      : js
+    const pageCss = isIconoplasm ? css.filter((resource) => !isKatexCssResource(resource)) : css
+    const pageJs = isIconoplasm ? js.filter((resource) => !isKatexJsResource(resource)) : js
 
     const url = new URL(`https://${cfg.baseUrl ?? "example.com"}`)
     const path = url.pathname as FullSlug
@@ -653,8 +659,11 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
           }}
         />
 
-        {/* Auth sidebar: loads on all pages, self-mounts the account panel into .right.sidebar */}
-        <script>{`document.addEventListener('DOMContentLoaded',function(){var s=document.createElement('script');s.type='module';s.src='/static/shared/auth-sidebar.mjs?v=20260617b';document.body.appendChild(s)})`}</script>
+        {/* App pages own their account UI. Loading the generic sidebar there
+            duplicates /api/auth/me and creates competing DOM owners. */}
+        {!isIconoplasm && !isGeneguessr && !isSettings && (
+          <script>{`document.addEventListener('DOMContentLoaded',function(){var s=document.createElement('script');s.type='module';s.src='/static/shared/auth-sidebar.mjs?v=${authSidebarAssetHash}';document.body.appendChild(s)})`}</script>
+        )}
 
         {/* Conditional app assets - computed outside JSX for SSR reliability */}
         {(() => {
@@ -663,15 +672,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
           }
 
           const root = pathToRoot(slugValue as FullSlug)
-          const isGeneguessr =
-            normalizedSlug === "apps/geneguessr" || fileData.frontmatter?.title === "Geneguessr"
-          const isIconoplasm =
-            normalizedSlug === "apps/iconoplasm" ||
-            fileData.frontmatter?.title ===
-              "Iconoplasm - Visual Mnemonics for Molecular Cell Biology"
-          const isSettings =
-            normalizedSlug === "settings" || fileData.frontmatter?.title === "Settings"
-
           if (!isGeneguessr && !isIconoplasm && !isSettings) {
             return null
           }
