@@ -415,5 +415,15 @@ test("candidate copy action stays in the compact candidate footer strip", () => 
   assert.match(app, /Copy blot/)
   assert.doesNotMatch(app, /<summary>copy this image to another gene<\/summary>/)
   assert.match(css, /\.icono-candidate-secondary-actions/)
+  assert.match(
+    css,
+    /\.icono-candidate-secondary-actions\s*\{[\s\S]*?flex-wrap:\s*nowrap;[\s\S]*?min-inline-size:\s*4\.9rem;[\s\S]*?\}/,
+    "the no-reflow footer should reserve exactly the two public actions instead of an empty third slot",
+  )
+  assert.doesNotMatch(
+    css,
+    /\.icono-candidate-secondary-actions\s*\{[\s\S]*?min-inline-size:\s*7\.55rem;[\s\S]*?\}/,
+    "the admin-only remove slot must not starve public Sample and Emulsion labels",
+  )
   assert.match(css, /\.icono-candidate-copy-panel\[open\]/)
 })

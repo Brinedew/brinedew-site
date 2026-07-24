@@ -3907,7 +3907,10 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   flex-wrap: nowrap;
   gap: 0.4rem;
   min-width: 0;
-  min-inline-size: 7.55rem;
+  /* Reserve the two public controls before client hydration without permanently
+     charging every footer for the admin-only remove control. The admin rail
+     still grows to its natural three-control width when that control exists. */
+  min-inline-size: 4.9rem;
   min-block-size: 2.25rem;
   position: relative;
 }
