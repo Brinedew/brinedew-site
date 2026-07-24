@@ -111,7 +111,7 @@ page keeps its dossier visit in a compact browser-local shelf and spends no
 discovery request. The website shelf can retain all 19,023 deliberately visited
 genes.
 
-When that reader later signs in, each authenticated browser session performs at
+When that reader later signs in, each authenticated page session performs at
 most one 200-symbol merge. One maximum batch therefore adds:
 
 - 1 Worker request;
@@ -120,7 +120,7 @@ most one 200-symbol merge. One maximum batch therefore adds:
 
 The merge is a bounded conversion of retained user intent, not anonymous
 background traffic. A failed merge leaves the local shelf intact for retry. An
-extreme full-catalog guest shelf takes 96 authenticated sessions to drain at
+extreme full-catalog guest shelf takes 96 page sessions to drain at
 this conservative batch size; it never becomes a single 19,023-row write burst.
 
 The first lifetime read of a gene's vote coordinator is different: it imports
@@ -277,7 +277,7 @@ and test all enforce that separation.
 The website now keeps deliberately visited dossiers in a compact local shelf
 that can retain all 19,023 catalog genes. Starter genes remain onboarding
 examples; only actually visited dossiers enter the pending merge. Each
-authenticated browser session merges at most 200 pending symbols and clears
+authenticated page session merges at most 200 pending symbols and clears
 only that successful batch locally. Signed-out browsing never spends a
 discovery Worker request.
 

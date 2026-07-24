@@ -37,7 +37,7 @@ test("website exploration no longer assigns writes to vote snapshot reads", () =
   })
 })
 
-test("website guest shelf retains the catalog but each login session has a bounded merge envelope", () => {
+test("website guest shelf retains the catalog but each page session has a bounded merge envelope", () => {
   const maximum = websiteGuestDiscoveryMergeCost()
   assert.equal(maximum.workerRequests, 1)
   assert.equal(maximum.d1RowsWritten, 1_600)
