@@ -168,6 +168,14 @@ body.iconoplasm-highlight-on-hover .iconoplasm-gene--pill:not(:hover) {
   text-shadow: none;
 }
 
+body.iconoplasm-highlight-on-hover .iconoplasm-gene--pill:not(:hover) .iconoplasm-gene-copy,
+body.iconoplasm-highlight-on-hover
+  .iconoplasm-gene--pill-outline:not(:hover)
+  .iconoplasm-gene-copy {
+  background: transparent;
+  box-shadow: none;
+}
+
 /* -- Tooltip container: horizontal card ----------------------------- */
 /* Source: C:\Users\Admin\.codex\skills\normalize\SKILL.md (Spacing & Layout, Components) +
    C:\Users\Admin\.codex\skills\polish\SKILL.md (Concentric radii, Surface separation).

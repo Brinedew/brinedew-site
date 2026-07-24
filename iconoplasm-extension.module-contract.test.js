@@ -1064,6 +1064,11 @@ test("DO NOT DELETE: highlight timing setting is wired through popup, shared set
     /body\.iconoplasm-highlight-on-hover \.iconoplasm-gene:not\(:hover\) \.iconoplasm-gene-paint-layer[\s\S]*opacity:\s*0;/,
     "hover mode should suppress local paint-layer highlights while the gene is not hovered",
   )
+  assert.match(
+    contentCss,
+    /body\.iconoplasm-highlight-on-hover[\s\S]*\.iconoplasm-gene--pill:not\(:hover\)[\s\S]*\.iconoplasm-gene-copy,[\s\S]*body\.iconoplasm-highlight-on-hover[\s\S]*\.iconoplasm-gene--pill-outline:not\(:hover\)[\s\S]*\.iconoplasm-gene-copy\s*\{[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;/,
+    "hover mode should suppress the native text-wrapper paint used by filled and outline pills while the gene is not hovered",
+  )
 })
 
 test("DO NOT DELETE: extension scanner never wraps editable textbox content", () => {
