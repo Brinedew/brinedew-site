@@ -1345,6 +1345,16 @@ function applySecurityHeaders(response, request) {
   for (const name of STRIP_RESPONSE_HEADERS) {
     headers.delete(name)
   }
+  try {
+    const reqUrl = new URL(request.url)
+    if (reqUrl.pathname.startsWith("/api/auth/")) {
+      // OAuth state, session identity, callback cookies, and logout responses
+      // must never survive a browser, intermediary, or shared edge cache.
+      headers.set("Cache-Control", "no-store")
+    }
+  } catch {
+    // Ignore malformed request URLs and retain the response's existing policy.
+  }
   enforceNoTransformForHtml(headers, request)
   headers.set("Content-Security-Policy", buildContentSecurityPolicy(request))
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
