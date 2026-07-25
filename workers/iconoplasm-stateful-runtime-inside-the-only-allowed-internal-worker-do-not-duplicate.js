@@ -99,7 +99,7 @@ const PUBLISHED_COMPATIBILITY_CONTRACTS = Object.freeze(
 )
 const ICONOPLASM_PRINT_COPY_PNG_PREFIX = "/api/iconoplasm/print-copy"
 const ICONOPLASM_PRINT_COPY_RENDER_PREFIX = "/api/iconoplasm/print-copy-render"
-const ICONOPLASM_PRINT_COPY_RENDER_VERSION = "2026-05-24-browser-run-v1"
+const ICONOPLASM_PRINT_COPY_RENDER_VERSION = "2026-07-25-font-face-fix"
 const ICONOPLASM_PRINT_COPY_CARD_CSS_WIDTH = 384
 const ICONOPLASM_PRINT_COPY_CARD_CSS_HEIGHT = 512
 const ICONOPLASM_BLOT_CARD_LAYOUT_WIDTH = ICONOPLASM_PRINT_COPY_CARD_CSS_WIDTH
@@ -25641,12 +25641,20 @@ function iconoplasmPrintCopyRenderHtml({ cardPayload, origin, symbol }) {
     '<meta charset="utf-8">' +
     '<meta name="viewport" content="width=384,initial-scale=1">' +
     '<meta name="robots" content="noindex,nofollow">' +
+    '<link rel="preload" href="/static/iconoplasm/fonts/IBMPlexMono-Regular.woff2" as="font" type="font/woff2" crossorigin>' +
+    '<link rel="preload" href="/static/iconoplasm/fonts/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin>' +
     '<link rel="preload" href="/static/iconoplasm/fonts/LeagueSpartan-800.woff2" as="font" type="font/woff2" crossorigin>' +
     '<link rel="preload" href="/static/iconoplasm/fonts/SpecialElite-Regular.woff2" as="font" type="font/woff2" crossorigin>' +
+    '<link rel="preload" href="/static/iconoplasm/fonts/Caveat-400.woff2" as="font" type="font/woff2" crossorigin>' +
     '<link rel="stylesheet" href="' +
     esc(cssHref) +
     '">' +
     "<style>" +
+    '@font-face{font-family:"IBM Plex Mono";src:url("/static/iconoplasm/fonts/IBMPlexMono-Regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:block}' +
+    '@font-face{font-family:"IBM Plex Mono";src:url("/static/iconoplasm/fonts/IBMPlexMono-Medium.woff2") format("woff2");font-weight:500;font-style:normal;font-display:block}' +
+    '@font-face{font-family:"League Spartan";src:url("/static/iconoplasm/fonts/LeagueSpartan-800.woff2") format("woff2");font-weight:800;font-style:normal;font-display:block}' +
+    '@font-face{font-family:"Special Elite";src:url("/static/iconoplasm/fonts/SpecialElite-Regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:block}' +
+    '@font-face{font-family:"Caveat";src:url("/static/iconoplasm/fonts/Caveat-400.woff2") format("woff2");font-weight:400;font-style:normal;font-display:block}' +
     "html,body{margin:0;width:384px;height:512px;overflow:hidden;background:transparent;color-scheme:light;--light:oklch(96% 0.015 75);--dark:oklch(20% 0.035 50);--accent:" +
     esc(color) +
     "}" +
