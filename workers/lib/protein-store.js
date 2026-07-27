@@ -13,6 +13,8 @@ const eligibleCache = {
 }
 const dailySelectionCache = {
   ids: null,
+  rows: null,
+  families: null,
   fetchedAt: 0,
   ttl: 5 * 60 * 1000,
 }
@@ -549,30 +551,152 @@ export async function getEligibleProteinIds(db) {
   return ids.slice()
 }
 
-export async function getDailySelectionProteinIds(db) {
+async function ensureDailySelectionCache(db) {
   const now = Date.now()
-  if (dailySelectionCache.ids && now - dailySelectionCache.fetchedAt < dailySelectionCache.ttl) {
-    return dailySelectionCache.ids.slice()
+  if (
+    dailySelectionCache.ids &&
+    dailySelectionCache.rows &&
+    dailySelectionCache.families &&
+    now - dailySelectionCache.fetchedAt < dailySelectionCache.ttl
+  ) {
+    return true
   }
 
   try {
     const { results } = await db
       .prepare(
-        `SELECT p.uniprot
+        `SELECT p.uniprot, p.gene_surname
          FROM proteins p
          WHERE p.structure_source IS NOT NULL
            AND p.gene_summary IS NOT NULL
-         ORDER BY p.id ASC`,
+         ORDER BY p.gene_surname ASC, p.uniprot ASC`,
       )
       .all()
-    const ids = (results || []).map((row) => row.uniprot)
+    const rows = (results || []).map((row) => ({
+      uniprot: normalizeKey(row.uniprot),
+      gene_surname: String(row.gene_surname || "")
+        .trim()
+        .toUpperCase(),
+    }))
+    const ids = rows.map((row) => row.uniprot)
+    dailySelectionCache.rows = rows
     dailySelectionCache.ids = ids
+    dailySelectionCache.families = buildDailySelectionFamilies(rows, ids)
     dailySelectionCache.fetchedAt = now
-    return ids.slice()
+    return true
   } catch (err) {
     console.warn("GeneGuessr: D1 getDailySelectionProteinIds failed", err)
+    return false
+  }
+}
+
+export async function getDailySelectionProteinIds(db) {
+  const loaded = await ensureDailySelectionCache(db)
+  return loaded && Array.isArray(dailySelectionCache.ids) ? dailySelectionCache.ids.slice() : []
+}
+
+const UINT64_MASK = (1n << 64n) - 1n
+
+function readUint64BigEndian(bytes, offset) {
+  let value = 0n
+  for (let index = offset; index < offset + 8; index += 1) {
+    value = (value << 8n) | BigInt(bytes[index] || 0)
+  }
+  return value
+}
+
+function mixUint64(value) {
+  let mixed = (value + 0x9e3779b97f4a7c15n) & UINT64_MASK
+  mixed = ((mixed ^ (mixed >> 30n)) * 0xbf58476d1ce4e5b9n) & UINT64_MASK
+  mixed = ((mixed ^ (mixed >> 27n)) * 0x94d049bb133111ebn) & UINT64_MASK
+  return (mixed ^ (mixed >> 31n)) & UINT64_MASK
+}
+
+function buildDailySelectionFamilies(rows, eligibleIds) {
+  const eligible =
+    Array.isArray(eligibleIds) && eligibleIds.length
+      ? new Set(eligibleIds.map((id) => normalizeKey(id)).filter(Boolean))
+      : null
+  const familiesBySurname = new Map()
+  const presentIds = new Set()
+
+  for (const row of rows || []) {
+    const uniprot = normalizeKey(row?.uniprot)
+    if (!uniprot || (eligible && !eligible.has(uniprot))) {
+      continue
+    }
+    const surname = String(row?.gene_surname || "")
+      .trim()
+      .toUpperCase()
+    // Missing family metadata must not silently remove a playable protein.
+    // Treat it as a one-member family until the data is repaired.
+    const familyKey = surname || `__UNFAMILIED__:${uniprot}`
+    if (!familiesBySurname.has(familyKey)) {
+      familiesBySurname.set(familyKey, new Set())
+    }
+    familiesBySurname.get(familyKey).add(uniprot)
+    presentIds.add(uniprot)
+  }
+
+  if (eligible) {
+    for (const uniprot of eligible) {
+      if (!presentIds.has(uniprot)) {
+        familiesBySurname.set(`__UNFAMILIED__:${uniprot}`, new Set([uniprot]))
+      }
+    }
+  }
+
+  return Array.from(familiesBySurname, ([surname, members]) => ({
+    surname,
+    members: Array.from(members).sort(),
+  })).sort((left, right) =>
+    left.surname < right.surname ? -1 : left.surname > right.surname ? 1 : 0,
+  )
+}
+
+/**
+ * ARCHITECTURE FENCE [GG-001]
+ *
+ * Build a deterministic candidate sequence with exactly one representative
+ * per surname. The representative varies by day, but a 400-member family still
+ * occupies exactly the same one slot as a one-member family.
+ */
+export async function buildFamilyBalancedDailyCandidateIds(
+  rows,
+  eligibleIds,
+  salt,
+  date = new Date(),
+) {
+  const families = buildDailySelectionFamilies(rows, eligibleIds)
+  return buildFamilyBalancedCandidateIdsFromFamilies(families, salt, date)
+}
+
+async function buildFamilyBalancedCandidateIdsFromFamilies(families, salt, date) {
+  if (!families.length) {
     return []
   }
+
+  const day = typeof date === "string" ? date : date.toISOString().slice(0, 10)
+  const seedBuffer = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${day}|${salt || ""}|family-balanced-v1`),
+  )
+  const seedBytes = new Uint8Array(seedBuffer)
+  const familySeed = readUint64BigEndian(seedBytes, 0)
+  const memberSeed = readUint64BigEndian(seedBytes, 8)
+  const familyStart = Number(familySeed % BigInt(families.length))
+  const memberStarts = families.map((family, familyIndex) =>
+    Number(mixUint64(memberSeed ^ BigInt(familyIndex)) % BigInt(family.members.length)),
+  )
+  const candidateIds = []
+
+  for (let familyOffset = 0; familyOffset < families.length; familyOffset += 1) {
+    const familyIndex = (familyStart + familyOffset) % families.length
+    const family = families[familyIndex]
+    candidateIds.push(family.members[memberStarts[familyIndex]])
+  }
+
+  return candidateIds
 }
 
 // Cache for surname-based protein grouping (for balanced random selection)
@@ -686,22 +810,18 @@ export async function pickRandomProteinBalanced(db) {
   }
 }
 
-export async function pickDailyTarget(db, eligibleIds, salt, date = new Date()) {
-  const ids =
-    Array.isArray(eligibleIds) && eligibleIds.length
-      ? eligibleIds
-      : await getDailySelectionProteinIds(db)
+export async function pickDailyTarget(db, salt, date = new Date()) {
+  const loaded = await ensureDailySelectionCache(db)
+  if (!loaded || !Array.isArray(dailySelectionCache.families)) {
+    return null
+  }
+  const families = dailySelectionCache.families
+  const ids = await buildFamilyBalancedCandidateIdsFromFamilies(families, salt, date)
   if (!ids.length) {
     return null
   }
   const today = typeof date === "string" ? date : date.toISOString().slice(0, 10)
-  const encoder = new TextEncoder()
-  const hashInput = encoder.encode(`${today}|${salt || ""}`)
-  const hashBuffer = await crypto.subtle.digest("SHA-256", hashInput)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  const hash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
-  const hashInt = parseInt(hash.slice(0, 16), 16)
-  const idx = hashInt % ids.length
+  const idx = 0
   let skippedAlphaFold = 0
   let chosenId = ids[idx]
   let protein = await fetchProteinByUniprot(db, chosenId)
@@ -721,6 +841,7 @@ export async function pickDailyTarget(db, eligibleIds, salt, date = new Date()) 
     protein,
     skippedAlphaFold,
     date: today,
+    candidateIds: ids,
   }
 }
 

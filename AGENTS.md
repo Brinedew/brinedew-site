@@ -91,6 +91,16 @@ failures into durable “missing gene” records. Read
 before changing anonymous bootstrap, the session-presence hint, catalog/card
 publication metadata, public batch reads, or extension detail caching.
 
+**ARCHITECTURE FENCE [GG-001]** — automatic GeneGuessr daily selection gives
+each normalized gene surname exactly one lottery slot. It first chooses a
+surname, then a deterministic daily representative inside that surname;
+structure and AlphaFold fallback may advance only through the remaining
+one-representative-per-surname sequence. Manual overrides remain explicit
+exceptions. Never hash across the flat protein table or let a large family gain
+more automatic slots because it has more members. Read
+`docs/GENEGUESSR_DAILY_SELECTION_RUNBOOK.md` before changing the daily pool,
+daily hash, target availability fallback, schedule cache, or pre-warm selection.
+
 ## "Site is broken" runbook
 
 When a user reports "site broken" or "images not loading" or any visual regression, the first 30 minutes are dominated by the wrong kind of investigation (DNS-layer forensics, status-page checks, Git blame) when the actual answer is almost always on the user's network or in a project-owned fallback that already exists. The pattern that wastes hours is:

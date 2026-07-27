@@ -34,7 +34,9 @@ const DISCORD_RECAP_IMAGE_MAX_BYTES = 2 * 1024 * 1024
 const ADMIN_SCHEDULE_DAY_CACHE_PREFIX = "admin_schedule_day:v2:"
 const ADMIN_SCHEDULE_DAY_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60
 const ADMIN_SCHEDULE_MAX_FUTURE_DAYS = 370
-const ADMIN_SCHEDULE_CACHE_VERSION = 2
+// Family-balanced daily selection changes every computed preview. Bump the
+// payload version so no flat-protein schedule entry survives the deployment.
+const ADMIN_SCHEDULE_CACHE_VERSION = 3
 const DAILY_TARGET_SALT_FALLBACK = "geneguessr-v2-939b5a0b"
 
 async function listAllKvKeys(env, prefix) {
@@ -111,9 +113,9 @@ function toScheduleUpcomingRow(entry) {
   }
 }
 
-async function buildScheduleDayCacheEntry(env, { date, overrideByDate, eligibleIds, salt }) {
+async function buildScheduleDayCacheEntry(env, { date, overrideByDate, salt }) {
   const plannedOverride = normalizeUniprotId(overrideByDate.get(date)?.uniprot_id)
-  const selection = await pickDailyTarget(env.DB, eligibleIds, salt, date)
+  const selection = await pickDailyTarget(env.DB, salt, date)
   const computedProtein = selection?.protein ? sanitizeProteinSummary(selection.protein) : null
   const computedUniprot = normalizeUniprotId(
     computedProtein?.uniprot || selection?.protein?.uniprot,
@@ -1072,7 +1074,8 @@ export async function handleAdminSchedule(request, env) {
     }
 
     if (missingDates.length) {
-      const eligibleIds = await getDailySelectionProteinIds(env.DB)
+      // Warm the shared family pool once before parallel day computations.
+      await getDailySelectionProteinIds(env.DB)
       const BATCH_SIZE = 16
       for (let i = 0; i < missingDates.length; i += BATCH_SIZE) {
         const batchDates = missingDates.slice(i, i + BATCH_SIZE)
@@ -1081,7 +1084,6 @@ export async function handleAdminSchedule(request, env) {
             buildScheduleDayCacheEntry(env, {
               date,
               overrideByDate,
-              eligibleIds,
               salt,
             }),
           ),
@@ -1191,9 +1193,8 @@ export async function handleAdminCards(request, env) {
     }
 
     if (!resolvedUniprot) {
-      const eligibleIds = await getDailySelectionProteinIds(env.DB)
       const salt = env?.DAILY_TARGET_SALT || "geneguessr-v2-939b5a0b"
-      const selection = await pickDailyTarget(env.DB, eligibleIds, salt, date)
+      const selection = await pickDailyTarget(env.DB, salt, date)
       resolvedUniprot = selection?.protein?.uniprot || null
       audit = {
         date,
