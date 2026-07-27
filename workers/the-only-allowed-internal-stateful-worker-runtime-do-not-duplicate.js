@@ -2995,6 +2995,9 @@ export default {
       if (!overrideId && env.PROD_KV?.get) {
         overrideId = await env.PROD_KV.get(overrideKey)
       }
+      const eligibleIds = await getDailySelectionProteinIds(env.DB)
+      const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
+      const computedSelection = await pickDailyTarget(env.DB, salt, tomorrowStr)
       let targetProtein
       let source
       let skippedAlphaFold = null
@@ -3005,12 +3008,9 @@ export default {
         console.log(`[CRON] Using admin override for ${tomorrowStr}: ${overrideId}`)
       } else {
         // 2. Use deterministic selection
-        const eligibleIds = await getDailySelectionProteinIds(env.DB)
-        const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
-        const selection = await pickDailyTarget(env.DB, eligibleIds, salt, tomorrowStr)
-        targetProtein = selection?.protein
-        skippedAlphaFold = Number.isFinite(selection?.skippedAlphaFold)
-          ? selection.skippedAlphaFold
+        targetProtein = computedSelection?.protein
+        skippedAlphaFold = Number.isFinite(computedSelection?.skippedAlphaFold)
+          ? computedSelection.skippedAlphaFold
           : null
         source = "computed"
         console.log(`[CRON] Computed target for ${tomorrowStr}: ${targetProtein?.uniprot}`)
@@ -3032,12 +3032,17 @@ export default {
       // 3. Verify the exact canonical structure before committing tomorrow's
       // puzzle. Metadata presence is not availability: the 2026-07-17 IMMP2L
       // incident had a perfectly formed SWISS-MODEL URL that returned 404.
-      const eligibleIds = await getDailySelectionProteinIds(env.DB)
-      const startIndex = Math.max(0, eligibleIds.indexOf(targetProtein.uniprot))
+      const balancedCandidateIds = Array.isArray(computedSelection?.candidateIds)
+        ? computedSelection.candidateIds
+        : eligibleIds
+      const availabilityIds = [
+        targetProtein.uniprot,
+        ...balancedCandidateIds.filter((uniprot) => uniprot !== targetProtein.uniprot),
+      ]
       const availableTarget = await selectAvailableDailyTarget({
         initialProtein: targetProtein,
-        eligibleIds,
-        startIndex,
+        eligibleIds: availabilityIds,
+        startIndex: 0,
         loadProtein: (uniprot) => fetchProteinByUniprot(env.DB, uniprot),
         resolveStructureMeta: (protein) => getCanonicalStructureMeta(protein, env),
         isStructureAvailable: (structureMeta, protein) =>
@@ -5166,6 +5171,7 @@ async function getDailyTargetProtein(env, options = {}) {
   let startIdx = 0
   let balancedPick = null // Track surname info for practice mode
   let explicitOverrideSelected = false
+  let dailyCandidateIds = eligibleIds
 
   const wantsAudit = Boolean(options.returnAudit)
   const audit = wantsAudit
@@ -5200,6 +5206,11 @@ async function getDailyTargetProtein(env, options = {}) {
   } else {
     // Daily mode: check for manual override first
     const today = new Date().toISOString().slice(0, 10)
+    const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
+    const computedDailySelection = await pickDailyTarget(env.DB, salt, today)
+    dailyCandidateIds = Array.isArray(computedDailySelection?.candidateIds)
+      ? computedDailySelection.candidateIds
+      : eligibleIds
     if (audit) {
       audit.date = today
     }
@@ -5309,13 +5320,11 @@ async function getDailyTargetProtein(env, options = {}) {
     }
 
     if (!protein) {
-      const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
-      const selection = await pickDailyTarget(env.DB, eligibleIds, salt)
-      protein = selection?.protein || null
+      protein = computedDailySelection?.protein || null
       if (audit) {
         audit.source = "computed"
-        audit.skipped_alpha_fold = Number.isFinite(selection?.skippedAlphaFold)
-          ? selection.skippedAlphaFold
+        audit.skipped_alpha_fold = Number.isFinite(computedDailySelection?.skippedAlphaFold)
+          ? computedDailySelection.skippedAlphaFold
           : null
       }
       startIdx = eligibleIds.indexOf(protein?.uniprot)
@@ -5328,10 +5337,13 @@ async function getDailyTargetProtein(env, options = {}) {
   // curated source decision, reject the whole protein when that source is
   // unreachable, and advance through the deterministic pool.
   if (protein && env) {
+    const availabilityIds = options.practice
+      ? eligibleIds
+      : [protein.uniprot, ...dailyCandidateIds.filter((uniprot) => uniprot !== protein.uniprot)]
     const availableTarget = await selectAvailableDailyTarget({
       initialProtein: protein,
-      eligibleIds,
-      startIndex: startIdx,
+      eligibleIds: availabilityIds,
+      startIndex: options.practice ? startIdx : 0,
       loadProtein: (uniprot) => fetchProteinByUniprot(env.DB, uniprot),
       resolveStructureMeta: (candidate) => getCanonicalStructureMeta(candidate, env),
       isStructureAvailable: (structureMeta, candidate) =>
