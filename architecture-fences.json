@@ -329,6 +329,37 @@
           "token": "ARCHITECTURE FENCE [IPD-008]"
         }
       ]
+    },
+    {
+      "id": "GG-001",
+      "title": "Daily targets give every gene surname one slot",
+      "decision": "Automatic GeneGuessr daily selection chooses one deterministic representative per normalized gene surname, then selects and falls back only through that one-representative-per-surname sequence. Manual overrides remain explicit exceptions.",
+      "reason": "Hashing across the flat protein table makes large families proportionally more likely. The surname-balancing schema and practice selector existed, but daily mode bypassed them and automatically selected SLC22A5, SLC6A8, and SLC12A2 in July 2026.",
+      "change_control": "The source pool, family grouping, deterministic hash, AlphaFold and structure-availability fallback, admin schedule cache version, pre-warm path, request-time path, instructions, runbook, and behavioral tests must change together. Never restore flat-table weighting or adjacent-row fallback.",
+      "runbook": "docs/GENEGUESSR_DAILY_SELECTION_RUNBOOK.md",
+      "additional_required_marker_categories": [],
+      "markers": [
+        {
+          "category": "instructions",
+          "file": "AGENTS.md",
+          "token": "ARCHITECTURE FENCE [GG-001]"
+        },
+        {
+          "category": "runbook",
+          "file": "docs/GENEGUESSR_DAILY_SELECTION_RUNBOOK.md",
+          "token": "ARCHITECTURE FENCE [GG-001]"
+        },
+        {
+          "category": "source",
+          "file": "workers/lib/protein-store.js",
+          "token": "ARCHITECTURE FENCE [GG-001]"
+        },
+        {
+          "category": "test",
+          "file": "workers/lib/daily-selection-pool.test.js",
+          "token": "ARCHITECTURE FENCE [GG-001]"
+        }
+      ]
     }
   ]
 }
