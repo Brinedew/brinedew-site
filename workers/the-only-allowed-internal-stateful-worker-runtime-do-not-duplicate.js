@@ -3351,6 +3351,10 @@ export class GameSession {
     } else if (path === "/get" && request.method === "GET") {
       // Internal route for OAuth session retrieval
       return this.getData()
+    } else if (path === "/consume" && request.method === "POST") {
+      // OAuth callbacks must be one-shot. Reading and deleting in one Durable
+      // Object transaction prevents two callback requests from reusing state.
+      return this.consumeData()
     } else if (path === "/reset" && request.method === "POST") {
       // Internal route for clearing OAuth session
       return this.clearData()
@@ -3381,6 +3385,9 @@ export class GameSession {
   async storeData(request) {
     const data = await request.json()
     await this.state.storage.put("data", data)
+    if (Number.isFinite(data?.delete_storage_at)) {
+      await this.state.storage.setAlarm(data.delete_storage_at)
+    }
     return new Response(JSON.stringify({ success: true }), {
       headers: { "Content-Type": "application/json" },
     })
@@ -3398,6 +3405,22 @@ export class GameSession {
   }
 
   /**
+   * Atomically retrieve and delete one-time data (OAuth callback state).
+   */
+  async consumeData() {
+    let data
+    await this.state.storage.transaction(async (transaction) => {
+      data = await transaction.get("data")
+      if (data !== undefined) {
+        await transaction.delete("data")
+      }
+    })
+    return new Response(JSON.stringify(data || {}), {
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
+  /**
    * Clear stored data (for logout)
    * Internal route only
    */
@@ -3406,6 +3429,13 @@ export class GameSession {
     return new Response(JSON.stringify({ success: true }), {
       headers: { "Content-Type": "application/json" },
     })
+  }
+
+  async alarm() {
+    // OAuth attempts that are abandoned at Discord should not leave Durable
+    // Object storage behind forever. Only records with delete_storage_at set
+    // schedule this alarm; persistent login sessions are unaffected.
+    await this.state.storage.deleteAll()
   }
 }
 
