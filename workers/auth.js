@@ -9,6 +9,7 @@ const DISCORD_OAUTH = "https://discord.com/oauth2/authorize"
 const DISCORD_TOKEN = "https://discord.com/api/v10/oauth2/token"
 const DISCORD_CLIENT_ID_FALLBACK = "1438111252730875984"
 const INVALID_ENV_MARKERS = new Set(["", "undefined", "null"])
+const OAUTH_SESSION_COOKIE_PREFIX = "oauth_session_"
 export const SHARED_SESSION_PRESENCE_COOKIE = "brinedew_session_present"
 const SHARED_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 
@@ -83,6 +84,14 @@ function base64UrlEncode(buffer) {
     binary += String.fromCharCode(bytes[i])
   }
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
+}
+
+async function oauthSessionCookieName(state) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(state))
+  // A state-bound name lets independent tabs keep independent HttpOnly
+  // browser bindings. Do not replace this with one global OAuth cookie: a
+  // second login would overwrite the first and break its callback.
+  return `${OAUTH_SESSION_COOKIE_PREFIX}${base64UrlEncode(digest).slice(0, 24)}`
 }
 
 function parseLeaderboardOptInFromUrl(url) {
@@ -202,6 +211,7 @@ export async function handleLogin(request, env) {
   const codeVerifier = generateRandomString(128)
   const codeChallenge = await generateCodeChallenge(codeVerifier)
   const state = generateRandomString(32)
+  const expiresAt = Date.now() + 600000
 
   // Store verifier and state in session (temporary storage)
   const sessionId = crypto.randomUUID()
@@ -227,7 +237,8 @@ export async function handleLogin(request, env) {
             return_to: returnTo,
             redirect_uri: redirectUri,
             cookie_domain: cookieDomain,
-            expires_at: Date.now() + 600000, // 10 minutes
+            expires_at: expiresAt, // 10 minutes
+            delete_storage_at: expiresAt,
           }),
         }),
       )
@@ -246,13 +257,16 @@ export async function handleLogin(request, env) {
   })
 
   const discordUrl = `${DISCORD_OAUTH}?${params.toString()}`
+  const oauthCookieName = await oauthSessionCookieName(state)
 
-  // Set session cookie to track OAuth session
+  // Bind this specific OAuth attempt to this browser. The state-derived cookie
+  // name is essential: mobile browsers and multiple app tabs can legitimately
+  // have overlapping Discord flows, and a fixed name makes them overwrite.
   return new Response(null, {
     status: 302,
     headers: {
       Location: discordUrl,
-      "Set-Cookie": `oauth_session=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600${cookieDomainAttr}`,
+      "Set-Cookie": `${oauthCookieName}=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600${cookieDomainAttr}`,
     },
   })
 }
@@ -285,9 +299,11 @@ export async function handleCallback(request, env) {
     return Response.json({ error: "Missing code or state" }, { status: 400 })
   }
 
-  // Get OAuth session from cookie
+  // The callback's state identifies the matching browser-bound OAuth cookie.
+  // This supports concurrent flows without weakening the login-CSRF binding.
   const cookies = parseCookies(request.headers.get("Cookie") || "")
-  const oauthSessionId = cookies.oauth_session
+  const oauthCookieName = await oauthSessionCookieName(state)
+  const oauthSessionId = cookies[oauthCookieName]
 
   if (!oauthSessionId) {
     return Response.json({ error: "Missing OAuth session" }, { status: 400 })
@@ -299,19 +315,22 @@ export async function handleCallback(request, env) {
 
   let oauthData
   try {
-    const oauthDataResp = await stub.fetch("http://internal/get")
+    const oauthDataResp = await stub.fetch(
+      new Request("http://internal/consume", { method: "POST" }),
+    )
     if (!oauthDataResp.ok) {
-      console.error("Failed to fetch OAuth data from DO:", await oauthDataResp.text())
+      console.error("Failed to consume OAuth data from DO:", await oauthDataResp.text())
       return Response.json({ error: "Failed to retrieve OAuth session" }, { status: 500 })
     }
     oauthData = await oauthDataResp.json()
   } catch (err) {
-    console.error("Error fetching OAuth data:", err)
+    console.error("Error consuming OAuth data:", err)
     return Response.json({ error: "Internal server error" }, { status: 500 })
   }
 
   if (!oauthData || oauthData.state !== state) {
-    console.error("Invalid state. Expected:", oauthData?.state, "Got:", state)
+    // Never log OAuth state values. They are short-lived CSRF credentials.
+    console.error("OAuth callback did not match a live, unused state")
     return Response.json({ error: "Invalid state parameter" }, { status: 400 })
   }
 
@@ -459,7 +478,7 @@ export async function handleCallback(request, env) {
   const headers = new Headers()
   headers.set(
     "Set-Cookie",
-    `oauth_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0${cookieDomainAttr}`,
+    `${oauthCookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0${cookieDomainAttr}`,
   )
   headers.append(
     "Set-Cookie",
