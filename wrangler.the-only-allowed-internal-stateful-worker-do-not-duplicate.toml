@@ -80,21 +80,21 @@ database_id = "43f485e3-a933-4345-b2f4-7c5ec1aaee6f"
 binding = "KV"
 id = "7d59f063885e415ab3df5301393a114d"
 
-# Anonymous Iconoplasm API abuse control. These counters are local to each
+# Anonymous public-route abuse control. These counters are local to each
 # Cloudflare location and eventually consistent; they are not billing ledgers.
 # They live on the route-owning Worker so every dynamic request is limited once.
 [[ratelimits]]
-name = "ICONOPLASM_RATE_LIMIT_5"
+name = "PUBLIC_RATE_LIMIT_5"
 namespace_id = "655005"
 simple = { limit = 5, period = 60 }
 
 [[ratelimits]]
-name = "ICONOPLASM_RATE_LIMIT_60"
+name = "PUBLIC_RATE_LIMIT_60"
 namespace_id = "655060"
 simple = { limit = 60, period = 60 }
 
 [[ratelimits]]
-name = "ICONOPLASM_RATE_LIMIT_120"
+name = "PUBLIC_RATE_LIMIT_120"
 namespace_id = "655120"
 simple = { limit = 120, period = 60 }
 
@@ -244,17 +244,17 @@ preview_id = "b0394946bccf4cd3afd9e1ff6de2bedc"
 # Bindings are non-inheritable. Staging uses separate namespaces so tests and
 # preview traffic can never consume production capacity.
 [[env.staging.ratelimits]]
-name = "ICONOPLASM_RATE_LIMIT_5"
+name = "PUBLIC_RATE_LIMIT_5"
 namespace_id = "1655005"
 simple = { limit = 5, period = 60 }
 
 [[env.staging.ratelimits]]
-name = "ICONOPLASM_RATE_LIMIT_60"
+name = "PUBLIC_RATE_LIMIT_60"
 namespace_id = "1655060"
 simple = { limit = 60, period = 60 }
 
 [[env.staging.ratelimits]]
-name = "ICONOPLASM_RATE_LIMIT_120"
+name = "PUBLIC_RATE_LIMIT_120"
 namespace_id = "1655120"
 simple = { limit = 120, period = 60 }
 
