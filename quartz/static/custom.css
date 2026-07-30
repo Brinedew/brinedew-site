@@ -269,9 +269,12 @@ article p {
 }
 
 /*
- * Essay spacing is parent-owned gap, not child margins.
- * Children cannot stack, collapse, or invent extra air — only the parent gap runs.
- * Heading "more air above" is padding (still one box), never margin-top+margin-bottom pairs.
+ * Essay spacing is parent-owned, not stacked child margins.
+ *
+ * Top-level blocks: flex column + gap (safe — not list boxes).
+ * Lists: keep display:list-item so ::marker bullets survive. Spacing between
+ * siblings is ONLY via `X + X { margin-top }` (one edge, one owner). Children
+ * never carry margin-bottom, so collapse/stacking cannot invent uneven air.
  */
 .markdown-preview-view.markdown-rendered {
   display: flex;
@@ -295,27 +298,35 @@ article p {
   padding-top: 0.5em;
 }
 
-/* Global article p { margin-bottom } cannot reach into essays. */
-.markdown-preview-view.markdown-rendered :is(p, ul, ol, li, blockquote, figure, pre, table) {
+/* Kill every global margin that could stack inside essays (p, img, li, …). */
+.markdown-preview-view.markdown-rendered :is(p, ul, ol, li, blockquote, figure, pre, table, img) {
   margin: 0;
 }
 
+/* Native list boxes — flex on ul/li kills markers; do not use it here. */
 .markdown-preview-view.markdown-rendered :is(ul, ol) {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4em;
+  display: block;
+  list-style: revert;
+  padding-inline-start: 1.6em;
 }
 
 .markdown-preview-view.markdown-rendered li {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35em;
-  align-items: flex-start;
+  display: list-item;
+  list-style: inherit;
 }
 
-.markdown-preview-view.markdown-rendered li > :is(ul, ol) {
-  width: 100%;
-  gap: 0.28em;
+/* One owner of list-item separation: adjacent sibling top margin only. */
+.markdown-preview-view.markdown-rendered :is(ul, ol) > li + li {
+  margin-top: 0.4em;
+}
+
+/* Title + nested list inside one li: one gap between consecutive children. */
+.markdown-preview-view.markdown-rendered li > * + * {
+  margin-top: 0.35em;
+}
+
+.markdown-preview-view.markdown-rendered :is(ul, ol) :is(ul, ol) > li + li {
+  margin-top: 0.28em;
 }
 
 .draft-warning-wrap {
