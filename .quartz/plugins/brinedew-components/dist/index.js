@@ -2427,37 +2427,63 @@ var DraftTagInjector = () => ({
 });
 
 // src/plugins/essayNormalizer.ts
-var BLOCK_TAGS = /* @__PURE__ */ new Set([
-  "p",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "ul",
-  "ol",
-  "li",
-  "blockquote",
-  "pre",
-  "table",
-  "thead",
-  "tbody",
-  "tr",
-  "figure",
-  "figcaption",
-  "hr",
-  "section",
-  "article",
-  "div",
-  "dl",
-  "dt",
-  "dd"
-]);
 var isElement = (node) => !!node && node.type === "element";
 var isWhitespaceText = (node) => !!node && node.type === "text" && !node.value.trim();
 var isBreak = (node) => isElement(node) && node.tagName === "br";
-function normalizeSpacing(tree) {
+var PHRASING_OK = /* @__PURE__ */ new Set([
+  "a",
+  "abbr",
+  "b",
+  "br",
+  "cite",
+  "code",
+  "del",
+  "em",
+  "i",
+  "img",
+  "kbd",
+  "mark",
+  "s",
+  "small",
+  "span",
+  "strong",
+  "sub",
+  "sup",
+  "time",
+  "u",
+  "var"
+]);
+function isPhrasingOnly(nodes) {
+  return nodes.every((child) => {
+    if (child.type === "text") return true;
+    if (child.type !== "element") return false;
+    if (!PHRASING_OK.has(child.tagName)) return false;
+    return isPhrasingOnly(child.children);
+  });
+}
+function stripBreaks(children) {
+  const next = [];
+  for (let i3 = 0; i3 < children.length; i3++) {
+    const child = children[i3];
+    if (!isBreak(child)) {
+      next.push(child);
+      continue;
+    }
+    const prev = next[next.length - 1];
+    const following = children[i3 + 1];
+    if (isElement(prev) || isElement(following)) continue;
+    if (isWhitespaceText(prev) || isWhitespaceText(following)) continue;
+    const prevAsUnknown = prev;
+    if (prevAsUnknown && typeof prevAsUnknown === "object" && prevAsUnknown.type === "text") {
+      const textNode = prevAsUnknown;
+      if (!textNode.value.endsWith(" ")) textNode.value += " ";
+    } else {
+      next.push({ type: "text", value: " " });
+    }
+  }
+  return next;
+}
+function normalizeStructure(tree) {
   visit(
     tree,
     "element",
@@ -2474,31 +2500,17 @@ function normalizeSpacing(tree) {
           parent.children.splice(index, 1);
           return;
         }
-        node.children = meaningful;
+        node.children = stripBreaks(meaningful);
+        if (parent.type === "element" && parent.tagName === "li" && isPhrasingOnly(node.children)) {
+          parent.children.splice(index, 1, ...node.children);
+          return;
+        }
       }
       if (node.children.some(isBreak)) {
-        const next = [];
-        for (let i3 = 0; i3 < node.children.length; i3++) {
-          const child = node.children[i3];
-          if (!isBreak(child)) {
-            next.push(child);
-            continue;
-          }
-          const prev = next[next.length - 1];
-          const following = node.children[i3 + 1];
-          const prevIsBlock = isElement(prev) && BLOCK_TAGS.has(prev.tagName);
-          const nextIsBlock = isElement(following) && BLOCK_TAGS.has(following.tagName);
-          if (prevIsBlock || nextIsBlock) continue;
-          if (isWhitespaceText(prev) || isWhitespaceText(following)) continue;
-          const prevAsUnknown = prev;
-          if (prevAsUnknown && typeof prevAsUnknown === "object" && prevAsUnknown.type === "text") {
-            const textNode = prevAsUnknown;
-            if (!textNode.value.endsWith(" ")) textNode.value += " ";
-          } else {
-            next.push({ type: "text", value: " " });
-          }
-        }
-        node.children = next;
+        node.children = stripBreaks(node.children);
+      }
+      if (isElement(node) && (node.tagName === "ul" || node.tagName === "ol" || node.tagName === "li" || node.tagName === "blockquote")) {
+        node.children = node.children.filter((child) => !isWhitespaceText(child));
       }
     }
   );
@@ -2527,7 +2539,7 @@ var EssayNormalizer = () => {
     htmlPlugins() {
       return [
         () => (tree) => {
-          normalizeSpacing(tree);
+          normalizeStructure(tree);
           normalizeHeadings(tree);
         }
       ];
