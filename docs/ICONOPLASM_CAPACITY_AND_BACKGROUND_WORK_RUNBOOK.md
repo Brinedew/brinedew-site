@@ -110,20 +110,26 @@ lurker for an auth check.
 Extension hover detail is immutable within a published card snapshot:
 
 - the catalog manifest exposes `card_snapshot_version`;
-- Chromium builds request `unlimitedStorage` because the fixed 19,023-gene
-  scanner catalog deliberately retains inspectable portrait references and
-  exceeds Chromium's default 10 MiB `storage.local` quota;
+- catalog publication writes a separately versioned scanner artifact before
+  advancing the manifest;
+- the scanner artifact contains only canonical symbol, name, UniProt, color,
+  and aliases, is capped at 3 MiB, and never contains portrait references;
+- extension upgrades atomically compact any legacy portrait-heavy scanner map
+  before returning gene data to a tab;
 - public gene batches read the corresponding published card artifact, not D1;
-- installed extensions keep a bounded local detail cache keyed by that version;
+- installed extensions keep a detail cache capped at both 512 entries and
+  4 MiB, keyed by that version;
 - a version change invalidates the cache;
 - only an explicit `missing` result is negative-cached, and transient failures
   remain retryable.
 
 Catalog portrait fingerprints and portrait-reference snapshots are publication
-artifacts too. Catalog publication writes them before advertising the version.
-Public manifest, search, and artifact reads consume the published metadata even
-after its former five-minute timestamp; they never scan D1 or write KV to
-"repair" it. Missing or corrupt publication state returns a retryable 503.
+artifacts too, but they do not belong in the per-tab scanner. Visible and hovered
+genes hydrate them through the published card batch. Catalog publication writes
+the full artifact and compact scanner before advertising either version. Public
+manifest, search, and artifact reads consume the published metadata even after
+its former five-minute timestamp; they never scan D1 or write KV to "repair" it.
+Missing or corrupt publication state returns a retryable 503.
 
 The batch endpoint still costs one Worker invocation on a cache miss. Persistence
 changes the unit of cost from page navigation to unique gene detail per

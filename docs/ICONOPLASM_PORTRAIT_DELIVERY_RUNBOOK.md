@@ -106,10 +106,13 @@ source-selection rules.
 
 - Public API schema: 4
 - Catalog artifact schema: 5
+- Extension scanner artifact schema: 1
 - Immutable catalog URL contract token: `a5c1`
 - Published portrait snapshot schema: `v3`
-- Minimum extension version: the version in `iconoplasm-extension/publisher-release.json` (currently 0.4.7)
-- Extension catalog portrait field: `p` (`PortraitAssetRefV1`)
+- Minimum extension version: the value in `iconoplasm-extension/publisher-release.json`
+- Full catalog portrait field: `p` (`PortraitAssetRefV1`)
+- Extension scanner portrait fields: none; visible and hovered genes hydrate
+  portraits from the published card-detail batch
 - Image-edit and candidate-generation result field: `result_asset`
 
 The catalog artifact schema and contract revision are part of both its
@@ -147,14 +150,17 @@ generated website or extension copies.
 3. Follow the candidate manifest's `artifact_url`. Confirm its URL contains
    `a5c1`, its body is schema 5, portrait-bearing genes use `p`, and no gene
    contains `pt` or `ph`.
-4. Confirm a public gene/media payload contains only first-party portrait URLs.
-5. On a healthy network, open two gene pages and verify portraits load from the
+4. Follow `scanner_artifact.artifact_url`. Confirm it is schema 1, stays below
+   3 MiB, contains exactly 19,023 canonical keys, and no scanner gene contains
+   `p`, `portrait`, or rendition URLs.
+5. Confirm a public gene/media payload contains only first-party portrait URLs.
+6. On a healthy network, open two gene pages and verify portraits load from the
    accelerator after one tab-wide probe.
-6. In a browser where the accelerator is unreachable, verify one failed
+7. In a browser where the accelerator is unreachable, verify one failed
    accelerator request followed by first-party portrait requests. Check image
    `complete`, `naturalWidth`, and `naturalHeight`, not only HTTP status.
-7. Generate or edit a blot after the tab has selected canonical delivery and
+8. Generate or edit a blot after the tab has selected canonical delivery and
    confirm the new result loads first-party in the comparison modal.
-8. Verify the extension on a normal web page in the same two network states.
-9. Run the shared delivery, extension worker, public media, image-edit, storage,
-   packaging, and build tests before deployment.
+9. Verify the extension on a normal web page in the same two network states.
+10. Run the shared delivery, extension worker, public media, image-edit, storage,
+    packaging, and build tests before deployment.

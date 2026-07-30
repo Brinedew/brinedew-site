@@ -3,7 +3,7 @@
   "name": "Iconoplasm",
   "version": "0.4.11",
   "description": "Highlights gene symbols on any page with hover cards, portraits, and gene colors. Track your discoveries as you browse.",
-  "permissions": ["storage", "unlimitedStorage"],
+  "permissions": ["storage"],
   "host_permissions": [
     "https://iconoplasm.brinedew.bio/*",
     "https://iconoplasmportraits.b-cdn.net/*"

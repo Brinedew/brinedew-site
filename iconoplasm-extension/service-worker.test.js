@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
+// ARCHITECTURE FENCE [IPD-008]: arbitrary tabs receive a bounded, portrait-free scanner index.
+
 const storageState = new Map()
 const sessionState = new Map()
 const requestedOverlay = {
@@ -39,6 +41,27 @@ const portraitDeliveryPolicy = {
   },
   probe_timeout_ms: 2500,
   decision_scope: "tab",
+}
+const scannerContract = {
+  schemaVersion: 1,
+  revision: 1,
+}
+
+function scannerManifest(buildVersion, byteSize = 128) {
+  return {
+    schema_version: scannerContract.schemaVersion,
+    contract_revision: scannerContract.revision,
+    build_version: buildVersion,
+    byte_size: byteSize,
+    artifact_url: `https://iconoplasm.brinedew.bio/api/public/v1/catalog/scanner.${buildVersion}.json`,
+  }
+}
+
+function rememberScannerState(buildVersion) {
+  storageState.set("iconoplasm_scanner_hash", buildVersion)
+  storageState.set("iconoplasm_scanner_schema_version", scannerContract.schemaVersion)
+  storageState.set("iconoplasm_scanner_contract_revision", scannerContract.revision)
+  storageState.set("iconoplasm_scanner_index_storage_version", 1)
 }
 
 function storageArea(state) {
@@ -95,50 +118,78 @@ await import("./service-worker.js")
 
 const hooks = globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__
 
-test("Chromium builds reserve enough local storage for the full portrait-reference catalog", () => {
+test("Chromium builds keep the scanner index bounded without unlimited storage", () => {
   const manifest = JSON.parse(readFileSync(new URL("./manifest.json", import.meta.url), "utf8"))
-  const chromiumDefaultLocalQuotaBytes = 10 * 1024 * 1024
   const publishedGeneCount = 19_023
-  const sha = "a".repeat(64)
-  const portraitReference = {
-    schema_version: 1,
-    asset_sha256: sha,
-    renditions: {
-      full: {
-        path: `portraits/v1/aa/${sha}/full.webp`,
-        canonical_url: `https://iconoplasm.brinedew.bio/portraits/v1/aa/${sha}/full.webp`,
-      },
-      medium: {
-        path: `portraits/v1/aa/${sha}/medium.webp`,
-        canonical_url: `https://iconoplasm.brinedew.bio/portraits/v1/aa/${sha}/medium.webp`,
-      },
-      thumb: {
-        path: `portraits/v1/aa/${sha}/thumb.webp`,
-        canonical_url: `https://iconoplasm.brinedew.bio/portraits/v1/aa/${sha}/thumb.webp`,
+  const legacyGenes = Object.fromEntries(
+    Array.from({ length: publishedGeneCount }, (_, index) => {
+      const symbol = `GENE${String(index).padStart(5, "0")}`
+      return [
+        symbol,
+        {
+          c: "#abcdef",
+          n: `representative gene ${index}`,
+          u: `P${String(index).padStart(5, "0")}`,
+          a: [`G-${index}`],
+          p: { asset_sha256: "a".repeat(64) },
+        },
+      ]
+    }),
+  )
+  const scannerIndex = hooks.normalizeScannerIndex(legacyGenes)
+  const scannerBytes = hooks.jsonByteLength(scannerIndex)
+
+  assert.equal(manifest.permissions.includes("unlimitedStorage"), false)
+  assert.ok(scannerBytes < hooks.scannerIndexMaxBytes)
+  assert.equal(Object.keys(scannerIndex).length, publishedGeneCount)
+  assert.equal(
+    Object.values(scannerIndex).some((gene) => "p" in gene),
+    false,
+  )
+})
+
+test("legacy portrait-heavy storage is compacted before a tab can receive it", async () => {
+  storageState.clear()
+  storageState.set("iconoplasm_genes", {
+    TP53: {
+      n: "tumor protein p53",
+      c: "#abcdef",
+      a: ["p53"],
+      p: {
+        asset_sha256: "a".repeat(64),
+        renditions: {
+          medium: {
+            canonical_url: "https://iconoplasm.brinedew.bio/portraits/tp53/medium.webp",
+          },
+        },
       },
     },
-  }
-  const representativeEntryBytes = Buffer.byteLength(
-    JSON.stringify({
-      GENE00000: {
-        c: "#abcdef",
-        n: "representative full gene name",
-        u: "P00000",
-        p: portraitReference,
-      },
-    }),
-    "utf8",
-  )
-  const representativeCatalogBytes = representativeEntryBytes * publishedGeneCount
+  })
+  storageState.set("iconoplasm_hash", "legacy-portrait-catalog")
+  storageState.set("iconoplasm_last_fetch", new Date().toISOString())
 
-  assert.ok(
-    representativeCatalogBytes > chromiumDefaultLocalQuotaBytes,
-    "the regression fixture must exceed Chromium's default storage.local quota",
-  )
-  assert.ok(
-    manifest.permissions.includes("unlimitedStorage"),
-    "the full published catalog must not fail closed at Chromium's default 10 MiB quota",
-  )
+  try {
+    const migrated = await hooks.migrateLegacyStoredScannerIndex(
+      await chrome.storage.local.get([
+        "iconoplasm_genes",
+        "iconoplasm_hash",
+        "iconoplasm_last_fetch",
+        "iconoplasm_scanner_index_storage_version",
+      ]),
+    )
+
+    assert.deepEqual(migrated.iconoplasm_genes.TP53, {
+      n: "tumor protein p53",
+      c: "#abcdef",
+      a: ["p53"],
+    })
+    assert.equal(storageState.get("iconoplasm_genes").TP53.p, undefined)
+    assert.equal(storageState.get("iconoplasm_scanner_index_storage_version"), 1)
+    assert.match(storageState.get("iconoplasm_scanner_hash"), /^legacy:/)
+    assert.equal(storageState.get("iconoplasm_last_fetch"), null)
+  } finally {
+    storageState.clear()
+  }
 })
 
 test("portrait fetch failures back off briefly but recover after the error TTL", async () => {
@@ -249,28 +300,23 @@ test("100 extension portraits share one failed primary decision per tab", async 
   }
 })
 
-test("schema-5 catalog assets remain inspectable canonical references in extension storage", async () => {
+test("the extension fetches the compact scanner artifact and never stores portrait references", async () => {
   const originalFetch = globalThis.fetch
   storageState.clear()
-  const sha = "a".repeat(64)
-  const asset = {
+  const scannerPayload = {
     schema_version: 1,
-    asset_sha256: sha,
-    renditions: {
-      full: {
-        path: `portraits/v1/aa/${sha}/full.webp`,
-        canonical_url: `https://iconoplasm.brinedew.bio/portraits/v1/aa/${sha}/full.webp`,
-      },
-      medium: {
-        path: `portraits/v1/aa/${sha}/medium.webp`,
-        canonical_url: `https://iconoplasm.brinedew.bio/portraits/v1/aa/${sha}/medium.webp`,
-      },
-      thumb: {
-        path: `portraits/v1/aa/${sha}/thumb.webp`,
-        canonical_url: `https://iconoplasm.brinedew.bio/portraits/v1/aa/${sha}/thumb.webp`,
+    contract_revision: 1,
+    generated_at: "2026-07-30T00:00:00.000Z",
+    gene_count: 1,
+    genes: {
+      A1BG: {
+        n: "alpha-1-B glycoprotein",
+        c: "#abcdef",
+        p: { asset_sha256: "a".repeat(64) },
       },
     },
   }
+  const scannerJson = JSON.stringify(scannerPayload)
   globalThis.fetch = async (input) => {
     const url = String(input || "")
     if (url.endsWith("/api/public/v1/catalog/manifest")) {
@@ -284,6 +330,7 @@ test("schema-5 catalog assets remain inspectable canonical references in extensi
         min_extension_version: "0.4.7",
         gene_count: 1,
         portrait_delivery: portraitDeliveryPolicy,
+        scanner_artifact: scannerManifest("schema-5-test", Buffer.byteLength(scannerJson, "utf8")),
         publication_aliases: {
           schema_version: 1,
           version: "v1-empty",
@@ -294,8 +341,11 @@ test("schema-5 catalog assets remain inspectable canonical references in extensi
         },
       })
     }
-    if (url.includes("catalog.schema-5-test.json")) {
-      return Response.json({ schema_version: 5, gene_count: 1, genes: [{ s: "A1BG", p: asset }] })
+    if (url.includes("scanner.schema-5-test.json")) {
+      return new Response(scannerJson, {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
     }
     throw new Error(`Unexpected URL: ${url}`)
   }
@@ -303,7 +353,12 @@ test("schema-5 catalog assets remain inspectable canonical references in extensi
   try {
     const result = await hooks.fetchGeneData({ forceArtifactRefresh: true })
     assert.equal(result.gene_count, 1)
-    assert.deepEqual(storageState.get("iconoplasm_genes").A1BG.p, asset)
+    assert.deepEqual(storageState.get("iconoplasm_genes").A1BG, {
+      n: "alpha-1-B glycoprotein",
+      c: "#abcdef",
+    })
+    assert.equal(storageState.get("iconoplasm_scanner_hash"), "schema-5-test")
+    assert.equal(storageState.get("iconoplasm_scanner_index_storage_version"), 1)
     assert.equal(storageState.get("iconoplasm_card_snapshot_version"), "ccv1-schema-5-test")
   } finally {
     globalThis.fetch = originalFetch
@@ -327,6 +382,7 @@ test("the extension rejects a catalog revision it was not packaged to understand
         min_extension_version: "1.0.0",
         gene_count: 1,
         portrait_delivery: portraitDeliveryPolicy,
+        scanner_artifact: scannerManifest("future-revision"),
         publication_aliases: {
           schema_version: 1,
           version: "v1-empty",
@@ -352,7 +408,7 @@ test("the extension rejects a catalog revision it was not packaged to understand
   }
 })
 
-test("alias-only manifest updates do not refetch the six-megabyte catalog artifact", async () => {
+test("alias-only manifest updates do not refetch the scanner artifact", async () => {
   const originalFetch = globalThis.fetch
   const baseGenes = Object.fromEntries(
     Object.keys({
@@ -368,6 +424,7 @@ test("alias-only manifest updates do not refetch the six-megabyte catalog artifa
   storageState.clear()
   storageState.set("iconoplasm_genes", baseGenes)
   storageState.set("iconoplasm_hash", "catalog-v2-portraits")
+  rememberScannerState("scanner-catalog-v2")
   storageState.set("iconoplasm_gene_count", 7)
   storageState.set("iconoplasm_schema_version", 5)
   storageState.set("iconoplasm_contract_revision", 1)
@@ -387,6 +444,7 @@ test("alias-only manifest updates do not refetch the six-megabyte catalog artifa
         catalog_hash: "catalog",
         artifact_url: "https://example.test/catalog.json",
         portrait_delivery: portraitDeliveryPolicy,
+        scanner_artifact: scannerManifest("scanner-catalog-v2"),
         artifact_schema_version: 5,
         artifact_contract_revision: 1,
         min_extension_version: "1.0.0",
@@ -424,6 +482,7 @@ test("mapping removals and specific cadherin labels update without refetching th
     CDH17: { n: "cadherin 17", a: ["HPT-1", "cadherin"] },
   })
   storageState.set("iconoplasm_hash", "catalog-v2-portraits")
+  rememberScannerState("scanner-catalog-v2")
   storageState.set("iconoplasm_gene_count", 3)
   storageState.set("iconoplasm_schema_version", 5)
   storageState.set("iconoplasm_contract_revision", 1)
@@ -440,6 +499,7 @@ test("mapping removals and specific cadherin labels update without refetching th
         catalog_hash: "catalog",
         artifact_url: "https://example.test/catalog.json",
         portrait_delivery: portraitDeliveryPolicy,
+        scanner_artifact: scannerManifest("scanner-catalog-v2"),
         artifact_schema_version: 5,
         artifact_contract_revision: 1,
         min_extension_version: "1.0.0",
@@ -473,11 +533,12 @@ test("mapping removals and specific cadherin labels update without refetching th
   }
 })
 
-test("an overlay contract retry does not turn into a full artifact download", async () => {
+test("an overlay contract retry does not turn into a scanner artifact download", async () => {
   const originalFetch = globalThis.fetch
   storageState.clear()
   storageState.set("iconoplasm_genes", { RELA: { n: "RELA", a: ["p65"] } })
   storageState.set("iconoplasm_hash", "catalog-v2-portraits")
+  rememberScannerState("scanner-catalog-v2")
   storageState.set("iconoplasm_gene_count", 1)
   storageState.set("iconoplasm_last_fetch", "2020-01-01T00:00:00.000Z")
   storageState.set("iconoplasm_schema_version", 5)
@@ -496,6 +557,7 @@ test("an overlay contract retry does not turn into a full artifact download", as
         catalog_hash: "catalog",
         artifact_url: "https://example.test/catalog.json",
         portrait_delivery: portraitDeliveryPolicy,
+        scanner_artifact: scannerManifest("scanner-catalog-v2"),
         artifact_schema_version: 5,
         artifact_contract_revision: 1,
         min_extension_version: "1.0.0",
@@ -528,6 +590,7 @@ test("a stale valid catalog returns immediately while one refresh runs in the ba
   storageState.clear()
   storageState.set("iconoplasm_genes", { TP53: { n: "tumor protein p53" } })
   storageState.set("iconoplasm_hash", "catalog-stale")
+  rememberScannerState("scanner-stale")
   storageState.set("iconoplasm_gene_count", 1)
   storageState.set("iconoplasm_last_fetch", "2020-01-01T00:00:00.000Z")
   storageState.set("iconoplasm_schema_version", 5)

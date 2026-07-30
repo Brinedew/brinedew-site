@@ -6,6 +6,10 @@ globalThis.IconoplasmCatalogContract = Object.freeze({
     schemaVersion: 5,
     revision: 1,
   }),
+  scanner: Object.freeze({
+    schemaVersion: 1,
+    revision: 1,
+  }),
   extension: Object.freeze({
     version: "0.4.11",
     minimumSupportedVersion: "0.4.10",

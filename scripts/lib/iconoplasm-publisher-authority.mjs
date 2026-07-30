@@ -47,12 +47,18 @@ export function readIconoplasmPublisherAuthority(repoRoot) {
   }
   const candidateSchemaVersion = Number(candidate.catalog_schema_version)
   const candidateContractRevision = Number(candidate.catalog_contract_revision)
+  const candidateScannerSchemaVersion = Number(candidate.scanner_schema_version)
+  const candidateScannerContractRevision = Number(candidate.scanner_contract_revision)
   if (
     Number(candidate.schema_version) !== 1 ||
     !Number.isInteger(candidateSchemaVersion) ||
     candidateSchemaVersion < 1 ||
     !Number.isInteger(candidateContractRevision) ||
-    candidateContractRevision < 1
+    candidateContractRevision < 1 ||
+    !Number.isInteger(candidateScannerSchemaVersion) ||
+    candidateScannerSchemaVersion < 1 ||
+    !Number.isInteger(candidateScannerContractRevision) ||
+    candidateScannerContractRevision < 1
   ) {
     throw new Error("Iconoplasm candidate contract is invalid")
   }
@@ -101,6 +107,8 @@ export function readIconoplasmPublisherAuthority(repoRoot) {
     minimumSupportedVersion,
     contractSchemaVersion,
     contractRevision,
+    candidateScannerSchemaVersion,
+    candidateScannerContractRevision,
     compatibilityContracts,
   }
 }
@@ -114,6 +122,10 @@ export function renderIconoplasmCatalogContractRuntime(release) {
     "  catalog: Object.freeze({",
     `    schemaVersion: ${release.contractSchemaVersion},`,
     `    revision: ${release.contractRevision},`,
+    "  }),",
+    "  scanner: Object.freeze({",
+    `    schemaVersion: ${release.candidateScannerSchemaVersion},`,
+    `    revision: ${release.candidateScannerContractRevision},`,
     "  }),",
     "  extension: Object.freeze({",
     `    version: ${JSON.stringify(release.version)},`,
