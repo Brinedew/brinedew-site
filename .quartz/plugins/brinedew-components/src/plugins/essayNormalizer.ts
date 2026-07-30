@@ -2,34 +2,6 @@ import { visit } from "unist-util-visit"
 import type { QuartzTransformerPlugin } from "@quartz-community/types"
 import type { Element, ElementContent, Parents, Root, RootContent, Text } from "hast"
 
-const BLOCK_TAGS = new Set([
-  "p",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "ul",
-  "ol",
-  "li",
-  "blockquote",
-  "pre",
-  "table",
-  "thead",
-  "tbody",
-  "tr",
-  "figure",
-  "figcaption",
-  "hr",
-  "section",
-  "article",
-  "div",
-  "dl",
-  "dt",
-  "dd",
-])
-
 const isElement = (node: RootContent | ElementContent | undefined): node is Element =>
   !!node && node.type === "element"
 
@@ -39,12 +11,74 @@ const isWhitespaceText = (node: RootContent | ElementContent | undefined): node 
 const isBreak = (node: RootContent | ElementContent | undefined): boolean =>
   isElement(node) && node.tagName === "br"
 
+const PHRASING_OK = new Set([
+  "a",
+  "abbr",
+  "b",
+  "br",
+  "cite",
+  "code",
+  "del",
+  "em",
+  "i",
+  "img",
+  "kbd",
+  "mark",
+  "s",
+  "small",
+  "span",
+  "strong",
+  "sub",
+  "sup",
+  "time",
+  "u",
+  "var",
+])
+
+function isPhrasingOnly(nodes: ElementContent[]): boolean {
+  return nodes.every((child) => {
+    if (child.type === "text") return true
+    if (child.type !== "element") return false
+    if (!PHRASING_OK.has(child.tagName)) return false
+    return isPhrasingOnly(child.children as ElementContent[])
+  })
+}
+
+function stripBreaks(children: ElementContent[]): ElementContent[] {
+  const next: ElementContent[] = []
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i]
+    if (!isBreak(child)) {
+      next.push(child)
+      continue
+    }
+    const prev = next[next.length - 1]
+    const following = children[i + 1]
+    if (isElement(prev) || isElement(following)) continue
+    if (isWhitespaceText(prev) || isWhitespaceText(following)) continue
+    const prevAsUnknown = prev as unknown
+    if (
+      prevAsUnknown &&
+      typeof prevAsUnknown === "object" &&
+      (prevAsUnknown as Text).type === "text"
+    ) {
+      const textNode = prevAsUnknown as Text
+      if (!textNode.value.endsWith(" ")) textNode.value += " "
+    } else {
+      next.push({ type: "text", value: " " })
+    }
+  }
+  return next
+}
+
 /**
- * Collapse Obsidian single-enter / double-enter noise into a single web-essay
- * block rhythm: strip hard <br> outside pre/code, drop empty paragraphs, and
- * keep one consistent separation between real blocks via CSS (not source breaks).
+ * Make uneven vertical rhythm structurally impossible:
+ * - Drop empty paragraphs / hard breaks (Obsidian noise).
+ * - Unwrap lone phrasing <p> inside <li> so list items are not p+ul sandwiches
+ *   with two independent margin boxes.
+ * Spacing between siblings is owned by CSS gap on the parent, not by child margins.
  */
-function normalizeSpacing(tree: Root): void {
+function normalizeStructure(tree: Root): void {
   visit(
     tree,
     "element",
@@ -52,7 +86,6 @@ function normalizeSpacing(tree: Root): void {
       if (!parent || index === undefined) return
       if (node.tagName === "pre" || node.tagName === "code") return
 
-      // Empty paragraphs from stray blank lines
       if (node.tagName === "p") {
         const meaningful = node.children.filter((child) => {
           if (child.type === "text") return child.value.trim().length > 0
@@ -63,38 +96,30 @@ function normalizeSpacing(tree: Root): void {
           parent.children.splice(index, 1)
           return
         }
-        node.children = meaningful as ElementContent[]
+        node.children = stripBreaks(meaningful as ElementContent[])
+
+        // Lone phrasing paragraph inside a list item → unwrap to bare phrasing.
+        // Prevents <li><p>title</p><ul>…</ul></li> from having an extra block box.
+        if (parent.type === "element" && parent.tagName === "li" && isPhrasingOnly(node.children)) {
+          parent.children.splice(index, 1, ...node.children)
+          return
+        }
       }
 
-      // Strip hard line breaks that remark-breaks injects for single Enter in Obsidian.
-      // Inside list items / paragraphs they become space; between blocks they disappear.
       if (node.children.some(isBreak)) {
-        const next: ElementContent[] = []
-        for (let i = 0; i < node.children.length; i++) {
-          const child = node.children[i]
-          if (!isBreak(child)) {
-            next.push(child)
-            continue
-          }
-          const prev = next[next.length - 1]
-          const following = node.children[i + 1]
-          const prevIsBlock = isElement(prev) && BLOCK_TAGS.has(prev.tagName)
-          const nextIsBlock = isElement(following) && BLOCK_TAGS.has(following.tagName)
-          if (prevIsBlock || nextIsBlock) continue
-          if (isWhitespaceText(prev) || isWhitespaceText(following)) continue
-          const prevAsUnknown = prev as unknown
-          if (
-            prevAsUnknown &&
-            typeof prevAsUnknown === "object" &&
-            (prevAsUnknown as Text).type === "text"
-          ) {
-            const textNode = prevAsUnknown as Text
-            if (!textNode.value.endsWith(" ")) textNode.value += " "
-          } else {
-            next.push({ type: "text", value: " " })
-          }
-        }
-        node.children = next
+        node.children = stripBreaks(node.children as ElementContent[])
+      }
+
+      // Drop pure-whitespace text nodes between block children so flex gap is the
+      // only separator (whitespace text can still create anonymous boxes).
+      if (
+        isElement(node) &&
+        (node.tagName === "ul" ||
+          node.tagName === "ol" ||
+          node.tagName === "li" ||
+          node.tagName === "blockquote")
+      ) {
+        node.children = node.children.filter((child) => !isWhitespaceText(child))
       }
     },
   )
@@ -113,7 +138,6 @@ function normalizeHeadings(tree: Root): void {
 
     if (!sawTitle) {
       sawTitle = true
-      // First heading is the page title — force H1 even if author used ##.
       node.tagName = "h1"
       return
     }
@@ -133,7 +157,7 @@ export const EssayNormalizer: QuartzTransformerPlugin = () => {
     htmlPlugins() {
       return [
         () => (tree: Root) => {
-          normalizeSpacing(tree)
+          normalizeStructure(tree)
           normalizeHeadings(tree)
         },
       ]
