@@ -40,15 +40,6 @@
       "commit": "local",
       "installedAt": "2026-07-30T16:23:55.262Z"
     },
-    "brinedew-footer": {
-      "source": {
-        "name": "brinedew-footer",
-        "repo": "./.quartz/local-plugins/brinedew-footer"
-      },
-      "resolved": "./.quartz/local-plugins/brinedew-footer",
-      "commit": "local",
-      "installedAt": "2026-07-30T16:23:55.265Z"
-    },
     "brinedew-tag-page": {
       "source": {
         "name": "brinedew-tag-page",
@@ -174,6 +165,15 @@
       "resolved": "https://github.com/quartz-community/fonts.git",
       "commit": "8be5be706d19ca34fa8e342327b78e11aff3d4f0",
       "installedAt": "2026-06-10T21:13:18.081Z"
+    },
+    "footer": {
+      "source": {
+        "name": "footer",
+        "repo": "./.quartz/local-plugins/footer"
+      },
+      "resolved": "./.quartz/local-plugins/footer",
+      "commit": "local",
+      "installedAt": "2026-07-30T16:29:54.069Z"
     },
     "github-flavored-markdown": {
       "source": "github:quartz-community/github-flavored-markdown",

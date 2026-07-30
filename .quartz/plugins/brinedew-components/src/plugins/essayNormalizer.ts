@@ -79,9 +79,15 @@ function normalizeSpacing(tree: Root): void {
         const nextIsBlock = isElement(following) && BLOCK_TAGS.has(following.tagName)
         if (prevIsBlock || nextIsBlock) continue
         if (isWhitespaceText(prev) || isWhitespaceText(following)) continue
-        if (prev && prev.type === "text" && !prev.value.endsWith(" ")) {
-          prev.value += " "
-        } else if (!prev || prev.type !== "text") {
+        const prevAsUnknown = prev as unknown
+        if (
+          prevAsUnknown &&
+          typeof prevAsUnknown === "object" &&
+          (prevAsUnknown as Text).type === "text"
+        ) {
+          const textNode = prevAsUnknown as Text
+          if (!textNode.value.endsWith(" ")) textNode.value += " "
+        } else {
           next.push({ type: "text", value: " " })
         }
       }
