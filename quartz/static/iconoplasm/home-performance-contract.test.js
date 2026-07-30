@@ -188,13 +188,26 @@ test("shared sidebar imports use the module content hash as their immutable cach
 
 test("each app page has exactly one account UI owner", async () => {
   const head = await readFile(headPath, "utf8")
+  const authSidebar = await readFile(authSidebarPath, "utf8")
 
   assert.match(head, /const isGeneguessr =/)
   assert.match(head, /const isSettings =/)
-  assert.match(
+  // B-693: reading pages never load Guest/Discord chrome. Apps and Settings
+  // mount their own sidebar stacks; Head no longer injects auth-sidebar.mjs.
+  assert.doesNotMatch(
     head,
-    /!isIconoplasm && !isGeneguessr && !isSettings && \(/,
-    "the generic auth sidebar must not load beside an app-owned account panel",
+    /auth-sidebar\.mjs/,
+    "Head must not inject the generic auth sidebar on any page",
+  )
+  assert.match(
+    authSidebar,
+    /isAccountChromePath/,
+    "auth-sidebar keeps an explicit account-chrome gate for defense in depth",
+  )
+  assert.match(
+    authSidebar,
+    /return false/,
+    "auth-sidebar account chrome stays off reading surfaces",
   )
 })
 
