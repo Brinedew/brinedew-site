@@ -2127,7 +2127,11 @@ var ContactForm_default = ContactForm;
 
 // src/components/PublicationDate.tsx
 var PublicationDate_default = (() => {
-  const PublicationDate = ({ cfg, fileData, displayClass }) => {
+  const PublicationDate = ({
+    cfg,
+    fileData,
+    displayClass
+  }) => {
     const slug2 = String(fileData.slug ?? "");
     const fm = fileData.frontmatter ?? {};
     const hasAuthorDate = fm.date !== void 0 || fm.published !== void 0 || fm.created !== void 0;
@@ -2454,46 +2458,50 @@ var isElement = (node) => !!node && node.type === "element";
 var isWhitespaceText = (node) => !!node && node.type === "text" && !node.value.trim();
 var isBreak = (node) => isElement(node) && node.tagName === "br";
 function normalizeSpacing(tree) {
-  visit(tree, "element", (node, index, parent) => {
-    if (!parent || index === void 0) return;
-    if (node.tagName === "pre" || node.tagName === "code") return;
-    if (node.tagName === "p") {
-      const meaningful = node.children.filter((child) => {
-        if (child.type === "text") return child.value.trim().length > 0;
-        if (isBreak(child)) return false;
-        return true;
-      });
-      if (meaningful.length === 0) {
-        parent.children.splice(index, 1);
-        return;
-      }
-      node.children = meaningful;
-    }
-    if (node.children.some(isBreak)) {
-      const next = [];
-      for (let i3 = 0; i3 < node.children.length; i3++) {
-        const child = node.children[i3];
-        if (!isBreak(child)) {
-          next.push(child);
-          continue;
+  visit(
+    tree,
+    "element",
+    (node, index, parent) => {
+      if (!parent || index === void 0) return;
+      if (node.tagName === "pre" || node.tagName === "code") return;
+      if (node.tagName === "p") {
+        const meaningful = node.children.filter((child) => {
+          if (child.type === "text") return child.value.trim().length > 0;
+          if (isBreak(child)) return false;
+          return true;
+        });
+        if (meaningful.length === 0) {
+          parent.children.splice(index, 1);
+          return;
         }
-        const prev = next[next.length - 1];
-        const following = node.children[i3 + 1];
-        const prevIsBlock = isElement(prev) && BLOCK_TAGS.has(prev.tagName);
-        const nextIsBlock = isElement(following) && BLOCK_TAGS.has(following.tagName);
-        if (prevIsBlock || nextIsBlock) continue;
-        if (isWhitespaceText(prev) || isWhitespaceText(following)) continue;
-        const prevAsUnknown = prev;
-        if (prevAsUnknown && typeof prevAsUnknown === "object" && prevAsUnknown.type === "text") {
-          const textNode = prevAsUnknown;
-          if (!textNode.value.endsWith(" ")) textNode.value += " ";
-        } else {
-          next.push({ type: "text", value: " " });
-        }
+        node.children = meaningful;
       }
-      node.children = next;
+      if (node.children.some(isBreak)) {
+        const next = [];
+        for (let i3 = 0; i3 < node.children.length; i3++) {
+          const child = node.children[i3];
+          if (!isBreak(child)) {
+            next.push(child);
+            continue;
+          }
+          const prev = next[next.length - 1];
+          const following = node.children[i3 + 1];
+          const prevIsBlock = isElement(prev) && BLOCK_TAGS.has(prev.tagName);
+          const nextIsBlock = isElement(following) && BLOCK_TAGS.has(following.tagName);
+          if (prevIsBlock || nextIsBlock) continue;
+          if (isWhitespaceText(prev) || isWhitespaceText(following)) continue;
+          const prevAsUnknown = prev;
+          if (prevAsUnknown && typeof prevAsUnknown === "object" && prevAsUnknown.type === "text") {
+            const textNode = prevAsUnknown;
+            if (!textNode.value.endsWith(" ")) textNode.value += " ";
+          } else {
+            next.push({ type: "text", value: " " });
+          }
+        }
+        node.children = next;
+      }
     }
-  });
+  );
 }
 function normalizeHeadings(tree) {
   let sawTitle = false;
