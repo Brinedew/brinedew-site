@@ -130,6 +130,11 @@ yargs(hideBin(process.argv))
                 default: false,
                 describe: "skip plugins whose directory already exists",
               },
+              "enabled-only": {
+                boolean: true,
+                default: false,
+                describe: "install only plugins enabled in quartz.config.yaml",
+              },
               "dry-run": {
                 boolean: true,
                 default: false,
@@ -142,6 +147,7 @@ yargs(hideBin(process.argv))
                 fromConfig: argv.fromConfig,
                 latest: argv.latest,
                 clean: argv.clean,
+                enabledOnly: argv.enabledOnly,
                 dryRun: argv.dryRun,
                 concurrency: argv.concurrency,
               })
