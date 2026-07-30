@@ -48,6 +48,7 @@ test("the registry owns every intentionally quota-limited public route class", (
     ["GET", "/api/public/v1/schema", "schema", 60],
     ["GET", "/api/public/v1/catalog/manifest", "catalog_manifest", 60],
     ["GET", "/api/public/v1/catalog/catalog.deadbeef.json", "catalog_artifact", 120],
+    ["GET", "/api/public/v1/catalog/scanner.deadbeef.json", "catalog_scanner", 120],
     ["GET", "/api/public/v1/dumps/catalog.deadbeef.jsonl", "catalog_dump", 60],
     ["GET", "/api/public/v1/gallery", "gallery", 60],
     ["GET", "/api/public/v1/genes/search?q=TP53", "gene_search", 120],

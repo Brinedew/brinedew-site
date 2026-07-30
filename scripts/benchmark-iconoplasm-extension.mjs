@@ -42,17 +42,18 @@ async function fetchCatalogGeneMap() {
     throw new Error(`Catalog manifest fetch failed: HTTP ${manifestResp.status}`)
   }
   const manifest = await manifestResp.json()
-  const artifactUrl =
-    manifest.artifact_url ||
-    `${host}/api/public/v1/catalog/catalog.${manifest.catalog_hash}.json?v=${encodeURIComponent(String(manifest.build_version || manifest.catalog_hash || ""))}`
+  const artifactUrl = String(manifest.scanner_artifact?.artifact_url || "")
+  if (!artifactUrl) throw new Error("Catalog manifest is missing the compact scanner artifact")
   const artifactResp = await fetch(artifactUrl)
   if (!artifactResp.ok) {
     throw new Error(`Catalog artifact fetch failed: HTTP ${artifactResp.status}`)
   }
   const artifact = await artifactResp.json()
   const geneMap = {}
-  for (const gene of Array.isArray(artifact.genes) ? artifact.genes : []) {
-    const symbol = String(gene?.s || "")
+  for (const [rawSymbol, gene] of Object.entries(
+    artifact.genes && typeof artifact.genes === "object" ? artifact.genes : {},
+  )) {
+    const symbol = String(rawSymbol || "")
       .trim()
       .toUpperCase()
     if (!symbol) continue

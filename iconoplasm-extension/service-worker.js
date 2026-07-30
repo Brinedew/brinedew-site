@@ -43,11 +43,20 @@ const REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION = Number(
   IconoCatalogContract.catalog?.schemaVersion,
 )
 const REQUIRED_PUBLISHED_CATALOG_CONTRACT_REVISION = Number(IconoCatalogContract.catalog?.revision)
+const REQUIRED_SCANNER_ARTIFACT_SCHEMA_VERSION = Number(IconoCatalogContract.scanner?.schemaVersion)
+const REQUIRED_SCANNER_ARTIFACT_CONTRACT_REVISION = Number(IconoCatalogContract.scanner?.revision)
+const SCANNER_INDEX_STORAGE_VERSION = 1
+const SCANNER_ARTIFACT_MAX_BYTES = 3 * 1024 * 1024
+const SCANNER_INDEX_MAX_BYTES = SCANNER_ARTIFACT_MAX_BYTES + 128 * 1024
 if (
   !Number.isInteger(REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION) ||
   REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION < 1 ||
   !Number.isInteger(REQUIRED_PUBLISHED_CATALOG_CONTRACT_REVISION) ||
-  REQUIRED_PUBLISHED_CATALOG_CONTRACT_REVISION < 1
+  REQUIRED_PUBLISHED_CATALOG_CONTRACT_REVISION < 1 ||
+  !Number.isInteger(REQUIRED_SCANNER_ARTIFACT_SCHEMA_VERSION) ||
+  REQUIRED_SCANNER_ARTIFACT_SCHEMA_VERSION < 1 ||
+  !Number.isInteger(REQUIRED_SCANNER_ARTIFACT_CONTRACT_REVISION) ||
+  REQUIRED_SCANNER_ARTIFACT_CONTRACT_REVISION < 1
 ) {
   throw new Error("Iconoplasm catalog contract runtime is invalid")
 }
@@ -159,6 +168,10 @@ async function getStatus() {
     "iconoplasm_last_fetch",
     "iconoplasm_schema_version",
     "iconoplasm_contract_revision",
+    "iconoplasm_scanner_hash",
+    "iconoplasm_scanner_schema_version",
+    "iconoplasm_scanner_contract_revision",
+    "iconoplasm_scanner_index_storage_version",
     "iconoplasm_alias_overlay_version",
     "iconoplasm_card_snapshot_version",
     "iconoplasm_contract_error",
@@ -170,6 +183,9 @@ async function getStatus() {
     lastFetch: result.iconoplasm_last_fetch || null,
     schemaVersion: result.iconoplasm_schema_version || null,
     contractRevision: result.iconoplasm_contract_revision || null,
+    scannerHash: result.iconoplasm_scanner_hash || null,
+    scannerSchemaVersion: result.iconoplasm_scanner_schema_version || null,
+    scannerContractRevision: result.iconoplasm_scanner_contract_revision || null,
     aliasOverlayVersion: result.iconoplasm_alias_overlay_version || null,
     cardSnapshotVersion: result.iconoplasm_card_snapshot_version || null,
     contractError: result.iconoplasm_contract_error || null,
@@ -246,6 +262,10 @@ async function getStoredGeneSnapshot() {
     "iconoplasm_last_fetch",
     "iconoplasm_schema_version",
     "iconoplasm_contract_revision",
+    "iconoplasm_scanner_hash",
+    "iconoplasm_scanner_schema_version",
+    "iconoplasm_scanner_contract_revision",
+    "iconoplasm_scanner_index_storage_version",
     "iconoplasm_portrait_delivery",
     "iconoplasm_card_snapshot_version",
     "iconoplasm_alias_overlay_version",
@@ -302,12 +322,31 @@ function normalizePublishedManifest(rawManifest) {
   const publicationAliases = IconoPublicationAliasOverlay.normalizePublishedAliasOverlay(
     manifest.publication_aliases,
   )
+  const scannerArtifact =
+    manifest.scanner_artifact && typeof manifest.scanner_artifact === "object"
+      ? manifest.scanner_artifact
+      : null
+  const scannerSchemaVersion = Number.parseInt(String(scannerArtifact?.schema_version ?? 0), 10)
+  const scannerContractRevision = Number.parseInt(
+    String(scannerArtifact?.contract_revision ?? 0),
+    10,
+  )
+  const scannerBuildVersion = String(scannerArtifact?.build_version || "").trim()
+  const scannerArtifactUrl = String(scannerArtifact?.artifact_url || "").trim()
+  const scannerByteSize = Number(scannerArtifact?.byte_size || 0)
   if (
     !currentHash ||
     (!filename && !artifactUrl) ||
     !Number.isFinite(schemaVersion) ||
     !Number.isFinite(contractRevision) ||
-    !publicationAliases
+    !publicationAliases ||
+    !scannerBuildVersion ||
+    !scannerArtifactUrl ||
+    !Number.isInteger(scannerSchemaVersion) ||
+    !Number.isInteger(scannerContractRevision) ||
+    !Number.isInteger(scannerByteSize) ||
+    scannerByteSize < 1 ||
+    scannerByteSize > SCANNER_ARTIFACT_MAX_BYTES
   ) {
     return null
   }
@@ -322,6 +361,13 @@ function normalizePublishedManifest(rawManifest) {
     min_extension_version: minExtensionVersion || currentExtensionVersion(),
     publication_aliases: publicationAliases,
     card_snapshot_version: String(manifest.card_snapshot_version || "").trim() || null,
+    scanner_artifact: {
+      schema_version: scannerSchemaVersion,
+      contract_revision: scannerContractRevision,
+      build_version: scannerBuildVersion,
+      artifact_url: scannerArtifactUrl,
+      byte_size: scannerByteSize,
+    },
   }
 }
 
@@ -357,6 +403,10 @@ async function invalidateStoredPublishedSnapshot({ code, message, minExtensionVe
     "iconoplasm_last_fetch",
     "iconoplasm_schema_version",
     "iconoplasm_contract_revision",
+    "iconoplasm_scanner_hash",
+    "iconoplasm_scanner_schema_version",
+    "iconoplasm_scanner_contract_revision",
+    "iconoplasm_scanner_index_storage_version",
     "iconoplasm_portrait_delivery",
     "iconoplasm_alias_overlay_version",
     "iconoplasm_alias_overlay_applied",
@@ -365,19 +415,27 @@ async function invalidateStoredPublishedSnapshot({ code, message, minExtensionVe
 }
 
 async function ensureFreshGeneData() {
-  const stored = await getStoredGeneSnapshot()
+  const stored = await migrateLegacyStoredScannerIndex(await getStoredGeneSnapshot())
   const geneCount = getStoredGeneCount(stored.iconoplasm_genes)
   const hasPublishedCatalogSchema =
     Number(stored.iconoplasm_schema_version || 0) === REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION &&
     Number(stored.iconoplasm_contract_revision || 0) ===
       REQUIRED_PUBLISHED_CATALOG_CONTRACT_REVISION &&
     Boolean(stored.iconoplasm_portrait_delivery)
+  const hasScannerIndexSchema =
+    Number(stored.iconoplasm_scanner_schema_version || 0) ===
+      REQUIRED_SCANNER_ARTIFACT_SCHEMA_VERSION &&
+    Number(stored.iconoplasm_scanner_contract_revision || 0) ===
+      REQUIRED_SCANNER_ARTIFACT_CONTRACT_REVISION &&
+    Number(stored.iconoplasm_scanner_index_storage_version || 0) === SCANNER_INDEX_STORAGE_VERSION
   const hasContractError = Boolean(stored.iconoplasm_contract_error)
-  const needsArtifactRebuild = geneCount === 0 || !hasPublishedCatalogSchema
+  const needsArtifactRebuild =
+    geneCount === 0 || !hasPublishedCatalogSchema || !hasScannerIndexSchema
   const needsRefresh =
     hasContractError || needsArtifactRebuild || isStaleFetch(stored.iconoplasm_last_fetch)
 
-  const hasUsableCache = geneCount > 0 && hasPublishedCatalogSchema && !hasContractError
+  const hasUsableCache =
+    geneCount > 0 && hasPublishedCatalogSchema && hasScannerIndexSchema && !hasContractError
   if (hasUsableCache) {
     // Stale-while-revalidate is the page-start contract. A valid local catalog is
     // immediately useful; network freshness must never hold every tab hostage.
@@ -391,8 +449,8 @@ async function ensureFreshGeneData() {
 
   if (needsRefresh) {
     // A manifest-overlay contract error is retried against the manifest only.
-    // The immutable artifact is already known-good and must not become a 6 MB
-    // retry penalty just because a small alias overlay was rejected.
+    // The immutable scanner artifact is already known-good and must not become
+    // a whole-index retry penalty just because a small alias overlay was rejected.
     await refreshGeneData({ forceArtifactRefresh: needsArtifactRebuild })
   }
 
@@ -673,31 +731,85 @@ async function fetchManifest() {
   return normalizePublishedManifest(await manifestResp.json())
 }
 
-function artifactUrl(manifest) {
-  if (manifest?.artifact_url) return manifest.artifact_url
-  if (!manifest?.filename) return null
-  const cacheKey = encodeURIComponent(String(manifest.current_hash || manifest.filename))
-  return `${API_PUBLIC}/catalog/${manifest.filename}?v=${cacheKey}`
+function jsonByteLength(value) {
+  return new TextEncoder().encode(JSON.stringify(value)).byteLength
 }
 
-function projectPublishedArtifactGenes(artifact) {
+function normalizeScannerIndex(rawGenes) {
   const lookup = {}
-  for (const gene of artifact.genes) {
-    const symbol = String(gene.s || "").toUpperCase()
+  const entries = Array.isArray(rawGenes)
+    ? rawGenes.map((gene) => [gene?.s, gene])
+    : Object.entries(rawGenes && typeof rawGenes === "object" ? rawGenes : {})
+  for (const [rawSymbol, gene] of entries) {
+    const symbol = String(rawSymbol || "")
+      .trim()
+      .toUpperCase()
     if (!symbol) continue
+    if (!gene || typeof gene !== "object") continue
     const entry = {}
     if (gene.c) entry.c = gene.c
     if (gene.n) entry.n = gene.n
     if (gene.u) entry.u = gene.u
     if (Array.isArray(gene.a) && gene.a.length) entry.a = gene.a
-    if (gene.p && typeof gene.p === "object") entry.p = gene.p
     lookup[symbol] = entry
   }
   return lookup
 }
 
-async function fetchPublishedArtifact(manifest) {
-  const url = artifactUrl(manifest)
+async function migrateLegacyStoredScannerIndex(stored) {
+  const snapshot = stored && typeof stored === "object" ? stored : {}
+  const genes = snapshot.iconoplasm_genes
+  if (!genes || typeof genes !== "object") return snapshot
+  const alreadyCurrent =
+    Number(snapshot.iconoplasm_scanner_index_storage_version || 0) ===
+      SCANNER_INDEX_STORAGE_VERSION &&
+    Number(snapshot.iconoplasm_scanner_schema_version || 0) ===
+      REQUIRED_SCANNER_ARTIFACT_SCHEMA_VERSION &&
+    Number(snapshot.iconoplasm_scanner_contract_revision || 0) ===
+      REQUIRED_SCANNER_ARTIFACT_CONTRACT_REVISION
+  if (alreadyCurrent) return snapshot
+
+  // ARCHITECTURE FENCE [IPD-008]: 0.4.11 stored portrait references inside the
+  // page scanner map. Replace that item atomically with its compact projection
+  // before any tab can receive the legacy multi-megabyte payload.
+  const compactGenes = normalizeScannerIndex(genes)
+  const compactBytes = jsonByteLength(compactGenes)
+  if (compactBytes > SCANNER_INDEX_MAX_BYTES) {
+    await chrome.storage.local.remove([
+      "iconoplasm_genes",
+      "iconoplasm_gene_count",
+      "iconoplasm_scanner_hash",
+      "iconoplasm_scanner_schema_version",
+      "iconoplasm_scanner_contract_revision",
+      "iconoplasm_scanner_index_storage_version",
+    ])
+    return {
+      ...snapshot,
+      iconoplasm_genes: null,
+      iconoplasm_gene_count: 0,
+      iconoplasm_scanner_hash: null,
+      iconoplasm_scanner_schema_version: null,
+      iconoplasm_scanner_contract_revision: null,
+      iconoplasm_scanner_index_storage_version: null,
+    }
+  }
+  const migration = {
+    iconoplasm_genes: compactGenes,
+    iconoplasm_gene_count: Object.keys(compactGenes).length,
+    // Force an immediate background fetch of the authoritative scanner artifact.
+    // The compact legacy projection is safe to serve while that refresh runs.
+    iconoplasm_last_fetch: null,
+    iconoplasm_scanner_hash: `legacy:${String(snapshot.iconoplasm_hash || "unknown")}`,
+    iconoplasm_scanner_schema_version: REQUIRED_SCANNER_ARTIFACT_SCHEMA_VERSION,
+    iconoplasm_scanner_contract_revision: REQUIRED_SCANNER_ARTIFACT_CONTRACT_REVISION,
+    iconoplasm_scanner_index_storage_version: SCANNER_INDEX_STORAGE_VERSION,
+  }
+  await chrome.storage.local.set(migration)
+  return { ...snapshot, ...migration }
+}
+
+async function fetchPublishedScannerArtifact(manifest) {
+  const url = manifest?.scanner_artifact?.artifact_url
   if (!url) return { error: "missing_url", artifact: null }
   const response = await fetchWithTimeout(
     url,
@@ -709,11 +821,39 @@ async function fetchPublishedArtifact(manifest) {
     ARTIFACT_FETCH_TIMEOUT_MS,
   )
   if (!response.ok) return { error: `http_${response.status}`, artifact: null }
-  const artifact = await response.json()
-  if (!artifact || !Array.isArray(artifact.genes)) {
+  const rawArtifact = await response.text()
+  const artifactBytes = new TextEncoder().encode(rawArtifact).byteLength
+  if (
+    artifactBytes > SCANNER_ARTIFACT_MAX_BYTES ||
+    artifactBytes !== Number(manifest.scanner_artifact.byte_size)
+  ) {
+    return { error: "invalid_artifact_size", artifact: null }
+  }
+  let artifact
+  try {
+    artifact = JSON.parse(rawArtifact)
+  } catch (_error) {
     return { error: "invalid_artifact", artifact: null }
   }
-  return { error: "", artifact }
+  if (
+    !artifact ||
+    Number(artifact.schema_version || 0) !== REQUIRED_SCANNER_ARTIFACT_SCHEMA_VERSION ||
+    Number(artifact.contract_revision || 0) !== REQUIRED_SCANNER_ARTIFACT_CONTRACT_REVISION ||
+    !artifact.genes ||
+    Array.isArray(artifact.genes) ||
+    typeof artifact.genes !== "object"
+  ) {
+    return { error: "invalid_artifact", artifact: null }
+  }
+  const genes = normalizeScannerIndex(artifact.genes)
+  const geneCount = Object.keys(genes).length
+  if (
+    geneCount !== Number(artifact.gene_count || 0) ||
+    (manifest.gene_count != null && geneCount !== Number(manifest.gene_count))
+  ) {
+    return { error: "invalid_gene_count", artifact: null }
+  }
+  return { error: "", artifact: { ...artifact, genes } }
 }
 
 async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
@@ -741,6 +881,22 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
       })
       return null
     }
+    if (
+      manifest.scanner_artifact.schema_version !== REQUIRED_SCANNER_ARTIFACT_SCHEMA_VERSION ||
+      manifest.scanner_artifact.contract_revision !== REQUIRED_SCANNER_ARTIFACT_CONTRACT_REVISION
+    ) {
+      await invalidateStoredPublishedSnapshot({
+        code: CONTRACT_ERROR_INCOMPATIBLE_ARTIFACT,
+        minExtensionVersion: manifest.min_extension_version,
+        message:
+          "Published scanner artifact contract does not match the schema and revision required by this extension.",
+      })
+      console.error("[Iconoplasm] Published scanner artifact contract is incompatible:", {
+        schemaVersion: manifest.scanner_artifact.schema_version,
+        contractRevision: manifest.scanner_artifact.contract_revision,
+      })
+      return null
+    }
 
     if (compareSemver(currentExtensionVersion(), manifest.min_extension_version) < 0) {
       await invalidateStoredPublishedSnapshot({
@@ -758,9 +914,11 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
       return null
     }
 
-    const stored = await getStoredGeneSnapshot()
+    const stored = await migrateLegacyStoredScannerIndex(await getStoredGeneSnapshot())
     const storedGeneCount = getStoredGeneCount(stored.iconoplasm_genes)
-    const artifactChanged = stored.iconoplasm_hash !== manifest.current_hash
+    const artifactChanged =
+      String(stored.iconoplasm_scanner_hash || "") !==
+      String(manifest.scanner_artifact.build_version || "")
     const aliasOverlayChanged =
       String(stored.iconoplasm_alias_overlay_version || "") !==
       String(manifest.publication_aliases.version || "")
@@ -773,6 +931,11 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
         iconoplasm_last_fetch: fetchedAt,
         iconoplasm_schema_version: manifest.schema_version,
         iconoplasm_contract_revision: manifest.contract_revision,
+        iconoplasm_hash: manifest.current_hash,
+        iconoplasm_scanner_hash: manifest.scanner_artifact.build_version,
+        iconoplasm_scanner_schema_version: manifest.scanner_artifact.schema_version,
+        iconoplasm_scanner_contract_revision: manifest.scanner_artifact.contract_revision,
+        iconoplasm_scanner_index_storage_version: SCANNER_INDEX_STORAGE_VERSION,
         iconoplasm_portrait_delivery: manifest.portrait_delivery,
         iconoplasm_min_extension_version: manifest.min_extension_version,
         iconoplasm_card_snapshot_version: manifest.card_snapshot_version,
@@ -788,22 +951,27 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
     let previousApplied = stored.iconoplasm_alias_overlay_applied || {}
 
     if (needsArtifact) {
-      const { artifact, error } = await fetchPublishedArtifact(manifest)
+      const { artifact, error } = await fetchPublishedScannerArtifact(manifest)
       if (!artifact) {
-        if (error === "missing_url" || error === "invalid_artifact") {
+        if (
+          error === "missing_url" ||
+          error === "invalid_artifact" ||
+          error === "invalid_artifact_size" ||
+          error === "invalid_gene_count"
+        ) {
           await invalidateStoredPublishedSnapshot({
             code: CONTRACT_ERROR_INVALID_MANIFEST,
             minExtensionVersion: manifest.min_extension_version,
             message:
               error === "missing_url"
-                ? "Published catalog manifest is missing a usable artifact URL or filename."
-                : "Published catalog artifact is missing the genes array required by the extension runtime.",
+                ? "Published catalog manifest is missing a usable scanner artifact URL."
+                : "Published scanner artifact is invalid or exceeds the extension storage budget.",
           })
         }
-        console.error("[Iconoplasm] Artifact fetch failed:", error)
+        console.error("[Iconoplasm] Scanner artifact fetch failed:", error)
         return null
       }
-      lookup = projectPublishedArtifactGenes(artifact)
+      lookup = artifact.genes
       geneCount = artifact.gene_count || Object.keys(lookup).length
       previousApplied = {}
     }
@@ -822,10 +990,24 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
       console.error("[Iconoplasm] Alias overlay validation failed:", overlayResult.errors)
       return null
     }
+    const scannerIndexBytes = jsonByteLength(overlayResult.genes)
+    if (scannerIndexBytes > SCANNER_INDEX_MAX_BYTES) {
+      await rememberContractError({
+        code: CONTRACT_ERROR_INVALID_MANIFEST,
+        minExtensionVersion: manifest.min_extension_version,
+        message: `Published scanner index exceeds its ${SCANNER_INDEX_MAX_BYTES}-byte storage budget.`,
+      })
+      console.error("[Iconoplasm] Scanner index storage budget exceeded:", scannerIndexBytes)
+      return null
+    }
 
     await chrome.storage.local.set({
       iconoplasm_genes: overlayResult.genes,
       iconoplasm_hash: manifest.current_hash,
+      iconoplasm_scanner_hash: manifest.scanner_artifact.build_version,
+      iconoplasm_scanner_schema_version: manifest.scanner_artifact.schema_version,
+      iconoplasm_scanner_contract_revision: manifest.scanner_artifact.contract_revision,
+      iconoplasm_scanner_index_storage_version: SCANNER_INDEX_STORAGE_VERSION,
       iconoplasm_gene_count: geneCount,
       iconoplasm_last_fetch: fetchedAt,
       iconoplasm_schema_version: manifest.schema_version,
@@ -859,6 +1041,12 @@ if (globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__) {
     portraitSourceState,
     portraitErrorTtlMs: PORTRAIT_DATA_URL_ERROR_TTL_MS,
     normalizePublishedManifest,
+    normalizeScannerIndex,
+    migrateLegacyStoredScannerIndex,
+    fetchPublishedScannerArtifact,
+    jsonByteLength,
+    scannerArtifactMaxBytes: SCANNER_ARTIFACT_MAX_BYTES,
+    scannerIndexMaxBytes: SCANNER_INDEX_MAX_BYTES,
     fetchGeneData,
     fetchWithTimeout,
     refreshGeneData,

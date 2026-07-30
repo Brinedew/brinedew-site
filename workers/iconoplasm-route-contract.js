@@ -122,6 +122,16 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     rateLimit: rateLimit("catalog_artifact", 120),
   }),
   contract({
+    id: "public_scanner_artifact",
+    match: pattern(/^\/api\/public\/v1\/catalog\/scanner\.([^/]+)\.json$/),
+    methods: GET,
+    auth: "public",
+    cache: "immutable",
+    budgetFamily: "public_catalog",
+    gatewayHandler: "public_scanner_artifact",
+    rateLimit: rateLimit("catalog_scanner", 120),
+  }),
+  contract({
     id: "public_catalog_dump",
     match: pattern(/^\/api\/public\/v1\/dumps\/catalog\.([^/]+)\.jsonl$/),
     methods: GET,

@@ -281,9 +281,9 @@
     {
       "id": "IPD-008",
       "title": "Anonymous startup and extension hover use the published read plane",
-      "decision": "Anonymous homepage startup avoids auth, settings, inventory, and admin probes; authenticated startup is gated by a non-authoritative session-presence hint. Signed-out dossier visits persist across the full 19,023-gene browser-local shelf; an authenticated page session merges at most 200 pending symbols and retains the remainder for later sessions. Extension hover batches read immutable published card artifacts and persists a bounded cache keyed by card snapshot version.",
-      "reason": "The shoutout risk is sustained daily request and D1 consumption, not an implausible per-user burst. Moving immutable reads to publication artifacts and amortizing them across browsing sessions keeps lurkers and power users from multiplying stateful work by page navigation.",
-      "change_control": "Anonymous bootstrap, session-presence semantics, catalog and card publication metadata, public batch projection, extension cache invalidation, tests, instructions, and this runbook must change atomically. The readable marker must never carry identity or authority, and transient public-read failures must remain retryable.",
+      "decision": "Anonymous homepage startup avoids auth, settings, inventory, and admin probes; authenticated startup is gated by a non-authoritative session-presence hint. Signed-out dossier visits persist across the full 19,023-gene browser-local shelf; an authenticated page session merges at most 200 pending symbols and retains the remainder for later sessions. Extension pages receive a separately versioned scanner artifact capped at 3 MiB with no portrait references. Visible and hovered genes hydrate immutable published card details into a 4 MiB revision-keyed cache.",
+      "reason": "The shoutout risk is sustained daily request and D1 consumption, while the browser risk is cloning cold portrait metadata into every tab and crossing Chromium's 10 MiB storage quota. Separating the compact matcher from bounded on-demand card detail keeps both public infrastructure work and per-user browser cost proportional to real use.",
+      "change_control": "Anonymous bootstrap, session-presence semantics, catalog, scanner, and card publication metadata, public batch projection, extension scanner migration, storage budgets, cache invalidation, tests, instructions, and this runbook must change atomically. The readable marker must never carry identity or authority, transient public-read failures must remain retryable, and portrait references must not return to the per-tab scanner map.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-673",
       "additional_required_marker_categories": [],
@@ -310,6 +310,11 @@
         },
         {
           "category": "source",
+          "file": "iconoplasm-extension/service-worker.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "source",
           "file": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
           "token": "ARCHITECTURE FENCE [IPD-008]"
         },
@@ -321,6 +326,11 @@
         {
           "category": "test",
           "file": "iconoplasm-extension/content-detail-cache.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "test",
+          "file": "iconoplasm-extension/service-worker.test.js",
           "token": "ARCHITECTURE FENCE [IPD-008]"
         },
         {
