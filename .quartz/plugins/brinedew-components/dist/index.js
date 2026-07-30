@@ -2483,9 +2483,11 @@ function normalizeSpacing(tree) {
         const nextIsBlock = isElement(following) && BLOCK_TAGS.has(following.tagName);
         if (prevIsBlock || nextIsBlock) continue;
         if (isWhitespaceText(prev) || isWhitespaceText(following)) continue;
-        if (prev && prev.type === "text" && !prev.value.endsWith(" ")) {
-          prev.value += " ";
-        } else if (!prev || prev.type !== "text") {
+        const prevAsUnknown = prev;
+        if (prevAsUnknown && typeof prevAsUnknown === "object" && prevAsUnknown.type === "text") {
+          const textNode = prevAsUnknown;
+          if (!textNode.value.endsWith(" ")) textNode.value += " ";
+        } else {
           next.push({ type: "text", value: " " });
         }
       }

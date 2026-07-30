@@ -299,9 +299,10 @@ plugins:
     layout:
       position: afterBody
       priority: 10
+  # Name must remain "footer" — config-loader special-cases extractPluginName === "footer".
   - source:
-      name: brinedew-footer
-      repo: ./.quartz/local-plugins/brinedew-footer
+      name: footer
+      repo: ./.quartz/local-plugins/footer
     enabled: true
     options:
       credit: Brinedew
