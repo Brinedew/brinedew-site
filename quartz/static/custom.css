@@ -268,9 +268,17 @@ article p {
   letter-spacing: 0.01em;
 }
 
-/* Obsidian → web essay spacing: one rhythm regardless of source line breaks. */
+/*
+ * Essay spacing: ONE vertical rhythm on top-level blocks only.
+ * Do not stack sibling margin-top on top of p/li/ul margin-bottom — that is
+ * what made nested scenario lists look uneven (double/triple gaps).
+ */
+.markdown-preview-view.markdown-rendered > * {
+  margin-block: 0;
+}
+
 .markdown-preview-view.markdown-rendered > * + * {
-  margin-top: 0.95em;
+  margin-top: 0.9em;
 }
 
 .markdown-preview-view.markdown-rendered > h1,
@@ -279,8 +287,7 @@ article p {
 .markdown-preview-view.markdown-rendered > h4,
 .markdown-preview-view.markdown-rendered > h5,
 .markdown-preview-view.markdown-rendered > h6 {
-  margin-top: 1.65em;
-  margin-bottom: 0.55em;
+  margin-top: 1.55em;
 }
 
 .markdown-preview-view.markdown-rendered > h1:first-child,
@@ -292,22 +299,35 @@ article p {
 .markdown-preview-view.markdown-rendered > table,
 .markdown-preview-view.markdown-rendered > pre,
 .markdown-preview-view.markdown-rendered > blockquote {
-  margin-top: 1.25em;
-  margin-bottom: 1.25em;
-}
-
-.markdown-preview-view.markdown-rendered > ul,
-.markdown-preview-view.markdown-rendered > ol {
-  margin-top: 0.85em;
-  margin-bottom: 0.85em;
+  margin-top: 1.2em;
 }
 
 .markdown-preview-view.markdown-rendered > hr {
-  margin: 1.75em 0;
+  margin-top: 1.6em;
+  margin-bottom: 0;
 }
 
-.markdown-preview-view.markdown-rendered p + p {
-  margin-top: 0.75em;
+/* Kill the global article p bottom margin inside essays so it cannot stack. */
+.markdown-preview-view.markdown-rendered p {
+  margin-block: 0;
+}
+
+/* Nested lists: even, tight — scenario titles + sub-bullets. */
+.markdown-preview-view.markdown-rendered li {
+  margin-block: 0.35em;
+}
+
+.markdown-preview-view.markdown-rendered li > p {
+  margin-block: 0;
+}
+
+.markdown-preview-view.markdown-rendered li > ul,
+.markdown-preview-view.markdown-rendered li > ol {
+  margin-block: 0.35em;
+}
+
+.markdown-preview-view.markdown-rendered li li {
+  margin-block: 0.2em;
 }
 
 .draft-warning-wrap {
