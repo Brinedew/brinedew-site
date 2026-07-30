@@ -45,55 +45,59 @@ const isBreak = (node: RootContent | ElementContent | undefined): boolean =>
  * keep one consistent separation between real blocks via CSS (not source breaks).
  */
 function normalizeSpacing(tree: Root): void {
-  visit(tree, "element", (node: Element, index: number | undefined, parent: Parents | undefined) => {
-    if (!parent || index === undefined) return
-    if (node.tagName === "pre" || node.tagName === "code") return
+  visit(
+    tree,
+    "element",
+    (node: Element, index: number | undefined, parent: Parents | undefined) => {
+      if (!parent || index === undefined) return
+      if (node.tagName === "pre" || node.tagName === "code") return
 
-    // Empty paragraphs from stray blank lines
-    if (node.tagName === "p") {
-      const meaningful = node.children.filter((child) => {
-        if (child.type === "text") return child.value.trim().length > 0
-        if (isBreak(child)) return false
-        return true
-      })
-      if (meaningful.length === 0) {
-        parent.children.splice(index, 1)
-        return
+      // Empty paragraphs from stray blank lines
+      if (node.tagName === "p") {
+        const meaningful = node.children.filter((child) => {
+          if (child.type === "text") return child.value.trim().length > 0
+          if (isBreak(child)) return false
+          return true
+        })
+        if (meaningful.length === 0) {
+          parent.children.splice(index, 1)
+          return
+        }
+        node.children = meaningful as ElementContent[]
       }
-      node.children = meaningful as ElementContent[]
-    }
 
-    // Strip hard line breaks that remark-breaks injects for single Enter in Obsidian.
-    // Inside list items / paragraphs they become space; between blocks they disappear.
-    if (node.children.some(isBreak)) {
-      const next: ElementContent[] = []
-      for (let i = 0; i < node.children.length; i++) {
-        const child = node.children[i]
-        if (!isBreak(child)) {
-          next.push(child)
-          continue
+      // Strip hard line breaks that remark-breaks injects for single Enter in Obsidian.
+      // Inside list items / paragraphs they become space; between blocks they disappear.
+      if (node.children.some(isBreak)) {
+        const next: ElementContent[] = []
+        for (let i = 0; i < node.children.length; i++) {
+          const child = node.children[i]
+          if (!isBreak(child)) {
+            next.push(child)
+            continue
+          }
+          const prev = next[next.length - 1]
+          const following = node.children[i + 1]
+          const prevIsBlock = isElement(prev) && BLOCK_TAGS.has(prev.tagName)
+          const nextIsBlock = isElement(following) && BLOCK_TAGS.has(following.tagName)
+          if (prevIsBlock || nextIsBlock) continue
+          if (isWhitespaceText(prev) || isWhitespaceText(following)) continue
+          const prevAsUnknown = prev as unknown
+          if (
+            prevAsUnknown &&
+            typeof prevAsUnknown === "object" &&
+            (prevAsUnknown as Text).type === "text"
+          ) {
+            const textNode = prevAsUnknown as Text
+            if (!textNode.value.endsWith(" ")) textNode.value += " "
+          } else {
+            next.push({ type: "text", value: " " })
+          }
         }
-        const prev = next[next.length - 1]
-        const following = node.children[i + 1]
-        const prevIsBlock = isElement(prev) && BLOCK_TAGS.has(prev.tagName)
-        const nextIsBlock = isElement(following) && BLOCK_TAGS.has(following.tagName)
-        if (prevIsBlock || nextIsBlock) continue
-        if (isWhitespaceText(prev) || isWhitespaceText(following)) continue
-        const prevAsUnknown = prev as unknown
-        if (
-          prevAsUnknown &&
-          typeof prevAsUnknown === "object" &&
-          (prevAsUnknown as Text).type === "text"
-        ) {
-          const textNode = prevAsUnknown as Text
-          if (!textNode.value.endsWith(" ")) textNode.value += " "
-        } else {
-          next.push({ type: "text", value: " " })
-        }
+        node.children = next
       }
-      node.children = next
-    }
-  })
+    },
+  )
 }
 
 /**

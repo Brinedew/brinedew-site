@@ -3,7 +3,11 @@ import { formatDate, getDate } from "./Date"
 import { QuartzPluginData } from "../plugins/vfile"
 
 export default (() => {
-  const PublicationDate: QuartzComponent = ({ cfg, fileData, displayClass }: QuartzComponentProps) => {
+  const PublicationDate: QuartzComponent = ({
+    cfg,
+    fileData,
+    displayClass,
+  }: QuartzComponentProps) => {
     const slug = String(fileData.slug ?? "")
     const fm = (fileData.frontmatter ?? {}) as Record<string, unknown>
     const hasAuthorDate =
@@ -24,8 +28,7 @@ export default (() => {
       const defaultDateType =
         (fileData as QuartzPluginData).defaultDateType ??
         ((cfg as { defaultDateType?: QuartzPluginData["defaultDateType"] }).defaultDateType as
-          | QuartzPluginData["defaultDateType"]
-          | undefined)
+          QuartzPluginData["defaultDateType"] | undefined)
       if (!defaultDateType) return null
       date = getDate({
         ...(fileData as QuartzPluginData),
