@@ -1,13 +1,13 @@
+import { checkAnonymousRateLimit, RATE_LIMIT_OUTCOME } from "./anonymous-rate-limit.js"
+
 /**
  * Contact form endpoint for the brinedew.bio About page.
  *
  * Anonymous submission from a visitor -> Cloudflare Email Sending -> contact@brinedew.bio
  * -> Email Routing rule -> brinedew@proton.me inbox.
  *
- * This is intentionally a self-contained module: Turnstile verification, per-IP rate
- * limiting, input sanitization, and email composition all live here so the contact
- * feature has zero coupling to the Iconoplasm or GeneGuessr domains that share this
- * stateful worker.
+ * Input validation and email composition remain feature-local. Anonymous abuse
+ * control reuses the stateful Worker's native public rate-limit boundary.
  *
  * It is wired into the same wrangler.toml as the rest of the stateful worker
  * (the one allowed internal stateful worker) and is only reachable through the
@@ -16,56 +16,12 @@
 
 const CONTACT_BODY_MAX = 5000
 const CONTACT_EMAIL_MAX = 254
-const RATE_LIMIT_PER_MIN = 5
-const RATE_WINDOW_MS = 60_000
-
-// Per-isolate Map keyed by `${routeKey}:${ip}`. Mirrors the pattern the artist-blacklist
-// endpoint uses; this is fine because the contact form is low-traffic and the per-isolate
-// state is naturally bounded by the number of unique visitors in a minute.
-const rlBuckets = new Map()
-
-function rateLimit(request, routeKey, maxPerMin) {
-  const ip = request.headers.get("CF-Connecting-IP") || "unknown"
-  const key = `${routeKey}:${ip}`
-  const now = Date.now()
-  const item = rlBuckets.get(key)
-  if (!item || now - item.start > RATE_WINDOW_MS) {
-    const fresh = { start: now, count: 1 }
-    rlBuckets.set(key, fresh)
-    return {
-      retryAfterSeconds: null,
-      headers: {
-        "X-RateLimit-Limit": String(maxPerMin),
-        "X-RateLimit-Period": String(Math.floor(RATE_WINDOW_MS / 1000)),
-        "X-RateLimit-Remaining": String(Math.max(0, maxPerMin - fresh.count)),
-        "X-RateLimit-Reset": String(Math.ceil(RATE_WINDOW_MS / 1000)),
-      },
-    }
-  }
-  item.count += 1
-  const resetSeconds = Math.max(1, Math.ceil((RATE_WINDOW_MS - (now - item.start)) / 1000))
-  if (item.count > maxPerMin) {
-    return {
-      retryAfterSeconds: resetSeconds,
-      headers: {
-        "X-RateLimit-Limit": String(maxPerMin),
-        "X-RateLimit-Period": String(Math.floor(RATE_WINDOW_MS / 1000)),
-        "X-RateLimit-Remaining": "0",
-        "X-RateLimit-Reset": String(resetSeconds),
-        "Retry-After": String(resetSeconds),
-      },
-    }
-  }
-  return {
-    retryAfterSeconds: null,
-    headers: {
-      "X-RateLimit-Limit": String(maxPerMin),
-      "X-RateLimit-Period": String(Math.floor(RATE_WINDOW_MS / 1000)),
-      "X-RateLimit-Remaining": String(Math.max(0, maxPerMin - item.count)),
-      "X-RateLimit-Reset": String(resetSeconds),
-    },
-  }
-}
+const CONTACT_RATE_LIMIT_POLICY = Object.freeze({
+  id: "contact",
+  binding: "PUBLIC_RATE_LIMIT_5",
+  limit: 5,
+  period: 60,
+})
 
 // Mirror the artist-blacklist sanitizer. Empty input becomes null so the
 // caller can distinguish "missing" from "present and short".
@@ -118,11 +74,27 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
     return jsonError("Method not allowed", 405, { Allow: "POST", ...corsHeaders })
   }
 
-  const rl = rateLimit(request, "contact", RATE_LIMIT_PER_MIN)
-  if (rl.retryAfterSeconds !== null) {
+  const rateLimit = await checkAnonymousRateLimit(
+    request,
+    env?.[CONTACT_RATE_LIMIT_POLICY.binding],
+    CONTACT_RATE_LIMIT_POLICY,
+    "contact",
+  )
+  const responseHeaders = {
+    ...Object.fromEntries(rateLimit.headers),
+    ...corsHeaders,
+  }
+  if (rateLimit.outcome === RATE_LIMIT_OUTCOME.UNAVAILABLE) {
+    console.error("[contact-form] rate limit unavailable", {
+      binding: CONTACT_RATE_LIMIT_POLICY.binding,
+      error:
+        rateLimit.error instanceof Error ? rateLimit.error.message : String(rateLimit.error || ""),
+    })
+    return jsonError("Contact form protection is temporarily unavailable.", 503, responseHeaders)
+  }
+  if (rateLimit.outcome === RATE_LIMIT_OUTCOME.LIMITED) {
     return jsonError("Too many submissions. Try again in a minute.", 429, {
-      ...rl.headers,
-      ...corsHeaders,
+      ...responseHeaders,
     })
   }
 
@@ -130,27 +102,24 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
   try {
     payload = await request.json()
   } catch {
-    return jsonError("Invalid JSON", 400, { ...rl.headers, ...corsHeaders })
+    return jsonError("Invalid JSON", 400, responseHeaders)
   }
 
   // Honeypot: silently accept and drop. If the hidden field is filled, it's a bot
   // and we don't want to give it a feedback signal.
   const honeypot = sanitizeText(payload?.website || "", 255) || ""
   if (honeypot) {
-    return jsonOk({ queued: false, ignored: true }, { ...rl.headers, ...corsHeaders })
+    return jsonOk({ queued: false, ignored: true }, responseHeaders)
   }
 
   const fromEmail = sanitizeText(payload?.email || "", CONTACT_EMAIL_MAX)
   const body = sanitizeText(payload?.message || payload?.body || "", CONTACT_BODY_MAX)
 
   if (!fromEmail || !isValidEmail(fromEmail)) {
-    return jsonError("Enter a valid email address.", 422, { ...rl.headers, ...corsHeaders })
+    return jsonError("Enter a valid email address.", 422, responseHeaders)
   }
   if (!body || body.length < 3) {
-    return jsonError("Write a message of at least 3 characters.", 422, {
-      ...rl.headers,
-      ...corsHeaders,
-    })
+    return jsonError("Write a message of at least 3 characters.", 422, responseHeaders)
   }
 
   // We do NOT include the visitor's address in the `from` field of the email we
@@ -165,10 +134,7 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
   })
 
   if (!env.CONTACT_EMAIL || typeof env.CONTACT_EMAIL.send !== "function") {
-    return jsonError("Contact email is not configured on the server.", 503, {
-      ...rl.headers,
-      ...corsHeaders,
-    })
+    return jsonError("Contact email is not configured on the server.", 503, responseHeaders)
   }
 
   let sendResult
@@ -180,10 +146,7 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
       text: emailText,
     })
   } catch (error) {
-    return jsonError("Failed to send the message. Please try again later.", 502, {
-      ...rl.headers,
-      ...corsHeaders,
-    })
+    return jsonError("Failed to send the message. Please try again later.", 502, responseHeaders)
   }
 
   // Mirror the message to KV so we have a durable record. The KV namespace
@@ -219,6 +182,6 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
       queued: true,
       messageId: sendResult?.messageId || null,
     },
-    { ...rl.headers, ...corsHeaders },
+    responseHeaders,
   )
 }

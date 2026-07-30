@@ -22,13 +22,13 @@ test("route policy is method-aware and leaves private and unrelated traffic alon
       id: resolveIconoplasmRateLimitPolicy(request("/api/public/v1/metadata"))?.id,
       binding: resolveIconoplasmRateLimitPolicy(request("/api/public/v1/metadata"))?.binding,
     },
-    { id: "metadata", binding: "ICONOPLASM_RATE_LIMIT_60" },
+    { id: "metadata", binding: "PUBLIC_RATE_LIMIT_60" },
   )
   assert.equal(
     resolveIconoplasmRateLimitPolicy(
       request("/api/iconoplasm/artist-blacklist-submissions", { method: "POST" }),
     )?.binding,
-    "ICONOPLASM_RATE_LIMIT_5",
+    "PUBLIC_RATE_LIMIT_5",
   )
   assert.equal(
     resolveIconoplasmRateLimitPolicy(request("/api/public/v1/genes/batch", { method: "GET" })),
@@ -76,7 +76,7 @@ test("allowed direct requests consume a native binding and receive truthful poli
   const response = await worker.fetch(
     request("/api/public/v1/gallery?order=votes"),
     {
-      ICONOPLASM_RATE_LIMIT_60: {
+      PUBLIC_RATE_LIMIT_60: {
         async limit({ key }) {
           keys.push(key)
           return { success: true }
@@ -107,7 +107,7 @@ test("a denied request returns 429 before entering the stateful runtime", async 
   const response = await worker.fetch(
     request("/api/public/v1/media/TP53"),
     {
-      ICONOPLASM_RATE_LIMIT_120: {
+      PUBLIC_RATE_LIMIT_120: {
         async limit() {
           return { success: false }
         },
@@ -130,7 +130,7 @@ test("a missing or failed native binding fails closed", async () => {
   assert.equal((await missing.response.json()).code, "ICONOPLASM_RATE_LIMIT_UNAVAILABLE")
 
   const failed = await enforceIconoplasmRateLimit(request("/api/public/v1/genes/search?q=TP53"), {
-    ICONOPLASM_RATE_LIMIT_120: {
+    PUBLIC_RATE_LIMIT_120: {
       async limit() {
         throw new Error("binding unavailable")
       },
@@ -155,17 +155,17 @@ test("production and staging declare isolated native quota bindings on the route
   assert.deepEqual(
     production.map(({ name, simple }) => [name, simple.limit, simple.period]),
     [
-      ["ICONOPLASM_RATE_LIMIT_5", 5, 60],
-      ["ICONOPLASM_RATE_LIMIT_60", 60, 60],
-      ["ICONOPLASM_RATE_LIMIT_120", 120, 60],
+      ["PUBLIC_RATE_LIMIT_5", 5, 60],
+      ["PUBLIC_RATE_LIMIT_60", 60, 60],
+      ["PUBLIC_RATE_LIMIT_120", 120, 60],
     ],
   )
   assert.deepEqual(
     staging.map(({ name, simple }) => [name, simple.limit, simple.period]),
     [
-      ["ICONOPLASM_RATE_LIMIT_5", 5, 60],
-      ["ICONOPLASM_RATE_LIMIT_60", 60, 60],
-      ["ICONOPLASM_RATE_LIMIT_120", 120, 60],
+      ["PUBLIC_RATE_LIMIT_5", 5, 60],
+      ["PUBLIC_RATE_LIMIT_60", 60, 60],
+      ["PUBLIC_RATE_LIMIT_120", 120, 60],
     ],
   )
   const namespaceIds = [...production, ...staging].map(({ namespace_id }) => namespace_id)

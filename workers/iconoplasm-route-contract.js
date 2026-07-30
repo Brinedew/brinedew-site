@@ -34,7 +34,7 @@ function rateLimit(id, limit) {
     id,
     limit,
     period: 60,
-    binding: `ICONOPLASM_RATE_LIMIT_${limit}`,
+    binding: `PUBLIC_RATE_LIMIT_${limit}`,
   })
 }
 
