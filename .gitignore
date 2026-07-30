@@ -121,3 +121,7 @@ iconoplasm-extension/.wxt-*/
 /*.png
 /*.jpg
 !logo-mask.png
+
+# Local plugin install leftovers
+.quartz/local-plugins/**/node_modules/
+
