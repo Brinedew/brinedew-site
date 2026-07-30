@@ -269,65 +269,53 @@ article p {
 }
 
 /*
- * Essay spacing: ONE vertical rhythm on top-level blocks only.
- * Do not stack sibling margin-top on top of p/li/ul margin-bottom — that is
- * what made nested scenario lists look uneven (double/triple gaps).
+ * Essay spacing is parent-owned gap, not child margins.
+ * Children cannot stack, collapse, or invent extra air — only the parent gap runs.
+ * Heading "more air above" is padding (still one box), never margin-top+margin-bottom pairs.
  */
+.markdown-preview-view.markdown-rendered {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9em;
+}
+
 .markdown-preview-view.markdown-rendered > * {
-  margin-block: 0;
+  margin: 0;
 }
 
-.markdown-preview-view.markdown-rendered > * + * {
-  margin-top: 0.9em;
+.markdown-preview-view.markdown-rendered > :is(h1, h2, h3, h4, h5, h6) {
+  padding-top: 0.55em;
 }
 
-.markdown-preview-view.markdown-rendered > h1,
-.markdown-preview-view.markdown-rendered > h2,
-.markdown-preview-view.markdown-rendered > h3,
-.markdown-preview-view.markdown-rendered > h4,
-.markdown-preview-view.markdown-rendered > h5,
-.markdown-preview-view.markdown-rendered > h6 {
-  margin-top: 1.55em;
-}
-
-.markdown-preview-view.markdown-rendered > h1:first-child,
-.markdown-preview-view.markdown-rendered > h2:first-child {
-  margin-top: 0;
-}
-
-.markdown-preview-view.markdown-rendered > figure,
-.markdown-preview-view.markdown-rendered > table,
-.markdown-preview-view.markdown-rendered > pre,
-.markdown-preview-view.markdown-rendered > blockquote {
-  margin-top: 1.2em;
+.markdown-preview-view.markdown-rendered > :is(h1, h2):first-child {
+  padding-top: 0;
 }
 
 .markdown-preview-view.markdown-rendered > hr {
-  margin-top: 1.6em;
-  margin-bottom: 0;
+  padding-top: 0.5em;
 }
 
-/* Kill the global article p bottom margin inside essays so it cannot stack. */
-.markdown-preview-view.markdown-rendered p {
-  margin-block: 0;
+/* Global article p { margin-bottom } cannot reach into essays. */
+.markdown-preview-view.markdown-rendered :is(p, ul, ol, li, blockquote, figure, pre, table) {
+  margin: 0;
 }
 
-/* Nested lists: even, tight — scenario titles + sub-bullets. */
+.markdown-preview-view.markdown-rendered :is(ul, ol) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
 .markdown-preview-view.markdown-rendered li {
-  margin-block: 0.35em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  align-items: flex-start;
 }
 
-.markdown-preview-view.markdown-rendered li > p {
-  margin-block: 0;
-}
-
-.markdown-preview-view.markdown-rendered li > ul,
-.markdown-preview-view.markdown-rendered li > ol {
-  margin-block: 0.35em;
-}
-
-.markdown-preview-view.markdown-rendered li li {
-  margin-block: 0.2em;
+.markdown-preview-view.markdown-rendered li > :is(ul, ol) {
+  width: 100%;
+  gap: 0.28em;
 }
 
 .draft-warning-wrap {
