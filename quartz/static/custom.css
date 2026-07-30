@@ -298,8 +298,35 @@ article p {
   padding-top: 0.5em;
 }
 
-/* Kill every global margin that could stack inside essays (p, img, li, …). */
+/* Kill every global margin that could stack inside essays. */
 .markdown-preview-view.markdown-rendered :is(p, ul, ol, li, blockquote, figure, pre, table, img) {
+  margin: 0;
+}
+
+/* Figures are top-level essay blocks; caption sits under the image via gap. */
+.markdown-preview-view.markdown-rendered figure.image-with-caption,
+.markdown-preview-view.markdown-rendered figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35em;
+  width: 100%;
+}
+
+.markdown-preview-view.markdown-rendered figure > img,
+.markdown-preview-view.markdown-rendered figure > picture {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0;
+}
+
+.markdown-preview-view.markdown-rendered figure > figcaption {
+  text-align: center;
+  font-size: 0.82em;
+  color: var(--darkgray);
+  text-wrap: balance;
+  max-width: 34rem;
   margin: 0;
 }
 
