@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Build Preview
     steps:
-      # Bump actions/checkout @v6 -> @v7, actions/cache @v5 -> @v6,
+      # Bump actions/checkout @v6 -> @v7 and
       # actions/upload-artifact @v6 -> @v7 (2026 current majors).
       - uses: actions/checkout@v7
         with:
