@@ -86,10 +86,7 @@ export default (() => {
                 <ul>
                   {sections[section].map((page) => (
                     <li>
-                      <a
-                        class="internal"
-                        href={resolveRelative(fileData.slug!, page.slug!)}
-                      >
+                      <a class="internal" href={resolveRelative(fileData.slug!, page.slug!)}>
                         {page.frontmatter?.title ?? page.slug}
                       </a>
                     </li>
@@ -100,10 +97,7 @@ export default (() => {
           )}
           <section>
             <h2>
-              <a
-                class="internal"
-                href={resolveRelative(fileData.slug!, sectionTargets.apps)}
-              >
+              <a class="internal" href={resolveRelative(fileData.slug!, sectionTargets.apps)}>
                 {sectionTitles.apps}
               </a>
             </h2>

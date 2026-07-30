@@ -2301,7 +2301,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
         })
     }
 
-    function submitVote(voteValue, sourceBox) {
+    function submitVote(voteValue, sourceControl) {
       // Source: C:\Users\Admin\.codex\skills\optimize\SKILL.md (Optimistic UI) +
       // C:\Users\Admin\.codex\skills\polish\SKILL.md (Interaction states).
       // Keep the selected vote lit on click, not after the network round-trip. This is shared
@@ -2367,7 +2367,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
               state.authenticated = false
               notifySnapshot()
               if (typeof cfg.onAuthRequired === "function") {
-                cfg.onAuthRequired(err, sourceBox || box)
+                cfg.onAuthRequired(err, sourceControl || box)
               }
               return
             }
@@ -2402,13 +2402,13 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
         if (upBtn) {
           upBtn.addEventListener("click", function (event) {
             event.stopPropagation()
-            submitVote(1, viewBox)
+            submitVote(1, event.currentTarget)
           })
         }
         if (downBtn) {
           downBtn.addEventListener("click", function (event) {
             event.stopPropagation()
-            submitVote(-1, viewBox)
+            submitVote(-1, event.currentTarget)
           })
         }
       })(boxes[listenerIndex])

@@ -8,8 +8,9 @@ type ContactFormOptions = {
 /**
  * Site-wide contact form for the brinedew.bio About page.
  *
- * Plain HTML form. Posts JSON to `/api/contact` on the stateful worker and
- * shows inline success / error status without a full page navigation.
+ * Progressive-enhancement form. Without JavaScript it posts standard form
+ * data to `/api/contact`; with JavaScript it posts JSON and shows status
+ * inline without a full-page navigation.
  * No bot challenge, no captcha, no third-party widget — the worker
  * applies a per-IP rate limit and a hidden honeypot field, which is the
  * right amount of friction for a personal site contact form.
@@ -33,7 +34,13 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
 
     return (
       <div class="contact-form-card" data-contact-form-root data-endpoint={endpoint}>
-        <form class="contact-form" data-contact-form novalidate>
+        <form
+          class="contact-form"
+          data-contact-form
+          action={endpoint}
+          method="post"
+          acceptCharset="UTF-8"
+        >
           <label class="contact-form__field">
             <span class="contact-form__label">Email</span>
             <input
@@ -53,6 +60,7 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
               class="contact-form__textarea"
               name="message"
               required
+              minLength={3}
               rows={6}
               maxLength={5000}
             ></textarea>
@@ -72,11 +80,7 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
           </div>
 
           <div class="contact-form__actions">
-            <button
-              class="contact-form__submit"
-              type="submit"
-              data-contact-form-submit
-            >
+            <button class="contact-form__submit" type="submit" data-contact-form-submit>
               Send
             </button>
           </div>
@@ -88,6 +92,39 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
             aria-live="polite"
             role="status"
           ></p>
+
+          <p
+            id="contact-sent"
+            class="contact-form__status contact-form__fallback-status"
+            data-tone="ok"
+            role="status"
+          >
+            Thanks — your message is on its way to my inbox.
+          </p>
+          <p
+            id="contact-invalid"
+            class="contact-form__status contact-form__fallback-status"
+            data-tone="error"
+            role="status"
+          >
+            Check your email address and write a message of at least 3 characters.
+          </p>
+          <p
+            id="contact-limited"
+            class="contact-form__status contact-form__fallback-status"
+            data-tone="error"
+            role="status"
+          >
+            Too many submissions. Try again in a minute.
+          </p>
+          <p
+            id="contact-failed"
+            class="contact-form__status contact-form__fallback-status"
+            data-tone="error"
+            role="status"
+          >
+            The message could not be sent. Please try again later.
+          </p>
         </form>
       </div>
     )
@@ -207,18 +244,24 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
 .contact-form__status[data-tone="error"] {
   color: oklch(50% 0.18 25);
 }
+
+.contact-form__fallback-status:not(:target) {
+  display: none;
+}
+
+.contact-form[data-contact-form-enhanced="true"] .contact-form__fallback-status {
+  display: none;
+}
 `
 
-  // SPA-safe init. Quartz's SPA navigation calls afterDOMLoaded on every page
-  // change, so this wires up the submit handler fresh each time without needing
-  // a MutationObserver. The script is small and idempotent.
+  // Quartz dispatches `nav` after the initial render and every SPA navigation,
+  // including browser Back/Forward after micromorph has replaced the page body.
   Component.afterDOMLoaded = `
 (function () {
   function attach(root) {
-    if (!root || root.__contactFormWired === true) return;
+    if (!root) return;
     var form = root.querySelector("[data-contact-form]");
-    if (!form) return;
-    root.__contactFormWired = true;
+    if (!form || form.dataset.contactFormEnhanced === "true") return;
     var endpoint = root.getAttribute("data-endpoint") || "/api/contact";
     var status = root.querySelector("[data-contact-form-status]");
     var submit = root.querySelector("[data-contact-form-submit]");
@@ -229,8 +272,30 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
       status.setAttribute("data-tone", tone || "neutral");
     }
 
+    var fallbackId =
+      window.location && typeof window.location.hash === "string"
+        ? window.location.hash.slice(1)
+        : "";
+    if (
+      fallbackId === "contact-sent" ||
+      fallbackId === "contact-invalid" ||
+      fallbackId === "contact-limited" ||
+      fallbackId === "contact-failed"
+    ) {
+      var fallback = root.querySelector("#" + fallbackId);
+      if (fallback) {
+        setStatus(fallback.textContent.trim(), fallback.getAttribute("data-tone") || "neutral");
+      }
+    }
+    form.dataset.contactFormEnhanced = "true";
+
     form.addEventListener("submit", function (event) {
       event.preventDefault();
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+
       var emailInput = form.querySelector("input[name='email']");
       var messageInput = form.querySelector("textarea[name='message']");
       var honeypot = form.querySelector("input[name='website']");
@@ -288,33 +353,16 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
     });
   }
 
-  // Attach to anything currently on the page, and re-attach on Quartz's
-  // SPA navigation events. The form is rendered only on pages that include
-  // the ContactForm component, but Quartz replaces the body on each nav.
   function init() {
     var roots = document.querySelectorAll("[data-contact-form-root]");
     for (var i = 0; i < roots.length; i++) attach(roots[i]);
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
-
-  // Quartz SPA nav fires a popstate on browser back/forward; emit a custom
-  // event the form can listen to. We hook into history.pushState too.
-  var origPush = history.pushState;
-  history.pushState = function () {
-    origPush.apply(this, arguments);
-    window.dispatchEvent(new Event("quartz:nav"));
-  };
-  window.addEventListener("popstate", function () { window.dispatchEvent(new Event("quartz:nav")); });
-  window.addEventListener("quartz:nav", init);
+  document.addEventListener("nav", init);
 })();
 `
 
   return Component
 }
 
-export default (ContactForm as unknown) as QuartzComponentConstructor<ContactFormOptions>
+export default ContactForm as unknown as QuartzComponentConstructor<ContactFormOptions>

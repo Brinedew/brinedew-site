@@ -11,7 +11,15 @@ import iconoplasmFontContract from "../shared/iconoplasm-card/font-contract.json
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, "..")
+const extensionRoot = path.join(repoRoot, "iconoplasm-extension")
+const extensionOnly = process.argv.includes("--extension-only")
 const publisherRelease = assertIconoplasmPublisherAuthority(repoRoot)
+
+function selectedOutputs(outputs) {
+  if (!extensionOnly) return outputs
+  const prefix = extensionRoot + path.sep
+  return outputs.filter((output) => output === extensionRoot || output.startsWith(prefix))
+}
 
 const targets = [
   {
@@ -106,20 +114,21 @@ const bundledTargets = [
     source: path.join(repoRoot, "shared", "iconoplasm-card", "lit-archival-card.js"),
     outputs: [
       path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "lit-archival-card.js"),
-      path.join(repoRoot, "iconoplasm-extension", "generated", "lit-archival-card.js"),
     ],
     format: "esm",
   },
 ]
 
 async function syncTarget({ source, prefix = "", outputs }) {
+  const outputsToWrite = selectedOutputs(outputs)
+  if (outputsToWrite.length === 0) return
   const content = await readFile(source, "utf8")
   const relativeSource = path.relative(repoRoot, source).replaceAll("\\", "/")
   const banner = source.endsWith(".css")
     ? `/* GENERATED FILE. Edit ${relativeSource}${prefix ? " and shared/iconoplasm-card/font-contract.json" : ""} and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\n`
     : `/* GENERATED FILE. Edit ${path.relative(repoRoot, source).replaceAll("\\", "/")} and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\n`
 
-  for (const output of outputs) {
+  for (const output of outputsToWrite) {
     await mkdir(path.dirname(output), { recursive: true })
     await writeFile(output, banner + prefix + content, "utf8")
   }
@@ -128,9 +137,11 @@ async function syncTarget({ source, prefix = "", outputs }) {
 await Promise.all(targets.map(syncTarget))
 
 async function syncBinaryTarget({ source, outputs }) {
+  const outputsToWrite = selectedOutputs(outputs)
+  if (outputsToWrite.length === 0) return
   const content = await readFile(source)
 
-  for (const output of outputs) {
+  for (const output of outputsToWrite) {
     await mkdir(path.dirname(output), { recursive: true })
     await writeFile(output, content)
   }
@@ -139,6 +150,8 @@ async function syncBinaryTarget({ source, outputs }) {
 await Promise.all(binaryTargets.map(syncBinaryTarget))
 
 async function bundleTarget({ source, outputs, format = "esm", globalName }) {
+  const outputsToWrite = selectedOutputs(outputs)
+  if (outputsToWrite.length === 0) return
   const result = await esbuild.build({
     entryPoints: [source],
     bundle: true,
@@ -156,7 +169,7 @@ async function bundleTarget({ source, outputs, format = "esm", globalName }) {
     path.relative(repoRoot, source).replaceAll("\\", "/") +
     " and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\n"
 
-  for (const output of outputs) {
+  for (const output of outputsToWrite) {
     await mkdir(path.dirname(output), { recursive: true })
     await writeFile(output, banner + outputFile.text, "utf8")
   }
@@ -203,4 +216,6 @@ async function syncSidebarShellImportVersions() {
   }
 }
 
-await syncSidebarShellImportVersions()
+if (!extensionOnly) {
+  await syncSidebarShellImportVersions()
+}

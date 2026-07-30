@@ -1200,7 +1200,7 @@ test("request inbox UI uses server read state and bounded live refresh", () => {
   const css = readFileSync(new URL("../quartz/static/custom.css", import.meta.url), "utf8")
   const head = readFileSync(new URL("../quartz/components/Head.tsx", import.meta.url), "utf8")
 
-  assert.match(app, /import \{ createRequestInbox \} from "\.\/request-inbox\.js"/)
+  assert.match(app, /import \{ createRequestInbox \} from "\.\/request-inbox\.js\?v=[^"]+"/)
   assert.match(inbox, /\/api\/iconoplasm\/notifications\?limit=50/)
   assert.match(inbox, /\/api\/iconoplasm\/notifications\/read/)
   assert.match(inbox, /refreshTimer = window\.setTimeout/)

@@ -1,12 +1,21 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { classNames } from "../util/lang"
 
-const IconoplasmPageSwitcher: QuartzComponent = ({ fileData, displayClass }: QuartzComponentProps) => {
+const IconoplasmPageSwitcher: QuartzComponent = ({
+  fileData,
+  displayClass,
+}: QuartzComponentProps) => {
   const slug = fileData.slug ?? ""
   const isIconoplasmPage = slug.startsWith("apps/iconoplasm")
   if (!isIconoplasmPage) return null
   const activeTab =
-    slug === "" || slug === "/" ? "archive" : slug.startsWith("clans") ? "clans" : slug.startsWith("wiki/Tutorial") ? "tutorial" : undefined
+    slug === "" || slug === "/"
+      ? "archive"
+      : slug.startsWith("clans")
+        ? "clans"
+        : slug.startsWith("wiki/Tutorial")
+          ? "tutorial"
+          : undefined
 
   return (
     <nav
