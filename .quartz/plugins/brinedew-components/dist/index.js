@@ -2368,6 +2368,9 @@ function visit(tree, testOrVisitor, visitorOrReverse, maybeReverse) {
 }
 
 // src/plugins/imageCaptions.ts
+function isWhitespaceText(node) {
+  return node.type === "text" && !node.value.trim();
+}
 var ImageCaptions = () => {
   return {
     name: "brinedew-image-captions",
@@ -2380,11 +2383,13 @@ var ImageCaptions = () => {
             (node, index, parent) => {
               if (!parent || index === void 0) return;
               if (node.tagName !== "p") return;
-              if (node.children.length !== 1) return;
-              const img = node.children[0];
+              const meaningful = node.children.filter((child) => !isWhitespaceText(child));
+              if (meaningful.length !== 1) return;
+              const img = meaningful[0];
               if (img.type !== "element" || img.tagName !== "img") return;
-              const alt = typeof img.properties.alt === "string" ? img.properties.alt : "";
+              const alt = typeof img.properties.alt === "string" ? img.properties.alt.trim() : "";
               if (!alt) return;
+              img.properties.alt = "";
               const figcaption = {
                 type: "element",
                 tagName: "figcaption",
@@ -2394,7 +2399,7 @@ var ImageCaptions = () => {
               const figure = {
                 type: "element",
                 tagName: "figure",
-                properties: {},
+                properties: { className: ["image-with-caption"] },
                 children: [img, figcaption]
               };
               parent.children.splice(index, 1, figure);
@@ -2428,7 +2433,7 @@ var DraftTagInjector = () => ({
 
 // src/plugins/essayNormalizer.ts
 var isElement = (node) => !!node && node.type === "element";
-var isWhitespaceText = (node) => !!node && node.type === "text" && !node.value.trim();
+var isWhitespaceText2 = (node) => !!node && node.type === "text" && !node.value.trim();
 var isBreak = (node) => isElement(node) && node.tagName === "br";
 var PHRASING_OK = /* @__PURE__ */ new Set([
   "a",
@@ -2472,7 +2477,7 @@ function stripBreaks(children) {
     const prev = next[next.length - 1];
     const following = children[i3 + 1];
     if (isElement(prev) || isElement(following)) continue;
-    if (isWhitespaceText(prev) || isWhitespaceText(following)) continue;
+    if (isWhitespaceText2(prev) || isWhitespaceText2(following)) continue;
     const prevAsUnknown = prev;
     if (prevAsUnknown && typeof prevAsUnknown === "object" && prevAsUnknown.type === "text") {
       const textNode = prevAsUnknown;
@@ -2510,7 +2515,7 @@ function normalizeStructure(tree) {
         node.children = stripBreaks(node.children);
       }
       if (isElement(node) && (node.tagName === "ul" || node.tagName === "ol" || node.tagName === "li" || node.tagName === "blockquote")) {
-        node.children = node.children.filter((child) => !isWhitespaceText(child));
+        node.children = node.children.filter((child) => !isWhitespaceText2(child));
       }
     }
   );

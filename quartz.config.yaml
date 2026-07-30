@@ -355,16 +355,17 @@ plugins:
     enabled: true
     order: 45
   - source:
-      name: essay-normalizer
-      repo: ./.quartz/local-plugins/essay-normalizer
-    enabled: true
-    # After GFM (40), before TOC (50) so outline levels feed the ToC.
-    order: 42
-  - source:
       name: image-captions
       repo: ./.quartz/local-plugins/image-captions
     enabled: true
-    order: 25
+    # After GFM (40), before essay-normalizer so figures exist before spacing AST work.
+    order: 41
+  - source:
+      name: essay-normalizer
+      repo: ./.quartz/local-plugins/essay-normalizer
+    enabled: true
+    # After captions (41), before TOC (50) so outline levels feed the ToC.
+    order: 42
   - source: github:quartz-community/spacer
     enabled: true
     options: {}

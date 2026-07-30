@@ -8,7 +8,7 @@
     "./components": "./dist/index.js"
   },
   "quartz": {
-    "category": "component",
+    "category": "transformer",
     "components": {
       "ImageCaptions": {
         "displayName": "Image Captions",

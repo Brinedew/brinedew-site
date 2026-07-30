@@ -1,39 +1,4 @@
-import { visit } from "unist-util-visit"
-
-const ImageCaptions = () => ({
-  name: "brinedew-image-captions",
-  htmlPlugins() {
-    return [() => (tree) => {
-      visit(tree, "element", (node, index, parent) => {
-        if (!parent || index === undefined) return
-        if (node.tagName !== "p") return
-        if (node.children.length !== 1) return
-        const img = node.children[0]
-        if (img.type !== "element" || img.tagName !== "img") return
-        const alt = (img.properties?.alt) || ""
-        if (!alt) return
-
-        // Clear alt on img — caption is now visible as figcaption
-        img.properties.alt = ""
-
-        const figcaption = {
-          type: "element",
-          tagName: "figcaption",
-          properties: {},
-          children: [{ type: "text", value: alt }],
-        }
-
-        const figure = {
-          type: "element",
-          tagName: "figure",
-          properties: {},
-          children: [img, figcaption],
-        }
-
-        parent.children.splice(index, 1, figure)
-      })
-    }]
-  },
-})
-
-export { ImageCaptions }
+// Re-export ImageCaptions from the shared brinedew-components bundled dist.
+import { ImageCaptions as _ImageCaptions } from "../../../plugins/brinedew-components/dist/index.js"
+export const ImageCaptions = _ImageCaptions
+export default _ImageCaptions
