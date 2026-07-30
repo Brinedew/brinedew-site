@@ -6,14 +6,6 @@ name: Publish Iconoplasm Firefox extension
 on:
   workflow_dispatch:
     inputs:
-      channel:
-        description: AMO signing channel
-        required: true
-        default: listed
-        type: choice
-        options:
-          - listed
-          - unlisted
       human_confirmation:
         description: "Type exactly: YES, I AM A HUMAN, PUBLISH ICONOPLASM"
         required: true
@@ -30,8 +22,8 @@ permissions:
 jobs:
   publish-firefox:
     # Re-platformed from windows-latest to ubuntu-latest. PowerShell 7 is
-    # preinstalled on GitHub-hosted Linux runners, and the web-ext sign/lint
-    # steps run via pnpm and Node, both fully cross-platform. See
+    # preinstalled on GitHub-hosted Linux runners, and the locked store publisher
+    # runs via pnpm and Node. See
     # publish-iconoplasm-edge.yml for the matching rationale.
     runs-on: ubuntu-latest
     defaults:
@@ -61,11 +53,14 @@ jobs:
         run: corepack enable
 
       - name: Check AMO secrets
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
         run: |
-          if (-not "${{ secrets.AMO_JWT_ISSUER }}") {
+          if (-not $env:AMO_JWT_ISSUER) {
             throw 'Missing GitHub secret AMO_JWT_ISSUER'
           }
-          if (-not "${{ secrets.AMO_JWT_SECRET }}") {
+          if (-not $env:AMO_JWT_SECRET) {
             throw 'Missing GitHub secret AMO_JWT_SECRET'
           }
 
@@ -86,30 +81,27 @@ jobs:
       - name: Package extension payload
         run: pnpm run package:iconoplasm-firefox
 
-      - name: Lint Firefox package
-        run: pnpm exec web-ext lint --source-dir iconoplasm-extension/dist/firefox-package
+      - name: Package reviewer source
+        run: pnpm run package:iconoplasm-firefox-source
 
       - name: Submit to Firefox Add-ons
-        run: |
-          pnpm exec web-ext sign `
-            --source-dir iconoplasm-extension/dist/firefox-package `
-            --artifacts-dir iconoplasm-extension/dist/firefox-signed `
-            --channel ${{ inputs.channel }} `
-            --api-key ${{ secrets.AMO_JWT_ISSUER }} `
-            --api-secret ${{ secrets.AMO_JWT_SECRET }}
+        env:
+          FIREFOX_CHANNEL: listed
+          FIREFOX_EXTENSION_ID: iconoplasm@brinedew.bio
+          FIREFOX_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          FIREFOX_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+          FIREFOX_ZIP: iconoplasm-extension/dist/iconoplasm-firefox-v${{ inputs.expected_version }}.zip
+          FIREFOX_SOURCES_ZIP: iconoplasm-extension/dist/iconoplasm-firefox-source-v${{ inputs.expected_version }}.zip
+        run: pnpm exec publish-extension
 
-      # Bump actions/upload-artifact @v4 -> @v7 (2026 current major). Both
-      # upload steps share the same action pin.
-      - name: Upload unsigned zip
+      # Keep the exact payload and reviewer source that were sent to AMO, even if
+      # AMO rejects the submission. Signed builds remain the store's authority.
+      - name: Upload Firefox submission bundles
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: iconoplasm-firefox-source-bundle
-          path: iconoplasm-extension/dist/iconoplasm-firefox-v*.zip
-          if-no-files-found: error
-
-      - name: Upload signed Firefox artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: iconoplasm-firefox-signed
-          path: iconoplasm-extension/dist/firefox-signed/**/*
+          name: iconoplasm-firefox-submission
+          path: |
+            iconoplasm-extension/dist/iconoplasm-firefox-v*.zip
+            iconoplasm-extension/dist/iconoplasm-firefox-source-v*.zip
           if-no-files-found: error

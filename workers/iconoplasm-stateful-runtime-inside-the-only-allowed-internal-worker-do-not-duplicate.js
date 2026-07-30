@@ -5676,7 +5676,7 @@ function webpDimensions(bytes) {
   if (view.length < 30 || bytesAscii(view, 0, 4) !== "RIFF" || bytesAscii(view, 8, 12) !== "WEBP") {
     return null
   }
-  for (let offset = 12; offset + 8 <= view.length; ) {
+  for (let offset = 12; offset + 8 <= view.length;) {
     const chunkType = bytesAscii(view, offset, offset + 4)
     const chunkSize = littleEndian32(view, offset + 4)
     const payloadOffset = offset + 8

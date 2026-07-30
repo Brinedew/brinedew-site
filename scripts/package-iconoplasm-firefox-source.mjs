@@ -12,11 +12,15 @@ const stageRoot = resolve(distRoot, "firefox-source-package")
 const { version: packageVersion } = assertIconoplasmPublisherAuthority(repoRoot)
 const zipPath = resolve(distRoot, `iconoplasm-firefox-source-v${packageVersion}.zip`)
 
+const rootTemplateFiles = [
+  ["iconoplasm-extension/amo-source/package.json", "package.json"],
+  ["iconoplasm-extension/amo-source/pnpm-lock.yaml", "pnpm-lock.yaml"],
+  ["iconoplasm-extension/amo-source/pnpm-workspace.yaml", "pnpm-workspace.yaml"],
+  ["iconoplasm-extension/amo-source/.npmrc", ".npmrc"],
+  ["iconoplasm-extension/amo-source/tsconfig.json", "tsconfig.json"],
+]
+
 const includeFiles = [
-  "package.json",
-  "pnpm-lock.yaml",
-  "pnpm-workspace.yaml",
-  ".npmrc",
   "wxt.config.ts",
   "scripts/sync-iconoplasm-shared.mjs",
   "scripts/package-iconoplasm-extension.mjs",
@@ -75,6 +79,14 @@ function copyFile(relPath) {
   cpSync(src, dest)
 }
 
+function copyRootTemplate(sourcePath, destinationPath) {
+  const src = resolve(repoRoot, sourcePath)
+  const dest = resolve(stageRoot, destinationPath)
+  ensureExists(src, "reviewer build file")
+  mkdirSync(resolve(dest, ".."), { recursive: true })
+  cpSync(src, dest)
+}
+
 function copyDir(relPath) {
   const src = resolve(repoRoot, relPath)
   const dest = resolve(stageRoot, relPath)
@@ -125,6 +137,7 @@ function zipPayload() {
 rmSync(stageRoot, { recursive: true, force: true })
 mkdirSync(stageRoot, { recursive: true })
 
+for (const [source, destination] of rootTemplateFiles) copyRootTemplate(source, destination)
 for (const file of includeFiles) copyFile(file)
 for (const dir of includeDirs) copyDir(dir)
 

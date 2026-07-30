@@ -315,49 +315,42 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   color: var(--light);
 }
 
-.icono-vote-login-overlay {
+.icono-vote-login-dialog {
   position: fixed;
   inset: 0;
-  z-index: 1050;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-  color-scheme: light;
-  --light: oklch(96% 0.015 75);
-  --dark: oklch(20% 0.035 50);
-  --secondary: oklch(40% 0.04 55);
-  --ui-border: oklch(82% 0.02 70);
-  --ui-bg: oklch(92% 0.01 75);
-}
-
-.icono-vote-login-overlay,
-.icono-vote-login-overlay * {
-  box-sizing: border-box;
-}
-
-.icono-vote-login-backdrop {
-  position: absolute;
-  inset: 0;
-  border: 0;
-  background: color-mix(in srgb, var(--dark) 78%, transparent);
-  cursor: default;
-}
-
-.icono-vote-login-dialog {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  gap: 1rem;
-  width: min(28rem, 100%);
+  width: min(28rem, calc(100% - 3rem));
   max-height: calc(100dvh - 3rem);
-  overflow-y: auto;
+  margin: auto;
   padding: 1.5rem;
+  overflow-y: auto;
   border: 1px solid var(--ui-border);
   border-radius: 16px;
   background: var(--light);
   color: var(--dark);
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+  color-scheme: light;
+  --light: oklch(96% 0.015 75);
+  --dark: oklch(20% 0.035 50);
+  --ui-border: oklch(82% 0.02 70);
+}
+
+html:has(.icono-vote-login-dialog[open]),
+body:has(.icono-vote-login-dialog[open]) {
+  overflow: hidden;
+}
+
+.icono-vote-login-dialog[open] {
+  display: grid;
+  gap: 1rem;
+}
+
+.icono-vote-login-dialog,
+.icono-vote-login-dialog * {
+  box-sizing: border-box;
+}
+
+.icono-vote-login-dialog::backdrop {
+  background: color-mix(in srgb, var(--dark) 78%, transparent);
 }
 
 .icono-vote-login-copy {
@@ -367,7 +360,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 }
 
 .icono-vote-login-title,
-.icono-vote-login-note,
 .icono-vote-login-link {
   font-family: "IBM Plex Mono", monospace;
 }
@@ -377,13 +369,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   font-size: 1.1rem;
   font-weight: 650;
   line-height: 1.2;
-}
-
-.icono-vote-login-note {
-  max-width: 42ch;
-  font-size: 0.9rem;
-  line-height: 1.45;
-  color: color-mix(in srgb, var(--dark) 70%, var(--secondary, var(--darkgray)) 30%);
 }
 
 .icono-vote-login-link {
@@ -412,8 +397,8 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 
 .icono-vote-login-close {
   position: absolute;
-  top: 1rem;
-  right: 1.25rem;
+  inset-block-start: 1rem;
+  inset-inline-end: 1.25rem;
   border: 0;
   background: transparent;
   color: inherit;
@@ -421,10 +406,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   font-size: 0.82rem;
   text-decoration: underline;
   cursor: pointer;
-}
-
-.icono-modal-locked {
-  overflow: hidden;
 }
 
 /* ───────── Search ───────── */

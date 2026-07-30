@@ -81,3 +81,34 @@ test("responsive vote views share one controller and one mutation", async () => 
     assert.equal(box.querySelector("[data-icono-vote-down]").classList.contains("active"), false)
   }
 })
+
+test("authentication failures return the exact vote control that opened the login prompt", async () => {
+  const runtime = await readFile(generatedRuntimePath, "utf8")
+  const sandbox = { console, clearTimeout, setTimeout }
+  sandbox.globalThis = sandbox
+  vm.runInNewContext(runtime, sandbox)
+
+  const shared = sandbox.IconoplasmCardShared
+  const { document } = parseHTML(`<main>${shared.voteBoxMarkup("", { variant: "label" })}</main>`)
+  const box = document.querySelector("[data-icono-vote-box]")
+  const upButton = box.querySelector("[data-icono-vote-up]")
+  let authPromptSource = null
+
+  shared.wireVoteBox(box, {
+    assetSha: "abc123",
+    fetchImpl: async () => ({
+      ok: false,
+      status: 401,
+      text: async () => JSON.stringify({ code: "AUTH_REQUIRED", error: "Log in" }),
+    }),
+    onAuthRequired(_error, sourceControl) {
+      authPromptSource = sourceControl
+    },
+    symbol: "TP53",
+  })
+
+  upButton.click()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  assert.equal(authPromptSource, upButton)
+})

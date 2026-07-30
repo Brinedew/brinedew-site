@@ -10,7 +10,10 @@ interface CitationData {
   year?: string
 }
 
-const CitationComponent = ({ displayClass, cite }: QuartzComponentProps & { cite?: CitationData }) => {
+const CitationComponent = ({
+  displayClass,
+  cite,
+}: QuartzComponentProps & { cite?: CitationData }) => {
   const [showPopover, setShowPopover] = useState(false)
   const [metadata, setMetadata] = useState<CitationData | null>(null)
 

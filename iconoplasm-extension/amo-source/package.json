@@ -1,0 +1,22 @@
+{
+  "name": "iconoplasm-amo-source",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@11.0.9",
+  "scripts": {
+    "sync:iconoplasm-extension": "node ./scripts/sync-iconoplasm-shared.mjs --extension-only",
+    "package:iconoplasm-firefox": "node ./scripts/package-iconoplasm-extension.mjs --target=firefox"
+  },
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1",
+    "roughjs": "4.6.6",
+    "typescript": "5.9.3",
+    "vite": "8.0.16",
+    "wxt": "0.21.2"
+  }
+}

@@ -23,8 +23,7 @@ type Section = {
 const TagSections: QuartzComponent = ({ fileData, displayClass }: QuartzComponentProps) => {
   if (String(fileData.slug ?? "").startsWith("apps/")) return null
 
-  const isDraft =
-    fileData.frontmatter?.draft === true || fileData.frontmatter?.draft === "true"
+  const isDraft = fileData.frontmatter?.draft === true || fileData.frontmatter?.draft === "true"
 
   const pageTags: unknown[] = isDraft
     ? ["draft", ...(Array.isArray(fileData.frontmatter?.tags) ? fileData.frontmatter.tags : [])]

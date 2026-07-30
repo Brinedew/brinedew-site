@@ -5678,8 +5678,8 @@ https://geneguessr.brinedew.bio/`
     wireSharedUserPanel(stack, { authBase: API_BASE })
   }
 
-  // Practice-list overlay (B-247)
-  let practiceOverlay = null
+  // Practice-list dialog (B-247)
+  let practiceDialog = null
   let practiceTextarea = null
   let practiceResultsEl = null
   let practiceValidateBtn = null
@@ -5687,20 +5687,13 @@ https://geneguessr.brinedew.bio/`
   let practiceClearBtn = null
   let practiceBusy = false
 
-  function isPracticeOverlayOpen() {
-    return practiceOverlay && practiceOverlay.classList.contains("is-visible")
+  function isPracticeDialogOpen() {
+    return Boolean(practiceDialog?.open)
   }
 
-  function lockBackground(enabled) {
-    document.documentElement.classList.toggle("pg-tutorial-locked", enabled)
-    document.body.classList.toggle("pg-tutorial-locked", enabled)
-  }
-
-  function closePracticeOverlay() {
-    if (!practiceOverlay) return
-    practiceOverlay.classList.remove("is-visible")
-    practiceOverlay.setAttribute("aria-hidden", "true")
-    lockBackground(false)
+  function closePracticeDialog() {
+    if (!isPracticeDialogOpen()) return
+    practiceDialog.close()
   }
 
   function normalizePracticeGeneToken(raw) {
@@ -6009,21 +6002,14 @@ https://geneguessr.brinedew.bio/`
     return startPracticeFromPool(pool)
   }
 
-  function ensurePracticeOverlay() {
-    if (practiceOverlay) return
-    practiceOverlay = document.createElement("div")
-    practiceOverlay.className = "pg-tutorial-overlay pg-practice-overlay"
-    practiceOverlay.setAttribute("aria-hidden", "true")
-
-    const backdrop = document.createElement("div")
-    backdrop.className = "pg-tutorial-backdrop"
-    practiceOverlay.appendChild(backdrop)
+  function ensurePracticeDialog() {
+    if (practiceDialog) return
+    practiceDialog = document.createElement("dialog")
+    practiceDialog.className = "pg-modal-dialog pg-practice-dialog"
+    practiceDialog.setAttribute("aria-labelledby", "pg-practice-title")
 
     const card = document.createElement("div")
     card.className = "pg-tutorial-card pg-practice-card"
-    card.setAttribute("role", "dialog")
-    card.setAttribute("aria-modal", "true")
-    card.setAttribute("aria-labelledby", "pg-practice-title")
 
     const closeBtn = document.createElement("button")
     closeBtn.type = "button"
@@ -6045,7 +6031,14 @@ https://geneguessr.brinedew.bio/`
       "Paste HGNC gene symbols (1000+ is fine). You can also paste a table; we will try to detect the gene-symbol column and ignore the rest."
     content.appendChild(desc)
 
+    const textareaLabel = document.createElement("label")
+    textareaLabel.className = "pg-practice-label"
+    textareaLabel.setAttribute("for", "pg-practice-genes")
+    textareaLabel.textContent = "Gene symbols"
+    content.appendChild(textareaLabel)
+
     practiceTextarea = document.createElement("textarea")
+    practiceTextarea.id = "pg-practice-genes"
     practiceTextarea.className = "pg-practice-textarea"
     practiceTextarea.placeholder = "TP53\nBRCA1\nEGFR\n...\n"
     practiceTextarea.spellcheck = false
@@ -6079,23 +6072,18 @@ https://geneguessr.brinedew.bio/`
 
     practiceResultsEl = document.createElement("div")
     practiceResultsEl.className = "pg-practice-results"
+    practiceResultsEl.setAttribute("role", "status")
+    practiceResultsEl.setAttribute("aria-live", "polite")
     content.appendChild(practiceResultsEl)
 
     card.appendChild(content)
-    practiceOverlay.appendChild(card)
-    document.body.appendChild(practiceOverlay)
+    practiceDialog.appendChild(card)
+    document.body.appendChild(practiceDialog)
 
-    const handleKeydown = (event) => {
-      if (!isPracticeOverlayOpen()) return
-      if (event.key === "Escape") {
-        closePracticeOverlay()
-        event.preventDefault()
-      }
-    }
-
-    backdrop.addEventListener("click", () => closePracticeOverlay())
-    closeBtn.addEventListener("click", () => closePracticeOverlay())
-    document.addEventListener("keydown", handleKeydown)
+    practiceDialog.addEventListener("click", (event) => {
+      if (event.target === practiceDialog) closePracticeDialog()
+    })
+    closeBtn.addEventListener("click", closePracticeDialog)
 
     practiceValidateBtn.addEventListener("click", () => void resolvePracticeListFromTextarea())
     practicePlayBtn.addEventListener(
@@ -6105,7 +6093,7 @@ https://geneguessr.brinedew.bio/`
           setPracticeBusy(true)
           try {
             await startPracticeFromStoredList()
-            closePracticeOverlay()
+            closePracticeDialog()
             render()
             setStatus("rendered")
           } catch (err) {
@@ -6127,17 +6115,15 @@ https://geneguessr.brinedew.bio/`
   }
 
   window.geneguessrOpenPracticeList = function () {
-    ensurePracticeOverlay()
+    ensurePracticeDialog()
     const stored = loadPracticeList()
     if (practiceTextarea) {
       practiceTextarea.value = typeof stored?.text === "string" ? stored.text : ""
     }
     renderPracticeResults(stored, null)
     setPracticeBusy(false)
-    practiceOverlay.classList.add("is-visible")
-    practiceOverlay.setAttribute("aria-hidden", "false")
-    lockBackground(true)
-    practiceTextarea && practiceTextarea.focus()
+    if (!isPracticeDialogOpen()) practiceDialog.showModal()
+    practiceTextarea?.focus()
   }
 
   window.geneguessrSetLeaderboardConsent = function (enabled) {

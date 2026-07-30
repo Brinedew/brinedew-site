@@ -103,7 +103,6 @@ const runtimeFiles = [
 ]
 
 const runtimeDirs = ["fonts", "generated", "icons"]
-const removableRuntimeFiles = ["generated/lit-archival-card.js"]
 
 const forbiddenRootEntries = [
   "store-assets",
@@ -207,16 +206,6 @@ function copyRuntimePayload() {
   }
 }
 
-function stripUnusedRuntimeFiles() {
-  for (const relativePath of removableRuntimeFiles) {
-    rmSync(resolve(wxtPublicRoot, relativePath), { force: true })
-  }
-}
-
-function applyTargetSpecificOverrides() {
-  stripUnusedRuntimeFiles()
-}
-
 function scanPayload(rootDir) {
   const stagedFiles = listRelativeFiles(rootDir)
   for (const filePath of stagedFiles) {
@@ -302,7 +291,6 @@ function main() {
   ensureExists(manifestPath, "manifest")
   checkForbiddenRootEntries()
   copyRuntimePayload()
-  applyTargetSpecificOverrides()
   scanPayload(wxtPublicRoot)
   runWxtZip()
   validatePackagedBackground()
