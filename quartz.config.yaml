@@ -113,10 +113,13 @@ configuration:
         highlight: "#8f9fa926"
         textHighlight: "#7dd3fc40"
 plugins:
-  - source: github:quartz-community/created-modified-date
+  - source:
+      name: brinedew-created-modified-date
+      repo: ./.quartz/local-plugins/brinedew-created-modified-date
     enabled: true
     options:
-      defaultDateType: modified
+      # Prefer stable publication date (frontmatter date/published) for essay furniture.
+      defaultDateType: published
       priority:
         - frontmatter
         - git
@@ -171,8 +174,10 @@ plugins:
   - source: github:quartz-community/citations
     enabled: false
     order: 85
+  # Disabled: Obsidian single-Enter becomes <br> and fights essay rhythm.
+  # Spacing is normalized by brinedew essay-normalizer instead.
   - source: github:quartz-community/hard-line-breaks
-    enabled: true
+    enabled: false
     order: 90
   - source: github:quartz-community/ox-hugo
     enabled: false
@@ -224,8 +229,18 @@ plugins:
     enabled: true
   - source: github:quartz-community/folder-page
     enabled: true
-  - source: github:quartz-community/tag-page
+  - source:
+      name: brinedew-tag-page
+      repo: ./.quartz/local-plugins/brinedew-tag-page
     enabled: true
+    options:
+      displayNames:
+        content/post: Posts
+        content/wiki: Wiki
+        content/apps: Apps
+        content/meta: Meta
+        meta: Meta
+        draft: Drafts
   # explorer disabled — live site uses custom nav
   - source: github:quartz-community/graph
     enabled: false
@@ -243,6 +258,14 @@ plugins:
     enabled: false
   - source: github:quartz-community/content-meta
     enabled: false
+  - source:
+      name: publication-date
+      repo: ./.quartz/local-plugins/publication-date
+    enabled: true
+    order: 24
+    layout:
+      position: beforeBody
+      priority: 20
   - source: github:quartz-community/tag-list
     enabled: false
     layout:
@@ -276,9 +299,12 @@ plugins:
     layout:
       position: afterBody
       priority: 10
-  - source: github:quartz-community/footer
+  - source:
+      name: brinedew-footer
+      repo: ./.quartz/local-plugins/brinedew-footer
     enabled: true
     options:
+      credit: Brinedew
       links:
         About: /About.html
         Support me: /posts/Support-me.html
@@ -328,6 +354,12 @@ plugins:
     enabled: true
     order: 45
   - source:
+      name: essay-normalizer
+      repo: ./.quartz/local-plugins/essay-normalizer
+    enabled: true
+    # After GFM (40), before TOC (50) so outline levels feed the ToC.
+    order: 42
+  - source:
       name: image-captions
       repo: ./.quartz/local-plugins/image-captions
     enabled: true
@@ -371,8 +403,14 @@ layout:
     folder:
       exclude:
         - reader-mode
+        - publication-date
     tag:
       exclude:
         - reader-mode
-    canvas: {}
-    bases: {}
+        - publication-date
+    canvas:
+      exclude:
+        - publication-date
+    bases:
+      exclude:
+        - publication-date
