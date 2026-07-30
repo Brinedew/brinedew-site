@@ -260,6 +260,56 @@ article p {
   text-wrap: pretty;
 }
 
+/* Essay furniture: publication date under the title (content-meta plugin). */
+.content-meta {
+  margin: 0 0 1.1rem;
+  color: var(--gray);
+  font-size: 0.92rem;
+  letter-spacing: 0.01em;
+}
+
+/* Obsidian → web essay spacing: one rhythm regardless of source line breaks. */
+.markdown-preview-view.markdown-rendered > * + * {
+  margin-top: 0.95em;
+}
+
+.markdown-preview-view.markdown-rendered > h1,
+.markdown-preview-view.markdown-rendered > h2,
+.markdown-preview-view.markdown-rendered > h3,
+.markdown-preview-view.markdown-rendered > h4,
+.markdown-preview-view.markdown-rendered > h5,
+.markdown-preview-view.markdown-rendered > h6 {
+  margin-top: 1.65em;
+  margin-bottom: 0.55em;
+}
+
+.markdown-preview-view.markdown-rendered > h1:first-child,
+.markdown-preview-view.markdown-rendered > h2:first-child {
+  margin-top: 0;
+}
+
+.markdown-preview-view.markdown-rendered > figure,
+.markdown-preview-view.markdown-rendered > table,
+.markdown-preview-view.markdown-rendered > pre,
+.markdown-preview-view.markdown-rendered > blockquote {
+  margin-top: 1.25em;
+  margin-bottom: 1.25em;
+}
+
+.markdown-preview-view.markdown-rendered > ul,
+.markdown-preview-view.markdown-rendered > ol {
+  margin-top: 0.85em;
+  margin-bottom: 0.85em;
+}
+
+.markdown-preview-view.markdown-rendered > hr {
+  margin: 1.75em 0;
+}
+
+.markdown-preview-view.markdown-rendered p + p {
+  margin-top: 0.75em;
+}
+
 .draft-warning-wrap {
   margin: 0 0 1rem;
 }

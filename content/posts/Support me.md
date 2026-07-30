@@ -1,7 +1,6 @@
 ---
 title: Support me
 tags:
-  - content/post
   - meta
 date: 2025-12-14
 draft: false

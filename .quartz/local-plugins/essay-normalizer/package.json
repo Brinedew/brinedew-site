@@ -1,0 +1,24 @@
+{
+  "name": "@brinedew/essay-normalizer",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./components": "./dist/index.js"
+  },
+  "dependencies": {
+    "preact": "^10.28.2"
+  },
+  "quartz": {
+    "category": "transformer",
+    "components": {
+      "EssayNormalizer": {
+        "displayName": "Essay Normalizer",
+        "defaultPosition": "beforeBody",
+        "defaultPriority": 1
+      }
+    }
+  }
+}
