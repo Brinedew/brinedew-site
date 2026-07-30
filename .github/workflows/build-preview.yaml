@@ -27,14 +27,6 @@ jobs:
           corepack prepare pnpm@11.0.9 --activate
           pnpm config set minimumReleaseAge 1440
 
-      - name: Cache Quartz plugins
-        uses: actions/cache@v6
-        with:
-          path: .quartz/plugins
-          key: ${{ runner.os }}-plugins-${{ hashFiles('quartz.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-plugins-
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
 
