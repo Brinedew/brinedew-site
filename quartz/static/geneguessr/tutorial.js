@@ -203,20 +203,20 @@
   }
 
   // DOM elements - created once
-  let overlay = null
+  let dialog = null
   let contentEl = null
   let dotsEl = null
   let statusEl = null
   let backBtn = null
   let forwardBtn = null
   let skipBtn = null
-  let footerEl = null
 
   // State
   let stepIndex = 0
   let contextualMode = false
   let onCloseCallback = null
   let renderToken = 0
+  let opening = false
 
   function setControlsDisabled(disabled) {
     if (backBtn) backBtn.disabled = disabled || (!contextualMode && stepIndex === 0)
@@ -242,20 +242,13 @@
     })
   }
 
-  function createOverlay() {
-    overlay = document.createElement("div")
-    overlay.className = "pg-tutorial-overlay"
-    overlay.setAttribute("aria-hidden", "true")
-
-    const backdrop = document.createElement("div")
-    backdrop.className = "pg-tutorial-backdrop"
-    overlay.appendChild(backdrop)
+  function createDialog() {
+    dialog = document.createElement("dialog")
+    dialog.className = "pg-modal-dialog pg-tutorial-dialog"
+    dialog.setAttribute("aria-labelledby", "pg-tutorial-title")
 
     const card = document.createElement("div")
     card.className = "pg-tutorial-card"
-    card.setAttribute("role", "dialog")
-    card.setAttribute("aria-modal", "true")
-    card.setAttribute("aria-labelledby", "pg-tutorial-title")
 
     skipBtn = document.createElement("button")
     skipBtn.type = "button"
@@ -270,7 +263,6 @@
 
     contentEl = document.createElement("div")
     contentEl.className = "pg-tutorial-content"
-    contentEl.id = "pg-tutorial-title"
     card.appendChild(contentEl)
 
     const nav = document.createElement("div")
@@ -279,6 +271,7 @@
     backBtn = document.createElement("button")
     backBtn.type = "button"
     backBtn.className = "pg-tutorial-nav-btn pg-tutorial-back"
+    backBtn.setAttribute("aria-label", "Back")
     backBtn.appendChild(buildArrowIcon("left"))
     nav.appendChild(backBtn)
 
@@ -289,6 +282,7 @@
     forwardBtn = document.createElement("button")
     forwardBtn.type = "button"
     forwardBtn.className = "pg-tutorial-nav-btn pg-tutorial-forward"
+    forwardBtn.setAttribute("aria-label", "Next")
     forwardBtn.appendChild(buildArrowIcon("right"))
     nav.appendChild(forwardBtn)
 
@@ -296,8 +290,8 @@
 
     // Intentionally no footer/checkbox. The tutorial already uses localStorage progress tracking.
 
-    overlay.appendChild(card)
-    document.body.appendChild(overlay)
+    dialog.appendChild(card)
+    document.body.appendChild(dialog)
 
     // Event listeners
     backBtn.addEventListener("click", prev)
@@ -309,7 +303,8 @@
       }
     })
     skipBtn.addEventListener("click", close)
-    document.addEventListener("keydown", handleKeydown)
+    dialog.addEventListener("keydown", handleKeydown)
+    dialog.addEventListener("close", handleClose)
   }
 
   function handleKeydown(event) {
@@ -320,63 +315,58 @@
     } else if (event.key === "ArrowLeft" && !contextualMode) {
       prev()
       event.preventDefault()
-    } else if (event.key === "Escape") {
-      close()
-      event.preventDefault()
     }
   }
 
   function isOpen() {
-    return overlay && overlay.classList.contains("is-visible")
+    return Boolean(dialog?.open)
   }
 
-  function lockBackground(enabled) {
-    document.documentElement.classList.toggle("pg-tutorial-locked", enabled)
-    document.body.classList.toggle("pg-tutorial-locked", enabled)
+  function handleClose() {
+    opening = false
+    if (onCloseCallback) {
+      const callback = onCloseCallback
+      onCloseCallback = null
+      callback()
+    }
   }
 
   function open(options = {}) {
     void (async () => {
-      if (!overlay) createOverlay()
-      if (isOpen()) return
+      if (!dialog) createDialog()
+      if (isOpen() || opening) return
+      opening = true
 
-      contextualMode = Boolean(options.contextual)
-      onCloseCallback = options.onClose || null
-      const step = options.step != null ? options.step : 0
+      try {
+        contextualMode = Boolean(options.contextual)
+        onCloseCallback = options.onClose || null
+        const step = options.step != null ? options.step : 0
 
-      // Toggle UI elements based on mode
-      statusEl.style.display = contextualMode ? "none" : ""
-      dotsEl.style.display = contextualMode ? "none" : ""
-      backBtn.style.display = contextualMode ? "none" : ""
-      if (footerEl) footerEl.style.display = contextualMode ? "none" : ""
-      skipBtn.style.display = contextualMode ? "none" : ""
+        // Toggle UI elements based on mode
+        statusEl.style.display = contextualMode ? "none" : ""
+        dotsEl.style.display = contextualMode ? "none" : ""
+        backBtn.style.display = contextualMode ? "none" : ""
+        skipBtn.style.display = contextualMode ? "none" : ""
 
-      // Preload images for the first shown step before displaying the overlay to avoid layout swings.
-      await preloadStepImages(step)
-      renderStep(step)
+        // Preload images for the first shown step before displaying the dialog to avoid layout swings.
+        await preloadStepImages(step)
+        renderStep(step)
+        dialog.showModal()
 
-      overlay.classList.add("is-visible")
-      overlay.setAttribute("aria-hidden", "false")
-      lockBackground(true)
-
-      if (contextualMode) {
-        forwardBtn.focus()
-      } else if (skipBtn) {
-        skipBtn.focus()
+        if (contextualMode) {
+          forwardBtn.focus()
+        } else if (skipBtn) {
+          skipBtn.focus()
+        }
+      } finally {
+        opening = false
       }
     })()
   }
 
   function close() {
-    if (!overlay) return
-    overlay.classList.remove("is-visible")
-    overlay.setAttribute("aria-hidden", "true")
-    lockBackground(false)
-
-    if (onCloseCallback) {
-      onCloseCallback()
-      onCloseCallback = null
-    }
+    if (!isOpen()) return
+    dialog.close()
   }
 
   function finish() {
@@ -388,7 +378,7 @@
   }
 
   function renderStep(index) {
-    if (!overlay) createOverlay()
+    if (!dialog) createDialog()
     stepIndex = Math.max(0, Math.min(STEP_CONTENT.length - 1, index))
 
     if (statusEl && !contextualMode) {
@@ -399,6 +389,7 @@
       contentEl.innerHTML = ""
       const step = STEP_CONTENT[stepIndex]
       const title = document.createElement("h2")
+      title.id = "pg-tutorial-title"
       title.textContent = step.title
       contentEl.appendChild(title)
       contentEl.appendChild(buildList(step.body))
@@ -431,9 +422,11 @@
       const isLastStep = stepIndex === STEP_CONTENT.length - 1
       if (isLastStep || contextualMode) {
         forwardBtn.textContent = "Got it"
+        forwardBtn.setAttribute("aria-label", "Got it")
         forwardBtn.classList.add("is-play")
       } else {
         forwardBtn.innerHTML = ""
+        forwardBtn.setAttribute("aria-label", "Next")
         forwardBtn.appendChild(buildArrowIcon("right"))
         forwardBtn.classList.remove("is-play")
       }
@@ -473,7 +466,7 @@
 
     // Boot: show step 1 if not seen
     boot() {
-      if (!overlay) createOverlay()
+      if (!dialog) createDialog()
       if (!hasSeenStep(1)) {
         setTimeout(() => {
           window.GeneGuessrTutorial.maybeShowStep(1)

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { test } from "node:test"
 import vm from "node:vm"
+
+import JSZip from "jszip"
 
 const workflowText = readFileSync(".github/workflows/publish-iconoplasm-firefox.yml", "utf8")
 const edgeWorkflowText = readFileSync(".github/workflows/publish-iconoplasm-edge.yml", "utf8")
@@ -11,6 +17,60 @@ const firefoxSourcePackageText = readFileSync(
   "utf8",
 )
 const amoSourceReadmeText = readFileSync("iconoplasm-extension/AMO-SOURCE-README.md", "utf8")
+function runPnpm(args, cwd, timeout = 180_000) {
+  const command = process.platform === "win32" ? "cmd.exe" : "pnpm"
+  const commandArgs =
+    process.platform === "win32" ? ["/d", "/s", "/c", ["pnpm", ...args].join(" ")] : args
+  const result = spawnSync(command, commandArgs, {
+    cwd,
+    encoding: "utf8",
+    env: { ...process.env, CI: "1" },
+    timeout,
+  })
+  const output = `${result.stdout || ""}\n${result.stderr || ""}`.slice(-8_000)
+  assert.equal(
+    result.status,
+    0,
+    `pnpm ${args.join(" ")} failed${result.error ? `: ${result.error.message}` : ""}:\n${output}`,
+  )
+}
+
+async function extractZip(zipPath, destination) {
+  const zip = await JSZip.loadAsync(await readFile(zipPath))
+  for (const entry of Object.values(zip.files)) {
+    const outputPath = path.join(destination, entry.name)
+    if (entry.dir) {
+      await mkdir(outputPath, { recursive: true })
+      continue
+    }
+    await mkdir(path.dirname(outputPath), { recursive: true })
+    await writeFile(outputPath, await entry.async("nodebuffer"))
+  }
+}
+
+async function zipFileContents(zipPath) {
+  const zip = await JSZip.loadAsync(await readFile(zipPath))
+  const files = new Map()
+  for (const [name, entry] of Object.entries(zip.files)) {
+    if (!entry.dir) files.set(name, await entry.async("nodebuffer"))
+  }
+  return files
+}
+
+function firstDifference(expected, actual) {
+  const limit = Math.min(expected.length, actual.length)
+  let offset = 0
+  while (offset < limit && expected[offset] === actual[offset]) offset += 1
+  const start = Math.max(0, offset - 80)
+  const end = offset + 160
+  return JSON.stringify({
+    offset,
+    expectedLength: expected.length,
+    actualLength: actual.length,
+    expected: expected.subarray(start, end).toString("utf8"),
+    actual: actual.subarray(start, end).toString("utf8"),
+  })
+}
 
 test("Firefox store publish workflow stays behind the human GUI gate", () => {
   assert.match(workflowText, /workflow_dispatch:/)
@@ -48,7 +108,7 @@ test("store publish packaging goes through WXT browser targets", () => {
 
   assert.match(
     packageJson.devDependencies?.wxt || "",
-    /^0\.20\./,
+    /^0\.21\./,
     "WXT should be an explicit dev dependency so browser-target packaging is not homegrown",
   )
   assert.match(
@@ -146,13 +206,98 @@ test("Firefox background-page scripts boot in dependency order without importScr
 })
 
 test("Firefox reviewer source package reproduces the pnpm/WXT build", () => {
+  const packageJson = JSON.parse(readFileSync("package.json", "utf8"))
+  const sharedSyncText = readFileSync("scripts/sync-iconoplasm-shared.mjs", "utf8")
+
   assert.match(firefoxSourcePackageText, /"pnpm-lock\.yaml"/)
   assert.match(firefoxSourcePackageText, /"pnpm-workspace\.yaml"/)
+  assert.match(firefoxSourcePackageText, /"iconoplasm-extension\/amo-source\/package\.json"/)
+  assert.match(firefoxSourcePackageText, /"iconoplasm-extension\/amo-source\/tsconfig\.json"/)
   assert.match(firefoxSourcePackageText, /"wxt\.config\.ts"/)
   assert.match(firefoxSourcePackageText, /"iconoplasm-extension\/publication-alias-overlay\.js"/)
   assert.doesNotMatch(firefoxSourcePackageText, /"package-lock\.json"/)
   assert.match(amoSourceReadmeText, /pnpm install --frozen-lockfile/)
+  assert.equal(
+    packageJson.scripts?.["sync:iconoplasm-extension"],
+    "node ./scripts/sync-iconoplasm-shared.mjs --extension-only",
+  )
+  assert.match(amoSourceReadmeText, /pnpm run sync:iconoplasm-extension/)
+  assert.match(sharedSyncText, /process\.argv\.includes\("--extension-only"\)/)
+  assert.match(
+    sharedSyncText,
+    /if \(!extensionOnly\) \{\s*await syncSidebarShellImportVersions\(\)/,
+  )
   assert.doesNotMatch(amoSourceReadmeText, /npm ci/)
+})
+
+test(
+  "the extracted Firefox reviewer archive rebuilds the submitted payload",
+  { timeout: 240_000 },
+  async (t) => {
+    const repoRoot = process.cwd()
+    const version = JSON.parse(readFileSync("iconoplasm-extension/manifest.json", "utf8")).version
+    const sourceZip = path.join(
+      repoRoot,
+      "iconoplasm-extension",
+      "dist",
+      `iconoplasm-firefox-source-v${version}.zip`,
+    )
+    const submittedZip = path.join(
+      repoRoot,
+      "iconoplasm-extension",
+      "dist",
+      `iconoplasm-firefox-v${version}.zip`,
+    )
+    const extractedRoot = await mkdtemp(path.join(tmpdir(), "iconoplasm-amo-source-"))
+    t.after(() => rm(extractedRoot, { recursive: true, force: true }))
+
+    runPnpm(["run", "sync:iconoplasm-extension"], repoRoot)
+    runPnpm(["run", "package:iconoplasm-firefox"], repoRoot)
+    runPnpm(["run", "package:iconoplasm-firefox-source"], repoRoot)
+    await extractZip(sourceZip, extractedRoot)
+
+    runPnpm(
+      ["install", "--frozen-lockfile", "--offline", "--config.block-exotic-subdeps=false"],
+      extractedRoot,
+    )
+    runPnpm(["run", "sync:iconoplasm-extension"], extractedRoot)
+    runPnpm(["run", "package:iconoplasm-firefox"], extractedRoot)
+
+    const rebuiltZip = path.join(
+      extractedRoot,
+      "iconoplasm-extension",
+      "dist",
+      `iconoplasm-firefox-v${version}.zip`,
+    )
+    const submittedFiles = await zipFileContents(submittedZip)
+    const rebuiltFiles = await zipFileContents(rebuiltZip)
+
+    assert.deepEqual([...rebuiltFiles.keys()].sort(), [...submittedFiles.keys()].sort())
+    for (const [name, expected] of submittedFiles) {
+      const actual = rebuiltFiles.get(name)
+      assert.ok(actual)
+      assert.equal(
+        actual.equals(expected),
+        true,
+        `${name} did not reproduce: ${firstDifference(expected, actual)}`,
+      )
+    }
+  },
+)
+
+test("Firefox submission uses the locked audited publisher and sends reviewer source", () => {
+  const packageJson = JSON.parse(readFileSync("package.json", "utf8"))
+
+  assert.equal(packageJson.devDependencies?.["publish-browser-extension"], "5.1.0")
+  assert.equal(packageJson.devDependencies?.["web-ext"], undefined)
+  assert.match(workflowText, /pnpm run package:iconoplasm-firefox-source/)
+  assert.match(workflowText, /FIREFOX_SOURCES_ZIP:/)
+  assert.match(workflowText, /FIREFOX_EXTENSION_ID: iconoplasm@brinedew\.bio/)
+  assert.match(workflowText, /FIREFOX_CHANNEL: listed/)
+  assert.match(workflowText, /pnpm exec publish-extension/)
+  assert.doesNotMatch(workflowText, /unlisted/)
+  assert.doesNotMatch(workflowText, /pnpm dlx/)
+  assert.doesNotMatch(workflowText, /\bweb-ext\b/)
 })
 
 test("Edge store publish workflow expands operation IDs into documented polling URLs", () => {

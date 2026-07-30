@@ -826,17 +826,23 @@
   pointer-events: none !important;
 }
 
-.pg-tutorial-overlay {
+.pg-modal-dialog {
   position: fixed;
   inset: 0;
+  box-sizing: border-box;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
   padding: 1.5rem;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  pointer-events: none;
   transition: opacity 0.2s ease;
-  z-index: 1050;
+  background: transparent;
 
   /* Keep the tutorial card in light mode even when the site is dark. */
   color-scheme: light;
@@ -860,14 +866,17 @@
   --pg-shadow-popover: 0 10px 24px rgba(15, 23, 42, 0.16);
 }
 
-.pg-tutorial-overlay.is-visible {
-  opacity: 1;
-  pointer-events: auto;
+html:has(.pg-modal-dialog[open]),
+body:has(.pg-modal-dialog[open]) {
+  overflow: hidden;
 }
 
-.pg-tutorial-backdrop {
-  position: absolute;
-  inset: 0;
+.pg-modal-dialog[open] {
+  display: flex;
+  opacity: 1;
+}
+
+.pg-modal-dialog::backdrop {
   background: color-mix(in srgb, var(--dark) 78%, transparent);
 }
 
@@ -900,6 +909,13 @@
   color: var(--secondary);
   font-size: 0.95rem;
   line-height: 1.3;
+}
+
+.pg-practice-label {
+  margin-bottom: -0.4rem;
+  color: var(--darkgray);
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .pg-practice-textarea {
@@ -1167,12 +1183,8 @@
   color: var(--secondary);
 }
 
-.pg-tutorial-locked {
-  overflow: hidden;
-}
-
 @media (max-width: 600px) {
-  .pg-tutorial-overlay {
+  .pg-modal-dialog {
     padding: 1rem;
   }
 
@@ -1196,7 +1208,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pg-tutorial-overlay {
+  .pg-modal-dialog {
     transition: none;
   }
 

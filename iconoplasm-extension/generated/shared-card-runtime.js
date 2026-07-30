@@ -10723,7 +10723,7 @@
           render();
         });
       }
-      function submitVote(voteValue, sourceBox) {
+      function submitVote(voteValue, sourceControl) {
         var ready = cfg.deferSnapshot && !snapshotPrimed ? ensureSnapshot().catch(function() {
           return null;
         }) : Promise.resolve();
@@ -10777,7 +10777,7 @@
               state.authenticated = false;
               notifySnapshot();
               if (typeof cfg.onAuthRequired === "function") {
-                cfg.onAuthRequired(err, sourceBox || box);
+                cfg.onAuthRequired(err, sourceControl || box);
               }
               return;
             }
@@ -10807,13 +10807,13 @@
           if (upBtn) {
             upBtn.addEventListener("click", function(event) {
               event.stopPropagation();
-              submitVote(1, viewBox);
+              submitVote(1, event.currentTarget);
             });
           }
           if (downBtn) {
             downBtn.addEventListener("click", function(event) {
               event.stopPropagation();
-              submitVote(-1, viewBox);
+              submitVote(-1, event.currentTarget);
             });
           }
         })(boxes[listenerIndex]);

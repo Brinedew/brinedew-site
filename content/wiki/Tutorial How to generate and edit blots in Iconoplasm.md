@@ -252,10 +252,9 @@ Each provider sets its own rates. Iconoplasm's dropdown shows rough estimates �
 
 | Iconoplasm provider | Models in dropdown | Per-image estimate (dropdown) | Official pricing page |
 |---|---|---|---|
-| **Krea API** | Flux, Seedream 4, Krea 2 Large, GPT Image 2, Nano Banana Pro | ~$0.002 – $0.16 | [krea.ai/features/api](https://www.krea.ai/features/api) |
-| **Gemini API** | 3.1 Flash Image, 3 Pro Image | ~$0.067 – $0.134 | [ai.google.dev/gemini-api/docs/pricing](https://ai.google.dev/gemini-api/docs/pricing) |
-| **Luma Uni API** | Uni 1.1, Uni 1.1 Max | $0.043 – $0.103 | [lumalabs.ai/pricing](https://lumalabs.ai/pricing) |
+| **Krea API** | Flux, Seedream 4, Krea 2 Large, GPT Image 2, Nano Banana Pro | ~\$0.002 – \$0.16 | [krea.ai/features/api](https://www.krea.ai/features/api) |
+| **Gemini API** | 3.1 Flash Image, 3 Pro Image | ~\$0.067 – \$0.134 | [ai.google.dev/gemini-api/docs/pricing](https://ai.google.dev/gemini-api/docs/pricing) |
+| **Luma Uni API** | Uni 1.1, Uni 1.1 Max | \$0.043 – \$0.103 | [lumalabs.ai/pricing](https://lumalabs.ai/pricing) |
 | **OpenAI API** | GPT Image 2 | ~$0.21 | [openai.com/api/pricing](https://openai.com/api/pricing) |
 
 All costs are billed directly by the provider, not by Iconoplasm.
-

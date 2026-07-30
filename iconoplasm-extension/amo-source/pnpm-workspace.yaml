@@ -1,5 +1,4 @@
-packages:
-  - ".quartz/plugins/brinedew-components"
+packages: []
 
 overrides:
   "@napi-rs/wasm-runtime@1.2.0": 1.1.5
@@ -8,6 +7,3 @@ overrides:
 allowBuilds:
   "@parcel/watcher": true
   esbuild: true
-  sharp: true
-  spawn-sync: false
-  workerd: true

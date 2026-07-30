@@ -1013,7 +1013,7 @@ test("website Simple account-window cards render metadata from cached card artif
   )
 
   const hydrateStart = app.indexOf("function hydrateBrickCards(cards)")
-  const hydrateEnd = app.indexOf("function buildVoteLoginPromptMarkup", hydrateStart)
+  const hydrateEnd = app.indexOf("function voteBoxMarkup", hydrateStart)
   assert.notEqual(hydrateStart, -1, "missing hydrateBrickCards")
   assert.notEqual(hydrateEnd, -1, "missing hydrateBrickCards boundary")
   const hydrateBlock = app.slice(hydrateStart, hydrateEnd)
@@ -1081,56 +1081,39 @@ test("home extension install surface stays outside virtualized artwork segments"
   assert.doesNotMatch(app, /appendHomeInstallCard\(inner\)/)
 })
 
-test("guest vote auth shows a page-level modal without joining artwork grids", async () => {
+test("guest vote auth keeps its native dialog wired and cache-versioned", async () => {
   const app = await readFile(appPath, "utf8")
-  const popupStart = app.indexOf("function showVoteLoginPopup(")
-  const popupEnd = app.indexOf("function voteBoxMarkup", popupStart)
-  assert.notEqual(popupStart, -1, "missing vote auth prompt handler")
-  assert.notEqual(popupEnd, -1, "missing vote auth prompt handler boundary")
-  const popupBlock = app.slice(popupStart, popupEnd)
-
-  assert.doesNotMatch(
-    popupBlock,
-    /window\.location\.(assign|href)|location\.assign|location\.href/,
-    "guest vote clicks must not immediately redirect to Discord auth",
+  const styles = await readFile(stylesPath, "utf8")
+  const localModuleImports = Array.from(
+    app.matchAll(/(?:from\s+|import\s+)["'](\.\.?\/[^"']+\.js(?:\?[^"']*)?)["']/g),
+    (match) => match[1],
+  )
+  assert.ok(localModuleImports.length > 0, "expected local Iconoplasm module imports")
+  assert.deepEqual(
+    localModuleImports.filter((specifier) => !specifier.includes("?v=")),
+    [],
+    "all local modules need versioned URLs because the edge serves them as immutable",
   )
   assert.match(
     app,
-    /function buildVoteLoginPromptMarkup\(/,
-    "guest vote auth should render a modal prompt",
+    /import \{ openVoteLoginDialog \} from "\.\/vote-login-dialog\.js\?v=[^"]+"/,
+    "the immutable dialog module URL must change when its implementation changes",
   )
-  const promptStart = app.indexOf("function buildVoteLoginPromptMarkup(")
-  const promptEnd = app.indexOf("function showVoteLoginPopup", promptStart)
-  assert.notEqual(promptStart, -1, "missing vote auth prompt builder")
-  assert.notEqual(promptEnd, -1, "missing vote auth prompt builder boundary")
-  const promptBlock = app.slice(promptStart, promptEnd)
 
+  const wireStart = app.indexOf("function wireVoteBox(box, symbolValue, assetShaValue, options)")
+  const wireEnd = app.indexOf("function cancelVoteProjectionRefreshPoll", wireStart)
+  assert.notEqual(wireStart, -1, "missing website vote-box adapter")
+  assert.notEqual(wireEnd, -1, "missing website vote-box adapter boundary")
+  const wireBlock = app.slice(wireStart, wireEnd)
+
+  assert.match(wireBlock, /onAuthRequired: function \(_error, sourceControl\)/)
+  assert.match(wireBlock, /openVoteLoginDialog\(\{/)
+  assert.match(wireBlock, /loginUrl: voteLoginUrl\(\)/)
+  assert.match(wireBlock, /returnFocus: sourceControl \|\| box/)
   assert.match(
-    popupBlock,
-    /buildVoteLoginPromptMarkup\(/,
-    "guest vote auth should render a visible prompt before exposing the Discord login CTA",
-  )
-  assert.match(promptBlock, /role="dialog"/, "vote login prompt should use a standard modal dialog")
-  assert.match(
-    promptBlock,
-    /aria-modal="true"/,
-    "vote login prompt should take focus out of page context",
-  )
-  assert.match(
-    popupBlock,
-    /document\.body\.appendChild\(prompt\)/,
-    "vote login prompt should mount at page level",
-  )
-  assert.match(popupBlock, /document\.documentElement\.classList\.add\("icono-modal-locked"\)/)
-  assert.doesNotMatch(
-    promptBlock,
-    /icono-card|icono-guest-login-card|icono-candidate-footer|<article/,
-    "vote login modal must not reuse card/grid/footer classes",
-  )
-  assert.doesNotMatch(
-    popupBlock,
-    /\.closest\("\.icono-candidate-card"\)|\.closest\("\.icono-candidate-footer"\)|insertAdjacentElement|insertBefore|[^.]appendChild\(prompt\)/,
-    "candidate vote prompts must not be inserted into any artwork/card context",
+    styles,
+    /html:has\(\.icono-vote-login-dialog\[open\]\)/,
+    "the native top layer must also lock document scrolling",
   )
 })
 

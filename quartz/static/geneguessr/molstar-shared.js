@@ -185,9 +185,12 @@
       console.warn("[MolstarShared] Unable to set interactivity props", err)
     }
 
-    if (
-      !(viewer && viewer.plugin && viewer.plugin.behaviors && viewer.plugin.behaviors.interaction)
-    ) {
+    if (!(
+      viewer &&
+      viewer.plugin &&
+      viewer.plugin.behaviors &&
+      viewer.plugin.behaviors.interaction
+    )) {
       return
     }
 

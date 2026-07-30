@@ -3,20 +3,23 @@ import {
   HOME_COLLECTION_ORDERS,
   normalizeDiscoveryEntries,
   normalizeHomeCollectionOrder,
-} from "./discovery-collection.js"
+} from "./discovery-collection.js?v=20260730-module-cache"
 import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
-} from "./home-orders.js"
-import { createRequestInbox } from "./request-inbox.js"
-import { portraitDelivery } from "./portrait-delivery.js"
-import { createEmulsionFavoriteStore, normalizeEmulsionFamilyId } from "./emulsion-favorites.js"
-import { createCollectionFeedController } from "./collection-feed.js"
+} from "./home-orders.js?v=20260730-module-cache"
+import { createRequestInbox } from "./request-inbox.js?v=20260730-module-cache"
+import { portraitDelivery } from "./portrait-delivery.js?v=20260730-module-cache"
+import {
+  createEmulsionFavoriteStore,
+  normalizeEmulsionFamilyId,
+} from "./emulsion-favorites.js?v=20260730-module-cache"
+import { createCollectionFeedController } from "./collection-feed.js?v=20260730-module-cache"
 import {
   createWebsiteGuestDiscoveryStore,
   WEBSITE_GUEST_DISCOVERY_MAX_ENTRIES,
   WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
-} from "./guest-discovery-store.js"
+} from "./guest-discovery-store.js?v=20260730-module-cache"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -27,6 +30,7 @@ import {
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=ec70a3b0941d0a38"
 import "./vendor/img-comparison-slider.js?v=20260516b517"
+import { openVoteLoginDialog } from "./vote-login-dialog.js?v=20260730-native-dialog"
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
 // appearance settings. Loading the cross-subdomain bridge during anonymous
@@ -130,7 +134,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var masonryLibsPromise = null
   var photoSwipeModulePromise = null
   var hasResolvedAuthState = false
-  var voteLoginPromptVisible = false
   var websiteGuestDiscoveries = createWebsiteGuestDiscoveryStore({
     storage: (function () {
       try {
@@ -3755,60 +3758,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     })
   }
 
-  function buildVoteLoginPromptMarkup() {
-    return (
-      '<div class="icono-vote-login-overlay" data-icono-vote-login-prompt aria-hidden="false">' +
-      '<button type="button" class="icono-vote-login-backdrop" data-icono-vote-login-dismiss aria-label="Close login prompt"></button>' +
-      '<div class="icono-vote-login-dialog" role="dialog" aria-modal="true" aria-labelledby="icono-vote-login-title">' +
-      '<button type="button" class="icono-vote-login-close" data-icono-vote-login-dismiss aria-label="Close">Close</button>' +
-      '<div class="icono-vote-login-copy">' +
-      '<div class="icono-vote-login-title" id="icono-vote-login-title">Log in with Discord to vote</div>' +
-      "</div>" +
-      '<a class="icono-vote-login-link" href="' +
-      esc(voteLoginUrl()) +
-      '">Log in with Discord</a>' +
-      "</div>" +
-      "</div>"
-    )
-  }
-
-  function showVoteLoginPopup(voteBox) {
-    var existing = document.querySelector("[data-icono-vote-login-prompt]")
-    if (existing) {
-      existing.remove()
-    }
-    var wrapper = document.createElement("div")
-    wrapper.innerHTML = buildVoteLoginPromptMarkup()
-    var prompt = wrapper.firstElementChild
-    if (!prompt) return
-    var closePrompt = function () {
-      prompt.remove()
-      document.documentElement.classList.remove("icono-modal-locked")
-      document.body.classList.remove("icono-modal-locked")
-      document.removeEventListener("keydown", onKeydown)
-      voteLoginPromptVisible = false
-      if (voteBox && typeof voteBox.focus === "function") voteBox.focus({ preventScroll: true })
-    }
-    var onKeydown = function (event) {
-      if (event.key === "Escape") {
-        event.preventDefault()
-        closePrompt()
-      }
-    }
-    prompt.querySelectorAll("[data-icono-vote-login-dismiss]").forEach(function (button) {
-      button.addEventListener("click", closePrompt)
-    })
-    document.body.appendChild(prompt)
-    document.documentElement.classList.add("icono-modal-locked")
-    document.body.classList.add("icono-modal-locked")
-    document.addEventListener("keydown", onKeydown)
-    if (!voteLoginPromptVisible) {
-      voteLoginPromptVisible = true
-      var link = prompt.querySelector("a")
-      if (link && typeof link.focus === "function") link.focus({ preventScroll: true })
-    }
-  }
-
   function voteBoxMarkup(extraAttrs, options) {
     return IconoCardShared.voteBoxMarkup(extraAttrs, options)
   }
@@ -3828,8 +3777,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       onSnapshot: function (snapshot, state) {
         if (typeof opts.onSnapshot === "function") opts.onSnapshot(snapshot, state)
       },
-      onAuthRequired: function (_error, sourceBox) {
-        showVoteLoginPopup(sourceBox || box)
+      onAuthRequired: function (_error, sourceControl) {
+        openVoteLoginDialog({
+          loginUrl: voteLoginUrl(),
+          returnFocus: sourceControl || box,
+        })
       },
       onVoteCommitted: function (data, state) {
         if (typeof opts.onVoteCommitted === "function") {

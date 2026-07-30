@@ -10,7 +10,8 @@ import chokidar from "chokidar"
 import prettyBytes from "pretty-bytes"
 import { execSync, spawnSync } from "child_process"
 import http from "http"
-import serveHandler from "serve-handler"
+import { finished } from "node:stream/promises"
+import sirv from "sirv"
 import { WebSocketServer } from "ws"
 import { randomUUID } from "crypto"
 import { Mutex } from "async-mutex"
@@ -49,6 +50,20 @@ import {
   cacheFile,
   cwd,
 } from "./constants.js"
+
+export async function serveStaticRequest(handler, req, res) {
+  handler(req, res, () => {
+    if (!res.writableEnded) {
+      res.statusCode = 404
+      res.end("Not found")
+    }
+  })
+  try {
+    await finished(res, { cleanup: true })
+  } catch (error) {
+    if (error?.code !== "ERR_STREAM_PREMATURE_CLOSE") throw error
+  }
+}
 
 /**
  * Resolve content directory path
@@ -447,6 +462,14 @@ export async function handleBuild(argv) {
   if (argv.serve) {
     const connections = []
     clientRefresh = () => connections.forEach((conn) => conn.send("rebuild"))
+    const staticFiles = sirv(argv.output, {
+      dev: true,
+      etag: true,
+      extensions: ["html"],
+      setHeaders(res) {
+        res.setHeader("Content-Disposition", "inline")
+      },
+    })
 
     if (argv.baseDir !== "" && !argv.baseDir.startsWith("/")) {
       argv.baseDir = "/" + argv.baseDir
@@ -471,32 +494,17 @@ export async function handleBuild(argv) {
 
       const serve = async () => {
         const release = await buildMutex.acquire()
-        await serveHandler(req, res, {
-          public: argv.output,
-          directoryListing: false,
-          headers: [
-            {
-              source: "**/*.*",
-              headers: [{ key: "Content-Disposition", value: "inline" }],
-            },
-            {
-              source: "**/*.webp",
-              headers: [{ key: "Content-Type", value: "image/webp" }],
-            },
-            // fixes bug where avif images are displayed as text instead of images (future proof)
-            {
-              source: "**/*.avif",
-              headers: [{ key: "Content-Type", value: "image/avif" }],
-            },
-          ],
-        })
-        const status = res.statusCode
-        const statusString =
-          status >= 200 && status < 300
-            ? styleText("green", `[${status}]`)
-            : styleText("red", `[${status}]`)
-        console.log(statusString + styleText("gray", ` ${argv.baseDir}${req.url}`))
-        release()
+        try {
+          await serveStaticRequest(staticFiles, req, res)
+          const status = res.statusCode
+          const statusString =
+            status >= 200 && status < 300
+              ? styleText("green", `[${status}]`)
+              : styleText("red", `[${status}]`)
+          console.log(statusString + styleText("gray", ` ${argv.baseDir}${req.url}`))
+        } finally {
+          release()
+        }
       }
 
       const redirect = (newFp) => {
