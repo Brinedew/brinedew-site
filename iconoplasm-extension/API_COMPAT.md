@@ -4,7 +4,7 @@
 releases. `version` and `catalog_contract` identify the newest human-authorized
 package. `minimum_supported_version` and `compatibility_contracts` define the
 only older package the API must still serve. The current human-authorized
-package is 0.4.10 and the compatibility floor is 0.4.9. Both receive catalog
+package is 0.4.11 and the compatibility floor is 0.4.10. Both receive catalog
 schema 5 from `GET /api/public/v1/catalog/manifest`.
 
 `candidate-contract.json` describes the unreleased source contract. The current

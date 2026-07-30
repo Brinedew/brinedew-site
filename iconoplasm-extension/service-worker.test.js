@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 const storageState = new Map()
@@ -93,6 +94,52 @@ await import("./publication-alias-overlay.js")
 await import("./service-worker.js")
 
 const hooks = globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__
+
+test("Chromium builds reserve enough local storage for the full portrait-reference catalog", () => {
+  const manifest = JSON.parse(readFileSync(new URL("./manifest.json", import.meta.url), "utf8"))
+  const chromiumDefaultLocalQuotaBytes = 10 * 1024 * 1024
+  const publishedGeneCount = 19_023
+  const sha = "a".repeat(64)
+  const portraitReference = {
+    schema_version: 1,
+    asset_sha256: sha,
+    renditions: {
+      full: {
+        path: `portraits/v1/aa/${sha}/full.webp`,
+        canonical_url: `https://iconoplasm.brinedew.bio/portraits/v1/aa/${sha}/full.webp`,
+      },
+      medium: {
+        path: `portraits/v1/aa/${sha}/medium.webp`,
+        canonical_url: `https://iconoplasm.brinedew.bio/portraits/v1/aa/${sha}/medium.webp`,
+      },
+      thumb: {
+        path: `portraits/v1/aa/${sha}/thumb.webp`,
+        canonical_url: `https://iconoplasm.brinedew.bio/portraits/v1/aa/${sha}/thumb.webp`,
+      },
+    },
+  }
+  const representativeEntryBytes = Buffer.byteLength(
+    JSON.stringify({
+      GENE00000: {
+        c: "#abcdef",
+        n: "representative full gene name",
+        u: "P00000",
+        p: portraitReference,
+      },
+    }),
+    "utf8",
+  )
+  const representativeCatalogBytes = representativeEntryBytes * publishedGeneCount
+
+  assert.ok(
+    representativeCatalogBytes > chromiumDefaultLocalQuotaBytes,
+    "the regression fixture must exceed Chromium's default storage.local quota",
+  )
+  assert.ok(
+    manifest.permissions.includes("unlimitedStorage"),
+    "the full published catalog must not fail closed at Chromium's default 10 MiB quota",
+  )
+})
 
 test("portrait fetch failures back off briefly but recover after the error TTL", async () => {
   const originalDateNow = Date.now

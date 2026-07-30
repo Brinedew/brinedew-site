@@ -110,6 +110,9 @@ lurker for an auth check.
 Extension hover detail is immutable within a published card snapshot:
 
 - the catalog manifest exposes `card_snapshot_version`;
+- Chromium builds request `unlimitedStorage` because the fixed 19,023-gene
+  scanner catalog deliberately retains inspectable portrait references and
+  exceeds Chromium's default 10 MiB `storage.local` quota;
 - public gene batches read the corresponding published card artifact, not D1;
 - installed extensions keep a bounded local detail cache keyed by that version;
 - a version change invalidates the cache;
