@@ -9,7 +9,6 @@ import {
 import { googleFontHref, googleFontSubsetHref } from "../util/theme"
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { unescapeHTML } from "../util/escape"
-import { CustomOgImagesEmitterName } from "../../.quartz/plugins"
 import { getPublicUrlForSlug, isNoIndexFile } from "../util/crawlability"
 import { buildAiSearchJsonLd, serializeJsonLd } from "../util/aiSearchMetadata"
 import iconoplasmFontContract from "../../shared/iconoplasm-card/font-contract.json"
@@ -384,9 +383,7 @@ export default (() => {
         )
       : null
 
-    const usesCustomOgImage = ctx.cfg.plugins.emitters.some(
-      (e) => e.name === CustomOgImagesEmitterName,
-    )
+    const usesCustomOgImage = ctx.cfg.plugins.emitters.some((e) => e.name === "CustomOgImages")
     const ogImageDefaultPath = `https://${cfg.baseUrl}/static/og-image.png?v=${CACHE_BUST}`
     const ogImageDefaultExtension = getFileExtension(ogImageDefaultPath)?.slice(1) ?? "png"
 
