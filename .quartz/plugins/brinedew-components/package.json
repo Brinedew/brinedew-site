@@ -52,6 +52,11 @@
         "displayName": "Contact Form",
         "defaultPosition": "afterBody",
         "defaultPriority": 15
+      },
+      "PublicationDate": {
+        "displayName": "Publication Date",
+        "defaultPosition": "beforeBody",
+        "defaultPriority": 20
       }
     }
   }

@@ -478,19 +478,20 @@ PageList.css = `
 var sectionTitles = {
   posts: "Posts",
   apps: "Apps",
-  wiki: "Wiki",
-  drafts: "Drafts"
+  wiki: "Wiki"
 };
 var sectionTargets = {
   posts: "tags/content/post",
   apps: "apps/index",
-  wiki: "tags/content/wiki",
-  drafts: "tags/draft"
+  wiki: "tags/content/wiki"
 };
 var sectionLimits = {
   posts: 4,
-  wiki: 4,
-  drafts: 5
+  wiki: 4
+};
+var isMetaInventoryFile = (file) => {
+  const tags = Array.isArray(file.frontmatter?.tags) ? file.frontmatter.tags : [];
+  return tags.includes("meta") || tags.includes("content/meta");
 };
 var sectionIndexSlugs = /* @__PURE__ */ new Set(["posts/index", "wiki/index", "apps/index"]);
 var summarize = (description) => {
@@ -508,16 +509,16 @@ var HomepageCrawlFrontier_default = (() => {
   }) => {
     if (fileData.slug !== "index") return null;
     const sorted = allFiles.filter(
-      (file) => isCrawlableFile(file) && file.slug !== "index" && !sectionIndexSlugs.has(String(file.slug))
+      (file) => isCrawlableFile(file) && file.slug !== "index" && !sectionIndexSlugs.has(String(file.slug)) && !isMetaInventoryFile(file) && // Drafts stay on tag pages; keep them off the public frontpage.
+      classifyCrawlSection(file) !== "drafts"
     ).sort(byDateAndAlphabetical());
     const sections = {
       posts: sorted.filter((file) => classifyCrawlSection(file) === "posts").slice(0, sectionLimits.posts),
-      wiki: sorted.filter((file) => classifyCrawlSection(file) === "wiki").slice(0, sectionLimits.wiki),
-      drafts: sorted.filter((file) => classifyCrawlSection(file) === "drafts").slice(0, sectionLimits.drafts)
+      wiki: sorted.filter((file) => classifyCrawlSection(file) === "wiki").slice(0, sectionLimits.wiki)
     };
     const baseUrl = cfg.baseUrl ?? "brinedew.bio";
     return /* @__PURE__ */ u2("nav", { class: "homepage-crawl-frontier", "aria-label": "Site index", children: /* @__PURE__ */ u2("div", { class: "homepage-crawl-frontier__sections", children: [
-      ["posts", "wiki", "drafts"].map(
+      ["posts", "wiki"].map(
         (section) => sections[section].length > 0 ? /* @__PURE__ */ u2("section", { children: [
           /* @__PURE__ */ u2("h2", { children: sectionTargets[section] ? /* @__PURE__ */ u2(
             "a",
@@ -2124,6 +2125,41 @@ var ContactForm = (opts = {}) => {
 };
 var ContactForm_default = ContactForm;
 
+// src/components/PublicationDate.tsx
+var PublicationDate_default = (() => {
+  const PublicationDate = ({ cfg, fileData, displayClass }) => {
+    const slug2 = String(fileData.slug ?? "");
+    const fm = fileData.frontmatter ?? {};
+    const hasAuthorDate = fm.date !== void 0 || fm.published !== void 0 || fm.created !== void 0;
+    if (!hasAuthorDate || slug2 === "index" || slug2.startsWith("tags/") || slug2.startsWith("apps/") || slug2.startsWith("settings")) {
+      return null;
+    }
+    let date;
+    try {
+      const defaultDateType = fileData.defaultDateType ?? cfg.defaultDateType;
+      if (!defaultDateType) return null;
+      date = getDate({
+        ...fileData,
+        defaultDateType
+      });
+    } catch {
+      return null;
+    }
+    if (!date) return null;
+    const locale = cfg.locale ?? "en-US";
+    return /* @__PURE__ */ u2("p", { class: `content-meta${displayClass ? ` ${displayClass}` : ""}`, children: /* @__PURE__ */ u2("time", { datetime: date.toISOString(), children: formatDate(date, locale) }) });
+  };
+  PublicationDate.css = `
+.content-meta {
+  margin: 0 0 1.1rem;
+  color: var(--gray);
+  font-size: 0.92rem;
+  letter-spacing: 0.01em;
+}
+`;
+  return PublicationDate;
+});
+
 // ../../../node_modules/.pnpm/unist-util-is@6.0.1/node_modules/unist-util-is/lib/index.js
 var convert = (
   // Note: overloads in JSDoc can’t yet use different `@template`s.
@@ -2385,13 +2421,118 @@ var DraftTagInjector = () => ({
     return [rehypeDraftTag];
   }
 });
+
+// src/plugins/essayNormalizer.ts
+var BLOCK_TAGS = /* @__PURE__ */ new Set([
+  "p",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "ul",
+  "ol",
+  "li",
+  "blockquote",
+  "pre",
+  "table",
+  "thead",
+  "tbody",
+  "tr",
+  "figure",
+  "figcaption",
+  "hr",
+  "section",
+  "article",
+  "div",
+  "dl",
+  "dt",
+  "dd"
+]);
+var isElement = (node) => !!node && node.type === "element";
+var isWhitespaceText = (node) => !!node && node.type === "text" && !node.value.trim();
+var isBreak = (node) => isElement(node) && node.tagName === "br";
+function normalizeSpacing(tree) {
+  visit(tree, "element", (node, index, parent) => {
+    if (!parent || index === void 0) return;
+    if (node.tagName === "pre" || node.tagName === "code") return;
+    if (node.tagName === "p") {
+      const meaningful = node.children.filter((child) => {
+        if (child.type === "text") return child.value.trim().length > 0;
+        if (isBreak(child)) return false;
+        return true;
+      });
+      if (meaningful.length === 0) {
+        parent.children.splice(index, 1);
+        return;
+      }
+      node.children = meaningful;
+    }
+    if (node.children.some(isBreak)) {
+      const next = [];
+      for (let i3 = 0; i3 < node.children.length; i3++) {
+        const child = node.children[i3];
+        if (!isBreak(child)) {
+          next.push(child);
+          continue;
+        }
+        const prev = next[next.length - 1];
+        const following = node.children[i3 + 1];
+        const prevIsBlock = isElement(prev) && BLOCK_TAGS.has(prev.tagName);
+        const nextIsBlock = isElement(following) && BLOCK_TAGS.has(following.tagName);
+        if (prevIsBlock || nextIsBlock) continue;
+        if (isWhitespaceText(prev) || isWhitespaceText(following)) continue;
+        if (prev && prev.type === "text" && !prev.value.endsWith(" ")) {
+          prev.value += " ";
+        } else if (!prev || prev.type !== "text") {
+          next.push({ type: "text", value: " " });
+        }
+      }
+      node.children = next;
+    }
+  });
+}
+function normalizeHeadings(tree) {
+  let sawTitle = false;
+  visit(tree, "element", (node) => {
+    const match = /^h([1-6])$/.exec(node.tagName);
+    if (!match) return;
+    const level = Number(match[1]);
+    if (!sawTitle) {
+      sawTitle = true;
+      node.tagName = "h1";
+      return;
+    }
+    if (level <= 1) {
+      node.tagName = "h2";
+      return;
+    }
+    node.tagName = `h${Math.min(6, level)}`;
+  });
+}
+var EssayNormalizer = () => {
+  return {
+    name: "brinedew-essay-normalizer",
+    htmlPlugins() {
+      return [
+        () => (tree) => {
+          normalizeSpacing(tree);
+          normalizeHeadings(tree);
+        }
+      ];
+    }
+  };
+};
 export {
   Citation_default as Citation,
   ContactForm_default as ContactForm,
   DraftTagInjector,
+  EssayNormalizer,
   HomepageCrawlFrontier_default as HomepageCrawlFrontier,
   IconoplasmPageSwitcher_default as IconoplasmPageSwitcher,
   ImageCaptions,
   ProteinInfobox_default as ProteinInfobox,
+  PublicationDate_default as PublicationDate,
   TagSections_default as TagSections
 };

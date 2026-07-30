@@ -8,20 +8,22 @@ const sectionTitles = {
   posts: "Posts",
   apps: "Apps",
   wiki: "Wiki",
-  drafts: "Drafts",
 }
 
 const sectionTargets = {
   posts: "tags/content/post" as FullSlug,
   apps: "apps/index" as FullSlug,
   wiki: "tags/content/wiki" as FullSlug,
-  drafts: "tags/draft" as FullSlug,
 }
 
 const sectionLimits = {
   posts: 4,
   wiki: 4,
-  drafts: 5,
+}
+
+const isMetaInventoryFile = (file: { frontmatter?: Record<string, unknown> | null }): boolean => {
+  const tags = Array.isArray(file.frontmatter?.tags) ? file.frontmatter.tags : []
+  return tags.includes("meta") || tags.includes("content/meta")
 }
 
 const sectionIndexSlugs = new Set(["posts/index", "wiki/index", "apps/index"])
@@ -48,7 +50,10 @@ export default (() => {
         (file) =>
           isCrawlableFile(file) &&
           file.slug !== "index" &&
-          !sectionIndexSlugs.has(String(file.slug)),
+          !sectionIndexSlugs.has(String(file.slug)) &&
+          !isMetaInventoryFile(file) &&
+          // Drafts stay on tag pages; keep them off the public frontpage.
+          classifyCrawlSection(file) !== "drafts",
       )
       .sort(byDateAndAlphabetical())
 
@@ -59,16 +64,13 @@ export default (() => {
       wiki: sorted
         .filter((file) => classifyCrawlSection(file) === "wiki")
         .slice(0, sectionLimits.wiki),
-      drafts: sorted
-        .filter((file) => classifyCrawlSection(file) === "drafts")
-        .slice(0, sectionLimits.drafts),
     }
     const baseUrl = cfg.baseUrl ?? "brinedew.bio"
 
     return (
       <nav class="homepage-crawl-frontier" aria-label="Site index">
         <div class="homepage-crawl-frontier__sections">
-          {(["posts", "wiki", "drafts"] as const).map((section) =>
+          {(["posts", "wiki"] as const).map((section) =>
             sections[section].length > 0 ? (
               <section>
                 <h2>

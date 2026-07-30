@@ -12,7 +12,6 @@ import { unescapeHTML } from "../util/escape"
 import { getPublicUrlForSlug, isNoIndexFile } from "../util/crawlability"
 import { buildAiSearchJsonLd, serializeJsonLd } from "../util/aiSearchMetadata"
 import iconoplasmFontContract from "../../shared/iconoplasm-card/font-contract.json"
-import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 
@@ -23,12 +22,6 @@ const CACHE_BUST = `${Date.now()}-${
   (typeof process !== "undefined" && process.env?.VERCEL_GIT_COMMIT_SHA) ||
   "build"
 }`
-const authSidebarAssetHash = createHash("sha256")
-  .update(
-    readFileSync(path.resolve(process.cwd(), "quartz", "static", "shared", "auth-sidebar.mjs")),
-  )
-  .digest("hex")
-  .slice(0, 16)
 
 const siteNetworkFontFaces = `
 @font-face {
@@ -656,11 +649,9 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
           }}
         />
 
-        {/* App pages own their account UI. Loading the generic sidebar there
-            duplicates /api/auth/me and creates competing DOM owners. */}
-        {!isIconoplasm && !isGeneguessr && !isSettings && (
-          <script>{`document.addEventListener('DOMContentLoaded',function(){var s=document.createElement('script');s.type='module';s.src='/static/shared/auth-sidebar.mjs?v=${authSidebarAssetHash}';document.body.appendChild(s)})`}</script>
-        )}
+        {/* Account chrome lives only on apps (GeneGuessr / Iconoplasm) and
+            Settings, each of which mounts its own sidebar stack. Essay/wiki
+            reading pages must not load Guest/Discord Login chrome (B-693). */}
 
         {/* Conditional app assets - computed outside JSX for SSR reliability */}
         {(() => {
