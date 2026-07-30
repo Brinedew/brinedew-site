@@ -25,6 +25,10 @@
     const storageApi = options.storageApi || null
     const storageKey = String(options.storageKey || "iconoplasm_published_gene_detail_cache_v1")
     const persistentLimit = Math.max(1, Number(options.persistentLimit || 512))
+    const persistentByteLimit = Math.max(
+      1024,
+      Number(options.persistentByteLimit || 4 * 1024 * 1024),
+    )
     const getRevision =
       typeof options.getRevision === "function" ? options.getRevision : async () => ""
     const deferTask =
@@ -35,6 +39,47 @@
     let draining = false
     let persistentHydrationPromise = null
     let activeRevision = ""
+
+    function utf8ByteLength(value) {
+      let bytes = 0
+      for (const character of String(value || "")) {
+        const codePoint = character.codePointAt(0)
+        if (codePoint <= 0x7f) bytes += 1
+        else if (codePoint <= 0x7ff) bytes += 2
+        else if (codePoint <= 0xffff) bytes += 3
+        else bytes += 4
+      }
+      return bytes
+    }
+
+    function boundedPersistentEntries(rawEntries, revision) {
+      const normalized = []
+      for (const entry of Array.isArray(rawEntries) ? rawEntries : []) {
+        const symbol = normalizeSymbol(entry && entry[0])
+        const record = entry && entry[1]
+        if (!symbol || !record || typeof record !== "object") continue
+        normalized.push([symbol, record])
+      }
+      const limited = normalized.slice(-persistentLimit)
+      const baseBytes = utf8ByteLength(
+        JSON.stringify({
+          schema_version: 1,
+          revision,
+          entries: [],
+        }),
+      )
+      let payloadBytes = baseBytes
+      const selectedNewestFirst = []
+      for (let index = limited.length - 1; index >= 0; index -= 1) {
+        const entry = limited[index]
+        const entryBytes = utf8ByteLength(JSON.stringify(entry))
+        const separatorBytes = selectedNewestFirst.length ? 1 : 0
+        if (payloadBytes + entryBytes + separatorBytes > persistentByteLimit) continue
+        payloadBytes += entryBytes + separatorBytes
+        selectedNewestFirst.push(entry)
+      }
+      return selectedNewestFirst.reverse()
+    }
 
     function delay(ms) {
       return new Promise((resolve) => windowRef.setTimeout(resolve, ms))
@@ -81,11 +126,21 @@
           if (payload && storageApi.remove) await storageApi.remove([storageKey])
           return
         }
-        for (const entry of payload.entries.slice(-persistentLimit)) {
+        const boundedEntries = boundedPersistentEntries(payload.entries, revision)
+        for (const entry of boundedEntries) {
           const symbol = normalizeSymbol(entry && entry[0])
           const record = entry && entry[1]
           if (!symbol || !record || typeof record !== "object") continue
           rememberRecord(symbol, record)
+        }
+        if (boundedEntries.length !== payload.entries.length && storageApi.set) {
+          await storageApi.set({
+            [storageKey]: {
+              schema_version: 1,
+              revision,
+              entries: boundedEntries,
+            },
+          })
         }
       })().catch(() => null)
       return persistentHydrationPromise
@@ -118,7 +173,7 @@
         merged.delete(symbol)
         merged.set(symbol, record)
       }
-      const entries = Array.from(merged.entries()).slice(-persistentLimit)
+      const entries = boundedPersistentEntries(Array.from(merged.entries()), revision)
       await storageApi.set({
         [storageKey]: {
           schema_version: 1,
@@ -262,6 +317,15 @@
       get: (symbol) => cache.get(normalizeSymbol(symbol)) || null,
       hydratePersistentCache,
       persistResolvedRecords,
+      persistentByteLimit,
+      persistentPayloadBytes: () =>
+        utf8ByteLength(
+          JSON.stringify({
+            schema_version: 1,
+            revision: activeRevision,
+            entries: boundedPersistentEntries(Array.from(cache.entries()), activeRevision),
+          }),
+        ),
     }
   }
 

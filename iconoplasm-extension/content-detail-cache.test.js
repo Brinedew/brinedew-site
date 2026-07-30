@@ -117,6 +117,39 @@ test("a new card snapshot invalidates persisted details before reuse", async () 
   assert.equal(storage.values.iconoplasm_published_gene_detail_cache_v1.revision, "card-v2")
 })
 
+test("persistent detail storage obeys a byte budget as well as an entry count", async () => {
+  const createGeneDetailStore = loadFactory()
+  const storage = createStorage()
+  const store = createGeneDetailStore({
+    windowRef: globalThis,
+    storageApi: storage,
+    persistentLimit: 512,
+    persistentByteLimit: 1400,
+    getRevision: async () => "card-v1",
+    batchUrl: "https://example.test/batch",
+    fetchImpl: async (_url, options) => {
+      const symbols = JSON.parse(options.body).symbols
+      return response({
+        snapshot_version: "card-v1",
+        genes: symbols.map((symbol) => ({
+          symbol,
+          essence: "x".repeat(480),
+          portrait: { medium_url: `https://example.test/${symbol}.webp` },
+        })),
+        missing: [],
+      })
+    },
+  })
+
+  await store.fetchBatch(["TP53", "BRCA1", "EGFR", "KRAS"])
+
+  const persisted = storage.values.iconoplasm_published_gene_detail_cache_v1
+  const persistedBytes = Buffer.byteLength(JSON.stringify(persisted), "utf8")
+  assert.ok(persistedBytes <= 1400)
+  assert.ok(persisted.entries.length < 4)
+  assert.ok(store.cache.size >= persisted.entries.length)
+})
+
 test("transient batch failures remain retryable instead of becoming missing genes", async () => {
   const createGeneDetailStore = loadFactory()
   let fetchCount = 0

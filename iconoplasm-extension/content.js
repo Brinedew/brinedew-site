@@ -109,8 +109,8 @@
   const DISCOVERY_AUTH_CACHE_TTL_MS = 5 * 60 * 1000
   const GUEST_DISCOVERY_SYMBOL_MAX = 2000
   const GENE_DETAIL_VISIBLE_LIMIT = 16
-  const PORTRAIT_VISIBLE_LIMIT = 8
-  const GENE_DATA_REQUEST_TIMEOUT_MS = 2000
+  const GENE_DETAIL_PERSISTENT_MAX_BYTES = 4 * 1024 * 1024
+  const GENE_DATA_REQUEST_TIMEOUT_MS = 5000
   const GENE_DATA_RETRY_DELAY_MS = 750
   // Fence: the hover card needs identity, accent color, synced essence, and the
   // published portrait metadata that powers both rendering and the vote box.
@@ -510,7 +510,6 @@
     discoveredSymbols: [],
   }
   let portraitLoadToken = 0
-  let portraitWarmScheduled = false
   let viewportWarmFrame = 0
   let visibilityScheduler = null
   let mutationScanController = null
@@ -630,6 +629,7 @@
     // Worker and KV read plane again for the same gene.
     storageApi: chrome.storage.local,
     persistentLimit: 512,
+    persistentByteLimit: GENE_DETAIL_PERSISTENT_MAX_BYTES,
     getRevision: async () => {
       const stored = await chrome.storage.local.get([
         "iconoplasm_card_snapshot_version",
@@ -709,7 +709,6 @@
       scanPage(document.body)
       refreshHighlightStyles()
       scheduleWarmVisibleGeneDetails()
-      scheduleWarmVisiblePortraits()
     }
   }
 
@@ -1036,20 +1035,6 @@
     discoveryTimerBySymbol.set(normalizedSymbol, timerId)
   }
 
-  function resolvePortraitUrl(gene) {
-    const renditions = gene?.p?.renditions || {}
-    const rendition = renditions.medium || renditions.thumb || renditions.full || null
-    return String(rendition?.canonical_url || "").trim()
-  }
-
-  function deferPortraitWarm(task) {
-    if (typeof window.requestIdleCallback === "function") {
-      window.requestIdleCallback(() => task(), { timeout: 800 })
-      return
-    }
-    window.setTimeout(task, 80)
-  }
-
   function deferGeneDetailWarm(task) {
     window.setTimeout(task, 0)
   }
@@ -1113,31 +1098,6 @@
     portraitCache.warmUrls(urls)
   }
 
-  function scheduleWarmVisiblePortraits(limit = PORTRAIT_VISIBLE_LIMIT) {
-    if (portraitWarmScheduled) return
-    portraitWarmScheduled = true
-    deferPortraitWarm(() => {
-      portraitWarmScheduled = false
-      if (!geneMap) return
-      const urls = []
-      const seenSymbols = new Set()
-      const sourceSymbols =
-        visibilityScheduler && visibilityScheduler.hasVisibleSymbols()
-          ? collectObservedVisibleGeneSymbols(limit)
-          : collectVisibleGeneSymbols(limit)
-      for (const symbol of sourceSymbols) {
-        if (!symbol || seenSymbols.has(symbol)) continue
-        seenSymbols.add(symbol)
-        const gene = geneMap[symbol]
-        const portraitSrc = resolvePortraitUrl(gene)
-        if (!portraitSrc) continue
-        urls.push(portraitSrc)
-        if (urls.length >= limit) break
-      }
-      warmPortraitUrls(urls)
-    })
-  }
-
   function collectVisibleGeneSymbols(limit = GENE_DETAIL_VISIBLE_LIMIT) {
     if (!geneMap) return []
     const symbols = []
@@ -1173,7 +1133,6 @@
       abovePx: GENE_DETAIL_VIEWPORT_ABOVE_PX,
       belowPx: GENE_DETAIL_VIEWPORT_BELOW_PX,
       onVisibleChange: () => {
-        scheduleWarmVisiblePortraits()
         scheduleWarmVisibleGeneDetails()
       },
     })
@@ -1219,21 +1178,6 @@
     return symbols
   }
 
-  function collectNeighborPortraitUrls(targetEl, limit = GENE_DETAIL_WARM_BATCH_SIZE) {
-    if (!geneMap) return []
-    const symbols = collectNeighborGeneSymbols(targetEl, limit)
-    const urls = []
-    const seenUrls = new Set()
-    for (const symbol of symbols) {
-      const gene = geneMap[symbol]
-      const portraitSrc = resolvePortraitUrl(gene)
-      if (!portraitSrc || seenUrls.has(portraitSrc)) continue
-      seenUrls.add(portraitSrc)
-      urls.push(portraitSrc)
-    }
-    return urls
-  }
-
   async function fetchGeneDetailsBatch(symbols) {
     return geneDetailStore.fetchBatch(symbols)
   }
@@ -1256,7 +1200,6 @@
     if (viewportWarmFrame) return
     viewportWarmFrame = window.requestAnimationFrame(() => {
       viewportWarmFrame = 0
-      scheduleWarmVisiblePortraits()
       scheduleWarmVisibleGeneDetails()
     })
   }
@@ -1338,17 +1281,16 @@
 
   function loadSimpleTooltipPortrait({ symbol, summaryGene, geneDetail, portraitRefs }) {
     if (!portraitRefs || !portraitRefs.portraitImg) return Promise.resolve()
-    // Fence: the published catalog is enough to discover and color symbols, but an older cached
-    // snapshot may not carry portrait renditions. The rich frame variants already recover from
-    // that state when the authoritative detail record arrives. Simple must follow the same
-    // contract instead of freezing its first "Portrait pending" render forever.
+    // The scanner index deliberately has no portrait metadata. Both tooltip renderers wait for
+    // the same bounded published-detail cache instead of copying cold portrait references into
+    // every tab.
     return loadTooltipPortrait({
       symbol,
       portrait: portraitRefs.portrait,
       portraitImg: portraitRefs.portraitImg,
       portraitFallback: portraitRefs.portraitFallback,
       portraitStatus: portraitRefs.portraitStatus,
-      portraitSrc: buildTooltipFramePortraitSrc(summaryGene, geneDetail),
+      portraitSrc: buildTooltipFramePortraitSrc(geneDetail),
     })
   }
 
@@ -1436,7 +1378,6 @@
     refreshHighlightStyles()
     scheduleDiscoveryBufferFlush()
     scheduleWarmVisibleGeneDetails()
-    scheduleWarmVisiblePortraits()
     if (!ensureVisibilityObserver()) {
       window.addEventListener("scroll", scheduleViewportWarm, { passive: true })
       window.addEventListener("resize", scheduleViewportWarm, { passive: true })
@@ -1468,7 +1409,6 @@
       scanPage,
       onScanComplete() {
         scheduleHighlightGeometryRefresh()
-        scheduleWarmVisiblePortraits()
         scheduleWarmVisibleGeneDetails()
       },
     })
@@ -1547,8 +1487,7 @@
       .trim()
       .toLowerCase()
     const portraitSrc =
-      String(portraitSrcOverride || "").trim() ||
-      buildTooltipFramePortraitSrc(summaryGene, geneDetail)
+      String(portraitSrcOverride || "").trim() || buildTooltipFramePortraitSrc(geneDetail)
     return IconoCardShared.resolveArchivalCardModel(geneModel, {
       mode: "brick",
       layoutVariant: isImageOnlyCardVariant() ? "image-only" : "lit-archival",
@@ -1567,12 +1506,9 @@
     })
   }
 
-  function buildTooltipFramePortraitSrc(summaryGene, geneDetail) {
+  function buildTooltipFramePortraitSrc(geneDetail) {
     const detailPortrait = geneDetail && geneDetail.portrait ? geneDetail.portrait : null
-    const detailUrl = portraitUrlFromGeneDetail({ portrait: detailPortrait })
-    if (detailUrl) return detailUrl
-    const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
-    return resolvePortraitUrl(summary)
+    return portraitUrlFromGeneDetail({ portrait: detailPortrait })
   }
 
   function buildTooltipFramePortraitDimensions(summaryGene, geneDetail) {
@@ -1729,7 +1665,7 @@
     const symbol = String((detail && detail.symbol) || summary.symbol || activeSymbol || "")
       .trim()
       .toUpperCase()
-    const directPortraitSrc = buildTooltipFramePortraitSrc(summaryGene, geneDetail)
+    const directPortraitSrc = buildTooltipFramePortraitSrc(geneDetail)
     const warmedPortraitSrc = directPortraitSrc
       ? portraitDataUrlCache.get(directPortraitSrc) || ""
       : ""
@@ -1879,7 +1815,6 @@
       : fetchGeneDetailForTooltip(symbol)
     const neighborSymbols = collectNeighborGeneSymbols(target, GENE_DETAIL_WARM_BATCH_SIZE)
     warmGeneDetails(neighborSymbols, GENE_DETAIL_WARM_BATCH_SIZE)
-    warmPortraitUrls(collectNeighborPortraitUrls(target, GENE_DETAIL_WARM_BATCH_SIZE))
 
     const color = gene.c || PLACEHOLDER_COLOR
     const usesFrameRenderer = usesTooltipFrameRenderer()

@@ -87,6 +87,11 @@ const CATALOG_ARTIFACT_CONTRACT_REVISION = Number(
   ICONOPLASM_CANDIDATE_CONTRACT.catalog_contract_revision,
 )
 const CATALOG_ARTIFACT_VERSION_TOKEN = `a${CATALOG_ARTIFACT_SCHEMA_VERSION}c${CATALOG_ARTIFACT_CONTRACT_REVISION}`
+const SCANNER_ARTIFACT_SCHEMA_VERSION = Number(ICONOPLASM_CANDIDATE_CONTRACT.scanner_schema_version)
+const SCANNER_ARTIFACT_CONTRACT_REVISION = Number(
+  ICONOPLASM_CANDIDATE_CONTRACT.scanner_contract_revision,
+)
+const SCANNER_ARTIFACT_MAX_BYTES = 3 * 1024 * 1024
 const PUBLISHED_EXTENSION_VERSION = String(ICONOPLASM_PUBLISHER_RELEASE.version)
 const PUBLISHED_CATALOG_SCHEMA_VERSION = Number(
   ICONOPLASM_PUBLISHER_RELEASE.catalog_contract.schema_version,
@@ -803,6 +808,7 @@ const USER_EMULSION_MAX_LENGTH = 140
 
 const KV_CATALOG_MANIFEST = "iconoplasm:catalog-manifest"
 const KV_CATALOG_PREFIX = "iconoplasm:catalog:"
+const KV_SCANNER_CATALOG_PREFIX = "iconoplasm:scanner-catalog:"
 // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
 // Search terms for future maintainers: PRL split-brain, canonical portrait,
 // canonical blot, logged-in logged-out mismatch, public card artifact,
@@ -10976,6 +10982,7 @@ async function extensionManifestObj(url, env, clientVersion = null) {
   const artifactContractRevision = compatibilityContract
     ? compatibilityContract.revision
     : CATALOG_ARTIFACT_CONTRACT_REVISION
+  const scannerArtifact = publicScannerArtifactManifest(url, manifest)
   return {
     ...manifest,
     current_hash: buildVersion,
@@ -10988,6 +10995,7 @@ async function extensionManifestObj(url, env, clientVersion = null) {
     ...(compatibilityContract ? { portrait_base_url: ICONOPLASM_CANONICAL_ORIGIN } : {}),
     portrait_delivery: portraitDeliveryPolicy(url, env),
     publication_aliases: publicationAliases,
+    scanner_artifact: scannerArtifact,
   }
 }
 
@@ -11184,6 +11192,42 @@ function publicCatalogArtifactPath(hash) {
   return publicApiPath(`/catalog/${publicCatalogArtifactFilename(hash)}`)
 }
 
+function publicScannerArtifactFilename(hash) {
+  return `scanner.${hash}.json`
+}
+
+function publicScannerArtifactPath(hash) {
+  return publicApiPath(`/catalog/${publicScannerArtifactFilename(hash)}`)
+}
+
+function publicScannerArtifactManifest(url, manifest) {
+  const scanner = manifest?.scanner_artifact
+  if (!scanner || typeof scanner !== "object") return null
+  const schemaVersion = Number(scanner.schema_version || 0)
+  const contractRevision = Number(scanner.contract_revision || 0)
+  const buildVersion = String(scanner.build_version || "").trim()
+  const filename = String(scanner.filename || "").trim()
+  const byteSize = Number(scanner.byte_size || 0)
+  if (
+    schemaVersion !== SCANNER_ARTIFACT_SCHEMA_VERSION ||
+    contractRevision !== SCANNER_ARTIFACT_CONTRACT_REVISION ||
+    !buildVersion ||
+    filename !== publicScannerArtifactFilename(buildVersion) ||
+    !Number.isInteger(byteSize) ||
+    byteSize < 1 ||
+    byteSize > SCANNER_ARTIFACT_MAX_BYTES
+  ) {
+    return null
+  }
+  return {
+    schema_version: schemaVersion,
+    contract_revision: contractRevision,
+    build_version: buildVersion,
+    byte_size: byteSize,
+    artifact_url: `${url.origin}${publicScannerArtifactPath(buildVersion)}`,
+  }
+}
+
 function publicCatalogJsonlFilename(hash) {
   return `catalog.${hash}.jsonl`
 }
@@ -11226,12 +11270,14 @@ async function publicMetadataObj(url, env) {
     min_extension_version: manifest.min_extension_version || MIN_EXTENSION_VERSION,
     portrait_delivery: manifest.portrait_delivery || portraitDeliveryPolicy(url, env),
     publication_aliases: manifest.publication_aliases || null,
+    scanner_artifact: manifest.scanner_artifact || null,
     urls: {
       metadata: publicUrl(url, "/metadata"),
       stats: publicUrl(url, "/stats"),
       schema: publicUrl(url, "/schema"),
       catalog_manifest: publicUrl(url, "/catalog/manifest"),
       catalog_artifact: buildHash ? `${url.origin}${publicCatalogArtifactPath(buildHash)}` : null,
+      catalog_scanner: manifest.scanner_artifact?.artifact_url || null,
       catalog_jsonl: catalogHash ? `${url.origin}${publicCatalogJsonlDumpPath(catalogHash)}` : null,
       changes: publicUrl(url, "/changes"),
       batch: publicUrl(url, "/genes/batch"),
@@ -11257,6 +11303,11 @@ function publicSchemaDoc() {
     catalog_contract: {
       schema_version: CATALOG_ARTIFACT_SCHEMA_VERSION,
       revision: CATALOG_ARTIFACT_CONTRACT_REVISION,
+    },
+    scanner_contract: {
+      schema_version: SCANNER_ARTIFACT_SCHEMA_VERSION,
+      revision: SCANNER_ARTIFACT_CONTRACT_REVISION,
+      max_bytes: SCANNER_ARTIFACT_MAX_BYTES,
     },
     cursor_format: "ISO-8601 UTC timestamp",
     batch_limits: {
@@ -24629,6 +24680,7 @@ async function handlePublicCatalogManifest(request, env) {
     portrait_delivery: manifest.portrait_delivery || portraitDeliveryPolicy(url, env),
     publication_aliases: manifest.publication_aliases || null,
     card_snapshot_version: String(cardSnapshot.current || "").trim() || null,
+    scanner_artifact: manifest.scanner_artifact || null,
     artifact_url: buildHash
       ? publicUrl(url, `/catalog/${publicCatalogArtifactFilename(buildHash)}`)
       : null,
@@ -24655,6 +24707,23 @@ async function handlePublicCatalogArtifact(env, path) {
     env,
     publicCatalogArtifactPath(String(match[1] || "")).replace(PUBLIC_API_PREFIX, "/api"),
   )
+}
+
+async function handlePublicScannerArtifact(env, path) {
+  const match = path.match(/\/api\/public\/v1\/catalog\/scanner\.([a-z0-9-]+)\.json$/i)
+  if (!match) return json({ error: "Invalid public scanner artifact path" }, 400)
+  if (!env.KV) return json({ error: "KV binding missing" }, 500)
+  const hash = String(match[1] || "").trim()
+  const raw = await env.KV.get(`${KV_SCANNER_CATALOG_PREFIX}${hash}`)
+  if (!raw) return json({ error: "Scanner artifact not found" }, 404)
+  return new Response(raw, {
+    headers: {
+      ...corsHeaders(),
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "public, max-age=31536000, immutable",
+      ETag: `"scanner-${hash}"`,
+    },
+  })
 }
 
 async function handlePublicCatalogJsonlDump(env, path) {
@@ -26336,6 +26405,8 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
   public_catalog_manifest: ({ request, env }) => handlePublicCatalogManifest(request, env),
   public_catalog_artifact: async ({ request, env, path }) =>
     asHead(request, await handlePublicCatalogArtifact(env, path)),
+  public_scanner_artifact: async ({ request, env, path }) =>
+    asHead(request, await handlePublicScannerArtifact(env, path)),
   public_catalog_dump: async ({ request, env, path }) =>
     asHead(request, await handlePublicCatalogJsonlDump(env, path)),
   public_gallery: ({ request, env, ctx }) => handlePublicGallery(request, env, ctx),
@@ -26760,6 +26831,44 @@ async function loadCatalogRowsForPublish(env) {
   return genes
 }
 
+export function buildPublishedScannerArtifact(artifact) {
+  if (!artifact || !Array.isArray(artifact.genes)) {
+    throw new Error("Scanner publication requires a catalog genes array")
+  }
+  const genes = {}
+  for (const rawGene of artifact.genes) {
+    const symbol = normalizeSymbol(rawGene?.s || "")
+    if (!symbol) throw new Error("Scanner publication found an invalid canonical symbol")
+    if (Object.hasOwn(genes, symbol)) {
+      throw new Error(`Scanner publication found duplicate symbol ${symbol}`)
+    }
+    const gene = {}
+    const fullName = sanitizeText(rawGene?.n, 255)
+    const uniprot = normalizeUniprot(rawGene?.u || null)
+    const color = normalizeHexColor(rawGene?.c || null)
+    const aliases = normalizeCatalogAliases(rawGene?.a || [])
+    if (fullName) gene.n = fullName
+    if (uniprot) gene.u = uniprot
+    if (color) gene.c = color
+    if (aliases.length) gene.a = aliases
+    genes[symbol] = gene
+  }
+  const scanner = {
+    schema_version: SCANNER_ARTIFACT_SCHEMA_VERSION,
+    contract_revision: SCANNER_ARTIFACT_CONTRACT_REVISION,
+    generated_at: String(artifact.generated_at || new Date().toISOString()),
+    gene_count: Object.keys(genes).length,
+    genes,
+  }
+  const byteSize = new TextEncoder().encode(JSON.stringify(scanner)).byteLength
+  if (byteSize > SCANNER_ARTIFACT_MAX_BYTES) {
+    throw new Error(
+      `Scanner artifact is ${byteSize} bytes; budget is ${SCANNER_ARTIFACT_MAX_BYTES} bytes`,
+    )
+  }
+  return { scanner, byteSize }
+}
+
 async function publishCatalogArtifact(env) {
   if (!env.KV) throw new Error("KV binding missing")
   const genes = await loadCatalogRowsForPublish(env)
@@ -26778,12 +26887,18 @@ async function publishCatalogArtifact(env) {
     await publishedPortraitRefs(env, { fresh: true }),
   )
   const artifactJson = JSON.stringify(hydrated)
+  // ARCHITECTURE FENCE [IPD-008]: arbitrary pages receive only this compact
+  // scanner index. Portrait references remain in the canonical catalog and
+  // published card details, where visible/hovered genes hydrate them on demand.
+  const { scanner, byteSize: scannerByteSize } = buildPublishedScannerArtifact(artifact)
+  const scannerJson = JSON.stringify(scanner)
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(artifactJson))
   const hash = Array.from(new Uint8Array(digest))
     .map((n) => n.toString(16).padStart(2, "0"))
     .join("")
     .slice(0, 12)
   const filename = `catalog.${hash}.json`
+  const scannerFilename = publicScannerArtifactFilename(hash)
   const catalogJsonl = `${hydrated.genes.map((gene) => JSON.stringify(gene)).join("\n")}\n`
   if (env.ICONOPLASM_PORTRAITS || canWriteExternalPortraitStorage(env)) {
     // Keep dumps alongside portraits under a separate prefix so public sync clients
@@ -26805,9 +26920,17 @@ async function publishCatalogArtifact(env) {
       catalog_jsonl_key: publicCatalogJsonlDumpKey(hash),
       catalog_jsonl_filename: publicCatalogJsonlFilename(hash),
     },
+    scanner_artifact: {
+      schema_version: scanner.schema_version,
+      contract_revision: scanner.contract_revision,
+      build_version: hash,
+      filename: scannerFilename,
+      byte_size: scannerByteSize,
+    },
   }
 
   await env.KV.put(`${KV_CATALOG_PREFIX}${hash}`, artifactJson)
+  await env.KV.put(`${KV_SCANNER_CATALOG_PREFIX}${hash}`, scannerJson)
   await env.KV.put(KV_CATALOG_MANIFEST, JSON.stringify(manifest))
 
   catalogCache.hash = null
@@ -26826,6 +26949,8 @@ async function publishCatalogArtifact(env) {
     filename,
     gene_count: hydrated.gene_count,
     schema_version: hydrated.schema_version,
+    scanner_artifact_filename: scannerFilename,
+    scanner_artifact_bytes: scannerByteSize,
     catalog_jsonl_filename: publicCatalogJsonlFilename(hash),
   }
 }

@@ -795,12 +795,22 @@ test("DO NOT DELETE: simple card portrait warmup decodes hover-neighbor images",
   )
 })
 
-test("DO NOT DELETE: simple hover portraits recover from catalog snapshots without portrait metadata", () => {
+test("DO NOT DELETE: simple hover portraits hydrate from bounded detail, never scanner metadata", () => {
   const source = readUtf8("./iconoplasm-extension/content.js")
   assert.match(
     source,
-    /function loadSimpleTooltipPortrait\(\{[\s\S]*portraitSrc:\s*buildTooltipFramePortraitSrc\(summaryGene,\s*geneDetail\)/,
-    "simple cards must resolve portraits from hydrated detail before falling back to the catalog summary",
+    /function loadSimpleTooltipPortrait\(\{[\s\S]*portraitSrc:\s*buildTooltipFramePortraitSrc\(geneDetail\)/,
+    "simple cards must resolve portraits from hydrated detail",
+  )
+  assert.match(
+    source,
+    /function buildTooltipFramePortraitSrc\(geneDetail\)[\s\S]*return portraitUrlFromGeneDetail\(\{ portrait: detailPortrait \}\)/,
+    "portrait resolution must use the bounded detail record",
+  )
+  assert.doesNotMatch(
+    source,
+    /resolvePortraitUrl|gene\?\.p\?\.renditions/,
+    "the per-tab scanner map must never regain portrait-reference fallback logic",
   )
   assert.match(
     source,

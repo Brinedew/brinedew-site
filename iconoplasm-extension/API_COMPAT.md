@@ -8,8 +8,12 @@ package is 0.4.11 and the compatibility floor is 0.4.10. Both receive catalog
 schema 5 from `GET /api/public/v1/catalog/manifest`.
 
 `candidate-contract.json` describes the unreleased source contract. The current
-candidate uses catalog schema 5, `PortraitAssetRefV1` in each gene's optional
-`p` field, `PortraitDeliveryPolicyV1`, and the publication alias dictionary.
+candidate uses full catalog schema 5 plus scanner schema 1. The full catalog
+retains each gene's optional `PortraitAssetRefV1` `p` field. The separately
+published scanner artifact contains only symbol, name, UniProt, color, and
+aliases; it is capped at 3 MiB and is the only whole-catalog payload sent to
+arbitrary tabs. `PortraitDeliveryPolicyV1` and the publication alias dictionary
+remain in the manifest.
 
 Ordinary development may change the candidate contract but must not change the
 extension version. The human-gated workstation publisher advances the manifest
@@ -32,6 +36,11 @@ invalidate their bounded persistent hover-detail cache when it changes, while
 older extensions safely ignore it. `POST /api/public/v1/genes/batch` projects
 records from that published card snapshot and echoes `snapshot_version`;
 transient failures are never durable negative-cache entries.
+
+The persistent detail cache is capped at 512 records and 4 MiB. Extension
+updates compact legacy portrait-heavy scanner storage before returning data to
+a tab. Chromium therefore stays below its default 10 MiB `storage.local` quota
+without requesting `unlimitedStorage`.
 
 For portrait architecture and operations, read
 `../docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md`.

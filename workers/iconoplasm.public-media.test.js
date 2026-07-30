@@ -6,6 +6,7 @@ import { readIconoplasmPublisherAuthority } from "../scripts/lib/iconoplasm-publ
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  buildPublishedScannerArtifact,
   mergePublishedPortraitRefsIntoArtifact,
   projectPublishedCompatibilityArtifact,
   publishedCatalogContractForClientVersion,
@@ -22,6 +23,10 @@ const candidateContract = {
   revision: Number(publisherRelease.candidate.catalog_contract_revision),
 }
 const currentArtifactToken = `a${candidateContract.schemaVersion}c${candidateContract.revision}`
+const scannerContract = {
+  schemaVersion: Number(publisherRelease.candidate.scanner_schema_version),
+  revision: Number(publisherRelease.candidate.scanner_contract_revision),
+}
 
 function expectedPublishedContract(version, contract) {
   const schemaVersion = Number(contract.schema_version)
@@ -49,6 +54,35 @@ test("published browser versions resolve through the inspectable authority contr
     )
   }
   assert.equal(publishedCatalogContractForClientVersion("0.0.0"), null)
+})
+
+test("published scanner artifacts contain only the fields needed for page matching", () => {
+  const { scanner, byteSize } = buildPublishedScannerArtifact({
+    generated_at: "2026-07-30T00:00:00.000Z",
+    genes: [
+      {
+        s: "TP53",
+        n: "tumor protein p53",
+        u: "P04637",
+        c: "#abcdef",
+        a: ["p53"],
+        tmh: false,
+        p: { asset_sha256: "a".repeat(64) },
+      },
+    ],
+  })
+
+  assert.deepEqual(scanner.genes, {
+    TP53: {
+      n: "tumor protein p53",
+      u: "P04637",
+      c: "#abcdef",
+      a: ["p53"],
+    },
+  })
+  assert.equal(scanner.schema_version, scannerContract.schemaVersion)
+  assert.equal(scanner.contract_revision, scannerContract.revision)
+  assert.ok(byteSize < 3 * 1024 * 1024)
 })
 
 class FakeStatement {
@@ -242,6 +276,22 @@ class FakeKV {
 
 function buildCatalogResolveKv() {
   const hash = "aliascatalog01"
+  const scanner = {
+    schema_version: scannerContract.schemaVersion,
+    contract_revision: scannerContract.revision,
+    generated_at: "2026-05-21T00:00:00.000Z",
+    gene_count: 2,
+    genes: {
+      A1BG: { n: "alpha-1-B glycoprotein", u: "P04217", c: "#dd8c9d" },
+      SOSTDC1: {
+        n: "sclerostin domain containing 1",
+        u: "Q6X4U4",
+        c: "#6f8b4e",
+        a: ["USAG1"],
+      },
+    },
+  }
+  const scannerJson = JSON.stringify(scanner)
   return new FakeKV({
     "iconoplasm:catalog-manifest": JSON.stringify({
       current_hash: hash,
@@ -249,6 +299,13 @@ function buildCatalogResolveKv() {
       schema_version: 4,
       canonical_key: "symbol",
       gene_count: 2,
+      scanner_artifact: {
+        schema_version: scannerContract.schemaVersion,
+        contract_revision: scannerContract.revision,
+        build_version: hash,
+        filename: `scanner.${hash}.json`,
+        byte_size: Buffer.byteLength(scannerJson, "utf8"),
+      },
     }),
     [`iconoplasm:catalog:${hash}`]: JSON.stringify({
       schema_version: 4,
@@ -272,6 +329,7 @@ function buildCatalogResolveKv() {
       fingerprint: { published_count: 0, latest: null },
     }),
     "iconoplasm:published-portrait-refs:v3-none": "[]",
+    [`iconoplasm:scanner-catalog:${hash}`]: scannerJson,
   })
 }
 
@@ -613,6 +671,13 @@ test("public catalog manifest publishes explicit extension contract fields", asy
                 current_hash: "catalog-2026-04-16",
                 generated_at: "2026-04-16T16:30:00.000Z",
                 gene_count: 19001,
+                scanner_artifact: {
+                  schema_version: scannerContract.schemaVersion,
+                  contract_revision: scannerContract.revision,
+                  build_version: "catalog",
+                  filename: "scanner.catalog.json",
+                  byte_size: 1_900_000,
+                },
               })
             }
             if (key === "iconoplasm:published-portrait-fingerprint:v3") {
@@ -643,6 +708,13 @@ test("public catalog manifest publishes explicit extension contract fields", asy
       `/catalog.catalog-2026-04-16-${currentArtifactToken}.json`,
     ),
   )
+  assert.deepEqual(payload?.scanner_artifact, {
+    schema_version: scannerContract.schemaVersion,
+    contract_revision: scannerContract.revision,
+    build_version: "catalog",
+    byte_size: 1_900_000,
+    artifact_url: "https://iconoplasm.brinedew.bio/api/public/v1/catalog/scanner.catalog.json",
+  })
   assert.deepEqual(payload?.portrait_delivery, {
     version: 1,
     canonical_origin: "https://iconoplasm.brinedew.bio",
@@ -725,6 +797,24 @@ test("published extension receives its publisher-declared client contract", asyn
       false,
     )
   }
+
+  const scannerResponse =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request(manifest.scanner_artifact.artifact_url, {
+        headers: { "X-Iconoplasm-Extension-Version": compatibilityVersion },
+      }),
+      env,
+      {},
+    )
+  const scanner = await scannerResponse.json()
+  assert.equal(scannerResponse.status, 200)
+  assert.equal(scanner.schema_version, scannerContract.schemaVersion)
+  assert.equal(scanner.contract_revision, scannerContract.revision)
+  assert.equal(Object.keys(scanner.genes).length, 2)
+  assert.equal(
+    Object.values(scanner.genes).some((gene) => "p" in gene),
+    false,
+  )
 })
 
 test("public media fails closed when THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE is missing", async () => {
