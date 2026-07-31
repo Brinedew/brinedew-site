@@ -8,8 +8,14 @@ tags:
 
 # The Price Of Not Being Cancer
 
-The title of the oldest human being in recorded history currently belongs to Jeanne Calment, who lived to 122. This record remained uncontested for quite a while, with the runner-up, Kane Tanaka, being 3 full years younger. Soon, however, Jeanne Calment's record will become somewhat more controversial (even more than it [already is](https://www.newyorker.com/magazine/2020/02/17/was-jeanne-calment-the-oldest-person-who-ever-lived-or-a-fraud)).
+Jeanne Calment, who died in 1997 at the age of 122, holds the record for being the oldest human in history. This record remained uncontested for quite a while, with the runner-up, Kane Tanaka, reaching just 119 - full 3 years younger, an impressive and unexplained gap. If you treat maximum human lifespan as the main benchmark for life extension efforts, the natural suspicion would be that longevity science has been stagnant for the last 30 years.
 
+Calment's record will stand uncontested for the rest of 2020s - the oldest person alive right now, Ethel Caterham, is only 117 and won't reach Calment's age until 2032. If Caterham dies before that date, it seems plausible that Calment's record could stand for the rest of 2030s. 
+
+What I do know for sure, though, is that in 2043 Calment will be overtaken by Henrietta Lacks, born in 1920 and surviving as an immortalized HeLa cell line in biology labs around the world. 
+
+How do I know that? 
+***
 [fill later in your own words: HeLa will match Calment's 122 years in 2043; CTVT ~11k years between dogs; DFTD decades in Tasmanian devils; lab immortalization often only needs p53 / Rb / telomerase]
 
 Is it always true that immortalized cells become parasitic? Are there no benign immortal cell lines in an organism?
