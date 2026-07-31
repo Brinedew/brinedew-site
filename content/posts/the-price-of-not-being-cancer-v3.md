@@ -12,9 +12,7 @@ Jeanne Calment, who died in 1997 at the age of 122, holds the record for being t
 
 Calment's record will stand uncontested for the rest of 2020s - the oldest person alive right now, Ethel Caterham, is only 117 and won't reach Calment's age until 2032. If Caterham dies before that date, it seems plausible that Calment's record could stand for the rest of 2030s. 
 
-What I do know for sure, though, is that in 2043 Calment will be overtaken by Henrietta Lacks, born in 1920 and surviving as an immortalized HeLa cell line in biology labs around the world. 
-
-How do I know that? 
+What I do know for sure, though, is that in 2043 Calment will be overtaken by Henrietta Lacks, born in 1920 and surviving as an immortalized HeLa cell line in biology labs around the world. But what's the upper limit on HeLa lifespan, if there is one?
 ***
 [fill later in your own words: HeLa will match Calment's 122 years in 2043; CTVT ~11k years between dogs; DFTD decades in Tasmanian devils; lab immortalization often only needs p53 / Rb / telomerase]
 
