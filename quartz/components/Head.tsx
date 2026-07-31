@@ -518,6 +518,11 @@ export default (() => {
   box-sizing: border-box;
 }
 body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
+  /* Critical-path twin of the styles.css root rule: keep a definite border-box
+     width so the auto horizontal margins inside the column-flex article cannot
+     shrink-wrap the root around slim content (see styles.css #iconoplasm-root). */
+  width: 100%;
+  box-sizing: border-box;
   max-width: 1180px;
   margin: 0 auto;
   padding: 0 1rem 2rem;
