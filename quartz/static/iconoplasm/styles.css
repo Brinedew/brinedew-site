@@ -3,6 +3,14 @@
 
 /* ───────── Root container ───────── */
 #iconoplasm-root {
+  /* The root lives inside Quartz's column-flex `.markdown-preview-view`. Without
+     an explicit inline size, `margin: 0 auto` disables cross-axis stretch and the
+     root shrink-wraps to its content's max-content width, so a gene page whose
+     narrowest/only candidate card is slim (e.g. GSC with one 384px candidate) gets
+     a narrow centered column while genes with wide galleries fill the column.
+     A definite border-box width restores the deterministic fill every page shows. */
+  width: 100%;
+  box-sizing: border-box;
   max-width: 960px;
   margin: 0 auto;
   padding: 0 1rem 2rem;

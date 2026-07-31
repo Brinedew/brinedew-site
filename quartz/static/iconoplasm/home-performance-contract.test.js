@@ -752,6 +752,40 @@ test("Iconoplasm middle column uses card fonts instead of inherited Crimson Pro"
   assert.doesNotMatch(styles, /font-family:\s*inherit/)
 })
 
+test("Iconoplasm root container always fills the center column", async () => {
+  // B-regression: `margin: 0 auto` inside Quartz's column-flex article disables
+  // cross-axis stretch, so the root shrink-wraps to its content's max-content
+  // width. Gene pages with slim galleries (e.g. GSC with one 384px candidate)
+  // rendered a narrow centered column with a tiny hero card while pages with
+  // wide galleries filled the column. A definite border-box width restores the
+  // deterministic fill in both the critical-path rule and the runtime rule.
+  const styles = await readFile(stylesPath, "utf8")
+  const head = await readFile(headPath, "utf8")
+
+  const runtimeStart = styles.indexOf("#iconoplasm-root {")
+  const runtimeEnd = styles.indexOf("}", runtimeStart)
+  assert.notEqual(runtimeStart, -1, "missing runtime root container rule")
+  const runtimeBlock = styles.slice(runtimeStart, runtimeEnd)
+
+  const criticalStart = head.indexOf('body[data-slug^="apps/iconoplasm"] #iconoplasm-root {')
+  const criticalEnd = head.indexOf("}", criticalStart)
+  assert.notEqual(criticalStart, -1, "missing critical root container rule")
+  const criticalBlock = head.slice(criticalStart, criticalEnd)
+
+  for (const [name, block] of [
+    ["runtime", runtimeBlock],
+    ["critical", criticalBlock],
+  ]) {
+    assert.match(block, /width:\s*100%/, `${name} root rule must fill the column`)
+    assert.match(
+      block,
+      /box-sizing:\s*border-box/,
+      `${name} root rule must size border-box so padding does not overflow the column`,
+    )
+    assert.match(block, /margin:\s*0\s+auto/, `${name} root rule must keep centering`)
+  }
+})
+
 test("Iconoplasm first visit defaults to light theme instead of system dark", async () => {
   const head = await readFile(headPath, "utf8")
 
