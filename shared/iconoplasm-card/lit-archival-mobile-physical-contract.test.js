@@ -1080,14 +1080,14 @@ test("expanded mobile viewport grows downward instead of moving the infocard or 
   )
 })
 
-test("mobile archive restoration is scoped to the current SPA session", async () => {
+test("mobile archive restoration is scoped to the current browser-tab navigation session", async () => {
   const app = await sourceText(appPath)
   const head = await sourceText(headPath)
 
   assert.match(
     app,
-    /var ICONO_ARCHIVE_RESTORE_SESSION =[\s\S]*Date\.now\(\)\.toString\(36\)[\s\S]*Math\.random\(\)\.toString\(36\)/,
-    "archive scroll restoration needs a runtime-only session key so reloads cannot replay old card-stack camera state",
+    /ICONO_ARCHIVE_RESTORE_SESSION_STORAGE_KEY = "iconoplasm\.archiveRestoreSession\.v1"[\s\S]*function readOrCreateIconoArchiveRestoreSession\(\)[\s\S]*sessionStorage\.getItem\([\s\S]*sessionStorage\.setItem\([\s\S]*var ICONO_ARCHIVE_RESTORE_SESSION = readOrCreateIconoArchiveRestoreSession\(\)/,
+    "archive restoration needs a stable per-tab token so a real browser Back traversal can survive document reloads",
   )
   assert.match(
     app,
@@ -1101,8 +1101,13 @@ test("mobile archive restoration is scoped to the current SPA session", async ()
   )
   assert.match(
     head,
-    /iconoplasmFreshState\.iconoplasmHome = null[\s\S]*window\.history\.replaceState\(iconoplasmFreshState[\s\S]*window\.scrollTo\(\{ left: 0, top: 0, behavior: "instant" \}\)[\s\S]*document\.documentElement\.scrollTop = 0/,
-    "a fresh home page load should clear stale archive camera state in the earliest bootstrap, before async card layout can inherit it",
+    /iconoplasmNavigationEntries[\s\S]*getEntriesByType\("navigation"\)[\s\S]*iconoplasmIsBrowserHistoryTraversal[\s\S]*type === "back_forward"/,
+    "the early bootstrap must distinguish a real browser Back traversal from an ordinary load or reload",
+  )
+  assert.match(
+    head,
+    /!iconoplasmIsBrowserHistoryTraversal[\s\S]*iconoplasmFreshState\.iconoplasmHome = null[\s\S]*window\.history\.replaceState\(iconoplasmFreshState[\s\S]*window\.scrollTo\(\{ left: 0, top: 0, behavior: "instant" \}\)[\s\S]*document\.documentElement\.scrollTop = 0/,
+    "ordinary home loads and reloads should still clear stale archive camera state before async card layout can inherit it",
   )
 
   const snapshotStart = app.indexOf("function snapshotHomeState")
@@ -1124,7 +1129,7 @@ test("mobile archive restoration is scoped to the current SPA session", async ()
   assert.match(
     restoreBlock,
     /home\.restoreSession !== ICONO_ARCHIVE_RESTORE_SESSION\) return null/,
-    "fresh reloads must reject old persisted scroll state, while same-session Back can still restore",
+    "history from another tab session must be rejected while same-tab browser Back can restore",
   )
   assert.match(restoreBlock, /cursor/)
   assert.match(restoreBlock, /anchorGene/)
