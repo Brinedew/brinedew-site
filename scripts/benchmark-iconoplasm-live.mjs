@@ -156,6 +156,5 @@ await runBenchmark({
   baseUrl: args.get("base-url") || DEFAULT_BASE_URL,
   runs: Number.parseInt(args.get("runs") || String(DEFAULT_RUNS), 10) || DEFAULT_RUNS,
   output: args.get("output") || "",
-  includeAdminDirtyShardPublication:
-    args.get("include-admin-dirty-shard-publication") === "true",
+  includeAdminDirtyShardPublication: args.get("include-admin-dirty-shard-publication") === "true",
 })
