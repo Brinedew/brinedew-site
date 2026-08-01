@@ -1,3 +1,6 @@
+# ARCHITECTURE FENCE [IPD-009]: this config and its loud source filenames are
+# executable ownership guards. Keep the single script, route, and state owner
+# aligned with cloudflare/deployment-topology.json.
 # This is the only worker in the repo that is allowed to hold dangerous state
 # bindings. Shared public workers call it through an absurdly explicit service
 # binding instead of regaining D1/KV/R2/session power themselves. Iconoplasm
