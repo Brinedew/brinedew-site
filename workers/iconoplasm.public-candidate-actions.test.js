@@ -23,6 +23,7 @@ class FakeStatement {
       this.sql.includes("FROM icono_generation_request_vision_option_rollup") &&
       this.sql.includes("WHERE vision_id = ?")
     ) {
+      if (this.db.noVisionOption) return null
       return {
         vision_id: this.args[0],
         emulsion_id: `A1-${String(this.args[0]).replace(/\D+/g, "") || "1"}`,
@@ -186,9 +187,10 @@ class FakeStatement {
 }
 
 class FakeDb {
-  constructor() {
+  constructor({ noVisionOption = false } = {}) {
     this.lastRequestId = 76
     this.generationRequests = []
+    this.noVisionOption = noVisionOption
   }
 
   prepare(sql) {
@@ -335,6 +337,57 @@ test("one request action queues a bounded idempotent emulsion batch", async () =
   assert.equal(retryResponse.status, 200)
   assert.equal(retryPayload.queued_count, 3)
   assert.equal(db.generationRequests.length, 3, "retry must not duplicate queued work")
+})
+
+test("a preallocated emulsion queues its first blot without inventing a reference asset", async () => {
+  const db = new FakeDb({ noVisionOption: true })
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/requests",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            symbol: "TP53",
+            requested_vision_ids: ["anima-v1-50817"],
+            client_batch_id: "first-pablo-uchida-blot",
+          }),
+        },
+      ),
+      buildEnv(db),
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.failed_count, 0)
+  assert.equal(db.generationRequests[0]?.requested_vision_id, "anima-v1-50817")
+})
+
+test("a reserved legacy number still requires an immutable example reference", async () => {
+  const db = new FakeDb({ noVisionOption: true })
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/requests",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            symbol: "TP53",
+            requested_vision_ids: ["anima-v1-5000"],
+            client_batch_id: "reserved-legacy-without-reference",
+          }),
+        },
+      ),
+      buildEnv(db),
+      { waitUntil() {} },
+    )
+  await response.json()
+
+  assert.equal(response.status, 400)
+  assert.equal(db.generationRequests.length, 0)
 })
 
 test("emulsion request batches reject more than twenty selections before writing", async () => {
