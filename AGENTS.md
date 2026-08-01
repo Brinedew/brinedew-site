@@ -94,6 +94,17 @@ failures into durable “missing gene” records. Read
 before changing anonymous bootstrap, the session-presence hint, catalog/card
 publication metadata, public batch reads, or extension detail caching.
 
+**ARCHITECTURE FENCE [IPD-009]** — canonical Iconoplasm gene first paint is
+cold-safe: the published KV read plane resolves the exact symbol without full
+catalog hydration, the detail ETag is probed before the HTML cache, and cache
+hits return before JSON parsing or shell rendering. The existing loudly named
+stateful Worker and direct route remain the only owner. Responsibility-based
+names are allowed only for extracted modules below that boundary; they never
+replace the protective prefix/suffix or create `iconoplasm-web`, a public
+proxy, or a second state owner. Read `docs/ICONOPLASM_REQUEST_LIFECYCLE.md`,
+`docs/SITE.md`, and `cloudflare/deployment-topology.json` before changing the
+gene document path, Worker split, deployment order, or module names.
+
 **ARCHITECTURE FENCE [GG-001]** — automatic GeneGuessr daily selection gives
 each normalized gene surname exactly one lottery slot. It first chooses a
 surname, then a deterministic daily representative inside that surname;

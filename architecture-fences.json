@@ -341,6 +341,48 @@
       ]
     },
     {
+      "id": "IPD-009",
+      "title": "Iconoplasm public reads stay cold-safe inside the one loud state boundary",
+      "decision": "Canonical gene first paint uses a published O(1) read path and checks the HTML cache before detail parsing or rendering, while all extracted modules remain behind the existing loudly named single state owner.",
+      "reason": "Disposable Cloudflare isolates make process warmth an invalid correctness assumption. A broad refactor can also accidentally recreate the retired public-proxy topology if the protective filenames and route owner are treated as ordinary names.",
+      "change_control": "The cold-path order, published-read barrier, protected filenames, topology manifest, deployment order, module naming rules, tests, instructions, runbook, and production workflow must change atomically. Never add a second Worker, public proxy, service-binding hop for normal reads, or shortened boundary name.",
+      "runbook": "docs/ICONOPLASM_REQUEST_LIFECYCLE.md",
+      "linear_issue": "B-694",
+      "additional_required_marker_categories": ["config", "deploy"],
+      "markers": [
+        {
+          "category": "instructions",
+          "file": "AGENTS.md",
+          "token": "ARCHITECTURE FENCE [IPD-009]"
+        },
+        {
+          "category": "runbook",
+          "file": "docs/ICONOPLASM_REQUEST_LIFECYCLE.md",
+          "token": "ARCHITECTURE FENCE [IPD-009]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+          "token": "ARCHITECTURE FENCE [IPD-009]"
+        },
+        {
+          "category": "test",
+          "file": "workers/iconoplasm-topology.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-009]"
+        },
+        {
+          "category": "config",
+          "file": "cloudflare/deployment-topology.json",
+          "token": "IPD-009"
+        },
+        {
+          "category": "deploy",
+          "file": ".github/workflows/deploy-quartz.yml",
+          "token": "ARCHITECTURE FENCE [IPD-009]"
+        }
+      ]
+    },
+    {
       "id": "GG-001",
       "title": "Daily targets give every gene surname one slot",
       "decision": "Automatic GeneGuessr daily selection chooses one deterministic representative per normalized gene surname, then selects and falls back only through that one-representative-per-surname sequence. Manual overrides remain explicit exceptions.",

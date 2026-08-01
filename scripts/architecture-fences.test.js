@@ -162,6 +162,26 @@ test("IPD-005 uses the per-database wall and a verified cold archive", () => {
   assert.match(archive, /DELETE FROM icono_publish_events/)
 })
 
+// ARCHITECTURE FENCE [IPD-009]
+test("IPD-009 keeps the cold path and deployment topology explicit", () => {
+  const topology = JSON.parse(readRepositoryFile("cloudflare/deployment-topology.json"))
+  assert.equal(topology.architectureFence, "IPD-009")
+  assert.equal(topology.stateOwner.cloudflareScript, "geneguessr-api")
+  assert.equal(topology.staticFirst.dynamicInvocationCount, 1)
+  assert.equal(topology.staticFirst.staticAssetsBypassWorker, true)
+  assert.equal(topology.stateOwner.publicProxyAllowed, false)
+
+  const lifecycle = readRepositoryFile("docs/ICONOPLASM_REQUEST_LIFECYCLE.md")
+  assert.match(lifecycle, /HTML cache before parsing JSON or rendering/i)
+  assert.match(lifecycle, /Login can enable private action\s+islands/i)
+
+  const runtime = readRepositoryFile(
+    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+  )
+  assert.match(runtime, /ARCHITECTURE FENCE \[IPD-009\]/)
+  assert.doesNotMatch(runtime, /iconoplasm-web/)
+})
+
 // ARCHITECTURE FENCE [IPD-006]
 test("IPD-006 preserves durable per-gene batches and bounded Discord receipts", () => {
   const delivery = readRepositoryFile("workers/iconoplasm-request-notifications.js")
