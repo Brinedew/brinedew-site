@@ -12,7 +12,7 @@ import {
 } from "./iconoplasm-gene-discovery.js"
 import {
   readIconoplasmPublishedGeneDiscoveryCatalog,
-  resolveIconoplasmPublishedGeneDiscoveryRecord,
+  resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
@@ -47,7 +47,11 @@ function rawGeneIdentifierFromPath(path) {
 export async function iconoplasmGeneDiscoveryStateForPath(env, path) {
   const rawIdentifier = rawGeneIdentifierFromPath(path)
   if (!rawIdentifier) return { kind: "unknown", canonicalSymbol: "", record: null }
-  const resolved = await resolveIconoplasmPublishedGeneDiscoveryRecord(env, rawIdentifier)
+  const resolved =
+    await resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      env,
+      rawIdentifier,
+    )
   if (!resolved || resolved.kind === "unavailable") {
     return { kind: "unavailable", canonicalSymbol: "", record: null }
   }

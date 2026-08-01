@@ -13479,6 +13479,59 @@ async function fetchCatalogRow(env, symbol) {
   }
 }
 
+// ARCHITECTURE FENCE [IPD-007]
+// A canonical public gene URL must not hydrate the full 19k-record catalog.
+// Keep this resolver on the published KV card-catalog barrier so the one
+// stateful Worker remains the sole owner of publication truth while the outer
+// HTML dispatcher can make a cheap route decision on a cold isolate. The
+// fresh D1 detail read remains separate and is never used to decide crawl
+// eligibility. Alias and UniProt resolution deliberately retain the
+// immutable-catalog path below; those identifiers are not primary-key lookups
+// and must not grow a second alias state store here.
+export async function resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+  env,
+  rawIdentifier,
+) {
+  const requestedSymbol = normalizeSymbol(rawIdentifier)
+  if (requestedSymbol) {
+    const versionInfo = await currentMobileCardSnapshotVersion(env)
+    const snapshotVersion = String(versionInfo?.current || "").trim()
+    if (!snapshotVersion || snapshotVersion === "0") {
+      return { kind: "unavailable", record: null, canonicalSymbol: "" }
+    }
+    const artifact = await readPublishedCardCatalogArtifact(
+      env,
+      snapshotVersion,
+      [requestedSymbol],
+      {
+        allowWholeArtifact: false,
+      },
+    )
+    if (!artifact) {
+      return { kind: "unavailable", record: null, canonicalSymbol: "" }
+    }
+    const card = artifact.bySymbol.get(requestedSymbol)
+    if (card) {
+      const payload = card.payload && typeof card.payload === "object" ? card.payload : card
+      const portrait =
+        payload.portrait && typeof payload.portrait === "object" ? payload.portrait : {}
+      return {
+        kind: "canonical",
+        canonicalSymbol: requestedSymbol,
+        record: {
+          s: requestedSymbol,
+          n: String(payload.full_name || card.full_name || "").trim(),
+          p: portrait.asset_sha256 ? { asset_sha256: portrait.asset_sha256 } : null,
+        },
+        version: snapshotVersion,
+        source: "published_card_catalog_shard",
+      }
+    }
+  }
+
+  return resolveIconoplasmPublishedGeneDiscoveryRecord(env, rawIdentifier)
+}
+
 async function resolveGene(env, rawId, { includeProtein = true } = {}) {
   const requestedSymbol = normalizeSymbol(rawId)
   if (!requestedSymbol) return null
@@ -25131,7 +25184,12 @@ function cardCatalogContentAddressedManifest({
   }
 }
 
-async function readPublishedCardCatalogArtifact(env, version, symbols = null) {
+async function readPublishedCardCatalogArtifact(
+  env,
+  version,
+  symbols = null,
+  { allowWholeArtifact = true } = {},
+) {
   // Runtime public card reads have one data path: KV artifact selected by
   // KV_GALLERY_VERSION. Do not add a "helpful" D1 fallback here. A fallback
   // would hide broken artifact publication in tests, multiply D1 reads across
@@ -25223,6 +25281,7 @@ async function readPublishedCardCatalogArtifact(env, version, symbols = null) {
     }
     parsed = { ...parsed, cards }
   }
+  if (requestedSymbols && allowWholeArtifact === false) return null
   const artifact = normalizeCardCatalogArtifact(parsed)
   if (!artifact) return null
   cardCatalogArtifactCache.version = artifactVersion
