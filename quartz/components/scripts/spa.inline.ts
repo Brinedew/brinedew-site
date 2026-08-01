@@ -155,6 +155,9 @@ window.spaNavigate = navigate
 function createRouter() {
   if (typeof window !== "undefined") {
     window.addEventListener("click", async (event) => {
+      // A feature-specific router may have already claimed this click at the document level.
+      // Respect the DOM cancellation contract instead of starting a second navigation.
+      if (event.defaultPrevented) return
       const { url } = getOpts(event) ?? {}
       // dont hijack behaviour, just let browser act normally
       if (!url || event.ctrlKey || event.metaKey) return
@@ -171,6 +174,9 @@ function createRouter() {
     })
 
     window.addEventListener("popstate", (event) => {
+      // Feature routers mark the history entries they fully own. Running the Quartz fetch/morph
+      // pipeline as well would create two route owners and can erase feature restoration state.
+      if (event.state?.quartzRouterIgnore === true) return
       const { url } = getOpts(event) ?? {}
       if (window.location.hash && window.location.pathname === url?.pathname) return
       navigate(new URL(window.location.toString()), true)

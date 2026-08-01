@@ -18,6 +18,8 @@ A saved history entry still contains that transient state so Back can restore th
 
 Restoration is scoped by the explicitly prefixed `ICONO_ARCHIVE_RESTORE_SESSION` token in `sessionStorage`, which survives a real same-tab document navigation without leaking across tabs. The early head bootstrap uses `PerformanceNavigationTiming.type`: it preserves the saved home entry only for `back_forward`, and clears it plus scroll position for ordinary navigation or reload. This distinction is required because a browser may implement Back as either a same-document SPA traversal, a back-forward-cache restore, or a full document traversal; all three must restore the gallery, while Refresh must start clean.
 
+Iconoplasm owns its in-app route entries. Its state carries the explicit `quartzRouterIgnore: true` suffix marker; the generic Quartz router must also honor an already-cancelled click. These two fences prevent the generic fetch/morph router and the Iconoplasm gallery router from both pushing or replaying the same navigation. Do not remove either fence unless Iconoplasm is migrated wholesale onto a single replacement router with equivalent scroll-restoration tests.
+
 The protected controller contract is `quartz/static/iconoplasm/collection-feed.test.js`. It covers loading boundaries, request joining and cancellation, feed semantics, keyboard traversal, forward and backward recycling, the mounted-card and payload caps after 100+ batches, retry behavior, and catalog snapshot changes.
 
 ## Gallery Card Freshness
