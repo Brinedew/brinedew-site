@@ -343,12 +343,12 @@
     {
       "id": "IPD-009",
       "title": "Iconoplasm public reads stay cold-safe inside the one loud state boundary",
-      "decision": "Canonical gene first paint uses a published O(1) read path and checks the HTML cache before detail parsing or rendering, while all extracted modules remain behind the existing loudly named single state owner.",
+      "decision": "Canonical gene first paint uses a publication-owned O(1) D1 identity index with no portrait or vote fields, then uses the current D1 detail ETag for HTML freshness and checks the HTML cache before detail parsing or rendering. All extracted modules remain behind the existing loudly named single state owner.",
       "reason": "Disposable Cloudflare isolates make process warmth an invalid correctness assumption. A broad refactor can also accidentally recreate the retired public-proxy topology if the protective filenames and route owner are treated as ordinary names.",
-      "change_control": "The cold-path order, published-read barrier, protected filenames, topology manifest, deployment order, module naming rules, tests, instructions, runbook, and production workflow must change atomically. Never add a second Worker, public proxy, service-binding hop for normal reads, or shortened boundary name.",
+      "change_control": "The cold-path order, published route-membership barrier, current-detail ETag authority, protected filenames, topology manifest, deployment order, module naming rules, tests, instructions, runbook, and production workflow must change atomically. Never put mutable portrait or vote state in the route index; add a second Worker, public proxy, or service-binding hop for normal reads; or replace the protective prefix/suffix with a shortened responsibility-only boundary name.",
       "runbook": "docs/ICONOPLASM_REQUEST_LIFECYCLE.md",
       "linear_issue": "B-694",
-      "additional_required_marker_categories": ["config", "deploy"],
+      "additional_required_marker_categories": ["config", "deploy", "migration"],
       "markers": [
         {
           "category": "instructions",
@@ -378,6 +378,11 @@
         {
           "category": "deploy",
           "file": ".github/workflows/deploy-quartz.yml",
+          "token": "ARCHITECTURE FENCE [IPD-009]"
+        },
+        {
+          "category": "migration",
+          "file": "migrations-iconoplasm/0059_published_gene_routes.sql",
           "token": "ARCHITECTURE FENCE [IPD-009]"
         }
       ]

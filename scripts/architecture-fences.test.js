@@ -174,12 +174,25 @@ test("IPD-009 keeps the cold path and deployment topology explicit", () => {
   const lifecycle = readRepositoryFile("docs/ICONOPLASM_REQUEST_LIFECYCLE.md")
   assert.match(lifecycle, /HTML cache before parsing JSON or rendering/i)
   assert.match(lifecycle, /Login can enable private action\s+islands/i)
+  assert.match(lifecycle, /icono_published_gene_routes/)
+  assert.match(lifecycle, /detail response[\s\S]*ETag[\s\S]*vote-fresh/i)
 
   const runtime = readRepositoryFile(
     "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
   )
   assert.match(runtime, /ARCHITECTURE FENCE \[IPD-009\]/)
+  assert.match(runtime, /FROM icono_published_gene_routes/)
+  assert.match(runtime, /source: "published_gene_route_d1"/)
   assert.doesNotMatch(runtime, /iconoplasm-web/)
+
+  const routeMigration = readRepositoryFile("migrations-iconoplasm/0059_published_gene_routes.sql")
+  assert.match(routeMigration, /gene_symbol TEXT PRIMARY KEY NOT NULL/)
+  assert.doesNotMatch(
+    routeMigration.match(
+      /CREATE TABLE IF NOT EXISTS icono_published_gene_routes[\s\S]*?WITHOUT ROWID;/,
+    )?.[0] || "",
+    /asset_sha256|portrait|vote/i,
+  )
 })
 
 // ARCHITECTURE FENCE [IPD-006]
