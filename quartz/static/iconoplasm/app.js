@@ -4805,7 +4805,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function renderRequestOptionPreviewStripMarkup(option) {
     var previews = Array.isArray(option && option.preview_assets) ? option.preview_assets : []
-    if (!previews.length) return ""
+    if (!previews.length) {
+      if (option && option.is_preallocated_without_preview) {
+        return '<span class="icono-request-option-strip icono-request-option-strip--empty"><span class="icono-request-option-empty">First blot</span></span>'
+      }
+      return ""
+    }
     var html = '<span class="icono-request-option-strip">'
     for (var i = 0; i < previews.length && i < 5; i++) {
       var asset = previews[i] || {}
@@ -4884,7 +4889,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       (isRandom ? " is-random" : "") +
       '" role="listitem">' +
       selectButton +
-      (isRandom
+      (isRandom || item.is_preallocated_without_preview
         ? ""
         : renderEmulsionFavoriteButtonMarkup(
             item.emulsion_family_id || item.emulsion_id,

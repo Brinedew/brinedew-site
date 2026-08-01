@@ -3,7 +3,12 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
-import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  iconoplasmAnimaEmulsionSlotFromExactAlias,
+  iconoplasmAnimaEmulsionSlotIsPreallocated,
+  iconoplasmPreallocatedAnimaEmulsionOption,
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class FakeRequestStatement {
   constructor(db, sql) {
@@ -411,6 +416,44 @@ function buildSessionBinding(session) {
     },
   }
 }
+
+test("preallocated Anima emulsion contract accepts exact aliases and keeps legacy holes closed", () => {
+  assert.equal(iconoplasmAnimaEmulsionSlotFromExactAlias("A1-50817"), 50817)
+  assert.equal(iconoplasmAnimaEmulsionSlotFromExactAlias("anima-v1-50817"), 50817)
+  assert.equal(iconoplasmAnimaEmulsionSlotFromExactAlias("A1-50817-e"), 50817)
+  assert.equal(iconoplasmAnimaEmulsionSlotFromExactAlias("A1-50817 trailing"), 0)
+  assert.equal(iconoplasmAnimaEmulsionSlotIsPreallocated(50817), true)
+  assert.equal(iconoplasmAnimaEmulsionSlotIsPreallocated(5000), false)
+  assert.equal(iconoplasmAnimaEmulsionSlotIsPreallocated(58011), false)
+
+  assert.deepEqual(iconoplasmPreallocatedAnimaEmulsionOption("A1-50817"), {
+    vision_id: "anima-v1-50817",
+    label: "A1-50817",
+    primary_label: "A1-50817",
+    secondary_label: "Ready for first blot",
+    search_text: "A1-50817 anima-v1-50817",
+    emulsion_id: "A1-50817",
+    emulsion_family_id: "A1-50817",
+    image_count: 0,
+    live_count: 0,
+    score: 0,
+    vote_h_index: 0,
+    preview_assets: [],
+    is_preallocated_without_preview: true,
+  })
+  assert.equal(iconoplasmPreallocatedAnimaEmulsionOption("A1-5000"), null)
+})
+
+test("public Anima allocation contract contains numeric facts but no private artist identities", () => {
+  const contract = readFileSync(
+    new URL("./generated/iconoplasm-anima-emulsion-slot-contract.js", import.meta.url),
+    "utf8",
+  )
+  assert.doesNotMatch(contract, /@[a-z0-9_()]+/i)
+  assert.doesNotMatch(contract, /pablo|suerte|uchida/i)
+  assert.match(contract, /"callable_slot_intervals"/)
+  assert.match(contract, /\[\s*4564,\s*20000\s*\]/)
+})
 
 test("admin request history keeps fulfilled rows and attaches their result image", async () => {
   const fulfilledSha = "a".repeat(64)
@@ -894,7 +937,7 @@ test("authenticated request options search the dedicated rollup by emulsion pref
   assert.equal(response.status, 200)
   assert.deepEqual(
     payload.request_options.map((option) => option.label),
-    ["A1-2070", "A1-2375"],
+    ["A1-2", "A1-2070", "A1-2375"],
   )
   assert.equal(env.gatewayDb.optionRollupReads, 1)
   assert.equal(env.gatewayDb.lastOptionRollupArgs[0], "A1-2")
@@ -910,6 +953,46 @@ test("authenticated request options search the dedicated rollup by emulsion pref
   )
   assert.equal(env.gatewayDb.visionRollupReads, 0)
   assert.equal(env.gatewayDb.previewReads, 0)
+})
+
+test("an exact preallocated emulsion search returns a selectable first-blot option", async () => {
+  const env = buildEnv({ dbOptions: { queryVisionOptions: true } })
+  env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
+  env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
+    fetch(request) {
+      return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        request,
+        {
+          DB: env.gatewayDb,
+          ICONOPLASM_DB: env.gatewayDb,
+          GAME_SESSIONS: env.GAME_SESSIONS,
+        },
+        { waitUntil() {} },
+      )
+    },
+  }
+
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options?query=A1-50817",
+        {
+          headers: { Cookie: "session=abc123" },
+        },
+      ),
+      env,
+      {},
+    )
+  const payload = await response.json()
+  const option = payload.request_options.find(
+    (candidate) => candidate.vision_id === "anima-v1-50817",
+  )
+
+  assert.equal(response.status, 200)
+  assert.equal(option?.label, "A1-50817")
+  assert.equal(option?.secondary_label, "Ready for first blot")
+  assert.equal(option?.is_preallocated_without_preview, true)
+  assert.deepEqual(option?.preview_assets, [])
 })
 
 test("authenticated request options search is not pinned to A1-1 emulsions", async () => {
@@ -943,7 +1026,7 @@ test("authenticated request options search is not pinned to A1-1 emulsions", asy
   assert.equal(response.status, 200)
   assert.deepEqual(
     payload.request_options.map((option) => option.label),
-    ["A1-3127"],
+    ["A1-3", "A1-3127"],
   )
   assert.equal(env.gatewayDb.lastOptionRollupArgs[0], "A1-3")
   assert.equal(env.gatewayDb.lastOptionRollupArgs[1], "A1-4")
