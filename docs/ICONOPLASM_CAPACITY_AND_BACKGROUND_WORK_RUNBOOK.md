@@ -253,10 +253,12 @@ code that requires it. Public readers remain fail-closed and never repair state.
 
 Each non-empty publication has an operation ID in
 `icono_card_catalog_publication_audit`, with `started`, `preparing`, `completed`,
-or `failed` outcome and exact dirty-symbol/shard counts. The operational table is
-bounded to 512 rows, and structured Worker logs carry the same operation ID. This
-is the evidence source for cost review; do not reconstruct history from a deleted
-cursor or infer it from whichever artifact happens to be live.
+or `failed` outcome. It records the trigger reason, exact dirty-symbol/shard
+counts, baseline shards read, replacement shards written, KV writes reserved and
+used, duration, and error code. The operational table is bounded to 512 rows,
+and structured Worker logs carry the same operation ID and counters. This is the
+evidence source for cost review; do not reconstruct history from a deleted cursor
+or infer it from whichever artifact happens to be live.
 
 Naming is part of the cost guard. Use explicit `card catalog dirty shard
 publication`, `baseline version`, `publication cursor`, and `schema migration

@@ -125,6 +125,14 @@ class FakeStatement {
     return { results: [] }
   }
   async run() {
+    if (this.sql.includes("icono_card_catalog_publication_audit")) {
+      assert.equal(
+        (this.sql.match(/\?/g) || []).length,
+        this.args.length,
+        "publication audit SQL placeholders must match its bound values",
+      )
+      this.db.auditBinds.push(this.args.slice())
+    }
     return { success: true, meta: { changes: 0 } }
   }
 }
@@ -135,6 +143,7 @@ class FakeDb {
     this.changedSymbols = []
     this.maxEventAt = "2026-06-05 12:00:00"
     this.shaBySymbol = new Map()
+    this.auditBinds = []
   }
   prepare(sql) {
     return new FakeStatement(this, sql)
@@ -242,7 +251,9 @@ test("one canonical change rewrites one shard and flips on the next publication 
   db.shaBySymbol.set("GENB", "ab".repeat(32))
   const putKeys = []
 
-  const result = await publishIconoplasmGalleryDirtyShardsForTest(buildEnv(db, kvStore, putKeys))
+  const result = await publishIconoplasmGalleryDirtyShardsForTest(buildEnv(db, kvStore, putKeys), {
+    triggerReason: "test_one_gene_tick",
+  })
 
   assert.equal(result.card_catalog.dirty_shard_publication, true)
   assert.equal(result.card_catalog.publication_more, false)
@@ -251,6 +262,14 @@ test("one canonical change rewrites one shard and flips on the next publication 
   assert.equal(putKeys.filter((key) => key.startsWith(SHARD_PREFIX)).length, 1)
   assert.equal(kvStore.has(PUBLICATION_KEY), false)
   assert.equal(JSON.parse(kvStore.get(WATERMARK_KEY)).watermark_event_at, db.maxEventAt)
+  const completedAudit = db.auditBinds.at(-1)
+  assert.equal(completedAudit[10], "test_one_gene_tick")
+  assert.equal(completedAudit[11], 1, "one baseline shard read")
+  assert.equal(completedAudit[12], 1, "one replacement shard written")
+  assert.equal(completedAudit[13], 6, "bounded step KV writes reserved")
+  assert.equal(completedAudit[14], 4, "shard, manifest, barrier, and watermark writes used")
+  assert.ok(completedAudit[15] >= 0, "completed operation records duration")
+  assert.equal(completedAudit[16], "completed")
 })
 
 test("a seven-shard delta is prepared in bounded steps and flips atomically only at completion", async () => {
@@ -274,6 +293,11 @@ test("a seven-shard delta is prepared in bounded steps and flips atomically only
   assert.equal(second.card_catalog.dirty_shard_count, 7)
   assert.notEqual(second.version, oldVersion)
   assert.equal(kvStore.has(PUBLICATION_KEY), false)
+  const completedAudit = db.auditBinds.at(-1)
+  assert.equal(completedAudit[11], 7)
+  assert.equal(completedAudit[12], 7)
+  assert.equal(completedAudit[13], 19)
+  assert.equal(completedAudit[14], 12)
 })
 
 test("a new symbol is inserted by splitting only its local shard", async () => {
