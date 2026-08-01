@@ -7688,6 +7688,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var snapshot = snapshotHomeState()
       var state = Object.assign({}, window.history.state || {}, {
         iconoplasm: true,
+        quartzRouterIgnore: true,
         iconoplasmPage: "home",
         iconoplasmHome: snapshot,
       })
@@ -8884,6 +8885,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
     }
     next.iconoplasm = true
+    next.quartzRouterIgnore = true
     window.history.replaceState(next, "", window.location.href)
   }
 
@@ -9047,7 +9049,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function buildNavigationState(path) {
-    var nextState = { iconoplasm: true }
+    var nextState = { iconoplasm: true, quartzRouterIgnore: true }
     var currentState = readHistoryState()
     var carriedHomeState =
       currentState &&
