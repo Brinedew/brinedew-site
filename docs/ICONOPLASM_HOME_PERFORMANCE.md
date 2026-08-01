@@ -20,6 +20,8 @@ Restoration is scoped by the explicitly prefixed `ICONO_ARCHIVE_RESTORE_SESSION`
 
 Iconoplasm owns its in-app route entries. Its state carries the explicit `quartzRouterIgnore: true` suffix marker; the generic Quartz router must also honor an already-cancelled click. These two fences prevent the generic fetch/morph router and the Iconoplasm gallery router from both pushing or replaying the same navigation. Do not remove either fence unless Iconoplasm is migrated wholesale onto a single replacement router with equivalent scroll-restoration tests.
 
+The Quartz router must read `target="_blank"` from the enclosing anchor, never from the nested image or text element that received the click. Image-only gallery cards deliberately open gene profiles in a new tab; hijacking their inner image click into SPA navigation destroys the source gallery's scroll context.
+
 The protected controller contract is `quartz/static/iconoplasm/collection-feed.test.js`. It covers loading boundaries, request joining and cancellation, feed semantics, keyboard traversal, forward and backward recycling, the mounted-card and payload caps after 100+ batches, retry behavior, and catalog snapshot changes.
 
 ## Gallery Card Freshness
