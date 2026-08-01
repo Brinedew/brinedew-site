@@ -207,7 +207,7 @@ function buildEnv({ bindGateway = true } = {}) {
   return bindGateway ? bindOnlyAllowedGateway(env, gatewayEnv) : env
 }
 
-test("admin read-model sync with invalidate_gallery still honors skip flags", async () => {
+test("admin read-model sync with publish_gallery_dirty_shards still honors skip flags", async () => {
   const env = buildEnv()
 
   const response =
@@ -224,7 +224,7 @@ test("admin read-model sync with invalidate_gallery still honors skip flags", as
           skip_gene_rollups: true,
           skip_vision_rollups: true,
           skip_dashboard: true,
-          invalidate_gallery: true,
+          publish_gallery_dirty_shards: true,
         }),
       }),
       env,
@@ -268,7 +268,7 @@ test("batched vision sync atomically refreshes the request-picker projection", a
           skip_vote_summaries: true,
           skip_gene_rollups: true,
           skip_dashboard: true,
-          invalidate_gallery: false,
+          publish_gallery_dirty_shards: false,
         }),
       }),
       env,
@@ -330,7 +330,7 @@ test("admin overview summary is scoped to canonical catalog rows", async () => {
           skip_vote_summaries: true,
           skip_gene_rollups: true,
           skip_vision_rollups: true,
-          invalidate_gallery: false,
+          publish_gallery_dirty_shards: false,
         }),
       }),
       env,

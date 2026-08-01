@@ -56,14 +56,14 @@ test("card catalog budget preflight covers KV exhaustion", () => {
   assert.match(status.failures.join(","), /kv_writes/)
 })
 
-test("card catalog budget preflight requires enough KV writes for one full catalog publish", () => {
+test("card catalog budget preflight reserves one bounded dirty-shard publication step", () => {
   const status = iconoplasmCardCatalogBudgetPreflightStatus(
-    healthySnapshot({ kv: { reads_remaining: 100, writes_remaining: 36, lists_remaining: 100 } }),
+    healthySnapshot({ kv: { reads_remaining: 100, writes_remaining: 15, lists_remaining: 100 } }),
   )
   assert.equal(status.ok, false)
   assert.match(status.failures.join(","), /kv_writes/)
   const kvWrites = status.checks.find((check) => check.name === "kv_writes")
-  assert.equal(kvWrites.required, 37)
+  assert.equal(kvWrites.required, 16)
 })
 
 test("card catalog budget preflight covers D1 exhaustion", () => {

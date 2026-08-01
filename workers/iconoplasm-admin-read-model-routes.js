@@ -1,18 +1,8 @@
 const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
-const FULL_CATALOG_ERROR = Object.freeze({
-  ok: false,
-  code: "CARD_ARTIFACT_REQUIRES_FULL_CATALOG",
-  error:
-    "Card artifact publication has one valid scope: the full catalog. Symbol-scoped artifacts are not allowed because they make unrelated catalog genes look missing.",
-  supported_scope: "catalog",
-})
-
 const REQUIRED_FUNCTIONS = Object.freeze([
   "coerceBoolean",
-  "currentMobileCardSnapshotVersion",
   "ensureBootstrapInitialized",
   "fetchBootstrapState",
-  "invalidateGalleryCache",
   "isAdmin",
   "json",
   "normalizeBootstrapSteps",
@@ -22,7 +12,7 @@ const REQUIRED_FUNCTIONS = Object.freeze([
   "runBootstrapStep",
   "sanitizeText",
   "syncReadModels",
-  "syncReadModelsAndInvalidateGallery",
+  "syncReadModelsAndPublishGalleryDirtyShards",
   "validVisionId",
   "writeBootstrapState",
 ])
@@ -33,12 +23,7 @@ function assertReadModelServices(services) {
       throw new TypeError(`Iconoplasm admin read-model service is missing: ${name}`)
     }
   }
-  for (const name of [
-    "bootstrapCompleteStatus",
-    "cardArtifactUnavailableCode",
-    "symbolRequestMax",
-    "visionRequestMax",
-  ]) {
+  for (const name of ["bootstrapCompleteStatus", "symbolRequestMax", "visionRequestMax"]) {
     if (services?.[name] === undefined || services?.[name] === null) {
       throw new TypeError(`Iconoplasm admin read-model configuration is missing: ${name}`)
     }
@@ -49,12 +34,9 @@ export function createIconoplasmAdminReadModelHandlers(services) {
   assertReadModelServices(services)
   const {
     bootstrapCompleteStatus,
-    cardArtifactUnavailableCode,
     coerceBoolean,
-    currentMobileCardSnapshotVersion,
     ensureBootstrapInitialized,
     fetchBootstrapState,
-    invalidateGalleryCache,
     isAdmin,
     json,
     normalizeBootstrapSteps,
@@ -65,7 +47,7 @@ export function createIconoplasmAdminReadModelHandlers(services) {
     sanitizeText,
     symbolRequestMax,
     syncReadModels,
-    syncReadModelsAndInvalidateGallery,
+    syncReadModelsAndPublishGalleryDirtyShards,
     validVisionId,
     visionRequestMax,
     writeBootstrapState,
@@ -121,8 +103,8 @@ export function createIconoplasmAdminReadModelHandlers(services) {
       false,
     )
     const skipDashboard = coerceBoolean(payload?.skip_dashboard ?? payload?.skipDashboard, false)
-    const shouldInvalidateGallery = coerceBoolean(
-      payload?.invalidate_gallery ?? payload?.invalidateGallery,
+    const shouldPublishGalleryDirtyShards = coerceBoolean(
+      payload?.publish_gallery_dirty_shards ?? payload?.publishGalleryDirtyShards,
       true,
     )
     const options = {
@@ -137,8 +119,8 @@ export function createIconoplasmAdminReadModelHandlers(services) {
     }
     // Scoped finalization phases stay D1-only. The durable ledger completion
     // performs the single global card-catalog publication.
-    const result = shouldInvalidateGallery
-      ? await syncReadModelsAndInvalidateGallery(env, options)
+    const result = shouldPublishGalleryDirtyShards
+      ? await syncReadModelsAndPublishGalleryDirtyShards(env, options)
       : await syncReadModels(env, options)
     return done(
       "admin_read_models_sync",
@@ -165,7 +147,7 @@ export function createIconoplasmAdminReadModelHandlers(services) {
             result?.target_daily_percent === null || result?.target_daily_percent === undefined
               ? null
               : Number(result.target_daily_percent || 0) || null,
-          invalidate_gallery: shouldInvalidateGallery,
+          publish_gallery_dirty_shards: shouldPublishGalleryDirtyShards,
           full_vision: fullVision,
           full_rebuild: fullRebuild,
           skip_vote_summaries: skipVoteSummaries,
@@ -190,80 +172,6 @@ export function createIconoplasmAdminReadModelHandlers(services) {
                   source: "published_card_catalog",
                 }
               : null,
-        },
-        200,
-        NO_STORE,
-      ),
-    )
-  }
-
-  async function warmCardArtifacts({ request, env, done }) {
-    if (!(await isAdmin(request, env)))
-      return done("admin_card_vms_warm_403", json({ error: "Unauthorized" }, 403))
-    if (!env.ICONOPLASM_DB)
-      return done("admin_card_vms_warm_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-    let payload
-    try {
-      payload = await request.json()
-    } catch {
-      return done("admin_card_vms_warm_400", json({ error: "Invalid JSON" }, 400))
-    }
-    const versionInfo = await currentMobileCardSnapshotVersion(env)
-    const requestedVersion = sanitizeText(payload?.version || "", 128) || ""
-    const snapshotVersion =
-      requestedVersion && requestedVersion === versionInfo.previous
-        ? versionInfo.previous
-        : versionInfo.current
-    const scope = String(payload?.scope || "")
-      .trim()
-      .toLowerCase()
-    if (scope && scope !== "catalog")
-      return done("admin_card_vms_warm_scope_409", json(FULL_CATALOG_ERROR, 409, NO_STORE))
-    if (Array.isArray(payload?.symbols) && payload.symbols.length)
-      return done("admin_card_vms_warm_symbols_409", json(FULL_CATALOG_ERROR, 409, NO_STORE))
-
-    let invalidation
-    try {
-      invalidation = await invalidateGalleryCache(env)
-    } catch (error) {
-      const errorCode = sanitizeText(String(error?.code || ""), 128) || cardArtifactUnavailableCode
-      return done(
-        "admin_card_vms_warm_card_artifact_refused",
-        json(
-          {
-            ok: false,
-            code: errorCode,
-            error: sanitizeText(String(error?.message || error), 1000),
-            budget: error?.payload || null,
-            version: snapshotVersion,
-            scope: "catalog",
-          },
-          errorCode === "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED" ? 429 : 409,
-          NO_STORE,
-        ),
-      )
-    }
-    const publishResult = invalidation.card_catalog || {}
-    const publicationInProgress = Boolean(publishResult.publication_more)
-    return done(
-      "admin_card_vms_warm",
-      json(
-        {
-          ok: true,
-          scope: "catalog",
-          version: invalidation.version,
-          after: sanitizeText(payload?.after || payload?.cursor || "", 64) || "",
-          next_cursor: "",
-          done: !publicationInProgress,
-          dirty_shard_publication_in_progress: publicationInProgress,
-          requested: publishResult.catalog_gene_count,
-          warmed: publishResult.artifact_gene_count,
-          missing: 0,
-          artifact_version: publishResult.artifact_version,
-          artifact_gene_count: publishResult.artifact_gene_count,
-          catalog_gene_count: publishResult.catalog_gene_count,
-          artifact_validated_at: publishResult.artifact_validated_at,
-          source: "published_card_catalog",
         },
         200,
         NO_STORE,
@@ -335,7 +243,6 @@ export function createIconoplasmAdminReadModelHandlers(services) {
 
   return Object.freeze({
     "admin_read_models.bootstrap": bootstrap,
-    "admin_read_models.card_artifacts_warm": warmCardArtifacts,
     "admin_read_models.sync": sync,
   })
 }

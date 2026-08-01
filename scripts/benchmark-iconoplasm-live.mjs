@@ -41,7 +41,7 @@ async function runBenchmark({
   baseUrl = DEFAULT_BASE_URL,
   runs = DEFAULT_RUNS,
   output = "",
-  includeAdminWarm = false,
+  includeAdminDirtyShardPublication = false,
 } = {}) {
   const adminToken = process.env.ICONOPLASM_ADMIN_TOKEN || ""
   const endpoints = [
@@ -75,33 +75,22 @@ async function runBenchmark({
       expectStatuses: [409],
     },
   ]
-  if (adminToken) {
+  if (includeAdminDirtyShardPublication) {
+    if (!adminToken) {
+      throw new Error(
+        "ICONOPLASM_ADMIN_TOKEN is required for --include-admin-dirty-shard-publication",
+      )
+    }
     endpoints.push({
-      name: "admin_symbol_scoped_warm_rejected",
-      url: `${baseUrl}/api/iconoplasm/admin/card-vms/warm`,
-      expectStatuses: [409],
-      options: {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${adminToken}`,
-        },
-        body: JSON.stringify({ symbols: ["INS"] }),
-      },
-    })
-  }
-  if (includeAdminWarm) {
-    if (!adminToken) throw new Error("ICONOPLASM_ADMIN_TOKEN is required for --include-admin-warm")
-    endpoints.push({
-      name: "admin_full_catalog_warm",
-      url: `${baseUrl}/api/iconoplasm/admin/card-vms/warm`,
+      name: "admin_gallery_dirty_shard_publication",
+      url: `${baseUrl}/api/iconoplasm/admin/gallery/publish-dirty-shards`,
       options: {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
         },
-        body: JSON.stringify({ scope: "catalog" }),
+        body: JSON.stringify({}),
       },
     })
   }
@@ -137,7 +126,7 @@ async function runBenchmark({
     measured_at: new Date().toISOString(),
     base_url: baseUrl,
     runs,
-    include_admin_warm: includeAdminWarm,
+    include_admin_dirty_shard_publication: includeAdminDirtyShardPublication,
     summary,
     samples,
   }
@@ -167,5 +156,6 @@ await runBenchmark({
   baseUrl: args.get("base-url") || DEFAULT_BASE_URL,
   runs: Number.parseInt(args.get("runs") || String(DEFAULT_RUNS), 10) || DEFAULT_RUNS,
   output: args.get("output") || "",
-  includeAdminWarm: args.get("include-admin-warm") === "true",
+  includeAdminDirtyShardPublication:
+    args.get("include-admin-dirty-shard-publication") === "true",
 })

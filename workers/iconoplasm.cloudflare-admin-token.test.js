@@ -85,7 +85,7 @@ test("23:55 is the sole production owner of full Iconoplasm maintenance", () => 
   assert.match(source, /process-vote-projection-refresh/)
 })
 
-test("frequent gallery-refresh cron is gallery-only, never the heavy maintenance", () => {
+test("frequent dirty-shard publication cron is gallery-only, never the heavy maintenance", () => {
   const runtime = read(
     "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
   )
@@ -93,7 +93,7 @@ test("frequent gallery-refresh cron is gallery-only, never the heavy maintenance
   // The */15 tick exists and is routed to the cheap gallery-only path...
   assert.match(wrangler, /crons\s*=\s*\[[^\]]*["']\*\/15 \* \* \* \*["']/s)
   assert.match(runtime, /cronExpr === "\*\/15 \* \* \* \*"/)
-  assert.match(runtime, /runScheduledIconoplasmGalleryRefresh/)
+  assert.match(runtime, /runScheduledIconoplasmGalleryDirtyShardPublication/)
   assert.match(runtime, /publishSharedGeneDiscoverySymbols/)
   // ...and must NOT be in the heavy maintenance set (vote projection + canon repair),
   // or the frequent tick would burn free-plan budget every 15 minutes.

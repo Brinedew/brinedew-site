@@ -263,7 +263,7 @@ async function syncReadModels(symbols) {
     const chunk = symbols.slice(index, index + chunkSize)
     const result = await adminPost("/api/iconoplasm/admin/read-models/sync", {
       symbols: chunk,
-      invalidate_gallery: false,
+      publish_gallery_dirty_shards: false,
       skip_vote_summaries: true,
       skip_vision_rollups: true,
       skip_dashboard: true,
@@ -279,7 +279,7 @@ async function syncReadModels(symbols) {
   }
   const finalPublish = await adminPost("/api/iconoplasm/admin/read-models/sync", {
     symbols: [],
-    invalidate_gallery: true,
+    publish_gallery_dirty_shards: true,
     skip_vote_summaries: true,
     skip_gene_rollups: true,
     skip_vision_rollups: true,
