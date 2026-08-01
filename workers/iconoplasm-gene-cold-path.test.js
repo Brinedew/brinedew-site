@@ -4,7 +4,10 @@ import test from "node:test"
 
 import { iconoplasmGeneDiscoveryStateForPath } from "./iconoplasm-gene-discovery-worker.js"
 import { iconoplasmPublishedGeneRecordIsIndexable } from "./iconoplasm-gene-discovery.js"
-import { resetIconoplasmRuntimeCachesForTest } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  resetIconoplasmRuntimeCachesForTest,
+  syncPublishedGeneRouteMembershipAfterPublicationForTest,
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const PORTRAIT_SHA = "a".repeat(64)
 const PROTECTED_ICONOPLASM_ENTRYPOINTS = Object.freeze([
@@ -12,59 +15,33 @@ const PROTECTED_ICONOPLASM_ENTRYPOINTS = Object.freeze([
   "iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
 ])
 
-function publishedCardCatalogFixture() {
+function publishedCanonicalRouteFixture() {
   const kvReads = []
-  const card = {
-    __complete: true,
-    schema_version: "iconoplasm.mobileCard.v1",
-    snapshot_version: "cold-v1",
-    data_source: "published_card_catalog",
-    symbol: "TP53",
-    full_name: "tumor protein p53",
-    portrait: { status: "published", asset_sha256: PORTRAIT_SHA },
-    field_status: {},
-    payload: {
-      symbol: "TP53",
-      full_name: "tumor protein p53",
-      portrait: { status: "published", asset_sha256: PORTRAIT_SHA },
-    },
-  }
   return {
     env: {
+      ICONOPLASM_DB: {
+        prepare(sql) {
+          assert.match(String(sql), /FROM icono_published_gene_routes/)
+          return {
+            bind(symbol) {
+              assert.equal(symbol, "TP53")
+              return {
+                async first() {
+                  return {
+                    gene_symbol: "TP53",
+                    full_name: "tumor protein p53",
+                    current_asset_sha256: PORTRAIT_SHA,
+                  }
+                },
+              }
+            },
+          }
+        },
+      },
       KV: {
         async get(key) {
           kvReads.push(String(key))
-          if (key === "iconoplasm:gallery-version") return JSON.stringify({ current: "cold-v1" })
-          if (key === "iconoplasm:card-catalog:cold-v1") {
-            return JSON.stringify({
-              schema: "iconoplasm.cardCatalog.v1",
-              artifact_version: "cold-v1",
-              storage: "kv_sharded",
-              catalog_gene_count: 1,
-              card_count: 1,
-              shard_count: 1,
-              shards: [
-                {
-                  index: 0,
-                  key: "iconoplasm:card-catalog-shard:cold-v1:0",
-                  artifact_version: "cold-v1",
-                  shard_index: 0,
-                  first_symbol: "TP53",
-                  last_symbol: "TP53",
-                  card_count: 1,
-                },
-              ],
-            })
-          }
-          if (key === "iconoplasm:card-catalog-shard:cold-v1:0") {
-            return JSON.stringify({
-              schema: "iconoplasm.cardCatalog.v1",
-              artifact_version: "cold-v1",
-              shard_index: 0,
-              cards: [card],
-            })
-          }
-          throw new Error(`canonical route must not read unexpected KV key: ${String(key)}`)
+          throw new Error(`canonical route must not read KV: ${String(key)}`)
         },
       },
     },
@@ -72,24 +49,72 @@ function publishedCardCatalogFixture() {
   }
 }
 
-test("canonical gene discovery uses the published card catalog on a cold route", async () => {
+test("canonical gene discovery uses the indexed publication route without KV reads", async () => {
   resetIconoplasmRuntimeCachesForTest()
   try {
-    const fixture = publishedCardCatalogFixture()
+    const fixture = publishedCanonicalRouteFixture()
     const state = await iconoplasmGeneDiscoveryStateForPath(fixture.env, "/gene/TP53")
 
     assert.equal(state.kind, "canonical")
     assert.equal(state.canonicalSymbol, "TP53")
     assert.equal(state.indexable, true)
     assert.equal(iconoplasmPublishedGeneRecordIsIndexable(state.record), true)
-    assert.deepEqual(fixture.kvReads, [
-      "iconoplasm:gallery-version",
-      "iconoplasm:card-catalog:cold-v1",
-      "iconoplasm:card-catalog-shard:cold-v1:0",
-    ])
+    assert.deepEqual(fixture.kvReads, [])
   } finally {
     resetIconoplasmRuntimeCachesForTest()
   }
+})
+
+test("publication route membership advances only through the bounded event window", async () => {
+  const statements = []
+  const env = {
+    ICONOPLASM_DB: {
+      prepare(sql) {
+        const statement = { sql: String(sql), binds: [] }
+        statements.push(statement)
+        return {
+          bind(...binds) {
+            statement.binds = binds
+            return {
+              async run() {
+                return { meta: { changes: statements.length } }
+              },
+            }
+          },
+        }
+      },
+    },
+  }
+
+  const result = await syncPublishedGeneRouteMembershipAfterPublicationForTest(env, {
+    afterEventAt: "2026-08-01 10:00:00",
+    throughEventAt: "2026-08-01 10:15:00",
+  })
+
+  assert.deepEqual(result, { inserted: 1, deleted: 2 })
+  assert.equal(statements.length, 2)
+  assert.match(statements[0].sql, /INSERT OR IGNORE INTO icono_published_gene_routes/)
+  assert.match(statements[1].sql, /DELETE FROM icono_published_gene_routes/)
+  for (const statement of statements) {
+    assert.match(statement.sql, /FROM icono_publish_events/)
+    assert.match(statement.sql, /created_at > \? AND created_at <= \?/)
+    assert.deepEqual(statement.binds.slice(-2), ["2026-08-01 10:00:00", "2026-08-01 10:15:00"])
+  }
+})
+
+test("published route migration stores identity only and seeds established membership", () => {
+  const migration = readFileSync(
+    new URL("../migrations-iconoplasm/0059_published_gene_routes.sql", import.meta.url),
+    "utf8",
+  )
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS icono_published_gene_routes/)
+  assert.match(migration, /gene_symbol TEXT PRIMARY KEY NOT NULL/)
+  assert.match(migration, /SELECT gene_symbol\s+FROM icono_gene_catalog/)
+  const tableDefinition = migration.match(
+    /CREATE TABLE IF NOT EXISTS icono_published_gene_routes[\s\S]*?WITHOUT ROWID;/,
+  )?.[0]
+  assert.ok(tableDefinition)
+  assert.doesNotMatch(tableDefinition, /asset_sha256|vote|portrait/i)
 })
 
 test("gene HTML cache lookup is structurally before payload parsing and shell rendering", () => {
@@ -131,6 +156,6 @@ test("the cold-path refactor preserves the loud single-owner filenames", () => {
     workerSource,
     /resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate/,
   )
-  assert.match(workerSource, /allowWholeArtifact: false/)
+  assert.match(workerSource, /FROM icono_published_gene_routes/)
   assert.doesNotMatch(workerSource, /iconoplasm-web/)
 })

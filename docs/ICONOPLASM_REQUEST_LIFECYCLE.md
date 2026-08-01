@@ -11,13 +11,14 @@ not mistake a warm browser for a different authorization path.
 For an exact published symbol, the cold path is bounded and ordered:
 
 1. Normalize the path symbol.
-2. Read `KV_GALLERY_VERSION` and the matching published card-catalog shard.
-   The published KV barrier is authoritative; D1 rows cannot make a card
-   public before publication.
-3. Build the canonical route record and current page snapshot version without
-   hydrating the full 19,023-gene catalog.
+2. Read the exact symbol from `icono_published_gene_routes`, the tiny indexed
+   D1 read model advanced only after the public card-catalog barrier succeeds.
+   This identity-only table has no portrait, ranking, or vote fields.
+3. Build the canonical route record without KV reads or hydration of the full
+   19,023-gene catalog.
 4. Fetch the internal JSON detail response only far enough to derive its ETag
-   snapshot version.
+   snapshot version. This current D1 detail is the vote-fresh page authority;
+   the coarse card artifact is not substituted for it.
 5. Check the HTML cache before parsing JSON or rendering the shell.
 6. Return the cached shell immediately on a hit. On a miss, parse and render
    using the same already-fetched detail response, then store the result.
@@ -26,6 +27,13 @@ Aliases and UniProt identifiers intentionally retain the immutable catalog
 resolver until their route-record publication contract is separately migrated.
 Unknown symbols remain real 404s; incomplete cards remain noindex/503. Do not
 turn a failed read into a publication or repair operation.
+
+After a successful card-catalog version flip, publication synchronizes route
+membership only for canonical-affecting event symbols in the watermark window.
+The operation is idempotent. It never copies mutable canon into the route table
+and never publishes KV per vote. A newly projected vote changes the detail ETag,
+so later navigation selects a new HTML cache key even while the browse artifact
+is still on its documented coarse refresh cadence.
 
 ## Warm versus authenticated
 
@@ -51,6 +59,7 @@ regression test is `workers/iconoplasm-gene-cold-path.test.js`.
 `IPD-007` remains in force: static assets first, one dynamic invocation, and
 the existing stateful Worker as the direct owner. `IPD-009` adds the cold-path
 and naming guard. The protected entrypoint/config filenames retain their exact
-`the-only-allowed-...-do-not-duplicate` shape. Responsibility names are only
-for extracted modules below the boundary; they do not replace the loud names,
-create a second runtime, or introduce `iconoplasm-web`.
+`the-only-allowed-...-do-not-duplicate` shape. Responsibility segments may make
+an extracted internal module more specific, but responsibility-only names must
+not replace the protective prefix/suffix, create a second runtime, or introduce
+`iconoplasm-web`.

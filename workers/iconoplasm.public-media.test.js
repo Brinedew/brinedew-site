@@ -613,6 +613,38 @@ test("site gene detail keeps the public cache policy on conditional responses", 
   )
 })
 
+test("a newly projected canonical vote changes the gene detail ETag", async () => {
+  const env = buildEnv()
+  const read = async () =>
+    handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+        headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
+      }),
+      env,
+      {},
+    )
+
+  const before = await read()
+  const beforePayload = await before.clone().json()
+  const votedAssetSha = "9".repeat(64)
+  env.gatewayDb.published.set("A1BG", {
+    ...env.gatewayDb.published.get("A1BG"),
+    asset_sha256: votedAssetSha,
+    candidate_image_id: 9001,
+    sample_label: "A1BG-9",
+    sample_number: 9,
+  })
+  resetIconoplasmRuntimeCachesForTest()
+  const after = await read()
+  const afterPayload = await after.clone().json()
+
+  assert.equal(before.status, 200)
+  assert.equal(after.status, 200)
+  assert.notEqual(after.headers.get("ETag"), before.headers.get("ETag"))
+  assert.notEqual(afterPayload?.portrait?.asset_sha256, beforePayload?.portrait?.asset_sha256)
+  assert.equal(afterPayload?.portrait?.asset_sha256, votedAssetSha)
+})
+
 test("site gene detail canonicalizes alias requests before rendering the gene payload", async () => {
   const response =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
