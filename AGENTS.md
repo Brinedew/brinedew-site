@@ -95,13 +95,15 @@ before changing anonymous bootstrap, the session-presence hint, catalog/card
 publication metadata, public batch reads, or extension detail caching.
 
 **ARCHITECTURE FENCE [IPD-009]** — canonical Iconoplasm gene first paint is
-cold-safe: the published KV read plane resolves the exact symbol without full
-catalog hydration, the detail ETag is probed before the HTML cache, and cache
-hits return before JSON parsing or shell rendering. The existing loudly named
-stateful Worker and direct route remain the only owner. Responsibility-based
-names are allowed only for extracted modules below that boundary; they never
-replace the protective prefix/suffix or create `iconoplasm-web`, a public
-proxy, or a second state owner. Read `docs/ICONOPLASM_REQUEST_LIFECYCLE.md`,
+cold-safe: a tiny publication-owned D1 identity index resolves an exact symbol
+without KV or full-catalog reads, the current D1 detail ETag is probed before
+the HTML cache, and cache hits return before JSON parsing or shell rendering.
+The route index stores no portrait or vote state. The existing loudly named
+stateful Worker and direct route remain the only owner. Never replace the
+protective prefix/suffix naming pattern with shorter responsibility-only names;
+descriptive responsibility segments are allowed only inside that full pattern
+for extracted modules below the boundary. Do not create `iconoplasm-web`, a
+public proxy, or a second state owner. Read `docs/ICONOPLASM_REQUEST_LIFECYCLE.md`,
 `docs/SITE.md`, and `cloudflare/deployment-topology.json` before changing the
 gene document path, Worker split, deployment order, or module names.
 

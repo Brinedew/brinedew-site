@@ -22,13 +22,13 @@ Wrangler configuration must continue to agree on this route owner.
 
 ## Route table
 
-| Host/path                                   | First owner           | Dynamic owner      | State                                    |
-| ------------------------------------------- | --------------------- | ------------------ | ---------------------------------------- |
-| `iconoplasm.brinedew.bio/<published asset>` | Workers Static Assets | none               | immutable build output                   |
-| `iconoplasm.brinedew.bio/gene/<SYMBOL>`     | Static Assets miss    | `geneguessr-api`   | published KV read plane plus HTML cache  |
-| `iconoplasm.brinedew.bio/api/*`             | Static Assets miss    | `geneguessr-api`   | existing Iconoplasm read/write contracts |
-| `iconoplasm.brinedew.bio/health`            | Static Assets miss    | `geneguessr-api`   | bounded health response                  |
-| `brinedew.bio/*`                            | public edge Worker    | public edge Worker | separate Brinedew site boundary          |
+| Host/path                                   | First owner           | Dynamic owner      | State                                                         |
+| ------------------------------------------- | --------------------- | ------------------ | ------------------------------------------------------------- |
+| `iconoplasm.brinedew.bio/<published asset>` | Workers Static Assets | none               | immutable build output                                        |
+| `iconoplasm.brinedew.bio/gene/<SYMBOL>`     | Static Assets miss    | `geneguessr-api`   | published D1 route index, current detail ETag, and HTML cache |
+| `iconoplasm.brinedew.bio/api/*`             | Static Assets miss    | `geneguessr-api`   | existing Iconoplasm read/write contracts                      |
+| `iconoplasm.brinedew.bio/health`            | Static Assets miss    | `geneguessr-api`   | bounded health response                                       |
+| `brinedew.bio/*`                            | public edge Worker    | public edge Worker | separate Brinedew site boundary                               |
 
 ## Deployment graph
 

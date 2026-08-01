@@ -90,12 +90,14 @@ The route owner has one deliberately staged read path for `/gene/{SYMBOL}`:
 
 1. Static Assets serves matching files before Worker code.
 2. The existing stateful Worker resolves an exact canonical symbol from the
-   published card-catalog barrier (`KV_GALLERY_VERSION` plus the matching
-   shard). This is a bounded KV read and does not hydrate the 19,023-gene
-   artifact or let unpublished D1 rows enter discovery.
+   identity-only `icono_published_gene_routes` D1 index. Publication advances
+   this table only after the card-catalog barrier succeeds. The normal exact
+   route therefore spends zero KV reads and does not hydrate the 19,023-gene
+   artifact or let unpublished catalog rows enter discovery.
 3. The Worker asks the existing site-gene detail handler for the response
    headers only. Its ETag supplies the immutable HTML snapshot key; the detail
-   handler itself uses the indexed D1 read model for fresh page facts.
+   handler itself uses the indexed D1 read model for fresh page facts and the
+   current projected vote result.
 4. `caches.default.match` runs before JSON parsing, card rendering, or shell
    injection. A hit returns the cached document immediately.
 5. Only a miss parses the detail payload and renders the complete first-paint
@@ -106,6 +108,12 @@ primary keys and continue through the immutable published-catalog resolver so
 they can redirect without creating a second alias map. Unknown symbols remain
 real 404s; incomplete profiles remain noindex; complete profiles remain the
 only indexable discovery surface.
+
+Do not merge route membership and current canon into one snapshot. The route
+index answers only “has this symbol crossed publication?”; the detail payload
+and ETag answer “what is canonical now?”. Moving the latter to KV would restore
+the stale-vote regression, while reading KV for the former would restore the
+request-spend regression.
 
 The protected entrypoint/config names are part of the architecture contract and
 must not be shortened or replaced:

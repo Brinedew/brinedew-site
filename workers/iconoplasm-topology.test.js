@@ -31,4 +31,5 @@ test("IPD-009 keeps the protected filenames and one-owner topology executable", 
   const lifecycle = read("docs/ICONOPLASM_REQUEST_LIFECYCLE.md")
   assert.match(lifecycle, /ARCHITECTURE FENCE \[IPD-009\]|IPD-009/)
   assert.match(lifecycle, /cache lookup must precede/i)
+  assert.match(lifecycle, /icono_published_gene_routes/)
 })

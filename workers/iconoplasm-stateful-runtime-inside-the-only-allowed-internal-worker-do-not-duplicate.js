@@ -13484,19 +13484,54 @@ async function fetchCatalogRow(env, symbol) {
 }
 
 // ARCHITECTURE FENCE [IPD-007]
-// A canonical public gene URL must not hydrate the full 19k-record catalog.
-// Keep this resolver on the published KV card-catalog barrier so the one
-// stateful Worker remains the sole owner of publication truth while the outer
-// HTML dispatcher can make a cheap route decision on a cold isolate. The
-// fresh D1 detail read remains separate and is never used to decide crawl
-// eligibility. Alias and UniProt resolution deliberately retain the
-// immutable-catalog path below; those identifiers are not primary-key lookups
-// and must not grow a second alias state store here.
+// A canonical public gene URL must not hydrate the full 19k-record catalog or
+// spend KV reads merely to establish route membership. The tiny publication-
+// owned route table contains identity only; current portrait/vote state remains
+// in the existing D1 detail models and their ETag remains the HTML snapshot
+// version. Alias and UniProt resolution deliberately retain the immutable
+// artifact fallback below; they must not grow a second alias state store here.
 export async function resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
   env,
   rawIdentifier,
 ) {
   const requestedSymbol = normalizeSymbol(rawIdentifier)
+  if (requestedSymbol && env?.ICONOPLASM_DB) {
+    try {
+      const publishedRoute = await env.ICONOPLASM_DB.prepare(
+        `SELECT r.gene_symbol,
+                c.full_name,
+                ps.current_asset_sha256
+           FROM icono_published_gene_routes r
+           JOIN icono_gene_catalog c
+             ON c.gene_symbol = r.gene_symbol
+           LEFT JOIN icono_publish_state ps
+             ON ps.gene_symbol = r.gene_symbol
+          WHERE r.gene_symbol = ?
+          LIMIT 1`,
+      )
+        .bind(requestedSymbol)
+        .first()
+      if (publishedRoute?.gene_symbol) {
+        const canonicalSymbol = normalizeSymbol(publishedRoute.gene_symbol)
+        return {
+          kind: "canonical",
+          canonicalSymbol,
+          record: {
+            s: canonicalSymbol,
+            n: String(publishedRoute.full_name || "").trim(),
+            p: publishedRoute.current_asset_sha256
+              ? { asset_sha256: String(publishedRoute.current_asset_sha256) }
+              : null,
+          },
+          source: "published_gene_route_d1",
+        }
+      }
+    } catch {
+      // During the migration rollout, or if D1 is temporarily unavailable,
+      // retain the established immutable-artifact path below. This is a
+      // correctness fallback, not the normal canonical request path.
+    }
+  }
   if (requestedSymbol) {
     const versionInfo = await currentMobileCardSnapshotVersion(env)
     const snapshotVersion = String(versionInfo?.current || "").trim()
@@ -13787,7 +13822,7 @@ function wantsProjectedField(fieldSet, field) {
   return !fieldSet || fieldSet.has(field)
 }
 
-async function geneRecord(env, url, rawId, { fields = null } = {}) {
+async function geneRecord(env, url, rawId, { fields = null, resolvedGene = null } = {}) {
   // Cost fence: extension hover traffic hits /genes/batch repeatedly across
   // arbitrary pages. When the caller projects a lean field set, treat that as a
   // real permission to skip the richer request-time work instead of building the
@@ -13827,7 +13862,7 @@ async function geneRecord(env, url, rawId, { fields = null } = {}) {
   const wantsConstraintPercentile = wantsProjectedField(fieldSet, "constraint_percentile")
   const wantsPrimaryTissue = wantsProjectedField(fieldSet, "primary_tissue")
 
-  const r = await resolveGene(env, rawId, { includeProtein: needsProtein })
+  const r = resolvedGene || (await resolveGene(env, rawId, { includeProtein: needsProtein }))
   if (!r?.symbol) return null
   const base = needsPortrait ? portraitBase(url, env) : null
   const portrait = needsPortrait ? await portraitState(env, r.symbol, base) : null
@@ -22792,6 +22827,56 @@ async function readCardCatalogPublishWatermark(env) {
   }
 }
 
+async function syncPublishedGeneRouteMembershipAfterPublication(
+  env,
+  { afterEventAt = null, throughEventAt = null } = {},
+) {
+  if (!env?.ICONOPLASM_DB || !throughEventAt) return { inserted: 0, deleted: 0 }
+  const placeholders = cardCatalogCanonicalActionPlaceholders()
+  const timeClause = afterEventAt ? "created_at > ? AND created_at <= ?" : "created_at <= ?"
+  const timeBinds = afterEventAt
+    ? [String(afterEventAt), String(throughEventAt)]
+    : [String(throughEventAt)]
+  const eventSymbolsSql = `SELECT DISTINCT gene_symbol
+                              FROM icono_publish_events
+                             WHERE action IN (${placeholders})
+                               AND ${timeClause}`
+  const actionBinds = [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS]
+
+  // Membership follows the artifact barrier, while the mutable portrait and
+  // vote result stay in their existing D1 models. Both statements are
+  // idempotent so a failed invocation can safely retry before advancing the
+  // publication watermark.
+  const inserted = await env.ICONOPLASM_DB.prepare(
+    `INSERT OR IGNORE INTO icono_published_gene_routes (gene_symbol)
+     SELECT c.gene_symbol
+       FROM icono_gene_catalog c
+       JOIN (${eventSymbolsSql}) changed
+         ON changed.gene_symbol = c.gene_symbol`,
+  )
+    .bind(...actionBinds, ...timeBinds)
+    .run()
+  const deleted = await env.ICONOPLASM_DB.prepare(
+    `DELETE FROM icono_published_gene_routes
+      WHERE gene_symbol IN (${eventSymbolsSql})
+        AND NOT EXISTS (
+          SELECT 1
+            FROM icono_gene_catalog c
+           WHERE c.gene_symbol = icono_published_gene_routes.gene_symbol
+        )`,
+  )
+    .bind(...actionBinds, ...timeBinds)
+    .run()
+  return {
+    inserted: Math.max(0, Number(inserted?.meta?.changes || 0) || 0),
+    deleted: Math.max(0, Number(deleted?.meta?.changes || 0) || 0),
+  }
+}
+
+export async function syncPublishedGeneRouteMembershipAfterPublicationForTest(env, options) {
+  return syncPublishedGeneRouteMembershipAfterPublication(env, options)
+}
+
 async function writeCardCatalogPublishWatermark(
   env,
   { artifactVersion, watermarkEventAt, cardCount, catalogGeneCount, contentHash } = {},
@@ -23449,6 +23534,7 @@ async function invalidateGalleryCache(env) {
   // rather than leaving the PRL-style logged-in/logged-out split-brain behind.
   clearGallerySnapshotCache()
   clearSharedD1CostCaches()
+  const previousPublicationWatermark = await readCardCatalogPublishWatermark(env)
   // Capture the high-water mark BEFORE the build. Anything reflected in the
   // artifact has created_at <= this; events landing mid-build stay pending.
   const watermarkEventAt = await maxCardCatalogPublishEventTimestamp(env)
@@ -23478,9 +23564,17 @@ async function invalidateGalleryCache(env) {
       contentHash: cardCatalog.content_hash || "",
     })
   }
+  const syncPublishedRoutes = async () => {
+    if (skipWatermark || !effectiveWatermarkEventAt) return
+    await syncPublishedGeneRouteMembershipAfterPublication(env, {
+      afterEventAt: previousPublicationWatermark?.watermark_event_at || null,
+      throughEventAt: effectiveWatermarkEventAt,
+    })
+  }
   if (String(previousBarrier.current || "").trim() === String(cardCatalog.artifact_version || "")) {
     galleryVersionCache.value = previousBarrier.raw || previousBarrier.current
     galleryVersionCache.loadedAt = Date.now()
+    await syncPublishedRoutes()
     await recordWatermark()
     return {
       version: previousBarrier.current,
@@ -23506,8 +23600,10 @@ async function invalidateGalleryCache(env) {
     kv_write_budget: cardCatalog.kv_write_budget || galleryVersionKvWriteBudget || null,
   }
   const version = await publishGalleryVersionBarrier(env, barrier)
-  // Record the watermark only after the version flip succeeded (and only when this
-  // was not a mid-rebuild chunk — see recordWatermark above).
+  // Route membership and the watermark advance only after the version flip.
+  // This preserves one publication boundary without putting mutable vote state
+  // into the route table.
+  await syncPublishedRoutes()
   await recordWatermark()
   return { version, card_catalog: cardCatalog }
 }
@@ -26152,6 +26248,7 @@ async function handleSiteGeneDetail(request, env, path) {
   const payload = projectGeneRecord(
     await geneRecord(env, url, resolved.symbol, {
       fields: url.searchParams.get("fields"),
+      resolvedGene: resolved,
     }),
     url.searchParams.get("fields"),
   )
