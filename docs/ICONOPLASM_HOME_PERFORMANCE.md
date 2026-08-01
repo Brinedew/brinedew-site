@@ -12,7 +12,9 @@ The homepage is an automatic, cursor-backed feed, but its data sources remain di
 
 The browser keeps the first paint to four cards, then requests 8 cards per mobile segment or 12 per desktop segment. It may mount at most 24 mobile cards or 48 desktop cards. Distant measured segments become height-preserving spacers and can be rehydrated in either direction. Only eight segment payloads may remain in memory, and ordered account windows must not be persisted.
 
-Automatic progress uses `history.replaceState`; explicit scope and sort changes use `pushState`. A saved route state contains the active cursor, segment page, anchor gene, and intra-segment offset so Back can restore the exact neighborhood without caching a complete DOM fragment.
+Automatic progress uses `history.replaceState` to update opaque `history.state` while the visible URL stays clean. Explicit scope and sort changes use `pushState`, but only user-meaningful, shareable choices may appear in the URL: a non-default order, shared scope, and the seed required to reproduce a random order. Cursor, segment page, offset, anchor gene, and intra-segment pixel offset are transient restoration data and must never be written to the address bar.
+
+A saved history entry still contains that transient state so Back can restore the exact neighborhood without caching a complete DOM fragment. Legacy URLs containing `page`, `after`, `offset`, `cursor`, `anchor`, or `anchorOffset` may be consumed once for restoration and are cleaned on the first feed-state update. Crawlable pagination remains in the document's `rel=next` link rather than mutating the user's current URL.
 
 The protected controller contract is `quartz/static/iconoplasm/collection-feed.test.js`. It covers loading boundaries, request joining and cancellation, feed semantics, keyboard traversal, forward and backward recycling, the mounted-card and payload caps after 100+ batches, retry behavior, and catalog snapshot changes.
 

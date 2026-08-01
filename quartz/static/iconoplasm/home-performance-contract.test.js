@@ -350,6 +350,22 @@ test("home scroll restore records the active cursor and anchor only for gene Bac
   assert.doesNotMatch(app, /cachedHomeView|createDocumentFragment\(\)/)
 })
 
+test("home scroll progress stays in history state instead of the visible URL", async () => {
+  const app = await readFile(appPath, "utf8")
+  const writerStart = app.indexOf("function writeCollectionHistory(push)")
+  const writerEnd = app.indexOf("\n    function resetCollection", writerStart)
+  assert.notEqual(writerStart, -1, "missing collection history writer")
+  assert.notEqual(writerEnd, -1, "missing collection history writer boundary")
+  const writer = app.slice(writerStart, writerEnd)
+
+  assert.match(app, /buildIconoplasmCollectionVisibleUrl/)
+  assert.match(app, /function updateFeedHistory\(snapshot\)[\s\S]*writeCollectionHistory\(false\)/)
+  assert.match(writer, /iconoplasmHome:\s*snapshot/)
+  assert.match(writer, /buildIconoplasmCollectionVisibleUrl\(window\.location\.href/)
+  assert.match(writer, /push \? "pushState" : "replaceState"/)
+  assert.doesNotMatch(writer, /searchParams\.set\("(?:page|after|offset|anchor|anchorOffset)"/)
+})
+
 test("auth payload owns the admin bit without a second admin session probe", async () => {
   const app = await readFile(appPath, "utf8")
   const stateStart = app.indexOf("function updateSharedUserState(user)")
