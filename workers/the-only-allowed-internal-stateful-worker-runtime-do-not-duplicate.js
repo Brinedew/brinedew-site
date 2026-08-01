@@ -372,7 +372,35 @@ function replaceIconoplasmStaticGeneShell(html, shellHtml) {
   )
 }
 
+async function iconoplasmGeneDetailResponseForHtmlCache(request, env, ctx, path) {
+  const symbol = iconoplasmStaticGeneSymbolFromPath(path)
+  if (!symbol) return null
+  try {
+    const apiUrl = new URL(request.url)
+    apiUrl.pathname = `/api/iconoplasm/site/genes/${encodeURIComponent(symbol)}`
+    apiUrl.search = ""
+    apiUrl.hash = ""
+    return await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(apiUrl.toString(), {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      }),
+      env,
+      ctx,
+    )
+  } catch (error) {
+    console.warn("Iconoplasm gene detail response for HTML cache failed:", error)
+    return null
+  }
+}
+
+function iconoplasmGeneSnapshotVersionFromDetailResponse(detailResponse) {
+  if (!detailResponse?.ok) return ""
+  return iconoplasmGeneDetailShellVersion(null, detailResponse.headers.get("ETag") || "")
+}
+
 async function iconoplasmGeneCardBootstrapInjection(request, env, ctx, path) {
+  const preloadedDetailResponse = arguments[4] || null
   // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
   // Search terms: PRL split-brain, gene page bootstrap, canonical blot,
   // public card artifact, KV_GALLERY_VERSION.
@@ -404,19 +432,9 @@ async function iconoplasmGeneCardBootstrapInjection(request, env, ctx, path) {
     }
   }
   try {
-    const apiUrl = new URL(request.url)
-    apiUrl.pathname = `/api/iconoplasm/site/genes/${encodeURIComponent(symbol)}`
-    apiUrl.search = ""
-    apiUrl.hash = ""
     const detailResponse =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(apiUrl.toString(), {
-          method: "GET",
-          headers: { Accept: "application/json" },
-        }),
-        env,
-        ctx,
-      )
+      preloadedDetailResponse ||
+      (await iconoplasmGeneDetailResponseForHtmlCache(request, env, ctx, path))
     if (!detailResponse || !detailResponse.ok) {
       return {
         injection: "",
@@ -428,7 +446,7 @@ async function iconoplasmGeneCardBootstrapInjection(request, env, ctx, path) {
       }
     }
     const detailEtag = detailResponse.headers.get("ETag") || ""
-    const cardPayload = await detailResponse.json()
+    const cardPayload = await detailResponse.clone().json()
     if (!cardPayload) {
       return {
         injection: "",
@@ -589,6 +607,7 @@ async function iconoplasmCacheableHtmlShellResponse(
   cacheStatus,
   preloadedGeneShell = null,
   geneDiscovery = null,
+  preloadedGeneDetailResponse = null,
 ) {
   const indexable = Boolean(geneDiscovery?.indexable)
   const headers = addIconoplasmGeneShellHeaders(response.headers, path, { indexable })
@@ -600,7 +619,14 @@ async function iconoplasmCacheableHtmlShellResponse(
   let body = response.status === 204 ? null : personalizeIconoplasmStaticGeneShell(html, path)
   let geneShell = preloadedGeneShell
   if (body && String(path || "").startsWith("/gene/")) {
-    if (!geneShell) geneShell = await iconoplasmGeneCardBootstrapInjection(request, env, ctx, path)
+    if (!geneShell)
+      geneShell = await iconoplasmGeneCardBootstrapInjection(
+        request,
+        env,
+        ctx,
+        path,
+        preloadedGeneDetailResponse,
+      )
     if (request.method === "GET" && indexable && !geneShell?.profileComplete) {
       return iconoplasmGeneUnavailableResponse(request.method)
     }
@@ -1812,6 +1838,10 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       )
     }
 
+    // ARCHITECTURE FENCE [IPD-007]
+    // Iconoplasm subdomain: static assets bypass this code; dynamic misses are
+    // owned directly by this one stateful Worker. Do not add a public proxy,
+    // service-binding hop, or second state owner here.
     // Iconoplasm subdomain: proxy non-API requests through Pages (same pattern as geneguessr),
     // delegate API/portrait/admin to the iconoplasm handler.
     if (isIconoplasmRequest(url.hostname)) {
@@ -1982,21 +2012,23 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         (request.method === "GET" || request.method === "HEAD") &&
         typeof caches !== "undefined" &&
         caches.default
-      const geneShellForHtmlCache =
+      // Read only the detail response headers before checking the per-gene
+      // HTML cache. The ETag is the freshness token; parsing and rendering the
+      // JSON payload belongs exclusively to a cache miss. This ordering is the
+      // cold-isolate CPU fence for canonical gene pages.
+      const geneDetailResponseForHtmlCache =
         canUseHtmlShellEdgeCache &&
         request.method === "GET" &&
         String(url.pathname || "").startsWith("/gene/")
-          ? await iconoplasmGeneCardBootstrapInjection(request, env, ctx, url.pathname)
+          ? await iconoplasmGeneDetailResponseForHtmlCache(request, env, ctx, url.pathname)
           : null
 
       if (canUseHtmlShellEdgeCache) {
-        const geneHtmlCacheKey = geneShellForHtmlCache?.snapshotVersion
-          ? iconoplasmGeneHtmlCacheKey(
-              url,
-              url.pathname,
-              geneShellForHtmlCache.snapshotVersion,
-              env,
-            )
+        const geneSnapshotVersionForHtmlCache = iconoplasmGeneSnapshotVersionFromDetailResponse(
+          geneDetailResponseForHtmlCache,
+        )
+        const geneHtmlCacheKey = geneSnapshotVersionForHtmlCache
+          ? iconoplasmGeneHtmlCacheKey(url, url.pathname, geneSnapshotVersionForHtmlCache, env)
           : null
         if (geneHtmlCacheKey) {
           const cachedGeneHtml = await caches.default.match(geneHtmlCacheKey)
@@ -2024,8 +2056,9 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
             ctx,
             url.pathname,
             "HIT",
-            geneShellForHtmlCache,
+            null,
             geneDiscovery,
+            geneDetailResponseForHtmlCache,
           )
         }
       }
@@ -2109,8 +2142,9 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
           ctx,
           url.pathname,
           "MISS",
-          geneShellForHtmlCache,
+          null,
           geneDiscovery,
+          geneDetailResponseForHtmlCache,
         )
       }
 

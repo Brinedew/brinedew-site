@@ -84,6 +84,51 @@ authority remains the per-gene VoteCoordinator Durable Object; never move
 immediate ranking truth to eventually consistent KV to make this routing shape
 look simpler.
 
+### Canonical gene first-paint cold path (B-694)
+
+The route owner has one deliberately staged read path for `/gene/{SYMBOL}`:
+
+1. Static Assets serves matching files before Worker code.
+2. The existing stateful Worker resolves an exact canonical symbol from the
+   published card-catalog barrier (`KV_GALLERY_VERSION` plus the matching
+   shard). This is a bounded KV read and does not hydrate the 19,023-gene
+   artifact or let unpublished D1 rows enter discovery.
+3. The Worker asks the existing site-gene detail handler for the response
+   headers only. Its ETag supplies the immutable HTML snapshot key; the detail
+   handler itself uses the indexed D1 read model for fresh page facts.
+4. `caches.default.match` runs before JSON parsing, card rendering, or shell
+   injection. A hit returns the cached document immediately.
+5. Only a miss parses the detail payload and renders the complete first-paint
+   card. The same response is reused for rendering; it is not fetched again.
+
+Alias and UniProt identifiers are intentionally different: they are not D1
+primary keys and continue through the immutable published-catalog resolver so
+they can redirect without creating a second alias map. Unknown symbols remain
+real 404s; incomplete profiles remain noindex; complete profiles remain the
+only indexable discovery surface.
+
+The protected entrypoint/config names are part of the architecture contract and
+must not be shortened or replaced:
+
+- `workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js`
+- `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`
+- `wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml`
+
+If a future extraction is needed, keep those files as the composition and
+dispatch boundary. New internal modules may add responsibility segments only
+inside that boundary, while retaining an `iconoplasm-` prefix and the explicit
+`-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js`
+suffix. Names such as `iconoplasm-web`, `public-worker`, `handler`, or
+`utils` are prohibited because they hide ownership and invite a second Worker
+or state owner. The extraction must preserve IPD-007: no shared public proxy,
+no normal-request service binding, no symbol-only cache, and no duplicate
+publication state.
+
+The regression contract lives in
+`workers/iconoplasm-gene-cold-path.test.js`. A change is incomplete if that
+test no longer proves both the indexed canonical lookup and cache-before-render
+ordering.
+
 Linear B-670 contains the live telemetry, user journeys, 22 ranked scenarios,
 research synthesis, rejected alternatives, and zero-spend constraint. Treat
 that evidence as revisable. Do not treat this fence—or an older issue—as

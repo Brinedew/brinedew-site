@@ -56,6 +56,27 @@ function buildPublishedCatalogEnv(genes) {
     gene_count: genes.length,
     genes,
   }
+  const cardVersion = `card-${hash}`
+  const cards = genes.map((gene) => {
+    const portrait = gene.p?.asset_sha256
+      ? { status: "published", asset_sha256: gene.p.asset_sha256 }
+      : { status: "missing", asset_sha256: null }
+    return {
+      __complete: true,
+      schema_version: "iconoplasm.mobileCard.v1",
+      snapshot_version: cardVersion,
+      data_source: "published_card_catalog",
+      symbol: gene.s,
+      full_name: gene.n,
+      portrait,
+      field_status: {},
+      payload: {
+        symbol: gene.s,
+        full_name: gene.n,
+        portrait,
+      },
+    }
+  })
   const store = new Map([
     [
       "iconoplasm:catalog-manifest",
@@ -73,6 +94,38 @@ function buildPublishedCatalogEnv(genes) {
       JSON.stringify({ cached_at: Date.now(), fingerprint }),
     ],
     [`iconoplasm:hydrated-catalog-artifact:a5c1:${buildHash}`, JSON.stringify(artifact)],
+    ["iconoplasm:gallery-version", JSON.stringify({ current: cardVersion })],
+    [
+      `iconoplasm:card-catalog:${cardVersion}`,
+      JSON.stringify({
+        schema: "iconoplasm.cardCatalog.v1",
+        artifact_version: cardVersion,
+        storage: "kv_sharded",
+        catalog_gene_count: cards.length,
+        card_count: cards.length,
+        shard_count: 1,
+        shards: [
+          {
+            index: 0,
+            key: `iconoplasm:card-catalog-shard:${cardVersion}:0`,
+            artifact_version: cardVersion,
+            shard_index: 0,
+            first_symbol: cards[0]?.symbol || "",
+            last_symbol: cards[cards.length - 1]?.symbol || "",
+            card_count: cards.length,
+          },
+        ],
+      }),
+    ],
+    [
+      `iconoplasm:card-catalog-shard:${cardVersion}:0`,
+      JSON.stringify({
+        schema: "iconoplasm.cardCatalog.v1",
+        artifact_version: cardVersion,
+        shard_index: 0,
+        cards,
+      }),
+    ],
   ])
   const env = {
     KV: {
