@@ -1106,7 +1106,7 @@ test("mobile archive restoration is scoped to the current SPA session", async ()
   )
 
   const snapshotStart = app.indexOf("function snapshotHomeState")
-  const snapshotEnd = app.indexOf("function writeCollectionUrl", snapshotStart)
+  const snapshotEnd = app.indexOf("function writeCollectionHistory", snapshotStart)
   assert.notEqual(snapshotStart, -1, "missing home snapshot helper")
   assert.notEqual(snapshotEnd, -1, "missing home snapshot helper boundary")
   const snapshotBlock = app.slice(snapshotStart, snapshotEnd)
