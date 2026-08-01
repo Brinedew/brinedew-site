@@ -19,6 +19,7 @@ import {
   matchIconoplasmRouteContract,
 } from "./iconoplasm-route-contract.js"
 import { ICONOPLASM_CLAN_CATALOG } from "./generated/iconoplasm-clan-catalog.js"
+import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/iconoplasm-anima-emulsion-slot-contract.js"
 import { renderIconoplasmArtistStylesHtml } from "./iconoplasm-artist-styles-html.js"
 import {
   addFavoriteEmulsion,
@@ -4421,7 +4422,10 @@ async function createGenerationRequest(
     const selectedReference = rankedReferences[0] || null
     requestedReferenceAssetSha = normalizeSha256(selectedReference?.asset_sha256 || "") || ""
     requestedReferenceGeneSymbol = normalizeSymbol(selectedReference?.gene_symbol || "") || ""
-    if (!requestedReferenceAssetSha) {
+    const preallocatedSlot = iconoplasmAnimaEmulsionSlotFromExactAlias(resolvedVisionId)
+    const isPreallocatedWithoutReference =
+      !requestedReferenceAssetSha && iconoplasmAnimaEmulsionSlotIsPreallocated(preallocatedSlot)
+    if (!requestedReferenceAssetSha && !isPreallocatedWithoutReference) {
       return {
         ok: false,
         error:
@@ -8352,6 +8356,50 @@ function normalizeGenerationRequestOptionSearchQuery(raw) {
   return text.replace(/\s+/g, " ").trim()
 }
 
+export function iconoplasmAnimaEmulsionSlotFromExactAlias(raw) {
+  const compact = String(raw || "")
+    .replace(/\s+/g, "")
+    .trim()
+  const match = /^(?:A1-|ANIMA-V1-)([1-9][0-9]*)(?:-E)?$/i.exec(compact)
+  if (!match) return 0
+  const slot = Number.parseInt(match[1], 10)
+  return Number.isSafeInteger(slot) && slot > 0 ? slot : 0
+}
+
+export function iconoplasmAnimaEmulsionSlotIsPreallocated(slot) {
+  const numericSlot = Number(slot)
+  if (!Number.isSafeInteger(numericSlot) || numericSlot <= 0) return false
+  return (ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT.callable_slot_intervals || []).some(
+    (interval) =>
+      Array.isArray(interval) &&
+      interval.length === 2 &&
+      numericSlot >= Number(interval[0]) &&
+      numericSlot <= Number(interval[1]),
+  )
+}
+
+export function iconoplasmPreallocatedAnimaEmulsionOption(raw) {
+  const slot = iconoplasmAnimaEmulsionSlotFromExactAlias(raw)
+  if (!iconoplasmAnimaEmulsionSlotIsPreallocated(slot)) return null
+  const emulsionId = `A1-${slot}`
+  const visionId = `anima-v1-${slot}`
+  return {
+    vision_id: visionId,
+    label: emulsionId,
+    primary_label: emulsionId,
+    secondary_label: "Ready for first blot",
+    search_text: `${emulsionId} ${visionId}`,
+    emulsion_id: emulsionId,
+    emulsion_family_id: emulsionId,
+    image_count: 0,
+    live_count: 0,
+    score: 0,
+    vote_h_index: 0,
+    preview_assets: [],
+    is_preallocated_without_preview: true,
+  }
+}
+
 function compactGenerationRequestOptionIdentityPrefix(raw, transform) {
   const compact = String(raw || "")
     .replace(/\s+/g, "")
@@ -8785,13 +8833,20 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
         artistTagUpper,
       )
       .all()
+    const groupedDatabaseOptions = groupGenerationRequestVisionOptions(
+      mapGenerationRequestVisionOptionRows(env, url, resp?.results || []),
+    )
+    const preallocatedExactOption = iconoplasmPreallocatedAnimaEmulsionOption(searchQuery)
+    if (
+      preallocatedExactOption &&
+      !groupedDatabaseOptions.some(
+        (option) => option?.vision_id === preallocatedExactOption.vision_id,
+      )
+    ) {
+      groupedDatabaseOptions.unshift(preallocatedExactOption)
+    }
     return annotateFavoriteGenerationRequestOptions(
-      [
-        ...groupGenerationRequestVisionOptions(
-          mapGenerationRequestVisionOptionRows(env, url, resp?.results || []),
-        ),
-        ...(await sharedUserOptionsPromise),
-      ],
+      [...groupedDatabaseOptions, ...(await sharedUserOptionsPromise)],
       favoriteEmulsionIds,
     )
   }
