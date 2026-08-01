@@ -218,6 +218,53 @@ correction.
 Linear may track remaining implementation, but a stale issue is not architectural
 authority.
 
+## ARCHITECTURE FENCE [IPD-010]: routine gallery publication is dirty-shard-only
+
+The gene universe is stable. A vote changes the canonical card for one gene; it
+does not create a reason to reread or remap all 19,023 genes. Routine publication
+therefore has one strategy:
+
+1. Capture the canonical publish-event ID high-water mark. The timestamp remains
+   diagnostic metadata; it is not the correctness cursor because multiple votes
+   can share one SQLite second.
+2. Resolve changed symbols to their current content-addressed shard ranges.
+3. Prepare at most six dirty shards in one Worker invocation. If more are dirty,
+   retain a durable publication cursor while the old manifest remains live.
+4. Reuse untouched immutable shard references. Insertions, removals, and splits
+   are local to the owning range; a missing blob may be repaired from that range
+   only.
+5. After every dirty shard is ready, write one manifest, flip the gallery version,
+   synchronize route membership, and advance the watermark as one publication
+   boundary.
+
+There is no size threshold whose fallback is a complete catalog rebuild. The
+scheduled route performs exactly one bounded step and ignores historical
+`max_chunks` input. No-op cycles write neither shards nor manifests. A normal
+single-gene canonical change writes at most one replacement shard, one manifest,
+one release pointer, and one watermark; content-addressing avoids even the shard
+write when bytes are unchanged.
+
+Cold bootstrap, legacy storage conversion, and a changed card-mapper revision are
+deployment migrations, not runtime recovery modes. The routine route fails with
+`CARD_CATALOG_BASELINE_REQUIRED`, `CARD_CATALOG_STORAGE_MIGRATION_REQUIRED`, or
+`CARD_CATALOG_SCHEMA_MIGRATION_REQUIRED`; it must never silently start broad work.
+Migration tooling must finish and validate a candidate baseline before activating
+code that requires it. Public readers remain fail-closed and never repair state.
+
+Each non-empty publication has an operation ID in
+`icono_card_catalog_publication_audit`, with `started`, `preparing`, `completed`,
+or `failed` outcome and exact dirty-symbol/shard counts. The operational table is
+bounded to 512 rows, and structured Worker logs carry the same operation ID. This
+is the evidence source for cost review; do not reconstruct history from a deleted
+cursor or infer it from whichever artifact happens to be live.
+
+Naming is part of the cost guard. Use explicit `card catalog dirty shard
+publication`, `baseline version`, `publication cursor`, and `schema migration
+required`. Do not call routine publication a `rebuild`, `warm`, or generic
+`refresh`; those names hide whether work is symbol-scoped and previously allowed
+an absentminded agent to route a scattered vote delta into complete-catalog work.
+Linear B-695 records the incident and implementation evidence.
+
 ## Incident evidence
 
 At 2026-07-22 15:05 UTC:

@@ -107,6 +107,20 @@ public proxy, or a second state owner. Read `docs/ICONOPLASM_REQUEST_LIFECYCLE.m
 `docs/SITE.md`, and `cloudflare/deployment-topology.json` before changing the
 gene document path, Worker split, deployment order, or module names.
 
+**ARCHITECTURE FENCE [IPD-010]** — routine Iconoplasm gallery publication is
+dirty-shard-only. A vote or canonical publish event updates the shard ranges
+that contain those symbols and atomically flips the manifest when they are all
+ready. The scheduled route processes one bounded step and cannot request more.
+Cold bootstrap, storage-format conversion, and card-mapping revision changes
+must fail explicitly in this path; never reinterpret them as permission to scan
+or rebuild all 19,023 genes. A missing shard may be repaired only from its own
+recorded range. Keep the `dirty_shard`, `baseline`, `publication`, and
+`schema_migration_required` vocabulary: generic `rebuild`, `refresh`, `warm`,
+or responsibility-only names hide cost and have already caused regressions.
+Read `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` and Linear B-695
+before changing gallery publication, its cron route, KV accounting, or mapper
+revision behavior.
+
 **ARCHITECTURE FENCE [GG-001]** — automatic GeneGuessr daily selection gives
 each normalized gene surname exactly one lottery slot. It first chooses a
 surname, then a deterministic daily representative inside that surname;
