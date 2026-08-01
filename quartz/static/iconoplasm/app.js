@@ -40,8 +40,21 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 ;(function () {
   "use strict"
 
-  var ICONO_ARCHIVE_RESTORE_SESSION =
-    Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
+  var ICONO_ARCHIVE_RESTORE_SESSION_STORAGE_KEY = "iconoplasm.archiveRestoreSession.v1"
+
+  function readOrCreateIconoArchiveRestoreSession() {
+    var freshSession = Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
+    try {
+      var storedSession = window.sessionStorage.getItem(ICONO_ARCHIVE_RESTORE_SESSION_STORAGE_KEY)
+      if (storedSession) return storedSession
+      window.sessionStorage.setItem(ICONO_ARCHIVE_RESTORE_SESSION_STORAGE_KEY, freshSession)
+    } catch (_iconoArchiveRestoreStorageError) {
+      // Storage-disabled browsers still get correct same-document SPA Back behavior.
+    }
+    return freshSession
+  }
+
+  var ICONO_ARCHIVE_RESTORE_SESSION = readOrCreateIconoArchiveRestoreSession()
   if (window.history && "scrollRestoration" in window.history) {
     window.history.scrollRestoration = "manual"
   }

@@ -144,7 +144,20 @@ export default (() => {
     window.history.scrollRestoration = "manual"
   }
   var iconoplasmStartupPath = window.location && window.location.pathname ? window.location.pathname : "/"
-  if ((iconoplasmStartupPath === "/" || iconoplasmStartupPath === "") && window.history) {
+  var iconoplasmNavigationEntries =
+    window.performance && typeof window.performance.getEntriesByType === "function"
+      ? window.performance.getEntriesByType("navigation")
+      : []
+  var iconoplasmIsBrowserHistoryTraversal = !!(
+    iconoplasmNavigationEntries &&
+    iconoplasmNavigationEntries[0] &&
+    iconoplasmNavigationEntries[0].type === "back_forward"
+  )
+  if (
+    (iconoplasmStartupPath === "/" || iconoplasmStartupPath === "") &&
+    window.history &&
+    !iconoplasmIsBrowserHistoryTraversal
+  ) {
     var iconoplasmFreshState =
       window.history.state && typeof window.history.state === "object"
         ? Object.assign({}, window.history.state)
