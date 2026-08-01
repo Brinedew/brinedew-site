@@ -175,7 +175,9 @@ pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-all
 
 Do not hand-edit `icono_publish_state`, `KV_GALLERY_VERSION`, or card artifact KV keys.
 
-Use the authenticated admin read-model sync for the affected symbol. It rebuilds the symbol read models and publishes a new full card-catalog artifact through the normal budget-gated path:
+Use the authenticated admin read-model sync for the affected symbol. It updates
+that symbol's read models and asks the normal budget-gated publisher to replace
+only the owning dirty shard:
 
 ```powershell
 @'
@@ -190,7 +192,7 @@ const res = await fetch("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/re
   },
   body: JSON.stringify({
     symbols: ["PRL"],
-    invalidate_gallery: true,
+    publish_gallery_dirty_shards: true,
     skip_dashboard: true,
   }),
 });
@@ -218,7 +220,9 @@ console.log(JSON.stringify({ status: res.status, payload: await res.json() }, nu
 '@ | node -
 ```
 
-If the endpoints now agree and a stale projection row remains, clear only the completed symbol job so the hourly projection drain does not spend another full artifact publish:
+If the endpoints now agree and a stale projection row remains, clear only the
+completed symbol job so the projection drain does not repeat already-settled
+promotion work:
 
 ```powershell
 pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "DELETE FROM icono_vote_projection_refresh_jobs WHERE gene_symbol = 'PRL' AND reason = 'vote_auto_promote'"

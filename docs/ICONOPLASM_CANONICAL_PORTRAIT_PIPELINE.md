@@ -116,11 +116,11 @@ Live evidence:
 - KV writes were 2770 on 2026-05-26, 1390 on 2026-05-27, and 1360 on 2026-05-28.
 - KV reads stayed modest on those days: 1050, 1470, and 1260.
 - The production namespace had 7971 `iconoplasm:card-catalog:` keys; 7917 were stale artifact shards/manifests.
-- One full catalog publish wrote roughly 27 KV objects at the current catalog size: 26 shards plus the manifest. A gallery invalidation also writes the shared `KV_GALLERY_VERSION` barrier.
+- The removed whole-catalog publisher wrote roughly 27 KV objects at the current catalog size: 26 shards plus the manifest. Its invalidation step also wrote the shared `KV_GALLERY_VERSION` barrier.
 
 Root cause:
 
-`invalidateGalleryCache(...)` minted a random artifact version for each invalidation. That made repeated read-model/admin sync work rewrite the full public card-catalog artifact even when the public card material had not changed.
+The removed `invalidateGalleryCache(...)` implementation minted a random artifact version for each invalidation. Repeated read-model/admin sync work therefore rewrote the complete public card catalog even when the public card material had not changed.
 
 Fix landed in commit `9a3bd1e6`:
 
@@ -129,9 +129,15 @@ Fix landed in commit `9a3bd1e6`:
 - Repeated identical gallery invalidation writes zero KV keys.
 - A regression test proves the first invalidation writes the artifact and the second identical invalidation does not write.
 
-Follow-up hardening:
+That 2026-05 content-addressing fix was necessary but not sufficient. B-695
+removed whole-catalog publication from steady state entirely. Current routine
+publication is `publishIconoplasmGalleryDirtyShards(...)`: it admits at most six
+dirty baseline shards per invocation and never falls back to complete-catalog
+work.
 
-- `kv_writes` preflight now requires full-publish headroom.
+Current hardening:
+
+- `kv_writes` preflight reserves at most the bounded dirty-shard step ceiling (16 writes), not hypothetical complete-catalog headroom.
 - Production enables card-catalog budget preflight and the shared KV write-budget reservation.
 - The budget watch workflow checks Cloudflare KV read/write/list/delete headroom every two hours and fails visibly before the free-tier wall is hit.
 - `scripts/cleanup-iconoplasm-stale-card-catalog-kv.mjs` is the only approved cleanup path for stale card-catalog KV bloat.
@@ -202,7 +208,9 @@ Use the normal production workflow, not a local one-off Worker upload, unless th
 
 ### 3. Republish through the authenticated admin sync path
 
-Use the admin endpoint for the affected symbol. This rebuilds the symbol read models and publishes a new full card-catalog artifact through the normal budget-gated barrier.
+Use the admin endpoint for the affected symbol. This updates the symbol read
+models and asks the budget-gated publisher to replace only the owning dirty
+shard. Unrelated shard references remain unchanged.
 
 ```powershell
 @'
@@ -217,7 +225,7 @@ const res = await fetch("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/re
   },
   body: JSON.stringify({
     symbols: ["PRL"],
-    invalidate_gallery: true,
+    publish_gallery_dirty_shards: true,
     skip_dashboard: true,
   }),
 });
@@ -229,7 +237,7 @@ Expected result:
 
 - `ok: true`
 - `symbols: 1`
-- `card_catalog.artifact_version` is a new version
+- `card_catalog.artifact_version` is a new version when the public card bytes changed
 - budget data is present and not exhausted across the Cloudflare barrier set, not only D1
 
 For PRL, this produced artifact `mpduzx6k-9e396c96`.
@@ -260,7 +268,9 @@ console.log(JSON.stringify({ status: res.status, payload: await res.json() }, nu
 
 ### 5. Clear only completed stale projection rows
 
-If the admin sync already advanced the artifact and live endpoints agree, clear the completed symbol's stale queued job so the hourly processor does not spend another full artifact publish on the same repair.
+If the admin sync already advanced the artifact and live endpoints agree, clear
+the completed symbol's stale queued job so the projection worker does not repeat
+already-settled promotion work.
 
 ```powershell
 pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "DELETE FROM icono_vote_projection_refresh_jobs WHERE gene_symbol = 'PRL' AND reason = 'vote_auto_promote'"

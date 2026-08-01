@@ -5,7 +5,7 @@ import test from "node:test"
 
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
-  invalidateIconoplasmGalleryCacheForTest,
+  publishIconoplasmGalleryDirtyShardsForTest,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
@@ -228,7 +228,7 @@ test("routine publication refuses cold bootstrap instead of manufacturing a full
   db.changedSymbols = ["GENA"]
   const env = buildEnv(db, new Map())
   await assert.rejects(
-    () => invalidateIconoplasmGalleryCacheForTest(env),
+    () => publishIconoplasmGalleryDirtyShardsForTest(env),
     (error) => error?.code === "CARD_CATALOG_BASELINE_REQUIRED",
   )
 })
@@ -242,7 +242,7 @@ test("one canonical change rewrites one shard and flips on the next publication 
   db.shaBySymbol.set("GENB", "ab".repeat(32))
   const putKeys = []
 
-  const result = await invalidateIconoplasmGalleryCacheForTest(buildEnv(db, kvStore, putKeys))
+  const result = await publishIconoplasmGalleryDirtyShardsForTest(buildEnv(db, kvStore, putKeys))
 
   assert.equal(result.card_catalog.dirty_shard_publication, true)
   assert.equal(result.card_catalog.publication_more, false)
@@ -261,7 +261,7 @@ test("a seven-shard delta is prepared in bounded steps and flips atomically only
   db.changedSymbols = symbols.slice()
   for (const symbol of symbols) db.shaBySymbol.set(symbol, "cd".repeat(32))
 
-  const first = await invalidateIconoplasmGalleryCacheForTest(buildEnv(db, kvStore))
+  const first = await publishIconoplasmGalleryDirtyShardsForTest(buildEnv(db, kvStore))
   assert.equal(first.version, oldVersion)
   assert.equal(first.card_catalog.publication_more, true)
   assert.equal(first.card_catalog.prepared_shard_count, 6)
@@ -269,7 +269,7 @@ test("a seven-shard delta is prepared in bounded steps and flips atomically only
   assert.equal(JSON.parse(kvStore.get(WATERMARK_KEY)).watermark_event_at, "2026-06-05 11:00:00")
   assert.ok(kvStore.has(PUBLICATION_KEY))
 
-  const second = await invalidateIconoplasmGalleryCacheForTest(buildEnv(db, kvStore))
+  const second = await publishIconoplasmGalleryDirtyShardsForTest(buildEnv(db, kvStore))
   assert.equal(second.card_catalog.publication_more, false)
   assert.equal(second.card_catalog.dirty_shard_count, 7)
   assert.notEqual(second.version, oldVersion)
@@ -285,7 +285,7 @@ test("a new symbol is inserted by splitting only its local shard", async () => {
   db.shaBySymbol.set("GENZ", "ef".repeat(32))
   const untouchedKey = JSON.parse(kvStore.get("iconoplasm:card-catalog:baseline-v2")).shards[0].key
 
-  const result = await invalidateIconoplasmGalleryCacheForTest(buildEnv(db, kvStore))
+  const result = await publishIconoplasmGalleryDirtyShardsForTest(buildEnv(db, kvStore))
   const manifest = JSON.parse(kvStore.get(`iconoplasm:card-catalog:${result.version}`))
 
   assert.equal(manifest.card_count, 5)
@@ -306,7 +306,7 @@ test("a mapper revision mismatch fails closed and never starts routine publicati
   const putKeys = []
 
   await assert.rejects(
-    () => invalidateIconoplasmGalleryCacheForTest(buildEnv(db, kvStore, putKeys)),
+    () => publishIconoplasmGalleryDirtyShardsForTest(buildEnv(db, kvStore, putKeys)),
     (error) => error?.code === "CARD_CATALOG_SCHEMA_MIGRATION_REQUIRED",
   )
   assert.deepEqual(putKeys, [])
@@ -320,7 +320,7 @@ test("public mobile-card reads resolve the atomically published dirty-shard mani
   seedBaseline(kvStore, symbols)
   db.changedSymbols = ["GENB"]
   db.shaBySymbol.set("GENB", "ab".repeat(32))
-  const published = await invalidateIconoplasmGalleryCacheForTest(buildEnv(db, kvStore))
+  const published = await publishIconoplasmGalleryDirtyShardsForTest(buildEnv(db, kvStore))
   kvStore.set("iconoplasm:gallery-version", JSON.stringify({ current: published.version }))
 
   const response =
