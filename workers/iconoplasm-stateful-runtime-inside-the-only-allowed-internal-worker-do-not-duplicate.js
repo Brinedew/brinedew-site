@@ -828,15 +828,15 @@ const KV_SCANNER_CATALOG_PREFIX = "iconoplasm:scanner-catalog:"
 // The PRL incident in May 2026 happened because D1 canonical state advanced
 // before the public artifact visible to logged-out users advanced. There are
 // now two separate read contracts:
-// 1. broad browse/mobile card traffic reads this coarse KV artifact and only
-//    moves when a deliberate full catalog publish flips KV_GALLERY_VERSION; and
+// 1. broad browse/mobile card traffic reads the immutable manifest selected by
+//    this barrier; routine publication replaces only event-owned dirty shards
+//    before atomically flipping KV_GALLERY_VERSION; and
 // 2. first-party individual gene pages refresh canonical detail from the D1
 //    read model after a vote projection settles.
 //
-// Do not publish this artifact from vote projection. A single public vote must
-// never spend the whole catalog's KV write budget. If an admin/publication route
-// does intend to move the broad KV artifact, it must write the full artifact
-// before flipping this version barrier.
+// Do not publish this artifact from vote projection. A vote records durable D1
+// intent; the scheduled dirty-shard publisher applies the bounded KV change.
+// The old manifest remains live until every dirty replacement is prepared.
 const KV_GALLERY_VERSION = "iconoplasm:gallery-version"
 const KV_PUBLISHED_PORTRAIT_REFS_PREFIX = "iconoplasm:published-portrait-refs:"
 const KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX = "iconoplasm:published-portrait-fingerprint:"
@@ -849,8 +849,9 @@ const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = `iconoplasm:hydrated-catalog-artifac
 const KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX = "iconoplasm:published-compatibility-artifact:"
 const KV_CARD_CATALOG_ARTIFACT_PREFIX = "iconoplasm:card-catalog:"
 // Watermark recorded after every successful card-catalog publish: which artifact
-// version is live and the max icono_publish_events.created_at it reflects. The
-// incremental publish path (B-531) reads this to rebuild only changed genes; the
+// version is live and the max icono_publish_events position it reflects. The
+// dirty-shard publication path reads this to identify changed genes and their
+// owning shards; the
 // /admin/gallery/publish-status endpoint reads it to answer "is the gallery
 // stale?" without a whole-catalog scan. Stored as one small KV object, not a
 // recomputed D1 view.
@@ -887,9 +888,7 @@ const CARD_CATALOG_ARTIFACT_CONTENT_VERSION_PREFIX = "ccv1"
 const CARD_CATALOG_CONTENT_ADDRESSED_STORAGE = "kv_card_catalog_content_addressed_shards"
 const KV_CARD_CATALOG_CONTENT_ADDRESSED_SHARD_PREFIX = "iconoplasm:card-catalog-shard:"
 const CARD_ARTIFACT_UNAVAILABLE = "CARD_ARTIFACT_UNAVAILABLE"
-const MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT = 25000
-const CARD_CATALOG_ARTIFACT_FULL_PUBLISH_KV_WRITE_HEADROOM =
-  Math.ceil(MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT / CARD_CATALOG_ARTIFACT_SHARD_SIZE) + 3
+const MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT = 25000
 const CARD_CATALOG_DAILY_KV_WRITE_BUDGET_DEFAULT = 900
 // ARCHITECTURE FENCE [IPD-010]: Routine publication never rebuilds the complete
 // catalog. It prepares at most
@@ -897,6 +896,12 @@ const CARD_CATALOG_DAILY_KV_WRITE_BUDGET_DEFAULT = 900
 // every dirty shard is ready for one atomic version flip. This is a cost and CPU
 // boundary, not a trigger for a broader fallback.
 const CARD_CATALOG_DIRTY_SHARDS_PER_PUBLICATION_STEP = 6
+// One step can write two replacement shard blobs per dirty baseline shard (a
+// local split), plus the manifest, publication cursor cleanup, watermark, and
+// gallery-version barrier. Budget admission is derived from that bounded path;
+// it must never reserve for a hypothetical complete-catalog rewrite.
+const CARD_CATALOG_DIRTY_SHARD_PUBLICATION_MAX_KV_WRITES =
+  CARD_CATALOG_DIRTY_SHARDS_PER_PUBLICATION_STEP * 2 + 4
 // The gene universe is fixed and currently below 20k. Querying one extra symbol
 // lets publication fail explicitly if that invariant changes; it must never turn
 // a large delta into a surprise full-catalog rebuild.
@@ -1349,7 +1354,7 @@ export function iconoplasmCardCatalogBudgetPreflightStatus(snapshot) {
     [
       "kv_writes",
       numberOrInfinity(snapshot?.kv?.writes_remaining),
-      CARD_CATALOG_ARTIFACT_FULL_PUBLISH_KV_WRITE_HEADROOM,
+      CARD_CATALOG_DIRTY_SHARD_PUBLICATION_MAX_KV_WRITES,
     ],
     ["kv_lists", numberOrInfinity(snapshot?.kv?.lists_remaining), 0],
     ["d1_rows_read", numberOrInfinity(snapshot?.d1?.rows_read_remaining), 1],
@@ -1456,7 +1461,6 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_reconcile" ||
     family === "admin_read_models" ||
     family === "admin_read_models_bootstrap" ||
-    family === "admin_card_vms_warm" ||
     family === "admin_finalization_enqueue" ||
     family === "admin_finalization_process" ||
     family === "admin_catalog" ||
@@ -15955,7 +15959,7 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
   // This helper only mutates the D1 source of truth. It does not publish the
   // logged-out/public card artifact and it does not flip KV_GALLERY_VERSION.
   // Callers that can affect public `/api/iconoplasm/cards/:symbol` output must
-  // follow this with read-model sync plus `invalidateGalleryCache`, or use the
+  // follow this with read-model sync plus `publishIconoplasmGalleryDirtyShards`, or use the
   // VoteCoordinator projection path below, which also rolls D1 back if public
   // artifact publication fails. The searchable failure mode is the PRL
   // split-brain incident: logged-in/private surfaces saw the new canonical blot
@@ -19759,7 +19763,7 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
         path: "/api/iconoplasm/admin/read-models/sync",
         payload: {
           symbols: [symbol],
-          invalidate_gallery: false,
+          publish_gallery_dirty_shards: false,
           skip_gene_rollups: true,
           skip_vision_rollups: true,
           skip_dashboard: true,
@@ -19784,7 +19788,7 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
         path: "/api/iconoplasm/admin/read-models/sync",
         payload: {
           symbols: [symbol],
-          invalidate_gallery: false,
+          publish_gallery_dirty_shards: false,
           skip_vote_summaries: true,
           skip_vision_rollups: true,
           skip_dashboard: true,
@@ -19814,7 +19818,7 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
           path: "/api/iconoplasm/admin/read-models/sync",
           payload: {
             vision_ids: visionIds,
-            invalidate_gallery: false,
+            publish_gallery_dirty_shards: false,
             skip_dashboard: true,
           },
         })
@@ -20028,11 +20032,11 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
     { maxItems: 5000 },
   )
 
-  // Cost fence: dashboard refresh + gallery invalidation is the one intentionally
-  // global tail step. Scoped Queue messages are allowed to advance symbol work,
-  // but they must not publish the gallery/card-catalog artifact for their own
-  // 50-symbol slice. That repeats 20k-card KV writes hundreds of times. Only run
-  // this block after the whole finalization ledger has drained to pending-finalize.
+  // Cost fence: the dashboard refresh and one dirty-shard publication request
+  // are the global tail step. Scoped Queue messages advance symbol work but do
+  // not publish per 50-symbol slice. The publisher still derives its exact dirty
+  // set from canonical events and touches only the owning shards. Only run this
+  // block after the whole finalization ledger has drained to pending-finalize.
   // Vision rollups follow the same rule: dedupe them across the whole ledger.
   for (
     let start = 0;
@@ -20052,7 +20056,7 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
         skip_gene_rollups: true,
         skip_vision_rollups: false,
         skip_dashboard: true,
-        invalidate_gallery: false,
+        publish_gallery_dirty_shards: false,
       },
     })
   }
@@ -20065,7 +20069,7 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
       skip_gene_rollups: true,
       skip_vision_rollups: true,
       skip_dashboard: false,
-      invalidate_gallery: true,
+      publish_gallery_dirty_shards: true,
     },
   })
   const completedAt = new Date().toISOString()
@@ -21292,7 +21296,7 @@ export async function repairCanonInvariants(
   }
 
   if (touchedSymbols.length) {
-    await syncAdminReadModelsAndInvalidateGallery(env, {
+    await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
       symbols: touchedSymbols,
       skipVisionRollups: true,
     })
@@ -22253,7 +22257,7 @@ async function removePortraitAssetAndQueueLocalRemoval(
     actorId: actorNorm,
     reason: `admin_remove_candidate:${assetShaNorm}`,
   })
-  await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbolNorm] })
+  await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, { symbols: [symbolNorm] })
 
   return {
     ok: true,
@@ -23604,14 +23608,13 @@ async function publishCardCatalogArtifactSmart(
   })
 }
 
-async function invalidateGalleryCache(env) {
+async function publishIconoplasmGalleryDirtyShards(env) {
   // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
   // Strict order matters:
-  // 1. Pick the next version while the old KV_GALLERY_VERSION remains live.
-  // 2. Build and validate the full public card-catalog artifact from D1/read
-  //    models.
-  // 3. Write all KV artifact shards and the artifact manifest.
-  // 4. Only then flip KV_GALLERY_VERSION.
+  // 1. Capture the canonical-event high-water while the old manifest stays live.
+  // 2. Identify the changed symbols and their owning baseline shards.
+  // 3. Prepare one bounded dirty-shard step; reuse every unrelated shard ref.
+  // 4. After the final step, write one manifest and flip KV_GALLERY_VERSION.
   //
   // If step 2 or 3 fails, the old public artifact remains live. Vote projection
   // callers that already changed D1 must roll the D1 canonical portrait back
@@ -23730,11 +23733,11 @@ async function invalidateGalleryCache(env) {
   return { version, card_catalog: cardCatalog }
 }
 
-export async function invalidateIconoplasmGalleryCacheForTest(env) {
-  return invalidateGalleryCache(env)
+export async function publishIconoplasmGalleryDirtyShardsForTest(env) {
+  return publishIconoplasmGalleryDirtyShards(env)
 }
 
-async function syncAdminReadModelsAndInvalidateGallery(
+async function syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(
   env,
   {
     symbols = [],
@@ -23767,8 +23770,8 @@ async function syncAdminReadModelsAndInvalidateGallery(
     skipVisionRollups,
     skipDashboard,
   })
-  const invalidation = await invalidateGalleryCache(env)
-  return { ...result, card_catalog: invalidation.card_catalog }
+  const publication = await publishIconoplasmGalleryDirtyShards(env)
+  return { ...result, card_catalog: publication.card_catalog }
 }
 
 function parseJsonTextList(raw) {
@@ -23900,7 +23903,7 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
   if (!env?.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
   const base = portraitBase(new URL(requestUrl || "https://iconoplasm.brinedew.bio/"), env)
   const symbolList = Array.isArray(symbols)
-    ? normalizeRequestedSymbols(symbols, MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT)
+    ? normalizeRequestedSymbols(symbols, MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT)
     : []
   const sql = `SELECT
        gc.gene_symbol,
@@ -25420,7 +25423,7 @@ async function readPublishedCardCatalogArtifact(
   const artifactVersion = String(version || "").trim()
   if (!artifactVersion || !env?.KV?.get) return null
   const requestedSymbols = Array.isArray(symbols)
-    ? normalizeRequestedSymbols(symbols, MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT)
+    ? normalizeRequestedSymbols(symbols, MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT)
     : null
   if (
     !requestedSymbols &&
@@ -26813,7 +26816,7 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       await parseJsonBody(request)
       let lastResult
       try {
-        lastResult = { ok: true, ...(await invalidateGalleryCache(meteredEnv)) }
+        lastResult = { ok: true, ...(await publishIconoplasmGalleryDirtyShards(meteredEnv)) }
       } catch (error) {
         console.error(
           "[CRON] gallery dirty-shard publication failed:",
@@ -26823,12 +26826,14 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
         lastResult = {
           ok: false,
           skipped: true,
-          code: sanitizeText(String(error?.code || ""), 128) || "GALLERY_REFRESH_SKIPPED",
+          code:
+            sanitizeText(String(error?.code || ""), 128) ||
+            "GALLERY_DIRTY_SHARD_PUBLICATION_SKIPPED",
           error: sanitizeText(String(error?.message || error), 500),
         }
       }
       console.log(
-        "[CRON] gallery refresh complete: ok=" +
+        "[CRON] gallery dirty-shard publication complete: ok=" +
           Boolean(lastResult?.ok) +
           " publication_more=" +
           Boolean(lastResult?.card_catalog?.publication_more) +
@@ -27195,7 +27200,7 @@ async function publishCatalogArtifact(env) {
   catalogCache.symbolByUniprot = new Map()
   catalogCache.symbolByAlias = new Map()
   catalogCache.loadedAt = 0
-  await invalidateGalleryCache(env)
+  await publishIconoplasmGalleryDirtyShards(env)
 
   return {
     ok: true,
@@ -27234,7 +27239,7 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
   ...createIconoplasmAdminGalleryHandlers({
     fetchGallery: fetchAdminGallery,
     fetchPublishStatus: cardCatalogPublishStatus,
-    invalidateGalleryCache,
+    publishIconoplasmGalleryDirtyShards,
     isAdmin: isIconoplasmAdmin,
     json,
     normalizeFilter: normalizeAdminGalleryFilter,
@@ -27264,12 +27269,9 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
   }),
   ...createIconoplasmAdminReadModelHandlers({
     bootstrapCompleteStatus: ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE,
-    cardArtifactUnavailableCode: CARD_ARTIFACT_UNAVAILABLE,
     coerceBoolean,
-    currentMobileCardSnapshotVersion,
     ensureBootstrapInitialized: ensureAdminReadModelBootstrapInitialized,
     fetchBootstrapState: fetchAdminReadModelBootstrapState,
-    invalidateGalleryCache,
     isAdmin: isIconoplasmAdmin,
     json,
     normalizeBootstrapSteps: normalizeAdminReadModelBootstrapSteps,
@@ -27280,7 +27282,8 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     sanitizeText,
     symbolRequestMax: ADMIN_READ_MODEL_SYNC_REQUEST_SYMBOL_MAX,
     syncReadModels: syncAdminReadModels,
-    syncReadModelsAndInvalidateGallery: syncAdminReadModelsAndInvalidateGallery,
+    syncReadModelsAndPublishGalleryDirtyShards:
+      syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards,
     validVisionId: validAdminRollupVisionId,
     visionRequestMax: ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX,
     writeBootstrapState: writeAdminReadModelBootstrapState,
@@ -31076,7 +31079,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           dryRun,
         })
         if (!dryRun)
-          await syncAdminReadModelsAndInvalidateGallery(env, {
+          await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
             symbols: Array.isArray(result.affected_symbols) ? result.affected_symbols : [],
           })
         return done("artist_styles_remove", json(result, 200, { "Cache-Control": "no-store" }))
@@ -32454,7 +32457,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         // ingest batch turned one sync into hundreds of global refreshes. Keep
         // the eager behavior for direct admin calls, but let the sync defer the
         // expensive refresh until reconcile has the full touched-symbol set.
-        await syncAdminReadModelsAndInvalidateGallery(env, {
+        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
           symbols: results.filter((row) => row?.ok && row?.symbol).map((row) => row.symbol),
         })
       }
@@ -32702,7 +32705,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
 
       if (!dryRun && !deferReadModels)
-        await syncAdminReadModelsAndInvalidateGallery(env, {
+        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
           symbols: Array.from(touchedSymbols),
         })
       // Reconcile can restore, reject, or unpublish many source assets. Refresh
@@ -32834,7 +32837,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         }
         // Unstaling can make previously hidden source assets eligible examples.
         await rebuildUserEmulsionOptionRollupsForSymbols(env, touchedSymbols)
-        await syncAdminReadModelsAndInvalidateGallery(env, { symbols: touchedSymbols })
+        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+          symbols: touchedSymbols,
+        })
         return done(
           "unstale_batch",
           json({
@@ -32889,7 +32894,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         // Publishing changes currentness and approval state, so rebuild all
         // emulsion examples on this gene from source rows.
         await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-        await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+          symbols: [symbol],
+        })
         return done(
           "publish",
           json({
@@ -32927,7 +32934,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         })
         // Clearing an override can auto-promote a different current asset.
         await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-        await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+          symbols: [symbol],
+        })
         return done(
           "clear_override",
           json({
@@ -32983,7 +32992,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         // Rejecting removes an asset from example eligibility and may auto-promote
         // a replacement current asset.
         await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-        await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+          symbols: [symbol],
+        })
         return done(
           "reject",
           json({
@@ -33016,7 +33027,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           .run()
         // Unpublishing changes currentness even when the asset row remains.
         await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-        await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+          symbols: [symbol],
+        })
         return done(
           "unpublish",
           json({ ok: true, action: "unpublish", symbol, from_asset_sha256: from }),
@@ -33049,7 +33062,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         })
         // Unstaling can restore source assets to the picker example pool.
         await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-        await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+          symbols: [symbol],
+        })
         return done(
           "unstale",
           json({
@@ -33126,7 +33141,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
         // Purging deletes the source asset; rebuild the affected examples.
         await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-        await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+          symbols: [symbol],
+        })
         return done(
           "purge_legacy",
           json({
@@ -33211,7 +33228,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         .run()
       // Rollback changes currentness and may expose a different preview first.
       await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-      await syncAdminReadModelsAndInvalidateGallery(env, { symbols: [symbol] })
+      await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, { symbols: [symbol] })
       return done(
         "rollback",
         json({

@@ -13,20 +13,9 @@ function json(data, status = 200, headers = {}) {
 function readModelServices(overrides = {}) {
   return {
     bootstrapCompleteStatus: "complete",
-    cardArtifactUnavailableCode: "CARD_ARTIFACT_UNAVAILABLE",
     coerceBoolean: (value, fallback = false) => (value == null ? fallback : Boolean(value)),
-    currentMobileCardSnapshotVersion: async () => ({ current: "current", previous: "previous" }),
     ensureBootstrapInitialized: async () => ({ status: "pending" }),
     fetchBootstrapState: async () => ({ status: "pending" }),
-    invalidateGalleryCache: async () => ({
-      version: "current",
-      card_catalog: {
-        artifact_gene_count: 1,
-        catalog_gene_count: 1,
-        artifact_version: "artifact",
-        artifact_validated_at: "2026-07-20T00:00:00.000Z",
-      },
-    }),
     isAdmin: async () => true,
     json,
     normalizeBootstrapSteps: () => 1,
@@ -44,7 +33,7 @@ function readModelServices(overrides = {}) {
     sanitizeText: (value, limit) => String(value || "").slice(0, limit),
     symbolRequestMax: 100,
     syncReadModels: async () => ({ symbols: 0, visions: 0 }),
-    syncReadModelsAndInvalidateGallery: async () => ({ symbols: 0, visions: 0 }),
+    syncReadModelsAndPublishGalleryDirtyShards: async () => ({ symbols: 0, visions: 0 }),
     validVisionId: (value) => {
       const normalized = String(value || "").trim()
       return normalized.startsWith("vision-") ? normalized : ""
@@ -82,7 +71,6 @@ test("read-model handler registry is immutable and domain-complete", () => {
   assert.equal(Object.isFrozen(handlers), true)
   assert.deepEqual(Object.keys(handlers).sort(), [
     "admin_read_models.bootstrap",
-    "admin_read_models.card_artifacts_warm",
     "admin_read_models.sync",
   ])
 })
@@ -96,7 +84,7 @@ test("scoped read-model sync remains D1-only and normalizes targets", async () =
         directCalls.push(options)
         return { symbols: 1, visions: 1 }
       },
-      syncReadModelsAndInvalidateGallery: async () => {
+      syncReadModelsAndPublishGalleryDirtyShards: async () => {
         invalidatingCalls += 1
         return { symbols: 0, visions: 0 }
       },
@@ -106,7 +94,7 @@ test("scoped read-model sync remains D1-only and normalizes targets", async () =
     body: {
       symbols: [" tp53 ", "TP53", ""],
       vision_ids: ["vision-one", "invalid", "vision-one"],
-      invalidate_gallery: false,
+      publish_gallery_dirty_shards: false,
     },
   })
   const payload = await response.json()
@@ -126,7 +114,7 @@ test("scoped read-model sync remains D1-only and normalizes targets", async () =
       skipDashboard: false,
     },
   ])
-  assert.equal(payload.invalidate_gallery, false)
+  assert.equal(payload.publish_gallery_dirty_shards, false)
 })
 
 test("bootstrap implements the HEAD method admitted by its route contract", async () => {
@@ -144,25 +132,4 @@ test("bootstrap implements the HEAD method admitted by its route contract", asyn
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("Cache-Control"), "no-store")
   assert.equal(stateReads, 1)
-})
-
-test("card artifact warming rejects symbol scope before publication", async () => {
-  let publicationCalls = 0
-  const handlers = createIconoplasmAdminReadModelHandlers(
-    readModelServices({
-      invalidateGalleryCache: async () => {
-        publicationCalls += 1
-        return {}
-      },
-    }),
-  )
-  const response = await responseFrom(handlers["admin_read_models.card_artifacts_warm"], {
-    body: { symbols: ["TP53"] },
-  })
-  const payload = await response.json()
-
-  assert.equal(response.status, 409)
-  assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(payload.code, "CARD_ARTIFACT_REQUIRES_FULL_CATALOG")
-  assert.equal(publicationCalls, 0)
 })

@@ -696,13 +696,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_read_models",
     "admin_publication.shared_discoveries",
   ),
-  adminApiContract(
-    "admin_card_vms_warm",
-    "/card-vms/warm",
-    POST,
-    "admin_card_vms_warm",
-    "admin_read_models.card_artifacts_warm",
-  ),
   adminApiContract("admin_assets", "/assets", GET, "admin_assets", "admin_assets.list"),
   adminApiContract(
     "admin_assets_summary",

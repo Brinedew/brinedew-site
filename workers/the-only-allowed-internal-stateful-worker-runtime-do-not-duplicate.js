@@ -818,7 +818,7 @@ async function runScheduledIconoplasmMaintenance(env, ctx) {
     // within ~24h instead of waiting for a manual sync. No-op by content hash
     // when nothing changed; self-skips (budget preflight throws, caught inside
     // the route) when there is no free-tier KV/D1 headroom.
-    const galleryResponse =
+    const galleryDirtyShardPublicationResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request("https://geneguessr-api/__internal/iconoplasm/publish-gallery-dirty-shards", {
           method: "POST",
@@ -828,19 +828,22 @@ async function runScheduledIconoplasmMaintenance(env, ctx) {
         env,
         ctx,
       )
-    const galleryResult = await galleryResponse.json()
-    console.log("[CRON] Iconoplasm gallery refresh result:", galleryResult)
+    const galleryDirtyShardPublicationResult = await galleryDirtyShardPublicationResponse.json()
+    console.log(
+      "[CRON] Iconoplasm gallery dirty-shard publication result:",
+      galleryDirtyShardPublicationResult,
+    )
   } catch (err) {
     console.error("[CRON] Iconoplasm canon maintenance failed:", err)
   }
 }
 
-async function runScheduledIconoplasmGalleryRefresh(env, ctx) {
+async function runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx) {
   // ARCHITECTURE FENCE [IPD-010]: one cron delivery prepares at most one
   // bounded dirty-shard step. Never add a caller-controlled drain count or a
   // complete-catalog fallback here.
   try {
-    const galleryResponse =
+    const galleryDirtyShardPublicationResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request("https://geneguessr-api/__internal/iconoplasm/publish-gallery-dirty-shards", {
           method: "POST",
@@ -850,11 +853,14 @@ async function runScheduledIconoplasmGalleryRefresh(env, ctx) {
         env,
         ctx,
       )
-    const galleryResult = await galleryResponse.json()
-    console.log("[CRON] Iconoplasm frequent gallery refresh result:", galleryResult)
+    const galleryDirtyShardPublicationResult = await galleryDirtyShardPublicationResponse.json()
+    console.log(
+      "[CRON] Iconoplasm frequent gallery dirty-shard publication result:",
+      galleryDirtyShardPublicationResult,
+    )
   } catch (err) {
     console.error(
-      "[CRON] Iconoplasm frequent gallery refresh failed:",
+      "[CRON] Iconoplasm frequent gallery dirty-shard publication failed:",
       String(err?.message || err || "unknown error"),
       "code=" + String(err?.code || ""),
     )
@@ -2924,16 +2930,16 @@ export default {
 
     if (cronExpr === "*/15 * * * *") {
       // These jobs share a clock, not a failure domain. Drain the durable outbox
-      // even when the unrelated gallery refresh fails, while preserving the
-      // gallery job's existing fail-loud behavior.
+      // even when the unrelated gallery dirty-shard publication fails, while
+      // preserving the publication job's existing fail-loud behavior.
       const scheduledMinute = new Date(Number(event?.scheduledTime || Date.now())).getUTCMinutes()
       const sharedDiscoveryPublicationPromise =
         scheduledMinute === 0
           ? publishSharedGeneDiscoverySymbols(env)
           : Promise.resolve({ ok: true, skipped: true, reason: "not_hour_boundary" })
-      const [galleryRefresh, notificationDelivery, sharedDiscoveryPublication] =
+      const [galleryDirtyShardPublication, notificationDelivery, sharedDiscoveryPublication] =
         await Promise.allSettled([
-          runScheduledIconoplasmGalleryRefresh(env, ctx),
+          runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx),
           deliverPendingRequestFulfillmentNotifications(env, { limit: 20 }),
           sharedDiscoveryPublicationPromise,
         ])
@@ -2970,7 +2976,9 @@ export default {
           ),
         )
       }
-      if (galleryRefresh.status === "rejected") throw galleryRefresh.reason
+      if (galleryDirtyShardPublication.status === "rejected") {
+        throw galleryDirtyShardPublication.reason
+      }
       return
     }
 
@@ -2982,7 +2990,7 @@ export default {
         console.error("[CRON] Recap posting failed:", err)
       }
       // Catch-up: scan recent days for any recaps missed due to cron failures
-      // (e.g. CPU budget exhaustion from gallery refresh). Posts at most 3 days
+      // (e.g. CPU budget exhaustion from gallery dirty-shard publication). Posts at most 3 days
       // back, stopping at the first day with no puzzle data.
       try {
         const catchup = await handlePostCatchupRecaps(env, 3)

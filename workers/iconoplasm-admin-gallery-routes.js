@@ -3,7 +3,7 @@ const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
 const REQUIRED_FUNCTIONS = Object.freeze([
   "fetchGallery",
   "fetchPublishStatus",
-  "invalidateGalleryCache",
+  "publishIconoplasmGalleryDirtyShards",
   "isAdmin",
   "json",
   "normalizeFilter",
@@ -27,7 +27,7 @@ export function createIconoplasmAdminGalleryHandlers(services) {
   const {
     fetchGallery,
     fetchPublishStatus,
-    invalidateGalleryCache,
+    publishIconoplasmGalleryDirtyShards,
     isAdmin,
     json,
     normalizeFilter,
@@ -59,12 +59,13 @@ export function createIconoplasmAdminGalleryHandlers(services) {
       )
     let result
     try {
-      result = { ok: true, ...(await invalidateGalleryCache(env)) }
+      result = { ok: true, ...(await publishIconoplasmGalleryDirtyShards(env)) }
     } catch (error) {
       result = {
         ok: false,
         skipped: true,
-        code: sanitizeText(String(error?.code || ""), 128) || "GALLERY_REFRESH_SKIPPED",
+        code:
+          sanitizeText(String(error?.code || ""), 128) || "GALLERY_DIRTY_SHARD_PUBLICATION_SKIPPED",
         error: sanitizeText(String(error?.message || error), 500),
       }
     }

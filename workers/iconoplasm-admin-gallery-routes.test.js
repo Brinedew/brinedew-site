@@ -19,7 +19,7 @@ function galleryServices(overrides = {}) {
       rows: [],
     }),
     fetchPublishStatus: async () => ({ changes_since_publish: 0 }),
-    invalidateGalleryCache: async () => ({ version: "current" }),
+    publishIconoplasmGalleryDirtyShards: async () => ({ version: "current" }),
     isAdmin: async () => true,
     json,
     normalizeFilter: (value) => `filter:${value}`,
@@ -122,15 +122,15 @@ test("gallery list executes HEAD through the same normalized bounded query", asy
 })
 
 test("dirty-shard publication ignores caller work sizing and reports safe refusal", async () => {
-  const invalidationEnvs = []
+  const publicationEnvs = []
   const statusEnvs = []
   const refusal = Object.assign(new Error("write budget exhausted"), {
     code: "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED",
   })
   const handlers = createIconoplasmAdminGalleryHandlers(
     galleryServices({
-      invalidateGalleryCache: async (env) => {
-        invalidationEnvs.push(env)
+      publishIconoplasmGalleryDirtyShards: async (env) => {
+        publicationEnvs.push(env)
         throw refusal
       },
       fetchPublishStatus: async (env) => {
@@ -148,7 +148,7 @@ test("dirty-shard publication ignores caller work sizing and reports safe refusa
 
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(statusEnvs[0], invalidationEnvs[0])
+  assert.equal(statusEnvs[0], publicationEnvs[0])
   assert.equal(payload.ok, false)
   assert.equal(payload.skipped, true)
   assert.equal(payload.code, "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED")

@@ -127,7 +127,7 @@ test("DO NOT DELETE: vote projection promotion is Queue-backed, not request wait
   )
   assert.doesNotMatch(
     voteProjectionBatch,
-    /invalidateGalleryCache\(|publishCardCatalogArtifact\(|assertIconoplasmCardCatalogBudgetPreflight\(/,
+    /publishIconoplasmGalleryDirtyShards\(|publishCardCatalogArtifact\(|assertIconoplasmCardCatalogBudgetPreflight\(/,
     "vote projection must not republish the broad KV card catalog or require its KV-heavy budget preflight",
   )
 
@@ -212,7 +212,7 @@ test("DO NOT DELETE: public vote hot paths keep raw asset-key predicates", () =>
   )
   assert.doesNotMatch(
     voteSetRoute,
-    /syncVoteReadModelsAndInvalidateGallery\(|syncAdminReadModelsAndInvalidateGallery\(/,
+    /syncVoteReadModelsAndPublishIconoplasmGalleryDirtyShards\(|syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards\(/,
     "single-vote writes must not call the bulk summary rebuild paths",
   )
 })
