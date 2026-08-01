@@ -72,11 +72,14 @@ dynamic Worker invocation. Matching files on `iconoplasm.brinedew.bio` must be
 served by Workers Static Assets before Worker execution; dynamic misses route
 directly to the existing stateful Worker, never through the shared public
 proxy. Rate limits live on that route owner. Read
-`docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` and Linear B-670
-before changing Iconoplasm route ownership, asset bindings, bundle generation,
-rate-limit placement, or production deploy order. This fence records evidence,
-not tradition: replace it when a fully costed alternative proves better and
-updates every enforcement point atomically.
+`docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` (including the
+canonical gene cold-path contract) and Linear B-670 before changing Iconoplasm
+route ownership, asset bindings, bundle generation, rate-limit placement, or
+production deploy order. Preserve the loud protected entrypoint and config
+names; an internal extraction may add descriptive responsibility segments only
+inside that boundary and must not create a second Worker or state owner. This
+fence records evidence, not tradition: replace it when a fully costed
+alternative proves better and updates every enforcement point atomically.
 
 **ARCHITECTURE FENCE [IPD-008]** — anonymous Iconoplasm startup and extension
 hover detail use the published read plane. A guest homepage must not probe
