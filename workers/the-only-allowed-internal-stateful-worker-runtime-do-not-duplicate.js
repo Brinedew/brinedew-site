@@ -399,8 +399,13 @@ function iconoplasmGeneSnapshotVersionFromDetailResponse(detailResponse) {
   return iconoplasmGeneDetailShellVersion(null, detailResponse.headers.get("ETag") || "")
 }
 
-async function iconoplasmGeneCardBootstrapInjection(request, env, ctx, path) {
-  const preloadedDetailResponse = arguments[4] || null
+async function iconoplasmGeneCardBootstrapInjection(
+  request,
+  env,
+  ctx,
+  path,
+  preloadedDetailResponse = null,
+) {
   // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
   // Search terms: PRL split-brain, gene page bootstrap, canonical blot,
   // public card artifact, KV_GALLERY_VERSION.
