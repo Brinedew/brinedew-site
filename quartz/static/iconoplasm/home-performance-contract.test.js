@@ -1463,7 +1463,7 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.match(internalWorker, /function personalizeIconoplasmStaticGeneShell\(html, path\)/)
   assert.match(
     internalWorker,
-    /async function iconoplasmGeneCardBootstrapInjection\(request, env, ctx, path\)/,
+    /async function iconoplasmGeneCardBootstrapInjection\(\s*request,\s*env,\s*ctx,\s*path,/,
   )
   assert.match(internalWorker, /function insertIconoplasmGeneCardBootstrap\(html, injection\)/)
   assert.match(internalWorker, /iconoplasmStaticGeneLeadCardHtmlFromPayload/)
