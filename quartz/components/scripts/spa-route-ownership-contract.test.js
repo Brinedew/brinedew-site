@@ -16,6 +16,21 @@ test("the Quartz router yields clicks already claimed by a feature router", asyn
   assert.match(clickRouter, /if \(event\.defaultPrevented\) return[\s\S]*getOpts\(event\)/)
 })
 
+test("the Quartz router reads new-tab intent from the enclosing anchor", async () => {
+  const source = await readFile(spaRouterPath, "utf8")
+  const optionsStart = source.indexOf("const getOpts")
+  const optionsEnd = source.indexOf("function notifyNav", optionsStart)
+
+  assert.notEqual(optionsStart, -1, "missing Quartz link option parser")
+  assert.notEqual(optionsEnd, -1, "missing Quartz link option parser boundary")
+  const optionsParser = source.slice(optionsStart, optionsEnd)
+  assert.match(
+    optionsParser,
+    /const a = target\.closest\("a"\)[\s\S]*if \(a\.target === "_blank"\) return/,
+  )
+  assert.doesNotMatch(optionsParser, /target\.attributes\.getNamedItem\("target"\)/)
+})
+
 test("the Quartz router yields history entries explicitly owned by Iconoplasm", async () => {
   const [routerSource, appSource] = await Promise.all([
     readFile(spaRouterPath, "utf8"),

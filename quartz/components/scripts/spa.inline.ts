@@ -26,9 +26,11 @@ const isSamePage = (url: URL): boolean => {
 
 const getOpts = ({ target }: Event): { url: URL; scroll?: boolean } | undefined => {
   if (!isElement(target)) return
-  if (target.attributes.getNamedItem("target")?.value === "_blank") return
   const a = target.closest("a")
   if (!a) return
+  // Clicks usually land on an image or text node inside the link. The navigation contract
+  // belongs to the enclosing anchor, so its target must be checked instead of event.target.
+  if (a.target === "_blank") return
   if ("routerIgnore" in a.dataset) return
   const { href } = a
   if (!isLocalUrl(href)) return
