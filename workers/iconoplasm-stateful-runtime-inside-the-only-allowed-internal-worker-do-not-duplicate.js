@@ -874,8 +874,8 @@ const CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS = [
 const CARD_CATALOG_ARTIFACT_SCHEMA = "iconoplasm.cardCatalog.v1"
 // Changes whenever source records are mapped into public card fields differently.
 // D1 publication events only detect data changes; this revision makes a deployed
-// mapping change invalidate an otherwise-fresh artifact and forces a bounded
-// rebuild from D1 instead of silently reusing cards produced by older code.
+// mapping change invalidate an otherwise-fresh artifact and require an explicit
+// deployment migration instead of silently mixing cards produced by two mappers.
 const CARD_CATALOG_BUILD_REVISION = 2
 const CARD_CATALOG_ARTIFACT_SHARD_SIZE = 750
 const CARD_CATALOG_ARTIFACT_CONTENT_VERSION_PREFIX = "ccv1"
@@ -891,24 +891,17 @@ const MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT = 25000
 const CARD_CATALOG_ARTIFACT_FULL_PUBLISH_KV_WRITE_HEADROOM =
   Math.ceil(MOBILE_CARD_VM_FULL_REBUILD_WARM_SYMBOL_LIMIT / CARD_CATALOG_ARTIFACT_SHARD_SIZE) + 3
 const CARD_CATALOG_DAILY_KV_WRITE_BUDGET_DEFAULT = 900
-// Max genes the inline incremental publish will rebuild in one Worker invocation.
-// Above this, the delta is handed to the bounded chunked rebuild (B-532) rather
-// than risking the CPU/subrequest 503 that the whole-catalog build hits at ~19k.
-// Conservative default; tune against real publish-status measurements.
-const CARD_CATALOG_INCREMENTAL_REBUILD_CEILING_DEFAULT = 3000
-// Bounded cold/large-delta rebuild (B-532). When there is no usable baseline, or
-// the delta exceeds the incremental ceiling, the catalog is rebuilt in
-// symbol-ordered chunks across multiple invocations: each chunk rebuilds this many
-// genes from D1, merges them into the live artifact, and flips the gallery version
-// to a progressively-fresher complete artifact. A cursor in KV tracks progress so
-// repeated /admin/gallery/refresh calls (or the nightly cron) drain it. Tuned on
-// prod against the real Worker CPU limit.
-const KV_CARD_CATALOG_REBUILD_CURSOR = "iconoplasm:card-catalog-rebuild-cursor:v1"
-// 1500 genes = 2 shards/chunk, verified ~5-8s on prod free tier. The nightly cron
-// uses this default; keep it at a chunk size proven to complete within Worker
-// limits so a staging chunk can't 503-wedge the cursor. Overridable per-call via
-// /admin/gallery/refresh {chunk_size} for faster manual draining.
-const CARD_CATALOG_REBUILD_CHUNK_SIZE_DEFAULT = 1500
+// ARCHITECTURE FENCE [IPD-010]: Routine publication never rebuilds the complete
+// catalog. It prepares at most
+// this many dirty shards per invocation, retaining the old live manifest until
+// every dirty shard is ready for one atomic version flip. This is a cost and CPU
+// boundary, not a trigger for a broader fallback.
+const CARD_CATALOG_DIRTY_SHARDS_PER_PUBLICATION_STEP = 6
+// The gene universe is fixed and currently below 20k. Querying one extra symbol
+// lets publication fail explicitly if that invariant changes; it must never turn
+// a large delta into a surprise full-catalog rebuild.
+const CARD_CATALOG_DIRTY_SYMBOL_SAFETY_LIMIT = 25000
+const KV_CARD_CATALOG_DIRTY_SHARD_PUBLICATION = "iconoplasm:card-catalog-dirty-shard-publication:v1"
 const MOBILE_CARD_MANIFEST_SCHEMA = "iconoplasm.mobileCardManifest.v1"
 const MOBILE_CARD_VM_SCHEMA = "iconoplasm.mobileCard.v1"
 const MOBILE_CARD_LAYOUT = "mobile-dossier-v1"
@@ -1471,7 +1464,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_catalog_upsert" ||
     family === "admin_catalog_reconcile" ||
     family === "admin_catalog_publish" ||
-    family === "admin_gallery_refresh" ||
+    family === "admin_gallery_dirty_shard_publication" ||
     family === "admin_essence" ||
     family === "admin_essence_upsert" ||
     family === "admin_essence_state"
@@ -11038,8 +11031,8 @@ const ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKE
   "/__internal/iconoplasm/process-vote-projection-refresh"
 const ICONOPLASM_SYNC_FINALIZATION_PROCESS_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
   "/__internal/iconoplasm/process-sync-finalization"
-const ICONOPLASM_REFRESH_GALLERY_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
-  "/__internal/iconoplasm/refresh-gallery"
+const ICONOPLASM_PUBLISH_GALLERY_DIRTY_SHARDS_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
+  "/__internal/iconoplasm/publish-gallery-dirty-shards"
 
 function isInternalRequestForTheOnlyAllowedStatefulWorker(request) {
   return (
@@ -11057,9 +11050,12 @@ function isIconoplasmCanonRepairRequestForTheOnlyAllowedStatefulWorker(path, met
   )
 }
 
-function isIconoplasmRefreshGalleryRequestForTheOnlyAllowedStatefulWorker(path, method = "GET") {
+function isIconoplasmPublishGalleryDirtyShardsRequestForTheOnlyAllowedStatefulWorker(
+  path,
+  method = "GET",
+) {
   return (
-    path === ICONOPLASM_REFRESH_GALLERY_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER &&
+    path === ICONOPLASM_PUBLISH_GALLERY_DIRTY_SHARDS_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER &&
     String(method || "GET").toUpperCase() === "POST"
   )
 }
@@ -22794,24 +22790,29 @@ function cardCatalogCanonicalActionPlaceholders() {
   return CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS.map(() => "?").join(",")
 }
 
-async function maxCardCatalogPublishEventTimestamp(env) {
+async function maxCardCatalogPublishEventPosition(env) {
   // The high-water mark a fresh publish will cover: the newest canonical-affecting
   // event at build time. Captured BEFORE the build so any event that lands during
   // the build is conservatively left for the next cycle (worst case: one extra
-  // gene rebuild later, never a silently-skipped change).
-  if (!env?.ICONOPLASM_DB) return null
+  // gene update later, never a silently-skipped change). ID is the correctness
+  // cursor: created_at has one-second precision and can be shared by an event
+  // captured here and a later event that arrives mid-build.
+  if (!env?.ICONOPLASM_DB) return { id: 0, created_at: null }
   try {
     const row = await env.ICONOPLASM_DB.prepare(
-      `SELECT MAX(created_at) AS max_created_at
+      `SELECT id, created_at
          FROM icono_publish_events
-        WHERE action IN (${cardCatalogCanonicalActionPlaceholders()})`,
+        WHERE action IN (${cardCatalogCanonicalActionPlaceholders()})
+        ORDER BY id DESC
+        LIMIT 1`,
     )
       .bind(...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS)
       .first()
-    const value = row?.max_created_at
-    return value ? String(value) : null
+    const id = Math.max(0, Number(row?.id || 0) || 0)
+    const createdAt = row?.created_at ? String(row.created_at) : null
+    return { id, created_at: createdAt }
   } catch {
-    return null
+    return { id: 0, created_at: null }
   }
 }
 
@@ -22829,18 +22830,31 @@ async function readCardCatalogPublishWatermark(env) {
 
 async function syncPublishedGeneRouteMembershipAfterPublication(
   env,
-  { afterEventAt = null, throughEventAt = null } = {},
+  { afterEventAt = null, throughEventAt = null, afterEventId = 0, throughEventId = 0 } = {},
 ) {
-  if (!env?.ICONOPLASM_DB || !throughEventAt) return { inserted: 0, deleted: 0 }
+  if (!env?.ICONOPLASM_DB || (!throughEventAt && !throughEventId)) {
+    return { inserted: 0, deleted: 0 }
+  }
   const placeholders = cardCatalogCanonicalActionPlaceholders()
-  const timeClause = afterEventAt ? "created_at > ? AND created_at <= ?" : "created_at <= ?"
-  const timeBinds = afterEventAt
-    ? [String(afterEventAt), String(throughEventAt)]
-    : [String(throughEventAt)]
+  const useEventIds = Number(throughEventId) > 0
+  const positionClause = useEventIds
+    ? Number(afterEventId) > 0
+      ? "id > ? AND id <= ?"
+      : "id <= ?"
+    : afterEventAt
+      ? "created_at > ? AND created_at <= ?"
+      : "created_at <= ?"
+  const positionBinds = useEventIds
+    ? Number(afterEventId) > 0
+      ? [Number(afterEventId), Number(throughEventId)]
+      : [Number(throughEventId)]
+    : afterEventAt
+      ? [String(afterEventAt), String(throughEventAt)]
+      : [String(throughEventAt)]
   const eventSymbolsSql = `SELECT DISTINCT gene_symbol
                               FROM icono_publish_events
                              WHERE action IN (${placeholders})
-                               AND ${timeClause}`
+                               AND ${positionClause}`
   const actionBinds = [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS]
 
   // Membership follows the artifact barrier, while the mutable portrait and
@@ -22854,7 +22868,7 @@ async function syncPublishedGeneRouteMembershipAfterPublication(
        JOIN (${eventSymbolsSql}) changed
          ON changed.gene_symbol = c.gene_symbol`,
   )
-    .bind(...actionBinds, ...timeBinds)
+    .bind(...actionBinds, ...positionBinds)
     .run()
   const deleted = await env.ICONOPLASM_DB.prepare(
     `DELETE FROM icono_published_gene_routes
@@ -22865,7 +22879,7 @@ async function syncPublishedGeneRouteMembershipAfterPublication(
            WHERE c.gene_symbol = icono_published_gene_routes.gene_symbol
         )`,
   )
-    .bind(...actionBinds, ...timeBinds)
+    .bind(...actionBinds, ...positionBinds)
     .run()
   return {
     inserted: Math.max(0, Number(inserted?.meta?.changes || 0) || 0),
@@ -22879,11 +22893,19 @@ export async function syncPublishedGeneRouteMembershipAfterPublicationForTest(en
 
 async function writeCardCatalogPublishWatermark(
   env,
-  { artifactVersion, watermarkEventAt, cardCount, catalogGeneCount, contentHash } = {},
+  {
+    artifactVersion,
+    watermarkEventAt,
+    watermarkEventId = 0,
+    cardCount,
+    catalogGeneCount,
+    contentHash,
+  } = {},
 ) {
   if (!env?.KV?.put) return null
   const nextVersion = String(artifactVersion || "")
   const nextEventAt = watermarkEventAt ? String(watermarkEventAt) : null
+  const nextEventId = Math.max(0, Number(watermarkEventId || 0) || 0)
   // Idempotent: the daily cron calls publish even when nothing changed. Writing
   // the watermark every time would burn the binding constraint (KV writes, 1k/day
   // free cap) on no-op cycles. Only put when the covered version or high-water
@@ -22893,7 +22915,8 @@ async function writeCardCatalogPublishWatermark(
   if (
     existing &&
     String(existing.artifact_version || "") === nextVersion &&
-    (existing.watermark_event_at || null) === nextEventAt
+    (existing.watermark_event_at || null) === nextEventAt &&
+    Math.max(0, Number(existing.watermark_event_id || 0) || 0) === nextEventId
   ) {
     return existing
   }
@@ -22902,6 +22925,7 @@ async function writeCardCatalogPublishWatermark(
     artifact_version: nextVersion,
     content_hash: String(contentHash || ""),
     watermark_event_at: nextEventAt,
+    watermark_event_id: nextEventId || null,
     card_count: Math.max(0, Number(cardCount || 0) || 0),
     catalog_gene_count: Math.max(0, Number(catalogGeneCount || 0) || 0),
     published_at: new Date().toISOString(),
@@ -22914,7 +22938,7 @@ async function writeCardCatalogPublishWatermark(
   return payload
 }
 
-async function cardCatalogChangesSinceWatermark(env, watermarkEventAt) {
+async function cardCatalogChangesSinceWatermark(env, watermarkEventAt, watermarkEventId = 0) {
   // One indexed query answers "which genes changed since the last publish" — no
   // whole-catalog scan. With no watermark yet, every canonical-affecting event
   // counts (we cannot prove what the live artifact covers).
@@ -22926,12 +22950,18 @@ async function cardCatalogChangesSinceWatermark(env, watermarkEventAt) {
   }
   if (!env?.ICONOPLASM_DB) return empty
   const placeholders = cardCatalogCanonicalActionPlaceholders()
-  const where = watermarkEventAt
-    ? `action IN (${placeholders}) AND created_at > ?`
-    : `action IN (${placeholders})`
-  const binds = watermarkEventAt
-    ? [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS, String(watermarkEventAt)]
-    : [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS]
+  const where =
+    Number(watermarkEventId) > 0
+      ? `action IN (${placeholders}) AND id > ?`
+      : watermarkEventAt
+        ? `action IN (${placeholders}) AND created_at > ?`
+        : `action IN (${placeholders})`
+  const binds =
+    Number(watermarkEventId) > 0
+      ? [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS, Number(watermarkEventId)]
+      : watermarkEventAt
+        ? [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS, String(watermarkEventAt)]
+        : [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS]
   try {
     const summary = await env.ICONOPLASM_DB.prepare(
       `SELECT COUNT(DISTINCT gene_symbol) AS changed_symbol_count,
@@ -22959,15 +22989,17 @@ async function cardCatalogPublishStatus(env) {
   const liveVersion = String(barrier?.current || "")
   const watermark = await readCardCatalogPublishWatermark(env)
   const watermarkEventAt = watermark?.watermark_event_at || null
+  const watermarkEventId = Math.max(0, Number(watermark?.watermark_event_id || 0) || 0)
   const publishedVersion = watermark?.artifact_version || null
-  const changes = await cardCatalogChangesSinceWatermark(env, watermarkEventAt)
-  const rebuildCursor = await readCardCatalogRebuildCursor(env)
+  const changes = await cardCatalogChangesSinceWatermark(env, watermarkEventAt, watermarkEventId)
+  const dirtyPublication = await readCardCatalogDirtyShardPublication(env)
   return {
     ok: true,
     live_gallery_version: liveVersion || null,
     published_artifact_version: publishedVersion,
     published_at: watermark?.published_at || null,
     watermark_event_at: watermarkEventAt,
+    watermark_event_id: watermarkEventId || null,
     has_watermark: Boolean(watermark),
     live_matches_published: Boolean(publishedVersion) && liveVersion === publishedVersion,
     changes_since_publish: changes.changed_symbol_count,
@@ -22975,47 +23007,55 @@ async function cardCatalogPublishStatus(env) {
     oldest_pending_change_at: changes.min_created_at,
     newest_pending_change_at: changes.max_created_at,
     is_stale: changes.changed_symbol_count > 0 || !watermark,
-    rebuild_in_progress: Boolean(rebuildCursor),
-    rebuild_cursor_symbol: rebuildCursor?.cursor_symbol || null,
-    rebuild_chunk_count: rebuildCursor?.chunk_count || 0,
+    dirty_shard_publication_in_progress: Boolean(dirtyPublication),
+    dirty_shards_total: Array.isArray(dirtyPublication?.groups)
+      ? dirtyPublication.groups.length
+      : 0,
+    dirty_shards_prepared: Math.max(0, Number(dirtyPublication?.next_group || 0) || 0),
+    publication_operation_id: dirtyPublication?.operation_id || null,
   }
-}
-
-function cardCatalogIncrementalRebuildCeiling(env) {
-  const raw = Number.parseInt(
-    String(env?.ICONOPLASM_CARD_CATALOG_INCREMENTAL_REBUILD_CEILING || "").trim(),
-    10,
-  )
-  return Number.isFinite(raw) && raw > 0 ? raw : CARD_CATALOG_INCREMENTAL_REBUILD_CEILING_DEFAULT
 }
 
 function isoToSqliteDatetimeFloor(value) {
   // icono_publish_events.created_at is a SQLite datetime ("YYYY-MM-DD HH:MM:SS",
   // UTC). Artifact validated_at is ISO ("...T...Z"). Convert to the comparable
   // SQLite form, flooring to the second so the cutoff is never AFTER the real
-  // build time — worst case we rebuild a gene already covered (idempotent), never
+  // build time — worst case we update a gene already covered (idempotent), never
   // skip a real change.
   const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/.exec(String(value || ""))
   return m ? `${m[1]} ${m[2]}` : null
 }
 
-async function cardCatalogChangedSymbolsSinceWatermark(env, watermarkEventAt, limit) {
-  // The genes the gallery owes a rebuild: distinct symbols with a
+async function cardCatalogChangedSymbolsWithinPublicationWindow(
+  env,
+  { afterEventAt = null, throughEventAt = null, afterEventId = 0, throughEventId = 0, limit },
+) {
+  // The genes whose owning gallery shards need publication: distinct symbols with a
   // canonical-affecting event after the watermark. `limit` is ceiling+1 so the
   // caller can detect "delta too large" without counting the whole history.
   if (!env?.ICONOPLASM_DB) return { symbols: [], truncated: false }
   const placeholders = cardCatalogCanonicalActionPlaceholders()
-  const where = watermarkEventAt
-    ? `action IN (${placeholders}) AND created_at > ?`
-    : `action IN (${placeholders})`
-  const binds = watermarkEventAt
-    ? [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS, String(watermarkEventAt)]
-    : [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS]
+  const clauses = [`action IN (${placeholders})`]
+  const binds = [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS]
+  if (Number(afterEventId) > 0) {
+    clauses.push("id > ?")
+    binds.push(Number(afterEventId))
+  } else if (afterEventAt) {
+    clauses.push("created_at > ?")
+    binds.push(String(afterEventAt))
+  }
+  if (Number(throughEventId) > 0) {
+    clauses.push("id <= ?")
+    binds.push(Number(throughEventId))
+  } else if (throughEventAt) {
+    clauses.push("created_at <= ?")
+    binds.push(String(throughEventAt))
+  }
   const cappedLimit = Math.max(1, Number(limit) || 1)
   const result = await env.ICONOPLASM_DB.prepare(
     `SELECT DISTINCT gene_symbol
        FROM icono_publish_events
-      WHERE ${where}
+      WHERE ${clauses.join(" AND ")}
       ORDER BY gene_symbol ASC
       LIMIT ?`,
   )
@@ -23026,296 +23066,264 @@ async function cardCatalogChangedSymbolsSinceWatermark(env, watermarkEventAt, li
   return { symbols, truncated: symbols.length >= cappedLimit }
 }
 
-function cardCatalogRebuildChunkSize(env) {
-  const raw = Number.parseInt(
-    String(env?.ICONOPLASM_CARD_CATALOG_REBUILD_CHUNK_SIZE || "").trim(),
-    10,
-  )
-  return Number.isFinite(raw) && raw > 0 ? raw : CARD_CATALOG_REBUILD_CHUNK_SIZE_DEFAULT
+function cardCatalogPublicationError(code, message) {
+  const error = new Error(message)
+  error.code = code
+  return error
 }
 
 function cardCatalogArtifactShardSize(env) {
-  // Overridable only to make multi-shard staging rebuilds testable with small
-  // fixtures; production uses the constant.
+  // Production uses the fixed contract size. Tests may lower it to exercise
+  // multi-shard publication without manufacturing thousands of cards.
   const raw = Number.parseInt(String(env?.ICONOPLASM_CARD_CATALOG_SHARD_SIZE || "").trim(), 10)
   return Number.isFinite(raw) && raw > 0 ? raw : CARD_CATALOG_ARTIFACT_SHARD_SIZE
 }
 
-async function readCardCatalogRebuildCursor(env) {
-  if (!env?.KV?.get) return null
-  try {
-    const raw = await env.KV.get(KV_CARD_CATALOG_REBUILD_CURSOR)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    if (!parsed || typeof parsed !== "object" || !parsed.active) return null
-    if (Number(parsed.build_revision) !== CARD_CATALOG_BUILD_REVISION) {
-      // A deploy changed card mapping semantics while a staged rebuild was in
-      // progress. Its accumulated shards are now mixed-version and cannot be
-      // published safely; restart the bounded rebuild from the first symbol.
-      await clearCardCatalogRebuildCursor(env)
-      return null
-    }
-    return parsed
-  } catch {
-    return null
-  }
+function normalizedCardCatalogManifestShards(manifest) {
+  return (Array.isArray(manifest?.shards) ? manifest.shards : [])
+    .slice()
+    .sort((left, right) => Number(left?.index) - Number(right?.index))
+    .map((shard, index) => ({
+      key: String(shard?.key || ""),
+      index,
+      card_count: Math.max(0, Number(shard?.card_count || 0) || 0),
+      content_hash: String(shard?.content_hash || ""),
+      first_symbol: normalizeSymbol(shard?.first_symbol || "") || null,
+      last_symbol: normalizeSymbol(shard?.last_symbol || "") || null,
+    }))
 }
 
-async function writeCardCatalogRebuildCursor(
-  env,
-  { cursorSymbol, startedEventAt, chunkCount, shardIndexNext, shardRefs },
-) {
+function cardCatalogOwningShardIndex(shards, symbol) {
+  const normalized = normalizeSymbol(symbol || "")
+  if (!normalized || !shards.length) return null
+  for (const shard of shards) {
+    if (shard.first_symbol && shard.last_symbol) {
+      if (normalized >= shard.first_symbol && normalized <= shard.last_symbol) return shard.index
+      // Stable local insertion: a symbol in a boundary gap belongs to the next
+      // range. No following shard is renumbered unless this one locally splits.
+      if (normalized < shard.first_symbol) return shard.index
+    }
+  }
+  return shards[shards.length - 1].index
+}
+
+function cardCatalogDirtyShardGroups(shards, changedSymbols) {
+  const byIndex = new Map()
+  for (const rawSymbol of changedSymbols) {
+    const symbol = normalizeSymbol(rawSymbol || "")
+    const index = cardCatalogOwningShardIndex(shards, symbol)
+    if (!symbol || index === null) continue
+    if (!byIndex.has(index)) byIndex.set(index, new Set())
+    byIndex.get(index).add(symbol)
+  }
+  return Array.from(byIndex.entries())
+    .sort((left, right) => left[0] - right[0])
+    .map(([baselineIndex, symbols]) => ({
+      baseline_index: baselineIndex,
+      symbols: Array.from(symbols).sort(),
+    }))
+}
+
+async function readCardCatalogDirtyShardPublication(env) {
+  if (!env?.KV?.get) return null
+  const raw = await env.KV.get(KV_CARD_CATALOG_DIRTY_SHARD_PUBLICATION)
+  if (!raw) return null
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw cardCatalogPublicationError(
+      "CARD_CATALOG_DIRTY_PUBLICATION_CORRUPT",
+      "Dirty-shard publication state is corrupt; refusing an implicit recovery.",
+    )
+  }
+  if (!parsed?.active) return null
+  if (Number(parsed.build_revision) !== CARD_CATALOG_BUILD_REVISION) {
+    throw cardCatalogPublicationError(
+      "CARD_CATALOG_SCHEMA_MIGRATION_REQUIRED",
+      "A card mapping revision changed during publication; run the explicit schema migration.",
+    )
+  }
+  return { ...parsed, persisted: true }
+}
+
+async function writeCardCatalogDirtyShardPublication(env, publication) {
   if (!env?.KV?.put) return
   await env.KV.put(
-    KV_CARD_CATALOG_REBUILD_CURSOR,
+    KV_CARD_CATALOG_DIRTY_SHARD_PUBLICATION,
     JSON.stringify({
-      schema: "iconoplasm.cardCatalogRebuildCursor.v1",
+      ...publication,
+      schema: "iconoplasm.cardCatalogDirtyShardPublication.v1",
       build_revision: CARD_CATALOG_BUILD_REVISION,
       active: true,
-      cursor_symbol: String(cursorSymbol || ""),
-      started_event_at: startedEventAt ? String(startedEventAt) : null,
-      chunk_count: Math.max(0, Number(chunkCount || 0) || 0),
-      shard_index_next: Math.max(0, Number(shardIndexNext || 0) || 0),
-      shard_refs: Array.isArray(shardRefs) ? shardRefs : [],
       updated_at: new Date().toISOString(),
     }),
   )
 }
 
-async function clearCardCatalogRebuildCursor(env) {
-  if (!env?.KV?.delete) {
-    if (env?.KV?.put)
-      await env.KV.put(KV_CARD_CATALOG_REBUILD_CURSOR, JSON.stringify({ active: false }))
-    return
+async function clearCardCatalogDirtyShardPublication(env) {
+  if (env?.KV?.delete) {
+    await env.KV.delete(KV_CARD_CATALOG_DIRTY_SHARD_PUBLICATION)
+  } else if (env?.KV?.put) {
+    await env.KV.put(
+      KV_CARD_CATALOG_DIRTY_SHARD_PUBLICATION,
+      JSON.stringify({ active: false, updated_at: new Date().toISOString() }),
+    )
   }
-  await env.KV.delete(KV_CARD_CATALOG_REBUILD_CURSOR)
 }
 
-async function cardCatalogNextRebuildSymbols(env, cursorSymbol, limit) {
-  if (!env?.ICONOPLASM_DB) return []
-  const cappedLimit = Math.max(1, Number(limit) || 1)
+async function recordCardCatalogDirtyShardPublicationAudit(
+  env,
+  publication,
+  { outcome, preparedShardCount = 0, targetVersion = null, error = null } = {},
+) {
+  if (!env?.ICONOPLASM_DB || !publication?.operation_id) return
+  const groups = Array.isArray(publication.groups) ? publication.groups : []
+  const dirtyShardCount =
+    groups.length || Math.max(0, Number(publication.dirty_shard_count || 0) || 0)
+  const completed = outcome === "completed" || outcome === "failed"
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_card_catalog_publication_audit (
+       operation_id, publication_kind, baseline_version, target_version,
+       after_event_at, through_event_at, after_event_id, through_event_id,
+       dirty_symbol_count, dirty_shard_count,
+       prepared_shard_count, outcome, error_code, error_message,
+       started_at, updated_at, completed_at
+     ) VALUES (?, 'dirty_shards', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP,
+               CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END)
+     ON CONFLICT(operation_id) DO UPDATE SET
+       target_version = excluded.target_version,
+       prepared_shard_count = excluded.prepared_shard_count,
+       outcome = excluded.outcome,
+       error_code = excluded.error_code,
+       error_message = excluded.error_message,
+       updated_at = CURRENT_TIMESTAMP,
+       completed_at = excluded.completed_at`,
+  )
+    .bind(
+      publication.operation_id,
+      String(publication.baseline_version || ""),
+      targetVersion ? String(targetVersion) : null,
+      publication.after_event_at ? String(publication.after_event_at) : null,
+      publication.through_event_at ? String(publication.through_event_at) : null,
+      Math.max(0, Number(publication.after_event_id || 0) || 0) || null,
+      Math.max(0, Number(publication.through_event_id || 0) || 0) || null,
+      Math.max(0, Number(publication.dirty_symbol_count || 0) || 0),
+      dirtyShardCount,
+      Math.max(0, Number(preparedShardCount || 0) || 0),
+      String(outcome || "started"),
+      error?.code ? sanitizeText(String(error.code), 128) : null,
+      error ? sanitizeText(String(error?.message || error), 500) : null,
+      publication.started_at || new Date().toISOString(),
+      completed ? 1 : 0,
+    )
+    .run()
+  console.log(
+    JSON.stringify({
+      service: "iconoplasm",
+      operation: "card_catalog_dirty_shard_publication",
+      operation_id: publication.operation_id,
+      outcome,
+      baseline_version: publication.baseline_version,
+      target_version: targetVersion,
+      dirty_symbol_count: publication.dirty_symbol_count,
+      dirty_shard_count: dirtyShardCount,
+      prepared_shard_count: preparedShardCount,
+      error_code: error?.code || null,
+    }),
+  )
+}
+
+async function cardCatalogSymbolsInsideShardRange(env, shard) {
+  if (!env?.ICONOPLASM_DB || !shard?.first_symbol || !shard?.last_symbol) return []
   const result = await env.ICONOPLASM_DB.prepare(
     `SELECT gene_symbol
        FROM icono_gene_catalog
-      WHERE gene_symbol > ?
-      ORDER BY gene_symbol ASC
-      LIMIT ?`,
+      WHERE gene_symbol >= ? AND gene_symbol <= ?
+      ORDER BY gene_symbol ASC`,
   )
-    .bind(String(cursorSymbol || ""), cappedLimit)
+    .bind(shard.first_symbol, shard.last_symbol)
     .all()
-  const rows = Array.isArray(result?.results) ? result.results : []
-  return rows.map((row) => normalizeSymbol(row?.gene_symbol || "")).filter(Boolean)
+  return (Array.isArray(result?.results) ? result.results : [])
+    .map((row) => normalizeSymbol(row?.gene_symbol || ""))
+    .filter(Boolean)
 }
 
-async function finalizeCardCatalogStagingRebuild(
-  env,
-  { shardRefs, startedEventAt, previousVersion, reserveGalleryVersionWrite },
-) {
-  // All shards for the staging rebuild exist (content-addressed). Assemble the
-  // manifest, derive the version from the ordered shard hashes (cheap), write the
-  // manifest, and signal the version flip + watermark. This is the only step that
-  // exposes the new catalog — until now the live version was untouched.
-  const catalogGeneCount = shardRefs.reduce((sum, ref) => sum + Number(ref?.card_count || 0), 0)
-  const artifactVersion = await cardCatalogContentAddressedVersion(shardRefs)
-  await clearCardCatalogRebuildCursor(env)
-  if (artifactVersion === previousVersion) {
-    // The rebuilt catalog is byte-identical to what is already live — no flip.
-    return {
-      artifact_version: previousVersion,
-      artifact_gene_count: catalogGeneCount,
-      catalog_gene_count: catalogGeneCount,
-      content_hash: artifactVersion,
-      reused_existing: true,
-      reserved_gallery_version_write: false,
-      source: "published_card_catalog",
-      rebuild: true,
-      rebuild_complete: true,
-      bootstrap_more: false,
-      watermark_event_at_override: startedEventAt,
-    }
+async function readCardCatalogShardCardsForPublication(env, shard, requestUrl) {
+  let parsed = null
+  try {
+    const raw = await env.KV.get(String(shard?.key || ""))
+    parsed = raw ? JSON.parse(raw) : null
+  } catch {
+    parsed = null
   }
-  const manifest = cardCatalogContentAddressedManifest({
-    artifactVersion,
-    shardRefs,
-    catalogGeneCount,
-    cardCount: catalogGeneCount,
-  })
-  const kvWriteBudget = await reserveIconoplasmCardCatalogKvWrites(env, {
-    operation: "card_catalog_staging_manifest_publish",
-    artifactVersion,
-    estimatedKvWrites: 1 + (reserveGalleryVersionWrite ? 1 : 0),
-    cardCount: catalogGeneCount,
-    shardCount: manifest.shard_count,
-  })
-  await env.KV.put(cardCatalogArtifactStoreKey(artifactVersion), JSON.stringify(manifest))
-  // Drop the isolate cache so the next public read re-reads the fresh artifact.
-  cardCatalogArtifactCache.version = null
-  cardCatalogArtifactCache.value = null
-  return {
-    artifact_version: artifactVersion,
-    artifact_gene_count: catalogGeneCount,
-    catalog_gene_count: catalogGeneCount,
-    artifact_validated_at: manifest.artifact_validated_at,
-    content_hash: artifactVersion,
-    reused_existing: false,
-    reserved_gallery_version_write: Boolean(reserveGalleryVersionWrite),
-    kv_write_budget: kvWriteBudget,
-    source: "published_card_catalog",
-    rebuild: true,
-    rebuild_complete: true,
-    bootstrap_more: false,
-    watermark_event_at_override: startedEventAt,
-  }
-}
+  if (parsed && Array.isArray(parsed.cards)) return parsed.cards
 
-async function runCardCatalogStagingRebuildChunk(
-  env,
-  { requestUrl, reserveGalleryVersionWrite, previousVersion, cursor },
-) {
-  // One bounded chunk of the staging rebuild (B-530 + B-532). Build the next N
-  // content-addressed shards from D1 (each 750 genes by symbol order), writing
-  // only shards whose content is new. Shard refs accumulate in the KV cursor; the
-  // live gallery version is NOT touched until the final chunk finalizes the
-  // manifest. Each chunk loads/builds/hashes ONLY its own shards — never the whole
-  // ~19k-card artifact — which is what keeps it under the Worker CPU limit.
-  const active = Boolean(cursor?.active)
-  const startedEventAt = active
-    ? (cursor.started_event_at ?? null)
-    : await maxCardCatalogPublishEventTimestamp(env)
-  const cursorSymbol = active ? String(cursor.cursor_symbol || "") : ""
-  const shardIndexNext = active ? Number(cursor.shard_index_next || 0) || 0 : 0
-  const shardRefs = active && Array.isArray(cursor.shard_refs) ? cursor.shard_refs.slice() : []
-  const shardSize = cardCatalogArtifactShardSize(env)
-  const chunkGenes = cardCatalogRebuildChunkSize(env)
-  const shardsPerChunk = Math.max(1, Math.round(chunkGenes / shardSize))
-  const genesToFetch = shardsPerChunk * shardSize
-  const fetched = await cardCatalogNextRebuildSymbols(env, cursorSymbol, genesToFetch + 1)
-  const hasMore = fetched.length > genesToFetch
-  const batchSymbols = fetched.slice(0, genesToFetch)
-  if (!batchSymbols.length) {
-    // Nothing left to build — finalize whatever shards we have.
-    return finalizeCardCatalogStagingRebuild(env, {
-      shardRefs,
-      startedEventAt,
-      previousVersion,
-      reserveGalleryVersionWrite,
-    })
-  }
-  // Build cards for this batch from D1 (cardCatalogRecordsForArtifact batches the
-  // IN-list under D1's 100-param cap).
+  // A missing immutable blob is repaired from only its recorded symbol range.
+  // Public reads remain fail-closed; this writer-side repair never scans the
+  // complete catalog and never changes unrelated shard boundaries.
+  const symbols = await cardCatalogSymbolsInsideShardRange(env, shard)
   const records = await cardCatalogRecordsForArtifact(env, {
     requestUrl,
-    symbols: batchSymbols,
+    symbols,
     snapshotVersion: "content-addressed",
   })
-  const recordBySymbol = new Map()
-  for (const record of records) {
-    const symbol = normalizeSymbol(record?.symbol || "")
-    if (symbol) recordBySymbol.set(symbol, record)
-  }
-  const sortedBatch = batchSymbols.slice().sort()
-  const cards = []
-  for (const symbol of sortedBatch) {
-    const record = recordBySymbol.get(symbol)
-    if (!record) continue // in catalog list but no joined row — drop from artifact
+  const cards = records.map((record) => {
     const vm = buildMobileCardVMFromGeneRecord(record, {
       snapshotVersion: "content-addressed",
       source: "published_card_catalog",
     })
     if (!assertCompleteMobileCardVM(vm)) {
-      throw new Error(`Staging rebuild refused to publish: invalid card for ${symbol}`)
+      throw cardCatalogPublicationError(
+        "CARD_CATALOG_LOCAL_SHARD_REPAIR_INVALID",
+        `Local shard repair produced an invalid card for ${normalizeSymbol(record?.symbol || "")}.`,
+      )
     }
-    cards.push({ ...vm, data_source: "published_card_catalog" })
-  }
-  await reserveIconoplasmCardCatalogKvWrites(env, {
-    operation: "card_catalog_staging_shard_publish",
-    artifactVersion: previousVersion,
-    estimatedKvWrites: shardsPerChunk,
-    cardCount: cards.length,
-    shardCount: shardsPerChunk,
+    return { ...vm, data_source: "published_card_catalog" }
   })
-  let shardIndex = shardIndexNext
-  for (let i = 0; i < cards.length; i += shardSize) {
-    const shardCards = cards.slice(i, i + shardSize)
-    const { ref } = await writeCardCatalogContentAddressedShard(env, {
-      index: shardIndex,
-      cards: shardCards,
-    })
-    shardRefs.push(ref)
-    shardIndex += 1
-  }
-  const chunkCount = (Number(cursor?.chunk_count || 0) || 0) + 1
-  if (hasMore) {
-    await writeCardCatalogRebuildCursor(env, {
-      cursorSymbol: sortedBatch[sortedBatch.length - 1],
-      startedEventAt,
-      chunkCount,
-      shardIndexNext: shardIndex,
-      shardRefs,
-    })
-    // Mid-rebuild: do NOT flip the live version (return the current version so
-    // invalidateGalleryCache takes the no-flip reuse path) and do NOT watermark.
-    return {
-      artifact_version: previousVersion,
-      artifact_gene_count: 0,
-      catalog_gene_count: 0,
-      content_hash: "",
-      reused_existing: true,
-      reserved_gallery_version_write: false,
-      source: "published_card_catalog",
-      rebuild: true,
-      bootstrap_more: true,
-      rebuild_chunk: chunkCount,
-      rebuild_cursor: sortedBatch[sortedBatch.length - 1],
-      rebuild_shards_built: shardRefs.length,
-    }
-  }
-  // Final batch built — finalize the manifest and flip.
-  const result = await finalizeCardCatalogStagingRebuild(env, {
-    shardRefs,
-    startedEventAt,
-    previousVersion,
-    reserveGalleryVersionWrite,
-  })
-  return { ...result, rebuild_chunk: chunkCount, rebuild_shards_built: shardRefs.length }
+  return cards.sort((left, right) => String(left.symbol).localeCompare(String(right.symbol)))
 }
 
-// Max shards a single shard-level incremental will touch in one invocation. If a
-// delta is scattered across more shards than this, the per-invocation load+hash
-// approaches whole-artifact cost, so defer to the (multi-invocation) staging
-// rebuild instead.
-const CARD_CATALOG_SHARD_LEVEL_MAX_AFFECTED_SHARDS = 6
-
-async function publishCardCatalogShardLevelIncremental(
-  env,
-  { previousVersion, manifest, changedSymbols, requestUrl, reserveGalleryVersionWrite },
-) {
-  // Apply a small, concentrated delta by rebuilding ONLY the content-addressed
-  // shards that contain changed genes, then flip immediately. Returns null to
-  // signal "use a staging rebuild instead" whenever the delta would need a
-  // re-shard (new gene outside all ranges, a shard that can't be loaded, or a gene
-  // missing from its range shard) or touches too many shards to stay bounded.
-  const shards = Array.isArray(manifest?.shards)
-    ? manifest.shards.slice().sort((a, b) => Number(a.index) - Number(b.index))
-    : []
-  if (!shards.length) return null
-  const changedSet = new Set(changedSymbols.map((s) => normalizeSymbol(s)).filter(Boolean))
-  const changedByIndex = new Map()
-  for (const sym of changedSet) {
-    const shard = shards.find((s) => {
-      const first = normalizeSymbol(s.first_symbol || "")
-      const last = normalizeSymbol(s.last_symbol || "")
-      return first && last && sym >= first && sym <= last
-    })
-    if (!shard) return null // outside all shard ranges -> new gene -> needs re-shard
-    const index = Number(shard.index)
-    if (!changedByIndex.has(index)) changedByIndex.set(index, new Set())
-    changedByIndex.get(index).add(sym)
+function cardCatalogRefsAfterDirtyReplacements(baselineShards, replacementRefsByIndex) {
+  const refs = []
+  for (const shard of baselineShards) {
+    const replacement = replacementRefsByIndex[String(shard.index)]
+    if (Array.isArray(replacement)) refs.push(...replacement)
+    else refs.push(shard)
   }
-  if (changedByIndex.size > CARD_CATALOG_SHARD_LEVEL_MAX_AFFECTED_SHARDS) return null
+  return refs.map((ref, index) => ({ ...ref, index }))
+}
+
+async function publishNextCardCatalogDirtyShardStep(
+  env,
+  { previousVersion, manifest, publication, requestUrl, reserveGalleryVersionWrite },
+) {
+  const baselineShards = normalizedCardCatalogManifestShards(manifest)
+  if (!baselineShards.length) {
+    throw cardCatalogPublicationError(
+      "CARD_CATALOG_BASELINE_REQUIRED",
+      "Routine publication requires a valid content-addressed baseline manifest.",
+    )
+  }
+  if (String(publication.baseline_version || "") !== previousVersion) {
+    throw cardCatalogPublicationError(
+      "CARD_CATALOG_PUBLICATION_BASELINE_MOVED",
+      "The live gallery version changed while dirty shards were being prepared.",
+    )
+  }
+
+  const groups = Array.isArray(publication.groups) ? publication.groups : []
+  const nextGroup = Math.max(0, Number(publication.next_group || 0) || 0)
+  const stepGroups = groups.slice(
+    nextGroup,
+    nextGroup + CARD_CATALOG_DIRTY_SHARDS_PER_PUBLICATION_STEP,
+  )
+  const stepSymbols = Array.from(
+    new Set(stepGroups.flatMap((group) => (Array.isArray(group?.symbols) ? group.symbols : []))),
+  )
   const records = await cardCatalogRecordsForArtifact(env, {
     requestUrl,
-    symbols: Array.from(changedSet),
+    symbols: stepSymbols,
     snapshotVersion: "content-addressed",
   })
   const recordBySymbol = new Map()
@@ -23323,65 +23331,105 @@ async function publishCardCatalogShardLevelIncremental(
     const symbol = normalizeSymbol(record?.symbol || "")
     if (symbol) recordBySymbol.set(symbol, record)
   }
+
+  const finalStep = nextGroup + stepGroups.length >= groups.length
   await reserveIconoplasmCardCatalogKvWrites(env, {
-    operation: "card_catalog_shard_incremental_publish",
+    operation: "card_catalog_dirty_shard_publication",
     artifactVersion: previousVersion,
-    estimatedKvWrites: changedByIndex.size + 1 + (reserveGalleryVersionWrite ? 1 : 0),
-    cardCount: changedSet.size,
-    shardCount: changedByIndex.size,
+    estimatedKvWrites:
+      stepGroups.length * 2 + (finalStep ? 3 + (reserveGalleryVersionWrite ? 1 : 0) : 1),
+    cardCount: stepSymbols.length,
+    shardCount: stepGroups.length,
   })
-  const newRefByIndex = new Map()
-  for (const [index, symSet] of changedByIndex) {
-    const shard = shards.find((s) => Number(s.index) === index)
-    const shardRaw = await env.KV.get(String(shard?.key || ""))
-    let shardParsed = null
-    try {
-      shardParsed = shardRaw ? JSON.parse(shardRaw) : null
-    } catch {
-      shardParsed = null
+
+  const replacementRefsByIndex = {
+    ...(publication.replacement_refs_by_index &&
+    typeof publication.replacement_refs_by_index === "object"
+      ? publication.replacement_refs_by_index
+      : {}),
+  }
+  const shardSize = cardCatalogArtifactShardSize(env)
+  for (const group of stepGroups) {
+    const index = Number(group?.baseline_index)
+    const shard = baselineShards[index]
+    if (!shard) {
+      throw cardCatalogPublicationError(
+        "CARD_CATALOG_DIRTY_SHARD_RANGE_INVALID",
+        `Dirty-shard publication referenced missing baseline shard ${index}.`,
+      )
     }
-    if (!shardParsed || !Array.isArray(shardParsed.cards)) return null // can't load -> re-shard
+    const existingCards = await readCardCatalogShardCardsForPublication(env, shard, requestUrl)
     const cardBySymbol = new Map()
-    for (const card of shardParsed.cards) {
+    for (const card of existingCards) {
       const symbol = normalizeSymbol(card?.symbol || "")
       if (symbol) cardBySymbol.set(symbol, card)
     }
-    for (const sym of symSet) {
-      const record = recordBySymbol.get(sym)
+    for (const rawSymbol of Array.isArray(group?.symbols) ? group.symbols : []) {
+      const symbol = normalizeSymbol(rawSymbol || "")
+      const record = recordBySymbol.get(symbol)
       if (!record) {
-        cardBySymbol.delete(sym) // removed from catalog
+        cardBySymbol.delete(symbol)
         continue
       }
-      if (!cardBySymbol.has(sym)) return null // not actually in this shard -> re-shard
       const vm = buildMobileCardVMFromGeneRecord(record, {
         snapshotVersion: "content-addressed",
         source: "published_card_catalog",
       })
       if (!assertCompleteMobileCardVM(vm)) {
-        throw new Error(`Shard-level incremental refused to publish: invalid card for ${sym}`)
+        throw cardCatalogPublicationError(
+          "CARD_CATALOG_DIRTY_CARD_INVALID",
+          `Dirty-shard publication refused an invalid card for ${symbol}.`,
+        )
       }
-      cardBySymbol.set(sym, { ...vm, data_source: "published_card_catalog" })
+      cardBySymbol.set(symbol, { ...vm, data_source: "published_card_catalog" })
     }
-    const newCards = Array.from(cardBySymbol.keys())
-      .sort()
-      .map((s) => cardBySymbol.get(s))
-    const { ref } = await writeCardCatalogContentAddressedShard(env, { index, cards: newCards })
-    newRefByIndex.set(index, ref)
+    const nextCards = Array.from(cardBySymbol.values()).sort((left, right) =>
+      String(left.symbol).localeCompare(String(right.symbol)),
+    )
+    const refs = []
+    for (let offset = 0; offset < nextCards.length; offset += shardSize) {
+      const { ref } = await writeCardCatalogContentAddressedShard(env, {
+        index: index + refs.length / 10,
+        cards: nextCards.slice(offset, offset + shardSize),
+      })
+      refs.push(ref)
+    }
+    replacementRefsByIndex[String(index)] = refs
   }
-  const newShardRefs = shards.map(
-    (s) =>
-      newRefByIndex.get(Number(s.index)) || {
-        key: s.key,
-        index: Number(s.index),
-        card_count: Number(s.card_count || 0),
-        content_hash: s.content_hash,
-        first_symbol: s.first_symbol || null,
-        last_symbol: s.last_symbol || null,
-      },
-  )
-  const catalogGeneCount = newShardRefs.reduce((sum, r) => sum + Number(r.card_count || 0), 0)
-  const artifactVersion = await cardCatalogContentAddressedVersion(newShardRefs)
+
+  const completedGroups = nextGroup + stepGroups.length
+  if (completedGroups < groups.length) {
+    await writeCardCatalogDirtyShardPublication(env, {
+      ...publication,
+      next_group: completedGroups,
+      replacement_refs_by_index: replacementRefsByIndex,
+    })
+    await recordCardCatalogDirtyShardPublicationAudit(env, publication, {
+      outcome: "preparing",
+      preparedShardCount: completedGroups,
+    })
+    return {
+      artifact_version: previousVersion,
+      artifact_gene_count: Math.max(0, Number(manifest.card_count || 0) || 0),
+      catalog_gene_count: Math.max(0, Number(manifest.catalog_gene_count || 0) || 0),
+      content_hash: String(manifest.content_hash || ""),
+      reused_existing: true,
+      reserved_gallery_version_write: false,
+      source: "published_card_catalog",
+      dirty_shard_publication: true,
+      publication_more: true,
+      dirty_symbol_count: Math.max(0, Number(publication.dirty_symbol_count || 0) || 0),
+      dirty_shard_count: groups.length,
+      publication_operation_id: publication.operation_id,
+      prepared_shard_count: completedGroups,
+    }
+  }
+
+  const nextRefs = cardCatalogRefsAfterDirtyReplacements(baselineShards, replacementRefsByIndex)
+  const catalogGeneCount = nextRefs.reduce((sum, ref) => sum + Number(ref.card_count || 0), 0)
+  const artifactVersion = await cardCatalogContentAddressedVersion(nextRefs)
   if (artifactVersion === previousVersion) {
+    if (publication.persisted) await clearCardCatalogDirtyShardPublication(env)
     return {
       artifact_version: previousVersion,
       artifact_gene_count: catalogGeneCount,
@@ -23390,30 +23438,55 @@ async function publishCardCatalogShardLevelIncremental(
       reused_existing: true,
       reserved_gallery_version_write: false,
       source: "published_card_catalog",
+      dirty_shard_publication: true,
+      publication_more: false,
+      watermark_event_at_override: publication.through_event_at || null,
+      watermark_event_id_override: Math.max(0, Number(publication.through_event_id || 0) || 0),
+      dirty_symbol_count: Math.max(0, Number(publication.dirty_symbol_count || 0) || 0),
+      dirty_shard_count: groups.length,
+      publication_operation_id: publication.operation_id,
     }
   }
-  const newManifest = cardCatalogContentAddressedManifest({
+  const nextManifest = cardCatalogContentAddressedManifest({
     artifactVersion,
-    shardRefs: newShardRefs,
+    shardRefs: nextRefs,
     catalogGeneCount,
     cardCount: catalogGeneCount,
   })
-  await env.KV.put(cardCatalogArtifactStoreKey(artifactVersion), JSON.stringify(newManifest))
+  await env.KV.put(cardCatalogArtifactStoreKey(artifactVersion), JSON.stringify(nextManifest))
+  if (publication.persisted) await clearCardCatalogDirtyShardPublication(env)
   cardCatalogArtifactCache.version = null
   cardCatalogArtifactCache.value = null
   return {
     artifact_version: artifactVersion,
     artifact_gene_count: catalogGeneCount,
     catalog_gene_count: catalogGeneCount,
-    artifact_validated_at: newManifest.artifact_validated_at,
+    artifact_validated_at: nextManifest.artifact_validated_at,
     content_hash: artifactVersion,
     reused_existing: false,
     reserved_gallery_version_write: Boolean(reserveGalleryVersionWrite),
     source: "published_card_catalog",
-    incremental: true,
-    shard_level: true,
-    changed_symbol_count: changedSet.size,
-    affected_shards: changedByIndex.size,
+    dirty_shard_publication: true,
+    publication_more: false,
+    watermark_event_at_override: publication.through_event_at || null,
+    watermark_event_id_override: Math.max(0, Number(publication.through_event_id || 0) || 0),
+    dirty_symbol_count: Math.max(0, Number(publication.dirty_symbol_count || 0) || 0),
+    dirty_shard_count: groups.length,
+    affected_shards: groups.length,
+    publication_operation_id: publication.operation_id,
+  }
+}
+
+async function publishNextCardCatalogDirtyShardStepWithAudit(env, options) {
+  try {
+    return await publishNextCardCatalogDirtyShardStep(env, options)
+  } catch (error) {
+    await recordCardCatalogDirtyShardPublicationAudit(env, options.publication, {
+      outcome: "failed",
+      preparedShardCount: options.publication?.next_group || 0,
+      error,
+    })
+    throw error
   }
 }
 
@@ -23423,64 +23496,68 @@ async function publishCardCatalogArtifactSmart(
     version,
     requestUrl = "https://iconoplasm.brinedew.bio/",
     reserveGalleryVersionWrite = false,
+    throughEventAt = null,
+    throughEventId = 0,
   } = {},
 ) {
-  // Route a publish without ever loading or hashing the whole ~19k-card artifact:
-  // - a rebuild in progress continues draining (staging, content-addressed);
-  // - no baseline manifest -> full publisher (small/first-run catalogs only);
-  // - nothing changed since the watermark -> reuse;
-  // - otherwise -> bounded staging rebuild (content-addressed), which rewrites only
-  //   the shards whose content actually changed.
+  // Routine publication has exactly one mutating strategy: prepare the shards
+  // named by canonical publish events, then atomically flip one manifest. Cold
+  // bootstrap and card-mapping migrations are operator deployment tasks; they
+  // are deliberately errors here, never hidden fallbacks from cron or voting.
   const previousVersion = String(version || "").trim()
-  const rebuildCursor = await readCardCatalogRebuildCursor(env)
-  if (rebuildCursor) {
-    return runCardCatalogStagingRebuildChunk(env, {
-      requestUrl,
-      reserveGalleryVersionWrite,
-      previousVersion,
-      cursor: rebuildCursor,
-    })
-  }
   // Manifest-only read (small): never parse the full sharded artifact here.
   const manifest = previousVersion
     ? await readCardCatalogArtifactManifest(env, previousVersion)
     : null
   if (!manifest) {
-    // No usable baseline manifest (genuinely cold / first run): build from scratch
-    // via the one bounded, content-addressed path. The staging rebuild reads the
-    // catalog symbols straight from D1, so it needs no prior artifact.
-    return runCardCatalogStagingRebuildChunk(env, {
-      requestUrl,
-      reserveGalleryVersionWrite,
-      previousVersion,
-      cursor: null,
-    })
+    throw cardCatalogPublicationError(
+      "CARD_CATALOG_BASELINE_REQUIRED",
+      "Routine gallery publication has no valid baseline; run the explicit deployment bootstrap.",
+    )
+  }
+  if (manifest.storage !== CARD_CATALOG_CONTENT_ADDRESSED_STORAGE) {
+    throw cardCatalogPublicationError(
+      "CARD_CATALOG_STORAGE_MIGRATION_REQUIRED",
+      "Routine gallery publication requires the content-addressed shard format.",
+    )
   }
   if (Number(manifest.build_revision) !== CARD_CATALOG_BUILD_REVISION) {
-    // The database can be unchanged while a deployment changes how canonical
-    // records become public cards. Publication-event watermarks cannot observe
-    // that code change, so an older build revision must be rebuilt in full.
-    return runCardCatalogStagingRebuildChunk(env, {
+    throw cardCatalogPublicationError(
+      "CARD_CATALOG_SCHEMA_MIGRATION_REQUIRED",
+      "The live card mapping revision differs from this deploy; migrate it explicitly before activation.",
+    )
+  }
+
+  const activePublication = await readCardCatalogDirtyShardPublication(env)
+  if (activePublication) {
+    return publishNextCardCatalogDirtyShardStepWithAudit(env, {
+      previousVersion,
+      manifest,
+      publication: activePublication,
       requestUrl,
       reserveGalleryVersionWrite,
-      previousVersion,
-      cursor: null,
     })
   }
   const watermark = await readCardCatalogPublishWatermark(env)
   let watermarkEventAt = watermark?.watermark_event_at || null
+  const watermarkEventId = Math.max(0, Number(watermark?.watermark_event_id || 0) || 0)
   if (!watermarkEventAt) {
     // Bootstrap cutoff from the live manifest's build time (no artifact load).
     watermarkEventAt = isoToSqliteDatetimeFloor(manifest.artifact_validated_at)
   }
-  const manifestContentAddressed = manifest.storage === CARD_CATALOG_CONTENT_ADDRESSED_STORAGE
-  const ceiling = cardCatalogIncrementalRebuildCeiling(env)
-  // For a content-addressed manifest, pull the actual changed-symbol list (bounded
-  // by the ceiling) so a small delta can be applied shard-level. For a legacy
-  // manifest we only need to know whether ANYTHING changed (-> staging rebuild,
-  // which also migrates it to content-addressed).
-  const queryLimit = manifestContentAddressed ? ceiling + 1 : 2
-  const changed = await cardCatalogChangedSymbolsSinceWatermark(env, watermarkEventAt, queryLimit)
+  const changed = await cardCatalogChangedSymbolsWithinPublicationWindow(env, {
+    afterEventAt: watermarkEventAt,
+    throughEventAt,
+    afterEventId: watermarkEventId,
+    throughEventId,
+    limit: CARD_CATALOG_DIRTY_SYMBOL_SAFETY_LIMIT + 1,
+  })
+  if (changed.truncated) {
+    throw cardCatalogPublicationError(
+      "CARD_CATALOG_DIRTY_SET_SAFETY_LIMIT",
+      `More than ${CARD_CATALOG_DIRTY_SYMBOL_SAFETY_LIMIT} genes are dirty; refusing a hidden catalog rebuild.`,
+    )
+  }
   if (!changed.symbols.length) {
     // Nothing canonical changed since the live artifact — reuse it as-is.
     return {
@@ -23494,29 +23571,36 @@ async function publishCardCatalogArtifactSmart(
       source: "published_card_catalog",
     }
   }
-  if (manifestContentAddressed && !changed.truncated && changed.symbols.length <= ceiling) {
-    // Small delta on a content-addressed artifact: rebuild ONLY the affected
-    // shards and flip immediately, so a canon change reaches the gallery in one
-    // cron cycle. Returns null if the delta needs a re-shard (new genes / removed
-    // genes shifting boundaries), in which case fall through to a staging rebuild.
-    const incremental = await publishCardCatalogShardLevelIncremental(env, {
-      previousVersion,
-      manifest,
-      changedSymbols: changed.symbols,
-      requestUrl,
-      reserveGalleryVersionWrite,
-      watermarkEventAt,
-    })
-    if (incremental) return incremental
+  const groups = cardCatalogDirtyShardGroups(
+    normalizedCardCatalogManifestShards(manifest),
+    changed.symbols,
+  )
+  if (!groups.length) {
+    throw cardCatalogPublicationError(
+      "CARD_CATALOG_DIRTY_RANGE_UNRESOLVED",
+      "Canonical changes exist but none map to a catalog shard.",
+    )
   }
-  // Large delta, a legacy (non-content-addressed) manifest, or a re-shard need ->
-  // bounded staging rebuild. Content-addressed shards mean unchanged shards are
-  // not rewritten, so this converges with KV writes proportional to the real delta.
-  return runCardCatalogStagingRebuildChunk(env, {
+  const publication = {
+    operation_id: crypto.randomUUID(),
+    baseline_version: previousVersion,
+    after_event_at: watermarkEventAt,
+    through_event_at: throughEventAt,
+    after_event_id: watermarkEventId,
+    through_event_id: Math.max(0, Number(throughEventId || 0) || 0),
+    dirty_symbol_count: changed.symbols.length,
+    groups,
+    next_group: 0,
+    replacement_refs_by_index: {},
+    started_at: new Date().toISOString(),
+  }
+  await recordCardCatalogDirtyShardPublicationAudit(env, publication, { outcome: "started" })
+  return publishNextCardCatalogDirtyShardStepWithAudit(env, {
+    previousVersion,
+    manifest,
+    publication,
     requestUrl,
     reserveGalleryVersionWrite,
-    previousVersion,
-    cursor: null,
   })
 }
 
@@ -23537,28 +23621,29 @@ async function invalidateGalleryCache(env) {
   const previousPublicationWatermark = await readCardCatalogPublishWatermark(env)
   // Capture the high-water mark BEFORE the build. Anything reflected in the
   // artifact has created_at <= this; events landing mid-build stay pending.
-  const watermarkEventAt = await maxCardCatalogPublishEventTimestamp(env)
+  const publicationHighWater = await maxCardCatalogPublishEventPosition(env)
+  const watermarkEventAt = publicationHighWater.created_at
+  const watermarkEventId = publicationHighWater.id
   const previousBarrier = await currentGalleryVersionBarrier(env)
   const cardCatalog = await publishCardCatalogArtifactSmart(env, {
     version: previousBarrier.current,
     requestUrl: "https://iconoplasm.brinedew.bio/",
     reserveGalleryVersionWrite: true,
+    throughEventAt: watermarkEventAt,
+    throughEventId: watermarkEventId,
   })
-  // Watermark coordination. A multi-chunk rebuild (B-532) must NOT claim freshness
-  // until its last chunk lands: while chunks remain (bootstrap_more) the gallery is
-  // only partially rebuilt, so skip the watermark — the KV rebuild cursor tracks
-  // progress instead. On the final chunk the rebuild records the watermark at the
-  // rebuild's START high-water event (watermark_event_at_override), conservatively
-  // leaving any change that arrived mid-rebuild for the next incremental.
-  const skipWatermark = cardCatalog.bootstrap_more === true
-  const effectiveWatermarkEventAt = cardCatalog.rebuild
-    ? (cardCatalog.watermark_event_at_override ?? null)
-    : watermarkEventAt
+  // Dirty shards can span multiple bounded invocations, but the live manifest and
+  // freshness watermark move only together after the final prepared shard. Events
+  // arriving after the captured high-water remain pending for the next publish.
+  const skipWatermark = cardCatalog.publication_more === true
+  const effectiveWatermarkEventAt = cardCatalog.watermark_event_at_override ?? watermarkEventAt
+  const effectiveWatermarkEventId = cardCatalog.watermark_event_id_override ?? watermarkEventId
   const recordWatermark = async () => {
     if (skipWatermark) return
     await writeCardCatalogPublishWatermark(env, {
       artifactVersion: cardCatalog.artifact_version,
       watermarkEventAt: effectiveWatermarkEventAt,
+      watermarkEventId: effectiveWatermarkEventId,
       cardCount: cardCatalog.artifact_gene_count,
       catalogGeneCount: cardCatalog.catalog_gene_count,
       contentHash: cardCatalog.content_hash || "",
@@ -23569,13 +23654,43 @@ async function invalidateGalleryCache(env) {
     await syncPublishedGeneRouteMembershipAfterPublication(env, {
       afterEventAt: previousPublicationWatermark?.watermark_event_at || null,
       throughEventAt: effectiveWatermarkEventAt,
+      afterEventId: previousPublicationWatermark?.watermark_event_id || 0,
+      throughEventId: effectiveWatermarkEventId,
     })
+  }
+  const finishPublicationAudit = async (outcome, error = null) => {
+    if (!cardCatalog.publication_operation_id || cardCatalog.publication_more) return
+    await recordCardCatalogDirtyShardPublicationAudit(
+      env,
+      {
+        operation_id: cardCatalog.publication_operation_id,
+        baseline_version: previousBarrier.current,
+        after_event_at: previousPublicationWatermark?.watermark_event_at || null,
+        through_event_at: effectiveWatermarkEventAt,
+        after_event_id: previousPublicationWatermark?.watermark_event_id || 0,
+        through_event_id: effectiveWatermarkEventId,
+        dirty_symbol_count: cardCatalog.dirty_symbol_count,
+        dirty_shard_count: cardCatalog.dirty_shard_count,
+      },
+      {
+        outcome,
+        preparedShardCount: cardCatalog.dirty_shard_count,
+        targetVersion: cardCatalog.artifact_version,
+        error,
+      },
+    )
   }
   if (String(previousBarrier.current || "").trim() === String(cardCatalog.artifact_version || "")) {
     galleryVersionCache.value = previousBarrier.raw || previousBarrier.current
     galleryVersionCache.loadedAt = Date.now()
-    await syncPublishedRoutes()
-    await recordWatermark()
+    try {
+      await syncPublishedRoutes()
+      await recordWatermark()
+      await finishPublicationAudit("completed")
+    } catch (error) {
+      await finishPublicationAudit("failed", error)
+      throw error
+    }
     return {
       version: previousBarrier.current,
       card_catalog: { ...cardCatalog, reused_gallery_version: true },
@@ -23599,12 +23714,19 @@ async function invalidateGalleryCache(env) {
     reused_existing: Boolean(cardCatalog.reused_existing),
     kv_write_budget: cardCatalog.kv_write_budget || galleryVersionKvWriteBudget || null,
   }
-  const version = await publishGalleryVersionBarrier(env, barrier)
-  // Route membership and the watermark advance only after the version flip.
-  // This preserves one publication boundary without putting mutable vote state
-  // into the route table.
-  await syncPublishedRoutes()
-  await recordWatermark()
+  let version
+  try {
+    version = await publishGalleryVersionBarrier(env, barrier)
+    // Route membership and the watermark advance only after the version flip.
+    // This preserves one publication boundary without putting mutable vote state
+    // into the route table.
+    await syncPublishedRoutes()
+    await recordWatermark()
+    await finishPublicationAudit("completed")
+  } catch (error) {
+    await finishPublicationAudit("failed", error)
+    throw error
+  }
   return { version, card_catalog: cardCatalog }
 }
 
@@ -26679,67 +26801,39 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       return response
     }
 
-    if (isIconoplasmRefreshGalleryRequestForTheOnlyAllowedStatefulWorker(path, request.method)) {
-      // Self-draining gallery refresh: keep processing chunks until the rebuild
-      // completes or we hit the per-invocation ceiling. Each chunk is ~5-8s on
-      // the free tier; a 30s CPU budget fits 3-4 chunks. This removes the
-      // dependency on cron delivery reliability — one cron firing drains the
-      // entire rebuild instead of needing one firing per chunk.
-      //
-      // max_chunks is passed by the caller: */15 cron sends 4 (drain fast),
-      // nightly maintenance sends 1 (leave budget for canon repair + recap).
-      const payload = await parseJsonBody(request)
-      const requestedMaxChunks = Number(payload?.max_chunks)
-      const maxChunks =
-        Number.isFinite(requestedMaxChunks) && requestedMaxChunks >= 1 && requestedMaxChunks <= 10
-          ? requestedMaxChunks
-          : 1
-      let lastResult = null
-      let chunksProcessed = 0
-      for (let attempt = 0; attempt < maxChunks; attempt += 1) {
-        let result
-        try {
-          result = { ok: true, ...(await invalidateGalleryCache(meteredEnv)) }
-        } catch (error) {
-          console.error(
-            "[CRON] gallery refresh chunk threw:",
-            String(error?.message || error || "unknown"),
-            "code=" + String(error?.code || ""),
-          )
-          result = {
-            ok: false,
-            skipped: true,
-            code: sanitizeText(String(error?.code || ""), 128) || "GALLERY_REFRESH_SKIPPED",
-            error: sanitizeText(String(error?.message || error), 500),
-          }
-          lastResult = result
-          break
-        }
-        lastResult = result
-        chunksProcessed += 1
-        const catalog = result?.card_catalog || {}
-        console.log(
-          "[CRON] gallery refresh chunk " +
-            attempt +
-            ":" +
-            " rebuild=" +
-            Boolean(catalog.rebuild) +
-            " bootstrap_more=" +
-            Boolean(catalog.bootstrap_more) +
-            " chunk=" +
-            Number(catalog.rebuild_chunk || 0) +
-            " cursor=" +
-            String(catalog.rebuild_cursor || ""),
+    if (
+      isIconoplasmPublishGalleryDirtyShardsRequestForTheOnlyAllowedStatefulWorker(
+        path,
+        request.method,
+      )
+    ) {
+      // Exactly one bounded dirty-shard step per invocation. A caller cannot
+      // smuggle `max_chunks` into a CPU/KV burst; cron and manual refresh share
+      // the same cost boundary.
+      await parseJsonBody(request)
+      let lastResult
+      try {
+        lastResult = { ok: true, ...(await invalidateGalleryCache(meteredEnv)) }
+      } catch (error) {
+        console.error(
+          "[CRON] gallery dirty-shard publication failed:",
+          String(error?.message || error || "unknown"),
+          "code=" + String(error?.code || ""),
         )
-        if (!catalog.bootstrap_more) break
+        lastResult = {
+          ok: false,
+          skipped: true,
+          code: sanitizeText(String(error?.code || ""), 128) || "GALLERY_REFRESH_SKIPPED",
+          error: sanitizeText(String(error?.message || error), 500),
+        }
       }
       console.log(
-        "[CRON] gallery refresh complete: chunks_processed=" +
-          chunksProcessed +
-          " ok=" +
+        "[CRON] gallery refresh complete: ok=" +
           Boolean(lastResult?.ok) +
-          " bootstrap_more=" +
-          Boolean(lastResult?.card_catalog?.bootstrap_more),
+          " publication_more=" +
+          Boolean(lastResult?.card_catalog?.publication_more) +
+          " dirty_shards=" +
+          Number(lastResult?.card_catalog?.dirty_shard_count || 0),
       )
       const response = json(lastResult || { ok: false, error: "no result" }, 200, {
         "Cache-Control": "no-store",

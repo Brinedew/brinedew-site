@@ -89,6 +89,8 @@ test("publication route membership advances only through the bounded event windo
   const result = await syncPublishedGeneRouteMembershipAfterPublicationForTest(env, {
     afterEventAt: "2026-08-01 10:00:00",
     throughEventAt: "2026-08-01 10:15:00",
+    afterEventId: 410,
+    throughEventId: 417,
   })
 
   assert.deepEqual(result, { inserted: 1, deleted: 2 })
@@ -97,8 +99,8 @@ test("publication route membership advances only through the bounded event windo
   assert.match(statements[1].sql, /DELETE FROM icono_published_gene_routes/)
   for (const statement of statements) {
     assert.match(statement.sql, /FROM icono_publish_events/)
-    assert.match(statement.sql, /created_at > \? AND created_at <= \?/)
-    assert.deepEqual(statement.binds.slice(-2), ["2026-08-01 10:00:00", "2026-08-01 10:15:00"])
+    assert.match(statement.sql, /id > \? AND id <= \?/)
+    assert.deepEqual(statement.binds.slice(-2), [410, 417])
   }
 })
 

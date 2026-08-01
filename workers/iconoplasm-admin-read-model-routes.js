@@ -244,7 +244,7 @@ export function createIconoplasmAdminReadModelHandlers(services) {
       )
     }
     const publishResult = invalidation.card_catalog || {}
-    const rebuildInProgress = Boolean(publishResult.bootstrap_more)
+    const publicationInProgress = Boolean(publishResult.publication_more)
     return done(
       "admin_card_vms_warm",
       json(
@@ -254,8 +254,8 @@ export function createIconoplasmAdminReadModelHandlers(services) {
           version: invalidation.version,
           after: sanitizeText(payload?.after || payload?.cursor || "", 64) || "",
           next_cursor: "",
-          done: !rebuildInProgress,
-          rebuild_in_progress: rebuildInProgress,
+          done: !publicationInProgress,
+          dirty_shard_publication_in_progress: publicationInProgress,
           requested: publishResult.catalog_gene_count,
           warmed: publishResult.artifact_gene_count,
           missing: 0,

@@ -33,7 +33,11 @@ membership only for canonical-affecting event symbols in the watermark window.
 The operation is idempotent. It never copies mutable canon into the route table
 and never publishes KV per vote. A newly projected vote changes the detail ETag,
 so later navigation selects a new HTML cache key even while the browse artifact
-is still on its documented coarse refresh cadence.
+waits for the next successful 15-minute publication tick. That tick rewrites only
+the dirty content-addressed shard and atomically flips the browse manifest. A
+scattered delta may require multiple six-shard preparation ticks, but the old
+manifest remains coherent until the one final flip; it never falls back to a
+complete-catalog rebuild. See architecture fence IPD-010.
 
 ## Warm versus authenticated
 

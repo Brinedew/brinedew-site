@@ -153,12 +153,44 @@ function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} })
 
 function buildEnv({ bindGateway = true } = {}) {
   const gatewayDb = new FakeIconoplasmDb()
+  const baselineVersion = "test-version"
+  const baselineShardKey = "iconoplasm:card-catalog-shard:test-baseline"
+  const baselineStore = new Map([
+    ["iconoplasm:gallery-version", baselineVersion],
+    [
+      `iconoplasm:card-catalog:${baselineVersion}`,
+      JSON.stringify({
+        schema: "iconoplasm.cardCatalog.v1",
+        build_revision: 2,
+        artifact_version: baselineVersion,
+        snapshot_version: baselineVersion,
+        artifact_validated_at: "2026-04-16T00:00:00.000Z",
+        content_hash: baselineVersion,
+        source: "published_card_catalog",
+        storage: "kv_card_catalog_content_addressed_shards",
+        shard_size: 750,
+        shard_count: 1,
+        catalog_gene_count: 1,
+        card_count: 1,
+        shards: [
+          {
+            key: baselineShardKey,
+            index: 0,
+            card_count: 1,
+            content_hash: "test-baseline",
+            first_symbol: "TP53",
+            last_symbol: "TP53",
+          },
+        ],
+      }),
+    ],
+  ])
   const gatewayEnv = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_DB: gatewayDb,
     ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: {
-      store: new Map([["iconoplasm:gallery-version", "test-version"]]),
+      store: baselineStore,
       async get(key) {
         return this.store.get(key) || null
       },
