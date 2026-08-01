@@ -16,6 +16,8 @@ Automatic progress uses `history.replaceState` to update opaque `history.state` 
 
 A saved history entry still contains that transient state so Back can restore the exact neighborhood without caching a complete DOM fragment. Legacy URLs containing `page`, `after`, `offset`, `cursor`, `anchor`, or `anchorOffset` may be consumed once for restoration and are cleaned on the first feed-state update. Crawlable pagination remains in the document's `rel=next` link rather than mutating the user's current URL.
 
+Restoration is scoped by the explicitly prefixed `ICONO_ARCHIVE_RESTORE_SESSION` token in `sessionStorage`, which survives a real same-tab document navigation without leaking across tabs. The early head bootstrap uses `PerformanceNavigationTiming.type`: it preserves the saved home entry only for `back_forward`, and clears it plus scroll position for ordinary navigation or reload. This distinction is required because a browser may implement Back as either a same-document SPA traversal, a back-forward-cache restore, or a full document traversal; all three must restore the gallery, while Refresh must start clean.
+
 The protected controller contract is `quartz/static/iconoplasm/collection-feed.test.js`. It covers loading boundaries, request joining and cancellation, feed semantics, keyboard traversal, forward and backward recycling, the mounted-card and payload caps after 100+ batches, retry behavior, and catalog snapshot changes.
 
 ## Gallery Card Freshness
