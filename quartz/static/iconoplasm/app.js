@@ -15,6 +15,7 @@ import {
   normalizeEmulsionFamilyId,
 } from "./emulsion-favorites.js?v=20260730-module-cache"
 import { createCollectionFeedController } from "./collection-feed.js?v=20260730-module-cache"
+import { buildIconoplasmCollectionVisibleUrl } from "./iconoplasm-collection-route-state.js?v=20260801-clean-visible-url"
 import {
   createWebsiteGuestDiscoveryStore,
   WEBSITE_GUEST_DISCOVERY_MAX_ENTRIES,
@@ -7567,7 +7568,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
     function updateFeedHistory(snapshot) {
       latestFeedSnapshot = snapshot
-      writeCollectionUrl(false)
+      writeCollectionHistory(false)
     }
 
     function syncCrawlableNextLink(payload, segment) {
@@ -7670,32 +7671,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
     }
 
-    function writeCollectionUrl(push) {
-      var url = new URL(window.location.href)
-      url.searchParams.set("order", galleryState.order)
-      if (galleryState.seed) url.searchParams.set("seed", galleryState.seed)
-      else url.searchParams.delete("seed")
-      if (galleryState.sharedDiscoveries) url.searchParams.set("scope", "shared")
-      else url.searchParams.delete("scope")
+    function writeCollectionHistory(push) {
       var snapshot = snapshotHomeState()
-      url.searchParams.set("page", String(snapshot.page || 1))
-      if (snapshot.cursor) url.searchParams.set("after", snapshot.cursor)
-      else url.searchParams.delete("after")
-      url.searchParams.set("offset", String(Math.max(0, Number(snapshot.offset || 0) || 0)))
-      url.searchParams.delete("cursor")
-      if (snapshot.anchorGene) url.searchParams.set("anchor", snapshot.anchorGene)
-      else url.searchParams.delete("anchor")
-      if (snapshot.anchorGene) {
-        url.searchParams.set("anchorOffset", String(Math.round(Number(snapshot.anchorTop || 0))))
-      } else {
-        url.searchParams.delete("anchorOffset")
-      }
       var state = Object.assign({}, window.history.state || {}, {
         iconoplasm: true,
         iconoplasmPage: "home",
         iconoplasmHome: snapshot,
       })
-      window.history[push ? "pushState" : "replaceState"](state, "", url.pathname + url.search)
+      var visibleUrl = buildIconoplasmCollectionVisibleUrl(window.location.href, {
+        order: galleryState.order,
+        defaultOrder: useClassicGallery ? GALLERY_DEFAULT_ORDER : HOME_COLLECTION_DEFAULT_ORDER,
+        scope: activeScope(),
+        seed: galleryState.seed,
+      })
+      window.history[push ? "pushState" : "replaceState"](state, "", visibleUrl)
     }
 
     function resetCollection(pushHistory) {
@@ -7710,7 +7699,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       latestFeedSnapshot = { page: 1, cursor: "", offset: 0, anchorGene: "", anchorTop: 0 }
       syncOrderOptions()
       syncCollectionChrome()
-      if (pushHistory) writeCollectionUrl(true)
+      if (pushHistory) writeCollectionHistory(true)
       var startOffset = Math.max(0, Number((restoreState && restoreState.offset) || 0) || 0)
       var startCursor = String((restoreState && restoreState.cursor) || "")
       var startPage = Math.max(1, Number((restoreState && restoreState.page) || 1) || 1)
