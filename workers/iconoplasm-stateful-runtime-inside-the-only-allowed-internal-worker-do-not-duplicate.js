@@ -45,6 +45,10 @@ import ICONOPLASM_PUBLISHER_RELEASE from "../iconoplasm-extension/publisher-rele
 import ICONOPLASM_CANDIDATE_CONTRACT from "../iconoplasm-extension/candidate-contract.json" with { type: "json" }
 import "../shared/iconoplasm-card/shared-card-runtime.js"
 
+// ARCHITECTURE FENCE [IPD-009]: canonical public gene reads stay cold-safe
+// inside this existing state owner. Extracted modules may narrow this file's
+// responsibilities, but may not create a second Worker, proxy, or state owner.
+
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const ICONOPLASM_CANONICAL_ORIGIN = `https://${ICONOPLASM_HOST}`
 // One notification can spend three external subrequests (portrait, DM channel,

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "topologyId": "iconoplasm-single-state-owner-2026",
+  "architectureFence": "IPD-009",
+  "protectedEntrypoints": [
+    {
+      "path": "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
+      "role": "Cloudflare Worker composition and dispatch boundary",
+      "cloudflareScript": "geneguessr-api",
+      "stateOwner": true,
+      "routes": ["iconoplasm.brinedew.bio/*"]
+    },
+    {
+      "path": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+      "role": "Iconoplasm stateful runtime inside the one state owner",
+      "cloudflareScript": "geneguessr-api",
+      "stateOwner": true,
+      "routes": ["iconoplasm.brinedew.bio/*"]
+    }
+  ],
+  "wranglerConfig": "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+  "staticFirst": {
+    "assetsDirectory": "./public-iconoplasm-edge",
+    "dynamicInvocationCount": 1,
+    "staticAssetsBypassWorker": true,
+    "dynamicMissOwner": "geneguessr-api"
+  },
+  "stateOwner": {
+    "cloudflareScript": "geneguessr-api",
+    "durableObjectsAndQueuesRemainHere": true,
+    "publicProxyAllowed": false,
+    "serviceBindingHopForNormalPublicReads": false
+  },
+  "extractionRoot": "workers/iconoplasm",
+  "naming": {
+    "protectedPrefix": "the-only-allowed-",
+    "protectedSuffix": "-do-not-duplicate",
+    "internalModulePattern": "iconoplasm/<responsibility>/<resource>.js",
+    "forbiddenShortNames": ["iconoplasm-web", "public-worker", "handler.js", "utils.js"]
+  },
+  "deployOrder": [
+    "database-migrations",
+    "stateful-worker",
+    "route-reconciliation",
+    "public-edge-worker",
+    "static-pages",
+    "html-shell-cache-activation"
+  ]
+}
