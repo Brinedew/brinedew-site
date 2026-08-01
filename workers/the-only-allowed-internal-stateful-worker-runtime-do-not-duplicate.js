@@ -820,10 +820,10 @@ async function runScheduledIconoplasmMaintenance(env, ctx) {
     // the route) when there is no free-tier KV/D1 headroom.
     const galleryResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request("https://geneguessr-api/__internal/iconoplasm/refresh-gallery", {
+        new Request("https://geneguessr-api/__internal/iconoplasm/publish-gallery-dirty-shards", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: "scheduled_gallery_refresh", max_chunks: 1 }),
+          body: JSON.stringify({ reason: "scheduled_gallery_dirty_shard_publication" }),
         }),
         env,
         ctx,
@@ -836,18 +836,16 @@ async function runScheduledIconoplasmMaintenance(env, ctx) {
 }
 
 async function runScheduledIconoplasmGalleryRefresh(env, ctx) {
-  // Self-draining gallery refresh: keep processing chunks until the rebuild
-  // completes or we hit the per-invocation ceiling. Each chunk is ~5-8s on
-  // the free tier; a 30s CPU budget fits 3-4 chunks. This removes the
-  // dependency on cron delivery reliability — one cron firing drains the
-  // entire rebuild instead of needing one firing per chunk.
+  // ARCHITECTURE FENCE [IPD-010]: one cron delivery prepares at most one
+  // bounded dirty-shard step. Never add a caller-controlled drain count or a
+  // complete-catalog fallback here.
   try {
     const galleryResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request("https://geneguessr-api/__internal/iconoplasm/refresh-gallery", {
+        new Request("https://geneguessr-api/__internal/iconoplasm/publish-gallery-dirty-shards", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: "scheduled_gallery_refresh_frequent", max_chunks: 4 }),
+          body: JSON.stringify({ reason: "scheduled_gallery_dirty_shard_publication_frequent" }),
         }),
         env,
         ctx,

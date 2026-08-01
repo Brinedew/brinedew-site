@@ -740,11 +740,11 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_gallery.publish_status",
   ),
   adminApiContract(
-    "admin_gallery_refresh",
-    "/gallery/refresh",
+    "admin_gallery_dirty_shard_publication",
+    "/gallery/publish-dirty-shards",
     POST,
-    "admin_gallery_refresh",
-    "admin_gallery.refresh",
+    "admin_gallery_dirty_shard_publication",
+    "admin_gallery.publish_dirty_shards",
   ),
   adminApiContract("admin_gallery", "/gallery", GET, "admin_gallery", "admin_gallery.list"),
   ...[
@@ -847,11 +847,11 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "internal_vote_projection_refresh",
   }),
   iconoplasmApiContract({
-    id: "internal_gallery_refresh",
-    match: exact("/__internal/iconoplasm/refresh-gallery"),
+    id: "internal_gallery_dirty_shard_publication",
+    match: exact("/__internal/iconoplasm/publish-gallery-dirty-shards"),
     methods: POST,
     auth: "internal-stateful-worker",
-    budgetFamily: "internal_gallery_refresh",
+    budgetFamily: "internal_gallery_dirty_shard_publication",
   }),
   iconoplasmApiContract({
     id: "internal_sync_finalization",

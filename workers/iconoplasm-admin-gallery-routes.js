@@ -44,31 +44,22 @@ export function createIconoplasmAdminGalleryHandlers(services) {
     return done("admin_gallery_publish_status", json(await fetchPublishStatus(env), 200, NO_STORE))
   }
 
-  async function refresh({ request, env, done }) {
+  async function publishDirtyShards({ request, env, done }) {
     if (!(await isAdmin(request, env)))
-      return done("admin_gallery_refresh_403", json({ error: "Unauthorized" }, 403))
+      return done("admin_gallery_dirty_shard_publication_403", json({ error: "Unauthorized" }, 403))
     if (!env.KV)
-      return done("admin_gallery_refresh_500", json({ error: "KV binding missing" }, 500))
+      return done(
+        "admin_gallery_dirty_shard_publication_500",
+        json({ error: "KV binding missing" }, 500),
+      )
     if (!env.ICONOPLASM_DB)
       return done(
-        "admin_gallery_refresh_500",
+        "admin_gallery_dirty_shard_publication_500",
         json({ error: "ICONOPLASM_DB binding missing" }, 500),
       )
-
-    let payload = {}
-    try {
-      payload = (await request.json()) || {}
-    } catch {
-      payload = {}
-    }
-    const chunkOverride = Number.parseInt(String(payload?.chunk_size ?? ""), 10)
-    const refreshEnv =
-      Number.isFinite(chunkOverride) && chunkOverride > 0
-        ? { ...env, ICONOPLASM_CARD_CATALOG_REBUILD_CHUNK_SIZE: String(chunkOverride) }
-        : env
     let result
     try {
-      result = { ok: true, ...(await invalidateGalleryCache(refreshEnv)) }
+      result = { ok: true, ...(await invalidateGalleryCache(env)) }
     } catch (error) {
       result = {
         ok: false,
@@ -77,8 +68,11 @@ export function createIconoplasmAdminGalleryHandlers(services) {
         error: sanitizeText(String(error?.message || error), 500),
       }
     }
-    const status = await fetchPublishStatus(refreshEnv)
-    return done("admin_gallery_refresh", json({ ...result, publish_status: status }, 200, NO_STORE))
+    const status = await fetchPublishStatus(env)
+    return done(
+      "admin_gallery_dirty_shard_publication",
+      json({ ...result, publish_status: status }, 200, NO_STORE),
+    )
   }
 
   async function list({ request, env, done }) {
@@ -117,6 +111,6 @@ export function createIconoplasmAdminGalleryHandlers(services) {
   return Object.freeze({
     "admin_gallery.list": list,
     "admin_gallery.publish_status": publishStatus,
-    "admin_gallery.refresh": refresh,
+    "admin_gallery.publish_dirty_shards": publishDirtyShards,
   })
 }

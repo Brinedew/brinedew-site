@@ -62,8 +62,8 @@ test("gallery handler registry is immutable and domain-complete", () => {
   assert.equal(Object.isFrozen(handlers), true)
   assert.deepEqual(Object.keys(handlers).sort(), [
     "admin_gallery.list",
+    "admin_gallery.publish_dirty_shards",
     "admin_gallery.publish_status",
-    "admin_gallery.refresh",
   ])
 })
 
@@ -121,7 +121,7 @@ test("gallery list executes HEAD through the same normalized bounded query", asy
   })
 })
 
-test("gallery refresh scopes chunk overrides and reports safe publication refusal", async () => {
+test("dirty-shard publication ignores caller work sizing and reports safe refusal", async () => {
   const invalidationEnvs = []
   const statusEnvs = []
   const refusal = Object.assign(new Error("write budget exhausted"), {
@@ -139,16 +139,15 @@ test("gallery refresh scopes chunk overrides and reports safe publication refusa
       },
     }),
   )
-  const response = await responseFrom(handlers["admin_gallery.refresh"], {
+  const response = await responseFrom(handlers["admin_gallery.publish_dirty_shards"], {
     method: "POST",
-    path: "/api/iconoplasm/admin/gallery/refresh",
+    path: "/api/iconoplasm/admin/gallery/publish-dirty-shards",
     body: { chunk_size: 37 },
   })
   const payload = await response.json()
 
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(invalidationEnvs[0].ICONOPLASM_CARD_CATALOG_REBUILD_CHUNK_SIZE, "37")
   assert.equal(statusEnvs[0], invalidationEnvs[0])
   assert.equal(payload.ok, false)
   assert.equal(payload.skipped, true)

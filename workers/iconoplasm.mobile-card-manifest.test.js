@@ -38,6 +38,9 @@ class FakeStatement {
   }
 
   async first() {
+    if (this.sql.includes("ORDER BY id DESC") && this.sql.includes("icono_publish_events")) {
+      return { id: 100, created_at: this.db.maxEventAt }
+    }
     if (this.sql.includes("FROM icono_gene_catalog")) {
       const symbol = String(this.args[0] || "")
         .trim()
@@ -63,6 +66,15 @@ class FakeStatement {
   }
 
   async all() {
+    if (
+      this.sql.includes("SELECT DISTINCT gene_symbol") &&
+      this.sql.includes("icono_publish_events")
+    ) {
+      const limit = Number(this.args[this.args.length - 1] || 1)
+      return {
+        results: this.db.changedSymbols.slice(0, limit).map((gene_symbol) => ({ gene_symbol })),
+      }
+    }
     if (
       this.sql.includes("FROM icono_gene_catalog gc") &&
       this.sql.includes("LEFT JOIN icono_gene_essence ge")
@@ -120,12 +132,20 @@ class FakeStatement {
   }
 
   async run() {
+    if (
+      this.sql.includes("icono_published_gene_routes") ||
+      this.sql.includes("icono_card_catalog_publication_audit")
+    ) {
+      return { success: true, meta: { changes: 0 } }
+    }
     throw new Error(`Unexpected SQL in fake DB run(): ${this.sql}`)
   }
 }
 
 class FakeIconoplasmDb {
   constructor() {
+    this.changedSymbols = []
+    this.maxEventAt = "2026-05-10 00:00:00"
     this.catalog = new Map([
       [
         "ERBB2",
@@ -352,6 +372,67 @@ function putShardedCardCatalogArtifact(
   }
 }
 
+function putContentAddressedCardCatalogBaseline(
+  kvStore,
+  symbols = ["ERBB2", "INS", "PTEN"],
+  version = "test-vm-version",
+) {
+  const cards = symbols.map((symbol) =>
+    completeMobileCardVM(symbol, version, "published_card_catalog"),
+  )
+  const contentHash = `test-baseline-${version}`
+  const shardKey = `iconoplasm:card-catalog-shard:${contentHash}`
+  kvStore.set(
+    shardKey,
+    JSON.stringify({
+      schema: "iconoplasm.cardCatalog.v1",
+      storage: "kv_card_catalog_content_addressed_shards",
+      content_hash: contentHash,
+      cards,
+    }),
+  )
+  kvStore.set(
+    `iconoplasm:card-catalog:${version}`,
+    JSON.stringify({
+      schema: "iconoplasm.cardCatalog.v1",
+      build_revision: 2,
+      artifact_version: version,
+      snapshot_version: version,
+      artifact_validated_at: "2026-05-09T00:00:00.000Z",
+      content_hash: version,
+      source: "published_card_catalog",
+      storage: "kv_card_catalog_content_addressed_shards",
+      shard_size: 750,
+      shard_count: 1,
+      catalog_gene_count: cards.length,
+      card_count: cards.length,
+      shards: [
+        {
+          key: shardKey,
+          index: 0,
+          card_count: cards.length,
+          content_hash: contentHash,
+          first_symbol: cards[0].symbol,
+          last_symbol: cards[cards.length - 1].symbol,
+        },
+      ],
+    }),
+  )
+  kvStore.set("iconoplasm:gallery-version", JSON.stringify({ current: version }))
+  kvStore.set(
+    "iconoplasm:card-catalog-publish-watermark:v1",
+    JSON.stringify({
+      schema: "iconoplasm.cardCatalogPublishWatermark.v1",
+      artifact_version: version,
+      watermark_event_at: "2026-05-09 00:00:00",
+      watermark_event_id: 100,
+      card_count: cards.length,
+      catalog_gene_count: cards.length,
+      published_at: "2026-05-09T00:00:00.000Z",
+    }),
+  )
+}
+
 function putCatalogResolveArtifact(
   kvStore,
   genes = [
@@ -531,11 +612,13 @@ function completeMobileCardVM(
 
 test("gallery invalidation reuses the card catalog artifact when public card material is unchanged", async () => {
   const kvStore = new Map()
+  putContentAddressedCardCatalogBaseline(kvStore)
   const putKeys = []
+  const db = new FakeIconoplasmDb()
+  db.maxEventAt = "2026-05-09 00:00:00"
   const env = buildEnv({
     kvStore,
-    cardArtifact: null,
-    version: "old-random-version",
+    db,
     onKvPut(key) {
       putKeys.push(key)
     },
@@ -543,15 +626,9 @@ test("gallery invalidation reuses the card catalog artifact when public card mat
 
   const first = await invalidateIconoplasmGalleryCacheForTest(env)
 
-  assert.match(first.version, /^ccv1-[a-f0-9]{32}$/)
-  assert.equal(first.card_catalog.reused_existing, false)
-  // Content-addressed: one shard blob (3 genes < shard size), one manifest, one flip.
-  assert.equal(putKeys.filter((key) => key.startsWith("iconoplasm:card-catalog-shard:")).length, 1)
-  assert.equal(
-    putKeys.filter((key) => key === `iconoplasm:card-catalog:${first.version}`).length,
-    1,
-  )
-  assert.equal(putKeys.filter((key) => key === "iconoplasm:gallery-version").length, 1)
+  assert.equal(first.version, "test-vm-version")
+  assert.equal(first.card_catalog.reused_existing, true)
+  assert.equal(putKeys.length, 0)
 
   const firstPutCount = putKeys.length
   const second = await invalidateIconoplasmGalleryCacheForTest(env)
@@ -564,12 +641,15 @@ test("gallery invalidation reuses the card catalog artifact when public card mat
 
 test("gallery invalidation reserves the shared KV write budget before publishing", async () => {
   const kvStore = new Map()
+  putContentAddressedCardCatalogBaseline(kvStore)
   const events = []
   const budget = fakeCardCatalogKvWriteBudgetBinding()
+  const db = new FakeIconoplasmDb()
+  db.changedSymbols = ["ERBB2"]
+  db.published.set("ERBB2", { ...db.published.get("ERBB2"), asset_sha256: "ad".repeat(32) })
   const env = buildEnv({
     kvStore,
-    cardArtifact: null,
-    version: "old-random-version",
+    db,
     onKvPut(key) {
       events.push(`put:${key}`)
     },
@@ -581,28 +661,27 @@ test("gallery invalidation reserves the shared KV write budget before publishing
 
   const first = await invalidateIconoplasmGalleryCacheForTest(env)
 
-  // The content-addressed staging rebuild reserves the shared KV-write budget
-  // before each write: a shard-publish reservation precedes the shard blob, and a
-  // manifest-publish reservation precedes the manifest + version flip.
+  // One reservation covers the bounded dirty shard, manifest, release pointer,
+  // and watermark before any write occurs.
   const ops = budget.reservations.map((r) => r.operation)
-  assert.ok(ops.includes("card_catalog_staging_shard_publish"))
-  assert.ok(ops.includes("card_catalog_staging_manifest_publish"))
-  assert.equal(budget.reservations[0].operation, "card_catalog_staging_shard_publish")
+  assert.deepEqual(ops, ["card_catalog_dirty_shard_publication"])
   // First KV write is a content-addressed shard, and it came after a reservation.
   assert.match(events[0], /^put:iconoplasm:card-catalog-shard:/)
-  assert.equal(first.card_catalog.rebuild_complete, true)
+  assert.equal(first.card_catalog.dirty_shard_publication, true)
 })
 
 test("gallery invalidation fails closed before KV puts when the shared write budget is exhausted", async () => {
   const kvStore = new Map()
+  putContentAddressedCardCatalogBaseline(kvStore)
   const putKeys = []
   // dailyLimit 1 is below the first chunk's shard-publish reservation, so the
   // budget gate trips before any KV write happens.
   const budget = fakeCardCatalogKvWriteBudgetBinding({ dailyLimit: 1 })
+  const db = new FakeIconoplasmDb()
+  db.changedSymbols = ["ERBB2"]
   const env = buildEnv({
     kvStore,
-    cardArtifact: null,
-    version: "old-random-version",
+    db,
     onKvPut(key) {
       putKeys.push(key)
     },
@@ -820,7 +899,10 @@ test("admin card catalog publish refuses symbol-scoped artifacts", async () => {
 test("admin card catalog publish preserves the molecular companion fields used by existing card renderers", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const kvStore = new Map()
-  const env = buildEnv({ kvStore, cardArtifact: null })
+  putContentAddressedCardCatalogBaseline(kvStore)
+  const db = new FakeIconoplasmDb()
+  db.changedSymbols = ["ERBB2", "INS", "PTEN"]
+  const env = buildEnv({ kvStore, db })
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
@@ -862,6 +944,9 @@ test("admin card catalog publish preserves the molecular companion fields used b
 test("published cards and print-copy payloads keep the HGNC gene name when UniProt differs", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const kvStore = new Map()
+  putContentAddressedCardCatalogBaseline(kvStore)
+  const db = new FakeIconoplasmDb()
+  db.changedSymbols = ["PTEN"]
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
@@ -872,7 +957,7 @@ test("published cards and print-copy payloads keep the HGNC gene name when UniPr
         },
         body: JSON.stringify({ scope: "catalog" }),
       }),
-      buildEnv({ kvStore, cardArtifact: null }),
+      buildEnv({ kvStore, db }),
     )
   const payload = await response.json()
 
@@ -912,6 +997,10 @@ test("published cards and print-copy payloads keep the HGNC gene name when UniPr
 
 test("admin card catalog publish does not count failed KV writes as published cards", async () => {
   resetIconoplasmRuntimeCachesForTest()
+  const kvStore = new Map()
+  putContentAddressedCardCatalogBaseline(kvStore)
+  const db = new FakeIconoplasmDb()
+  db.changedSymbols = ["ERBB2"]
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/card-vms/warm", {
@@ -923,11 +1012,10 @@ test("admin card catalog publish does not count failed KV writes as published ca
         body: JSON.stringify({ scope: "catalog" }),
       }),
       {
-        ...buildEnv(),
+        ...buildEnv({ kvStore, db }),
         KV: {
           async get(key) {
-            if (key === "iconoplasm:gallery-version") return "test-vm-version"
-            return null
+            return kvStore.has(key) ? kvStore.get(key) : null
           },
           async put() {
             throw new Error("KV write failed")
@@ -1051,25 +1139,26 @@ test("frontend mobile path uses the card catalog manifest and rejects fallback r
 })
 
 test("gallery invalidation publishes a validated card catalog before flipping the live version", () => {
-  assert.match(source, /async function runCardCatalogStagingRebuildChunk/)
+  assert.match(source, /async function publishNextCardCatalogDirtyShardStep/)
   assert.match(source, /CARD_CATALOG_ARTIFACT_SCHEMA/)
   assert.match(source, /ICONOPLASM_STARTER_GENE_SYMBOLS/)
   assert.equal(
     matchIconoplasmRouteContract("/api/iconoplasm/admin/card-vms/warm", "POST")?.route?.apiHandler,
     "admin_read_models.card_artifacts_warm",
   )
-  assert.match(source, /await warmCatalogCache\(env\)/)
-  assert.match(source, /Array\.from\(catalogCache\.bySymbol\.keys\(\)\)/)
-  // Build-before-flip invariant: the card-catalog artifact (incremental or full,
-  // via the smart publisher) must be produced before KV_GALLERY_VERSION is moved.
+  // Build-before-flip invariant: all dirty shards and the manifest are produced
+  // before KV_GALLERY_VERSION is moved.
   assert.match(
     source,
     /const cardCatalog = await publishCardCatalogArtifactSmart\(env,[\s\S]*publishGalleryVersionBarrier\(env, barrier\)/,
   )
-  // ONE publish path: the smart publisher routes cold/large/scattered deltas to
-  // the bounded, content-addressed staging rebuild — no legacy full builder.
+  // ONE routine publish path: bounded dirty shards only. Cold or mismatched
+  // baselines fail explicitly and never enter a whole-catalog fallback.
   assert.match(source, /async function publishCardCatalogArtifactSmart/)
-  assert.match(source, /return runCardCatalogStagingRebuildChunk\(env, \{/)
+  assert.match(source, /return publishNextCardCatalogDirtyShardStepWithAudit\(env, \{/)
+  assert.match(source, /CARD_CATALOG_SCHEMA_MIGRATION_REQUIRED/)
+  assert.doesNotMatch(source, /runCardCatalogStagingRebuildChunk/)
+  assert.doesNotMatch(source, /KV_CARD_CATALOG_REBUILD_CURSOR/)
   assert.match(source, /CARD_CATALOG_CONTENT_ADDRESSED_STORAGE/)
   assert.match(readModelRouteSource, /CARD_ARTIFACT_REQUIRES_FULL_CATALOG/)
   assert.match(readModelRouteSource, /published_card_catalog/)

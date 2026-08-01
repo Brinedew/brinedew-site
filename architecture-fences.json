@@ -388,6 +388,43 @@
       ]
     },
     {
+      "id": "IPD-010",
+      "title": "Routine gallery publication is dirty-shard-only",
+      "decision": "Canonical publish events prepare only their owning content-addressed card shards, in steps of at most six shards per Worker invocation, then atomically flip one manifest. Routine cron and voting paths never rebuild the complete catalog.",
+      "reason": "The fixed gene universe makes a complete-catalog rebuild unrelated to normal vote scope. The former scattered-delta fallback delayed visible votes, consumed avoidable KV operations, and made an exceptional migration mechanism look like ordinary publication.",
+      "change_control": "Dirty-symbol event windows, stable shard ownership, local insertion/removal/split behavior, one-step scheduled execution, atomic manifest and watermark order, KV budget accounting, bounded operation audits, migration fail-closed errors, naming rules, tests, instructions, and this runbook must change atomically. Never introduce a dirty-count or shard-count threshold that falls back to complete-catalog work.",
+      "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
+      "linear_issue": "B-695",
+      "additional_required_marker_categories": ["migration"],
+      "markers": [
+        {
+          "category": "instructions",
+          "file": "AGENTS.md",
+          "token": "ARCHITECTURE FENCE [IPD-010]"
+        },
+        {
+          "category": "runbook",
+          "file": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
+          "token": "ARCHITECTURE FENCE [IPD-010]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+          "token": "ARCHITECTURE FENCE [IPD-010]"
+        },
+        {
+          "category": "test",
+          "file": "workers/iconoplasm.dirty-shard-publication.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-010]"
+        },
+        {
+          "category": "migration",
+          "file": "migrations-iconoplasm/0060_card_catalog_publication_audit.sql",
+          "token": "ARCHITECTURE FENCE [IPD-010]"
+        }
+      ]
+    },
+    {
       "id": "GG-001",
       "title": "Daily targets give every gene surname one slot",
       "decision": "Automatic GeneGuessr daily selection chooses one deterministic representative per normalized gene surname, then selects and falls back only through that one-representative-per-surname sequence. Manual overrides remain explicit exceptions.",
