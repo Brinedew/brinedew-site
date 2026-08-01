@@ -123,14 +123,16 @@ test("gallery list executes HEAD through the same normalized bounded query", asy
 
 test("dirty-shard publication ignores caller work sizing and reports safe refusal", async () => {
   const publicationEnvs = []
+  const publicationOptions = []
   const statusEnvs = []
   const refusal = Object.assign(new Error("write budget exhausted"), {
     code: "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED",
   })
   const handlers = createIconoplasmAdminGalleryHandlers(
     galleryServices({
-      publishIconoplasmGalleryDirtyShards: async (env) => {
+      publishIconoplasmGalleryDirtyShards: async (env, options) => {
         publicationEnvs.push(env)
+        publicationOptions.push(options)
         throw refusal
       },
       fetchPublishStatus: async (env) => {
@@ -142,13 +144,14 @@ test("dirty-shard publication ignores caller work sizing and reports safe refusa
   const response = await responseFrom(handlers["admin_gallery.publish_dirty_shards"], {
     method: "POST",
     path: "/api/iconoplasm/admin/gallery/publish-dirty-shards",
-    body: { chunk_size: 37 },
+    body: { chunk_size: 37, reason: "manual_cost_verification" },
   })
   const payload = await response.json()
 
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("Cache-Control"), "no-store")
   assert.equal(statusEnvs[0], publicationEnvs[0])
+  assert.equal(publicationOptions[0].triggerReason, "manual_cost_verification")
   assert.equal(payload.ok, false)
   assert.equal(payload.skipped, true)
   assert.equal(payload.code, "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED")
