@@ -22906,7 +22906,7 @@ async function writeCardCatalogPublishWatermark(
     contentHash,
   } = {},
 ) {
-  if (!env?.KV?.put) return null
+  if (!env?.KV?.put) return { watermark: null, wrote: false }
   const nextVersion = String(artifactVersion || "")
   const nextEventAt = watermarkEventAt ? String(watermarkEventAt) : null
   const nextEventId = Math.max(0, Number(watermarkEventId || 0) || 0)
@@ -22922,7 +22922,7 @@ async function writeCardCatalogPublishWatermark(
     (existing.watermark_event_at || null) === nextEventAt &&
     Math.max(0, Number(existing.watermark_event_id || 0) || 0) === nextEventId
   ) {
-    return existing
+    return { watermark: existing, wrote: false }
   }
   const payload = {
     schema: "iconoplasm.cardCatalogPublishWatermark.v1",
@@ -22937,9 +22937,9 @@ async function writeCardCatalogPublishWatermark(
   try {
     await env.KV.put(KV_CARD_CATALOG_PUBLISH_WATERMARK, JSON.stringify(payload))
   } catch {
-    return null
+    return { watermark: null, wrote: false }
   }
-  return payload
+  return { watermark: payload, wrote: true }
 }
 
 async function cardCatalogChangesSinceWatermark(env, watermarkEventAt, watermarkEventId = 0) {
@@ -23186,18 +23186,32 @@ async function recordCardCatalogDirtyShardPublicationAudit(
   const dirtyShardCount =
     groups.length || Math.max(0, Number(publication.dirty_shard_count || 0) || 0)
   const completed = outcome === "completed" || outcome === "failed"
+  const cost = publication.cost && typeof publication.cost === "object" ? publication.cost : {}
+  const startedAt = publication.started_at || new Date().toISOString()
+  const startedAtMs = Date.parse(startedAt)
+  const durationMs =
+    completed && Number.isFinite(startedAtMs) ? Math.max(0, Date.now() - startedAtMs) : null
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_card_catalog_publication_audit (
        operation_id, publication_kind, baseline_version, target_version,
        after_event_at, through_event_at, after_event_id, through_event_id,
-       dirty_symbol_count, dirty_shard_count,
-       prepared_shard_count, outcome, error_code, error_message,
+       dirty_symbol_count, dirty_shard_count, prepared_shard_count,
+       trigger_reason, shards_read, shards_written,
+       kv_writes_reserved, kv_writes_used, duration_ms,
+       outcome, error_code, error_message,
        started_at, updated_at, completed_at
-     ) VALUES (?, 'dirty_shards', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP,
+     ) VALUES (?, 'dirty_shards', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               CURRENT_TIMESTAMP,
                CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END)
      ON CONFLICT(operation_id) DO UPDATE SET
        target_version = excluded.target_version,
        prepared_shard_count = excluded.prepared_shard_count,
+       trigger_reason = excluded.trigger_reason,
+       shards_read = excluded.shards_read,
+       shards_written = excluded.shards_written,
+       kv_writes_reserved = excluded.kv_writes_reserved,
+       kv_writes_used = excluded.kv_writes_used,
+       duration_ms = excluded.duration_ms,
        outcome = excluded.outcome,
        error_code = excluded.error_code,
        error_message = excluded.error_message,
@@ -23215,10 +23229,16 @@ async function recordCardCatalogDirtyShardPublicationAudit(
       Math.max(0, Number(publication.dirty_symbol_count || 0) || 0),
       dirtyShardCount,
       Math.max(0, Number(preparedShardCount || 0) || 0),
+      sanitizeText(String(publication.trigger_reason || "unspecified"), 255) || "unspecified",
+      Math.max(0, Number(cost.shards_read || 0) || 0),
+      Math.max(0, Number(cost.shards_written || 0) || 0),
+      Math.max(0, Number(cost.kv_writes_reserved || 0) || 0),
+      Math.max(0, Number(cost.kv_writes_used || 0) || 0),
+      durationMs,
       String(outcome || "started"),
       error?.code ? sanitizeText(String(error.code), 128) : null,
       error ? sanitizeText(String(error?.message || error), 500) : null,
-      publication.started_at || new Date().toISOString(),
+      startedAt,
       completed ? 1 : 0,
     )
     .run()
@@ -23233,6 +23253,12 @@ async function recordCardCatalogDirtyShardPublicationAudit(
       dirty_symbol_count: publication.dirty_symbol_count,
       dirty_shard_count: dirtyShardCount,
       prepared_shard_count: preparedShardCount,
+      trigger_reason: publication.trigger_reason || "unspecified",
+      shards_read: Math.max(0, Number(cost.shards_read || 0) || 0),
+      shards_written: Math.max(0, Number(cost.shards_written || 0) || 0),
+      kv_writes_reserved: Math.max(0, Number(cost.kv_writes_reserved || 0) || 0),
+      kv_writes_used: Math.max(0, Number(cost.kv_writes_used || 0) || 0),
+      duration_ms: durationMs,
       error_code: error?.code || null,
     }),
   )
@@ -23337,11 +23363,20 @@ async function publishNextCardCatalogDirtyShardStep(
   }
 
   const finalStep = nextGroup + stepGroups.length >= groups.length
+  const estimatedKvWrites =
+    stepGroups.length * 2 + (finalStep ? 3 + (reserveGalleryVersionWrite ? 1 : 0) : 1)
+  const cost = {
+    shards_read: Math.max(0, Number(publication.cost?.shards_read || 0) || 0),
+    shards_written: Math.max(0, Number(publication.cost?.shards_written || 0) || 0),
+    kv_writes_reserved:
+      Math.max(0, Number(publication.cost?.kv_writes_reserved || 0) || 0) + estimatedKvWrites,
+    kv_writes_used: Math.max(0, Number(publication.cost?.kv_writes_used || 0) || 0),
+  }
+  publication.cost = cost
   await reserveIconoplasmCardCatalogKvWrites(env, {
     operation: "card_catalog_dirty_shard_publication",
     artifactVersion: previousVersion,
-    estimatedKvWrites:
-      stepGroups.length * 2 + (finalStep ? 3 + (reserveGalleryVersionWrite ? 1 : 0) : 1),
+    estimatedKvWrites,
     cardCount: stepSymbols.length,
     shardCount: stepGroups.length,
   })
@@ -23363,6 +23398,7 @@ async function publishNextCardCatalogDirtyShardStep(
       )
     }
     const existingCards = await readCardCatalogShardCardsForPublication(env, shard, requestUrl)
+    cost.shards_read += 1
     const cardBySymbol = new Map()
     for (const card of existingCards) {
       const symbol = normalizeSymbol(card?.symbol || "")
@@ -23392,23 +23428,33 @@ async function publishNextCardCatalogDirtyShardStep(
     )
     const refs = []
     for (let offset = 0; offset < nextCards.length; offset += shardSize) {
-      const { ref } = await writeCardCatalogContentAddressedShard(env, {
+      const { ref, wrote } = await writeCardCatalogContentAddressedShard(env, {
         index: index + refs.length / 10,
         cards: nextCards.slice(offset, offset + shardSize),
       })
       refs.push(ref)
+      if (wrote) {
+        cost.shards_written += 1
+        cost.kv_writes_used += 1
+      }
     }
     replacementRefsByIndex[String(index)] = refs
   }
 
   const completedGroups = nextGroup + stepGroups.length
   if (completedGroups < groups.length) {
-    await writeCardCatalogDirtyShardPublication(env, {
+    const continuedCost = {
+      ...cost,
+      kv_writes_used: cost.kv_writes_used + 1,
+    }
+    const continuedPublication = {
       ...publication,
       next_group: completedGroups,
       replacement_refs_by_index: replacementRefsByIndex,
-    })
-    await recordCardCatalogDirtyShardPublicationAudit(env, publication, {
+      cost: continuedCost,
+    }
+    await writeCardCatalogDirtyShardPublication(env, continuedPublication)
+    await recordCardCatalogDirtyShardPublicationAudit(env, continuedPublication, {
       outcome: "preparing",
       preparedShardCount: completedGroups,
     })
@@ -23425,7 +23471,9 @@ async function publishNextCardCatalogDirtyShardStep(
       dirty_symbol_count: Math.max(0, Number(publication.dirty_symbol_count || 0) || 0),
       dirty_shard_count: groups.length,
       publication_operation_id: publication.operation_id,
+      publication_trigger_reason: publication.trigger_reason || "unspecified",
       prepared_shard_count: completedGroups,
+      publication_cost: continuedCost,
     }
   }
 
@@ -23433,7 +23481,10 @@ async function publishNextCardCatalogDirtyShardStep(
   const catalogGeneCount = nextRefs.reduce((sum, ref) => sum + Number(ref.card_count || 0), 0)
   const artifactVersion = await cardCatalogContentAddressedVersion(nextRefs)
   if (artifactVersion === previousVersion) {
-    if (publication.persisted) await clearCardCatalogDirtyShardPublication(env)
+    if (publication.persisted) {
+      await clearCardCatalogDirtyShardPublication(env)
+      cost.kv_writes_used += 1
+    }
     return {
       artifact_version: previousVersion,
       artifact_gene_count: catalogGeneCount,
@@ -23449,6 +23500,8 @@ async function publishNextCardCatalogDirtyShardStep(
       dirty_symbol_count: Math.max(0, Number(publication.dirty_symbol_count || 0) || 0),
       dirty_shard_count: groups.length,
       publication_operation_id: publication.operation_id,
+      publication_trigger_reason: publication.trigger_reason || "unspecified",
+      publication_cost: cost,
     }
   }
   const nextManifest = cardCatalogContentAddressedManifest({
@@ -23458,7 +23511,11 @@ async function publishNextCardCatalogDirtyShardStep(
     cardCount: catalogGeneCount,
   })
   await env.KV.put(cardCatalogArtifactStoreKey(artifactVersion), JSON.stringify(nextManifest))
-  if (publication.persisted) await clearCardCatalogDirtyShardPublication(env)
+  cost.kv_writes_used += 1
+  if (publication.persisted) {
+    await clearCardCatalogDirtyShardPublication(env)
+    cost.kv_writes_used += 1
+  }
   cardCatalogArtifactCache.version = null
   cardCatalogArtifactCache.value = null
   return {
@@ -23478,6 +23535,8 @@ async function publishNextCardCatalogDirtyShardStep(
     dirty_shard_count: groups.length,
     affected_shards: groups.length,
     publication_operation_id: publication.operation_id,
+    publication_trigger_reason: publication.trigger_reason || "unspecified",
+    publication_cost: cost,
   }
 }
 
@@ -23502,6 +23561,7 @@ async function publishCardCatalogArtifactSmart(
     reserveGalleryVersionWrite = false,
     throughEventAt = null,
     throughEventId = 0,
+    triggerReason = "unspecified",
   } = {},
 ) {
   // Routine publication has exactly one mutating strategy: prepare the shards
@@ -23587,6 +23647,7 @@ async function publishCardCatalogArtifactSmart(
   }
   const publication = {
     operation_id: crypto.randomUUID(),
+    trigger_reason: sanitizeText(String(triggerReason || "unspecified"), 255) || "unspecified",
     baseline_version: previousVersion,
     after_event_at: watermarkEventAt,
     through_event_at: throughEventAt,
@@ -23596,6 +23657,12 @@ async function publishCardCatalogArtifactSmart(
     groups,
     next_group: 0,
     replacement_refs_by_index: {},
+    cost: {
+      shards_read: 0,
+      shards_written: 0,
+      kv_writes_reserved: 0,
+      kv_writes_used: 0,
+    },
     started_at: new Date().toISOString(),
   }
   await recordCardCatalogDirtyShardPublicationAudit(env, publication, { outcome: "started" })
@@ -23608,7 +23675,7 @@ async function publishCardCatalogArtifactSmart(
   })
 }
 
-async function publishIconoplasmGalleryDirtyShards(env) {
+async function publishIconoplasmGalleryDirtyShards(env, { triggerReason = "unspecified" } = {}) {
   // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
   // Strict order matters:
   // 1. Capture the canonical-event high-water while the old manifest stays live.
@@ -23634,7 +23701,17 @@ async function publishIconoplasmGalleryDirtyShards(env) {
     reserveGalleryVersionWrite: true,
     throughEventAt: watermarkEventAt,
     throughEventId: watermarkEventId,
+    triggerReason,
   })
+  cardCatalog.publication_cost = {
+    shards_read: Math.max(0, Number(cardCatalog.publication_cost?.shards_read || 0) || 0),
+    shards_written: Math.max(0, Number(cardCatalog.publication_cost?.shards_written || 0) || 0),
+    kv_writes_reserved: Math.max(
+      0,
+      Number(cardCatalog.publication_cost?.kv_writes_reserved || 0) || 0,
+    ),
+    kv_writes_used: Math.max(0, Number(cardCatalog.publication_cost?.kv_writes_used || 0) || 0),
+  }
   // Dirty shards can span multiple bounded invocations, but the live manifest and
   // freshness watermark move only together after the final prepared shard. Events
   // arriving after the captured high-water remain pending for the next publish.
@@ -23643,7 +23720,7 @@ async function publishIconoplasmGalleryDirtyShards(env) {
   const effectiveWatermarkEventId = cardCatalog.watermark_event_id_override ?? watermarkEventId
   const recordWatermark = async () => {
     if (skipWatermark) return
-    await writeCardCatalogPublishWatermark(env, {
+    const result = await writeCardCatalogPublishWatermark(env, {
       artifactVersion: cardCatalog.artifact_version,
       watermarkEventAt: effectiveWatermarkEventAt,
       watermarkEventId: effectiveWatermarkEventId,
@@ -23651,6 +23728,7 @@ async function publishIconoplasmGalleryDirtyShards(env) {
       catalogGeneCount: cardCatalog.catalog_gene_count,
       contentHash: cardCatalog.content_hash || "",
     })
+    if (result.wrote) cardCatalog.publication_cost.kv_writes_used += 1
   }
   const syncPublishedRoutes = async () => {
     if (skipWatermark || !effectiveWatermarkEventAt) return
@@ -23674,6 +23752,8 @@ async function publishIconoplasmGalleryDirtyShards(env) {
         through_event_id: effectiveWatermarkEventId,
         dirty_symbol_count: cardCatalog.dirty_symbol_count,
         dirty_shard_count: cardCatalog.dirty_shard_count,
+        trigger_reason: cardCatalog.publication_trigger_reason || triggerReason,
+        cost: cardCatalog.publication_cost,
       },
       {
         outcome,
@@ -23709,6 +23789,7 @@ async function publishIconoplasmGalleryDirtyShards(env) {
         cardCount: cardCatalog.artifact_gene_count,
         shardCount: 0,
       })
+  if (galleryVersionKvWriteBudget) cardCatalog.publication_cost.kv_writes_reserved += 1
   barrier.card_catalog = {
     artifact_version: cardCatalog.artifact_version,
     content_hash: cardCatalog.content_hash || "",
@@ -23720,6 +23801,7 @@ async function publishIconoplasmGalleryDirtyShards(env) {
   let version
   try {
     version = await publishGalleryVersionBarrier(env, barrier)
+    cardCatalog.publication_cost.kv_writes_used += 1
     // Route membership and the watermark advance only after the version flip.
     // This preserves one publication boundary without putting mutable vote state
     // into the route table.
@@ -23733,8 +23815,8 @@ async function publishIconoplasmGalleryDirtyShards(env) {
   return { version, card_catalog: cardCatalog }
 }
 
-export async function publishIconoplasmGalleryDirtyShardsForTest(env) {
-  return publishIconoplasmGalleryDirtyShards(env)
+export async function publishIconoplasmGalleryDirtyShardsForTest(env, options) {
+  return publishIconoplasmGalleryDirtyShards(env, options)
 }
 
 async function syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(
@@ -23770,7 +23852,9 @@ async function syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(
     skipVisionRollups,
     skipDashboard,
   })
-  const publication = await publishIconoplasmGalleryDirtyShards(env)
+  const publication = await publishIconoplasmGalleryDirtyShards(env, {
+    triggerReason: "admin_read_model_sync",
+  })
   return { ...result, card_catalog: publication.card_catalog }
 }
 
@@ -26811,12 +26895,19 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       )
     ) {
       // Exactly one bounded dirty-shard step per invocation. A caller cannot
-      // smuggle `max_chunks` into a CPU/KV burst; cron and manual refresh share
+      // smuggle `max_chunks` into a CPU/KV burst; cron and manual publication share
       // the same cost boundary.
-      await parseJsonBody(request)
+      const payload = await parseJsonBody(request)
       let lastResult
       try {
-        lastResult = { ok: true, ...(await publishIconoplasmGalleryDirtyShards(meteredEnv)) }
+        lastResult = {
+          ok: true,
+          ...(await publishIconoplasmGalleryDirtyShards(meteredEnv, {
+            triggerReason:
+              sanitizeText(String(payload?.reason || ""), 255) ||
+              "internal_gallery_dirty_shard_publication",
+          })),
+        }
       } catch (error) {
         console.error(
           "[CRON] gallery dirty-shard publication failed:",
@@ -27200,7 +27291,9 @@ async function publishCatalogArtifact(env) {
   catalogCache.symbolByUniprot = new Map()
   catalogCache.symbolByAlias = new Map()
   catalogCache.loadedAt = 0
-  await publishIconoplasmGalleryDirtyShards(env)
+  await publishIconoplasmGalleryDirtyShards(env, {
+    triggerReason: "catalog_artifact_publication",
+  })
 
   return {
     ok: true,

@@ -421,6 +421,11 @@
           "category": "migration",
           "file": "migrations-iconoplasm/0060_card_catalog_publication_audit.sql",
           "token": "ARCHITECTURE FENCE [IPD-010]"
+        },
+        {
+          "category": "migration",
+          "file": "migrations-iconoplasm/0061_card_catalog_publication_audit_cost_fields.sql",
+          "token": "ARCHITECTURE FENCE [IPD-010]"
         }
       ]
     },

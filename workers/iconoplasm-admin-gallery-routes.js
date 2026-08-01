@@ -59,7 +59,15 @@ export function createIconoplasmAdminGalleryHandlers(services) {
       )
     let result
     try {
-      result = { ok: true, ...(await publishIconoplasmGalleryDirtyShards(env)) }
+      const payload = await request.json().catch(() => ({}))
+      result = {
+        ok: true,
+        ...(await publishIconoplasmGalleryDirtyShards(env, {
+          triggerReason:
+            sanitizeText(String(payload?.reason || ""), 255) ||
+            "admin_gallery_dirty_shard_publication",
+        })),
+      }
     } catch (error) {
       result = {
         ok: false,
