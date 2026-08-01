@@ -8,6 +8,14 @@ const worker = readFileSync(
   ),
   "utf8",
 )
+const routeContract = readFileSync(
+  new URL("../workers/iconoplasm-route-contract.js", import.meta.url),
+  "utf8",
+)
+const readModelRoutes = readFileSync(
+  new URL("../workers/iconoplasm-admin-read-model-routes.js", import.meta.url),
+  "utf8",
+)
 const workflow = readFileSync(
   new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
   "utf8",
@@ -75,8 +83,23 @@ includesOrFail(
 )
 includesOrFail(
   worker,
-  "CARD_CATALOG_ARTIFACT_FULL_PUBLISH_KV_WRITE_HEADROOM",
-  "Worker must reserve enough KV write headroom for a full card-catalog publish.",
+  "CARD_CATALOG_DIRTY_SHARD_PUBLICATION_MAX_KV_WRITES",
+  "Worker must reserve the bounded dirty-shard publication step ceiling.",
+)
+doesNotMatchOrFail(
+  worker,
+  /CARD_CATALOG_ARTIFACT_FULL_PUBLISH_KV_WRITE_HEADROOM|async function publishCardCatalogArtifact\(/,
+  "Worker must not retain a whole-catalog routine publication path or budget name.",
+)
+doesNotMatchOrFail(
+  routeContract,
+  /\/card-vms\/warm|admin_read_models\.card_artifacts_warm/,
+  "Route contract must not expose the retired whole-catalog-shaped warm endpoint.",
+)
+doesNotMatchOrFail(
+  readModelRoutes,
+  /CARD_ARTIFACT_REQUIRES_FULL_CATALOG|invalidate_gallery|invalidateGalleryCache/,
+  "Read-model routes must use explicit dirty-shard publication naming.",
 )
 includesOrFail(
   worker,
