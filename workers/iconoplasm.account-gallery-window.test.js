@@ -635,6 +635,10 @@ test("image-only account gallery window projects compact cards from the canonica
   assert.doesNotMatch(response.headers.get("Server-Timing") || "", /acct_portrait_refs/)
 })
 
+// ARCHITECTURE FENCE [IPD-011]
+// Keep both discarded sources stale on purpose. This test must fail if an agent
+// restores either the discovery-row SHA or the legacy published-portrait-ref
+// snapshot as the image-only account gallery authority.
 test("image-only account gallery ignores stale discovery and legacy portrait-ref identities", async () => {
   const db = new FakeDb()
   const staleRowSha = "95".repeat(32)

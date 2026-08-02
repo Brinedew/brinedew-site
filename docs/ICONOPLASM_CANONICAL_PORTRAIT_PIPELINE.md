@@ -315,3 +315,43 @@ When D1 had new canonical B but the public lead card still came from old artifac
 - B could be hidden from candidate thumbnails because it was current in D1
 
 That makes the user see "old canonical duplicated as a candidate" and "the candidate I voted on disappeared." The real failure is not candidate deletion. It is D1/artifact split-brain.
+
+## 2026-08-02 B-700 Signed-In Account Gallery Split
+
+**ARCHITECTURE FENCE [IPD-011]** protects the account-gallery seam that is easy
+to mistake for a harmless image-only optimization.
+
+Observed visual evidence in one logged-in Edge session:
+
+- homepage ZNF25: old light-purple skin;
+- `/gene/ZNF25`: current dark-gray skin;
+- a fresh cache-busting homepage navigation still showed the old image.
+
+That last observation rejected the ordinary stale-browser-cache hypothesis. It
+also explained why guest and substitute-browser checks were misleading: they
+did not traverse the signed-in `account-gallery-window?view=image-only` branch.
+
+The branch had three potential portrait identities:
+
+1. the discovery row's historical `asset_sha256`;
+2. the separately versioned `publishedPortraitRefs(...)` snapshot; and
+3. the published card VM selected by `KV_GALLERY_VERSION`.
+
+Only the third participates in routine dirty-shard publication and represents
+the browse snapshot that the homepage is supposed to display. Keeping URL and
+SHA atomic inside option 2 was insufficient: an internally consistent old URL
+and old SHA are still the wrong canonical portrait. The bug was architectural,
+not a malformed response.
+
+Commit `afd6f6eb` removed the image-only early return and made both account
+variants load the same bounded set of card VMs from the current published card
+artifact. The compact response is derived from those VMs. Discovery rows remain
+the authority for account membership/order only.
+
+Rollback rule: do not restore a separate portrait snapshot to make the
+image-only response cheaper. If performance changes are needed, retain the
+single `KV_GALLERY_VERSION` and `readPublishedCardCatalogArtifact(...)` path,
+then optimize its indexed shard reads or projection. Acceptance requires a
+logged-in same-session visual comparison of the affected homepage card and gene
+page; API payloads, hashes, D1 rows, and guest-browser screenshots are supporting
+evidence, not substitutes for the user-visible outcome.
