@@ -6,7 +6,9 @@ const args = new Set(process.argv.slice(2))
 const apply = args.has("--apply")
 const mapFlag = process.argv.indexOf("--map")
 const mapPath = resolve(
-  mapFlag >= 0 ? process.argv[mapFlag + 1] : "../Iconoplasm/artifacts/emulsion-identity-cutover/website-asset-emulsion-map.json",
+  mapFlag >= 0
+    ? process.argv[mapFlag + 1]
+    : "../Iconoplasm/artifacts/emulsion-identity-cutover/website-asset-emulsion-map.json",
 )
 const artifactDir = resolve("artifacts/b-699-emulsion-identity-cutover")
 const sqlDir = resolve(artifactDir, "sql")
@@ -16,8 +18,12 @@ const rows = JSON.parse(readFileSync(mapPath, "utf8"))
 if (!Array.isArray(rows) || rows.length === 0) throw new Error("The asset identity map is empty")
 const seen = new Set()
 for (const row of rows) {
-  const gene = String(row?.gene_symbol || "").trim().toUpperCase()
-  const asset = String(row?.asset_sha256 || "").trim().toLowerCase()
+  const gene = String(row?.gene_symbol || "")
+    .trim()
+    .toUpperCase()
+  const asset = String(row?.asset_sha256 || "")
+    .trim()
+    .toLowerCase()
   const oldId = String(row?.old_vision_id || "").trim()
   const newId = String(row?.canonical_vision_id || "").trim()
   if (!/^[A-Z0-9-]{1,32}$/.test(gene) || !/^[a-f0-9]{64}$/.test(asset)) {
@@ -26,11 +32,17 @@ for (const row of rows) {
   if (!/^anima-v1-[1-9][0-9]*$/.test(oldId) || !/^anima-v1-[1-9][0-9]*$/.test(newId)) {
     throw new Error(`Invalid emulsion mapping: ${oldId} -> ${newId}`)
   }
-  if (oldId === newId) throw new Error(`Unchanged row is not allowed in the transfer map: ${gene}/${asset}`)
+  if (oldId === newId)
+    throw new Error(`Unchanged row is not allowed in the transfer map: ${gene}/${asset}`)
   const key = `${gene}|${asset}`
   if (seen.has(key)) throw new Error(`Duplicate asset key: ${key}`)
   seen.add(key)
-  Object.assign(row, { gene_symbol: gene, asset_sha256: asset, old_vision_id: oldId, canonical_vision_id: newId })
+  Object.assign(row, {
+    gene_symbol: gene,
+    asset_sha256: asset,
+    old_vision_id: oldId,
+    canonical_vision_id: newId,
+  })
   if (Object.keys(row).some((keyName) => /artist|name|tag/i.test(keyName))) {
     throw new Error("Private artist identity fields are forbidden in the Website migration map")
   }
@@ -145,7 +157,19 @@ writeFileSync(cleanupPath, "DROP TABLE icono_emulsion_identity_cutover_b699;\n")
 const runWrangler = (filePath) => {
   return execFileSync(
     process.execPath,
-    [resolve("node_modules/wrangler/bin/wrangler.js"), "d1", "execute", "iconoplasm", "--remote", "--config", configPath, "--file", filePath, "--json", "--yes"],
+    [
+      resolve("node_modules/wrangler/bin/wrangler.js"),
+      "d1",
+      "execute",
+      "iconoplasm",
+      "--remote",
+      "--config",
+      configPath,
+      "--file",
+      filePath,
+      "--json",
+      "--yes",
+    ],
     { cwd: resolve("."), encoding: "utf8", timeout: 120_000, maxBuffer: 16 * 1024 * 1024 },
   )
 }
@@ -159,10 +183,20 @@ const parseWranglerJson = (output) => {
 const report = { apply, map_path: mapPath, map_rows: rows.length, sql_files: files.length + 2 }
 if (apply) {
   const outputs = []
-  for (const filePath of files) outputs.push({ file: filePath, result: parseWranglerJson(runWrangler(filePath)) })
+  for (const filePath of files)
+    outputs.push({ file: filePath, result: parseWranglerJson(runWrangler(filePath)) })
   const validation = parseWranglerJson(runWrangler(validatePath))
-  const values = Object.fromEntries((validation?.[0]?.results || []).map((row) => [row.check_name, Number(row.value)]))
-  if (values.map_rows !== rows.length || values.asset_mismatches || values.vote_mismatches || values.summary_mismatches || values.event_mismatches || values.old_favorites) {
+  const values = Object.fromEntries(
+    (validation?.[0]?.results || []).map((row) => [row.check_name, Number(row.value)]),
+  )
+  if (
+    values.map_rows !== rows.length ||
+    values.asset_mismatches ||
+    values.vote_mismatches ||
+    values.summary_mismatches ||
+    values.event_mismatches ||
+    values.old_favorites
+  ) {
     throw new Error(`D1 validation failed: ${JSON.stringify(values)}`)
   }
   outputs.push({ file: validatePath, result: validation })

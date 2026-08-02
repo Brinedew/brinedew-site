@@ -4426,11 +4426,15 @@ async function createGenerationRequest(
     if (animaSlot && !iconoplasmAnimaEmulsionSlotIsPreallocated(animaSlot)) {
       return {
         ok: false,
-        error: "This emulsion ID is not assigned. Refresh the picker and choose an available emulsion.",
+        error:
+          "This emulsion ID is not assigned. Refresh the picker and choose an available emulsion.",
       }
     }
     if (!optionRow && !animaSlot) {
-      return { ok: false, error: "This emulsion is not available. Refresh the picker and choose again." }
+      return {
+        ok: false,
+        error: "This emulsion is not available. Refresh the picker and choose again.",
+      }
     }
   }
   const insertResp = await env.ICONOPLASM_DB.prepare(
