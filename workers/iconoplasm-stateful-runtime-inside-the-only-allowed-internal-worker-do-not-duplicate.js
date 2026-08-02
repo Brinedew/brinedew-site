@@ -4087,24 +4087,68 @@ function mapGeneDiscoveryRow(row) {
   }
 }
 
-function accountGalleryImageOnlyCard(row, env, publishedPortraitRef = null) {
+function accountGalleryImageOnlyCard(row, env, publishedCard = null) {
   const symbol = normalizeSymbol(row?.gene_symbol || "")
   if (!symbol) return null
+  const publishedPayload =
+    publishedCard?.payload && typeof publishedCard.payload === "object"
+      ? publishedCard.payload
+      : null
+  const publishedPayloadPortrait =
+    publishedPayload?.portrait && typeof publishedPayload.portrait === "object"
+      ? publishedPayload.portrait
+      : null
+  const publishedVmPortrait =
+    publishedCard?.portrait && typeof publishedCard.portrait === "object"
+      ? publishedCard.portrait
+      : null
   const base = portraitBase(new URL("https://iconoplasm.brinedew.bio/"), env)
-  const publishedAsset = portraitAssetRef(base, publishedPortraitRef?.asset_sha256)
+  const publishedAsset = portraitAssetRef(
+    base,
+    publishedPayloadPortrait?.asset_sha256 || publishedVmPortrait?.asset_sha256,
+  )
   const publishedAssetSha = normalizeSha256(publishedAsset?.asset_sha256 || "")
-  const refHeroUrl = portraitAssetUrl(publishedAsset, "full") || ""
-  const refMediumUrl = portraitAssetUrl(publishedAsset, "medium") || ""
-  const assetSha = normalizeSha256(row?.asset_sha256 || "")
-  const assetMediumUrl = assetSha ? adminPortraitUrl(base, assetSha, "medium") : ""
-  const mediumUrl = refMediumUrl || assetMediumUrl || refHeroUrl
+  const refHeroUrl =
+    portraitAssetUrl(publishedAsset, "full") ||
+    sanitizeText(
+      publishedPayloadPortrait?.hero_url ||
+        publishedPayloadPortrait?.full_url ||
+        publishedVmPortrait?.full_url ||
+        "",
+      2048,
+    ) ||
+    ""
+  const refMediumUrl =
+    portraitAssetUrl(publishedAsset, "medium") ||
+    sanitizeText(
+      publishedPayloadPortrait?.medium_url ||
+        publishedPayloadPortrait?.url ||
+        publishedVmPortrait?.url ||
+        "",
+      2048,
+    ) ||
+    ""
+  const mediumUrl = refMediumUrl || refHeroUrl
   const heroUrl = refHeroUrl || mediumUrl
-  const width = optionalInt(row?.image_width) || 384
-  const height = optionalInt(row?.image_height) || 512
+  const width =
+    optionalInt(publishedPayloadPortrait?.width) ||
+    optionalInt(publishedVmPortrait?.width) ||
+    optionalInt(row?.image_width) ||
+    384
+  const height =
+    optionalInt(publishedPayloadPortrait?.height) ||
+    optionalInt(publishedVmPortrait?.height) ||
+    optionalInt(row?.image_height) ||
+    512
   return {
     symbol,
-    full_name: sanitizeText(row?.full_name || "", 255) || symbol,
-    color: "#888",
+    full_name:
+      sanitizeText(
+        publishedPayload?.full_name || publishedCard?.full_name || row?.full_name || "",
+        255,
+      ) || symbol,
+    color:
+      normalizeHexColor(publishedPayload?.color || publishedCard?.display_color || "") || "#888",
     pt: mediumUrl,
     portrait:
       heroUrl || mediumUrl
@@ -4114,7 +4158,7 @@ function accountGalleryImageOnlyCard(row, env, publishedPortraitRef = null) {
             // A discovery/read-model row can legitimately lag the canonical
             // reference; exposing its SHA beside the current URL creates a
             // split-brain card that client code can later reconstruct wrongly.
-            asset_sha256: publishedAssetSha || assetSha || null,
+            asset_sha256: publishedAssetSha || null,
             width,
             height,
           }
@@ -27887,77 +27931,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const versionInfoPromise = accountWindowStage("acct_version", () =>
         currentMobileCardSnapshotVersion(env),
       )
-      const publishedRefsPromise = imageOnlyView
-        ? accountWindowStage("acct_portrait_refs", () => publishedPortraitRefs(env))
-        : Promise.resolve(null)
-      const [windowData, discoveredCount, versionInfo, imageOnlyPublishedRefs] = await Promise.all([
+      const [windowData, discoveredCount, versionInfo] = await Promise.all([
         windowPromise,
         discoveredCountPromise,
         versionInfoPromise,
-        publishedRefsPromise,
       ])
-      if (imageOnlyView) {
-        const publishedRefs = imageOnlyPublishedRefs
-        const publishedRefBySymbol = new Map()
-        for (const ref of Array.isArray(publishedRefs) ? publishedRefs : []) {
-          const symbol = normalizeSymbol(ref?.symbol || ref?.gene_symbol || "")
-          if (symbol) publishedRefBySymbol.set(symbol, ref)
-        }
-        const cards = windowData.rows
-          .map((row) =>
-            accountGalleryImageOnlyCard(
-              row,
-              env,
-              publishedRefBySymbol.get(normalizeSymbol(row?.gene_symbol || "")) || null,
-            ),
-          )
-          .filter(Boolean)
-        return done(
-          "account_gallery_window",
-          json(
-            {
-              ok: true,
-              schema: ACCOUNT_GALLERY_WINDOW_SCHEMA,
-              view: "image-only",
-              authenticated: Boolean(sessionUser?.user_id),
-              user: sessionUser?.user_id
-                ? {
-                    id: userId,
-                    username: sessionUser.username || null,
-                  }
-                : null,
-              order: requestedOrder,
-              scope: requestedScope,
-              discovered_count: discoveredCount,
-              vm_version: versionInfo.current,
-              items: windowData.rows.map((row) => ({
-                symbol: normalizeSymbol(row.gene_symbol || ""),
-                discovery: row,
-              })),
-              cards,
-              missing: [],
-              has_previous: !!windowData.hasPrevious,
-              previous_cursor: windowData.previousCursor || "",
-              has_more: !!windowData.hasMore,
-              next_cursor: windowData.nextCursor || "",
-              diagnostics: {
-                d1_composed: 0,
-                d1_window_rows: windowData.rows.length,
-                requested_limit: cleanedLimit,
-                scope: requestedScope,
-                source: "published_portrait_refs_image_only",
-                supported_orders: Array.from(ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS),
-              },
-            },
-            200,
-            {
-              "Cache-Control": "no-store",
-              "Server-Timing": accountWindowTimingHeader(),
-              "X-Iconoplasm-Data-Source": "published-portrait-refs-image-only",
-            },
-          ),
-        )
-      }
       const snapshotVersion = versionInfo.current
       const symbols = windowData.rows
         .map((row) => normalizeSymbol(row.gene_symbol || ""))
@@ -27991,7 +27969,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       for (const row of windowData.rows) {
         const symbol = normalizeSymbol(row.gene_symbol || "")
         const vm = vmBySymbol.get(symbol)
-        if (vm) cards.push(vm)
+        if (vm) cards.push(imageOnlyView ? accountGalleryImageOnlyCard(row, env, vm) : vm)
         items.push({
           symbol,
           discovery: row,
@@ -28003,6 +27981,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           {
             ok: true,
             schema: ACCOUNT_GALLERY_WINDOW_SCHEMA,
+            ...(imageOnlyView ? { view: "image-only" } : {}),
             authenticated: Boolean(sessionUser?.user_id),
             user: sessionUser?.user_id
               ? {
@@ -28030,7 +28009,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               artifact_gene_count: artifact.card_count,
               catalog_gene_count: artifact.catalog_gene_count,
               artifact_validated_at: artifact.artifact_validated_at,
-              source: "published_card_catalog",
+              source: imageOnlyView
+                ? "published_card_catalog_image_only"
+                : "published_card_catalog",
               supported_orders: Array.from(ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS),
             },
           },
@@ -28039,7 +28020,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             "Cache-Control": "no-store",
             "Server-Timing": accountWindowTimingHeader(),
             "X-Iconoplasm-VM-Version": snapshotVersion,
-            "X-Iconoplasm-Data-Source": missing.length ? "mixed-or-missing" : "kv-snapshot",
+            "X-Iconoplasm-Data-Source": missing.length
+              ? "mixed-or-missing"
+              : imageOnlyView
+                ? "published-card-catalog-image-only"
+                : "kv-snapshot",
           },
         ),
       )
