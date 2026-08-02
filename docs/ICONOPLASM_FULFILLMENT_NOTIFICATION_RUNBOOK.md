@@ -4,9 +4,9 @@
 
 ## Product contract
 
-A Discord DM is a receipt for one user action, not the archive of every image
-that action generated. Delivery is grouped by requester, durable batch ID,
-canonical gene, and request kind.
+A Discord DM is a receipt for a completed generation publication, not for an
+individual button press. Delivery is grouped by durable publication ID,
+requester, and canonical gene after the images have been generated.
 
 - Ten candidates for one gene produce one DM with ten previews.
 - Ten candidates split across two genes produce two DMs, one per gene.
@@ -25,19 +25,24 @@ therefore treats ten as a hard preview-attachment ceiling and also applies a
 
 ## Durable ownership
 
-The browser creates one `client_batch_id` per queue action. The API validates
-it and persists it as `request_batch_id` on every generated request, together
-with `request_batch_size`. The D1 delivery-pending trigger copies both values
-into the notification outbox. Historical requests are deliberately migrated to
-unique `legacy-request:{id}` batches; never guess old grouping from row order or
-completion time.
+Drain already owns a durable `publication_id` tied one-to-one to a completed
+generation session. The fulfillment API requires that ID, persists it with the
+recipient-and-gene group size while moving requests to `delivery_pending`, and
+the D1 trigger copies both values into the notification outbox. Request-time
+`request_batch_id` remains provenance only. Historical rows are deliberately
+migrated to unique `legacy-request:{id}` delivery groups; never guess old
+grouping from row order or completion time.
 
-`workers/iconoplasm-request-notifications.js` selects only complete group
-leaders, claims every outbox row in the group, downloads no more than ten full
+`workers/iconoplasm-request-notifications.js` selects only complete
+publication-recipient-and-gene group leaders, claims every outbox row in the
+group, downloads no more than ten full
 renditions, posts one nonce-enforced multipart DM, and applies the same delivery
 result to every row. The per-file 10 MiB guard and 24 MiB aggregate guard bound
 memory without reducing image quality. Reconciliation can mark each associated
 request fulfilled only after that shared Discord receipt is confirmed.
+
+Repeated fulfillment calls for the same publication reuse the same durable ID.
+The sender must not deliver rows whose publication group is incomplete.
 
 ## Failure rules
 

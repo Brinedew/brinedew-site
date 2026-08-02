@@ -86,12 +86,9 @@ class NotificationStatement {
       )
       const groups = new Map()
       for (const row of this.db.notifications) {
-        const key = [
-          row.requester_user_id,
-          row.request_batch_id,
-          row.gene_symbol,
-          row.request_kind,
-        ].join("|")
+        const key = [row.requester_user_id, row.fulfillment_publication_id, row.gene_symbol].join(
+          "|",
+        )
         if (!groups.has(key)) groups.set(key, [])
         groups.get(key).push(row)
       }
@@ -99,7 +96,7 @@ class NotificationStatement {
         results: Array.from(groups.values())
           .filter(
             (rows) =>
-              rows.length === Number(rows[0].request_batch_size || 1) &&
+              rows.length === Number(rows[0].fulfillment_group_size || 1) &&
               deliverableStatuses.includes(rows[0].discord_status),
           )
           .map((rows) => rows.sort((a, b) => Number(a.id) - Number(b.id))[0]),
@@ -107,16 +104,15 @@ class NotificationStatement {
     }
     if (
       this.sql.includes("FROM icono_request_notifications n") &&
-      this.sql.includes("n.request_batch_id = ?")
+      this.sql.includes("n.fulfillment_publication_id = ?")
     ) {
-      const [requesterUserId, requestBatchId, geneSymbol, kind] = this.args
+      const [requesterUserId, fulfillmentPublicationId, geneSymbol] = this.args
       return {
         results: this.db.notifications.filter(
           (row) =>
             row.requester_user_id === requesterUserId &&
-            row.request_batch_id === requestBatchId &&
-            row.gene_symbol === geneSymbol &&
-            row.request_kind === kind,
+            row.fulfillment_publication_id === fulfillmentPublicationId &&
+            row.gene_symbol === geneSymbol,
         ),
       }
     }
@@ -308,23 +304,32 @@ class FulfillmentStatement {
   }
 
   async run() {
+    if (this.sql.includes("UPDATE icono_request_notifications")) {
+      return { meta: { changes: 0 } }
+    }
     if (this.sql.includes("SET status = 'delivery_pending'")) {
-      const requestId = Number(this.args[4])
+      const requestId = Number(this.args[6])
       const request = this.db.requests.find((row) => Number(row.id) === requestId)
       if (!request || request.status !== "open") return { meta: { changes: 0 } }
       request.status = "delivery_pending"
       request.fulfilled_asset_sha256 = String(this.args[1] || "")
       request.fulfilled_vision_id = String(this.args[2] || "")
       request.fulfillment_note = String(this.args[3] || "")
+      request.fulfillment_publication_id = String(this.args[4] || "")
+      request.fulfillment_group_size = Number(this.args[5] || 1)
       return { meta: { changes: 1 } }
     }
     if (this.sql.includes("SET updated_at = CURRENT_TIMESTAMP")) {
-      const [requestId, assetSha, visionId] = this.args
+      const [publicationId, groupSize, requestId, assetSha, visionId] = this.args
       const request = this.db.requests.find((row) => Number(row.id) === Number(requestId))
       const matches =
         request?.status === "delivery_pending" &&
         request.fulfilled_asset_sha256 === assetSha &&
         request.fulfilled_vision_id === visionId
+      if (matches) {
+        request.fulfillment_publication_id = String(publicationId || "")
+        request.fulfillment_group_size = Number(groupSize || 1)
+      }
       return { meta: { changes: matches ? 1 : 0 } }
     }
     throw new Error(`Unexpected fulfillment write SQL: ${this.sql}`)
@@ -333,7 +338,13 @@ class FulfillmentStatement {
 
 class FulfillmentDb {
   constructor(requests) {
-    this.requests = requests
+    this.requests = requests.map((request) => ({
+      requester_user_id: BRINEDEW_USER_ID,
+      gene_symbol: "INS",
+      fulfillment_publication_id: "",
+      fulfillment_group_size: 1,
+      ...request,
+    }))
   }
 
   prepare(sql) {
@@ -384,6 +395,8 @@ function notificationRow(overrides = {}) {
     discord_attempt_count: 0,
     request_batch_id: "legacy-request:42",
     request_batch_size: 1,
+    fulfillment_publication_id: "legacy-request:42",
+    fulfillment_group_size: 1,
     ...overrides,
   }
 }
@@ -439,7 +452,7 @@ test("fulfillment replay settles only the exact asset already bound to the reque
 
   const started = await fulfillGenerationRequests(
     { ICONOPLASM_DB: db },
-    { items: [item], resolvedBy: "pytest" },
+    { items: [item], resolvedBy: "pytest", publicationId: "pub-replay" },
   )
   assert.equal(started.ok, true)
   assert.deepEqual(started.request_ids, [40])
@@ -449,7 +462,7 @@ test("fulfillment replay settles only the exact asset already bound to the reque
 
   const pendingReplay = await fulfillGenerationRequests(
     { ICONOPLASM_DB: db },
-    { items: [item], resolvedBy: "pytest" },
+    { items: [item], resolvedBy: "pytest", publicationId: "pub-replay" },
   )
   assert.equal(pendingReplay.ok, true)
   assert.deepEqual(pendingReplay.request_ids, [40])
@@ -458,7 +471,7 @@ test("fulfillment replay settles only the exact asset already bound to the reque
   db.requests[0].status = "fulfilled"
   const replayed = await fulfillGenerationRequests(
     { ICONOPLASM_DB: db },
-    { items: [item], resolvedBy: "pytest" },
+    { items: [item], resolvedBy: "pytest", publicationId: "pub-replay" },
   )
   assert.equal(replayed.ok, true)
   assert.deepEqual(replayed.request_ids, [])
@@ -488,6 +501,7 @@ test("fulfillment replay rejects a later candidate for an already settled reques
         },
       ],
       resolvedBy: "pytest",
+      publicationId: "pub-conflict",
     },
   )
 
@@ -532,6 +546,7 @@ test("fulfillment batch preflight prevents partial rebinding", async () => {
         },
       ],
       resolvedBy: "pytest",
+      publicationId: "pub-atomic-conflict",
     },
   )
 
@@ -539,6 +554,36 @@ test("fulfillment batch preflight prevents partial rebinding", async () => {
   assert.equal(db.requests[0].status, "open")
   assert.equal(db.requests[0].fulfilled_asset_sha256, "")
   assert.equal(db.requests[1].fulfilled_asset_sha256, originalAsset)
+})
+
+test("fulfillment binds separate random requests to one completed publication group", async () => {
+  const requests = Array.from({ length: 6 }, (_, index) => ({
+    id: 60 + index,
+    status: "open",
+    request_batch_id: `single-random-${index}`,
+    request_batch_size: 1,
+  }))
+  const db = new FulfillmentDb(requests)
+  const result = await fulfillGenerationRequests(
+    { ICONOPLASM_DB: db },
+    {
+      publicationId: "pub-kncn-six",
+      resolvedBy: "pytest",
+      items: requests.map((request, index) => ({
+        request_ids: [request.id],
+        fulfilled_asset_sha256: (index + 30).toString(16).padStart(64, "0"),
+        fulfilled_vision_id: `anima-v1-${index + 1}`,
+      })),
+    },
+  )
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(
+    result.request_ids,
+    requests.map((request) => request.id),
+  )
+  assert.ok(db.requests.every((request) => request.fulfillment_publication_id === "pub-kncn-six"))
+  assert.ok(db.requests.every((request) => request.fulfillment_group_size === 6))
 })
 
 test("notification migration creates inbox rows atomically and never backfills users", () => {
@@ -574,6 +619,18 @@ test("notification migration creates inbox rows atomically and never backfills u
   assert.match(batchMigration, /NEW\.request_batch_id/)
   assert.match(batchMigration, /NEW\.request_batch_size/)
   assert.match(batchMigration, /legacy-request:/)
+
+  const fulfillmentPublicationMigration = readFileSync(
+    new URL(
+      "../migrations-iconoplasm/0062_fulfillment_publication_notification_groups.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  )
+  assert.match(fulfillmentPublicationMigration, /ADD COLUMN fulfillment_publication_id/)
+  assert.match(fulfillmentPublicationMigration, /ADD COLUMN fulfillment_group_size/)
+  assert.match(fulfillmentPublicationMigration, /NEW\.fulfillment_publication_id/)
+  assert.match(fulfillmentPublicationMigration, /NEW\.fulfillment_group_size/)
 })
 
 test("authenticated inbox returns exact fulfillment context and durable unread count", async () => {
@@ -925,7 +982,7 @@ test("Brinedew fulfillment sends one nonce-enforced DM and is retry-idempotent",
 })
 
 // ARCHITECTURE FENCE [IPD-006]
-test("one ten-candidate action spanning two genes sends exactly two Discord messages", async () => {
+test("one ten-candidate publication spanning two genes sends exactly two Discord messages", async () => {
   const rows = Array.from({ length: 10 }, (_, index) => {
     const isIns = index < 5
     const requestId = 100 + index
@@ -933,8 +990,8 @@ test("one ten-candidate action spanning two genes sends exactly two Discord mess
       id: requestId,
       request_id: requestId,
       gene_symbol: isIns ? "INS" : "TP53",
-      request_batch_id: "two-gene-action",
-      request_batch_size: 5,
+      fulfillment_publication_id: "pub-two-gene",
+      fulfillment_group_size: 5,
       fulfilled_asset_sha256: (index + 1).toString(16).padStart(64, "0"),
     })
   })
@@ -967,6 +1024,46 @@ test("one ten-candidate action spanning two genes sends exactly two Discord mess
   }
 })
 
+test("six separately requested random blots completed in one publication send one Discord message", async () => {
+  const rows = Array.from({ length: 6 }, (_, index) => {
+    const requestId = 160 + index
+    return notificationRow({
+      id: requestId,
+      request_id: requestId,
+      gene_symbol: "KNCN",
+      request_mode: "random",
+      request_batch_id: `single-random-${index}`,
+      request_batch_size: 1,
+      fulfillment_publication_id: "pub-kncn-random-six",
+      fulfillment_group_size: 6,
+      fulfilled_asset_sha256: (index + 20).toString(16).padStart(64, "0"),
+    })
+  })
+  const db = new NotificationDb(rows)
+  const messages = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("storage.bunnycdn.com")) return validWebpResponse()
+    if (String(url).endsWith("/users/@me/channels")) return Response.json({ id: "dm-channel-1" })
+    messages.push(JSON.parse(String(init?.body?.get("payload_json") || "{}")))
+    return Response.json({ id: "discord-message-kncn" })
+  }
+  try {
+    const result = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db), {
+      requestIds: rows.map((row) => row.request_id),
+    })
+
+    assert.equal(result.delivered, 1)
+    assert.equal(result.delivered_requests, 6)
+    assert.equal(messages.length, 1)
+    assert.equal(messages[0].attachments.length, 6)
+    assert.match(messages[0].content, /6 free queue candidate blots for \*\*KNCN\*\*/)
+    assert.ok(rows.every((row) => row.discord_message_id === "discord-message-kncn"))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("a hundred-candidate batch remains one Discord receipt with ten previews", async () => {
   const rows = Array.from({ length: 100 }, (_, index) => {
     const requestId = 200 + index
@@ -974,8 +1071,8 @@ test("a hundred-candidate batch remains one Discord receipt with ten previews", 
       id: requestId,
       request_id: requestId,
       gene_symbol: "TP53",
-      request_batch_id: "hundred-candidate-action",
-      request_batch_size: 100,
+      fulfillment_publication_id: "pub-hundred-candidate",
+      fulfillment_group_size: 100,
       fulfilled_asset_sha256: (index + 1).toString(16).padStart(64, "0"),
     })
   })
@@ -1008,13 +1105,13 @@ test("a hundred-candidate batch remains one Discord receipt with ten previews", 
   }
 })
 
-test("an incomplete batch waits instead of fragmenting into multiple messages", async () => {
+test("an incomplete publication group waits instead of fragmenting into multiple messages", async () => {
   const rows = [
     notificationRow({
       id: 300,
       request_id: 300,
-      request_batch_id: "partially-fulfilled-action",
-      request_batch_size: 2,
+      fulfillment_publication_id: "pub-partial",
+      fulfillment_group_size: 2,
     }),
   ]
   const db = new NotificationDb(rows)
