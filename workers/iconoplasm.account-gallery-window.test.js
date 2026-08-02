@@ -601,7 +601,7 @@ test("shared discovery read-model rebuild is admin-only and excludes the configu
   )
 })
 
-test("image-only account gallery window returns discovery-fresh portrait cards without catalog artifact", async () => {
+test("image-only account gallery window projects compact cards from the canonical card artifact", async () => {
   const db = new FakeDb()
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -617,7 +617,7 @@ test("image-only account gallery window returns discovery-fresh portrait cards w
 
   assert.equal(response.status, 200)
   assert.equal(payload.view, "image-only")
-  assert.equal(payload.diagnostics.source, "published_portrait_refs_image_only")
+  assert.equal(payload.diagnostics.source, "published_card_catalog_image_only")
   assert.deepEqual(
     payload.cards.map((card) => card.symbol),
     ["TP53", "BRCA1"],
@@ -628,14 +628,14 @@ test("image-only account gallery window returns discovery-fresh portrait cards w
   assert.equal(payload.cards[0]?.ph, undefined)
   assert.equal(payload.cards[0]?.portrait?.hero_url, undefined)
   assert.equal(payload.cards[0]?.portrait?.medium_url, undefined)
-  assert.equal(payload.cards[0]?.width, 384)
-  assert.equal(payload.cards[0]?.height, 512)
+  assert.equal(payload.cards[0]?.width, 768)
+  assert.equal(payload.cards[0]?.height, 1024)
   assert.notEqual(payload.cards[0]?.schema_version, "iconoplasm.mobileCard.v1")
-  assert.match(response.headers.get("Server-Timing") || "", /acct_portrait_refs/)
-  assert.doesNotMatch(response.headers.get("Server-Timing") || "", /acct_catalog/)
+  assert.match(response.headers.get("Server-Timing") || "", /acct_catalog/)
+  assert.doesNotMatch(response.headers.get("Server-Timing") || "", /acct_portrait_refs/)
 })
 
-test("image-only account gallery keeps published portrait URL and identity atomic", async () => {
+test("image-only account gallery ignores stale discovery and legacy portrait-ref identities", async () => {
   const db = new FakeDb()
   const staleRowSha = "95".repeat(32)
   const publishedSha = "fb".repeat(32)
@@ -647,18 +647,29 @@ test("image-only account gallery keeps published portrait URL and identity atomi
     image_height: 512,
   })
   const env = buildEnv({ db, version: "test-published-identity" })
+  const canonicalArtifact = completeCardCatalogArtifact(
+    ["INS", "PRL", "RHO", "TP53", "BRCA1"],
+    "test-published-identity",
+  )
+  for (const card of canonicalArtifact.cards) {
+    card.portrait.asset_sha256 = publishedSha
+  }
+  await env.KV.put(
+    "iconoplasm:card-catalog:test-published-identity",
+    JSON.stringify(canonicalArtifact),
+  )
   await env.KV.put(
     `iconoplasm:published-portrait-fingerprint:v3`,
     JSON.stringify({
-      fingerprint: { published_count: 5, latest: publishedSha },
+      fingerprint: { published_count: 5, latest: staleRowSha },
     }),
   )
   await env.KV.put(
-    `iconoplasm:published-portrait-refs:v3-5-${publishedSha}`,
+    `iconoplasm:published-portrait-refs:v3-5-${staleRowSha}`,
     JSON.stringify(
       ["INS", "PRL", "RHO", "TP53", "BRCA1"].map((symbol) => ({
         symbol,
-        asset_sha256: publishedSha,
+        asset_sha256: staleRowSha,
       })),
     ),
   )
