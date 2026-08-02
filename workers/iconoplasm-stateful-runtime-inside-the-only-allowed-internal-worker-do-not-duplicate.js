@@ -8091,12 +8091,16 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
   )
   if (!cleanedVisionIds.length) return 0
 
-  const placeholders = cleanedVisionIds.map(() => "?").join(", ")
+  const visionIdsJson = JSON.stringify(cleanedVisionIds)
   await env.ICONOPLASM_DB.prepare(
-    `DELETE FROM icono_generation_request_vision_option_rollup
-     WHERE vision_id IN (${placeholders})`,
+    `WITH incoming AS (
+       SELECT value AS vision_id
+       FROM json_each(?)
+     )
+     DELETE FROM icono_generation_request_vision_option_rollup
+     WHERE vision_id IN (SELECT vision_id FROM incoming)`,
   )
-    .bind(...cleanedVisionIds)
+    .bind(visionIdsJson)
     .run()
 
   const summaryResp = await env.ICONOPLASM_DB.prepare(
@@ -8113,9 +8117,9 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
        live_count,
        score
      FROM icono_admin_vision_rollup
-     WHERE vision_id IN (${placeholders})`,
+     WHERE vision_id IN (SELECT value FROM json_each(?))`,
   )
-    .bind(...cleanedVisionIds)
+    .bind(visionIdsJson)
     .all()
   const summaryRows = Array.isArray(summaryResp?.results) ? summaryResp.results : []
   if (!summaryRows.length) return 0

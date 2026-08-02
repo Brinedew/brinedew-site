@@ -18,7 +18,10 @@ class FakeStatement {
 
   async all() {
     this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
-    if (this.sql.includes("FROM icono_admin_vision_rollup") && this.args.includes("anima-v1-18")) {
+    if (
+      this.sql.includes("FROM icono_admin_vision_rollup") &&
+      this.args.some((value) => String(value).includes("anima-v1-18"))
+    ) {
       return {
         results: [
           {
