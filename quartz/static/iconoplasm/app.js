@@ -1614,21 +1614,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function guestDiscoveryEntries() {
-    // Guests need a starter trio so the collection mechanic begins with a recognizable shape
-    // instead of a blank wall. Keep these concrete and culturally familiar rather than only
-    // biomed-famous.
-    var localEntries = websiteGuestDiscoveries.listEntries()
-    var localSymbols = new Set(
-      localEntries.map(function (entry) {
-        return normalizedSymbol(entry && entry.gene_symbol)
-      }),
-    )
-    var starterEntries = GUEST_STARTER_GENES.filter(function (entry) {
-      return !localSymbols.has(normalizedSymbol(entry && entry.gene_symbol))
-    }).map(function (entry) {
+    // The signed-out archive is a fixed three-card preview, not a second local
+    // collection. Gene visits are still buffered privately for a bounded merge
+    // after login, but they must never enlarge or replace this visible trio.
+    var starterEntries = GUEST_STARTER_GENES.map(function (entry) {
       return Object.assign({ encounter_count: 1 }, entry)
     })
-    return normalizeDiscoveryEntries(localEntries.concat(starterEntries))
+    return normalizeDiscoveryEntries(starterEntries)
   }
 
   function fallbackDiscoveredGene(entry) {
