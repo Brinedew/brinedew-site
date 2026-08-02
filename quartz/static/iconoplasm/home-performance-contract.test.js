@@ -249,6 +249,19 @@ test("guest collection state resolves locally without an auth or discovery read"
   assert.doesNotMatch(guestBranch, /fetchDiscoveryState|fetchHomeCollectionCounts|\/api\//)
 })
 
+test("the visible guest archive is exactly the three starters", async () => {
+  const app = await readFile(appPath, "utf8")
+  const start = app.indexOf("function guestDiscoveryEntries()")
+  const end = app.indexOf("function fallbackDiscoveredGene", start)
+  assert.notEqual(start, -1, "missing guestDiscoveryEntries")
+  assert.notEqual(end, -1, "missing guestDiscoveryEntries boundary")
+  const block = app.slice(start, end)
+
+  assert.match(block, /GUEST_STARTER_GENES\.map/)
+  assert.doesNotMatch(block, /websiteGuestDiscoveries|localEntries|concat/)
+  assert.match(block, /return normalizeDiscoveryEntries\(starterEntries\)/)
+})
+
 test("account collection first-card path uses a bounded gallery window for supported orders", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("async function requestFeedPage(request)")
@@ -1653,13 +1666,13 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   )
 })
 
-test("gene page visits persist locally for guests and use the server only after auth", async () => {
+test("gene page visits stay in a private guest merge buffer until auth", async () => {
   const app = await readFile(appPath, "utf8")
   assert.match(app, /function recordGenePageVisitDiscovery\(symbol\)/)
   assert.match(
     app,
     /if \(!currentUser\) \{\s*websiteGuestDiscoveries\.remember\(key\)\s*return\s*\}/,
-    "signed-out gene visits must stay in the full-catalog local shelf without a Worker request",
+    "signed-out gene visits must stay in the private merge buffer without a Worker request",
   )
   assert.match(app, /function mergeWebsiteGuestDiscoveriesIfSignedIn\(\)/)
   assert.match(
