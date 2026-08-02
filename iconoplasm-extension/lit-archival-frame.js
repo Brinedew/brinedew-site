@@ -482,6 +482,7 @@
     const target = event.target instanceof Element ? event.target : null
     if (!target) return
     if (target.closest("[data-icono-vote-box]")) return
+    if (currentPayload && currentPayload.navigationMode === "explicit") return
     const link = target.closest("[data-icono-nav]")
     if (link) event.preventDefault()
     const symbol = currentSymbol()
