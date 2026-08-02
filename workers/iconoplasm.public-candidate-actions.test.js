@@ -365,7 +365,7 @@ test("a preallocated emulsion queues its first blot without inventing a referenc
   assert.equal(db.generationRequests[0]?.requested_vision_id, "anima-v1-50817")
 })
 
-test("a reserved legacy number still requires an immutable example reference", async () => {
+test("an unassigned emulsion number is rejected instead of reconstructed", async () => {
   const db = new FakeDb({ noVisionOption: true })
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -377,16 +377,17 @@ test("a reserved legacy number still requires an immutable example reference", a
           body: JSON.stringify({
             symbol: "TP53",
             requested_vision_ids: ["anima-v1-5000"],
-            client_batch_id: "reserved-legacy-without-reference",
+            client_batch_id: "unassigned-emulsion-id",
           }),
         },
       ),
       buildEnv(db),
       { waitUntil() {} },
     )
-  await response.json()
+  const payload = await response.json()
 
   assert.equal(response.status, 400)
+  assert.match(JSON.stringify(payload), /not assigned/i)
   assert.equal(db.generationRequests.length, 0)
 })
 

@@ -4422,15 +4422,15 @@ async function createGenerationRequest(
     const selectedReference = rankedReferences[0] || null
     requestedReferenceAssetSha = normalizeSha256(selectedReference?.asset_sha256 || "") || ""
     requestedReferenceGeneSymbol = normalizeSymbol(selectedReference?.gene_symbol || "") || ""
-    const preallocatedSlot = iconoplasmAnimaEmulsionSlotFromExactAlias(resolvedVisionId)
-    const isPreallocatedWithoutReference =
-      !requestedReferenceAssetSha && iconoplasmAnimaEmulsionSlotIsPreallocated(preallocatedSlot)
-    if (!requestedReferenceAssetSha && !isPreallocatedWithoutReference) {
+    const animaSlot = iconoplasmAnimaEmulsionSlotFromExactAlias(resolvedVisionId)
+    if (animaSlot && !iconoplasmAnimaEmulsionSlotIsPreallocated(animaSlot)) {
       return {
         ok: false,
-        error:
-          "This emulsion has no reproducible example blot. Refresh the picker and choose another emulsion.",
+        error: "This emulsion ID is not assigned. Refresh the picker and choose an available emulsion.",
       }
+    }
+    if (!optionRow && !animaSlot) {
+      return { ok: false, error: "This emulsion is not available. Refresh the picker and choose again." }
     }
   }
   const insertResp = await env.ICONOPLASM_DB.prepare(
