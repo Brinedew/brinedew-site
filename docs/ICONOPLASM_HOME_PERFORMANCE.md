@@ -26,6 +26,65 @@ The protected controller contract is `quartz/static/iconoplasm/collection-feed.t
 
 ## Gallery Card Freshness
 
+**ARCHITECTURE FENCE [IPD-011] — the signed-in image gallery has one portrait authority.**
+
+The account window combines two kinds of data with deliberately different
+jobs:
+
+- discovery rows determine which genes belong to the account and in what order;
+- the versioned published card artifact determines every displayed card field,
+  including the canonical portrait URL and `asset_sha256`.
+
+`view=image-only` is only a smaller wire representation. It is not a separate
+read model and must not have a separate freshness mechanism. The server first
+reads the account's bounded symbol window, resolves `KV_GALLERY_VERSION`, reads
+those symbols from `readPublishedCardCatalogArtifact(...)`, and then projects
+compact image cards from those published card VMs. The ordinary and image-only
+views therefore differ in response shape, not authority.
+
+### Why this fence exists: B-700 / ZNF25, 2026-08-02
+
+The removed design let the image-only branch return early from
+`publishedPortraitRefs(...)`. That snapshot looked efficient because it held
+only symbol-to-SHA pairs, but it was an independently published and cached
+portrait timeline. Routine dirty-shard publication advanced the canonical card
+artifact without guaranteeing the legacy portrait-reference snapshot advanced
+in the same atomic operation.
+
+The user-visible result was a split that code-only checks initially missed:
+
+1. In the user's logged-in Edge session, the homepage showed ZNF25 with the old
+   light-purple skin.
+2. In the same browser session, `/gene/ZNF25` showed the current dark-gray
+   canonical portrait.
+3. A fresh cache-busting homepage URL still showed light purple, rejecting an
+   ordinary browser-cache explanation.
+4. Guest/substitute-browser checks could show the correct portrait because they
+   did not exercise the signed-in account-window image-only branch.
+
+The durable repair in `afd6f6eb` removed the early parallel-snapshot branch.
+Both account response variants now read the same published artifact version;
+the image-only variant merely projects fewer fields. The regression test makes
+the discovery-row SHA and legacy portrait-reference snapshot stale while the
+card artifact is current, and requires the response to use the artifact.
+
+### Forbidden “optimizations”
+
+Do not:
+
+- restore `publishedPortraitRefs(...)` as the image-only account source;
+- use `row.asset_sha256` from the discovery window for a displayed portrait;
+- treat an image-only response as permission to bypass the card artifact;
+- add a cache whose key is not the live card artifact version; or
+- accept API/hash equality alone as proof when the bug report is visual.
+
+If the artifact lookup is too expensive, optimize shard indexing or compact
+projection inside the single artifact path. Do not create another portrait
+timeline. A proposed replacement is acceptable only if one publication event
+selects one canonical image for both account-gallery variants and a same-session
+Computer Use check confirms the homepage and gene page show the same character
+skin color.
+
 Undesired optimization: do not let browser storage decide that a gallery card page is fresh enough to paint before the page has checked the current backend manifest.
 
 The `/api/iconoplasm/mobile-card-manifest` response is the freshness authority for mobile/home gallery card view-models. IndexedDB rows are a write-through performance cache only. A fully populated local page cache must still ask the manifest endpoint for the current `KV_GALLERY_VERSION` before rendering, because browsers such as Edge can retain old IndexedDB rows for weeks. If local rows from an old version are allowed to short-circuit the manifest request, the gallery can show portraits that were outvoted long ago while the gene page correctly shows the current canonical portrait.
