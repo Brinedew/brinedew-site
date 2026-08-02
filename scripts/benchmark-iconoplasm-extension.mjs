@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url)
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const extensionDir = path.join(repoRoot, "iconoplasm-extension")
 const matcherFile = path.join(extensionDir, "content-matcher.js")
-const contentFile = path.join(extensionDir, "content.js")
+const blocklistFile = path.join(extensionDir, "blocklist-defaults.js")
 const host = process.env.ICONO_HOST || "https://iconoplasm.brinedew.bio"
 const testPageUrl = process.env.ICONO_TEST_URL || "http://127.0.0.1:41731/test-page"
 const playwrightCorePath =
@@ -30,10 +30,14 @@ function loadMatcherApi(source) {
 }
 
 async function loadBlocklist() {
-  const contentSource = await fs.readFile(contentFile, "utf8")
-  const match = contentSource.match(/const BLOCKLIST = new Set\(\[([\s\S]*?)\]\)/)
-  if (!match) throw new Error("Could not extract BLOCKLIST from content.js")
-  return vm.runInNewContext("([" + match[1] + "])", {})
+  const source = await fs.readFile(blocklistFile, "utf8")
+  const context = vm.createContext({})
+  vm.runInContext(source, context, { filename: blocklistFile })
+  const blocklist = vm.runInContext("Array.from(ICONOPLASM_DEFAULT_BLOCKLIST)", context)
+  if (!Array.isArray(blocklist) || blocklist.some((entry) => typeof entry !== "string")) {
+    throw new Error("Iconoplasm default blocklist did not evaluate to an array of strings")
+  }
+  return blocklist
 }
 
 async function fetchCatalogGeneMap() {
