@@ -4087,6 +4087,18 @@ function mapGeneDiscoveryRow(row) {
   }
 }
 
+// ARCHITECTURE FENCE [IPD-011]
+// Chesterton's fence: this compact image-only response MUST be a projection of
+// the versioned published card VM. The discovery row is allowed to be fresher
+// for membership/order and staler for portrait metadata; it is not a portrait
+// authority. A previous optimization read portrait identity from the separate
+// publishedPortraitRefs snapshot. Dirty-shard publication advanced the card
+// artifact without necessarily advancing that parallel snapshot, so logged-in
+// Edge rendered old light-purple ZNF25 on the homepage while the gene page
+// rendered the current dark-gray canonical. Do not reintroduce a second image
+// source here. If a compact response needs new fields, project them from
+// publishedCard/publishedCard.payload and keep the account-window regression
+// test adversarially stale in every noncanonical source.
 function accountGalleryImageOnlyCard(row, env, publishedCard = null) {
   const symbol = normalizeSymbol(row?.gene_symbol || "")
   if (!symbol) return null
@@ -27940,6 +27952,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const symbols = windowData.rows
         .map((row) => normalizeSymbol(row.gene_symbol || ""))
         .filter(Boolean)
+      // ARCHITECTURE FENCE [IPD-011]
+      // Rich and image-only account windows intentionally converge here. One
+      // KV_GALLERY_VERSION selects one published artifact; only the projection
+      // shape differs below. Do not add an early image-only return backed by
+      // publishedPortraitRefs, discovery rows, D1 composition, IndexedDB, or a
+      // separate cache. Those paths can be internally consistent yet disagree
+      // with the gene page after a canonical portrait publication.
       const artifact = await accountWindowStage("acct_catalog", () =>
         readPublishedCardCatalogArtifact(env, snapshotVersion, symbols),
       )

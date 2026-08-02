@@ -430,6 +430,38 @@
       ]
     },
     {
+      "id": "IPD-011",
+      "title": "Signed-in account galleries use one canonical portrait artifact",
+      "decision": "Personal and shared account windows use discovery data only for membership and order, then project every displayed portrait from the exact published card artifact selected by KV_GALLERY_VERSION. The image-only view is a compact projection of that same card VM, not a separate portrait read plane.",
+      "reason": "The former image-only branch used a separately versioned published-portrait-reference snapshot. Routine dirty-shard publication could advance the card artifact without advancing that snapshot, so logged-in Edge showed old light-purple ZNF25 on the homepage while the same session's gene page showed the current dark-gray canonical.",
+      "change_control": "Account-window membership, ordering, card-artifact selection, image-only projection, cache keys, behavioral tests, instructions, and both portrait/home runbooks must change together. Never restore discovery-row portrait identity, publishedPortraitRefs, browser-local portrait state, or another independently versioned snapshot as an image-only source. Any replacement must prove a single publication selects the same visible portrait on the signed-in homepage and gene page in one browser session.",
+      "runbook": "docs/ICONOPLASM_HOME_PERFORMANCE.md",
+      "linear_issue": "B-700",
+      "additional_required_marker_categories": [],
+      "markers": [
+        {
+          "category": "instructions",
+          "file": "AGENTS.md",
+          "token": "ARCHITECTURE FENCE [IPD-011]"
+        },
+        {
+          "category": "runbook",
+          "file": "docs/ICONOPLASM_HOME_PERFORMANCE.md",
+          "token": "ARCHITECTURE FENCE [IPD-011]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+          "token": "ARCHITECTURE FENCE [IPD-011]"
+        },
+        {
+          "category": "test",
+          "file": "workers/iconoplasm.account-gallery-window.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-011]"
+        }
+      ]
+    },
+    {
       "id": "GG-001",
       "title": "Daily targets give every gene surname one slot",
       "decision": "Automatic GeneGuessr daily selection chooses one deterministic representative per normalized gene surname, then selects and falls back only through that one-representative-per-surname sequence. Manual overrides remain explicit exceptions.",

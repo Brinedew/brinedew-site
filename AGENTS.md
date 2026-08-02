@@ -121,6 +121,21 @@ Read `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` and Linear B-695
 before changing gallery publication, its cron route, KV accounting, or mapper
 revision behavior.
 
+**ARCHITECTURE FENCE [IPD-011]** — every homepage portrait in a signed-in
+account window is projected from the exact versioned published card artifact
+selected by `KV_GALLERY_VERSION`. Discovery rows decide membership and order;
+they do not decide portrait identity. The image-only account view is a compact
+projection of the same card VM used by the ordinary account view, not a second
+portrait read plane. Never restore `publishedPortraitRefs(...)`, discovery-row
+`asset_sha256`, a browser-local portrait cache, or any other parallel snapshot
+as the image-only source. That split caused B-700: logged-in Edge showed the
+old light-purple ZNF25 on the homepage while the same session's gene page showed
+the current dark-gray canonical. Read `docs/ICONOPLASM_HOME_PERFORMANCE.md` and
+the B-700 section of `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md` before
+changing account-gallery card composition, `view=image-only`, or portrait
+freshness behavior. Any replacement must preserve one portrait authority and
+must pass a same-session visual comparison of the homepage and gene page.
+
 **ARCHITECTURE FENCE [GG-001]** — automatic GeneGuessr daily selection gives
 each normalized gene surname exactly one lottery slot. It first chooses a
 surname, then a deterministic daily representative inside that surname;
