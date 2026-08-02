@@ -10,6 +10,12 @@ draft: false
 
 ## Unreleased
 
+## 0.4.12 - 2026-08-02
+
+- Fixed Microsoft Edge losing all gene highlights after the extension catalog exceeded the browser's local-storage quota.
+- Replaced the portrait-heavy whole-catalog cache with a compact scanner index; hover details and portraits now load only when needed.
+- Existing installs automatically migrate legacy catalog storage from about 19 MB to about 1.9 MB.
+- Removed the unlimited-storage permission and bounded the persistent detail caches.
 ## 0.4.11 - 2026-07-24
 
 * Fixed simple hover mode not displaying portraits in MS Edge browser
