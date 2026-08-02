@@ -522,9 +522,7 @@
   let highlightVisibility = "always"
   let cardVariant = "image-only"
   let activeGeneSummary = null
-  let activeGeneTrigger = null
-  let touchSheetActive = false
-  let lastTouchInteractionAt = 0
+  let tooltipNavigationArmedAt = 0
   let litArchivalFrameRequestSerial = 0
   let litArchivalPrewarmFrame = null
   const pendingLitArchivalPrewarmSources = new Set()
@@ -537,7 +535,7 @@
   const GENE_DETAIL_VIEWPORT_BELOW_PX = 960
   const TOOLTIP_VIEWPORT_MARGIN_PX = 8
   const TOOLTIP_TARGET_GAP_PX = 8
-  const TOUCH_INTERACTION_TTL_MS = 1500
+  const TOOLTIP_NAVIGATION_DELAY_MS = 500
   const decodedPortraitSrcCache = new Set()
   const decodedPortraitSrcPromises = new Map()
   const DECODED_PORTRAIT_CACHE_LIMIT = 96
@@ -1427,17 +1425,11 @@
       applyTooltipTheme,
       onMouseOver,
       onMouseOut,
-      onDocumentPointerDown,
-      onDocumentTouchStart,
-      onDocumentClick,
-      onDocumentKeyDown,
       onFrameMessage: onLitArchivalFrameMessage,
       onTooltipClick,
       onTooltipKeyDown,
       cancelHideTimer,
       onTooltipMouseLeave,
-      onBackdropClick: () => hideTooltip({ restoreFocus: true }),
-      onCloseClick: () => hideTooltip({ restoreFocus: true }),
     })
     // createTooltipShell invokes the callback before this module's tooltip variable is assigned.
     // Reapply after assignment so the first hover gets the same frame-card classes as later
@@ -1504,10 +1496,7 @@
       mobileReview: false,
       portraitAlt: symbol ? symbol + " portrait" : "Gene portrait",
       portraitSrc,
-      // Touch previews use a separate, plainly labelled action in the sheet chrome. Keeping
-      // navigation out of the card prevents a newly mounted portrait from becoming the target of
-      // the same tap that asked to preview it.
-      titleHref: !touchSheetActive && symbol ? buildGenePageUrl(symbol) : "",
+      titleHref: symbol ? buildGenePageUrl(symbol) : "",
       voteHtml: assetSha
         ? !isImageOnlyCardVariant() &&
           IconoCardShared.voteBoxMarkup("", {
@@ -1688,8 +1677,8 @@
       theme: "light",
       cardVariant,
       symbol,
-      pageUrl: !touchSheetActive && symbol ? buildGenePageUrl(symbol) : "",
-      navigationMode: touchSheetActive ? "explicit" : "card",
+      pageUrl: symbol ? buildGenePageUrl(symbol) : "",
+      navigationArmedAt: tooltipNavigationArmedAt,
       loading: !detail,
       gene: detail || archivalTooltipGeneModel(summaryGene, null),
       portraitSrc: warmedPortraitSrc || directPortraitSrc,
@@ -1769,84 +1758,17 @@
     return responses.get(normalizedSymbol) || null
   }
 
-  function hasCoarseTouchPrimaryInput() {
-    if (typeof window.matchMedia !== "function") return false
-    return window.matchMedia("(hover: none) and (pointer: coarse)").matches
-  }
-
-  function isRecentTouchInteraction() {
-    return Date.now() - lastTouchInteractionAt <= TOUCH_INTERACTION_TTL_MS
-  }
-
-  function shouldUseTouchSheet(event) {
-    const pointerType = String((event && event.pointerType) || "").toLowerCase()
-    return pointerType === "touch" || isRecentTouchInteraction() || hasCoarseTouchPrimaryInput()
-  }
-
-  function onDocumentPointerDown(event) {
-    if (String((event && event.pointerType) || "").toLowerCase() === "touch") {
-      lastTouchInteractionAt = Date.now()
-    }
-  }
-
-  function onDocumentTouchStart() {
-    lastTouchInteractionAt = Date.now()
-  }
-
-  function onDocumentClick(event) {
-    const target = event && event.target && event.target.closest ? event.target : null
-    if (!target || target.closest(".iconoplasm-tooltip")) return
-    const gene = target.closest(".iconoplasm-gene")
-    if (!gene || !shouldUseTouchSheet(event)) return
-
-    // A touch preview is a deliberate activation, so do not allow a containing page link or a
-    // delegated site handler to turn the same tap into navigation underneath the sheet.
-    event.preventDefault()
-    event.stopPropagation()
-    showTooltipForTarget(gene, { touchSheet: true })
-  }
-
-  function onDocumentKeyDown(event) {
-    if (!touchSheetActive || !event || event.key !== "Escape") return
-    event.preventDefault()
-    hideTooltip({ restoreFocus: true })
-  }
-
-  function configureTooltipInteractionMode(symbol, target, useTouchSheet) {
-    touchSheetActive = Boolean(useTouchSheet)
-    activeGeneTrigger = target || null
-    tooltip.classList.toggle("iconoplasm-tooltip--touch-sheet", touchSheetActive)
-    const backdrop = document.querySelector(".iconoplasm-tooltip-backdrop")
-    if (backdrop) {
-      backdrop.classList.toggle("iconoplasm-tooltip-backdrop--visible", touchSheetActive)
-    }
-    const openAction = tooltip.querySelector("[data-icono-tooltip-open]")
-    if (openAction) {
-      openAction.href = symbol ? buildGenePageUrl(symbol) : ""
-      openAction.textContent = symbol ? "Open " + symbol + " on Iconoplasm" : "Open on Iconoplasm"
-    }
-    if (touchSheetActive) {
-      tooltip.setAttribute("role", "dialog")
-      tooltip.setAttribute("aria-modal", "true")
-      tooltip.setAttribute("aria-label", (symbol || "Gene") + " preview")
-    } else {
-      tooltip.setAttribute("role", "tooltip")
-      tooltip.removeAttribute("aria-modal")
-      tooltip.removeAttribute("aria-label")
-    }
-  }
-
   function onTooltipClick(e) {
     if (e && e.target && e.target.closest("[data-icono-vote-box]")) return
-    if (e && e.target && e.target.closest(".iconoplasm-tooltip-mobile-bar")) return
-    if (touchSheetActive) return
+    if (Date.now() < tooltipNavigationArmedAt) {
+      e.preventDefault()
+      return
+    }
     openGenePage(activeSymbol)
   }
 
   function onTooltipKeyDown(e) {
     if (e.target && e.target.closest("[data-icono-vote-box]")) return
-    if (e.target && e.target.closest(".iconoplasm-tooltip-mobile-bar")) return
-    if (touchSheetActive) return
     if (e.key !== "Enter" && e.key !== " ") return
     e.preventDefault()
     openGenePage(activeSymbol)
@@ -1883,11 +1805,6 @@
   function onMouseOver(e) {
     const target = e.target.closest(".iconoplasm-gene")
     if (!target) return
-    if (shouldUseTouchSheet(e)) return
-    showTooltipForTarget(target)
-  }
-
-  function showTooltipForTarget(target, options = {}) {
     cancelHideTimer()
 
     const symbol = target.dataset.gene
@@ -1898,7 +1815,7 @@
     }
     activeSymbol = symbol
     activeGeneSummary = Object.assign({ symbol }, gene)
-    configureTooltipInteractionMode(symbol, target, Boolean(options.touchSheet))
+    tooltipNavigationArmedAt = Date.now() + TOOLTIP_NAVIGATION_DELAY_MS
     // Fence: fetch the hovered gene before warming neighbors. Reversing this puts the hovered
     // symbol into the warm queue first, so the visible card waits on background work.
     const hoverGeneDetailPromise = geneDetailCache.has(symbol)
@@ -1957,32 +1874,22 @@
       })
     }
 
-    if (touchSheetActive) {
-      tooltip.style.removeProperty("left")
-      tooltip.style.removeProperty("top")
-      delete tooltip.dataset.placement
-    } else {
-      // Position pointer previews next to their trigger. Touch previews are fixed bottom sheets so
-      // they cannot be mounted under the user's finger or drift when mobile browser chrome resizes.
-      const rect = target.getBoundingClientRect()
-      const tooltipWidth = tooltip.offsetWidth || 500
-      const tooltipHeight = tooltip.offsetHeight || 248
-      const tooltipPosition = chooseTooltipViewportPosition(rect, tooltipWidth, tooltipHeight)
-      tooltip.style.left = tooltipPosition.left + window.scrollX + "px"
-      tooltip.style.top = tooltipPosition.top + window.scrollY + "px"
-      tooltip.dataset.placement = tooltipPosition.showBelow ? "below" : "above"
-    }
+    // Position tooltip
+    const rect = target.getBoundingClientRect()
+    const tooltipWidth = tooltip.offsetWidth || 500
+    const tooltipHeight = tooltip.offsetHeight || 248
+
+    const tooltipPosition = chooseTooltipViewportPosition(rect, tooltipWidth, tooltipHeight)
+
+    tooltip.style.left = tooltipPosition.left + window.scrollX + "px"
+    tooltip.style.top = tooltipPosition.top + window.scrollY + "px"
+    tooltip.dataset.placement = tooltipPosition.showBelow ? "below" : "above"
 
     tooltip.classList.add("iconoplasm-tooltip-visible")
     scheduleDiscoveryEncounter(symbol)
-    if (touchSheetActive) {
-      const close = tooltip.querySelector(".iconoplasm-tooltip-mobile-close")
-      if (close && typeof close.focus === "function") close.focus({ preventScroll: true })
-    }
   }
 
   function onMouseOut(e) {
-    if (touchSheetActive) return
     const target = e.target.closest(".iconoplasm-gene")
     if (!target) return
     const related = e.relatedTarget
@@ -1993,7 +1900,6 @@
   }
 
   function onTooltipMouseLeave(e) {
-    if (touchSheetActive) return
     const related = e.relatedTarget
     if (related && (related.closest(".iconoplasm-tooltip") || related.closest(".iconoplasm-gene")))
       return
@@ -2054,28 +1960,14 @@
     }
   }
 
-  function hideTooltip(options = {}) {
+  function hideTooltip() {
     cancelHideTimer()
     clearPendingDiscovery(activeSymbol)
-    const trigger = activeGeneTrigger
     activeSymbol = null
     activeGeneSummary = null
-    activeGeneTrigger = null
+    tooltipNavigationArmedAt = 0
     portraitLoadToken += 1
     tooltip.classList.remove("iconoplasm-tooltip-visible")
-    tooltip.classList.remove("iconoplasm-tooltip--touch-sheet")
-    tooltip.setAttribute("role", "tooltip")
-    tooltip.removeAttribute("aria-modal")
-    tooltip.removeAttribute("aria-label")
-    const backdrop = document.querySelector(".iconoplasm-tooltip-backdrop")
-    if (backdrop) backdrop.classList.remove("iconoplasm-tooltip-backdrop--visible")
-    touchSheetActive = false
-    if (options.restoreFocus && trigger && typeof trigger.focus === "function") {
-      const hadTabIndex = trigger.hasAttribute("tabindex")
-      if (!hadTabIndex) trigger.setAttribute("tabindex", "-1")
-      trigger.focus({ preventScroll: true })
-      if (!hadTabIndex) trigger.removeAttribute("tabindex")
-    }
   }
 
   // -- Go ------------------------------------------------------------
