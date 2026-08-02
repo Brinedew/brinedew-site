@@ -1,7 +1,7 @@
 // Default disambiguation blocklist — shared between content.js and popup.js.
 // Data-driven: every entry BOTH (a) exists in the gene catalog as a symbol/alias
 // AND (b) is a common English word that users probably don't want highlighted.
-// Pruned 2026-05-09 from 99 entries to 74 alias-only catalog-verified entries.
+// Pruned 2026-05-09 from 99 entries to 76 alias-only catalog-verified entries.
 //
 // Users see these pre-populated in the Blocklist tab and can un-block any of them.
 // Stored in chrome.storage as the "removed defaults" set so new defaults in future
@@ -57,6 +57,7 @@ const ICONOPLASM_DEFAULT_BLOCKLIST = [
   "NAIL", // alias of CD244
   "PACE", // alias of FURIN
   "POEM", // alias of NPNT
+  "POKEMON", // alias of ZBTB7A
   "PREY", // alias of PYURF
   "RACE", // alias of AMACR
   "RAIN", // alias of RASIP1
@@ -69,6 +70,7 @@ const ICONOPLASM_DEFAULT_BLOCKLIST = [
   "SNAP", // alias of SNAP25
   "SOUL", // alias of HEBP2
   "SPAR", // alias of SPAAR
+  "SPATIAL", // alias of TBATA
   "STEP", // alias of PTPN5
   "STOP", // alias of MAP6
   "STUD", // alias of TBPL1
