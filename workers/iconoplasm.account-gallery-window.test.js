@@ -624,6 +624,7 @@ test("image-only account gallery window returns discovery-fresh portrait cards w
   )
   assert.equal(payload.cards[0]?.portrait?.status, "published")
   assert.match(payload.cards[0]?.pt || "", /\/portraits\/v1\/7b\//)
+  assert.equal(payload.cards[0]?.portrait?.asset_sha256, "7b".repeat(32))
   assert.equal(payload.cards[0]?.ph, undefined)
   assert.equal(payload.cards[0]?.portrait?.hero_url, undefined)
   assert.equal(payload.cards[0]?.portrait?.medium_url, undefined)
@@ -632,6 +633,51 @@ test("image-only account gallery window returns discovery-fresh portrait cards w
   assert.notEqual(payload.cards[0]?.schema_version, "iconoplasm.mobileCard.v1")
   assert.match(response.headers.get("Server-Timing") || "", /acct_portrait_refs/)
   assert.doesNotMatch(response.headers.get("Server-Timing") || "", /acct_catalog/)
+})
+
+test("image-only account gallery keeps published portrait URL and identity atomic", async () => {
+  const db = new FakeDb()
+  const staleRowSha = "95".repeat(32)
+  const publishedSha = "fb".repeat(32)
+  db.enrich = (row) => ({
+    ...row,
+    full_name: `${row.gene_symbol} full name`,
+    asset_sha256: staleRowSha,
+    image_width: 384,
+    image_height: 512,
+  })
+  const env = buildEnv({ db, version: "test-published-identity" })
+  await env.KV.put(
+    `iconoplasm:published-portrait-fingerprint:v3`,
+    JSON.stringify({
+      fingerprint: { published_count: 5, latest: publishedSha },
+    }),
+  )
+  await env.KV.put(
+    `iconoplasm:published-portrait-refs:v3-5-${publishedSha}`,
+    JSON.stringify(
+      ["INS", "PRL", "RHO", "TP53", "BRCA1"].map((symbol) => ({
+        symbol,
+        asset_sha256: publishedSha,
+      })),
+    ),
+  )
+  resetIconoplasmRuntimeCachesForTest()
+
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=2&view=image-only",
+        { headers: { Cookie: "session=abc" } },
+      ),
+      env,
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.match(payload.cards[0].pt, new RegExp(`/portraits/v1/fb/${publishedSha}/medium\\.webp$`))
+  assert.equal(payload.cards[0].portrait.asset_sha256, publishedSha)
+  assert.notEqual(payload.cards[0].portrait.asset_sha256, staleRowSha)
 })
 
 test("account gallery window paginates symbol order with a stable cursor", async () => {

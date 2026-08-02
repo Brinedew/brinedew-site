@@ -1848,7 +1848,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (card) ordered.push(mobileCardPayloadFromVM(card))
         else failures.push({ symbol: symbols[j], reason: "manifest_missing" })
       }
-      return { cards: ordered, failures: failures }
+      return {
+        cards: ordered,
+        failures: failures,
+        snapshotVersion: String(manifest.snapshot_version || ""),
+      }
     })
   }
 
@@ -7515,6 +7519,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           previousCursor: accountData.previous_cursor,
           hasMore: !!accountData.has_more,
           nextCursor: accountData.next_cursor,
+          snapshotVersion: String(accountData.vm_version || ""),
         }
       }
 
@@ -7541,6 +7546,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         discoveredCount: galleryState.sortedDiscoveries.length,
         hasPrevious: offset > 0,
         hasMore: offset + entries.length < galleryState.sortedDiscoveries.length,
+        snapshotVersion: String((result && result.snapshotVersion) || ""),
       }
     }
 
@@ -7729,8 +7735,46 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     syncOrderOptions()
     syncCollectionChrome()
     activeHomeHistorySnapshot = snapshotHomeState
+    var refreshVisibleSnapshot = function () {
+      if (disposed || document.visibilityState === "hidden") return Promise.resolve(false)
+      var loadedVersion = String(feedController.debugState().snapshotVersion || "").trim()
+      if (!loadedVersion) return Promise.resolve(false)
+      if (refreshVisibleSnapshot.promise) return refreshVisibleSnapshot.promise
+      refreshVisibleSnapshot.promise = fetchJSON(
+        "/api/public/v1/metadata?gallery-freshness=" + encodeURIComponent(String(Date.now())),
+        {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-store" },
+        },
+      )
+        .then(function (metadata) {
+          if (disposed) return false
+          var currentVersion = String((metadata && metadata.card_snapshot_version) || "").trim()
+          if (!currentVersion || currentVersion === loadedVersion) return false
+          // Preserve the visible card and its viewport position, but discard all
+          // mounted payloads. A long-lived or back/forward-restored tab must not
+          // keep displaying a portrait from an older canonical snapshot.
+          pendingHomeRestoreState = snapshotHomeState()
+          render()
+          return true
+        })
+        .catch(function (error) {
+          console.warn(
+            "[Iconoplasm] visible gallery freshness check failed:",
+            String((error && error.message) || error || "unknown"),
+          )
+          return false
+        })
+        .finally(function () {
+          refreshVisibleSnapshot.promise = null
+        })
+      return refreshVisibleSnapshot.promise
+    }
+    refreshVisibleSnapshot.promise = null
+    activeHomeFreshnessCheck = refreshVisibleSnapshot
     activeHomeRenderCleanup = function () {
       disposed = true
+      if (activeHomeFreshnessCheck === refreshVisibleSnapshot) activeHomeFreshnessCheck = null
       activeSearchRequest += 1
       clearTimeout(searchTimer)
       feedController.dispose()
@@ -8840,6 +8884,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var lastRenderedPath = null
   var activeHomeHistorySnapshot = null
   var activeHomeRenderCleanup = null
+  var activeHomeFreshnessCheck = null
   var pendingHomeRestoreState = null
   var queuedHomeHistorySync = null
   var pendingHomeAnchor = null
@@ -9597,6 +9642,18 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   window.addEventListener("popstate", function () {
     render()
   })
+
+  function refreshVisibleHomeSnapshot() {
+    if (document.visibilityState === "hidden") return
+    if (getRoute().page !== "home" || typeof activeHomeFreshnessCheck !== "function") return
+    void activeHomeFreshnessCheck()
+  }
+
+  // A browser can preserve the mounted archive for hours or restore it from the
+  // back/forward cache without running a new page load. Revalidate the published
+  // snapshot whenever that page becomes visible again.
+  document.addEventListener("visibilitychange", refreshVisibleHomeSnapshot)
+  window.addEventListener("pageshow", refreshVisibleHomeSnapshot)
 
   window.addEventListener(ICONO_EXTENSION_PRESENCE_EVENT, handleIconoplasmExtensionPresence)
 

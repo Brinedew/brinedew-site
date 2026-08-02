@@ -1398,6 +1398,17 @@ test("account gallery first window is discovery-fresh and never persistently cac
   assert.match(app, /payloadCacheSize:\s*8/)
 })
 
+test("a restored or long-lived home gallery revalidates its published snapshot", async () => {
+  const app = await readFile(appPath, "utf8")
+  assert.match(app, /snapshotVersion:\s*String\(accountData\.vm_version \|\| ""\)/)
+  assert.match(app, /snapshotVersion:\s*String\(\(result && result\.snapshotVersion\) \|\| ""\)/)
+  assert.match(app, /\/api\/public\/v1\/metadata\?gallery-freshness=/)
+  assert.match(app, /metadata && metadata\.card_snapshot_version/)
+  assert.match(app, /pendingHomeRestoreState = snapshotHomeState\(\)[\s\S]*render\(\)/)
+  assert.match(app, /document\.addEventListener\("visibilitychange", refreshVisibleHomeSnapshot\)/)
+  assert.match(app, /window\.addEventListener\("pageshow", refreshVisibleHomeSnapshot\)/)
+})
+
 test("archival fallback cards clear missing portrait state during hydration", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function hydrateBrickCard(card, genePayload)")

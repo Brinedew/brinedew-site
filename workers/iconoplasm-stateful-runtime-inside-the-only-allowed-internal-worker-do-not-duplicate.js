@@ -4092,6 +4092,7 @@ function accountGalleryImageOnlyCard(row, env, publishedPortraitRef = null) {
   if (!symbol) return null
   const base = portraitBase(new URL("https://iconoplasm.brinedew.bio/"), env)
   const publishedAsset = portraitAssetRef(base, publishedPortraitRef?.asset_sha256)
+  const publishedAssetSha = normalizeSha256(publishedAsset?.asset_sha256 || "")
   const refHeroUrl = portraitAssetUrl(publishedAsset, "full") || ""
   const refMediumUrl = portraitAssetUrl(publishedAsset, "medium") || ""
   const assetSha = normalizeSha256(row?.asset_sha256 || "")
@@ -4109,7 +4110,11 @@ function accountGalleryImageOnlyCard(row, env, publishedPortraitRef = null) {
       heroUrl || mediumUrl
         ? {
             status: "published",
-            asset_sha256: assetSha || null,
+            // The URL and identity must describe the same published portrait.
+            // A discovery/read-model row can legitimately lag the canonical
+            // reference; exposing its SHA beside the current URL creates a
+            // split-brain card that client code can later reconstruct wrongly.
+            asset_sha256: publishedAssetSha || assetSha || null,
             width,
             height,
           }
