@@ -417,14 +417,15 @@ function buildSessionBinding(session) {
   }
 }
 
-test("preallocated Anima emulsion contract accepts exact aliases and keeps legacy holes closed", () => {
+test("assigned Anima emulsion contract accepts exact aliases and rejects unassigned numbers", () => {
   assert.equal(iconoplasmAnimaEmulsionSlotFromExactAlias("A1-50817"), 50817)
   assert.equal(iconoplasmAnimaEmulsionSlotFromExactAlias("anima-v1-50817"), 50817)
   assert.equal(iconoplasmAnimaEmulsionSlotFromExactAlias("A1-50817-e"), 50817)
   assert.equal(iconoplasmAnimaEmulsionSlotFromExactAlias("A1-50817 trailing"), 0)
   assert.equal(iconoplasmAnimaEmulsionSlotIsPreallocated(50817), true)
   assert.equal(iconoplasmAnimaEmulsionSlotIsPreallocated(5000), false)
-  assert.equal(iconoplasmAnimaEmulsionSlotIsPreallocated(58011), false)
+  assert.equal(iconoplasmAnimaEmulsionSlotIsPreallocated(58250), true)
+  assert.equal(iconoplasmAnimaEmulsionSlotIsPreallocated(58251), false)
 
   assert.deepEqual(iconoplasmPreallocatedAnimaEmulsionOption("A1-50817"), {
     vision_id: "anima-v1-50817",
@@ -452,7 +453,8 @@ test("public Anima allocation contract contains numeric facts but no private art
   assert.doesNotMatch(contract, /@[a-z0-9_()]+/i)
   assert.doesNotMatch(contract, /pablo|suerte|uchida/i)
   assert.match(contract, /"callable_slot_intervals"/)
-  assert.match(contract, /\[\s*4564,\s*20000\s*\]/)
+  assert.doesNotMatch(contract, /reserved_legacy/i)
+  assert.match(contract, /"schema": "iconoplasm\.anima-emulsion-slot-contract\.v2"/)
 })
 
 test("admin request history keeps fulfilled rows and attaches their result image", async () => {
