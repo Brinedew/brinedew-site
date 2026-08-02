@@ -143,25 +143,30 @@ const cleanupPath = resolve(sqlDir, "999-cleanup.sql")
 writeFileSync(cleanupPath, "DROP TABLE icono_emulsion_identity_cutover_b699;\n")
 
 const runWrangler = (filePath) => {
-  const executable = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
   return execFileSync(
-    executable,
-    ["exec", "wrangler", "d1", "execute", "iconoplasm", "--remote", "--config", configPath, "--file", filePath, "--json", "--yes"],
+    process.execPath,
+    [resolve("node_modules/wrangler/bin/wrangler.js"), "d1", "execute", "iconoplasm", "--remote", "--config", configPath, "--file", filePath, "--json", "--yes"],
     { cwd: resolve("."), encoding: "utf8", timeout: 120_000, maxBuffer: 16 * 1024 * 1024 },
   )
+}
+
+const parseWranglerJson = (output) => {
+  const start = String(output).indexOf("[")
+  if (start < 0) throw new Error(`Wrangler did not return JSON: ${String(output).slice(0, 500)}`)
+  return JSON.parse(String(output).slice(start))
 }
 
 const report = { apply, map_path: mapPath, map_rows: rows.length, sql_files: files.length + 2 }
 if (apply) {
   const outputs = []
-  for (const filePath of files) outputs.push({ file: filePath, result: JSON.parse(runWrangler(filePath)) })
-  const validation = JSON.parse(runWrangler(validatePath))
+  for (const filePath of files) outputs.push({ file: filePath, result: parseWranglerJson(runWrangler(filePath)) })
+  const validation = parseWranglerJson(runWrangler(validatePath))
   const values = Object.fromEntries((validation?.[0]?.results || []).map((row) => [row.check_name, Number(row.value)]))
   if (values.map_rows !== rows.length || values.asset_mismatches || values.vote_mismatches || values.summary_mismatches || values.event_mismatches || values.old_favorites) {
     throw new Error(`D1 validation failed: ${JSON.stringify(values)}`)
   }
   outputs.push({ file: validatePath, result: validation })
-  outputs.push({ file: cleanupPath, result: JSON.parse(runWrangler(cleanupPath)) })
+  outputs.push({ file: cleanupPath, result: parseWranglerJson(runWrangler(cleanupPath)) })
   writeFileSync(resolve(artifactDir, "apply-results.json"), `${JSON.stringify(outputs, null, 2)}\n`)
   report.validation = values
 }
