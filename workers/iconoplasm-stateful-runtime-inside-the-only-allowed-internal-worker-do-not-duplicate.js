@@ -9103,11 +9103,20 @@ async function generationRequestDiagnostics(env, url, request, symbol) {
 
 export async function fulfillGenerationRequests(
   env,
-  { items = [], resolvedBy = "workstation_sync" } = {},
+  { items = [], resolvedBy = "workstation_sync", publicationId = "" } = {},
 ) {
   if (!env.ICONOPLASM_DB)
     return { ok: false, fulfilled: 0, request_ids: [], error: "ICONOPLASM_DB binding missing" }
   const actorNorm = normalizeUserId(resolvedBy || "workstation_sync")
+  const publicationIdNorm = sanitizeText(publicationId || "", 128) || ""
+  if (!publicationIdNorm || !/^[a-z0-9][a-z0-9._:-]*$/i.test(publicationIdNorm)) {
+    return {
+      ok: false,
+      fulfilled: 0,
+      request_ids: [],
+      error: "A valid durable publication_id is required for request fulfillment.",
+    }
+  }
   const intentsByRequestId = new Map()
   const requestedRequestIds = new Set()
   const deliveryRequestIds = new Set()
@@ -9180,8 +9189,12 @@ export async function fulfillGenerationRequests(
     return env.ICONOPLASM_DB.prepare(
       `SELECT id,
               status,
+              requester_user_id,
+              gene_symbol,
               COALESCE(fulfilled_asset_sha256, '') AS fulfilled_asset_sha256,
-              COALESCE(fulfilled_vision_id, '') AS fulfilled_vision_id
+              COALESCE(fulfilled_vision_id, '') AS fulfilled_vision_id,
+              COALESCE(fulfillment_publication_id, '') AS fulfillment_publication_id,
+              COALESCE(fulfillment_group_size, 1) AS fulfillment_group_size
        FROM icono_generation_requests
        WHERE id = ?
        LIMIT 1`,
@@ -9195,6 +9208,22 @@ export async function fulfillGenerationRequests(
       normalizeSha256(row?.fulfilled_asset_sha256 || "") === intent.fulfilledAssetSha &&
       sanitizeVoteVisionId(row?.fulfilled_vision_id || "") === intent.fulfilledVisionId
     )
+  }
+
+  async function bindNotificationToPublication(requestId, fulfillmentGroupSize) {
+    await env.ICONOPLASM_DB.prepare(
+      `UPDATE icono_request_notifications
+       SET fulfillment_publication_id = ?,
+           fulfillment_group_size = ?
+       WHERE request_id = ?
+         AND discord_status <> 'sent'
+         AND (
+           fulfillment_publication_id = ''
+           OR fulfillment_publication_id = 'legacy-request:' || request_id
+         )`,
+    )
+      .bind(publicationIdNorm, fulfillmentGroupSize, requestId)
+      .run()
   }
 
   const preflightRows = new Map()
@@ -9243,8 +9272,20 @@ export async function fulfillGenerationRequests(
     }
   }
 
+  const fulfillmentGroupSizes = new Map()
+  for (const intent of intentsByRequestId.values()) {
+    const row = preflightRows.get(intent.requestId)
+    const groupKey = `${normalizeUserId(row?.requester_user_id || "")}|${normalizeSymbol(row?.gene_symbol || "")}`
+    fulfillmentGroupSizes.set(groupKey, Number(fulfillmentGroupSizes.get(groupKey) || 0) + 1)
+  }
+
   for (const intent of intentsByRequestId.values()) {
     const preflightRow = preflightRows.get(intent.requestId)
+    const fulfillmentGroupKey = `${normalizeUserId(preflightRow?.requester_user_id || "")}|${normalizeSymbol(preflightRow?.gene_symbol || "")}`
+    const fulfillmentGroupSize = Math.max(
+      1,
+      Number(fulfillmentGroupSizes.get(fulfillmentGroupKey) || 1),
+    )
     const preflightStatus = String(preflightRow?.status || "")
       .trim()
       .toLowerCase()
@@ -9261,7 +9302,9 @@ export async function fulfillGenerationRequests(
              fulfilled_by = ?,
              fulfilled_asset_sha256 = ?,
              fulfilled_vision_id = ?,
-             fulfillment_note = ?
+             fulfillment_note = ?,
+             fulfillment_publication_id = ?,
+             fulfillment_group_size = ?
          WHERE id = ?
            AND status = 'open'`,
       )
@@ -9270,10 +9313,13 @@ export async function fulfillGenerationRequests(
           intent.fulfilledAssetSha,
           intent.fulfilledVisionId,
           intent.note,
+          publicationIdNorm,
+          fulfillmentGroupSize,
           intent.requestId,
         )
         .run()
       if (Number(beginResp?.meta?.changes || 0) > 0) {
+        await bindNotificationToPublication(intent.requestId, fulfillmentGroupSize)
         deliveryRequestIds.add(intent.requestId)
         startedDeliveryIds.add(intent.requestId)
         continue
@@ -9292,17 +9338,39 @@ export async function fulfillGenerationRequests(
       continue
     }
     if (currentStatus === "delivery_pending" && matchesIntent(currentRow, intent)) {
+      if (
+        currentRow.fulfillment_publication_id &&
+        currentRow.fulfillment_publication_id !== publicationIdNorm &&
+        currentRow.fulfillment_publication_id !== `legacy-request:${intent.requestId}`
+      ) {
+        conflicts.push({
+          request_id: intent.requestId,
+          reason: "request_already_bound_to_different_publication",
+          existing_publication_id: currentRow.fulfillment_publication_id,
+          attempted_publication_id: publicationIdNorm,
+        })
+        continue
+      }
       const resumeResp = await env.ICONOPLASM_DB.prepare(
         `UPDATE icono_generation_requests
-         SET updated_at = CURRENT_TIMESTAMP
+         SET updated_at = CURRENT_TIMESTAMP,
+             fulfillment_publication_id = ?,
+             fulfillment_group_size = ?
          WHERE id = ?
            AND status = 'delivery_pending'
            AND fulfilled_asset_sha256 = ?
            AND fulfilled_vision_id = ?`,
       )
-        .bind(intent.requestId, intent.fulfilledAssetSha, intent.fulfilledVisionId)
+        .bind(
+          publicationIdNorm,
+          fulfillmentGroupSize,
+          intent.requestId,
+          intent.fulfilledAssetSha,
+          intent.fulfilledVisionId,
+        )
         .run()
       if (Number(resumeResp?.meta?.changes || 0) > 0) {
+        await bindNotificationToPublication(intent.requestId, fulfillmentGroupSize)
         deliveryRequestIds.add(intent.requestId)
         continue
       }
@@ -28572,6 +28640,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const result = await fulfillGenerationRequests(env, {
         items: Array.isArray(p?.items) ? p.items : [],
         resolvedBy: await actor(request, env),
+        publicationId: p?.publication_id || "",
       })
       if (!result.ok) {
         return done(

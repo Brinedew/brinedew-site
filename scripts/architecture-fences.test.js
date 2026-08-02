@@ -196,21 +196,22 @@ test("IPD-009 keeps the cold path and deployment topology explicit", () => {
 })
 
 // ARCHITECTURE FENCE [IPD-006]
-test("IPD-006 preserves durable per-gene batches and bounded Discord receipts", () => {
+test("IPD-006 preserves durable publication groups and bounded Discord receipts", () => {
   const delivery = readRepositoryFile("workers/iconoplasm-request-notifications.js")
   const runtime = readRepositoryFile(
     "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
   )
   const migration = readRepositoryFile(
-    "migrations-iconoplasm/0058_request_notification_batches.sql",
+    "migrations-iconoplasm/0062_fulfillment_publication_notification_groups.sql",
   )
   assert.match(delivery, /DISCORD_MAX_ATTACHMENTS_PER_MESSAGE = 10/)
   assert.match(delivery, /DISCORD_ATTACHMENT_BATCH_MAX_BYTES/)
-  assert.match(delivery, /request_batch_id/)
-  assert.match(delivery, /request_batch_size/)
+  assert.match(delivery, /fulfillment_publication_id/)
+  assert.match(delivery, /fulfillment_group_size/)
   assert.match(delivery, /full\.webp/)
-  assert.match(runtime, /requestBatchId: batchId/)
-  assert.match(runtime, /requestBatchSize: uniqueVisionIds\.length/)
+  assert.match(runtime, /publicationId: p\?\.publication_id/)
+  assert.match(runtime, /fulfillment_publication_id = \?/)
+  assert.match(runtime, /fulfillment_group_size = \?/)
   assert.match(migration, /legacy-request:/)
   assert.doesNotMatch(delivery, /setTimeout|setInterval/)
 })
