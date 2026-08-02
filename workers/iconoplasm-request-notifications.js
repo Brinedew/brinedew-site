@@ -545,23 +545,23 @@ export async function deliverPendingRequestFulfillmentNotifications(
     ? ["pending", "retry", "suppressed_not_test_recipient"]
     : ["pending", "retry"]
   const statusPlaceholders = deliverableStatuses.map(() => "?").join(",")
-  const sameBatch = (left, right) => `
+  const sameDeliveryGroup = (left, right) => `
     ${left}.requester_user_id = ${right}.requester_user_id
-    AND ${left}.request_batch_id = ${right}.request_batch_id
-    AND ${left}.gene_symbol = ${right}.gene_symbol
-    AND ${left}.request_kind = ${right}.request_kind`
+    AND ${left}.fulfillment_publication_id = ${right}.fulfillment_publication_id
+    AND ${left}.gene_symbol = ${right}.gene_symbol`
   const where = [
     `n.discord_status IN (${statusPlaceholders})`,
+    "n.fulfillment_publication_id <> ''",
     "(n.discord_next_attempt_at IS NULL OR n.discord_next_attempt_at <= CURRENT_TIMESTAMP)",
     `n.id = (
       SELECT MIN(leader.id)
       FROM icono_request_notifications leader
-      WHERE ${sameBatch("leader", "n")}
+      WHERE ${sameDeliveryGroup("leader", "n")}
     )`,
-    `n.request_batch_size = (
+    `n.fulfillment_group_size = (
       SELECT COUNT(*)
       FROM icono_request_notifications completed
-      WHERE ${sameBatch("completed", "n")}
+      WHERE ${sameDeliveryGroup("completed", "n")}
     )`,
   ]
   const params = [...deliverableStatuses]
@@ -569,7 +569,7 @@ export async function deliverPendingRequestFulfillmentNotifications(
     where.push(`EXISTS (
       SELECT 1
       FROM icono_request_notifications scoped
-      WHERE ${sameBatch("scoped", "n")}
+      WHERE ${sameDeliveryGroup("scoped", "n")}
         AND scoped.request_id IN (${ids.map(() => "?").join(",")})
     )`)
     params.push(...ids)
@@ -597,26 +597,24 @@ export async function deliverPendingRequestFulfillmentNotifications(
   for (const leader of Array.isArray(rowsResponse?.results) ? rowsResponse.results : []) {
     const leaderId = positiveInteger(leader?.id)
     const requesterId = userId(leader?.requester_user_id)
-    const batchId = boundedText(leader?.request_batch_id, 128)
+    const publicationId = boundedText(leader?.fulfillment_publication_id, 128)
     const symbol = geneSymbol(leader?.gene_symbol)
-    const kind = requestKind(leader?.request_kind)
     const expectedSize = Math.max(
       1,
-      Math.min(500, positiveInteger(leader?.request_batch_size) || 1),
+      Math.min(500, positiveInteger(leader?.fulfillment_group_size) || 1),
     )
-    if (!leaderId || !requesterId || !batchId || !symbol) continue
+    if (!leaderId || !requesterId || !publicationId || !symbol) continue
 
     const groupResponse = await env.ICONOPLASM_DB.prepare(
       `SELECT n.*
        FROM icono_request_notifications n
        WHERE n.requester_user_id = ?
-         AND n.request_batch_id = ?
+         AND n.fulfillment_publication_id = ?
          AND n.gene_symbol = ?
-         AND n.request_kind = ?
        ORDER BY n.id ASC
        LIMIT 501`,
     )
-      .bind(requesterId, batchId, symbol, kind)
+      .bind(requesterId, publicationId, symbol)
       .all()
     const rows = Array.isArray(groupResponse?.results) ? groupResponse.results : []
     if (

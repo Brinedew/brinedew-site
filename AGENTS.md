@@ -56,10 +56,11 @@ essence, keep the admin rollup copy empty, and archive publish events older than
 columns, materialized payloads, append-only ledgers, retention jobs, D1 bindings,
 capacity charts, or bulk reconciliation paths.
 
-**ARCHITECTURE FENCE [IPD-006]** — a Free Queue action is the Discord delivery
-unit, partitioned by gene. Persist `request_batch_id`; never infer a batch from
-timestamps, adjacent IDs, or whichever fulfillments happen to share a cron run.
-Wait until every request in that batch-and-gene is ready, then send one receipt
+**ARCHITECTURE FENCE [IPD-006]** — one completed workstation publication is the
+Discord delivery unit, partitioned by recipient and gene. Persist the durable
+publication ID; never infer a group from button presses, timestamps, adjacent
+IDs, or a cron run. Wait until every request in that publication-recipient-gene
+group is ready, then send one receipt
 with at most ten full-resolution preview attachments and the authoritative
 gene-page link. A hundred candidates still means one receipt, not ten DMs and
 not a hundred-image contact sheet. Read
