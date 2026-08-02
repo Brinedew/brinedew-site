@@ -662,8 +662,8 @@ test("DO NOT DELETE: default blocklist keeps alias-only pruning outcome", () => 
   const defaults = [...source.matchAll(/"([A-Z0-9-]+)"/g)].map((match) => match[1])
   const defaultSet = new Set(defaults)
 
-  assert.equal(defaults.length, 74, "default blocklist should stay at the alias-only pruned size")
-  for (const term of ["FLOWER", "JERKY", "STAT"]) {
+  assert.equal(defaults.length, 76, "default blocklist should stay at the alias-only pruned size")
+  for (const term of ["FLOWER", "JERKY", "POKEMON", "SPATIAL", "STAT"]) {
     assert.ok(defaultSet.has(term), `${term} should be kept because it is an alias-only term`)
   }
   for (const term of [
