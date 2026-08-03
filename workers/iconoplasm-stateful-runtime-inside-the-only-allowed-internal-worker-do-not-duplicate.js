@@ -3110,6 +3110,19 @@ async function headPortraitStorageObject(env, key) {
   return { ok: true }
 }
 
+async function verifyPortraitStorageObjectAfterPut(env, key) {
+  // Bunny Storage is eventually consistent across storage nodes immediately
+  // after PUT. Keep verification authoritative, but absorb the documented
+  // short replication window instead of rerendering an object that was
+  // accepted successfully.
+  for (const delayMs of [0, 750, 1500, 3000]) {
+    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
+    const object = await headPortraitStorageObject(env, key)
+    if (object) return object
+  }
+  return null
+}
+
 export async function putPortraitStorageObject(
   env,
   key,
@@ -20612,7 +20625,7 @@ async function processIconoplasmGeneCardMaterializationMessage(message, env, ctx
           renderer_revision: ICONOPLASM_GENE_CARD_RENDERER_REVISION,
         },
       })
-      const verified = await headPortraitStorageObject(env, objectKey)
+      const verified = await verifyPortraitStorageObjectAfterPut(env, objectKey)
       if (!verified) throw new Error("Uploaded gene card could not be verified")
     }
     const completed = await completeIconoplasmGeneCardMaterialization(env, {
