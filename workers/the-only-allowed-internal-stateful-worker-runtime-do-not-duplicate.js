@@ -1303,7 +1303,10 @@ function buildContentSecurityPolicy(request) {
 function crossOriginResourcePolicyForRequest(request) {
   try {
     const reqUrl = new URL(request.url)
-    if (reqUrl.hostname === ICONOPLASM_HOST && reqUrl.pathname.startsWith("/portraits/")) {
+    if (
+      reqUrl.hostname === ICONOPLASM_HOST &&
+      (reqUrl.pathname.startsWith("/portraits/") || reqUrl.pathname.startsWith("/gene-cards/"))
+    ) {
       return "cross-origin"
     }
   } catch {
@@ -1827,14 +1830,17 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
     // Portrait binaries must resolve even after service-binding hops or route
     // reassignment, so do not make them depend on the incoming hostname still
     // looking like iconoplasm.brinedew.bio.
-    if (url.pathname.startsWith("/portraits/")) {
+    if (url.pathname.startsWith("/portraits/") || url.pathname.startsWith("/gene-cards/")) {
       const key = url.pathname.replace(/^\/+/, "")
       const object = await env.ICONOPLASM_PORTRAITS?.get?.(key)
       if (object) {
+        const fallbackContentType = url.pathname.startsWith("/gene-cards/")
+          ? "image/png"
+          : "image/webp"
         return new Response(request.method === "HEAD" ? null : object.body, {
           status: 200,
           headers: {
-            "Content-Type": object.httpMetadata?.contentType || "image/webp",
+            "Content-Type": object.httpMetadata?.contentType || fallbackContentType,
             "Cache-Control": "public, max-age=31536000, immutable",
             ETag: `"${object.httpEtag || key}"`,
             "Access-Control-Allow-Origin": "*",
@@ -1862,6 +1868,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       const isApiOrWorker =
         url.pathname.startsWith("/api/") ||
         url.pathname.startsWith("/portraits/") ||
+        url.pathname.startsWith("/gene-cards/") ||
         url.pathname === "/admin" ||
         url.pathname === "/blocklist" ||
         url.pathname === "/blocklist/" ||

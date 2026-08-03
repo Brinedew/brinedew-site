@@ -282,6 +282,16 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     rateLimit: null,
   }),
   contract({
+    id: "gene_card_asset",
+    match: prefix("/gene-cards/", "storageKey"),
+    methods: GET,
+    auth: "public",
+    cache: "immutable",
+    budgetFamily: "public_gene_card_asset",
+    gatewayHandler: "gene_card_asset",
+    rateLimit: null,
+  }),
+  contract({
     id: "site_gene_detail",
     match: prefix(`${ICONOPLASM_SITE_GENE_API_PREFIX}/`, "symbol"),
     methods: GET,

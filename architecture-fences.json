@@ -5,8 +5,8 @@
     {
       "id": "IPD-001",
       "title": "Bunny is the healthy-path portrait accelerator",
-      "decision": "Healthy browser tabs load content-addressed portrait bytes directly from Bunny; one failed real-image probe selects the canonical first-party fallback for that tab.",
-      "reason": "Direct Bunny delivery avoids charging every healthy portrait read to the Cloudflare Worker budget. A resolver failure on one network is the reason the fallback exists, not evidence that Bunny should be disabled globally.",
+      "decision": "Healthy browser tabs load content-addressed portrait and requested labelled-card bytes directly from Bunny; one failed real-image probe selects the canonical first-party fallback for that tab.",
+      "reason": "Direct Bunny delivery avoids charging every healthy portrait or labelled-card read to the Cloudflare Worker budget. A resolver failure on one network is the reason the fallback exists, not evidence that Bunny should be disabled globally.",
       "change_control": "Retiring or replacing Bunny requires an explicit architecture migration that updates this registry, the delivery runbook, source policy, production and staging configuration, behavioral tests, and deploy guard in one reviewed change.",
       "runbook": "docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md",
       "linear_issue": "B-649",

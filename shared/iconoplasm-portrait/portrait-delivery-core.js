@@ -18,6 +18,7 @@ export const DEFAULT_PORTRAIT_DELIVERY_POLICY = Object.freeze({
 
 const SOURCES = new Set(["accelerator", "canonical"])
 const STATES = new Set(["undecided", "accelerator", "canonical", "terminal_failure"])
+const DELIVERED_IMAGE_PATH_PREFIXES = Object.freeze(["/portraits/", "/gene-cards/"])
 
 function normalizedOrigin(raw, fallback = "") {
   try {
@@ -90,7 +91,11 @@ export function portraitPath(rawUrl, policy = DEFAULT_PORTRAIT_DELIVERY_POLICY) 
     const parsed = new URL(value, normalizedPolicy.canonical_origin)
     const allowedOrigins = new Set([normalizedPolicy.canonical_origin])
     if (normalizedPolicy.accelerator.origin) allowedOrigins.add(normalizedPolicy.accelerator.origin)
-    if (!allowedOrigins.has(parsed.origin) || !parsed.pathname.startsWith("/portraits/")) return ""
+    if (
+      !allowedOrigins.has(parsed.origin) ||
+      !DELIVERED_IMAGE_PATH_PREFIXES.some((prefix) => parsed.pathname.startsWith(prefix))
+    )
+      return ""
     return parsed.pathname + parsed.search
   } catch (_error) {
     return ""

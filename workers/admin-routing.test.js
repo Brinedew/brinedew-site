@@ -53,6 +53,30 @@ test("portrait binaries stay wired even when they arrive through a non-iconoplas
   assert.equal(response.headers.get("content-type"), "image/webp")
 })
 
+test("labelled gene-card binaries have the same first-party storage fallback", async () => {
+  const key = "gene-cards/v1/S/SOX12/fingerprint/SOX12-iconoplasm-gene-card.png"
+  const response = await worker.fetch(
+    new Request(`https://iconoplasm.brinedew.bio/${key}`, { method: "GET" }),
+    {
+      ICONOPLASM_PORTRAITS: {
+        async get(requestedKey) {
+          assert.equal(requestedKey, key)
+          return {
+            body: "png-bytes",
+            httpMetadata: { contentType: "image/png" },
+            httpEtag: "gene-card-etag",
+          }
+        },
+      },
+    },
+    { waitUntil() {} },
+  )
+
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("content-type"), "image/png")
+  assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable")
+})
+
 test("iconoplasm admin gallery mutation routes reach the admin gate instead of 404", async () => {
   const mutationPaths = [
     "/api/iconoplasm/admin/publish",
