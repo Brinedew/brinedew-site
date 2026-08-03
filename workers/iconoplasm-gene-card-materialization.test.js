@@ -118,6 +118,11 @@ test("the durable ledger is bounded and queue delivery is serialized", () => {
     "guest enrollment must reject a Turnstile token minted for another action",
   )
   assert.match(
+    runtimeSource,
+    /verifyPortraitStorageObjectAfterPut[\s\S]*\[0, 750, 1500, 3000\][\s\S]*headPortraitStorageObject/,
+    "Bunny read-after-write verification must absorb its short replication window",
+  )
+  assert.match(
     wranglerSource,
     /queue = "iconoplasm-gene-card-materialization"[\s\S]*max_batch_size = 1/,
   )
