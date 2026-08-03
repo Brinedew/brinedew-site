@@ -42,6 +42,9 @@ renderer revision, including the selected portrait identity. They never choose
 or reconstruct a portrait independently. Public downloads go through the
 first-party print-copy route and set the same gene-specific filename in
 `Content-Disposition`; ready archive thumbnails may use the accelerator URL.
+After a labelled-card PUT, the worker retries authenticated Storage HEAD across
+a bounded five-second replication window before declaring verification failed.
+It never treats an unverified upload as ready.
 
 ## Storage and serving
 
