@@ -50,6 +50,7 @@ import {
   iconoplasmGeneCardDownloadFilename,
   iconoplasmGeneCardFingerprint,
   iconoplasmGeneCardObjectKey,
+  iconoplasmGeneCardPngDimensions,
   readIconoplasmGeneCardMaterialization,
   recordIconoplasmGeneCardBrowserSeconds,
   recoverDueIconoplasmGeneCardMaterializations,
@@ -20614,8 +20615,20 @@ async function processIconoplasmGeneCardMaterializationMessage(message, env, ctx
           snapshotVersion: identity.snapshotVersion,
           assetSha: identity.assetSha,
         }),
-        iconoplasmPrintCopyDimensions(identity.cardPayload),
+        {
+          width: ICONOPLASM_GENE_CARD_WIDTH,
+          height: ICONOPLASM_GENE_CARD_HEIGHT,
+        },
       )
+      const pngDimensions = iconoplasmGeneCardPngDimensions(pngBytes)
+      if (
+        pngDimensions?.width !== ICONOPLASM_GENE_CARD_WIDTH ||
+        pngDimensions?.height !== ICONOPLASM_GENE_CARD_HEIGHT
+      ) {
+        throw new Error(
+          `Browser screenshot dimensions were ${pngDimensions?.width || 0}x${pngDimensions?.height || 0}; expected ${ICONOPLASM_GENE_CARD_WIDTH}x${ICONOPLASM_GENE_CARD_HEIGHT}`,
+        )
+      }
       await putPortraitStorageObject(env, objectKey, pngBytes, {
         contentType: "image/png",
         cacheControl: "public, max-age=31536000, immutable",
