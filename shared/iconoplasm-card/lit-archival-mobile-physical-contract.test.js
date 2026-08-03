@@ -105,7 +105,11 @@ test("first-paint fonts are embedded and revealed as one bounded transaction", a
   assert.equal(contract.websiteDelivery.strategy, "embedded-fontface-api")
   assert.ok(contract.websiteDelivery.revealTimeoutMs > 0)
   assert.ok(contract.websiteDelivery.revealTimeoutMs < 1000)
-  assert.equal(contract.extensionDisplay, "block")
+  assert.equal(
+    contract.extensionDisplay,
+    "swap",
+    "extension cards must paint fallback text immediately instead of hiding copy during font load",
+  )
   assert.doesNotMatch(css, /(?:^|\n)@font-face\s*\{/)
   assert.doesNotMatch(head, /\/static\/iconoplasm\/fonts\//)
   assert.match(head, /readFileSync\([\s\S]*\.toString\("base64"\)/)
