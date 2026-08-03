@@ -18,6 +18,9 @@ const BUNNY_ENV = {
   ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "secret-access-key",
 }
 
+const IMAGE_IDENTITY = { day: "2026-06-03", uniprotId: "P08134" }
+const IMAGE_KEY = "discord-recap-images/v2/2026-06-03/P08134/molstar-recap-v2.png"
+
 function withMockedFetch(handler, fn) {
   const original = globalThis.fetch
   const calls = []
@@ -30,8 +33,12 @@ function withMockedFetch(handler, fn) {
   })
 }
 
-test("recap image is keyed under a stable prefix", () => {
-  assert.equal(buildDiscordRecapImageKey("2026-06-03"), "discord-recap-images/2026-06-03.png")
+test("recap image identity includes day, exact protein, and renderer contract", () => {
+  assert.equal(buildDiscordRecapImageKey(IMAGE_IDENTITY), IMAGE_KEY)
+  assert.notEqual(
+    buildDiscordRecapImageKey({ day: IMAGE_IDENTITY.day, uniprotId: "P01112" }),
+    IMAGE_KEY,
+  )
 })
 
 test("Bunny config enables read and write without R2", () => {
@@ -46,13 +53,14 @@ test("put writes to the Bunny storage API with the AccessKey header", async () =
   await withMockedFetch(
     () => new Response(null, { status: 201 }),
     async (calls) => {
-      const { key } = await putDiscordRecapImage(BUNNY_ENV, "2026-06-03", new Uint8Array([1, 2, 3]))
-      assert.equal(key, "discord-recap-images/2026-06-03.png")
-      assert.equal(calls.length, 1)
-      assert.equal(
-        calls[0].url,
-        "https://storage.bunnycdn.com/iconoplasm-portraits/discord-recap-images/2026-06-03.png",
+      const { key } = await putDiscordRecapImage(
+        BUNNY_ENV,
+        IMAGE_IDENTITY,
+        new Uint8Array([1, 2, 3]),
       )
+      assert.equal(key, IMAGE_KEY)
+      assert.equal(calls.length, 1)
+      assert.equal(calls[0].url, "https://storage.bunnycdn.com/iconoplasm-portraits/" + IMAGE_KEY)
       assert.equal(calls[0].init.method, "PUT")
       assert.equal(calls[0].init.headers.AccessKey, "secret-access-key")
     },
@@ -62,15 +70,12 @@ test("put writes to the Bunny storage API with the AccessKey header", async () =
 test("load reads from Bunny storage with its AccessKey and returns bytes", async () => {
   await withMockedFetch(
     (url, init) => {
-      assert.equal(
-        url,
-        "https://storage.bunnycdn.com/iconoplasm-portraits/discord-recap-images/2026-06-03.png",
-      )
+      assert.equal(url, "https://storage.bunnycdn.com/iconoplasm-portraits/" + IMAGE_KEY)
       assert.equal(init.headers.AccessKey, "secret-access-key")
       return new Response(new Uint8Array([9, 8, 7]), { status: 200 })
     },
     async () => {
-      const bytes = await loadDiscordRecapImageBytes(BUNNY_ENV, "2026-06-03")
+      const bytes = await loadDiscordRecapImageBytes(BUNNY_ENV, IMAGE_IDENTITY)
       assert.ok(bytes instanceof Uint8Array)
       assert.equal(bytes.byteLength, 3)
     },
@@ -80,14 +85,14 @@ test("load reads from Bunny storage with its AccessKey and returns bytes", async
 test("load falls back to the public CDN only without storage credentials", async () => {
   await withMockedFetch(
     (url, init) => {
-      assert.equal(url, "https://iconoplasmportraits.b-cdn.net/discord-recap-images/2026-06-03.png")
+      assert.equal(url, "https://iconoplasmportraits.b-cdn.net/" + IMAGE_KEY)
       assert.deepEqual(init, {})
       return new Response(new Uint8Array([9, 8, 7]), { status: 200 })
     },
     async () => {
       const bytes = await loadDiscordRecapImageBytes(
         { ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net" },
-        "2026-06-03",
+        IMAGE_IDENTITY,
       )
       assert.ok(bytes instanceof Uint8Array)
       assert.equal(bytes.byteLength, 3)
@@ -99,7 +104,7 @@ test("load returns null on 404 instead of throwing", async () => {
   await withMockedFetch(
     () => new Response(null, { status: 404 }),
     async () => {
-      const bytes = await loadDiscordRecapImageBytes(BUNNY_ENV, "2026-06-03")
+      const bytes = await loadDiscordRecapImageBytes(BUNNY_ENV, IMAGE_IDENTITY)
       assert.equal(bytes, null)
     },
   )
@@ -109,9 +114,9 @@ test("head reports existence and size via the storage API", async () => {
   await withMockedFetch(
     () => new Response(null, { status: 200, headers: { "content-length": "4242" } }),
     async () => {
-      const head = await headDiscordRecapImage(BUNNY_ENV, "2026-06-03")
+      const head = await headDiscordRecapImage(BUNNY_ENV, IMAGE_IDENTITY)
       assert.equal(head.size, 4242)
-      assert.equal(head.key, "discord-recap-images/2026-06-03.png")
+      assert.equal(head.key, IMAGE_KEY)
     },
   )
 })
@@ -120,7 +125,7 @@ test("delete issues a DELETE against the storage API", async () => {
   await withMockedFetch(
     () => new Response(null, { status: 200 }),
     async (calls) => {
-      const acted = await deleteDiscordRecapImage(BUNNY_ENV, "2026-06-03")
+      const acted = await deleteDiscordRecapImage(BUNNY_ENV, IMAGE_IDENTITY)
       assert.equal(acted, true)
       assert.equal(calls[0].init.method, "DELETE")
     },
@@ -142,9 +147,9 @@ test("R2 binding takes precedence when present", async () => {
       throw new Error("fetch should not be called when STRUCTURES_BUCKET is bound")
     },
     async () => {
-      await putDiscordRecapImage(r2Env, "2026-06-03", new Uint8Array([1]))
+      await putDiscordRecapImage(r2Env, IMAGE_IDENTITY, new Uint8Array([1]))
       assert.equal(puts.length, 1)
-      assert.equal(puts[0].key, "discord-recap-images/2026-06-03.png")
+      assert.equal(puts[0].key, IMAGE_KEY)
     },
   )
 })
