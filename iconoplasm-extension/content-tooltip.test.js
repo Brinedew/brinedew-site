@@ -16,3 +16,9 @@ test("newly shown cards wait 500ms before they can navigate", async () => {
   assert.match(frame, /Date\.now\(\) < Number\([\s\S]*navigationArmedAt/)
   assert.doesNotMatch(css, /touch-sheet|tooltip-backdrop/)
 })
+
+test("extension hover-card fonts never hide text while packaged fonts load", async () => {
+  const css = await readFile(new URL("./generated/shared-card-label.css", import.meta.url), "utf8")
+  assert.match(css, /font-display:\s*swap;/)
+  assert.doesNotMatch(css, /font-display:\s*block;/)
+})
