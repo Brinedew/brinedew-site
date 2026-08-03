@@ -137,6 +137,11 @@
           "token": "ARCHITECTURE FENCE [IPD-004]"
         },
         {
+          "category": "source",
+          "file": "workers/iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
+          "token": "ARCHITECTURE FENCE [IPD-004]"
+        },
+        {
           "category": "config",
           "file": "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
           "token": "ARCHITECTURE FENCE [IPD-004]"
@@ -144,6 +149,11 @@
         {
           "category": "test",
           "file": "scripts/architecture-fences.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-004]"
+        },
+        {
+          "category": "test",
+          "file": "workers/iconoplasm-gene-card-materialization.test.js",
           "token": "ARCHITECTURE FENCE [IPD-004]"
         },
         {
@@ -161,7 +171,7 @@
       "change_control": "Large payload placement, read-model columns, append-only ledgers, retention, archive bindings, capacity thresholds, observability, migrations, tests, instructions, runbook, and deploy enforcement must change atomically. Cold history may be removed from the hot database only after verified archival.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-667",
-      "additional_required_marker_categories": ["config", "deploy"],
+      "additional_required_marker_categories": ["config", "deploy", "migration"],
       "markers": [
         {
           "category": "instructions",
@@ -179,6 +189,16 @@
           "token": "ARCHITECTURE FENCE [IPD-005]"
         },
         {
+          "category": "source",
+          "file": "workers/iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        },
+        {
+          "category": "migration",
+          "file": "migrations-iconoplasm/0063_gene_card_materializations.sql",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        },
+        {
           "category": "config",
           "file": "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
           "token": "ARCHITECTURE FENCE [IPD-005]"
@@ -186,6 +206,11 @@
         {
           "category": "test",
           "file": "scripts/architecture-fences.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        },
+        {
+          "category": "test",
+          "file": "workers/iconoplasm-gene-card-materialization.test.js",
           "token": "ARCHITECTURE FENCE [IPD-005]"
         },
         {

@@ -12,6 +12,7 @@ import {
 } from "./iconoplasm-gene-discovery.js"
 import {
   readIconoplasmPublishedGeneDiscoveryCatalog,
+  readIconoplasmPublishedGeneCardPrintCopies,
   resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
@@ -134,9 +135,15 @@ export async function handleIconoplasmGeneDiscoveryDocument(request, env, path) 
     if (path !== canonicalPath) {
       return Response.redirect(`https://${ICONOPLASM_HOST}${canonicalPath}`, 301)
     }
+    const genes = snapshot.ranges.get(range.slug) || []
+    const printCopies =
+      (await readIconoplasmPublishedGeneCardPrintCopies(
+        env,
+        genes.map((gene) => gene.symbol),
+      )) || new Map()
     return discoveryDocumentResponse(
       request,
-      renderIconoplasmGeneRangeHtml(snapshot, range),
+      renderIconoplasmGeneRangeHtml(snapshot, range, printCopies),
       "text/html; charset=utf-8",
       snapshot,
     )
@@ -162,9 +169,15 @@ export async function handleIconoplasmGeneDiscoveryDocument(request, env, path) 
   if (sitemapRangeMatch) {
     const range = iconoplasmGeneRangeBySlug(sitemapRangeMatch[1])
     if (!range) return iconoplasmGeneNotFoundResponse(request.method)
+    const genes = snapshot.ranges.get(range.slug) || []
+    const printCopies =
+      (await readIconoplasmPublishedGeneCardPrintCopies(
+        env,
+        genes.map((gene) => gene.symbol),
+      )) || new Map()
     return discoveryDocumentResponse(
       request,
-      buildIconoplasmGeneRangeSitemapXml(snapshot, range),
+      buildIconoplasmGeneRangeSitemapXml(snapshot, range, printCopies),
       "application/xml; charset=utf-8",
       snapshot,
     )

@@ -22,6 +22,24 @@ When changing a background consumer, test all four states: no job, runnable job,
 future job, and failed job whose durable backoff was just advanced. The future
 case must prove that no immediate replacement is sent.
 
+Requested gene-card materialization is deliberately serial and demand driven.
+The D1 row is the authority; a Queue message only wakes its current generation.
+The consumer uses batch size one and maximum concurrency one. Duplicate voter
+requests converge on that row, expired leases are recovered by the scheduled
+job, and stale generations are harmless. Provider deferrals preserve the
+attempt count and wait until the durable due time instead of spinning Queue
+operations.
+
+When the daily Browser budget is exhausted, the row advances to the next UTC
+day but does not mint one delayed Queue message per waiting gene. The scheduled
+recovery job wakes bounded due rows from D1. Short launch-interval deferrals may
+use one delayed Queue wakeup because they become runnable within seconds.
+
+Browser Rendering is protected by a D1 budget shared across isolates: at most
+eight launches and 480 reserved seconds per UTC day, with at least 25 seconds
+between launches. These are launch reservations, so crashes cannot silently
+refund capacity and create a thundering herd.
+
 ## ARCHITECTURE FENCE [IPD-005]: the primary D1 is bounded operational state
 
 The Free-plan wall is **500,000,000 bytes per D1 database**. The separate 5 GB
@@ -34,6 +52,13 @@ history. It must not accumulate either of these:
 
 - a second copy of immutable gene-profile prose in a read model;
 - unbounded historical publish events.
+
+The gene-card ledger is bounded by the canonical 19,023-gene inventory and
+stores only the newest desired/ready fingerprints, lease, retry state, object
+key, and request count. It stores neither PNG bytes nor per-request history.
+Seven daily budget rows are retained. Content-addressed PNGs live in Bunny
+Storage, where a matching existing object can be reused without launching a
+browser.
 
 `icono_gene_essence` remains the canonical manifestation source.
 `icono_admin_gene_rollup.manifestation` is deliberately kept empty during the

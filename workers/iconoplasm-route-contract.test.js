@@ -21,6 +21,8 @@ const PATTERN_EXAMPLES = Object.freeze({
   public_catalog_dump: "/api/public/v1/dumps/catalog.abc123.jsonl",
   mobile_card_symbol: "/api/iconoplasm/cards/TP53",
   print_copy_png: "/api/iconoplasm/print-copy/TP53.png",
+  print_copy_enrollment: "/api/iconoplasm/print-copy-requests/TP53",
+  print_copy_status: "/api/iconoplasm/print-copy-status/TP53",
   print_copy_render: "/api/iconoplasm/print-copy-render/TP53",
   public_gene_detail: "/api/public/v1/genes/TP53",
   gene_request_summary: "/api/iconoplasm/requests/gene/TP53/summary",
