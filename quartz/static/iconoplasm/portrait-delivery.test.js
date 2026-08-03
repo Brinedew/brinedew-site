@@ -116,6 +116,25 @@ test("one failed accelerator probe switches 100 simultaneous portraits to canoni
   assert.deepEqual(delivery.state(), { state: "canonical", failed: ["accelerator"] })
 })
 
+test("a failed accelerator probe switches labelled gene cards to their first-party URL", async () => {
+  const controlled = controlledImages()
+  const delivery = createPortraitDelivery({
+    sessionStorageRef: memoryStorage(),
+    ImageCtor: controlled.ImageCtor,
+    policy: enabledAcceleratorPolicy,
+  })
+  const canonical =
+    "https://iconoplasm.brinedew.bio/gene-cards/v1/S/SOX12/fingerprint/SOX12-iconoplasm-gene-card.png"
+  const resolved = delivery.ensure(canonical)
+
+  await Promise.resolve()
+  assert.equal(controlled.images.length, 1)
+  controlled.images[0].onerror()
+
+  assert.equal(await resolved, canonical)
+  assert.deepEqual(delivery.state(), { state: "canonical", failed: ["accelerator"] })
+})
+
 test("one successful accelerator probe releases every portrait to Bunny", async () => {
   const controlled = controlledImages()
   const delivery = createPortraitDelivery({

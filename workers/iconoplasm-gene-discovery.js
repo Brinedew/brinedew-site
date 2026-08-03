@@ -618,7 +618,7 @@ function escapeHtml(value) {
     .replace(/\"/g, "&quot;")
 }
 
-function archiveDocument({ title, description, canonicalPath, body }) {
+function archiveDocument({ title, description, canonicalPath, body, scripts = "" }) {
   const canonicalUrl = `${ICONOPLASM_ORIGIN}${canonicalPath}`
   return `<!doctype html>
 <html lang="en">
@@ -648,8 +648,29 @@ function archiveDocument({ title, description, canonicalPath, body }) {
     <nav class="archive-nav" aria-label="Iconoplasm"><a href="/">← Character-card archive</a><a href="/genes" aria-current="${canonicalPath === "/genes" ? "page" : "false"}">Gene reference</a></nav>
     ${body}
   </div>
+  ${scripts}
 </body>
 </html>`
+}
+
+const ICONOPLASM_ACCELERATOR_ORIGIN = "https://iconoplasmportraits.b-cdn.net"
+
+function geneCardImageUrls(rawUrl) {
+  try {
+    const parsed = new URL(String(rawUrl || ""), ICONOPLASM_ORIGIN)
+    if (
+      ![ICONOPLASM_ORIGIN, ICONOPLASM_ACCELERATOR_ORIGIN].includes(parsed.origin) ||
+      !parsed.pathname.startsWith("/gene-cards/")
+    )
+      return null
+    const path = `${parsed.pathname}${parsed.search}`
+    return {
+      accelerator: `${ICONOPLASM_ACCELERATOR_ORIGIN}${path}`,
+      canonical: `${ICONOPLASM_ORIGIN}${path}`,
+    }
+  } catch {
+    return null
+  }
 }
 
 export function renderIconoplasmGeneIndexHtml(snapshot) {
@@ -678,12 +699,15 @@ export function renderIconoplasmGeneIndexHtml(snapshot) {
 
 export function renderIconoplasmGeneRangeHtml(snapshot, range, printCopies = new Map()) {
   const genes = snapshot.ranges.get(range.slug) || []
+  let hasThumbnails = false
   const links = genes
     .map((gene) => {
       const path = `/gene/${encodeURIComponent(gene.symbol)}`
       const printCopy = printCopies instanceof Map ? printCopies.get(gene.symbol) : null
-      const thumbnail = printCopy?.image_url
-        ? `<a class="gene-card-thumb-link" href="${path}" aria-label="Open ${escapeHtml(gene.symbol)} gene profile"><img class="gene-card-thumb" src="${escapeHtml(printCopy.image_url)}" width="${Number(printCopy.width || 1536)}" height="${Number(printCopy.height || 2048)}" loading="lazy" decoding="async" alt="${escapeHtml(gene.symbol)} Iconoplasm labelled gene card"></a>`
+      const imageUrls = geneCardImageUrls(printCopy?.image_url)
+      if (imageUrls) hasThumbnails = true
+      const thumbnail = imageUrls
+        ? `<a class="gene-card-thumb-link" href="${path}" aria-label="Open ${escapeHtml(gene.symbol)} gene profile"><img class="gene-card-thumb" src="${escapeHtml(imageUrls.accelerator)}" data-iconoplasm-canonical-image-src="${escapeHtml(imageUrls.canonical)}" width="${Number(printCopy.width || 1536)}" height="${Number(printCopy.height || 2048)}" loading="lazy" decoding="async" alt="${escapeHtml(gene.symbol)} Iconoplasm labelled gene card"></a>`
         : ""
       return `<li class="gene-entry">${thumbnail}<a class="gene-link" href="${path}"><span class="gene-symbol">${escapeHtml(gene.symbol)}</span><span class="gene-name">${escapeHtml(gene.fullName)}</span></a></li>`
     })
@@ -694,6 +718,9 @@ export function renderIconoplasmGeneRangeHtml(snapshot, range, printCopies = new
     description: `Canonical Iconoplasm character profiles for ${genes.length.toLocaleString("en-US")} human genes in the frozen ${range.label} symbol range.`,
     canonicalPath: `/genes/${range.slug}`,
     body,
+    scripts: hasThumbnails
+      ? `<script type="module" src="/static/iconoplasm/gene-card-thumb-delivery.js?v=20260803-gene-card-fallback"></script>`
+      : "",
   })
 }
 
@@ -745,8 +772,9 @@ export function buildIconoplasmGeneRangeSitemapXml(snapshot, range, printCopies 
   const entries = genes.map((gene) => {
     const loc = `${ICONOPLASM_ORIGIN}/gene/${encodeURIComponent(gene.symbol)}`
     const printCopy = printCopies instanceof Map ? printCopies.get(gene.symbol) : null
-    const image = printCopy?.image_url
-      ? `<image:image><image:loc>${escapeXml(printCopy.image_url)}</image:loc><image:title>${escapeXml(`${gene.symbol} Iconoplasm labelled gene card`)}</image:title><image:caption>${escapeXml(`${gene.symbol} — ${gene.fullName}`)}</image:caption></image:image>`
+    const imageUrls = geneCardImageUrls(printCopy?.image_url)
+    const image = imageUrls
+      ? `<image:image><image:loc>${escapeXml(imageUrls.canonical)}</image:loc><image:title>${escapeXml(`${gene.symbol} Iconoplasm labelled gene card`)}</image:title><image:caption>${escapeXml(`${gene.symbol} — ${gene.fullName}`)}</image:caption></image:image>`
       : ""
     return `  <url><loc>${escapeXml(loc)}</loc><lastmod>${lastmod}</lastmod>${image}</url>`
   })

@@ -16,7 +16,10 @@ Cloudflare Worker budget. The first real image probes once per tab; a regional
 DNS failure selects the canonical first-party fallback for that tab. Never turn
 one network's DNS result into a global accelerator disable. Read
 `docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md` before changing portrait policy,
-storage, CDN configuration, preconnects, or fallback behavior.
+storage, CDN configuration, preconnects, or fallback behavior. Requested
+labelled-card thumbnails share this same tab-scoped accelerator/fallback
+decision; never emit a raw Bunny-only browser image without the canonical
+first-party binding.
 
 **ARCHITECTURE FENCE [IPD-003]** — Iconoplasm gene discovery is one atomic
 published-catalog contract. Complete canonical profiles are indexable; aliases

@@ -27272,19 +27272,25 @@ async function mirrorGeneCommentToDiscord(request, env, ctx, { symbol, username,
   await postIconoplasmGeneCommentToDiscord(env, { symbol, username, body, imageBytes })
 }
 
-async function handlePublishedPortraitRoute(request, env, ctx, path) {
+async function handlePublishedImageAssetRoute(
+  request,
+  env,
+  ctx,
+  path,
+  { fallbackContentType = "image/webp", label = "Portrait" } = {},
+) {
   const key = path.replace(/^\/+/, "")
   return cachedPortraitResponse(request, ctx, async () => {
     const obj = await readPortraitStorageObject(env, key, {
-      fallbackContentType: "image/webp",
+      fallbackContentType,
     })
     if (!obj && !env.ICONOPLASM_PORTRAITS && !canReadExternalPortraitStorage(env)) {
-      return json({ error: "Portrait bucket not configured" }, 404)
+      return json({ error: `${label} bucket not configured` }, 404)
     }
-    if (!obj) return json({ error: "Portrait not found" }, 404)
+    if (!obj) return json({ error: `${label} not found` }, 404)
     return new Response(obj.body, {
       headers: {
-        "Content-Type": obj.contentType || "image/webp",
+        "Content-Type": obj.contentType || fallbackContentType,
         "Cache-Control": "public, max-age=31536000, immutable",
         ETag: `"${obj.etag || key}"`,
         "Access-Control-Allow-Origin": "*",
@@ -27341,7 +27347,13 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
   public_changes: ({ request, env }) => handlePublicChanges(request, env),
   public_media: ({ match, request, env }) =>
     handlePublicMedia(request, env, match.params.symbol || ""),
-  portrait: ({ request, env, ctx, path }) => handlePublishedPortraitRoute(request, env, ctx, path),
+  portrait: ({ request, env, ctx, path }) =>
+    handlePublishedImageAssetRoute(request, env, ctx, path),
+  gene_card_asset: ({ request, env, ctx, path }) =>
+    handlePublishedImageAssetRoute(request, env, ctx, path, {
+      fallbackContentType: "image/png",
+      label: "Gene card",
+    }),
   site_gene_detail: ({ request, env, path }) => handleSiteGeneDetail(request, env, path),
 })
 

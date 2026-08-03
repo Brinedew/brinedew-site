@@ -413,7 +413,7 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
       return done(request, response)
     }
 
-    if (path.startsWith("/portraits/")) {
+    if (path.startsWith("/portraits/") || path.startsWith("/gene-cards/")) {
       if (!env.ICONOPLASM_PORTRAITS) {
         const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
           request,
