@@ -9,7 +9,7 @@
 
 export const ICONOPLASM_GENE_CARD_QUEUE_BINDING = "ICONOPLASM_GENE_CARD_MATERIALIZATION_QUEUE"
 export const ICONOPLASM_GENE_CARD_QUEUE_KIND = "materialize_requested_gene_card"
-export const ICONOPLASM_GENE_CARD_RENDERER_REVISION = "gene-card-v1-2026-08-03"
+export const ICONOPLASM_GENE_CARD_RENDERER_REVISION = "gene-card-v2-2026-08-03-print-resolution"
 export const ICONOPLASM_GENE_CARD_WIDTH = 1536
 export const ICONOPLASM_GENE_CARD_HEIGHT = 2048
 
@@ -108,6 +108,31 @@ export function iconoplasmGeneCardCdnUrl(env, objectKey) {
 export function iconoplasmGeneCardDownloadFilename(symbolValue) {
   const symbol = normalizeSymbol(symbolValue)
   return symbol ? `${symbol}-iconoplasm-gene-card.png` : "iconoplasm-gene-card.png"
+}
+
+export function iconoplasmGeneCardPngDimensions(bytes) {
+  const source = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || [])
+  if (
+    source.byteLength < 24 ||
+    source[0] !== 0x89 ||
+    source[1] !== 0x50 ||
+    source[2] !== 0x4e ||
+    source[3] !== 0x47 ||
+    source[12] !== 0x49 ||
+    source[13] !== 0x48 ||
+    source[14] !== 0x44 ||
+    source[15] !== 0x52
+  ) {
+    return null
+  }
+  const dimensionAt = (offset) =>
+    source[offset] * 0x1000000 +
+    source[offset + 1] * 0x10000 +
+    source[offset + 2] * 0x100 +
+    source[offset + 3]
+  const width = dimensionAt(16)
+  const height = dimensionAt(20)
+  return width > 0 && height > 0 ? { width, height } : null
 }
 
 function rowResult(result) {

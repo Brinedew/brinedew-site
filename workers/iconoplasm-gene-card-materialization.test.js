@@ -11,6 +11,7 @@ import {
   iconoplasmGeneCardDownloadFilename,
   iconoplasmGeneCardFingerprint,
   iconoplasmGeneCardObjectKey,
+  iconoplasmGeneCardPngDimensions,
 } from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 
 const runtimeSource = readFileSync(
@@ -76,6 +77,18 @@ test("materialized objects and downloads carry the canonical gene symbol", () =>
   assert.equal(iconoplasmGeneCardDownloadFilename("sox12"), "SOX12-iconoplasm-gene-card.png")
   assert.equal(ICONOPLASM_GENE_CARD_WIDTH, 1536)
   assert.equal(ICONOPLASM_GENE_CARD_HEIGHT, 2048)
+})
+
+test("materialized print dimensions are verified from the PNG header", () => {
+  const png = new Uint8Array(24)
+  png.set([0x89, 0x50, 0x4e, 0x47], 0)
+  png.set([0x49, 0x48, 0x44, 0x52], 12)
+  png.set([0x00, 0x00, 0x06, 0x00], 16)
+  png.set([0x00, 0x00, 0x08, 0x00], 20)
+
+  assert.deepEqual(iconoplasmGeneCardPngDimensions(png), { width: 1536, height: 2048 })
+  assert.equal(iconoplasmGeneCardPngDimensions(new Uint8Array([1, 2, 3])), null)
+  assert.match(runtimeSource, /Browser screenshot dimensions were/)
 })
 
 test("GET and HEAD cannot enroll, enqueue, cache in KV, or launch Browser Rendering", () => {
