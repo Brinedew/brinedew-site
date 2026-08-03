@@ -53,6 +53,12 @@ must increment `ADMIN_SCHEDULE_CACHE_VERSION` so cached previews are recomputed.
 The production pre-warm cron and request-time slow path must consume the same
 balanced candidate sequence.
 
+Recap images are not date-only schedule state. Their immutable storage identity
+contains the day, selected UniProt ID, and `DISCORD_RECAP_RENDER_CONTRACT`.
+Changing a target therefore makes any prior image an automatic miss. Whenever
+the renderer, camera, colouring, or pixel-readiness rules change, increment the
+render contract and regenerate the affected catalog from the admin panel.
+
 After deployment:
 
 1. wait for the deploy workflow to complete;

@@ -27,9 +27,11 @@ text-only.
   - Logic: [`workers/discord.js`](../workers/discord.js) (`handlePostDailyRecap`)
 - It reads `puzzle_actual:<day>` from KV for the answer, then `getWinnersCount`
   + `getDailyGuessAggregates` from D1 for the stats.
-- It tries to load a pre-rendered PNG (`discord-recap-images/<day>.png`) from
-  object storage. If present → posts text **+ image** (multipart). If absent →
-  posts **text-only**. It never hard-fails on a missing image.
+- It tries to load the pre-rendered PNG for the exact puzzle identity:
+  `discord-recap-images/v2/<day>/<uniprot>/<render-contract>.png`. If that exact
+  object is present → posts text **+ image** (multipart). If absent → posts
+  **text-only**. It never substitutes an image cached for a different target or
+  renderer, and never hard-fails on a missing image.
 - On success it writes `discord_summary_posted:<day>` to KV (idempotency) and
   clears any `discord_summary_post_failure:<day>` marker.
 
@@ -48,7 +50,7 @@ History (see Linear B-356):
   which broke recap posting at stage `load_cached_image` with
   `STRUCTURES_BUCKET binding is not configured`.
 
-Current design (2026-06-03):
+Current design (2026-08-03):
 
 - The recap image now uses the **same Bunny CDN object storage the Iconoplasm
   portrait pipeline already uses** — no R2 required. Shared helpers live in
@@ -60,6 +62,12 @@ Current design (2026-06-03):
   "Upload Next 365 Days") posts to `POST /api/admin/discord-recap-image`, which
   now writes to Bunny. Pre-render the catalog there and the daily cron attaches
   images automatically.
+- Stored objects are immutable and keyed by day + authoritative UniProt ID +
+  `DISCORD_RECAP_RENDER_CONTRACT`. A schedule override or renderer revision is
+  therefore an automatic cache miss; legacy date-only objects are never read.
+- The admin renderer samples the actual Mol* canvas until molecule pixels are
+  present for three consecutive frames. It retries a fresh viewer once and
+  refuses the upload if the canvas remains a uniform background.
 - **If no image is uploaded, the recap still posts text-only.** This is the
   cloud-only fallback B-356 asked for: the daily post can never be blocked by the
   image pipeline.

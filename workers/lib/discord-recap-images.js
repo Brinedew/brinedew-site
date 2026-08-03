@@ -1,11 +1,36 @@
-const DISCORD_RECAP_IMAGE_PREFIX = "discord-recap-images/"
+const DISCORD_RECAP_IMAGE_PREFIX = "discord-recap-images/v2/"
+
+// This is part of the stored-object identity. Bump it whenever the renderer,
+// camera, colouring, or pixel-readiness contract changes. A bump deliberately
+// makes every older image a cache miss instead of silently reusing stale ink.
+export const DISCORD_RECAP_RENDER_CONTRACT = "molstar-recap-v2"
 
 export function isValidIsoDay(value) {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value))
 }
 
-export function buildDiscordRecapImageKey(day) {
-  return `${DISCORD_RECAP_IMAGE_PREFIX}${day}.png`
+function normalizeUniprotId(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase()
+  return /^[A-Z0-9]+(?:-[0-9]+)?$/.test(normalized) ? normalized : null
+}
+
+function normalizeImageIdentity(identity) {
+  const day = String(identity?.day || "").trim()
+  const uniprotId = normalizeUniprotId(identity?.uniprotId)
+  if (!isValidIsoDay(day)) {
+    throw new Error("Invalid recap image day")
+  }
+  if (!uniprotId) {
+    throw new Error("Invalid recap image UniProt id")
+  }
+  return { day, uniprotId }
+}
+
+export function buildDiscordRecapImageKey(identity) {
+  const { day, uniprotId } = normalizeImageIdentity(identity)
+  return `${DISCORD_RECAP_IMAGE_PREFIX}${day}/${uniprotId}/${DISCORD_RECAP_RENDER_CONTRACT}.png`
 }
 
 // ---------------------------------------------------------------------------
@@ -68,8 +93,14 @@ export function canReadDiscordRecapImage(env) {
 /**
  * Store the recap PNG for a day. Returns { key }.
  */
-export async function putDiscordRecapImage(env, day, bytes, { contentType = "image/png" } = {}) {
-  const key = buildDiscordRecapImageKey(day)
+export async function putDiscordRecapImage(
+  env,
+  identity,
+  bytes,
+  { contentType = "image/png" } = {},
+) {
+  const normalizedIdentity = normalizeImageIdentity(identity)
+  const key = buildDiscordRecapImageKey(normalizedIdentity)
 
   if (env?.STRUCTURES_BUCKET) {
     await env.STRUCTURES_BUCKET.put(key, bytes, {
@@ -78,7 +109,9 @@ export async function putDiscordRecapImage(env, day, bytes, { contentType = "ima
         cacheControl: "public, max-age=31536000, immutable",
       },
       customMetadata: {
-        day,
+        day: normalizedIdentity.day,
+        uniprotId: normalizedIdentity.uniprotId,
+        renderContract: DISCORD_RECAP_RENDER_CONTRACT,
         uploadedBy: "admin",
         uploadedAt: new Date().toISOString(),
       },
@@ -111,8 +144,8 @@ export async function putDiscordRecapImage(env, day, bytes, { contentType = "ima
 /**
  * Return existence/metadata for a day's recap PNG, or null if missing.
  */
-export async function headDiscordRecapImage(env, day) {
-  const key = buildDiscordRecapImageKey(day)
+export async function headDiscordRecapImage(env, identity) {
+  const key = buildDiscordRecapImageKey(identity)
 
   if (env?.STRUCTURES_BUCKET) {
     const head = await env.STRUCTURES_BUCKET.head(key)
@@ -159,8 +192,8 @@ export async function headDiscordRecapImage(env, day) {
 /**
  * Load a day's recap PNG bytes, or null if missing.
  */
-export async function loadDiscordRecapImageBytes(env, day) {
-  const key = buildDiscordRecapImageKey(day)
+export async function loadDiscordRecapImageBytes(env, identity) {
+  const key = buildDiscordRecapImageKey(identity)
 
   if (env?.STRUCTURES_BUCKET) {
     const object = await env.STRUCTURES_BUCKET.get(key)
@@ -198,8 +231,8 @@ export async function loadDiscordRecapImageBytes(env, day) {
 /**
  * Delete a day's recap PNG. Best-effort; returns true if it acted.
  */
-export async function deleteDiscordRecapImage(env, day) {
-  const key = buildDiscordRecapImageKey(day)
+export async function deleteDiscordRecapImage(env, identity) {
+  const key = buildDiscordRecapImageKey(identity)
 
   if (env?.STRUCTURES_BUCKET) {
     await env.STRUCTURES_BUCKET.delete(key)

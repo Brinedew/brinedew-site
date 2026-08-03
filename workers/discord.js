@@ -247,13 +247,14 @@ async function buildDailySummaryData(env, day, options = {}) {
   }
 }
 
-async function loadCachedRecapImage(env, day) {
+async function loadCachedRecapImage(env, day, uniprotId) {
   // Backed by R2 if STRUCTURES_BUCKET is ever rebound, otherwise the live
   // Bunny CDN object storage. See workers/lib/discord-recap-images.js.
-  const bytes = await loadDiscordRecapImageBytes(env, day)
+  const identity = { day, uniprotId }
+  const bytes = await loadDiscordRecapImageBytes(env, identity)
   if (!bytes) return null
   return {
-    key: buildDiscordRecapImageKey(day),
+    key: buildDiscordRecapImageKey(identity),
     uploadedAt: null,
     bytes,
   }
@@ -418,7 +419,7 @@ export async function handleRepairPostedRecap(env, { day }) {
       details: summary.body?.error || "unknown_error",
     }
   }
-  const cached = await loadCachedRecapImage(env, day)
+  const cached = await loadCachedRecapImage(env, day, summary.body.target?.uniprot_id)
   if (!cached?.bytes) {
     return { ok: false, error: "recap_image_missing", day }
   }
@@ -490,7 +491,7 @@ export async function handlePostDailyRecap(env, options = {}) {
       // object storage (Bunny CDN, or R2 if ever rebound). If none exists we
       // intentionally fall through and post a text-only recap rather than
       // failing the whole post — daily posting must not depend on the image.
-      const cached = await loadCachedRecapImage(env, day).catch((err) => {
+      const cached = await loadCachedRecapImage(env, day, recap.target?.uniprot_id).catch((err) => {
         console.warn(`[CRON] Recap image load failed for ${day}, posting text-only:`, err)
         return null
       })

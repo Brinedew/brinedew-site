@@ -1,0 +1,84 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+
+import { handleAdminDiscordRecapImageStatus, handleAdminDiscordRecapImageUpload } from "./admin.js"
+
+function buildAdminEnv(bucket) {
+  return {
+    ADMIN_DISCORD_USER_ID: "admin-user",
+    GAME_SESSIONS: {
+      idFromName: (name) => name,
+      get: () => ({
+        fetch: async () => Response.json({ user_id: "admin-user" }),
+      }),
+    },
+    STRUCTURES_BUCKET: bucket,
+  }
+}
+
+function adminRequest(url, init = {}) {
+  const headers = new Headers(init.headers)
+  headers.set("Cookie", "session=test-session")
+  return new Request(url, { ...init, headers })
+}
+
+test("admin upload stores an image under its exact target identity", async () => {
+  const writes = []
+  const env = buildAdminEnv({
+    async put(key, bytes, options) {
+      writes.push({ key, bytes, options })
+    },
+  })
+  const request = adminRequest("https://example.test/api/admin/discord-recap-image", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      day: "2026-08-02",
+      uniprot_id: "p08134",
+      image_base64: "iVBORw0KGgo=",
+    }),
+  })
+
+  const response = await handleAdminDiscordRecapImageUpload(request, env)
+  const body = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(body.uniprot_id, "P08134")
+  assert.equal(body.render_contract, "molstar-recap-v2")
+  assert.equal(writes[0].key, "discord-recap-images/v2/2026-08-02/P08134/molstar-recap-v2.png")
+  assert.equal(writes[0].options.customMetadata.uniprotId, "P08134")
+})
+
+test("admin upload rejects an unbound day-only image", async () => {
+  const env = buildAdminEnv({ put: async () => assert.fail("must not write") })
+  const request = adminRequest("https://example.test/api/admin/discord-recap-image", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ day: "2026-08-02", image_base64: "iVBORw0KGgo=" }),
+  })
+
+  const response = await handleAdminDiscordRecapImageUpload(request, env)
+  assert.equal(response.status, 400)
+  assert.match((await response.json()).error, /uniprot_id/)
+})
+
+test("admin status checks only the requested target identity", async () => {
+  const reads = []
+  const env = buildAdminEnv({
+    async head(key) {
+      reads.push(key)
+      return null
+    },
+  })
+  const request = adminRequest(
+    "https://example.test/api/admin/discord-recap-image?day=2026-08-02&uniprot=P08134",
+  )
+
+  const response = await handleAdminDiscordRecapImageStatus(request, env)
+  const body = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(body.exists, false)
+  assert.equal(body.uniprot_id, "P08134")
+  assert.deepEqual(reads, ["discord-recap-images/v2/2026-08-02/P08134/molstar-recap-v2.png"])
+})
