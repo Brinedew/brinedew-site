@@ -36,6 +36,26 @@ import {
 } from "./iconoplasm-request-notifications.js"
 import { ICONOPLASM_WIKI_PAGEVIEWS } from "./iconoplasm-wiki-pageviews.js"
 import {
+  ICONOPLASM_GENE_CARD_HEIGHT,
+  ICONOPLASM_GENE_CARD_QUEUE_KIND,
+  ICONOPLASM_GENE_CARD_RENDERER_REVISION,
+  ICONOPLASM_GENE_CARD_WIDTH,
+  advanceEnrolledIconoplasmGeneCardMaterialization,
+  claimDueIconoplasmGeneCardMaterialization,
+  completeIconoplasmGeneCardMaterialization,
+  deferIconoplasmGeneCardMaterialization,
+  enrollIconoplasmGeneCardMaterialization,
+  failIconoplasmGeneCardMaterialization,
+  iconoplasmGeneCardCdnUrl,
+  iconoplasmGeneCardDownloadFilename,
+  iconoplasmGeneCardFingerprint,
+  iconoplasmGeneCardObjectKey,
+  readIconoplasmGeneCardMaterialization,
+  recordIconoplasmGeneCardBrowserSeconds,
+  recoverDueIconoplasmGeneCardMaterializations,
+  reserveIconoplasmGeneCardBrowserLaunch,
+} from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
+import {
   applyIconoplasmPublicationAliasPolicyToGene,
   ICONOPLASM_PUBLICATION_ALIASES,
   iconoplasmPublicationAliasManifest,
@@ -119,7 +139,6 @@ const ICONOPLASM_BLOT_REQUEST_HEIGHT = ICONOPLASM_BLOT_CARD_LAYOUT_HEIGHT * 4
 const ICONOPLASM_BLOT_REQUEST_SIZE = `${ICONOPLASM_BLOT_REQUEST_WIDTH}x${ICONOPLASM_BLOT_REQUEST_HEIGHT}`
 const ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO = "3:4"
 const ICONOPLASM_OPENAI_BLOT_REQUEST_SIZE = ICONOPLASM_BLOT_REQUEST_SIZE
-const ICONOPLASM_PRINT_COPY_KV_TTL_SECONDS = 60 * 60 * 24 * 30
 const ICONOPLASM_IMAGE_PROVIDER_TIMEOUT_MS = 10 * 60 * 1000
 const ICONOPLASM_PROVIDER_POLL_INITIAL_WAIT_MS = 60_000
 const ICONOPLASM_PROVIDER_POLL_INTERVAL_MS = 10_000
@@ -872,6 +891,7 @@ const CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS = [
   "rollback",
   "unpublish",
   "purge_legacy",
+  "gene_card_materialized",
 ]
 const CARD_CATALOG_ARTIFACT_SCHEMA = "iconoplasm.cardCatalog.v1"
 // Changes whenever source records are mapped into public card fields differently.
@@ -1430,6 +1450,8 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (family === "mobile_card_manifest") return "first_party_read"
   if (family === "mobile_card_symbol") return "first_party_read"
   if (family === "print_copy_png" || family === "print_copy_render") return "first_party_read"
+  if (family === "print_copy_status") return "first_party_read"
+  if (family === "print_copy_enrollment") return "first_party_write"
   if (family === "account_gallery_window") return "first_party_read"
   if (family === "clans_overview") return "first_party_read"
   if (family === "gene_comments") return "first_party_write"
@@ -11102,6 +11124,7 @@ async function verifyTurnstileSubmission(env, request, token) {
     return {
       configured: true,
       passed: Boolean(data?.success),
+      action: sanitizeText(data?.action || "", 128) || "",
       reason: Array.isArray(data?.["error-codes"]) ? data["error-codes"].join(",") : "",
     }
   } catch (error) {
@@ -20508,6 +20531,135 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
   }
 }
 
+async function processIconoplasmGeneCardMaterializationMessage(message, env, ctx) {
+  const body = decodeIconoplasmQueueMessageBody(message?.body)
+  const symbol = normalizeSymbol(body?.symbol || "")
+  if (!symbol) {
+    message?.ack?.()
+    return { ok: false, code: "INVALID_SYMBOL" }
+  }
+  const claimed = await claimDueIconoplasmGeneCardMaterialization(env, symbol)
+  if (claimed.kind === "future") {
+    await enqueueIconoplasmGeneCardWakeup(env, symbol, {
+      delaySeconds: claimed.delaySeconds,
+      force: true,
+    })
+    message?.ack?.()
+    return { ok: true, deferred: true }
+  }
+  if (claimed.kind !== "claimed") {
+    message?.ack?.()
+    return { ok: true, duplicate: true }
+  }
+
+  let budgetReservation = null
+  const startedAt = Date.now()
+  try {
+    const request = new Request(
+      `${ICONOPLASM_CANONICAL_ORIGIN}${ICONOPLASM_PRINT_COPY_PNG_PREFIX}/${encodeURIComponent(symbol)}.png`,
+    )
+    const identity = await currentIconoplasmGeneCardMaterializationIdentity(
+      request,
+      env,
+      ctx,
+      symbol,
+    )
+    if (!identity.ok)
+      throw new Error(`Published card unavailable (${identity.response?.status || 503})`)
+    if (identity.cardFingerprint !== claimed.row.desired_card_fingerprint) {
+      await advanceEnrolledIconoplasmGeneCardMaterialization(env, {
+        symbol,
+        cardFingerprint: identity.cardFingerprint,
+        assetSha256: identity.assetSha,
+      })
+      message?.ack?.()
+      return { ok: true, superseded: true }
+    }
+
+    const objectKey = iconoplasmGeneCardObjectKey(symbol, identity.cardFingerprint)
+    const existing = await headPortraitStorageObject(env, objectKey)
+    if (!existing) {
+      budgetReservation = await reserveIconoplasmGeneCardBrowserLaunch(env)
+      if (!budgetReservation.ok) {
+        await deferIconoplasmGeneCardMaterialization(env, {
+          symbol,
+          leaseToken: claimed.leaseToken,
+          delaySeconds: budgetReservation.delaySeconds,
+          error: budgetReservation.reason,
+          // A daily-cap backlog stays in D1 for scheduled recovery. Giving
+          // every waiting gene a next-day Queue message would make demand
+          // spikes pay twice without creating any additional render capacity.
+          enqueue: budgetReservation.reason !== "daily_budget",
+        })
+        message?.ack?.()
+        return { ok: true, deferred: true, reason: budgetReservation.reason }
+      }
+      const pngBytes = await renderIconoplasmPrintCopyPngWithBrowser(
+        env,
+        iconoplasmPrintCopyRenderUrl(request, {
+          symbol,
+          snapshotVersion: identity.snapshotVersion,
+          assetSha: identity.assetSha,
+        }),
+        iconoplasmPrintCopyDimensions(identity.cardPayload),
+      )
+      await putPortraitStorageObject(env, objectKey, pngBytes, {
+        contentType: "image/png",
+        cacheControl: "public, max-age=31536000, immutable",
+        customMetadata: {
+          gene_symbol: symbol,
+          card_fingerprint: identity.cardFingerprint,
+          renderer_revision: ICONOPLASM_GENE_CARD_RENDERER_REVISION,
+        },
+      })
+      const verified = await headPortraitStorageObject(env, objectKey)
+      if (!verified) throw new Error("Uploaded gene card could not be verified")
+    }
+    const completed = await completeIconoplasmGeneCardMaterialization(env, {
+      symbol,
+      leaseToken: claimed.leaseToken,
+      cardFingerprint: identity.cardFingerprint,
+      assetSha256: identity.assetSha,
+      objectKey,
+    })
+    message?.ack?.()
+    return { ok: true, completed, reused: Boolean(existing) }
+  } catch (error) {
+    await failIconoplasmGeneCardMaterialization(env, {
+      symbol,
+      leaseToken: claimed.leaseToken,
+      error,
+    })
+    message?.ack?.()
+    console.error("Iconoplasm gene-card materialization failed", {
+      symbol,
+      error: String(error?.message || error),
+    })
+    return { ok: false, error: String(error?.message || error) }
+  } finally {
+    if (budgetReservation?.ok) {
+      await recordIconoplasmGeneCardBrowserSeconds(
+        env,
+        budgetReservation.day,
+        (Date.now() - startedAt) / 1000,
+      )
+    }
+  }
+}
+
+async function handleIconoplasmGeneCardMaterializationQueue(batch, env, ctx) {
+  const messages = Array.isArray(batch?.messages) ? batch.messages : []
+  const results = []
+  for (const message of messages) {
+    results.push(await processIconoplasmGeneCardMaterializationMessage(message, env, ctx))
+  }
+  return {
+    ok: results.every((result) => result.ok),
+    processed: results.length,
+    results,
+  }
+}
+
 function iconoplasmQueueBatchKind(batch) {
   const messages = Array.isArray(batch?.messages) ? batch.messages : []
   for (const message of messages) {
@@ -20520,10 +20672,17 @@ function iconoplasmQueueBatchKind(batch) {
 
 export async function handleIconoplasmQueue(batch, env, ctx) {
   const kind = iconoplasmQueueBatchKind(batch)
+  if (kind === ICONOPLASM_GENE_CARD_QUEUE_KIND) {
+    return handleIconoplasmGeneCardMaterializationQueue(batch, env, ctx)
+  }
   if (kind === ICONOPLASM_VOTE_PROJECTION_QUEUE_MESSAGE_KIND) {
     return handleIconoplasmVoteProjectionQueue(batch, env, ctx)
   }
   return handleIconoplasmSyncFinalizationQueue(batch, env, ctx)
+}
+
+export async function recoverDueIconoplasmGeneCardMaterializationsForScheduled(env) {
+  return recoverDueIconoplasmGeneCardMaterializations(env, { limit: 8 })
 }
 
 async function processPendingSyncFinalizationJobs(
@@ -23535,6 +23694,9 @@ async function publishNextCardCatalogDirtyShardStep(
   }
 
   const groups = Array.isArray(publication.groups) ? publication.groups : []
+  const dirtySymbols = Array.from(
+    new Set(groups.flatMap((group) => (Array.isArray(group?.symbols) ? group.symbols : []))),
+  )
   const nextGroup = Math.max(0, Number(publication.next_group || 0) || 0)
   const stepGroups = groups.slice(
     nextGroup,
@@ -23661,6 +23823,7 @@ async function publishNextCardCatalogDirtyShardStep(
       dirty_shard_publication: true,
       publication_more: true,
       dirty_symbol_count: Math.max(0, Number(publication.dirty_symbol_count || 0) || 0),
+      dirty_symbols: dirtySymbols,
       dirty_shard_count: groups.length,
       publication_operation_id: publication.operation_id,
       publication_trigger_reason: publication.trigger_reason || "unspecified",
@@ -23690,6 +23853,7 @@ async function publishNextCardCatalogDirtyShardStep(
       watermark_event_at_override: publication.through_event_at || null,
       watermark_event_id_override: Math.max(0, Number(publication.through_event_id || 0) || 0),
       dirty_symbol_count: Math.max(0, Number(publication.dirty_symbol_count || 0) || 0),
+      dirty_symbols: dirtySymbols,
       dirty_shard_count: groups.length,
       publication_operation_id: publication.operation_id,
       publication_trigger_reason: publication.trigger_reason || "unspecified",
@@ -23724,6 +23888,7 @@ async function publishNextCardCatalogDirtyShardStep(
     watermark_event_at_override: publication.through_event_at || null,
     watermark_event_id_override: Math.max(0, Number(publication.through_event_id || 0) || 0),
     dirty_symbol_count: Math.max(0, Number(publication.dirty_symbol_count || 0) || 0),
+    dirty_symbols: dirtySymbols,
     dirty_shard_count: groups.length,
     affected_shards: groups.length,
     publication_operation_id: publication.operation_id,
@@ -23955,6 +24120,23 @@ async function publishIconoplasmGalleryDirtyShards(env, { triggerReason = "unspe
       },
     )
   }
+  const reconcileRequestedGeneCards = async (artifactVersion) => {
+    if (skipWatermark || !Array.isArray(cardCatalog.dirty_symbols)) return
+    try {
+      await advanceEnrolledIconoplasmGeneCardsAfterPublication(
+        env,
+        artifactVersion,
+        cardCatalog.dirty_symbols,
+      )
+    } catch (error) {
+      // The published card barrier is already authoritative. A failed wakeup
+      // cannot roll it back; the durable cron recovery owns retrying ledger work.
+      console.error("Requested gene-card reconciliation failed after publication", {
+        artifact_version: artifactVersion,
+        error: String(error?.message || error),
+      })
+    }
+  }
   if (String(previousBarrier.current || "").trim() === String(cardCatalog.artifact_version || "")) {
     galleryVersionCache.value = previousBarrier.raw || previousBarrier.current
     galleryVersionCache.loadedAt = Date.now()
@@ -23962,6 +24144,7 @@ async function publishIconoplasmGalleryDirtyShards(env, { triggerReason = "unspe
       await syncPublishedRoutes()
       await recordWatermark()
       await finishPublicationAudit("completed")
+      await reconcileRequestedGeneCards(previousBarrier.current)
     } catch (error) {
       await finishPublicationAudit("failed", error)
       throw error
@@ -24000,6 +24183,7 @@ async function publishIconoplasmGalleryDirtyShards(env, { triggerReason = "unspe
     await syncPublishedRoutes()
     await recordWatermark()
     await finishPublicationAudit("completed")
+    await reconcileRequestedGeneCards(version)
   } catch (error) {
     await finishPublicationAudit("failed", error)
     throw error
@@ -24138,7 +24322,7 @@ function cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }) {
         sample_text_hash: null,
         artist_id: null,
       }
-  return {
+  const record = {
     api_version: PUBLIC_API_VERSION,
     schema_version: API_SCHEMA_VERSION,
     canonical_key: "symbol",
@@ -24173,6 +24357,31 @@ function cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }) {
     resolved_from: "published_card_catalog_bulk",
     snapshot_version: snapshotVersion,
   }
+  const materializationFingerprint = iconoplasmGeneCardFingerprint(record)
+  const readyFingerprint = String(row?.gene_card_ready_fingerprint || "")
+    .trim()
+    .toLowerCase()
+  const readyAssetSha = normalizeSha256(row?.gene_card_ready_asset_sha256 || "")
+  const objectKey = String(row?.gene_card_object_key || "").trim()
+  if (
+    row?.gene_card_state === "ready" &&
+    readyFingerprint === materializationFingerprint &&
+    (!assetSha || readyAssetSha === assetSha) &&
+    objectKey
+  ) {
+    record.print_copy = {
+      status: "ready",
+      card_fingerprint: readyFingerprint,
+      asset_sha256: readyAssetSha || null,
+      object_key: objectKey,
+      image_url: iconoplasmGeneCardCdnUrl(null, objectKey),
+      width: optionalInt(row?.gene_card_width) || ICONOPLASM_GENE_CARD_WIDTH,
+      height: optionalInt(row?.gene_card_height) || ICONOPLASM_GENE_CARD_HEIGHT,
+      filename: iconoplasmGeneCardDownloadFilename(symbol),
+      renderer_revision: ICONOPLASM_GENE_CARD_RENDERER_REVISION,
+    }
+  }
+  return record
 }
 
 async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, snapshotVersion }) {
@@ -24220,7 +24429,13 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
        pa.variant_slot,
        pa.sample_label,
        pa.sample_number,
-       pa.sample_text_hash
+       pa.sample_text_hash,
+       gcm.state AS gene_card_state,
+       gcm.ready_card_fingerprint AS gene_card_ready_fingerprint,
+       gcm.ready_asset_sha256 AS gene_card_ready_asset_sha256,
+       gcm.object_key AS gene_card_object_key,
+       gcm.width AS gene_card_width,
+       gcm.height AS gene_card_height
      FROM icono_gene_catalog gc
      LEFT JOIN icono_gene_essence ge
        ON ge.gene_symbol = gc.gene_symbol
@@ -24228,7 +24443,9 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
        ON ps.gene_symbol = gc.gene_symbol
      LEFT JOIN icono_portrait_assets pa
        ON pa.gene_symbol = ps.gene_symbol
-      AND pa.asset_sha256 = ps.current_asset_sha256`
+      AND pa.asset_sha256 = ps.current_asset_sha256
+     LEFT JOIN icono_gene_card_materializations gcm
+       ON gcm.gene_symbol = gc.gene_symbol`
   // D1 caps bound parameters at 100 per query. Batch the symbol IN-list so a large
   // incremental delta or a rebuild chunk never trips "too many SQL variables". The
   // unscoped (full) path stays a single query.
@@ -25790,6 +26007,62 @@ async function readPublishedCardCatalogArtifact(
   return artifact
 }
 
+// ARCHITECTURE FENCE [IPD-003] + [IPD-011]: range pages and image sitemaps
+// project requested print copies from only the exact published card shards
+// selected by KV_GALLERY_VERSION. They never query votes, compose D1 cards, or
+// trigger rendering. A range normally overlaps one 750-card immutable shard.
+export async function readIconoplasmPublishedGeneCardPrintCopies(env, symbols) {
+  const requestedSymbols = normalizeRequestedSymbols(
+    Array.isArray(symbols) ? symbols : [],
+    MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT,
+  )
+  if (!requestedSymbols.length) return new Map()
+  const versionInfo = await currentMobileCardSnapshotVersion(env)
+  const artifact = await readPublishedCardCatalogArtifact(
+    env,
+    versionInfo.current,
+    requestedSymbols,
+    { allowWholeArtifact: false },
+  )
+  if (!artifact) return null
+  const result = new Map()
+  for (const symbol of requestedSymbols) {
+    const card = artifact.bySymbol.get(symbol)
+    const printCopy = card?.payload?.print_copy
+    if (printCopy?.status === "ready" && printCopy.image_url && printCopy.card_fingerprint) {
+      result.set(symbol, { ...printCopy })
+    }
+  }
+  return result
+}
+
+async function advanceEnrolledIconoplasmGeneCardsAfterPublication(env, version, symbols) {
+  const requestedSymbols = normalizeRequestedSymbols(
+    Array.isArray(symbols) ? symbols : [],
+    MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT,
+  )
+  if (!requestedSymbols.length) return { considered: 0, advanced: 0 }
+  const artifact = await readPublishedCardCatalogArtifact(env, version, requestedSymbols, {
+    allowWholeArtifact: false,
+  })
+  if (!artifact) throw new Error(`Published card artifact ${version} is unavailable`)
+  let advanced = 0
+  for (const symbol of requestedSymbols) {
+    const card = artifact.bySymbol.get(symbol)
+    if (!card?.payload) continue
+    if (
+      await advanceEnrolledIconoplasmGeneCardMaterialization(env, {
+        symbol,
+        cardFingerprint: iconoplasmGeneCardFingerprint(card.payload),
+        assetSha256: iconoplasmPrintCopyAssetSha(card.payload),
+      })
+    ) {
+      advanced += 1
+    }
+  }
+  return { considered: requestedSymbols.length, advanced }
+}
+
 function cardArtifactUnavailablePayload(version, detail = "") {
   return {
     ok: false,
@@ -26100,16 +26373,6 @@ function iconoplasmPrintCopyAssetSha(cardPayload) {
   return normalizeSha256(cardPayload?.portrait?.asset_sha256 || "")
 }
 
-function iconoplasmPrintCopyVersionedUrl(request, { symbol, snapshotVersion, assetSha }) {
-  const url = new URL(request.url)
-  url.pathname = `${ICONOPLASM_PRINT_COPY_PNG_PREFIX}/${encodeURIComponent(symbol)}.png`
-  url.search = ""
-  url.searchParams.set("v", snapshotVersion)
-  if (assetSha) url.searchParams.set("asset", assetSha)
-  url.hash = ""
-  return url
-}
-
 function iconoplasmPrintCopyRenderUrl(request, { symbol, snapshotVersion, assetSha }) {
   const url = new URL(request.url)
   url.pathname = `${ICONOPLASM_PRINT_COPY_RENDER_PREFIX}/${encodeURIComponent(symbol)}`
@@ -26315,19 +26578,6 @@ function iconoplasmPrintCopyRenderHtml({ cardPayload, origin, symbol }) {
   )
 }
 
-function iconoplasmPrintCopyPngResponse(body, { snapshotVersion, assetSha }) {
-  return new Response(body, {
-    status: 200,
-    headers: {
-      "Content-Type": "image/png",
-      "Cache-Control": "public, max-age=31536000, immutable",
-      "X-Iconoplasm-VM-Version": snapshotVersion,
-      "X-Iconoplasm-Print-Copy-Renderer": ICONOPLASM_PRINT_COPY_RENDER_VERSION,
-      ...(assetSha ? { "X-Iconoplasm-Asset-Sha256": assetSha } : {}),
-    },
-  })
-}
-
 function iconoplasmPrintCopyArrayBuffer(bytes) {
   if (bytes instanceof ArrayBuffer) return bytes
   if (ArrayBuffer.isView(bytes)) {
@@ -26403,85 +26653,156 @@ async function handleIconoplasmPrintCopyRender(request, env, ctx, symbolFromPath
   )
 }
 
+async function currentIconoplasmGeneCardMaterializationIdentity(request, env, ctx, symbolFromPath) {
+  const resolved = await iconoplasmPrintCopyCardForRequest(request, env, ctx, symbolFromPath)
+  if (!resolved.ok) return resolved
+  const assetSha = iconoplasmPrintCopyAssetSha(resolved.cardPayload)
+  return {
+    ...resolved,
+    assetSha,
+    cardFingerprint: iconoplasmGeneCardFingerprint(resolved.cardPayload),
+  }
+}
+
+function iconoplasmGeneCardStatusPayload(env, identity, row) {
+  const ready = Boolean(
+    row?.state === "ready" &&
+    row?.ready_card_fingerprint === identity.cardFingerprint &&
+    row?.object_key,
+  )
+  return {
+    ok: true,
+    symbol: identity.symbol,
+    status: ready ? "ready" : row?.state === "failed" ? "failed" : row ? "queued" : "not_requested",
+    requested: Boolean(row),
+    filename: iconoplasmGeneCardDownloadFilename(identity.symbol),
+    ...(ready
+      ? {
+          image_url: iconoplasmGeneCardCdnUrl(env, row.object_key),
+          download_url: `${ICONOPLASM_PRINT_COPY_PNG_PREFIX}/${encodeURIComponent(identity.symbol)}.png?v=${encodeURIComponent(identity.cardFingerprint)}`,
+          width: optionalInt(row.width) || ICONOPLASM_GENE_CARD_WIDTH,
+          height: optionalInt(row.height) || ICONOPLASM_GENE_CARD_HEIGHT,
+        }
+      : {}),
+    ...(row?.last_error ? { last_error: String(row.last_error) } : {}),
+  }
+}
+
+async function handleIconoplasmGeneCardEnrollment(request, env, ctx, symbolFromPath) {
+  if (request.method !== "POST") {
+    return json({ error: "Method not allowed" }, 405, { "Cache-Control": "no-store" })
+  }
+  if (!hasTrustedIconoplasmBrowserOrigin(request)) {
+    return json({ error: "First-party browser origin required", code: "FIRST_PARTY_ONLY" }, 403, {
+      "Cache-Control": "no-store",
+    })
+  }
+  const identity = await currentIconoplasmGeneCardMaterializationIdentity(
+    request,
+    env,
+    ctx,
+    symbolFromPath,
+  )
+  if (!identity.ok) return identity.response
+  const sessionUser = await iconoplasmSessionUser(request, env)
+  if (!sessionUser?.user_id) {
+    const body = await parseJsonBody(request)
+    const turnstile = await verifyTurnstileSubmission(
+      env,
+      request,
+      body?.turnstile_token || body?.cf_turnstile_response || "",
+    )
+    if (turnstile.configured && (!turnstile.passed || turnstile.action !== "gene_card_request")) {
+      return json(
+        {
+          error: "Please complete the bot check and try again.",
+          code: "TURNSTILE_REQUIRED",
+          turnstile_site_key: sanitizeText(env.ICONOPLASM_TURNSTILE_SITE_KEY || "", 255) || null,
+        },
+        403,
+        { "Cache-Control": "no-store" },
+      )
+    }
+  }
+  const row = await enrollIconoplasmGeneCardMaterialization(env, {
+    symbol: identity.symbol,
+    cardFingerprint: identity.cardFingerprint,
+    assetSha256: identity.assetSha,
+  })
+  return json(iconoplasmGeneCardStatusPayload(env, identity, row), 200, {
+    "Cache-Control": "no-store",
+  })
+}
+
+async function handleIconoplasmGeneCardStatus(request, env, ctx, symbolFromPath) {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return json({ error: "Method not allowed" }, 405, { "Cache-Control": "no-store" })
+  }
+  const identity = await currentIconoplasmGeneCardMaterializationIdentity(
+    request,
+    env,
+    ctx,
+    symbolFromPath,
+  )
+  if (!identity.ok) return identity.response
+  const row = await readIconoplasmGeneCardMaterialization(env, identity.symbol)
+  return asHead(
+    request,
+    json(iconoplasmGeneCardStatusPayload(env, identity, row), 200, {
+      "Cache-Control": "no-store",
+    }),
+  )
+}
+
+// GET and HEAD are permanently read-only. A crawler, prefetch, or broken image
+// can never launch Browser Rendering or enroll work.
 async function handleIconoplasmPrintCopyPng(request, env, ctx, symbolFromPath) {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return json({ error: "Method not allowed" }, 405, { "Cache-Control": "no-store" })
   }
-  const resolved = await iconoplasmPrintCopyCardForRequest(request, env, ctx, symbolFromPath)
-  if (!resolved.ok) return resolved.response
-  const assetSha = iconoplasmPrintCopyAssetSha(resolved.cardPayload)
-  const url = new URL(request.url)
-  if (
-    !iconoplasmPrintCopyRequestMatchesCurrent(url, {
-      snapshotVersion: resolved.snapshotVersion,
-      assetSha,
-    })
-  ) {
-    return Response.redirect(
-      iconoplasmPrintCopyVersionedUrl(request, {
-        symbol: resolved.symbol,
-        snapshotVersion: resolved.snapshotVersion,
-        assetSha,
-      }).toString(),
-      302,
-    )
-  }
-  const kvKey = [
-    "iconoplasm:print-copy-png",
-    ICONOPLASM_PRINT_COPY_RENDER_VERSION,
-    resolved.snapshotVersion,
-    resolved.symbol,
-    assetSha || "no-asset",
-  ].join(":")
-  if (env.KV) {
-    const cached = await env.KV.get(kvKey, "arrayBuffer")
-    if (cached) {
-      return asHead(
-        request,
-        iconoplasmPrintCopyPngResponse(cached, {
-          snapshotVersion: resolved.snapshotVersion,
-          assetSha,
-        }),
-      )
-    }
-  }
-  if (request.method === "HEAD") {
-    return new Response(null, {
-      status: 200,
-      headers: {
-        "Content-Type": "image/png",
-        "Cache-Control": "no-store",
-        "X-Iconoplasm-VM-Version": resolved.snapshotVersion,
-        "X-Iconoplasm-Print-Copy-Renderer": ICONOPLASM_PRINT_COPY_RENDER_VERSION,
-        ...(assetSha ? { "X-Iconoplasm-Asset-Sha256": assetSha } : {}),
-      },
-    })
-  }
-  const pngBytes = await renderIconoplasmPrintCopyPngWithBrowser(
+  const identity = await currentIconoplasmGeneCardMaterializationIdentity(
+    request,
     env,
-    iconoplasmPrintCopyRenderUrl(request, {
-      symbol: resolved.symbol,
-      snapshotVersion: resolved.snapshotVersion,
-      assetSha,
-    }),
-    iconoplasmPrintCopyDimensions(resolved.cardPayload),
+    ctx,
+    symbolFromPath,
   )
-  if (env.KV) {
-    ctx.waitUntil(
-      env.KV.put(kvKey, pngBytes, {
-        expirationTtl: ICONOPLASM_PRINT_COPY_KV_TTL_SECONDS,
-        metadata: {
-          asset_sha256: assetSha || "",
-          renderer: ICONOPLASM_PRINT_COPY_RENDER_VERSION,
-          snapshot_version: resolved.snapshotVersion,
-          symbol: resolved.symbol,
-        },
-      }),
+  if (!identity.ok) return identity.response
+  const row = await readIconoplasmGeneCardMaterialization(env, identity.symbol)
+  if (
+    row?.state !== "ready" ||
+    row?.ready_card_fingerprint !== identity.cardFingerprint ||
+    !row?.object_key
+  ) {
+    return json(
+      {
+        error: "Print copy has not been materialized",
+        code: "GENE_CARD_NOT_READY",
+        status_url: `/api/iconoplasm/print-copy-status/${encodeURIComponent(identity.symbol)}`,
+      },
+      404,
+      { "Cache-Control": "no-store" },
     )
   }
-  return iconoplasmPrintCopyPngResponse(pngBytes, {
-    snapshotVersion: resolved.snapshotVersion,
-    assetSha,
+  const object = await readPortraitStorageObject(env, row.object_key, {
+    fallbackContentType: "image/png",
+  })
+  if (!object) {
+    return json({ error: "Materialized print copy is unavailable" }, 503, {
+      "Cache-Control": "no-store",
+      "Retry-After": "60",
+    })
+  }
+  return new Response(request.method === "HEAD" ? null : object.body, {
+    status: 200,
+    headers: {
+      "Content-Type": "image/png",
+      "Content-Disposition": `attachment; filename="${iconoplasmGeneCardDownloadFilename(identity.symbol)}"`,
+      "Cache-Control": "private, no-store",
+      ETag: object.etag,
+      "X-Iconoplasm-Card-Fingerprint": identity.cardFingerprint,
+      "X-Iconoplasm-Print-Copy-Renderer": ICONOPLASM_PRINT_COPY_RENDER_VERSION,
+      ...(identity.assetSha ? { "X-Iconoplasm-Asset-Sha256": identity.assetSha } : {}),
+    },
   })
 }
 
@@ -26978,6 +27299,20 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     handleMobileCardSymbol(request, env, ctx, decodeURIComponent(match.params.symbol || "")),
   print_copy_png: ({ request, env, ctx, path }) =>
     handleIconoplasmPrintCopyPng(request, env, ctx, iconoplasmPrintCopyPngSymbolFromPath(path)),
+  print_copy_enrollment: ({ match, request, env, ctx }) =>
+    handleIconoplasmGeneCardEnrollment(
+      request,
+      env,
+      ctx,
+      decodeURIComponent(match.params.symbol || ""),
+    ),
+  print_copy_status: ({ match, request, env, ctx }) =>
+    handleIconoplasmGeneCardStatus(
+      request,
+      env,
+      ctx,
+      decodeURIComponent(match.params.symbol || ""),
+    ),
   print_copy_render: ({ request, env, ctx, path }) =>
     handleIconoplasmPrintCopyRender(
       request,

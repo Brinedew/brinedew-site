@@ -1610,10 +1610,13 @@ test("DO NOT DELETE: lab-label row labels do not collapse into character stacks"
   )
 })
 
-test("DO NOT DELETE: print copy request opens a PNG image, not a modal", () => {
+test("DO NOT DELETE: print copy explicitly enrolls one durable PNG and never opens a modal", () => {
   const appSource = readUtf8("./quartz/static/iconoplasm/app.js")
   const workerSource = readUtf8(
     "./workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+  )
+  const materializationSource = readUtf8(
+    "./workers/iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
   )
   const workerConfig = readUtf8(
     "./wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
@@ -1623,23 +1626,33 @@ test("DO NOT DELETE: print copy request opens a PNG image, not a modal", () => {
 
   assert.match(
     appSource,
-    /function printCopyImageUrl\(symbol, genePayload\)[\s\S]*\/api\/iconoplasm\/print-copy\/[\s\S]*\.png[\s\S]*searchParams\.set\("asset", assetSha\)/,
-    "print-copy controls should link to the server PNG endpoint with the displayed asset identity when available",
+    /function postPrintCopyRequest\(symbol, turnstileToken\)[\s\S]*\/api\/iconoplasm\/print-copy-requests\/[\s\S]*method: "POST"/,
+    "print-copy controls should explicitly enroll the displayed published card",
   )
   assert.match(
     appSource,
-    /function setPrintCopyTriggerUrl\(symbol, url\)[\s\S]*data-icono-print-copy-url[\s\S]*setAttribute\("href", url\)[\s\S]*setAttribute\("target", "_blank"\)/,
-    "gene pages should attach the PNG endpoint to the printed request control",
+    /function fetchPrintCopyStatus\(symbol\)[\s\S]*\/api\/iconoplasm\/print-copy-status\/[\s\S]*cache: "no-store"/,
+    "status polling must use the read-only status endpoint",
   )
   assert.match(
     appSource,
-    /function preparePrintCopyImageUrl\(symbol, genePayload\)[\s\S]*printCopyImageUrl\(key, genePayload \|\| readCachedRenderableGenePayload\(key\)\)[\s\S]*setPrintCopyTriggerUrl\(key, url\)/,
-    "print-copy preparation should be a cheap link attachment, not a background raster job",
+    /function openPrintCopyImage\(trigger\)[\s\S]*postPrintCopyRequest\(key\)[\s\S]*waitForPrintCopy\(key, 0\)[\s\S]*beginPrintCopyDownload\(payload\)/,
+    "a click should enroll, poll, and download the ready object",
+  )
+  assert.match(
+    appSource,
+    /PRINT_COPY_STATUS_DELAYS_MS = \[5000, 10000, 20000, 40000, 45000\]/,
+    "many users must not create a five-second status polling herd",
   )
   assert.match(
     workerConfig,
     /\[browser\][\s\S]*binding = "ICONOPLASM_PRINT_COPY_BROWSER"[\s\S]*\[env\.staging\.browser\][\s\S]*binding = "ICONOPLASM_PRINT_COPY_BROWSER"/,
     "the stateful worker must own the Browser Run binding in both prod and staging",
+  )
+  assert.match(
+    materializationSource,
+    /ON CONFLICT\(gene_symbol\) DO UPDATE SET[\s\S]*request_count = icono_gene_card_materializations\.request_count \+ 1/,
+    "multiple requests must converge on one per-gene ledger row",
   )
   assert.match(
     workerSource,
@@ -1667,14 +1680,14 @@ test("DO NOT DELETE: print copy request opens a PNG image, not a modal", () => {
     "Browser Run sessions must be closed explicitly so screenshots do not leak billable browser time",
   )
   assert.match(
-    workerSource,
-    /env\.KV\.get\(kvKey, "arrayBuffer"\)[\s\S]*env\.KV\.put\(kvKey, pngBytes, \{/,
-    "generated PNGs should be cached by snapshot and asset before spending Browser Run again",
+    materializationSource,
+    /export function iconoplasmGeneCardDownloadFilename\(symbolValue\)[\s\S]*-iconoplasm-gene-card\.png/,
+    "downloads must use a useful per-gene filename",
   )
   assert.match(
     workerSource,
-    /Response\.redirect\([\s\S]*iconoplasmPrintCopyVersionedUrl/,
-    "symbol-only PNG requests should redirect to a versioned image URL before immutable caching",
+    /Content-Disposition[\s\S]*iconoplasmGeneCardDownloadFilename\(identity\.symbol\)/,
+    "the first-party download response must declare the gene-specific filename",
   )
   assert.match(
     workerSource,
@@ -1693,18 +1706,23 @@ test("DO NOT DELETE: print copy request opens a PNG image, not a modal", () => {
   )
   assert.doesNotMatch(
     appSource,
-    /openPrintCopyViewer|data-icono-print-copy-viewer|cloneNode|role", "dialog"|about:blank/,
+    /openPrintCopyViewer|closePrintCopyViewer|data-icono-print-copy-viewer|cloneNode|role", "dialog"|about:blank/,
     "print-copy requests must not open a modal, clone the archival card, or use a blank-tab placeholder",
   )
   assert.match(
     appSource,
     /function wireGeneContent\(container, genePayload\)[\s\S]*wirePrintCopyRequests\(container, genePayload\)/,
-    "gene pages should prepare the PNG before the user clicks",
+    "gene pages should wire the existing printed request control",
   )
   assert.match(
     appSource,
     /printCopyTrigger\.getAttribute\("href"\)[\s\S]*stopImmediatePropagation[\s\S]*return/,
     "ready print-copy requests should let the browser open the prepared PNG link directly",
+  )
+  assert.match(
+    workerConfig,
+    /queue = "iconoplasm-gene-card-materialization"[\s\S]*max_batch_size = 1[\s\S]*max_concurrency = 1/,
+    "Browser Rendering work must remain serial even when many users request cards",
   )
   assert.doesNotMatch(
     stylesSource,

@@ -1086,6 +1086,7 @@ import {
   IconoplasmSyncGovernor,
   handleIconoplasmQueue,
   publishSharedGeneDiscoverySymbols,
+  recoverDueIconoplasmGeneCardMaterializationsForScheduled,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   deliverPendingRequestFulfillmentNotifications,
@@ -2937,12 +2938,17 @@ export default {
         scheduledMinute === 0
           ? publishSharedGeneDiscoverySymbols(env)
           : Promise.resolve({ ok: true, skipped: true, reason: "not_hour_boundary" })
-      const [galleryDirtyShardPublication, notificationDelivery, sharedDiscoveryPublication] =
-        await Promise.allSettled([
-          runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx),
-          deliverPendingRequestFulfillmentNotifications(env, { limit: 20 }),
-          sharedDiscoveryPublicationPromise,
-        ])
+      const [
+        galleryDirtyShardPublication,
+        notificationDelivery,
+        sharedDiscoveryPublication,
+        geneCardMaterializationRecovery,
+      ] = await Promise.allSettled([
+        runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx),
+        deliverPendingRequestFulfillmentNotifications(env, { limit: 20 }),
+        sharedDiscoveryPublicationPromise,
+        recoverDueIconoplasmGeneCardMaterializationsForScheduled(env),
+      ])
       if (notificationDelivery.status === "fulfilled") {
         const notificationSettlement = await reconcileDeliveredRequestFulfillments(env)
         if (notificationDelivery.value.considered) {
@@ -2972,6 +2978,24 @@ export default {
           String(
             sharedDiscoveryPublication.reason?.message ||
               sharedDiscoveryPublication.reason ||
+              "unknown error",
+          ),
+        )
+      }
+      if (
+        geneCardMaterializationRecovery.status === "fulfilled" &&
+        geneCardMaterializationRecovery.value.enqueued
+      ) {
+        console.log(
+          "[CRON] Iconoplasm requested gene-card recovery:",
+          geneCardMaterializationRecovery.value,
+        )
+      } else if (geneCardMaterializationRecovery.status === "rejected") {
+        console.error(
+          "[CRON] Iconoplasm requested gene-card recovery failed:",
+          String(
+            geneCardMaterializationRecovery.reason?.message ||
+              geneCardMaterializationRecovery.reason ||
               "unknown error",
           ),
         )

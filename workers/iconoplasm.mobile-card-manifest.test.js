@@ -694,7 +694,7 @@ test("dirty-shard publication fails closed before KV puts when the shared write 
   assert.equal(putKeys.length, 0)
 })
 
-test("print-copy honors the displayed canonical asset when the public card artifact is stale", async () => {
+test("print-copy HEAD is read-only and cannot render an unrequested card", async () => {
   const db = new FakeIconoplasmDb()
   const currentAssetSha = "8d".repeat(32)
   db.published.set("ERBB2", {
@@ -718,25 +718,9 @@ test("print-copy honors the displayed canonical asset when the public card artif
       env,
     )
 
-  assert.equal(response.status, 302)
-  const location = response.headers.get("Location") || ""
-  assert.match(location, /\/api\/iconoplasm\/print-copy\/ERBB2\.png/)
-  assert.match(location, new RegExp(`asset=${currentAssetSha}`))
-  assert.match(location, new RegExp(`v=site-gene-detail-${currentAssetSha}`))
-  assert.doesNotMatch(location, /7b7b7b/)
-
-  const resolved =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request(location, { method: "HEAD" }),
-      env,
-    )
-
-  assert.equal(resolved.status, 200)
-  assert.equal(resolved.headers.get("X-Iconoplasm-Asset-Sha256"), currentAssetSha)
-  assert.equal(
-    resolved.headers.get("X-Iconoplasm-VM-Version"),
-    `site-gene-detail-${currentAssetSha}`,
-  )
+  assert.equal(response.status, 404)
+  assert.equal(response.headers.get("Cache-Control"), "no-store")
+  assert.equal(response.headers.get("X-Iconoplasm-Print-Copy-Renderer"), null)
 })
 
 test("mobile card manifest returns complete VMs from the published card catalog artifact", async () => {

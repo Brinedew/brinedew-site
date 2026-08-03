@@ -177,6 +177,23 @@ jobs:
             geneguessr-api \
             "iconoplasm.brinedew.bio/*"
 
+      # ARCHITECTURE FENCE [IPD-004]: the materialization Queue is transport for
+      # the bounded D1 ledger. Provision names before the Worker version binds
+      # them; tolerate only the provider's explicit already-exists response.
+      - name: Ensure requested gene-card Queues exist
+        run: |
+          set -euo pipefail
+          for queue in iconoplasm-gene-card-materialization iconoplasm-gene-card-materialization-dlq; do
+            output="$(pnpm exec wrangler queues create "$queue" 2>&1)" || {
+              echo "$output"
+              if echo "$output" | grep -Eiq "already exists|already.*queue|duplicate"; then
+                continue
+              fi
+              exit 1
+            }
+            echo "$output"
+          done
+
       - name: Deploy the only allowed internal stateful worker (production)
         run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend"
 

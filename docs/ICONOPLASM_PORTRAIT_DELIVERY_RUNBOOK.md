@@ -35,6 +35,14 @@ Domain payloads contain canonical first-party URLs only. A storage or CDN
 provider hostname is not an asset identifier and must not be added to gene,
 candidate, edit-job, or catalog payloads.
 
+Labelled gene-card PNGs are a separate derived asset class under
+`gene-cards/v1/<prefix>/<card-fingerprint>/<SYMBOL>-iconoplasm-gene-card.png`.
+Their fingerprint comes from the exact versioned published card payload and the
+renderer revision, including the selected portrait identity. They never choose
+or reconstruct a portrait independently. Public downloads go through the
+first-party print-copy route and set the same gene-specific filename in
+`Content-Disposition`; ready archive thumbnails may use the accelerator URL.
+
 ## Storage and serving
 
 Portrait bytes live in Bunny Storage. The internal stateful Worker is the only

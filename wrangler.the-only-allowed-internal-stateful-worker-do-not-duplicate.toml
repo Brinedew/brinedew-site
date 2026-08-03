@@ -126,6 +126,10 @@ queue = "iconoplasm-sync-finalization"
 binding = "ICONOPLASM_VOTE_PROJECTION_QUEUE"
 queue = "iconoplasm-vote-projection"
 
+[[queues.producers]]
+binding = "ICONOPLASM_GENE_CARD_MATERIALIZATION_QUEUE"
+queue = "iconoplasm-gene-card-materialization"
+
 [[queues.consumers]]
 queue = "iconoplasm-sync-finalization"
 # ARCHITECTURE FENCE [IPD-004]: consumer retries and producer replacements
@@ -143,6 +147,17 @@ max_batch_size = 25
 max_batch_timeout = 1
 max_retries = 5
 retry_delay = 30
+
+[[queues.consumers]]
+queue = "iconoplasm-gene-card-materialization"
+# ARCHITECTURE FENCE [IPD-004]: one message wakes one leased D1 row. Serialized
+# delivery also keeps Browser Rendering below its launch/concurrency envelope.
+dead_letter_queue = "iconoplasm-gene-card-materialization-dlq"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 5
+retry_delay = 30
+max_concurrency = 1
 
 [[migrations]]
 tag = "v1"
@@ -290,6 +305,10 @@ queue = "iconoplasm-sync-finalization-staging"
 binding = "ICONOPLASM_VOTE_PROJECTION_QUEUE"
 queue = "iconoplasm-vote-projection-staging"
 
+[[env.staging.queues.producers]]
+binding = "ICONOPLASM_GENE_CARD_MATERIALIZATION_QUEUE"
+queue = "iconoplasm-gene-card-materialization-staging"
+
 [[env.staging.queues.consumers]]
 queue = "iconoplasm-sync-finalization-staging"
 dead_letter_queue = "iconoplasm-sync-staging-dlq"
@@ -305,6 +324,15 @@ max_batch_size = 25
 max_batch_timeout = 1
 max_retries = 5
 retry_delay = 30
+
+[[env.staging.queues.consumers]]
+queue = "iconoplasm-gene-card-materialization-staging"
+dead_letter_queue = "iconoplasm-gene-card-materialization-staging-dlq"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 5
+retry_delay = 30
+max_concurrency = 1
 
 [[env.staging.migrations]]
 tag = "v1"

@@ -33,6 +33,10 @@ existing non-visual homepage description, not as new chrome in the immersive
 Archive/Clans switcher; feed skip links stay clipped until keyboard focus. Read
 `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md` before changing the renderer,
 gene HTML, range map, robots metadata, archive, sitemap, or `llms.txt`.
+Requested labelled-card thumbnails are a projection of an already-published
+card artifact. Archive, sitemap, and image reads may expose only a ready object
+whose fingerprint still matches that exact card; those crawler reads must never
+enroll work, consult votes, scan D1, or launch Browser Rendering.
 Model-training crawlers are not the search contract: GPTBot and ClaudeBot are
 blocked by a project-owned WAF rule before Worker execution, while OpenAI,
 Anthropic, and Perplexity search/user agents remain allowed. The WAF policy,
@@ -45,7 +49,10 @@ delayed until its ledger `next_attempt_at`; never immediately replace a message
 merely because `remaining > 0`, and never cap a long durable backoff to a short
 retry loop. Read `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` before
 changing Queue consumers, retry delays, ledger status counts, or self-draining
-background work.
+background work. Requested gene-card materialization follows the same fence:
+one durable row owns the latest desired fingerprint, duplicate requests only
+increase demand, and a batch-size-one Queue consumer serializes Browser
+Rendering within the daily budget.
 
 **ARCHITECTURE FENCE [IPD-005]** — the primary Iconoplasm D1 is bounded
 operational state. Its Free-plan wall is 500,000,000 bytes per database, not the
@@ -55,6 +62,9 @@ essence, keep the admin rollup copy empty, and archive publish events older than
 `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` before adding large
 columns, materialized payloads, append-only ledgers, retention jobs, D1 bindings,
 capacity charts, or bulk reconciliation paths.
+Labelled PNG bytes and render history do not belong in D1. Keep at most one
+compact materialization row per canonical gene and seven daily budget rows;
+store content-addressed image bytes in Bunny.
 
 **ARCHITECTURE FENCE [IPD-006]** — one completed workstation publication is the
 Discord delivery unit, partitioned by recipient and gene. Persist the durable
