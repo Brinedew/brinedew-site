@@ -41,7 +41,10 @@ Their fingerprint comes from the exact versioned published card payload and the
 renderer revision, including the selected portrait identity. They never choose
 or reconstruct a portrait independently. Public downloads go through the
 first-party print-copy route and set the same gene-specific filename in
-`Content-Disposition`; ready archive thumbnails may use the accelerator URL.
+`Content-Disposition`; ready archive thumbnails use the accelerator on healthy
+tabs and the canonical `/gene-cards/` route after the same tab-scoped delivery
+probe used by portraits. Image sitemaps publish the canonical first-party URL,
+not a storage-provider hostname.
 After a labelled-card PUT, the worker retries authenticated Storage HEAD across
 a bounded five-second replication window before declaring verification failed.
 It never treats an unverified upload as ready.
@@ -53,10 +56,11 @@ runtime with the authenticated Storage API credential. It performs idempotent
 GET, HEAD, PUT, and DELETE operations with bounded timeout and transient retry.
 Permanent 4xx responses fail immediately.
 
-`https://iconoplasm.brinedew.bio/portraits/v1/...` reads authenticated storage
-and writes successful immutable GET responses to Cloudflare's edge cache. The
-portrait path is content-addressed, so query strings do not create separate
-cache objects.
+`https://iconoplasm.brinedew.bio/portraits/v1/...` and
+`https://iconoplasm.brinedew.bio/gene-cards/v1/...` read authenticated storage
+and write successful immutable GET responses to Cloudflare's edge cache. Both
+paths are content-addressed, so query strings do not create separate cache
+objects.
 
 ## Browser delivery policy
 
@@ -101,6 +105,8 @@ The website and extension use the same state machine from
 
 - The first real portrait probe selects the accelerator or canonical origin for
   the tab.
+- Requested labelled-card thumbnails bind to this same decision. A Bunny DNS
+  failure must never leave broken alt text in the crawlable archive.
 - Simultaneous portraits share that one decision.
 - Any later portrait, including a newly generated edit result, is resolved
   through the current tab decision before it is assigned.

@@ -167,11 +167,13 @@ test("ready requested cards appear in raw range HTML and the matching image site
 
   assert.match(html, /class="gene-card-thumb"/)
   assert.match(html, /TP53 Iconoplasm labelled gene card/)
-  assert.match(sitemap, /xmlns:image="http:\/\/www\.google\.com\/schemas\/sitemap-image\/1\.1"/)
   assert.match(
-    sitemap,
-    /<image:loc>https:\/\/iconoplasmportraits\.b-cdn\.net\/gene-cards\/v1\/T\/TP53/,
+    html,
+    /data-iconoplasm-canonical-image-src="https:\/\/iconoplasm\.brinedew\.bio\/gene-cards\/v1\/T\/TP53/,
   )
+  assert.match(html, /gene-card-thumb-delivery\.js\?v=20260803-gene-card-fallback/)
+  assert.match(sitemap, /xmlns:image="http:\/\/www\.google\.com\/schemas\/sitemap-image\/1\.1"/)
+  assert.match(sitemap, /<image:loc>https:\/\/iconoplasm\.brinedew\.bio\/gene-cards\/v1\/T\/TP53/)
 
   const textOnlyHtml = renderIconoplasmGeneRangeHtml(snapshot, range, new Map())
   const textOnlySitemap = buildIconoplasmGeneRangeSitemapXml(snapshot, range, new Map())
