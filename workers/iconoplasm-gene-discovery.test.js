@@ -143,6 +143,42 @@ test("sitemap index and shards use the same eligible range membership", () => {
   assert.doesNotMatch(geneXml, /TRIM1/)
 })
 
+test("ready requested cards appear in raw range HTML and the matching image sitemap only", () => {
+  const snapshot = buildIconoplasmGeneDiscoverySnapshot({
+    version: "fixture-images-v1",
+    catalogHash: "fixturehash",
+    generatedAt: "2026-08-03T00:00:00.000Z",
+    genes: [publishedGene("TP53", "tumor protein p53")],
+  })
+  const range = iconoplasmGeneRangeForSymbol("TP53")
+  const ready = new Map([
+    [
+      "TP53",
+      {
+        image_url:
+          "https://iconoplasmportraits.b-cdn.net/gene-cards/v1/T/TP53/fingerprint/TP53-iconoplasm-gene-card.png",
+        width: 1536,
+        height: 2048,
+      },
+    ],
+  ])
+  const html = renderIconoplasmGeneRangeHtml(snapshot, range, ready)
+  const sitemap = buildIconoplasmGeneRangeSitemapXml(snapshot, range, ready)
+
+  assert.match(html, /class="gene-card-thumb"/)
+  assert.match(html, /TP53 Iconoplasm labelled gene card/)
+  assert.match(sitemap, /xmlns:image="http:\/\/www\.google\.com\/schemas\/sitemap-image\/1\.1"/)
+  assert.match(
+    sitemap,
+    /<image:loc>https:\/\/iconoplasmportraits\.b-cdn\.net\/gene-cards\/v1\/T\/TP53/,
+  )
+
+  const textOnlyHtml = renderIconoplasmGeneRangeHtml(snapshot, range, new Map())
+  const textOnlySitemap = buildIconoplasmGeneRangeSitemapXml(snapshot, range, new Map())
+  assert.doesNotMatch(textOnlyHtml, /<img class="gene-card-thumb"/)
+  assert.doesNotMatch(textOnlySitemap, /<image:image>/)
+})
+
 test("llms.txt documents discovery and every card mapping", () => {
   const text = buildIconoplasmLlmsTxt({ catalogHash: "fixturehash" })
 

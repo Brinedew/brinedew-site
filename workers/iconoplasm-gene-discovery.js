@@ -637,7 +637,7 @@ function archiveDocument({ title, description, canonicalPath, body }) {
     .archive-shell{width:min(1120px,calc(100% - 32px));margin:0 auto;padding:24px 0 64px}.archive-nav{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;min-height:44px;border-bottom:1px solid var(--line);font-size:.84rem}.archive-nav a{min-height:44px;display:inline-flex;align-items:center}
     .archive-head{padding:clamp(36px,7vw,88px) 0 clamp(28px,5vw,54px);border-bottom:3px double var(--ink)}.archive-kicker{margin:0 0 8px;color:var(--accent);font-size:.75rem;letter-spacing:.16em;text-transform:uppercase}.archive-head h1{font-family:IconoDisplay,system-ui,sans-serif;font-size:clamp(2.7rem,8vw,6.8rem);line-height:.86;letter-spacing:-.045em;margin:0;max-width:900px}.archive-deck{max-width:720px;margin:24px 0 0;color:var(--muted);font-size:clamp(.9rem,1.5vw,1.05rem)}
     .letter-section{display:grid;grid-template-columns:72px 1fr;gap:18px;padding:28px 0;border-bottom:1px solid var(--line)}.letter-section h2{font-family:IconoDisplay,system-ui,sans-serif;font-size:3rem;line-height:1;margin:0}.range-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:0;padding:0;list-style:none}.range-link{display:flex;min-height:52px;padding:10px 12px;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);background:color-mix(in srgb,var(--wash) 72%,transparent);text-decoration:none}.range-link:hover{border-color:var(--accent)}.range-count{color:var(--muted);font-size:.76rem;white-space:nowrap}
-    .range-summary{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;padding:24px 0;border-bottom:1px solid var(--line);color:var(--muted)}.range-summary strong{color:var(--ink)}.gene-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 28px;margin:0;padding:18px 0 0;list-style:none}.gene-list li{border-bottom:1px solid color-mix(in srgb,var(--line) 65%,transparent)}.gene-link{display:grid;grid-template-columns:minmax(90px,auto) 1fr;gap:16px;align-items:baseline;min-height:48px;padding:11px 4px;text-decoration:none}.gene-symbol{font-weight:700;color:var(--accent)}.gene-name{font-size:.83rem;color:var(--muted)}
+    .range-summary{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;padding:24px 0;border-bottom:1px solid var(--line);color:var(--muted)}.range-summary strong{color:var(--ink)}.gene-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 28px;margin:0;padding:18px 0 0;list-style:none}.gene-list li{border-bottom:1px solid color-mix(in srgb,var(--line) 65%,transparent)}.gene-entry{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px}.gene-card-thumb-link{display:block;width:54px;height:72px;margin:6px 0}.gene-card-thumb{display:block;width:54px;height:72px;object-fit:contain;background:var(--wash);border:1px solid var(--line)}.gene-link{display:grid;grid-template-columns:minmax(90px,auto) 1fr;gap:16px;align-items:baseline;min-height:48px;padding:11px 4px;text-decoration:none}.gene-symbol{font-weight:700;color:var(--accent)}.gene-name{font-size:.83rem;color:var(--muted)}
     .archive-foot{padding:28px 0;color:var(--muted);font-size:.76rem}.archive-foot code{color:var(--ink)}
     @media(max-width:720px){.archive-shell{width:min(100% - 22px,1120px);padding-top:10px}.letter-section{grid-template-columns:44px 1fr;gap:10px}.letter-section h2{font-size:2.2rem}.range-list,.gene-list{grid-template-columns:1fr}.archive-head h1{font-size:clamp(2.7rem,17vw,5.2rem)}.gene-link{grid-template-columns:minmax(82px,auto) 1fr}}
     @media(prefers-color-scheme:dark){:root{--paper:#1d1c19;--ink:#efeadf;--muted:#aaa397;--line:#5b574f;--accent:#66c9c3;--wash:#2a2823}}
@@ -676,13 +676,17 @@ export function renderIconoplasmGeneIndexHtml(snapshot) {
   })
 }
 
-export function renderIconoplasmGeneRangeHtml(snapshot, range) {
+export function renderIconoplasmGeneRangeHtml(snapshot, range, printCopies = new Map()) {
   const genes = snapshot.ranges.get(range.slug) || []
   const links = genes
-    .map(
-      (gene) =>
-        `<li><a class="gene-link" href="/gene/${encodeURIComponent(gene.symbol)}"><span class="gene-symbol">${escapeHtml(gene.symbol)}</span><span class="gene-name">${escapeHtml(gene.fullName)}</span></a></li>`,
-    )
+    .map((gene) => {
+      const path = `/gene/${encodeURIComponent(gene.symbol)}`
+      const printCopy = printCopies instanceof Map ? printCopies.get(gene.symbol) : null
+      const thumbnail = printCopy?.image_url
+        ? `<a class="gene-card-thumb-link" href="${path}" aria-label="Open ${escapeHtml(gene.symbol)} gene profile"><img class="gene-card-thumb" src="${escapeHtml(printCopy.image_url)}" width="${Number(printCopy.width || 1536)}" height="${Number(printCopy.height || 2048)}" loading="lazy" decoding="async" alt="${escapeHtml(gene.symbol)} Iconoplasm labelled gene card"></a>`
+        : ""
+      return `<li class="gene-entry">${thumbnail}<a class="gene-link" href="${path}"><span class="gene-symbol">${escapeHtml(gene.symbol)}</span><span class="gene-name">${escapeHtml(gene.fullName)}</span></a></li>`
+    })
     .join("")
   const body = `<header class="archive-head"><p class="archive-kicker">Iconoplasm · ${escapeHtml(range.initial)} registry</p><h1>${escapeHtml(range.label)}</h1><p class="archive-deck">Canonical human gene symbols in the frozen ${escapeHtml(range.label)} reference range.</p></header><main><div class="range-summary"><strong>${genes.length.toLocaleString("en-US")} complete profiles</strong><a href="/genes#letter-${range.initial}">All ${range.initial} ranges</a></div><ul class="gene-list">${links}</ul></main><footer class="archive-foot">Range contract <code>${ICONOPLASM_GENE_RANGE_CONTRACT_VERSION}</code> · Catalog <code>${escapeHtml(snapshot.catalogHash || snapshot.version)}</code></footer>`
   return archiveDocument({
@@ -735,12 +739,18 @@ export function buildIconoplasmStaticPagesSitemapXml(snapshot) {
   )
 }
 
-export function buildIconoplasmGeneRangeSitemapXml(snapshot, range) {
+export function buildIconoplasmGeneRangeSitemapXml(snapshot, range, printCopies = new Map()) {
   const genes = snapshot.ranges.get(range.slug) || []
-  return urlsetXml(
-    genes.map((gene) => `${ICONOPLASM_ORIGIN}/gene/${encodeURIComponent(gene.symbol)}`),
-    snapshot,
-  )
+  const lastmod = stableLastModified(snapshot)
+  const entries = genes.map((gene) => {
+    const loc = `${ICONOPLASM_ORIGIN}/gene/${encodeURIComponent(gene.symbol)}`
+    const printCopy = printCopies instanceof Map ? printCopies.get(gene.symbol) : null
+    const image = printCopy?.image_url
+      ? `<image:image><image:loc>${escapeXml(printCopy.image_url)}</image:loc><image:title>${escapeXml(`${gene.symbol} Iconoplasm labelled gene card`)}</image:title><image:caption>${escapeXml(`${gene.symbol} — ${gene.fullName}`)}</image:caption></image:image>`
+      : ""
+    return `  <url><loc>${escapeXml(loc)}</loc><lastmod>${lastmod}</lastmod>${image}</url>`
+  })
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${entries.join("\n")}\n</urlset>`
 }
 
 export function buildIconoplasmLlmsTxt(snapshot) {

@@ -96,6 +96,26 @@ documentation, sitemap expectations, and tests together.
 Archive and sitemap requests read the shared versioned KV catalog artifact.
 They must never add an on-request whole-catalog D1 scan.
 
+## Requested labelled-card images
+
+The print-copy action is explicit enrollment, not a GET side effect. Its POST
+records the current published card fingerprint in the bounded materialization
+ledger. Signed-in users use their session; guests must pass Turnstile. Repeated
+requests from many users converge on the same gene row and content-addressed
+object. They do not create parallel renders.
+
+The Queue renders only the exact versioned published card artifact. It never
+reconstructs a winner from live votes. If publication changes while a render is
+in flight, the stale completion cannot replace the newer desired fingerprint;
+the ledger remains due for the new card. Downloads use a useful per-gene name,
+for example `SOX12-iconoplasm-gene-card.png`.
+
+Archive range HTML and the image sitemap expose a thumbnail only after the ready
+fingerprint matches the card in that same catalog artifact. Their GET and HEAD
+paths remain immutable published reads: no enrollment, vote query, D1 repair,
+Queue send, or Browser Rendering is allowed. This keeps Google discovery cheap
+and makes crawling incapable of manufacturing the 19,023-image corpus.
+
 ## Safe changes
 
 When a visible card field changes, update the canonical resolver and semantic
