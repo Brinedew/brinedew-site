@@ -179,19 +179,17 @@ jobs:
 
       # ARCHITECTURE FENCE [IPD-004]: the materialization Queue is transport for
       # the bounded D1 ledger. Provision names before the Worker version binds
-      # them; tolerate only the provider's explicit already-exists response.
+      # them; inspect exact names instead of parsing provider error prose.
       - name: Ensure requested gene-card Queues exist
         run: |
           set -euo pipefail
           for queue in iconoplasm-gene-card-materialization iconoplasm-gene-card-materialization-dlq; do
-            output="$(pnpm exec wrangler queues create "$queue" 2>&1)" || {
-              echo "$output"
-              if echo "$output" | grep -Eiq "already exists|already.*queue|duplicate"; then
-                continue
-              fi
-              exit 1
-            }
-            echo "$output"
+            if pnpm exec wrangler queues info "$queue" >/dev/null 2>&1; then
+              echo "Queue $queue already exists"
+              continue
+            fi
+            pnpm exec wrangler queues create "$queue"
+            pnpm exec wrangler queues info "$queue" >/dev/null
           done
 
       - name: Deploy the only allowed internal stateful worker (production)
