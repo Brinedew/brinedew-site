@@ -45,6 +45,9 @@ first-party print-copy route and set the same gene-specific filename in
 tabs and the canonical `/gene-cards/` route after the same tab-scoped delivery
 probe used by portraits. Image sitemaps publish the canonical first-party URL,
 not a storage-provider hostname.
+The renderer verifies the PNG IHDR is exactly 1536×2048 before upload and the
+ledger publishes those dimensions only after that check; portrait-source
+dimensions must not silently redefine the print artifact size.
 After a labelled-card PUT, the worker retries authenticated Storage HEAD across
 a bounded five-second replication window before declaring verification failed.
 It never treats an unverified upload as ready.
