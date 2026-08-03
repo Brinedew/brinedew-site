@@ -3950,13 +3950,13 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           if (attempt === 0) {
             console.warn('Admin preview: structure-token returned ' + response.status + ' for ' + uniprot + ', retrying...');
             await new Promise(r => setTimeout(r, 1500));
-            if (loadToken !== previewLoadToken) return; // bail if superseded
+            if (loadToken !== previewLoadToken) return { ok: false, reason: 'superseded' }; // bail if superseded
           }
         }
 
         // Handle "structure unavailable" (404) gracefully — not an error
         if (response.status === 404 || (!response.ok && data && data.error === 'Structure unavailable')) {
-          if (loadToken !== previewLoadToken) return;
+          if (loadToken !== previewLoadToken) return { ok: false, reason: 'superseded' };
           previewStructureChoice = null;
           previewReady = false;
           previewLoadingEl.hidden = true;
@@ -3964,7 +3964,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           previewPlaceholderEl.hidden = false;
           previewPlaceholderEl.textContent = 'No 3D structure available for ' + pendingLabel + '.';
           previewStatusEl.textContent = 'No structure';
-          return;
+          return { ok: false, reason: 'no_structure' };
         }
 
         if (!response.ok) {
@@ -3974,7 +3974,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         // If a newer preview load started while this request was in flight, bail out
         // before we touch the existing viewer/UI.
         if (loadToken !== previewLoadToken) {
-          return;
+          return { ok: false, reason: 'superseded' };
         }
 
         // Check if structure is available
@@ -3986,7 +3986,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           previewPlaceholderEl.hidden = false;
           previewPlaceholderEl.textContent = 'No 3D structure available for preview.';
           previewStatusEl.textContent = 'Preview unavailable';
-          return;
+          return { ok: false, reason: 'no_structure' };
         }
 
         const mountTarget = previewMountEl || previewContainer;
@@ -4030,7 +4030,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         if (loadToken !== previewLoadToken) {
           await disposePreviewViewer(viewer);
           localViewer = null;
-          return;
+          return { ok: false, reason: 'superseded' };
         }
 
         if (!result || !result.ok) {
@@ -4057,6 +4057,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             chainLabels: representation.chainLabels
           });
         }
+        return { ok: true };
       } catch (err) {
         // Dispose any viewer created during this call that wasn't
         // transferred to previewViewer — prevents WebGL context leaks.
@@ -4074,6 +4075,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         } else {
           console.warn('Admin preview: ignored stale protein load', err);
         }
+        return { ok: false, reason: 'load_failed', error: err };
       }
     }
 
@@ -4429,9 +4431,16 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     }
 
     async function fetchRecapImageStatus(day) {
-      const response = await fetch(API_BASE + '/api/admin/discord-recap-image?day=' + encodeURIComponent(day), {
+      const uniprot = scheduleData[day]?.uniprot;
+      if (!uniprot) {
+        throw new Error('No scheduled protein for ' + day);
+      }
+      const response = await fetch(
+        API_BASE + '/api/admin/discord-recap-image?day=' + encodeURIComponent(day) + '&uniprot=' + encodeURIComponent(uniprot),
+        {
         credentials: 'include'
-      });
+        }
+      );
       const payload = await response.json();
       if (!response.ok) {
         throw new Error(payload?.error || 'Failed to check recap image status for ' + day);
@@ -4477,8 +4486,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       recapStatusRefreshInFlight = (async () => {
         let pendingDays = Array.from(new Set(daysToFetch));
         while (pendingDays.length > 0) {
+          const imageIdentities = pendingDays.map((day) => day + '~' + scheduleData[day].uniprot);
           const response = await fetch(
-            API_BASE + '/api/admin/discord-recap-images?days=' + encodeURIComponent(pendingDays.join(',')),
+            API_BASE + '/api/admin/discord-recap-images?images=' + encodeURIComponent(imageIdentities.join(',')),
             { credentials: 'include' }
           );
           const payload = await response.json();
@@ -4557,46 +4567,78 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       if (yearBtn) yearBtn.disabled = recapUploadRunning;
     }
 
-    async function waitForPreviewCanvas(timeoutMs) {
-      const timeout = Number(timeoutMs || 90000);
-      const start = Date.now();
-      while (Date.now() - start < timeout) {
-        const canvas = previewMountEl ? previewMountEl.querySelector('canvas') : null;
-        if (previewReady && canvas && canvas.width > 0 && canvas.height > 0) {
-          return canvas;
-        }
-        await sleep(250);
-      }
-      throw new Error('Preview did not become ready in time');
-    }
-
-    function getCanvasNonDarkRatio(canvas) {
+    function getCanvasContentMetrics(canvas) {
       const sample = document.createElement('canvas');
       sample.width = 96;
       sample.height = 72;
       const ctx = sample.getContext('2d', { willReadFrequently: true });
       ctx.drawImage(canvas, 0, 0, sample.width, sample.height);
       const data = ctx.getImageData(0, 0, sample.width, sample.height).data;
-      let visible = 0;
-      let nonDark = 0;
+
+      // Mol* clears the canvas to a uniform background. Estimate that colour
+      // from its four corners and count pixels that differ materially from it.
+      // This detects rendered geometry regardless of light/dark theme; the old
+      // brightness test incorrectly counted the dark background as content.
+      const cornerOffsets = [
+        0,
+        (sample.width - 1) * 4,
+        (sample.height - 1) * sample.width * 4,
+        (sample.width * sample.height - 1) * 4
+      ];
+      const background = [0, 1, 2].map((channel) => {
+        const values = cornerOffsets.map((offset) => data[offset + channel]).sort((a, b) => a - b);
+        return Math.round((values[1] + values[2]) / 2);
+      });
+      let foregroundPixels = 0;
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
         const a = data[i + 3];
         if (a <= 8) continue;
-        visible += 1;
-        if (r + g + b > 24) nonDark += 1;
+        const distanceSquared =
+          Math.pow(r - background[0], 2) +
+          Math.pow(g - background[1], 2) +
+          Math.pow(b - background[2], 2);
+        if (distanceSquared >= 625) foregroundPixels += 1;
       }
-      return visible > 0 ? nonDark / visible : 0;
+      return {
+        foregroundPixels,
+        foregroundRatio: foregroundPixels / (sample.width * sample.height),
+        background
+      };
+    }
+
+    function hasRenderedMolecule(metrics) {
+      return !!metrics && metrics.foregroundPixels >= 28 && metrics.foregroundRatio >= 0.004;
+    }
+
+    async function waitForPreviewContent(timeoutMs) {
+      const timeout = Number(timeoutMs || 90000);
+      const start = Date.now();
+      let consecutiveHealthyFrames = 0;
+      let lastMetrics = null;
+      while (Date.now() - start < timeout) {
+        const canvas = previewMountEl ? previewMountEl.querySelector('canvas') : null;
+        if (previewReady && canvas && canvas.width > 0 && canvas.height > 0) {
+          lastMetrics = getCanvasContentMetrics(canvas);
+          consecutiveHealthyFrames = hasRenderedMolecule(lastMetrics)
+            ? consecutiveHealthyFrames + 1
+            : 0;
+          if (consecutiveHealthyFrames >= 3) {
+            return { canvas, metrics: lastMetrics };
+          }
+        }
+        await sleep(250);
+      }
+      const detail = lastMetrics
+        ? ' (' + lastMetrics.foregroundPixels + ' foreground pixels, ratio ' + lastMetrics.foregroundRatio.toFixed(4) + ')'
+        : '';
+      throw new Error('Preview never produced stable molecule pixels' + detail);
     }
 
     async function capturePreviewImageBase64() {
-      const canvas = await waitForPreviewCanvas(90000);
-      const ratio = getCanvasNonDarkRatio(canvas);
-      if (ratio < 0.01) {
-        throw new Error('Preview canvas appears blank/too dark');
-      }
+      const { canvas } = await waitForPreviewContent(90000);
       const dataUrl = canvas.toDataURL('image/png');
       const marker = 'base64,';
       const idx = dataUrl.indexOf(marker);
@@ -4606,12 +4648,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       return dataUrl.slice(idx + marker.length);
     }
 
-    async function uploadRecapImage(day, imageBase64) {
+    async function uploadRecapImage(day, uniprot, imageBase64) {
       const response = await fetch(API_BASE + '/api/admin/discord-recap-image', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ day, image_base64: imageBase64 })
+        body: JSON.stringify({ day, uniprot_id: uniprot, image_base64: imageBase64 })
       });
       const payload = await response.json();
       if (!response.ok) {
@@ -4627,28 +4669,33 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         throw new Error('No scheduled protein for ' + day);
       }
 
-      if (opts.bulk === true) {
-        await loadProteinInPreview(row.uniprot);
-      } else if (selectedDate !== day) {
-        selectDate(day);
-      } else if (previewReady !== true) {
-        await loadProteinInPreview(row.uniprot);
+      if (selectedDate !== day) {
+        selectDate(day, { loadPreview: false });
       }
 
-      const statusText = String(previewStatusEl && previewStatusEl.textContent ? previewStatusEl.textContent : '').toLowerCase();
-      const placeholderText = String(previewPlaceholderEl && previewPlaceholderEl.textContent ? previewPlaceholderEl.textContent : '').toLowerCase();
-      const placeholderShowsNoStructure =
-        !!previewPlaceholderEl &&
-        previewPlaceholderEl.hidden === false &&
-        placeholderText.includes('no 3d structure available');
-      if (statusText.includes('no structure') || placeholderShowsNoStructure) {
-        throw new Error('No structure available for ' + row.uniprot);
+      let base64 = null;
+      let lastError = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const loadResult = await loadProteinInPreview(row.uniprot);
+        if (!loadResult?.ok) {
+          if (loadResult?.reason === 'no_structure') {
+            throw new Error('No structure available for ' + row.uniprot);
+          }
+          lastError = loadResult?.error || new Error('Preview load failed for ' + row.uniprot);
+          continue;
+        }
+        try {
+          base64 = await capturePreviewImageBase64();
+          break;
+        } catch (err) {
+          lastError = err;
+          console.warn('Recap image validation failed for ' + row.uniprot + ' on attempt ' + (attempt + 1), err);
+        }
       }
-
-      await waitForPreviewCanvas(90000);
-      await sleep(800); // Let Mol* settle before pixel capture.
-      const base64 = await capturePreviewImageBase64();
-      const uploaded = await uploadRecapImage(day, base64);
+      if (!base64) {
+        throw lastError || new Error('Could not render recap image for ' + row.uniprot);
+      }
+      const uploaded = await uploadRecapImage(day, row.uniprot, base64);
       recapImageExistsByDay[day] = true;
       renderCalendar(currentDate);
       if (!opts.silent) {
@@ -4791,7 +4838,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
               base64 = rendered.base64;
               imageByUniprot.set(row.uniprot, base64);
             } else {
-              await uploadRecapImage(day, base64);
+              await uploadRecapImage(day, row.uniprot, base64);
               recapImageExistsByDay[day] = true;
             }
             uploaded += 1;
@@ -4913,7 +4960,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
               base64 = rendered.base64;
               imageByUniprot.set(row.uniprot, base64);
             } else {
-              await uploadRecapImage(day, base64);
+              await uploadRecapImage(day, row.uniprot, base64);
               recapImageExistsByDay[day] = true;
             }
             uploaded += 1;
@@ -5085,7 +5132,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       });
     }
 
-      function selectDate(date) {
+      function selectDate(date, options) {
+        const opts = options || {};
         selectedDate = date;
         renderCalendar(currentDate); // Re-render to show selection highlight
       
@@ -5142,7 +5190,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       
       // Load Preview
       const proteinToLoad = (data && data.uniprot) ? data.uniprot : null;
-      if (proteinToLoad) {
+      if (proteinToLoad && opts.loadPreview !== false) {
         loadProteinInPreview(proteinToLoad);
       } else {
         // Clear preview if no protein

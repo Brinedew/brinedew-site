@@ -7,12 +7,12 @@ import { parseCookies } from "./auth.js"
 import { sanitizeProteinSummary } from "./lib/structure-utils.js"
 import {
   buildDiscordRecapImageKey,
+  DISCORD_RECAP_RENDER_CONTRACT,
   isValidIsoDay,
   canWriteDiscordRecapImage,
   canReadDiscordRecapImage,
   putDiscordRecapImage,
   headDiscordRecapImage,
-  deleteDiscordRecapImage,
 } from "./lib/discord-recap-images.js"
 import {
   fetchProteinByUniprot as loadProtein,
@@ -173,7 +173,11 @@ function decodeBase64Png(value) {
     for (let i = 0; i < binary.length; i += 1) {
       bytes[i] = binary.charCodeAt(i)
     }
-    return bytes.byteLength > 0 ? bytes : null
+    const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10]
+    const hasPngSignature =
+      bytes.byteLength >= pngSignature.length &&
+      pngSignature.every((expected, index) => bytes[index] === expected)
+    return hasPngSignature ? bytes : null
   } catch {
     return null
   }
@@ -812,13 +816,6 @@ export async function handleOverrideProtein(request, env) {
     console.warn("Failed to delete daily bootstrap cache after override update", err)
   }
 
-  // Override changed the target protein; invalidate previously cached recap image for this day.
-  try {
-    await deleteDiscordRecapImage(env, date)
-  } catch (err) {
-    console.warn("Failed to delete stale recap image after override update", err)
-  }
-
   return Response.json({
     success: true,
     message: `Protein override set for ${date}`,
@@ -1405,13 +1402,6 @@ export async function handleDeleteOverride(request, env) {
   await env.KV.delete(key)
   await deleteAdminScheduleDayCacheEntry(env, date)
 
-  // Override removal can change the selected protein; invalidate day image cache.
-  try {
-    await deleteDiscordRecapImage(env, date)
-  } catch (err) {
-    console.warn("Failed to delete recap image after override removal", err)
-  }
-
   return Response.json({
     success: true,
     message: `Protein override removed for ${date}`,
@@ -1421,7 +1411,7 @@ export async function handleDeleteOverride(request, env) {
 /**
  * POST /api/admin/discord-recap-image
  * Upload a rendered PNG for a specific day (used by admin panel pre-rendering).
- * Body: { day: "YYYY-MM-DD", image_base64: "..." }
+ * Body: { day: "YYYY-MM-DD", uniprot_id: "P12345", image_base64: "..." }
  */
 export async function handleAdminDiscordRecapImageUpload(request, env) {
   if (!(await isAdmin(request, env))) {
@@ -1445,6 +1435,12 @@ export async function handleAdminDiscordRecapImageUpload(request, env) {
   if (!isValidIsoDay(day)) {
     return Response.json({ error: "Invalid day format. Use YYYY-MM-DD" }, { status: 400 })
   }
+  const uniprotId = String(payload?.uniprot_id || "")
+    .trim()
+    .toUpperCase()
+  if (!/^[A-Z0-9]+(?:-[0-9]+)?$/.test(uniprotId)) {
+    return Response.json({ error: "Invalid or missing uniprot_id" }, { status: 400 })
+  }
 
   const bytes = decodeBase64Png(payload?.image_base64)
   if (!bytes) {
@@ -1462,19 +1458,22 @@ export async function handleAdminDiscordRecapImageUpload(request, env) {
     )
   }
 
-  const { key } = await putDiscordRecapImage(env, day, bytes, { contentType: "image/png" })
+  const identity = { day, uniprotId }
+  const { key } = await putDiscordRecapImage(env, identity, bytes, { contentType: "image/png" })
 
   return Response.json({
     success: true,
     day,
+    uniprot_id: uniprotId,
+    render_contract: DISCORD_RECAP_RENDER_CONTRACT,
     key,
     bytes: bytes.byteLength,
   })
 }
 
 /**
- * GET /api/admin/discord-recap-image?day=YYYY-MM-DD
- * Returns cache status for a day-specific recap image.
+ * GET /api/admin/discord-recap-image?day=YYYY-MM-DD&uniprot=P12345
+ * Returns cache status for an exact day/target/renderer recap image.
  */
 export async function handleAdminDiscordRecapImageStatus(request, env) {
   if (!(await isAdmin(request, env))) {
@@ -1489,12 +1488,20 @@ export async function handleAdminDiscordRecapImageStatus(request, env) {
   if (!isValidIsoDay(day)) {
     return Response.json({ error: "Invalid day format. Use YYYY-MM-DD" }, { status: 400 })
   }
+  const uniprotId = String(url.searchParams.get("uniprot") || "")
+    .trim()
+    .toUpperCase()
+  if (!/^[A-Z0-9]+(?:-[0-9]+)?$/.test(uniprotId)) {
+    return Response.json({ error: "Invalid or missing uniprot" }, { status: 400 })
+  }
 
-  const key = buildDiscordRecapImageKey(day)
-  const head = await headDiscordRecapImage(env, day)
+  const identity = { day, uniprotId }
+  const key = buildDiscordRecapImageKey(identity)
+  const head = await headDiscordRecapImage(env, identity)
   if (!head) {
     return Response.json({
       day,
+      uniprot_id: uniprotId,
       key,
       exists: false,
     })
@@ -1502,6 +1509,7 @@ export async function handleAdminDiscordRecapImageStatus(request, env) {
 
   return Response.json({
     day,
+    uniprot_id: uniprotId,
     key,
     exists: true,
     size: head.size || null,
@@ -1511,8 +1519,8 @@ export async function handleAdminDiscordRecapImageStatus(request, env) {
 }
 
 /**
- * GET /api/admin/discord-recap-images?days=YYYY-MM-DD,YYYY-MM-DD,...
- * Returns cache status for multiple day-specific recap images.
+ * GET /api/admin/discord-recap-images?images=YYYY-MM-DD~P12345,...
+ * Returns cache status for multiple exact day/target/renderer recap images.
  */
 export async function handleAdminDiscordRecapImageStatuses(request, env) {
   if (!(await isAdmin(request, env))) {
@@ -1523,31 +1531,42 @@ export async function handleAdminDiscordRecapImageStatuses(request, env) {
   }
 
   const url = new URL(request.url)
-  const rawDays = String(url.searchParams.get("days") || "")
-  const uniqueDays = Array.from(
+  const rawImages = String(url.searchParams.get("images") || "")
+  const uniqueImages = Array.from(
     new Set(
-      rawDays
+      rawImages
         .split(",")
-        .map((day) => String(day || "").trim())
-        .filter((day) => isValidIsoDay(day)),
+        .map((value) => String(value || "").trim())
+        .filter((value) => {
+          const [day, uniprotId, ...rest] = value.split("~")
+          return (
+            rest.length === 0 &&
+            isValidIsoDay(day) &&
+            /^[A-Z0-9]+(?:-[0-9]+)?$/.test(String(uniprotId || "").toUpperCase())
+          )
+        }),
     ),
   ).slice(0, 370)
 
-  if (uniqueDays.length === 0) {
+  if (uniqueImages.length === 0) {
     return Response.json(
-      { error: "Provide at least one valid day in days=YYYY-MM-DD,..." },
+      { error: "Provide at least one valid image in images=YYYY-MM-DD~P12345,..." },
       { status: 400 },
     )
   }
 
   const statuses = Object.create(null)
   await Promise.all(
-    uniqueDays.map(async (day) => {
-      const key = buildDiscordRecapImageKey(day)
-      const head = await headDiscordRecapImage(env, day)
+    uniqueImages.map(async (value) => {
+      const [day, rawUniprotId] = value.split("~")
+      const uniprotId = rawUniprotId.toUpperCase()
+      const identity = { day, uniprotId }
+      const key = buildDiscordRecapImageKey(identity)
+      const head = await headDiscordRecapImage(env, identity)
       statuses[day] = head
         ? {
             day,
+            uniprot_id: uniprotId,
             key,
             exists: true,
             size: head.size || null,
@@ -1556,6 +1575,7 @@ export async function handleAdminDiscordRecapImageStatuses(request, env) {
           }
         : {
             day,
+            uniprot_id: uniprotId,
             key,
             exists: false,
           }
@@ -1564,7 +1584,7 @@ export async function handleAdminDiscordRecapImageStatuses(request, env) {
 
   return Response.json({
     ok: true,
-    count: uniqueDays.length,
+    count: uniqueImages.length,
     days: statuses,
   })
 }
