@@ -5,6 +5,7 @@ import {
   ADMIN_HTML,
   buildMissingRecapImageGroups,
   chunkRecapImageDays,
+  isRecapDayKey,
   summarizeRecapImageCoverage,
 } from "./admin-html.js"
 
@@ -59,6 +60,10 @@ test("annual recap fill plans only missing objects and bounds status requests", 
   const exists = { "2026-08-04": true, "2026-08-06": true }
 
   assert.deepEqual(chunkRecapImageDays(days, 3), [days.slice(0, 3), days.slice(3)])
+  assert.equal(isRecapDayKey(days[0]), true)
+  assert.equal(isRecapDayKey("not-a-day"), false)
+  assert.match(ADMIN_HTML, /function isRecapDayKey\(day\)[\s\S]*\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\//)
+  assert.match(ADMIN_HTML, /\.filter\(\(day\) => isRecapDayKey\(day\)\)/)
   assert.deepEqual(buildMissingRecapImageGroups(days, schedule, exists), [
     { uniprot: "P35270", days: ["2026-08-05"] },
     { uniprot: "Q6PJG6", days: ["2026-08-07"] },
