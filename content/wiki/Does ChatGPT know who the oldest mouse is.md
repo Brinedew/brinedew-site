@@ -7,9 +7,9 @@ draft: true
 
 # Does ChatGPT know who the oldest mouse is?
 
-AIs are in the [news](https://www.telegraph.co.uk/business/2026/08/03/unreleased-ai-model-solves-decades-old-maths-problems/) this [week](https://mashable.com/tech/anthropic-fable-5-disproves-jacobian-conjecture) for supposedly getting research mathematicians out of a job. If any of you are looking for a new career, consider pivoting to areas AIs can't touch in the near future - like reading longevity papers.
+AIs are in the [news](https://www.telegraph.co.uk/business/2026/08/03/unreleased-ai-model-solves-decades-old-maths-problems/) this [week](https://mashable.com/tech/anthropic-fable-5-disproves-jacobian-conjecture) for supposedly getting research mathematicians out of a job. If any of you are looking for a new career, consider pivoting to the one thing AIs still can't do - reading longevity papers.
 
-Let's say you're interested in benchmarking lifespan extension communities against each other, based on which animal they work on. It's 2026, so for many of us the natural first step to just turn to ChatGPT, or any other AI assistant, and ask it to make a table of lifespan records by species. 
+Let's say you're interested in benchmarking lifespan extension communities against each other, based on which animal they work on. It's 2026, so for many of us the natural first step is to turn to ChatGPT, or any other AI assistant, and ask it to make a table of lifespan records by species. 
 
 In response, AIs invariably repeat that a mouse from Andrzej Bartke's laboratory lived for **1,819 days**, the maximum mouse lifespan ever reported.
 
@@ -17,7 +17,7 @@ But are they right to do that?
 ![[image-57.png|A mundane data collation request I gave to ChatGPT]]![[image-59.png|The response - note the "high confidence", "cleanest row" claims.]]
 Bartke's lifespan record was indeed celebrated by the [Methuselah Foundation](https://www.mfoundation.org/) in 2003 as Methuselah Mouse Prize. But this specific mouse was never actually recorded in any research publication! The 1,819-day figure comes from **personal communication**, not a paper documenting the animal cohort and its survival record. 
 
-To be clear, the 
+To be clear, Bartke himself  
 
 This is not by itself an attack on scientific integrity of MPrize participants - lifespan prize design is a hard problem. However, when making comparative maximum lifespan tables (as I do), it's not an accepted practice to include Bartke's result on the same level of evidentiary support as the lifespan results from published mouse cohorts.
 
@@ -46,48 +46,58 @@ What went wrong is that the researcher, when recording the mouse's uncertain-but
 
 Why did an outlier this large go unnoticed until dataset publication? As it was explained to me, the mystery mouse was marked "removed" for data analysis purposes. It's a common practice that mice removed for fighting, technical accidents, training, or other aging-unrelated causes would be treated as "last seen alive" at removal date. This accounting practice helps to keep a five-year longevity experiment on track even if a few mice accidentally flood during the first year because of a compromised pipe.
 
-Consider an analysis that uses a hybrid analysis structure: 
-* Kaplan–Meier curves and log-rank tests use the partial information from removed ("censored") mice.
-* Their separately reported “median longevity” and 90th-percentile age are calculated from animals with known death ages, after dropping “removed” records.
-
-Whether that second step is a good idea or not, to me is unclear. Regardless, as a result, removed entries aren't included in the experimental summary statistics that the researcher reports on (median survival, 90th percentile survival).
+Longevity program methods feature a hybrid analysis structure: 
+* Survival analysis: Kaplan–Meier curves and log-rank tests use the partial information from removed ("censored") mice.
+* Longevity analysis: “median longevity” and 90th-percentile age are calculated only from animals with known death ages, after excluding the “removed” records.
+![[image-61.png|From Miller et al., 2007]]
+Whether that second step is a good idea or not, can be argued. Charitably,  Regardless,  according to the lab, the removed mouse entry wasn't included in the experimental summary statistics that the researcher reports on (median survival, 90th percentile survival). So it wouldn't show up as a "valid"
 
 Another concern entirely is deliberate fabrication. A policy of including off-journal records into lifespan tables would be very vulnerable to fabrication: it's stupid simple to fabricate a single animal's lifespan, but fabricating an entire cohort makes it possible for data sleuths to discover statistical irregularities in the dataset.
 
 LLMs, however, fail to draw this distinction and include Bartke's mouse on equal grounds with all the actual studies. But when you point out the lack of publication, they happily throw Bartke's mouse away.
 
-In that case, they still can't decide on a singular record. If you use ChatGPT 5.6 Extra High thinking ($20 subscription), it finds the mouse lifespan record of 1,628 days.
+Even in this case, **they still can't decide on a singular lifespan record.** 
 
+If you use ChatGPT 5.6 Extra High thinking ($20 subscription), it claims the mouse lifespan record of 1,628 days.
 ![[image-56.png]]
 
-This is taken from Turturro et al (2009) [^1]:
+This is taken from Turturro et al (1999) [^1]:
 
 > The oldest male mouse, B6D2F1, lived to 1,628 days.
 
 ![[image-53.png|From Turturro et al., 1999]]
-But if you ask ChatGPT 5.6 Pro ($100 subscription!!! please support your local scientist) it will dig up Weindruch et al. (1986)[^2], with 54.6 months equaling around 1,660 days, plus-minus a few days, depending on month conversion.
+But if you ask ChatGPT 5.6 Pro ($100 subscription!!! please support your local scientist), it will dig up Weindruch et al. (1986)[^2], with a maximum record of 54.6 months - equaling around 1,660 days, plus-minus a couple days depending on month conversion math.
 
 > The longest-lived individual mouse was from group N/R40 that lived 54.6 mo.
 
 ![[image-55.png|From Weindruch et al., 1986]]
 
 ChatGPT Pro also brings up Harrison-Archer study from 1987.[^3] In a later secondary work, the same authors describe the study as producing:
+
 > “1742 days, a new record for Mus”
 
-But I couldn't actually access the paper, and the later curve digitization efforts by Schmauck-Medina et al. didn't provide curves for this study either, despite mentioning it by name as the record-holder.
+But I couldn't actually access the paper, and the later curve digitization efforts by Schmauck-Medina et al.[^4] didn't provide curves for this study either, despite mentioning it by name as the record-holder.
 
+Are there perhaps even more older studies I will find after getting a $200 subscription? Could Claude Mythos have given Anthropic employees a 10-year-old mouse lifespan record from Meiji era? Who knows! At this point, it's surprising that Mendel-style long-overlooked breakthroughs aren't popping up left and right.
 
+![[image-63.png]]
 
-So is AI good at unstructured data collation and meta-analysis? 
+**So is AI good for unstructured data collation and free-form meta-analysis?** 
 
-For a longevity enthusiast, as of 2026, it seems like the answer is definitely no - it's way too easy to mislead by pop-science content and it can't really assess the data critically without the user's help. 
+Hank Green, a long-time pop-science youtuber, is currently [facing criticism](https://www.businessinsider.com/hank-green-youtube-ai-apology-2026-8) for relying on AI for "research purposes". Some of his fans discourage the practice for the fears of "biasing the research process", while others don't see anything wrong with it - doesn't google or pubmed search also bias which papers you see first?
 
-For a researcher who knows how to formulate a right prompt, it can dig up something worth following up on. This is perhaps a mirror of AIs as a knowledge multiplier that people [called out](https://x.com/connerdelights/status/2079687509077073977) when reading Terence Tao's ChatGPT transcripts.
+As much as I sympathize with the second camp, I have to give it to the AI skeptics on this one. Despite all the hallucination-pruning, AI-assisted literature review is still not thorough enough to be relied on by someone outside the field.
 
-![[image-60.png]]
+For a longevity enthusiast, as of 2026, it seems like the answer is definitely still "double-check AI's work with an expert". It's still way too easy to mislead AIs by pop-science content biasing its ability to read critically. I have more examples of AIs being too gullible to discard secondary literature if it contradicts primary source - look out for a future post on CTVT origins.
+
+To give AI some credit back, for a researcher who knows how to formulate a right prompt, AI can definitely assist with digging up something worth following up on. HackerNews users have [called out](https://news.ycombinator.com/item?id=49010345) this "smart get smarter" knowledge multiplier dynamic of AI after trying to read Terence Tao's ChatGPT transcripts.
+
+![[image-62.png]]
 
 [^1]: Turturro A, Witt WW, Lewis S, Hass BS, Lipman RD, Hart RW. Growth Curves and Survival Characteristics of the Animals Used in the Biomarkers of Aging Program. *Journal of Gerontology: Biological Sciences.* 1999;54(11):B492–B501. [doi:10.1093/gerona/54.11.B492](https://doi.org/10.1093/gerona/54.11.B492).
 
 [^2]: R. Weindruch, R. L. Walford, S. Fligiel and D. Guthrie. “The Retardation of Aging in Mice by Dietary Restriction: Longevity, Cancer, Immunity and Lifetime Energy Intake.” _Journal of Nutrition_. 1986;116(4):641–654. [doi:10.1093/jn/116.4.641](https://doi.org/10.1093/jn/116.4.641)
 
 [^3]: D. E. Harrison and J. R. Archer. “Genetic Differences in Effects of Food Restriction on Aging in Mice.” _Journal of Nutrition_. 1987;117(2):376–382. [doi:10.1093/jn/117.2.376](https://doi.org/10.1093/jn/117.2.376)
+
+[^4]: Schmauck-Medina et al., _Dietary restriction in aging and longevity_, _Nature Aging_ 6, 485–505 (2026), DOI **10.1038/s43587-026-01091-5**.
