@@ -93,6 +93,29 @@ test("admin status checks only the requested target identity", async () => {
   assert.deepEqual(reads, ["discord-recap-images/v2/2026-08-02/P08134/molstar-recap-v3.png"])
 })
 
+test("admin can visually inspect exact stored bytes with a unique filename", async () => {
+  const storedBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+  const env = buildAdminEnv({
+    async get() {
+      return { arrayBuffer: async () => storedBytes.buffer.slice(0) }
+    },
+  })
+  const request = adminRequest(
+    "https://example.test/api/admin/discord-recap-image?day=2026-08-02&uniprot=P08134&download=1",
+  )
+
+  const response = await handleAdminDiscordRecapImageStatus(request, env)
+
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("content-type"), "image/png")
+  assert.equal(response.headers.get("cache-control"), "private, no-store")
+  assert.equal(
+    response.headers.get("content-disposition"),
+    'inline; filename="geneguessr-2026-08-02-P08134-molstar-recap-v3.png"',
+  )
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), storedBytes)
+})
+
 test("annual recap status checks never exceed five concurrent storage reads", async () => {
   let active = 0
   let maxActive = 0
