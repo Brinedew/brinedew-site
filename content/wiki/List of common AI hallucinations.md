@@ -3,7 +3,7 @@ title: List of common AI hallucinations
 tags:
   - content/wiki
 date: 2026-08-04
-draft: true
+draft: false
 ---
 
 # List of common AI hallucinations
