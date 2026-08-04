@@ -3111,7 +3111,7 @@ export default {
         source = "admin_override"
         console.log(`[CRON] Using admin override for ${tomorrowStr}: ${overrideId}`)
       } else {
-        availabilityPin = await readDailyTargetAvailabilityPin(env.KV, {
+        availabilityPin = await readDailyTargetAvailabilityPin(env.DB, {
           date: tomorrowStr,
           salt,
           selectionPoolFingerprint: computedSelection?.poolFingerprint,
@@ -5440,7 +5440,7 @@ async function getDailyTargetProtein(env, options = {}) {
     // it; algorithm or pool changes fall back to normal computed selection.
     if (!protein) {
       try {
-        availabilityPin = await readDailyTargetAvailabilityPin(env.KV, {
+        availabilityPin = await readDailyTargetAvailabilityPin(env.DB, {
           date: today,
           salt,
           selectionPoolFingerprint: computedDailySelection?.poolFingerprint,
@@ -7166,7 +7166,7 @@ async function handleAdminAvailabilityReplacementStructurePin(request, env) {
 
     const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
     const selection = await pickDailyTarget(env.DB, salt, date)
-    const availabilityPin = await readDailyTargetAvailabilityPin(env.KV, {
+    const availabilityPin = await readDailyTargetAvailabilityPin(env.DB, {
       date,
       salt,
       selectionPoolFingerprint: selection?.poolFingerprint,

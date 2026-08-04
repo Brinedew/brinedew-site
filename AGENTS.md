@@ -189,10 +189,17 @@ fallback, repair, or visual acceptance.
 The authoritative annual schedule response must never return HTTP 200 with a
 null identity in its requested horizon. Generate primary identities from one
 canonical in-memory shuffle-bag plan, bulk-load the minimal protein summaries,
-cache only complete day entries, and fail the whole response closed if any
-summary is missing. Do not restore per-day `SELECT *` schedule hydration: it
-exhausted a live annual request after 340 future identities and disguised the
+write no per-day schedule cache, and fail the whole response closed if any
+summary is missing. Do not restore per-day KV schedule caching or `SELECT *`
+schedule hydration: together they exhausted Cloudflare's daily KV write budget
+and a live annual request after 340 future identities, disguising the
 remaining 25 failures as successful null rows.
+
+Automatic availability pins are durable D1 state, not KV state. They must stay
+available even when unrelated KV writes have exhausted the account's daily
+quota; annual reconciliation discovered this fence when its first dead curated
+structure could not record a replacement after the old schedule cache spent the
+KV budget.
 
 Mol*'s fixed bottom-left orientation axes are not molecule pixels. Readiness
 must measure the molecular viewport and require spatial spread outside that UI

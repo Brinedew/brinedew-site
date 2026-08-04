@@ -82,9 +82,9 @@ Current design (2026-08-03):
 - The authoritative schedule endpoint constructs the whole horizon from one
   deterministic in-memory bag plan and bulk-loads minimal protein summaries. It
   returns HTTP 503 rather than HTTP 200 if even one day lacks an identity, and
-  never caches an incomplete day. This protects the browser preflight from the
-  2026-08-04 failure where per-day D1 reads produced 340 valid future rows plus
-  25 silent nulls.
+  writes no per-day KV cache. This protects the browser preflight from the
+  2026-08-04 failures where per-day D1 reads produced 340 valid future rows plus
+  25 silent nulls and the cache exhausted Cloudflare's daily KV write budget.
 - Stored objects are immutable and keyed by day + authoritative UniProt ID +
   `DISCORD_RECAP_RENDER_CONTRACT`. A schedule override or renderer revision is
   therefore an automatic cache miss; legacy date-only objects are never read.
@@ -105,8 +105,10 @@ Current design (2026-08-03):
   are never replaced automatically.
 - A successful replacement is accepted only after its curated structure is
   cached and R2 confirms `pinnedUntil` through the play date. Availability pins
-  are selector-salt and pool-fingerprint bound, and are shared by the admin
-  schedule, cards, pre-warm, and request-time paths.
+  are selector-salt and pool-fingerprint bound D1 records, and are shared by the
+  admin schedule, cards, pre-warm, and request-time paths. D1 ownership is a
+  capacity fence: replacement decisions must remain writable after unrelated KV
+  traffic reaches Cloudflare's daily write ceiling.
 - Bunny upload success is the documented HTTP `201`, followed by bounded
   exact-byte read-back from the same authenticated storage identity. Production
   measurement on 2026-08-04 required longer than 5 seconds, so the shared retry

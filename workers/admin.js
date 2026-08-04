@@ -26,9 +26,8 @@ import { buildClueSections, maskClueSections, sanitizeTargetProtein } from "./li
 import { getDailyGuessAggregates, getGuessAggregatesForDateRange } from "./lib/guess-aggregates.js"
 import { getGameSessionWriteEvidence } from "./lib/game-session-write-evidence.js"
 import {
-  DAILY_TARGET_AVAILABILITY_PIN_PREFIX,
   collectDailyTargetHorizonExclusions,
-  parseDailyTargetAvailabilityPin,
+  listDailyTargetAvailabilityPins,
   readDailyTargetAvailabilityPin,
   selectDailyTargetAvailabilityReplacement,
   writeDailyTargetAvailabilityPin,
@@ -45,13 +44,8 @@ const DISCORD_RECAP_IMAGE_MAX_BYTES = 2 * 1024 * 1024
 // Leave one connection in reserve for runtime/account plumbing and process
 // recap-object HEADs in bounded waves instead of a 365-way Promise.all.
 const DISCORD_RECAP_STATUS_CONCURRENCY = 5
-const ADMIN_SCHEDULE_DAY_CACHE_PREFIX = "admin_schedule_day:v2:"
-const ADMIN_SCHEDULE_DAY_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60
 const ADMIN_SCHEDULE_MAX_FUTURE_DAYS = 370
 const ADMIN_SCHEDULE_REPLACEMENT_HORIZON_DAYS = 365
-// Family-balanced daily selection changes every computed preview. Bump the
-// payload version so no flat-protein schedule entry survives the deployment.
-const ADMIN_SCHEDULE_CACHE_VERSION = 5
 const DAILY_TARGET_SALT_FALLBACK = "geneguessr-v2-939b5a0b"
 
 async function listAllKvKeys(env, prefix) {
@@ -69,21 +63,6 @@ async function listAllKvKeys(env, prefix) {
   return keys
 }
 
-function buildAdminScheduleDayCacheKey(date) {
-  return `${ADMIN_SCHEDULE_DAY_CACHE_PREFIX}${date}`
-}
-
-async function deleteAdminScheduleDayCacheEntry(env, date) {
-  if (!isValidIsoDay(date)) {
-    return
-  }
-  try {
-    await env.KV.delete(buildAdminScheduleDayCacheKey(date))
-  } catch (err) {
-    console.warn("Failed to delete admin schedule day cache entry", err)
-  }
-}
-
 function normalizeUniprotId(value) {
   const raw = String(value || "")
     .trim()
@@ -91,39 +70,16 @@ function normalizeUniprotId(value) {
   return raw || null
 }
 
-function isScheduleDayCacheEntryValid(
-  entry,
-  { date, overrideUniprotId, availabilityPinUniprotId, salt, selectionPoolFingerprint },
-) {
-  if (!entry || typeof entry !== "object") {
-    return false
-  }
-  if (entry.cache_version !== ADMIN_SCHEDULE_CACHE_VERSION) {
-    return false
-  }
-  if (entry.date !== date) {
-    return false
-  }
-  if (entry.salt !== salt) {
-    return false
-  }
-  if (!selectionPoolFingerprint || entry.selection_pool_fingerprint !== selectionPoolFingerprint) {
-    return false
-  }
-  const cachedOverride = normalizeUniprotId(entry.override_uniprot_id)
-  if (cachedOverride !== normalizeUniprotId(overrideUniprotId)) {
-    return false
-  }
-  const cachedAvailabilityPin = normalizeUniprotId(entry.availability_pin_uniprot_id)
-  if (cachedAvailabilityPin !== normalizeUniprotId(availabilityPinUniprotId)) {
-    return false
-  }
+function isScheduleDayEntryComplete(entry, selectionPoolFingerprint) {
   const computedUniprot = normalizeUniprotId(entry.computed_uniprot_id)
   const computedProteinUniprot = normalizeUniprotId(entry?.computed?.uniprot)
-  if (!computedUniprot || !computedProteinUniprot || computedUniprot !== computedProteinUniprot) {
-    return false
-  }
-  return true
+  return Boolean(
+    selectionPoolFingerprint &&
+    entry?.selection_pool_fingerprint === selectionPoolFingerprint &&
+    computedUniprot &&
+    computedProteinUniprot &&
+    computedUniprot === computedProteinUniprot,
+  )
 }
 
 function toScheduleUpcomingRow(entry) {
@@ -160,7 +116,6 @@ function buildScheduleDayCacheEntry({
   const availabilityPinProtein = proteinSummaryByUniprot.get(availabilityPinUniprotId) || null
 
   return {
-    cache_version: ADMIN_SCHEDULE_CACHE_VERSION,
     date,
     salt,
     selection_pool_fingerprint: selection?.poolFingerprint || null,
@@ -175,20 +130,6 @@ function buildScheduleDayCacheEntry({
       ? selection.skippedAlphaFold
       : null,
     generated_at: Date.now(),
-  }
-}
-
-async function putScheduleDayCacheEntry(env, entry) {
-  const date = entry?.date
-  if (!isValidIsoDay(date)) {
-    return
-  }
-  try {
-    await env.KV.put(buildAdminScheduleDayCacheKey(date), JSON.stringify(entry), {
-      expirationTtl: ADMIN_SCHEDULE_DAY_CACHE_TTL_SECONDS,
-    })
-  } catch (err) {
-    console.warn(`Admin schedule day cache write failed for ${date}; serving uncached`, err)
   }
 }
 
@@ -834,7 +775,6 @@ export async function handleOverrideProtein(request, env) {
       set_at: Date.now(),
     },
   })
-  await deleteAdminScheduleDayCacheEntry(env, date)
 
   // Invalidate the game's daily bootstrap cache so the override takes effect immediately.
   try {
@@ -1075,62 +1015,20 @@ export async function handleAdminSchedule(request, env) {
     }
     const plannedDates = dates.filter((date) => !recordedDates.has(date))
 
-    const availabilityPinKeys = await listAllKvKeys(env, DAILY_TARGET_AVAILABILITY_PIN_PREFIX)
-    const availabilityPins = await Promise.all(
-      availabilityPinKeys.map(async (key) => {
-        const date = key.name.replace(DAILY_TARGET_AVAILABILITY_PIN_PREFIX, "")
-        if (!plannedDates.includes(date)) {
-          return null
-        }
-        try {
-          const raw = await env.KV.get(key.name)
-          return parseDailyTargetAvailabilityPin(raw, {
-            date,
-            salt,
-            selectionPoolFingerprint,
-          })
-        } catch {
-          return null
-        }
-      }),
-    )
+    const availabilityPins = plannedDates.length
+      ? await listDailyTargetAvailabilityPins(env.DB, {
+          firstDate: plannedDates[0],
+          lastDate: plannedDates.at(-1),
+          salt,
+          selectionPoolFingerprint,
+        })
+      : []
     const availabilityPinByDate = new Map(
       availabilityPins.filter(Boolean).map((entry) => [entry.date, entry]),
     )
 
-    const cachedRowsByDate = new Map()
-    await Promise.all(
-      plannedDates.map(async (date) => {
-        try {
-          const cached = await env.KV.get(buildAdminScheduleDayCacheKey(date), { type: "json" })
-          if (cached && typeof cached === "object") {
-            cachedRowsByDate.set(date, cached)
-          }
-        } catch (err) {
-          console.warn(`Admin schedule day cache read failed for ${date}; recomputing`, err)
-        }
-      }),
-    )
-
     const upcomingByDate = new Map()
-    const missingDates = []
-    for (const date of plannedDates) {
-      const plannedOverride = normalizeUniprotId(overrideByDate.get(date)?.uniprot_id)
-      const cachedEntry = cachedRowsByDate.get(date)
-      if (
-        isScheduleDayCacheEntryValid(cachedEntry, {
-          date,
-          overrideUniprotId: plannedOverride,
-          availabilityPinUniprotId: availabilityPinByDate.get(date)?.uniprot_id,
-          salt,
-          selectionPoolFingerprint,
-        })
-      ) {
-        upcomingByDate.set(date, cachedEntry)
-        continue
-      }
-      missingDates.push(date)
-    }
+    const missingDates = plannedDates
 
     if (missingDates.length) {
       const selections = await planDailyTargets(env.DB, salt, missingDates)
@@ -1158,16 +1056,9 @@ export async function handleAdminSchedule(request, env) {
       )
 
       const validEntries = builtEntries.filter((entry) =>
-        isScheduleDayCacheEntryValid(entry, {
-          date: entry.date,
-          overrideUniprotId: overrideByDate.get(entry.date)?.uniprot_id,
-          availabilityPinUniprotId: availabilityPinByDate.get(entry.date)?.uniprot_id,
-          salt,
-          selectionPoolFingerprint,
-        }),
+        isScheduleDayEntryComplete(entry, selectionPoolFingerprint),
       )
       validEntries.forEach((entry) => upcomingByDate.set(entry.date, entry))
-      await Promise.allSettled(validEntries.map((entry) => putScheduleDayCacheEntry(env, entry)))
     }
 
     const incompleteDates = plannedDates.filter(
@@ -1288,7 +1179,7 @@ export async function handleAdminScheduleAvailabilityReplacement(request, env) {
     const forbidden = new Set(forbiddenUniprotIds)
     const forbiddenSurnames = new Set(forbiddenGeneSurnames)
     const rejected = new Set(rejectedUniprotIds)
-    const existingPin = await readDailyTargetAvailabilityPin(env.KV, {
+    const existingPin = await readDailyTargetAvailabilityPin(env.DB, {
       date,
       salt,
       selectionPoolFingerprint,
@@ -1316,7 +1207,7 @@ export async function handleAdminScheduleAvailabilityReplacement(request, env) {
       )
     }
 
-    const record = await writeDailyTargetAvailabilityPin(env.KV, {
+    const record = await writeDailyTargetAvailabilityPin(env.DB, {
       date,
       salt,
       selectionPoolFingerprint,
@@ -1326,8 +1217,6 @@ export async function handleAdminScheduleAvailabilityReplacement(request, env) {
       forbiddenUniprotIds: Array.from(forbidden),
       forbiddenGeneSurnames: Array.from(forbiddenSurnames),
     })
-    await deleteAdminScheduleDayCacheEntry(env, date)
-
     return Response.json({
       ok: true,
       date,
@@ -1413,7 +1302,7 @@ export async function handleAdminCards(request, env) {
     if (!resolvedUniprot) {
       const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT_FALLBACK
       const selection = await pickDailyTarget(env.DB, salt, date)
-      const availabilityPin = await readDailyTargetAvailabilityPin(env.KV, {
+      const availabilityPin = await readDailyTargetAvailabilityPin(env.DB, {
         date,
         salt,
         selectionPoolFingerprint: selection?.poolFingerprint,
@@ -1641,7 +1530,6 @@ export async function handleDeleteOverride(request, env) {
 
   const key = `puzzle_override:${date}`
   await env.KV.delete(key)
-  await deleteAdminScheduleDayCacheEntry(env, date)
 
   return Response.json({
     success: true,

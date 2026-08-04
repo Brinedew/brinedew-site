@@ -60,11 +60,10 @@ All three were automatic picks, not admin overrides.
 
 ## Schedule and release behavior
 
-The admin schedule caches computed future days. The cache entry includes a
-fingerprint of the normalized playable family pool; adding, removing, or
-reclassifying a protein invalidates the old bag rather than mixing old and new
-computed days. Any selection-algorithm change
-must increment `ADMIN_SCHEDULE_CACHE_VERSION` so cached previews are recomputed.
+The admin schedule computes future days from the normalized playable-family
+pool fingerprint on every request. It does not write a per-day KV cache. The
+batch planner and minimal protein-summary query make that cache unnecessary,
+while avoiding hundreds of writes against Cloudflare's shared daily KV quota.
 The production pre-warm cron and request-time slow path must consume the same
 balanced candidate sequence.
 
@@ -72,14 +71,16 @@ An annual admin request computes its primary identities from one in-memory
 shuffle-bag plan and bulk-loads only the protein summary projection. It must not
 perform one `SELECT *` per day. The latter exhausted the live 2026-08-04 annual
 request after 340 future identities and returned the remaining 25 as null rows
-under HTTP 200. Only complete day entries may be cached; if any planned summary
-is unavailable, the entire schedule response is HTTP 503 with the missing dates.
+under HTTP 200. If any planned summary is unavailable, the entire schedule
+response is HTTP 503 with the missing dates.
 
 Automatic availability pins use the same salt and pool fingerprint. Stale pins
 do not survive a picker or pool change. They are lower priority than manual
 overrides and recorded actual targets. The admin cards endpoint, tomorrow
 pre-warm, and request-time selection must resolve the same pin and preserve its
 horizon exclusions if the pinned structure later becomes unavailable.
+Pins live in D1, not KV: they must remain writable after unrelated traffic has
+exhausted Cloudflare's daily KV write allowance.
 
 Successful browser rendering alone is not enough for a future replacement.
 The canonical curated structure is cached in R2, its `pinnedUntil` metadata is

@@ -10,6 +10,7 @@
 | `protein_embeddings`      | upload_embeddings.py   | **Static reference data - upload once**    |
 | `users`, `games`, `stats` | Worker runtime         | User/game state, never touch in migrations |
 | `structure_failures`      | Worker runtime         | Cache of failed structure fetches          |
+| `daily_target_availability_pins` | Worker runtime | Durable non-AlphaFold daily replacements |
 
 ## Critical rule
 
