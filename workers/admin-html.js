@@ -3981,7 +3981,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
 
 
-    async function loadProteinInPreview(uniprot) {
+    async function loadProteinInPreview(uniprot, options = {}) {
       const loadToken = ++previewLoadToken;
       const pendingLabel = uniprot;
       previewStatusEl.textContent = 'Loading ' + pendingLabel + '...';
@@ -4049,6 +4049,21 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           previewPlaceholderEl.textContent = 'No 3D structure available for preview.';
           previewStatusEl.textContent = 'Preview unavailable';
           return { ok: false, reason: 'no_structure' };
+        }
+
+        if (options.verifyStructureBytes === true) {
+          // Recap generation is an unattended reconciliation. A known HTTP
+          // failure must fail the group immediately instead of consuming two
+          // Mol* load timeouts before the final storage audit can continue.
+          const structureProbe = await fetch(data.url, {
+            method: 'HEAD',
+            credentials: 'include'
+          });
+          if (!structureProbe.ok) {
+            throw new Error(
+              'Structure bytes unavailable for ' + uniprot + ' (HTTP ' + structureProbe.status + ')'
+            );
+          }
         }
 
         const mountTarget = previewMountEl || previewContainer;
@@ -4771,7 +4786,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       let base64 = null;
       let lastError = null;
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        const loadResult = await loadProteinInPreview(row.uniprot);
+        const loadResult = await loadProteinInPreview(row.uniprot, {
+          verifyStructureBytes: opts.bulk === true
+        });
         if (!loadResult?.ok) {
           if (loadResult?.reason === 'no_structure') {
             throw new Error('No structure available for ' + row.uniprot);

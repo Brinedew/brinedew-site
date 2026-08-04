@@ -73,7 +73,7 @@ Current design (2026-08-03):
   fails closed unless the authoritative response contains exactly 365
   consecutive day/UniProt identities from today through day 364, checks stored objects in 25-identity
   client chunks, and processes only missing identities. Missing days are grouped
-  by UniProt so one molecule render can cover repeated targets, but the base64
+  by UniProt so an explicit repeated override can reuse one molecule render, but the base64
   bitmap and Mol* viewer are released after that group. A closed tab loses only
   the active group: verified objects are the durable checkpoint for the next run.
   After processing, the admin re-reads all 365 immutable identities and may show
@@ -85,6 +85,10 @@ Current design (2026-08-03):
 - The admin renderer samples the actual Mol* canvas until molecule pixels are
   present for three consecutive frames. It retries a fresh viewer once and
   refuses the upload if the canvas remains a uniform background.
+- Bulk reconciliation probes the selected structure URL with `HEAD` before
+  starting Mol*. A known 4xx/5xx structure failure is retained as a hole
+  immediately instead of consuming two viewer load timeouts; ordinary
+  interactive admin previews keep their existing loading behavior.
 - Bunny upload success is the documented HTTP `201`, followed by bounded
   exact-byte read-back from the same authenticated storage identity. Production
   measurement on 2026-08-04 required longer than 5 seconds, so the shared retry
