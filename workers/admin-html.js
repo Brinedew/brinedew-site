@@ -2152,6 +2152,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         }
       } catch (err) {
         console.error('Error loading schedule:', err);
+        if (options.required === true) {
+          throw err;
+        }
       }
     }
     
@@ -5015,15 +5018,26 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       setRecapImageMessage('Loading schedule and checking exact yearly coverage...', 'info');
 
       try {
-        await loadSchedule({ futureDays: DISCORD_IMAGE_UPLOAD_DAYS });
+        await loadSchedule({ futureDays: DISCORD_IMAGE_UPLOAD_DAYS, required: true });
         const today = new Date().toISOString().slice(0, 10);
+        const expectedLastDate = new Date(today + 'T00:00:00.000Z');
+        expectedLastDate.setUTCDate(expectedLastDate.getUTCDate() + DISCORD_IMAGE_UPLOAD_DAYS - 1);
+        const expectedLastDay = expectedLastDate.toISOString().slice(0, 10);
         const days = Object.keys(scheduleData)
           .filter((day) => day >= today && scheduleData[day]?.uniprot)
           .sort()
           .slice(0, DISCORD_IMAGE_UPLOAD_DAYS);
 
-        if (days.length === 0) {
-          throw new Error('No upcoming scheduled proteins to upload.');
+        if (
+          days.length !== DISCORD_IMAGE_UPLOAD_DAYS ||
+          days[0] !== today ||
+          days[days.length - 1] !== expectedLastDay
+        ) {
+          throw new Error(
+            'Authoritative yearly schedule is incomplete: expected ' + DISCORD_IMAGE_UPLOAD_DAYS +
+            ' consecutive identities from ' + today + ' through ' + expectedLastDay +
+            ', received ' + days.length + ' ending at ' + (days[days.length - 1] || 'none') + '.'
+          );
         }
 
         await fetchRecapStatusesForDays(days);
