@@ -25,6 +25,21 @@ test("apex iconoplasm admin route stays on the worker and uses the same admin ga
   assert.match(await response.text(), /Unauthorized/)
 })
 
+test("posted recap repair is reachable only through the admin gate", async () => {
+  const response = await worker.fetch(
+    new Request("https://brinedew.bio/api/admin/repair-posted-recap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ day: "2026-08-03" }),
+    }),
+    {},
+    { waitUntil() {} },
+  )
+
+  assert.equal(response.status, 403)
+  assert.deepEqual(await response.json(), { error: "Unauthorized" })
+})
+
 test("portrait binaries stay wired even when they arrive through a non-iconoplasm host boundary", async () => {
   const response = await worker.fetch(
     new Request(
