@@ -15,9 +15,11 @@ In response, AIs invariably repeat that a mouse from Andrzej Bartke's laboratory
 
 But are they right to do that?
 ![[image-57.png|A mundane data collation request I gave to ChatGPT]]![[image-59.png|The response - note the "high confidence", "cleanest row" claims.]]
-On the surface, the inclusion seems warranted. Bartke is a well-regarded researcher known for studying dwarf mice. Dwarfism is well-known for being linked to longer lifespans within a species and offers protection from age-related diseases. And Bartke's lifespan record was indeed celebrated by the [Methuselah Foundation](https://www.mfoundation.org/) in 2003 as Methuselah Mouse Prize. 
+On the surface, the inclusion seems warranted. Bartke is a well-regarded researcher known for studying dwarf mice. Dwarfism is known for being linked to longer lifespans within a species and for offering protection from age-related diseases. And Bartke's lifespan record was indeed celebrated by the [Methuselah Foundation](https://www.mfoundation.org/) in 2003 as Methuselah Mouse Prize. 
 
 But this specific mouse was never actually recorded in any research publication! The 1,819-day figure comes from **personal communication**, not a paper documenting the animal cohort and its survival record. 
+
+In two decades since the record claim, none of Bartke's publications got even close to repeating it. The longest lifespan I could find in his published work is a 1,537-day-old mouse from Sun et al. (2013).
 
 This is not by itself an attack on the scientific integrity of MPrize participants - lifespan prize design is a hard problem. However, when making comparative maximum lifespan tables (as I do), it's not an accepted practice to include Bartke's result on the same level of evidentiary support as the lifespan results from published mouse cohorts.
 
