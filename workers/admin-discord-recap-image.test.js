@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleAdminDiscordRecapImageStatus, handleAdminDiscordRecapImageUpload } from "./admin.js"
+import {
+  handleAdminDiscordRecapImageStatus,
+  handleAdminDiscordRecapImageStatuses,
+  handleAdminDiscordRecapImageUpload,
+} from "./admin.js"
 
 function buildAdminEnv(bucket) {
   return {
@@ -87,4 +91,37 @@ test("admin status checks only the requested target identity", async () => {
   assert.equal(body.exists, false)
   assert.equal(body.uniprot_id, "P08134")
   assert.deepEqual(reads, ["discord-recap-images/v2/2026-08-02/P08134/molstar-recap-v2.png"])
+})
+
+test("annual recap status checks never exceed five concurrent storage reads", async () => {
+  let active = 0
+  let maxActive = 0
+  const reads = []
+  const env = buildAdminEnv({
+    async head(key) {
+      reads.push(key)
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      await new Promise((resolve) => setTimeout(resolve, 2))
+      active -= 1
+      return null
+    },
+  })
+  const identities = Array.from(
+    { length: 17 },
+    (_, index) =>
+      `2026-08-${String(index + 1).padStart(2, "0")}~P${String(index + 1).padStart(5, "0")}`,
+  )
+  const request = adminRequest(
+    `https://example.test/api/admin/discord-recap-images?images=${encodeURIComponent(identities.join(","))}`,
+  )
+
+  const response = await handleAdminDiscordRecapImageStatuses(request, env)
+  const body = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(body.count, 17)
+  assert.equal(Object.keys(body.days).length, 17)
+  assert.equal(reads.length, 17)
+  assert.equal(maxActive, 5)
 })

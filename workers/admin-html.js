@@ -1,3 +1,56 @@
+// Pure planning helpers are stringified into the inline admin runtime below.
+// Keeping one implementation makes the resumability contract directly testable
+// without exposing a production-only testing hook on window.
+export function chunkRecapImageDays(days, batchSize = 25) {
+  const normalizedSize = Math.max(1, Math.min(25, Math.floor(Number(batchSize) || 25)))
+  const normalizedDays = Array.from(
+    new Set(
+      (Array.isArray(days) ? days : [])
+        .map((day) => String(day || "").trim())
+        .filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day)),
+    ),
+  )
+  const chunks = []
+  for (let index = 0; index < normalizedDays.length; index += normalizedSize) {
+    chunks.push(normalizedDays.slice(index, index + normalizedSize))
+  }
+  return chunks
+}
+
+export function buildMissingRecapImageGroups(days, scheduleByDay, existsByDay) {
+  const groupsByUniprot = new Map()
+  for (const day of Array.isArray(days) ? days : []) {
+    if (existsByDay?.[day] === true) continue
+    const uniprot = String(scheduleByDay?.[day]?.uniprot || "")
+      .trim()
+      .toUpperCase()
+    if (!uniprot) continue
+    if (!groupsByUniprot.has(uniprot)) {
+      groupsByUniprot.set(uniprot, { uniprot, days: [] })
+    }
+    groupsByUniprot.get(uniprot).days.push(day)
+  }
+  return Array.from(groupsByUniprot.values())
+}
+
+export function summarizeRecapImageCoverage(days, existsByDay) {
+  const normalizedDays = Array.isArray(days) ? days : []
+  const missingDays = normalizedDays.filter((day) => existsByDay?.[day] !== true)
+  return {
+    total: normalizedDays.length,
+    ready: normalizedDays.length - missingDays.length,
+    missingDays,
+  }
+}
+
+const ADMIN_RECAP_BULK_HELPERS = [
+  chunkRecapImageDays,
+  buildMissingRecapImageGroups,
+  summarizeRecapImageCoverage,
+]
+  .map((helper) => helper.toString())
+  .join("\n\n")
+
 // Admin panel HTML content
 export const ADMIN_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -1751,6 +1804,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     
     <script src="/static/geneguessr/molstar-shared.js?v=admin"></script>
     <script>
+    ${ADMIN_RECAP_BULK_HELPERS}
     const API_BASE = '';
 
     function deepClone(value) {
@@ -1967,6 +2021,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     let recapStatusRefreshInFlight = null;
     const recapStatusQueuedDays = new Set();
     const DISCORD_IMAGE_UPLOAD_DAYS = 365;
+    const DISCORD_IMAGE_STATUS_BATCH_SIZE = 25;
     const DEFAULT_SCHEDULE_FUTURE_DAYS = 120;
     let recapUploadRunning = false;
     let scheduleRefreshInFlight = null;
@@ -4459,6 +4514,61 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       renderCalendar(currentDate);
     }
 
+    async function fetchRecapStatusesForDays(days, options = {}) {
+      // ARCHITECTURE FENCE [GG-002]: never fan a yearly reconciliation into one
+      // unbounded Worker request. These exact-object reads are both the preflight
+      // and the durable resume checkpoint after a browser interruption.
+      const updateKnownState = options.updateKnownState !== false;
+      const normalizedDays = Array.from(
+        new Set(
+          (Array.isArray(days) ? days : [])
+            .map((day) => String(day || '').trim())
+            .filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day))
+            .filter((day) => !!scheduleData[day]?.uniprot)
+        )
+      );
+      const statuses = Object.create(null);
+      let changed = false;
+
+      for (const batchDays of chunkRecapImageDays(normalizedDays, DISCORD_IMAGE_STATUS_BATCH_SIZE)) {
+        const imageIdentities = batchDays.map((day) => day + '~' + scheduleData[day].uniprot);
+        const response = await fetch(
+          API_BASE + '/api/admin/discord-recap-images?images=' + encodeURIComponent(imageIdentities.join(',')),
+          { credentials: 'include' }
+        );
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.error || 'Failed to load recap image statuses');
+        }
+        if (Number(payload?.count) !== batchDays.length) {
+          throw new Error(
+            'Recap image status response covered ' + Number(payload?.count || 0) +
+            ' of ' + batchDays.length + ' requested identities'
+          );
+        }
+
+        const byDay = payload?.days || {};
+        for (const day of batchDays) {
+          if (!Object.prototype.hasOwnProperty.call(byDay, day)) {
+            throw new Error('Recap image status response omitted ' + day);
+          }
+          statuses[day] = byDay[day];
+          if (updateKnownState) {
+            const exists = byDay[day]?.exists === true;
+            if (recapImageExistsByDay[day] !== exists) {
+              recapImageExistsByDay[day] = exists;
+              changed = true;
+            }
+          }
+        }
+      }
+
+      if (changed) {
+        renderCalendar(currentDate);
+      }
+      return statuses;
+    }
+
     async function refreshRecapStatusesForVisibleDays(visibleDays, options = {}) {
       const force = options.force === true;
       const normalizedDays = Array.from(
@@ -4485,29 +4595,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       recapStatusRefreshInFlight = (async () => {
         let pendingDays = Array.from(new Set(daysToFetch));
         while (pendingDays.length > 0) {
-          const imageIdentities = pendingDays.map((day) => day + '~' + scheduleData[day].uniprot);
-          const response = await fetch(
-            API_BASE + '/api/admin/discord-recap-images?images=' + encodeURIComponent(imageIdentities.join(',')),
-            { credentials: 'include' }
-          );
-          const payload = await response.json();
-          if (!response.ok) {
-            throw new Error(payload?.error || 'Failed to load recap image statuses');
-          }
-
-          const byDay = payload?.days || {};
-          let changed = false;
-          pendingDays.forEach((day) => {
-            const exists = !!byDay?.[day]?.exists;
-            if (recapImageExistsByDay[day] !== exists) {
-              recapImageExistsByDay[day] = exists;
-              changed = true;
-            }
-          });
-
-          if (changed) {
-            renderCalendar(currentDate);
-          }
+          await fetchRecapStatusesForDays(pendingDays);
 
           pendingDays = Array.from(recapStatusQueuedDays);
           recapStatusQueuedDays.clear();
@@ -4696,13 +4784,17 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       }
       const uploaded = await uploadRecapImage(day, row.uniprot, base64);
       recapImageExistsByDay[day] = true;
-      renderCalendar(currentDate);
+      if (!opts.bulk) {
+        renderCalendar(currentDate);
+      }
       if (!opts.silent) {
         setRecapImageMessage('Uploaded recap image for ' + day + ' (' + row.symbol + ')', 'success');
       }
-      refreshRecapWarning().catch((err) => {
-        console.error('Failed to refresh recap warning after upload:', err);
-      });
+      if (!opts.bulk) {
+        refreshRecapWarning().catch((err) => {
+          console.error('Failed to refresh recap warning after upload:', err);
+        });
+      }
       return { uploaded, base64, uniprot: row.uniprot, symbol: row.symbol || row.uniprot };
     }
 
@@ -4911,15 +5003,16 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     }
 
     async function uploadNextYearImages() {
+      // ARCHITECTURE FENCE [GG-002]: this is reconciliation, not bulk overwrite.
+      // Existing verified objects are the checkpoint; only missing identities
+      // render, one protein bitmap lives in memory at a time, and 365/365 is
+      // independently re-read before the UI may report success.
       if (recapUploadRunning) {
         return;
       }
 
-      const proceed = confirm('Render and upload recap images for the next 365 days? This can take a while.');
-      if (!proceed) return;
-
       setRecapButtonsBusy(true);
-      setRecapImageMessage('Loading schedule for yearly upload...', 'info');
+      setRecapImageMessage('Loading schedule and checking exact yearly coverage...', 'info');
 
       try {
         await loadSchedule({ futureDays: DISCORD_IMAGE_UPLOAD_DAYS });
@@ -4933,61 +5026,100 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           throw new Error('No upcoming scheduled proteins to upload.');
         }
 
-        const imageByUniprot = new Map();
-        let uploaded = 0;
-        let failed = 0;
-        let skipped = 0;
-
-        for (let i = 0; i < days.length; i += 1) {
-          const day = days[i];
-          const row = scheduleData[day];
-          const label = row?.symbol || row?.uniprot || day;
+        await fetchRecapStatusesForDays(days);
+        const initialCoverage = summarizeRecapImageCoverage(days, recapImageExistsByDay);
+        if (initialCoverage.ready === initialCoverage.total) {
           setRecapImageMessage(
-            'Processing ' + (i + 1) + '/' + days.length + ' (' + day + ' • ' + label + ')',
+            'Yearly coverage already verified: ' + initialCoverage.ready + '/' + initialCoverage.total +
+            ' exact images through ' + days[days.length - 1] + '.',
+            'success'
+          );
+          return;
+        }
+
+        const groups = buildMissingRecapImageGroups(days, scheduleData, recapImageExistsByDay);
+        const proceed = confirm(
+          'Resume exact recap-image coverage through ' + days[days.length - 1] + '?\\n\\n' +
+          'Verified ready: ' + initialCoverage.ready + '/' + initialCoverage.total + '\\n' +
+          'Missing objects: ' + initialCoverage.missingDays.length + '\\n' +
+          'Unique protein renders required: ' + groups.length + '\\n\\n' +
+          'Existing verified objects will be skipped. Closing the tab is safe; the next run resumes from remaining objects.'
+        );
+        if (!proceed) {
+          setRecapImageMessage(
+            'Yearly fill cancelled. Verified coverage remains ' + initialCoverage.ready + '/' + initialCoverage.total + '.',
+            'info'
+          );
+          return;
+        }
+
+        let uploaded = 0;
+        const failures = [];
+
+        for (let i = 0; i < groups.length; i += 1) {
+          const group = groups[i];
+          const firstDay = group.days[0];
+          const row = scheduleData[firstDay];
+          const label = row?.symbol || group.uniprot;
+          setRecapImageMessage(
+            'Rendering protein ' + (i + 1) + '/' + groups.length + ' (' + label +
+            ' • ' + group.days.length + ' missing day' + (group.days.length === 1 ? '' : 's') +
+            ' • ' + uploaded + '/' + initialCoverage.missingDays.length + ' uploaded)',
             'info'
           );
 
-          if (!row?.uniprot) {
-            skipped += 1;
-            continue;
-          }
-
+          let base64 = null;
           try {
-            let base64 = imageByUniprot.get(row.uniprot);
-            if (!base64) {
-              const rendered = await renderAndUploadDayImage(day, { silent: true, bulk: true });
-              base64 = rendered.base64;
-              imageByUniprot.set(row.uniprot, base64);
-            } else {
-              await uploadRecapImage(day, row.uniprot, base64);
-              recapImageExistsByDay[day] = true;
-            }
+            const rendered = await renderAndUploadDayImage(firstDay, { silent: true, bulk: true });
+            base64 = rendered.base64;
             uploaded += 1;
-          } catch (err) {
-            const msg = String(err && err.message ? err.message : err);
-            if (msg.toLowerCase().includes('no structure available')) {
-              skipped += 1;
-            } else {
-              failed += 1;
+            await destroyPreviewViewer();
+
+            for (const day of group.days.slice(1)) {
+              await uploadRecapImage(day, group.uniprot, base64);
+              recapImageExistsByDay[day] = true;
+              uploaded += 1;
             }
-            console.error('Yearly recap-image upload failed for ' + day + ':', err);
+          } catch (err) {
+            for (const day of group.days) {
+              recapImageExistsByDay[day] = false;
+            }
+            failures.push({
+              uniprot: group.uniprot,
+              days: group.days.slice(),
+              error: String(err && err.message ? err.message : err)
+            });
+            console.error('Yearly recap-image upload failed for ' + group.uniprot + ':', err);
+          } finally {
+            base64 = null;
+            await destroyPreviewViewer();
           }
           await sleep(250);
         }
 
+        setRecapImageMessage('Rechecking all ' + days.length + ' exact stored objects...', 'info');
+        await fetchRecapStatusesForDays(days);
+        const finalCoverage = summarizeRecapImageCoverage(days, recapImageExistsByDay);
         renderCalendar(currentDate);
         refreshRecapWarning().catch((err) => {
           console.error('Failed to refresh recap warning after yearly upload:', err);
         });
 
-        if (failed > 0) {
+        if (finalCoverage.missingDays.length > 0) {
+          const sample = finalCoverage.missingDays.slice(0, 12).join(', ');
+          const more = finalCoverage.missingDays.length > 12
+            ? ' (+' + (finalCoverage.missingDays.length - 12) + ' more)'
+            : '';
           setRecapImageMessage(
-            'Yearly upload finished with errors. Uploaded: ' + uploaded + ', failed: ' + failed + ', skipped: ' + skipped,
+            'Yearly fill incomplete: verified ' + finalCoverage.ready + '/' + finalCoverage.total +
+            '. Still missing: ' + sample + more + '. Rerun to resume missing objects only.' +
+            (failures.length ? ' Failed protein groups: ' + failures.length + '.' : ''),
             'error'
           );
         } else {
           setRecapImageMessage(
-            'Yearly upload complete. Uploaded: ' + uploaded + ', skipped: ' + skipped + '.',
+            'Yearly coverage verified: ' + finalCoverage.ready + '/' + finalCoverage.total +
+            ' exact images through ' + days[days.length - 1] + '. New uploads this run: ' + uploaded + '.',
             'success'
           );
         }

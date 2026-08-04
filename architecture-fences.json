@@ -525,9 +525,9 @@
     {
       "id": "GG-002",
       "title": "Recap images require pixel and storage proof",
-      "decision": "A GeneGuessr recap image is publishable only after the browser proves stable molecule pixels and object storage returns the exact uploaded bytes from the immutable day, UniProt, and renderer identity. Missing images preserve the text recap; repairs edit the recorded Discord message in place.",
-      "reason": "The July renderer uploaded a uniform dark canvas that Discord displayed as a blank attachment. The August Bunny cutover then accepted an upload response without proving the object existed, so NHP2 posted without an attachment while the admin UI reported success and its startup warning crashed before schedule initialization.",
-      "change_control": "Renderer readiness, object identity, upload success semantics, read-back verification, admin coverage, text-only fallback, posted-message repair, instructions, runbook, and behavioral tests must change together. Never treat attachment presence, a generic 2xx, object metadata, or non-zero byte length as proof that a visible protein will reach Discord.",
+      "decision": "A GeneGuessr recap image is publishable only after the browser proves stable molecule pixels and object storage returns the exact uploaded bytes from the immutable day, UniProt, and renderer identity. Missing images preserve the text recap; repairs edit the recorded Discord message in place. Annual coverage is a resumable reconciliation: bounded preflight and final reads, skip verified objects, group missing days by protein, retain one bitmap at a time, and report success only for 365/365 exact objects.",
+      "reason": "The July renderer uploaded a uniform dark canvas that Discord displayed as a blank attachment. The August Bunny cutover then accepted an upload response without proving the object existed, so NHP2 posted without an attachment while the admin UI reported success and its startup warning crashed before schedule initialization. B-702 then found only 1 of 365 yearly objects ready and proved the old bulk button had no checkpoint, skip-ready behavior, memory bound, or exact final audit.",
+      "change_control": "Renderer readiness, object identity, upload success semantics, read-back verification, bounded bulk reconciliation, admin coverage, text-only fallback, posted-message repair, instructions, runbook, and behavioral tests must change together. Never treat attachment presence, a generic 2xx, object metadata, an attempted-upload count, or non-zero byte length as proof that a visible protein will reach Discord.",
       "runbook": "docs/DISCORD_INTEGRATION.md",
       "additional_required_marker_categories": [],
       "markers": [
@@ -547,8 +547,23 @@
           "token": "ARCHITECTURE FENCE [GG-002]"
         },
         {
+          "category": "source",
+          "file": "workers/admin-html.js",
+          "token": "ARCHITECTURE FENCE [GG-002]"
+        },
+        {
+          "category": "source",
+          "file": "workers/admin.js",
+          "token": "ARCHITECTURE FENCE [GG-002]"
+        },
+        {
           "category": "test",
           "file": "workers/discord-recap-image-store.test.js",
+          "token": "ARCHITECTURE FENCE [GG-002]"
+        },
+        {
+          "category": "test",
+          "file": "workers/admin-html.daily-target-audit.test.js",
           "token": "ARCHITECTURE FENCE [GG-002]"
         }
       ]
