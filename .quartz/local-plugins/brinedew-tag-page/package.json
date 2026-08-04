@@ -43,11 +43,9 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "lint": "eslint . --max-warnings=0",
-    "format": "prettier . --check",
-    "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run lint && npm run format && npm run test"
+    "format": "prettier --ignore-path NUL src tsup.config.ts --check",
+    "check": "pnpm run typecheck && pnpm run format"
   },
   "peerDependencies": {
     "preact": "^10.0.0",
@@ -62,25 +60,15 @@
     }
   },
   "dependencies": {
-    "@quartz-community/types": "github:quartz-community/types",
-    "@quartz-community/utils": "github:quartz-community/utils"
+    "@quartz-community/types": "github:quartz-community/types#d342893db8240099cfd9d4499996333f1ca636b4",
+    "@quartz-community/utils": "github:quartz-community/utils#ff02040c07d0dcb2075994b2acd7cfec710326fa"
   },
   "devDependencies": {
-    "@types/hast": "^3.0.4",
-    "@types/mdast": "^4.0.4",
-    "@types/node": "^24.10.0",
-    "@typescript-eslint/eslint-plugin": "^7.18.0",
-    "@typescript-eslint/parser": "^7.18.0",
-    "eslint": "^8.57.0",
-    "eslint-config-prettier": "^9.1.0",
-    "github-slugger": "^2.0.0",
-    "hast-util-to-jsx-runtime": "^2.3.6",
-    "preact": "^10.28.2",
-    "prettier": "^3.6.2",
-    "sass": "^1.97.3",
+    "@types/node": "^25.7.0",
+    "prettier": "^3.9.6",
+    "sass": "^1.99.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=22",

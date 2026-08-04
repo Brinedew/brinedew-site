@@ -1,3 +1,8 @@
-export { T as TagPage, a as TagPageOptions } from './types-aKOR1SB2.js';
-export { _ as TagContent } from './TagContent-BLPikvbg.js';
-export { PageGenerator, PageMatcher, QuartzComponent, QuartzComponentConstructor, QuartzComponentProps, QuartzPageTypePlugin, QuartzPageTypePluginInstance, VirtualPage } from '@quartz-community/types';
+import { QuartzPageTypePlugin } from '@quartz-community/types';
+import { TagPageOptions } from './types.js';
+export { PageList, TagContent } from './components/index.js';
+import 'preact';
+
+declare const TagPage: QuartzPageTypePlugin<TagPageOptions>;
+
+export { TagPage, TagPageOptions };

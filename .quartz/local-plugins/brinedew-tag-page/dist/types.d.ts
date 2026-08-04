@@ -1,2 +1,10 @@
-export { BuildCtx, PageGenerator, PageMatcher, ProcessedContent, QuartzPageTypePlugin, QuartzPageTypePluginInstance, QuartzPluginData, SortFn, StaticResources, VirtualPage } from '@quartz-community/types';
-export { a as TagPageOptions } from './types-aKOR1SB2.js';
+import { SortFn } from '@quartz-community/types';
+
+interface TagPageOptions {
+    sort?: SortFn;
+    numPages?: number;
+    prefixTags?: boolean;
+    displayNames?: Record<string, string>;
+}
+
+export type { TagPageOptions };
