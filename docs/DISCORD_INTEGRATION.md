@@ -76,8 +76,10 @@ Current design (2026-08-03):
   present for three consecutive frames. It retries a fresh viewer once and
   refuses the upload if the canvas remains a uniform background.
 - Bunny upload success is the documented HTTP `201`, followed by bounded
-  exact-byte read-back from the same authenticated storage identity. The admin
-  UI must not mark a day covered before that verification succeeds.
+  exact-byte read-back from the same authenticated storage identity. Production
+  measurement on 2026-08-04 required longer than 5 seconds, so the shared retry
+  envelope probes for up to 15 seconds. The admin UI must not mark a day covered
+  before that verification succeeds.
 - **If no image is uploaded, the recap still posts text-only.** This is the
   cloud-only fallback B-356 asked for: the daily post can never be blocked by the
   image pipeline.
