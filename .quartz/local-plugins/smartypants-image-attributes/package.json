@@ -1,0 +1,21 @@
+{
+  "name": "@brinedew/smartypants-image-attributes",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./components": "./dist/index.js"
+  },
+  "quartz": {
+    "category": "transformer",
+    "components": {
+      "SmartypantsImageAttributes": {
+        "displayName": "SmartyPants Image Attributes",
+        "defaultPosition": "beforeBody",
+        "defaultPriority": 1
+      }
+    }
+  }
+}

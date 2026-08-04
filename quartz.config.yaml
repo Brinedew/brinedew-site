@@ -355,17 +355,24 @@ plugins:
     enabled: true
     order: 45
   - source:
+      name: smartypants-image-attributes
+      repo: ./.quartz/local-plugins/smartypants-image-attributes
+    enabled: true
+    # GFM owns the canonical SmartyPants engine; this extends it to Obsidian
+    # image aliases before those aliases become visible figcaptions.
+    order: 41
+  - source:
       name: image-captions
       repo: ./.quartz/local-plugins/image-captions
     enabled: true
-    # After GFM (40), before essay-normalizer so figures exist before spacing AST work.
-    order: 41
+    # After caption typography (41), before essay-normalizer.
+    order: 42
   - source:
       name: essay-normalizer
       repo: ./.quartz/local-plugins/essay-normalizer
     enabled: true
-    # After captions (41), before TOC (50) so outline levels feed the ToC.
-    order: 42
+    # After captions (42), before TOC (50) so outline levels feed the ToC.
+    order: 43
   - source: github:quartz-community/spacer
     enabled: true
     options: {}

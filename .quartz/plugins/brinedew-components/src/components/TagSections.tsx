@@ -122,7 +122,7 @@ TagSections.css = `
   font-weight: 600;
   color: var(--secondary);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.06em;
   margin: 0 0 0.25rem 0;
   padding: 0;
 }
