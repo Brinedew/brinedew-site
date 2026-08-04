@@ -8,11 +8,10 @@ draft: true
 
 # List of common AI hallucinations
 
-This is a list of dubious claims, hallucinations, or urban legends I often stumble upon when I work with LLMs. I add entries to this list continuously as I encounter them. 
-## AIs cite Bartke (2003) mouse lifespan record together with published lifespan records
+This is a list of dubious claims, hallucinations, or regurgitated urban legends I often stumble upon when I work with LLMs. I add entries to this list continuously as I encounter them. 
+## AIs cite Bartke's 2003 GHR-KO 11C mouse as if it was a published lifespan record
 
-When asked for the mouse lifespan records, LLMs often repeat that a mouse from Andrzej Bartke's laboratory lived for **1,819 days**, the maximum reported mouse lifespan. They cite this number even when asked to compare mouse lifespan records in scientific literature.
-
+When asked for the mouse lifespan records, LLMs often repeat that a mouse from Andrzej Bartke's laboratory lived for **1,819 days**, the maximum mouse lifespan ever reported. They cite this number even when asked to compare mouse lifespan records in scientific literature.
 ![[image-57.png|A mundane data collation request I gave to ChatGPT]]![[image-59.png|The response - note the "high confidence", "cleanest row" claims.]]
 This lifespan record was indeed celebrated by the [Methuselah Foundation](https://www.mfoundation.org/) in 2003 as Methuselah Mouse Prize, but it was never reported in a scientific publication. The 1,819-day figure comes from **personal communication**, not a paper documenting the animal cohort and its survival record. 
 
@@ -38,7 +37,7 @@ This is taken from Turturro et al (2009) [^1]:
 > The oldest male mouse, B6D2F1, lived to 1,628 days.
 
 ![[image-53.png|From Turturro et al., 1999]]
-But if you ask ChatGPT 5.6 Pro ($100 subscription!!! please support your local scientist) it will dig up Weindruch et al. (1986)[^2], with 54.6 months equaling, depending on month conversion, up to 1,662 days.
+But if you ask ChatGPT 5.6 Pro ($100 subscription!!! please support your local scientist) it will dig up Weindruch et al. (1986)[^2], with 54.6 months equaling around 1,660 days, plus-minus a week, depending on month conversion.
 
 > The longest-lived individual mouse was from group N/R40 that lived 54.6 mo.
 
