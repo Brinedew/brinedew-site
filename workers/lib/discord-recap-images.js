@@ -16,14 +16,6 @@ const DISCORD_RECAP_IMAGE_PREFIX = "discord-recap-images/v2/"
 export const DISCORD_RECAP_RENDER_CONTRACT = "molstar-recap-v2"
 
 const BUNNY_UPLOAD_SUCCESS_STATUS = 201
-const BUNNY_STORAGE_REGION_HOSTS = Object.freeze([
-  "storage.bunnycdn.com",
-  "uk.storage.bunnycdn.com",
-  "ny.storage.bunnycdn.com",
-  "la.storage.bunnycdn.com",
-  "sg.storage.bunnycdn.com",
-  "syd.storage.bunnycdn.com",
-])
 
 export function isValidIsoDay(value) {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value))
@@ -312,57 +304,4 @@ export async function deleteDiscordRecapImage(env, identity) {
     throw new Error(`Recap image DELETE failed (${response.status}) for ${key}`)
   }
   return true
-}
-
-// Temporary, admin-only incident probe. Every object uses a unique diagnostics
-// key and is deleted from the same endpoint in finally. Remove this export and
-// its route after the zone's primary regional hostname has been measured and
-// pinned in Worker configuration.
-export async function probeBunnyStorageRegions(env) {
-  const zone = bunnyStorageZone(env)
-  const password = bunnyStoragePassword(env)
-  if (!zone || !password) throw new Error("Bunny storage is not configured")
-
-  return Promise.all(
-    BUNNY_STORAGE_REGION_HOSTS.map(async (host) => {
-      const hostSlug = host.replace(/[^a-z0-9]+/gi, "-")
-      const key = `discord-recap-images/diagnostics/${crypto.randomUUID()}-${hostSlug}.bin`
-      const url = `https://${host}/${zone}/${key}`
-      const expected = crypto.getRandomValues(new Uint8Array(32))
-      let putStatus = null
-      let getStatus = null
-      let exactReadBack = false
-      let error = null
-      try {
-        const putResponse = await fetch(url, {
-          method: "PUT",
-          headers: { AccessKey: password, "Content-Type": "application/octet-stream" },
-          body: expected,
-          signal: AbortSignal.timeout(10_000),
-        })
-        putStatus = putResponse.status
-        await putResponse.body?.cancel().catch(() => null)
-        const getResponse = await fetch(url, {
-          headers: { AccessKey: password },
-          signal: AbortSignal.timeout(10_000),
-        })
-        getStatus = getResponse.status
-        if (getResponse.ok) {
-          const actual = new Uint8Array(await getResponse.arrayBuffer())
-          exactReadBack = equalBytes(actual, expected)
-        } else {
-          await getResponse.body?.cancel().catch(() => null)
-        }
-      } catch (caught) {
-        error = String(caught?.message || caught).slice(0, 200)
-      } finally {
-        await fetch(url, {
-          method: "DELETE",
-          headers: { AccessKey: password },
-          signal: AbortSignal.timeout(10_000),
-        }).catch(() => null)
-      }
-      return { host, putStatus, getStatus, exactReadBack, error }
-    }),
-  )
 }
