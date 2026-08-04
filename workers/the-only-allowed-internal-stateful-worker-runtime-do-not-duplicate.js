@@ -2616,11 +2616,24 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       } catch {
         // Invalid input is reported by the handler.
       }
-      const result = await handleRepairPostedRecap(env, { day })
-      return new Response(JSON.stringify(result), {
-        status: result.ok ? 200 : 409,
-        headers: { "Content-Type": "application/json" },
-      })
+      try {
+        const result = await handleRepairPostedRecap(env, { day })
+        return new Response(JSON.stringify(result), {
+          status: result.ok ? 200 : 409,
+          headers: { "Content-Type": "application/json" },
+        })
+      } catch (error) {
+        console.error("Posted recap repair failed:", error)
+        return Response.json(
+          {
+            ok: false,
+            error: "recap_repair_failed",
+            day,
+            details: error instanceof Error ? error.message : String(error),
+          },
+          { status: 502 },
+        )
+      }
     }
 
     if (url.pathname === "/api/admin/feature-flags" && request.method === "POST") {
