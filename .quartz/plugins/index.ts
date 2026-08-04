@@ -13,7 +13,7 @@ export type { SearchField, SearchOptions } from "./search"
 export type { SyntaxHighlightingOptions } from "./syntax-highlighting"
 export type { TableOfContentsTransformerOptions, TocEntry } from "./table-of-contents"
 export { BasesEntry, BasesView, FilterNode, GroupBy, PropertyConfig, SortDirection, SummaryType, ViewRenderer, ViewRendererProps, ViewTypeRegistration, BasesBody, registerCustomViews, viewRegistry, compile, evaluate, evaluateFilter, resolvePropertyValue, BasesData, BasesPageOptions } from "./bases-page"
-export { TagPage, TagPageOptions, TagContent } from "./brinedew-tag-page"
+export { PageList, TagContent, TagPageOptions } from "./brinedew-tag-page"
 export { CanvasBackgroundStyle, CanvasColor, CanvasData, CanvasEdge, CanvasEnd, CanvasFileNode, CanvasGroupNode, CanvasLinkNode, CanvasNode, CanvasSide, CanvasTextNode, CanvasBody, CanvasFrame, CanvasPageOptions } from "./canvas-page"
 export { ContentBody, ContentBodyOptions } from "./content-page"
 export { DraftTagInjector } from "./draft-tag-injector"
@@ -40,6 +40,9 @@ export const plugins: Record<string, Record<string, (...args: unknown[]) => void
   },
   "brinedew-created-modified-date": {
     CreatedModifiedDate: (...args: unknown[]) => { componentRegistry.setOptionOverrides("brinedew-created-modified-date", args[0] as Record<string, unknown>); },
+  },
+  "brinedew-tag-page": {
+    TagPage: (...args: unknown[]) => { componentRegistry.setOptionOverrides("brinedew-tag-page", args[0] as Record<string, unknown>); },
   },
   "canvas-page": {
     CanvasPage: (...args: unknown[]) => { componentRegistry.setOptionOverrides("canvas-page", args[0] as Record<string, unknown>); },
@@ -93,6 +96,9 @@ export const plugins: Record<string, Record<string, (...args: unknown[]) => void
   "search": {
     Search: (...args: unknown[]) => { componentRegistry.setOptionOverrides("search", args[0] as Record<string, unknown>); },
   },
+  "smartypants-image-attributes": {
+    SmartypantsImageAttributes: (...args: unknown[]) => { componentRegistry.setOptionOverrides("smartypants-image-attributes", args[0] as Record<string, unknown>); },
+  },
   "spacer": {
     Spacer: (...args: unknown[]) => { componentRegistry.setOptionOverrides("spacer", args[0] as Record<string, unknown>); },
   },
@@ -111,6 +117,7 @@ export const AliasRedirects = plugins["alias-redirects"].AliasRedirects
 export const BasesPage = plugins["bases-page"].BasesPage
 export const BasesTransformer = plugins["bases-page"].BasesTransformer
 export const CreatedModifiedDate = plugins["brinedew-created-modified-date"].CreatedModifiedDate
+export const TagPage = plugins["brinedew-tag-page"].TagPage
 export const CanvasPage = plugins["canvas-page"].CanvasPage
 export const CNAME = plugins["cname"].CNAME
 export const ContentIndex = plugins["content-index"].ContentIndex
@@ -129,6 +136,7 @@ export const ExcalidrawPage = plugins["obsidian-plugin-excalidraw"].ExcalidrawPa
 export const PageTitle = plugins["page-title"].PageTitle
 export const ReaderMode = plugins["reader-mode"].ReaderMode
 export const Search = plugins["search"].Search
+export const SmartypantsImageAttributes = plugins["smartypants-image-attributes"].SmartypantsImageAttributes
 export const Spacer = plugins["spacer"].Spacer
 export const SyntaxHighlighting = plugins["syntax-highlighting"].SyntaxHighlighting
 export const TableOfContentsTransformer = plugins["table-of-contents"].TableOfContentsTransformer

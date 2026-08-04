@@ -301,6 +301,15 @@
       "commit": "0f4c1a233cd03a0f562e13636b89b7708f8e2698",
       "installedAt": "2026-06-03T13:32:36.597Z"
     },
+    "smartypants-image-attributes": {
+      "source": {
+        "name": "smartypants-image-attributes",
+        "repo": "./.quartz/local-plugins/smartypants-image-attributes"
+      },
+      "resolved": "./.quartz/local-plugins/smartypants-image-attributes",
+      "commit": "local",
+      "installedAt": "2026-08-04T23:34:04.153Z"
+    },
     "spacer": {
       "source": "github:quartz-community/spacer",
       "resolved": "https://github.com/quartz-community/spacer.git",
