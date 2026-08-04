@@ -5,6 +5,8 @@ import {
   buildDailySelectionPoolFingerprint,
   buildFamilyBalancedDailyCandidateIds,
   getDailySelectionProteinIds,
+  planDailyTarget,
+  planDailyTargets,
 } from "./protein-store.js"
 
 test("daily selection uses a stable ordered pool independent of transient structure failures", async () => {
@@ -85,6 +87,35 @@ test("family-balanced daily sequence is deterministic and input-order independen
   assert.deepEqual(first, second)
   assert.equal(first.length, 3)
   assert.equal(new Set(first).size, 3)
+})
+
+test("bulk horizon planning is exactly equivalent to the canonical daily picker", async () => {
+  const db = {
+    prepare() {
+      return {
+        all: async () => ({
+          results: [
+            { uniprot: "Q96T52", gene_surname: "SLC" },
+            { uniprot: "Q96T53", gene_surname: "SLC" },
+            { uniprot: "Q96T54", gene_surname: "TP53" },
+          ],
+        }),
+      }
+    },
+  }
+  const dates = Array.from({ length: 30 }, (_, offset) => {
+    const date = new Date("2026-08-04T00:00:00.000Z")
+    date.setUTCDate(date.getUTCDate() + offset)
+    return date.toISOString().slice(0, 10)
+  })
+
+  const bulk = await planDailyTargets(db, "test-salt", dates)
+  const canonical = await Promise.all(dates.map((date) => planDailyTarget(db, "test-salt", date)))
+
+  assert.deepEqual(
+    bulk.map((selection) => selection.uniprot),
+    canonical.map((selection) => selection.candidateIds[0]),
+  )
 })
 
 test("daily pool fingerprint is order-independent and changes with membership", async () => {

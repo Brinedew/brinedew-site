@@ -186,6 +186,14 @@ each protein image after its missing days finish. Read `docs/DISCORD_INTEGRATION
 before changing recap rendering, storage, bulk coverage, upload success, cron
 fallback, repair, or visual acceptance.
 
+The authoritative annual schedule response must never return HTTP 200 with a
+null identity in its requested horizon. Generate primary identities from one
+canonical in-memory shuffle-bag plan, bulk-load the minimal protein summaries,
+cache only complete day entries, and fail the whole response closed if any
+summary is missing. Do not restore per-day `SELECT *` schedule hydration: it
+exhausted a live annual request after 340 future identities and disguised the
+remaining 25 failures as successful null rows.
+
 Mol*'s fixed bottom-left orientation axes are not molecule pixels. Readiness
 must measure the molecular viewport and require spatial spread outside that UI
 region. Any readiness change must bump `DISCORD_RECAP_RENDER_CONTRACT`; images

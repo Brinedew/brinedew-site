@@ -79,6 +79,12 @@ Current design (2026-08-03):
   After processing, the admin re-reads all 365 immutable identities and may show
   success only for exact 365/365 coverage. Server-side HEAD work runs at five
   concurrent storage reads, below Cloudflare's six-connection invocation limit.
+- The authoritative schedule endpoint constructs the whole horizon from one
+  deterministic in-memory bag plan and bulk-loads minimal protein summaries. It
+  returns HTTP 503 rather than HTTP 200 if even one day lacks an identity, and
+  never caches an incomplete day. This protects the browser preflight from the
+  2026-08-04 failure where per-day D1 reads produced 340 valid future rows plus
+  25 silent nulls.
 - Stored objects are immutable and keyed by day + authoritative UniProt ID +
   `DISCORD_RECAP_RENDER_CONTRACT`. A schedule override or renderer revision is
   therefore an automatic cache miss; legacy date-only objects are never read.
