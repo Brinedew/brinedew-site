@@ -40,6 +40,19 @@ test("posted recap repair is reachable only through the admin gate", async () =>
   assert.deepEqual(await response.json(), { error: "Unauthorized" })
 })
 
+test("temporary Bunny region probe is reachable only through the admin gate", async () => {
+  const response = await worker.fetch(
+    new Request("https://brinedew.bio/api/admin/bunny-storage-region-probe", {
+      method: "POST",
+    }),
+    {},
+    { waitUntil() {} },
+  )
+
+  assert.equal(response.status, 403)
+  assert.deepEqual(await response.json(), { error: "Unauthorized" })
+})
+
 test("portrait binaries stay wired even when they arrive through a non-iconoplasm host boundary", async () => {
   const response = await worker.fetch(
     new Request(
