@@ -7,12 +7,14 @@ import { parseCookies } from "./auth.js"
 import { sanitizeProteinSummary } from "./lib/structure-utils.js"
 import {
   buildDiscordRecapImageKey,
+  buildDiscordRecapImageDownloadFilename,
   DISCORD_RECAP_RENDER_CONTRACT,
   isValidIsoDay,
   canWriteDiscordRecapImage,
   canReadDiscordRecapImage,
   putDiscordRecapImage,
   headDiscordRecapImage,
+  loadDiscordRecapImageBytes,
 } from "./lib/discord-recap-images.js"
 import {
   fetchProteinByUniprot as loadProtein,
@@ -1638,6 +1640,20 @@ export async function handleAdminDiscordRecapImageStatus(request, env) {
 
   const identity = { day, uniprotId }
   const key = buildDiscordRecapImageKey(identity)
+  if (url.searchParams.get("download") === "1") {
+    const bytes = await loadDiscordRecapImageBytes(env, identity)
+    if (!bytes) {
+      return Response.json({ day, uniprot_id: uniprotId, key, exists: false }, { status: 404 })
+    }
+    return new Response(bytes, {
+      headers: {
+        "Content-Type": "image/png",
+        "Content-Length": String(bytes.byteLength),
+        "Content-Disposition": `inline; filename="${buildDiscordRecapImageDownloadFilename(identity)}"`,
+        "Cache-Control": "private, no-store",
+      },
+    })
+  }
   const head = await headDiscordRecapImage(env, identity)
   if (!head) {
     return Response.json({

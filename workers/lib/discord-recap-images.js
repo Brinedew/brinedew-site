@@ -45,6 +45,11 @@ export function buildDiscordRecapImageKey(identity) {
   return `${DISCORD_RECAP_IMAGE_PREFIX}${day}/${uniprotId}/${DISCORD_RECAP_RENDER_CONTRACT}.png`
 }
 
+export function buildDiscordRecapImageDownloadFilename(identity) {
+  const { day, uniprotId } = normalizeImageIdentity(identity)
+  return `geneguessr-${day}-${uniprotId}-${DISCORD_RECAP_RENDER_CONTRACT}.png`
+}
+
 // ---------------------------------------------------------------------------
 // Storage backend resolution.
 //
