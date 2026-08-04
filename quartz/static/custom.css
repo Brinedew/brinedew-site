@@ -277,9 +277,17 @@ article p {
  * never carry margin-bottom, so collapse/stacking cannot invent uneven air.
  */
 .markdown-preview-view.markdown-rendered {
+  /*
+   * Editorial rhythm contract. Keep these values explicit: inline furniture
+   * must not be able to renegotiate the height or spacing of a prose block.
+   */
+  --essay-leading: 1.6rem;
+  --essay-block-gap: 0.9em;
+  --essay-caption-gap: 0.35em;
   display: flex;
   flex-direction: column;
-  gap: 0.9em;
+  gap: var(--essay-block-gap);
+  line-height: var(--essay-leading);
 }
 
 .markdown-preview-view.markdown-rendered > * {
@@ -298,6 +306,38 @@ article p {
   padding-top: 0.5em;
 }
 
+/*
+ * Prose uses one line box regardless of whether a line contains links,
+ * emphasis, list markers, blockquotes, footnotes, or citation markers.
+ */
+.markdown-preview-view.markdown-rendered :is(p, li, blockquote) {
+  line-height: var(--essay-leading);
+}
+
+/*
+ * Native vertical-align:super/sub contributes the marker's own line-height to
+ * the parent line box. Position the smaller glyph visually instead, with a
+ * zero-height inline box, so annotations cannot add stray vertical pixels.
+ */
+.markdown-preview-view.markdown-rendered :is(sup, sub),
+.markdown-preview-view.markdown-rendered :is(sup, sub) > * {
+  line-height: 0;
+}
+
+.markdown-preview-view.markdown-rendered :is(sup, sub) {
+  position: relative;
+  vertical-align: baseline;
+  font-size: 0.75em;
+}
+
+.markdown-preview-view.markdown-rendered sup {
+  top: -0.42em;
+}
+
+.markdown-preview-view.markdown-rendered sub {
+  bottom: -0.2em;
+}
+
 /* Kill every global margin that could stack inside essays. */
 .markdown-preview-view.markdown-rendered :is(p, ul, ol, li, blockquote, figure, pre, table, img) {
   margin: 0;
@@ -309,7 +349,7 @@ article p {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35em;
+  gap: var(--essay-caption-gap);
   width: 100%;
 }
 
@@ -328,6 +368,7 @@ article p {
 .markdown-preview-view.markdown-rendered figure > figcaption {
   text-align: center;
   font-size: 0.82em;
+  line-height: 1.35;
   color: var(--darkgray);
   text-wrap: balance;
   max-width: 34rem;
