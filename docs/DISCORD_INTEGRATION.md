@@ -124,6 +124,11 @@ Current design (2026-08-03):
   image pipeline.
 - A posted text-only recap is repaired in place using its durable message ID;
   repair never creates a second daily message.
+- Repair treats the existing posted marker as read-only. Discord PATCH edits
+  that exact message in place and cannot change its ID, so a post-success KV
+  rewrite would add no authority. This is also a capacity fence: an exhausted
+  daily KV write allowance must not turn a successful Discord edit into a false
+  repair failure.
 
 Production preflight on 2026-08-04 found 365 scheduled identities through
 2027-08-03, 347 unique proteins, and only 1 ready object. That incident is B-702;

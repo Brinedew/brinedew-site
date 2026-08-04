@@ -433,18 +433,20 @@ export async function handleRepairPostedRecap(env, { day }) {
     content,
     screenshotBytes: cached.bytes,
   })
-  const updatedMarker = {
-    ...marker,
-    message_id: edited.messageId,
-    channel_id: channelId,
-    edited_at: Date.now(),
+  // PATCH edits the durable Discord message in place: Discord cannot return a
+  // different message id for this operation. The posted marker is therefore
+  // already correct and must remain read-only here. Rewriting it only to add
+  // telemetry consumed a scarce KV write and could turn a successful Discord
+  // edit into a false HTTP 500 after the external mutation had completed.
+  if (edited.messageId !== String(marker.message_id)) {
+    throw new Error("Discord recap edit returned a different message id")
   }
-  await env.KV.put(getPostedKey(day), JSON.stringify(updatedMarker))
+  const editedAt = Date.now()
   return {
     ok: true,
     day,
     message_id: edited.messageId,
-    edited_at: updatedMarker.edited_at,
+    edited_at: editedAt,
     screenshot_bytes: cached.bytes.byteLength,
   }
 }
