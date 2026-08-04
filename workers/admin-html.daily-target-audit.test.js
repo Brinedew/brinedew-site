@@ -5,6 +5,7 @@ import {
   ADMIN_HTML,
   buildMissingRecapImageGroups,
   chunkRecapImageDays,
+  computeMoleculeContentMetricsFromRgba,
   isRecapDayKey,
   summarizeRecapImageCoverage,
 } from "./admin-html.js"
@@ -44,12 +45,49 @@ test("recap uploads are target-bound and require stable molecule pixels", () => 
   assert.match(ADMIN_HTML, /uniprot_id: uniprot/)
   assert.match(ADMIN_HTML, /function getCanvasContentMetrics\(canvas\)/)
   assert.match(ADMIN_HTML, /consecutiveHealthyFrames >= 3/)
+  assert.match(ADMIN_HTML, /metrics\.moleculeForegroundPixels >= 28/)
+  assert.match(ADMIN_HTML, /metrics\.occupiedMoleculeTiles >= 2/)
   assert.match(ADMIN_HTML, /Preview never produced stable molecule pixels/)
   assert.match(ADMIN_HTML, /verifyStructureBytes: opts\.bulk === true/)
   assert.match(ADMIN_HTML, /method: 'HEAD'/)
   assert.match(ADMIN_HTML, /Structure bytes unavailable for/)
   assert.doesNotMatch(ADMIN_HTML, /getCanvasNonDarkRatio/)
   assert.doesNotMatch(ADMIN_HTML, /Let Mol\* settle before pixel capture/)
+})
+
+test("molecule readiness ignores the fixed bottom-left Molstar orientation axes", () => {
+  const width = 96
+  const height = 72
+  const background = [17, 12, 10]
+  const pixels = new Uint8ClampedArray(width * height * 4)
+  for (let offset = 0; offset < pixels.length; offset += 4) {
+    pixels[offset] = background[0]
+    pixels[offset + 1] = background[1]
+    pixels[offset + 2] = background[2]
+    pixels[offset + 3] = 255
+  }
+  const paint = (left, top, right, bottom, color) => {
+    for (let y = top; y < bottom; y += 1) {
+      for (let x = left; x < right; x += 1) {
+        const offset = (y * width + x) * 4
+        pixels[offset] = color[0]
+        pixels[offset + 1] = color[1]
+        pixels[offset + 2] = color[2]
+      }
+    }
+  }
+
+  paint(8, 55, 20, 65, [220, 20, 20])
+  const axesOnly = computeMoleculeContentMetricsFromRgba(pixels, width, height, background)
+  assert.ok(axesOnly.foregroundPixels > 28)
+  assert.equal(axesOnly.moleculeForegroundPixels, 0)
+  assert.equal(axesOnly.occupiedMoleculeTiles, 0)
+
+  paint(38, 20, 62, 48, [30, 200, 150])
+  const molecule = computeMoleculeContentMetricsFromRgba(pixels, width, height, background)
+  assert.ok(molecule.moleculeForegroundPixels >= 28)
+  assert.ok(molecule.moleculeForegroundRatio >= 0.006)
+  assert.ok(molecule.occupiedMoleculeTiles >= 2)
 })
 
 test("annual recap fill plans only missing objects and bounds status requests", () => {
@@ -98,5 +136,18 @@ test("annual recap fill is resumable, memory-bounded, and exact before success",
   assert.doesNotMatch(
     ADMIN_HTML,
     /const imageByUniprot = new Map\(\);[\s\S]*Yearly upload complete/,
+  )
+})
+
+test("annual recap fill replaces only failed automatic targets outside the full horizon", () => {
+  assert.match(ADMIN_HTML, /\/api\/admin\/schedule\/availability-replacement/)
+  assert.match(ADMIN_HTML, /horizonEntries: horizonEntries/)
+  assert.match(ADMIN_HTML, /days\.map\(\(horizonDay\) => \(\{/)
+  assert.match(ADMIN_HTML, /row\?\.source !== 'override'/)
+  assert.match(ADMIN_HTML, /availability_replacement/)
+  assert.match(ADMIN_HTML, /\/api\/admin\/schedule\/availability-replacement\/pin-structure/)
+  assert.ok(
+    ADMIN_HTML.indexOf("await renderAndUploadDayImage(firstDay") <
+      ADMIN_HTML.indexOf("await pinAvailabilityReplacementStructure(firstDay"),
   )
 })

@@ -53,9 +53,9 @@ test("admin upload stores an image under its exact target identity", async () =>
 
   assert.equal(response.status, 200)
   assert.equal(body.uniprot_id, "P08134")
-  assert.equal(body.render_contract, "molstar-recap-v2")
+  assert.equal(body.render_contract, "molstar-recap-v3")
   assert.equal(body.verified_bytes, 8)
-  assert.equal(writes[0].key, "discord-recap-images/v2/2026-08-02/P08134/molstar-recap-v2.png")
+  assert.equal(writes[0].key, "discord-recap-images/v2/2026-08-02/P08134/molstar-recap-v3.png")
   assert.equal(writes[0].options.customMetadata.uniprotId, "P08134")
 })
 
@@ -90,7 +90,7 @@ test("admin status checks only the requested target identity", async () => {
   assert.equal(response.status, 200)
   assert.equal(body.exists, false)
   assert.equal(body.uniprot_id, "P08134")
-  assert.deepEqual(reads, ["discord-recap-images/v2/2026-08-02/P08134/molstar-recap-v2.png"])
+  assert.deepEqual(reads, ["discord-recap-images/v2/2026-08-02/P08134/molstar-recap-v3.png"])
 })
 
 test("annual recap status checks never exceed five concurrent storage reads", async () => {

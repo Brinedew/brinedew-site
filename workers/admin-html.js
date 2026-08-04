@@ -47,11 +47,59 @@ export function summarizeRecapImageCoverage(days, existsByDay) {
   }
 }
 
+export function computeMoleculeContentMetricsFromRgba(data, width, height, background) {
+  const molecularLeft = Math.floor(width * 0.25)
+  const molecularRight = Math.ceil(width * 0.96)
+  const molecularTop = Math.floor(height * 0.05)
+  const molecularBottom = Math.ceil(height * 0.95)
+  const tileWidth = Math.max(1, Math.floor(width / 8))
+  const tileHeight = Math.max(1, Math.floor(height / 6))
+  const occupiedMoleculeTiles = new Set()
+  let foregroundPixels = 0
+  let moleculeForegroundPixels = 0
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4
+      const alpha = data[offset + 3]
+      if (alpha <= 8) continue
+      const distanceSquared =
+        Math.pow(data[offset] - background[0], 2) +
+        Math.pow(data[offset + 1] - background[1], 2) +
+        Math.pow(data[offset + 2] - background[2], 2)
+      if (distanceSquared < 625) continue
+
+      foregroundPixels += 1
+      if (x >= molecularLeft && x < molecularRight && y >= molecularTop && y < molecularBottom) {
+        moleculeForegroundPixels += 1
+        occupiedMoleculeTiles.add(
+          Math.floor((x - molecularLeft) / tileWidth) +
+            ":" +
+            Math.floor((y - molecularTop) / tileHeight),
+        )
+      }
+    }
+  }
+
+  const molecularArea = Math.max(
+    1,
+    (molecularRight - molecularLeft) * (molecularBottom - molecularTop),
+  )
+  return {
+    foregroundPixels,
+    foregroundRatio: foregroundPixels / Math.max(1, width * height),
+    moleculeForegroundPixels,
+    moleculeForegroundRatio: moleculeForegroundPixels / molecularArea,
+    occupiedMoleculeTiles: occupiedMoleculeTiles.size,
+  }
+}
+
 const ADMIN_RECAP_BULK_HELPERS = [
   isRecapDayKey,
   chunkRecapImageDays,
   buildMissingRecapImageGroups,
   summarizeRecapImageCoverage,
+  computeMoleculeContentMetricsFromRgba,
 ]
   .map((helper) => helper.toString())
   .join("\n\n")
@@ -2129,6 +2177,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             source: row.source || 'actual',
             uniprot: row.uniprot_id,
             symbol: row.protein?.hgnc || row.uniprot_id,
+            geneSurname: row.protein?.gene_surname || ('__UNFAMILIED__:' + row.uniprot_id),
             rejected: row.rejected_count
           };
         });
@@ -2136,15 +2185,25 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         // Upcoming
         (data.upcoming || []).forEach(row => {
           const isOverride = !!row.override_uniprot_id;
+          const isAvailabilityReplacement = !isOverride && !!row.availability_pin_uniprot_id;
           const protein = isOverride
             ? (row.override_protein || { uniprot: row.override_uniprot_id })
-            : row.computed;
+            : isAvailabilityReplacement
+              ? (row.availability_pin_protein || { uniprot: row.availability_pin_uniprot_id })
+              : row.computed;
           
           scheduleData[row.date] = {
             type: 'upcoming',
-            source: isOverride ? 'override' : 'computed',
-            uniprot: protein?.uniprot || row.override_uniprot_id,
-            symbol: protein?.hgnc || protein?.uniprot || row.override_uniprot_id,
+            source: isOverride
+              ? 'override'
+              : isAvailabilityReplacement
+                ? 'availability_replacement'
+                : 'computed',
+            uniprot: protein?.uniprot || row.override_uniprot_id || row.availability_pin_uniprot_id,
+            symbol: protein?.hgnc || protein?.uniprot || row.override_uniprot_id || row.availability_pin_uniprot_id,
+            geneSurname: protein?.gene_surname || ('__UNFAMILIED__:' + (protein?.uniprot || row.override_uniprot_id || row.availability_pin_uniprot_id)),
+            canonicalUniprot: row.computed?.uniprot || null,
+            canonicalGeneSurname: row.computed?.gene_surname || (row.computed?.uniprot ? '__UNFAMILIED__:' + row.computed.uniprot : null),
             fullName: protein?.full_name
           };
         });
@@ -4699,28 +4758,17 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         const values = cornerOffsets.map((offset) => data[offset + channel]).sort((a, b) => a - b);
         return Math.round((values[1] + values[2]) / 2);
       });
-      let foregroundPixels = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        const a = data[i + 3];
-        if (a <= 8) continue;
-        const distanceSquared =
-          Math.pow(r - background[0], 2) +
-          Math.pow(g - background[1], 2) +
-          Math.pow(b - background[2], 2);
-        if (distanceSquared >= 625) foregroundPixels += 1;
-      }
       return {
-        foregroundPixels,
-        foregroundRatio: foregroundPixels / (sample.width * sample.height),
+        ...computeMoleculeContentMetricsFromRgba(data, sample.width, sample.height, background),
         background
       };
     }
 
     function hasRenderedMolecule(metrics) {
-      return !!metrics && metrics.foregroundPixels >= 28 && metrics.foregroundRatio >= 0.004;
+      return !!metrics &&
+        metrics.moleculeForegroundPixels >= 28 &&
+        metrics.moleculeForegroundRatio >= 0.006 &&
+        metrics.occupiedMoleculeTiles >= 2;
     }
 
     async function waitForPreviewContent(timeoutMs) {
@@ -4742,7 +4790,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         await sleep(250);
       }
       const detail = lastMetrics
-        ? ' (' + lastMetrics.foregroundPixels + ' foreground pixels, ratio ' + lastMetrics.foregroundRatio.toFixed(4) + ')'
+        ? ' (' + lastMetrics.moleculeForegroundPixels + ' molecule-region pixels, ratio ' +
+          lastMetrics.moleculeForegroundRatio.toFixed(4) + ', tiles ' + lastMetrics.occupiedMoleculeTiles + ')'
         : '';
       throw new Error('Preview never produced stable molecule pixels' + detail);
     }
@@ -5027,6 +5076,51 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       }
     }
 
+    async function requestAvailabilityReplacement(day, horizonEntries, rejectedUniprotIds) {
+      const response = await fetch(API_BASE + '/api/admin/schedule/availability-replacement', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: day,
+          horizonEntries: horizonEntries,
+          rejectedUniprotIds: Array.from(rejectedUniprotIds)
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to record an availability replacement');
+      }
+      const protein = data.replacement_protein || { uniprot: data.replacement_uniprot_id };
+      scheduleData[day] = {
+        type: 'upcoming',
+        source: 'availability_replacement',
+        uniprot: protein.uniprot || data.replacement_uniprot_id,
+        symbol: protein.hgnc || protein.uniprot || data.replacement_uniprot_id,
+        geneSurname: protein.gene_surname || ('__UNFAMILIED__:' + (protein.uniprot || data.replacement_uniprot_id)),
+        fullName: protein.full_name
+      };
+      markRecapImageUnknown(day);
+      return data;
+    }
+
+    async function pinAvailabilityReplacementStructure(day, uniprot) {
+      const response = await fetch(
+        API_BASE + '/api/admin/schedule/availability-replacement/pin-structure',
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: day, uniprot: uniprot })
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Replacement structure could not be pinned through its play date');
+      }
+      return data;
+    }
+
     async function uploadNextYearImages() {
       // ARCHITECTURE FENCE [GG-002]: this is reconciliation, not bulk overwrite.
       // Existing verified objects are the checkpoint; only missing identities
@@ -5091,7 +5185,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
         let uploaded = 0;
         const failures = [];
-
         for (let i = 0; i < groups.length; i += 1) {
           const group = groups[i];
           const firstDay = group.days[0];
@@ -5117,15 +5210,65 @@ export const ADMIN_HTML = `<!DOCTYPE html>
               uploaded += 1;
             }
           } catch (err) {
-            for (const day of group.days) {
-              recapImageExistsByDay[day] = false;
+            let finalError = err;
+            const canReplaceAutomatically =
+              group.days.length === 1 && row?.source !== 'override';
+
+            if (canReplaceAutomatically) {
+              const rejectedUniprotIds = new Set([group.uniprot]);
+              for (let replacementAttempt = 1; replacementAttempt <= 50; replacementAttempt += 1) {
+                try {
+                  const replacement = await requestAvailabilityReplacement(
+                    firstDay,
+                    days.map((horizonDay) => ({
+                      date: horizonDay,
+                      uniprot: scheduleData[horizonDay]?.uniprot,
+                      geneSurname: scheduleData[horizonDay]?.geneSurname,
+                      canonicalUniprot: scheduleData[horizonDay]?.canonicalUniprot,
+                      canonicalGeneSurname: scheduleData[horizonDay]?.canonicalGeneSurname
+                    })),
+                    rejectedUniprotIds
+                  );
+                  const replacementUniprot = replacement.replacement_uniprot_id;
+                  setRecapImageMessage(
+                    'Rejected unreachable ' + group.uniprot + ' for ' + firstDay +
+                    '. Rendering non-AlphaFold replacement ' + replacementUniprot +
+                    ' (attempt ' + replacementAttempt + '/50)...',
+                    'info'
+                  );
+                  const rendered = await renderAndUploadDayImage(firstDay, {
+                    silent: true,
+                    bulk: true
+                  });
+                  await pinAvailabilityReplacementStructure(firstDay, replacementUniprot);
+                  rendered.base64 = null;
+                  recapImageExistsByDay[firstDay] = true;
+                  uploaded += 1;
+                  finalError = null;
+                  break;
+                } catch (replacementError) {
+                  const rejectedReplacement = scheduleData[firstDay]?.uniprot;
+                  if (rejectedReplacement) {
+                    rejectedUniprotIds.add(rejectedReplacement);
+                  }
+                  finalError = replacementError;
+                  recapImageExistsByDay[firstDay] = false;
+                  await destroyPreviewViewer();
+                }
+              }
             }
-            failures.push({
-              uniprot: group.uniprot,
-              days: group.days.slice(),
-              error: String(err && err.message ? err.message : err)
-            });
-            console.error('Yearly recap-image upload failed for ' + group.uniprot + ':', err);
+
+            if (finalError) {
+              for (const day of group.days) {
+                recapImageExistsByDay[day] = false;
+              }
+              failures.push({
+                uniprot: group.uniprot,
+                days: group.days.slice(),
+                error: String(finalError && finalError.message ? finalError.message : finalError)
+              });
+              console.error('Yearly recap-image upload failed for ' + group.uniprot + ':', finalError);
+            }
           } finally {
             base64 = null;
             await destroyPreviewViewer();

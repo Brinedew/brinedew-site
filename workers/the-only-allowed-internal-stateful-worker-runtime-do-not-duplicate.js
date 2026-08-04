@@ -1132,6 +1132,7 @@ import {
   DEFAULT_GRAPHICS_SETTINGS,
   normalizeGraphicsSettings,
   handleAdminSchedule,
+  handleAdminScheduleAvailabilityReplacement,
   handleAdminCards,
   handleAdminGuessStats,
   handleAdminGuessAnalytics,
@@ -1180,6 +1181,10 @@ import {
   selectAvailableDailyTarget,
   shouldReplaceRecordedDailyTarget,
 } from "./lib/daily-target-availability.js"
+import {
+  getDailyTargetFamilyKey,
+  readDailyTargetAvailabilityPin,
+} from "./lib/daily-target-availability-pins.js"
 import { isUsableStructureProbe } from "./lib/structure-probe-validation.js"
 
 const SECURITY_HEADERS = {
@@ -2719,6 +2724,28 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       })
     }
 
+    if (
+      url.pathname === "/api/admin/schedule/availability-replacement" &&
+      request.method === "POST"
+    ) {
+      const response = await handleAdminScheduleAvailabilityReplacement(request, env)
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+      })
+    }
+
+    if (
+      url.pathname === "/api/admin/schedule/availability-replacement/pin-structure" &&
+      request.method === "POST"
+    ) {
+      const response = await handleAdminAvailabilityReplacementStructurePin(request, env)
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+      })
+    }
+
     if (url.pathname === "/api/admin/cards" && request.method === "GET") {
       const response = await handleAdminCards(request, env)
       return new Response(response.body, {
@@ -3076,6 +3103,7 @@ export default {
       const computedSelection = await pickDailyTarget(env.DB, salt, tomorrowStr)
       let targetProtein
       let source
+      let availabilityPin = null
       let skippedAlphaFold = null
 
       if (overrideId) {
@@ -3083,13 +3111,19 @@ export default {
         source = "admin_override"
         console.log(`[CRON] Using admin override for ${tomorrowStr}: ${overrideId}`)
       } else {
-        // 2. Use deterministic selection
-        targetProtein = computedSelection?.protein
+        availabilityPin = await readDailyTargetAvailabilityPin(env.KV, {
+          date: tomorrowStr,
+          salt,
+          selectionPoolFingerprint: computedSelection?.poolFingerprint,
+        })
+        targetProtein = availabilityPin?.uniprot_id
+          ? await fetchProteinByUniprot(env.DB, availabilityPin.uniprot_id)
+          : computedSelection?.protein
         skippedAlphaFold = Number.isFinite(computedSelection?.skippedAlphaFold)
           ? computedSelection.skippedAlphaFold
           : null
-        source = "computed"
-        console.log(`[CRON] Computed target for ${tomorrowStr}: ${targetProtein?.uniprot}`)
+        source = availabilityPin ? "availability_replacement" : "computed"
+        console.log(`[CRON] ${source} target for ${tomorrowStr}: ${targetProtein?.uniprot}`)
       }
 
       if (!targetProtein) {
@@ -3099,9 +3133,12 @@ export default {
 
       const cronAudit = {
         date: tomorrowStr,
-        source: source === "admin_override" ? "override" : "computed",
+        source: source === "admin_override" ? "override" : source,
         override_id: overrideId || null,
-        rejected: [],
+        rejected: (availabilityPin?.rejected_uniprot_ids || []).map((uniprot) => ({
+          uniprot_id: uniprot,
+          reason: "catalog_render_unavailable",
+        })),
         skipped_alpha_fold: skippedAlphaFold,
       }
 
@@ -3123,7 +3160,13 @@ export default {
         resolveStructureMeta: (protein) => getCanonicalStructureMeta(protein, env),
         isStructureAvailable: (structureMeta, protein) =>
           verifyDailyTargetStructure(env, structureMeta, protein, { pinUntil: tomorrowStr }),
-        isCandidateIneligible: source === "admin_override" ? () => false : isAlphaFoldOnlyProtein,
+        isCandidateIneligible:
+          source === "admin_override"
+            ? () => false
+            : (candidate) =>
+                isAlphaFoldOnlyProtein(candidate) ||
+                (candidate.uniprot !== availabilityPin?.uniprot_id &&
+                  isForbiddenByAvailabilityPin(candidate, availabilityPin)),
         maxCandidates: 10,
       })
       cronAudit.rejected.push(...availableTarget.rejected)
@@ -5265,6 +5308,20 @@ async function handleGuessSimilarity(request, env, corsHeaders) {
   }
 }
 
+function isForbiddenByAvailabilityPin(protein, availabilityPin) {
+  if (!protein || !availabilityPin) {
+    return false
+  }
+  const uniprot = String(protein.uniprot || "")
+    .trim()
+    .toUpperCase()
+  const surname = getDailyTargetFamilyKey(protein)
+  return (
+    availabilityPin.forbidden_uniprot_ids.includes(uniprot) ||
+    availabilityPin.forbidden_gene_surnames.includes(surname)
+  )
+}
+
 async function getDailyTargetProtein(env, options = {}) {
   const eligibleIds = options.practice
     ? await getEligibleProteinIds(env.DB)
@@ -5278,6 +5335,7 @@ async function getDailyTargetProtein(env, options = {}) {
   let balancedPick = null // Track surname info for practice mode
   let explicitOverrideSelected = false
   let dailyCandidateIds = eligibleIds
+  let availabilityPin = null
 
   const wantsAudit = Boolean(options.returnAudit)
   const audit = wantsAudit
@@ -5375,6 +5433,38 @@ async function getDailyTargetProtein(env, options = {}) {
       }
     }
 
+    // A future availability replacement is an automatic operational pin, not
+    // a manual override. It keeps a dead curated structure out of the mystery
+    // game without switching that protein to AlphaFold. The pin is valid only
+    // for the exact selector salt and playable-pool fingerprint that produced
+    // it; algorithm or pool changes fall back to normal computed selection.
+    if (!protein) {
+      try {
+        availabilityPin = await readDailyTargetAvailabilityPin(env.KV, {
+          date: today,
+          salt,
+          selectionPoolFingerprint: computedDailySelection?.poolFingerprint,
+        })
+        if (availabilityPin?.uniprot_id) {
+          const pinnedProtein = await fetchProteinByUniprot(env.DB, availabilityPin.uniprot_id)
+          if (pinnedProtein && !isAlphaFoldOnlyProtein(pinnedProtein)) {
+            protein = pinnedProtein
+            startIdx = 0
+            if (audit) {
+              audit.source = "availability_replacement"
+              audit.rejected = availabilityPin.rejected_uniprot_ids.map((uniprot) => ({
+                uniprot_id: uniprot,
+                reason: "catalog_render_unavailable",
+              }))
+              audit.skipped_alpha_fold = 0
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("GeneGuessr: failed to load availability replacement", err?.message || err)
+      }
+    }
+
     // If prod has already served today's puzzle (no override needed), mirror that pick in staging.
     // This keeps `?gg_api=...staging...` usable for comparing visuals without changing live behavior.
     if (!protein && env.PROD_KV?.get) {
@@ -5455,7 +5545,12 @@ async function getDailyTargetProtein(env, options = {}) {
       isStructureAvailable: (structureMeta, candidate) =>
         verifyDailyTargetStructure(env, structureMeta, candidate),
       isCandidateIneligible:
-        options.practice || explicitOverrideSelected ? () => false : isAlphaFoldOnlyProtein,
+        options.practice || explicitOverrideSelected
+          ? () => false
+          : (candidate) =>
+              isAlphaFoldOnlyProtein(candidate) ||
+              (candidate.uniprot !== availabilityPin?.uniprot_id &&
+                isForbiddenByAvailabilityPin(candidate, availabilityPin)),
       maxCandidates: 10,
     })
     if (audit) {
@@ -7055,6 +7150,56 @@ async function ensureStructureCached(env, meta, options = {}) {
   return true
 }
 
+async function handleAdminAvailabilityReplacementStructurePin(request, env) {
+  if (!(await isAdmin(request, env))) {
+    return Response.json({ error: "Unauthorized" }, { status: 403 })
+  }
+  try {
+    const body = await request.json()
+    const date = String(body?.date || "").trim()
+    const uniprot = String(body?.uniprot || "")
+      .trim()
+      .toUpperCase()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !uniprot) {
+      return Response.json({ error: "Date and UniProt ID are required" }, { status: 400 })
+    }
+
+    const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
+    const selection = await pickDailyTarget(env.DB, salt, date)
+    const availabilityPin = await readDailyTargetAvailabilityPin(env.KV, {
+      date,
+      salt,
+      selectionPoolFingerprint: selection?.poolFingerprint,
+    })
+    if (!availabilityPin || availabilityPin.uniprot_id !== uniprot) {
+      return Response.json({ error: "Availability replacement pin changed" }, { status: 409 })
+    }
+
+    const protein = await fetchProteinByUniprot(env.DB, uniprot)
+    if (!protein || isAlphaFoldOnlyProtein(protein)) {
+      return Response.json(
+        { error: "Replacement is not a playable curated structure" },
+        { status: 409 },
+      )
+    }
+    const structureMeta = await getCanonicalStructureMeta(protein, env)
+    const cached = await ensureStructureCachedWithPin(env, structureMeta, date)
+    if (!cached) {
+      return Response.json({ error: "Replacement structure could not be pinned" }, { status: 502 })
+    }
+    return Response.json({
+      ok: true,
+      date,
+      uniprot,
+      structure_key: structureMeta.r2Key,
+      pinned_until: date,
+    })
+  } catch (err) {
+    console.error("Admin availability replacement structure pin failed", err)
+    return Response.json({ error: "Internal server error", details: err.message }, { status: 500 })
+  }
+}
+
 /**
  * Cache a structure with pinning metadata for daily target protection.
  * Pinned structures are skipped during FIFO eviction until pinnedUntil date passes.
@@ -7083,9 +7228,30 @@ async function ensureStructureCachedWithPin(env, meta, pinnedUntil) {
       console.log(`[PIN] ${meta.r2Key} already pinned until ${currentPin}`)
       return true
     }
-    // Need to update pin - R2 doesn't support metadata-only updates,
-    // so we'd need to re-upload. For now, just log and accept existing cache.
-    console.log(`[PIN] ${meta.r2Key} cached but pin expired (${currentPin}), accepting anyway`)
+    // R2 has no metadata-only update. Stream the cached object back into the
+    // same key with merged metadata, then verify the durable pin. Merely
+    // accepting an unpinned cache entry lets FIFO eviction remove a future
+    // mystery target after its recap image has already been generated.
+    const cachedObject = await env.STRUCTURES_BUCKET.get(meta.r2Key)
+    if (!cachedObject?.body) {
+      console.warn(`[PIN] ${meta.r2Key} disappeared before metadata refresh`)
+      return false
+    }
+    await env.STRUCTURES_BUCKET.put(meta.r2Key, cachedObject.body, {
+      httpMetadata: cachedObject.httpMetadata || existing.httpMetadata,
+      customMetadata: {
+        ...(existing.customMetadata || {}),
+        pinnedUntil,
+        source: meta.source || existing.customMetadata?.source || "unknown",
+      },
+    })
+    const refreshed = await env.STRUCTURES_BUCKET.head(meta.r2Key)
+    const refreshedPin = refreshed?.customMetadata?.pinnedUntil
+    if (!refreshed || !refreshedPin || refreshedPin < pinnedUntil) {
+      console.warn(`[PIN] ${meta.r2Key} metadata refresh did not persist`)
+      return false
+    }
+    console.log(`[PIN] ${meta.r2Key} metadata refreshed through ${refreshedPin}`)
     return true
   }
 
@@ -7131,6 +7297,12 @@ async function ensureStructureCachedWithPin(env, meta, pinnedUntil) {
       source: meta.source || "unknown",
     },
   })
+
+  const stored = await env.STRUCTURES_BUCKET.head(meta.r2Key)
+  if (!stored || stored.customMetadata?.pinnedUntil !== pinnedUntil) {
+    console.warn(`[PIN] ${meta.r2Key} upload did not retain the requested pin`)
+    return false
+  }
 
   console.log(
     `[PIN] Cached ${meta.r2Key} (${Math.round(data.byteLength / 1024)}KB) pinned until ${pinnedUntil}`,

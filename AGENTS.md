@@ -163,6 +163,16 @@ more automatic slots because it has more members. Read
 `docs/GENEGUESSR_DAILY_SELECTION_RUNBOOK.md` before changing the daily pool,
 daily hash, target availability fallback, schedule cache, or pre-warm selection.
 
+Ahead-of-time recap reconciliation must reject an unreachable automatic target,
+never change that protein to AlphaFold. Its availability replacement must come
+from outside every UniProt ID and normalized surname in the authoritative
+horizon, so one broken structure cannot create a later collision or cascade
+rewrite. Availability pins are automatic, pool-fingerprint-bound records (not
+manual overrides); admin schedule, pre-warm, request slow path, and card render
+must all consume the same pin. A visually accepted replacement structure must
+also be cached in R2, pinned through its play date, and read back with the
+requested `pinnedUntil` metadata before yearly coverage can pass.
+
 **ARCHITECTURE FENCE [GG-002]** — a GeneGuessr recap image is usable only when
 the rendered canvas contains molecule pixels and the exact uploaded bytes can be
 read back from the immutable day + UniProt + renderer key. A Bunny 2xx response,
@@ -175,6 +185,11 @@ durable checkpoint, only missing identities render, and the browser releases
 each protein image after its missing days finish. Read `docs/DISCORD_INTEGRATION.md`
 before changing recap rendering, storage, bulk coverage, upload success, cron
 fallback, repair, or visual acceptance.
+
+Mol*'s fixed bottom-left orientation axes are not molecule pixels. Readiness
+must measure the molecular viewport and require spatial spread outside that UI
+region. Any readiness change must bump `DISCORD_RECAP_RENDER_CONTRACT`; images
+accepted by an older gate must never satisfy the new coverage audit.
 
 ## "Site is broken" runbook
 
