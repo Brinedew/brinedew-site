@@ -16,7 +16,7 @@ import {
 } from "./lib/discord-recap-images.js"
 import {
   fetchProteinByUniprot as loadProtein,
-  getDailySelectionProteinIds,
+  getDailySelectionPoolFingerprint,
   pickDailyTarget,
   getBlendedSimilarity,
 } from "./lib/protein-store.js"
@@ -40,7 +40,7 @@ const ADMIN_SCHEDULE_DAY_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60
 const ADMIN_SCHEDULE_MAX_FUTURE_DAYS = 370
 // Family-balanced daily selection changes every computed preview. Bump the
 // payload version so no flat-protein schedule entry survives the deployment.
-const ADMIN_SCHEDULE_CACHE_VERSION = 3
+const ADMIN_SCHEDULE_CACHE_VERSION = 4
 const DAILY_TARGET_SALT_FALLBACK = "geneguessr-v2-939b5a0b"
 
 async function listAllKvKeys(env, prefix) {
@@ -80,7 +80,10 @@ function normalizeUniprotId(value) {
   return raw || null
 }
 
-function isScheduleDayCacheEntryValid(entry, { date, overrideUniprotId, salt }) {
+function isScheduleDayCacheEntryValid(
+  entry,
+  { date, overrideUniprotId, salt, selectionPoolFingerprint },
+) {
   if (!entry || typeof entry !== "object") {
     return false
   }
@@ -91,6 +94,9 @@ function isScheduleDayCacheEntryValid(entry, { date, overrideUniprotId, salt }) 
     return false
   }
   if (entry.salt !== salt) {
+    return false
+  }
+  if (!selectionPoolFingerprint || entry.selection_pool_fingerprint !== selectionPoolFingerprint) {
     return false
   }
   const cachedOverride = normalizeUniprotId(entry.override_uniprot_id)
@@ -139,6 +145,7 @@ async function buildScheduleDayCacheEntry(env, { date, overrideByDate, salt }) {
     cache_version: ADMIN_SCHEDULE_CACHE_VERSION,
     date,
     salt,
+    selection_pool_fingerprint: selection?.poolFingerprint || null,
     computed_uniprot_id: computedUniprot,
     computed: computedProtein,
     override_uniprot_id: plannedOverride,
@@ -1036,6 +1043,13 @@ export async function handleAdminSchedule(request, env) {
 
     // Upcoming (planned)
     const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT_FALLBACK
+    const selectionPoolFingerprint = await getDailySelectionPoolFingerprint(env.DB)
+    if (!selectionPoolFingerprint) {
+      return new Response(JSON.stringify({ error: "Daily selection pool unavailable" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
     const dates = []
     for (let offset = 0; offset <= futureDays; offset += 1) {
       dates.push(addDaysISO(today, offset))
@@ -1066,6 +1080,7 @@ export async function handleAdminSchedule(request, env) {
           date,
           overrideUniprotId: plannedOverride,
           salt,
+          selectionPoolFingerprint,
         })
       ) {
         upcomingByDate.set(date, cachedEntry)
@@ -1075,8 +1090,6 @@ export async function handleAdminSchedule(request, env) {
     }
 
     if (missingDates.length) {
-      // Warm the shared family pool once before parallel day computations.
-      await getDailySelectionProteinIds(env.DB)
       const BATCH_SIZE = 16
       for (let i = 0; i < missingDates.length; i += BATCH_SIZE) {
         const batchDates = missingDates.slice(i, i + BATCH_SIZE)
