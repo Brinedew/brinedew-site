@@ -2164,6 +2164,138 @@ var PublicationDate_default = (() => {
   return PublicationDate;
 });
 
+// src/plugins/imageCaptions.ts
+function isElement(node) {
+  return !!node && node.type === "element";
+}
+function isWhitespaceText(node) {
+  return !!node && node.type === "text" && !node.value.trim();
+}
+function imageInside(node) {
+  if (!isElement(node)) return void 0;
+  if (node.tagName === "img") return node;
+  if (node.tagName !== "a") return void 0;
+  const meaningful = node.children.filter((child2) => !isWhitespaceText(child2));
+  if (meaningful.length !== 1) return void 0;
+  const child = meaningful[0];
+  return isElement(child) && child.tagName === "img" ? child : void 0;
+}
+function trimmedPhrasing(nodes) {
+  const next = [...nodes];
+  const first = next[0];
+  const last = next[next.length - 1];
+  if (first?.type === "text") first.value = first.value.replace(/^\s+/, "");
+  if (last?.type === "text") last.value = last.value.replace(/\s+$/, "");
+  return next.filter((node) => !isWhitespaceText(node));
+}
+function captionFor(img) {
+  const properties = img.properties;
+  let alt = typeof properties.alt === "string" ? properties.alt.trim() : "";
+  const width = String(properties.width ?? "");
+  const height = String(properties.height ?? "");
+  if (alt.endsWith(",") && /^(?:18|19|20)\d{2}$/.test(width) && (!height || height === "auto")) {
+    alt = `${alt} ${width}`;
+    delete properties.width;
+  }
+  if (properties.width === "auto") delete properties.width;
+  if (properties.height === "auto") delete properties.height;
+  return alt;
+}
+function figureFor(media, img) {
+  const caption = captionFor(img);
+  const children = [media];
+  if (caption) {
+    img.properties.alt = "";
+    children.push({
+      type: "element",
+      tagName: "figcaption",
+      properties: {},
+      children: [{ type: "text", value: caption }]
+    });
+  }
+  return {
+    type: "element",
+    tagName: "figure",
+    properties: { className: [caption ? "image-with-caption" : "image-without-caption"] },
+    children
+  };
+}
+function splitImageParagraph(paragraph) {
+  if (!paragraph.children.some((child) => imageInside(child))) return void 0;
+  const replacement = [];
+  let phrasing = [];
+  const flushPhrasing = () => {
+    const children = trimmedPhrasing(phrasing);
+    phrasing = [];
+    if (children.length === 0) return;
+    replacement.push({
+      type: "element",
+      tagName: "p",
+      properties: { ...paragraph.properties },
+      children
+    });
+  };
+  for (const child of paragraph.children) {
+    const img = imageInside(child);
+    if (!img) {
+      phrasing.push(child);
+      continue;
+    }
+    flushPhrasing();
+    replacement.push(figureFor(child, img));
+  }
+  flushPhrasing();
+  return replacement;
+}
+function normalizeImageCaptions(parent) {
+  for (let index = 0; index < parent.children.length; index++) {
+    const node = parent.children[index];
+    if (!isElement(node)) continue;
+    if (node.tagName === "figure") continue;
+    if (node.tagName === "p") {
+      const replacement = splitImageParagraph(node);
+      if (replacement) {
+        parent.children.splice(index, 1, ...replacement);
+        index += replacement.length - 1;
+        continue;
+      }
+    }
+    normalizeImageCaptions(node);
+  }
+}
+var ImageCaptions = () => {
+  return {
+    name: "brinedew-image-captions",
+    htmlPlugins() {
+      return [
+        () => (tree) => {
+          normalizeImageCaptions(tree);
+        }
+      ];
+    }
+  };
+};
+
+// src/plugins/draftTagInjector.ts
+var rehypeDraftTag = () => {
+  return (_tree, file) => {
+    const frontmatter = file.data.frontmatter;
+    if (!frontmatter) return;
+    const isDraft = frontmatter.draft === true || frontmatter.draft === "true";
+    if (!isDraft) return;
+    const tags = frontmatter.tags ?? [];
+    if (!tags.includes("draft")) {
+      frontmatter.tags = [...tags, "draft"];
+    }
+  };
+};
+var DraftTagInjector = () => ({
+  name: "brinedew-draft-tag-injector",
+  htmlPlugins() {
+    return [rehypeDraftTag];
+  }
+});
+
 // ../../../node_modules/.pnpm/unist-util-is@6.0.1/node_modules/unist-util-is/lib/index.js
 var convert = (
   // Note: overloads in JSDoc can’t yet use different `@template`s.
@@ -2367,74 +2499,10 @@ function visit(tree, testOrVisitor, visitorOrReverse, maybeReverse) {
   }
 }
 
-// src/plugins/imageCaptions.ts
-function isWhitespaceText(node) {
-  return node.type === "text" && !node.value.trim();
-}
-var ImageCaptions = () => {
-  return {
-    name: "brinedew-image-captions",
-    htmlPlugins() {
-      return [
-        () => (tree) => {
-          visit(
-            tree,
-            "element",
-            (node, index, parent) => {
-              if (!parent || index === void 0) return;
-              if (node.tagName !== "p") return;
-              const meaningful = node.children.filter((child) => !isWhitespaceText(child));
-              if (meaningful.length !== 1) return;
-              const img = meaningful[0];
-              if (img.type !== "element" || img.tagName !== "img") return;
-              const alt = typeof img.properties.alt === "string" ? img.properties.alt.trim() : "";
-              if (!alt) return;
-              img.properties.alt = "";
-              const figcaption = {
-                type: "element",
-                tagName: "figcaption",
-                properties: {},
-                children: [{ type: "text", value: alt }]
-              };
-              const figure = {
-                type: "element",
-                tagName: "figure",
-                properties: { className: ["image-with-caption"] },
-                children: [img, figcaption]
-              };
-              parent.children.splice(index, 1, figure);
-            }
-          );
-        }
-      ];
-    }
-  };
-};
-
-// src/plugins/draftTagInjector.ts
-var rehypeDraftTag = () => {
-  return (_tree, file) => {
-    const frontmatter = file.data.frontmatter;
-    if (!frontmatter) return;
-    const isDraft = frontmatter.draft === true || frontmatter.draft === "true";
-    if (!isDraft) return;
-    const tags = frontmatter.tags ?? [];
-    if (!tags.includes("draft")) {
-      frontmatter.tags = [...tags, "draft"];
-    }
-  };
-};
-var DraftTagInjector = () => ({
-  name: "brinedew-draft-tag-injector",
-  htmlPlugins() {
-    return [rehypeDraftTag];
-  }
-});
-
 // src/plugins/essayNormalizer.ts
-var isElement = (node) => !!node && node.type === "element";
+var isElement2 = (node) => !!node && node.type === "element";
 var isWhitespaceText2 = (node) => !!node && node.type === "text" && !node.value.trim();
-var isBreak = (node) => isElement(node) && node.tagName === "br";
+var isBreak = (node) => isElement2(node) && node.tagName === "br";
 var PHRASING_OK = /* @__PURE__ */ new Set([
   "a",
   "abbr",
@@ -2476,7 +2544,7 @@ function stripBreaks(children) {
     }
     const prev = next[next.length - 1];
     const following = children[i3 + 1];
-    if (isElement(prev) || isElement(following)) continue;
+    if (isElement2(prev) || isElement2(following)) continue;
     if (isWhitespaceText2(prev) || isWhitespaceText2(following)) continue;
     const prevAsUnknown = prev;
     if (prevAsUnknown && typeof prevAsUnknown === "object" && prevAsUnknown.type === "text") {
@@ -2514,7 +2582,7 @@ function normalizeStructure(tree) {
       if (node.children.some(isBreak)) {
         node.children = stripBreaks(node.children);
       }
-      if (isElement(node) && (node.tagName === "ul" || node.tagName === "ol" || node.tagName === "li" || node.tagName === "blockquote")) {
+      if (isElement2(node) && (node.tagName === "ul" || node.tagName === "ol" || node.tagName === "li" || node.tagName === "blockquote")) {
         node.children = node.children.filter((child) => !isWhitespaceText2(child));
       }
     }
