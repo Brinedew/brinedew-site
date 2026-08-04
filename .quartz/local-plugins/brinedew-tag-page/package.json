@@ -44,7 +44,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --ignore-path NUL src tsup.config.ts --check",
+    "format": "prettier --ignore-path .prettierignore \"src/**/*.{ts,tsx,scss}\" tsup.config.ts --check",
     "check": "pnpm run typecheck && pnpm run format"
   },
   "peerDependencies": {
