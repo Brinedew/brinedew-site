@@ -2,7 +2,10 @@ import puppeteer from "@cloudflare/puppeteer"
 import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
-import { BUNNY_READ_AFTER_WRITE_DELAYS_MS } from "./lib/bunny-storage-consistency.js"
+import {
+  BUNNY_READ_AFTER_WRITE_DELAYS_MS,
+  putBunnyObjectUntilVerified,
+} from "./lib/bunny-storage-consistency.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-routes.js"
 import { createIconoplasmAdminGalleryHandlers } from "./iconoplasm-admin-gallery-routes.js"
@@ -20630,17 +20633,22 @@ async function processIconoplasmGeneCardMaterializationMessage(message, env, ctx
           `Browser screenshot dimensions were ${pngDimensions?.width || 0}x${pngDimensions?.height || 0}; expected ${ICONOPLASM_GENE_CARD_WIDTH}x${ICONOPLASM_GENE_CARD_HEIGHT}`,
         )
       }
-      await putPortraitStorageObject(env, objectKey, pngBytes, {
-        contentType: "image/png",
-        cacheControl: "public, max-age=31536000, immutable",
-        customMetadata: {
-          gene_symbol: symbol,
-          card_fingerprint: identity.cardFingerprint,
-          renderer_revision: ICONOPLASM_GENE_CARD_RENDERER_REVISION,
-        },
+      const verified = await putBunnyObjectUntilVerified({
+        put: () =>
+          putPortraitStorageObject(env, objectKey, pngBytes, {
+            contentType: "image/png",
+            cacheControl: "public, max-age=31536000, immutable",
+            customMetadata: {
+              gene_symbol: symbol,
+              card_fingerprint: identity.cardFingerprint,
+              renderer_revision: ICONOPLASM_GENE_CARD_RENDERER_REVISION,
+            },
+          }),
+        verify: () => verifyPortraitStorageObjectAfterPut(env, objectKey),
       })
-      const verified = await verifyPortraitStorageObjectAfterPut(env, objectKey)
-      if (!verified) throw new Error("Uploaded gene card could not be verified")
+      if (!verified) {
+        throw new Error("Uploaded gene card could not be verified after idempotent storage retries")
+      }
     }
     const completed = await completeIconoplasmGeneCardMaterialization(env, {
       symbol,
