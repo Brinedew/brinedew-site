@@ -106,6 +106,20 @@ test("posted recap correction replaces Discord content and attachment in one PAT
   }
 })
 
+test("posted recap correction rejects an impossible Discord message id change", async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => Response.json({ id: "different-message" })
+
+  try {
+    const { env, marker, postedKey, store, writes } = makeRepairEnv()
+    await assert.rejects(handleRepairPostedRecap(env, { day: REPAIR_DAY }), /different message id/)
+    assert.deepEqual(JSON.parse(store.get(postedKey)), marker)
+    assert.equal(writes.length, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("repair leaves the posted marker untouched when the corrected image is missing", async () => {
   const { env, marker, postedKey, store, writes } = makeRepairEnv({ withImage: false })
 
@@ -156,8 +170,12 @@ test("repair retries PATCH the same durable message and never create a duplicate
         `https://discord.com/api/v10/channels/${REPAIR_CHANNEL_ID}/messages/${REPAIR_MESSAGE_ID}`,
       )
     }
-    assert.equal(writes.length, 2)
-    assert.equal(JSON.parse(store.get(postedKey)).message_id, REPAIR_MESSAGE_ID)
+    assert.equal(writes.length, 0)
+    assert.deepEqual(JSON.parse(store.get(postedKey)), {
+      message_id: REPAIR_MESSAGE_ID,
+      channel_id: REPAIR_CHANNEL_ID,
+      posted_at: 123456789,
+    })
   } finally {
     globalThis.fetch = originalFetch
   }
