@@ -9,7 +9,7 @@ draft: true
 
 AIs are in the [news](https://www.telegraph.co.uk/business/2026/08/03/unreleased-ai-model-solves-decades-old-maths-problems/) this [week](https://mashable.com/tech/anthropic-fable-5-disproves-jacobian-conjecture) for supposedly getting research mathematicians out of a job. If any of you are looking for a new career, consider pivoting to areas AIs can't touch in the near future - like reading longevity papers.
 
-Let's say you're interested in benchmarking lifespan extension communities against each other, based on which animal they work on. It's 2026, so for many of us the natural first step to just turn to ChatGPT, or any other AI assistant, and ask it to make a table of model organism lifespan records. 
+Let's say you're interested in benchmarking lifespan extension communities against each other, based on which animal they work on. It's 2026, so for many of us the natural first step to just turn to ChatGPT, or any other AI assistant, and ask it to make a table of lifespan records by species. 
 
 In response, AIs invariably repeat that a mouse from Andrzej Bartke's laboratory lived for **1,819 days**, the maximum mouse lifespan ever reported.
 
@@ -44,11 +44,11 @@ In this case, the mouse was last seen at Nov 1, 2021, at the age of 18 months. D
 
 What went wrong is that the researcher, when recording the mouse's uncertain-but-unimpressive lifespan, made a typo in the records table. When inputting the date last seen at, instead of typing 2021, they typed 2024 - numbers 1 and 4 are close together on the keypad. This added 36 months to mouse's 18-month lifespan, adding up to 1,644 days.
 
-Why did an outlier this large go unnoticed until dataset publication? As it was explained to me, the mystery mouse was marked "removed" for data analysis purposes. It's a common practice that mice removed for fighting, technical accidents, or training purposes would be treated as last seen alive at removal date and lost to follow-up. This accounting practice helps to keep a five-year longevity experiment on track even if a few mice accidentally flood during the first year because of a compromised pipe.
+Why did an outlier this large go unnoticed until dataset publication? As it was explained to me, the mystery mouse was marked "removed" for data analysis purposes. It's a common practice that mice removed for fighting, technical accidents, training, or other aging-unrelated causes would be treated as "last seen alive" at removal date. This accounting practice helps to keep a five-year longevity experiment on track even if a few mice accidentally flood during the first year because of a compromised pipe.
 
-protocols use a hybrid analysis structure: 
+Consider an analysis that uses a hybrid analysis structure: 
 * Kaplan–Meier curves and log-rank tests use the partial information from removed ("censored") mice.
-* Their separately reported “median longevity” and 90th-percentile age appear to be calculated from animals with known death ages, after dropping “removed” records.
+* Their separately reported “median longevity” and 90th-percentile age are calculated from animals with known death ages, after dropping “removed” records.
 
 Whether that second step is a good idea or not, to me is unclear. Regardless, as a result, removed entries aren't included in the experimental summary statistics that the researcher reports on (median survival, 90th percentile survival).
 
