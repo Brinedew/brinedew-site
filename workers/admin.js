@@ -1459,15 +1459,27 @@ export async function handleAdminDiscordRecapImageUpload(request, env) {
   }
 
   const identity = { day, uniprotId }
-  const { key } = await putDiscordRecapImage(env, identity, bytes, { contentType: "image/png" })
+  let stored
+  try {
+    stored = await putDiscordRecapImage(env, identity, bytes, { contentType: "image/png" })
+  } catch (error) {
+    console.error("Admin recap image upload failed verification:", error)
+    return Response.json(
+      {
+        error: error instanceof Error ? error.message : "Recap image storage verification failed",
+      },
+      { status: 502 },
+    )
+  }
 
   return Response.json({
     success: true,
     day,
     uniprot_id: uniprotId,
     render_contract: DISCORD_RECAP_RENDER_CONTRACT,
-    key,
+    key: stored.key,
     bytes: bytes.byteLength,
+    verified_bytes: stored.verifiedBytes,
   })
 }
 

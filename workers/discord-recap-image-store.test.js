@@ -11,6 +11,9 @@ import {
   deleteDiscordRecapImage,
 } from "./lib/discord-recap-images.js"
 
+// ARCHITECTURE FENCE [GG-002]: these tests deliberately distinguish an HTTP
+// acknowledgement from exact retrievability of the uploaded image bytes.
+
 const BUNNY_ENV = {
   ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
   ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
@@ -50,8 +53,13 @@ test("Bunny config enables read and write without R2", () => {
 })
 
 test("put writes to the Bunny storage API with the AccessKey header", async () => {
+  let reads = 0
   await withMockedFetch(
-    () => new Response(null, { status: 201 }),
+    (url, init) => {
+      if (init.method === "PUT") return new Response(null, { status: 201 })
+      reads += 1
+      return new Response(new Uint8Array([1, 2, 3]), { status: 200 })
+    },
     async (calls) => {
       const { key } = await putDiscordRecapImage(
         BUNNY_ENV,
@@ -59,12 +67,49 @@ test("put writes to the Bunny storage API with the AccessKey header", async () =
         new Uint8Array([1, 2, 3]),
       )
       assert.equal(key, IMAGE_KEY)
-      assert.equal(calls.length, 1)
+      assert.equal(calls.length, 2)
       assert.equal(calls[0].url, "https://storage.bunnycdn.com/iconoplasm-portraits/" + IMAGE_KEY)
       assert.equal(calls[0].init.method, "PUT")
       assert.equal(calls[0].init.headers.AccessKey, "secret-access-key")
+      assert.equal(reads, 1)
     },
   )
+})
+
+test("put rejects a false-positive 200 because Bunny upload success is 201", async () => {
+  await withMockedFetch(
+    () => new Response('{"Message":"Not Found"}', { status: 200 }),
+    async () => {
+      await assert.rejects(
+        putDiscordRecapImage(BUNNY_ENV, IMAGE_IDENTITY, new Uint8Array([1, 2, 3])),
+        /returned 200, expected 201/,
+      )
+    },
+  )
+})
+
+test("put rejects acknowledged uploads whose exact bytes cannot be read back", async () => {
+  const originalSetTimeout = globalThis.setTimeout
+  globalThis.setTimeout = (callback) => {
+    callback()
+    return 0
+  }
+  try {
+    await withMockedFetch(
+      (_url, init) =>
+        init.method === "PUT"
+          ? new Response(null, { status: 201 })
+          : new Response(new Uint8Array([9, 9, 9]), { status: 200 }),
+      async () => {
+        await assert.rejects(
+          putDiscordRecapImage(BUNNY_ENV, IMAGE_IDENTITY, new Uint8Array([1, 2, 3])),
+          /exact-byte read-back failed/,
+        )
+      },
+    )
+  } finally {
+    globalThis.setTimeout = originalSetTimeout
+  }
 })
 
 test("load reads from Bunny storage with its AccessKey and returns bytes", async () => {
@@ -134,10 +179,15 @@ test("delete issues a DELETE against the storage API", async () => {
 
 test("R2 binding takes precedence when present", async () => {
   const puts = []
+  let storedBytes = null
   const r2Env = {
     STRUCTURES_BUCKET: {
       async put(key, bytes) {
         puts.push({ key, bytes })
+        storedBytes = new Uint8Array(bytes)
+      },
+      async get() {
+        return storedBytes ? { arrayBuffer: async () => storedBytes.buffer.slice(0) } : null
       },
     },
   }

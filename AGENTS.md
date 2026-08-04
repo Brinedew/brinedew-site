@@ -160,6 +160,15 @@ more automatic slots because it has more members. Read
 `docs/GENEGUESSR_DAILY_SELECTION_RUNBOOK.md` before changing the daily pool,
 daily hash, target availability fallback, schedule cache, or pre-warm selection.
 
+**ARCHITECTURE FENCE [GG-002]** — a GeneGuessr recap image is usable only when
+the rendered canvas contains molecule pixels and the exact uploaded bytes can be
+read back from the immutable day + UniProt + renderer key. A Bunny 2xx response,
+an object HEAD, a Discord attachment node, or a non-empty PNG is not visual
+proof. Missing images may preserve the daily text recap, but admin coverage must
+say so and a later repair must edit the existing Discord message rather than
+post a duplicate. Read `docs/DISCORD_INTEGRATION.md` before changing recap
+rendering, storage, upload success, cron fallback, repair, or visual acceptance.
+
 ## "Site is broken" runbook
 
 When a user reports "site broken" or "images not loading" or any visual regression, the first 30 minutes are dominated by the wrong kind of investigation (DNS-layer forensics, status-page checks, Git blame) when the actual answer is almost always on the user's network or in a project-owned fallback that already exists. The pattern that wastes hours is:
