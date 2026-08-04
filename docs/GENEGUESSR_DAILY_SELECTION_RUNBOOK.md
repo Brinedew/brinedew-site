@@ -50,6 +50,11 @@ All three were automatic picks, not admin overrides.
 - Unreachable candidates may advance through the remaining balanced sequence
   as a recorded availability replacement. They must never fall back to the
   adjacent row in the flat protein table.
+- Ahead-of-time horizon reconciliation keeps every valid computed target. A
+  failed automatic target is replaced only by a non-AlphaFold candidate whose
+  UniProt ID and normalized surname are both outside the complete authoritative
+  horizon. This prevents both a direct repeat and a wraparound/member-rotation
+  family repeat without cascading later dates.
 - A recorded actual target remains authoritative unless the existing
   availability rules permit replacement before the first guess.
 
@@ -62,6 +67,18 @@ computed days. Any selection-algorithm change
 must increment `ADMIN_SCHEDULE_CACHE_VERSION` so cached previews are recomputed.
 The production pre-warm cron and request-time slow path must consume the same
 balanced candidate sequence.
+
+Automatic availability pins use the same salt and pool fingerprint. Stale pins
+do not survive a picker or pool change. They are lower priority than manual
+overrides and recorded actual targets. The admin cards endpoint, tomorrow
+pre-warm, and request-time selection must resolve the same pin and preserve its
+horizon exclusions if the pinned structure later becomes unavailable.
+
+Successful browser rendering alone is not enough for a future replacement.
+The canonical curated structure is cached in R2, its `pinnedUntil` metadata is
+extended through the play date (including rewriting metadata on an existing
+cached object), and the metadata is read back before reconciliation accepts the
+replacement.
 
 Recap images are not date-only schedule state. Their immutable storage identity
 contains the day, selected UniProt ID, and `DISCORD_RECAP_RENDER_CONTRACT`.

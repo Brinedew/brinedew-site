@@ -84,11 +84,23 @@ Current design (2026-08-03):
   therefore an automatic cache miss; legacy date-only objects are never read.
 - The admin renderer samples the actual Mol* canvas until molecule pixels are
   present for three consecutive frames. It retries a fresh viewer once and
-  refuses the upload if the canvas remains a uniform background.
+  refuses the upload if the molecular viewport remains empty. The fixed
+  bottom-left orientation axes are explicitly outside the measured molecule
+  region; axes-only frames were the reason for the `molstar-recap-v3` contract
+  cutover and cannot satisfy v3 coverage.
 - Bulk reconciliation probes the selected structure URL with `HEAD` before
   starting Mol*. A known 4xx/5xx structure failure is retained as a hole
   immediately instead of consuming two viewer load timeouts; ordinary
   interactive admin previews keep their existing loading behavior.
+- A failed automatic mystery target is not rendered with AlphaFold. Yearly
+  reconciliation records a non-AlphaFold availability replacement outside all
+  UniProt IDs and normalized surnames in the 365-day horizon, then renders and
+  uploads that target-bound image. Manual overrides remain authoritative and
+  are never replaced automatically.
+- A successful replacement is accepted only after its curated structure is
+  cached and R2 confirms `pinnedUntil` through the play date. Availability pins
+  are selector-salt and pool-fingerprint bound, and are shared by the admin
+  schedule, cards, pre-warm, and request-time paths.
 - Bunny upload success is the documented HTTP `201`, followed by bounded
   exact-byte read-back from the same authenticated storage identity. Production
   measurement on 2026-08-04 required longer than 5 seconds, so the shared retry

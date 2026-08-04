@@ -22,7 +22,7 @@ const BUNNY_ENV = {
 }
 
 const IMAGE_IDENTITY = { day: "2026-06-03", uniprotId: "P08134" }
-const IMAGE_KEY = "discord-recap-images/v2/2026-06-03/P08134/molstar-recap-v2.png"
+const IMAGE_KEY = "discord-recap-images/v2/2026-06-03/P08134/molstar-recap-v3.png"
 
 function withMockedFetch(handler, fn) {
   const original = globalThis.fetch

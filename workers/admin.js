@@ -23,6 +23,14 @@ import {
 import { buildClueSections, maskClueSections, sanitizeTargetProtein } from "./lib/game-engine.js"
 import { getDailyGuessAggregates, getGuessAggregatesForDateRange } from "./lib/guess-aggregates.js"
 import { getGameSessionWriteEvidence } from "./lib/game-session-write-evidence.js"
+import {
+  DAILY_TARGET_AVAILABILITY_PIN_PREFIX,
+  collectDailyTargetHorizonExclusions,
+  parseDailyTargetAvailabilityPin,
+  readDailyTargetAvailabilityPin,
+  selectDailyTargetAvailabilityReplacement,
+  writeDailyTargetAvailabilityPin,
+} from "./lib/daily-target-availability-pins.js"
 
 function addDaysISO(dateIso, days) {
   const base = new Date(`${dateIso}T00:00:00.000Z`)
@@ -38,9 +46,10 @@ const DISCORD_RECAP_STATUS_CONCURRENCY = 5
 const ADMIN_SCHEDULE_DAY_CACHE_PREFIX = "admin_schedule_day:v2:"
 const ADMIN_SCHEDULE_DAY_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60
 const ADMIN_SCHEDULE_MAX_FUTURE_DAYS = 370
+const ADMIN_SCHEDULE_REPLACEMENT_HORIZON_DAYS = 365
 // Family-balanced daily selection changes every computed preview. Bump the
 // payload version so no flat-protein schedule entry survives the deployment.
-const ADMIN_SCHEDULE_CACHE_VERSION = 4
+const ADMIN_SCHEDULE_CACHE_VERSION = 5
 const DAILY_TARGET_SALT_FALLBACK = "geneguessr-v2-939b5a0b"
 
 async function listAllKvKeys(env, prefix) {
@@ -82,7 +91,7 @@ function normalizeUniprotId(value) {
 
 function isScheduleDayCacheEntryValid(
   entry,
-  { date, overrideUniprotId, salt, selectionPoolFingerprint },
+  { date, overrideUniprotId, availabilityPinUniprotId, salt, selectionPoolFingerprint },
 ) {
   if (!entry || typeof entry !== "object") {
     return false
@@ -103,6 +112,10 @@ function isScheduleDayCacheEntryValid(
   if (cachedOverride !== normalizeUniprotId(overrideUniprotId)) {
     return false
   }
+  const cachedAvailabilityPin = normalizeUniprotId(entry.availability_pin_uniprot_id)
+  if (cachedAvailabilityPin !== normalizeUniprotId(availabilityPinUniprotId)) {
+    return false
+  }
   const computedUniprot = normalizeUniprotId(entry.computed_uniprot_id)
   const computedProteinUniprot = normalizeUniprotId(entry?.computed?.uniprot)
   if (!computedUniprot || !computedProteinUniprot || computedUniprot !== computedProteinUniprot) {
@@ -116,6 +129,11 @@ function toScheduleUpcomingRow(entry) {
     date: entry?.date || null,
     override_uniprot_id: normalizeUniprotId(entry?.override_uniprot_id),
     override_protein: entry?.override_protein || null,
+    availability_pin_uniprot_id: normalizeUniprotId(entry?.availability_pin_uniprot_id),
+    availability_pin_protein: entry?.availability_pin_protein || null,
+    availability_pin_original_uniprot_id: normalizeUniprotId(
+      entry?.availability_pin_original_uniprot_id,
+    ),
     computed: entry?.computed || null,
     skipped_alpha_fold: Number.isFinite(entry?.skipped_alpha_fold)
       ? entry.skipped_alpha_fold
@@ -123,8 +141,13 @@ function toScheduleUpcomingRow(entry) {
   }
 }
 
-async function buildScheduleDayCacheEntry(env, { date, overrideByDate, salt }) {
+async function buildScheduleDayCacheEntry(
+  env,
+  { date, overrideByDate, availabilityPinByDate, salt },
+) {
   const plannedOverride = normalizeUniprotId(overrideByDate.get(date)?.uniprot_id)
+  const availabilityPin = availabilityPinByDate.get(date) || null
+  const availabilityPinUniprotId = normalizeUniprotId(availabilityPin?.uniprot_id)
   const selection = await pickDailyTarget(env.DB, salt, date)
   const computedProtein = selection?.protein ? sanitizeProteinSummary(selection.protein) : null
   const computedUniprot = normalizeUniprotId(
@@ -141,6 +164,16 @@ async function buildScheduleDayCacheEntry(env, { date, overrideByDate, salt }) {
     }
   }
 
+  let availabilityPinProtein = null
+  if (availabilityPinUniprotId) {
+    try {
+      const protein = await loadProtein(env.DB, availabilityPinUniprotId)
+      availabilityPinProtein = protein ? sanitizeProteinSummary(protein) : null
+    } catch {
+      availabilityPinProtein = null
+    }
+  }
+
   return {
     cache_version: ADMIN_SCHEDULE_CACHE_VERSION,
     date,
@@ -150,6 +183,9 @@ async function buildScheduleDayCacheEntry(env, { date, overrideByDate, salt }) {
     computed: computedProtein,
     override_uniprot_id: plannedOverride,
     override_protein: overrideProtein,
+    availability_pin_uniprot_id: availabilityPinUniprotId,
+    availability_pin_protein: availabilityPinProtein,
+    availability_pin_original_uniprot_id: normalizeUniprotId(availabilityPin?.original_uniprot_id),
     skipped_alpha_fold: Number.isFinite(selection?.skippedAlphaFold)
       ? selection.skippedAlphaFold
       : null,
@@ -1056,6 +1092,29 @@ export async function handleAdminSchedule(request, env) {
     }
     const plannedDates = dates.filter((date) => !recordedDates.has(date))
 
+    const availabilityPinKeys = await listAllKvKeys(env, DAILY_TARGET_AVAILABILITY_PIN_PREFIX)
+    const availabilityPins = await Promise.all(
+      availabilityPinKeys.map(async (key) => {
+        const date = key.name.replace(DAILY_TARGET_AVAILABILITY_PIN_PREFIX, "")
+        if (!plannedDates.includes(date)) {
+          return null
+        }
+        try {
+          const raw = await env.KV.get(key.name)
+          return parseDailyTargetAvailabilityPin(raw, {
+            date,
+            salt,
+            selectionPoolFingerprint,
+          })
+        } catch {
+          return null
+        }
+      }),
+    )
+    const availabilityPinByDate = new Map(
+      availabilityPins.filter(Boolean).map((entry) => [entry.date, entry]),
+    )
+
     const cachedRowsByDate = new Map()
     await Promise.all(
       plannedDates.map(async (date) => {
@@ -1079,6 +1138,7 @@ export async function handleAdminSchedule(request, env) {
         isScheduleDayCacheEntryValid(cachedEntry, {
           date,
           overrideUniprotId: plannedOverride,
+          availabilityPinUniprotId: availabilityPinByDate.get(date)?.uniprot_id,
           salt,
           selectionPoolFingerprint,
         })
@@ -1098,6 +1158,7 @@ export async function handleAdminSchedule(request, env) {
             buildScheduleDayCacheEntry(env, {
               date,
               overrideByDate,
+              availabilityPinByDate,
               salt,
             }),
           ),
@@ -1120,6 +1181,10 @@ export async function handleAdminSchedule(request, env) {
           date,
           override_uniprot_id: normalizeUniprotId(overrideByDate.get(date)?.uniprot_id),
           override_protein: null,
+          availability_pin_uniprot_id: normalizeUniprotId(
+            availabilityPinByDate.get(date)?.uniprot_id,
+          ),
+          availability_pin_protein: null,
           computed: null,
           skipped_alpha_fold: null,
         }
@@ -1135,6 +1200,130 @@ export async function handleAdminSchedule(request, env) {
     return Response.json(payload)
   } catch (err) {
     console.error("Error in handleAdminSchedule:", err)
+    return Response.json({ error: "Internal server error", details: err.message }, { status: 500 })
+  }
+}
+
+/**
+ * POST /api/admin/schedule/availability-replacement
+ *
+ * Records a deterministic replacement for one unreachable computed target.
+ * The caller supplies the complete authoritative horizon as forbidden IDs, so
+ * the replacement comes from outside that horizon and cannot cascade into a
+ * second date. The browser still has to render, upload, and read back the exact
+ * target-bound recap object before yearly coverage can pass.
+ */
+export async function handleAdminScheduleAvailabilityReplacement(request, env) {
+  if (!(await isAdmin(request, env))) {
+    return Response.json({ error: "Unauthorized" }, { status: 403 })
+  }
+
+  try {
+    const body = await request.json()
+    const date = String(body?.date || "").trim()
+    const today = new Date().toISOString().slice(0, 10)
+    const lastAllowedDate = addDaysISO(today, ADMIN_SCHEDULE_MAX_FUTURE_DAYS)
+    if (!isValidIsoDay(date) || date < today || date > lastAllowedDate) {
+      return Response.json(
+        { error: "Replacement date is outside the admin horizon" },
+        { status: 400 },
+      )
+    }
+
+    const normalizeIdList = (value) =>
+      Array.from(
+        new Set((Array.isArray(value) ? value : []).map(normalizeUniprotId).filter(Boolean)),
+      )
+    const rejectedUniprotIds = normalizeIdList(body?.rejectedUniprotIds)
+    const horizonExclusions = collectDailyTargetHorizonExclusions(body?.horizonEntries, {
+      firstDate: today,
+      dayCount: ADMIN_SCHEDULE_REPLACEMENT_HORIZON_DAYS,
+    })
+    if (!horizonExclusions) {
+      return Response.json(
+        { error: "A complete consecutive 365-day horizon manifest is required" },
+        { status: 400 },
+      )
+    }
+    if (rejectedUniprotIds.length > 5000) {
+      return Response.json({ error: "Rejected identity set is too large" }, { status: 400 })
+    }
+    const forbiddenUniprotIds = horizonExclusions.forbiddenUniprotIds
+    const forbiddenGeneSurnames = horizonExclusions.forbiddenGeneSurnames
+
+    const plannedOverride = normalizeUniprotId(await env.KV.get(`puzzle_override:${date}`))
+    if (plannedOverride) {
+      return Response.json(
+        { error: "Manual overrides are authoritative and cannot be replaced automatically" },
+        { status: 409 },
+      )
+    }
+
+    const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT_FALLBACK
+    const selection = await pickDailyTarget(env.DB, salt, date)
+    const originalUniprotId = normalizeUniprotId(selection?.protein?.uniprot)
+    const selectionPoolFingerprint = selection?.poolFingerprint || null
+    const candidateIds = Array.isArray(selection?.candidateIds)
+      ? selection.candidateIds.map(normalizeUniprotId).filter(Boolean)
+      : []
+    if (!originalUniprotId || !selectionPoolFingerprint || !candidateIds.length) {
+      return Response.json({ error: "Daily selection pool unavailable" }, { status: 503 })
+    }
+
+    const forbidden = new Set(forbiddenUniprotIds)
+    const forbiddenSurnames = new Set(forbiddenGeneSurnames)
+    const rejected = new Set(rejectedUniprotIds)
+    const existingPin = await readDailyTargetAvailabilityPin(env.KV, {
+      date,
+      salt,
+      selectionPoolFingerprint,
+    })
+    for (const rejectedId of existingPin?.rejected_uniprot_ids || []) {
+      rejected.add(rejectedId)
+    }
+
+    forbidden.add(originalUniprotId)
+    const replacement = await selectDailyTargetAvailabilityReplacement({
+      candidateIds,
+      forbiddenUniprotIds: Array.from(forbidden),
+      forbiddenGeneSurnames: Array.from(forbiddenSurnames),
+      rejectedUniprotIds: Array.from(rejected),
+      loadProtein: (uniprot) => loadProtein(env.DB, uniprot),
+    })
+    const replacementProtein = replacement.protein
+    for (const rejectedId of replacement.rejectedUniprotIds) {
+      rejected.add(rejectedId)
+    }
+    if (!replacementProtein) {
+      return Response.json(
+        { error: "No non-AlphaFold replacement exists outside the authoritative horizon" },
+        { status: 503 },
+      )
+    }
+
+    const record = await writeDailyTargetAvailabilityPin(env.KV, {
+      date,
+      salt,
+      selectionPoolFingerprint,
+      originalUniprotId,
+      replacementUniprotId: replacementProtein.uniprot,
+      rejectedUniprotIds: Array.from(rejected),
+      forbiddenUniprotIds: Array.from(forbidden),
+      forbiddenGeneSurnames: Array.from(forbiddenSurnames),
+    })
+    await deleteAdminScheduleDayCacheEntry(env, date)
+
+    return Response.json({
+      ok: true,
+      date,
+      source: "availability_replacement",
+      original_uniprot_id: originalUniprotId,
+      replacement_uniprot_id: record.uniprot_id,
+      replacement_protein: sanitizeProteinSummary(replacementProtein),
+      selection_pool_fingerprint: selectionPoolFingerprint,
+    })
+  } catch (err) {
+    console.error("Error recording availability replacement:", err)
     return Response.json({ error: "Internal server error", details: err.message }, { status: 500 })
   }
 }
@@ -1207,18 +1396,38 @@ export async function handleAdminCards(request, env) {
     }
 
     if (!resolvedUniprot) {
-      const salt = env?.DAILY_TARGET_SALT || "geneguessr-v2-939b5a0b"
+      const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT_FALLBACK
       const selection = await pickDailyTarget(env.DB, salt, date)
-      resolvedUniprot = selection?.protein?.uniprot || null
-      audit = {
+      const availabilityPin = await readDailyTargetAvailabilityPin(env.KV, {
         date,
-        uniprot_id: resolvedUniprot,
-        source: "computed",
-        override_id: null,
-        rejected: [],
-        skipped_alpha_fold: Number.isFinite(selection?.skippedAlphaFold)
-          ? selection.skippedAlphaFold
-          : null,
+        salt,
+        selectionPoolFingerprint: selection?.poolFingerprint,
+      })
+      if (availabilityPin?.uniprot_id) {
+        resolvedUniprot = availabilityPin.uniprot_id
+        audit = {
+          date,
+          uniprot_id: resolvedUniprot,
+          source: "availability_replacement",
+          override_id: null,
+          rejected: availabilityPin.rejected_uniprot_ids.map((uniprot) => ({
+            uniprot_id: uniprot,
+            reason: "catalog_render_unavailable",
+          })),
+          skipped_alpha_fold: 0,
+        }
+      } else {
+        resolvedUniprot = selection?.protein?.uniprot || null
+        audit = {
+          date,
+          uniprot_id: resolvedUniprot,
+          source: "computed",
+          override_id: null,
+          rejected: [],
+          skipped_alpha_fold: Number.isFinite(selection?.skippedAlphaFold)
+            ? selection.skippedAlphaFold
+            : null,
+        }
       }
     }
 
