@@ -46,7 +46,7 @@ But if you ask ChatGPT 5.6 Pro ($100 subscription!!! please support your local s
 ChatGPT Pro also brings up Harrison-Archer study from 1987.[^3] In a later secondary work, the same authors describe the study as producing:
 > “1742 days, a new record for Mus”
 
-
+In short, the more you pay for your AI, the longer it extends the mouse lifespan winter.
 
 [^1]: Turturro A, Witt WW, Lewis S, Hass BS, Lipman RD, Hart RW. Growth Curves and Survival Characteristics of the Animals Used in the Biomarkers of Aging Program. *Journal of Gerontology: Biological Sciences.* 1999;54(11):B492–B501. [doi:10.1093/gerona/54.11.B492](https://doi.org/10.1093/gerona/54.11.B492).
 
