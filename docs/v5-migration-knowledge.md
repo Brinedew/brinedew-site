@@ -21,11 +21,16 @@ This breaks ALL `article > X` CSS child combinators. Always use descendant selec
 
 ## Image Captions
 
-v5 OFM renders images as bare `<p><img>` — no `<figure>`/`<figcaption>`.
-Alt text from `![caption](img.png)` is only in the `alt` attribute, not visible text.
+v5 OFM initially renders images inside paragraphs and puts the caption only in
+the image `alt` attribute. The local `image-captions` HTML transformer is the
+canonical repair: it splits prose-image-prose paragraphs into independent
+blocks and emits semantic `<figure>/<figcaption>` markup. Do not replace this
+with blank-line linting or `p:has(img)` CSS; the published renderer must remain
+correct even when CommonMark merges adjacent source lines into one paragraph.
 
-Current fix: CSS `p:has(img) + p` styles the next paragraph as italic caption.
-Long-term: rehype plugin to convert to `<figure><figcaption>`.
+Essay figure images also override Quartz's global `content-visibility: auto`.
+That optimization collapses off-screen replaced elements without a reserved
+intrinsic size and causes large layout jumps in long image-heavy posts.
 
 ## Plugin System
 

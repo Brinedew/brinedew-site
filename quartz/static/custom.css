@@ -319,6 +319,10 @@ article p {
   max-width: 100%;
   height: auto;
   margin: 0;
+  /* Replaced media already has intrinsic dimensions. Quartz's global
+     content-visibility:auto skips off-screen image layout and collapses long
+     essays until the reader scrolls near each image, causing large jumps. */
+  content-visibility: visible;
 }
 
 .markdown-preview-view.markdown-rendered figure > figcaption {
