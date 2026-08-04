@@ -28,6 +28,12 @@ blocks and emits semantic `<figure>/<figcaption>` markup. Do not replace this
 with blank-line linting or `p:has(img)` CSS; the published renderer must remain
 correct even when CommonMark merges adjacent source lines into one paragraph.
 
+Essay vertical rhythm is also renderer-owned. At the standard 19px article
+size, the contract is 25.6px prose leading and a 17.1px top-level block gap,
+with centered figure/caption geometry. Superscripts and subscripts use
+zero-height inline boxes with relative visual positioning so footnotes and
+citations cannot enlarge a line box.
+
 Essay figure images also override Quartz's global `content-visibility: auto`.
 That optimization collapses off-screen replaced elements without a reserved
 intrinsic size and causes large layout jumps in long image-heavy posts.
