@@ -74,6 +74,11 @@ quartz/cli/tui/dist/
 .quartz/plugins/contact-form
 .quartz/plugins/brinedew-components
 .quartz/plugins/brinedew-image-captions
+.quartz/plugins/brinedew-created-modified-date
+.quartz/plugins/brinedew-tag-page
+.quartz/plugins/essay-normalizer
+.quartz/plugins/footer
+.quartz/plugins/publication-date
 
 # Python cache
 __pycache__/
