@@ -132,8 +132,8 @@ test("the durable ledger is bounded and queue delivery is serialized", () => {
   )
   assert.match(
     runtimeSource,
-    /verifyPortraitStorageObjectAfterPut[\s\S]*\[0, 750, 1500, 3000\][\s\S]*headPortraitStorageObject/,
-    "Bunny read-after-write verification must absorb its short replication window",
+    /verifyPortraitStorageObjectAfterPut[\s\S]*BUNNY_READ_AFTER_WRITE_DELAYS_MS[\s\S]*headPortraitStorageObject/,
+    "Bunny read-after-write verification must use the shared measured replication window",
   )
   assert.match(
     wranglerSource,

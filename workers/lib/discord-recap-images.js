@@ -1,3 +1,5 @@
+import { BUNNY_READ_AFTER_WRITE_DELAYS_MS } from "./bunny-storage-consistency.js"
+
 const DISCORD_RECAP_IMAGE_PREFIX = "discord-recap-images/v2/"
 
 // ARCHITECTURE FENCE [GG-002]: storage acknowledgement is not delivery proof.
@@ -11,7 +13,6 @@ const DISCORD_RECAP_IMAGE_PREFIX = "discord-recap-images/v2/"
 export const DISCORD_RECAP_RENDER_CONTRACT = "molstar-recap-v2"
 
 const BUNNY_UPLOAD_SUCCESS_STATUS = 201
-const BUNNY_READ_AFTER_WRITE_DELAYS_MS = [0, 750, 1500, 3000]
 
 export function isValidIsoDay(value) {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value))
