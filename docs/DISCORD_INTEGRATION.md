@@ -69,6 +69,15 @@ Current design (2026-08-03):
   "Upload Next 365 Days") posts to `POST /api/admin/discord-recap-image`, which
   now writes to Bunny. Pre-render the catalog there and the daily cron attaches
   images automatically.
+- **"Upload Next 365 Days" is a resumable reconciliation, not a blind loop.** It
+  loads the exact day/UniProt schedule, checks stored objects in 25-identity
+  client chunks, and processes only missing identities. Missing days are grouped
+  by UniProt so one molecule render can cover repeated targets, but the base64
+  bitmap and Mol* viewer are released after that group. A closed tab loses only
+  the active group: verified objects are the durable checkpoint for the next run.
+  After processing, the admin re-reads all 365 immutable identities and may show
+  success only for exact 365/365 coverage. Server-side HEAD work runs at five
+  concurrent storage reads, below Cloudflare's six-connection invocation limit.
 - Stored objects are immutable and keyed by day + authoritative UniProt ID +
   `DISCORD_RECAP_RENDER_CONTRACT`. A schedule override or renderer revision is
   therefore an automatic cache miss; legacy date-only objects are never read.
@@ -90,6 +99,11 @@ Current design (2026-08-03):
   image pipeline.
 - A posted text-only recap is repaired in place using its durable message ID;
   repair never creates a second daily message.
+
+Production preflight on 2026-08-04 found 365 scheduled identities through
+2027-08-03, 347 unique proteins, and only 1 ready object. That incident is B-702;
+it is the regression fixture for resumability, bounded provider work, and exact
+final coverage.
 
 ### Manual trigger / backfill
 

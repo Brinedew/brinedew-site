@@ -166,8 +166,12 @@ read back from the immutable day + UniProt + renderer key. A Bunny 2xx response,
 an object HEAD, a Discord attachment node, or a non-empty PNG is not visual
 proof. Missing images may preserve the daily text recap, but admin coverage must
 say so and a later repair must edit the existing Discord message rather than
-post a duplicate. Read `docs/DISCORD_INTEGRATION.md` before changing recap
-rendering, storage, upload success, cron fallback, repair, or visual acceptance.
+post a duplicate. Annual filling is a resumable reconciliation, not a blind
+365-item loop: preflight and final checks are bounded, verified objects are the
+durable checkpoint, only missing identities render, and the browser releases
+each protein image after its missing days finish. Read `docs/DISCORD_INTEGRATION.md`
+before changing recap rendering, storage, bulk coverage, upload success, cron
+fallback, repair, or visual acceptance.
 
 ## "Site is broken" runbook
 
