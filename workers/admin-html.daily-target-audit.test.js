@@ -1,7 +1,15 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { ADMIN_HTML } from "./admin-html.js"
+import {
+  ADMIN_HTML,
+  buildMissingRecapImageGroups,
+  chunkRecapImageDays,
+  summarizeRecapImageCoverage,
+} from "./admin-html.js"
+
+// ARCHITECTURE FENCE [GG-002]: yearly coverage is resumable reconciliation,
+// not an attempted-upload counter or an unbounded browser loop.
 
 test("admin inline runtime is valid JavaScript", () => {
   const start = ADMIN_HTML.indexOf("<script>")
@@ -38,4 +46,43 @@ test("recap uploads are target-bound and require stable molecule pixels", () => 
   assert.match(ADMIN_HTML, /Preview never produced stable molecule pixels/)
   assert.doesNotMatch(ADMIN_HTML, /getCanvasNonDarkRatio/)
   assert.doesNotMatch(ADMIN_HTML, /Let Mol\* settle before pixel capture/)
+})
+
+test("annual recap fill plans only missing objects and bounds status requests", () => {
+  const days = ["2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07"]
+  const schedule = {
+    "2026-08-04": { uniprot: "Q8WU10" },
+    "2026-08-05": { uniprot: "P35270" },
+    "2026-08-06": { uniprot: "P35270" },
+    "2026-08-07": { uniprot: "Q6PJG6" },
+  }
+  const exists = { "2026-08-04": true, "2026-08-06": true }
+
+  assert.deepEqual(chunkRecapImageDays(days, 3), [days.slice(0, 3), days.slice(3)])
+  assert.deepEqual(buildMissingRecapImageGroups(days, schedule, exists), [
+    { uniprot: "P35270", days: ["2026-08-05"] },
+    { uniprot: "Q6PJG6", days: ["2026-08-07"] },
+  ])
+  assert.deepEqual(summarizeRecapImageCoverage(days, exists), {
+    total: 4,
+    ready: 2,
+    missingDays: ["2026-08-05", "2026-08-07"],
+  })
+})
+
+test("annual recap fill is resumable, memory-bounded, and exact before success", () => {
+  assert.match(ADMIN_HTML, /await fetchRecapStatusesForDays\(days\)/)
+  assert.match(
+    ADMIN_HTML,
+    /buildMissingRecapImageGroups\(days, scheduleData, recapImageExistsByDay\)/,
+  )
+  assert.match(ADMIN_HTML, /Existing verified objects will be skipped/)
+  assert.match(ADMIN_HTML, /base64 = null;[\s\S]*await destroyPreviewViewer\(\)/)
+  assert.match(ADMIN_HTML, /Rechecking all [\s\S]*await fetchRecapStatusesForDays\(days\)/)
+  assert.match(ADMIN_HTML, /finalCoverage\.missingDays\.length > 0/)
+  assert.match(ADMIN_HTML, /Yearly coverage verified:/)
+  assert.doesNotMatch(
+    ADMIN_HTML,
+    /const imageByUniprot = new Map\(\);[\s\S]*Yearly upload complete/,
+  )
 })

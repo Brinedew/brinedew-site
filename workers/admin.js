@@ -31,6 +31,10 @@ function addDaysISO(dateIso, days) {
 }
 
 const DISCORD_RECAP_IMAGE_MAX_BYTES = 2 * 1024 * 1024
+// Cloudflare permits six simultaneous outgoing connections per invocation.
+// Leave one connection in reserve for runtime/account plumbing and process
+// recap-object HEADs in bounded waves instead of a 365-way Promise.all.
+const DISCORD_RECAP_STATUS_CONCURRENCY = 5
 const ADMIN_SCHEDULE_DAY_CACHE_PREFIX = "admin_schedule_day:v2:"
 const ADMIN_SCHEDULE_DAY_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60
 const ADMIN_SCHEDULE_MAX_FUTURE_DAYS = 370
@@ -1535,6 +1539,9 @@ export async function handleAdminDiscordRecapImageStatus(request, env) {
  * Returns cache status for multiple exact day/target/renderer recap images.
  */
 export async function handleAdminDiscordRecapImageStatuses(request, env) {
+  // ARCHITECTURE FENCE [GG-002]: annual coverage probes must stay under the
+  // platform's simultaneous-outgoing-connection envelope even when the caller
+  // supplies the full 370-identity API maximum.
   if (!(await isAdmin(request, env))) {
     return Response.json({ error: "Unauthorized" }, { status: 403 })
   }
@@ -1568,31 +1575,34 @@ export async function handleAdminDiscordRecapImageStatuses(request, env) {
   }
 
   const statuses = Object.create(null)
-  await Promise.all(
-    uniqueImages.map(async (value) => {
-      const [day, rawUniprotId] = value.split("~")
-      const uniprotId = rawUniprotId.toUpperCase()
-      const identity = { day, uniprotId }
-      const key = buildDiscordRecapImageKey(identity)
-      const head = await headDiscordRecapImage(env, identity)
-      statuses[day] = head
-        ? {
-            day,
-            uniprot_id: uniprotId,
-            key,
-            exists: true,
-            size: head.size || null,
-            uploadedAt: head.uploadedAt || null,
-            metadata: head.metadata || {},
-          }
-        : {
-            day,
-            uniprot_id: uniprotId,
-            key,
-            exists: false,
-          }
-    }),
-  )
+  for (let index = 0; index < uniqueImages.length; index += DISCORD_RECAP_STATUS_CONCURRENCY) {
+    const batch = uniqueImages.slice(index, index + DISCORD_RECAP_STATUS_CONCURRENCY)
+    await Promise.all(
+      batch.map(async (value) => {
+        const [day, rawUniprotId] = value.split("~")
+        const uniprotId = rawUniprotId.toUpperCase()
+        const identity = { day, uniprotId }
+        const key = buildDiscordRecapImageKey(identity)
+        const head = await headDiscordRecapImage(env, identity)
+        statuses[day] = head
+          ? {
+              day,
+              uniprot_id: uniprotId,
+              key,
+              exists: true,
+              size: head.size || null,
+              uploadedAt: head.uploadedAt || null,
+              metadata: head.metadata || {},
+            }
+          : {
+              day,
+              uniprot_id: uniprotId,
+              key,
+              exists: false,
+            }
+      }),
+    )
+  }
 
   return Response.json({
     ok: true,
