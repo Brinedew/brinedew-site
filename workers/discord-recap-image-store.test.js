@@ -146,6 +146,48 @@ test("put absorbs the measured Bunny propagation window before declaring failure
   }
 })
 
+test("put retries the same immutable bytes after an acknowledged write is lost", async () => {
+  const originalSetTimeout = globalThis.setTimeout
+  let puts = 0
+  let reads = 0
+  const bodies = []
+  globalThis.setTimeout = (callback) => {
+    callback()
+    return 0
+  }
+  try {
+    await withMockedFetch(
+      (_url, init) => {
+        if (init.method === "PUT") {
+          puts += 1
+          bodies.push(Array.from(init.body))
+          return new Response(null, { status: 201 })
+        }
+        reads += 1
+        return puts === 1
+          ? new Response(null, { status: 404 })
+          : new Response(new Uint8Array([1, 2, 3]), { status: 200 })
+      },
+      async () => {
+        const result = await putDiscordRecapImage(
+          BUNNY_ENV,
+          IMAGE_IDENTITY,
+          new Uint8Array([1, 2, 3]),
+        )
+        assert.equal(result.verifiedBytes, 3)
+        assert.equal(puts, 2)
+        assert.equal(reads, 6)
+        assert.deepEqual(bodies, [
+          [1, 2, 3],
+          [1, 2, 3],
+        ])
+      },
+    )
+  } finally {
+    globalThis.setTimeout = originalSetTimeout
+  }
+})
+
 test("load reads from Bunny storage with its AccessKey and returns bytes", async () => {
   await withMockedFetch(
     (url, init) => {

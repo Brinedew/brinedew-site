@@ -79,7 +79,9 @@ Current design (2026-08-03):
   exact-byte read-back from the same authenticated storage identity. Production
   measurement on 2026-08-04 required longer than 5 seconds, so the shared retry
   envelope probes for up to 15 seconds. The admin UI must not mark a day covered
-  before that verification succeeds.
+  before that verification succeeds. Bunny also acknowledged one RHOC PUT that
+  never became readable; storage therefore retries the same immutable key and
+  exact bytes up to three times without another browser render.
 - **If no image is uploaded, the recap still posts text-only.** This is the
   cloud-only fallback B-356 asked for: the daily post can never be blocked by the
   image pipeline.

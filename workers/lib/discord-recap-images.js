@@ -1,4 +1,7 @@
-import { BUNNY_READ_AFTER_WRITE_DELAYS_MS } from "./bunny-storage-consistency.js"
+import {
+  BUNNY_READ_AFTER_WRITE_DELAYS_MS,
+  putBunnyObjectUntilVerified,
+} from "./bunny-storage-consistency.js"
 
 const DISCORD_RECAP_IMAGE_PREFIX = "discord-recap-images/v2/"
 
@@ -162,29 +165,34 @@ export async function putDiscordRecapImage(
       "Recap image storage is not configured for writes (Bunny zone/password missing)",
     )
   }
-  const response = await fetch(writeUrl, {
-    method: "PUT",
-    headers: {
-      AccessKey: password,
-      "Content-Type": contentType,
+  const stored = await putBunnyObjectUntilVerified({
+    put: async () => {
+      const response = await fetch(writeUrl, {
+        method: "PUT",
+        headers: {
+          AccessKey: password,
+          "Content-Type": contentType,
+        },
+        body: expectedBytes,
+      })
+      if (response.status !== BUNNY_UPLOAD_SUCCESS_STATUS) {
+        const responseText = await boundedResponseText(response)
+        throw new Error(
+          `Recap image PUT returned ${response.status}, expected ${BUNNY_UPLOAD_SUCCESS_STATUS}, for ${key}: ${responseText || "no body"}`,
+        )
+      }
+      await response.body?.cancel().catch(() => null)
     },
-    body: expectedBytes,
+    verify: async () => {
+      for (const delayMs of BUNNY_READ_AFTER_WRITE_DELAYS_MS) {
+        if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
+        const readBack = await loadDiscordRecapImageBytes(env, normalizedIdentity)
+        if (readBack && equalBytes(readBack, expectedBytes)) return readBack
+      }
+      return null
+    },
   })
-  if (response.status !== BUNNY_UPLOAD_SUCCESS_STATUS) {
-    const responseText = await boundedResponseText(response)
-    throw new Error(
-      `Recap image PUT returned ${response.status}, expected ${BUNNY_UPLOAD_SUCCESS_STATUS}, for ${key}: ${responseText || "no body"}`,
-    )
-  }
-  await response.body?.cancel().catch(() => null)
-
-  for (const delayMs of BUNNY_READ_AFTER_WRITE_DELAYS_MS) {
-    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
-    const stored = await loadDiscordRecapImageBytes(env, normalizedIdentity)
-    if (stored && equalBytes(stored, expectedBytes)) {
-      return { key, verifiedBytes: stored.byteLength }
-    }
-  }
+  if (stored) return { key, verifiedBytes: stored.byteLength }
 
   throw new Error(`Recap image PUT was acknowledged but exact-byte read-back failed for ${key}`)
 }
