@@ -17,6 +17,10 @@ export function chunkRecapImageDays(days, batchSize = 25) {
   return chunks
 }
 
+export function isRecapDayKey(day) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(day || "").trim())
+}
+
 export function buildMissingRecapImageGroups(days, scheduleByDay, existsByDay) {
   const groupsByUniprot = new Map()
   for (const day of Array.isArray(days) ? days : []) {
@@ -44,6 +48,7 @@ export function summarizeRecapImageCoverage(days, existsByDay) {
 }
 
 const ADMIN_RECAP_BULK_HELPERS = [
+  isRecapDayKey,
   chunkRecapImageDays,
   buildMissingRecapImageGroups,
   summarizeRecapImageCoverage,
@@ -4526,7 +4531,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         new Set(
           (Array.isArray(days) ? days : [])
             .map((day) => String(day || '').trim())
-            .filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day))
+            .filter((day) => isRecapDayKey(day))
             .filter((day) => !!scheduleData[day]?.uniprot)
         )
       );
