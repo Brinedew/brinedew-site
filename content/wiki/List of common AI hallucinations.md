@@ -21,16 +21,19 @@ Why can't we just include every mouse claimed by a scientist, whether in a publi
 
 LLMs, however, fail to draw this distinction and include Bartke's mouse on equal grounds with all the others. But when chastised, they happily throw Bartke's mouse away.
 
-The published *Mus musculus* record I can verify for myself is **1,628 days**[^1]. Turturro and colleagues reported in 1999:
+The published *Mus musculus* record I can verify for myself is 1,628 days[^1]. Turturro and colleagues reported in 1999:
 
 > The oldest male mouse, B6D2F1, lived to 1,628 days.
 
 ![[image-53.png|From Turturro et al., 1999]]
-Other notable reports include Weindruch et al. from 1986[^2], with 53 months equaling 1,612 days
+Other notable reports include Weindruch et al. from 1986[^2], with 53 months equaling 1,612 days.
 
 > The longest lived 10% of mice from group 6 averaged 53.0 mo which, to our knowledge, exceeds reported values for any mice of any strain.
 
+And the Harrison-Archer study from 1987.[^3]
 
 [^1]: Turturro A, Witt WW, Lewis S, Hass BS, Lipman RD, Hart RW. Growth Curves and Survival Characteristics of the Animals Used in the Biomarkers of Aging Program. *Journal of Gerontology: Biological Sciences.* 1999;54(11):B492–B501. [doi:10.1093/gerona/54.11.B492](https://doi.org/10.1093/gerona/54.11.B492).
 
-[^2]: https://www.sciencedirect.com/science/article/abs/pii/S0022316623077829
+[^2]: 
+
+[^3]: Harrison DE, Archer JR. Genetic differences in effects of food restriction on aging in mice. J-Nutr. 1987 Feb; 117(2):376-82. [doi:10.1093/jn/117.2.376](https://doi.org/10.1093/jn/117.2.376)
