@@ -152,9 +152,12 @@ must pass a same-session visual comparison of the homepage and gene page.
 
 **ARCHITECTURE FENCE [GG-001]** — automatic GeneGuessr daily selection gives
 each normalized gene surname exactly one lottery slot. It first chooses a
-surname, then a deterministic daily representative inside that surname;
-structure and AlphaFold fallback may advance only through the remaining
-one-representative-per-surname sequence. Manual overrides remain explicit
+surname from a deterministic without-replacement shuffle-bag, then a
+deterministic representative inside that surname. Automatic targets cannot
+repeat inside one complete playable-surname cycle;
+AlphaFold-only rows are excluded from the automatic bag; structure fallback
+may advance only through the remaining one-representative-per-surname
+sequence. Manual overrides remain explicit
 exceptions. Never hash across the flat protein table or let a large family gain
 more automatic slots because it has more members. Read
 `docs/GENEGUESSR_DAILY_SELECTION_RUNBOOK.md` before changing the daily pool,

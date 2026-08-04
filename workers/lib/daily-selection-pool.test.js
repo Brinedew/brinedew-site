@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  buildDailySelectionPoolFingerprint,
   buildFamilyBalancedDailyCandidateIds,
   getDailySelectionProteinIds,
 } from "./protein-store.js"
@@ -29,6 +30,7 @@ test("daily selection uses a stable ordered pool independent of transient struct
   assert.equal(calls.length, 1)
   assert.match(calls[0], /SELECT p\.uniprot, p\.gene_surname/)
   assert.match(calls[0], /ORDER BY p\.gene_surname ASC, p\.uniprot ASC/)
+  assert.match(calls[0], /LOWER\(TRIM\(p\.structure_source\)\) <> 'alphafold'/)
   assert.doesNotMatch(calls[0], /structure_failures/)
 })
 
@@ -85,7 +87,48 @@ test("family-balanced daily sequence is deterministic and input-order independen
   assert.equal(new Set(first).size, 3)
 })
 
-test("large-family representative rotates across dates without gaining extra slots", async () => {
+test("daily pool fingerprint is order-independent and changes with membership", async () => {
+  const first = await buildDailySelectionPoolFingerprint([
+    { surname: "SLC", members: ["SLC_B", "SLC_A"] },
+    { surname: "TP53", members: ["TP53_A"] },
+  ])
+  const reordered = await buildDailySelectionPoolFingerprint([
+    { surname: "tp53", members: ["tp53_a"] },
+    { surname: "slc", members: ["slc_a", "slc_b"] },
+  ])
+  const changed = await buildDailySelectionPoolFingerprint([
+    { surname: "SLC", members: ["SLC_A"] },
+    { surname: "TP53", members: ["TP53_A"] },
+  ])
+
+  assert.equal(first, reordered)
+  assert.notEqual(first, changed)
+})
+
+test("automatic targets do not repeat inside a full surname shuffle-bag", async () => {
+  const rows = Array.from({ length: 400 }, (_, index) => ({
+    uniprot: `P${String(index).padStart(5, "0")}`,
+    gene_surname: `FAMILY_${String(index).padStart(5, "0")}`,
+  }))
+  const eligibleIds = rows.map((row) => row.uniprot)
+  const selected = []
+
+  for (let offset = 0; offset < 365; offset += 1) {
+    const date = new Date("2026-08-04T00:00:00.000Z")
+    date.setUTCDate(date.getUTCDate() + offset)
+    const ids = await buildFamilyBalancedDailyCandidateIds(
+      rows,
+      eligibleIds,
+      "test-salt",
+      date.toISOString().slice(0, 10),
+    )
+    selected.push(ids[0])
+  }
+
+  assert.equal(new Set(selected).size, 365)
+})
+
+test("large-family representative rotates between complete bag cycles", async () => {
   const rows = [
     { uniprot: "SLC_A", gene_surname: "SLC" },
     { uniprot: "SLC_B", gene_surname: "SLC" },
@@ -93,19 +136,22 @@ test("large-family representative rotates across dates without gaining extra slo
     { uniprot: "TP53_A", gene_surname: "TP53" },
   ]
   const eligibleIds = rows.map((row) => row.uniprot)
-  const slcRepresentatives = new Set()
+  const first = await buildFamilyBalancedDailyCandidateIds(
+    rows,
+    eligibleIds,
+    "test-salt",
+    "2026-07-01",
+  )
+  const nextCycleDate = new Date("2026-07-01T00:00:00.000Z")
+  nextCycleDate.setUTCDate(nextCycleDate.getUTCDate() + 2)
+  const nextCycle = await buildFamilyBalancedDailyCandidateIds(
+    rows,
+    eligibleIds,
+    "test-salt",
+    nextCycleDate.toISOString().slice(0, 10),
+  )
+  const firstSlc = first.find((id) => id.startsWith("SLC_"))
+  const nextSlc = nextCycle.find((id) => id.startsWith("SLC_"))
 
-  for (let day = 1; day <= 31; day += 1) {
-    const ids = await buildFamilyBalancedDailyCandidateIds(
-      rows,
-      eligibleIds,
-      "test-salt",
-      `2026-07-${String(day).padStart(2, "0")}`,
-    )
-    const slcIds = ids.filter((id) => id.startsWith("SLC_"))
-    assert.equal(slcIds.length, 1)
-    slcRepresentatives.add(slcIds[0])
-  }
-
-  assert.ok(slcRepresentatives.size > 1)
+  assert.notEqual(firstSlc, nextSlc)
 })

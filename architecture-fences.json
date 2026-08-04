@@ -494,9 +494,9 @@
     {
       "id": "GG-001",
       "title": "Daily targets give every gene surname one slot",
-      "decision": "Automatic GeneGuessr daily selection chooses one deterministic representative per normalized gene surname, then selects and falls back only through that one-representative-per-surname sequence. Manual overrides remain explicit exceptions.",
+      "decision": "Automatic GeneGuessr daily selection walks a deterministic without-replacement shuffle-bag of normalized gene surnames and chooses one deterministic representative per surname. Automatic targets cannot repeat inside one complete playable-surname cycle. Manual overrides and recorded availability replacements remain explicit exceptions.",
       "reason": "Hashing across the flat protein table makes large families proportionally more likely. The surname-balancing schema and practice selector existed, but daily mode bypassed them and automatically selected SLC22A5, SLC6A8, and SLC12A2 in July 2026.",
-      "change_control": "The source pool, family grouping, deterministic hash, AlphaFold and structure-availability fallback, admin schedule cache version, pre-warm path, request-time path, instructions, runbook, and behavioral tests must change together. Never restore flat-table weighting or adjacent-row fallback.",
+      "change_control": "The source pool and its cache fingerprint, family grouping, deterministic shuffle-bag, AlphaFold and structure-availability fallback, admin schedule cache version, pre-warm path, request-time path, instructions, runbook, and behavioral tests must change together. Never restore flat-table weighting, independent per-date hashing, or adjacent-row fallback.",
       "runbook": "docs/GENEGUESSR_DAILY_SELECTION_RUNBOOK.md",
       "additional_required_marker_categories": [],
       "markers": [
