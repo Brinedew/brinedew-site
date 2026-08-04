@@ -2,6 +2,7 @@ import puppeteer from "@cloudflare/puppeteer"
 import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
+import { BUNNY_READ_AFTER_WRITE_DELAYS_MS } from "./lib/bunny-storage-consistency.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-routes.js"
 import { createIconoplasmAdminGalleryHandlers } from "./iconoplasm-admin-gallery-routes.js"
@@ -3114,9 +3115,9 @@ async function headPortraitStorageObject(env, key) {
 async function verifyPortraitStorageObjectAfterPut(env, key) {
   // Bunny Storage is eventually consistent across storage nodes immediately
   // after PUT. Keep verification authoritative, but absorb the documented
-  // short replication window instead of rerendering an object that was
+  // measured replication window instead of rerendering an object that was
   // accepted successfully.
-  for (const delayMs of [0, 750, 1500, 3000]) {
+  for (const delayMs of BUNNY_READ_AFTER_WRITE_DELAYS_MS) {
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
     const object = await headPortraitStorageObject(env, key)
     if (object) return object

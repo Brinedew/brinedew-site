@@ -112,6 +112,40 @@ test("put rejects acknowledged uploads whose exact bytes cannot be read back", a
   }
 })
 
+test("put absorbs the measured Bunny propagation window before declaring failure", async () => {
+  const originalSetTimeout = globalThis.setTimeout
+  const observedDelays = []
+  let reads = 0
+  globalThis.setTimeout = (callback, delayMs) => {
+    observedDelays.push(delayMs)
+    callback()
+    return 0
+  }
+  try {
+    await withMockedFetch(
+      (_url, init) => {
+        if (init.method === "PUT") return new Response(null, { status: 201 })
+        reads += 1
+        return reads < 5
+          ? new Response(null, { status: 404 })
+          : new Response(new Uint8Array([1, 2, 3]), { status: 200 })
+      },
+      async () => {
+        const result = await putDiscordRecapImage(
+          BUNNY_ENV,
+          IMAGE_IDENTITY,
+          new Uint8Array([1, 2, 3]),
+        )
+        assert.equal(result.verifiedBytes, 3)
+        assert.equal(reads, 5)
+        assert.deepEqual(observedDelays, [1000, 2000, 4000, 8000])
+      },
+    )
+  } finally {
+    globalThis.setTimeout = originalSetTimeout
+  }
+})
+
 test("load reads from Bunny storage with its AccessKey and returns bytes", async () => {
   await withMockedFetch(
     (url, init) => {
