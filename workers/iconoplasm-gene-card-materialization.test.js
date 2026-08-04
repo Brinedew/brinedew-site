@@ -136,6 +136,11 @@ test("the durable ledger is bounded and queue delivery is serialized", () => {
     "Bunny read-after-write verification must use the shared measured replication window",
   )
   assert.match(
+    runtimeSource,
+    /putBunnyObjectUntilVerified[\s\S]*putPortraitStorageObject[\s\S]*verifyPortraitStorageObjectAfterPut/,
+    "an acknowledged but lost gene-card PUT must retry the same rendered bytes",
+  )
+  assert.match(
     wranglerSource,
     /queue = "iconoplasm-gene-card-materialization"[\s\S]*max_batch_size = 1/,
   )
