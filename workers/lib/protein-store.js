@@ -301,6 +301,34 @@ export async function fetchProteinByUniprot(db, uniprot) {
   return protein || null
 }
 
+/**
+ * Load the small protein projection used by schedule/admin views in one D1
+ * statement. A year-long schedule must not issue one SELECT * per day: aside
+ * from being wasteful, that can exhaust an invocation while leaving the tail
+ * of an otherwise-200 response without identities.
+ */
+export async function fetchProteinSummaryMapByUniprotIds(db, uniprotIds) {
+  const ids = Array.from(
+    new Set((Array.isArray(uniprotIds) ? uniprotIds : []).map(normalizeKey).filter(Boolean)),
+  )
+  if (!ids.length) {
+    return new Map()
+  }
+
+  const { results } = await db
+    .prepare(
+      `SELECT uniprot, gene, gene_surname, full_name, length
+       FROM proteins
+       WHERE uniprot IN (SELECT value FROM json_each(?))`,
+    )
+    .bind(JSON.stringify(ids))
+    .all()
+
+  return new Map(
+    (results || []).map((row) => [normalizeKey(row.uniprot), sanitizeProteinSummary(row)]),
+  )
+}
+
 export async function fetchProteinByGene(db, gene) {
   if (!gene || typeof gene !== "string") return null
   const key = gene.toUpperCase().trim()
@@ -709,6 +737,10 @@ export async function buildFamilyBalancedDailyCandidateIds(
   return buildFamilyBalancedCandidateIdsFromFamilies(families, salt, date)
 }
 
+// ARCHITECTURE FENCE [GG-001]: automatic targets walk a deterministic
+// without-replacement surname bag. For any window shorter than the number
+// of playable surnames, no automatic family (and therefore no UniProt ID)
+// can repeat. A new bag cycle rotates the representative inside each family.
 async function buildFamilyBalancedCandidateIdsFromFamilies(families, salt, date) {
   if (!families.length) {
     return []
@@ -720,6 +752,21 @@ async function buildFamilyBalancedCandidateIdsFromFamilies(families, salt, date)
     throw new Error(`Invalid daily selection date: ${day}`)
   }
   const dayOrdinal = Math.floor(dayTimestamp / 86_400_000)
+  const { familyOrder, memberSeed } = await buildFamilyBalancedBag(families, salt)
+  const familyCount = families.length
+  const familyPosition = ((dayOrdinal % familyCount) + familyCount) % familyCount
+  const familyCycle = Math.floor(dayOrdinal / familyCount)
+  const candidateIds = []
+
+  for (let familyOffset = 0; familyOffset < families.length; familyOffset += 1) {
+    const familyIndex = familyOrder[(familyPosition + familyOffset) % familyCount]
+    candidateIds.push(selectFamilyMember(families, familyIndex, familyCycle, memberSeed))
+  }
+
+  return candidateIds
+}
+
+async function buildFamilyBalancedBag(families, salt) {
   const seedBuffer = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(`${salt || ""}|family-balanced-shuffle-bag-v2`),
@@ -734,26 +781,16 @@ async function buildFamilyBalancedCandidateIdsFromFamilies(families, salt, date)
     ;[familyOrder[index], familyOrder[swapIndex]] = [familyOrder[swapIndex], familyOrder[index]]
   }
 
-  // ARCHITECTURE FENCE [GG-001]: automatic targets walk a deterministic
-  // without-replacement surname bag. For any window shorter than the number
-  // of playable surnames, no automatic family (and therefore no UniProt ID)
-  // can repeat. A new bag cycle rotates the representative inside each family.
-  const familyCount = families.length
-  const familyPosition = ((dayOrdinal % familyCount) + familyCount) % familyCount
-  const familyCycle = Math.floor(dayOrdinal / familyCount)
-  const candidateIds = []
+  return { familyOrder, memberSeed }
+}
 
-  for (let familyOffset = 0; familyOffset < families.length; familyOffset += 1) {
-    const familyIndex = familyOrder[(familyPosition + familyOffset) % familyCount]
-    const family = families[familyIndex]
-    const memberStart = Number(
-      mixUint64(memberSeed ^ BigInt(familyIndex)) % BigInt(family.members.length),
-    )
-    const memberIndex = (memberStart + familyCycle) % family.members.length
-    candidateIds.push(family.members[memberIndex])
-  }
-
-  return candidateIds
+function selectFamilyMember(families, familyIndex, familyCycle, memberSeed) {
+  const family = families[familyIndex]
+  const memberStart = Number(
+    mixUint64(memberSeed ^ BigInt(familyIndex)) % BigInt(family.members.length),
+  )
+  const memberIndex = (memberStart + familyCycle) % family.members.length
+  return family.members[memberIndex]
 }
 
 // Cache for surname-based protein grouping (for balanced random selection)
@@ -867,7 +904,7 @@ export async function pickRandomProteinBalanced(db) {
   }
 }
 
-export async function pickDailyTarget(db, salt, date = new Date()) {
+export async function planDailyTarget(db, salt, date = new Date()) {
   const loaded = await ensureDailySelectionCache(db)
   if (!loaded || !Array.isArray(dailySelectionCache.families)) {
     return null
@@ -878,14 +915,59 @@ export async function pickDailyTarget(db, salt, date = new Date()) {
     return null
   }
   const today = typeof date === "string" ? date : date.toISOString().slice(0, 10)
-  const protein = await fetchProteinByUniprot(db, ids[0])
   return {
-    protein,
+    uniprot: ids[0],
     skippedAlphaFold: 0,
     date: today,
     candidateIds: ids,
     poolFingerprint: dailySelectionCache.fingerprint,
   }
+}
+
+/**
+ * Compute primary targets for a schedule horizon with one shuffle and one
+ * digest. This is exactly equivalent to taking candidateIds[0] from
+ * planDailyTarget for each day, without rebuilding the entire candidate order
+ * hundreds of times in one Worker invocation.
+ */
+export async function planDailyTargets(db, salt, dates) {
+  const loaded = await ensureDailySelectionCache(db)
+  if (!loaded || !Array.isArray(dailySelectionCache.families)) {
+    return []
+  }
+  const families = dailySelectionCache.families
+  if (!families.length) {
+    return []
+  }
+  const { familyOrder, memberSeed } = await buildFamilyBalancedBag(families, salt)
+  const familyCount = families.length
+
+  return (Array.isArray(dates) ? dates : []).map((value) => {
+    const date = typeof value === "string" ? value : value.toISOString().slice(0, 10)
+    const dayTimestamp = Date.parse(`${date}T00:00:00.000Z`)
+    if (!Number.isFinite(dayTimestamp)) {
+      throw new Error(`Invalid daily selection date: ${date}`)
+    }
+    const dayOrdinal = Math.floor(dayTimestamp / 86_400_000)
+    const familyPosition = ((dayOrdinal % familyCount) + familyCount) % familyCount
+    const familyCycle = Math.floor(dayOrdinal / familyCount)
+    const familyIndex = familyOrder[familyPosition]
+    return {
+      uniprot: selectFamilyMember(families, familyIndex, familyCycle, memberSeed),
+      skippedAlphaFold: 0,
+      date,
+      poolFingerprint: dailySelectionCache.fingerprint,
+    }
+  })
+}
+
+export async function pickDailyTarget(db, salt, date = new Date()) {
+  const plan = await planDailyTarget(db, salt, date)
+  if (!plan) {
+    return null
+  }
+  const protein = await fetchProteinByUniprot(db, plan.uniprot)
+  return { ...plan, protein }
 }
 
 function cosineSimilarity(vecA, vecB) {

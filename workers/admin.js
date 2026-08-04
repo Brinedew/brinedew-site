@@ -16,7 +16,9 @@ import {
 } from "./lib/discord-recap-images.js"
 import {
   fetchProteinByUniprot as loadProtein,
+  fetchProteinSummaryMapByUniprotIds,
   getDailySelectionPoolFingerprint,
+  planDailyTargets,
   pickDailyTarget,
   getBlendedSimilarity,
 } from "./lib/protein-store.js"
@@ -141,38 +143,21 @@ function toScheduleUpcomingRow(entry) {
   }
 }
 
-async function buildScheduleDayCacheEntry(
-  env,
-  { date, overrideByDate, availabilityPinByDate, salt },
-) {
+function buildScheduleDayCacheEntry({
+  date,
+  overrideByDate,
+  availabilityPinByDate,
+  salt,
+  selection,
+  proteinSummaryByUniprot,
+}) {
   const plannedOverride = normalizeUniprotId(overrideByDate.get(date)?.uniprot_id)
   const availabilityPin = availabilityPinByDate.get(date) || null
   const availabilityPinUniprotId = normalizeUniprotId(availabilityPin?.uniprot_id)
-  const selection = await pickDailyTarget(env.DB, salt, date)
-  const computedProtein = selection?.protein ? sanitizeProteinSummary(selection.protein) : null
-  const computedUniprot = normalizeUniprotId(
-    computedProtein?.uniprot || selection?.protein?.uniprot,
-  )
-
-  let overrideProtein = null
-  if (plannedOverride) {
-    try {
-      const protein = await loadProtein(env.DB, plannedOverride)
-      overrideProtein = protein ? sanitizeProteinSummary(protein) : null
-    } catch {
-      overrideProtein = null
-    }
-  }
-
-  let availabilityPinProtein = null
-  if (availabilityPinUniprotId) {
-    try {
-      const protein = await loadProtein(env.DB, availabilityPinUniprotId)
-      availabilityPinProtein = protein ? sanitizeProteinSummary(protein) : null
-    } catch {
-      availabilityPinProtein = null
-    }
-  }
+  const computedUniprot = normalizeUniprotId(selection?.uniprot)
+  const computedProtein = proteinSummaryByUniprot.get(computedUniprot) || null
+  const overrideProtein = proteinSummaryByUniprot.get(plannedOverride) || null
+  const availabilityPinProtein = proteinSummaryByUniprot.get(availabilityPinUniprotId) || null
 
   return {
     cache_version: ADMIN_SCHEDULE_CACHE_VERSION,
@@ -1047,34 +1032,32 @@ export async function handleAdminSchedule(request, env) {
     // Fetch protein data for history rows to get gene symbols
     // Also cross-reference with override keys to fix source for days where
     // the bootstrap cache caused source to be recorded as "unknown"
-    const history = await Promise.all(
-      historyRaw.map(async (row) => {
-        // If source is missing/unknown but an override key exists for this date,
-        // it was an override — fix the source retroactively
-        let source = row.source
-        if (
-          (!source || source === "unknown" || source === "actual") &&
-          overrideByDate.has(row.date)
-        ) {
-          const ovr = overrideByDate.get(row.date)
-          // Verify the override uniprot matches the actual pick
-          if (!row.uniprot_id || ovr.uniprot_id === row.uniprot_id) {
-            source = "override"
-          }
-        }
-        const patched = { ...row, source }
-
-        if (patched.uniprot_id) {
-          try {
-            const protein = await loadProtein(env.DB, patched.uniprot_id)
-            return { ...patched, protein: protein ? sanitizeProteinSummary(protein) : null }
-          } catch {
-            return patched
-          }
-        }
-        return patched
-      }),
+    const historyProteinByUniprot = await fetchProteinSummaryMapByUniprotIds(
+      env.DB,
+      historyRaw.map((row) => row.uniprot_id),
     )
+    const history = historyRaw.map((row) => {
+      // If source is missing/unknown but an override key exists for this date,
+      // it was an override — fix the source retroactively
+      let source = row.source
+      if (
+        (!source || source === "unknown" || source === "actual") &&
+        overrideByDate.has(row.date)
+      ) {
+        const ovr = overrideByDate.get(row.date)
+        // Verify the override uniprot matches the actual pick
+        if (!row.uniprot_id || ovr.uniprot_id === row.uniprot_id) {
+          source = "override"
+        }
+      }
+      const patched = { ...row, source }
+
+      if (patched.uniprot_id) {
+        const protein = historyProteinByUniprot.get(normalizeUniprotId(patched.uniprot_id))
+        return protein ? { ...patched, protein } : patched
+      }
+      return patched
+    })
     const recordedDates = new Set(history.map((row) => row.date).filter(Boolean))
 
     // Upcoming (planned)
@@ -1150,28 +1133,60 @@ export async function handleAdminSchedule(request, env) {
     }
 
     if (missingDates.length) {
-      const BATCH_SIZE = 16
-      for (let i = 0; i < missingDates.length; i += BATCH_SIZE) {
-        const batchDates = missingDates.slice(i, i + BATCH_SIZE)
-        const builtEntries = await Promise.all(
-          batchDates.map((date) =>
-            buildScheduleDayCacheEntry(env, {
-              date,
-              overrideByDate,
-              availabilityPinByDate,
-              salt,
-            }),
-          ),
+      const selections = await planDailyTargets(env.DB, salt, missingDates)
+      const selectionByDate = new Map(
+        selections.filter(Boolean).map((selection) => [selection.date, selection]),
+      )
+      const summaryIds = []
+      for (const date of missingDates) {
+        summaryIds.push(
+          selectionByDate.get(date)?.uniprot,
+          overrideByDate.get(date)?.uniprot_id,
+          availabilityPinByDate.get(date)?.uniprot_id,
         )
-
-        builtEntries.forEach((entry) => {
-          if (entry?.date) {
-            upcomingByDate.set(entry.date, entry)
-          }
-        })
-
-        await Promise.allSettled(builtEntries.map((entry) => putScheduleDayCacheEntry(env, entry)))
       }
+      const proteinSummaryByUniprot = await fetchProteinSummaryMapByUniprotIds(env.DB, summaryIds)
+      const builtEntries = missingDates.map((date) =>
+        buildScheduleDayCacheEntry({
+          date,
+          overrideByDate,
+          availabilityPinByDate,
+          salt,
+          selection: selectionByDate.get(date),
+          proteinSummaryByUniprot,
+        }),
+      )
+
+      const validEntries = builtEntries.filter((entry) =>
+        isScheduleDayCacheEntryValid(entry, {
+          date: entry.date,
+          overrideUniprotId: overrideByDate.get(entry.date)?.uniprot_id,
+          availabilityPinUniprotId: availabilityPinByDate.get(entry.date)?.uniprot_id,
+          salt,
+          selectionPoolFingerprint,
+        }),
+      )
+      validEntries.forEach((entry) => upcomingByDate.set(entry.date, entry))
+      await Promise.allSettled(validEntries.map((entry) => putScheduleDayCacheEntry(env, entry)))
+    }
+
+    const incompleteDates = plannedDates.filter(
+      (date) => !normalizeUniprotId(upcomingByDate.get(date)?.computed?.uniprot),
+    )
+    if (incompleteDates.length) {
+      console.error("Admin schedule generation incomplete", {
+        requested: plannedDates.length,
+        incompleteDates,
+      })
+      return Response.json(
+        {
+          error: "Admin schedule generation incomplete",
+          requested: plannedDates.length,
+          completed: plannedDates.length - incompleteDates.length,
+          incomplete_dates: incompleteDates,
+        },
+        { status: 503 },
+      )
     }
 
     const upcoming = plannedDates.map((date) => {
