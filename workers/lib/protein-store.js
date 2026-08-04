@@ -1,4 +1,3 @@
-import { isAlphaFoldOnlyProtein } from "./game-engine.js"
 import { sanitizeProteinSummary } from "./structure-utils.js"
 
 const MAX_CACHE_SIZE = 512
@@ -15,6 +14,7 @@ const dailySelectionCache = {
   ids: null,
   rows: null,
   families: null,
+  fingerprint: null,
   fetchedAt: 0,
   ttl: 5 * 60 * 1000,
 }
@@ -568,6 +568,7 @@ async function ensureDailySelectionCache(db) {
         `SELECT p.uniprot, p.gene_surname
          FROM proteins p
          WHERE p.structure_source IS NOT NULL
+           AND LOWER(TRIM(p.structure_source)) <> 'alphafold'
            AND p.gene_summary IS NOT NULL
          ORDER BY p.gene_surname ASC, p.uniprot ASC`,
       )
@@ -582,6 +583,9 @@ async function ensureDailySelectionCache(db) {
     dailySelectionCache.rows = rows
     dailySelectionCache.ids = ids
     dailySelectionCache.families = buildDailySelectionFamilies(rows, ids)
+    dailySelectionCache.fingerprint = await buildDailySelectionPoolFingerprint(
+      dailySelectionCache.families,
+    )
     dailySelectionCache.fetchedAt = now
     return true
   } catch (err) {
@@ -593,6 +597,40 @@ async function ensureDailySelectionCache(db) {
 export async function getDailySelectionProteinIds(db) {
   const loaded = await ensureDailySelectionCache(db)
   return loaded && Array.isArray(dailySelectionCache.ids) ? dailySelectionCache.ids.slice() : []
+}
+
+export async function getDailySelectionPoolFingerprint(db) {
+  const loaded = await ensureDailySelectionCache(db)
+  return loaded ? dailySelectionCache.fingerprint : null
+}
+
+export async function buildDailySelectionPoolFingerprint(families) {
+  const canonicalFamilies = (Array.isArray(families) ? families : [])
+    .map((family) => ({
+      surname: String(family?.surname || "")
+        .trim()
+        .toUpperCase(),
+      members: Array.from(
+        new Set(
+          (Array.isArray(family?.members) ? family.members : []).map((member) =>
+            normalizeKey(String(member || "").trim()),
+          ),
+        ),
+      )
+        .filter(Boolean)
+        .sort(),
+    }))
+    .filter((family) => family.surname && family.members.length)
+    .sort((left, right) =>
+      left.surname < right.surname ? -1 : left.surname > right.surname ? 1 : 0,
+    )
+  const fingerprintSource = canonicalFamilies
+    .map((family) => `${family.surname}\u0000${family.members.join(",")}`)
+    .join("\n")
+  const fingerprintBytes = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fingerprintSource)),
+  )
+  return Array.from(fingerprintBytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
 }
 
 const UINT64_MASK = (1n << 64n) - 1n
@@ -677,23 +715,42 @@ async function buildFamilyBalancedCandidateIdsFromFamilies(families, salt, date)
   }
 
   const day = typeof date === "string" ? date : date.toISOString().slice(0, 10)
+  const dayTimestamp = Date.parse(`${day}T00:00:00.000Z`)
+  if (!Number.isFinite(dayTimestamp)) {
+    throw new Error(`Invalid daily selection date: ${day}`)
+  }
+  const dayOrdinal = Math.floor(dayTimestamp / 86_400_000)
   const seedBuffer = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(`${day}|${salt || ""}|family-balanced-v1`),
+    new TextEncoder().encode(`${salt || ""}|family-balanced-shuffle-bag-v2`),
   )
   const seedBytes = new Uint8Array(seedBuffer)
-  const familySeed = readUint64BigEndian(seedBytes, 0)
+  let familySeed = readUint64BigEndian(seedBytes, 0)
   const memberSeed = readUint64BigEndian(seedBytes, 8)
-  const familyStart = Number(familySeed % BigInt(families.length))
-  const memberStarts = families.map((family, familyIndex) =>
-    Number(mixUint64(memberSeed ^ BigInt(familyIndex)) % BigInt(family.members.length)),
-  )
+  const familyOrder = families.map((_, index) => index)
+  for (let index = familyOrder.length - 1; index > 0; index -= 1) {
+    familySeed = mixUint64(familySeed ^ BigInt(index))
+    const swapIndex = Number(familySeed % BigInt(index + 1))
+    ;[familyOrder[index], familyOrder[swapIndex]] = [familyOrder[swapIndex], familyOrder[index]]
+  }
+
+  // ARCHITECTURE FENCE [GG-001]: automatic targets walk a deterministic
+  // without-replacement surname bag. For any window shorter than the number
+  // of playable surnames, no automatic family (and therefore no UniProt ID)
+  // can repeat. A new bag cycle rotates the representative inside each family.
+  const familyCount = families.length
+  const familyPosition = ((dayOrdinal % familyCount) + familyCount) % familyCount
+  const familyCycle = Math.floor(dayOrdinal / familyCount)
   const candidateIds = []
 
   for (let familyOffset = 0; familyOffset < families.length; familyOffset += 1) {
-    const familyIndex = (familyStart + familyOffset) % families.length
+    const familyIndex = familyOrder[(familyPosition + familyOffset) % familyCount]
     const family = families[familyIndex]
-    candidateIds.push(family.members[memberStarts[familyIndex]])
+    const memberStart = Number(
+      mixUint64(memberSeed ^ BigInt(familyIndex)) % BigInt(family.members.length),
+    )
+    const memberIndex = (memberStart + familyCycle) % family.members.length
+    candidateIds.push(family.members[memberIndex])
   }
 
   return candidateIds
@@ -821,27 +878,13 @@ export async function pickDailyTarget(db, salt, date = new Date()) {
     return null
   }
   const today = typeof date === "string" ? date : date.toISOString().slice(0, 10)
-  const idx = 0
-  let skippedAlphaFold = 0
-  let chosenId = ids[idx]
-  let protein = await fetchProteinByUniprot(db, chosenId)
-  if (protein && isAlphaFoldOnlyProtein(protein)) {
-    for (let offset = 1; offset < ids.length; offset++) {
-      const candidateId = ids[(idx + offset) % ids.length]
-      const candidate = await fetchProteinByUniprot(db, candidateId)
-      if (candidate && !isAlphaFoldOnlyProtein(candidate)) {
-        skippedAlphaFold = offset
-        chosenId = candidateId
-        protein = candidate
-        break
-      }
-    }
-  }
+  const protein = await fetchProteinByUniprot(db, ids[0])
   return {
     protein,
-    skippedAlphaFold,
+    skippedAlphaFold: 0,
     date: today,
     candidateIds: ids,
+    poolFingerprint: dailySelectionCache.fingerprint,
   }
 }
 
