@@ -1,5 +1,5 @@
-export const DAILY_TARGET_AVAILABILITY_PIN_PREFIX = "puzzle_availability_pin:"
 export const DAILY_TARGET_AVAILABILITY_PIN_VERSION = 1
+const DAILY_TARGET_AVAILABILITY_PIN_TABLE = "daily_target_availability_pins"
 
 function normalizeUniprotId(value) {
   const normalized = String(value || "")
@@ -105,8 +105,34 @@ export async function selectDailyTargetAvailabilityReplacement({
   return { protein: null, rejectedUniprotIds: Array.from(rejected) }
 }
 
-export function buildDailyTargetAvailabilityPinKey(date) {
-  return `${DAILY_TARGET_AVAILABILITY_PIN_PREFIX}${date}`
+function parseJsonArray(value) {
+  if (Array.isArray(value)) {
+    return value
+  }
+  try {
+    const parsed = JSON.parse(String(value || "[]"))
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function availabilityPinRecordFromRow(row) {
+  if (!row) {
+    return null
+  }
+  return {
+    version: Number(row.version),
+    date: row.date,
+    salt: row.salt,
+    selection_pool_fingerprint: row.selection_pool_fingerprint,
+    original_uniprot_id: row.original_uniprot_id,
+    uniprot_id: row.uniprot_id,
+    rejected_uniprot_ids: parseJsonArray(row.rejected_uniprot_ids_json),
+    forbidden_uniprot_ids: parseJsonArray(row.forbidden_uniprot_ids_json),
+    forbidden_gene_surnames: parseJsonArray(row.forbidden_gene_surnames_json),
+    recorded_at: Number(row.recorded_at),
+  }
 }
 
 export function parseDailyTargetAvailabilityPin(
@@ -155,16 +181,49 @@ export function parseDailyTargetAvailabilityPin(
   }
 }
 
-export async function readDailyTargetAvailabilityPin(kv, { date, salt, selectionPoolFingerprint }) {
-  if (!kv?.get) {
+export async function readDailyTargetAvailabilityPin(db, { date, salt, selectionPoolFingerprint }) {
+  if (!db?.prepare) {
     return null
   }
-  const raw = await kv.get(buildDailyTargetAvailabilityPinKey(date))
-  return parseDailyTargetAvailabilityPin(raw, { date, salt, selectionPoolFingerprint })
+  const row = await db
+    .prepare(`SELECT * FROM ${DAILY_TARGET_AVAILABILITY_PIN_TABLE} WHERE date = ? LIMIT 1`)
+    .bind(date)
+    .first()
+  return parseDailyTargetAvailabilityPin(availabilityPinRecordFromRow(row), {
+    date,
+    salt,
+    selectionPoolFingerprint,
+  })
+}
+
+export async function listDailyTargetAvailabilityPins(
+  db,
+  { firstDate, lastDate, salt, selectionPoolFingerprint },
+) {
+  if (!db?.prepare || !firstDate || !lastDate) {
+    return []
+  }
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM ${DAILY_TARGET_AVAILABILITY_PIN_TABLE}
+       WHERE date >= ? AND date <= ?
+       ORDER BY date ASC`,
+    )
+    .bind(firstDate, lastDate)
+    .all()
+  return (results || [])
+    .map((row) =>
+      parseDailyTargetAvailabilityPin(availabilityPinRecordFromRow(row), {
+        date: row.date,
+        salt,
+        selectionPoolFingerprint,
+      }),
+    )
+    .filter(Boolean)
 }
 
 export async function writeDailyTargetAvailabilityPin(
-  kv,
+  db,
   {
     date,
     salt,
@@ -176,7 +235,7 @@ export async function writeDailyTargetAvailabilityPin(
     forbiddenGeneSurnames = [],
   },
 ) {
-  if (!kv?.put) {
+  if (!db?.prepare) {
     throw new Error("Daily target availability pin storage is unavailable")
   }
   const uniprotId = normalizeUniprotId(replacementUniprotId)
@@ -203,15 +262,43 @@ export async function writeDailyTargetAvailabilityPin(
     ),
     recorded_at: Date.now(),
   }
-  await kv.put(buildDailyTargetAvailabilityPinKey(date), JSON.stringify(record), {
-    metadata: {
-      version: record.version,
-      date: record.date,
-      uniprot_id: record.uniprot_id,
-      original_uniprot_id: record.original_uniprot_id,
-      selection_pool_fingerprint: record.selection_pool_fingerprint,
-      recorded_at: record.recorded_at,
-    },
-  })
+  await db
+    .prepare(
+      `INSERT INTO ${DAILY_TARGET_AVAILABILITY_PIN_TABLE} (
+         date,
+         version,
+         salt,
+         selection_pool_fingerprint,
+         original_uniprot_id,
+         uniprot_id,
+         rejected_uniprot_ids_json,
+         forbidden_uniprot_ids_json,
+         forbidden_gene_surnames_json,
+         recorded_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(date) DO UPDATE SET
+         version = excluded.version,
+         salt = excluded.salt,
+         selection_pool_fingerprint = excluded.selection_pool_fingerprint,
+         original_uniprot_id = excluded.original_uniprot_id,
+         uniprot_id = excluded.uniprot_id,
+         rejected_uniprot_ids_json = excluded.rejected_uniprot_ids_json,
+         forbidden_uniprot_ids_json = excluded.forbidden_uniprot_ids_json,
+         forbidden_gene_surnames_json = excluded.forbidden_gene_surnames_json,
+         recorded_at = excluded.recorded_at`,
+    )
+    .bind(
+      record.date,
+      record.version,
+      record.salt,
+      record.selection_pool_fingerprint,
+      record.original_uniprot_id,
+      record.uniprot_id,
+      JSON.stringify(record.rejected_uniprot_ids),
+      JSON.stringify(record.forbidden_uniprot_ids),
+      JSON.stringify(record.forbidden_gene_surnames),
+      record.recorded_at,
+    )
+    .run()
   return record
 }
