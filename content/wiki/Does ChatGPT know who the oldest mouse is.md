@@ -21,7 +21,7 @@ However, a closer look reveals that the MPrize program was launched on the 8th o
 
 And while a few other people got MPrize awards, none of them were in the record-breaking "Longevity Prize" category - Bartke remains its singular recipient.
 
-More baffling, this specific mouse was never actually recorded in any research publication! The 1,819-day figure comes from **personal communication**, not from any paper. 
+More baffling, this specific mouse was never actually recorded in any research publication! The 1,819-day number comes from **personal communication**, not from any paper. 
 
 In the two decades since the record claim, none of Bartke's publications have come close to repeating it. The longest lifespan I could find in his published work is a 1,537-day-old mouse from Sun et al. (2013)[^5].
 ![[image-65.png|Each data point records day of death of the animal (x-axis) and what share of the group survived longer than that animal (y-axis). Four colors signify a control group and three treatment groups. From Sun et al., 2013. ]]
@@ -31,13 +31,13 @@ Just by eyeballing the lifespan curves here, you get a sense of the scale of the
 
 To be clear, I'm not challenging Bartke or MPrize here about this result - for all I know, the mouse could really have been living for nearly 5 years, the experiment it was bred for turned out to be unpublishable, so the only recognition the mouse could get was as a spark for establishing MPrize. 
 
-Who I'm really challenging here is ChatGPT, for thinking that winning a lifespan prize in such circumstances is an acceptable level of evidentiary support for a lifespan data point to be included alongside published mouse cohorts.
+Who I'm really challenging here is ChatGPT, for thinking that winning a lifespan prize in such circumstances is an acceptable level of evidentiary support for a lifespan data point to be included alongside published fruit fly and C.elegans cohorts in the same comparative table.
 
 **Why shouldn't AI analysis just include every mouse lifespan record claimed by a researcher?** Why does it matter whether the record is featured in a publication or not?
 
 Because we want results that are evidence-based, not word-of-scientist-based.
 
-Relying on word alone would lose important quality control checks on data. A research paper featuring a lifespan record also provides supporting data that help validate the record against the possibility of a catastrophic mix-up. For example, when authors provide a survival curve for all the individuals in a cohort, you can now judge: 
+Relying on word alone would lose important quality control checks on data. A research paper featuring a lifespan record also provides supporting data that helps validate the record against the possibility of a catastrophic mix-up. For example, when authors provide a survival curve for all the individuals in a cohort, you can now judge: 
 * Is the shape of the survival curve compatible with the ages in the text of the paper?
 * Was the winning animal a suspicious outlier among its cohort mates?
 * How good were the animal facility conditions based on the control group survival shape?
@@ -56,23 +56,27 @@ Long story short:
 
 **How do lifespan mix-ups happen?** 
 
-In the case above, the mouse was last seen on Nov 1, 2021, at the age of 18 months. During the next scheduled weighing, 6 months later, the mouse was gone. It wasn't anything out of the ordinary: during routine colony maintenance, dead mice not reserved for dissection are normally removed by animal facility technicians, not researchers.
+In the case above, the mouse was last seen on Nov 1, 2021, at the age of 18 months. During the next scheduled weighing, 6 months later, the mouse was gone. It wasn't anything out of the ordinary: during routine colony maintenance, dead or heavily injured mice not reserved for dissection are normally removed by animal facility technicians, not researchers. Their dates of death are not necessarily well-recorded - in this case, the researched might use a last-seen-at date instead.
 
 What went wrong is that the researcher, when recording the mouse's uncertain-but-unimpressive lifespan, made a typo in the records table. When inputting the last-seen date, instead of typing 2021, they typed 2024 - the numbers 1 and 4 are close together on the keypad. This added 36 months to the mouse's 18-month lifespan, adding up to 1,644 days.
 
-Why did an outlier this large go unnoticed until dataset publication? As it was explained to me, the mystery mouse was marked "removed" for aging analysis purposes. It's a common practice to mark mice removed for fighting, technical accidents, training, or other aging-unrelated causes to be treated as "last seen alive" at removal date, and exclude them from aging-specific analysis. This accounting practice helps to keep a five-year longevity experiment on track even if a few mice get accidentally lost to flooding during the first year because of a compromised pipe.
+**Why did an outlier this large go unnoticed until dataset publication?** 
 
 Animal longevity studies can feature a hybrid analysis structure: 
-* Survival analysis (such as survival curves) use the partial information from removed mice.
-* Longevity analysis: “median longevity” and 90th-percentile age are calculated only from animals with known death ages, after excluding the “removed” records.
-![[image-61.png|From Miller et al., 2007]]
-For an aging researcher, animals lost to non-aging purposes are not that interesting. These mice weren't included in the experimental summary statistics that the researcher reports on (median survival, 90th percentile survival). So it would only affect a small subset of readouts.
+* Survival analysis (such as survival curves) use the information from all the mice.
+* Longevity analysis, like median longevity and 90th-percentile age statistics are calculated only from animals with known death ages, after excluding the “removed” records.
 
-Getting back to arguments for keeping a papers-only record policy, another concern entirely is deliberate fabrication. A policy of including off-journal records into lifespan tables would be very vulnerable to fabrication: it's stupid simple to fabricate a single animal's lifespan, but fabricating an entire cohort makes it possible for data sleuths to discover statistical irregularities in the dataset.
+ It's a common practice to mark mice as "removed" for fighting, technical accidents, unrelated experiments, or other aging-unrelated causes. Their removal will be treated as "last seen alive" date by the researcher, and they will be excluded from aging-specific analysis. This recording practice helps to keep a five-year longevity experiment on track even if a few mice get accidentally lost to flooding during the first year because of a compromised pipe.
+![[image-61.png|From Miller et al., 2007]]
+As it was explained to me, the mystery mouse was indeed marked "removed" for aging analysis purposes.
+
+For an aging researcher, animals lost to non-aging purposes are not that interesting. These "removed" mice weren't included in the experimental summary statistics that the researcher reports on. So the removed mouse's exceptional lifespan would end up only affect one small non-crucial readout - easy to overlook.
+
+**Getting back** to arguments for keeping a papers-only record policy, another concern entirely is deliberate fabrication. A policy of including off-journal records into lifespan tables would be very vulnerable to fabrication: it's stupid simple to fabricate a single animal's lifespan, but fabricating an entire cohort makes it possible for data sleuths to discover statistical irregularities in the dataset.
 
 LLMs, however, fail to draw this distinction and include Bartke's mouse on equal footing with all the actual studies. But when you point out the lack of publication, they happily throw Bartke's mouse away.
 
-Even in this case, **they still can't decide on a singular lifespan record.** 
+Even in this case, **AIs still can't decide on a singular lifespan record.** 
 
 If you use ChatGPT 5.6 Extra High thinking ($20 subscription), it claims the mouse lifespan record of 1,628 days.
 ![[image-56.png]]
@@ -82,7 +86,7 @@ This is taken from Turturro et al (1999) [^1]:
 > The oldest male mouse, B6D2F1, lived to 1,628 days.
 
 ![[image-53.png|From Turturro et al., 1999]]
-But if you ask ChatGPT 5.6 Pro ($100 subscription!!! please support your local scientist), it will dig up Weindruch et al. (1986)[^2], with a maximum record of 54.6 months - equaling around 1,660 days, plus-minus a couple days depending on month conversion math.
+But if you ask ChatGPT 5.6 Pro ($100 subscription!!! please [support](https://brinedew.bio/posts/Support-me.html) your local scientist), it will dig up Weindruch et al. (1986)[^2], with a maximum record of 54.6 months - equaling around 1,660 days, plus-minus a couple days depending on month conversion math.
 
 > The longest-lived individual mouse was from group N/R40 that lived 54.6 mo.
 
@@ -102,13 +106,11 @@ Hank Green, a long-time pop-science youtuber, is currently [facing criticism](ht
 
 As much as I sympathize with the second camp, I have to give it to the AI skeptics on this one. Despite all the hallucination-pruning, AI-assisted literature review is still not thorough enough to be relied on by someone outside the field.
 
-For a longevity enthusiast, as of 2026, it seems like the answer is definitely still "double-check AI's work with an expert". It's still way too easy to mislead AIs by pop-science content biasing its ability to read critically. I have more examples of AIs being too gullible to discard secondary literature if it contradicts the primary source - look out for a future post on CTVT origins.
+For a longevity enthusiast, as of 2026, it seems like the answer is definitely "double-check AI's analysis with multiple experts". It's still way too easy to mislead AIs by pop-science content biasing its ability to read critically. I have seen other examples of AIs being too hesitant to discard secondary literature if it contradicts the primary source - look out for a future post on CTVT origins.
 
 To give AI some credit back, for a researcher who knows how to formulate the right prompt, AI can plausibly assist with digging up something worth following up on. Hacker News users have [called out](https://news.ycombinator.com/item?id=49010345) this "smart get smarter" knowledge multiplier dynamic of AI after trying to read Terence Tao's ChatGPT transcripts.
-
 ![[image-62.png]]
-
-On the other hand, somebody just disproved a long-standing conjecture by just asking ChatGPT to "[do a breakthrough](https://www.newscientist.com/article/2580932-extremely-basic-ai-prompt-cracks-decades-old-maths-problem/)", so, you know, better not get too comfortable.
+On the other hand, somebody just disproved a long-standing conjecture by just asking ChatGPT to "[do a breakthrough](https://www.newscientist.com/article/2580932-extremely-basic-ai-prompt-cracks-decades-old-maths-problem/)", so, you know, better not get too comfortable as an expert.
 
 [^1]: Turturro A, Witt WW, Lewis S, Hass BS, Lipman RD, Hart RW. Growth Curves and Survival Characteristics of the Animals Used in the Biomarkers of Aging Program. *Journal of Gerontology: Biological Sciences.* 1999;54(11):B492–B501. [doi:10.1093/gerona/54.11.B492](https://doi.org/10.1093/gerona/54.11.B492).
 
