@@ -68,6 +68,13 @@ must increment `ADMIN_SCHEDULE_CACHE_VERSION` so cached previews are recomputed.
 The production pre-warm cron and request-time slow path must consume the same
 balanced candidate sequence.
 
+An annual admin request computes its primary identities from one in-memory
+shuffle-bag plan and bulk-loads only the protein summary projection. It must not
+perform one `SELECT *` per day. The latter exhausted the live 2026-08-04 annual
+request after 340 future identities and returned the remaining 25 as null rows
+under HTTP 200. Only complete day entries may be cached; if any planned summary
+is unavailable, the entire schedule response is HTTP 503 with the missing dates.
+
 Automatic availability pins use the same salt and pool fingerprint. Stale pins
 do not survive a picker or pool change. They are lower priority than manual
 overrides and recorded actual targets. The admin cards endpoint, tomorrow
@@ -102,8 +109,15 @@ After deployment:
 - every surname contributes exactly one candidate;
 - input ordering does not change the deterministic result;
 - 365 consecutive automatic picks are unique when at least 365 surnames exist;
+- bulk horizon planning yields exactly the same primary identity as the
+  canonical one-day picker;
 - a large family's representative advances between complete bag cycles without
   adding slots.
+
+`workers/admin-schedule-year.test.js` must prove that the first uncached annual
+request returns 365 complete, unique protein and surname identities using bulk
+queries, and that missing summaries fail the response closed without caching
+partial rows.
 
 `workers/lib/daily-target-availability.test.js` protects the separate structure
 availability and recorded-target replacement rules.
