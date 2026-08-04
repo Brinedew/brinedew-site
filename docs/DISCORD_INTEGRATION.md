@@ -70,7 +70,8 @@ Current design (2026-08-03):
   now writes to Bunny. Pre-render the catalog there and the daily cron attaches
   images automatically.
 - **"Upload Next 365 Days" is a resumable reconciliation, not a blind loop.** It
-  loads the exact day/UniProt schedule, checks stored objects in 25-identity
+  fails closed unless the authoritative response contains exactly 365
+  consecutive day/UniProt identities from today through day 364, checks stored objects in 25-identity
   client chunks, and processes only missing identities. Missing days are grouped
   by UniProt so one molecule render can cover repeated targets, but the base64
   bitmap and Mol* viewer are released after that group. A closed tab loses only

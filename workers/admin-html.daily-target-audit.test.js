@@ -71,6 +71,12 @@ test("annual recap fill plans only missing objects and bounds status requests", 
 })
 
 test("annual recap fill is resumable, memory-bounded, and exact before success", () => {
+  assert.match(
+    ADMIN_HTML,
+    /loadSchedule\(\{ futureDays: DISCORD_IMAGE_UPLOAD_DAYS, required: true \}\)/,
+  )
+  assert.match(ADMIN_HTML, /days\.length !== DISCORD_IMAGE_UPLOAD_DAYS/)
+  assert.match(ADMIN_HTML, /Authoritative yearly schedule is incomplete/)
   assert.match(ADMIN_HTML, /await fetchRecapStatusesForDays\(days\)/)
   assert.match(
     ADMIN_HTML,
