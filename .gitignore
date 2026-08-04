@@ -51,6 +51,7 @@ quartz/cli/tui/dist/
 .quartz/plugins/remove-draft/
 .quartz/plugins/roam/
 .quartz/plugins/search/
+.quartz/plugins/smartypants-image-attributes
 .quartz/plugins/spacer/
 .quartz/plugins/stacked-pages/
 .quartz/plugins/syntax-highlighting/
