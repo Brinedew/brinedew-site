@@ -1962,14 +1962,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       }
     }
 
-    setupPreviewToggle();
-    setupGraphicsForm();
-    bindForms();
-    setupProteinSelector();
-    loadStatus();
-    setupSchedule();
-    initializePreview();
-
     let scheduleData = {};
     const recapImageExistsByDay = Object.create(null);
     let recapStatusRefreshInFlight = null;
@@ -1979,16 +1971,23 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     let recapUploadRunning = false;
     let scheduleRefreshInFlight = null;
 
+    setupPreviewToggle();
+    setupGraphicsForm();
+    bindForms();
+    setupProteinSelector();
+    loadStatus();
+    setupSchedule();
+    initializePreview();
+
     // Override picker state: keep the UI gene-first, but keep the selected UniProt ID as the internal key.
     let overrideSelectedSuggestionUniprot = null;
     let overrideSelectedSuggestionGene = null;
 
-    function setupSchedule() {
-      // No controls needed anymore, auto-load on init
-      loadSchedule({ futureDays: 120 });
-      refreshRecapWarning().catch((err) => {
-        console.error('Failed initial recap warning refresh:', err);
-      });
+    async function setupSchedule() {
+      // Warning identities come from the authoritative schedule. Never check
+      // storage until that schedule has finished loading.
+      await loadSchedule({ futureDays: 120 });
+      await refreshRecapWarning();
     }
 
     function applyLocalOverride(date, uniprotId, symbolHint) {
@@ -4534,7 +4533,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         ]);
         if (!yesterdayStatus?.exists) {
           setRecapWarningMessage(
-            'Warning: Missing recap image for ' + yesterday + '. The 00:03 UTC recap post for that day will fail until you upload it.',
+            'Warning: Missing recap image for ' + yesterday + '. Its recap will post text-only until you upload and repair it.',
             'error'
           );
           return;

@@ -14,6 +14,13 @@ Two features live here:
 
 ## 1. Daily GeneGuessr recap
 
+**ARCHITECTURE FENCE [GG-002]:** an image is ready only when the admin renderer
+has observed stable molecule pixels and storage returns the exact bytes that were
+uploaded under the immutable day + UniProt + renderer identity. An attachment
+node, a non-empty PNG, object metadata, or a generic 2xx response is not proof of
+a visible protein. The July 2026 path admitted a uniform RGB `17,12,10` canvas;
+the August 3 cutover then reported an unverified Bunny upload as successful.
+
 Once a day the worker posts yesterday's puzzle result to `#geneguessr`: the gene,
 how many people solved it, the top guesses, and a link to play. When a
 pre-rendered structure image exists it's attached; otherwise the recap posts
@@ -68,9 +75,14 @@ Current design (2026-08-03):
 - The admin renderer samples the actual Mol* canvas until molecule pixels are
   present for three consecutive frames. It retries a fresh viewer once and
   refuses the upload if the canvas remains a uniform background.
+- Bunny upload success is the documented HTTP `201`, followed by bounded
+  exact-byte read-back from the same authenticated storage identity. The admin
+  UI must not mark a day covered before that verification succeeds.
 - **If no image is uploaded, the recap still posts text-only.** This is the
   cloud-only fallback B-356 asked for: the daily post can never be blocked by the
   image pipeline.
+- A posted text-only recap is repaired in place using its durable message ID;
+  repair never creates a second daily message.
 
 ### Manual trigger / backfill
 
