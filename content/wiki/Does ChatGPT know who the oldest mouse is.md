@@ -23,7 +23,7 @@ And while a few other people got MPrize awards, none of them were in the record-
 
 More baffling, this specific mouse was never actually recorded in any research publication! The 1,819-day number comes from **personal communication**, not from any paper. 
 
-In the two decades since the record claim, none of Bartke's publications have come close to repeating it. The longest lifespan I could find in his published work is a 1,537-day-old mouse from Sun et al. (2013)[^5].
+In the two decades since the record claim, none of Bartke's publications have come close to repeating it. The longest lifespan I could find in his published work is a 1,537-day-old mouse from Sun et al. (2013)[^1].
 ![[image-65.png|Each data point records day of death of the animal (x-axis) and what share of the group survived longer than that animal (y-axis). Four colors signify a control group and three treatment groups. From Sun et al., 2013. ]]
 Just by eyeballing the lifespan curves here, you get a sense of the scale of the gap. The distance between two ticks is 250 days. To put the MPrize mouse on this chart, you would need to extend the x-axis by 1 full tick, and then put the marker past that tick. In fact, let me just add the circle where the record would be.
 
@@ -81,22 +81,22 @@ Even in this case, **AIs still can't decide on a singular lifespan record.**
 If you use ChatGPT 5.6 Extra High thinking ($20 subscription), it claims the mouse lifespan record of 1,628 days.
 ![[image-56.png]]
 
-This is taken from Turturro et al (1999) [^1]:
+This is taken from Turturro et al. (1999)[^2]:
 
 > The oldest male mouse, B6D2F1, lived to 1,628 days.
 
 ![[image-53.png|From Turturro et al., 1999]]
-But if you ask ChatGPT 5.6 Pro ($100 subscription!!! please [support](https://brinedew.bio/posts/Support-me.html) your local scientist), it will dig up Weindruch et al. (1986)[^2], with a maximum record of 54.6 months - equaling around 1,660 days, plus-minus a couple days depending on month conversion math.
+But if you ask ChatGPT 5.6 Pro ($100 subscription!!! please [support](https://brinedew.bio/posts/Support-me.html) your local scientist), it will dig up Weindruch et al. (1986)[^3], with a maximum record of 54.6 months - equaling around 1,660 days, plus-minus a couple days depending on month conversion math.
 
 > The longest-lived individual mouse was from group N/R40 that lived 54.6 mo.
 
 ![[image-55.png|From Weindruch et al., 1986]]
 
-ChatGPT Pro also brings up Harrison-Archer study from 1987.[^3] In a later secondary work, the same authors describe the study as producing:
+ChatGPT Pro also brings up Harrison-Archer study from 1987.[^4] In a later secondary work, the same authors describe the study as producing:
 
 > “1742 days, a new record for Mus”
 
-But I couldn't actually access the paper, and the later curve digitization efforts by Schmauck-Medina et al.[^4] didn't provide curves for this study either, despite mentioning it by name as the record-holder.
+But I couldn't actually access the paper, and the later curve digitization efforts by Schmauck-Medina et al.[^5] didn't provide curves for this study either, despite mentioning it by name as the record-holder.
 
 Are there perhaps even older studies I will find after getting a $200 subscription? Maybe. If I was an Anthropic employee, would Claude Mythos have shown me a lifespan record for a 10-year-old mouse from Meiji era? Who knows! At this point, it's surprising that Mendel-style long-overlooked breakthroughs aren't popping up left and right. And yes, I asked AI to look through the old Soviet lifespan papers.
 ![[image-63.png|They don't know about Bogdanov's rejuvenation experiments from the 1920s]]
@@ -112,12 +112,12 @@ To give AI some credit back, for a researcher who knows how to formulate the rig
 ![[image-62.png]]
 On the other hand, somebody just disproved a long-standing conjecture by just asking ChatGPT to "[do a breakthrough](https://www.newscientist.com/article/2580932-extremely-basic-ai-prompt-cracks-decades-old-maths-problem/)", so, you know, better not get too comfortable as an expert.
 
-[^1]: Turturro A, Witt WW, Lewis S, Hass BS, Lipman RD, Hart RW. Growth Curves and Survival Characteristics of the Animals Used in the Biomarkers of Aging Program. *Journal of Gerontology: Biological Sciences.* 1999;54(11):B492–B501. [doi:10.1093/gerona/54.11.B492](https://doi.org/10.1093/gerona/54.11.B492).
+[^1]: Sun LY, Spong A, Swindell WR, Fang Y, Hill C, Huber JA, Boehm JD, Westbrook R, Salvatori R, Bartke A. Growth hormone-releasing hormone disruption extends lifespan and regulates response to caloric restriction in mice. *eLife*. 2013;2:e01098. [doi:10.7554/eLife.01098](https://doi.org/10.7554/eLife.01098).
 
-[^2]: R. Weindruch, R. L. Walford, S. Fligiel and D. Guthrie. “The Retardation of Aging in Mice by Dietary Restriction: Longevity, Cancer, Immunity and Lifetime Energy Intake.” _Journal of Nutrition_. 1986;116(4):641–654. [doi:10.1093/jn/116.4.641](https://doi.org/10.1093/jn/116.4.641)
+[^2]: Turturro A, Witt WW, Lewis S, Hass BS, Lipman RD, Hart RW. Growth curves and survival characteristics of the animals used in the Biomarkers of Aging Program. *Journal of Gerontology: Biological Sciences*. 1999;54(11):B492–B501. [doi:10.1093/gerona/54.11.B492](https://doi.org/10.1093/gerona/54.11.B492).
 
-[^3]: D. E. Harrison and J. R. Archer. “Genetic Differences in Effects of Food Restriction on Aging in Mice.” _Journal of Nutrition_. 1987;117(2):376–382. [doi:10.1093/jn/117.2.376](https://doi.org/10.1093/jn/117.2.376)
+[^3]: Weindruch R, Walford RL, Fligiel S, Guthrie D. The retardation of aging in mice by dietary restriction: longevity, cancer, immunity and lifetime energy intake. *Journal of Nutrition*. 1986;116(4):641–654. [doi:10.1093/jn/116.4.641](https://doi.org/10.1093/jn/116.4.641).
 
-[^4]: Schmauck-Medina et al., _Dietary restriction in aging and longevity_, _Nature Aging_ 6, 485–505 (2026), DOI **10.1038/s43587-026-01091-5**.
+[^4]: Harrison DE, Archer JR. Genetic differences in effects of food restriction on aging in mice. *Journal of Nutrition*. 1987;117(2):376–382. [doi:10.1093/jn/117.2.376](https://doi.org/10.1093/jn/117.2.376).
 
-[^5]: Liou Y Sun, Adam Spong, William R Swindell, Yimin Fang, Cristal Hill, Joshua A Huber, Jacob D Boehm, Reyhan Westbrook, Roberto Salvatori, Andrzej Bartke (2013) Growth hormone-releasing hormone disruption extends lifespan and regulates response to caloric restriction in mice eLife 2:e01098
+[^5]: Schmauck-Medina T, et al. Dietary restriction in aging and longevity. *Nature Aging*. 2026;6:485–505. [doi:10.1038/s43587-026-01091-5](https://doi.org/10.1038/s43587-026-01091-5).
