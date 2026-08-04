@@ -2,9 +2,8 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
-  buildDailyTargetAvailabilityPinKey,
   collectDailyTargetHorizonExclusions,
-  parseDailyTargetAvailabilityPin,
+  listDailyTargetAvailabilityPins,
   readDailyTargetAvailabilityPin,
   selectDailyTargetAvailabilityReplacement,
   writeDailyTargetAvailabilityPin,
@@ -42,17 +41,46 @@ test("horizon exclusions require every consecutive day and include canonical fam
 })
 
 test("availability pins are bound to the exact selector salt and pool fingerprint", async () => {
-  const values = new Map()
-  const kv = {
-    async get(key) {
-      return values.get(key) || null
-    },
-    async put(key, value) {
-      values.set(key, value)
+  let storedRow = null
+  const db = {
+    prepare(sql) {
+      let bound = []
+      return {
+        bind(...values) {
+          bound = values
+          return this
+        },
+        async run() {
+          assert.match(sql, /INSERT INTO daily_target_availability_pins/)
+          storedRow = {
+            date: bound[0],
+            version: bound[1],
+            salt: bound[2],
+            selection_pool_fingerprint: bound[3],
+            original_uniprot_id: bound[4],
+            uniprot_id: bound[5],
+            rejected_uniprot_ids_json: bound[6],
+            forbidden_uniprot_ids_json: bound[7],
+            forbidden_gene_surnames_json: bound[8],
+            recorded_at: bound[9],
+          }
+        },
+        async first() {
+          return storedRow?.date === bound[0] ? storedRow : null
+        },
+        async all() {
+          return {
+            results:
+              storedRow && storedRow.date >= bound[0] && storedRow.date <= bound[1]
+                ? [storedRow]
+                : [],
+          }
+        },
+      }
     },
   }
 
-  await writeDailyTargetAvailabilityPin(kv, {
+  await writeDailyTargetAvailabilityPin(db, {
     date: "2027-01-02",
     salt: "selector-v2",
     selectionPoolFingerprint: "pool-a",
@@ -63,7 +91,7 @@ test("availability pins are bound to the exact selector salt and pool fingerprin
     forbiddenGeneSurnames: ["slc", "SLC"],
   })
 
-  const pin = await readDailyTargetAvailabilityPin(kv, {
+  const pin = await readDailyTargetAvailabilityPin(db, {
     date: "2027-01-02",
     salt: "selector-v2",
     selectionPoolFingerprint: "pool-a",
@@ -72,12 +100,21 @@ test("availability pins are bound to the exact selector salt and pool fingerprin
   assert.deepEqual(pin.rejected_uniprot_ids, ["Q-OLD"])
   assert.deepEqual(pin.forbidden_gene_surnames, ["SLC"])
   assert.equal(
-    parseDailyTargetAvailabilityPin(values.get(buildDailyTargetAvailabilityPinKey("2027-01-02")), {
+    await readDailyTargetAvailabilityPin(db, {
       date: "2027-01-02",
       salt: "selector-v2",
       selectionPoolFingerprint: "pool-b",
     }),
     null,
+  )
+  assert.deepEqual(
+    await listDailyTargetAvailabilityPins(db, {
+      firstDate: "2027-01-01",
+      lastDate: "2027-01-03",
+      salt: "selector-v2",
+      selectionPoolFingerprint: "pool-a",
+    }),
+    [pin],
   )
 })
 

@@ -28,6 +28,9 @@ test("year schedule bulk-loads summaries and never returns a partial 200 respons
           return this
         },
         async all() {
+          if (sql.includes("FROM daily_target_availability_pins")) {
+            return { results: [] }
+          }
           if (sql.includes("SELECT p.uniprot, p.gene_surname")) {
             return {
               results: proteins.map(({ uniprot, gene_surname }) => ({
@@ -47,7 +50,7 @@ test("year schedule bulk-loads summaries and never returns a partial 200 respons
   }
 
   const today = isoToday()
-  const storedScheduleDays = new Map()
+  let kvWriteCount = 0
   const kv = {
     async list({ prefix }) {
       if (prefix === "puzzle_actual:") {
@@ -63,11 +66,11 @@ test("year schedule bulk-loads summaries and never returns a partial 200 respons
       }
       return { list_complete: true, keys: [] }
     },
-    async get(key) {
-      return storedScheduleDays.get(key) || null
+    async get() {
+      return null
     },
-    async put(key, value) {
-      storedScheduleDays.set(key, JSON.parse(value))
+    async put() {
+      kvWriteCount += 1
     },
     async delete() {},
   }
@@ -105,10 +108,11 @@ test("year schedule bulk-loads summaries and never returns a partial 200 respons
   assert.equal(new Set(body.upcoming.map((row) => row.computed.gene_surname)).size, 365)
   assert.equal(
     statements.length,
-    3,
-    "history, selection pool, and future summaries are each bulk queries",
+    4,
+    "pins, history, selection pool, and future summaries are each bulk queries",
   )
   assert.ok(statements.every((sql) => !sql.includes("SELECT * FROM proteins")))
+  assert.equal(kvWriteCount, 0, "annual schedule reads must not spend the KV daily write budget")
 })
 
 test("year schedule fails closed when planned protein summaries are unavailable", async () => {
@@ -131,6 +135,9 @@ test("year schedule fails closed when planned protein summaries are unavailable"
           return this
         },
         async all() {
+          if (sql.includes("FROM daily_target_availability_pins")) {
+            return { results: [] }
+          }
           if (sql.includes("SELECT p.uniprot, p.gene_surname")) {
             return {
               results: proteins.map(({ uniprot, gene_surname }) => ({
