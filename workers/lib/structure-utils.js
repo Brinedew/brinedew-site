@@ -454,6 +454,7 @@ export function sanitizeProteinSummary(protein) {
   return {
     uniprot: protein.uniprot,
     hgnc: protein.gene || protein.hgnc, // DB column is 'gene', client expects 'hgnc'
+    gene_surname: protein.gene_surname || null,
     full_name: protein.full_name,
     length: protein.length,
   }

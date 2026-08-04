@@ -13,7 +13,7 @@ const DISCORD_RECAP_IMAGE_PREFIX = "discord-recap-images/v2/"
 // This is part of the stored-object identity. Bump it whenever the renderer,
 // camera, colouring, or pixel-readiness contract changes. A bump deliberately
 // makes every older image a cache miss instead of silently reusing stale ink.
-export const DISCORD_RECAP_RENDER_CONTRACT = "molstar-recap-v2"
+export const DISCORD_RECAP_RENDER_CONTRACT = "molstar-recap-v3"
 
 const BUNNY_UPLOAD_SUCCESS_STATUS = 201
 
