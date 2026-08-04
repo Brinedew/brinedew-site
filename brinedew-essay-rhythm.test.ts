@@ -14,10 +14,12 @@ function rule(selector: string): string {
 test("essay rhythm has explicit leading and parent-owned block gaps", () => {
   const essay = rule(".markdown-preview-view.markdown-rendered")
   assert.match(essay, /--essay-leading:\s*1\.6rem;/)
-  assert.match(essay, /--essay-block-gap:\s*0\.9em;/)
+  assert.match(essay, /--essay-block-gap:\s*0\.7em;/)
   assert.match(essay, /--essay-caption-gap:\s*0\.35em;/)
   assert.match(essay, /gap:\s*var\(--essay-block-gap\);/)
   assert.match(essay, /line-height:\s*var\(--essay-leading\);/)
+  assert.match(essay, /font-kerning:\s*normal;/)
+  assert.match(essay, /text-rendering:\s*optimizeLegibility;/)
 
   const prose = rule(".markdown-preview-view.markdown-rendered :is(p, li, blockquote)")
   assert.match(prose, /line-height:\s*var\(--essay-leading\);/)
