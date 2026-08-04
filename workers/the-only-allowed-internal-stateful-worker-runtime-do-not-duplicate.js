@@ -1128,6 +1128,7 @@ import {
   handleAdminDiscordRecapImageUpload,
   handleAdminDiscordRecapImageStatus,
   handleAdminDiscordRecapImageStatuses,
+  handleAdminBunnyStorageRegionProbe,
   handleGraphicsSettings,
   DEFAULT_GRAPHICS_SETTINGS,
   normalizeGraphicsSettings,
@@ -2570,6 +2571,14 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
 
     if (url.pathname === "/api/admin/discord-recap-images" && request.method === "GET") {
       const response = await handleAdminDiscordRecapImageStatuses(request, env)
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+      })
+    }
+
+    if (url.pathname === "/api/admin/bunny-storage-region-probe" && request.method === "POST") {
+      const response = await handleAdminBunnyStorageRegionProbe(request, env)
       return new Response(response.body, {
         status: response.status,
         headers: { ...Object.fromEntries(response.headers), ...corsHeaders },

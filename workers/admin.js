@@ -13,6 +13,7 @@ import {
   canReadDiscordRecapImage,
   putDiscordRecapImage,
   headDiscordRecapImage,
+  probeBunnyStorageRegions,
 } from "./lib/discord-recap-images.js"
 import {
   fetchProteinByUniprot as loadProtein,
@@ -1599,6 +1600,14 @@ export async function handleAdminDiscordRecapImageStatuses(request, env) {
     count: uniqueImages.length,
     days: statuses,
   })
+}
+
+export async function handleAdminBunnyStorageRegionProbe(request, env) {
+  if (!(await isAdmin(request, env))) {
+    return Response.json({ error: "Unauthorized" }, { status: 403 })
+  }
+  const regions = await probeBunnyStorageRegions(env)
+  return Response.json({ regions })
 }
 
 /**
