@@ -23,9 +23,9 @@ And while a few other people got MPrize awards, none of them were in the record-
 
 More baffling, this specific mouse was never actually recorded in any research publication! The 1,819-day figure comes from **personal communication**, not from any paper. 
 
-In the two decades since the record claim, none of Bartke's publications got even close to repeating it. The longest lifespan I could find in his published work is a 1,537-day-old mouse from Sun et al. (2013)[^5].
+In the two decades since the record claim, none of Bartke's publications have come close to repeating it. The longest lifespan I could find in his published work is a 1,537-day-old mouse from Sun et al. (2013)[^5].
 ![[image-65.png|Each data point records day of death of the animal (x-axis) and what share of the group survived longer than that animal (y-axis). Four colors signify a control group and three treatment groups. From Sun et al., 2013. ]]
-Just eyeballing the lifespan curves here, you get a feeling for the scale of the gap. The distance between two ticks is 250 days. To put the MPrize mouse on this chart, you would need to extend the x-axis by 1 full tick, and then put the marker past that tick. In fact, let me just add the circle where the record would be.
+Just by eyeballing the lifespan curves here, you get a sense of the scale of the gap. The distance between two ticks is 250 days. To put the MPrize mouse on this chart, you would need to extend the x-axis by 1 full tick, and then put the marker past that tick. In fact, let me just add the circle where the record would be.
 
 ![[bartke.png]]
 
@@ -38,9 +38,9 @@ Who I'm really challenging here is ChatGPT, for thinking that winning a lifespan
 Because we want results that are evidence-based, not word-of-scientist-based.
 
 Relying on word alone would lose important quality control checks on data. A research paper featuring a lifespan record also provides supporting data that help validate the record against the possibility of a catastrophic mix-up. For example, when authors provide a survival curve for all the individuals in a cohort, you can now judge: 
-* is the shape of the survival curve compatible with the ages in the text of the paper?
-* was the winning animal a suspicious outlier among its cohort mates?
-* how good were the animal facility conditions based on the control group survival shape?
+* Is the shape of the survival curve compatible with the ages in the text of the paper?
+* Was the winning animal a suspicious outlier among its cohort mates?
+* How good were the animal facility conditions based on the control group survival shape?
 And so on.
 
 **Are mouse mix-ups a realistic concern in longevity research?** 
@@ -51,14 +51,14 @@ But not everyone can be diligent all the time. Earlier this year ChatGPT helped 
 
 Long story short:
 1. I downloaded raw datasets from https://phenome.jax.org/studies/aging and pointed ChatGPT at the folders to analyze. 
-2. ChatGPT quickly found an outlier mouse that had a recorded age of 1,644 days in the raw dataset - easily in top 3 of mouse lifespans of all time, but not remarked about anywhere. 
+2. ChatGPT quickly found an outlier mouse that had a recorded age of 1,644 days in the raw dataset - easily in the top 3 mouse lifespans of all time, but not remarked about anywhere. 
 3. I reached out to the lab responsible for the animal, and they explained that this mouse's outstanding longevity was just a mix-up.
 
 **How do lifespan mix-ups happen?** 
 
 In the case above, the mouse was last seen on Nov 1, 2021, at the age of 18 months. During the next scheduled weighing, 6 months later, the mouse was gone. It wasn't anything out of the ordinary: during routine colony maintenance, dead mice not reserved for dissection are normally removed by animal facility technicians, not researchers.
 
-What went wrong is that the researcher, when recording the mouse's uncertain-but-unimpressive lifespan, made a typo in the records table. When inputting the last-seen date, instead of typing 2021, they typed 2024 - numbers 1 and 4 are close together on the keypad. This added 36 months to the mouse's 18-month lifespan, adding up to 1,644 days.
+What went wrong is that the researcher, when recording the mouse's uncertain-but-unimpressive lifespan, made a typo in the records table. When inputting the last-seen date, instead of typing 2021, they typed 2024 - the numbers 1 and 4 are close together on the keypad. This added 36 months to the mouse's 18-month lifespan, adding up to 1,644 days.
 
 Why did an outlier this large go unnoticed until dataset publication? As it was explained to me, the mystery mouse was marked "removed" for aging analysis purposes. It's a common practice to mark mice removed for fighting, technical accidents, training, or other aging-unrelated causes to be treated as "last seen alive" at removal date, and exclude them from aging-specific analysis. This accounting practice helps to keep a five-year longevity experiment on track even if a few mice get accidentally lost to flooding during the first year because of a compromised pipe.
 
@@ -98,13 +98,13 @@ Are there perhaps even older studies I will find after getting a $200 subscripti
 ![[image-63.png|They don't know about Bogdanov's rejuvenation experiments from the 1920s]]
 **So is AI good for unstructured data collation and free-form meta-analysis?** 
 
-Hank Green, a long-time pop-science youtuber, is currently [facing criticism](https://www.businessinsider.com/hank-green-youtube-ai-apology-2026-8) for relying on AI for "research purposes". Some of his fans discourage the practice for the fears of "biasing the research process", while others don't see anything wrong with it - doesn't google or pubmed search also bias which papers you see first?
+Hank Green, a long-time pop-science youtuber, is currently [facing criticism](https://www.businessinsider.com/hank-green-youtube-ai-apology-2026-8) for relying on AI for "research purposes". Some of his fans discourage the practice for the fears of "biasing the research process", while others don't see anything wrong with it - doesn't Google or Pubmed search also bias which papers you see first?
 
 As much as I sympathize with the second camp, I have to give it to the AI skeptics on this one. Despite all the hallucination-pruning, AI-assisted literature review is still not thorough enough to be relied on by someone outside the field.
 
 For a longevity enthusiast, as of 2026, it seems like the answer is definitely still "double-check AI's work with an expert". It's still way too easy to mislead AIs by pop-science content biasing its ability to read critically. I have more examples of AIs being too gullible to discard secondary literature if it contradicts the primary source - look out for a future post on CTVT origins.
 
-To give AI some credit back, for a researcher who knows how to formulate a right prompt, AI can plausibly assist with digging up something worth following up on. HackerNews users have [called out](https://news.ycombinator.com/item?id=49010345) this "smart get smarter" knowledge multiplier dynamic of AI after trying to read Terence Tao's ChatGPT transcripts.
+To give AI some credit back, for a researcher who knows how to formulate the right prompt, AI can plausibly assist with digging up something worth following up on. Hacker News users have [called out](https://news.ycombinator.com/item?id=49010345) this "smart get smarter" knowledge multiplier dynamic of AI after trying to read Terence Tao's ChatGPT transcripts.
 
 ![[image-62.png]]
 
