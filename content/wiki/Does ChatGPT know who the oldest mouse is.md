@@ -1,6 +1,7 @@
 ---
 title: Does ChatGPT know who the oldest mouse is?
 tags:
+  - content/post
 date: 2026-08-04
 draft: false
 ---

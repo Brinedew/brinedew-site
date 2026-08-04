@@ -1,9 +1,14 @@
-export { _ as TagContent } from '../TagContent-BLPikvbg.js';
-import { QuartzComponent, SortFn } from '@quartz-community/types';
-export { SortFn } from '@quartz-community/types';
-export { byDateAndAlphabetical } from '@quartz-community/utils/sort';
+import { QuartzComponent, QuartzComponentProps, QuartzPluginData, SortFn } from '@quartz-community/types';
+import { TagPageOptions } from '../types.js';
+import * as preact from 'preact';
 
-declare function byDateAndAlphabeticalFolderFirst(_cfg: unknown): SortFn;
-declare const PageList: QuartzComponent;
+declare const _default: (options?: TagPageOptions) => QuartzComponent;
 
-export { PageList, byDateAndAlphabeticalFolderFirst };
+interface PageListProps extends QuartzComponentProps {
+    pages?: QuartzPluginData[];
+    limit?: number;
+    sort?: SortFn;
+}
+declare function PageList({ fileData, allFiles, pages, limit, sort }: PageListProps): preact.JSX.Element;
+
+export { PageList, _default as TagContent };

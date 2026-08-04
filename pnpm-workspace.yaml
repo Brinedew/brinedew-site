@@ -1,5 +1,6 @@
 packages:
   - ".quartz/plugins/brinedew-components"
+  - ".quartz/local-plugins/brinedew-tag-page"
 
 overrides:
   "@napi-rs/wasm-runtime@1.2.0": 1.1.5

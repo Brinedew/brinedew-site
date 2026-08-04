@@ -1372,6 +1372,26 @@ article li:has(> input[type="checkbox"]:checked) {
   height: auto;
 }
 
+/* Posts and Wiki are editorial archives, not reading pages. Their empty right
+   rail is removed at desktop widths so the two-column index can use the page.
+   This belongs in the unlayered site stylesheet: the project sidebar rule
+   above intentionally outranks component-layer CSS. */
+@media (min-width: 1200px) {
+  body[data-slug="tags/content/post"] .page > #quartz-body,
+  body[data-slug="tags/content/wiki"] .page > #quartz-body {
+    grid-template-columns: 17rem minmax(0, 1fr);
+    grid-template-areas:
+      "grid-sidebar-left grid-header"
+      "grid-sidebar-left grid-center"
+      "grid-sidebar-left grid-footer";
+  }
+
+  body[data-slug="tags/content/post"] .page > #quartz-body .sidebar.right,
+  body[data-slug="tags/content/wiki"] .page > #quartz-body .sidebar.right {
+    display: none;
+  }
+}
+
 /* Iconoplasm + GeneGuessr: hide folder-page listing (app pages are not folder pages) */
 body[data-slug^="apps/iconoplasm"] .page-listing,
 body[data-slug^="apps/geneguessr"] .page-listing {
