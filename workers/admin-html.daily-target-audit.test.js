@@ -27,10 +27,13 @@ test("daily target rejection audit displays the recorded UniProt id", () => {
   )
 })
 
-test("admin can regenerate and update an already-posted recap without duplicating it", () => {
+test("admin reuses an accepted immutable image when updating an already-posted recap", () => {
   assert.match(ADMIN_HTML, /id="btn-repair-posted-recap"/)
   assert.match(ADMIN_HTML, /\/api\/admin\/repair-posted-recap/)
-  assert.match(ADMIN_HTML, /renderAndUploadDayImage\(day, \{ silent: true \}\)/)
+  assert.match(
+    ADMIN_HTML,
+    /const statuses = await fetchRecapStatusesForDays\(\[day\]\);[\s\S]*if \(statuses\[day\]\?\.exists !== true\) \{[\s\S]*renderAndUploadDayImage\(day, \{ silent: true \}\)/,
+  )
 })
 
 test("recap coverage warning waits for the authoritative schedule", () => {

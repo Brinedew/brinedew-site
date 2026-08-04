@@ -4904,9 +4904,17 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         return;
       }
       setRecapButtonsBusy(true);
-      setRecapImageMessage('Rendering image and updating the posted recap for ' + day + '...', 'info');
+      setRecapImageMessage('Checking the stored image and updating the posted recap for ' + day + '...', 'info');
       try {
-        await renderAndUploadDayImage(day, { silent: true });
+        // ARCHITECTURE FENCE [GG-002]: a repair consumes the immutable image
+        // already accepted for this day/UniProt/renderer identity. Rendering a
+        // second PNG for the same key creates different bytes and turns Bunny's
+        // read-after-write behaviour into a false upload failure. Render only
+        // when the authoritative object-status check says the identity is absent.
+        const statuses = await fetchRecapStatusesForDays([day]);
+        if (statuses[day]?.exists !== true) {
+          await renderAndUploadDayImage(day, { silent: true });
+        }
         const response = await fetch(API_BASE + '/api/admin/repair-posted-recap', {
           method: 'POST',
           credentials: 'include',

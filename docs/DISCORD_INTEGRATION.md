@@ -124,16 +124,23 @@ Current design (2026-08-03):
   image pipeline.
 - A posted text-only recap is repaired in place using its durable message ID;
   repair never creates a second daily message.
+- Repair first checks the immutable day + UniProt + renderer object and reuses
+  its accepted bytes. It renders only when that exact object is missing. A
+  second render for an existing key is not a valid refresh: nondeterministic
+  canvas pixels can differ while Bunny still serves the previously accepted
+  object, producing an unresolvable exact-byte comparison.
 - Repair treats the existing posted marker as read-only. Discord PATCH edits
   that exact message in place and cannot change its ID, so a post-success KV
   rewrite would add no authority. This is also a capacity fence: an exhausted
   daily KV write allowance must not turn a successful Discord edit into a false
   repair failure.
 
-Production preflight on 2026-08-04 found 365 scheduled identities through
-2027-08-03, 347 unique proteins, and only 1 ready object. That incident is B-702;
-it is the regression fixture for resumability, bounded provider work, and exact
-final coverage.
+The first production preflight on 2026-08-04 found 365 scheduled identities
+through 2027-08-03, only 347 unique proteins, and 1 ready object. That historical
+incident is B-702; it is the regression fixture for resumability, bounded
+provider work, and exact final coverage. After the picker and availability-pin
+repairs, the same live horizon resolved to 365 unique UniProt IDs and 365 unique
+normalized surnames with 365/365 exact images.
 
 ### Manual trigger / backfill
 
