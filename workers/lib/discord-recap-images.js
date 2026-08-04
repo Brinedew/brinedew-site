@@ -1,9 +1,17 @@
 const DISCORD_RECAP_IMAGE_PREFIX = "discord-recap-images/v2/"
 
+// ARCHITECTURE FENCE [GG-002]: storage acknowledgement is not delivery proof.
+// Keep the immutable identity, documented 201 status, and exact-byte read-back
+// together so a rewritten 404 or delayed/misdirected write cannot become a
+// false "uploaded" state in the admin UI.
+
 // This is part of the stored-object identity. Bump it whenever the renderer,
 // camera, colouring, or pixel-readiness contract changes. A bump deliberately
 // makes every older image a cache miss instead of silently reusing stale ink.
 export const DISCORD_RECAP_RENDER_CONTRACT = "molstar-recap-v2"
+
+const BUNNY_UPLOAD_SUCCESS_STATUS = 201
+const BUNNY_READ_AFTER_WRITE_DELAYS_MS = [0, 750, 1500, 3000]
 
 export function isValidIsoDay(value) {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value))
@@ -80,6 +88,28 @@ function bunnyWriteUrl(env, key) {
   return `https://${host}/${zone}/${key}`
 }
 
+function asUint8Array(bytes) {
+  if (bytes instanceof Uint8Array) return bytes
+  if (bytes instanceof ArrayBuffer) return new Uint8Array(bytes)
+  if (ArrayBuffer.isView(bytes)) {
+    return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  }
+  throw new Error("Recap image bytes must be binary data")
+}
+
+function equalBytes(left, right) {
+  if (left.byteLength !== right.byteLength) return false
+  for (let index = 0; index < left.byteLength; index += 1) {
+    if (left[index] !== right[index]) return false
+  }
+  return true
+}
+
+async function boundedResponseText(response, maxLength = 400) {
+  const body = await response.text().catch(() => "")
+  return body.length > maxLength ? `${body.slice(0, maxLength)}...` : body
+}
+
 export function canWriteDiscordRecapImage(env) {
   if (env?.STRUCTURES_BUCKET) return true
   return Boolean(bunnyStorageZone(env) && bunnyStoragePassword(env))
@@ -101,9 +131,10 @@ export async function putDiscordRecapImage(
 ) {
   const normalizedIdentity = normalizeImageIdentity(identity)
   const key = buildDiscordRecapImageKey(normalizedIdentity)
+  const expectedBytes = asUint8Array(bytes)
 
   if (env?.STRUCTURES_BUCKET) {
-    await env.STRUCTURES_BUCKET.put(key, bytes, {
+    await env.STRUCTURES_BUCKET.put(key, expectedBytes, {
       httpMetadata: {
         contentType,
         cacheControl: "public, max-age=31536000, immutable",
@@ -116,7 +147,11 @@ export async function putDiscordRecapImage(
         uploadedAt: new Date().toISOString(),
       },
     })
-    return { key }
+    const stored = await loadDiscordRecapImageBytes(env, normalizedIdentity)
+    if (!stored || !equalBytes(stored, expectedBytes)) {
+      throw new Error(`Recap image R2 read-back verification failed for ${key}`)
+    }
+    return { key, verifiedBytes: stored.byteLength }
   }
 
   const writeUrl = bunnyWriteUrl(env, key)
@@ -132,13 +167,25 @@ export async function putDiscordRecapImage(
       AccessKey: password,
       "Content-Type": contentType,
     },
-    body: bytes,
+    body: expectedBytes,
   })
-  if (!response.ok) {
-    const text = await response.text().catch(() => "")
-    throw new Error(`Recap image PUT failed (${response.status}) for ${key}: ${text || "no body"}`)
+  if (response.status !== BUNNY_UPLOAD_SUCCESS_STATUS) {
+    const responseText = await boundedResponseText(response)
+    throw new Error(
+      `Recap image PUT returned ${response.status}, expected ${BUNNY_UPLOAD_SUCCESS_STATUS}, for ${key}: ${responseText || "no body"}`,
+    )
   }
-  return { key }
+  await response.body?.cancel().catch(() => null)
+
+  for (const delayMs of BUNNY_READ_AFTER_WRITE_DELAYS_MS) {
+    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
+    const stored = await loadDiscordRecapImageBytes(env, normalizedIdentity)
+    if (stored && equalBytes(stored, expectedBytes)) {
+      return { key, verifiedBytes: stored.byteLength }
+    }
+  }
+
+  throw new Error(`Recap image PUT was acknowledged but exact-byte read-back failed for ${key}`)
 }
 
 /**

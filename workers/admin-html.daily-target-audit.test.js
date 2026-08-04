@@ -23,6 +23,14 @@ test("admin can regenerate and update an already-posted recap without duplicatin
   assert.match(ADMIN_HTML, /renderAndUploadDayImage\(day, \{ silent: true \}\)/)
 })
 
+test("recap coverage warning waits for the authoritative schedule", () => {
+  assert.match(
+    ADMIN_HTML,
+    /async function setupSchedule\(\) \{[\s\S]*await loadSchedule\(\{ futureDays: 120 \}\);[\s\S]*await refreshRecapWarning\(\);/,
+  )
+  assert.ok(ADMIN_HTML.indexOf("let scheduleData = {};") < ADMIN_HTML.indexOf("setupSchedule();"))
+})
+
 test("recap uploads are target-bound and require stable molecule pixels", () => {
   assert.match(ADMIN_HTML, /uniprot_id: uniprot/)
   assert.match(ADMIN_HTML, /function getCanvasContentMetrics\(canvas\)/)
