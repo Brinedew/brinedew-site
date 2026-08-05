@@ -7,15 +7,19 @@ draft: false
 ---
 # AI doesn't know who the oldest mouse is
 
+I.
+
 AIs are in the [news](https://www.telegraph.co.uk/business/2026/08/03/unreleased-ai-model-solves-decades-old-maths-problems/) this [week](https://mashable.com/tech/anthropic-fable-5-disproves-jacobian-conjecture) for supposedly solving dozens of long-standing math questions and putting research mathematicians out of a job. If any of you are looking for a new career, I urge you to pivot to the one thing AIs still can't do - reading longevity papers.
 
 Let's say you're interested in benchmarking lifespan extension communities against each other, based on which animal they work on. It's 2026, so for many of us the natural first step is to turn to ChatGPT, or any other AI assistant, and to ask it for a table of lifespan records by species. 
 
 When asked point blank what's the oldest lab mouse, AIs invariably repeat that a mouse called "GHR-KO 11C" from Andrzej Bartke's laboratory lived for **1,819 days**, the maximum mouse lifespan ever recorded.
 
-![[image-71.png|The answer by Claude Sonnet 5 High]]
+![[image-71.png|The answer by Claude Sonnet 5 High.]]![[image-57.png|A mundane data collation request I gave to ChatGPT]]![[image-59.png|The response - note the "high confidence", "cleanest row" claims.]]
 But are they right to cite it?
-![[image-57.png|A mundane data collation request I gave to ChatGPT]]![[image-59.png|The response - note the "high confidence", "cleanest row" claims.]]
+
+II.
+
 On the surface, the record seems warranted. Bartke is a well-regarded researcher known for studying dwarf mice. Small stature is known for being linked to longer lifespans within various species and for offering protection from age-related diseases. And Bartke's lifespan record was indeed celebrated by the [Methuselah Foundation](https://www.mfoundation.org/) in 2003 as the Methuselah Mouse Prize. 
 
 However, a closer look reveals that the MPrize program was [launched](https://www.fightaging.org/archives/2003/05/methuselah-mouse-prize-launched/) on the 31st of May 2003, five months *after* the Bartke mouse had died on the 8th of January 2003.
@@ -63,7 +67,9 @@ To be clear, I'm not challenging Bartke or MPrize here about this result - for a
 
 Who I'm really challenging here is ChatGPT, for thinking that winning a lifespan prize in such circumstances is an acceptable level of evidentiary support for a lifespan data point to be included alongside published fruit fly and C.elegans cohorts in the same comparative table.
 
-**Why shouldn't AI analysis just include every mouse lifespan record claimed by a researcher?** Why does it matter whether the record is featured in a publication or not?
+**Why shouldn't AI analysis just include every mouse lifespan record claimed by a researcher?** 
+
+In other words: Am I just nitpicking here? Longest-living humans or turtles aren't tied to a primary source, why should mice be? Why does it matter whether the record is featured in a publication or not?
 
 Because the record result in a publication is better-supported by other evidence in that publication.
 
@@ -96,7 +102,7 @@ What went wrong is that the researcher, when recording the mouse's uncertain-but
 
 So this created a strange data point: this mouse appeared to have a massive observed lifespan, yet it was censored from the lifespan study instead of carefully tracked like a long-living mouse would be.
 
-**Why did an outlier this large go unnoticed until dataset publication?** 
+**Why can an outlier this large go unnoticed until dataset publication?** 
 
 Animal longevity studies can feature a hybrid analysis structure: 
 * Survival analysis (such as survival curves) uses the information from all the mice, whether the death was recorded or not.
@@ -112,7 +118,11 @@ For an aging researcher, animals lost to non-aging purposes are not that interes
 
 AIs, however, fail to draw this distinction and include Bartke's mouse on equal footing with all the actual studies. But when you point out the lack of publication, they happily throw Bartke's mouse away.
 
-Even in this case, **AIs still can't decide on a singular lifespan record.** 
+III.
+
+After being warned about Bartke's record, **AIs can't decide on a singular mouse lifespan record.** 
+
+Claude Sonnet 5 
 
 If you use ChatGPT 5.6 Extra High thinking ($20 subscription), it claims the maximum mouse lifespan record of 1,628 days.
 ![[image-56.png|M. musculus is the species name for lab mice.]]
