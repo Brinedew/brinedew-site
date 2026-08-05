@@ -144,6 +144,22 @@ test("public edge canonicalizes document aliases without invoking either upstrea
   assert.equal(www.headers.get("Location"), "https://brinedew.bio/?source=alias")
   assert.equal(geneguessr.status, 301)
   assert.equal(geneguessr.headers.get("Location"), "https://geneguessr.brinedew.bio/privacy")
+
+  for (const [path, location] of [
+    ["/support", "https://brinedew.bio/posts/support-me?source=alias"],
+    ["/support/", "https://brinedew.bio/posts/support-me?source=alias"],
+    ["/posts/Support-me.html", "https://brinedew.bio/posts/support-me?source=alias"],
+  ]) {
+    const response = await worker.fetch(
+      new Request(`https://brinedew.bio${path}?source=alias`),
+      env,
+      {},
+    )
+
+    assert.equal(response.status, 301, path)
+    assert.equal(response.headers.get("Location"), location, path)
+  }
+
   assert.equal(stateful.calls.length, 0)
 })
 
