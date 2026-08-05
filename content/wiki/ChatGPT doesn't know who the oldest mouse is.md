@@ -11,21 +11,30 @@ AIs are in the [news](https://www.telegraph.co.uk/business/2026/08/03/unreleased
 
 Let's say you're interested in benchmarking lifespan extension communities against each other, based on which animal they work on. It's 2026, so for many of us the natural first step is to turn to ChatGPT, or any other AI assistant, and to ask it for a table of lifespan records by species. 
 
-In response, AIs invariably repeat that a mouse called "GHR-KO 11C" from Andrzej Bartke's laboratory lived for **1,819 days**, the maximum mouse lifespan ever reported.
+When asked point blank what's the oldest lab mouse, AIs invariably repeat that a mouse called "GHR-KO 11C" from Andrzej Bartke's laboratory lived for **1,819 days**, the maximum mouse lifespan ever recorded.
 
-But are they right to include it?
+![[image-71.png|The answer by Claude Sonnet 5 High]]
+But are they right to cite it?
 ![[image-57.png|A mundane data collation request I gave to ChatGPT]]![[image-59.png|The response - note the "high confidence", "cleanest row" claims.]]
-On the surface, the inclusion seems warranted. Bartke is a well-regarded researcher known for studying dwarf mice. Small stature is known for being linked to longer lifespans within various species and for offering protection from age-related diseases. And Bartke's lifespan record was indeed celebrated by the [Methuselah Foundation](https://www.mfoundation.org/) in 2003 as the Methuselah Mouse Prize. 
+On the surface, the record seems warranted. Bartke is a well-regarded researcher known for studying dwarf mice. Small stature is known for being linked to longer lifespans within various species and for offering protection from age-related diseases. And Bartke's lifespan record was indeed celebrated by the [Methuselah Foundation](https://www.mfoundation.org/) in 2003 as the Methuselah Mouse Prize. 
 
 However, a closer look reveals that the MPrize program was [launched](https://www.fightaging.org/archives/2003/05/methuselah-mouse-prize-launched/) on the 31st of May 2003, five months *after* the Bartke mouse had died on the 8th of January 2003.
 
 And while a few other people got MPrize awards, none of them were in the record-breaking "Longevity Prize" category - Bartke remains its singular recipient.
 
-More baffling, this specific mouse was never actually recorded in any primary source! The 1,819-day number comes from **personal communication**, not from any paper. 
+More baffling, this specific mouse was never actually recorded in any primary source! The 1,819-day number comes from **personal communication**, not from a publication. 
 ![[image-68.png|How Bartke cites his own result. From Brown-Borg and Bartke, 2012]]
 Here is how the mouse is described in a 2015 [AAAS feature](https://www.pomona.edu/sites/default/files/science-2015-cohen-1186-7-2.pdf):
 
 ![[image-70.png]]
+
+This is not what I would call "cleanest row in the set".
+
+Okay, but if MPrize validated the record, perhaps we can call the award itself a publication we can cite? 
+
+It's unclear to me if we can. The postmortem body of the GHR-KO 11C was reported to be [transferred](https://www.mrt.com/news/article/A-Methuselah-of-Mice-Dies-in-Lab-7778005.php) to UT San Antonio. 
+
+How can you validate the lifespan of a dead animal? From a forum post by Aubrey de Grey we know that they used a technique 
 
 In the two decades since the record claim, none of Bartke's publications have come close to recording an outlier this large. The longest lifespan I could find in his published work is a 1,537-day-old mouse from Sun et al. (2013)[^1].
 ![[image-65.png|Each data point records day of death of the animal (x-axis) and what share of the group survived longer than that animal (y-axis). Four colors signify a control group and three treatment groups. From Sun et al., 2013. ]]
@@ -104,9 +113,9 @@ ChatGPT Pro also brings up Harrison-Archer study from 1987.[^4] In a later secon
 
 > “1742 days, a new record for Mus”
 
-But I couldn't actually access the paper, and the later curve digitization efforts by Schmauck-Medina et al.[^5] didn't provide curves for this study either, despite mentioning it by name as the record-holder.
+This is the strongest candidate for the longest-living mouse with a primary source record I found so far. But I couldn't actually access the full text of the paper, and the later curve reconstruction efforts by Schmauck-Medina et al.[^5] didn't provide lifespan curves for this study either, despite mentioning it by name as the record-holder.
 
-Are there perhaps even older studies I will find after getting a $200 subscription? Maybe. If I was an Anthropic employee, would Claude Mythos have shown me a lifespan record for a 10-year-old mouse from Meiji era? Who knows! At this point, it's surprising that Mendel-style long-overlooked breakthroughs aren't popping up left and right. And yes, I asked AI to look through the old Soviet lifespan papers.
+Are there perhaps even older studies I will find after getting a $200 subscription? Maybe. If I was an Anthropic employee, would Claude Mythos have shown me a citation for a 10-year-old mouse from Meiji era? Who knows! At this point, it's surprising that Mendel-style long-overlooked breakthroughs aren't popping up left and right. And yes, I asked AI to look through the old Soviet lifespan papers.
 ![[image-63.png|They don't know about Bogdanov's rejuvenation experiments from the 1920s]]
 **So is AI good for unstructured data collation and free-form meta-analysis?** 
 
