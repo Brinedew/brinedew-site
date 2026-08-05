@@ -15,20 +15,19 @@ In response, AIs invariably repeat that a mouse called "GHR-KO 11C" from Andrzej
 
 But are they right to include it?
 ![[image-57.png|A mundane data collation request I gave to ChatGPT]]![[image-59.png|The response - note the "high confidence", "cleanest row" claims.]]
-On the surface, the inclusion seems warranted. Bartke is a well-regarded researcher known for studying dwarf mice. Dwarfism is known for being linked to longer lifespans within various species and for offering protection from age-related diseases. And Bartke's lifespan record was indeed celebrated by the [Methuselah Foundation](https://www.mfoundation.org/) in 2003 as the Methuselah Mouse Prize. 
+On the surface, the inclusion seems warranted. Bartke is a well-regarded researcher known for studying dwarf mice. Small stature is known for being linked to longer lifespans within various species and for offering protection from age-related diseases. And Bartke's lifespan record was indeed celebrated by the [Methuselah Foundation](https://www.mfoundation.org/) in 2003 as the Methuselah Mouse Prize. 
 
 However, a closer look reveals that the MPrize program was [launched](https://www.fightaging.org/archives/2003/05/methuselah-mouse-prize-launched/) on the 31st of May 2003, five months *after* the Bartke mouse had died on the 8th of January 2003.
 
 And while a few other people got MPrize awards, none of them were in the record-breaking "Longevity Prize" category - Bartke remains its singular recipient.
 
 More baffling, this specific mouse was never actually recorded in any primary source! The 1,819-day number comes from **personal communication**, not from any paper. 
-
-![[image-68.png|From Brown-Borg and... Bartke?, 2012]]
+![[image-68.png|How Bartke cites his own result. From Brown-Borg and Bartke, 2012]]
 Here is how the mouse is described in a 2015 [AAAS feature](https://www.pomona.edu/sites/default/files/science-2015-cohen-1186-7-2.pdf):
 
 ![[image-70.png]]
 
-In the two decades since the record claim, none of Bartke's publications have come close to repeating it. The longest lifespan I could find in his published work is a 1,537-day-old mouse from Sun et al. (2013)[^1].
+In the two decades since the record claim, none of Bartke's publications have come close to recording an outlier this large. The longest lifespan I could find in his published work is a 1,537-day-old mouse from Sun et al. (2013)[^1].
 ![[image-65.png|Each data point records day of death of the animal (x-axis) and what share of the group survived longer than that animal (y-axis). Four colors signify a control group and three treatment groups. From Sun et al., 2013. ]]
 Just by eyeballing the lifespan curves here, you get a sense of the scale of the gap. The distance between two ticks is 250 days. To put the MPrize mouse on this chart, you would need to extend the x-axis by 1 full tick, and then put the marker past that tick. In fact, let me just add the circle where the record would be.
 
@@ -50,32 +49,36 @@ And so on.
 
 **Are mouse mix-ups a realistic concern in longevity research?** 
 
-Surprisingly, yes. Mice are my model animal of choice, and I made a fair share of mix-ups myself: unclear earmark positions, swapped project cards, and a mass pregnancy in the all-female cage (one of them turned out to be not female). With diligent record-keeping, those are all fixable.
+Surprisingly, yes. Mice are the model animal I have the most experience with, and I made a fair share of mix-ups myself: unclear earmark positions, swapped project cards, and a mass pregnancy in the all-female cage (one of them turned out to be not female). With diligent record-keeping, those are all fixable.
 
-But not everyone can be diligent all the time. Earlier this year ChatGPT helped me spot one mix-up at a longevity database.
+But not everyone can be diligent all the time. Earlier this year ChatGPT helped me spot one record discrepancy at a longevity database.
 
 Long story short:
 1. I downloaded raw datasets from https://phenome.jax.org/studies/aging and pointed ChatGPT at the folders to analyze. 
-2. ChatGPT quickly found an outlier mouse that had a recorded age of 1,644 days in the raw dataset - easily in the top 3 mouse lifespans of all time, but not remarked about anywhere. 
-3. I reached out to the lab responsible for the animal, and they explained that this mouse's outstanding longevity was just a mix-up.
+2. ChatGPT quickly found an outlier mouse that had a recorded age of 1,644 days in the raw dataset - easily in the top 5 mouse lifespans of all time, but not remarked about anywhere. 
+3. I reached out to the lab responsible for the animal, and they explained that this mouse's outstanding longevity was just a clerical error.
 
 **How do lifespan mix-ups happen?** 
 
-In the case above, the mouse was last seen on Nov 1, 2021, at the age of 18 months. During the next scheduled weighing, 6 months later, the mouse was gone. It wasn't anything out of the ordinary: during routine colony maintenance, dead or heavily injured mice not reserved for dissection are normally removed by animal facility technicians, not researchers. Their dates of death are not necessarily well-recorded - in this case, the researcher might use a last-seen-at date instead of a death date.
+In the case above, the mouse was last seen on Nov 1, 2021, at the age of 18 months. During the next scheduled weighing, 6 months later, the mouse was gone. The researcher then recorded the animal's last-seen-at date - a practice known as ["censoring"](https://en.wikipedia.org/wiki/Censoring_(statistics)) in lifespan studies.
 
-What went wrong is that the researcher, when recording the mouse's uncertain-but-unimpressive lifespan, made a typo in the records table. When inputting the last-seen date, instead of typing 2021, they typed 2024 - the numbers 1 and 4 are close together on the keypad. This added 36 months to the mouse's 18-month lifespan, adding up to 1,644 days.
+It wasn't anything out of the ordinary: during routine colony maintenance, dead or heavily injured mice not reserved for dissection are normally removed by animal facility technicians, not researchers. Their dates of death are not necessarily well-recorded.
+
+What went wrong is that the researcher, when recording the mouse's uncertain-but-unimpressive lifespan, made a typo in the records table. When inputting the last-seen date, instead of typing 2021, they typed 2024 - the numbers 1 and 4 are close together on the keypad. This added 36 months to the mouse's 18-month observation period, adding up to 1,644 days.
+
+So this created a strange data point: this mouse appeared to have a massive observed lifespan, yet it was censored from the lifespan study instead of carefully tracked like a long-living mouse would be.
 
 **Why did an outlier this large go unnoticed until dataset publication?** 
 
 Animal longevity studies can feature a hybrid analysis structure: 
-* Survival analysis (such as survival curves) use the information from all the mice.
-* Longevity analysis, like median longevity and 90th-percentile age statistics are calculated only from animals with known death ages, after excluding the “removed” records.
+* Survival analysis (such as survival curves) uses the information from all the mice, whether the death was recorded or not.
+* Longevity analysis, like median longevity and 90th-percentile age statistics are calculated only from animals with known death dates, after excluding the “removed” records.
 
- It's a common practice to mark mice as "removed" for fighting, technical accidents, unrelated experiments, or other aging-unrelated causes. Their removal will be treated as "last seen alive" date by the researcher, and they will be excluded from aging-specific analysis. This recording practice helps to keep a five-year longevity experiment on track even if a few mice get accidentally lost to flooding during the first year because of a compromised pipe.
+ In NIA's Interventions Testing Program, it's a common practice to mark mice as "removed" for fighting, technical accidents, unrelated experiments, or other aging-unrelated causes. Their removal will be treated as "last seen alive" date by the researcher, and they will be excluded from aging-specific analysis. This recording practice helps to keep a five-year longevity experiment on track even if a few mice get accidentally lost to flooding during the first year because of a compromised pipe.
 ![[image-61.png|From Miller et al., 2007]]
 As it was explained to me, the mystery mouse was indeed marked "removed" for aging analysis purposes.
 
-For an aging researcher, animals lost to non-aging purposes are not that interesting. These "removed" mice weren't included in the experimental summary statistics that the researcher reports on. So the removed mouse's exceptional lifespan would end up only affecting one small non-crucial readout - easy to overlook.
+For an aging researcher, animals lost to non-aging purposes are not that interesting. These "removed" mice weren't included in the experimental summary statistics that the researcher reports on. So the removed mouse's exceptional lifespan would end up only shifting one readout (log-rank test) a tiny bit - easy to overlook.
 
 **Getting back** to arguments for keeping a papers-only record policy, another concern entirely is deliberate fabrication. A policy of including off-journal records into lifespan tables would be very vulnerable to fabrication: it's stupid simple to fabricate a single animal's lifespan, but fabricating an entire cohort makes it possible for data sleuths to discover statistical irregularities in the dataset.
 
