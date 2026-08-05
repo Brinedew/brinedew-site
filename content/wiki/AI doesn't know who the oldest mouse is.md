@@ -11,7 +11,7 @@ I.
 
 AIs are in the [news](https://www.telegraph.co.uk/business/2026/08/03/unreleased-ai-model-solves-decades-old-maths-problems/) this [week](https://mashable.com/tech/anthropic-fable-5-disproves-jacobian-conjecture) for supposedly solving dozens of long-standing math questions and putting research mathematicians out of a job. If any of you are looking for a new career, I urge you to pivot to the one thing AIs still can't do - reading longevity papers.
 
-Let's say you're interested in benchmarking lifespan extension communities against each other, based on which animal they work on. It's 2026, so for many of us the natural first step is to turn to ChatGPT, or any other AI assistant, and to ask it for a table of lifespan records by species. 
+Let's say you're interested in benchmarking lifespan extension communities against each other, based on which animal they work on. It's 2026, so for many of us the natural first step is to turn to ChatGPT, Claude, or any other AI assistant, and to ask it for a table of lifespan records by species. 
 
 When asked point blank what's the oldest lab mouse, AIs invariably repeat that a mouse called "GHR-KO 11C" from Andrzej Bartke's laboratory lived for **1,819 days**, the maximum mouse lifespan ever recorded.
 
@@ -67,7 +67,7 @@ To be clear, I'm not challenging Bartke or MPrize here about this result - for a
 
 Who I'm really challenging here is ChatGPT, for thinking that winning a lifespan prize in such circumstances is an acceptable level of evidentiary support for a lifespan data point to be included alongside published fruit fly and C.elegans cohorts in the same comparative table.
 
-**Why shouldn't AI analysis just include every mouse lifespan record claimed by a researcher?** 
+**Why shouldn't AI just give you every mouse lifespan record claimed by a researcher?** 
 
 In other words: Am I just nitpicking here? Longest-living humans or turtles aren't tied to a primary source, why should mice be? Why does it matter whether the record is featured in a publication or not?
 
