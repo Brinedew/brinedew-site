@@ -118,7 +118,7 @@ As much as I sympathize with the second camp, I have to give it to the AI skepti
 
 For a longevity enthusiast, as of 2026, it seems like the answer is definitely "double-check AI's analysis with multiple domain experts". It's still way too easy to mislead AIs by pop-science content biasing its ability to read critically. I have seen other examples of AIs being too hesitant to discard secondary literature if it contradicts the primary source - look out for a future post on CTVT origins.
 
-To give AI some credit back, for a researcher who knows how to formulate the right prompt, AI can plausibly assist with digging up something worth following up on. Hacker News users have [called out](https://news.ycombinator.com/item?id=49010345) this "smart get smarter" knowledge multiplier dynamic of AI after trying to read Terence Tao's ChatGPT transcripts.
+To give AI some credit back, for a researcher who knows how to formulate the right prompt, AI can plausibly assist with digging up something worth following up on. Sean Goedecke has [called out](https://www.seangoedecke.com/llms-reward-expertise/) this "smart get smarter" knowledge multiplier dynamic of AI after trying to read Terence Tao's ChatGPT transcripts.
 ![[image-62.png]]
 On the other hand, somebody just disproved a long-standing conjecture by just asking ChatGPT to "[do a breakthrough](https://www.newscientist.com/article/2580932-extremely-basic-ai-prompt-cracks-decades-old-maths-problem/)", so, you know, better not get too comfortable as an expert.
 
