@@ -131,7 +131,7 @@ This is taken from Turturro et al. (1999)[^2]:
 > The oldest male mouse, B6D2F1, lived to 1,628 days.
 
 ![[image-53.png|From Turturro et al., 1999]]
-But if you ask ChatGPT 5.6 Pro ($100 subscription! please [support](https://brinedew.bio/posts/Support-me.html) your local scientist), it will dig up Weindruch et al. (1986)[^3], with a maximum record of 54.6 months - equaling around 1,660 days, plus-minus a couple days depending on month conversion math.
+But if you ask ChatGPT 5.6 Pro ($100 subscription! please [support](https://brinedew.bio/posts/support-me) your local scientist), it will dig up Weindruch et al. (1986)[^3], with a maximum record of 54.6 months - equaling around 1,660 days, plus-minus a couple days depending on month conversion math.
 
 > The longest-lived individual mouse was from group N/R40 that lived 54.6 mo.
 
