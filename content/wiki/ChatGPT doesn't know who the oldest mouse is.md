@@ -70,11 +70,11 @@ Animal longevity studies can feature a hybrid analysis structure:
 ![[image-61.png|From Miller et al., 2007]]
 As it was explained to me, the mystery mouse was indeed marked "removed" for aging analysis purposes.
 
-For an aging researcher, animals lost to non-aging purposes are not that interesting. These "removed" mice weren't included in the experimental summary statistics that the researcher reports on. So the removed mouse's exceptional lifespan would end up only affect one small non-crucial readout - easy to overlook.
+For an aging researcher, animals lost to non-aging purposes are not that interesting. These "removed" mice weren't included in the experimental summary statistics that the researcher reports on. So the removed mouse's exceptional lifespan would end up only affecting one small non-crucial readout - easy to overlook.
 
 **Getting back** to arguments for keeping a papers-only record policy, another concern entirely is deliberate fabrication. A policy of including off-journal records into lifespan tables would be very vulnerable to fabrication: it's stupid simple to fabricate a single animal's lifespan, but fabricating an entire cohort makes it possible for data sleuths to discover statistical irregularities in the dataset.
 
-LLMs, however, fail to draw this distinction and include Bartke's mouse on equal footing with all the actual studies. But when you point out the lack of publication, they happily throw Bartke's mouse away.
+AIs, however, fail to draw this distinction and include Bartke's mouse on equal footing with all the actual studies. But when you point out the lack of publication, they happily throw Bartke's mouse away.
 
 Even in this case, **AIs still can't decide on a singular lifespan record.** 
 
