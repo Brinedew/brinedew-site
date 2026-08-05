@@ -6,6 +6,15 @@ const GENEGUESSR_HOST = "geneguessr.brinedew.bio"
 const MAIN_SITE_HOSTS = new Set(["brinedew.bio", "www.brinedew.bio", "staging.brinedew.bio"])
 const ROOT_DOCUMENT_PATHS = new Set(["/", "/index", "/index/", "/index.html"])
 const PRIVACY_DOCUMENT_PATHS = new Set(["/privacy", "/privacy/", "/privacy.html"])
+const SUPPORT_ALIAS_PATHS = new Set([
+  "/support",
+  "/support/",
+  "/posts/support-me.html",
+  "/posts/support-me/",
+  "/posts/Support-me",
+  "/posts/Support-me/",
+  "/posts/Support-me.html",
+])
 const ANALYTICS_CONSENT_COUNTRIES = new Set([
   "AT",
   "BE",
@@ -134,6 +143,16 @@ function applyPublicDocumentHeaders(response, request) {
 }
 
 function canonicalDocumentRedirect(url) {
+  // Keep human-facing support aliases as HTTP redirects. The Quartz alias
+  // emitter uses a noindex meta-refresh shell, which browsers follow but many
+  // AI fetchers do not; a direct 301 preserves one crawlable canonical page.
+  if (MAIN_SITE_HOSTS.has(url.hostname) && SUPPORT_ALIAS_PATHS.has(url.pathname)) {
+    const canonicalHost = url.hostname === "www.brinedew.bio" ? "brinedew.bio" : url.hostname
+    const target = new URL(`https://${canonicalHost}/posts/support-me`)
+    target.search = url.search
+    return Response.redirect(target.toString(), 301)
+  }
+
   if (url.hostname === "www.brinedew.bio" && ROOT_DOCUMENT_PATHS.has(url.pathname)) {
     const target = new URL("https://brinedew.bio/")
     target.search = url.search
