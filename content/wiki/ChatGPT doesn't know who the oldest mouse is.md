@@ -11,17 +11,22 @@ AIs are in the [news](https://www.telegraph.co.uk/business/2026/08/03/unreleased
 
 Let's say you're interested in benchmarking lifespan extension communities against each other, based on which animal they work on. It's 2026, so for many of us the natural first step is to turn to ChatGPT, or any other AI assistant, and to ask it for a table of lifespan records by species. 
 
-In response, AIs invariably repeat that a mouse from Andrzej Bartke's laboratory lived for **1,819 days**, the maximum mouse lifespan ever reported.
+In response, AIs invariably repeat that a mouse called "GHR-KO 11C" from Andrzej Bartke's laboratory lived for **1,819 days**, the maximum mouse lifespan ever reported.
 
-But are they right to do that?
+But are they right to include it?
 ![[image-57.png|A mundane data collation request I gave to ChatGPT]]![[image-59.png|The response - note the "high confidence", "cleanest row" claims.]]
-On the surface, the inclusion seems warranted. Bartke is a well-regarded researcher known for studying dwarf mice. Dwarfism is known for being linked to longer lifespans within a species and for offering protection from age-related diseases. And Bartke's lifespan record was indeed celebrated by the [Methuselah Foundation](https://www.mfoundation.org/) in 2003 as the Methuselah Mouse Prize. 
+On the surface, the inclusion seems warranted. Bartke is a well-regarded researcher known for studying dwarf mice. Dwarfism is known for being linked to longer lifespans within various species and for offering protection from age-related diseases. And Bartke's lifespan record was indeed celebrated by the [Methuselah Foundation](https://www.mfoundation.org/) in 2003 as the Methuselah Mouse Prize. 
 
-However, a closer look reveals that the MPrize program was launched on the 8th of June 2003, five months *after* the Bartke mouse had died on the 8th of January 2003.
+However, a closer look reveals that the MPrize program was [launched](https://www.fightaging.org/archives/2003/05/methuselah-mouse-prize-launched/) on the 31st of May 2003, five months *after* the Bartke mouse had died on the 8th of January 2003.
 
 And while a few other people got MPrize awards, none of them were in the record-breaking "Longevity Prize" category - Bartke remains its singular recipient.
 
-More baffling, this specific mouse was never actually recorded in any research publication! The 1,819-day number comes from **personal communication**, not from any paper. 
+More baffling, this specific mouse was never actually recorded in any primary source! The 1,819-day number comes from **personal communication**, not from any paper. 
+
+![[image-68.png|From Brown-Borg and... Bartke?, 2012]]
+Here is how the mouse is described in a 2015 [AAAS feature](https://www.pomona.edu/sites/default/files/science-2015-cohen-1186-7-2.pdf):
+
+![[image-70.png]]
 
 In the two decades since the record claim, none of Bartke's publications have come close to repeating it. The longest lifespan I could find in his published work is a 1,537-day-old mouse from Sun et al. (2013)[^1].
 ![[image-65.png|Each data point records day of death of the animal (x-axis) and what share of the group survived longer than that animal (y-axis). Four colors signify a control group and three treatment groups. From Sun et al., 2013. ]]
