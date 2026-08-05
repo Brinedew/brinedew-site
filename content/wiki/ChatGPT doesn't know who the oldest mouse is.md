@@ -61,9 +61,9 @@ Who I'm really challenging here is ChatGPT, for thinking that winning a lifespan
 
 **Why shouldn't AI analysis just include every mouse lifespan record claimed by a researcher?** Why does it matter whether the record is featured in a publication or not?
 
-Because we want results that are evidence-based, not word-of-scientist-based.
+Because the record result in a publication is better-supported by other evidence in that publication.
 
-Relying on word alone would lose important quality control checks on data. A research paper featuring a lifespan record also provides supporting data that helps validate the record against the possibility of a catastrophic mix-up. For example, when authors provide a survival curve for all the individuals in a cohort, you can now judge: 
+Relying on a press release alone would lose important quality control checks on data. A research paper featuring a lifespan record also provides supporting data that helps validate the record against the possibility of a catastrophic mix-up. For example, when authors provide a survival curve for all the individuals in a cohort, you can now judge: 
 * Is the shape of the survival curve compatible with the ages in the text of the paper?
 * Was the winning animal a suspicious outlier among its cohort mates?
 * How good were the animal facility conditions based on the control group survival shape?
