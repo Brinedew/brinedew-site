@@ -51,7 +51,11 @@ So, according to Aubrey here, they used a method called Aspartic acid racemizati
 
 In the two decades since the record claim, none of Bartke's publications have come close to recording an outlier this large. The longest lifespan I could find in his published work is a 1,537-day-old mouse from Sun et al. (2013)[^1].
 ![[image-65.png|Each data point records day of death of the animal (x-axis) and what share of the group survived longer than that animal (y-axis). Four colors signify a control group and three treatment groups. From Sun et al., 2013. ]]
-Just by eyeballing the lifespan curves here, you get a sense of the scale of the gap. The distance between two ticks is 250 days. To put the MPrize mouse on this chart, you would need to extend the x-axis by 1 full tick, and then put the marker past that tick. In fact, let me just add the circle where the record would be.
+This is a good time to introduce two common lifespan-increasing interventions in mouse longevity studies:
+* **Caloric restriction** (CR) simply means giving the mouse less food that it normally eats: experimental conditions can range from 20% CR up to 50% CR. The control condition, where mice eat at their own pace, is called *ad libitum* (AL) 
+* **Growth hormone receptor knock-out** (GHR-KO or simply KO) is a mouse strain whose GHR gene was artificially disabled. Mice with an unperturbed genetic background are called wild-type (WT) or normal (N)
+![[image-73.png|bGH mice are engineered to chronically overexpress bovine growth hormone. From Young et al., 2023]]
+Just by eyeballing the lifespan curves above, you can get a sense of the scale of the gap. The distance between two ticks is 250 days. To put the MPrize mouse on this chart, you would need to extend the x-axis by 1 full tick, and then put the marker past that tick. In fact, let me just add the circle where the record would be.
 
 ![[bartke.png]]
 
@@ -122,14 +126,12 @@ But if you ask ChatGPT 5.6 Pro ($100 subscription! please [support](https://brin
 > The longest-lived individual mouse was from group N/R40 that lived 54.6 mo.
 
 ![[image-55.png|From Weindruch et al., 1986]]
-If you're lucky, ChatGPT Pro will also bring up the Harrison-Archer study from 1987 based on secondary sources.[^4] It doesn't always remember to mention it: the paper is paywalled and ChatGPT doesn't have institutional access. In this paper, Harrison-Archer write:
+If you're lucky, ChatGPT Pro will also bring up the Harrison-Archer study from 1987 based on what secondary sources say about it.[^4] AI doesn't always remember to mention this paper: it is paywalled and ChatGPT doesn't have institutional access to it. In this paper, authors write:
 
-> The maximum longevity of 1742 d in this group of 34 mice may have set a new record for the genus Mus
+> The maximum longevity of 1742 d in this group of 34 mice may have set a new record for the genus Mus.
 
-This is the strongest candidate for the longest-living mouse with a primary source record I found so far.
-
-![[image-72.png]]
-
+This is the strongest candidate for the longest-living mouse with a primary source record I found so far. Note, however, that it's also a single outlier within its cohort: the second oldest mouse in that cohort died much younger.
+![[image-72.png|Note the displacement of the outlier relative to x-axis. From Harrison and Archer, 1987. .]]
 Are there perhaps even older studies I will find after getting a $200 subscription? Maybe. If I was an Anthropic employee, would Claude Mythos have shown me a citation for a 10-year-old mouse from Meiji era? Who knows! At this point, it's surprising that Mendel-style long-overlooked breakthroughs aren't popping up left and right. And yes, I asked AI to look through the old Soviet lifespan papers.
 ![[image-63.png|They don't know about Bogdanov's rejuvenation experiments from the 1920s]]
 **So is AI good for unstructured data collation and free-form meta-analysis?** 
