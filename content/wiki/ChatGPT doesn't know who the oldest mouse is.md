@@ -67,6 +67,8 @@ Relying on a press release alone would lose important quality control checks on 
 * Is the shape of the survival curve compatible with the ages in the text of the paper?
 * Was the winning animal a suspicious outlier among its cohort mates?
 * How good were the animal facility conditions based on the control group survival shape?
+* 
+
 And so on.
 
 **Are mouse mix-ups a realistic concern in longevity research?** 
@@ -108,9 +110,8 @@ AIs, however, fail to draw this distinction and include Bartke's mouse on equal 
 
 Even in this case, **AIs still can't decide on a singular lifespan record.** 
 
-If you use ChatGPT 5.6 Extra High thinking ($20 subscription), it claims the mouse lifespan record of 1,628 days.
-![[image-56.png]]
-
+If you use ChatGPT 5.6 Extra High thinking ($20 subscription), it claims the maximum mouse lifespan record of 1,628 days.
+![[image-56.png|M. musculus is the species name for lab mice.]]
 This is taken from Turturro et al. (1999)[^2]:
 
 > The oldest male mouse, B6D2F1, lived to 1,628 days.
@@ -121,12 +122,13 @@ But if you ask ChatGPT 5.6 Pro ($100 subscription! please [support](https://brin
 > The longest-lived individual mouse was from group N/R40 that lived 54.6 mo.
 
 ![[image-55.png|From Weindruch et al., 1986]]
+If you're lucky, ChatGPT Pro will also bring up the Harrison-Archer study from 1987 based on secondary sources.[^4] It doesn't always remember to mention it: the paper is paywalled and ChatGPT doesn't have institutional access. In this paper, Harrison-Archer write:
 
-ChatGPT Pro also brings up Harrison-Archer study from 1987.[^4] In a later secondary work, the same authors describe the study as producing:
+> The maximum longevity of 1742 d in this group of 34 mice may have set a new record for the genus Mus
 
-> “1742 days, a new record for Mus”
+This is the strongest candidate for the longest-living mouse with a primary source record I found so far.
 
-This is the strongest candidate for the longest-living mouse with a primary source record I found so far. But I couldn't actually access the full text of the paper, and the later curve reconstruction efforts by Schmauck-Medina et al.[^5] didn't provide lifespan curves for this study either, despite mentioning it by name as the record-holder.
+![[image-72.png]]
 
 Are there perhaps even older studies I will find after getting a $200 subscription? Maybe. If I was an Anthropic employee, would Claude Mythos have shown me a citation for a 10-year-old mouse from Meiji era? Who knows! At this point, it's surprising that Mendel-style long-overlooked breakthroughs aren't popping up left and right. And yes, I asked AI to look through the old Soviet lifespan papers.
 ![[image-63.png|They don't know about Bogdanov's rejuvenation experiments from the 1920s]]
