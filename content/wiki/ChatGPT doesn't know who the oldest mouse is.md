@@ -1,11 +1,11 @@
 ---
-title: Does ChatGPT know who the oldest mouse is?
+title: ChatGPT doesn't know who the oldest mouse is
 tags:
   - content/post
 date: 2026-08-04
 draft: false
 ---
-# Does ChatGPT know who the oldest mouse is?
+# ChatGPT doesn't know who the oldest mouse is
 
 AIs are in the [news](https://www.telegraph.co.uk/business/2026/08/03/unreleased-ai-model-solves-decades-old-maths-problems/) this [week](https://mashable.com/tech/anthropic-fable-5-disproves-jacobian-conjecture) for supposedly solving dozens of long-standing math questions and putting research mathematicians out of a job. If any of you are looking for a new career, I urge you to pivot to the one thing AIs still can't do - reading longevity papers.
 
@@ -56,7 +56,7 @@ Long story short:
 
 **How do lifespan mix-ups happen?** 
 
-In the case above, the mouse was last seen on Nov 1, 2021, at the age of 18 months. During the next scheduled weighing, 6 months later, the mouse was gone. It wasn't anything out of the ordinary: during routine colony maintenance, dead or heavily injured mice not reserved for dissection are normally removed by animal facility technicians, not researchers. Their dates of death are not necessarily well-recorded - in this case, the researched might use a last-seen-at date instead.
+In the case above, the mouse was last seen on Nov 1, 2021, at the age of 18 months. During the next scheduled weighing, 6 months later, the mouse was gone. It wasn't anything out of the ordinary: during routine colony maintenance, dead or heavily injured mice not reserved for dissection are normally removed by animal facility technicians, not researchers. Their dates of death are not necessarily well-recorded - in this case, the researcher might use a last-seen-at date instead of a death date.
 
 What went wrong is that the researcher, when recording the mouse's uncertain-but-unimpressive lifespan, made a typo in the records table. When inputting the last-seen date, instead of typing 2021, they typed 2024 - the numbers 1 and 4 are close together on the keypad. This added 36 months to the mouse's 18-month lifespan, adding up to 1,644 days.
 
@@ -86,7 +86,7 @@ This is taken from Turturro et al. (1999)[^2]:
 > The oldest male mouse, B6D2F1, lived to 1,628 days.
 
 ![[image-53.png|From Turturro et al., 1999]]
-But if you ask ChatGPT 5.6 Pro ($100 subscription!!! please [support](https://brinedew.bio/posts/Support-me.html) your local scientist), it will dig up Weindruch et al. (1986)[^3], with a maximum record of 54.6 months - equaling around 1,660 days, plus-minus a couple days depending on month conversion math.
+But if you ask ChatGPT 5.6 Pro ($100 subscription! please [support](https://brinedew.bio/posts/Support-me.html) your local scientist), it will dig up Weindruch et al. (1986)[^3], with a maximum record of 54.6 months - equaling around 1,660 days, plus-minus a couple days depending on month conversion math.
 
 > The longest-lived individual mouse was from group N/R40 that lived 54.6 mo.
 
