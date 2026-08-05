@@ -1,11 +1,11 @@
 ---
-title: ChatGPT doesn't know who the oldest mouse is
+title: AI doesn't know who the oldest mouse is
 tags:
   - content/post
 date: 2026-08-04
 draft: false
 ---
-# ChatGPT doesn't know who the oldest mouse is
+# AI doesn't know who the oldest mouse is
 
 AIs are in the [news](https://www.telegraph.co.uk/business/2026/08/03/unreleased-ai-model-solves-decades-old-maths-problems/) this [week](https://mashable.com/tech/anthropic-fable-5-disproves-jacobian-conjecture) for supposedly solving dozens of long-standing math questions and putting research mathematicians out of a job. If any of you are looking for a new career, I urge you to pivot to the one thing AIs still can't do - reading longevity papers.
 
