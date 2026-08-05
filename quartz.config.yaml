@@ -308,7 +308,7 @@ plugins:
       credit: Brinedew
       links:
         About: /About.html
-        Support me: /posts/Support-me.html
+        Support me: /posts/support-me
   # Contact form for the brinedew.bio About page. Opt-in via the
   # `contact: true` frontmatter on content/About.md. The form posts to
   # /api/contact on the stateful worker, which delivers via Cloudflare
