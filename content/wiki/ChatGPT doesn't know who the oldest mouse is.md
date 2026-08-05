@@ -47,7 +47,7 @@ allows us to give the prize to a mouse born long before the prize
 began (as we indeed did, to Bartke last year). If we can award a  
 new PP soon, becaue someone beats Bartke, that's great publicity.
 
-Ok, so according to Aubrey here, they used a method called Aspartic acid racemization (AAR) to estimate age at death. 
+So, according to Aubrey here, they used a method called Aspartic acid racemization (AAR) to estimate the age of the mouse at death. 
 
 In the two decades since the record claim, none of Bartke's publications have come close to recording an outlier this large. The longest lifespan I could find in his published work is a 1,537-day-old mouse from Sun et al. (2013)[^1].
 ![[image-65.png|Each data point records day of death of the animal (x-axis) and what share of the group survived longer than that animal (y-axis). Four colors signify a control group and three treatment groups. From Sun et al., 2013. ]]
