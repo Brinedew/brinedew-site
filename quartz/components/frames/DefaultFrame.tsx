@@ -72,7 +72,7 @@ export const DefaultFrame: PageFrame = {
                   Log in with Discord
                 </a>
                 <a
-                  href="/posts/Support-me"
+                  href="/posts/support-me"
                   class="icono-guest-login-card-button draft-cta-btn--support"
                   hidden
                 >
