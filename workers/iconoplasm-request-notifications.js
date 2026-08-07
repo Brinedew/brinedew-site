@@ -23,6 +23,11 @@ const DISCORD_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
 // Keep one Worker invocation well below its memory ceiling even if a malformed
 // rendition is individually under Discord's per-file limit.
 const DISCORD_ATTACHMENT_BATCH_MAX_BYTES = 24 * 1024 * 1024
+// ARCHITECTURE FENCE [IPD-006]: one delivery group may require two portrait
+// fetches per attachment when the authenticated storage path is unavailable,
+// plus the Discord channel and message calls. Process one group per Worker
+// invocation so regional fallback stays below Cloudflare's 50-subrequest cap.
+export const DISCORD_MAX_FULFILLMENT_GROUPS_PER_INVOCATION = 1
 
 function boundedText(value, maxLength) {
   const text = String(value || "").trim()
@@ -326,6 +331,12 @@ function hasWebpSignature(bytes) {
   )
 }
 
+function isWorkerSubrequestLimitError(value) {
+  return /too many subrequests(?: by single worker invocation)?/i.test(
+    String(value?.message || value || ""),
+  )
+}
+
 async function readBoundedResponseBytes(response, maxBytes) {
   const reader = response.body?.getReader()
   if (!reader) {
@@ -377,6 +388,14 @@ async function loadFulfilledPortraitAttachment(env, row) {
     try {
       response = await fetch(portraitRequest.url, { headers: portraitRequest.headers })
     } catch (error) {
+      if (isWorkerSubrequestLimitError(error)) {
+        return {
+          ok: false,
+          retryable: true,
+          deferred: true,
+          error: `Fulfilled portrait delivery deferred: ${boundedText(error?.message || error, 500)}`,
+        }
+      }
       if (index + 1 < portraitRequests.length) {
         console.warn("Iconoplasm portrait delivery falling back after storage request failure", {
           asset_sha256: sha,
@@ -561,7 +580,13 @@ export async function deliverPendingRequestFulfillmentNotifications(
   if (!env?.ICONOPLASM_DB) {
     return { ok: false, delivered: 0, error: "ICONOPLASM_DB binding missing" }
   }
-  const safeLimit = Math.max(1, Math.min(50, positiveInteger(limit) || 20))
+  const safeLimit = Math.max(
+    1,
+    Math.min(
+      DISCORD_MAX_FULFILLMENT_GROUPS_PER_INVOCATION,
+      positiveInteger(limit) || DISCORD_MAX_FULFILLMENT_GROUPS_PER_INVOCATION,
+    ),
+  )
   const ids = Array.from(
     new Set((Array.isArray(requestIds) ? requestIds : []).map(positiveInteger).filter(Boolean)),
   ).slice(0, 50)
@@ -620,6 +645,7 @@ export async function deliverPendingRequestFulfillmentNotifications(
     suppressed: 0,
     failed: 0,
     unknown: 0,
+    deferred: 0,
   }
   for (const leader of Array.isArray(rowsResponse?.results) ? rowsResponse.results : []) {
     const leaderId = positiveInteger(leader?.id)
@@ -685,7 +711,8 @@ export async function deliverPendingRequestFulfillmentNotifications(
         error: "DISCORD_BOT_TOKEN is not configured.",
         attemptCount: Number(leader?.discord_attempt_count || 0) + 1,
       })
-      result.failed += 1
+      if (failure.deferred) result.deferred += 1
+      else result.failed += 1
       continue
     }
 
@@ -789,6 +816,15 @@ export async function deliverPendingRequestFulfillmentNotifications(
       result.delivered += 1
       result.delivered_requests += rows.length
     } catch (error) {
+      if (isWorkerSubrequestLimitError(error)) {
+        await setDiscordState(env, notificationIds, "retry", {
+          channelId,
+          error: `Discord message delivery deferred: ${boundedText(error?.message || error, 500)}`,
+          attemptCount: Number(leader?.discord_attempt_count || 0) + 1,
+        })
+        result.deferred += 1
+        continue
+      }
       // A failed response read after POST is ambiguous. Do not retry and risk
       // a duplicate DM; the durable website inbox remains authoritative.
       await setDiscordState(env, notificationIds, "unknown", {

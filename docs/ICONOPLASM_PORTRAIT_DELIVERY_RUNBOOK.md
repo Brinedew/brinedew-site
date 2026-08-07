@@ -73,6 +73,16 @@ the WebP signature check before Discord receives them. This keeps a Vietnam-side
 resolver or Storage replica problem from turning a valid portrait into a
 publication failure without changing Bunny's healthy browser path.
 
+Discord fulfillment is deliberately sliced at one complete requester/publication/
+gene group per Worker invocation. A group may require both Storage and public-CDN
+fetches for every preview, followed by the Discord channel and message calls;
+processing several groups together can exceed Cloudflare's per-invocation
+subrequest ceiling even when each individual path is healthy. The workstation
+repeats the exact publication handoff until the pending request set is empty.
+An explicit Cloudflare subrequest-limit exception is retryable because the
+platform rejects that outbound call before it can reach Discord. Other ambiguous
+message outcomes remain terminal and must not be replayed automatically.
+
 ## Browser delivery policy
 
 ### Why Bunny is primary
