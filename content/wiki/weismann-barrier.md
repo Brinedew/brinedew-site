@@ -9,45 +9,42 @@ aliases:
 ---
 # Weismann Barrier
 
-**Weismann barrier** describes a life-cycle arrangement in which one cell lineage produces gametes and other lineages build the organism's body. A mutation can spread through a bodily lineage during an organism's life, while its descendant cells remain in that organism. The barrier concerns which descendants a cell lineage can produce: descendants inside the present body, or descendants that begin another organism.[^1][^6]
-
-August Weismann developed the underlying distinction in his germ-plasm theory, before genes and DNA were known. He proposed a hereditary substance that persists between generations while each organism's body develops and perishes. Current use of the term concerns the relation between reproductive and bodily lineages rather than Weismann's proposed hereditary material.[^1]
-
-## Historical model
-
-Weismann's germ plasm was a proposed physical carrier of heredity. He described its components as biophors, determinants, ids, and idants. These terms belong to a nineteenth-century model of inheritance. The theory distinguished cell lineages that contribute cells to later organisms from lineages that remain within the present organism.[^1]
+**Weismann barrier** is a concept in evolutionary biology describing the separation of germline and somatic lineages. In its strong animal form, cells in the germline produce eggs or sperm, while cells in the soma produce the parent organism's tissues. A mutation in the germline can enter an egg or sperm; a mutation in the soma can spread only among the parent's bodily cells.[^1][^6]
 
 ![[weismann-barrier-germ-plasm.png|Diagram of Weismann's germ-plasm theory: hereditary material continues between generations while each body develops from it. Wikimedia Commons.]]
 
-In the strong form of the arrangement, germ plasm continues through the reproductive lineage. Somatic tissues develop from it during each generation and end with that generation. The reproductive lineage supplies the cells that start a descendant organism, while somatic lineages supply the parent body.
+An embryo begins with cells that divide to make more cells. In an irreversible germline-soma arrangement, a cell can leave the reproductive lineage and become a body cell. Its descendants remain body cells. The lineage that continues to make gametes supplies the cells of the next organism.[^1][^6]
 
-## A restricted cell transition
+## Daughter-cell routes
 
-Gao and colleagues describe the barrier through permitted daughter-cell transitions. In their model, a germ-role cell can produce a soma-role cell. A soma-role cell cannot produce a germ-role cell. At the end of the life cycle, germ-role cells found new organisms; soma-role cells do not.[^6]
+Every division produces daughter cells with a role. A germ-role cell can produce another germ-role cell or a soma-role cell. A soma-role cell produces soma-role daughters. At reproduction, germ-role cells begin new organisms; soma-role cells die with the parent.[^6]
 
-Gao and colleagues call this pattern irreversible somatic differentiation. Their reversible alternative permits both directions of role change: a germ-role cell can produce a soma-role cell, and a soma-role cell can produce a germ-role cell. These model categories classify permitted transitions between cell roles in a developmental strategy.[^6]
+Irreversible somatic differentiation names this one-way division rule. Reversible somatic differentiation permits a soma-role cell to produce a germ-role cell. A life cycle without somatic differentiation produces no soma-role cells.[^6]
 
-## Somatic contributions to organismal performance
+## Somatic work and reproductive cost
 
-In Gao and colleagues' model, soma-role cells increase the rate or effectiveness of organismal growth. At reproduction, their lineages end with the parent. Cells assigned to the body use material and developmental time that could otherwise produce future organisms.
+Making a soma-role cell removes one cell from the reproductive lineage. That cell can instead help the parent organism grow. The gain is faster or more effective growth of the parent; the cost is a smaller pool of cells that can begin descendants.
 
-Gao and colleagues modeled this trade-off. Irreversible somatic differentiation was favored when changing cell roles carried a cost, small numbers of soma-role cells substantially improved organismal performance, and the organism was large enough for that improvement to matter. The model identifies conditions under which a one-way transition from reproductive to bodily role can outcompete developmental strategies with a return route.[^2]
+In a developmental model, irreversible somatic differentiation evolved when changing cell role carried a cost, small numbers of soma-role cells substantially improved organismal performance, and the organism was large enough for that improvement to affect reproduction. Under those conditions, selection favored a one-way cellular role in the model.[^2]
 
-## Life-cycle variation
+## Life cycles with a return route
 
-Multicellular life cycles use several arrangements for reproduction. In many animals, a lineage supplying gametes develops separately from lineages that construct the body. Gao and colleagues identify widespread exceptions to irreversible somatic differentiation in plants and reported transitions from vegetative to reproductive functions in some cnidarians. In these life cycles, a lineage active during vegetative growth can remain eligible to contribute to a later organism.[^3]
+Many animals use a one-way route from germ role to soma role. Plants include widespread exceptions, and some cnidarians contain lineages that move from vegetative work to reproductive work. A cell lineage can therefore spend part of its life building or maintaining an organism and later produce cells for a new organism.[^3]
 
-This variation changes the route by which a mutation can leave one organism. In an animal with a sequestered germline, a mutation confined to a mature bodily lineage remains in that organism. A lineage that later changes from vegetative to reproductive function can carry a mutation into a later organism. The difference lies in the transition a lineage is permitted to make during the life cycle.[^3]
+A mutation can appear during vegetative growth. In a sequestered germline, it stays in the parent body because the mutated lineage produces only body cells. When a vegetative lineage later produces reproductive cells, the mutation can enter the next organism through those cells.[^3]
+
+## Weismann's historical model
+
+August Weismann developed the germ-plasm theory before genes and DNA were known. He proposed a hereditary substance that passed between generations while each body formed and perished.[^1]
 
 ## Aging and cancer
 
-Weismann connected the distinction to aging by treating the germline as potentially continuous and the soma as mortal. Later disposable-soma models describe a resource allocation: maintenance repairs the current body, while reproduction produces descendants. Pen and Flatt identify the separated germline and soma as a central premise of this tradition. The theory locates aging in a life cycle that allocates finite resources between current-body maintenance and descendant production.[^4]
+Weismann connected a continuing germline and a mortal soma to aging. [[disposable-soma-theory|Disposable-soma theory]] treats maintenance and reproduction as competing uses of resources. Repairing the parent body preserves somatic cells; producing descendants places resources in the germline route.[^4]
 
-Cancer involves genetic and epigenetic change that can create cell clones with different growth rates inside one body. Caulin and Maley describe this as somatic evolution and discuss tumor-suppressor mechanisms that limit the propagation of such changes through tissue. A cancer clone can acquire many descendants in its host while remaining a lineage of that host. A germline lineage enters the next organism through gametes. The Weismann barrier separates those two descendant routes.[^5]
+Cancer is an evolutionary process within a bodily lineage. Genetic and epigenetic changes can create cell clones with different growth rates inside one body. Tumor-suppressor mechanisms limit the propagation of such changes through tissue. A cancer lineage can expand within its host; a germline lineage enters the next organism through gametes.[^5]
 
 ## Related
 
-- [[disposable-soma-theory|Disposable soma theory]]
 - [[selection-shadow-theory|Selection shadow theory]]
 - [[cellular-senescence|Cellular senescence]]
 - [[tumor-suppressor-theory-of-aging|Tumor suppressor theory of aging]]
