@@ -305,7 +305,28 @@ class FulfillmentStatement {
 
   async run() {
     if (this.sql.includes("UPDATE icono_request_notifications")) {
-      return { meta: { changes: 0 } }
+      const [publicationId, groupSize, requestId] = this.args
+      let changes = 0
+      for (const row of this.db.notifications) {
+        if (
+          Number(row.request_id) !== Number(requestId) ||
+          row.discord_status === "sent" ||
+          (row.fulfillment_publication_id &&
+            row.fulfillment_publication_id !== `legacy-request:${requestId}` &&
+            row.fulfillment_publication_id !== String(this.args[3] || ""))
+        ) {
+          continue
+        }
+        row.fulfillment_publication_id = String(publicationId || "")
+        row.fulfillment_group_size = Number(groupSize || 1)
+        if (row.discord_status === "failed") {
+          row.discord_status = "retry"
+          row.discord_error = ""
+          row.discord_next_attempt_at = null
+        }
+        changes += 1
+      }
+      return { meta: { changes } }
     }
     if (this.sql.includes("SET status = 'delivery_pending'")) {
       const requestId = Number(this.args[6])
@@ -337,7 +358,7 @@ class FulfillmentStatement {
 }
 
 class FulfillmentDb {
-  constructor(requests) {
+  constructor(requests, notifications = []) {
     this.requests = requests.map((request) => ({
       requester_user_id: BRINEDEW_USER_ID,
       gene_symbol: "INS",
@@ -345,6 +366,7 @@ class FulfillmentDb {
       fulfillment_group_size: 1,
       ...request,
     }))
+    this.notifications = notifications
   }
 
   prepare(sql) {
@@ -511,6 +533,51 @@ test("fulfillment replay rejects a later candidate for an already settled reques
   assert.equal(result.conflicts[0].reason, "request_already_bound_to_different_result")
   assert.equal(db.requests[0].fulfilled_asset_sha256, originalAsset)
   assert.equal(db.requests[0].fulfilled_vision_id, "anima-v1-1398")
+})
+
+test("fulfillment replay requeues a failed pre-Discord notification", async () => {
+  const assetSha = "c".repeat(64)
+  const notification = {
+    request_id: 40,
+    fulfillment_publication_id: "pub-replay",
+    fulfillment_group_size: 1,
+    discord_status: "failed",
+    discord_error: "Fulfilled portrait download failed (404).",
+    discord_next_attempt_at: "2026-08-06 18:00:00",
+  }
+  const db = new FulfillmentDb(
+    [
+      {
+        id: 40,
+        status: "delivery_pending",
+        fulfilled_asset_sha256: assetSha,
+        fulfilled_vision_id: "anima-v1-1398",
+        fulfillment_publication_id: "pub-replay",
+      },
+    ],
+    [notification],
+  )
+
+  const result = await fulfillGenerationRequests(
+    { ICONOPLASM_DB: db },
+    {
+      items: [
+        {
+          request_ids: [40],
+          fulfilled_asset_sha256: assetSha,
+          fulfilled_vision_id: "anima-v1-1398",
+        },
+      ],
+      resolvedBy: "pytest",
+      publicationId: "pub-replay",
+    },
+  )
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.request_ids, [40])
+  assert.equal(notification.discord_status, "retry")
+  assert.equal(notification.discord_error, "")
+  assert.equal(notification.discord_next_attempt_at, null)
 })
 
 test("fulfillment batch preflight prevents partial rebinding", async () => {
@@ -1251,11 +1318,44 @@ test("a missing fulfilled image fails visibly before Discord receives a message"
 
     assert.equal(result.delivered, 0)
     assert.equal(result.failed, 1)
-    assert.equal(urls.length, 1)
+    assert.equal(urls.length, 2)
     assert.match(urls[0], /storage\.bunnycdn\.com/)
+    assert.match(urls[1], /iconoplasmportraits\.b-cdn\.net/)
     assert.doesNotMatch(urls[0], /discord\.com/)
+    assert.doesNotMatch(urls[1], /discord\.com/)
     assert.equal(row.discord_status, "failed")
     assert.match(row.discord_error, /portrait download failed \(404\)/i)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("a regional authenticated-storage miss falls back to the public Bunny CDN before failing delivery", async () => {
+  const row = notificationRow()
+  const db = new NotificationDb([row])
+  const originalFetch = globalThis.fetch
+  const urls = []
+  globalThis.fetch = async (url, init) => {
+    const value = String(url)
+    urls.push(value)
+    if (value.includes("storage.bunnycdn.com")) {
+      return new Response("storage replica not ready", { status: 404 })
+    }
+    if (value.includes("iconoplasmportraits.b-cdn.net")) return validWebpResponse()
+    if (value.endsWith("/users/@me/channels")) return Response.json({ id: "dm-channel-1" })
+    return Response.json({ id: "discord-message-fallback" })
+  }
+  try {
+    const result = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db), {
+      requestIds: [42],
+    })
+
+    assert.equal(result.delivered, 1)
+    assert.equal(result.failed, 0)
+    assert.match(urls[0], /storage\.bunnycdn\.com/)
+    assert.match(urls[1], /iconoplasmportraits\.b-cdn\.net/)
+    assert.equal(row.discord_status, "sent")
+    assert.equal(row.discord_message_id, "discord-message-fallback")
   } finally {
     globalThis.fetch = originalFetch
   }

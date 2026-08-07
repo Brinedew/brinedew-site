@@ -74,6 +74,44 @@ test("portrait PUT fails a permanent Bunny authorization error without retrying"
   }
 })
 
+test("external portrait PUT can require an authoritative read-after-write check", async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    calls.push({ url, method: init?.method || "GET" })
+    if (init?.method === "PUT") return new Response(null, { status: 201 })
+    assert.equal(init?.method, "HEAD")
+    return new Response(null, { status: 200 })
+  }
+
+  try {
+    await putPortraitStorageObject(
+      {
+        ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+        ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "iconoplasm-portraits",
+        ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-access-key",
+        ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: 0,
+      },
+      PORTRAIT_KEY,
+      Uint8Array.from([1, 2, 3, 4]),
+      { contentType: "image/webp", verifyAfterPut: true },
+    )
+    assert.deepEqual(calls, [
+      {
+        url: `https://storage.bunnycdn.com/iconoplasm-portraits/${PORTRAIT_KEY}`,
+        method: "PUT",
+      },
+      {
+        url: `https://storage.bunnycdn.com/iconoplasm-portraits/${PORTRAIT_KEY}`,
+        method: "HEAD",
+      },
+    ])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
   return {
     ...env,

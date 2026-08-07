@@ -65,6 +65,14 @@ and write successful immutable GET responses to Cloudflare's edge cache. Both
 paths are content-addressed, so query strings do not create separate cache
 objects.
 
+Server-generated Discord receipts use the same content-addressed full rendition
+but have a second, delivery-only fallback: authenticated Storage is attempted
+first, then the public Bunny CDN is tried when the Storage request is regionally
+unreachable or returns 404. The fallback is bounded and the bytes still require
+the WebP signature check before Discord receives them. This keeps a Vietnam-side
+resolver or Storage replica problem from turning a valid portrait into a
+publication failure without changing Bunny's healthy browser path.
+
 ## Browser delivery policy
 
 ### Why Bunny is primary
