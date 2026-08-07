@@ -73,6 +73,14 @@ the WebP signature check before Discord receives them. This keeps a Vietnam-side
 resolver or Storage replica problem from turning a valid portrait into a
 publication failure without changing Bunny's healthy browser path.
 
+Routine workstation ingest is a bounded write path: each missing rendition gets
+one Bunny Storage PUT, and the normal candidate batch must not invoke the
+read-after-write retry envelope. That envelope can repeat a PUT and several
+HEAD probes while Bunny converges, so it belongs only to explicit storage audit
+or repair work. Keeping it out of ordinary ingest preserves the Worker resource
+envelope; the durable storage-audit path remains available when exact
+read-after-write proof is required.
+
 Discord fulfillment is deliberately sliced at one complete requester/publication/
 gene group per Worker invocation. A group may require both Storage and public-CDN
 fetches for every preview, followed by the Discord channel and message calls;

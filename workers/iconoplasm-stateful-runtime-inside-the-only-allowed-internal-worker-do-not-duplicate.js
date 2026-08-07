@@ -32775,12 +32775,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
           if (!dryRun) {
             const uploadTasks = []
+            // Routine ingest must keep one bounded write envelope. The
+            // read-after-write helper is intentionally reserved for explicit
+            // storage verification/repair paths: it can repeat a PUT and
+            // several HEAD probes for one rendition while Bunny converges.
+            // Running that envelope for all three renditions of every normal
+            // sync item made a previously safe binary batch exceed the
+            // Cloudflare Worker resource envelope.
             if (!exists.full) {
               if (!fullBytes) throw new Error("Missing full rendition payload for new upload")
               uploadTasks.push(
                 putPortraitStorageObject(env, keys.full, fullBytes, {
                   contentType: "image/webp",
-                  verifyAfterPut: true,
                   customMetadata: {
                     gene_symbol: symbol,
                     asset_sha256: assetSha,
@@ -32794,7 +32800,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               uploadTasks.push(
                 putPortraitStorageObject(env, keys.medium, mediumBytes, {
                   contentType: "image/webp",
-                  verifyAfterPut: true,
                   customMetadata: {
                     gene_symbol: symbol,
                     asset_sha256: assetSha,
@@ -32808,7 +32813,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               uploadTasks.push(
                 putPortraitStorageObject(env, keys.thumb, thumbBytes, {
                   contentType: "image/webp",
-                  verifyAfterPut: true,
                   customMetadata: {
                     gene_symbol: symbol,
                     asset_sha256: assetSha,
