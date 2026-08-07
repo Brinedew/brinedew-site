@@ -9,73 +9,41 @@ aliases:
 ---
 # Weismann Barrier
 
-**Weismann barrier** is a concept in biology describing the separation of reproductive and bodily cell lineages in many animals. Germline cells make eggs or sperm and can contribute to a descendant organism. Somatic cells make tissues such as skin, muscle, gut, and brain and ordinarily end with the organism. A mutation in a skin-cell lineage may spread through that tissue while remaining confined to the organism in which it arose.[^1]
+**Weismann barrier** describes a life-cycle arrangement in which one cell lineage produces gametes and other lineages build the organism's body. A mutation can spread through a bodily lineage during an organism's life, while its descendant cells remain in that organism. The barrier concerns which descendants a cell lineage can produce: descendants inside the present body, or descendants that begin another organism.[^1][^6]
 
-August Weismann developed the idea before genes or DNA were known. His germ-plasm theory proposed a hereditary substance transmitted through generations while each body develops from it. Modern biology describes inheritance through genes, chromosomes, and DNA. “Weismann barrier” now labels the separation between these two lineages.[^1]
+August Weismann developed the underlying distinction in his germ-plasm theory, before genes and DNA were known. He proposed a hereditary substance that persists between generations while each organism's body develops and perishes. Current use of the term concerns the relation between reproductive and bodily lineages rather than Weismann's proposed hereditary material.[^1]
 
-## Historical origin
+## Historical model
 
-Weismann published his mature account in *Das Keimplasma* in 1892; an English translation, *The Germ-Plasm: A Theory of Heredity*, followed in 1893. In its preface, he distinguished a hereditary substance transmitted between generations from the “perishable body” of the individual. He used that distinction to reject the idea that changes acquired by the body are ordinarily transmitted to offspring.[^1]
+Weismann's germ plasm was a proposed physical carrier of heredity. He described its components as biophors, determinants, ids, and idants. These terms belong to a nineteenth-century model of inheritance. The theory distinguished cell lineages that contribute cells to later organisms from lineages that remain within the present organism.[^1]
 
-Weismann described inheritance with biophors, determinants, ids, and idants. These terms belong to his historical material theory. Germline cells develop inside an organism and receive material from its tissues. Their descendants later include eggs or sperm.[^1]
+![[weismann-barrier-germ-plasm.png|Diagram of Weismann's germ-plasm theory: hereditary material continues between generations while each body develops from it. Wikimedia Commons.]]
 
-## Cell roles
+In the strong form of the arrangement, germ plasm continues through the reproductive lineage. Somatic tissues develop from it during each generation and end with that generation. The reproductive lineage supplies the cells that start a descendant organism, while somatic lineages supply the parent body.
 
-The barrier classifies cells by the descendants they can produce. Germline cells produce eggs or sperm, which produce the first cells of a descendant organism. Somatic cells build, maintain, and repair the present body. Their descendants remain in that body. Intestinal stem cells and neurons differ in division rate while sharing a somatic reproductive fate.[^1]
+## A restricted cell transition
 
-![[weismann-barrier-germ-plasm.png|Diagram of Weismann's germ-plasm theory: germ plasm continues between generations while each soma develops from it. Wikimedia Commons.]]
+Gao and colleagues describe the barrier through permitted daughter-cell transitions. In their model, a germ-role cell can produce a soma-role cell. A soma-role cell cannot produce a germ-role cell. At the end of the life cycle, germ-role cells found new organisms; soma-role cells do not.[^6]
 
-## Differentiation regimes
+Gao and colleagues call this pattern irreversible somatic differentiation. Their reversible alternative permits both directions of role change: a germ-role cell can produce a soma-role cell, and a soma-role cell can produce a germ-role cell. These model categories classify permitted transitions between cell roles in a developmental strategy.[^6]
 
-Cell division and reproductive access are separate properties. The following terms classify cell fate.[^6]
+## Somatic contributions to organismal performance
 
-- **Irreversible somatic differentiation**
-  - A germ-role cell produces germ-role or soma-role daughters.
-  - A soma-role cell produces soma-role daughters.
-  - At reproduction, germ-role cells begin new organisms; soma-role cells die with the parent.
-- **Reversible somatic differentiation**
-  - A germ-role cell produces a soma-role daughter.
-  - A soma-role cell produces a germ-role daughter.
-- **Terminal differentiation**
-  - A cell stops dividing.
-  - Terminal differentiation describes cell division. Germline and soma describe reproductive lineage.
+In Gao and colleagues' model, soma-role cells increase the rate or effectiveness of organismal growth. At reproduction, their lineages end with the parent. Cells assigned to the body use material and developmental time that could otherwise produce future organisms.
 
-## A model life cycle
-
-Gao and colleagues model an organism with germ-role and soma-role cells.[^2]
-
-1. A germ-role cell starts an organism.
-2. Cells divide during growth.
-3. Germ-role cells produce soma-role cells.
-4. Soma-role cells shorten the time required for growth.
-5. At reproduction, each germ-role cell begins a new organism.
-6. Soma-role cells die with the parent organism.
-
-The model favored irreversible soma under three conditions:[^2]
-
-- Changing cell roles imposed a cost.
-- Small numbers of soma-role cells shortened growth time.
-- Organisms reached sufficient size.
+Gao and colleagues modeled this trade-off. Irreversible somatic differentiation was favored when changing cell roles carried a cost, small numbers of soma-role cells substantially improved organismal performance, and the organism was large enough for that improvement to matter. The model identifies conditions under which a one-way transition from reproductive to bodily role can outcompete developmental strategies with a return route.[^2]
 
 ## Life-cycle variation
 
-Many animals use germline lineages to supply gametes and somatic lineages to supply the body. Plants use meristems to produce vegetative structures during growth and flowers or seeds later in the life cycle. A mutation in a meristematic branch can enter descendants through those flowers or seeds. Some cnidarians also generate reproductive cells from lineages that previously performed vegetative functions.[^3]
+Multicellular life cycles use several arrangements for reproduction. In many animals, a lineage supplying gametes develops separately from lineages that construct the body. Gao and colleagues identify widespread exceptions to irreversible somatic differentiation in plants and reported transitions from vegetative to reproductive functions in some cnidarians. In these life cycles, a lineage active during vegetative growth can remain eligible to contribute to a later organism.[^3]
+
+This variation changes the route by which a mutation can leave one organism. In an animal with a sequestered germline, a mutation confined to a mature bodily lineage remains in that organism. A lineage that later changes from vegetative to reproductive function can carry a mutation into a later organism. The difference lies in the transition a lineage is permitted to make during the life cycle.[^3]
 
 ## Aging and cancer
 
-Weismann treated the soma as mortal and the germline as potentially continuous. The [[disposable-soma-theory|disposable soma theory]] allocates resources between repair and reproduction. Maintenance spends resources on cells and tissues. Reproduction spends resources on offspring.[^4]
+Weismann connected the distinction to aging by treating the germline as potentially continuous and the soma as mortal. Later disposable-soma models describe a resource allocation: maintenance repairs the current body, while reproduction produces descendants. Pen and Flatt identify the separated germline and soma as a central premise of this tradition. The theory locates aging in a life cycle that allocates finite resources between current-body maintenance and descendant production.[^4]
 
-Cancer develops through genetic and epigenetic changes that create fitness differences among cells in one body. A clone with a growth advantage can occupy more tissue and damage that body. Its descendants remain cells of that organism. Germline descendants become cells of a new organism.[^5]
-
-## Working definition
-
-Use **Weismann barrier** for a lineage arrangement with three features:
-
-1. A germline has privileged access to future organisms.
-2. Somatic lineages can grow and change inside the present organism.
-3. Germline lineages transmit inherited genetic variation, while somatic genetic variation remains within the organism.
-
-The definition applies directly to many animals. Plants, clonal organisms, regenerative animals, and non-nuclear inheritance use different routes from parent cells to offspring. The term classifies daughter cells by outcome: bodily lineages remain in one body; reproductive lineages produce a later body.[^1][^3]
+Cancer involves genetic and epigenetic change that can create cell clones with different growth rates inside one body. Caulin and Maley describe this as somatic evolution and discuss tumor-suppressor mechanisms that limit the propagation of such changes through tissue. A cancer clone can acquire many descendants in its host while remaining a lineage of that host. A germline lineage enters the next organism through gametes. The Weismann barrier separates those two descendant routes.[^5]
 
 ## Related
 
