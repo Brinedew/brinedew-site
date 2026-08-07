@@ -13,42 +13,6 @@ aliases:
 
 ![[weismann-barrier-germ-plasm.png|Diagram of Weismann's germ-plasm theory: hereditary material continues between generations while each body develops from it. Wikimedia Commons.]]
 
-An embryo begins with cells that divide to make more cells. In an irreversible germline-soma arrangement, a cell can leave the reproductive lineage and become a body cell. Its descendants remain body cells. The lineage that continues to make gametes supplies the cells of the next organism.[^1][^6]
-
-## Daughter-cell routes
-
-Every division produces daughter cells with a role. A germ-role cell can produce another germ-role cell or a soma-role cell. A soma-role cell produces soma-role daughters. At reproduction, germ-role cells begin new organisms; soma-role cells die with the parent.[^6]
-
-Irreversible somatic differentiation names this one-way division rule. Reversible somatic differentiation permits a soma-role cell to produce a germ-role cell. A life cycle without somatic differentiation produces no soma-role cells.[^6]
-
-## Somatic work and reproductive cost
-
-Making a soma-role cell removes one cell from the reproductive lineage. That cell can instead help the parent organism grow. The gain is faster or more effective growth of the parent; the cost is a smaller pool of cells that can begin descendants.
-
-In a developmental model, irreversible somatic differentiation evolved when changing cell role carried a cost, small numbers of soma-role cells substantially improved organismal performance, and the organism was large enough for that improvement to affect reproduction. Under those conditions, selection favored a one-way cellular role in the model.[^2]
-
-## Life cycles with a return route
-
-Many animals use a one-way route from germ role to soma role. Plants include widespread exceptions, and some cnidarians contain lineages that move from vegetative work to reproductive work. A cell lineage can therefore spend part of its life building or maintaining an organism and later produce cells for a new organism.[^3]
-
-A mutation can appear during vegetative growth. In a sequestered germline, it stays in the parent body because the mutated lineage produces only body cells. When a vegetative lineage later produces reproductive cells, the mutation can enter the next organism through those cells.[^3]
-
-## Weismann's historical model
-
-August Weismann developed the germ-plasm theory before genes and DNA were known. He proposed a hereditary substance that passed between generations while each body formed and perished.[^1]
-
-## Aging and cancer
-
-Weismann connected a continuing germline and a mortal soma to aging. [[disposable-soma-theory|Disposable-soma theory]] treats maintenance and reproduction as competing uses of resources. Repairing the parent body preserves somatic cells; producing descendants places resources in the germline route.[^4]
-
-Cancer is an evolutionary process within a bodily lineage. Genetic and epigenetic changes can create cell clones with different growth rates inside one body. Tumor-suppressor mechanisms limit the propagation of such changes through tissue. A cancer lineage can expand within its host; a germline lineage enters the next organism through gametes.[^5]
-
-## Related
-
-- [[selection-shadow-theory|Selection shadow theory]]
-- [[cellular-senescence|Cellular senescence]]
-- [[tumor-suppressor-theory-of-aging|Tumor suppressor theory of aging]]
-
 ## Citations
 
 [^1]: Weismann A. *The Germ-Plasm: A Theory of Heredity*. Translated by W. Newton Parker and Harriet Rönnfeldt. Charles Scribner's Sons; 1893. [Internet Archive scan](https://archive.org/details/germplasmatheor01weisgoog). See also Zou Y. [“The Germ-Plasm: a Theory of Heredity (1893), by August Weismann”](https://embryo.asu.edu/pages/germ-plasm-theory-heredity-1893-august-weismann). *Embryo Project Encyclopedia*. 2015.
