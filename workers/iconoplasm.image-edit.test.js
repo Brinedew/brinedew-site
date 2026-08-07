@@ -1858,6 +1858,13 @@ test("candidate generation can use tag sample mode with appended essence facts",
       assert.match(String(body.prompt || ""), /39 years old/)
       assert.match(String(body.prompt || ""), /75 kg/)
       assert.match(String(body.prompt || ""), /Tropical Night Blue/)
+      assert.match(
+        String(body.prompt || ""),
+        /light skin color, subdued skin color, cyan skin color/,
+      )
+      assert.doesNotMatch(String(body.prompt || ""), /#7cc7b2/i)
+      assert.doesNotMatch(String(body.prompt || ""), /colored skin/i)
+      assert.doesNotMatch(String(body.prompt || ""), /seafoam/)
       assert.doesNotMatch(String(body.prompt || ""), /A prose body/)
       return new Response(JSON.stringify({ data: [{ b64_json: base64(GENERATED_BYTES) }] }), {
         status: 200,
@@ -3042,6 +3049,7 @@ test("image edit jobs call the provider, write renditions, and publish with inhe
         ? String(editCall.init.body.get("prompt") || "")
         : ""
     assert.match(editPrompt, /visible skin tone/i)
+    assert.match(editPrompt, /#b17f62/i)
     assert.match(editPrompt, /outfit/i)
     assert.match(editPrompt, /leave wardrobe and costume colors unchanged/i)
     assert.doesNotMatch(editPrompt, /adjust surface tone/i)
