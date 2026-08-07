@@ -67,6 +67,7 @@ import {
 } from "./iconoplasm-publication-aliases.js"
 import { normalizeIconoplasmHomeOrder } from "../quartz/static/iconoplasm/home-orders.js"
 import { WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE } from "../quartz/static/iconoplasm/guest-discovery-contract.js"
+import { skinColorPromptTagsFromHex } from "../shared/iconoplasm-card/skin-color-prompt-terms.js"
 import ICONOPLASM_PUBLISHER_RELEASE from "../iconoplasm-extension/publisher-release.json" with { type: "json" }
 import ICONOPLASM_CANDIDATE_CONTRACT from "../iconoplasm-extension/candidate-contract.json" with { type: "json" }
 import "../shared/iconoplasm-card/shared-card-runtime.js"
@@ -7549,10 +7550,12 @@ function candidateGenerationEssenceSuffix(geneContext) {
   const faction = asPromptPhraseText(geneContext?.faction || "")
   if (faction) tags.push(faction)
   const skinHex = normalizeHexColor(geneContext?.skin_hex || "")
-  const skinName = asPromptPhraseText(geneContext?.skin_name || "")
-  if (skinHex || skinName) {
-    tags.push("colored skin")
-    tags.push(`${skinHex ? `${skinHex} ` : ""}${skinName ? `${skinName} ` : ""}skin color`.trim())
+  if (skinHex) {
+    // GENERATION PIPELINE: hex and the calibrated display name remain on the
+    // card/data surfaces, but neither is injected into the image prompt.
+    // The old central-node injection is intentionally disabled:
+    //     tags.push(`${skinHex} ${skinName} skin color`)
+    tags.push(...skinColorPromptTagsFromHex(skinHex))
   }
   const familyFeature = asPromptPhraseText(geneContext?.family_feature || "")
   if (familyFeature) tags.push(familyFeature)
