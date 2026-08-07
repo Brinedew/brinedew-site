@@ -3132,7 +3132,12 @@ export async function putPortraitStorageObject(
   env,
   key,
   bytes,
-  { contentType = "application/octet-stream", cacheControl = "", customMetadata = null } = {},
+  {
+    contentType = "application/octet-stream",
+    cacheControl = "",
+    customMetadata = null,
+    verifyAfterPut = false,
+  } = {},
 ) {
   if (env.ICONOPLASM_PORTRAITS && typeof env.ICONOPLASM_PORTRAITS.put === "function") {
     return env.ICONOPLASM_PORTRAITS.put(key, bytes, {
@@ -3148,23 +3153,36 @@ export async function putPortraitStorageObject(
   if (!writeUrl || !password) {
     throw new Error("External portrait storage is not configured for writes")
   }
-  const response = await fetchPortraitStorage(
-    env,
-    writeUrl,
-    {
-      method: "PUT",
-      headers: {
-        AccessKey: password,
-        "Content-Type": contentType,
-        ...(cacheControl ? { "Cache-Control": cacheControl } : {}),
+  const putOnce = async () => {
+    const response = await fetchPortraitStorage(
+      env,
+      writeUrl,
+      {
+        method: "PUT",
+        headers: {
+          AccessKey: password,
+          "Content-Type": contentType,
+          ...(cacheControl ? { "Cache-Control": cacheControl } : {}),
+        },
+        body: bytes,
       },
-      body: bytes,
-    },
-    { operation: "PUT", key },
-  )
-  if (!response.ok) {
-    throw new Error(`External portrait PUT failed (${response.status}) for ${key}`)
+      { operation: "PUT", key },
+    )
+    if (!response.ok) {
+      throw new Error(`External portrait PUT failed (${response.status}) for ${key}`)
+    }
   }
+  if (verifyAfterPut) {
+    const verified = await putBunnyObjectUntilVerified({
+      put: putOnce,
+      verify: () => verifyPortraitStorageObjectAfterPut(env, key),
+    })
+    if (!verified) {
+      throw new Error(`External portrait PUT was not readable after idempotent retries for ${key}`)
+    }
+    return { ok: true, verified: true }
+  }
+  await putOnce()
   return { ok: true }
 }
 
@@ -9254,15 +9272,19 @@ export async function fulfillGenerationRequests(
     await env.ICONOPLASM_DB.prepare(
       `UPDATE icono_request_notifications
        SET fulfillment_publication_id = ?,
-           fulfillment_group_size = ?
+           fulfillment_group_size = ?,
+           discord_status = CASE WHEN discord_status = 'failed' THEN 'retry' ELSE discord_status END,
+           discord_error = CASE WHEN discord_status = 'failed' THEN '' ELSE discord_error END,
+           discord_next_attempt_at = CASE WHEN discord_status = 'failed' THEN NULL ELSE discord_next_attempt_at END
        WHERE request_id = ?
          AND discord_status <> 'sent'
          AND (
            fulfillment_publication_id = ''
            OR fulfillment_publication_id = 'legacy-request:' || request_id
+           OR fulfillment_publication_id = ?
          )`,
     )
-      .bind(publicationIdNorm, fulfillmentGroupSize, requestId)
+      .bind(publicationIdNorm, fulfillmentGroupSize, requestId, publicationIdNorm)
       .run()
   }
 
@@ -32755,6 +32777,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               uploadTasks.push(
                 putPortraitStorageObject(env, keys.full, fullBytes, {
                   contentType: "image/webp",
+                  verifyAfterPut: true,
                   customMetadata: {
                     gene_symbol: symbol,
                     asset_sha256: assetSha,
@@ -32768,6 +32791,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               uploadTasks.push(
                 putPortraitStorageObject(env, keys.medium, mediumBytes, {
                   contentType: "image/webp",
+                  verifyAfterPut: true,
                   customMetadata: {
                     gene_symbol: symbol,
                     asset_sha256: assetSha,
@@ -32781,6 +32805,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               uploadTasks.push(
                 putPortraitStorageObject(env, keys.thumb, thumbBytes, {
                   contentType: "image/webp",
+                  verifyAfterPut: true,
                   customMetadata: {
                     gene_symbol: symbol,
                     asset_sha256: assetSha,
