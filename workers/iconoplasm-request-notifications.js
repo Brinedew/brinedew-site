@@ -293,24 +293,29 @@ function fulfilledPortraitUrl(env, row) {
   return `${base}/portraits/v1/${sha.slice(0, 2)}/${sha}/full.webp`
 }
 
-function fulfilledPortraitRequest(env, row) {
+function fulfilledPortraitRequests(env, row) {
   const sha = assetSha(row?.fulfilled_asset_sha256)
   if (!sha) return null
   // Preserve the full rendition users received before batching. The ten-file,
   // per-file, and aggregate byte ceilings bound Worker memory independently.
   const key = `portraits/v1/${sha.slice(0, 2)}/${sha}/full.webp`
+  const requests = []
   const storageZone = boundedText(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE, 255)
   const storagePassword = boundedText(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD, 2000)
   if (storageZone && storagePassword) {
     const storageHost =
       boundedText(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST, 255) || "storage.bunnycdn.com"
-    return {
+    requests.push({
+      source: "authenticated_storage",
       url: `https://${storageHost}/${encodeURIComponent(storageZone)}/${key}`,
       headers: { AccessKey: storagePassword, Accept: "image/webp" },
-    }
+    })
   }
   const publicUrl = fulfilledPortraitUrl(env, row)
-  return publicUrl ? { url: publicUrl, headers: { Accept: "image/webp" } } : null
+  if (publicUrl && !requests.some((request) => request.url === publicUrl)) {
+    requests.push({ source: "public_cdn", url: publicUrl, headers: { Accept: "image/webp" } })
+  }
+  return requests
 }
 
 function hasWebpSignature(bytes) {
@@ -357,8 +362,8 @@ async function readBoundedResponseBytes(response, maxBytes) {
 async function loadFulfilledPortraitAttachment(env, row) {
   const symbol = geneSymbol(row?.gene_symbol) || "gene"
   const sha = assetSha(row?.fulfilled_asset_sha256)
-  const portraitRequest = fulfilledPortraitRequest(env, row)
-  if (!sha || !portraitRequest) {
+  const portraitRequests = fulfilledPortraitRequests(env, row)
+  if (!sha || !portraitRequests?.length) {
     return {
       ok: false,
       retryable: false,
@@ -367,16 +372,38 @@ async function loadFulfilledPortraitAttachment(env, row) {
   }
 
   let response
-  try {
-    response = await fetch(portraitRequest.url, { headers: portraitRequest.headers })
-  } catch (error) {
-    return {
-      ok: false,
-      retryable: true,
-      error: `Fulfilled portrait download failed: ${boundedText(error?.message || error || "unknown", 500)}`,
+  for (let index = 0; index < portraitRequests.length; index += 1) {
+    const portraitRequest = portraitRequests[index]
+    try {
+      response = await fetch(portraitRequest.url, { headers: portraitRequest.headers })
+    } catch (error) {
+      if (index + 1 < portraitRequests.length) {
+        console.warn("Iconoplasm portrait delivery falling back after storage request failure", {
+          asset_sha256: sha,
+          source: portraitRequest.source,
+          error: boundedText(error?.message || error || "unknown", 500),
+        })
+        continue
+      }
+      return {
+        ok: false,
+        retryable: true,
+        error: `Fulfilled portrait download failed: ${boundedText(error?.message || error || "unknown", 500)}`,
+      }
     }
-  }
-  if (!response.ok) {
+    if (response.ok) break
+    if (response.status === 404 && index + 1 < portraitRequests.length) {
+      try {
+        await response.body?.cancel()
+      } catch {
+        // The failed response is already unusable; preserve the fallback path.
+      }
+      console.warn("Iconoplasm portrait delivery falling back after storage 404", {
+        asset_sha256: sha,
+        source: portraitRequest.source,
+      })
+      continue
+    }
     return {
       ok: false,
       retryable: response.status === 429 || response.status >= 500,
