@@ -62,6 +62,9 @@ class FakeStatement {
       lastPortraitAssetInsertBoundValues = this.boundValues
       return { success: true, meta: { changes: 1 } }
     }
+    if (this.sql.includes("INSERT INTO icono_storage_audit_queue")) {
+      return { success: true, meta: { changes: 1 } }
+    }
     throw new Error(`Unexpected SQL in fake DB run(): ${this.sql}`)
   }
 }
@@ -241,6 +244,70 @@ test("admin ingest non-dry-run writes a portrait asset row without SQL column mi
   assert.equal(payload?.failed, 0)
   assert.equal(payload?.results?.[0]?.ok, true)
   assert.equal(payload?.results?.[0]?.symbol, "ABCA1")
+})
+
+test("normal external-storage ingest does not run read-after-write retries per rendition", async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (input, init) => {
+    calls.push({ url: String(input), method: String(init?.method || "GET") })
+    return new Response(null, { status: init?.method === "PUT" ? 201 : 200 })
+  }
+
+  const gatewayDb = new FakeIconoplasmDb()
+  const gatewayEnv = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: gatewayDb,
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "iconoplasm-portraits",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-access-key",
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: 0,
+  }
+  const env = bindOnlyAllowedGateway({ ...gatewayEnv, ICONOPLASM_DB: null, gatewayDb }, gatewayEnv)
+  const base64 = Buffer.from("fake-webp-payload").toString("base64")
+  const request = new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/ingest", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer secret-admin-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      dry_run: false,
+      defer_read_models: true,
+      force_upload: true,
+      items: [
+        {
+          symbol: "ABCA1",
+          asset_sha256: "bc77289ec8c179a2847351b2250fcb08dce316fddd8ebafb4a30b6a2376c41f6",
+          vision_id: "anima-v1-42",
+          renditions: {
+            full: { base64, width: 1024, height: 1024 },
+            medium: { base64, width: 512, height: 512 },
+            thumb: { base64, width: 256, height: 256 },
+          },
+        },
+      ],
+    }),
+  })
+
+  try {
+    const response =
+      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+        {},
+      )
+    const payload = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(payload?.processed, 1)
+    assert.equal(payload?.failed, 0)
+    assert.equal(calls.filter((call) => call.method === "PUT").length, 3)
+    assert.equal(calls.filter((call) => call.method === "HEAD").length, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })
 
 test("admin ingest can explicitly clear sample hash for unknown provenance", async () => {
