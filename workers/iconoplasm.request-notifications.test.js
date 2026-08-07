@@ -92,6 +92,7 @@ class NotificationStatement {
         if (!groups.has(key)) groups.set(key, [])
         groups.get(key).push(row)
       }
+      const limit = Number(this.args[this.args.length - 1]) || groups.size
       return {
         results: Array.from(groups.values())
           .filter(
@@ -99,7 +100,8 @@ class NotificationStatement {
               rows.length === Number(rows[0].fulfillment_group_size || 1) &&
               deliverableStatuses.includes(rows[0].discord_status),
           )
-          .map((rows) => rows.sort((a, b) => Number(a.id) - Number(b.id))[0]),
+          .map((rows) => rows.sort((a, b) => Number(a.id) - Number(b.id))[0])
+          .slice(0, limit),
       }
     }
     if (
@@ -1072,12 +1074,17 @@ test("one ten-candidate publication spanning two genes sends exactly two Discord
     return Response.json({ id: `discord-message-${messages.length}` })
   }
   try {
-    const result = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db), {
+    const first = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db), {
+      requestIds: rows.map((row) => row.request_id),
+    })
+    const second = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db), {
       requestIds: rows.map((row) => row.request_id),
     })
 
-    assert.equal(result.delivered, 2)
-    assert.equal(result.delivered_requests, 10)
+    assert.equal(first.delivered, 1)
+    assert.equal(first.delivered_requests, 5)
+    assert.equal(second.delivered, 1)
+    assert.equal(second.delivered_requests, 5)
     assert.equal(messages.length, 2)
     assert.deepEqual(
       messages.map((message) => message.attachments.length),
@@ -1086,6 +1093,31 @@ test("one ten-candidate publication spanning two genes sends exactly two Discord
     assert.match(messages[0].content, /5 free queue candidate blots for \*\*INS\*\*/)
     assert.match(messages[1].content, /5 free queue candidate blots for \*\*TP53\*\*/)
     assert.ok(rows.every((row) => row.discord_status === "sent"))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("a Worker subrequest ceiling defers the Discord message without marking it unknown", async () => {
+  const row = notificationRow()
+  const db = new NotificationDb([row])
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    const value = String(url)
+    if (value.includes("storage.bunnycdn.com")) return validWebpResponse()
+    if (value.endsWith("/users/@me/channels")) return Response.json({ id: "dm-channel-1" })
+    throw new Error("Too many subrequests by single Worker invocation")
+  }
+  try {
+    const result = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(db), {
+      requestIds: [row.request_id],
+    })
+
+    assert.equal(result.deferred, 1)
+    assert.equal(result.failed, 0)
+    assert.equal(result.unknown, 0)
+    assert.equal(row.discord_status, "retry")
+    assert.match(row.discord_error, /delivery deferred.*too many subrequests/i)
   } finally {
     globalThis.fetch = originalFetch
   }
