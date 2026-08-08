@@ -825,6 +825,88 @@ article p {
   background: color-mix(in srgb, var(--light) 82%, #d6b45e 18%);
 }
 
+.icono-request-inbox__receipt {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.42rem;
+  padding: 0.62rem 0.35rem;
+}
+
+.icono-request-inbox__receipt-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.icono-request-inbox__receipt-head .icono-request-inbox__line {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.icono-request-inbox__receipt-count {
+  flex: 0 0 auto;
+  color: var(--secondary);
+  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+  font-size: 0.61rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.icono-request-inbox__previews {
+  display: grid;
+  gap: 3px;
+  overflow: hidden;
+}
+
+.icono-request-inbox__previews--1 {
+  grid-template-columns: minmax(0, 46%);
+}
+
+.icono-request-inbox__previews--2,
+.icono-request-inbox__previews--3 {
+  grid-template-columns: repeat(var(--icono-request-preview-count, 3), minmax(0, 1fr));
+}
+
+.icono-request-inbox__previews--2 {
+  --icono-request-preview-count: 2;
+}
+
+.icono-request-inbox__previews--4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.icono-request-inbox__preview {
+  position: relative;
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  aspect-ratio: 4 / 5;
+  background: color-mix(in srgb, var(--ui-bg) 82%, var(--dark) 18%);
+}
+
+.icono-request-inbox__receipt .icono-request-inbox__preview img,
+.icono-request-inbox__receipt
+  .icono-request-inbox__preview
+  .icono-request-inbox__photo-placeholder {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.icono-request-inbox__preview-more {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--dark) 68%, transparent);
+  color: var(--light);
+  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+  font-size: 0.78rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
 .icono-request-inbox__item img,
 .icono-request-inbox__photo-placeholder {
   display: block;

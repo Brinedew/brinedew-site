@@ -58,9 +58,29 @@ class NotificationStatement {
       const ready = this.db.notifications.filter(
         (row) => row.requester_user_id === requesterUserId && row.discord_status === "sent",
       )
+      const groups = new Set(
+        ready.map((row) =>
+          [
+            row.fulfillment_publication_id || `legacy-request:${row.request_id}`,
+            row.gene_symbol,
+          ].join("|"),
+        ),
+      )
+      const unreadGroups = new Set(
+        ready
+          .filter((row) => !row.read_at)
+          .map((row) =>
+            [
+              row.fulfillment_publication_id || `legacy-request:${row.request_id}`,
+              row.gene_symbol,
+            ].join("|"),
+          ),
+      )
       return {
         ready_count: ready.length,
         unread_count: ready.filter((row) => !row.read_at).length,
+        ready_group_count: groups.size,
+        unread_group_count: unreadGroups.size,
       }
     }
     if (this.sql.includes("AS open_count") && this.sql.includes("AS cancelled_count")) {
@@ -150,10 +170,18 @@ class NotificationStatement {
   async run() {
     if (this.sql.includes("SET read_at = COALESCE")) {
       const userId = String(this.args[0] || "")
-      const ids = this.args.slice(1).map(Number)
+      const grouped = this.sql.includes("fulfillment_publication_id = ?")
+      const publicationId = grouped ? String(this.args[1] || "") : ""
+      const symbol = grouped ? String(this.args[2] || "") : ""
+      const ids = grouped ? [] : this.args.slice(1).map(Number)
       let changes = 0
       for (const row of this.db.notifications) {
         if (row.requester_user_id !== userId || row.discord_status !== "sent" || row.read_at)
+          continue
+        if (
+          grouped &&
+          (row.fulfillment_publication_id !== publicationId || row.gene_symbol !== symbol)
+        )
           continue
         if (ids.length && !ids.includes(Number(row.id))) continue
         row.read_at = "2026-07-16 14:00:00"
@@ -732,6 +760,8 @@ test("authenticated inbox returns exact fulfillment context and durable unread c
   assert.equal(payload.authenticated, true)
   assert.equal(payload.unread_count, 1)
   assert.equal(payload.ready_count, 1)
+  assert.equal(payload.unread_group_count, 1)
+  assert.equal(payload.ready_group_count, 1)
   assert.equal(payload.open_count, 1)
   assert.equal(payload.ready_requests[0].request_id, 42)
   assert.equal(payload.ready_requests[0].notification_id, 7)
@@ -739,6 +769,8 @@ test("authenticated inbox returns exact fulfillment context and durable unread c
   assert.equal(payload.ready_requests[0].candidate_image_id, 59981)
   assert.equal(payload.ready_requests[0].asset_created_at, "2026-07-16 13:44:10")
   assert.equal(payload.ready_requests[0].requested_emulsion_label, "A1-4527")
+  assert.equal(payload.ready_requests[0].fulfillment_publication_id, "legacy-request:42")
+  assert.equal(payload.ready_requests[0].fulfillment_group_size, 1)
   assert.match(payload.ready_requests[0].image_url, /a{64}\/thumb\.webp$/)
 })
 
@@ -959,6 +991,46 @@ test("read state is written only inside the authenticated requester's inbox", as
   assert.equal(payload.marked_read, 1)
   assert.ok(own.read_at)
   assert.equal(anotherUser.read_at, null)
+})
+
+test("one inbox receipt marks the complete publication and gene group read", async () => {
+  const publicationRows = [7, 8, 9].map((id) =>
+    notificationRow({
+      id,
+      request_id: 40 + id,
+      gene_symbol: "HPN",
+      fulfillment_publication_id: "pub-hpn-three",
+      fulfillment_group_size: 3,
+      discord_status: "sent",
+    }),
+  )
+  const otherPublication = notificationRow({
+    id: 10,
+    request_id: 50,
+    gene_symbol: "HPN",
+    fulfillment_publication_id: "pub-hpn-other",
+    discord_status: "sent",
+  })
+  const db = new NotificationDb([...publicationRows, otherPublication])
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/notifications/read", {
+        method: "POST",
+        headers: { Cookie: "session=test", "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fulfillment_publication_id: "pub-hpn-three",
+          gene_symbol: "HPN",
+        }),
+      }),
+      { ICONOPLASM_DB: db, GAME_SESSIONS: buildSessionBinding() },
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.marked_read, 3)
+  assert.ok(publicationRows.every((row) => row.read_at))
+  assert.equal(otherPublication.read_at, null)
 })
 
 test("non-Brinedew fulfillment is suppressed before any Discord fetch", async () => {
@@ -1450,6 +1522,8 @@ test("request inbox uses one-open Shoelace groups and an accessible unread dot",
     authenticated: true,
     unread_count: 1,
     ready_count: 1,
+    unread_group_count: 1,
+    ready_group_count: 1,
     open_count: 1,
     cancelled_count: 0,
     ready_requests: [
@@ -1458,6 +1532,8 @@ test("request inbox uses one-open Shoelace groups and an accessible unread dot",
         request_id: 42,
         notification_id: 7,
         unread: true,
+        fulfillment_publication_id: "pub-ins-one",
+        fulfillment_group_size: 1,
         gene_symbol: "INS",
         gene_url: "/gene/INS",
         image_url: "https://example.test/ins.webp",
@@ -1493,10 +1569,12 @@ test("request inbox uses one-open Shoelace groups and an accessible unread dot",
   assert.match(initialMarkup, /data-icono-request-id="42"/)
   assert.match(initialMarkup, /data-icono-candidate-image-id="59981"/)
   assert.match(initialMarkup, /data-icono-asset-sha="a{64}"/)
-  assert.match(initialMarkup, /Request #42 · image/)
+  assert.match(initialMarkup, /data-icono-request-publication-id="pub-ins-one"/)
+  assert.match(initialMarkup, />1 image</)
+  assert.match(initialMarkup, /Completed .* · View all 1/)
   assert.match(initialMarkup, /data-icono-request-notification-id="7"/)
   assert.match(initialMarkup, /<sl-badge[^>]+variant="danger"[^>]+aria-hidden="true"/)
-  assert.match(initialMarkup, /1 unread notification/)
+  assert.match(initialMarkup, /1 unread generation/)
 
   function fakeGroup(name) {
     return {
@@ -1541,14 +1619,17 @@ test("request inbox uses one-open Shoelace groups and an accessible unread dot",
   assert.doesNotMatch(inbox.panelMarkup(), /data-icono-request-group="waiting" open/)
 })
 
-test("request inbox renders every verified delivery receipt even when genes repeat", async () => {
+test("request inbox groups one publication and gene into one bounded receipt", async () => {
   const readyRequests = Array.from({ length: 20 }, (_, index) => ({
     id: index + 1,
     request_id: index + 1,
     notification_id: index + 1,
     unread: index === 0,
-    gene_symbol: index < 3 ? "HPN" : `GENE${index}`,
-    gene_url: index < 3 ? "/gene/HPN" : `/gene/GENE${index}`,
+    fulfillment_publication_id:
+      index < 6 ? "pub-hpn-six" : index === 6 ? "pub-hpn-next" : `pub-${index}`,
+    fulfillment_group_size: index < 6 ? 6 : 1,
+    gene_symbol: index < 7 ? "HPN" : `GENE${index}`,
+    gene_url: index < 7 ? "/gene/HPN" : `/gene/GENE${index}`,
     image_url: `https://example.test/${index + 1}.webp`,
     requested_emulsion_label: "Random default",
     fulfilled_at: "2026-07-16 13:45:00",
@@ -1559,6 +1640,8 @@ test("request inbox renders every verified delivery receipt even when genes repe
       authenticated: true,
       unread_count: 1,
       ready_count: 20,
+      unread_group_count: 1,
+      ready_group_count: 15,
       open_count: 0,
       cancelled_count: 1,
       ready_requests: readyRequests,
@@ -1571,12 +1654,90 @@ test("request inbox renders every verified delivery receipt even when genes repe
   await inbox.refresh()
 
   const markup = inbox.panelMarkup()
-  assert.equal((markup.match(/data-icono-request-id=/g) || []).length, 20)
-  assert.equal((markup.match(/data-icono-request-notification-id=/g) || []).length, 20)
-  assert.equal((markup.match(/<strong>HPN<\/strong>/g) || []).length, 3)
+  assert.equal((markup.match(/data-icono-request-receipt/g) || []).length, 15)
+  assert.equal((markup.match(/data-icono-request-id=/g) || []).length, 18)
+  assert.equal((markup.match(/<strong>HPN<\/strong>/g) || []).length, 2)
+  assert.match(markup, /data-icono-request-publication-id="pub-hpn-six"/)
+  assert.match(markup, /data-icono-request-notification-ids="1,2,3,4,5,6"/)
+  assert.match(markup, />6 images</)
+  assert.match(markup, />\+2<\/span>/)
   assert.match(markup, /data-icono-request-group="ready" open/)
-  assert.match(markup, />20<\/span>/)
+  assert.match(markup, />15<\/span>/)
   assert.match(markup, /Cancelled <span>1<\/span>/)
+})
+
+test("request inbox receipt click acknowledges the durable group instead of one preview", async () => {
+  const payload = {
+    ok: true,
+    authenticated: true,
+    unread_count: 3,
+    ready_count: 3,
+    unread_group_count: 1,
+    ready_group_count: 1,
+    open_count: 0,
+    cancelled_count: 0,
+    ready_requests: [],
+    open_requests: [],
+  }
+  const calls = []
+  const inbox = createRequestInbox({
+    fetchJSON: async (url, options) => {
+      calls.push({ url, options })
+      return payload
+    },
+    getCurrentUser: () => ({ id: BRINEDEW_USER_ID }),
+    renderSidebar() {},
+    escapeHtml: (value) => String(value ?? ""),
+  })
+  const attributes = {
+    "data-icono-request-notification-ids": "7,8,9",
+    "data-icono-request-publication-id": "pub-hpn-three",
+    "data-icono-request-gene-symbol": "HPN",
+    href: "/gene/HPN",
+  }
+  const handlers = {}
+  const receipt = {
+    getAttribute(name) {
+      return attributes[name] || ""
+    },
+    addEventListener(name, handler) {
+      handlers[name] = handler
+    },
+  }
+  const previousWindow = globalThis.window
+  let resolveNavigation
+  const navigation = new Promise((resolve) => {
+    resolveNavigation = resolve
+  })
+  globalThis.window = { location: { assign: resolveNavigation } }
+  try {
+    inbox.wire({
+      querySelector() {
+        return null
+      },
+      querySelectorAll(selector) {
+        return selector === "[data-icono-request-receipt]" ? [receipt] : []
+      },
+    })
+    let prevented = false
+    handlers.click({
+      preventDefault() {
+        prevented = true
+      },
+    })
+    const acknowledgement = calls.find((call) => call.url === "/api/iconoplasm/notifications/read")
+    assert.equal(prevented, true)
+    assert.ok(acknowledgement)
+    assert.deepEqual(JSON.parse(acknowledgement.options.body), {
+      notification_ids: [7, 8, 9],
+      fulfillment_publication_id: "pub-hpn-three",
+      gene_symbol: "HPN",
+      all: false,
+    })
+    await navigation
+  } finally {
+    globalThis.window = previousWindow
+  }
 })
 
 test("every Shoelace component used by the request inbox has a deployable public entry", () => {

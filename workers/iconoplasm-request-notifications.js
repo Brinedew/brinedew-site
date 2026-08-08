@@ -103,6 +103,8 @@ function mapReadyNotification(row, portraitUrlForAsset) {
       (row?.request_mode === "specific" ? "Specific emulsion" : "Random default"),
     fulfilled_asset_sha256: sha,
     fulfilled_vision_id: boundedText(row?.fulfilled_vision_id, 255),
+    fulfillment_publication_id: boundedText(row?.fulfillment_publication_id, 255),
+    fulfillment_group_size: Math.max(1, positiveInteger(row?.fulfillment_group_size)),
     candidate_image_id: positiveInteger(row?.candidate_image_id),
     asset_created_at: boundedText(row?.asset_created_at, 64),
     created_at: boundedText(row?.request_created_at, 64),
@@ -155,7 +157,15 @@ export async function readRequestNotificationInbox(
     env.ICONOPLASM_DB.prepare(
       `SELECT
          COUNT(*) AS ready_count,
-         SUM(CASE WHEN n.read_at IS NULL THEN 1 ELSE 0 END) AS unread_count
+         SUM(CASE WHEN n.read_at IS NULL THEN 1 ELSE 0 END) AS unread_count,
+         COUNT(DISTINCT
+           COALESCE(NULLIF(n.fulfillment_publication_id, ''), 'legacy-request:' || n.request_id)
+           || char(31) || n.gene_symbol
+         ) AS ready_group_count,
+         COUNT(DISTINCT CASE WHEN n.read_at IS NULL THEN
+           COALESCE(NULLIF(n.fulfillment_publication_id, ''), 'legacy-request:' || n.request_id)
+           || char(31) || n.gene_symbol
+         END) AS unread_group_count
        ${validDeliveryJoin}
        WHERE n.requester_user_id = ?
          AND n.discord_status = 'sent'`,
@@ -184,6 +194,8 @@ export async function readRequestNotificationInbox(
     authenticated: true,
     unread_count: positiveInteger(countRow?.unread_count),
     ready_count: Math.max(positiveInteger(countRow?.ready_count), ready.length),
+    unread_group_count: positiveInteger(countRow?.unread_group_count),
+    ready_group_count: Math.max(positiveInteger(countRow?.ready_group_count), ready.length ? 1 : 0),
     open_count: Math.max(positiveInteger(openCount), pending.length),
     cancelled_count: positiveInteger(cancelledCount),
     ready_requests: ready.map((row) => mapReadyNotification(row, portraitUrlForAsset)),
@@ -203,7 +215,13 @@ export async function readRequestNotificationInbox(
 
 export async function markRequestNotificationsRead(
   env,
-  { requesterUserId, notificationIds = [], markAll = false } = {},
+  {
+    requesterUserId,
+    notificationIds = [],
+    fulfillmentPublicationId = "",
+    gene = "",
+    markAll = false,
+  } = {},
 ) {
   if (!env?.ICONOPLASM_DB) {
     return { ok: false, status: 500, error: "ICONOPLASM_DB binding missing" }
@@ -220,6 +238,18 @@ export async function markRequestNotificationsRead(
          AND read_at IS NULL`,
     )
       .bind(requesterId)
+      .run()
+  } else if (boundedText(fulfillmentPublicationId, 255) && geneSymbol(gene)) {
+    response = await env.ICONOPLASM_DB.prepare(
+      `UPDATE icono_request_notifications
+       SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+       WHERE requester_user_id = ?
+         AND fulfillment_publication_id = ?
+         AND gene_symbol = ?
+         AND discord_status = 'sent'
+         AND read_at IS NULL`,
+    )
+      .bind(requesterId, boundedText(fulfillmentPublicationId, 255), geneSymbol(gene))
       .run()
   } else {
     const ids = Array.from(
