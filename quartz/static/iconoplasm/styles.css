@@ -2816,6 +2816,12 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
     0 10px 24px color-mix(in srgb, var(--dark) 8%, transparent);
 }
 
+.icono-card--image-tile.icono-card--skeleton.icono-card--reverse-skeleton {
+  border: 0;
+  background: transparent;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--dark) 8%, transparent);
+}
+
 .icono-image-only-placeholder {
   pointer-events: none;
 }
@@ -3249,9 +3255,19 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 }
 
 .icono-card--guest-reverse {
+  position: relative;
   box-sizing: border-box;
   width: min(100%, var(--icono-image-tile-width));
   aspect-ratio: 3 / 4;
+  overflow: hidden;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--dark) 8%, transparent);
+}
+
+.icono-card-reverse-face {
+  position: absolute;
+  inset: 0;
+  display: block;
+  box-sizing: border-box;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--dark) 26%, var(--ui-border) 74%);
   background:
@@ -3271,11 +3287,10 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   background-size: 2rem 2rem;
   box-shadow:
     inset 0 0 0 0.45rem color-mix(in srgb, var(--light) 80%, transparent),
-    inset 0 0 0 0.52rem color-mix(in srgb, var(--dark) 25%, transparent),
-    0 10px 24px color-mix(in srgb, var(--dark) 8%, transparent);
+    inset 0 0 0 0.52rem color-mix(in srgb, var(--dark) 25%, transparent);
 }
 
-.icono-card--guest-reverse-mark {
+.icono-card-reverse-face__mark {
   position: absolute;
   inset: 50% auto auto 50%;
   width: clamp(4.5rem, 26%, 6.5rem);

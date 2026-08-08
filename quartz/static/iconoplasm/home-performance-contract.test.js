@@ -284,6 +284,7 @@ test("guest continuation uses fake card backs beneath the existing auxiliary inf
   const continuationBlock = app.slice(continuationStart, continuationEnd)
   assert.match(continuationBlock, /GUEST_CONTINUATION_CARD_COUNT/)
   assert.match(continuationBlock, /data-icono-guest-reverse-card/)
+  assert.match(continuationBlock, /buildReverseCardFaceMarkup\(\)/)
   assert.match(continuationBlock, /aria-hidden="true"/)
   assert.doesNotMatch(continuationBlock, /data-icono-symbol|href=/)
   assert.match(
@@ -722,11 +723,13 @@ test("image-only masonry has a physical artboard cap and native adaptive columns
   assert.match(skeletonBlock, /icono-card--variant-image-only/)
   assert.match(skeletonBlock, /icono-image-only-link/)
   assert.match(skeletonBlock, /icono-image-only-media-stage/)
-  assert.match(skeletonBlock, /icono-image-only-loading-mark/)
+  assert.match(skeletonBlock, /icono-card--reverse-skeleton/)
+  assert.match(skeletonBlock, /buildReverseCardFaceMarkup\(\)/)
+  assert.doesNotMatch(skeletonBlock, /icono-image-only-loading-mark/)
   assert.match(
-    app + "\n" + sharedCardCss,
-    /icono-image-only-loading-mark[\s\S]*\/static\/iconoplasm\/icons\/icon-512\.png/,
-    "blot-only skeleton and unloaded final card must reuse the same shipped Iconoplasm extension icon layer",
+    styles,
+    /\.icono-card-reverse-face\s*\{[\s\S]*background:[\s\S]*linear-gradient[\s\S]*background-size:\s*2rem 2rem/,
+    "blot-only skeletons must reuse the guest continuation reverse-card face",
   )
   assert.doesNotMatch(skeletonBlock, /icono-image-only-skeleton-figure/)
   assert.doesNotMatch(
@@ -746,8 +749,8 @@ test("image-only masonry has a physical artboard cap and native adaptive columns
   )
   assert.match(
     styles,
-    /\.icono-card--image-tile\.icono-card--skeleton\s*\{[\s\S]*border-radius:\s*0[\s\S]*background:\s*var\(--light\)/,
-    "blot-only skeleton shells must use the page paper background, not an invented dark card color",
+    /\.icono-card--image-tile\.icono-card--skeleton\.icono-card--reverse-skeleton\s*\{[\s\S]*border:\s*0[\s\S]*background:\s*transparent[\s\S]*box-shadow:\s*0 10px 24px/,
+    "the skeleton shell must not add a second frame around the shared reverse-card face",
   )
   assert.match(
     sharedCardCss,
@@ -762,7 +765,7 @@ test("image-only masonry has a physical artboard cap and native adaptive columns
   assert.doesNotMatch(
     styles,
     /iconoSkeletonWash|\.icono-image-only-skeleton-artboard|\.icono-image-only-skeleton-icon|\.icono-image-only-skeleton-wash|\.icono-image-only-skeleton-caption|collection-progress-track--skeleton/,
-    "image-only and collection skeletons must stay static, undecorated, and visually identical to the unloaded final card",
+    "image-only and collection skeletons must not restore the retired skeleton-only visual system",
   )
   assert.match(
     sharedCardCss,
