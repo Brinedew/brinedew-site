@@ -1,13 +1,9 @@
-import type {
-  AgentDefinition,
-  AnchorPolicy,
-  SuggestionPolicy,
-} from "./types";
+import type { AgentDefinition, AnchorPolicy, SuggestionPolicy } from "./types"
 
 interface AgentOptions {
-  anchorPolicy?: AnchorPolicy;
-  suggestionPolicy?: SuggestionPolicy;
-  neighbors?: string[];
+  anchorPolicy?: AnchorPolicy
+  suggestionPolicy?: SuggestionPolicy
+  neighbors?: string[]
 }
 
 // Proof-of-concept default: the full registry is searchable and individually
@@ -17,7 +13,7 @@ export const DEFAULT_ENABLED_AGENT_IDS = new Set([
   "self-referential-roadmap",
   "staccato-exposition",
   "section-stub",
-]);
+])
 
 function agent(
   id: string,
@@ -43,7 +39,7 @@ function agent(
     suggestionPolicy: options.suggestionPolicy ?? "replace",
     enabled: DEFAULT_ENABLED_AGENT_IDS.has(id),
     version: 1,
-  };
+  }
 }
 
 // Macro, Meso, and Micro are provenance documents, not runtime categories.
@@ -438,7 +434,11 @@ export const AGENTS: readonly AgentDefinition[] = [
     "Flag only a passage that presents a historical theory, formal model variable, comparative observation, or practical application as though they were the same type of claim.",
     "Weismann's historical barrier proves that the model's transfer coefficient is a universal biological constant.",
     "Weismann proposed a historical barrier; later formal models represent transfer with a parameter whose value depends on the organism and mechanism.",
-    { anchorPolicy: "line-marker", suggestionPolicy: "explain-only", neighbors: ["abstraction-level-hop"] },
+    {
+      anchorPolicy: "line-marker",
+      suggestionPolicy: "explain-only",
+      neighbors: ["abstraction-level-hop"],
+    },
   ),
   agent(
     "interrupted-ordinary-model",
@@ -446,7 +446,11 @@ export const AGENTS: readonly AgentDefinition[] = [
     "Flag only a document that moves to exceptions, history, or applications before establishing the ordinary system, its parts, transition, and consequence.",
     "The opening names a barrier and immediately lists horizontal-transfer exceptions before explaining either lineage.",
     "The opening defines germline and soma, explains the transfer direction, and then introduces exceptions.",
-    { anchorPolicy: "line-marker", suggestionPolicy: "explain-only", neighbors: ["history-before-model-completion"] },
+    {
+      anchorPolicy: "line-marker",
+      suggestionPolicy: "explain-only",
+      neighbors: ["history-before-model-completion"],
+    },
   ),
   agent(
     "unexplained-first-image",
@@ -454,7 +458,11 @@ export const AGENTS: readonly AgentDefinition[] = [
     "Flag only the first image when nearby prose fails to name the visible relation the reader should inspect and its connection to the model.",
     "![[barrier.svg]]\nThe Weismann barrier has a long history.",
     "![[barrier.svg]]\nThe vertical line traces hereditary material through gametes; each lateral branch ends in one generation's soma.",
-    { anchorPolicy: "line-marker", suggestionPolicy: "explain-only", neighbors: ["figure-bridge-sentence"] },
+    {
+      anchorPolicy: "line-marker",
+      suggestionPolicy: "explain-only",
+      neighbors: ["figure-bridge-sentence"],
+    },
   ),
   agent(
     "history-before-model-completion",
@@ -462,7 +470,11 @@ export const AGENTS: readonly AgentDefinition[] = [
     "Flag only historical material that interrupts the article before the present explanatory model is complete.",
     "The lead names two cell lineages; the next section begins with Weismann's biography before explaining information transfer.",
     "The ordinary transfer model is complete before the history section dates its formulation.",
-    { anchorPolicy: "line-marker", suggestionPolicy: "explain-only", neighbors: ["interrupted-ordinary-model"] },
+    {
+      anchorPolicy: "line-marker",
+      suggestionPolicy: "explain-only",
+      neighbors: ["interrupted-ordinary-model"],
+    },
   ),
   agent(
     "duplicated-explanatory-job",
@@ -470,7 +482,11 @@ export const AGENTS: readonly AgentDefinition[] = [
     "Flag only two passages that perform the same explanatory job without adding a new relation, qualification, or example.",
     "The lead says somatic mutations do not enter offspring. A later overview repeats that somatic mutations do not enter offspring.",
     "The lead states the transfer limit; a later section explains the cellular lineage that creates it.",
-    { anchorPolicy: "line-marker", suggestionPolicy: "delete", neighbors: ["lead-restatement", "caption-restatement"] },
+    {
+      anchorPolicy: "line-marker",
+      suggestionPolicy: "delete",
+      neighbors: ["lead-restatement", "caption-restatement"],
+    },
   ),
   agent(
     "misused-citation-needed-marker",
@@ -486,7 +502,11 @@ export const AGENTS: readonly AgentDefinition[] = [
     "Flag only paragraph or section order that follows papers, authors, or studies rather than the system's entities and causal sequence.",
     "Smith studied the receptor. Lee studied the adaptor. Chen studied transcription.",
     "Ligand binding activates the receptor, which recruits the adaptor and induces transcription.[@smith2020; @lee2021; @chen2022]",
-    { anchorPolicy: "line-marker", suggestionPolicy: "explain-only", neighbors: ["citation-shaped-prose"] },
+    {
+      anchorPolicy: "line-marker",
+      suggestionPolicy: "explain-only",
+      neighbors: ["citation-shaped-prose"],
+    },
   ),
   agent(
     "missing-ordinary-case",
@@ -494,7 +514,11 @@ export const AGENTS: readonly AgentDefinition[] = [
     "Flag only a document that discusses exceptions or applications without first presenting the ordinary case.",
     "The page opens with rare horizontal-transfer exceptions and never states the usual inheritance direction.",
     "The page first explains vertical germline inheritance, then presents horizontal-transfer exceptions.",
-    { anchorPolicy: "line-marker", suggestionPolicy: "explain-only", neighbors: ["interrupted-ordinary-model"] },
+    {
+      anchorPolicy: "line-marker",
+      suggestionPolicy: "explain-only",
+      neighbors: ["interrupted-ordinary-model"],
+    },
   ),
   agent(
     "missing-transition",
@@ -502,7 +526,11 @@ export const AGENTS: readonly AgentDefinition[] = [
     "Flag only an explanation that names states or parts but omits the operation connecting them.",
     "The receptor is at the membrane. The transcription factor is in the nucleus.",
     "Ligand binding activates the receptor, whose kinase cascade moves the transcription factor into the nucleus.",
-    { anchorPolicy: "line-marker", suggestionPolicy: "explain-only", neighbors: ["unfinished-causal-chain"] },
+    {
+      anchorPolicy: "line-marker",
+      suggestionPolicy: "explain-only",
+      neighbors: ["unfinished-causal-chain"],
+    },
   ),
   agent(
     "missing-constraint",
@@ -510,7 +538,11 @@ export const AGENTS: readonly AgentDefinition[] = [
     "Flag only a mechanism stated without the condition that bounds when or where it operates, when the passage itself makes the claim appear universal.",
     "Homologous recombination repairs double-strand breaks.",
     "During S and G2 phases, homologous recombination repairs double-strand breaks using a sister chromatid template.",
-    { anchorPolicy: "line-marker", suggestionPolicy: "explain-only", neighbors: ["unearned-certainty"] },
+    {
+      anchorPolicy: "line-marker",
+      suggestionPolicy: "explain-only",
+      neighbors: ["unearned-certainty"],
+    },
   ),
   agent(
     "missing-major-variation",
@@ -518,7 +550,11 @@ export const AGENTS: readonly AgentDefinition[] = [
     "Flag only a page that explicitly introduces multiple forms but then presents one form as the universal mechanism.",
     "The lead names intrinsic and extrinsic apoptosis, but the mechanism section explains only mitochondrial cytochrome-c release as apoptosis itself.",
     "The mechanism section separately explains mitochondrial and death-receptor initiation before their caspase pathways converge.",
-    { anchorPolicy: "line-marker", suggestionPolicy: "explain-only", neighbors: ["missing-constraint"] },
+    {
+      anchorPolicy: "line-marker",
+      suggestionPolicy: "explain-only",
+      neighbors: ["missing-constraint"],
+    },
   ),
   agent(
     "missing-boundary-or-counterexample",
@@ -526,12 +562,16 @@ export const AGENTS: readonly AgentDefinition[] = [
     "Flag only a broad generalization that lacks a concrete case showing where it stops applying despite an evident boundary in the document's own scope.",
     "Somatic mutations never enter the germline, and the page offers no exception or scope condition.",
     "Somatic mutations usually end with the soma; plant meristem lineages and horizontal transfer define important boundaries to that rule.",
-    { anchorPolicy: "line-marker", suggestionPolicy: "explain-only", neighbors: ["missing-constraint", "unearned-certainty"] },
+    {
+      anchorPolicy: "line-marker",
+      suggestionPolicy: "explain-only",
+      neighbors: ["missing-constraint", "unearned-certainty"],
+    },
   ),
-] as const;
+] as const
 
-export const AGENT_BY_ID = new Map(AGENTS.map((definition) => [definition.id, definition]));
+export const AGENT_BY_ID = new Map(AGENTS.map((definition) => [definition.id, definition]))
 
 if (AGENT_BY_ID.size !== AGENTS.length) {
-  throw new Error("Atomic agent IDs must be unique.");
+  throw new Error("Atomic agent IDs must be unique.")
 }

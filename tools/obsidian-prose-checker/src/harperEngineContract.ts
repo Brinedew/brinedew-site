@@ -1,19 +1,19 @@
-export type HarperSuggestionKind = "replace" | "remove" | "insert-after";
+export type HarperSuggestionKind = "replace" | "remove" | "insert-after"
 
 export interface HarperSuggestion {
-  kind: HarperSuggestionKind;
-  replacement: string;
+  kind: HarperSuggestionKind
+  replacement: string
 }
 
 export interface HarperLint {
-  from: number;
-  to: number;
-  source: string;
-  message: string;
-  suggestions: HarperSuggestion[];
+  from: number
+  to: number
+  source: string
+  message: string
+  suggestions: HarperSuggestion[]
 }
 
 export interface HarperEngine {
-  lint(text: string): Promise<HarperLint[]>;
-  dispose(): void;
+  lint(text: string): Promise<HarperLint[]>
+  dispose(): void
 }
