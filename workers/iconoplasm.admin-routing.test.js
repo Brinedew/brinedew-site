@@ -275,7 +275,9 @@ test("admin asset repair scope falls back to unverified published portraits when
     async all() {
       if (
         this.sql.includes("FROM icono_publish_state ps") &&
-        this.sql.includes("COALESCE(q.audit_state, 'unknown') <> 'renderable'")
+        this.sql.includes(
+          "COALESCE(q.audit_state, 'unknown') NOT IN ('renderable', 'regionally_divergent')",
+        )
       ) {
         return { results: this.db.repairableRows() }
       }
@@ -294,6 +296,8 @@ test("admin asset repair scope falls back to unverified published portraits when
           verifiedRenderableImages,
           storageAuditCoveragePercent,
           storageIncompleteAssets,
+          storageRegionallyDivergentAssets,
+          storageRecheckDueAssets,
           brokenLiveImages,
           renderableLiveConfirmed,
           unverifiedLivePortraits,
@@ -314,6 +318,8 @@ test("admin asset repair scope falls back to unverified published portraits when
           verified_renderable_images: verifiedRenderableImages,
           storage_audit_coverage_percent: storageAuditCoveragePercent,
           storage_incomplete_assets: storageIncompleteAssets,
+          storage_regionally_divergent_assets: storageRegionallyDivergentAssets,
+          storage_recheck_due_assets: storageRecheckDueAssets,
           broken_live_images: brokenLiveImages,
           renderable_live_confirmed: renderableLiveConfirmed,
           unverified_live_portraits: unverifiedLivePortraits,
@@ -424,6 +430,10 @@ test("admin asset repair scope falls back to unverified published portraits when
           .length,
         storage_incomplete_assets: this.queueRows.filter((row) => row.audit_state === "broken")
           .length,
+        storage_regionally_divergent_assets: this.queueRows.filter(
+          (row) => row.audit_state === "regionally_divergent",
+        ).length,
+        storage_recheck_due_assets: 0,
         broken_live_images: this.queueRows.filter(
           (row) => row.audit_state === "broken" && row.is_current,
         ).length,
@@ -638,6 +648,8 @@ test("admin asset storage audit consumes queued work and refreshes the persisted
           verifiedRenderableImages,
           storageAuditCoveragePercent,
           storageIncompleteAssets,
+          storageRegionallyDivergentAssets,
+          storageRecheckDueAssets,
           brokenLiveImages,
           renderableLiveConfirmed,
           unverifiedLivePortraits,
@@ -658,6 +670,8 @@ test("admin asset storage audit consumes queued work and refreshes the persisted
           verified_renderable_images: verifiedRenderableImages,
           storage_audit_coverage_percent: storageAuditCoveragePercent,
           storage_incomplete_assets: storageIncompleteAssets,
+          storage_regionally_divergent_assets: storageRegionallyDivergentAssets,
+          storage_recheck_due_assets: storageRecheckDueAssets,
           broken_live_images: brokenLiveImages,
           renderable_live_confirmed: renderableLiveConfirmed,
           unverified_live_portraits: unverifiedLivePortraits,
@@ -755,15 +769,21 @@ test("admin asset storage audit consumes queued work and refreshes the persisted
     queueAggregate() {
       return {
         audited_assets: this.queueRows.filter((row) => row.audit_state !== "unknown").length,
-        verified_renderable_images: this.queueRows.filter((row) => row.audit_state === "renderable")
-          .length,
+        verified_renderable_images: this.queueRows.filter((row) =>
+          ["renderable", "regionally_divergent"].includes(row.audit_state),
+        ).length,
         storage_incomplete_assets: this.queueRows.filter((row) => row.audit_state === "broken")
           .length,
+        storage_regionally_divergent_assets: this.queueRows.filter(
+          (row) => row.audit_state === "regionally_divergent",
+        ).length,
+        storage_recheck_due_assets: 0,
         broken_live_images: this.queueRows.filter(
           (row) => row.audit_state === "broken" && row.is_current,
         ).length,
         renderable_live_confirmed: this.queueRows.filter(
-          (row) => row.audit_state === "renderable" && row.is_current,
+          (row) =>
+            ["renderable", "regionally_divergent"].includes(row.audit_state) && row.is_current,
         ).length,
         storage_queue_backlog_assets: this.queueRows.filter((row) => row.audit_state === "unknown")
           .length,
