@@ -1570,8 +1570,11 @@ test("request inbox uses one-open Shoelace groups and an accessible unread dot",
   assert.match(initialMarkup, /data-icono-candidate-image-id="59981"/)
   assert.match(initialMarkup, /data-icono-asset-sha="a{64}"/)
   assert.match(initialMarkup, /data-icono-request-publication-id="pub-ins-one"/)
-  assert.match(initialMarkup, />1 image</)
-  assert.match(initialMarkup, /Completed .* · View all 1/)
+  assert.match(initialMarkup, /receipt-count" aria-label="1 image">1</)
+  assert.doesNotMatch(
+    initialMarkup,
+    /<em>(?:ready|queued)<\/em>|Completed|View all|Random default|Requested /,
+  )
   assert.match(initialMarkup, /data-icono-request-notification-id="7"/)
   assert.match(initialMarkup, /<sl-badge[^>]+variant="danger"[^>]+aria-hidden="true"/)
   assert.match(initialMarkup, /1 unread generation/)
@@ -1659,8 +1662,9 @@ test("request inbox groups one publication and gene into one bounded receipt", a
   assert.equal((markup.match(/<strong>HPN<\/strong>/g) || []).length, 2)
   assert.match(markup, /data-icono-request-publication-id="pub-hpn-six"/)
   assert.match(markup, /data-icono-request-notification-ids="1,2,3,4,5,6"/)
-  assert.match(markup, />6 images</)
+  assert.match(markup, /receipt-count" aria-label="6 images">6</)
   assert.match(markup, />\+2<\/span>/)
+  assert.doesNotMatch(markup, /<em>ready<\/em>|Completed|View all|Random default/)
   assert.match(markup, /data-icono-request-group="ready" open/)
   assert.match(markup, />15<\/span>/)
   assert.match(markup, /Cancelled <span>1<\/span>/)
