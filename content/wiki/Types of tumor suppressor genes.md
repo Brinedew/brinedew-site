@@ -11,27 +11,23 @@ aliases:
 
 The **types of tumor suppressor genes** most commonly distinguished in cancer biology are gatekeeper, caretaker, and landscaper genes. They differ by the control that is lost when a gene is inactivated: direct growth restraint, genome maintenance, or regulation of the surrounding tissue.
 
-![[deininger1999-tumor-suppressor-inactivation.jpg|A common tumor-suppressor failure mode: one copy is deleted and the remaining copy is mutated, leaving the cell without the inhibitory gene product. From Deininger, 1999.]]
+![[deininger1999-tumor-suppressor-inactivation.jpg|A common tumor-suppressor failure mode: one copy is deleted and the remaining copy is mutated, ending the cell's supply of the inhibitory gene product. From Deininger, 1999.]]
 
-## Classification axes
+## Classification
 
-Tumor suppressor genes are commonly grouped as:
+Tumor suppressor genes are grouped by the control that is lost when the gene is inactivated:
 
 - **Gatekeepers:** restrain the potentially malignant cell itself by limiting division, enforcing cell-cycle arrest, or promoting apoptosis.
 - **Caretakers:** maintain genome stability and lower the rate at which later driver mutations appear.
 - **Landscapers:** regulate the tissue environment around the potentially malignant cell.
 
-The categories describe loss-of-function effects, not evolutionary relatedness or permanent gene membership. One gene product can participate in several protective processes. Kinzler and Vogelstein introduced the gatekeeper/caretaker distinction in the late 1990s, and later reviews describe landscapers as a third functional class.[^1][^4]
+Kinzler and Vogelstein introduced the gatekeeper/caretaker distinction in the late 1990s, and later reviews treat landscapers as a third functional class.[^1][^4]
 
-| Type | Main failure when lost | Typical examples | Immediate cancer consequence |
-| --- | --- | --- | --- |
-| Gatekeeper | Cell-autonomous growth restraint fails | APC, RB1, TP53 | A mutant clone can expand instead of being stopped |
-| Caretaker | Genome maintenance fails | DNA mismatch repair genes, BRCA1/BRCA2, ATM/ATR pathway genes | More mutations accumulate across the genome |
-| Landscaper | Tissue microenvironment control fails | SMAD4, E-cadherin, context-dependent NF1 | Surrounding stroma becomes more supportive of neoplastic growth |
+A cell carries two alleles of each tumor suppressor. A mutation that inactivates one allele leaves the second allele producing functional protein, so the suppressor's growth-restraining activity survives the first hit. In the classic two-hit pattern the cell loses that activity only when a second event inactivates the remaining allele.[^3]
 
 ## Gatekeeper genes
 
-Gatekeeper genes restrain the expansion of abnormal cells. When both functional copies are lost, the cell has one fewer local brake on proliferation. The immediate effect is cell-autonomous: an abnormal clone becomes more likely to persist long enough to acquire later changes.
+Gatekeeper genes restrain the expansion of abnormal cells. When both alleles are inactivated, the cell loses a brake on proliferation. The failure is cell-autonomous: the abnormal clone persists longer and acquires later changes.
 
 Common gatekeeper examples include:
 
@@ -39,11 +35,11 @@ Common gatekeeper examples include:
 - **[[rb-rb1|RB1]]:** gates the G1/S transition by controlling E2F-dependent cell-cycle entry.
 - **[[p53-tp53|p53]]:** a broader progression gatekeeper; DNA damage, oncogene stress, and other signals can feed into p53-mediated arrest, senescence, or apoptosis.
 
-Gatekeeper loss can appear as a rate-limiting step in a particular tissue because the tissue already contains dividing cells. The lost gene had been one of the controls deciding which of those cells may keep dividing.[^2]
+Gatekeeper loss is rate-limiting in a tissue that already contains dividing cells, because the lost gatekeeper had been the one deciding which of those cells may keep dividing.[^2]
 
 ## Caretaker genes
 
-Caretaker genes maintain the genome from which later cancer mutations are drawn. Their loss may not immediately make a cell proliferate faster. Instead, caretaker loss raises the chance that later mutations, deletions, rearrangements, or replication errors will hit gatekeepers, oncogenes, or other cancer-relevant systems.
+Caretaker genes maintain the genome from which later cancer mutations are drawn. Their loss lets later mutations accumulate, so a subsequent mutation, deletion, rearrangement, or replication error can reach a gatekeeper, an oncogene, or another cancer-relevant system.
 
 Common caretaker examples include:
 
@@ -51,13 +47,13 @@ Common caretaker examples include:
 - **BRCA1 and BRCA2:** homologous recombination repair helps maintain chromosome integrity.
 - **[[atm|ATM]] and [[atr|ATR]]:** DNA damage response kinases that help coordinate checkpoint and repair programs after damage.
 
-A defective caretaker changes the mutation supply available to a clone. Additional driver events become easier to sample, so tumor evolution can accelerate without the caretaker being the final growth switch. Caretaker loss is often less tissue-specific than gatekeeper loss because every renewing tissue depends on replication fidelity and repair.[^2][^3]
+A defective caretaker supplies a clone with a larger mutation pool, so later driver mutations surface more often and a gatekeeper or oncogene hit grants the growth advantage more easily. Caretaker loss touches more tissue types, since each renewing tissue depends on replication fidelity and repair.[^2][^3]
 
 ## Landscaper genes
 
-Landscaper genes regulate the tissue environment in which epithelial cells grow. A mutated landscaper contributes to cancer by making the local microenvironment more permissive for neoplastic growth. Reviews describe this class as genes whose loss can affect extracellular matrix proteins, cell-surface markers, adhesion molecules, growth factors, and neighboring stromal cells.[^4]
+Landscaper genes regulate the tissue environment around epithelial cells. A mutated landscaper makes the local microenvironment friendlier to neoplastic growth. Reviews describe this class as genes whose loss changes extracellular matrix proteins, cell-surface markers, adhesion molecules, growth factors, and neighboring stromal cells.[^4]
 
-Epithelial cells grow inside a structured neighborhood of basement membrane, stromal cells, immune cells, mechanical constraints, soluble signals, and adhesion cues. If that environment becomes abnormal, a clone that would otherwise be restrained can receive survival, growth, or invasion support from its surroundings.
+Epithelial cells grow in a structured neighborhood of basement membrane, stromal cells, immune cells, mechanical constraints, soluble signals, and adhesion cues. When the neighborhood changes, a clone picks up survival, growth, or invasion support from its surroundings.
 
 Landscaper loss acts through the tissue before it acts through the epithelial clone:
 
@@ -65,21 +61,29 @@ Landscaper loss acts through the tissue before it acts through the epithelial cl
 2. The local tissue environment changes.
 3. Epithelial cells that would otherwise be restrained receive more survival, growth, or invasion support.
 
-A mutation found in a cancer cell may therefore be important because it changes that cell, because it changes how the cell communicates with the stroma, or because it reflects a broader tissue process.
+A cell found in a cancer may be important in three ways:
+
+- It changes the cell itself.
+- It changes how the cell communicates with the stroma.
+- It reflects a changed tissue environment.
 
 ## Boundary cases
 
-The categories separate different failure modes, but they are not mutually exclusive boxes. [[p53-tp53|p53]] is a boundary case: it is a gatekeeper when it stops damaged or stressed cells from expanding, but it also has caretaker-like effects because p53 signaling shapes DNA damage responses and genomic stability. NF1 can also be discussed as both a gatekeeper and a landscaper in some contexts.[^4]
+[[p53-tp53|p53]] spans two classes. As a gatekeeper it stops damaged or stressed cells from expanding. It also shows caretaker-like effects, because p53 signaling shapes DNA damage responses and genomic stability.[^2] NF1 sits in the gatekeeper and landscaper classes in some contexts.[^4]
 
-The same gene product can sit in more than one causal path: a checkpoint path, a repair path, an adhesion path, or a signaling path that changes the local environment. A gene should therefore be classified by the cancer-preventing function being lost in a given tissue and stage.
+A gene can contribute through one or several mechanisms: enforcing a cell-cycle checkpoint, repairing DNA damage, maintaining cell adhesion, or transmitting signals that reshape the local tissue. The class follows the cancer-preventing function lost in a given tissue and stage.
 
 ## Consequences
 
-Each class makes a different first prediction. Gatekeeper loss predicts clonal expansion. Caretaker loss predicts a higher supply of later mutations. Landscaper loss predicts a changed tissue context that makes abnormal growth easier. The corresponding measurements are proliferation and arrest for gatekeepers, mutation burden and repair defects for caretakers, and stromal or extracellular-matrix changes for landscapers.
+Each class makes a different first prediction:
 
-The [[tumor-suppressor-theory-of-aging|tumor suppressor theory of aging]] depends on the same functional split. A tissue that strongly activates gatekeeper programs may suppress cancer by arresting or killing damaged cells, but that same response can deplete proliferative capacity or accumulate senescent cells. A tissue that relies heavily on caretaker activity may postpone cancer by reducing mutation supply. A tissue whose landscape changes with age may become more permissive even before a single clone has acquired every cell-autonomous advantage.
+| Class | First prediction | Measurement |
+|---|---|---|
+| Gatekeeper | clonal expansion | proliferation, arrest |
+| Caretaker | higher supply of later mutations | mutation burden, repair defects |
+| Landscaper | changed tissue context | stromal or extracellular-matrix changes |
 
-A gene called a tumor suppressor still needs its level specified. The lost control may be cell behavior, genome stability, or tissue environment, and those losses produce different routes toward cancer.
+The [[tumor-suppressor-theory-of-aging|tumor suppressor theory of aging]] uses the same split. A gatekeeper-heavy tissue may suppress cancer by arresting or killing damaged cells. The same response depletes proliferative capacity or accumulates senescent cells. A caretaker-heavy tissue may postpone cancer by keeping the mutation supply low. A tissue whose landscape shifts with age may grow permissive before a clone has acquired every cell-autonomous advantage.
 
 ## References
 

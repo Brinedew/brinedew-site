@@ -77,6 +77,12 @@ Executioner protease in apoptosis that cleaves many substrates to dismantle the 
 **Catabolism**
 Destructive metabolic processes where complex biomolecules are broken down into the simpler ones, releasing energy.
 
+**Cell-autonomous**
+Describes a biological effect that runs inside an affected cell using that cell's own components, such as the internal growth brake a gatekeeper tumor suppressor provides to the cell itself.
+
+**Cell non-autonomous**
+Describes a biological effect that reaches the affected cell from neighboring cells or the tissue environment, such as the survival, growth, or invasion support a clone receives from a changed stroma.
+
 **Cell competition**
 Process where fitter cells eliminate less-fit neighbors, preserving tissue quality under mutation pressure.
 
