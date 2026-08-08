@@ -55,23 +55,34 @@ It never treats an unverified upload as ready.
 ## Storage and serving
 
 Portrait bytes live in Bunny Storage. The internal stateful Worker is the only
-runtime with the authenticated Storage API credential. It performs idempotent
-GET, HEAD, PUT, and DELETE operations with bounded timeout and transient retry.
-Permanent 4xx responses fail immediately.
+runtime with the authenticated Storage API credential. One server-side adapter,
+`workers/lib/iconoplasm-portrait-storage.js`, owns Bunny configuration, bounded
+requests, GET/HEAD source selection, PUT, and DELETE. Routes and notification
+senders must not reconstruct those operations independently.
 
 `https://iconoplasm.brinedew.bio/portraits/v1/...` and
-`https://iconoplasm.brinedew.bio/gene-cards/v1/...` read authenticated storage
-and write successful immutable GET responses to Cloudflare's edge cache. Both
-paths are content-addressed, so query strings do not create separate cache
-objects.
+`https://iconoplasm.brinedew.bio/gene-cards/v1/...` first read authenticated
+Storage. Bunny can expose different truth through its Storage API and public CDN
+replicas: the observed CASP8AP2 failure loaded from an American VPN while the
+Vietnam first-party Storage read returned 404. A Storage 404 or unreachable
+Storage view therefore advances inside the Worker to the public CDN view. The
+Vietnamese browser still talks only to the first-party URL; Cloudflare performs
+the second Bunny read. Only failure of every configured view is a missing
+object. A split-view success emits the structured
+`portrait-storage-regional-divergence` warning. Successful immutable GETs are
+written to Cloudflare's edge cache, and query strings do not create duplicate
+cache objects.
 
-Server-generated Discord receipts use the same content-addressed full rendition
-but have a second, delivery-only fallback: authenticated Storage is attempted
-first, then the public Bunny CDN is tried when the Storage request is regionally
-unreachable or returns 404. The fallback is bounded and the bytes still require
-the WebP signature check before Discord receives them. This keeps a Vietnam-side
-resolver or Storage replica problem from turning a valid portrait into a
-publication failure without changing Bunny's healthy browser path.
+Website Ops stores `regionally_divergent` separately from ordinary
+`renderable`. Its existing storage-audit action always prioritizes unknown rows,
+then permits verdicts older than 30 days to re-enter the same bounded batch of
+at most 100 assets. This is an operator-triggered rolling recheck, not an
+automatic corpus sweep; the summary reports how many old verdicts are due.
+
+Server-generated Discord receipts use that same adapter and the same
+content-addressed full rendition. Discord keeps its WebP signature and byte
+limits after the shared read resolves. It must never regain a private copy of
+Storage-vs-CDN selection.
 
 Routine workstation ingest is a bounded write path: each missing rendition gets
 one Bunny Storage PUT, and the normal candidate batch must not invoke the
@@ -105,6 +116,15 @@ An `ERR_NAME_NOT_RESOLVED` from one browser or ISP is evidence for that tab to
 select canonical delivery. It is not evidence that Bunny Storage, the Bunny
 pull zone, or Bunny globally is unhealthy. Do not disable the accelerator from
 one regional probe.
+
+The inverse black swan is equally important: one successful VPN or region does
+not prove the first-party fallback works elsewhere. For any regional portrait
+incident, test the same immutable key through (1) the affected browser's Bunny
+URL, (2) the affected browser's first-party URL, (3) a contrasting VPN region,
+and (4) both server-side Bunny views. Record each observation separately before
+changing delivery policy. Never collapse client DNS, Storage API visibility,
+CDN replica visibility, and first-party Worker behavior into one “Bunny works”
+or “Bunny is down” claim.
 
 Retiring or replacing Bunny is allowed only as an explicit architecture
 migration. Update `architecture-fences.json`, this runbook, both policy decision
@@ -179,6 +199,8 @@ a policy change invalidates cached metadata without rebuilding the gene catalog.
   `iconoplasm-extension/service-worker.js`
 - Public contracts, canonical routes, and storage adapter:
   `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`
+- Server-side Bunny Storage/CDN authority:
+  `workers/lib/iconoplasm-portrait-storage.js`
 - Shared bundle generation:
   `scripts/sync-iconoplasm-shared.mjs`
 

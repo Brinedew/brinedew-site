@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
 import test from "node:test"
 
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
@@ -11,6 +12,50 @@ const SHA = "4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212"
 const PORTRAIT_KEY = `portraits/v1/47/${SHA}/medium.webp`
 const DUMP_KEY = "public-dumps/catalog.abc123.jsonl"
 const CDN_BASE = "https://iconoplasmportraits.b-cdn.net"
+
+test("server-side portrait consumers cannot recreate Bunny source selection", async () => {
+  const notificationSource = await readFile(
+    new URL("./iconoplasm-request-notifications.js", import.meta.url),
+    "utf8",
+  )
+  const runtimeSource = await readFile(
+    new URL(
+      "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+      import.meta.url,
+    ),
+    "utf8",
+  )
+
+  assert.match(notificationSource, /from "\.\/lib\/iconoplasm-portrait-storage\.js"/)
+  assert.doesNotMatch(notificationSource, /storage\.bunnycdn\.com/)
+  assert.doesNotMatch(notificationSource, /ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD/)
+  assert.doesNotMatch(runtimeSource, /function externalPortraitCdnBase\(/)
+  assert.doesNotMatch(runtimeSource, /function readPortraitStorageObject\(/)
+})
+
+test("storage audit preserves regional divergence as durable operational truth", async () => {
+  const runtimeSource = await readFile(
+    new URL(
+      "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+      import.meta.url,
+    ),
+    "utf8",
+  )
+  const migrationSource = await readFile(
+    new URL("../migrations-iconoplasm/0064_storage_regional_divergence_truth.sql", import.meta.url),
+    "utf8",
+  )
+
+  assert.match(runtimeSource, /regional_divergence[\s\S]*regionally_divergent/)
+  assert.match(
+    runtimeSource,
+    /audit_state IN \('renderable', 'regionally_divergent'\)[\s\S]*storage_regionally_divergent_assets/,
+  )
+  assert.match(runtimeSource, /ICONO_STORAGE_AUDIT_RECHECK_DAYS = 30/)
+  assert.match(runtimeSource, /last_audited_at[\s\S]*datetime\('now', '-' \|\| \? \|\| ' days'\)/)
+  assert.match(migrationSource, /storage_regionally_divergent_assets/)
+  assert.match(migrationSource, /storage_recheck_due_assets/)
+})
 
 test("idempotent portrait PUT retries transient Bunny failures with the same payload", async () => {
   const originalFetch = globalThis.fetch
@@ -190,6 +235,83 @@ test("stateful worker favors authenticated Bunny storage over a fragile public C
     assert.equal(response.status, 200)
     assert.equal(response.headers.get("content-type"), "image/webp")
     assert.equal(await response.text(), "storage-image-bytes")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("first-party portrait survives a region split where Storage is 404 but Bunny CDN has bytes", async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input?.url || ""
+    calls.push({ url, accessKey: init?.headers?.AccessKey || "" })
+    if (url.includes("storage.bunnycdn.com")) {
+      return new Response(null, { status: 404 })
+    }
+    assert.equal(url, `${CDN_BASE}/${PORTRAIT_KEY}`)
+    return new Response("replica-image-bytes", {
+      status: 200,
+      headers: {
+        "Content-Type": "image/webp",
+        ETag: '"bunny-replica-etag"',
+      },
+    })
+  }
+
+  try {
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(`https://iconoplasm.brinedew.bio/${PORTRAIT_KEY}`),
+        {
+          ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: CDN_BASE,
+          ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+          ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "iconoplasm-portraits",
+          ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-access-key",
+          ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: 0,
+        },
+        {},
+      )
+
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get("content-type"), "image/webp")
+    assert.equal(await response.text(), "replica-image-bytes")
+    assert.deepEqual(calls, [
+      {
+        url: `https://storage.bunnycdn.com/iconoplasm-portraits/${PORTRAIT_KEY}`,
+        accessKey: "storage-access-key",
+      },
+      { url: `${CDN_BASE}/${PORTRAIT_KEY}`, accessKey: "" },
+    ])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("first-party portrait returns 404 only after both Bunny views reject the same key", async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (input) => {
+    calls.push(typeof input === "string" ? input : input?.url || "")
+    return new Response(null, { status: 404 })
+  }
+
+  try {
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(`https://iconoplasm.brinedew.bio/${PORTRAIT_KEY}`),
+        {
+          ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: CDN_BASE,
+          ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+          ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "iconoplasm-portraits",
+          ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-access-key",
+          ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: 0,
+        },
+        {},
+      )
+
+    assert.equal(response.status, 404)
+    assert.equal(calls.length, 2)
   } finally {
     globalThis.fetch = originalFetch
   }

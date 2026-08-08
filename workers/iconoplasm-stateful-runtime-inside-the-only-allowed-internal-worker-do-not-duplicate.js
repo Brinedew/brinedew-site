@@ -3,9 +3,15 @@ import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
 import {
-  BUNNY_READ_AFTER_WRITE_DELAYS_MS,
-  putBunnyObjectUntilVerified,
-} from "./lib/bunny-storage-consistency.js"
+  canReadExternalPortraitStorage,
+  canWriteExternalPortraitStorage,
+  deletePortraitStorageObject,
+  externalPortraitCdnBase,
+  headPortraitStorageObject,
+  putPortraitStorageObject,
+  readPortraitStorageObject,
+} from "./lib/iconoplasm-portrait-storage.js"
+export { putPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-routes.js"
 import { createIconoplasmAdminGalleryHandlers } from "./iconoplasm-admin-gallery-routes.js"
@@ -2908,151 +2914,6 @@ function joinUrl(base, key) {
   return `${b}/${k}`
 }
 
-function externalPortraitCdnBase(env) {
-  const raw = String(
-    env?.ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL || env?.ICONOPLASM_PORTRAIT_CDN_BASE_URL || "",
-  ).trim()
-  return raw ? raw.replace(/\/+$/, "") : ""
-}
-
-function externalPortraitStorageZone(env) {
-  return String(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE || "").trim()
-}
-
-function externalPortraitStorageHost(env) {
-  const raw = String(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST || "").trim()
-  return raw || "storage.bunnycdn.com"
-}
-
-function externalPortraitStoragePassword(env) {
-  return String(env?.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD || "").trim()
-}
-
-function canReadExternalPortraitStorage(env) {
-  return Boolean(
-    (externalPortraitStorageZone(env) &&
-      externalPortraitStorageHost(env) &&
-      externalPortraitStoragePassword(env)) ||
-    externalPortraitCdnBase(env),
-  )
-}
-
-function canWriteExternalPortraitStorage(env) {
-  return Boolean(
-    externalPortraitStorageZone(env) &&
-    externalPortraitStorageHost(env) &&
-    externalPortraitStoragePassword(env),
-  )
-}
-
-function externalPortraitPublicUrl(env, key) {
-  const base = externalPortraitCdnBase(env)
-  if (!base) return null
-  return joinUrl(base, key)
-}
-
-function externalPortraitStorageWriteUrl(env, key) {
-  const zone = externalPortraitStorageZone(env)
-  const host = externalPortraitStorageHost(env)
-  if (!zone || !host) return null
-  return joinUrl(`https://${host}/${zone}`, key)
-}
-
-function portraitStorageRetryDelay(env, attempt) {
-  const configured = Number(env?.ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS)
-  const base = Number.isFinite(configured) ? Math.max(0, configured) : 125
-  const exponential = Math.min(2000, base * 2 ** Math.max(0, attempt - 1))
-  const jitter = exponential ? Math.floor(Math.random() * Math.max(1, exponential * 0.25)) : 0
-  return exponential + jitter
-}
-
-function portraitStorageRequestTimeout(env) {
-  const configured = Number(env?.ICONOPLASM_PORTRAIT_STORAGE_TIMEOUT_MS)
-  return Number.isFinite(configured) ? Math.max(250, Math.min(30_000, configured)) : 8000
-}
-
-function retryablePortraitStorageStatus(status) {
-  return status === 408 || status === 425 || status === 429 || status >= 500
-}
-
-async function fetchPortraitStorage(env, url, init, { operation, key }) {
-  const maxAttempts = 4
-  let lastError = null
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const controller = typeof AbortController === "function" ? new AbortController() : null
-    const timer = setTimeout(() => controller?.abort(), portraitStorageRequestTimeout(env))
-    try {
-      const response = await fetch(url, {
-        ...init,
-        ...(controller ? { signal: controller.signal } : {}),
-      })
-      if (
-        response.ok ||
-        response.status === 404 ||
-        !retryablePortraitStorageStatus(response.status)
-      ) {
-        return response
-      }
-      await response.body?.cancel().catch(() => null)
-      lastError = new Error(`External portrait ${operation} failed (${response.status}) for ${key}`)
-    } catch (error) {
-      lastError = error
-    } finally {
-      clearTimeout(timer)
-    }
-    if (attempt < maxAttempts) {
-      const delay = portraitStorageRetryDelay(env, attempt)
-      if (delay) await new Promise((resolve) => setTimeout(resolve, delay))
-    }
-  }
-  throw lastError || new Error(`External portrait ${operation} failed for ${key}`)
-}
-
-async function readPortraitStorageObject(env, key, { fallbackContentType = "image/webp" } = {}) {
-  if (env.ICONOPLASM_PORTRAITS) {
-    const object = await env.ICONOPLASM_PORTRAITS.get(key)
-    if (!object) return null
-    return {
-      body: object.body,
-      contentType: object.httpMetadata?.contentType || fallbackContentType,
-      etag: object.httpEtag || key,
-    }
-  }
-  const storageUrl = externalPortraitStorageWriteUrl(env, key)
-  const storagePassword = externalPortraitStoragePassword(env)
-  if (storageUrl && storagePassword) {
-    const response = await fetchPortraitStorage(
-      env,
-      storageUrl,
-      {
-        headers: { AccessKey: storagePassword },
-      },
-      { operation: "GET", key },
-    )
-    if (response.status === 404) return null
-    if (!response.ok) {
-      throw new Error(`External portrait storage fetch failed (${response.status}) for ${key}`)
-    }
-    return {
-      body: response.body,
-      contentType: response.headers.get("content-type") || fallbackContentType,
-      etag: response.headers.get("etag") || key,
-    }
-  }
-  const publicUrl = externalPortraitPublicUrl(env, key)
-  if (!publicUrl) return null
-  const response = await fetchPortraitStorage(env, publicUrl, {}, { operation: "GET", key })
-  if (response.status === 404) return null
-  if (!response.ok) {
-    throw new Error(`External portrait fetch failed (${response.status}) for ${key}`)
-  }
-  return {
-    body: response.body,
-    contentType: response.headers.get("content-type") || fallbackContentType,
-    etag: response.headers.get("etag") || key,
-  }
-}
-
 function portraitEdgeCacheKey(request) {
   const cacheUrl = new URL(request.url)
   // Portrait filenames are content-addressed. Query strings are only useful
@@ -3089,127 +2950,6 @@ async function cachedPortraitResponse(request, ctx, load) {
     else await cacheWrite
   }
   return request.method === "HEAD" ? portraitHeadResponse(fresh) : fresh
-}
-
-async function headPortraitStorageObject(env, key) {
-  if (env.ICONOPLASM_PORTRAITS && typeof env.ICONOPLASM_PORTRAITS.head === "function") {
-    return env.ICONOPLASM_PORTRAITS.head(key)
-  }
-  const writeUrl = externalPortraitStorageWriteUrl(env, key)
-  const password = externalPortraitStoragePassword(env)
-  if (!writeUrl || !password) return null
-  const response = await fetchPortraitStorage(
-    env,
-    writeUrl,
-    {
-      method: "HEAD",
-      headers: {
-        AccessKey: password,
-      },
-    },
-    { operation: "HEAD", key },
-  )
-  if (response.status === 404) return null
-  if (!response.ok) {
-    throw new Error(`External portrait HEAD failed (${response.status}) for ${key}`)
-  }
-  return { ok: true }
-}
-
-async function verifyPortraitStorageObjectAfterPut(env, key) {
-  // Bunny Storage is eventually consistent across storage nodes immediately
-  // after PUT. Keep verification authoritative, but absorb the documented
-  // measured replication window instead of rerendering an object that was
-  // accepted successfully.
-  for (const delayMs of BUNNY_READ_AFTER_WRITE_DELAYS_MS) {
-    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
-    const object = await headPortraitStorageObject(env, key)
-    if (object) return object
-  }
-  return null
-}
-
-export async function putPortraitStorageObject(
-  env,
-  key,
-  bytes,
-  {
-    contentType = "application/octet-stream",
-    cacheControl = "",
-    customMetadata = null,
-    verifyAfterPut = false,
-  } = {},
-) {
-  if (env.ICONOPLASM_PORTRAITS && typeof env.ICONOPLASM_PORTRAITS.put === "function") {
-    return env.ICONOPLASM_PORTRAITS.put(key, bytes, {
-      httpMetadata: {
-        contentType,
-        ...(cacheControl ? { cacheControl } : {}),
-      },
-      ...(customMetadata ? { customMetadata } : {}),
-    })
-  }
-  const writeUrl = externalPortraitStorageWriteUrl(env, key)
-  const password = externalPortraitStoragePassword(env)
-  if (!writeUrl || !password) {
-    throw new Error("External portrait storage is not configured for writes")
-  }
-  const putOnce = async () => {
-    const response = await fetchPortraitStorage(
-      env,
-      writeUrl,
-      {
-        method: "PUT",
-        headers: {
-          AccessKey: password,
-          "Content-Type": contentType,
-          ...(cacheControl ? { "Cache-Control": cacheControl } : {}),
-        },
-        body: bytes,
-      },
-      { operation: "PUT", key },
-    )
-    if (!response.ok) {
-      throw new Error(`External portrait PUT failed (${response.status}) for ${key}`)
-    }
-  }
-  if (verifyAfterPut) {
-    const verified = await putBunnyObjectUntilVerified({
-      put: putOnce,
-      verify: () => verifyPortraitStorageObjectAfterPut(env, key),
-    })
-    if (!verified) {
-      throw new Error(`External portrait PUT was not readable after idempotent retries for ${key}`)
-    }
-    return { ok: true, verified: true }
-  }
-  await putOnce()
-  return { ok: true }
-}
-
-async function deletePortraitStorageObject(env, key) {
-  if (env.ICONOPLASM_PORTRAITS && typeof env.ICONOPLASM_PORTRAITS.delete === "function") {
-    return env.ICONOPLASM_PORTRAITS.delete(key)
-  }
-  const writeUrl = externalPortraitStorageWriteUrl(env, key)
-  const password = externalPortraitStoragePassword(env)
-  if (!writeUrl || !password) return null
-  const response = await fetchPortraitStorage(
-    env,
-    writeUrl,
-    {
-      method: "DELETE",
-      headers: {
-        AccessKey: password,
-      },
-    },
-    { operation: "DELETE", key },
-  )
-  if (response.status === 404) return null
-  if (!response.ok) {
-    throw new Error(`External portrait DELETE failed (${response.status}) for ${key}`)
-  }
-  return { ok: true }
 }
 
 function portraitBase(url, env) {
@@ -12068,6 +11808,7 @@ async function fetchAssetStateRows(env, requestedSymbols = null) {
 }
 
 const ICONO_WEBSITE_TRUTH_SUMMARY_KEY = "iconoplasm_website_truth_summary"
+const ICONO_STORAGE_AUDIT_RECHECK_DAYS = 30
 const ICONO_STORAGE_AUDIT_QUEUE_KEY = "iconoplasm_storage_audit"
 const ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH = 200
 // Cloudflare gives each invocation a finite request budget. Each audited asset
@@ -12136,6 +11877,11 @@ function mapWebsiteTruthSummaryRow(row) {
     verified_renderable_images: Math.max(0, Number(row?.verified_renderable_images || 0)),
     storage_audit_coverage_percent: Number(row?.storage_audit_coverage_percent || 0),
     storage_incomplete_assets: Math.max(0, Number(row?.storage_incomplete_assets || 0)),
+    storage_regionally_divergent_assets: Math.max(
+      0,
+      Number(row?.storage_regionally_divergent_assets || 0),
+    ),
+    storage_recheck_due_assets: Math.max(0, Number(row?.storage_recheck_due_assets || 0)),
     broken_live_images: Math.max(0, Number(row?.broken_live_images || 0)),
     renderable_live_confirmed: Math.max(0, Number(row?.renderable_live_confirmed || 0)),
     unverified_live_portraits: Math.max(0, Number(row?.unverified_live_portraits || 0)),
@@ -12853,6 +12599,8 @@ async function computeWebsiteTruthSummary(env) {
       verified_renderable_images: 0,
       storage_audit_coverage_percent: 0,
       storage_incomplete_assets: 0,
+      storage_regionally_divergent_assets: 0,
+      storage_recheck_due_assets: 0,
       broken_live_images: 0,
       renderable_live_confirmed: 0,
       unverified_live_portraits: baseline.published_live_portraits,
@@ -12870,10 +12618,12 @@ async function computeWebsiteTruthSummary(env) {
   const queueRow = await env.ICONOPLASM_DB.prepare(
     `SELECT
        COALESCE(SUM(CASE WHEN q.audit_state <> 'unknown' THEN 1 ELSE 0 END), 0) AS audited_assets,
-       COALESCE(SUM(CASE WHEN q.audit_state = 'renderable' THEN 1 ELSE 0 END), 0) AS verified_renderable_images,
+       COALESCE(SUM(CASE WHEN q.audit_state IN ('renderable', 'regionally_divergent') THEN 1 ELSE 0 END), 0) AS verified_renderable_images,
        COALESCE(SUM(CASE WHEN q.audit_state = 'broken' THEN 1 ELSE 0 END), 0) AS storage_incomplete_assets,
+       COALESCE(SUM(CASE WHEN q.audit_state = 'regionally_divergent' THEN 1 ELSE 0 END), 0) AS storage_regionally_divergent_assets,
+       COALESCE(SUM(CASE WHEN q.audit_state <> 'unknown' AND datetime(COALESCE(q.last_audited_at, '')) <= datetime('now', '-${ICONO_STORAGE_AUDIT_RECHECK_DAYS} days') THEN 1 ELSE 0 END), 0) AS storage_recheck_due_assets,
        COALESCE(SUM(CASE WHEN q.is_current = 1 AND q.audit_state = 'broken' THEN 1 ELSE 0 END), 0) AS broken_live_images,
-       COALESCE(SUM(CASE WHEN q.is_current = 1 AND q.audit_state = 'renderable' THEN 1 ELSE 0 END), 0) AS renderable_live_confirmed,
+       COALESCE(SUM(CASE WHEN q.is_current = 1 AND q.audit_state IN ('renderable', 'regionally_divergent') THEN 1 ELSE 0 END), 0) AS renderable_live_confirmed,
        COALESCE(SUM(CASE WHEN q.audit_state = 'unknown' THEN 1 ELSE 0 END), 0) AS storage_queue_backlog_assets
      FROM icono_storage_audit_queue q
      WHERE EXISTS (
@@ -12894,6 +12644,11 @@ async function computeWebsiteTruthSummary(env) {
   const auditedAssets = Math.max(0, Number(queueRow?.audited_assets || 0))
   const verifiedRenderableImages = Math.max(0, Number(queueRow?.verified_renderable_images || 0))
   const storageIncompleteAssets = Math.max(0, Number(queueRow?.storage_incomplete_assets || 0))
+  const storageRegionallyDivergentAssets = Math.max(
+    0,
+    Number(queueRow?.storage_regionally_divergent_assets || 0),
+  )
+  const storageRecheckDueAssets = Math.max(0, Number(queueRow?.storage_recheck_due_assets || 0))
   const brokenLiveImages = Math.max(0, Number(queueRow?.broken_live_images || 0))
   const renderableLiveConfirmed = Math.max(0, Number(queueRow?.renderable_live_confirmed || 0))
   const storageQueueBacklogAssets = Math.max(0, Number(queueRow?.storage_queue_backlog_assets || 0))
@@ -12903,7 +12658,8 @@ async function computeWebsiteTruthSummary(env) {
     auditableAssets === 0 ||
     (Boolean(queueState?.seeded_complete) &&
       auditedAssets >= auditableAssets &&
-      storageQueueBacklogAssets <= 0)
+      storageQueueBacklogAssets <= 0 &&
+      storageRecheckDueAssets <= 0)
   const updatedAt = new Date().toISOString()
   const lastExactAuditTotal = exactKnown
     ? verifiedRenderableImages
@@ -12918,6 +12674,12 @@ async function computeWebsiteTruthSummary(env) {
     0,
     publishedLivePortraits - renderableLiveConfirmed - brokenLiveImages,
   )
+  const divergenceNote = storageRegionallyDivergentAssets
+    ? ` ${storageRegionallyDivergentAssets.toLocaleString("en-US")} readable assets have inconsistent provider views and require provider-side investigation.`
+    : ""
+  const recheckNote = storageRecheckDueAssets
+    ? ` ${storageRecheckDueAssets.toLocaleString("en-US")} prior verdicts are over ${ICONO_STORAGE_AUDIT_RECHECK_DAYS} days old and are available for bounded recheck.`
+    : ""
   const statusNote = exactKnown
     ? `Storage audit has a complete persisted verdict for all ${auditableAssets.toLocaleString("en-US")} auditable website assets.`
     : queueState?.seeded_complete
@@ -12937,6 +12699,8 @@ async function computeWebsiteTruthSummary(env) {
     verified_renderable_images: verifiedRenderableImages,
     storage_audit_coverage_percent: coveragePercent,
     storage_incomplete_assets: storageIncompleteAssets,
+    storage_regionally_divergent_assets: storageRegionallyDivergentAssets,
+    storage_recheck_due_assets: storageRecheckDueAssets,
     broken_live_images: brokenLiveImages,
     renderable_live_confirmed: renderableLiveConfirmed,
     unverified_live_portraits: unverifiedLivePortraits,
@@ -12945,7 +12709,7 @@ async function computeWebsiteTruthSummary(env) {
     last_exact_audit_at: lastExactAuditAt,
     storage_queue_backlog_assets: storageQueueBacklogAssets,
     storage_queue_seeded_complete: queueState?.seeded_complete ? 1 : 0,
-    storage_audit_status_note: statusNote,
+    storage_audit_status_note: `${statusNote}${divergenceNote}${recheckNote}`,
     updated_at: updatedAt,
   })
 }
@@ -12964,6 +12728,8 @@ async function writeWebsiteTruthSummary(env, summary) {
        verified_renderable_images,
        storage_audit_coverage_percent,
        storage_incomplete_assets,
+       storage_regionally_divergent_assets,
+       storage_recheck_due_assets,
        broken_live_images,
        renderable_live_confirmed,
        unverified_live_portraits,
@@ -12974,7 +12740,7 @@ async function writeWebsiteTruthSummary(env, summary) {
        storage_queue_seeded_complete,
        storage_audit_status_note,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(summary_key) DO UPDATE SET
        candidate_assets = excluded.candidate_assets,
        stale_assets = excluded.stale_assets,
@@ -12984,6 +12750,8 @@ async function writeWebsiteTruthSummary(env, summary) {
        verified_renderable_images = excluded.verified_renderable_images,
        storage_audit_coverage_percent = excluded.storage_audit_coverage_percent,
        storage_incomplete_assets = excluded.storage_incomplete_assets,
+       storage_regionally_divergent_assets = excluded.storage_regionally_divergent_assets,
+       storage_recheck_due_assets = excluded.storage_recheck_due_assets,
        broken_live_images = excluded.broken_live_images,
        renderable_live_confirmed = excluded.renderable_live_confirmed,
        unverified_live_portraits = excluded.unverified_live_portraits,
@@ -13005,6 +12773,8 @@ async function writeWebsiteTruthSummary(env, summary) {
       row.verified_renderable_images,
       row.storage_audit_coverage_percent,
       row.storage_incomplete_assets,
+      row.storage_regionally_divergent_assets,
+      row.storage_recheck_due_assets,
       row.broken_live_images,
       row.renderable_live_confirmed,
       row.unverified_live_portraits,
@@ -13116,20 +12886,25 @@ async function selectStorageAuditQueueRowsToProcess(
      JOIN icono_portrait_assets pa
        ON pa.gene_symbol = q.gene_symbol
       AND pa.asset_sha256 = q.asset_sha256
-     WHERE q.audit_state = 'unknown'
+     WHERE (
+         q.audit_state = 'unknown'
+         OR datetime(COALESCE(q.last_audited_at, '')) <= datetime('now', '-' || ? || ' days')
+       )
        AND q.next_attempt_at <= CURRENT_TIMESTAMP
        AND (? = 0 OR q.gene_symbol IN (SELECT gene_symbol FROM incoming_scope))
        AND COALESCE(pa.is_legacy, 0) = 0
        AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'
      ORDER BY
+       CASE q.audit_state WHEN 'unknown' THEN 0 ELSE 1 END ASC,
        q.is_current DESC,
        COALESCE(q.is_stale, 0) ASC,
+       COALESCE(q.last_audited_at, '') ASC,
        COALESCE(q.created_at, '') DESC,
        q.gene_symbol ASC,
        q.asset_sha256 ASC
      LIMIT ?`,
   )
-    .bind(JSON.stringify(wantedSymbols), applyScope, cleanedLimit)
+    .bind(JSON.stringify(wantedSymbols), ICONO_STORAGE_AUDIT_RECHECK_DAYS, applyScope, cleanedLimit)
     .all()
   return Array.isArray(response?.results) ? response.results : []
 }
@@ -13172,6 +12947,10 @@ async function inspectAdminAssetStorageRows(
       if (!mediumHead) missingRenditions.push("medium")
       if (!thumbHead) missingRenditions.push("thumb")
 
+      const regionalDivergence = [fullHead, mediumHead, thumbHead].some((head) =>
+        Boolean(head?.regionalDivergence),
+      )
+
       return {
         ok: true,
         symbol,
@@ -13184,6 +12963,12 @@ async function inspectAdminAssetStorageRows(
         attempts: Math.max(0, Number(rawRow?.attempts || 0)),
         storage_complete: missingRenditions.length === 0,
         missing_renditions: missingRenditions,
+        regional_divergence: regionalDivergence,
+        rendition_sources: {
+          full: fullHead?.source || "missing",
+          medium: mediumHead?.source || "missing",
+          thumb: thumbHead?.source || "missing",
+        },
       }
     } catch (error) {
       return {
@@ -13232,7 +13017,11 @@ async function writeStorageAuditQueueInspectionResults(env, rows) {
       successRows.push({
         gene_symbol: symbol,
         asset_sha256: assetSha,
-        audit_state: row?.storage_complete ? "renderable" : "broken",
+        audit_state: row?.storage_complete
+          ? row?.regional_divergence
+            ? "regionally_divergent"
+            : "renderable"
+          : "broken",
         missing_renditions_json: JSON.stringify(
           Array.isArray(row?.missing_renditions) ? row.missing_renditions : [],
         ),
@@ -13650,7 +13439,7 @@ async function fetchKnownBrokenStorageAuditRows(env, { requestedSymbols = null, 
        AND (? = 0 OR ps.gene_symbol IN (SELECT gene_symbol FROM incoming_scope))
        AND COALESCE(pa.is_legacy, 0) = 0
        AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'
-      AND COALESCE(q.audit_state, 'unknown') <> 'renderable'
+      AND COALESCE(q.audit_state, 'unknown') NOT IN ('renderable', 'regionally_divergent')
      ORDER BY
        CASE COALESCE(q.audit_state, 'unknown')
          WHEN 'broken' THEN 0

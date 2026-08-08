@@ -198,6 +198,10 @@ export function createIconoplasmAdminAssetHandlers(services) {
           verified_renderable_images: Number(summaryRow?.verified_renderable_images || 0),
           storage_audit_coverage_percent: Number(summaryRow?.storage_audit_coverage_percent || 0),
           storage_incomplete_assets: Number(summaryRow?.storage_incomplete_assets || 0),
+          storage_regionally_divergent_assets: Number(
+            summaryRow?.storage_regionally_divergent_assets || 0,
+          ),
+          storage_recheck_due_assets: Number(summaryRow?.storage_recheck_due_assets || 0),
           broken_live_images: Number(summaryRow?.broken_live_images || 0),
           renderable_live_confirmed: Number(summaryRow?.renderable_live_confirmed || 0),
           unverified_live_portraits: Number(summaryRow?.unverified_live_portraits || 0),
