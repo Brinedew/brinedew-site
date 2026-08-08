@@ -262,6 +262,24 @@ test("the visible guest archive is exactly the three starters", async () => {
   assert.match(block, /return normalizeDiscoveryEntries\(starterEntries\)/)
 })
 
+test("the loaded guest starter gallery fades into the existing auxiliary infocard", async () => {
+  const [app, styles] = await Promise.all([readFile(appPath, "utf8"), readFile(stylesPath, "utf8")])
+  const chromeStart = app.indexOf("function syncCollectionChrome()")
+  const chromeEnd = app.indexOf("function ensureLocalCollection(signal)", chromeStart)
+  const chromeBlock = app.slice(chromeStart, chromeEnd)
+
+  assert.match(
+    chromeBlock,
+    /feed\.classList\.toggle\([\s\S]*"icono-feed--guest-preview"[\s\S]*!useClassicGallery[\s\S]*galleryState\.ready[\s\S]*!galleryState\.authenticated[\s\S]*!galleryState\.sharedDiscoveries/,
+  )
+  assert.match(
+    styles,
+    /\.icono-feed--guest-preview\[aria-busy="false"\]::after\s*\{[\s\S]*height:\s*var\(--icono-guest-gallery-hider-height\)[\s\S]*margin-top:\s*calc\(-1 \* var\(--icono-guest-gallery-hider-height\)\)[\s\S]*pointer-events:\s*none[\s\S]*linear-gradient\(transparent, var\(--light\)\)/,
+  )
+  assert.match(app, /appendHomeInstallCard\(auxiliary\)/)
+  assert.doesNotMatch(chromeBlock, /fetch\(|fetchJSON|fetchAuthedJSON/)
+})
+
 test("account collection first-card path uses a bounded gallery window for supported orders", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("async function requestFeedPage(request)")

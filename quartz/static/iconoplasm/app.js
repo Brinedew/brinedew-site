@@ -7497,6 +7497,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
     function syncCollectionChrome() {
       syncCounts()
+      feed.classList.toggle(
+        "icono-feed--guest-preview",
+        !useClassicGallery &&
+          galleryState.ready &&
+          !galleryState.authenticated &&
+          !galleryState.sharedDiscoveries,
+      )
       if (useClassicGallery) {
         summaryEl.hidden = true
         emptyEl.hidden = true
