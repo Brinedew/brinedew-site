@@ -643,8 +643,7 @@ article p {
   container-type: inline-size;
 }
 
-.icono-request-inbox__head,
-.icono-request-inbox__line {
+.icono-request-inbox__head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -840,11 +839,6 @@ article p {
   gap: 0.65rem;
 }
 
-.icono-request-inbox__receipt-head .icono-request-inbox__line {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 .icono-request-inbox__receipt-count {
   flex: 0 0 auto;
   color: var(--secondary);
@@ -924,36 +918,17 @@ article p {
   gap: 0.08rem;
 }
 
-.icono-request-inbox__line strong {
+.icono-request-inbox__receipt-head strong,
+.icono-request-inbox__copy strong {
   font-family: "League Spartan", sans-serif;
   font-size: 0.95rem;
   letter-spacing: 0.025em;
 }
 
-.icono-request-inbox__line em {
-  color: var(--secondary);
-  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
-  font-size: 0.58rem;
-  font-style: normal;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.icono-request-inbox__item--unread .icono-request-inbox__line em {
-  color: var(--dark);
-  font-weight: 700;
-}
-
-.icono-request-inbox__emulsion,
 .icono-request-inbox__copy small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.icono-request-inbox__emulsion {
-  font-size: 0.72rem;
-  font-weight: 620;
 }
 
 .icono-request-inbox__copy small {

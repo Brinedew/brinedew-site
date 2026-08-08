@@ -296,7 +296,6 @@ export function createRequestInbox({
 
   function fulfilledReceiptMarkup(group) {
     var items = Array.isArray(group.items) ? group.items : []
-    var newest = items[0] || {}
     var previews = items.slice(0, 4)
     var total = Math.max(1, Number(group.expected_size || 0) || items.length)
     var notificationIds = items
@@ -304,17 +303,6 @@ export function createRequestInbox({
         return Number(item.notification_id || 0) || 0
       })
       .filter(Boolean)
-    var emulsionLabels = Array.from(
-      new Set(
-        items.map(function (item) {
-          return String(item.requested_emulsion_label || "Requested blot")
-        }),
-      ),
-    )
-    var emulsionSummary =
-      emulsionLabels.length === 1
-        ? emulsionLabels[0]
-        : String(emulsionLabels.length) + " requested emulsions"
     var previewMarkup = ""
     for (var previewIndex = 0; previewIndex < previews.length; previewIndex++) {
       var item = previews[previewIndex] || {}
@@ -356,25 +344,19 @@ export function createRequestInbox({
       escapeHtml(group.gene_symbol || "") +
       '" data-icono-request-notification-ids="' +
       escapeHtml(notificationIds.join(",")) +
-      '"><span class="icono-request-inbox__receipt-head"><span class="icono-request-inbox__line"><strong>' +
+      '"><span class="icono-request-inbox__receipt-head"><strong>' +
       escapeHtml(group.gene_symbol || "Gene") +
-      "</strong><em>ready</em></span>" +
-      '<span class="icono-request-inbox__receipt-count">' +
+      '</strong><span class="icono-request-inbox__receipt-count" aria-label="' +
       escapeHtml(String(total)) +
       (total === 1 ? " image" : " images") +
+      '">' +
+      escapeHtml(String(total)) +
       "</span></span>" +
       '<span class="icono-request-inbox__previews icono-request-inbox__previews--' +
       escapeHtml(String(Math.max(1, previews.length))) +
       '" aria-hidden="true">' +
       previewMarkup +
-      "</span>" +
-      '<span class="icono-request-inbox__copy"><span class="icono-request-inbox__emulsion">' +
-      escapeHtml(emulsionSummary) +
-      "</span><small>Completed " +
-      escapeHtml(ageLabel(newest.fulfilled_at || newest.created_at)) +
-      " · View all " +
-      escapeHtml(String(total)) +
-      "</small></span></a>"
+      "</span></a>"
     )
   }
 
@@ -383,12 +365,9 @@ export function createRequestInbox({
       '<a class="icono-request-inbox__item icono-request-inbox__item--queued" href="' +
       escapeHtml(item.gene_url || "/") +
       '" data-icono-nav><span class="icono-request-inbox__queue-mark" aria-hidden="true"></span>' +
-      '<span class="icono-request-inbox__copy"><span class="icono-request-inbox__line"><strong>' +
+      '<span class="icono-request-inbox__copy"><strong>' +
       escapeHtml(item.gene_symbol || "Gene") +
-      "</strong><em>queued</em></span>" +
-      '<span class="icono-request-inbox__emulsion">' +
-      escapeHtml(item.requested_emulsion_label || "Random default") +
-      "</span><small>Requested " +
+      "</strong><small>" +
       escapeHtml(ageLabel(item.created_at)) +
       "</small></span></a>"
     )
@@ -407,7 +386,6 @@ export function createRequestInbox({
     var readyGroups = groupReadyRequests(readyRequests)
     var openRequests = Array.isArray(state.open_requests) ? state.open_requests : []
     var unread = Math.max(0, Number(state.unread_count || 0) || 0)
-    var readyCount = Math.max(0, Number(state.ready_count || 0) || 0)
     var unreadGroupCount = Math.max(0, Number(state.unread_group_count || 0) || 0)
     var readyGroupCount = Math.max(readyGroups.length, Number(state.ready_group_count || 0) || 0)
     var openCount = Math.max(0, Number(state.open_count || 0) || 0)
@@ -429,15 +407,11 @@ export function createRequestInbox({
         "Finished requests will stay here.</div>"
     } else if (readyGroupCount > readyGroups.length) {
       readyContent +=
-        '<div class="icono-request-inbox__limit-note">Showing the newest ' +
+        '<div class="icono-request-inbox__limit-note">' +
         escapeHtml(String(readyGroups.length)) +
         " of " +
         escapeHtml(String(readyGroupCount)) +
-        " ready generations (" +
-        escapeHtml(String(readyRequests.length)) +
-        " of " +
-        escapeHtml(String(readyCount)) +
-        " images loaded).</div>"
+        " shown.</div>"
     }
 
     var waitingContent = ""
@@ -450,11 +424,11 @@ export function createRequestInbox({
         "New requests appear here until they are ready.</div>"
     } else if (openCount > openRequests.length) {
       waitingContent +=
-        '<div class="icono-request-inbox__limit-note">Showing the oldest ' +
+        '<div class="icono-request-inbox__limit-note">' +
         escapeHtml(String(openRequests.length)) +
         " of " +
         escapeHtml(String(openCount)) +
-        " waiting requests.</div>"
+        " shown.</div>"
     }
     html += requestGroupMarkup("ready", "Ready", readyGroupCount, unreadGroupCount, readyContent)
     html += requestGroupMarkup("waiting", "Waiting", openCount, 0, waitingContent)
