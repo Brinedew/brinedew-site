@@ -1,0 +1,7 @@
+Brinedew Prose Checker includes and adapts interaction and integration ideas
+from Harper, Copyright 2024 Elijah Potter and Harper contributors.
+
+Harper is licensed under the Apache License, Version 2.0.
+https://github.com/Automattic/harper
+
+The Harper grammar engine is consumed through the published harper.js package.
