@@ -9,62 +9,113 @@ aliases:
 ---
 # Indeterminate growth
 
-**Indeterminate growth** is a life-history pattern in which an organism keeps growing after reaching reproductive maturity, without a fixed adult body size. The opposite pattern is **determinate growth**: the organism grows to a fixed size, then stops. The fixed-cell-count extreme is covered under [[eutely|Eutely]].
+**Indeterminate growth** is a life-history pattern in which an organism continues to increase in size after reproductive maturity instead of reaching a fixed adult size. Determinate and indeterminate growth are endpoints of a continuum: the practical question is how much growth remains after maturity, not whether growth is literally unlimited. The fixed-cell-count extreme is covered under [[eutely|Eutely]].
 
-![[spathoglottis-indeterminate-raceme.jpg|Spathoglottis plicata (Philippine ground orchid) — an indeterminate raceme: new flowers keep forming at the tip while lower flowers have already fruited, so the stem has no fixed length. Photo: Eric Guinther, Wikimedia Commons, CC BY-SA 3.0.]]
+![[spathoglottis-indeterminate-raceme.jpg|Spathoglottis plicata (Philippine ground orchid) with an indeterminate raceme: fruits mature below while new flowers continue to form toward the growing tip. Photo by Eric Guinther, Wikimedia Commons, CC BY-SA 3.0.]]
 
-## Mechanism
+## Definition and variation
 
-CLAIM-1: Indeterminate growth persists because cell populations with stem-cell-like power stay available late in life — plant meristems, stem cells in cnidarians, circulating cells in colonial ascidians — rather than a germ line sequestered early in development.[^1]
+The growth classification applies at more than one biological scale. A flowering shoot can be indeterminate even though the plant bearing it eventually dies. In life-history biology, the unit being classified is the whole organism and the reference point is reproductive maturity.
 
-CLAIM-2: Where size keeps increasing after maturity, fecundity rises with size, so larger, older individuals produce more offspring than smaller, younger ones.[^2]
+Determinate growth has an endpoint in the organism's normal developmental programme. This does not mean that every cell stops dividing: an adult bird or mammal can still replace skin, blood, and gut cells after body growth has largely stopped. Indeterminate growth concerns the trajectory of body size. Growth is rapid before maturity and continues more slowly afterwards in many molluscs, crustaceans, fish, amphibians, and reptiles.[^1]
+
+Indeterminate growth need not continue at a constant rate or reach an immense size. Growth may become extremely slow, and death can end a trajectory that has no fixed developmental endpoint. The pattern occurs across plants, insects, fish, reptiles, and corals.[^2]
+
+Growth form is therefore a graded trait. An organism that matures near its maximum size has little scope for adult growth; one that matures while still small has much more. Size at maturity divided by maximum size captures that difference better than forcing every species into one of two boxes.[^6]
+
+## Growth and reproduction
+
+After maturity, acquired energy can support maintenance, immediate reproduction, or further growth. Their proportions vary with species and conditions. Growth becomes an investment in later reproduction only when a larger body can produce or provision more offspring. In a size-dependent life-history model, reducing present reproduction can then increase future reproductive output by increasing body size.[^3]
+
+That sequence contains two separate links: survival allows another period of growth, and added size raises later fecundity. If either link is weak, indeterminate growth gives little evolutionary reward for reaching an older age. If both are strong, a large old individual can contribute more offspring per breeding event than a newly mature one. Williams used this size-fecundity relation to predict slower senescence in organisms that continue growing after maturity.[^1]
+
+The relevant quantity is **reproductive value**: an individual's expected contribution to future generations from its present age and state. In the usual [[selection-shadow-theory|selection-shadow]] account, fewer individuals survive to old ages, so selection is less effective against harmful late-life traits. Size-dependent fecundity pushes in the other direction. When fecundity rises disproportionately with size and age, older size classes make a larger contribution to future generations, strengthening selection on traits expressed in those classes.[^4]
+
+The model describes how growth changes the fitness return on survival and maintenance. It does not specify a mechanism that repairs age damage. Growth is only one way to shift a population's reproductive value toward later ages.[^4]
 
 ## Consequences for ageing
 
-CLAIM-3: An increase in fecundity with age has the opposite effect from mortality: it tends to raise the reproductive probability of the more advanced ages and thereby intensify the selection against senescence — the stated basic evolutionary reason for the apparent association between rapid senescence and determinate growth.[^3]
+Senescence has at least two population-level measurements. **Actuarial senescence** is an increase in mortality risk with age after maturity. **Reproductive senescence** is a decline in reproductive performance with age.[^8] The two trajectories can be uncoupled: fertility can change without a matching change in mortality, and mortality can change without a matching change in fertility.[^9]
 
-CLAIM-4: In measured life histories, indeterminate growers show mortality that is approximately constant or decreases somewhat with age, and fertility that is more or less constant or increases — a pattern distinct from determinate growers.[^4]
+Comparative life tables provide a partial test of the growth-fecundity prediction. Among the indeterminate growers classified in one broad dataset, mortality was approximately constant or decreased somewhat with age, while fertility was approximately constant or increased somewhat.[^5] A later review reported little evidence of rising mortality in 98% of the plant species and all of the corals in its displayed data, and a declining mortality risk in the indeterminately growing South American river turtle (*Podocnemis expansa*).[^6]
 
-CLAIM-5: Actuarial senescence is the rule in determinate growers such as birds and mammals, but is only negligible in organisms displaying indeterminate growth — an empirical result that supports the fecundity-with-growth prediction.[^5]
+These observations fit the prediction that adult growth can preserve the reproductive value of later life. They do not establish growth form as the sole cause. Some indeterminate growers show ordinary positive senescence,[^6] and reproductive decline need not follow the same trajectory as mortality.[^9]
 
-CLAIM-6: An organism whose reproductive capacity increases with size can be selected to sacrifice current reproduction if the sacrifice markedly increases size, and with it future reproductive output — the demographic negative-senescence hypothesis.[^6]
+## Limits
 
-CLAIM-7: In a broad survey, 98% of studied plant species and all studied corals show little evidence of rising mortality with age, and the South American river turtle shows negative actuarial senescence; some indeterminately growing species do still display senescence.[^7]
+An indeterminate grower may add less length in each successive year while never reaching a programmed adult endpoint. It remains vulnerable to disease, injury, predation, and physiological deterioration. Continued growth and continued survival are separate traits.
 
-CLAIM-8: A mortality curve that drops as a tree grows larger is not negative senescence in a deterioration sense; demographic patterns are an amalgam of physiological, social, cohort, competition-predation, and population-specific effects.[^8]
+**Negative actuarial senescence** means that measured mortality risk falls with age. It does not mean that individual cells or organs become younger. A tree's mortality curve can decline as the tree grows larger, but the curve combines physiological state with cohort composition, competition, predation, and local conditions.[^7]
 
-## Exceptions and limits
-
-The consequences section treats indeterminate growth as the absence of actuarial senescence; two limits bracket that claim. First, what looks like "negative senescence" in a growth-shaped mortality curve is a description that merges several underlying processes, not evidence of an aging-reversal mechanism.[^8] Second, growth form itself is better treated as a continuous variable — size at maturity as a proportion of maximum size — than as a determinate-or-indeterminate dichotomy.[^9]
+Growth, actuarial senescence, reproductive senescence, and physiological deterioration must therefore be measured separately. Indeterminate growth supplies one route by which later survival can retain evolutionary value. It neither guarantees increasing fertility nor identifies the cellular mechanisms that maintain a particular organism.
 
 ## See also
 
-- [[eutely]] — the determinate-growth extreme
+- [[eutely]]
 - [[weismann-barrier]]
+- [[selection-shadow-theory]]
 
 ## Citations
 
-[^1]: Grosberg RK, Strathmann RR. "The Evolution of Multicellularity: A Minor Major Transition?" *Annual Review of Ecology, Evolution, and Systematics.* 2007;38:621-655. doi:10.1146/annurev.ecolsys.36.102403.114735.
+[^1]: Williams GC. "Pleiotropy, natural selection, and the evolution of senescence." *Evolution.* 1957;11:398-411. [doi:10.1111/j.1558-5646.1957.tb02911.x](https://doi.org/10.1111/j.1558-5646.1957.tb02911.x).
 
-> [!info]- Primary evidence (Grosberg & Strathmann, 2007 — scattered pluripotent cells)
-> ![[richardk.grosberg2007-p22-b3.png|Grosberg & Strathmann 2007 — organisms without early germline sequestration keep scattered pluripotent cells (plant meristems, cnidarian stem cells, colonial ascidians) that can later become germ cells.]]
+> [!info]- Primary theoretical source excerpt (Williams, 1957)
+> ![[georgec.williams1957-p8-b5.png|Williams, 1957 — passage contrasting post-maturity growth patterns and linking added size to increased fecundity.]]
 >
-> **OCR excerpt:** "many of the multicellular organisms that do not sequester a germ line early in ontogeny have scattered pluripotent cells (e.g., plant meristems, stem cells in cnidarians, circulating cells in colonial ascidians)." (p. 22, `doc:richardk.grosberg2007/page:22/block:3`)
+> **OCR excerpt:** "Many organisms, such as rotifers, most insects, and warm-blooded vertebrates grow very little after reaching maturity. Others, such as mollusks, most crustacea, and most cold-blooded vertebrates continue to grow at an appreciable rate long after sexual maturity, perhaps throughout life. Such an increase in size is accompanied by an increase in fecundity." (p. 8, `doc:georgec.williams1957/page:8/block:5`)
 
-[^2]: Williams GC. "Pleiotropy, natural selection, and the evolution of senescence." *Evolution.* 1957;11:398-411. [doi:10.1111/j.1558-5646.1957.tb02911.x](https://doi.org/10.1111/j.1558-5646.1957.tb02911.x).
+[^2]: Roper M, Capdevila P, Salguero-Gómez R. "Senescence: why and where selection gradients might not decline with age." *Proceedings of the Royal Society B.* 2021;288:20210851. [doi:10.1098/rspb.2021.0851](https://doi.org/10.1098/rspb.2021.0851).
 
-> [!info]- Primary evidence (Williams 1957 — fecundity after maturity)
-> ![[georgec.williams1957-p8-b5.png|Williams 1957 — "Others, such as mollusks, most crustacea, and most cold-blooded vertebrates continue to grow at an appreciable rate long after sexual maturity ... Such an increase in size is accompanied by an increase in fecundity."]]
+> [!info]- Review excerpt (Roper et al., 2021 — taxonomic range)
+> ![[markroper2021-p6-b4-taxa.png|Roper et al., 2021 — passage locating indeterminate growth across plants, insects, fish, reptiles, and corals.]]
 >
-> **OCR excerpt:** "Others, such as mollusks, most crustacea, and most cold-blooded vertebrates continue to grow at an appreciable rate long after sexual maturity, perhaps throughout life. Such an increase in size is accompanied by an increase in fecundity." (p. 8, `doc:georgec.williams1957/page:8/block:5`)
+> **OCR excerpt:** "Spanning across taxa, many stage-categorized species have the capacity to grow indefinitely. Extremely common in plants, indeterminate growth is also found in insects, fish, reptiles and corals." (p. 6, `doc:markroper2021/page:6/block:4`)
 
-[^3]: Williams GC. *Origin of the same* — p. 9: "An increase in fecundity has the opposite effect from mortality. It tends to increase the reproductive probability for the more advanced ages and thereby intensify the selection against senescence." See [^2] for the full source.
+[^3]: Roper M, Capdevila P, Salguero-Gómez R. "Senescence: why and where selection gradients might not decline with age." *Proceedings of the Royal Society B.* 2021;288:20210851. [doi:10.1098/rspb.2021.0851](https://doi.org/10.1098/rspb.2021.0851).
 
-> [!info]- Primary evidence (Williams 1957 — fecundity repels the force on old ages)
-> ![[georgec.williams1957-p9-b0.png|Williams 1957 — "An increase in fecundity has the opposite effect from mortality. It tends to increase the reproductive probability for the more advanced ages and thereby intensify the selection against senescence."]]
+> [!info]- Review excerpt (Roper et al., 2021 — size-dependent model)
+> ![[markroper2021-p6-b4-model.png|Roper et al., 2021 — passage summarizing a model in which growth can trade present reproduction for greater future reproductive output.]]
 >
-> **OCR excerpt:** "An increase in fecundity has the opposite effect from mortality. It tends to increase the reproductive probability for the more advanced ages and thereby intensify the selection against senescence." (p. 9, `doc:georgec.williams1957/page:9/block:0`)
+> **OCR excerpt:** "The authors modelled an organism whose reproductive capacity increases with size. For such an organism, it can pay to sacrifice current reproductive output if such a sacrifice markedly increases size, and, therefore, potential future reproductive output." (p. 6, `doc:markroper2021/page:6/block:4`)
 
-[^g]: Jones OR, et al. "Diversity of ageing across the tree of life." *Nature.* 2014;505:169-173. [doi:10.1038/nature12789](https://doi.org/10.100
+[^4]: Roper M, Capdevila P, Salguero-Gómez R. "Senescence: why and where selection gradients might not decline with age." *Proceedings of the Royal Society B.* 2021;288:20210851. [doi:10.1098/rspb.2021.0851](https://doi.org/10.1098/rspb.2021.0851).
 
-(truncated)
+> [!info]- Review excerpt (Roper et al., 2021 — reproductive value)
+> ![[markroper2021-p6-b7.png|Roper et al., 2021 — passage explaining how increasing fecundity with size shifts reproductive value toward older size classes.]]
+>
+> **OCR excerpt:** "If reproduction is much lower at younger, mature ages (lower sizes) and increases disproportionately with size and age, then the relative reproductive value of older ages classes and the abundance of mothers will be biased towards older age classes. Growth and increasing reproductive capacity with age provide just one mechanism to alter a population's reproductive value and stable age distributions in favour of delaying senescence." (p. 6, `doc:markroper2021/page:6/block:7`)
+
+[^5]: Jones OR, et al. "Diversity of ageing across the tree of life." *Nature.* 2014;505:169-173. [doi:10.1038/nature12789](https://doi.org/10.1038/nature12789).
+
+> [!info]- Comparative study excerpt (Jones et al., 2014)
+> ![[jones2014-p6-b0.png|Jones et al., 2014 — reported mortality and fertility trajectories among indeterminate growers in the comparative dataset.]]
+>
+> **OCR excerpt:** "[In] these indeterminate growers, mortality is approximately constant or decreases somewhat with age, whereas fertility is more or less constant or increases to some extent. Species with indeterminate growth may exhibit patterns of senescence that are fundamentally different from those of species with determinant growth." (p. 6, `doc:jones2014/page:6/block:0`)
+
+[^6]: Roper M, Capdevila P, Salguero-Gómez R. "Senescence: why and where selection gradients might not decline with age." *Proceedings of the Royal Society B.* 2021;288:20210851. [doi:10.1098/rspb.2021.0851](https://doi.org/10.1098/rspb.2021.0851).
+
+> [!info]- Review dataset and limitation excerpt (Roper et al., 2021)
+> ![[markroper2021-p6-b6.png|Roper et al., 2021 — dataset summary, an indeterminate-grower exception, and the proposal to treat growth form continuously.]]
+>
+> **OCR excerpt:** "In our display of currently available demographic data, 98% of studied plant species and all of our studied corals show little evidence of an increase in risk of mortality with age... Some indeterminately growing species do still display senescence... Transforming growth form into a continuous variable, for example, as size at maturity as a proportion of maximum size, will allow for more quantitative comparative tests on the effects of growth form on senescence." (p. 6, `doc:markroper2021/page:6/block:6`)
+
+[^7]: Cohen AA, Legault V, Fülöp T. "What if there's no such thing as 'aging'?" *Mechanisms of Ageing and Development.* 2020;192:111344. [doi:10.1016/j.mad.2020.111344](https://doi.org/10.1016/j.mad.2020.111344).
+
+> [!info]- Conceptual analysis excerpt (Cohen et al., 2020)
+> ![[cohen2020a-p12-b2-focused.png|Cohen et al., 2020 — passage distinguishing a falling demographic mortality curve from reversal of organismal deterioration.]]
+>
+> **OCR excerpt:** "A species such as a tree that shows dramatic declines in mortality as it grows larger is not showing negative senescence in any way that would be of interest in terms of understanding sub-organismal processes related to deterioration with age, or their evolution. The demographic patterns reflect an amalgam of underlying processes - physiological, social, cohort effects, competition/predation, population-specific effects, etc." (p. 12, `doc:cohen2020a/page:12/block:2`)
+
+[^8]: Roper M, Capdevila P, Salguero-Gómez R. "Senescence: why and where selection gradients might not decline with age." *Proceedings of the Royal Society B.* 2021;288:20210851. [doi:10.1098/rspb.2021.0851](https://doi.org/10.1098/rspb.2021.0851).
+
+> [!info]- Review definition excerpt (Roper et al., 2021)
+> ![[markroper2021-p1-b17.png|Roper et al., 2021 — definition of senescence through age-related mortality and reproductive decline after maturity.]]
+>
+> **OCR excerpt:** "Senescence, the increasing risk of mortality and decline in reproduction with age after maturity, has long been explained by a collation of theories defining the 'classical evolutionary framework of senescence'." (p. 1, `doc:markroper2021/page:1/block:17`)
+
+[^9]: Roper M, Capdevila P, Salguero-Gómez R. "Senescence: why and where selection gradients might not decline with age." *Proceedings of the Royal Society B.* 2021;288:20210851. [doi:10.1098/rspb.2021.0851](https://doi.org/10.1098/rspb.2021.0851).
+
+> [!info]- Review comparison excerpt (Roper et al., 2021)
+> ![[markroper2021-p6-b1.png|Roper et al., 2021 — passage reporting that reproductive and actuarial senescence can follow different age trajectories.]]
+>
+> **OCR excerpt:** "Our results here show that age trajectories of reproduction are often uncoupled from the pattern of actuarial senescence... both uncoupling and concurrent patterns of actuarial and reproductive senescence appear common." (p. 6, `doc:markroper2021/page:6/block:1`)
