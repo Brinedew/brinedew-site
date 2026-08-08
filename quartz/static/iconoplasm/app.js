@@ -2180,14 +2180,21 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
+  function buildReverseCardFaceMarkup() {
+    return (
+      '<span class="icono-card-reverse-face" aria-hidden="true">' +
+      '<span class="icono-card-reverse-face__mark"></span></span>'
+    )
+  }
+
   function buildImageOnlySkeletonCardMarkup(index) {
     return (
-      '<article class="icono-card icono-card--image-tile icono-card--variant-image-only icono-card--skeleton" data-icono-index="' +
+      '<article class="icono-card icono-card--image-tile icono-card--variant-image-only icono-card--skeleton icono-card--reverse-skeleton" data-icono-index="' +
       index +
       '" style="--width:384;--height:512;">' +
       '<div class="icono-image-only-link icono-image-only-placeholder" aria-hidden="true">' +
       '<div class="icono-image-only-media-stage">' +
-      '<div class="icono-image-only-loading-mark" aria-hidden="true"></div>' +
+      buildReverseCardFaceMarkup() +
       "</div>" +
       "</div>" +
       "</article>"
@@ -2215,7 +2222,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return (
       '<article class="icono-card icono-card--guest-reverse" aria-hidden="true" data-icono-guest-reverse-card="' +
       cardIndex +
-      '"><span class="icono-card--guest-reverse-mark"></span></article>'
+      '">' +
+      buildReverseCardFaceMarkup() +
+      "</article>"
     )
   }
 
