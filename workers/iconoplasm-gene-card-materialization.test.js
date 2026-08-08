@@ -28,6 +28,10 @@ const ledgerSource = readFileSync(
   ),
   "utf8",
 )
+const portraitStorageSource = readFileSync(
+  new URL("./lib/iconoplasm-portrait-storage.js", import.meta.url),
+  "utf8",
+)
 const migrationSource = readFileSync(
   new URL("../migrations-iconoplasm/0063_gene_card_materializations.sql", import.meta.url),
   "utf8",
@@ -131,12 +135,12 @@ test("the durable ledger is bounded and queue delivery is serialized", () => {
     "guest enrollment must reject a Turnstile token minted for another action",
   )
   assert.match(
-    runtimeSource,
+    portraitStorageSource,
     /verifyPortraitStorageObjectAfterPut[\s\S]*BUNNY_READ_AFTER_WRITE_DELAYS_MS[\s\S]*headPortraitStorageObject/,
     "Bunny read-after-write verification must use the shared measured replication window",
   )
   assert.match(
-    runtimeSource,
+    portraitStorageSource,
     /putBunnyObjectUntilVerified[\s\S]*putPortraitStorageObject[\s\S]*verifyPortraitStorageObjectAfterPut/,
     "an acknowledged but lost gene-card PUT must retry the same rendered bytes",
   )

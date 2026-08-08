@@ -29,7 +29,14 @@ one network's DNS result into a global accelerator disable. Read
 storage, CDN configuration, preconnects, or fallback behavior. Requested
 labelled-card thumbnails share this same tab-scoped accelerator/fallback
 decision; never emit a raw Bunny-only browser image without the canonical
-first-party binding.
+first-party binding. Bunny Storage and Bunny CDN replicas can disagree by
+region. The first-party Worker must resolve those server-side views through the
+single portrait-storage adapter, and only failure of every configured view is
+“missing.” For a regional incident, test the affected browser, a contrasting
+VPN region, authenticated Storage, and the CDN replica before choosing a cause.
+Website Ops must preserve split-view success as `regionally_divergent`; its
+operator-triggered audit may recheck verdicts older than 30 days only through
+the existing bounded batch, never an automatic corpus sweep.
 
 **ARCHITECTURE FENCE [IPD-003]** — Iconoplasm gene discovery is one atomic
 published-catalog contract. Complete canonical profiles are indexable; aliases
