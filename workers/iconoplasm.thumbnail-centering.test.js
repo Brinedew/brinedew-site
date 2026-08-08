@@ -4,6 +4,11 @@ import { readFileSync } from "node:fs"
 
 const css = readFileSync(new URL("../quartz/static/iconoplasm/styles.css", import.meta.url), "utf8")
 const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
+const requestInbox = readFileSync(
+  new URL("../quartz/static/iconoplasm/request-inbox.js", import.meta.url),
+  "utf8",
+)
+const siteCss = readFileSync(new URL("../quartz/static/custom.css", import.meta.url), "utf8")
 
 function expectCenteredCover(selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -26,6 +31,11 @@ test("Iconoplasm thumbnail viewports reuse the centered search portrait behavior
     /icono-thumbnail-viewport-image\" src=/,
     "request option thumbnails should reuse the shared thumbnail viewport class directly",
   )
+  assert.match(
+    requestInbox,
+    /icono-thumbnail-viewport-image\" src=/,
+    "request inbox previews should reuse the shared thumbnail viewport class directly",
+  )
   assert.doesNotMatch(
     css,
     /\.icono-request-option-thumb-image\s*\{/m,
@@ -35,5 +45,10 @@ test("Iconoplasm thumbnail viewports reuse the centered search portrait behavior
     css,
     /\.icono-request-option-thumb\s*\{[^}]*width:\s*96px;[^}]*height:\s*128px;/m,
     "request option previews should keep a true 2x portrait viewport",
+  )
+  assert.match(
+    siteCss,
+    /\.icono-request-inbox__preview\s*\{[^}]*aspect-ratio:\s*3\s*\/\s*4;/m,
+    "request inbox previews should keep the same portrait viewport ratio",
   )
 })

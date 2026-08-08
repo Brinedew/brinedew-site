@@ -876,7 +876,8 @@ article p {
   display: block;
   min-width: 0;
   overflow: hidden;
-  aspect-ratio: 4 / 5;
+  /* Match Iconoplasm's established 48x64 and 96x128 thumbnail viewports. */
+  aspect-ratio: 3 / 4;
   background: color-mix(in srgb, var(--ui-bg) 82%, var(--dark) 18%);
 }
 
@@ -886,7 +887,6 @@ article p {
   .icono-request-inbox__photo-placeholder {
   width: 100%;
   height: 100%;
-  object-fit: cover;
 }
 
 .icono-request-inbox__preview-more {

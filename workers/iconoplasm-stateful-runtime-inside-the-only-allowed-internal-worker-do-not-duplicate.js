@@ -3837,7 +3837,11 @@ async function requestNotificationInboxPayload(env, request, { limit = 50 } = {}
     openCount: counts.open_count,
     cancelledCount: counts.cancelled_count,
     portraitUrlForAsset(asset) {
-      return adminPortraitUrl(base, asset, "thumb")
+      // Inbox previews use the same portrait rendition as the site's existing
+      // search and request-option thumbnail viewports. The square `thumb`
+      // rendition is already cropped and must not be cropped a second time
+      // inside a portrait viewport.
+      return adminPortraitUrl(base, asset, "medium")
     },
   })
 }

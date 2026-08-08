@@ -771,7 +771,7 @@ test("authenticated inbox returns exact fulfillment context and durable unread c
   assert.equal(payload.ready_requests[0].requested_emulsion_label, "A1-4527")
   assert.equal(payload.ready_requests[0].fulfillment_publication_id, "legacy-request:42")
   assert.equal(payload.ready_requests[0].fulfillment_group_size, 1)
-  assert.match(payload.ready_requests[0].image_url, /a{64}\/thumb\.webp$/)
+  assert.match(payload.ready_requests[0].image_url, /a{64}\/medium\.webp$/)
 })
 
 test("request inbox does not promote legacy fulfilled rows without verified delivery receipts", async () => {
@@ -1663,6 +1663,7 @@ test("request inbox groups one publication and gene into one bounded receipt", a
   assert.equal((markup.match(/<strong>HPN<\/strong>/g) || []).length, 2)
   assert.match(markup, /data-icono-request-publication-id="pub-hpn-six"/)
   assert.match(markup, /data-icono-request-notification-ids="1,2,3,4,5,6"/)
+  assert.match(markup, /class="icono-thumbnail-viewport-image"/)
   assert.match(markup, /receipt-count" aria-label="6 images">6</)
   assert.match(markup, />\+2<\/span>/)
   assert.doesNotMatch(markup, /<em>ready<\/em>|Completed|View all|Random default/)

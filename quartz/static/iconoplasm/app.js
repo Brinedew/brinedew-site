@@ -8,7 +8,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=20260730-module-cache"
-import { createRequestInbox } from "./request-inbox.js?v=20260809-distilled-receipts"
+import { createRequestInbox } from "./request-inbox.js?v=20260809-portrait-thumbnails"
 import { portraitDelivery } from "./portrait-delivery.js?v=20260730-module-cache"
 import {
   createEmulsionFavoriteStore,
