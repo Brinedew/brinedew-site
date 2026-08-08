@@ -90,7 +90,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       first_discovered_at: "2026-01-01T00:00:00.000Z",
       last_encountered_at: "2026-01-01T00:00:00.000Z",
     },
+    {
+      gene_symbol: "CD4",
+      first_discovered_at: "2025-12-31T00:00:00.000Z",
+      last_encountered_at: "2025-12-31T00:00:00.000Z",
+    },
   ]
+  var GUEST_CONTINUATION_CARD_COUNT = 4
   var HOME_LAYOUT_DEFAULT = "bricks"
   var CARD_VARIANT_DEFAULT = "image-only"
   var HOME_SKELETON_CARD_COUNT = 4
@@ -1757,9 +1763,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function guestDiscoveryEntries() {
-    // The signed-out archive is a fixed three-card preview, not a second local
+    // The signed-out archive is a fixed four-card preview, not a second local
     // collection. Gene visits are still buffered privately for a bounded merge
-    // after login, but they must never enlarge or replace this visible trio.
+    // after login, but they must never enlarge or replace these visible starters.
     var starterEntries = GUEST_STARTER_GENES.map(function (entry) {
       return Object.assign({ encounter_count: 1 }, entry)
     })
@@ -2205,6 +2211,27 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return html
   }
 
+  function buildGuestReverseCardMarkup(cardIndex) {
+    return (
+      '<article class="icono-card icono-card--guest-reverse" aria-hidden="true" data-icono-guest-reverse-card="' +
+      cardIndex +
+      '"><span class="icono-card--guest-reverse-mark"></span></article>'
+    )
+  }
+
+  function buildGuestContinuationMarkup() {
+    var html = ""
+    for (var i = 0; i < GUEST_CONTINUATION_CARD_COUNT; i++) {
+      html += buildGuestReverseCardMarkup(i)
+    }
+    return (
+      '<div class="icono-guest-continuation" id="icono-guest-continuation" hidden aria-hidden="true">' +
+      '<div class="icono-guest-continuation-grid">' +
+      html +
+      "</div></div>"
+    )
+  }
+
   function buildHomeShellMarkup(layout, cardVariant) {
     var resolvedLayout = effectiveHomeGridLayout(layout, cardVariant)
     // Single source of truth: content/apps/iconoplasm/index.md intentionally ships an empty
@@ -2247,7 +2274,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '">' +
       buildHomeSkeletonGridMarkup(layout, cardVariant) +
       "</div></section></div>" +
+      '<div class="icono-post-feed-stage" id="icono-post-feed-stage">' +
+      buildGuestContinuationMarkup() +
       '<div class="icono-home-auxiliary" id="icono-home-auxiliary" hidden></div>' +
+      "</div>" +
       '<div class="icono-feed-state"><span id="icono-feed-status" role="status" aria-live="polite"></span>' +
       '<button type="button" id="icono-feed-retry" hidden>Retry</button></div>' +
       '<span id="icono-feed-after" tabindex="-1"></span>' +
@@ -7497,13 +7527,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
     function syncCollectionChrome() {
       syncCounts()
-      feed.classList.toggle(
-        "icono-feed--guest-preview",
+      var guestPreviewActive =
         !useClassicGallery &&
-          galleryState.ready &&
-          !galleryState.authenticated &&
-          !galleryState.sharedDiscoveries,
-      )
+        galleryState.ready &&
+        !galleryState.authenticated &&
+        !galleryState.sharedDiscoveries
+      var postFeedStage = document.getElementById("icono-post-feed-stage")
+      var guestContinuation = document.getElementById("icono-guest-continuation")
+      if (postFeedStage) {
+        postFeedStage.classList.toggle("icono-post-feed-stage--guest-preview", guestPreviewActive)
+      }
+      if (guestContinuation) guestContinuation.hidden = !guestPreviewActive
       if (useClassicGallery) {
         summaryEl.hidden = true
         emptyEl.hidden = true
