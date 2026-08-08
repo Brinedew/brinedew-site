@@ -567,6 +567,42 @@
           "token": "ARCHITECTURE FENCE [GG-002]"
         }
       ]
+    },
+    {
+      "id": "BPC-001",
+      "title": "Remote prose checks are explicit, snapshot-bound, and free-Zen-only",
+      "decision": "Harper grammar may run locally after editor idle, while DeepSeek prose agents run only after an explicit user command against one immutable complete-document snapshot. Remote startup and typing paths read no credential and send no traffic. The sole remote model is deepseek-v4-flash-free on OpenCode Zen, with no paid, Go, or alternate-provider fallback.",
+      "reason": "Whole-document atomic agents take roughly one to two minutes apiece and duplicate private prose across requests. A live trigger would race edits, flood the provider, worsen Obsidian startup, and send drafts without deliberate consent. A silent fallback could convert expiry of the free preview into unbounded paid use.",
+      "change_control": "Plugin startup, editor events, run commands, model routing, credential reads, agent granularity, anchor validation, runbook, and behavioral tests must change together. Any replacement must preserve explicit initiation, immutable full-document snapshots, exact one-error agents, and fail-closed cost behavior.",
+      "runbook": "docs/OBSIDIAN_PROSE_CHECKER_RUNBOOK.md",
+      "additional_required_marker_categories": [],
+      "markers": [
+        {
+          "category": "instructions",
+          "file": "AGENTS.md",
+          "token": "ARCHITECTURE FENCE [BPC-001]"
+        },
+        {
+          "category": "runbook",
+          "file": "docs/OBSIDIAN_PROSE_CHECKER_RUNBOOK.md",
+          "token": "ARCHITECTURE FENCE [BPC-001]"
+        },
+        {
+          "category": "source",
+          "file": "tools/obsidian-prose-checker/src/main.ts",
+          "token": "ARCHITECTURE FENCE [BPC-001]"
+        },
+        {
+          "category": "source",
+          "file": "tools/obsidian-prose-checker/src/openCodeClient.ts",
+          "token": "ARCHITECTURE FENCE [BPC-001]"
+        },
+        {
+          "category": "test",
+          "file": "tools/obsidian-prose-checker/tests/architectureFence.test.ts",
+          "token": "ARCHITECTURE FENCE [BPC-001]"
+        }
+      ]
     }
   ]
 }
