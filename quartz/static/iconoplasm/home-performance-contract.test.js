@@ -727,9 +727,14 @@ test("image-only masonry has a physical artboard cap and native adaptive columns
   assert.match(skeletonBlock, /buildReverseCardFaceMarkup\(\)/)
   assert.doesNotMatch(skeletonBlock, /icono-image-only-loading-mark/)
   assert.match(
-    styles,
+    sharedCardCss,
     /\.icono-card-reverse-face\s*\{[\s\S]*background:[\s\S]*linear-gradient[\s\S]*background-size:\s*2rem 2rem/,
-    "blot-only skeletons must reuse the guest continuation reverse-card face",
+    "the shared card system must own the reverse-card face used by skeletons and unloaded cards",
+  )
+  assert.match(
+    app,
+    /function buildReverseCardFaceMarkup\(\)\s*\{\s*return IconoCardShared\.renderCardReverseFaceHtml\(\)/,
+    "the gallery skeleton and guest continuation must use the shared reverse-card renderer",
   )
   assert.doesNotMatch(skeletonBlock, /icono-image-only-skeleton-figure/)
   assert.doesNotMatch(
@@ -767,17 +772,20 @@ test("image-only masonry has a physical artboard cap and native adaptive columns
     /iconoSkeletonWash|\.icono-image-only-skeleton-artboard|\.icono-image-only-skeleton-icon|\.icono-image-only-skeleton-wash|\.icono-image-only-skeleton-caption|collection-progress-track--skeleton/,
     "image-only and collection skeletons must not restore the retired skeleton-only visual system",
   )
+  assert.match(sharedCard, /function renderCardReverseFaceHtml\(\)/)
   assert.match(
-    sharedCardCss,
-    /\.icono-image-only-loading-mark\s*\{[\s\S]*url\("\/static\/iconoplasm\/icons\/icon-512\.png"\)[\s\S]*transform:\s*translate\(-50%, -54%\)/,
-    "final image-only cards must keep the same extension-icon placeholder under portraits until the image load event fires",
+    sharedCard,
+    /function renderLabLabelImageOnlyCardHtml\(model\)[\s\S]*renderCardReverseFaceHtml\(\)/,
+    "final unloaded image-only cards must use the same reverse face as the gallery skeleton and guest continuation",
   )
+  assert.doesNotMatch(sharedCard, /icono-image-only-loading-mark/)
+  assert.doesNotMatch(sharedCardCss, /icono-image-only-loading-mark/)
   assert.match(sharedCardCss, /\.icono-image-only-photo\s*\{[\s\S]*opacity:\s*0/)
   assert.match(sharedCardCss, /\.icono-image-only-photo--loaded\s*\{[\s\S]*opacity:\s*1/)
   assert.match(
     sharedCardCss,
-    /\.icono-image-only-media-stage--loaded \.icono-image-only-loading-mark\s*\{[\s\S]*opacity:\s*0/,
-    "the final-card placeholder mark should hide only after the portrait is loaded",
+    /\.icono-image-only-media-stage--loaded \.icono-card-reverse-face\s*\{[\s\S]*opacity:\s*0/,
+    "the shared reverse face should hide only after the portrait is loaded",
   )
   assert.match(
     app,
