@@ -3221,21 +3221,21 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 }
 
 .icono-post-feed-stage--guest-preview {
-  display: grid;
+  display: flow-root;
   isolation: isolate;
   margin-top: var(--icono-image-tile-gutter);
-}
-
-.icono-post-feed-stage--guest-preview > .icono-guest-continuation,
-.icono-post-feed-stage--guest-preview > .icono-home-auxiliary,
-.icono-post-feed-stage--guest-preview::after {
-  grid-area: 1 / 1;
+  overflow: hidden;
 }
 
 .icono-guest-continuation {
   z-index: 0;
   min-width: 0;
   overflow: hidden;
+}
+
+.icono-post-feed-stage--guest-preview > .icono-guest-continuation {
+  position: absolute;
+  inset: 0;
 }
 
 .icono-guest-continuation-grid {
@@ -3289,6 +3289,8 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 
 .icono-post-feed-stage--guest-preview::after {
   content: "";
+  position: absolute;
+  inset: 0;
   z-index: 1;
   pointer-events: none;
   background: linear-gradient(
@@ -3302,9 +3304,10 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 }
 
 .icono-post-feed-stage--guest-preview > .icono-home-auxiliary {
+  position: relative;
   z-index: 2;
-  align-self: start;
   margin-top: clamp(8rem, 18vw, 12rem);
+  margin-bottom: clamp(4rem, 10vw, 6rem);
 }
 
 .icono-home-auxiliary[hidden] {
