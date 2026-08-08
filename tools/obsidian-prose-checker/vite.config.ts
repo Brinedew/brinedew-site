@@ -1,11 +1,8 @@
-import { builtinModules } from "node:module";
-import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitest/config";
+import { builtinModules } from "node:module"
+import { fileURLToPath } from "node:url"
+import { defineConfig } from "vitest/config"
 
-const nodeBuiltins = new Set([
-  ...builtinModules,
-  ...builtinModules.map((name) => `node:${name}`),
-]);
+const nodeBuiltins = new Set([...builtinModules, ...builtinModules.map((name) => `node:${name}`)])
 
 export default defineConfig(({ mode }) => ({
   ...(mode === "test"
@@ -46,4 +43,4 @@ export default defineConfig(({ mode }) => ({
       reporter: ["text", "json-summary"],
     },
   },
-}));
+}))

@@ -32,7 +32,7 @@
     "verify:iconoplasm-publication-aliases": "node ./scripts/verify-iconoplasm-publication-aliases.mjs",
     "validate:iconoplasm-topology": "node ./scripts/validate-iconoplasm-deployment-topology.mjs",
     "format": "pnpm exec prettier . --write",
-    "test": "node scripts/run-tests.mjs",
+    "test": "node scripts/run-tests.mjs && pnpm --filter @brinedew/obsidian-prose-checker test",
     "profile": "0x -D prof ./quartz/bootstrap-cli.mjs build --concurrency=1",
     "install-plugins": "node ./quartz/bootstrap-cli.mjs plugin install --from-config"
   },

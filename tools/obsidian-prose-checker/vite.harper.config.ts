@@ -1,10 +1,7 @@
-import { builtinModules } from "node:module";
-import { defineConfig } from "vite";
+import { builtinModules } from "node:module"
+import { defineConfig } from "vite"
 
-const nodeBuiltins = new Set([
-  ...builtinModules,
-  ...builtinModules.map((name) => `node:${name}`),
-]);
+const nodeBuiltins = new Set([...builtinModules, ...builtinModules.map((name) => `node:${name}`)])
 
 export default defineConfig({
   build: {
@@ -25,4 +22,4 @@ export default defineConfig({
       },
     },
   },
-});
+})
