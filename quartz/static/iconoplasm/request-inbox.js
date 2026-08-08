@@ -17,6 +17,8 @@ export function createRequestInbox({
     loading: false,
     unread_count: 0,
     ready_count: 0,
+    unread_group_count: 0,
+    ready_group_count: 0,
     open_count: 0,
     cancelled_count: 0,
     ready_requests: [],
@@ -75,6 +77,8 @@ export function createRequestInbox({
     state.loading = false
     state.unread_count = 0
     state.ready_count = 0
+    state.unread_group_count = 0
+    state.ready_group_count = 0
     state.open_count = 0
     state.cancelled_count = 0
     state.ready_requests = []
@@ -109,6 +113,18 @@ export function createRequestInbox({
         state.loaded = true
         state.unread_count = Math.max(0, Number(payload.unread_count || 0) || 0)
         state.ready_count = Math.max(0, Number(payload.ready_count || 0) || 0)
+        var loadedReadyGroups = groupReadyRequests(readyRequests)
+        state.unread_group_count = Math.max(
+          0,
+          Number(payload.unread_group_count || 0) ||
+            loadedReadyGroups.filter(function (group) {
+              return group.unread
+            }).length,
+        )
+        state.ready_group_count = Math.max(
+          Number(payload.ready_group_count || 0) || 0,
+          loadedReadyGroups.length,
+        )
         state.open_count = Math.max(0, Number(payload.open_count || 0) || 0)
         state.cancelled_count = Math.max(0, Number(payload.cancelled_count || 0) || 0)
         state.ready_requests = readyRequests
@@ -137,7 +153,8 @@ export function createRequestInbox({
       })
   }
 
-  function markRead(notificationIds, markAll) {
+  function markRead(notificationIds, markAll, receipt) {
+    var group = receipt || {}
     return fetchJSON("/api/iconoplasm/notifications/read", {
       method: "POST",
       credentials: "include",
@@ -145,6 +162,8 @@ export function createRequestInbox({
       headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({
         notification_ids: Array.isArray(notificationIds) ? notificationIds : [],
+        fulfillment_publication_id: group.fulfillment_publication_id || "",
+        gene_symbol: group.gene_symbol || "",
         all: markAll === true,
       }),
     }).then(function () {
@@ -208,7 +227,7 @@ export function createRequestInbox({
         ? '<sl-badge class="icono-request-inbox__unread-dot" variant="danger" pill aria-hidden="true"></sl-badge>' +
           '<span class="sr-only">' +
           escapeHtml(String(unread)) +
-          (unread === 1 ? " unread notification" : " unread notifications") +
+          (unread === 1 ? " unread generation" : " unread generations") +
           "</span>"
         : "") +
       '<span class="icono-request-inbox__group-count">' +
@@ -231,43 +250,130 @@ export function createRequestInbox({
     )
   }
 
-  function fulfilledRequestMarkup(item) {
-    var imageUrl =
-      item.image_url && typeof resolvePortraitUrl === "function"
-        ? resolvePortraitUrl(item.image_url)
-        : item.image_url
+  // ARCHITECTURE FENCE [IPD-006] — mirror Discord's durable receipt boundary.
+  // A repeated gene is grouped only inside the same workstation publication;
+  // adjacent rows and timestamps are never treated as generation identity.
+  function groupReadyRequests(items) {
+    var groups = []
+    var byKey = Object.create(null)
+    var requests = Array.isArray(items) ? items : []
+    for (var index = 0; index < requests.length; index++) {
+      var item = requests[index] || {}
+      var publicationId = String(item.fulfillment_publication_id || "").trim()
+      var symbol = String(item.gene_symbol || "")
+        .trim()
+        .toUpperCase()
+      var notificationId = Number(item.notification_id || 0) || 0
+      var requestId = Number(item.request_id || item.id || 0) || 0
+      var key =
+        publicationId && symbol
+          ? publicationId + "\u001f" + symbol
+          : "ungrouped:" + (notificationId || requestId || index)
+      var group = byKey[key]
+      if (!group) {
+        group = {
+          key: key,
+          fulfillment_publication_id: publicationId,
+          gene_symbol: symbol,
+          gene_url: item.gene_url || "/",
+          expected_size: 0,
+          unread: false,
+          items: [],
+        }
+        byKey[key] = group
+        groups.push(group)
+      }
+      group.items.push(item)
+      group.expected_size = Math.max(
+        group.expected_size,
+        Number(item.fulfillment_group_size || 0) || 0,
+        group.items.length,
+      )
+      group.unread = group.unread || item.unread === true
+    }
+    return groups
+  }
+
+  function fulfilledReceiptMarkup(group) {
+    var items = Array.isArray(group.items) ? group.items : []
+    var newest = items[0] || {}
+    var previews = items.slice(0, 4)
+    var total = Math.max(1, Number(group.expected_size || 0) || items.length)
+    var notificationIds = items
+      .map(function (item) {
+        return Number(item.notification_id || 0) || 0
+      })
+      .filter(Boolean)
+    var emulsionLabels = Array.from(
+      new Set(
+        items.map(function (item) {
+          return String(item.requested_emulsion_label || "Requested blot")
+        }),
+      ),
+    )
+    var emulsionSummary =
+      emulsionLabels.length === 1
+        ? emulsionLabels[0]
+        : String(emulsionLabels.length) + " requested emulsions"
+    var previewMarkup = ""
+    for (var previewIndex = 0; previewIndex < previews.length; previewIndex++) {
+      var item = previews[previewIndex] || {}
+      var imageUrl =
+        item.image_url && typeof resolvePortraitUrl === "function"
+          ? resolvePortraitUrl(item.image_url)
+          : item.image_url
+      var hiddenCount = previewIndex === previews.length - 1 ? total - previews.length : 0
+      previewMarkup +=
+        '<span class="icono-request-inbox__preview" data-icono-request-id="' +
+        escapeHtml(String(item.request_id || item.id || "")) +
+        '" data-icono-request-notification-id="' +
+        escapeHtml(String(item.notification_id || "")) +
+        '" data-icono-asset-sha="' +
+        escapeHtml(String(item.fulfilled_asset_sha256 || "")) +
+        '" data-icono-candidate-image-id="' +
+        escapeHtml(String(item.candidate_image_id || "")) +
+        '">' +
+        (imageUrl
+          ? '<img src="' +
+            escapeHtml(imageUrl) +
+            '" alt="" loading="lazy" decoding="async" width="72" height="90">'
+          : '<span class="icono-request-inbox__photo-placeholder" aria-hidden="true"></span>') +
+        (hiddenCount > 0
+          ? '<span class="icono-request-inbox__preview-more" aria-hidden="true">+' +
+            escapeHtml(String(hiddenCount)) +
+            "</span>"
+          : "") +
+        "</span>"
+    }
     return (
-      '<a class="icono-request-inbox__item' +
-      (item.unread ? " icono-request-inbox__item--unread" : "") +
+      '<a class="icono-request-inbox__item icono-request-inbox__receipt' +
+      (group.unread ? " icono-request-inbox__item--unread" : "") +
       '" href="' +
-      escapeHtml(item.gene_url || "/") +
-      '" data-icono-request-id="' +
-      escapeHtml(String(item.request_id || item.id || "")) +
-      '" data-icono-asset-sha="' +
-      escapeHtml(String(item.fulfilled_asset_sha256 || "")) +
-      '" data-icono-candidate-image-id="' +
-      escapeHtml(String(item.candidate_image_id || "")) +
-      '"' +
-      (item.notification_id
-        ? ' data-icono-request-notification-id="' + escapeHtml(String(item.notification_id)) + '"'
-        : "") +
-      '">' +
-      (imageUrl
-        ? '<img src="' +
-          escapeHtml(imageUrl) +
-          '" alt="" loading="lazy" decoding="async" width="44" height="56">'
-        : '<span class="icono-request-inbox__photo-placeholder" aria-hidden="true"></span>') +
-      '<span class="icono-request-inbox__copy"><span class="icono-request-inbox__line"><strong>' +
-      escapeHtml(item.gene_symbol || "Gene") +
+      escapeHtml(group.gene_url || "/") +
+      '" data-icono-request-receipt data-icono-request-publication-id="' +
+      escapeHtml(group.fulfillment_publication_id || "") +
+      '" data-icono-request-gene-symbol="' +
+      escapeHtml(group.gene_symbol || "") +
+      '" data-icono-request-notification-ids="' +
+      escapeHtml(notificationIds.join(",")) +
+      '"><span class="icono-request-inbox__receipt-head"><span class="icono-request-inbox__line"><strong>' +
+      escapeHtml(group.gene_symbol || "Gene") +
       "</strong><em>ready</em></span>" +
-      '<span class="icono-request-inbox__emulsion">' +
-      escapeHtml(item.requested_emulsion_label || "Requested blot") +
-      "</span><small>Request #" +
-      escapeHtml(String(item.request_id || item.id || "?")) +
-      " · image " +
-      escapeHtml(ageLabel(item.asset_created_at || item.fulfilled_at || item.created_at)) +
-      " · ready " +
-      escapeHtml(ageLabel(item.fulfilled_at || item.created_at)) +
+      '<span class="icono-request-inbox__receipt-count">' +
+      escapeHtml(String(total)) +
+      (total === 1 ? " image" : " images") +
+      "</span></span>" +
+      '<span class="icono-request-inbox__previews icono-request-inbox__previews--' +
+      escapeHtml(String(Math.max(1, previews.length))) +
+      '" aria-hidden="true">' +
+      previewMarkup +
+      "</span>" +
+      '<span class="icono-request-inbox__copy"><span class="icono-request-inbox__emulsion">' +
+      escapeHtml(emulsionSummary) +
+      "</span><small>Completed " +
+      escapeHtml(ageLabel(newest.fulfilled_at || newest.created_at)) +
+      " · View all " +
+      escapeHtml(String(total)) +
       "</small></span></a>"
     )
   }
@@ -298,9 +404,12 @@ export function createRequestInbox({
       )
     }
     var readyRequests = Array.isArray(state.ready_requests) ? state.ready_requests : []
+    var readyGroups = groupReadyRequests(readyRequests)
     var openRequests = Array.isArray(state.open_requests) ? state.open_requests : []
     var unread = Math.max(0, Number(state.unread_count || 0) || 0)
     var readyCount = Math.max(0, Number(state.ready_count || 0) || 0)
+    var unreadGroupCount = Math.max(0, Number(state.unread_group_count || 0) || 0)
+    var readyGroupCount = Math.max(readyGroups.length, Number(state.ready_group_count || 0) || 0)
     var openCount = Math.max(0, Number(state.open_count || 0) || 0)
     var cancelledCount = Math.max(0, Number(state.cancelled_count || 0) || 0)
     var html =
@@ -311,20 +420,24 @@ export function createRequestInbox({
     var readyContent = unread
       ? '<div class="icono-request-inbox__group-actions"><button type="button" data-icono-request-inbox-read-all>Mark all read</button></div>'
       : ""
-    for (var i = 0; i < readyRequests.length; i++) {
-      readyContent += fulfilledRequestMarkup(readyRequests[i] || {})
+    for (var i = 0; i < readyGroups.length; i++) {
+      readyContent += fulfilledReceiptMarkup(readyGroups[i] || {})
     }
     if (!readyRequests.length) {
       readyContent +=
         '<div class="icono-request-inbox__empty"><strong>Nothing ready yet.</strong>' +
         "Finished requests will stay here.</div>"
-    } else if (readyCount > readyRequests.length) {
+    } else if (readyGroupCount > readyGroups.length) {
       readyContent +=
         '<div class="icono-request-inbox__limit-note">Showing the newest ' +
+        escapeHtml(String(readyGroups.length)) +
+        " of " +
+        escapeHtml(String(readyGroupCount)) +
+        " ready generations (" +
         escapeHtml(String(readyRequests.length)) +
         " of " +
         escapeHtml(String(readyCount)) +
-        " ready requests.</div>"
+        " images loaded).</div>"
     }
 
     var waitingContent = ""
@@ -343,7 +456,7 @@ export function createRequestInbox({
         escapeHtml(String(openCount)) +
         " waiting requests.</div>"
     }
-    html += requestGroupMarkup("ready", "Ready", readyCount, unread, readyContent)
+    html += requestGroupMarkup("ready", "Ready", readyGroupCount, unreadGroupCount, readyContent)
     html += requestGroupMarkup("waiting", "Waiting", openCount, 0, waitingContent)
     html += "</div>"
     if (cancelledCount) {
@@ -387,18 +500,25 @@ export function createRequestInbox({
         })
       })(groups[groupIndex])
     }
-    var links = stack.querySelectorAll("[data-icono-request-notification-id]")
+    var links = stack.querySelectorAll("[data-icono-request-receipt]")
     for (var i = 0; i < links.length; i++) {
       ;(function (link) {
         link.addEventListener("click", function (event) {
-          var id = Number.parseInt(
-            link.getAttribute("data-icono-request-notification-id") || "0",
-            10,
-          )
-          if (!id) return
+          var ids = String(link.getAttribute("data-icono-request-notification-ids") || "")
+            .split(",")
+            .map(function (value) {
+              return Number.parseInt(value, 10) || 0
+            })
+            .filter(Boolean)
+          var publicationId = link.getAttribute("data-icono-request-publication-id") || ""
+          var symbol = link.getAttribute("data-icono-request-gene-symbol") || ""
+          if (!ids.length && !(publicationId && symbol)) return
           event.preventDefault()
           var href = link.getAttribute("href") || "/"
-          void markRead([id], false)
+          void markRead(ids, false, {
+            fulfillment_publication_id: publicationId,
+            gene_symbol: symbol,
+          })
             .catch(function () {})
             .finally(function () {
               window.location.assign(href)

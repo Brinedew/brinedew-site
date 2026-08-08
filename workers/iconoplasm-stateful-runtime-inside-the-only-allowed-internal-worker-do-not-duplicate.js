@@ -3845,13 +3845,15 @@ async function requestNotificationInboxPayload(env, request, { limit = 50 } = {}
 async function markRequestNotificationsRead(
   env,
   request,
-  { notificationIds = [], markAll = false } = {},
+  { notificationIds = [], fulfillmentPublicationId = "", gene = "", markAll = false } = {},
 ) {
   const sessionUser = await iconoplasmSessionUser(request, env)
   const requesterUserId = normalizeUserId(sessionUser?.user_id || "")
   return markRequestNotificationsReadForUser(env, {
     requesterUserId: isGuestUserId(requesterUserId) ? "" : requesterUserId,
     notificationIds,
+    fulfillmentPublicationId,
+    gene,
     markAll,
   })
 }
@@ -28716,6 +28718,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
       const payload = await markRequestNotificationsRead(env, request, {
         notificationIds: p?.notification_ids,
+        fulfillmentPublicationId: p?.fulfillment_publication_id,
+        gene: p?.gene_symbol,
         markAll: p?.all === true,
       })
       return done(

@@ -227,10 +227,10 @@
     },
     {
       "id": "IPD-006",
-      "title": "Discord fulfillment is one bounded receipt per completed publication, recipient, and gene",
-      "decision": "A completed generation session has one durable publication identity; Discord delivery waits for each complete publication-recipient-gene group, sends one message with at most ten full-resolution preview images, and links the authoritative gene gallery for the complete result set.",
+      "title": "Fulfillment is one bounded receipt per completed publication, recipient, and gene",
+      "decision": "A completed generation session has one durable publication identity. Discord delivery waits for each complete publication-recipient-gene group, sends one message with at most ten full-resolution preview images, and links the authoritative gene gallery for the complete result set. The Request inbox mirrors the same durable receipt boundary with a bounded preview mosaic and group-level read acknowledgement.",
       "reason": "Request-time button presses are not a meaningful notification boundary. The durable workstation publication is the point where the exact completed images are known. Completion-time or cron-window grouping is still unsafe because it can merge unrelated publications or fragment retries. Discord cannot carry one hundred useful image attachments in one message, and the Worker must keep memory and subrequests bounded.",
-      "change_control": "Durable publication identity, fulfillment group-size columns, delivery-pending trigger snapshots, group completeness, attachment and memory ceilings, nonce idempotency, reconciliation, workstation payloads, behavioral tests, instructions, and this runbook must change atomically. Never replace the durable publication boundary with timing, row adjacency, or request-time clicks.",
+      "change_control": "Durable publication identity, fulfillment group-size columns, delivery-pending trigger snapshots, group completeness, Discord and Request inbox presentation, group-level read acknowledgement, attachment and memory ceilings, nonce idempotency, reconciliation, workstation payloads, behavioral tests, instructions, and this runbook must change atomically. Never replace the durable publication boundary with timing, row adjacency, or request-time clicks.",
       "runbook": "docs/ICONOPLASM_FULFILLMENT_NOTIFICATION_RUNBOOK.md",
       "additional_required_marker_categories": [],
       "markers": [
@@ -247,6 +247,11 @@
         {
           "category": "source",
           "file": "workers/iconoplasm-request-notifications.js",
+          "token": "ARCHITECTURE FENCE [IPD-006]"
+        },
+        {
+          "category": "source",
+          "file": "quartz/static/iconoplasm/request-inbox.js",
           "token": "ARCHITECTURE FENCE [IPD-006]"
         },
         {

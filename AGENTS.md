@@ -87,7 +87,8 @@ compact materialization row per canonical gene and seven daily budget rows;
 store content-addressed image bytes in Bunny.
 
 **ARCHITECTURE FENCE [IPD-006]** — one completed workstation publication is the
-Discord delivery unit, partitioned by recipient and gene. Persist the durable
+Discord delivery and Request inbox receipt unit, partitioned by recipient and
+gene. Persist the durable
 publication ID; never infer a group from button presses, timestamps, adjacent
 IDs, or a cron run. Wait until every request in that publication-recipient-gene
 group is ready, then send one receipt
@@ -95,8 +96,8 @@ with at most ten full-resolution preview attachments and the authoritative
 gene-page link. A hundred candidates still means one receipt, not ten DMs and
 not a hundred-image contact sheet. Read
 `docs/ICONOPLASM_FULFILLMENT_NOTIFICATION_RUNBOOK.md` before changing request
-creation, fulfillment triggers, Discord delivery, attachment limits, or
-delivery reconciliation.
+creation, fulfillment triggers, Discord delivery, Request inbox grouping,
+attachment limits, or delivery reconciliation.
 
 **ARCHITECTURE FENCE [IPD-007]** — Iconoplasm is static-first and has one
 dynamic Worker invocation. Matching files on `iconoplasm.brinedew.bio` must be

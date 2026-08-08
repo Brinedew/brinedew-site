@@ -4,14 +4,18 @@
 
 ## Product contract
 
-A Discord DM is a receipt for a completed generation publication, not for an
-individual button press. Delivery is grouped by durable publication ID,
-requester, and canonical gene after the images have been generated.
+A Discord DM and a Ready item in the Request inbox are receipts for a completed
+generation publication, not for an individual button press. Both surfaces are
+grouped by durable publication ID, requester, and canonical gene after the
+images have been generated. Separate publications for the same gene remain
+separate receipts.
 
 - Ten candidates for one gene produce one DM with ten previews.
 - Ten candidates split across two genes produce two DMs, one per gene.
 - One hundred candidates for one gene produce one DM with ten previews and a
   link to all one hundred on the gene page.
+- The Request inbox mirrors that receipt as one item with a bounded preview
+  mosaic and one group-level read acknowledgement.
 - A group is not sent until all of its expected notification rows exist. This
   prevents staggered workstation completion from fragmenting one action into
   several messages.
