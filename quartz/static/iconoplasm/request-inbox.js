@@ -322,9 +322,9 @@ export function createRequestInbox({
         escapeHtml(String(item.candidate_image_id || "")) +
         '">' +
         (imageUrl
-          ? '<img src="' +
+          ? '<img class="icono-thumbnail-viewport-image" src="' +
             escapeHtml(imageUrl) +
-            '" alt="" loading="lazy" decoding="async" width="72" height="90">'
+            '" alt="" loading="lazy" decoding="async" width="72" height="96">'
           : '<span class="icono-request-inbox__photo-placeholder" aria-hidden="true"></span>') +
         (hiddenCount > 0
           ? '<span class="icono-request-inbox__preview-more" aria-hidden="true">+' +
