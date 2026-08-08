@@ -4007,6 +4007,22 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   overflow: visible;
 }
 
+/* The anonymous shelf is intentionally only a three-card sample. Reuse the
+   draft-page cutoff illusion so the sample reads as a window into a continuing
+   archive, while the existing install/login infocard remains the next real
+   surface in document order. */
+.icono-feed--guest-preview[aria-busy="false"]::after {
+  --icono-guest-gallery-hider-height: clamp(7rem, 18vw, 12rem);
+  content: "";
+  display: block;
+  height: var(--icono-guest-gallery-hider-height);
+  margin-top: calc(-1 * var(--icono-guest-gallery-hider-height));
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(transparent, var(--light));
+}
+
 .icono-feed:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 72%, white 28%);
   outline-offset: 0.4rem;

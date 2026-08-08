@@ -182,15 +182,12 @@ test("www host is routed and permanently canonicalized to the apex host", async 
   )
 })
 
-test("GeneGuessr canonical subdomain owns public app URLs", async () => {
-  const [appsIndex, geneguessrStaticApp, headComponent] = await Promise.all([
-    readFile(appsIndexSource, "utf8"),
+test("GeneGuessr canonical subdomain owns public app routes", async () => {
+  const [geneguessrStaticApp, headComponent] = await Promise.all([
     readFile(geneguessrStaticAppSource, "utf8"),
     readFile(headComponentSource, "utf8"),
   ])
 
-  assert.match(appsIndex, /\]\(https:\/\/geneguessr\.brinedew\.bio\/\)/)
-  assert.doesNotMatch(appsIndex, /\]\(\/apps\/geneguessr\/?\)/)
   assert.doesNotMatch(geneguessrStaticApp, /https:\/\/brinedew\.bio\/apps\/geneguessr\/(?!render)/)
   assert.match(headComponent, /host === "geneguessr\.brinedew\.bio" \? "\/privacy"/)
   assert.doesNotMatch(
@@ -229,6 +226,17 @@ test("GeneGuessr canonical subdomain owns public app URLs", async () => {
     assert.equal(response.status, 301, path)
     assert.equal(response.headers.get("location"), location, path)
   }
+})
+
+test("apps index delegates descriptions to the canonical folder listing", async () => {
+  const appsIndex = await readFile(appsIndexSource, "utf8")
+  const body = appsIndex.replace(/^---[\s\S]*?---\s*/, "").trim()
+
+  assert.deepEqual(
+    body.split(/\r?\n/).filter((line) => line.trim()),
+    ["# Apps"],
+  )
+  assert.doesNotMatch(body, /\bData:|\bGameplay:|\bStatus:|6 guesses|Fully static/)
 })
 
 test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent contract", async () => {
