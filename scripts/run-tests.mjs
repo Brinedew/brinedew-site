@@ -41,6 +41,10 @@ function walk(root) {
 
 function isSourceTest(file) {
   if (file.startsWith("public/")) return false
+  // Workspace packages own their runner and test environment. In particular,
+  // the Obsidian plugin uses Vitest to provide browser/module shims that Node's
+  // built-in test runner cannot supply.
+  if (file.startsWith("tools/obsidian-prose-checker/")) return false
   const basename = path.posix.basename(file)
   if (/\.(test|spec)\.(?:[cm]?js|tsx?)$/.test(basename)) return true
   return file.startsWith("scripts/test-") && /\.(?:[cm]?js|tsx?)$/.test(basename)

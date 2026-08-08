@@ -1,4 +1,4 @@
-import type { AgentDefinition } from "./types";
+import type { AgentDefinition } from "./types"
 
 const OUTPUT_SCHEMA = `{
   "findings": [
@@ -13,11 +13,11 @@ const OUTPUT_SCHEMA = `{
       "anchorKind": "span or line"
     }
   ]
-}`;
+}`
 
 export interface AgentPrompt {
-  system: string;
-  user: string;
+  system: string
+  user: string
 }
 
 export function buildAgentPrompt(
@@ -26,15 +26,21 @@ export function buildAgentPrompt(
   documentHash: string,
 ): AgentPrompt {
   const positives = definition.positiveExamples
-    .map((example, index) => `${index + 1}. ${JSON.stringify(example.text)}\n   Why: ${example.rationale}`)
-    .join("\n");
+    .map(
+      (example, index) =>
+        `${index + 1}. ${JSON.stringify(example.text)}\n   Why: ${example.rationale}`,
+    )
+    .join("\n")
   const negatives = definition.hardNegativeExamples
-    .map((example, index) => `${index + 1}. ${JSON.stringify(example.text)}\n   Why not: ${example.rationale}`)
-    .join("\n");
+    .map(
+      (example, index) =>
+        `${index + 1}. ${JSON.stringify(example.text)}\n   Why not: ${example.rationale}`,
+    )
+    .join("\n")
   const neighbors =
     definition.protectedNearNeighbors.length === 0
       ? "None named. Still ignore every prose defect outside the definition."
-      : definition.protectedNearNeighbors.join(", ");
+      : definition.protectedNearNeighbors.join(", ")
 
   return {
     system: [
@@ -79,7 +85,7 @@ DOCUMENT SHA-256: ${documentHash}
 <document>
 ${documentText}
 </document>`,
-  };
+  }
 }
 
 export function buildJsonRepairPrompt(rawResponse: string): AgentPrompt {
@@ -93,5 +99,5 @@ MALFORMED RESPONSE
 <response>
 ${rawResponse}
 </response>`,
-  };
+  }
 }
