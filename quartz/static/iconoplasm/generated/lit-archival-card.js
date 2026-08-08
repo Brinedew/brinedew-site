@@ -952,8 +952,10 @@ function imageOnlyTemplate(model) {
   var dims = asObject(model.portraitDimensions);
   var width = Number(dims.width || 0);
   var height = Number(dims.height || 0);
+  var runtime = sharedCardRuntime();
+  var reverseFaceHtml = runtime && typeof runtime.renderCardReverseFaceHtml === "function" ? runtime.renderCardReverseFaceHtml() : "";
   var media = b2`<div class="icono-image-only-media-stage">
-    <div class="icono-image-only-loading-mark" aria-hidden="true"></div>
+    ${o5(reverseFaceHtml)}
     ${portraitSrc ? b2`<img
           class="icono-image-only-photo"
           src=${portraitSrc}

@@ -10387,6 +10387,9 @@
       var summaryClose = href ? "</a>" : "</span>";
       return '<div class="icono-label-mobile-peek"><div role="button" tabindex="0" class="icono-label-mobile-peek-toggle" data-icono-label-mobile-toggle aria-expanded="false" aria-label="Show details for ' + escapeHtml(model.symbol) + '"><span class="icono-label-mobile-peek-tab" aria-hidden="true"><span class="icono-label-mobile-peek-tab-symbol">' + escapeHtml(model.symbol) + '</span></span><span class="icono-label-mobile-peek-topline"><span class="icono-label-mobile-peek-kicker">full name</span></span></div>' + summaryOpen + '<span class="icono-label-mobile-peek-name">' + escapeHtml(model.fullName) + "</span>" + summaryClose + '<span class="icono-label-mobile-peek-swipe">' + renderLabLabelVoteShell(model.voteHtml) + "</span></div>";
     }
+    function renderCardReverseFaceHtml() {
+      return '<span class="icono-card-reverse-face" aria-hidden="true"><span class="icono-card-reverse-face__mark"></span></span>';
+    }
     function renderLabLabelImageOnlyCardHtml(model) {
       var href = String(model.titleHref || "").trim();
       var portraitSrc = String(model.portraitSrc || "").trim();
@@ -10396,7 +10399,7 @@
       var height = Number(dims.height || 0);
       var widthAttr = width > 0 ? ' width="' + escapeHtml(String(Math.round(width))) + '"' : "";
       var heightAttr = height > 0 ? ' height="' + escapeHtml(String(Math.round(height))) + '"' : "";
-      var mediaHtml = '<div class="icono-image-only-media-stage"><div class="icono-image-only-loading-mark" aria-hidden="true"></div>' + (portraitSrc ? '<img class="icono-image-only-photo" src="' + escapeHtml(portraitSrc) + '" alt="' + escapeHtml(portraitAlt) + '" loading="eager" decoding="async" fetchpriority="high"' + widthAttr + heightAttr + ">" : '<div class="icono-image-only-fallback" aria-hidden="true"></div>') + "</div>";
+      var mediaHtml = '<div class="icono-image-only-media-stage">' + renderCardReverseFaceHtml() + (portraitSrc ? '<img class="icono-image-only-photo" src="' + escapeHtml(portraitSrc) + '" alt="' + escapeHtml(portraitAlt) + '" loading="eager" decoding="async" fetchpriority="high"' + widthAttr + heightAttr + ">" : '<div class="icono-image-only-fallback" aria-hidden="true"></div>') + "</div>";
       var overlayHtml = '<div class="icono-image-only-overlay"><div class="icono-image-only-caption-row"><div class="icono-label-name icono-image-only-name">' + escapeHtml(model.fullName || model.symbol) + '</div><div class="icono-label-symbol icono-image-only-symbol">' + escapeHtml(model.symbol) + "</div></div></div>";
       if (href) {
         return '<a class="icono-image-only-link" href="' + escapeHtml(href) + '"' + (modelOpensInNewTab(model) ? ' target="_blank" rel="noopener noreferrer"' : "") + ">" + mediaHtml + overlayHtml + "</a>";
@@ -10867,6 +10870,7 @@
       renderLabLabelSpecimenFooterHtml,
       renderLabLabelSpecimenRailHtml,
       renderLabLabelSemanticCharacterProfileHtml,
+      renderCardReverseFaceHtml,
       renderLabLabelCardHtml,
       renderLitArchivalCardHtml,
       renderTooltipMetaRowsHtml,

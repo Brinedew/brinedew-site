@@ -3263,45 +3263,6 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   box-shadow: 0 10px 24px color-mix(in srgb, var(--dark) 8%, transparent);
 }
 
-.icono-card-reverse-face {
-  position: absolute;
-  inset: 0;
-  display: block;
-  box-sizing: border-box;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--dark) 26%, var(--ui-border) 74%);
-  background:
-    linear-gradient(
-      135deg,
-      transparent 44%,
-      color-mix(in srgb, var(--dark) 5%, transparent) 45% 55%,
-      transparent 56%
-    ),
-    linear-gradient(
-      45deg,
-      transparent 44%,
-      color-mix(in srgb, var(--dark) 5%, transparent) 45% 55%,
-      transparent 56%
-    ),
-    color-mix(in srgb, var(--light) 92%, #d9cbb8 8%);
-  background-size: 2rem 2rem;
-  box-shadow:
-    inset 0 0 0 0.45rem color-mix(in srgb, var(--light) 80%, transparent),
-    inset 0 0 0 0.52rem color-mix(in srgb, var(--dark) 25%, transparent);
-}
-
-.icono-card-reverse-face__mark {
-  position: absolute;
-  inset: 50% auto auto 50%;
-  width: clamp(4.5rem, 26%, 6.5rem);
-  aspect-ratio: 1;
-  translate: -50% -50%;
-  border-radius: 24%;
-  background: url("/static/iconoplasm/icons/icon-512.png") center / contain no-repeat;
-  filter: saturate(0.65) contrast(0.9);
-  opacity: 0.72;
-}
-
 .icono-post-feed-stage--guest-preview::after {
   content: "";
   position: absolute;
