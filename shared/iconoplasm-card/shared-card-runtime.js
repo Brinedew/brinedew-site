@@ -1665,6 +1665,13 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     )
   }
 
+  function renderCardReverseFaceHtml() {
+    return (
+      '<span class="icono-card-reverse-face" aria-hidden="true">' +
+      '<span class="icono-card-reverse-face__mark"></span></span>'
+    )
+  }
+
   function renderLabLabelImageOnlyCardHtml(model) {
     var href = String(model.titleHref || "").trim()
     var portraitSrc = String(model.portraitSrc || "").trim()
@@ -1681,7 +1688,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     var heightAttr = height > 0 ? ' height="' + escapeHtml(String(Math.round(height))) + '"' : ""
     var mediaHtml =
       '<div class="icono-image-only-media-stage">' +
-      '<div class="icono-image-only-loading-mark" aria-hidden="true"></div>' +
+      renderCardReverseFaceHtml() +
       (portraitSrc
         ? '<img class="icono-image-only-photo" src="' +
           escapeHtml(portraitSrc) +
@@ -2469,6 +2476,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     renderLabLabelSpecimenFooterHtml: renderLabLabelSpecimenFooterHtml,
     renderLabLabelSpecimenRailHtml: renderLabLabelSpecimenRailHtml,
     renderLabLabelSemanticCharacterProfileHtml: renderLabLabelSemanticCharacterProfileHtml,
+    renderCardReverseFaceHtml: renderCardReverseFaceHtml,
     renderLabLabelCardHtml: renderLabLabelCardHtml,
     renderLitArchivalCardHtml: renderLitArchivalCardHtml,
     renderTooltipMetaRowsHtml: renderTooltipMetaRowsHtml,

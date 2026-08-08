@@ -2181,10 +2181,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function buildReverseCardFaceMarkup() {
-    return (
-      '<span class="icono-card-reverse-face" aria-hidden="true">' +
-      '<span class="icono-card-reverse-face__mark"></span></span>'
-    )
+    return IconoCardShared.renderCardReverseFaceHtml()
   }
 
   function buildImageOnlySkeletonCardMarkup(index) {
@@ -9338,7 +9335,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var photo = candidatePortraitUrl(item, "medium") || candidatePortraitUrl(item, "thumb")
     var media =
       '<div class="icono-image-only-media-stage">' +
-      '<div class="icono-image-only-loading-mark" aria-hidden="true"></div>' +
+      buildReverseCardFaceMarkup() +
       (photo
         ? '<img class="icono-image-only-photo" src="' +
           esc(photo) +
