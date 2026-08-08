@@ -3212,6 +3212,101 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   margin: 1rem auto 0;
 }
 
+.icono-post-feed-stage {
+  position: relative;
+}
+
+.icono-guest-continuation[hidden] {
+  display: none !important;
+}
+
+.icono-post-feed-stage--guest-preview {
+  display: grid;
+  isolation: isolate;
+  margin-top: var(--icono-image-tile-gutter);
+}
+
+.icono-post-feed-stage--guest-preview > .icono-guest-continuation,
+.icono-post-feed-stage--guest-preview > .icono-home-auxiliary,
+.icono-post-feed-stage--guest-preview::after {
+  grid-area: 1 / 1;
+}
+
+.icono-guest-continuation {
+  z-index: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.icono-guest-continuation-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, var(--icono-image-tile-width)), var(--icono-image-tile-width))
+  );
+  gap: var(--icono-image-tile-gutter);
+  justify-content: center;
+}
+
+.icono-card--guest-reverse {
+  box-sizing: border-box;
+  width: min(100%, var(--icono-image-tile-width));
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--dark) 26%, var(--ui-border) 74%);
+  background:
+    linear-gradient(
+      135deg,
+      transparent 44%,
+      color-mix(in srgb, var(--dark) 5%, transparent) 45% 55%,
+      transparent 56%
+    ),
+    linear-gradient(
+      45deg,
+      transparent 44%,
+      color-mix(in srgb, var(--dark) 5%, transparent) 45% 55%,
+      transparent 56%
+    ),
+    color-mix(in srgb, var(--light) 92%, #d9cbb8 8%);
+  background-size: 2rem 2rem;
+  box-shadow:
+    inset 0 0 0 0.45rem color-mix(in srgb, var(--light) 80%, transparent),
+    inset 0 0 0 0.52rem color-mix(in srgb, var(--dark) 25%, transparent),
+    0 10px 24px color-mix(in srgb, var(--dark) 8%, transparent);
+}
+
+.icono-card--guest-reverse-mark {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: clamp(4.5rem, 26%, 6.5rem);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 24%;
+  background: url("/static/iconoplasm/icons/icon-512.png") center / contain no-repeat;
+  filter: saturate(0.65) contrast(0.9);
+  opacity: 0.72;
+}
+
+.icono-post-feed-stage--guest-preview::after {
+  content: "";
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent clamp(2.5rem, 7vw, 4.5rem),
+    color-mix(in srgb, var(--light) 58%, transparent) clamp(8rem, 18vw, 12rem),
+    var(--light) clamp(20rem, 46vw, 30rem),
+    var(--light) 100%
+  );
+}
+
+.icono-post-feed-stage--guest-preview > .icono-home-auxiliary {
+  z-index: 2;
+  align-self: start;
+  margin-top: clamp(8rem, 18vw, 12rem);
+}
+
 .icono-home-auxiliary[hidden] {
   display: none !important;
 }
@@ -4007,22 +4102,6 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   overflow: visible;
 }
 
-/* The anonymous shelf is intentionally only a three-card sample. Reuse the
-   draft-page cutoff illusion so the sample reads as a window into a continuing
-   archive, while the existing install/login infocard remains the next real
-   surface in document order. */
-.icono-feed--guest-preview[aria-busy="false"]::after {
-  --icono-guest-gallery-hider-height: clamp(7rem, 18vw, 12rem);
-  content: "";
-  display: block;
-  height: var(--icono-guest-gallery-hider-height);
-  margin-top: calc(-1 * var(--icono-guest-gallery-hider-height));
-  position: relative;
-  z-index: 1;
-  pointer-events: none;
-  background: linear-gradient(transparent, var(--light));
-}
-
 .icono-feed:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 72%, white 28%);
   outline-offset: 0.4rem;
@@ -4323,6 +4402,11 @@ html[data-theme="dark"] .icono-card--brick {
   }
 
   .icono-grid[data-layout="image-only-masonry"] {
+    gap: 0;
+  }
+
+  .icono-guest-continuation-grid {
+    grid-template-columns: minmax(0, var(--icono-image-tile-width));
     gap: 0;
   }
 
