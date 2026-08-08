@@ -796,6 +796,7 @@ article p {
 
 .icono-request-inbox__item {
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: 44px minmax(0, 1fr);
   gap: 0.65rem;
   align-items: center;

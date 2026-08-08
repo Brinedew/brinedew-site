@@ -1510,6 +1510,7 @@ test("request inbox UI uses server read state and bounded live refresh", () => {
   assert.match(inbox, /data-icono-request-notification-id/)
   assert.doesNotMatch(inbox, /icono_last_seen_fulfilled/)
   assert.match(css, /\.icono-request-inbox__item--unread/)
+  assert.match(css, /\.icono-request-inbox__item\s*\{[^}]*flex:\s*0 0 auto/)
   assert.match(css, /prefers-reduced-motion: reduce/)
   assert.match(css, /\.sidebar\.right > \.brd-sidebar-stack[\s\S]*max-height: none/)
   assert.match(head, /custom\.css\?v=\$\{CACHE_BUST\}/)
