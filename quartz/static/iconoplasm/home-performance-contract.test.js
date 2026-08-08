@@ -249,8 +249,11 @@ test("guest collection state resolves locally without an auth or discovery read"
   assert.doesNotMatch(guestBranch, /fetchDiscoveryState|fetchHomeCollectionCounts|\/api\//)
 })
 
-test("the visible guest archive is exactly the three starters", async () => {
+test("the visible guest archive is exactly the four named starters", async () => {
   const app = await readFile(appPath, "utf8")
+  const constantsStart = app.indexOf("var GUEST_STARTER_GENES")
+  const constantsEnd = app.indexOf("var GUEST_CONTINUATION_CARD_COUNT", constantsStart)
+  const constantsBlock = app.slice(constantsStart, constantsEnd)
   const start = app.indexOf("function guestDiscoveryEntries()")
   const end = app.indexOf("function fallbackDiscoveredGene", start)
   assert.notEqual(start, -1, "missing guestDiscoveryEntries")
@@ -260,9 +263,13 @@ test("the visible guest archive is exactly the three starters", async () => {
   assert.match(block, /GUEST_STARTER_GENES\.map/)
   assert.doesNotMatch(block, /websiteGuestDiscoveries|localEntries|concat/)
   assert.match(block, /return normalizeDiscoveryEntries\(starterEntries\)/)
+  assert.deepEqual(
+    Array.from(constantsBlock.matchAll(/gene_symbol: "([A-Z0-9]+)"/g), (match) => match[1]),
+    ["INS", "RHO", "PRL", "CD4"],
+  )
 })
 
-test("the loaded guest starter gallery fades into the existing auxiliary infocard", async () => {
+test("guest continuation uses fake card backs beneath the existing auxiliary infocard", async () => {
   const [app, styles] = await Promise.all([readFile(appPath, "utf8"), readFile(stylesPath, "utf8")])
   const chromeStart = app.indexOf("function syncCollectionChrome()")
   const chromeEnd = app.indexOf("function ensureLocalCollection(signal)", chromeStart)
@@ -270,12 +277,21 @@ test("the loaded guest starter gallery fades into the existing auxiliary infocar
 
   assert.match(
     chromeBlock,
-    /feed\.classList\.toggle\([\s\S]*"icono-feed--guest-preview"[\s\S]*!useClassicGallery[\s\S]*galleryState\.ready[\s\S]*!galleryState\.authenticated[\s\S]*!galleryState\.sharedDiscoveries/,
+    /guestPreviewActive\s*=\s*[\s\S]*!useClassicGallery[\s\S]*galleryState\.ready[\s\S]*!galleryState\.authenticated[\s\S]*!galleryState\.sharedDiscoveries[\s\S]*icono-post-feed-stage--guest-preview[\s\S]*guestContinuation\.hidden = !guestPreviewActive/,
   )
+  const continuationStart = app.indexOf("function buildGuestReverseCardMarkup")
+  const continuationEnd = app.indexOf("function buildHomeShellMarkup", continuationStart)
+  const continuationBlock = app.slice(continuationStart, continuationEnd)
+  assert.match(continuationBlock, /GUEST_CONTINUATION_CARD_COUNT/)
+  assert.match(continuationBlock, /data-icono-guest-reverse-card/)
+  assert.match(continuationBlock, /aria-hidden="true"/)
+  assert.doesNotMatch(continuationBlock, /data-icono-symbol|href=/)
   assert.match(
     styles,
-    /\.icono-feed--guest-preview\[aria-busy="false"\]::after\s*\{[\s\S]*height:\s*var\(--icono-guest-gallery-hider-height\)[\s\S]*margin-top:\s*calc\(-1 \* var\(--icono-guest-gallery-hider-height\)\)[\s\S]*pointer-events:\s*none[\s\S]*linear-gradient\(transparent, var\(--light\)\)/,
+    /\.icono-post-feed-stage--guest-preview::after\s*\{[\s\S]*pointer-events:\s*none[\s\S]*background:\s*linear-gradient\([\s\S]*var\(--light\) 100%/,
   )
+  assert.match(styles, /\.icono-card--guest-reverse\s*\{[\s\S]*aspect-ratio:\s*3 \/ 4/)
+  assert.doesNotMatch(styles, /\.icono-feed--guest-preview[^{]*::after/)
   assert.match(app, /appendHomeInstallCard\(auxiliary\)/)
   assert.doesNotMatch(chromeBlock, /fetch\(|fetchJSON|fetchAuthedJSON/)
 })
@@ -481,6 +497,8 @@ test("home shell exposes landmarks, search semantics, and a labelled automatic f
     effectiveHomeGridLayout: () => "bricks",
     homeCollectionOptionsMarkup: () => '<option value="newest">Newest</option>',
     buildHomeSkeletonGridMarkup: () => '<article class="icono-card"></article>',
+    buildGuestContinuationMarkup: () =>
+      '<div id="icono-guest-continuation" hidden aria-hidden="true"></div>',
     esc: (value) => String(value),
   }
   vm.runInNewContext(
@@ -498,6 +516,8 @@ test("home shell exposes landmarks, search semantics, and a labelled automatic f
   assert.equal(document.querySelector("#icono-grid")?.getAttribute("role"), "feed")
   assert.equal(document.querySelector("#icono-grid")?.getAttribute("aria-label"), "Gene collection")
   assert.equal(document.querySelector("#icono-feed-status")?.getAttribute("aria-live"), "polite")
+  assert.ok(document.querySelector("#icono-post-feed-stage"))
+  assert.ok(document.querySelector("#icono-guest-continuation"))
   assert.equal(document.querySelectorAll(".icono-feed-skip").length, 2)
   assert.equal(document.querySelector("#icono-feed-retry")?.hidden, true)
   assert.equal(document.querySelector("#icono-collection-pager"), null)

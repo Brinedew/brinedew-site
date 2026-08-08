@@ -178,6 +178,12 @@ deliberately visited dossier symbols in `localStorage`; it never posts while
 signed out. Each authenticated page session merges at most 200 pending
 symbols and clears only that batch after a successful response.
 
+The visible signed-out archive is the fixed published set `INS`, `RHO`, `PRL`,
+and `CD4`. Any card backs shown after those four are noninteractive continuation
+scenery beneath the existing infocard fade: they carry no gene symbols, do not
+count as discoveries, and must not cause an authentication, catalog, or card
+detail request.
+
 The readable `brinedew_session_present` cookie is only a request-suppression
 hint. It contains no user ID, role, or secret and grants no authority. Only the
 HttpOnly session cookie authenticates a request. When the hint is present, the
