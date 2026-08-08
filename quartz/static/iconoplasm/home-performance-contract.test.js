@@ -290,6 +290,14 @@ test("guest continuation uses fake card backs beneath the existing auxiliary inf
     styles,
     /\.icono-post-feed-stage--guest-preview::after\s*\{[\s\S]*pointer-events:\s*none[\s\S]*background:\s*linear-gradient\([\s\S]*var\(--light\) 100%/,
   )
+  assert.match(
+    styles,
+    /\.icono-post-feed-stage--guest-preview > \.icono-guest-continuation\s*\{[\s\S]*position:\s*absolute[\s\S]*inset:\s*0/,
+  )
+  assert.match(
+    styles,
+    /\.icono-post-feed-stage--guest-preview > \.icono-home-auxiliary\s*\{[\s\S]*position:\s*relative[\s\S]*margin-bottom:/,
+  )
   assert.match(styles, /\.icono-card--guest-reverse\s*\{[\s\S]*aspect-ratio:\s*3 \/ 4/)
   assert.doesNotMatch(styles, /\.icono-feed--guest-preview[^{]*::after/)
   assert.match(app, /appendHomeInstallCard\(auxiliary\)/)
