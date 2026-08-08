@@ -10,6 +10,16 @@ fences are deliberately enforced in instructions, runbooks, source,
 configuration, tests, and deployment. A fence may be replaced, but only by an
 explicit migration that updates all registered enforcement points together.
 
+**ARCHITECTURE FENCE [BPC-001]** — Brinedew Prose Checker has two separate
+lanes: Harper may lint locally after editor idle, while remote DeepSeek checks
+run only after an explicit user command against one immutable full-document
+snapshot. Remote code must not probe the model, read the API key, scan a note,
+or send traffic during plugin startup or typing. The only remote route is the
+currently free `deepseek-v4-flash-free` model on OpenCode Zen; absence, expiry,
+or auth failure stops the run and never falls back to OpenCode Go or a paid
+model. Read `docs/OBSIDIAN_PROSE_CHECKER_RUNBOOK.md` before changing plugin
+startup, scheduling, model routing, credential handling, or result anchoring.
+
 **ARCHITECTURE FENCE [IPD-001]** — Bunny is Iconoplasm's healthy-path portrait
 accelerator because direct delivery avoids charging each image to the
 Cloudflare Worker budget. The first real image probes once per tab; a regional
