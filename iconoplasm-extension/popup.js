@@ -2,7 +2,8 @@ const versionEl = document.getElementById("version-text")
 const HIGHLIGHT_MODE_KEY = "iconoplasm_highlight_mode"
 const HIGHLIGHT_VISIBILITY_KEY = "iconoplasm_highlight_visibility"
 const CARD_VARIANT_KEY = "iconoplasm_card_variant"
-const USER_BLOCKLIST_KEY = "iconoplasm_user_blocklist"
+const CONTENT_STORAGE_KEYS = IconoplasmContentSettings.storageKeys
+const USER_BLOCKLIST_KEY = CONTENT_STORAGE_KEYS.userBlocklist
 
 if (versionEl) {
   versionEl.textContent = "v" + chrome.runtime.getManifest().version
@@ -89,7 +90,8 @@ loadSettings().catch(() => null)
 
 // ---- Blocklist ----
 
-const REMOVED_DEFAULTS_KEY = "iconoplasm_removed_defaults"
+const REMOVED_DEFAULTS_KEY = CONTENT_STORAGE_KEYS.removedDefaults
+const SHARED_BLOCKLIST_KEY = CONTENT_STORAGE_KEYS.sharedBlocklist
 const blocklistInput = document.getElementById("blocklist-input")
 const blocklistAddBtn = document.getElementById("blocklist-add-btn")
 const blocklistItemsEl = document.getElementById("blocklist-items")
@@ -97,41 +99,38 @@ const blocklistEmptyEl = document.getElementById("blocklist-empty")
 const blocklistRestoreBtn = document.getElementById("blocklist-restore-btn")
 const blocklistCountEl = document.getElementById("blocklist-count")
 
-// The default set, for quick lookups
-const defaultSet = new Set(ICONOPLASM_DEFAULT_BLOCKLIST)
-
-async function getUserBlocklist() {
-  const result = await chrome.storage.local.get([USER_BLOCKLIST_KEY])
-  const raw = result[USER_BLOCKLIST_KEY]
-  return Array.isArray(raw) ? raw : []
+async function getBlocklistState() {
+  const result = await chrome.storage.local.get([
+    USER_BLOCKLIST_KEY,
+    REMOVED_DEFAULTS_KEY,
+    SHARED_BLOCKLIST_KEY,
+  ])
+  return {
+    sharedDefaults: IconoplasmContentSettings.resolveSharedBlocklistDefaults(
+      result[SHARED_BLOCKLIST_KEY],
+      ICONOPLASM_DEFAULT_BLOCKLIST,
+    ),
+    userEntries: IconoplasmContentSettings.normalizeBlocklistTerms(result[USER_BLOCKLIST_KEY]),
+    removedDefaults: IconoplasmContentSettings.normalizeBlocklistTerms(
+      result[REMOVED_DEFAULTS_KEY],
+    ),
+  }
 }
 
-async function getRemovedDefaults() {
-  const result = await chrome.storage.local.get([REMOVED_DEFAULTS_KEY])
-  const raw = result[REMOVED_DEFAULTS_KEY]
-  return Array.isArray(raw) ? raw : []
-}
-
-async function saveUserBlocklist(list) {
-  await chrome.storage.local.set({ [USER_BLOCKLIST_KEY]: list })
-}
-
-async function saveRemovedDefaults(list) {
-  await chrome.storage.local.set({ [REMOVED_DEFAULTS_KEY]: list })
-}
-
-function normalizeSymbol(s) {
-  return String(s || "")
-    .trim()
-    .toUpperCase()
+async function saveBlocklistOverrides({ userEntries, removedDefaults }) {
+  await chrome.storage.local.set({
+    [USER_BLOCKLIST_KEY]: IconoplasmContentSettings.normalizeBlocklistTerms(userEntries),
+    [REMOVED_DEFAULTS_KEY]: IconoplasmContentSettings.normalizeBlocklistTerms(removedDefaults),
+  })
 }
 
 // Build the effective list for rendering: { symbol, isDefault }
 // Always a single alphabetically-sorted list — no defaults-first grouping.
-function buildEffectiveList(removedDefaults, userAdded) {
+function buildEffectiveList(sharedDefaults, removedDefaults, userAdded) {
+  const defaultSet = new Set(sharedDefaults)
   const removedSet = new Set(removedDefaults)
   const entries = []
-  for (const sym of ICONOPLASM_DEFAULT_BLOCKLIST) {
+  for (const sym of sharedDefaults) {
     if (!removedSet.has(sym)) entries.push({ symbol: sym, isDefault: true })
   }
   for (const sym of userAdded) {
@@ -141,27 +140,30 @@ function buildEffectiveList(removedDefaults, userAdded) {
   return entries
 }
 
-function updateBlocklistCount(entries) {
+function updateBlocklistCount(entries, sharedDefaultCount) {
   if (!blocklistCountEl) return
   const activeDefaults = entries.filter((e) => e.isDefault).length
-  const total = ICONOPLASM_DEFAULT_BLOCKLIST.length
   const custom = entries.filter((e) => !e.isDefault).length
   const parts = []
-  parts.push(activeDefaults + "/" + total + " defaults")
+  parts.push(activeDefaults + "/" + sharedDefaultCount + " defaults")
   if (custom > 0) parts.push(custom + " custom")
   blocklistCountEl.textContent = parts.join(" + ")
 }
 
 async function renderBlocklist() {
-  const [removedDefaults, userAdded] = await Promise.all([getRemovedDefaults(), getUserBlocklist()])
-  const entries = buildEffectiveList(removedDefaults, userAdded)
+  const { sharedDefaults, removedDefaults, userEntries } = await getBlocklistState()
+  const entries = buildEffectiveList(sharedDefaults, removedDefaults, userEntries)
+  const defaultSet = new Set(sharedDefaults)
 
   blocklistItemsEl.innerHTML = ""
-  updateBlocklistCount(entries)
+  updateBlocklistCount(entries, sharedDefaults.length)
 
   // Show/hide restore button based on whether any defaults have been removed
   if (blocklistRestoreBtn) {
-    blocklistRestoreBtn.classList.toggle("popup-btn--hidden", removedDefaults.length === 0)
+    blocklistRestoreBtn.classList.toggle(
+      "popup-btn--hidden",
+      !removedDefaults.some((term) => defaultSet.has(term)),
+    )
   }
 
   if (entries.length === 0) {
@@ -195,16 +197,14 @@ async function renderBlocklist() {
     btn.textContent = "\u00d7"
     btn.setAttribute("aria-label", "Remove " + entry.symbol)
     btn.addEventListener("click", async () => {
-      if (entry.isDefault) {
-        // Don't delete from defaults array — just remember the removal
-        const removed = await getRemovedDefaults()
-        if (!removed.includes(entry.symbol)) {
-          await saveRemovedDefaults([...removed, entry.symbol].sort())
-        }
-      } else {
-        const current = await getUserBlocklist()
-        await saveUserBlocklist(current.filter((s) => s !== entry.symbol))
-      }
+      const state = await getBlocklistState()
+      const next = IconoplasmContentSettings.removeBlocklistEntry(
+        state.sharedDefaults,
+        state.userEntries,
+        state.removedDefaults,
+        entry.symbol,
+      )
+      await saveBlocklistOverrides(next)
       renderBlocklist()
     })
 
@@ -215,37 +215,26 @@ async function renderBlocklist() {
 }
 
 async function addToBlocklist() {
-  const raw = normalizeSymbol(blocklistInput.value)
-  if (!raw) return
-  // Only accept plausible gene symbols: 1-12 alphanumeric chars, optional trailing dash+digits
-  if (!/^[A-Z0-9]{1,12}(-[A-Z0-9]{1,4})?$/.test(raw)) return
-
-  // If it's a previously-removed default, just restore it
-  if (defaultSet.has(raw)) {
-    const removed = await getRemovedDefaults()
-    if (removed.includes(raw)) {
-      await saveRemovedDefaults(removed.filter((s) => s !== raw))
-    }
-    blocklistInput.value = ""
-    blocklistInput.focus()
-    renderBlocklist()
-    return
-  }
-
-  const current = await getUserBlocklist()
-  if (current.includes(raw)) {
-    blocklistInput.value = ""
-    return
-  }
-  await saveUserBlocklist([...current, raw].sort())
-  renderBlocklist()
+  const incoming = IconoplasmContentSettings.parseUserBlocklistInput(blocklistInput.value)
+  if (!incoming.length) return
+  const state = await getBlocklistState()
+  await saveBlocklistOverrides(
+    IconoplasmContentSettings.addBlocklistEntries(
+      state.sharedDefaults,
+      state.userEntries,
+      state.removedDefaults,
+      incoming,
+    ),
+  )
   blocklistInput.value = ""
   blocklistInput.focus()
+  renderBlocklist()
 }
 
 if (blocklistRestoreBtn) {
   blocklistRestoreBtn.addEventListener("click", async () => {
-    await saveRemovedDefaults([])
+    const state = await getBlocklistState()
+    await saveBlocklistOverrides({ userEntries: state.userEntries, removedDefaults: [] })
     renderBlocklist()
   })
 }
@@ -259,6 +248,17 @@ blocklistInput.addEventListener("keydown", (e) => {
 })
 
 renderBlocklist().catch(() => null)
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local") return
+  if (
+    changes[USER_BLOCKLIST_KEY] ||
+    changes[REMOVED_DEFAULTS_KEY] ||
+    changes[SHARED_BLOCKLIST_KEY]
+  ) {
+    renderBlocklist().catch(() => null)
+  }
+})
 
 // ---- Account status ----
 

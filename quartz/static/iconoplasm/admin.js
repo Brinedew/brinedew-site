@@ -2,6 +2,9 @@
   var API_BASE = "/api/iconoplasm/admin"
   var ADMIN_READ_TIMEOUT_MS = 12000
   var ADMIN_WRITE_TIMEOUT_MS = 30000
+  var EXTENSION_BLOCKLIST_MAX_TERMS = 500
+  var EXTENSION_BLOCKLIST_MAX_TERM_LENGTH = 64
+  var EXTENSION_BLOCKLIST_CONTROL_CHAR_PATTERN = /[\u0000-\u001f\u007f]/
   function defaultVisionPageSize() {
     return typeof window.matchMedia === "function" &&
       window.matchMedia("(max-width: 700px)").matches
@@ -37,6 +40,16 @@
     selectedPromptKind: "",
     promptsLoaded: false,
     promptMaxLength: 2400,
+    extensionBlocklistPolicy: null,
+    extensionBlocklistPublication: null,
+    extensionBlocklistLimits: {
+      max_terms: EXTENSION_BLOCKLIST_MAX_TERMS,
+      max_term_length: EXTENSION_BLOCKLIST_MAX_TERM_LENGTH,
+    },
+    extensionBlocklistDraft: [],
+    extensionBlocklistInvalidTerms: [],
+    extensionBlocklistLoaded: false,
+    extensionBlocklistBusy: false,
     visionPage: 1,
     visionPageSize: defaultVisionPageSize(),
     selectedVisionId: "",
@@ -65,6 +78,7 @@
       costs: document.getElementById("panel-costs"),
       requests: document.getElementById("panel-requests"),
       prompts: document.getElementById("panel-prompts"),
+      extension: document.getElementById("panel-extension"),
       archive: document.getElementById("panel-archive"),
       styles: document.getElementById("panel-styles"),
       activity: document.getElementById("panel-activity"),
@@ -131,6 +145,17 @@
     promptTemplateStatus: document.getElementById("prompt-template-status"),
     promptTemplateSave: document.querySelector("[data-prompt-save]"),
     promptSuffixSave: document.querySelector("[data-prompt-suffix-save]"),
+    extensionBlocklistRefresh: document.getElementById("extension-blocklist-refresh"),
+    extensionBlocklistCount: document.getElementById("extension-blocklist-count"),
+    extensionBlocklistRevision: document.getElementById("extension-blocklist-revision"),
+    extensionBlocklistUpdated: document.getElementById("extension-blocklist-updated"),
+    extensionBlocklistSync: document.getElementById("extension-blocklist-sync"),
+    extensionBlocklistInput: document.getElementById("extension-blocklist-input"),
+    extensionBlocklistAdd: document.getElementById("extension-blocklist-add"),
+    extensionBlocklistTerms: document.getElementById("extension-blocklist-terms"),
+    extensionBlocklistDirty: document.getElementById("extension-blocklist-dirty"),
+    extensionBlocklistStatus: document.getElementById("extension-blocklist-status"),
+    extensionBlocklistPublish: document.getElementById("extension-blocklist-publish"),
     visionStatsList: document.getElementById("vision-stats-list"),
     visionStatsMeta: document.getElementById("vision-stats-meta"),
     visionCleanupPanel: document.getElementById("vision-cleanup-panel"),
@@ -195,6 +220,7 @@
     ],
     requests: ["requests-summary", "requests-list", "requests-detail"],
     prompts: ["prompt-template-list"],
+    extension: ["extension-blocklist-terms"],
     archive: ["gallery-grid", "gallery-detail"],
     styles: [
       "vision-stats-list",
@@ -241,6 +267,11 @@
     if (tab === "prompts") {
       if (state.promptsLoaded) renderImageEditPrompts()
       else refreshImageEditPrompts()
+      return
+    }
+    if (tab === "extension") {
+      if (state.extensionBlocklistLoaded) renderExtensionBlocklist()
+      else refreshExtensionBlocklist()
       return
     }
     if (tab === "archive") {
@@ -489,6 +520,7 @@
       }
       if (!resp.ok) {
         var err = new Error("HTTP " + resp.status)
+        err.status = resp.status
         err.response = data
         throw err
       }
@@ -1218,6 +1250,479 @@
       setLog({ error: "Prompt save failed", details: err.response || message })
     } finally {
       if (els.promptTemplateSave) els.promptTemplateSave.disabled = !selectedImageEditPrompt()
+    }
+  }
+
+  function normalizeExtensionBlocklistTerm(value) {
+    return String(value || "")
+      .trim()
+      .replace(/[\u2010-\u2015\u2212]/g, "-")
+      .toUpperCase()
+  }
+
+  function normalizeExtensionBlocklistTerms(values) {
+    var seen = new Set()
+    var terms = []
+    ;(Array.isArray(values) ? values : []).forEach(function (value) {
+      var term = normalizeExtensionBlocklistTerm(value)
+      if (!term || seen.has(term)) return
+      seen.add(term)
+      terms.push(term)
+    })
+    terms.sort()
+    return terms
+  }
+
+  function parseExtensionBlocklistPaste(value) {
+    return normalizeExtensionBlocklistTerms(String(value || "").split(/[\s,]+/))
+  }
+
+  function extensionBlocklistTermsMatch(left, right) {
+    var leftTerms = normalizeExtensionBlocklistTerms(left)
+    var rightTerms = normalizeExtensionBlocklistTerms(right)
+    if (leftTerms.length !== rightTerms.length) return false
+    return leftTerms.every(function (term, index) {
+      return term === rightTerms[index]
+    })
+  }
+
+  function extensionBlocklistIsDirty() {
+    var savedTerms = state.extensionBlocklistPolicy?.terms || []
+    return !extensionBlocklistTermsMatch(state.extensionBlocklistDraft, savedTerms)
+  }
+
+  function extensionBlocklistNeedsPublicationRetry() {
+    return state.extensionBlocklistLoaded && state.extensionBlocklistPublication?.in_sync === false
+  }
+
+  function setExtensionBlocklistStatus(message, tone) {
+    if (!els.extensionBlocklistStatus) return
+    els.extensionBlocklistStatus.textContent = String(message || "")
+    els.extensionBlocklistStatus.dataset.tone = String(tone || "")
+  }
+
+  function extensionBlocklistTermValidationMessage(term, maxTermLength) {
+    if (EXTENSION_BLOCKLIST_CONTROL_CHAR_PATTERN.test(term)) {
+      return "A pasted term contains a control character. Use catalog aliases separated by commas or whitespace."
+    }
+    if (term.length > maxTermLength) {
+      return term + " exceeds the " + String(maxTermLength) + " character limit."
+    }
+    return ""
+  }
+
+  function extensionBlocklistInvalidReasonLabel(reason) {
+    if (reason === "canonical_symbol") return "Canonical symbol"
+    if (reason === "not_published_alias") return "Not a published catalog alias"
+    if (reason === "ambiguous_alias") return "Alias belongs to multiple genes"
+    return "Invalid shared term"
+  }
+
+  function normalizeExtensionBlocklistInvalidTerms(values) {
+    var seen = new Set()
+    var invalidTerms = []
+    ;(Array.isArray(values) ? values : []).forEach(function (value) {
+      if (!value || typeof value !== "object") return
+      var term = normalizeExtensionBlocklistTerm(value.term)
+      if (!term || seen.has(term)) return
+      seen.add(term)
+      var reason = String(value.reason || "")
+      invalidTerms.push({
+        term: term,
+        reason: reason,
+        label: extensionBlocklistInvalidReasonLabel(reason),
+      })
+    })
+    return invalidTerms
+  }
+
+  function extensionBlocklistInvalidTermsSummary(invalidTerms) {
+    var terms = normalizeExtensionBlocklistInvalidTerms(invalidTerms)
+    if (!terms.length) return ""
+    return (
+      String(terms.length) +
+      (terms.length === 1 ? " term was rejected: " : " terms were rejected: ") +
+      terms
+        .map(function (entry) {
+          return entry.term + " — " + entry.label.toLowerCase()
+        })
+        .join("; ") +
+      ". Review the marked draft terms, then publish again."
+    )
+  }
+
+  function applyExtensionBlocklistPayload(data) {
+    var policy = data && data.policy && typeof data.policy === "object" ? data.policy : null
+    if (!policy) throw new Error("Shared blocklist response is missing its policy.")
+    var limits =
+      data && data.limits && typeof data.limits === "object"
+        ? data.limits
+        : state.extensionBlocklistLimits || {}
+    var publication =
+      data && data.publication && typeof data.publication === "object" ? data.publication : {}
+    var maxTerms = Number.parseInt(String(limits.max_terms || EXTENSION_BLOCKLIST_MAX_TERMS), 10)
+    var maxTermLength = Number.parseInt(
+      String(limits.max_term_length || EXTENSION_BLOCKLIST_MAX_TERM_LENGTH),
+      10,
+    )
+    var revision = Number.parseInt(String(policy.revision || 0), 10)
+    if (!Number.isInteger(revision) || revision < 1) {
+      throw new Error("Shared blocklist response has an invalid revision.")
+    }
+    if (!Array.isArray(policy.terms)) {
+      throw new Error("Shared blocklist response is missing its terms.")
+    }
+    var schemaVersion = Number.parseInt(String(policy.schema_version || 0), 10)
+    state.extensionBlocklistPolicy = {
+      schema_version:
+        Number.isInteger(schemaVersion) && schemaVersion > 0 ? schemaVersion : null,
+      revision,
+      version: String(policy.version || ""),
+      terms: normalizeExtensionBlocklistTerms(policy.terms),
+      updated_at: String(policy.updated_at || ""),
+      updated_by: String(policy.updated_by || ""),
+    }
+    state.extensionBlocklistPublication = {
+      version: String(publication.version || ""),
+      in_sync: publication.in_sync === true,
+    }
+    state.extensionBlocklistLimits = {
+      max_terms:
+        Number.isFinite(maxTerms) && maxTerms > 0 ? maxTerms : EXTENSION_BLOCKLIST_MAX_TERMS,
+      max_term_length:
+        Number.isFinite(maxTermLength) && maxTermLength > 0
+          ? maxTermLength
+          : EXTENSION_BLOCKLIST_MAX_TERM_LENGTH,
+    }
+    state.extensionBlocklistLoaded = true
+  }
+
+  function extensionBlocklistTermMarkup(term, invalidReason) {
+    var invalidLabel = String(invalidReason || "")
+    return [
+      '<li class="extension-blocklist-term' +
+        (invalidLabel ? " extension-blocklist-term-invalid" : "") +
+        '"' +
+        (invalidLabel ? ' data-invalid="true"' : "") +
+        ">",
+      '<span class="extension-blocklist-term-copy">',
+      '<span class="mono">' + esc(term) + "</span>",
+      invalidLabel
+        ? '<span class="extension-blocklist-term-error">' + esc(invalidLabel) + "</span>"
+        : "",
+      "</span>",
+      '<button type="button" class="extension-blocklist-remove" data-extension-blocklist-remove="' +
+        esc(term) +
+        '" aria-label="Remove ' +
+        esc(term) +
+        ' from the publication draft">',
+      '<span aria-hidden="true">×</span>',
+      "</button>",
+      "</li>",
+    ].join("")
+  }
+
+  function renderExtensionBlocklist() {
+    var policy = state.extensionBlocklistPolicy
+    var publication = state.extensionBlocklistPublication || {}
+    var limits = state.extensionBlocklistLimits || {
+      max_terms: EXTENSION_BLOCKLIST_MAX_TERMS,
+      max_term_length: EXTENSION_BLOCKLIST_MAX_TERM_LENGTH,
+    }
+    var draftTerms = normalizeExtensionBlocklistTerms(state.extensionBlocklistDraft)
+    var invalidTermsByTerm = new Map(
+      normalizeExtensionBlocklistInvalidTerms(state.extensionBlocklistInvalidTerms).map(function (
+        entry,
+      ) {
+        return [entry.term, entry.label]
+      }),
+    )
+    var dirty = state.extensionBlocklistLoaded && extensionBlocklistIsDirty()
+    var retryPublication = extensionBlocklistNeedsPublicationRetry()
+    var busy = Boolean(state.extensionBlocklistBusy)
+
+    if (els.extensionBlocklistCount) {
+      els.extensionBlocklistCount.textContent = state.extensionBlocklistLoaded
+        ? draftTerms.length + " / " + String(limits.max_terms || EXTENSION_BLOCKLIST_MAX_TERMS)
+        : "—"
+    }
+    if (els.extensionBlocklistRevision) {
+      els.extensionBlocklistRevision.textContent = policy ? String(policy.revision) : "—"
+      els.extensionBlocklistRevision.title = policy?.version
+        ? "Policy version " + policy.version
+        : "Policy version unavailable"
+    }
+    if (els.extensionBlocklistUpdated) {
+      if (policy?.updated_at) {
+        var updatedText = formatTimestampShort(policy.updated_at)
+        if (policy.updated_by) updatedText += " · " + policy.updated_by
+        els.extensionBlocklistUpdated.textContent = updatedText
+        els.extensionBlocklistUpdated.title = policy.updated_at
+      } else {
+        els.extensionBlocklistUpdated.textContent = state.extensionBlocklistLoaded
+          ? "No recorded update"
+          : "Not loaded"
+        els.extensionBlocklistUpdated.removeAttribute("title")
+      }
+    }
+    if (els.extensionBlocklistSync) {
+      var syncState = state.extensionBlocklistLoaded
+        ? publication.in_sync
+          ? "synced"
+          : "pending"
+        : "unknown"
+      els.extensionBlocklistSync.dataset.sync = syncState
+      els.extensionBlocklistSync.textContent =
+        syncState === "synced" ? "Published" : syncState === "pending" ? "Pending" : "Not loaded"
+      els.extensionBlocklistSync.title = publication.version
+        ? "Published version " + publication.version
+        : "Published version unavailable"
+    }
+    if (els.extensionBlocklistDirty) {
+      els.extensionBlocklistDirty.dataset.dirty = dirty ? "true" : "false"
+      els.extensionBlocklistDirty.textContent = dirty ? "Unpublished changes" : "Saved policy"
+    }
+    if (els.extensionBlocklistTerms) {
+      els.extensionBlocklistTerms.innerHTML = draftTerms.length
+        ? draftTerms
+            .map(function (term) {
+              return extensionBlocklistTermMarkup(term, invalidTermsByTerm.get(term))
+            })
+            .join("")
+        : '<li class="extension-blocklist-empty"><strong>No shared terms in this draft.</strong><span>The packaged fallback remains available only until the shared policy loads.</span></li>'
+    }
+    if (els.extensionBlocklistInput) {
+      els.extensionBlocklistInput.disabled = !state.extensionBlocklistLoaded || busy
+    }
+    if (els.extensionBlocklistAdd)
+      els.extensionBlocklistAdd.disabled = !state.extensionBlocklistLoaded || busy
+    if (els.extensionBlocklistRefresh) els.extensionBlocklistRefresh.disabled = busy
+    if (els.extensionBlocklistPublish) {
+      els.extensionBlocklistPublish.disabled = (!dirty && !retryPublication) || busy
+      els.extensionBlocklistPublish.textContent = busy
+        ? "Working…"
+        : retryPublication && !dirty
+          ? "Retry publication"
+          : "Publish shared terms"
+    }
+  }
+
+  async function refreshExtensionBlocklist(options) {
+    var opts = options || {}
+    var preservedDraft = opts.preserveDraft
+      ? normalizeExtensionBlocklistTerms(state.extensionBlocklistDraft)
+      : null
+    try {
+      state.extensionBlocklistBusy = true
+      setExtensionBlocklistStatus("Loading the shared policy…", "")
+      renderExtensionBlocklist()
+      var data = await apiJson("/extension-blocklist", { method: "GET" })
+      applyExtensionBlocklistPayload(data)
+      state.extensionBlocklistInvalidTerms = []
+      state.extensionBlocklistDraft = preservedDraft || state.extensionBlocklistPolicy.terms.slice()
+      var publicationPending = extensionBlocklistNeedsPublicationRetry()
+      setExtensionBlocklistStatus(
+        opts.message ||
+          (publicationPending
+            ? "Shared policy loaded, but publication is pending. Retry publication to publish the saved policy."
+            : "Shared policy loaded."),
+        opts.tone || (publicationPending ? "warning" : "success"),
+      )
+    } catch (err) {
+      if (isRequestCanceled(err)) return
+      var message = requestErrorMessage(err, "Shared policy failed to load.")
+      setExtensionBlocklistStatus(message, "error")
+      setLog({ error: "Shared blocklist load failed", details: err.response || message })
+    } finally {
+      state.extensionBlocklistBusy = false
+      renderExtensionBlocklist()
+    }
+  }
+
+  function addExtensionBlocklistDraftTerms() {
+    if (!els.extensionBlocklistInput || !state.extensionBlocklistLoaded) return
+    var incoming = parseExtensionBlocklistPaste(els.extensionBlocklistInput.value)
+    if (!incoming.length) {
+      els.extensionBlocklistInput.setAttribute("aria-invalid", "true")
+      setExtensionBlocklistStatus("Paste at least one term before adding to the draft.", "error")
+      return
+    }
+    var maxTermLength = Number(
+      state.extensionBlocklistLimits?.max_term_length || EXTENSION_BLOCKLIST_MAX_TERM_LENGTH,
+    )
+    var invalidMessage = ""
+    incoming.some(function (term) {
+      invalidMessage = extensionBlocklistTermValidationMessage(term, maxTermLength)
+      return Boolean(invalidMessage)
+    })
+    if (invalidMessage) {
+      els.extensionBlocklistInput.setAttribute("aria-invalid", "true")
+      setExtensionBlocklistStatus(invalidMessage, "error")
+      return
+    }
+    var current = new Set(normalizeExtensionBlocklistTerms(state.extensionBlocklistDraft))
+    var added = 0
+    incoming.forEach(function (term) {
+      if (current.has(term)) return
+      current.add(term)
+      added += 1
+    })
+    var nextTerms = normalizeExtensionBlocklistTerms(Array.from(current))
+    var maxTerms = Number(
+      state.extensionBlocklistLimits?.max_terms || EXTENSION_BLOCKLIST_MAX_TERMS,
+    )
+    if (nextTerms.length > maxTerms) {
+      els.extensionBlocklistInput.setAttribute("aria-invalid", "true")
+      setExtensionBlocklistStatus(
+        "This draft would exceed the " + String(maxTerms) + " term limit.",
+        "error",
+      )
+      return
+    }
+    state.extensionBlocklistDraft = nextTerms
+    els.extensionBlocklistInput.value = ""
+    els.extensionBlocklistInput.removeAttribute("aria-invalid")
+    renderExtensionBlocklist()
+    setExtensionBlocklistStatus(
+      added
+        ? "Added " + String(added) + (added === 1 ? " term" : " terms") + " to the draft."
+        : "Those terms are already in the draft.",
+      added ? "success" : "",
+    )
+    els.extensionBlocklistInput.focus()
+  }
+
+  function removeExtensionBlocklistDraftTerm(term) {
+    var normalized = normalizeExtensionBlocklistTerm(term)
+    if (!normalized) return
+    state.extensionBlocklistDraft = normalizeExtensionBlocklistTerms(
+      state.extensionBlocklistDraft.filter(function (candidate) {
+        return candidate !== normalized
+      }),
+    )
+    state.extensionBlocklistInvalidTerms = normalizeExtensionBlocklistInvalidTerms(
+      state.extensionBlocklistInvalidTerms,
+    ).filter(function (entry) {
+      return entry.term !== normalized
+    })
+    renderExtensionBlocklist()
+    setExtensionBlocklistStatus(
+      normalized + " removed from the draft. Publish to replace the shared list.",
+      "",
+    )
+  }
+
+  function extensionBlocklistErrorCarriesSavedPolicy(err) {
+    var response = err && err.response && typeof err.response === "object" ? err.response : null
+    if (!response) return false
+    if (response.saved === true) return true
+    return String(response.code || "").startsWith("extension_blocklist_projection_")
+  }
+
+  async function publishExtensionBlocklist() {
+    if (
+      !state.extensionBlocklistLoaded ||
+      (!extensionBlocklistIsDirty() && !extensionBlocklistNeedsPublicationRetry())
+    )
+      return
+    var expectedRevision = Number(state.extensionBlocklistPolicy?.revision || 0)
+    var draftTerms = normalizeExtensionBlocklistTerms(state.extensionBlocklistDraft)
+    var maxTermLength = Number(
+      state.extensionBlocklistLimits?.max_term_length || EXTENSION_BLOCKLIST_MAX_TERM_LENGTH,
+    )
+    var invalidMessage = ""
+    draftTerms.some(function (term) {
+      invalidMessage = extensionBlocklistTermValidationMessage(term, maxTermLength)
+      return Boolean(invalidMessage)
+    })
+    if (invalidMessage) {
+      setExtensionBlocklistStatus(invalidMessage, "error")
+      return
+    }
+    try {
+      state.extensionBlocklistBusy = true
+      state.extensionBlocklistInvalidTerms = []
+      setExtensionBlocklistStatus("Publishing the complete shared list…", "")
+      renderExtensionBlocklist()
+      var data = await apiJson("/extension-blocklist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ terms: draftTerms, expected_revision: expectedRevision }),
+      })
+      if (data?.policy) {
+        applyExtensionBlocklistPayload(data)
+        state.extensionBlocklistInvalidTerms = []
+        state.extensionBlocklistDraft = state.extensionBlocklistPolicy.terms.slice()
+      } else {
+        state.extensionBlocklistBusy = false
+        await refreshExtensionBlocklist()
+      }
+      var inSync = state.extensionBlocklistPublication?.in_sync === true
+      setExtensionBlocklistStatus(
+        inSync
+          ? "Published; extensions pick it up on a later page load or browser restart; the manifest cache may last up to five minutes."
+          : "Shared terms saved. Publication is still catching up.",
+        inSync ? "success" : "warning",
+      )
+      setLog({ ok: true, extension_blocklist: state.extensionBlocklistPolicy })
+    } catch (err) {
+      if (Number(err?.status || 0) === 409) {
+        state.extensionBlocklistBusy = false
+        await refreshExtensionBlocklist({
+          preserveDraft: true,
+          message:
+            "A newer revision was saved elsewhere. Your draft is preserved against the refreshed baseline; review it before publishing again.",
+          tone: "warning",
+        })
+        return
+      }
+      if (Number(err?.status || 0) === 422) {
+        var rejectedTerms = normalizeExtensionBlocklistInvalidTerms(err?.response?.invalid_terms)
+        if (rejectedTerms.length) {
+          state.extensionBlocklistInvalidTerms = rejectedTerms
+          setExtensionBlocklistStatus(extensionBlocklistInvalidTermsSummary(rejectedTerms), "error")
+          setLog({
+            error: "Shared blocklist terms were rejected",
+            invalid_terms: rejectedTerms,
+          })
+          return
+        }
+      }
+      if (
+        Number(err?.status || 0) === 503 &&
+        extensionBlocklistErrorCarriesSavedPolicy(err) &&
+        err?.response?.policy &&
+        err?.response?.publication
+      ) {
+        var preservedDraft = normalizeExtensionBlocklistTerms(state.extensionBlocklistDraft)
+        try {
+          applyExtensionBlocklistPayload(err.response)
+          state.extensionBlocklistDraft = preservedDraft
+          setExtensionBlocklistStatus(
+            extensionBlocklistNeedsPublicationRetry()
+              ? "The shared policy is saved, but publication is still pending. Your draft is preserved; retry publication."
+              : "The shared policy is published. Your draft is preserved; extensions pick it up on a later page load or browser restart; the manifest cache may last up to five minutes.",
+            extensionBlocklistNeedsPublicationRetry() ? "warning" : "success",
+          )
+          setLog(
+            extensionBlocklistNeedsPublicationRetry()
+              ? {
+                  warning: "Shared blocklist publication incomplete",
+                  extension_blocklist: state.extensionBlocklistPolicy,
+                }
+              : { ok: true, extension_blocklist: state.extensionBlocklistPolicy },
+          )
+          return
+        } catch (_payloadError) {
+          // Fall through to the ordinary request error when the 503 payload is incomplete.
+        }
+      }
+      var message = requestErrorMessage(err, "Shared policy publish failed.")
+      setExtensionBlocklistStatus(message, "error")
+      setLog({ error: "Shared blocklist publish failed", details: err.response || message })
+    } finally {
+      state.extensionBlocklistBusy = false
+      renderExtensionBlocklist()
     }
   }
 
@@ -6746,6 +7251,43 @@
     if (els.promptPrefixSave) {
       els.promptPrefixSave.addEventListener("click", saveImageEditPromptPrefix)
     }
+    if (els.extensionBlocklistRefresh) {
+      els.extensionBlocklistRefresh.addEventListener("click", function () {
+        if (
+          extensionBlocklistIsDirty() &&
+          !window.confirm("Discard this unpublished draft and reload the shared policy?")
+        ) {
+          setExtensionBlocklistStatus("Draft kept. Nothing was reloaded.", "")
+          return
+        }
+        refreshExtensionBlocklist()
+      })
+    }
+    if (els.extensionBlocklistAdd) {
+      els.extensionBlocklistAdd.addEventListener("click", addExtensionBlocklistDraftTerms)
+    }
+    if (els.extensionBlocklistInput) {
+      els.extensionBlocklistInput.addEventListener("input", function () {
+        els.extensionBlocklistInput.removeAttribute("aria-invalid")
+      })
+      els.extensionBlocklistInput.addEventListener("keydown", function (ev) {
+        if (ev.key !== "Enter" || (!ev.ctrlKey && !ev.metaKey)) return
+        ev.preventDefault()
+        addExtensionBlocklistDraftTerms()
+      })
+    }
+    if (els.extensionBlocklistTerms) {
+      els.extensionBlocklistTerms.addEventListener("click", function (ev) {
+        var remove = ev.target.closest("[data-extension-blocklist-remove]")
+        if (!remove) return
+        removeExtensionBlocklistDraftTerm(
+          String(remove.getAttribute("data-extension-blocklist-remove") || ""),
+        )
+      })
+    }
+    if (els.extensionBlocklistPublish) {
+      els.extensionBlocklistPublish.addEventListener("click", publishExtensionBlocklist)
+    }
 
     document.body.addEventListener("click", async function (ev) {
       var jump = ev.target.closest("[data-jump-symbol]")
@@ -7194,6 +7736,7 @@
         "Open this tab to load image edit prompt templates.",
       )
     }
+    renderExtensionBlocklist()
     bindActions()
   }
 

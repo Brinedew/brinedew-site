@@ -207,6 +207,27 @@ Extension hover detail is immutable within a published card snapshot:
 - only an explicit `missing` result is negative-cached, and transient failures
   remain retryable.
 
+The shared extension text blocklist follows the same published-read-plane
+boundary without becoming a catalog artifact. Administrators replace one
+normalized, revisioned policy; D1 retains its canonical revision and bounded
+recent audit history, while bounded immutable KV revision records contain the
+complete public projections. Public readers select the highest valid revision,
+so an expired older publisher cannot overwrite or hide a newer policy. The
+existing catalog manifest carries that projection as `extension_blocklist`, and
+its revision participates in the manifest ETag. Public manifest reads never
+repair or fall back to D1, a term-only revision never rebuilds or downloads the
+scanner artifact, and the extension makes no additional request or timer.
+Admin writes normalize, sort, and deduplicate terms, reject canonical symbols,
+and require every term to be one unambiguous alias in the currently published
+scanner. Whether that alias is an unwanted common-English ambiguity remains an
+explicit administrator judgment; the system must not pretend to infer it.
+
+Once an extension has accepted a valid projection, it retains that last-known-
+good authoritative list through missing, malformed, stale, or failed refreshes.
+A valid empty list is an intentional empty policy. The packaged list is used
+only before a valid projection has ever been accepted; per-user removed-default
+tombstones and custom terms remain browser-local and retain user authority.
+
 Catalog portrait fingerprints and portrait-reference snapshots are publication
 artifacts too, but they do not belong in the per-tab scanner. Visible and hovered
 genes hydrate them through the published card batch. Catalog publication writes

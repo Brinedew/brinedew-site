@@ -1,6 +1,7 @@
 import { handleMe } from "./auth.js"
 import { isAdmin } from "./admin.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
+import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
 import { renderIconoplasmArtistStylesHtml } from "./iconoplasm-artist-styles-html.js"
 import {
   ICONOPLASM_API_SCHEMA_VERSION as API_SCHEMA_VERSION,
@@ -533,7 +534,12 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
       if (!(await isAdmin(request, env))) {
         return done(request, html("<h1>403 Unauthorized</h1>", 403))
       }
-      return done(request, html(ICONOPLASM_ADMIN_HTML, 200, { "Cache-Control": "no-store" }))
+      return done(
+        request,
+        html(renderIconoplasmAdminHtml(ICONOPLASM_ADMIN_HTML, env), 200, {
+          "Cache-Control": "no-store",
+        }),
+      )
     }
 
     if (

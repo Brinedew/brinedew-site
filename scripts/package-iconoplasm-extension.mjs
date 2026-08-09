@@ -268,6 +268,7 @@ function validatePackagedBackground() {
       "generated/catalog-contract.js",
       "generated/portrait-delivery-core.js",
       "publication-alias-overlay.js",
+      "content-settings.js",
       "service-worker.js",
     ]
     const actualScripts = packagedManifest.background?.scripts

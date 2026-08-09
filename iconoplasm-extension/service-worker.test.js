@@ -57,6 +57,16 @@ function scannerManifest(buildVersion, byteSize = 128) {
   }
 }
 
+function sharedBlocklistProjection(revision, terms) {
+  return {
+    schema_version: 1,
+    revision,
+    version: `ebl1-${revision.toString(16).padStart(16, "0")}`,
+    term_count: terms.length,
+    terms,
+  }
+}
+
 function rememberScannerState(buildVersion) {
   storageState.set("iconoplasm_scanner_hash", buildVersion)
   storageState.set("iconoplasm_scanner_schema_version", scannerContract.schemaVersion)
@@ -114,9 +124,102 @@ globalThis.IconoplasmPortraitDelivery =
 
 await import("./generated/catalog-contract.js")
 await import("./publication-alias-overlay.js")
+await import("./content-settings.js")
 await import("./service-worker.js")
 
 const hooks = globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__
+
+test("shared blocklist projections normalize to the bounded public contract", () => {
+  const settings = globalThis.IconoplasmContentSettings
+  assert.deepEqual(
+    settings.normalizeSharedBlocklistProjection({
+      schema_version: 1,
+      revision: 3,
+      version: "ebl1-0000000000000003",
+      term_count: 2,
+      terms: [" spatial ", "IL\u20111", "SPATIAL"],
+    }),
+    {
+      schema_version: 1,
+      revision: 3,
+      version: "ebl1-0000000000000003",
+      term_count: 2,
+      terms: ["IL-1", "SPATIAL"],
+    },
+  )
+  assert.equal(settings.normalizeSharedBlocklistProjection(sharedBlocklistProjection(0, [])), null)
+  assert.equal(
+    settings.normalizeSharedBlocklistProjection({
+      ...sharedBlocklistProjection(1, ["SAFE"]),
+      terms: ["BAD\nTERM"],
+    }),
+    null,
+  )
+  assert.equal(
+    settings.normalizeSharedBlocklistProjection({
+      ...sharedBlocklistProjection(1, ["SAFE"]),
+      version: "not-a-policy-version",
+    }),
+    null,
+  )
+  const missingVersion = sharedBlocklistProjection(9, ["SAFE"])
+  delete missingVersion.version
+  assert.equal(settings.normalizeSharedBlocklistProjection(missingVersion), null)
+  const missingTermCount = sharedBlocklistProjection(9, ["SAFE"])
+  delete missingTermCount.term_count
+  assert.equal(settings.normalizeSharedBlocklistProjection(missingTermCount), null)
+  const oversizedTerms = Array.from(
+    { length: settings.sharedBlocklistMaxTerms },
+    (_, index) => `${String(index).padStart(4, "0")}${"😀".repeat(30)}`,
+  )
+  assert.equal(
+    oversizedTerms.every((term) => term.length === 64),
+    true,
+  )
+  assert.equal(
+    settings.normalizeSharedBlocklistProjection(sharedBlocklistProjection(5, oversizedTerms)),
+    null,
+    "the last-known-good item must stay inside its 48 KiB storage budget",
+  )
+})
+
+test("shared blocklist acceptance rejects incomplete high revisions and accepts later valid policy", async () => {
+  storageState.clear()
+  const accepted = sharedBlocklistProjection(3, ["SPATIAL"])
+  try {
+    await hooks.acceptPublishedExtensionBlocklist(accepted, null)
+    assert.deepEqual(storageState.get("iconoplasm_extension_blocklist"), accepted)
+
+    const missingVersion = sharedBlocklistProjection(9, ["POISON"])
+    delete missingVersion.version
+    const missingTermCount = sharedBlocklistProjection(10, ["POISON"])
+    delete missingTermCount.term_count
+
+    for (const candidate of [
+      null,
+      { ...sharedBlocklistProjection(4, ["BAD"]), schema_version: 2 },
+      missingVersion,
+      missingTermCount,
+      sharedBlocklistProjection(2, ["OLDER"]),
+      sharedBlocklistProjection(3, ["SAME-REVISION-MUTATION"]),
+    ]) {
+      await hooks.acceptPublishedExtensionBlocklist(
+        candidate,
+        storageState.get("iconoplasm_extension_blocklist"),
+      )
+      assert.deepEqual(storageState.get("iconoplasm_extension_blocklist"), accepted)
+    }
+
+    const intentionalEmpty = sharedBlocklistProjection(4, [])
+    await hooks.acceptPublishedExtensionBlocklist(
+      intentionalEmpty,
+      storageState.get("iconoplasm_extension_blocklist"),
+    )
+    assert.deepEqual(storageState.get("iconoplasm_extension_blocklist"), intentionalEmpty)
+  } finally {
+    storageState.clear()
+  }
+})
 
 test("Chromium builds keep the scanner index bounded without unlimited storage", () => {
   const manifest = JSON.parse(readFileSync(new URL("./manifest.json", import.meta.url), "utf8"))
@@ -360,6 +463,56 @@ test("the extension fetches the compact scanner artifact and never stores portra
     assert.equal(storageState.get("iconoplasm_scanner_hash"), "schema-5-test")
     assert.equal(storageState.get("iconoplasm_scanner_index_storage_version"), 1)
     assert.equal(storageState.get("iconoplasm_card_snapshot_version"), "ccv1-schema-5-test")
+  } finally {
+    globalThis.fetch = originalFetch
+    storageState.clear()
+  }
+})
+
+test("a shared-blocklist-only manifest revision persists without a scanner download", async () => {
+  const originalFetch = globalThis.fetch
+  storageState.clear()
+  storageState.set("iconoplasm_genes", { SPATIAL: { n: "spatial" } })
+  storageState.set("iconoplasm_hash", "catalog-policy-only")
+  rememberScannerState("scanner-policy-only")
+  storageState.set("iconoplasm_gene_count", 1)
+  storageState.set("iconoplasm_schema_version", 5)
+  storageState.set("iconoplasm_contract_revision", 1)
+  storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
+  storageState.set("iconoplasm_alias_overlay_version", "v1-test")
+  storageState.set("iconoplasm_alias_overlay_applied", {})
+  storageState.set("iconoplasm_extension_blocklist", sharedBlocklistProjection(1, ["OLD"]))
+
+  let artifactFetches = 0
+  globalThis.fetch = async (input) => {
+    const url = String(input || "")
+    if (url.endsWith("/api/public/v1/catalog/manifest")) {
+      return Response.json({
+        build_version: "catalog-policy-only",
+        catalog_hash: "catalog-policy-only",
+        artifact_url: "https://example.test/catalog.json",
+        artifact_schema_version: 5,
+        artifact_contract_revision: 1,
+        min_extension_version: "1.0.0",
+        gene_count: 1,
+        portrait_delivery: portraitDeliveryPolicy,
+        scanner_artifact: scannerManifest("scanner-policy-only"),
+        publication_aliases: requestedOverlay,
+        extension_blocklist: sharedBlocklistProjection(2, ["POKEMON", "SPATIAL"]),
+      })
+    }
+    artifactFetches += 1
+    throw new Error(`Policy-only refresh must not fetch the scanner artifact: ${url}`)
+  }
+
+  try {
+    const result = await hooks.fetchGeneData()
+    assert.equal(result.gene_count, 1)
+    assert.equal(artifactFetches, 0)
+    assert.deepEqual(
+      storageState.get("iconoplasm_extension_blocklist"),
+      sharedBlocklistProjection(2, ["POKEMON", "SPATIAL"]),
+    )
   } finally {
     globalThis.fetch = originalFetch
     storageState.clear()

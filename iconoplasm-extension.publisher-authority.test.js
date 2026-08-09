@@ -46,7 +46,7 @@ test("ordinary repository work has no extension version writer", () => {
   )
 })
 
-test("published and candidate catalog contracts remain explicit", () => {
+test("published and candidate extension contracts remain explicit", () => {
   const authority = readJson("iconoplasm-extension/publisher-release.json")
   const candidate = readJson("iconoplasm-extension/candidate-contract.json")
   const patchNotes = readFileSync("content/wiki/Iconoplasm Patch Notes.md", "utf8")
@@ -59,6 +59,8 @@ test("published and candidate catalog contracts remain explicit", () => {
   if (authority.catalog_contract.schema_version === candidate.catalog_schema_version) {
     assert.ok(authority.catalog_contract.revision <= candidate.catalog_contract_revision)
   }
+  assert.equal(candidate.extension_blocklist_schema_version, 1)
+  assert.equal(candidate.extension_blocklist_contract_revision, 1)
   assert.ok(Object.keys(authority.compatibility_contracts).length <= 1)
   assert.match(patchNotes, /^## Unreleased$/m)
   assert.doesNotMatch(patchNotes, /^## 0\.(5\.0|6\.0)\b/m)

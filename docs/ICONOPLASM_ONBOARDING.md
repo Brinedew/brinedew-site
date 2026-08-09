@@ -392,9 +392,9 @@ Do not quietly switch users to some other mode and call it done.
 
 There is also a verified manual worker path from this repo:
 
-- from `d:\Coding\Website`, run `npx wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml`
-- then run `npx wrangler deploy`
-- or use the VS Code task `Deploy iconoplasm worker now`
+- from `d:\Coding\Website`, set `$cacheBust = git rev-parse HEAD`
+- run `pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$cacheBust"`
+- then run `pnpm exec wrangler deploy --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$cacheBust"`
 
 If you do that, still commit and push right away so Git and production do not drift apart.
 

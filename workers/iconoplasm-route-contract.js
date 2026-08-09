@@ -770,6 +770,13 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_gallery.publish_dirty_shards",
   ),
   adminApiContract("admin_gallery", "/gallery", GET, "admin_gallery", "admin_gallery.list"),
+  adminApiContract(
+    "admin_extension_blocklist",
+    "/extension-blocklist",
+    GET_POST,
+    "admin_extension_blocklist",
+    "admin_extension_blocklist.policy",
+  ),
   ...[
     "publish",
     "clear-override",

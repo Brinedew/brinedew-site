@@ -138,7 +138,7 @@ test("store publish packaging goes through WXT browser targets", () => {
   )
   assert.match(
     wxtConfigText,
-    /browser === "firefox"[\s\S]*"generated\/catalog-contract\.js"[\s\S]*"generated\/portrait-delivery-core\.js"[\s\S]*"publication-alias-overlay\.js"[\s\S]*"service-worker\.js"/,
+    /browser === "firefox"[\s\S]*"generated\/catalog-contract\.js"[\s\S]*"generated\/portrait-delivery-core\.js"[\s\S]*"publication-alias-overlay\.js"[\s\S]*"content-settings\.js"[\s\S]*"service-worker\.js"/,
     "WXT config should load every Firefox background-page dependency before the service worker",
   )
   assert.match(
@@ -186,6 +186,7 @@ test("Firefox background-page scripts boot in dependency order without importScr
     "iconoplasm-extension/generated/catalog-contract.js",
     "iconoplasm-extension/generated/portrait-delivery-core.js",
     "iconoplasm-extension/publication-alias-overlay.js",
+    "iconoplasm-extension/content-settings.js",
     "iconoplasm-extension/service-worker.js",
   ]
 
@@ -215,6 +216,7 @@ test("Firefox reviewer source package reproduces the pnpm/WXT build", () => {
   assert.match(firefoxSourcePackageText, /"iconoplasm-extension\/amo-source\/tsconfig\.json"/)
   assert.match(firefoxSourcePackageText, /"wxt\.config\.ts"/)
   assert.match(firefoxSourcePackageText, /"iconoplasm-extension\/publication-alias-overlay\.js"/)
+  assert.match(firefoxSourcePackageText, /"iconoplasm-extension\/content-settings\.js"/)
   assert.doesNotMatch(firefoxSourcePackageText, /"package-lock\.json"/)
   assert.match(amoSourceReadmeText, /pnpm install --frozen-lockfile/)
   assert.equal(

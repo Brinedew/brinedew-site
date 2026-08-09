@@ -655,6 +655,91 @@ test("DO NOT DELETE: custom entries promoted into defaults behave like defaults"
     [],
     "removing the default GPT should not be defeated by the stale custom GPT entry",
   )
+
+  const removed = settings.removeBlocklistEntry(["GPT"], ["CUSTOM", "GPT"], [], "GPT")
+  assert.deepEqual([...removed.userEntries], ["CUSTOM"])
+  assert.deepEqual([...removed.removedDefaults], ["GPT"])
+  assert.deepEqual(
+    [...settings.buildEffectiveBlocklist([], removed.userEntries, removed.removedDefaults)],
+    ["CUSTOM"],
+    "removing a promoted default must delete its custom copy so policy demotion cannot revive it",
+  )
+
+  const explicitlyRestored = settings.addBlocklistEntries(
+    [],
+    removed.userEntries,
+    removed.removedDefaults,
+    ["GPT"],
+  )
+  assert.deepEqual([...explicitlyRestored.userEntries], ["CUSTOM", "GPT"])
+  assert.deepEqual([...explicitlyRestored.removedDefaults], [])
+  assert.deepEqual(
+    [
+      ...settings.buildEffectiveBlocklist(
+        ["GPT"],
+        explicitlyRestored.userEntries,
+        explicitlyRestored.removedDefaults,
+      ),
+    ].sort(),
+    ["CUSTOM", "GPT"],
+    "default -> remove -> demote -> explicit custom Add -> re-promote must preserve the last Add",
+  )
+})
+
+test("DO NOT DELETE: authoritative shared defaults replace the packaged fallback", async () => {
+  const vm = await import("node:vm")
+  const sandbox = {}
+  sandbox.globalThis = sandbox
+  vm.runInNewContext(readUtf8("./iconoplasm-extension/content-settings.js"), sandbox)
+  const settings = sandbox.IconoplasmContentSettings
+  const candidate = readJson("./iconoplasm-extension/candidate-contract.json")
+  assert.equal(settings.sharedBlocklistSchemaVersion, candidate.extension_blocklist_schema_version)
+  assert.equal(
+    settings.sharedBlocklistContractRevision,
+    candidate.extension_blocklist_contract_revision,
+  )
+  const projection = {
+    schema_version: 1,
+    revision: 2,
+    version: "ebl1-0000000000000002",
+    term_count: 1,
+    terms: [" remote\u2010term "],
+  }
+
+  assert.deepEqual(
+    [...settings.resolveSharedBlocklistDefaults(projection, ["PACKAGED"])],
+    ["REMOTE-TERM"],
+  )
+  assert.deepEqual(
+    [
+      ...settings.resolveSharedBlocklistDefaults(
+        {
+          schema_version: 1,
+          revision: 3,
+          version: "ebl1-0000000000000003",
+          term_count: 0,
+          terms: [],
+        },
+        ["PACKAGED"],
+      ),
+    ],
+    [],
+    "a valid empty shared policy must not fall back to packaged defaults",
+  )
+  assert.deepEqual(
+    [...settings.resolveSharedBlocklistDefaults({ schema_version: 2 }, ["PACKAGED"])],
+    ["PACKAGED"],
+    "missing or malformed first-run state must use the packaged fallback",
+  )
+  assert.deepEqual(
+    [...settings.parseUserBlocklistInput("spatial, pokemon\nSTAT;SPATIAL")],
+    ["POKEMON", "SPATIAL", "STAT"],
+  )
+  assert.match(
+    readUtf8("./iconoplasm-extension/popup.html"),
+    /blocklist-defaults\.js[\s\S]*content-settings\.js[\s\S]*popup\.js/,
+    "the popup must load the shared policy resolver before its blocklist UI",
+  )
 })
 
 test("DO NOT DELETE: default blocklist keeps alias-only pruning outcome", () => {
@@ -1119,8 +1204,8 @@ test("DO NOT DELETE: blocklist changes live-unhighlight already wrapped page tex
   )
   assert.match(
     popupSource,
-    /await chrome\.storage\.local\.set\(\{ \[USER_BLOCKLIST_KEY\]: list \}\)/,
-    "popup.js should persist blocklist edits through chrome.storage so content tabs receive onChanged",
+    /function saveBlocklistOverrides[\s\S]*\[USER_BLOCKLIST_KEY\][\s\S]*\[REMOVED_DEFAULTS_KEY\]/,
+    "popup.js should persist user entries and removed-default tombstones together",
   )
   assert.match(
     contentSource,
@@ -1129,8 +1214,8 @@ test("DO NOT DELETE: blocklist changes live-unhighlight already wrapped page tex
   )
   assert.match(
     contentSource,
-    /changes\[USER_BLOCKLIST_KEY\] \|\| changes\[REMOVED_DEFAULTS_KEY\][\s\S]*refreshBlocklistFromStorage\(\)/,
-    "content.js should react live to blocklist storage changes instead of waiting for a reload",
+    /changes\[USER_BLOCKLIST_KEY\][\s\S]*changes\[REMOVED_DEFAULTS_KEY\][\s\S]*changes\[SHARED_BLOCKLIST_KEY\][\s\S]*refreshBlocklistFromStorage\(\)/,
+    "content.js should react live to local overrides and authoritative shared-policy changes",
   )
   assert.match(
     contentSource,
