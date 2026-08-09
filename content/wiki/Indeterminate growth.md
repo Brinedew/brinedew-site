@@ -9,7 +9,7 @@ aliases:
 ---
 # Indeterminate growth
 
-**Indeterminate growth** is a life-history pattern in which an organism continues to increase in size after reproductive maturity instead of reaching a fixed adult size. Determinate and indeterminate growth are endpoints of a continuum: the practical question is how much growth remains after maturity, not whether growth is literally unlimited. The fixed-cell-count extreme is covered under [[eutely|Eutely]].
+**Indeterminate growth** is a life-history pattern in which an organism continues to increase in size even after reaching adulthood, instead of reaching a fixed adult size. The opposite extreme, a fixed-cell-count in adulthood, is [[eutely|eutely]].
 
 ![[spathoglottis-indeterminate-raceme.jpg|Spathoglottis plicata (Philippine ground orchid) with an indeterminate raceme: fruits mature below while new flowers continue to form toward the growing tip. Photo by Eric Guinther, Wikimedia Commons, CC BY-SA 3.0.]]
 
