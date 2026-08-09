@@ -203,6 +203,12 @@ test("iconoplasm admin publishes a revisioned full shared extension blocklist", 
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /"Retry publication"/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /Number\(err\?\.status \|\| 0\) === 503/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /extensionBlocklistErrorCarriesSavedPolicy\(err\)/)
+  assert.match(
+    ICONOPLASM_ADMIN_RUNTIME,
+    /EXTENSION_BLOCKLIST_PUBLICATION_RETRY_DELAYS_MS = \[2000, 5000, 10000, 20000, 30000\]/,
+  )
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /extension_blocklist_projection_not_visible/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /Automatic publication retries ended/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /applyExtensionBlocklistPayload\(err\.response\)/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /state\.extensionBlocklistDraft = preservedDraft/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /schema_version:/)
@@ -349,6 +355,191 @@ test("pending extension publication can be retried without manufacturing a draft
   assert.equal(requests.length, 1, "a clean, published policy should not post again")
 })
 
+test("extension blocklist automatically retries transient saved publication lag with bounded timers", async () => {
+  const decisionStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function extensionBlocklistErrorCarriesSavedPolicy",
+  )
+  const publishStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "async function publishExtensionBlocklist",
+    decisionStart,
+  )
+  const publishEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf("function attentionMarkup", publishStart)
+  assert.notEqual(decisionStart, -1)
+  assert.notEqual(publishStart, -1)
+  assert.notEqual(publishEnd, -1)
+  const source = `${ICONOPLASM_ADMIN_RUNTIME.slice(decisionStart, publishEnd)}\nthis.publishExtensionBlocklist = publishExtensionBlocklist; this.cancelExtensionBlocklistPublicationRetry = cancelExtensionBlocklistPublicationRetry`
+
+  function fakeTimers() {
+    let nextId = 1
+    const pending = new Map()
+    return {
+      window: {
+        setTimeout(callback, delayMs) {
+          const id = nextId
+          nextId += 1
+          pending.set(id, { callback, delayMs })
+          return id
+        },
+        clearTimeout(id) {
+          pending.delete(id)
+        },
+      },
+      count() {
+        return pending.size
+      },
+      async runNext() {
+        const next = Array.from(pending.entries()).sort(
+          (left, right) => left[1].delayMs - right[1].delayMs || left[0] - right[0],
+        )[0]
+        assert.ok(next, "expected an automatic retry timer")
+        pending.delete(next[0])
+        await next[1].callback()
+      },
+    }
+  }
+
+  function projectionNotVisible() {
+    const error = new Error("projection not visible")
+    error.status = 503
+    error.response = {
+      code: "extension_blocklist_projection_not_visible",
+      error: "Saved projection is not visible yet",
+      policy: {
+        schema_version: 1,
+        revision: 1,
+        version: "ebl1-seed",
+        terms: ["AMID"],
+      },
+      publication: { version: "", in_sync: false },
+    }
+    return error
+  }
+
+  function harness(apiBehavior, delays = [1, 2, 3]) {
+    const timers = fakeTimers()
+    const requests = []
+    const statuses = []
+    const state = {
+      activeTab: "extension",
+      extensionBlocklistLoaded: true,
+      extensionBlocklistPolicy: { revision: 1, version: "ebl1-seed", terms: ["AMID"] },
+      extensionBlocklistPublication: { version: "", in_sync: false },
+      extensionBlocklistLimits: { max_term_length: 64 },
+      extensionBlocklistDraft: ["AMID"],
+      extensionBlocklistInvalidTerms: [],
+      extensionBlocklistBusy: false,
+      extensionBlocklistPublicationRetry: null,
+      extensionBlocklistPublicationRetryTimer: null,
+      extensionBlocklistPublicationRetryRunId: 0,
+    }
+    const normalizeTerms = (terms) =>
+      Array.from(new Set(Array.from(terms || []).map(String))).sort()
+    const termsMatch = (left, right) =>
+      JSON.stringify(normalizeTerms(left)) === JSON.stringify(normalizeTerms(right))
+    const sandbox = {
+      state,
+      window: timers.window,
+      EXTENSION_BLOCKLIST_MAX_TERM_LENGTH: 64,
+      EXTENSION_BLOCKLIST_PUBLICATION_RETRY_DELAYS_MS: delays,
+      extensionBlocklistTermsMatch: termsMatch,
+      extensionBlocklistIsDirty: () =>
+        !termsMatch(state.extensionBlocklistDraft, state.extensionBlocklistPolicy?.terms),
+      extensionBlocklistNeedsPublicationRetry: () =>
+        state.extensionBlocklistLoaded && state.extensionBlocklistPublication?.in_sync === false,
+      normalizeExtensionBlocklistTerms: normalizeTerms,
+      extensionBlocklistTermValidationMessage: () => "",
+      normalizeExtensionBlocklistInvalidTerms: () => [],
+      extensionBlocklistInvalidTermsSummary: () => "",
+      setExtensionBlocklistStatus: (message, tone) => statuses.push({ message, tone }),
+      renderExtensionBlocklist: () => {},
+      apiJson: async (path, options) => {
+        requests.push({ path, body: JSON.parse(options.body) })
+        return apiBehavior(requests.length)
+      },
+      applyExtensionBlocklistPayload: (data) => {
+        state.extensionBlocklistPolicy = {
+          ...data.policy,
+          terms: normalizeTerms(data.policy.terms),
+        }
+        state.extensionBlocklistPublication = { ...data.publication }
+        state.extensionBlocklistLoaded = true
+      },
+      refreshExtensionBlocklist: async () => {},
+      setLog: () => {},
+      requestErrorMessage: (error, fallback) =>
+        String(error?.response?.error || error?.message || fallback),
+      isRequestCanceled: () => false,
+    }
+    new Script(source, {
+      filename: "iconoplasm-admin-extension-automatic-retry.js",
+    }).runInNewContext(sandbox)
+    return { requests, sandbox, state, statuses, timers, termsMatch }
+  }
+
+  const eventuallyVisible = harness(async (requestNumber) => {
+    if (requestNumber === 1) throw projectionNotVisible()
+    return {
+      policy: { revision: 1, version: "ebl1-seed", terms: ["AMID"] },
+      publication: { version: "ebl1-seed", in_sync: true },
+    }
+  })
+  await eventuallyVisible.sandbox.publishExtensionBlocklist()
+  assert.equal(eventuallyVisible.requests.length, 1)
+  assert.equal(eventuallyVisible.timers.count(), 1)
+  assert.match(eventuallyVisible.statuses.at(-1).message, /Automatic retry 1 of 3 starts/)
+  await eventuallyVisible.timers.runNext()
+  assert.equal(eventuallyVisible.requests.length, 2, "visibility success should not need a click")
+  assert.equal(eventuallyVisible.state.extensionBlocklistPublication.in_sync, true)
+  assert.equal(eventuallyVisible.timers.count(), 0)
+  assert.match(eventuallyVisible.statuses.at(-1).message, /^Published;/)
+  assert.deepEqual(eventuallyVisible.requests[1].body, {
+    terms: ["AMID"],
+    expected_revision: 1,
+  })
+
+  const leftTab = harness(async () => {
+    throw projectionNotVisible()
+  })
+  await leftTab.sandbox.publishExtensionBlocklist()
+  assert.equal(leftTab.timers.count(), 1)
+  leftTab.sandbox.cancelExtensionBlocklistPublicationRetry(
+    "Automatic publication retry stopped because you left this tab. Use Retry publication to try again.",
+  )
+  assert.equal(leftTab.timers.count(), 0, "leaving the tab must clear the pending timer")
+  assert.equal(leftTab.state.extensionBlocklistPublicationRetry, null)
+  assert.match(leftTab.statuses.at(-1).message, /stopped because you left this tab/)
+  assert.doesNotMatch(leftTab.statuses.at(-1).message, /starts in/)
+
+  const edited = harness(async () => {
+    throw projectionNotVisible()
+  })
+  await edited.sandbox.publishExtensionBlocklist()
+  assert.equal(edited.timers.count(), 1)
+  edited.state.extensionBlocklistDraft = ["ARCH"]
+  await edited.timers.runNext()
+  assert.equal(edited.requests.length, 1, "a dirty draft must prevent the scheduled POST")
+  assert.equal(edited.timers.count(), 0)
+  assert.equal(edited.state.extensionBlocklistPublicationRetry, null)
+
+  const exhausted = harness(async () => {
+    throw projectionNotVisible()
+  })
+  await exhausted.sandbox.publishExtensionBlocklist()
+  while (exhausted.timers.count()) await exhausted.timers.runNext()
+  assert.equal(exhausted.requests.length, 4, "one manual POST plus three bounded retries")
+  assert.equal(exhausted.state.extensionBlocklistPublication.in_sync, false)
+  assert.equal(exhausted.state.extensionBlocklistPublicationRetry, null)
+  assert.equal(
+    exhausted.termsMatch(
+      exhausted.state.extensionBlocklistDraft,
+      exhausted.state.extensionBlocklistPolicy.terms,
+    ),
+    true,
+    "the clean saved policy remains eligible for the manual Retry publication button",
+  )
+  assert.match(exhausted.statuses.at(-1).message, /Use Retry publication to try again/)
+})
+
 test("extension blocklist distinguishes unsaved failures, conflicts, and client refresh timing", async () => {
   const decisionStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
     "function extensionBlocklistErrorCarriesSavedPolicy",
@@ -463,12 +654,16 @@ test("extension blocklist renders every rejected term with an actionable reason"
     "function renderExtensionBlocklist",
     markupStart,
   )
+  const decisionStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function extensionBlocklistErrorCarriesSavedPolicy",
+  )
   const publishStart = ICONOPLASM_ADMIN_RUNTIME.indexOf("async function publishExtensionBlocklist")
   const publishEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf("function attentionMarkup", publishStart)
   assert.notEqual(helpersStart, -1)
   assert.notEqual(helpersEnd, -1)
   assert.notEqual(markupStart, -1)
   assert.notEqual(markupEnd, -1)
+  assert.notEqual(decisionStart, -1)
   assert.notEqual(publishStart, -1)
   assert.notEqual(publishEnd, -1)
 
@@ -508,7 +703,7 @@ test("extension blocklist renders every rejected term with an actionable reason"
     esc: (value) => String(value),
   }
   new Script(
-    `${ICONOPLASM_ADMIN_RUNTIME.slice(helpersStart, helpersEnd)}\n${ICONOPLASM_ADMIN_RUNTIME.slice(markupStart, markupEnd)}\n${ICONOPLASM_ADMIN_RUNTIME.slice(publishStart, publishEnd)}\nthis.publishExtensionBlocklist = publishExtensionBlocklist; this.termMarkup = extensionBlocklistTermMarkup`,
+    `${ICONOPLASM_ADMIN_RUNTIME.slice(helpersStart, helpersEnd)}\n${ICONOPLASM_ADMIN_RUNTIME.slice(markupStart, markupEnd)}\n${ICONOPLASM_ADMIN_RUNTIME.slice(decisionStart, publishEnd)}\nthis.publishExtensionBlocklist = publishExtensionBlocklist; this.termMarkup = extensionBlocklistTermMarkup`,
     { filename: "iconoplasm-admin-extension-validation.js" },
   ).runInNewContext(sandbox)
 
@@ -687,6 +882,8 @@ test("admin tab lifecycle unmounts inactive render roots and aborts their reads"
     refreshImageEditPrompts: () => calls.push("refresh-prompts"),
     renderExtensionBlocklist: () => calls.push("render-extension"),
     refreshExtensionBlocklist: () => calls.push("refresh-extension"),
+    cancelExtensionBlocklistPublicationRetry: (message) =>
+      calls.push(["cancel-extension-retry", message]),
     renderTable: () => calls.push("render-archive"),
     renderGeneDetail: () => calls.push("render-gene"),
     refreshAssets: () => calls.push("refresh-archive"),
@@ -727,6 +924,11 @@ test("admin tab lifecycle unmounts inactive render roots and aborts their reads"
   assert.equal(document.querySelector("#vision-stats-list").children.length, 0)
   assert.equal(state.visionPreviewRequestId, 1)
   assert.equal(state.visionDetailRequestId, 1)
+  const cancelCall = calls.find(
+    (call) => Array.isArray(call) && call[0] === "cancel-extension-retry",
+  )
+  assert.ok(cancelCall)
+  assert.match(cancelCall[1], /stopped because you left this tab/)
 })
 
 test("visions load a bounded summary page and reserve detail hydration for selection", () => {
