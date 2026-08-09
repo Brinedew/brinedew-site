@@ -3,5 +3,7 @@
   "catalog_schema_version": 5,
   "catalog_contract_revision": 1,
   "scanner_schema_version": 1,
-  "scanner_contract_revision": 1
+  "scanner_contract_revision": 1,
+  "extension_blocklist_schema_version": 1,
+  "extension_blocklist_contract_revision": 1
 }

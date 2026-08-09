@@ -121,10 +121,17 @@ only gate one direct authenticated-user lookup, while the HttpOnly session
 cookie remains the credential. Extension detail batches project immutable
 published card artifacts and persist a bounded cache keyed by the card snapshot
 version; they must not compose public hover cards from D1 or turn transient
-failures into durable “missing gene” records. Read
-`docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` and Linear B-671
+failures into durable “missing gene” records. The admin-managed shared extension
+text blocklist is a tiny, versioned KV projection carried by the existing catalog
+manifest: public readers must never fall back to D1, create a second extension
+request, or rebuild the scanner artifact for a term-only change. Protocol-aware
+extensions retain the last valid authoritative list, use the packaged list only
+before any valid projection is available, and keep per-user removals and custom
+terms browser-local. Read
+`docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` and Linear B-673
 before changing anonymous bootstrap, the session-presence hint, catalog/card
-publication metadata, public batch reads, or extension detail caching.
+publication metadata, public batch reads, extension detail caching, or shared
+extension terms.
 
 **ARCHITECTURE FENCE [IPD-009]** — canonical Iconoplasm gene first paint is
 cold-safe: a tiny publication-owned D1 identity index resolves an exact symbol

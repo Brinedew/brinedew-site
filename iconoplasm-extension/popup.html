@@ -177,9 +177,10 @@
               type="text"
               id="blocklist-input"
               class="popup-text-input"
-              placeholder="Add gene symbol..."
+              placeholder="Add symbols, separated by spaces..."
               autocomplete="off"
               spellcheck="false"
+              maxlength="1024"
             />
             <button id="blocklist-add-btn" class="popup-btn popup-btn--primary">Add</button>
           </div>
@@ -231,6 +232,7 @@
     </main>
 
     <script src="blocklist-defaults.js"></script>
+    <script src="content-settings.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

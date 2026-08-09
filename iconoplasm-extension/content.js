@@ -87,6 +87,7 @@
   const CARD_VARIANT_KEY = CONTENT_STORAGE_KEYS.cardVariant
   const GUEST_DISCOVERIES_STORAGE_KEY = CONTENT_STORAGE_KEYS.guestDiscoveries
   const REMOVED_DEFAULTS_KEY = CONTENT_STORAGE_KEYS.removedDefaults
+  const SHARED_BLOCKLIST_KEY = CONTENT_STORAGE_KEYS.sharedBlocklist
   const USER_BLOCKLIST_KEY = CONTENT_STORAGE_KEYS.userBlocklist
   const ICONOPLASM_API_BASE = IconoCardShared.resolveApiBase("https://iconoplasm.brinedew.bio")
   const ICONOPLASM_GENE_BATCH_URL = ICONOPLASM_API_BASE + "/api/public/v1/genes/batch"
@@ -482,7 +483,8 @@
   }
 
   // -- Disambiguation blocklist --------------------------------------
-  // Defaults live in blocklist-defaults.js (shared with popup.js).
+  // ARCHITECTURE FENCE [IPD-008]: the last valid admin-published shared policy
+  // is authoritative. blocklist-defaults.js is only the first-run/offline fallback.
   // Users can remove defaults via the popup; those removals are stored
   // in chrome.storage under REMOVED_DEFAULTS_KEY. Extra user-added
   // entries live under USER_BLOCKLIST_KEY. The effective blocklist at
@@ -687,12 +689,19 @@
 
   async function loadEffectiveBlocklist() {
     const blocklistStorage = await new Promise((resolve) => {
-      chrome.storage.local.get([USER_BLOCKLIST_KEY, REMOVED_DEFAULTS_KEY], (result) => {
-        resolve(result || {})
-      })
+      chrome.storage.local.get(
+        [USER_BLOCKLIST_KEY, REMOVED_DEFAULTS_KEY, SHARED_BLOCKLIST_KEY],
+        (result) => {
+          resolve(result || {})
+        },
+      )
     })
-    return IconoContentSettings.buildEffectiveBlocklist(
+    const sharedDefaults = IconoContentSettings.resolveSharedBlocklistDefaults(
+      blocklistStorage[SHARED_BLOCKLIST_KEY],
       ICONOPLASM_DEFAULT_BLOCKLIST,
+    )
+    return IconoContentSettings.buildEffectiveBlocklist(
+      sharedDefaults,
       blocklistStorage[USER_BLOCKLIST_KEY],
       blocklistStorage[REMOVED_DEFAULTS_KEY],
     )
@@ -1334,8 +1343,8 @@
       loadGuestDiscoverySymbols(),
     ])
 
-    // Effective blocklist = (defaults - user-removed) + user-added extras.
-    // Both lists live in chrome.storage; defaults come from blocklist-defaults.js.
+    // Effective blocklist = (chosen shared defaults - user-removed) + user extras.
+    // The packaged defaults are used only until a valid shared projection exists.
     effectiveBlocklist = await loadEffectiveBlocklist()
 
     const payload = await IconoContentLifecycle.requestGeneData(chrome, {
@@ -1460,7 +1469,11 @@
         Boolean(activeSymbol),
       )
     }
-    if (changes[USER_BLOCKLIST_KEY] || changes[REMOVED_DEFAULTS_KEY]) {
+    if (
+      changes[USER_BLOCKLIST_KEY] ||
+      changes[REMOVED_DEFAULTS_KEY] ||
+      changes[SHARED_BLOCKLIST_KEY]
+    ) {
       refreshBlocklistFromStorage().catch((err) => {
         console.error("[Iconoplasm] blocklist refresh failed:", err)
       })

@@ -6,6 +6,7 @@ import {
   handleIconoplasmGatewayRequest,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { iconoplasmExtensionBlocklistKvKey } from "./iconoplasm-extension-blocklist-policy.js"
 
 // DO NOT DELETE THIS FILE.
 //
@@ -249,6 +250,16 @@ class FakeSharedKv {
         }),
       ],
       ["iconoplasm:gallery-version", version],
+      [
+        iconoplasmExtensionBlocklistKvKey(1),
+        JSON.stringify({
+          schema_version: 1,
+          revision: 1,
+          version: "ebl1-1111111111111111",
+          term_count: 1,
+          terms: ["AMID"],
+        }),
+      ],
     ])
   }
 
@@ -259,6 +270,18 @@ class FakeSharedKv {
 
   async put(key, value) {
     this.store.set(key, String(value))
+  }
+
+  async list({ prefix = "", limit = 1_000, cursor = "" } = {}) {
+    const names = [...this.store.keys()].filter((key) => key.startsWith(prefix)).sort()
+    const offset = Number.parseInt(cursor, 10) || 0
+    const page = names.slice(offset, offset + limit)
+    const nextOffset = offset + page.length
+    return {
+      keys: page.map((name) => ({ name })),
+      list_complete: nextOffset >= names.length,
+      cursor: nextOffset < names.length ? String(nextOffset) : "",
+    }
   }
 }
 

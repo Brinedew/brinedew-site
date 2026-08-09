@@ -23,6 +23,7 @@ export default defineConfig({
           "generated/catalog-contract.js",
           "generated/portrait-delivery-core.js",
           "publication-alias-overlay.js",
+          "content-settings.js",
           "service-worker.js",
         ],
       }
