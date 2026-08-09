@@ -5,6 +5,7 @@
   var EXTENSION_BLOCKLIST_MAX_TERMS = 500
   var EXTENSION_BLOCKLIST_MAX_TERM_LENGTH = 64
   var EXTENSION_BLOCKLIST_CONTROL_CHAR_PATTERN = /[\u0000-\u001f\u007f]/
+  var EXTENSION_BLOCKLIST_PUBLICATION_RETRY_DELAYS_MS = [2000, 5000, 10000, 20000, 30000]
   function defaultVisionPageSize() {
     return typeof window.matchMedia === "function" &&
       window.matchMedia("(max-width: 700px)").matches
@@ -50,6 +51,9 @@
     extensionBlocklistInvalidTerms: [],
     extensionBlocklistLoaded: false,
     extensionBlocklistBusy: false,
+    extensionBlocklistPublicationRetry: null,
+    extensionBlocklistPublicationRetryTimer: null,
+    extensionBlocklistPublicationRetryRunId: 0,
     visionPage: 1,
     visionPageSize: defaultVisionPageSize(),
     selectedVisionId: "",
@@ -299,6 +303,11 @@
   function setActiveTab(tab) {
     if (!els.panels[tab]) return
     var changed = mountedAdminTab !== tab
+    if (changed && mountedAdminTab === "extension" && tab !== "extension") {
+      cancelExtensionBlocklistPublicationRetry(
+        "Automatic publication retry stopped because you left this tab. Use Retry publication to try again.",
+      )
+    }
     if (changed && activeTabReadController) activeTabReadController.abort()
     if (changed && mountedAdminTab) unmountAdminTab(mountedAdminTab)
     if (changed) {
@@ -1507,6 +1516,7 @@
   }
 
   async function refreshExtensionBlocklist(options) {
+    cancelExtensionBlocklistPublicationRetry()
     var opts = options || {}
     var preservedDraft = opts.preserveDraft
       ? normalizeExtensionBlocklistTerms(state.extensionBlocklistDraft)
@@ -1578,6 +1588,7 @@
       )
       return
     }
+    cancelExtensionBlocklistPublicationRetry()
     state.extensionBlocklistDraft = nextTerms
     els.extensionBlocklistInput.value = ""
     els.extensionBlocklistInput.removeAttribute("aria-invalid")
@@ -1594,6 +1605,7 @@
   function removeExtensionBlocklistDraftTerm(term) {
     var normalized = normalizeExtensionBlocklistTerm(term)
     if (!normalized) return
+    cancelExtensionBlocklistPublicationRetry()
     state.extensionBlocklistDraft = normalizeExtensionBlocklistTerms(
       state.extensionBlocklistDraft.filter(function (candidate) {
         return candidate !== normalized
@@ -1618,12 +1630,256 @@
     return String(response.code || "").startsWith("extension_blocklist_projection_")
   }
 
+  function extensionBlocklistErrorCanAutoRetry(err) {
+    var code = String(err?.response?.code || "")
+    return (
+      code === "extension_blocklist_projection_not_visible" ||
+      code === "extension_blocklist_projection_busy"
+    )
+  }
+
+  function cancelExtensionBlocklistPublicationRetry(statusMessage) {
+    var wasActive = Boolean(
+      state.extensionBlocklistPublicationRetry ||
+      state.extensionBlocklistPublicationRetryTimer != null,
+    )
+    state.extensionBlocklistPublicationRetryRunId =
+      Number(state.extensionBlocklistPublicationRetryRunId || 0) + 1
+    if (
+      state.extensionBlocklistPublicationRetryTimer != null &&
+      typeof window.clearTimeout === "function"
+    ) {
+      window.clearTimeout(state.extensionBlocklistPublicationRetryTimer)
+    }
+    state.extensionBlocklistPublicationRetryTimer = null
+    state.extensionBlocklistPublicationRetry = null
+    if (wasActive && statusMessage) {
+      setExtensionBlocklistStatus(statusMessage, "warning")
+    }
+    return wasActive
+  }
+
+  function extensionBlocklistPublicationRetryIsCurrent(retry) {
+    return Boolean(
+      retry &&
+      state.extensionBlocklistPublicationRetry === retry &&
+      Number(retry.run_id || 0) === Number(state.extensionBlocklistPublicationRetryRunId || 0),
+    )
+  }
+
+  function extensionBlocklistPublicationRetryPolicyMatches(policy, retry) {
+    if (!policy || !retry) return false
+    return Boolean(
+      Number(policy.revision || 0) === Number(retry.revision || 0) &&
+      String(policy.version || "") === String(retry.version || "") &&
+      extensionBlocklistTermsMatch(policy.terms, retry.terms),
+    )
+  }
+
+  function extensionBlocklistPublicationRetryEligibility(retry) {
+    if (!extensionBlocklistPublicationRetryIsCurrent(retry)) return "canceled"
+    if (state.activeTab !== "extension") return "inactive"
+    if (state.extensionBlocklistBusy) return "busy"
+    if (!state.extensionBlocklistLoaded || !state.extensionBlocklistPolicy) return "unavailable"
+    if (state.extensionBlocklistPublication?.in_sync === true) return "published"
+    if (!extensionBlocklistPublicationRetryPolicyMatches(state.extensionBlocklistPolicy, retry)) {
+      return "revision_changed"
+    }
+    if (
+      extensionBlocklistIsDirty() ||
+      !extensionBlocklistTermsMatch(state.extensionBlocklistDraft, retry.terms)
+    ) {
+      return "draft_changed"
+    }
+    return ""
+  }
+
+  function stopExtensionBlocklistPublicationRetry(retry, message, tone) {
+    if (!extensionBlocklistPublicationRetryIsCurrent(retry)) return
+    cancelExtensionBlocklistPublicationRetry()
+    if (message && state.activeTab === "extension") {
+      setExtensionBlocklistStatus(message, tone || "warning")
+      renderExtensionBlocklist()
+    }
+  }
+
+  function queueExtensionBlocklistPublicationRetry(retry) {
+    if (!extensionBlocklistPublicationRetryIsCurrent(retry)) return false
+    var eligibility = extensionBlocklistPublicationRetryEligibility(retry)
+    if (eligibility) {
+      var eligibilityMessage =
+        eligibility === "revision_changed"
+          ? "Automatic publication retry stopped because the saved policy changed. Refresh before trying again."
+          : ""
+      stopExtensionBlocklistPublicationRetry(retry, eligibilityMessage, "warning")
+      return false
+    }
+    var attemptIndex = Number(retry.next_attempt_index || 0)
+    if (attemptIndex >= EXTENSION_BLOCKLIST_PUBLICATION_RETRY_DELAYS_MS.length) {
+      stopExtensionBlocklistPublicationRetry(
+        retry,
+        "Automatic publication retries ended after " +
+          String(EXTENSION_BLOCKLIST_PUBLICATION_RETRY_DELAYS_MS.length) +
+          " attempts. Use Retry publication to try again.",
+        "warning",
+      )
+      return false
+    }
+    var delayMs = EXTENSION_BLOCKLIST_PUBLICATION_RETRY_DELAYS_MS[attemptIndex]
+    retry.next_attempt_index = attemptIndex + 1
+    setExtensionBlocklistStatus(
+      "Publication is saved but still pending. Automatic retry " +
+        String(retry.next_attempt_index) +
+        " of " +
+        String(EXTENSION_BLOCKLIST_PUBLICATION_RETRY_DELAYS_MS.length) +
+        " starts in " +
+        String(Math.round(delayMs / 1000)) +
+        " seconds.",
+      "warning",
+    )
+    state.extensionBlocklistPublicationRetryTimer = window.setTimeout(function () {
+      state.extensionBlocklistPublicationRetryTimer = null
+      return runExtensionBlocklistPublicationRetry(retry)
+    }, delayMs)
+    return true
+  }
+
+  function scheduleExtensionBlocklistPublicationRetry(err) {
+    if (!extensionBlocklistErrorCanAutoRetry(err)) return false
+    if (
+      state.activeTab !== "extension" ||
+      state.extensionBlocklistBusy ||
+      !state.extensionBlocklistLoaded ||
+      !state.extensionBlocklistPolicy ||
+      state.extensionBlocklistPublication?.in_sync === true ||
+      extensionBlocklistIsDirty()
+    ) {
+      return false
+    }
+    var retryTerms = normalizeExtensionBlocklistTerms(state.extensionBlocklistPolicy.terms)
+    if (!extensionBlocklistTermsMatch(state.extensionBlocklistDraft, retryTerms)) return false
+    cancelExtensionBlocklistPublicationRetry()
+    var retry = {
+      run_id: Number(state.extensionBlocklistPublicationRetryRunId || 0),
+      revision: Number(state.extensionBlocklistPolicy.revision || 0),
+      version: String(state.extensionBlocklistPolicy.version || ""),
+      terms: retryTerms,
+      next_attempt_index: 0,
+    }
+    state.extensionBlocklistPublicationRetry = retry
+    return queueExtensionBlocklistPublicationRetry(retry)
+  }
+
+  function completeExtensionBlocklistPublicationRetry(retry) {
+    if (!extensionBlocklistPublicationRetryIsCurrent(retry)) return
+    cancelExtensionBlocklistPublicationRetry()
+    setExtensionBlocklistStatus(
+      "Published; extensions pick it up on a later page load or browser restart; the manifest cache may last up to five minutes.",
+      "success",
+    )
+    setLog({ ok: true, extension_blocklist: state.extensionBlocklistPolicy })
+  }
+
+  async function runExtensionBlocklistPublicationRetry(retry) {
+    var eligibility = extensionBlocklistPublicationRetryEligibility(retry)
+    if (eligibility) {
+      stopExtensionBlocklistPublicationRetry(
+        retry,
+        eligibility === "revision_changed"
+          ? "Automatic publication retry stopped because the saved policy changed. Refresh before trying again."
+          : "",
+        "warning",
+      )
+      return
+    }
+    try {
+      state.extensionBlocklistBusy = true
+      setExtensionBlocklistStatus(
+        "Automatic publication retry " +
+          String(retry.next_attempt_index) +
+          " of " +
+          String(EXTENSION_BLOCKLIST_PUBLICATION_RETRY_DELAYS_MS.length) +
+          " is running…",
+        "warning",
+      )
+      renderExtensionBlocklist()
+      var data = await apiJson("/extension-blocklist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ terms: retry.terms, expected_revision: retry.revision }),
+      })
+      if (!extensionBlocklistPublicationRetryIsCurrent(retry)) return
+      if (!extensionBlocklistPublicationRetryPolicyMatches(data?.policy, retry)) {
+        state.extensionBlocklistBusy = false
+        stopExtensionBlocklistPublicationRetry(
+          retry,
+          "Automatic publication retry stopped because the saved policy changed. Refresh before trying again.",
+          "warning",
+        )
+        return
+      }
+      applyExtensionBlocklistPayload(data)
+      state.extensionBlocklistDraft = retry.terms.slice()
+      state.extensionBlocklistInvalidTerms = []
+      state.extensionBlocklistBusy = false
+      if (state.extensionBlocklistPublication?.in_sync === true) {
+        completeExtensionBlocklistPublicationRetry(retry)
+        return
+      }
+      queueExtensionBlocklistPublicationRetry(retry)
+    } catch (err) {
+      if (!extensionBlocklistPublicationRetryIsCurrent(retry)) return
+      if (Number(err?.status || 0) === 409) {
+        state.extensionBlocklistBusy = false
+        cancelExtensionBlocklistPublicationRetry()
+        await refreshExtensionBlocklist({
+          preserveDraft: true,
+          message:
+            "Automatic publication retry stopped because a newer revision was saved elsewhere. Your draft is preserved.",
+          tone: "warning",
+        })
+        return
+      }
+      if (
+        Number(err?.status || 0) === 503 &&
+        extensionBlocklistErrorCarriesSavedPolicy(err) &&
+        extensionBlocklistErrorCanAutoRetry(err) &&
+        err?.response?.policy &&
+        err?.response?.publication &&
+        extensionBlocklistPublicationRetryPolicyMatches(err.response.policy, retry)
+      ) {
+        applyExtensionBlocklistPayload(err.response)
+        state.extensionBlocklistDraft = retry.terms.slice()
+        state.extensionBlocklistInvalidTerms = []
+        state.extensionBlocklistBusy = false
+        if (state.extensionBlocklistPublication?.in_sync === true) {
+          completeExtensionBlocklistPublicationRetry(retry)
+          return
+        }
+        queueExtensionBlocklistPublicationRetry(retry)
+        return
+      }
+      state.extensionBlocklistBusy = false
+      stopExtensionBlocklistPublicationRetry(
+        retry,
+        "Automatic publication retry stopped: " +
+          requestErrorMessage(err, "publication retry failed") +
+          ". Use Retry publication to try again.",
+        "warning",
+      )
+    } finally {
+      state.extensionBlocklistBusy = false
+      if (state.activeTab === "extension") renderExtensionBlocklist()
+    }
+  }
+
   async function publishExtensionBlocklist() {
     if (
       !state.extensionBlocklistLoaded ||
       (!extensionBlocklistIsDirty() && !extensionBlocklistNeedsPublicationRetry())
     )
       return
+    cancelExtensionBlocklistPublicationRetry()
     var expectedRevision = Number(state.extensionBlocklistPolicy?.revision || 0)
     var draftTerms = normalizeExtensionBlocklistTerms(state.extensionBlocklistDraft)
     var maxTermLength = Number(
@@ -1697,12 +1953,18 @@
         try {
           applyExtensionBlocklistPayload(err.response)
           state.extensionBlocklistDraft = preservedDraft
-          setExtensionBlocklistStatus(
-            extensionBlocklistNeedsPublicationRetry()
-              ? "The shared policy is saved, but publication is still pending. Your draft is preserved; retry publication."
-              : "The shared policy is published. Your draft is preserved; extensions pick it up on a later page load or browser restart; the manifest cache may last up to five minutes.",
-            extensionBlocklistNeedsPublicationRetry() ? "warning" : "success",
-          )
+          state.extensionBlocklistBusy = false
+          var retryScheduled =
+            extensionBlocklistNeedsPublicationRetry() &&
+            scheduleExtensionBlocklistPublicationRetry(err)
+          if (!retryScheduled) {
+            setExtensionBlocklistStatus(
+              extensionBlocklistNeedsPublicationRetry()
+                ? "The shared policy is saved, but publication is still pending. Your draft is preserved; retry publication."
+                : "The shared policy is published. Your draft is preserved; extensions pick it up on a later page load or browser restart; the manifest cache may last up to five minutes.",
+              extensionBlocklistNeedsPublicationRetry() ? "warning" : "success",
+            )
+          }
           setLog(
             extensionBlocklistNeedsPublicationRetry()
               ? {
