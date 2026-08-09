@@ -1,11 +1,11 @@
-// Default disambiguation blocklist — shared between content.js and popup.js.
+// Packaged disambiguation blocklist fallback — shared between content.js and popup.js.
 // Data-driven: every entry BOTH (a) exists in the gene catalog as a symbol/alias
 // AND (b) is a common English word that users probably don't want highlighted.
 // Pruned 2026-05-09 from 99 entries to 76 alias-only catalog-verified entries.
 //
-// Users see these pre-populated in the Blocklist tab and can un-block any of them.
-// Stored in chrome.storage as the "removed defaults" set so new defaults in future
-// versions appear automatically unless the user already removed them.
+// The admin-published extension_blocklist is authoritative after the extension has
+// accepted one valid projection. This packaged list is used only on first run or
+// while offline before that point. User removals remain browser-local tombstones.
 
 // eslint-disable-next-line no-unused-vars
 const ICONOPLASM_DEFAULT_BLOCKLIST = [

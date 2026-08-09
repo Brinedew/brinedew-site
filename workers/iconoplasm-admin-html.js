@@ -4,7 +4,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Iconoplasm Admin</title>
-  <link rel="stylesheet" href="/static/iconoplasm/admin.css" />
+  <link rel="stylesheet" href="/static/iconoplasm/admin.css?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" />
 </head>
 <body>
   <div class="page">
@@ -18,6 +18,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <button class="tab-btn" id="admin-tab-costs" role="tab" aria-selected="false" aria-controls="panel-costs" tabindex="-1" data-tab="costs">Observability</button>
       <button class="tab-btn" id="admin-tab-requests" role="tab" aria-selected="false" aria-controls="panel-requests" tabindex="-1" data-tab="requests">Requests</button>
       <button class="tab-btn" id="admin-tab-prompts" role="tab" aria-selected="false" aria-controls="panel-prompts" tabindex="-1" data-tab="prompts">Prompts</button>
+      <button class="tab-btn" id="admin-tab-extension" role="tab" aria-selected="false" aria-controls="panel-extension" tabindex="-1" data-tab="extension">Extension</button>
       <button class="tab-btn" id="admin-tab-archive" role="tab" aria-selected="false" aria-controls="panel-archive" tabindex="-1" data-tab="archive">Gallery</button>
       <button class="tab-btn" id="admin-tab-styles" role="tab" aria-selected="false" aria-controls="panel-styles" tabindex="-1" data-tab="styles">Visions</button>
       <button class="tab-btn" id="admin-tab-activity" role="tab" aria-selected="false" aria-controls="panel-activity" tabindex="-1" data-tab="activity">Log</button>
@@ -322,6 +323,63 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       </div>
     </div>
 
+    <!-- -- extension policy -- -->
+    <div class="panel" id="panel-extension" role="tabpanel" aria-labelledby="admin-tab-extension" hidden>
+      <section class="extension-blocklist-workspace" aria-labelledby="extension-blocklist-heading">
+        <div class="extension-blocklist-head">
+          <div>
+            <p class="extension-blocklist-kicker">Extension policy</p>
+            <h2 id="extension-blocklist-heading">Shared text blocklist</h2>
+            <p class="extension-blocklist-intro">Publish the complete shared-default list received by every protocol-capable extension. The 76 packaged terms are only the first-run and offline fallback; a loaded policy replaces them.</p>
+          </div>
+          <button type="button" id="extension-blocklist-refresh">Refresh policy</button>
+        </div>
+
+        <div class="extension-blocklist-ledger" aria-label="Shared blocklist publication details">
+          <div>
+            <span class="extension-blocklist-ledger-label">Shared terms</span>
+            <strong id="extension-blocklist-count">—</strong>
+          </div>
+          <div>
+            <span class="extension-blocklist-ledger-label">Revision</span>
+            <strong class="mono" id="extension-blocklist-revision">—</strong>
+          </div>
+          <div>
+            <span class="extension-blocklist-ledger-label">Updated</span>
+            <strong id="extension-blocklist-updated">Not loaded</strong>
+          </div>
+          <div>
+            <span class="extension-blocklist-ledger-label">Publication</span>
+            <strong class="extension-blocklist-sync" id="extension-blocklist-sync" data-sync="unknown">Not loaded</strong>
+          </div>
+        </div>
+
+        <div class="extension-blocklist-composer">
+          <label for="extension-blocklist-input">Add terms to this draft</label>
+          <div class="extension-blocklist-input-row">
+            <textarea id="extension-blocklist-input" rows="3" spellcheck="false" autocomplete="off" autocapitalize="characters" aria-describedby="extension-blocklist-input-help" placeholder="Paste terms separated by commas, spaces, or new lines" disabled></textarea>
+            <button class="btn-primary" type="button" id="extension-blocklist-add" disabled>Add to draft</button>
+          </div>
+          <p class="small" id="extension-blocklist-input-help">Every term must be an existing non-canonical catalog alias and a common-English ambiguity. Terms are normalized to uppercase. Adding only changes the draft; nothing reaches extensions until you publish.</p>
+        </div>
+
+        <div class="extension-blocklist-draft-head">
+          <div>
+            <h3>Publication draft</h3>
+            <p class="small">This draft replaces the full shared list. Remove a term here to unblock it for everyone on the next publish.</p>
+          </div>
+          <span class="extension-blocklist-dirty" id="extension-blocklist-dirty" data-dirty="false">Saved policy</span>
+        </div>
+
+        <ul class="extension-blocklist-terms" id="extension-blocklist-terms" aria-label="Shared blocklist draft terms" aria-live="polite"></ul>
+
+        <div class="extension-blocklist-actions">
+          <div class="extension-blocklist-status" id="extension-blocklist-status" role="status" aria-live="polite"></div>
+          <button class="btn-primary extension-blocklist-publish" type="button" id="extension-blocklist-publish" disabled>Publish shared terms</button>
+        </div>
+      </section>
+    </div>
+
     <!-- ── browse (archive) ── -->
     <div class="panel" id="panel-archive" role="tabpanel" aria-labelledby="admin-tab-archive" hidden>
       <div class="section-head">
@@ -493,7 +551,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     <pre class="log" id="action-log">No actions yet.</pre>
   </div>
 
-  <script src="/static/iconoplasm/admin.js" defer></script>
+  <script src="/static/iconoplasm/admin.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
 </body>
 </html>
 `

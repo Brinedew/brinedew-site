@@ -1092,6 +1092,7 @@ import {
   deliverPendingRequestFulfillmentNotifications,
   reconcileDeliveredRequestFulfillments,
 } from "./iconoplasm-request-notifications.js"
+import { reconcileIconoplasmExtensionBlocklistPolicy } from "./iconoplasm-extension-blocklist-policy.js"
 import { archiveColdIconoplasmPublishEvents } from "./iconoplasm-publish-event-archive.js"
 import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate } from "./benchmark/the-only-allowed-benchmark-stateful-runtime-do-not-duplicate.js"
 
@@ -1143,6 +1144,7 @@ import {
 import { ADMIN_HTML } from "./admin-html.js"
 import { ADMIN_V2_HTML } from "./admin-v2-html.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
+import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
 import {
   DEFAULT_HINT_COST,
   HINT_REWARD_ON_INCORRECT,
@@ -2520,7 +2522,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       if (!(await isAdmin(request, env))) {
         return new Response("Unauthorized", { status: 403 })
       }
-      return new Response(ICONOPLASM_ADMIN_HTML, {
+      return new Response(renderIconoplasmAdminHtml(ICONOPLASM_ADMIN_HTML, env), {
         headers: {
           "Content-Type": "text/html;charset=UTF-8",
           "Cache-Control": "no-store",
@@ -2990,11 +2992,13 @@ export default {
         notificationDelivery,
         sharedDiscoveryPublication,
         geneCardMaterializationRecovery,
+        extensionBlocklistReconciliation,
       ] = await Promise.allSettled([
         runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx),
         deliverPendingRequestFulfillmentNotifications(env, { limit: 20 }),
         sharedDiscoveryPublicationPromise,
         recoverDueIconoplasmGeneCardMaterializationsForScheduled(env),
+        reconcileIconoplasmExtensionBlocklistPolicy(env),
       ])
       if (notificationDelivery.status === "fulfilled") {
         const notificationSettlement = await reconcileDeliveredRequestFulfillments(env)
@@ -3043,6 +3047,24 @@ export default {
           String(
             geneCardMaterializationRecovery.reason?.message ||
               geneCardMaterializationRecovery.reason ||
+              "unknown error",
+          ),
+        )
+      }
+      if (
+        extensionBlocklistReconciliation.status === "fulfilled" &&
+        extensionBlocklistReconciliation.value.changed
+      ) {
+        console.log(
+          "[CRON] Iconoplasm extension blocklist publication:",
+          extensionBlocklistReconciliation.value,
+        )
+      } else if (extensionBlocklistReconciliation.status === "rejected") {
+        console.error(
+          "[CRON] Iconoplasm extension blocklist publication failed:",
+          String(
+            extensionBlocklistReconciliation.reason?.message ||
+              extensionBlocklistReconciliation.reason ||
               "unknown error",
           ),
         )

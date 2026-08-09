@@ -3,6 +3,7 @@ import test from "node:test"
 import { fileURLToPath } from "node:url"
 
 import { readIconoplasmPublisherAuthority } from "../scripts/lib/iconoplasm-publisher-authority.mjs"
+import { iconoplasmExtensionBlocklistKvKey } from "./iconoplasm-extension-blocklist-policy.js"
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
@@ -272,6 +273,18 @@ class FakeKV {
     this.entries.set(key, value)
     return true
   }
+
+  async list({ prefix = "", limit = 1_000, cursor = "" } = {}) {
+    const names = [...this.entries.keys()].filter((key) => key.startsWith(prefix)).sort()
+    const offset = Number.parseInt(cursor, 10) || 0
+    const page = names.slice(offset, offset + limit)
+    const nextOffset = offset + page.length
+    return {
+      keys: page.map((name) => ({ name })),
+      list_complete: nextOffset >= names.length,
+      cursor: nextOffset < names.length ? String(nextOffset) : "",
+    }
+  }
 }
 
 function buildCatalogResolveKv() {
@@ -330,6 +343,13 @@ function buildCatalogResolveKv() {
     }),
     "iconoplasm:published-portrait-refs:v3-none": "[]",
     [`iconoplasm:scanner-catalog:${hash}`]: scannerJson,
+    [iconoplasmExtensionBlocklistKvKey(1)]: JSON.stringify({
+      schema_version: 1,
+      revision: 1,
+      version: "ebl1-1111111111111111",
+      term_count: 1,
+      terms: ["AMID"],
+    }),
   })
 }
 
@@ -696,33 +716,33 @@ test("public catalog manifest publishes explicit extension contract fields", asy
       new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
       buildEnv({
         ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
-        KV: {
-          async get(key) {
-            if (key === "iconoplasm:catalog-manifest") {
-              return JSON.stringify({
-                current_hash: "catalog-2026-04-16",
-                generated_at: "2026-04-16T16:30:00.000Z",
-                gene_count: 19001,
-                scanner_artifact: {
-                  schema_version: scannerContract.schemaVersion,
-                  contract_revision: scannerContract.revision,
-                  build_version: "catalog",
-                  filename: "scanner.catalog.json",
-                  byte_size: 1_900_000,
-                },
-              })
-            }
-            if (key === "iconoplasm:published-portrait-fingerprint:v3") {
-              return JSON.stringify({
-                schema: "iconoplasm.publishedPortraitFingerprint.v1",
-                published_at: "2026-04-16T16:30:00.000Z",
-                fingerprint: { published_count: 0, latest: null },
-              })
-            }
-            if (key === "iconoplasm:published-portrait-refs:v3-none") return "[]"
-            return null
-          },
-        },
+        KV: new FakeKV({
+          "iconoplasm:catalog-manifest": JSON.stringify({
+            current_hash: "catalog-2026-04-16",
+            generated_at: "2026-04-16T16:30:00.000Z",
+            gene_count: 19001,
+            scanner_artifact: {
+              schema_version: scannerContract.schemaVersion,
+              contract_revision: scannerContract.revision,
+              build_version: "catalog",
+              filename: "scanner.catalog.json",
+              byte_size: 1_900_000,
+            },
+          }),
+          "iconoplasm:published-portrait-fingerprint:v3": JSON.stringify({
+            schema: "iconoplasm.publishedPortraitFingerprint.v1",
+            published_at: "2026-04-16T16:30:00.000Z",
+            fingerprint: { published_count: 0, latest: null },
+          }),
+          "iconoplasm:published-portrait-refs:v3-none": "[]",
+          [iconoplasmExtensionBlocklistKvKey(1)]: JSON.stringify({
+            schema_version: 1,
+            revision: 1,
+            version: "ebl1-1111111111111111",
+            term_count: 1,
+            terms: ["AMID"],
+          }),
+        }),
       }),
       {},
     )

@@ -166,6 +166,390 @@ test("iconoplasm admin exposes image edit checkmark prompt editing as its own ta
   assert.match(ICONOPLASM_ADMIN_HTML, /apiJson\(["']\/image-edit-prompts["'],\s*\{/)
 })
 
+test("iconoplasm admin publishes a revisioned full shared extension blocklist", () => {
+  assert.match(ICONOPLASM_ADMIN_SHELL, /data-tab="extension">Extension<\/button>/)
+  assert.match(
+    ICONOPLASM_ADMIN_SHELL,
+    /id="panel-extension" role="tabpanel" aria-labelledby="admin-tab-extension"/,
+  )
+  assert.match(ICONOPLASM_ADMIN_SHELL, /Publish the complete shared-default list/)
+  assert.match(
+    ICONOPLASM_ADMIN_SHELL,
+    /76 packaged terms are only the first-run and offline fallback; a loaded policy replaces them/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_SHELL,
+    /Every term must be an existing non-canonical catalog alias and a common-English ambiguity/,
+  )
+  assert.match(ICONOPLASM_ADMIN_SHELL, /id="extension-blocklist-input"[\s\S]*disabled/)
+  assert.match(ICONOPLASM_ADMIN_SHELL, /id="extension-blocklist-terms"[\s\S]*aria-live="polite"/)
+  assert.match(ICONOPLASM_ADMIN_SHELL, /id="extension-blocklist-publish" disabled/)
+
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /EXTENSION_BLOCKLIST_MAX_TERMS = 500/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /EXTENSION_BLOCKLIST_MAX_TERM_LENGTH = 64/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /replace\(\/\[\\u2010-\\u2015\\u2212\]\/g, "-"\)/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /EXTENSION_BLOCKLIST_CONTROL_CHAR_PATTERN\.test\(term\)/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /split\(\/\[\\s,\]\+\/\)/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /terms\.sort\(\)/)
+  assert.doesNotMatch(ICONOPLASM_ADMIN_RUNTIME, /extensionBlocklistInput\.maxLength/)
+  assert.match(
+    ICONOPLASM_ADMIN_RUNTIME,
+    /apiJson\("\/extension-blocklist", \{ method: "GET" \}\)/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_RUNTIME,
+    /body: JSON\.stringify\(\{ terms: draftTerms, expected_revision: expectedRevision \}\)/,
+  )
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /Number\(err\?\.status \|\| 0\) === 409/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /preserveDraft: true/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /extensionBlocklistNeedsPublicationRetry\(\)/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /"Retry publication"/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /Number\(err\?\.status \|\| 0\) === 503/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /extensionBlocklistErrorCarriesSavedPolicy\(err\)/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /applyExtensionBlocklistPayload\(err\.response\)/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /state\.extensionBlocklistDraft = preservedDraft/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /schema_version:/)
+  assert.match(
+    ICONOPLASM_ADMIN_RUNTIME,
+    /Published; extensions pick it up on a later page load or browser restart; the manifest cache may last up to five minutes\./,
+  )
+  assert.doesNotMatch(ICONOPLASM_ADMIN_RUNTIME, /next manifest refresh|normally within five minutes/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /A newer revision was saved elsewhere/)
+  assert.doesNotMatch(ICONOPLASM_ADMIN_RUNTIME, /A newer revision was published elsewhere/)
+  assert.doesNotMatch(ICONOPLASM_ADMIN_RUNTIME, /published and live|now live|make it live/i)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /Discard this unpublished draft and reload the shared policy/)
+  assert.match(
+    ICONOPLASM_ADMIN_RUNTIME,
+    /extensionBlocklistPublish\.addEventListener\("click", publishExtensionBlocklist\)/,
+  )
+  assert.match(ICONOPLASM_ADMIN_CSS, /\.extension-blocklist-remove \{[\s\S]*min-width: 44px/)
+  assert.match(ICONOPLASM_ADMIN_CSS, /@media \(max-width: 600px\)[\s\S]*extension-blocklist-ledger/)
+})
+
+test("extension blocklist draft normalization matches the worker contract", () => {
+  const constantsStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "var EXTENSION_BLOCKLIST_MAX_TERMS",
+  )
+  const constantsEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf("function defaultVisionPageSize", constantsStart)
+  const helpersStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function normalizeExtensionBlocklistTerm",
+  )
+  const helpersEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function applyExtensionBlocklistPayload",
+    helpersStart,
+  )
+  assert.notEqual(constantsStart, -1)
+  assert.notEqual(constantsEnd, -1)
+  assert.notEqual(helpersStart, -1)
+  assert.notEqual(helpersEnd, -1)
+
+  const sandbox = {}
+  new Script(
+    `${ICONOPLASM_ADMIN_RUNTIME.slice(constantsStart, constantsEnd)}\n${ICONOPLASM_ADMIN_RUNTIME.slice(helpersStart, helpersEnd)}\nthis.contract = { normalizeExtensionBlocklistTerm, parseExtensionBlocklistPaste, extensionBlocklistTermValidationMessage, maxTerms: EXTENSION_BLOCKLIST_MAX_TERMS, maxTermLength: EXTENSION_BLOCKLIST_MAX_TERM_LENGTH }`,
+    { filename: "iconoplasm-admin-extension-blocklist.js" },
+  ).runInNewContext(sandbox)
+
+  assert.equal(sandbox.contract.maxTerms, 500)
+  assert.equal(sandbox.contract.maxTermLength, 64)
+  assert.equal(sandbox.contract.normalizeExtensionBlocklistTerm("  a\u2013b  "), "A-B")
+  assert.deepEqual(
+    Array.from(sandbox.contract.parseExtensionBlocklistPaste("task, amid\nTASK\tbank")),
+    ["AMID", "BANK", "TASK"],
+  )
+  assert.match(sandbox.contract.extensionBlocklistTermValidationMessage("A\u0000B", 64), /control character/)
+  assert.equal(
+    sandbox.contract.extensionBlocklistTermValidationMessage("A\u0085B", 64),
+    "",
+    "the browser shape check must match the worker's C0/U+007F control-character contract",
+  )
+  assert.match(sandbox.contract.extensionBlocklistTermValidationMessage("A".repeat(65), 64), /64 character limit/)
+})
+
+test("pending extension publication can be retried without manufacturing a draft edit", async () => {
+  const decisionStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function extensionBlocklistErrorCarriesSavedPolicy",
+  )
+  const publishStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "async function publishExtensionBlocklist",
+  )
+  const publishEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf("function attentionMarkup", publishStart)
+  assert.notEqual(decisionStart, -1)
+  assert.notEqual(publishStart, -1)
+  assert.notEqual(publishEnd, -1)
+
+  const requests = []
+  const statuses = []
+  const state = {
+    extensionBlocklistLoaded: true,
+    extensionBlocklistPolicy: { revision: 7, terms: ["AMID"] },
+    extensionBlocklistPublication: { version: "ebl1-old", in_sync: false },
+    extensionBlocklistLimits: { max_term_length: 64 },
+    extensionBlocklistDraft: ["AMID"],
+    extensionBlocklistBusy: false,
+  }
+  const sandbox = {
+    state,
+    EXTENSION_BLOCKLIST_MAX_TERM_LENGTH: 64,
+    extensionBlocklistIsDirty: () => false,
+    extensionBlocklistNeedsPublicationRetry: () =>
+      state.extensionBlocklistLoaded && state.extensionBlocklistPublication?.in_sync === false,
+    normalizeExtensionBlocklistTerms: (terms) => Array.from(terms || []),
+    extensionBlocklistTermValidationMessage: () => "",
+    setExtensionBlocklistStatus: (message, tone) => statuses.push({ message, tone }),
+    renderExtensionBlocklist: () => {},
+    apiJson: async (path, options) => {
+      requests.push({ path, options })
+      const error = new Error("publication pending")
+      error.status = 503
+      error.response = {
+        code: "extension_blocklist_projection_failed",
+        policy: {
+          schema_version: 1,
+          revision: 8,
+          version: "ebl1-new",
+          terms: ["AMID"],
+        },
+        publication: { version: "ebl1-old", in_sync: false },
+      }
+      throw error
+    },
+    applyExtensionBlocklistPayload: (data) => {
+      state.extensionBlocklistPolicy = { ...data.policy }
+      state.extensionBlocklistPublication = { ...data.publication }
+    },
+    setLog: () => {},
+    requestErrorMessage: () => "publish failed",
+    isRequestCanceled: () => false,
+  }
+  new Script(
+    `${ICONOPLASM_ADMIN_RUNTIME.slice(decisionStart, publishEnd)}\nthis.publishExtensionBlocklist = publishExtensionBlocklist`,
+    { filename: "iconoplasm-admin-extension-publication.js" },
+  ).runInNewContext(sandbox)
+
+  await sandbox.publishExtensionBlocklist()
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].path, "/extension-blocklist")
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    terms: ["AMID"],
+    expected_revision: 7,
+  })
+  assert.equal(state.extensionBlocklistPolicy.revision, 8)
+  assert.equal(state.extensionBlocklistPolicy.schema_version, 1)
+  assert.deepEqual(state.extensionBlocklistDraft, ["AMID"])
+  assert.match(statuses.at(-1).message, /publication is still pending/)
+
+  state.extensionBlocklistPublication.in_sync = true
+  await sandbox.publishExtensionBlocklist()
+  assert.equal(requests.length, 1, "a clean, published policy should not post again")
+})
+
+test("extension blocklist distinguishes unsaved failures, conflicts, and client refresh timing", async () => {
+  const decisionStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function extensionBlocklistErrorCarriesSavedPolicy",
+  )
+  const publishStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "async function publishExtensionBlocklist",
+    decisionStart,
+  )
+  const publishEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf("function attentionMarkup", publishStart)
+  assert.notEqual(decisionStart, -1)
+  assert.notEqual(publishStart, -1)
+  assert.notEqual(publishEnd, -1)
+  const source = `${ICONOPLASM_ADMIN_RUNTIME.slice(decisionStart, publishEnd)}\nthis.publishExtensionBlocklist = publishExtensionBlocklist`
+
+  function scenario(apiJson) {
+    const statuses = []
+    const refreshes = []
+    let applied = 0
+    const state = {
+      extensionBlocklistLoaded: true,
+      extensionBlocklistPolicy: { revision: 7, version: "ebl1-old", terms: ["AMID"] },
+      extensionBlocklistPublication: { version: "ebl1-old", in_sync: true },
+      extensionBlocklistLimits: { max_term_length: 64 },
+      extensionBlocklistDraft: ["ARCH"],
+      extensionBlocklistInvalidTerms: [],
+      extensionBlocklistBusy: false,
+    }
+    const sandbox = {
+      state,
+      EXTENSION_BLOCKLIST_MAX_TERM_LENGTH: 64,
+      extensionBlocklistIsDirty: () => true,
+      extensionBlocklistNeedsPublicationRetry: () =>
+        state.extensionBlocklistLoaded && state.extensionBlocklistPublication?.in_sync === false,
+      normalizeExtensionBlocklistTerms: (terms) => Array.from(terms || []),
+      extensionBlocklistTermValidationMessage: () => "",
+      normalizeExtensionBlocklistInvalidTerms: () => [],
+      extensionBlocklistInvalidTermsSummary: () => "",
+      setExtensionBlocklistStatus: (message, tone) => statuses.push({ message, tone }),
+      renderExtensionBlocklist: () => {},
+      apiJson,
+      applyExtensionBlocklistPayload: (data) => {
+        applied += 1
+        state.extensionBlocklistPolicy = { ...data.policy }
+        state.extensionBlocklistPublication = { ...data.publication }
+      },
+      refreshExtensionBlocklist: async (options) => refreshes.push(options || {}),
+      setLog: () => {},
+      requestErrorMessage: (error, fallback) =>
+        String(error?.response?.error || error?.message || fallback),
+      isRequestCanceled: () => false,
+    }
+    new Script(source, {
+      filename: "iconoplasm-admin-extension-publication-outcomes.js",
+    }).runInNewContext(sandbox)
+    return { applied: () => applied, refreshes, sandbox, state, statuses }
+  }
+
+  const unsaved = scenario(async () => {
+    const error = new Error("scanner unavailable")
+    error.status = 503
+    error.response = {
+      code: "published_scanner_unavailable",
+      error: "Published scanner catalog is unavailable; publish the catalog before editing this policy",
+      policy: { revision: 8, version: "ebl1-server", terms: ["AMID"] },
+      publication: { version: "ebl1-server", in_sync: true },
+    }
+    throw error
+  })
+  await unsaved.sandbox.publishExtensionBlocklist()
+  assert.equal(unsaved.applied(), 0, "a pre-save 503 must not replace the editor baseline")
+  assert.equal(unsaved.state.extensionBlocklistPolicy.revision, 7)
+  assert.deepEqual(unsaved.state.extensionBlocklistDraft, ["ARCH"])
+  assert.equal(unsaved.statuses.at(-1).tone, "error")
+  assert.match(unsaved.statuses.at(-1).message, /scanner catalog is unavailable/i)
+  assert.doesNotMatch(unsaved.statuses.at(-1).message, /policy is saved|policy is published/i)
+
+  const conflict = scenario(async () => {
+    const error = new Error("revision conflict")
+    error.status = 409
+    error.response = { code: "extension_blocklist_revision_conflict" }
+    throw error
+  })
+  await conflict.sandbox.publishExtensionBlocklist()
+  assert.equal(conflict.refreshes.length, 1)
+  assert.match(conflict.refreshes[0].message, /newer revision was saved elsewhere/i)
+  assert.doesNotMatch(conflict.refreshes[0].message, /published elsewhere/i)
+
+  const published = scenario(async () => ({
+    policy: { revision: 8, version: "ebl1-new", terms: ["ARCH"] },
+    publication: { version: "ebl1-new", in_sync: true },
+  }))
+  await published.sandbox.publishExtensionBlocklist()
+  assert.equal(published.applied(), 1)
+  assert.equal(published.statuses.at(-1).tone, "success")
+  assert.match(published.statuses.at(-1).message, /later page load or browser restart/i)
+  assert.match(published.statuses.at(-1).message, /manifest cache may last up to five minutes/i)
+  assert.doesNotMatch(published.statuses.at(-1).message, /next manifest refresh|normally within/i)
+})
+
+test("extension blocklist renders every rejected term with an actionable reason", async () => {
+  const helpersStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function normalizeExtensionBlocklistTerm",
+  )
+  const helpersEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function applyExtensionBlocklistPayload",
+    helpersStart,
+  )
+  const markupStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function extensionBlocklistTermMarkup",
+    helpersEnd,
+  )
+  const markupEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function renderExtensionBlocklist",
+    markupStart,
+  )
+  const publishStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "async function publishExtensionBlocklist",
+  )
+  const publishEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf("function attentionMarkup", publishStart)
+  assert.notEqual(helpersStart, -1)
+  assert.notEqual(helpersEnd, -1)
+  assert.notEqual(markupStart, -1)
+  assert.notEqual(markupEnd, -1)
+  assert.notEqual(publishStart, -1)
+  assert.notEqual(publishEnd, -1)
+
+  const status = { textContent: "", dataset: {} }
+  const state = {
+    extensionBlocklistLoaded: true,
+    extensionBlocklistPolicy: { revision: 7, terms: ["AMID"] },
+    extensionBlocklistPublication: { version: "ebl1-old", in_sync: true },
+    extensionBlocklistLimits: { max_term_length: 64 },
+    extensionBlocklistDraft: ["DUPE", "TP53", "X"],
+    extensionBlocklistInvalidTerms: [],
+    extensionBlocklistBusy: false,
+  }
+  const sandbox = {
+    state,
+    els: { extensionBlocklistStatus: status },
+    EXTENSION_BLOCKLIST_MAX_TERM_LENGTH: 64,
+    EXTENSION_BLOCKLIST_CONTROL_CHAR_PATTERN: /[\u0000-\u001f\u007f]/,
+    apiJson: async () => {
+      const error = new Error("terms rejected")
+      error.status = 422
+      error.response = {
+        error: "Every shared blocklist term must be an unambiguous alias",
+        invalid_terms: [
+          { term: "TP53", reason: "canonical_symbol" },
+          { term: "X", reason: "not_published_alias" },
+          { term: "DUPE", reason: "ambiguous_alias" },
+        ],
+      }
+      throw error
+    },
+    applyExtensionBlocklistPayload: () => {},
+    renderExtensionBlocklist: () => {},
+    setLog: () => {},
+    requestErrorMessage: () => "generic validation failure",
+    isRequestCanceled: () => false,
+    esc: (value) => String(value),
+  }
+  new Script(
+    `${ICONOPLASM_ADMIN_RUNTIME.slice(helpersStart, helpersEnd)}\n${ICONOPLASM_ADMIN_RUNTIME.slice(markupStart, markupEnd)}\n${ICONOPLASM_ADMIN_RUNTIME.slice(publishStart, publishEnd)}\nthis.publishExtensionBlocklist = publishExtensionBlocklist; this.termMarkup = extensionBlocklistTermMarkup`,
+    { filename: "iconoplasm-admin-extension-validation.js" },
+  ).runInNewContext(sandbox)
+
+  await sandbox.publishExtensionBlocklist()
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(state.extensionBlocklistInvalidTerms)),
+    [
+      { term: "TP53", reason: "canonical_symbol", label: "Canonical symbol" },
+      {
+        term: "X",
+        reason: "not_published_alias",
+        label: "Not a published catalog alias",
+      },
+      {
+        term: "DUPE",
+        reason: "ambiguous_alias",
+        label: "Alias belongs to multiple genes",
+      },
+    ],
+  )
+  assert.match(status.textContent, /TP53 — canonical symbol/)
+  assert.match(status.textContent, /X — not a published catalog alias/)
+  assert.match(status.textContent, /DUPE — alias belongs to multiple genes/)
+  assert.doesNotMatch(status.textContent, /generic validation failure/)
+
+  const canonicalMarkup = sandbox.termMarkup(
+    "TP53",
+    state.extensionBlocklistInvalidTerms[0].label,
+  )
+  assert.match(canonicalMarkup, /extension-blocklist-term-invalid/)
+  assert.match(canonicalMarkup, /data-invalid="true"/)
+  assert.match(canonicalMarkup, /TP53/)
+  assert.match(canonicalMarkup, /Canonical symbol/)
+  const aliasMarkup = sandbox.termMarkup("X", state.extensionBlocklistInvalidTerms[1].label)
+  assert.match(aliasMarkup, /X/)
+  assert.match(aliasMarkup, /Not a published catalog alias/)
+  const ambiguousMarkup = sandbox.termMarkup(
+    "DUPE",
+    state.extensionBlocklistInvalidTerms[2].label,
+  )
+  assert.match(ambiguousMarkup, /DUPE/)
+  assert.match(ambiguousMarkup, /Alias belongs to multiple genes/)
+})
+
 test("iconoplasm admin trend chart explains the baked budget pace guide", () => {
   assert.match(ICONOPLASM_ADMIN_HTML, /row && row\.rows_read_daily_smart_limit/)
   assert.match(ICONOPLASM_ADMIN_HTML, /Smart daily allowance/)
@@ -210,11 +594,11 @@ test("iconoplasm admin keeps the observability chesterton fence comment", () => 
 test("iconoplasm admin shell loads external assets and its runtime parses", () => {
   assert.match(
     ICONOPLASM_ADMIN_SHELL,
-    /<link rel="stylesheet" href="\/static\/iconoplasm\/admin\.css" \/>/,
+    /<link rel="stylesheet" href="\/static\/iconoplasm\/admin\.css\?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" \/>/,
   )
   assert.match(
     ICONOPLASM_ADMIN_SHELL,
-    /<script src="\/static\/iconoplasm\/admin\.js" defer><\/script>/,
+    /<script src="\/static\/iconoplasm\/admin\.js\?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer><\/script>/,
   )
   assert.doesNotMatch(ICONOPLASM_ADMIN_SHELL, /<style>/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_SHELL, /<script>/)
@@ -253,14 +637,23 @@ test("admin tab lifecycle unmounts inactive render roots and aborts their reads"
   assert.notEqual(start, -1)
   assert.notEqual(end, -1)
 
-  const tabs = ["overview", "costs", "requests", "prompts", "archive", "styles", "activity"]
+  const tabs = [
+    "overview",
+    "costs",
+    "requests",
+    "prompts",
+    "extension",
+    "archive",
+    "styles",
+    "activity",
+  ]
   const markup = [
     '<nav id="admin-tabs">',
     ...tabs.map((tab) => `<button role="tab" data-tab="${tab}">${tab}</button>`),
     "</nav>",
     ...tabs.map(
       (tab) =>
-        `<div class="panel" id="panel-${tab}" hidden><div id="${tab === "overview" ? "overview-events" : tab === "styles" ? "vision-stats-list" : tab === "activity" ? "activity-list" : `root-${tab}`}"><img alt="retained" /></div></div>`,
+        `<div class="panel" id="panel-${tab}" hidden><div id="${tab === "overview" ? "overview-events" : tab === "extension" ? "extension-blocklist-terms" : tab === "styles" ? "vision-stats-list" : tab === "activity" ? "activity-list" : `root-${tab}`}"><img alt="retained" /></div></div>`,
     ),
   ].join("")
   const { document } = parseHTML(markup)
@@ -273,6 +666,7 @@ test("admin tab lifecycle unmounts inactive render roots and aborts their reads"
     costReport: null,
     requestsLoaded: false,
     promptsLoaded: false,
+    extensionBlocklistLoaded: false,
     archiveLoaded: false,
     visionStats: [],
     selectedGeneDetail: null,
@@ -297,6 +691,8 @@ test("admin tab lifecycle unmounts inactive render roots and aborts their reads"
     refreshGenerationRequests: () => calls.push("refresh-requests"),
     renderImageEditPrompts: () => calls.push("render-prompts"),
     refreshImageEditPrompts: () => calls.push("refresh-prompts"),
+    renderExtensionBlocklist: () => calls.push("render-extension"),
+    refreshExtensionBlocklist: () => calls.push("refresh-extension"),
     renderTable: () => calls.push("render-archive"),
     renderGeneDetail: () => calls.push("render-gene"),
     refreshAssets: () => calls.push("refresh-archive"),
@@ -328,6 +724,11 @@ test("admin tab lifecycle unmounts inactive render roots and aborts their reads"
   assert.ok(calls.includes("refresh-styles"))
 
   document.querySelector("#vision-stats-list").innerHTML = '<img alt="vision" />'
+  sandbox.setActiveTab("extension")
+  assert.equal(document.querySelector("#panel-extension").hidden, false)
+  assert.equal(document.querySelector("#vision-stats-list").children.length, 0)
+  assert.ok(calls.includes("refresh-extension"))
+
   sandbox.setActiveTab("activity")
   assert.equal(document.querySelector("#vision-stats-list").children.length, 0)
   assert.equal(state.visionPreviewRequestId, 1)

@@ -15,10 +15,14 @@ if (typeof importScripts === "function") {
   if (!globalThis.IconoplasmPublicationAliasOverlay) {
     importScripts("publication-alias-overlay.js")
   }
+  if (!globalThis.IconoplasmContentSettings) {
+    importScripts("content-settings.js")
+  }
 }
 const IconoCatalogContract = globalThis.IconoplasmCatalogContract
 const IconoPortraitDelivery = globalThis.IconoplasmPortraitDelivery
 const IconoPublicationAliasOverlay = globalThis.IconoplasmPublicationAliasOverlay
+const IconoContentSettings = globalThis.IconoplasmContentSettings
 if (!IconoPortraitDelivery) {
   throw new Error("Iconoplasm portrait delivery runtime is required")
 }
@@ -27,6 +31,9 @@ if (!IconoPublicationAliasOverlay) {
 }
 if (!IconoCatalogContract) {
   throw new Error("Iconoplasm catalog contract runtime is required")
+}
+if (!IconoContentSettings) {
+  throw new Error("Iconoplasm content settings runtime is required")
 }
 
 const HOST = "https://iconoplasm.brinedew.bio"
@@ -48,6 +55,7 @@ const REQUIRED_SCANNER_ARTIFACT_CONTRACT_REVISION = Number(IconoCatalogContract.
 const SCANNER_INDEX_STORAGE_VERSION = 1
 const SCANNER_ARTIFACT_MAX_BYTES = 3 * 1024 * 1024
 const SCANNER_INDEX_MAX_BYTES = SCANNER_ARTIFACT_MAX_BYTES + 128 * 1024
+const SHARED_BLOCKLIST_STORAGE_KEY = IconoContentSettings.storageKeys.sharedBlocklist
 if (
   !Number.isInteger(REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION) ||
   REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION < 1 ||
@@ -174,6 +182,7 @@ async function getStatus() {
     "iconoplasm_scanner_index_storage_version",
     "iconoplasm_alias_overlay_version",
     "iconoplasm_card_snapshot_version",
+    SHARED_BLOCKLIST_STORAGE_KEY,
     "iconoplasm_contract_error",
     "iconoplasm_min_extension_version",
   ])
@@ -188,6 +197,9 @@ async function getStatus() {
     scannerContractRevision: result.iconoplasm_scanner_contract_revision || null,
     aliasOverlayVersion: result.iconoplasm_alias_overlay_version || null,
     cardSnapshotVersion: result.iconoplasm_card_snapshot_version || null,
+    sharedBlocklistRevision:
+      IconoContentSettings.normalizeSharedBlocklistProjection(result[SHARED_BLOCKLIST_STORAGE_KEY])
+        ?.revision || null,
     contractError: result.iconoplasm_contract_error || null,
     minExtensionVersion: result.iconoplasm_min_extension_version || null,
   }
@@ -270,6 +282,7 @@ async function getStoredGeneSnapshot() {
     "iconoplasm_card_snapshot_version",
     "iconoplasm_alias_overlay_version",
     "iconoplasm_alias_overlay_applied",
+    SHARED_BLOCKLIST_STORAGE_KEY,
     "iconoplasm_contract_error",
     "iconoplasm_min_extension_version",
   ])
@@ -322,6 +335,9 @@ function normalizePublishedManifest(rawManifest) {
   const publicationAliases = IconoPublicationAliasOverlay.normalizePublishedAliasOverlay(
     manifest.publication_aliases,
   )
+  const extensionBlocklist = IconoContentSettings.normalizeSharedBlocklistProjection(
+    manifest.extension_blocklist,
+  )
   const scannerArtifact =
     manifest.scanner_artifact && typeof manifest.scanner_artifact === "object"
       ? manifest.scanner_artifact
@@ -360,6 +376,7 @@ function normalizePublishedManifest(rawManifest) {
     gene_count: Number.isFinite(Number(manifest.gene_count)) ? Number(manifest.gene_count) : null,
     min_extension_version: minExtensionVersion || currentExtensionVersion(),
     publication_aliases: publicationAliases,
+    extension_blocklist: extensionBlocklist,
     card_snapshot_version: String(manifest.card_snapshot_version || "").trim() || null,
     scanner_artifact: {
       schema_version: scannerSchemaVersion,
@@ -369,6 +386,18 @@ function normalizePublishedManifest(rawManifest) {
       byte_size: scannerByteSize,
     },
   }
+}
+
+async function acceptPublishedExtensionBlocklist(publishedProjection, storedProjection) {
+  const stored = IconoContentSettings.normalizeSharedBlocklistProjection(storedProjection)
+  const published = IconoContentSettings.normalizeSharedBlocklistProjection(publishedProjection)
+  if (!published || (stored && published.revision <= stored.revision)) return stored
+
+  // ARCHITECTURE FENCE [IPD-008]: one storage item is the atomic last-known-good
+  // policy. A valid empty terms array is authoritative; missing, malformed, equal,
+  // or lower revisions never erase or replace the accepted projection.
+  await chrome.storage.local.set({ [SHARED_BLOCKLIST_STORAGE_KEY]: published })
+  return published
 }
 
 async function rememberContractError({ code, message, minExtensionVersion = "" } = {}) {
@@ -915,6 +944,10 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
     }
 
     const stored = await migrateLegacyStoredScannerIndex(await getStoredGeneSnapshot())
+    await acceptPublishedExtensionBlocklist(
+      manifest.extension_blocklist,
+      stored[SHARED_BLOCKLIST_STORAGE_KEY],
+    )
     const storedGeneCount = getStoredGeneCount(stored.iconoplasm_genes)
     const artifactChanged =
       String(stored.iconoplasm_scanner_hash || "") !==
@@ -1041,6 +1074,7 @@ if (globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__) {
     portraitSourceState,
     portraitErrorTtlMs: PORTRAIT_DATA_URL_ERROR_TTL_MS,
     normalizePublishedManifest,
+    acceptPublishedExtensionBlocklist,
     normalizeScannerIndex,
     migrateLegacyStoredScannerIndex,
     fetchPublishedScannerArtifact,

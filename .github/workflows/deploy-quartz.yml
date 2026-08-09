@@ -102,6 +102,9 @@ jobs:
             workers/iconoplasm.do-not-delete-cost-guards.test.js \
             workers/iconoplasm.sync-finalization-queue.test.js \
             workers/iconoplasm-publish-event-archive.test.js \
+            workers/iconoplasm-extension-blocklist-policy.test.js \
+            workers/iconoplasm-extension-blocklist-public.test.js \
+            workers/iconoplasm-admin-assets.test.js \
             workers/iconoplasm.admin-html.test.js \
             workers/iconoplasm.card-catalog-budget-preflight.test.js \
             workers/seo-discovery.test.js \
@@ -208,7 +211,7 @@ jobs:
           echo "$output"
 
       - name: Upload public edge worker script with routes (production)
-        run: pnpm exec wrangler deploy
+        run: pnpm exec wrangler deploy --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST"
 
       - name: Reassign production routes to the public edge worker
         run: |

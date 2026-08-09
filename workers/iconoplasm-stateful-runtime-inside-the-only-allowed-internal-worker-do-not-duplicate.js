@@ -13,13 +13,16 @@ import {
 } from "./lib/iconoplasm-portrait-storage.js"
 export { putPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
+import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
 import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-routes.js"
+import { createIconoplasmAdminExtensionBlocklistHandlers } from "./iconoplasm-admin-extension-blocklist-routes.js"
 import { createIconoplasmAdminGalleryHandlers } from "./iconoplasm-admin-gallery-routes.js"
 import { createIconoplasmAdminPublicationHandlers } from "./iconoplasm-admin-publication-routes.js"
 import { createIconoplasmAdminReadModelHandlers } from "./iconoplasm-admin-read-model-routes.js"
 import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
 import { iconoplasmCacheControl } from "./iconoplasm-cache-policy.js"
 import { iconoplasmObservabilitySnapshotForAdmin } from "./iconoplasm-observability-freshness.js"
+import { readPublishedIconoplasmExtensionBlocklist } from "./iconoplasm-extension-blocklist-policy.js"
 import {
   ICONOPLASM_API_SCHEMA_VERSION as API_SCHEMA_VERSION,
   ICONOPLASM_PUBLIC_API_VERSION as PUBLIC_API_VERSION,
@@ -1526,6 +1529,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_requests_drain_plan" ||
     family === "admin_requests_fulfill" ||
     family === "admin_image_edit_prompts" ||
+    family === "admin_extension_blocklist" ||
     family === "admin_gene_request_diagnostics" ||
     family === "admin_local_removals_pending" ||
     family === "admin_local_removals_ack" ||
@@ -10962,6 +10966,9 @@ async function extensionManifestObj(url, env, clientVersion = null) {
   // This is the complete extension contract: artifact compatibility, minimum
   // client version, aliases, and portrait delivery policy travel together.
   const publicationAliases = await iconoplasmPublicationAliasManifest()
+  // Shared extension policy is a dedicated, short-lived KV projection. Never
+  // add a D1 fallback here: this manifest is global browser traffic.
+  const extensionBlocklist = await readPublishedIconoplasmExtensionBlocklist(env.KV)
   const compatibilityContract = publishedCompatibilityContractForClientVersion(clientVersion)
   const portraitFingerprint = await sharedPublishedPortraitFingerprint(env)
   if (!portraitFingerprint) {
@@ -11001,12 +11008,15 @@ async function extensionManifestObj(url, env, clientVersion = null) {
     portrait_delivery: portraitDeliveryPolicy(url, env),
     publication_aliases: publicationAliases,
     scanner_artifact: scannerArtifact,
+    extension_blocklist: extensionBlocklist,
   }
 }
 
 function catalogManifestEtag(manifest) {
   const buildVersion = String(manifest?.build_version || manifest?.current_hash || "").trim()
   const aliasVersion = String(manifest?.publication_aliases?.version || "").trim()
+  const extensionBlocklistVersion = String(manifest?.extension_blocklist?.version || "").trim()
+  const extensionBlocklistRevision = Number(manifest?.extension_blocklist?.revision) || 0
   const delivery = manifest?.portrait_delivery || {}
   const accelerator = delivery?.accelerator || {}
   const deliveryVersion = [
@@ -11020,6 +11030,9 @@ function catalogManifestEtag(manifest) {
   const version = [
     buildVersion,
     aliasVersion ? `aliases-${aliasVersion}` : "",
+    extensionBlocklistVersion
+      ? `blocklist-${extensionBlocklistVersion}-r${extensionBlocklistRevision}`
+      : "",
     deliveryVersion ? `delivery-${encodeURIComponent(deliveryVersion)}` : "",
   ]
     .filter(Boolean)
@@ -25305,6 +25318,7 @@ async function handlePublicCatalogManifest(request, env) {
     ...(manifest.portrait_base_url ? { portrait_base_url: manifest.portrait_base_url } : {}),
     portrait_delivery: manifest.portrait_delivery || portraitDeliveryPolicy(url, env),
     publication_aliases: manifest.publication_aliases || null,
+    extension_blocklist: manifest.extension_blocklist || null,
     card_snapshot_version: String(cardSnapshot.current || "").trim() || null,
     scanner_artifact: manifest.scanner_artifact || null,
     artifact_url: buildHash
@@ -27722,6 +27736,11 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     readPublicStatsProjection,
     sanitizeText,
     stateSymbolMax: 25000,
+  }),
+  ...createIconoplasmAdminExtensionBlocklistHandlers({
+    actor,
+    isAdmin: isIconoplasmAdmin,
+    json,
   }),
   ...createIconoplasmAdminGalleryHandlers({
     fetchGallery: fetchAdminGallery,
@@ -31482,7 +31501,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     if (path === "/admin") {
       if (!(await isAdmin(request, env)))
         return done("admin_403", html("<h1>403 Unauthorized</h1>", 403))
-      return done("admin", html(ICONOPLASM_ADMIN_HTML, 200, { "Cache-Control": "no-store" }))
+      return done(
+        "admin",
+        html(renderIconoplasmAdminHtml(ICONOPLASM_ADMIN_HTML, env), 200, {
+          "Cache-Control": "no-store",
+        }),
+      )
     }
 
     if (path === "/api/iconoplasm/admin/artist-styles/remove" && request.method === "POST") {
