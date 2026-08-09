@@ -82,11 +82,7 @@ function publicManifestKv() {
       schema: 1,
       status: "active",
     }),
-    [iconoplasmExtensionBlocklistKvKey(1)]: projection(
-      1,
-      "ebl1-1111111111111111",
-      ["AMID"],
-    ),
+    [iconoplasmExtensionBlocklistKvKey(1)]: projection(1, "ebl1-1111111111111111", ["AMID"]),
     [iconoplasmExtensionBlocklistKvKey(999)]: "{corrupt projection",
   })
 }

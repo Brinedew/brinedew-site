@@ -48,13 +48,16 @@ function trustedMutationOrigin(rawOrigin) {
     return url.protocol === "http:" || url.protocol === "https:"
   }
   return (
-    url.protocol === "https:" &&
-    (hostname === "brinedew.bio" || hostname.endsWith(".brinedew.bio"))
+    url.protocol === "https:" && (hostname === "brinedew.bio" || hostname.endsWith(".brinedew.bio"))
   )
 }
 
 function mutationAdmissionError(request) {
-  if (String(request.headers.get("Sec-Fetch-Site") || "").trim().toLowerCase() === "cross-site") {
+  if (
+    String(request.headers.get("Sec-Fetch-Site") || "")
+      .trim()
+      .toLowerCase() === "cross-site"
+  ) {
     return {
       code: "cross_site_request_forbidden",
       error: "Cross-site extension blocklist mutations are forbidden",
@@ -84,7 +87,10 @@ function mutationAdmissionError(request) {
 
 async function readBoundedJson(request) {
   const declaredLength = Number(request.headers.get("Content-Length"))
-  if (Number.isFinite(declaredLength) && declaredLength > ICONOPLASM_EXTENSION_BLOCKLIST_MAX_REQUEST_BYTES) {
+  if (
+    Number.isFinite(declaredLength) &&
+    declaredLength > ICONOPLASM_EXTENSION_BLOCKLIST_MAX_REQUEST_BYTES
+  ) {
     throw Object.assign(new Error("Request body is too large"), {
       code: "extension_blocklist_request_too_large",
       status: 413,
@@ -279,10 +285,7 @@ export function createIconoplasmAdminExtensionBlocklistHandlers(services) {
         actor: await actor(request, env),
       })
       policySaved = true
-      const published = await publishIconoplasmExtensionBlocklistPolicy(
-        env.ICONOPLASM_DB,
-        env.KV,
-      )
+      const published = await publishIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB, env.KV)
       if (published.busy) {
         return done(
           "admin_extension_blocklist_503",
@@ -329,10 +332,7 @@ export function createIconoplasmAdminExtensionBlocklistHandlers(services) {
       }
       try {
         const payload = await currentPayload(env, base)
-        return done(
-          `admin_extension_blocklist_${status}`,
-          json(payload, status, NO_STORE),
-        )
+        return done(`admin_extension_blocklist_${status}`, json(payload, status, NO_STORE))
       } catch {
         return done(
           `admin_extension_blocklist_${status}`,

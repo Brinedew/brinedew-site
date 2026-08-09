@@ -89,7 +89,9 @@ class FakeDb {
       return result(1)
     }
 
-    if (statement.sql.startsWith("INSERT OR IGNORE INTO icono_extension_blocklist_policy_history")) {
+    if (
+      statement.sql.startsWith("INSERT OR IGNORE INTO icono_extension_blocklist_policy_history")
+    ) {
       const [key, revision, version] = statement.values
       if (
         key !== "shared" ||
@@ -602,7 +604,10 @@ test("scheduled reconciliation repairs stale projection and clears an expired in
   assert.equal(kv.puts.length, putsBeforeCleanup)
 
   const cronSource = readFileSync(
-    new URL("./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js", import.meta.url),
+    new URL(
+      "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
+      import.meta.url,
+    ),
     "utf8",
   )
   assert.match(
@@ -766,7 +771,9 @@ test("admin rejects an exact 500-term projection over 48 KiB before the D1 CAS",
     terms,
   })
   assert.equal(terms.length, 500)
-  assert.ok(new TextEncoder().encode(body).byteLength < ICONOPLASM_EXTENSION_BLOCKLIST_MAX_REQUEST_BYTES)
+  assert.ok(
+    new TextEncoder().encode(body).byteLength < ICONOPLASM_EXTENSION_BLOCKLIST_MAX_REQUEST_BYTES,
+  )
   assert.ok(
     new TextEncoder().encode(projected).byteLength >
       ICONOPLASM_EXTENSION_BLOCKLIST_MAX_PROJECTION_BYTES,
@@ -936,7 +943,10 @@ test("admin mutation admission blocks CSRF before D1 or KV and allows trusted br
       blockedEnv,
     )
     const payload = await response.json()
-    assert.equal(response.status, blockedCase.expectedCode === "application_json_required" ? 415 : 403)
+    assert.equal(
+      response.status,
+      blockedCase.expectedCode === "application_json_required" ? 415 : 403,
+    )
     assert.equal(payload.code, blockedCase.expectedCode)
     assert.equal(bindingReads, 0)
     assert.equal(authChecks, 0)
