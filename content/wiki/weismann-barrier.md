@@ -10,7 +10,7 @@ aliases:
 ---
 # Weismann Barrier
 
-The **Weismann barrier**, proposed by August Weismann, is the strict distinction between the "immortal" germ cell lineages producing gametes and "disposable" somatic cells in animals, in contrast to Charles Darwin's proposed pangenesis mechanism for inheritance.[^1]
+The **Weismann barrier** is the strict distinction between the "immortal" germ cell lineages producing gametes and "disposable" somatic cells in animals, in contrast to Charles Darwin's proposed pangenesis mechanism for inheritance.[^1]
 
 ![[weismann-barrier-germ-plasm.png|Diagram of Weismann's germ-plasm theory: the hereditary material, the germ plasm, is confined to the gonads. Somatic cells (of the body) develop afresh in each generation from the germ plasm. Whatever may happen to those cells does not affect the next generation. Wikimedia Commons.]]
 
