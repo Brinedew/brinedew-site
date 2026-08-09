@@ -1,6 +1,7 @@
 public
 node_modules
 .quartz-cache
+.pytest_cache/
 
 # Lockfiles. Reformatting pnpm-lock.yaml is a footgun: pnpm validates
 # the file with a content hash and a reformat breaks the install on

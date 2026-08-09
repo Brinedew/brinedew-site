@@ -192,10 +192,7 @@ test("iconoplasm admin publishes a revisioned full shared extension blocklist", 
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /split\(\/\[\\s,\]\+\/\)/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /terms\.sort\(\)/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_RUNTIME, /extensionBlocklistInput\.maxLength/)
-  assert.match(
-    ICONOPLASM_ADMIN_RUNTIME,
-    /apiJson\("\/extension-blocklist", \{ method: "GET" \}\)/,
-  )
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /apiJson\("\/extension-blocklist", \{ method: "GET" \}\)/)
   assert.match(
     ICONOPLASM_ADMIN_RUNTIME,
     /body: JSON\.stringify\(\{ terms: draftTerms, expected_revision: expectedRevision \}\)/,
@@ -213,11 +210,17 @@ test("iconoplasm admin publishes a revisioned full shared extension blocklist", 
     ICONOPLASM_ADMIN_RUNTIME,
     /Published; extensions pick it up on a later page load or browser restart; the manifest cache may last up to five minutes\./,
   )
-  assert.doesNotMatch(ICONOPLASM_ADMIN_RUNTIME, /next manifest refresh|normally within five minutes/)
+  assert.doesNotMatch(
+    ICONOPLASM_ADMIN_RUNTIME,
+    /next manifest refresh|normally within five minutes/,
+  )
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /A newer revision was saved elsewhere/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_RUNTIME, /A newer revision was published elsewhere/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_RUNTIME, /published and live|now live|make it live/i)
-  assert.match(ICONOPLASM_ADMIN_RUNTIME, /Discard this unpublished draft and reload the shared policy/)
+  assert.match(
+    ICONOPLASM_ADMIN_RUNTIME,
+    /Discard this unpublished draft and reload the shared policy/,
+  )
   assert.match(
     ICONOPLASM_ADMIN_RUNTIME,
     /extensionBlocklistPublish\.addEventListener\("click", publishExtensionBlocklist\)/,
@@ -227,13 +230,12 @@ test("iconoplasm admin publishes a revisioned full shared extension blocklist", 
 })
 
 test("extension blocklist draft normalization matches the worker contract", () => {
-  const constantsStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
-    "var EXTENSION_BLOCKLIST_MAX_TERMS",
+  const constantsStart = ICONOPLASM_ADMIN_RUNTIME.indexOf("var EXTENSION_BLOCKLIST_MAX_TERMS")
+  const constantsEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function defaultVisionPageSize",
+    constantsStart,
   )
-  const constantsEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf("function defaultVisionPageSize", constantsStart)
-  const helpersStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
-    "function normalizeExtensionBlocklistTerm",
-  )
+  const helpersStart = ICONOPLASM_ADMIN_RUNTIME.indexOf("function normalizeExtensionBlocklistTerm")
   const helpersEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf(
     "function applyExtensionBlocklistPayload",
     helpersStart,
@@ -256,22 +258,26 @@ test("extension blocklist draft normalization matches the worker contract", () =
     Array.from(sandbox.contract.parseExtensionBlocklistPaste("task, amid\nTASK\tbank")),
     ["AMID", "BANK", "TASK"],
   )
-  assert.match(sandbox.contract.extensionBlocklistTermValidationMessage("A\u0000B", 64), /control character/)
+  assert.match(
+    sandbox.contract.extensionBlocklistTermValidationMessage("A\u0000B", 64),
+    /control character/,
+  )
   assert.equal(
     sandbox.contract.extensionBlocklistTermValidationMessage("A\u0085B", 64),
     "",
     "the browser shape check must match the worker's C0/U+007F control-character contract",
   )
-  assert.match(sandbox.contract.extensionBlocklistTermValidationMessage("A".repeat(65), 64), /64 character limit/)
+  assert.match(
+    sandbox.contract.extensionBlocklistTermValidationMessage("A".repeat(65), 64),
+    /64 character limit/,
+  )
 })
 
 test("pending extension publication can be retried without manufacturing a draft edit", async () => {
   const decisionStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
     "function extensionBlocklistErrorCarriesSavedPolicy",
   )
-  const publishStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
-    "async function publishExtensionBlocklist",
-  )
+  const publishStart = ICONOPLASM_ADMIN_RUNTIME.indexOf("async function publishExtensionBlocklist")
   const publishEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf("function attentionMarkup", publishStart)
   assert.notEqual(decisionStart, -1)
   assert.notEqual(publishStart, -1)
@@ -405,7 +411,8 @@ test("extension blocklist distinguishes unsaved failures, conflicts, and client 
     error.status = 503
     error.response = {
       code: "published_scanner_unavailable",
-      error: "Published scanner catalog is unavailable; publish the catalog before editing this policy",
+      error:
+        "Published scanner catalog is unavailable; publish the catalog before editing this policy",
       policy: { revision: 8, version: "ebl1-server", terms: ["AMID"] },
       publication: { version: "ebl1-server", in_sync: true },
     }
@@ -443,9 +450,7 @@ test("extension blocklist distinguishes unsaved failures, conflicts, and client 
 })
 
 test("extension blocklist renders every rejected term with an actionable reason", async () => {
-  const helpersStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
-    "function normalizeExtensionBlocklistTerm",
-  )
+  const helpersStart = ICONOPLASM_ADMIN_RUNTIME.indexOf("function normalizeExtensionBlocklistTerm")
   const helpersEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf(
     "function applyExtensionBlocklistPayload",
     helpersStart,
@@ -458,9 +463,7 @@ test("extension blocklist renders every rejected term with an actionable reason"
     "function renderExtensionBlocklist",
     markupStart,
   )
-  const publishStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
-    "async function publishExtensionBlocklist",
-  )
+  const publishStart = ICONOPLASM_ADMIN_RUNTIME.indexOf("async function publishExtensionBlocklist")
   const publishEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf("function attentionMarkup", publishStart)
   assert.notEqual(helpersStart, -1)
   assert.notEqual(helpersEnd, -1)
@@ -510,31 +513,25 @@ test("extension blocklist renders every rejected term with an actionable reason"
   ).runInNewContext(sandbox)
 
   await sandbox.publishExtensionBlocklist()
-  assert.deepEqual(
-    JSON.parse(JSON.stringify(state.extensionBlocklistInvalidTerms)),
-    [
-      { term: "TP53", reason: "canonical_symbol", label: "Canonical symbol" },
-      {
-        term: "X",
-        reason: "not_published_alias",
-        label: "Not a published catalog alias",
-      },
-      {
-        term: "DUPE",
-        reason: "ambiguous_alias",
-        label: "Alias belongs to multiple genes",
-      },
-    ],
-  )
+  assert.deepEqual(JSON.parse(JSON.stringify(state.extensionBlocklistInvalidTerms)), [
+    { term: "TP53", reason: "canonical_symbol", label: "Canonical symbol" },
+    {
+      term: "X",
+      reason: "not_published_alias",
+      label: "Not a published catalog alias",
+    },
+    {
+      term: "DUPE",
+      reason: "ambiguous_alias",
+      label: "Alias belongs to multiple genes",
+    },
+  ])
   assert.match(status.textContent, /TP53 — canonical symbol/)
   assert.match(status.textContent, /X — not a published catalog alias/)
   assert.match(status.textContent, /DUPE — alias belongs to multiple genes/)
   assert.doesNotMatch(status.textContent, /generic validation failure/)
 
-  const canonicalMarkup = sandbox.termMarkup(
-    "TP53",
-    state.extensionBlocklistInvalidTerms[0].label,
-  )
+  const canonicalMarkup = sandbox.termMarkup("TP53", state.extensionBlocklistInvalidTerms[0].label)
   assert.match(canonicalMarkup, /extension-blocklist-term-invalid/)
   assert.match(canonicalMarkup, /data-invalid="true"/)
   assert.match(canonicalMarkup, /TP53/)
@@ -542,10 +539,7 @@ test("extension blocklist renders every rejected term with an actionable reason"
   const aliasMarkup = sandbox.termMarkup("X", state.extensionBlocklistInvalidTerms[1].label)
   assert.match(aliasMarkup, /X/)
   assert.match(aliasMarkup, /Not a published catalog alias/)
-  const ambiguousMarkup = sandbox.termMarkup(
-    "DUPE",
-    state.extensionBlocklistInvalidTerms[2].label,
-  )
+  const ambiguousMarkup = sandbox.termMarkup("DUPE", state.extensionBlocklistInvalidTerms[2].label)
   assert.match(ambiguousMarkup, /DUPE/)
   assert.match(ambiguousMarkup, /Alias belongs to multiple genes/)
 })

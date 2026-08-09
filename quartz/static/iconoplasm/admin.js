@@ -1374,8 +1374,7 @@
     }
     var schemaVersion = Number.parseInt(String(policy.schema_version || 0), 10)
     state.extensionBlocklistPolicy = {
-      schema_version:
-        Number.isInteger(schemaVersion) && schemaVersion > 0 ? schemaVersion : null,
+      schema_version: Number.isInteger(schemaVersion) && schemaVersion > 0 ? schemaVersion : null,
       revision,
       version: String(policy.version || ""),
       terms: normalizeExtensionBlocklistTerms(policy.terms),
@@ -1431,11 +1430,11 @@
     }
     var draftTerms = normalizeExtensionBlocklistTerms(state.extensionBlocklistDraft)
     var invalidTermsByTerm = new Map(
-      normalizeExtensionBlocklistInvalidTerms(state.extensionBlocklistInvalidTerms).map(function (
-        entry,
-      ) {
-        return [entry.term, entry.label]
-      }),
+      normalizeExtensionBlocklistInvalidTerms(state.extensionBlocklistInvalidTerms).map(
+        function (entry) {
+          return [entry.term, entry.label]
+        },
+      ),
     )
     var dirty = state.extensionBlocklistLoaded && extensionBlocklistIsDirty()
     var retryPublication = extensionBlocklistNeedsPublicationRetry()
