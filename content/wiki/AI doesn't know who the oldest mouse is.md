@@ -7,8 +7,6 @@ draft: false
 ---
 # AI doesn't know who the oldest mouse is
 
-I.
-
 AIs are in the [news](https://www.telegraph.co.uk/business/2026/08/03/unreleased-ai-model-solves-decades-old-maths-problems/) this [week](https://mashable.com/tech/anthropic-fable-5-disproves-jacobian-conjecture) for supposedly solving dozens of long-standing math questions and putting research mathematicians out of a job. If any of you are looking for a new career, I urge you to pivot to the one thing AIs still can't do - reading longevity papers.
 
 Let's say you're interested in benchmarking lifespan extension communities against each other, based on which animal they work on. It's 2026, so for many of us the natural first step is to turn to ChatGPT, Claude, or any other AI assistant, and to ask it for a table of lifespan records by species. 
