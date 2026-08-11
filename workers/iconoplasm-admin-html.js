@@ -447,7 +447,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
                 <textarea id="extension-blocklist-input" rows="3" spellcheck="false" autocomplete="off" autocapitalize="characters" aria-describedby="extension-blocklist-input-help" placeholder="Paste terms separated by commas, spaces, or new lines" disabled></textarea>
                 <button class="btn-primary" type="button" id="extension-blocklist-add" disabled>Add to draft</button>
               </div>
-              <p class="small" id="extension-blocklist-input-help">Every term must be an existing non-canonical catalog alias and a common-English ambiguity. Terms are normalized to uppercase. Adding only changes the draft; nothing reaches extensions until you publish.</p>
+              <p class="small" id="extension-blocklist-input-help">Use an existing non-canonical catalog alias, or protect a larger phrase that contains a recognized gene label (for example, APC/C). A protected phrase suppresses every gene highlight inside it while the same gene still highlights elsewhere. Terms are normalized to uppercase. Adding only changes the draft; nothing reaches extensions until you publish.</p>
               <details class="extension-blocklist-details">
                 <summary>How publishing works</summary>
                 <p class="small">The 76 packaged terms are only the first-run and offline fallback. A loaded policy replaces the complete shared list for every protocol-capable extension.</p>

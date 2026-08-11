@@ -14,6 +14,23 @@
       .toUpperCase()
   }
 
+  function normalizeBlocklistTerm(rawTerm) {
+    return String(rawTerm || "")
+      .trim()
+      .replace(/[\u2010-\u2015\u2212]/g, "-")
+      .toUpperCase()
+  }
+
+  function normalizeBlocklist(rawBlocklist) {
+    const values =
+      Array.isArray(rawBlocklist) || rawBlocklist instanceof Set
+        ? [...rawBlocklist]
+        : rawBlocklist && typeof rawBlocklist[Symbol.iterator] === "function"
+          ? Array.from(rawBlocklist)
+          : []
+    return new Set(values.map(normalizeBlocklistTerm).filter(Boolean))
+  }
+
   function normalizeAliasKey(rawAlias) {
     return String(rawAlias || "")
       .trim()
@@ -271,15 +288,83 @@
     return matches
   }
 
+  function foldBlocklistTextForScan(rawText) {
+    const source = String(rawText || "")
+    let folded = ""
+    const originalStarts = []
+    const originalEnds = []
+
+    for (let index = 0; index < source.length;) {
+      const codePoint = source.codePointAt(index)
+      const character = String.fromCodePoint(codePoint)
+      const characterEnd = index + character.length
+      const normalized = character.replace(/[\u2010-\u2015\u2212]/g, "-").toUpperCase()
+      folded += normalized
+      for (let offset = 0; offset < normalized.length; offset += 1) {
+        originalStarts.push(index)
+        originalEnds.push(characterEnd)
+      }
+      index = characterEnd
+    }
+
+    return { folded, originalStarts, originalEnds }
+  }
+
+  function collectBlockedSpans(text, trieRoot) {
+    const source = String(text || "")
+    if (!source || !trieRoot) return []
+    const { folded, originalStarts, originalEnds } = foldBlocklistTextForScan(source)
+    const spans = []
+
+    for (let start = 0; start < folded.length; start += 1) {
+      // Unicode uppercase expansion can produce multiple folded code units for one
+      // source character. A blocklisted phrase may start only at a real source
+      // character boundary so reported spans always map back to the DOM exactly.
+      if (start > 0 && originalStarts[start] === originalStarts[start - 1]) continue
+      const originalStart = originalStarts[start]
+      if (!hasAliasLeftBoundary(source, originalStart)) continue
+
+      let node = trieRoot
+      let cursor = start
+      while (cursor < folded.length) {
+        node = node.children[folded.charAt(cursor)]
+        if (!node) break
+        cursor += 1
+        const endsAtSourceBoundary =
+          cursor === folded.length || originalStarts[cursor] !== originalStarts[cursor - 1]
+        if (!node.terminal || !endsAtSourceBoundary) continue
+        const originalEnd = originalEnds[cursor - 1]
+        if (!hasAliasRightBoundary(source, originalEnd)) continue
+        spans.push({
+          index: originalStart,
+          length: originalEnd - originalStart,
+          text: source.slice(originalStart, originalEnd),
+          term: node.terminal,
+        })
+      }
+    }
+
+    return spans
+  }
+
+  function overlapsBlockedSpan(candidate, blockedSpans) {
+    const start = Number(candidate && candidate.index) || 0
+    const end = start + (Number(candidate && candidate.length) || 0)
+    for (const span of Array.isArray(blockedSpans) ? blockedSpans : []) {
+      const left = Number(span && span.index) || 0
+      const right = left + (Number(span && span.length) || 0)
+      if (start < right && end > left) return true
+    }
+    return false
+  }
+
   function filterCandidates(candidates, options) {
     const opts = options && typeof options === "object" ? options : {}
     const geneMap = opts.geneMap && typeof opts.geneMap === "object" ? opts.geneMap : null
     // Single blocklist Set — the caller (content.js) merges defaults + user choices
     // into one set, so the matcher just blocks whatever it's told to block.
     const blocklist =
-      opts.blocklist instanceof Set
-        ? opts.blocklist
-        : new Set(Array.isArray(opts.blocklist) ? opts.blocklist.map(normalizeSymbol) : [])
+      opts.blocklist instanceof Set ? opts.blocklist : normalizeBlocklist(opts.blocklist)
     const accepted = []
 
     for (const candidate of Array.isArray(candidates) ? candidates : []) {
@@ -332,7 +417,12 @@
     // after case-folding it into an all-caps gene namespace. Upstream publication
     // should emit the exact alias spellings we want to recognize on-page.
     const aliasTrie = buildTrie(Object.keys(aliasLookup), normalizeAliasKey)
-    const matcherOptions = Object.assign({}, options || {}, { geneMap: safeGeneMap })
+    const blocklist = normalizeBlocklist(options && options.blocklist)
+    const blocklistTrie = blocklist.size ? buildTrie([...blocklist], normalizeBlocklistTerm) : null
+    const matcherOptions = Object.assign({}, options || {}, {
+      geneMap: safeGeneMap,
+      blocklist,
+    })
     return {
       collectCandidates(text) {
         return collectCandidates(text, exactTrie)
@@ -344,12 +434,16 @@
         return filterCandidates(candidates, matcherOptions)
       },
       findMatches(text) {
+        // A blocklist entry protects its complete source span. This is stronger
+        // than candidate equality: APC/C suppresses the otherwise-valid APC
+        // symbol inside it, while a standalone APC remains eligible.
+        const blockedSpans = collectBlockedSpans(text, blocklistTrie)
         const acceptedExact = sortCandidates(
           filterCandidates(collectCandidates(text, exactTrie), matcherOptions),
-        )
+        ).filter((candidate) => !overlapsBlockedSpan(candidate, blockedSpans))
         const aliasCandidates = sortCandidates(
           filterCandidates(collectAliasCandidates(text, aliasTrie, aliasLookup), matcherOptions),
-        )
+        ).filter((candidate) => !overlapsBlockedSpan(candidate, blockedSpans))
         // Fence: exact canonical symbols win. The alias layer only fills empty spans so
         // `NFKB1` still beats `NF-κB`-style convenience names when both could plausibly fire.
         const accepted = [...acceptedExact]

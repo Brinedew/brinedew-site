@@ -182,7 +182,7 @@ test("iconoplasm admin keeps the shared blocklist inside the Recognition workspa
   )
   assert.match(
     ICONOPLASM_ADMIN_SHELL,
-    /Every term must be an existing non-canonical catalog alias and a common-English ambiguity/,
+    /Use an existing non-canonical catalog alias, or protect a larger phrase that contains a recognized gene label \(for example, APC\/C\)/,
   )
   assert.match(ICONOPLASM_ADMIN_SHELL, /id="extension-blocklist-input"[\s\S]*disabled/)
   assert.match(ICONOPLASM_ADMIN_SHELL, /id="extension-blocklist-terms"[\s\S]*aria-live="polite"/)
@@ -1151,7 +1151,7 @@ test("extension blocklist renders every rejected term with an actionable reason"
         error: "Every shared blocklist term must be an unambiguous alias",
         invalid_terms: [
           { term: "TP53", reason: "canonical_symbol" },
-          { term: "X", reason: "not_published_alias" },
+          { term: "X", reason: "not_recognition_target" },
           { term: "DUPE", reason: "ambiguous_alias" },
         ],
       }
@@ -1174,8 +1174,8 @@ test("extension blocklist renders every rejected term with an actionable reason"
     { term: "TP53", reason: "canonical_symbol", label: "Canonical symbol" },
     {
       term: "X",
-      reason: "not_published_alias",
-      label: "Not a published catalog alias",
+      reason: "not_recognition_target",
+      label: "No recognized gene label inside",
     },
     {
       term: "DUPE",
@@ -1184,7 +1184,7 @@ test("extension blocklist renders every rejected term with an actionable reason"
     },
   ])
   assert.match(status.textContent, /TP53 — canonical symbol/)
-  assert.match(status.textContent, /X — not a published catalog alias/)
+  assert.match(status.textContent, /X — no recognized gene label inside/)
   assert.match(status.textContent, /DUPE — alias belongs to multiple genes/)
   assert.doesNotMatch(status.textContent, /generic validation failure/)
 
@@ -1195,7 +1195,7 @@ test("extension blocklist renders every rejected term with an actionable reason"
   assert.match(canonicalMarkup, /Canonical symbol/)
   const aliasMarkup = sandbox.termMarkup("X", state.extensionBlocklistInvalidTerms[1].label)
   assert.match(aliasMarkup, /X/)
-  assert.match(aliasMarkup, /Not a published catalog alias/)
+  assert.match(aliasMarkup, /No recognized gene label inside/)
   const ambiguousMarkup = sandbox.termMarkup("DUPE", state.extensionBlocklistInvalidTerms[2].label)
   assert.match(ambiguousMarkup, /DUPE/)
   assert.match(ambiguousMarkup, /Alias belongs to multiple genes/)
