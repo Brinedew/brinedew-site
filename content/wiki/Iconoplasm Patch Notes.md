@@ -10,6 +10,9 @@ draft: false
 
 ## Unreleased
 
+## 0.4.13 - 2026-08-11
+
+* updated the gene alias blocklist retrieval to rely on online storage instead of purely local storage
 ## 0.4.12 - 2026-08-02
 
 - Fixed Microsoft Edge losing all gene highlights after the extension catalog exceeded the browser's local-storage quota.
