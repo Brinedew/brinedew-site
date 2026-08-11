@@ -8,6 +8,7 @@ import vm from "node:vm"
 // individual KV history bounded, and anonymous consumption on one atomic pair.
 
 import { createIconoplasmAdminExtensionBlocklistHandlers } from "./iconoplasm-admin-extension-blocklist-routes.js"
+import { buildIconoplasmRecognitionValidationIndex } from "./iconoplasm-recognition-validation-index.js"
 import { ICONOPLASM_DEFAULT_PUBLICATION_ALIASES } from "./iconoplasm-publication-aliases.js"
 import { iconoplasmPublicationAliasKvKey } from "./iconoplasm-publication-alias-policy.js"
 import {
@@ -369,14 +370,14 @@ function publicationAliasPolicyRow() {
 function recognitionValidationRow(aliasRow, blocklistRow) {
   return {
     policy_key: "shared",
-    state: "unvalidated",
+    state: "valid",
     validator_revision: 1,
-    scanner_version: "",
+    scanner_version: "scannerfixture01",
     alias_revision: aliasRow.revision,
     alias_version: aliasRow.version,
     blocklist_revision: blocklistRow.revision,
     blocklist_version: blocklistRow.version,
-    validated_at: null,
+    validated_at: "2026-08-11T00:00:30.000Z",
     validation_lease_token: null,
     validation_lease_expires_at: null,
     last_validation_error: null,
@@ -436,6 +437,9 @@ function scannerEntries() {
   ]) {
     if (!genes[symbol]) genes[symbol] = {}
   }
+  const recognitionIndex = buildIconoplasmRecognitionValidationIndex(genes, {
+    scannerVersion: hash,
+  })
   return {
     "iconoplasm:catalog-manifest": JSON.stringify({
       current_hash: hash,
@@ -445,6 +449,8 @@ function scannerEntries() {
       schema_version: 1,
       genes,
     }),
+    ...Object.fromEntries(recognitionIndex.shards.map((shard) => [shard.key, shard.value])),
+    [recognitionIndex.manifestKey]: recognitionIndex.manifestValue,
   }
 }
 

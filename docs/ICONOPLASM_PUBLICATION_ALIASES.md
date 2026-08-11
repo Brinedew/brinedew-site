@@ -87,14 +87,17 @@ gene and cannot suppress the same spelling when another gene owns it.
 ## Cross-policy safety
 
 Publication aliases and the shared extension blocklist are one recognition
-system even though their public payloads remain separate. On a true semantic
-mutation, the route first normalizes and size-checks the candidate, then reads
-the scanner artifact once. One fused traversal builds the canonical, collision,
-and published-owner indexes used to validate both the alias candidate and every
-desired blocklist term. The route re-reads the small catalog manifest to reject
-a scanner flip, and the D1 CAS saves the policy revision and exact `valid`
-receipt in the same batch. A purely normalized no-op skips this pre-save scanner
-work.
+system even though their public payloads remain separate. Catalog publication
+already has every scanner gene in memory, so it performs the full fused
+recognition validation there, writes one immutable 64-shard canonical/alias
+lookup index, and records the exact `valid` D1 receipt before advancing the
+catalog manifest. A foreground semantic mutation first normalizes and
+size-checks the candidate, requires that receipt for the unchanged baseline,
+then reads only the small lookup shards touched by new or removed mappings and
+new blocklist terms. It re-reads the small catalog manifest to reject a scanner
+flip, and the D1 CAS saves the policy revision and next exact `valid` receipt in
+the same batch. It never fetches or parses the 1.9 MiB scanner artifact. A purely
+normalized no-op skips lookup validation too.
 
 Each saved row persists the exact counterpart dependency revision. An
 individual publisher may stage a revision only after that dependency is
@@ -109,11 +112,11 @@ boundary.
 Reconciliation first directly GETs the exact desired immutable keys. It reads
 the current scanner version from the small manifest and accepts scan bypass only
 when the singleton receipt is `valid` for that exact scanner and policy tuple.
-A missing, stale-validator, or scanner-mismatched receipt claims a bounded lease
-and performs one fused revalidation. A deterministic 422 result is stored as
-`invalid`, preventing every cron tick from rescanning the same bad tuple; an
-active same-target lease returns a retryable 503 without touching the scanner
-artifact. Lease claim and completion are SQL-guarded by the current policy rows.
+A missing, stale-validator, or scanner-mismatched receipt returns a loud
+retryable 503 and requires catalog publication to rebuild the proof while the
+scanner is already in memory. Reconciliation never repairs that state by
+parsing the scanner artifact. A deterministic `invalid` receipt remains a 422,
+preventing every cron tick from retrying an impossible tuple.
 
 Cleanup mode is explicit. Foreground admin saves call reconciliation with
 cleanup disabled, so an unchanged propagation retry never lists retained
@@ -189,9 +192,12 @@ An alias-only revision preserves these properties:
 
 - no additional extension request or polling timer;
 - no generated-catalog or scanner rebuild;
-- one scanner artifact read and one fused recognition-index build for a true
-  mutation or lazy receipt repair, then zero scanner artifact reads on
-  matching-receipt publication retries;
+- zero scanner-artifact reads on true admin mutations and publication retries;
+  a normal one-alias mutation reads one tiny index manifest plus only the
+  canonical/collision shards touched by that alias;
+- one full fused recognition traversal only during catalog publication, where
+  scanner genes are already in memory; catalog publication writes the immutable
+  64-shard validation index and current exact receipt before manifest advance;
 - semantic no-op saves do not create another policy revision or audit-history
   row and skip pre-save scanner work;
 - reconciler retries directly GET the exact desired alias, blocklist, and pair
@@ -245,6 +251,7 @@ before the new schema becomes mandatory.
 | Authenticated GET/POST route                                                                      | `workers/iconoplasm-admin-publication-alias-routes.js`                                            |
 | Cross-policy reconciliation order and atomic public recognition-pair bundle                       | `workers/iconoplasm-recognition-policy-reconciliation.js`                                         |
 | Bounded exact validation receipt, leases, and D1 CAS guards                                       | `workers/iconoplasm-recognition-policy-validation.js`                                             |
+| Publication-time recognition index and targeted admin lookups                                     | `workers/iconoplasm-recognition-validation-index.js`                                              |
 | Migration and exact revision-1 seed                                                               | `migrations-iconoplasm/0066_publication_alias_policy.sql`                                         |
 | Singleton recognition-validation receipt migration                                                | `migrations-iconoplasm/0067_recognition_policy_validation.sql`                                    |
 | Manifest, ETag, search/resolve, compatibility projection                                          | `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js` |

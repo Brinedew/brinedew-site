@@ -19,6 +19,12 @@ import {
   iconoplasmRecognitionValidationTargetMatches,
   prepareIconoplasmRecognitionValidationReceiptUpsert,
 } from "./iconoplasm-recognition-policy-validation.js"
+import {
+  iconoplasmRecognitionIndexCanonicalKey,
+  iconoplasmRecognitionIndexCollisionKey,
+  iconoplasmRecognitionIndexPublishedKey,
+  readIconoplasmRecognitionValidationIndexRecords,
+} from "./iconoplasm-recognition-validation-index.js"
 
 export const ICONOPLASM_PUBLICATION_ALIAS_POLICY_KEY = "curated"
 export const ICONOPLASM_PUBLICATION_ALIAS_MAX_PROJECTION_BYTES = 4 * 1024
@@ -638,6 +644,328 @@ export async function validateIconoplasmPublicationAliasesAgainstPublishedScanne
   }
   projectionForPolicy(manifest)
   return manifest
+}
+
+function policyValuesByCollision(policy, field) {
+  const result = new Map()
+  for (const [symbol, aliases] of Object.entries(policy?.[field] || {})) {
+    for (const alias of aliases) {
+      const key = publicationAliasCollisionKey(alias)
+      if (!key) continue
+      if (!result.has(key)) result.set(key, new Map())
+      const byOwner = result.get(key)
+      if (!byOwner.has(symbol)) byOwner.set(symbol, new Set())
+      byOwner.get(symbol).add(alias)
+    }
+  }
+  return result
+}
+
+function collisionOwnedBy(policyMap, collisionKey, symbol) {
+  return Boolean(policyMap.get(collisionKey)?.has(symbol))
+}
+
+function recognizedBoundaryContains(term, candidate) {
+  if (!term || !candidate || candidate.length > term.length) return false
+  let offset = term.indexOf(candidate)
+  while (offset >= 0) {
+    const before = offset > 0 ? term[offset - 1] : ""
+    const after = offset + candidate.length < term.length ? term[offset + candidate.length] : ""
+    if (
+      (!before || !RECOGNITION_BOUNDARY_CHARACTER_RE.test(before)) &&
+      (!after || !RECOGNITION_BOUNDARY_CHARACTER_RE.test(after))
+    ) {
+      return true
+    }
+    offset = term.indexOf(candidate, offset + 1)
+  }
+  return false
+}
+
+function recognitionCandidates(term) {
+  const candidates = new Set([term])
+  const characters = Array.from(term)
+  for (let start = 0; start < characters.length; start += 1) {
+    if (start > 0 && RECOGNITION_BOUNDARY_CHARACTER_RE.test(characters[start - 1])) continue
+    for (let end = start + 1; end <= characters.length; end += 1) {
+      if (end < characters.length && RECOGNITION_BOUNDARY_CHARACTER_RE.test(characters[end])) {
+        continue
+      }
+      const candidate = publishedAliasTermKey(characters.slice(start, end).join(""))
+      if (candidate) candidates.add(candidate)
+    }
+  }
+  return candidates
+}
+
+function recordOwners(record) {
+  return new Set(Array.isArray(record?.o) ? record.o : [])
+}
+
+async function validateRequiredTermsIncrementally(
+  kv,
+  scannerVersion,
+  candidatePolicy,
+  requiredAliasTerms,
+  changedPublishedKeys,
+  collisionRecords,
+) {
+  const affectedTerms = (requiredAliasTerms || [])
+    .map(publishedAliasTermKey)
+    .filter(Boolean)
+    .filter((term) =>
+      [...changedPublishedKeys].some((key) => recognizedBoundaryContains(term, key)),
+    )
+  if (affectedTerms.length === 0) return
+
+  const candidatesByTerm = new Map(affectedTerms.map((term) => [term, recognitionCandidates(term)]))
+  const candidateKeys = new Set()
+  for (const candidates of candidatesByTerm.values()) {
+    for (const candidate of candidates) {
+      candidateKeys.add(iconoplasmRecognitionIndexCanonicalKey(candidate))
+      candidateKeys.add(iconoplasmRecognitionIndexPublishedKey(candidate))
+    }
+  }
+  const records = await readIconoplasmRecognitionValidationIndexRecords(
+    kv,
+    scannerVersion,
+    candidateKeys,
+  )
+  const ownersByPublishedKey = new Map()
+  const canonicalSymbols = new Set()
+  for (const candidates of candidatesByTerm.values()) {
+    for (const candidate of candidates) {
+      if (records.get(iconoplasmRecognitionIndexCanonicalKey(candidate))) {
+        canonicalSymbols.add(candidate)
+      }
+      ownersByPublishedKey.set(
+        candidate,
+        recordOwners(records.get(iconoplasmRecognitionIndexPublishedKey(candidate))),
+      )
+    }
+  }
+  for (const [symbol, aliases] of Object.entries(candidatePolicy.remove_by_symbol)) {
+    for (const alias of aliases) {
+      const collision = collisionRecords.get(iconoplasmRecognitionIndexCollisionKey(alias))
+      for (const publishedKey of collision?.k?.[symbol] || []) {
+        ownersByPublishedKey.get(publishedKey)?.delete(symbol)
+      }
+    }
+  }
+  for (const [symbol, aliases] of Object.entries(candidatePolicy.by_symbol)) {
+    for (const alias of aliases) {
+      ownersByPublishedKey.get(publishedAliasTermKey(alias))?.add(symbol)
+    }
+  }
+
+  const invalidTerms = []
+  for (const term of affectedTerms) {
+    const owners = ownersByPublishedKey.get(term)
+    if (canonicalSymbols.has(term)) {
+      invalidTerms.push({ term, reason: "canonical_symbol" })
+      continue
+    }
+    if (owners?.size === 1) continue
+    if (owners?.size > 1) {
+      invalidTerms.push({ term, reason: "ambiguous_alias" })
+      continue
+    }
+    const nested = [...candidatesByTerm.get(term)].some(
+      (candidate) =>
+        candidate !== term &&
+        (canonicalSymbols.has(candidate) || ownersByPublishedKey.get(candidate)?.size === 1),
+    )
+    if (!nested) invalidTerms.push({ term, reason: "not_recognition_target" })
+  }
+  if (invalidTerms.length) {
+    throw policyError(
+      "publication_alias_policy_invalidates_blocklist",
+      "Publication alias policy would make a shared blocklist term unavailable or ambiguous",
+      422,
+      { invalid_terms: invalidTerms },
+    )
+  }
+}
+
+export async function validateIconoplasmRequiredAliasTermsAgainstPublishedIndex(
+  kv,
+  publicationAliases,
+  requiredAliasTerms,
+  { scannerVersion } = {},
+) {
+  requireBinding(kv, "KV")
+  const policy = validateIconoplasmPublicationAliases(publicationAliases?.by_symbol || {}, {
+    rawRemovals: publicationAliases?.remove_by_symbol || {},
+  })
+  const collisionKeys = new Set()
+  for (const aliases of Object.values(policy.remove_by_symbol)) {
+    for (const alias of aliases) collisionKeys.add(iconoplasmRecognitionIndexCollisionKey(alias))
+  }
+  const collisionRecords = await readIconoplasmRecognitionValidationIndexRecords(
+    kv,
+    scannerVersion,
+    collisionKeys,
+  )
+  const normalizedTerms = (requiredAliasTerms || []).map(publishedAliasTermKey).filter(Boolean)
+  await validateRequiredTermsIncrementally(
+    kv,
+    scannerVersion,
+    policy,
+    normalizedTerms,
+    new Set(normalizedTerms),
+    collisionRecords,
+  )
+  return normalizedTerms
+}
+
+export async function validateIconoplasmPublicationAliasesIncrementallyAgainstPublishedIndex(
+  kv,
+  candidatePolicy,
+  { baselinePolicy, requiredAliasTerms = [], scannerVersion } = {},
+) {
+  requireBinding(kv, "KV")
+  if (!baselinePolicy || !scannerVersion) {
+    throw policyError(
+      "recognition_validation_baseline_unavailable",
+      "A valid current recognition receipt is required before editing aliases",
+      503,
+    )
+  }
+  const candidate = await normalizeIconoplasmPublicationAliasPolicyCandidate(
+    candidatePolicy?.by_symbol,
+    candidatePolicy?.remove_by_symbol,
+  )
+  const baselineAdditions = policyValuesByCollision(baselinePolicy, "by_symbol")
+  const baselineRemovals = policyValuesByCollision(baselinePolicy, "remove_by_symbol")
+  const candidateAdditions = policyValuesByCollision(candidate, "by_symbol")
+  const candidateRemovals = policyValuesByCollision(candidate, "remove_by_symbol")
+  const lookupKeys = new Set()
+  const newTargets = new Set()
+  const changedPublishedKeys = new Set()
+
+  for (const [collisionKey, owners] of candidateAdditions) {
+    for (const [symbol, aliases] of owners) {
+      if (collisionOwnedBy(baselineAdditions, collisionKey, symbol)) continue
+      newTargets.add(symbol)
+      lookupKeys.add(iconoplasmRecognitionIndexCanonicalKey(collisionKey))
+      lookupKeys.add(iconoplasmRecognitionIndexCollisionKey(collisionKey))
+      for (const alias of aliases) changedPublishedKeys.add(publishedAliasTermKey(alias))
+    }
+  }
+  for (const [collisionKey, owners] of candidateRemovals) {
+    for (const [symbol] of owners) {
+      if (collisionOwnedBy(baselineRemovals, collisionKey, symbol)) continue
+      newTargets.add(symbol)
+      lookupKeys.add(iconoplasmRecognitionIndexCollisionKey(collisionKey))
+    }
+  }
+  for (const [collisionKey, owners] of baselineAdditions) {
+    for (const [symbol, aliases] of owners) {
+      if (collisionOwnedBy(candidateAdditions, collisionKey, symbol)) continue
+      for (const alias of aliases) changedPublishedKeys.add(publishedAliasTermKey(alias))
+    }
+  }
+  for (const [collisionKey, owners] of baselineRemovals) {
+    for (const [symbol] of owners) {
+      if (collisionOwnedBy(candidateRemovals, collisionKey, symbol)) continue
+      lookupKeys.add(iconoplasmRecognitionIndexCollisionKey(collisionKey))
+    }
+  }
+  for (const symbol of newTargets) lookupKeys.add(iconoplasmRecognitionIndexCanonicalKey(symbol))
+  for (const aliases of Object.values(candidate.remove_by_symbol)) {
+    for (const alias of aliases) lookupKeys.add(iconoplasmRecognitionIndexCollisionKey(alias))
+  }
+
+  const records = await readIconoplasmRecognitionValidationIndexRecords(
+    kv,
+    scannerVersion,
+    lookupKeys,
+  )
+  const invalidOperations = []
+  for (const [collisionKey, owners] of candidateRemovals) {
+    for (const [symbol, aliases] of owners) {
+      if (collisionOwnedBy(baselineRemovals, collisionKey, symbol)) continue
+      const collision = records.get(iconoplasmRecognitionIndexCollisionKey(collisionKey))
+      if (!collision?.o?.includes(symbol)) {
+        invalidOperations.push({
+          operation: "remove",
+          symbol,
+          alias: [...aliases][0],
+          reason: collision?.o?.length ? "owned_by_other_gene" : "not_generated_for_target",
+          owners: [...(collision?.o || [])],
+        })
+        continue
+      }
+      for (const key of collision.k?.[symbol] || []) changedPublishedKeys.add(key)
+    }
+  }
+  for (const [collisionKey, owners] of baselineRemovals) {
+    for (const [symbol] of owners) {
+      if (collisionOwnedBy(candidateRemovals, collisionKey, symbol)) continue
+      const collision = records.get(iconoplasmRecognitionIndexCollisionKey(collisionKey))
+      for (const key of collision?.k?.[symbol] || []) changedPublishedKeys.add(key)
+    }
+  }
+  for (const [collisionKey, owners] of candidateAdditions) {
+    for (const [symbol, aliases] of owners) {
+      if (collisionOwnedBy(baselineAdditions, collisionKey, symbol)) continue
+      const alias = [...aliases][0]
+      const canonicalOwner = records.get(iconoplasmRecognitionIndexCanonicalKey(collisionKey))
+        ? collisionKey
+        : null
+      const collision = records.get(iconoplasmRecognitionIndexCollisionKey(collisionKey))
+      const conflictingOwners = [
+        ...new Set([...(collision?.o || []), canonicalOwner].filter(Boolean)),
+      ]
+        .filter((owner) => owner !== symbol)
+        .sort()
+      if (conflictingOwners.length) {
+        invalidOperations.push({
+          operation: "add",
+          symbol,
+          alias,
+          reason: "owned_by_other_gene",
+          owners: conflictingOwners,
+        })
+      } else if (collision?.o?.includes(symbol)) {
+        invalidOperations.push({
+          operation: "add",
+          symbol,
+          alias,
+          reason: "already_generated_for_target",
+          owners: [symbol],
+        })
+      }
+    }
+  }
+  for (const symbol of newTargets) {
+    if (!records.get(iconoplasmRecognitionIndexCanonicalKey(symbol))) {
+      invalidOperations.push({
+        operation: "target",
+        symbol,
+        alias: null,
+        reason: "unknown_canonical_symbol",
+        owners: [],
+      })
+    }
+  }
+  if (invalidOperations.length) {
+    throw policyError(
+      "publication_alias_operations_conflict_with_scanner",
+      "Publication alias operations conflict with the published scanner catalog",
+      422,
+      { invalid_operations: invalidOperations },
+    )
+  }
+  await validateRequiredTermsIncrementally(
+    kv,
+    scannerVersion,
+    candidate,
+    requiredAliasTerms,
+    changedPublishedKeys,
+    records,
+  )
+  return candidate
 }
 
 function publicationAliasVersionToken(version) {
