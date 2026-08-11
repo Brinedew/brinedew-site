@@ -290,6 +290,30 @@ test("Recognition defaults to an accessible alias-mapping draft workspace", () =
     ICONOPLASM_ADMIN_CSS,
     /\.publication-alias-mapping-actions button \{[\s\S]*min-height: 44px/,
   )
+  assert.match(
+    ICONOPLASM_ADMIN_SHELL,
+    /class="recognition-editor"[\s\S]*class="recognition-command-rail"[\s\S]*id="publication-alias-form"[\s\S]*id="publication-alias-publish"[\s\S]*class="recognition-draft-pane" aria-labelledby="publication-alias-draft-heading"[\s\S]*id="publication-alias-mappings"/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_SHELL,
+    /class="recognition-editor"[\s\S]*class="recognition-command-rail"[\s\S]*id="extension-blocklist-input"[\s\S]*id="extension-blocklist-publish"[\s\S]*class="recognition-draft-pane" aria-labelledby="extension-blocklist-draft-heading"[\s\S]*id="extension-blocklist-terms"/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_CSS,
+    /\.recognition-editor \{[\s\S]*grid-template-columns: minmax\(320px, 0\.82fr\) minmax\(440px, 1\.18fr\)/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_CSS,
+    /\.recognition-draft-pane \{[\s\S]*max-height: clamp\(460px, 62vh, 700px\)[\s\S]*overflow: hidden/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_CSS,
+    /\.publication-alias-mappings \{[\s\S]*overflow-y: auto[\s\S]*overscroll-behavior: contain/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_CSS,
+    /@media \(max-width: 900px\)[\s\S]*\.recognition-editor \{[\s\S]*grid-template-columns: 1fr[\s\S]*\.publication-alias-mappings,[\s\S]*\.extension-blocklist-terms \{[\s\S]*max-height: min\(52vh, 520px\)/,
+  )
 })
 
 test("the 45-addition alias policy publishes without collapsing or reordering case variants", async () => {
