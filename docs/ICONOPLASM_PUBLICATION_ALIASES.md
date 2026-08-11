@@ -151,8 +151,11 @@ The server enforces all of the following before the D1 CAS:
 - a newly added alias already generated for the same target is rejected as
   `already_generated_for_target` (the catalog already provides it);
 - a newly introduced removal must currently belong to the named target; and
-- every desired shared-blocklist term remains one unambiguous non-canonical
-  alias after applying the candidate policy.
+- every desired shared-blocklist term is either one unambiguous non-canonical
+  alias or a larger phrase containing a recognized canonical symbol or
+  unambiguous alias after applying the candidate policy. A larger phrase is a
+  protected span: `APC/C` suppresses the nested `APC` highlight without
+  suppressing standalone `APC` elsewhere.
 
 Persisted additions and removals are grandfathered when the generated scanner
 later evolves. Existing additions that become generated are harmless; an

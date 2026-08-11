@@ -2700,6 +2700,7 @@
 
   function extensionBlocklistInvalidReasonLabel(reason) {
     if (reason === "canonical_symbol") return "Canonical symbol"
+    if (reason === "not_recognition_target") return "No recognized gene label inside"
     if (reason === "not_published_alias") return "Not a published catalog alias"
     if (reason === "ambiguous_alias") return "Alias belongs to multiple genes"
     return "Invalid shared term"

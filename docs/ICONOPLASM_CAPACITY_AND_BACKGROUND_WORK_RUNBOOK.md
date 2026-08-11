@@ -270,12 +270,15 @@ KV record. Scheduled reconciliation runs blocklist, aliases, blocklist again,
 then the atomic pair publisher: removals therefore stage blocklist-first,
 additions alias-first, and sequential saved-but-pending revisions converge
 without deadlock. Only the final pair value advances the anonymous read plane.
-Admin blocklist writes normalize, sort, and deduplicate terms, reject canonical
-symbols, and require every term to be one unambiguous alias after the desired
-alias policy. Alias writes reject unknown targets, cross-owner collisions, and
-new aliases already supplied by the generated scanner while ensuring every
-desired blocklist term remains valid. Whether an alias is an unwanted common-
-English ambiguity remains explicit administrator judgment.
+Admin blocklist writes normalize, sort, and deduplicate terms and reject a
+canonical symbol used by itself. Each term must be either one unambiguous alias
+or a larger protected phrase containing a recognized canonical symbol or
+unambiguous alias after the desired alias policy. A protected phrase suppresses
+all overlapping highlights inside that occurrence while leaving the same label
+recognizable elsewhere. Alias writes reject unknown targets, cross-owner
+collisions, and new aliases already supplied by the generated scanner while
+ensuring every desired blocklist term remains valid. Whether an alias or phrase
+is an unwanted ambiguity remains explicit administrator judgment.
 
 Once an extension has accepted a valid blocklist or alias projection, it retains
 that last-known-good authoritative state through missing, malformed, stale, or
