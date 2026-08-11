@@ -312,6 +312,18 @@ test("Recognition defaults to an accessible alias-mapping draft workspace", () =
   )
   assert.match(
     ICONOPLASM_ADMIN_CSS,
+    /\.recognition-command-rail \.publication-alias-fields \{[\s\S]*grid-template-columns: minmax\(0, 1fr\)/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_CSS,
+    /\.publication-alias-list-head \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto[\s\S]*align-items: start/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_CSS,
+    /\.publication-alias-filter \{[\s\S]*grid-row: 2[\s\S]*grid-column: 1 \/ -1/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_CSS,
     /@media \(max-width: 900px\)[\s\S]*\.recognition-editor \{[\s\S]*grid-template-columns: 1fr[\s\S]*\.publication-alias-mappings,[\s\S]*\.extension-blocklist-terms \{[\s\S]*max-height: min\(52vh, 520px\)/,
   )
 })
