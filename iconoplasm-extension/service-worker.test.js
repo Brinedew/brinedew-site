@@ -343,6 +343,41 @@ test("portrait fetch failures back off briefly but recover after the error TTL",
   }
 })
 
+test("concurrent requests for the same successful portrait share one byte transfer", async () => {
+  const originalFetch = globalThis.fetch
+  let fetchCalls = 0
+  let releaseFetch
+  const fetchGate = new Promise((resolve) => {
+    releaseFetch = resolve
+  })
+  hooks.clearPortraitDataUrlCaches()
+  globalThis.fetch = async () => {
+    fetchCalls += 1
+    await fetchGate
+    return new Response(Uint8Array.from([1, 2, 3]), {
+      status: 200,
+      headers: { "Content-Type": "image/webp" },
+    })
+  }
+
+  try {
+    const url = "https://iconoplasm.brinedew.bio/media/shared.webp"
+    const first = hooks.fetchPortraitDataUrl(url)
+    const second = hooks.fetchPortraitDataUrl(url)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.equal(fetchCalls, 1)
+
+    releaseFetch()
+    const [left, right] = await Promise.all([first, second])
+    assert.equal(left.dataUrl, right.dataUrl)
+    assert.match(left.dataUrl, /^data:image\/webp;base64,/)
+    assert.equal(fetchCalls, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+    hooks.clearPortraitDataUrlCaches()
+  }
+})
+
 test("100 extension portraits share one failed primary decision per tab", async () => {
   const originalFetch = globalThis.fetch
   let primaryFetches = 0

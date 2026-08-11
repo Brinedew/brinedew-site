@@ -865,7 +865,6 @@ test("DO NOT DELETE: simple card title uses stable label typography and ink", ()
 
 test("DO NOT DELETE: simple card portrait warmup decodes hover-neighbor images", () => {
   const source = readUtf8("./iconoplasm-extension/content.js")
-  const detailCacheSource = readUtf8("./iconoplasm-extension/content-detail-cache.js")
   assert.match(
     source,
     /const decodedPortraitSrcCache = new Set\(\)/,
@@ -878,28 +877,48 @@ test("DO NOT DELETE: simple card portrait warmup decodes hover-neighbor images",
   )
   assert.match(
     source,
-    /function onPortraitWarmBatch\(usableSources\)[\s\S]*prewarmLitArchivalFramePortraitSrcs\(usableSources\)[\s\S]*warmDecodedPortraitSources\(usableSources\)/,
-    "neighbor portrait warming should serve both the frame renderer and the simple-card renderer",
-  )
-  assert.match(
-    detailCacheSource,
-    /const onResolvedBatch =[\s\S]*options\.onResolvedBatch[\s\S]*if \(genes\.length\) onResolvedBatch\(genes\)/,
-    "detail cache batches should expose hydrated records to the content script instead of hiding portrait URLs inside the cache",
+    /function onPortraitWarmSource\(usableSource\)[\s\S]*if \(usesTooltipFrameRenderer\(\)\)[\s\S]*prewarmLitArchivalFramePortraitSrcs\(\[usableSource\]\)[\s\S]*warmDecodedPortraitSources\(\[usableSource\]\)/,
+    "neighbor portrait warming should decode only in the renderer mode that can paint it",
   )
   assert.match(
     source,
-    /function onGeneDetailWarmBatch\(records\)[\s\S]*portraitUrlFromGeneDetail\(record\)[\s\S]*warmPortraitUrls\(urls\)/,
-    "preloaded gene details should immediately warm the exact detail portrait URLs the rich hover card will render",
+    /const PORTRAIT_WARM_BATCH_SIZE = 2/,
+    "background portrait warming should stay within a two-transfer lane",
+  )
+  assert.doesNotMatch(
+    source,
+    /onResolvedBatch:/,
+    "generic viewport metadata warming must not start arbitrary portrait transfers",
   )
   assert.match(
     source,
-    /onResolvedBatch: onGeneDetailWarmBatch/,
-    "content.js should connect detail preloading to portrait preloading",
+    /const neighborDetailsPromise =[\s\S]*Promise\.all\(\[[\s\S]*getUsablePortraitSrc\(portraitSrc\)[\s\S]*neighborDetailsPromise[\s\S]*portraitUrlsFromGeneDetails[\s\S]*warmPortraitUrls\(portraitUrls\)/,
+    "the hovered portrait should own the active request before four neighbor portraits enter the background lane",
   )
   assert.match(
     source,
-    /function collectNeighborGeneSymbols\(targetEl[\s\S]*if \(targetIndex === -1\) return \[\][\s\S]*for \(let distance = 1; symbols\.length < max; distance \+= 1\)[\s\S]*const left = targetIndex - distance[\s\S]*const right = targetIndex \+ distance[\s\S]*if \(left >= 0\)[\s\S]*if \(right < genes\.length\)/,
-    "neighbor warming should walk both left and right rings instead of spending the budget on only one side of the hovered symbol",
+    /const hoverIntent = hoverIntentTracker\.enter\(symbol\)[\s\S]*Promise\.all\([\s\S]*hoverIntentTracker\.isCurrent\(hoverIntent\)[\s\S]*warmPortraitUrls\(portraitUrls\)/,
+    "a superseded hover must not launch stale neighbor portrait work, including A to B to A pointer movement",
+  )
+  assert.match(
+    source,
+    /hoverIntentTracker\.enter\(symbol\)[\s\S]*portraitCache\.replaceWarmUrls\(\[\]\)/,
+    "new hover intent should discard queued, not-yet-started portraits from the previous hover",
+  )
+  assert.match(
+    source,
+    /allowsSpeculativePrewarm\([\s\S]*window\.navigator\?\.connection[\s\S]*postBackgroundTask\([\s\S]*signal:\s*neighborPrewarmSignal/,
+    "neighbor speculation should respect the user's connection policy and run in a cancellable browser-priority task",
+  )
+  assert.match(
+    source,
+    /litArchivalFrameController[\s\S]*\.postHydrated\([\s\S]*payload\.requestId/,
+    "a late portrait adapter result must match the exact frame request, not only the current symbol",
+  )
+  assert.match(
+    source,
+    /function deferGeneDetailWarm\(task\)[\s\S]*postBackgroundTask\([\s\S]*if \(activeSymbol\)[\s\S]*deferGeneDetailWarm\(task\)/,
+    "generic viewport metadata should use browser background priority and yield to an active hover instead of launching a third request lane",
   )
   assert.doesNotMatch(
     source,
@@ -1020,6 +1039,8 @@ test("DO NOT DELETE: extension runtime typography uses Iconoplasm fonts, not leg
 test("DO NOT DELETE: blot-only frame clears stale neighbor cards before portrait decode", () => {
   const frameSource = readUtf8("./iconoplasm-extension/lit-archival-frame.js")
   const contentSource = readUtf8("./iconoplasm-extension/content.js")
+  const tooltipSource = readUtf8("./iconoplasm-extension/content-tooltip.js")
+  const contentCss = readUtf8("./iconoplasm-extension/content.css")
   assert.match(
     frameSource,
     /let renderSerial = 0/,
@@ -1041,9 +1062,14 @@ test("DO NOT DELETE: blot-only frame clears stale neighbor cards before portrait
     "the frame should acknowledge the exact render request after it replaces stale card markup",
   )
   assert.match(
-    contentSource,
-    /iframe\.dataset\.iconoFrameRenderState = "pending"[\s\S]*iframe\.contentWindow\.postMessage\(payload/,
-    "content.js should hide a stale symbol frame before asking it to render the next symbol",
+    tooltipSource,
+    /activeFrame\.dataset\.iconoFrameRenderState = "pending"[\s\S]*activeFrame\.contentWindow\.postMessage\(payload/,
+    "the persistent frame controller should hide stale symbol content before posting the next symbol",
+  )
+  assert.match(
+    contentCss,
+    /\.iconoplasm-tooltip-lit-frame\[data-icono-frame-render-state="pending"\]\s*\{\s*opacity:\s*0;/,
+    "the pending state must actually hide the previous symbol while postMessage crosses contexts",
   )
   assert.match(
     contentSource,
@@ -1052,7 +1078,7 @@ test("DO NOT DELETE: blot-only frame clears stale neighbor cards before portrait
   )
   assert.match(
     frameSource,
-    /const portraitDecodedSourceCache = new Set\(\)[\s\S]*portraitDecodedSourceCache\.add\(usableSrc\)/,
+    /const portraitDecodedSourceCache = new Set\(\)[\s\S]*function rememberDecodedPortraitSource\(src\)[\s\S]*portraitDecodedSourceCache\.add\(src\)/,
     "the frame should remember which prewarmed portrait sources are actually decoded",
   )
   assert.match(
@@ -1064,31 +1090,42 @@ test("DO NOT DELETE: blot-only frame clears stale neighbor cards before portrait
 
 test("DO NOT DELETE: frame portrait prewarm decodes before a visible neighbor hover", () => {
   const source = readUtf8("./iconoplasm-extension/content.js")
+  const tooltipSource = readUtf8("./iconoplasm-extension/content-tooltip.js")
   const contentCss = readUtf8("./iconoplasm-extension/content.css")
   assert.match(
     source,
-    /let litArchivalPrewarmFrame = null[\s\S]*const pendingLitArchivalPrewarmSources = new Set\(\)/,
-    "neighbor blot prewarm should keep a frame-side queue even when no visible tooltip exists yet",
+    /let litArchivalFrameShell = null[\s\S]*createPersistentFrameController\([\s\S]*const pendingLitArchivalPrewarmSources = new Set\(\)/,
+    "neighbor prewarm should share the one persistent renderer and its readiness queue",
+  )
+  assert.match(
+    tooltipSource,
+    /function createPersistentFrameController\(options = \{\}\)[\s\S]*if \(frame && frame\.isConnected\) return frame[\s\S]*const nextFrame = documentRef\.createElement\("iframe"\)[\s\S]*host\.appendChild\(nextFrame\)/,
+    "the renderer controller should create one iframe inside its final host and reuse it",
+  )
+  assert.doesNotMatch(
+    source,
+    /document\.body\.appendChild\(litArchivalFrame\)|document\.body\.appendChild\(iframe\)/,
+    "the loaded renderer must never be reparented because that reloads its browsing context",
   )
   assert.match(
     source,
-    /function ensureLitArchivalPrewarmFrame\(\)[\s\S]*document\.createElement\("iframe"\)[\s\S]*iconoplasm-tooltip-lit-frame--prewarm[\s\S]*document\.body\.appendChild\(iframe\)/,
-    "neighbor portrait preloading should create a hidden extension frame before the user hovers the neighboring symbol",
-  )
-  assert.match(
-    source,
-    /function prewarmLitArchivalFramePortraitSrcs\(sources\)[\s\S]*pendingLitArchivalPrewarmSources\.add\(source\)[\s\S]*ensureLitArchivalPrewarmFrame\(\)[\s\S]*flushLitArchivalPrewarmSources\(\)/,
+    /function prewarmLitArchivalFramePortraitSrcs\(sources\)[\s\S]*pendingLitArchivalPrewarmSources\.add\(source\)[\s\S]*ensureLitArchivalFrame\(\)[\s\S]*flushLitArchivalPrewarmSources\(\)/,
     "neighbor portrait preloading should queue sources, ensure a frame exists, then flush into that frame for decode",
   )
   assert.match(
     source,
-    /litArchivalPrewarmFrame\.dataset\.iconoFrameReady = "true"[\s\S]*flushLitArchivalPrewarmSources\(\)/,
-    "queued neighbor prewarms should flush as soon as the hidden prewarm frame is ready",
+    /data\.type === LIT_ARCHIVAL_PREWARMED_MESSAGE[\s\S]*rememberReadyLitArchivalPrewarmSource\(source\)[\s\S]*flushLitArchivalPrewarmSources\(\)/,
+    "sources should become ready only after the frame acknowledges decode and a paint boundary",
+  )
+  assert.match(
+    source,
+    /data\.type === LIT_ARCHIVAL_READY_MESSAGE[\s\S]*litArchivalFrameController\.markReady\(event\.source\)[\s\S]*flushLitArchivalPrewarmSources\(\)/,
+    "the content adapter should route frame readiness through the persistent controller before flushing prewarm work",
   )
   assert.match(
     contentCss,
-    /\.iconoplasm-tooltip-lit-frame--prewarm\s*\{[\s\S]*width:\s*1px[\s\S]*height:\s*1px[\s\S]*visibility:\s*hidden/,
-    "the prewarm frame should decode images without showing a second card on the page",
+    /\.iconoplasm-tooltip-lit-frame--prewarm\s*\{[\s\S]*width:\s*1px[\s\S]*height:\s*1px[\s\S]*opacity:\s*0/,
+    "the prewarm frame should stay paint-scheduled while remaining invisible on the page",
   )
 })
 
@@ -1098,6 +1135,26 @@ test("DO NOT DELETE: first tooltip creation applies frame-card classes after ass
     source,
     /tooltip = IconoContentTooltip\.createTooltipShell\([\s\S]*?\)\s*\n\s*\/\/ createTooltipShell invokes the callback before this module's tooltip variable is assigned\.[\s\S]*?applyTooltipTheme\(\)/,
     "the first hover should not miss image-only/frame-card classes until a later settings change",
+  )
+  assert.match(
+    source,
+    /function createTooltip\(\)[\s\S]*if \(tooltip && tooltip\.isConnected\) return tooltip/,
+    "gene-data retries must reuse the one tooltip and its document/window listeners",
+  )
+  assert.match(
+    source,
+    /function createAuthToast\(\)[\s\S]*if \(authToast && authToast\.isConnected\) return authToast/,
+    "gene-data retries must not duplicate the auth toast",
+  )
+  assert.match(
+    source,
+    /createAdapterOwnedPortraitState\([\s\S]*const payload = \{[\s\S]*portraitSrc: portraitState\.frameSrc,[\s\S]*model: buildLitTooltipCardModel\([\s\S]*portraitState\.frameSrc[\s\S]*postLitArchivalFramePayload\(iframe, payload\)/,
+    "cold rich hover should paint text first and wait for the one adapter-owned portrait source",
+  )
+  assert.doesNotMatch(
+    source,
+    /portraitSrc:\s*(?:warmedPortraitSrc|portraitState\.frameSrc)\s*\|\|\s*directPortraitSrc/,
+    "cold rich hover must not race a raw canonical image against the portrait adapter",
   )
 })
 
