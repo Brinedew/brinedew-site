@@ -2,8 +2,12 @@
 // exact desired-state dependency revisions persisted by each administrator
 // save, then exposed through one atomic immutable KV pair projection.
 import {
+  cleanupIconoplasmExtensionBlocklistProjectionHistory,
   parseIconoplasmPublishedExtensionBlocklistProjection,
   readAuthoritativePublishedIconoplasmExtensionBlocklist,
+  readIconoplasmExtensionBlocklistPolicy,
+  readPublishedIconoplasmExtensionBlocklistAtRevision,
+  readPublishedIconoplasmExtensionBlocklistForPolicy,
   readRetainedPublishedIconoplasmExtensionBlocklists,
   reconcileIconoplasmExtensionBlocklistPolicy,
   validateIconoplasmExtensionBlocklistAgainstPublishedScanner,
@@ -13,9 +17,25 @@ import {
   iconoplasmPublicationAliasManifestFromPolicy,
 } from "./iconoplasm-publication-aliases.js"
 import {
+  cleanupIconoplasmPublicationAliasProjectionHistory,
   readAuthoritativePublishedIconoplasmPublicationAliases,
+  loadIconoplasmPublishedScannerRecognitionContext,
+  readIconoplasmPublicationAliasPolicy,
+  readIconoplasmPublishedScannerVersion,
+  readPublishedIconoplasmPublicationAliasesForPolicy,
   reconcileIconoplasmPublicationAliasPolicy,
+  validateIconoplasmPublicationAliasesAgainstPublishedScanner,
 } from "./iconoplasm-publication-alias-policy.js"
+import {
+  claimIconoplasmRecognitionValidationLease,
+  completeIconoplasmRecognitionValidationLease,
+  iconoplasmRecognitionValidationReceiptMatches,
+  iconoplasmRecognitionValidationTarget,
+  iconoplasmRecognitionValidationTargetMatches,
+  readIconoplasmRecognitionValidationReceipt,
+  rejectIconoplasmRecognitionValidationLease,
+  releaseIconoplasmRecognitionValidationLease,
+} from "./iconoplasm-recognition-policy-validation.js"
 
 export const ICONOPLASM_RECOGNITION_PAIR_KV_PREFIX = "iconoplasm:recognition-policy-pair:v1:"
 export const ICONOPLASM_RECOGNITION_PAIR_KV_RETENTION = 100
@@ -326,12 +346,23 @@ async function cleanupPairKeysBestEffort(kv, protectedKey) {
   }
 }
 
-export async function publishIconoplasmRecognitionPolicyPair(kv) {
+export async function publishIconoplasmRecognitionPolicyPair(
+  kv,
+  {
+    aliases: suppliedAliases = null,
+    blocklist: suppliedBlocklist = null,
+    validatedRecognitionTarget = null,
+    cleanup = true,
+  } = {},
+) {
   if (!kv) throw policyError("kv_binding_missing", "KV binding missing")
-  const [aliases, blocklist] = await Promise.all([
-    readAuthoritativePublishedIconoplasmPublicationAliases(kv),
-    readAuthoritativePublishedIconoplasmExtensionBlocklist(kv),
-  ])
+  const [aliases, blocklist] =
+    suppliedAliases && suppliedBlocklist
+      ? [suppliedAliases, suppliedBlocklist]
+      : await Promise.all([
+          readAuthoritativePublishedIconoplasmPublicationAliases(kv),
+          readAuthoritativePublishedIconoplasmExtensionBlocklist(kv),
+        ])
   if (!aliases || !blocklist || !compatiblePair(aliases, blocklist)) {
     throw policyError(
       "recognition_pair_dependencies_not_published",
@@ -339,9 +370,20 @@ export async function publishIconoplasmRecognitionPolicyPair(kv) {
       503,
     )
   }
-  await validateIconoplasmExtensionBlocklistAgainstPublishedScanner(kv, blocklist.terms, {
-    publicationAliases: aliases.overlay,
-  })
+  if (
+    validatedRecognitionTarget &&
+    !iconoplasmRecognitionValidationTargetMatches(validatedRecognitionTarget, {
+      scannerVersion: validatedRecognitionTarget.scanner_version,
+      aliases: { revision: aliases.revision, version: aliases.overlay?.version },
+      blocklist,
+    })
+  ) {
+    throw policyError(
+      "recognition_pair_validation_target_mismatch",
+      "Recognition policy projections do not match the validated target",
+      503,
+    )
+  }
   const key = iconoplasmRecognitionPairKvKey(aliases.revision, blocklist.revision)
   const raw = pairRaw(aliases, blocklist)
   const existing = await kv.get(key)
@@ -351,6 +393,11 @@ export async function publishIconoplasmRecognitionPolicyPair(kv) {
       "Immutable recognition pair key already contains different content",
       503,
     )
+  }
+  if (!validatedRecognitionTarget) {
+    await validateIconoplasmExtensionBlocklistAgainstPublishedScanner(kv, blocklist.terms, {
+      publicationAliases: aliases.overlay,
+    })
   }
   if (existing == null) await kv.put(key, raw)
   const visible = await parsePair(await kv.get(key), {
@@ -374,7 +421,7 @@ export async function publishIconoplasmRecognitionPolicyPair(kv) {
     ok: true,
     changed: existing == null,
     pair: visible,
-    cleanup: await cleanupPairKeysBestEffort(kv, key),
+    cleanup: cleanup ? await cleanupPairKeysBestEffort(kv, key) : { ok: true, skipped: true },
   }
 }
 
@@ -390,7 +437,132 @@ async function settled(work) {
   }
 }
 
-export async function reconcileIconoplasmRecognitionPolicies(env, { now = new Date() } = {}) {
+function pairMatchesDesired(pair, aliases, blocklist) {
+  return Boolean(
+    pair &&
+    pair.alias_revision === aliases.revision &&
+    pair.blocklist_revision === blocklist.revision &&
+    pair.alias_depends_on_blocklist_revision ===
+      nullableRevision(aliases.depends_on_blocklist_revision) &&
+    pair.blocklist_depends_on_alias_revision ===
+      nullableRevision(blocklist.depends_on_alias_revision) &&
+    pair.publication_aliases.version === aliases.version &&
+    pair.extension_blocklist.version === blocklist.version &&
+    JSON.stringify(pair.publication_aliases.by_symbol) === JSON.stringify(aliases.by_symbol) &&
+    JSON.stringify(pair.publication_aliases.remove_by_symbol) ===
+      JSON.stringify(aliases.remove_by_symbol) &&
+    JSON.stringify(pair.extension_blocklist.terms) === JSON.stringify(blocklist.terms),
+  )
+}
+
+async function readExactDesiredPair(kv, aliases, blocklist) {
+  const key = iconoplasmRecognitionPairKvKey(aliases.revision, blocklist.revision)
+  const pair = await parsePair(await kv.get(key), {
+    aliasRevision: aliases.revision,
+    blocklistRevision: blocklist.revision,
+  })
+  return pairMatchesDesired(pair, aliases, blocklist) ? { key, pair } : null
+}
+
+async function ensureRecognitionValidationReceipt(env, aliases, blocklist, scannerVersion, now) {
+  const target = iconoplasmRecognitionValidationTarget({
+    scannerVersion,
+    aliases,
+    blocklist,
+  })
+  const current = await readIconoplasmRecognitionValidationReceipt(env.ICONOPLASM_DB)
+  if (iconoplasmRecognitionValidationReceiptMatches(current, target, "valid")) return target
+  if (iconoplasmRecognitionValidationReceiptMatches(current, target, "invalid")) {
+    throw policyError(
+      "recognition_policy_validation_invalid",
+      current.last_validation_error || "Desired recognition policy is invalid for this scanner",
+      422,
+    )
+  }
+  const claim = await claimIconoplasmRecognitionValidationLease(env.ICONOPLASM_DB, target, { now })
+  if (claim.status === "valid") return target
+  if (claim.status === "invalid") {
+    throw policyError(
+      "recognition_policy_validation_invalid",
+      claim.receipt?.last_validation_error ||
+        "Desired recognition policy is invalid for this scanner",
+      422,
+    )
+  }
+  if (claim.status !== "owned") {
+    throw policyError(
+      "recognition_policy_validation_in_progress",
+      "Recognition policy validation is already in progress",
+      503,
+    )
+  }
+  try {
+    const scannerContext = await loadIconoplasmPublishedScannerRecognitionContext(env.KV)
+    if (scannerContext.scanner_version !== scannerVersion) {
+      throw policyError(
+        "published_scanner_changed_during_validation",
+        "Published scanner changed before recognition validation began",
+        503,
+      )
+    }
+    await validateIconoplasmPublicationAliasesAgainstPublishedScanner(
+      env.KV,
+      aliases.by_symbol,
+      aliases.remove_by_symbol,
+      {
+        baselinePolicy: aliases,
+        requiredAliasTerms: blocklist.terms,
+        scannerContext,
+      },
+    )
+    if ((await readIconoplasmPublishedScannerVersion(env.KV)) !== scannerVersion) {
+      throw policyError(
+        "published_scanner_changed_during_validation",
+        "Published scanner changed during recognition validation",
+        503,
+      )
+    }
+    const completed = await completeIconoplasmRecognitionValidationLease(
+      env.ICONOPLASM_DB,
+      target,
+      claim.token,
+      { now },
+    )
+    if (!completed) {
+      throw policyError(
+        "recognition_policy_validation_contended",
+        "Recognition policy changed during validation",
+        503,
+      )
+    }
+    return target
+  } catch (error) {
+    const deterministic = Number(error?.status) === 422
+    if (deterministic) {
+      await rejectIconoplasmRecognitionValidationLease(
+        env.ICONOPLASM_DB,
+        target,
+        claim.token,
+        error?.message || error,
+        { now },
+      )
+    } else {
+      await releaseIconoplasmRecognitionValidationLease(
+        env.ICONOPLASM_DB,
+        target,
+        claim.token,
+        error?.message || error,
+        { now },
+      )
+    }
+    throw error
+  }
+}
+
+export async function reconcileIconoplasmRecognitionPolicies(
+  env,
+  { now = new Date(), cleanup = true } = {},
+) {
   if (!env?.ICONOPLASM_DB || !env?.KV) {
     const value = { ok: false, skipped: true, reason: "binding_missing" }
     return {
@@ -400,22 +572,159 @@ export async function reconcileIconoplasmRecognitionPolicies(env, { now = new Da
     }
   }
 
+  const [desiredAliases, desiredBlocklist] = await Promise.all([
+    readIconoplasmPublicationAliasPolicy(env.ICONOPLASM_DB),
+    readIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB),
+  ])
+  const exactPair = await readExactDesiredPair(env.KV, desiredAliases, desiredBlocklist)
+  const scannerVersion = await readIconoplasmPublishedScannerVersion(env.KV)
+  const validatedRecognitionTarget = await ensureRecognitionValidationReceipt(
+    env,
+    desiredAliases,
+    desiredBlocklist,
+    scannerVersion,
+    now,
+  )
+  const [validatedAliases, validatedBlocklist, validatedScannerVersion] = await Promise.all([
+    readIconoplasmPublicationAliasPolicy(env.ICONOPLASM_DB),
+    readIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB),
+    readIconoplasmPublishedScannerVersion(env.KV),
+  ])
+  if (
+    !iconoplasmRecognitionValidationTargetMatches(validatedRecognitionTarget, {
+      scannerVersion: validatedScannerVersion,
+      aliases: validatedAliases,
+      blocklist: validatedBlocklist,
+    })
+  ) {
+    throw policyError(
+      "recognition_policy_validation_contended",
+      "Recognition policy or scanner changed after validation",
+      503,
+    )
+  }
+  if (exactPair) {
+    const cleanupResults = cleanup
+      ? await Promise.all([
+          cleanupIconoplasmPublicationAliasProjectionHistory(env.KV, {
+            protectedRevision: validatedAliases.revision,
+          }),
+          cleanupIconoplasmExtensionBlocklistProjectionHistory(env.KV, {
+            protectedRevision: validatedBlocklist.revision,
+          }),
+          cleanupPairKeysBestEffort(env.KV, exactPair.key),
+        ])
+      : [
+          { ok: true, skipped: true },
+          { ok: true, skipped: true },
+          { ok: true, skipped: true },
+        ]
+    const value = { ok: true, changed: false, skipped: true, reason: "already_published" }
+    return {
+      extension_blocklist: {
+        status: "fulfilled",
+        value: { ...value, cleanup: cleanupResults[1] },
+      },
+      publication_aliases: {
+        status: "fulfilled",
+        value: { ...value, cleanup: cleanupResults[0] },
+      },
+      pair: {
+        status: "fulfilled",
+        value: { ...value, pair: exactPair.pair, cleanup: cleanupResults[2] },
+      },
+      passes: Object.freeze({
+        blocklist_first: { status: "fulfilled", value },
+        blocklist_second: { status: "fulfilled", value },
+      }),
+    }
+  }
+
   // A blocklist removal may be the dependency that makes an alias removal safe.
   // Run it first, then aliases, then retry the blocklist so the opposite
   // dependency (a newly published alias) also converges in this same cron tick.
   const blocklistFirst = await settled(() =>
-    reconcileIconoplasmExtensionBlocklistPolicy(env, { now }),
+    reconcileIconoplasmExtensionBlocklistPolicy(env, {
+      now,
+      exactDesired: true,
+      validatedRecognitionTarget,
+      cleanup,
+      readPublishedAliases: () =>
+        readPublishedIconoplasmPublicationAliasesForPolicy(env.KV, validatedAliases),
+    }),
   )
   const publicationAliases = await settled(() =>
     reconcileIconoplasmPublicationAliasPolicy(env, {
       now,
-      readPublishedBlocklist: () => readAuthoritativePublishedIconoplasmExtensionBlocklist(env.KV),
+      readPublishedBlocklist: () =>
+        readPublishedIconoplasmExtensionBlocklistAtRevision(
+          env.KV,
+          validatedAliases.depends_on_blocklist_revision || validatedBlocklist.revision,
+        ),
+      exactDesired: true,
+      validatedRecognitionTarget,
+      cleanup,
     }),
   )
   const blocklistSecond = await settled(() =>
-    reconcileIconoplasmExtensionBlocklistPolicy(env, { now }),
+    reconcileIconoplasmExtensionBlocklistPolicy(env, {
+      now,
+      exactDesired: true,
+      validatedRecognitionTarget,
+      cleanup,
+    }),
   )
-  const pair = await settled(() => publishIconoplasmRecognitionPolicyPair(env.KV))
+  const pair = await settled(async () => {
+    if (
+      publicationAliases.status !== "fulfilled" ||
+      blocklistSecond.status !== "fulfilled" ||
+      publicationAliases.value?.busy ||
+      publicationAliases.value?.reason === "projection_in_progress" ||
+      blocklistSecond.value?.busy ||
+      blocklistSecond.value?.reason === "projection_in_progress"
+    ) {
+      throw policyError(
+        "recognition_pair_dependencies_not_published",
+        "Exact alias and blocklist projections must publish before pairing",
+        503,
+      )
+    }
+    const [currentAliases, currentBlocklist, currentScannerVersion] = await Promise.all([
+      readIconoplasmPublicationAliasPolicy(env.ICONOPLASM_DB),
+      readIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB),
+      readIconoplasmPublishedScannerVersion(env.KV),
+    ])
+    if (
+      !iconoplasmRecognitionValidationTargetMatches(validatedRecognitionTarget, {
+        scannerVersion: currentScannerVersion,
+        aliases: currentAliases,
+        blocklist: currentBlocklist,
+      })
+    ) {
+      throw policyError(
+        "recognition_policy_validation_contended",
+        "Recognition policy or scanner changed before pair publication",
+        503,
+      )
+    }
+    const [aliases, blocklist] = await Promise.all([
+      readPublishedIconoplasmPublicationAliasesForPolicy(env.KV, currentAliases),
+      readPublishedIconoplasmExtensionBlocklistForPolicy(env.KV, currentBlocklist),
+    ])
+    if (!aliases || !blocklist) {
+      throw policyError(
+        "recognition_pair_dependencies_not_published",
+        "Exact alias and blocklist projections are not yet visible",
+        503,
+      )
+    }
+    return publishIconoplasmRecognitionPolicyPair(env.KV, {
+      aliases,
+      blocklist,
+      validatedRecognitionTarget,
+      cleanup,
+    })
+  })
   const extensionBlocklist =
     blocklistSecond.status === "fulfilled"
       ? {

@@ -87,7 +87,8 @@ compact materialization row per canonical gene and seven daily budget rows;
 store content-addressed image bytes in Bunny. Administrator recognition policy
 history is bounded operational state too: publication aliases and the shared
 extension blocklist retain only their newest 100 D1 revisions and 100 immutable
-KV projections.
+KV projections. Recognition validation uses one singleton receipt row; never
+turn validation attempts, leases, or scanner builds into an append-only ledger.
 
 **ARCHITECTURE FENCE [IPD-006]** — one completed workstation publication is the
 Discord delivery and Request inbox receipt unit, partitioned by recipient and
@@ -139,7 +140,18 @@ projection is available, and keep per-user removals and custom terms
 browser-local. Alias and blocklist saves persist and CAS-check the exact
 counterpart revision they validated; only one atomic pair value may advance the
 public plane, so a blocklisted term is never published without one unambiguous
-alias.
+alias. A true semantic mutation may build the published scanner recognition
+context only once. That same D1 CAS stores one bounded validation receipt bound
+to the validator revision, scanner build, and exact alias/blocklist
+revision-version tuple. Publication retries use direct immutable-key GETs plus
+that receipt; they must not parse or rebuild the scanner while waiting for KV
+list propagation. A semantic no-op skips scanner validation. Because v1 pair
+keys do not encode the scanner build, even an existing exact pair requires a
+valid receipt for the current manifest before it can be accepted.
+Foreground admin reconciliation disables history cleanup so propagation retries
+remain list-free. The default scheduled reconciler owns bounded best-effort
+cleanup of alias, blocklist, and pair KV histories, including the exact-pair
+fast path; never disable cleanup for the scheduled caller.
 Read
 `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` and Linear B-673
 before changing anonymous bootstrap, the session-presence hint, catalog/card

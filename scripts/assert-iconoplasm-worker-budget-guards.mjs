@@ -16,6 +16,10 @@ const readModelRoutes = readFileSync(
   new URL("../workers/iconoplasm-admin-read-model-routes.js", import.meta.url),
   "utf8",
 )
+const publicationAliasPolicyTests = readFileSync(
+  new URL("../workers/iconoplasm-publication-alias-policy.test.js", import.meta.url),
+  "utf8",
+)
 const workflow = readFileSync(
   new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
   "utf8",
@@ -141,6 +145,11 @@ includesOrFail(
   workflow,
   "assert-iconoplasm-worker-budget-guards.mjs",
   "Production workflow must run this deploy drift guard.",
+)
+includesOrFail(
+  publicationAliasPolicyTests,
+  'test("3-POST 1102 value-before-list retries never rebuild the scanner context"',
+  "The alias policy suite must keep the loud 3-POST 1102 scanner-cost regression.",
 )
 doesNotMatchOrFail(
   workflow,

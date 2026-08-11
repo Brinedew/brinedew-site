@@ -66,6 +66,7 @@ class FakeDb {
     this.aliasRow = { ...aliasRow }
     this.history = history.map((entry) => ({ ...entry }))
     this.calls = []
+    this.validationRow = recognitionValidationRow(this.aliasRow, this.row)
   }
 
   prepare(sql) {
@@ -86,12 +87,106 @@ class FakeDb {
     if (statement.sql.includes("FROM icono_publication_alias_policy")) {
       return { ...this.aliasRow }
     }
+    if (statement.sql.includes("FROM icono_recognition_policy_validation")) {
+      return { ...this.validationRow }
+    }
     throw new Error(`Unexpected first(): ${statement.sql}`)
   }
 
   async run(statement) {
     this.calls.push({ kind: "run", sql: statement.sql, values: statement.values })
     const result = (changes) => ({ meta: { changes } })
+
+    if (statement.sql.startsWith("INSERT INTO icono_recognition_policy_validation")) {
+      const [
+        validatorRevision,
+        scannerVersion,
+        validatedAt,
+        aliasRevision,
+        aliasVersion,
+        blocklistRevision,
+        blocklistVersion,
+      ] = statement.values
+      if (
+        this.aliasRow.revision !== aliasRevision ||
+        this.aliasRow.version !== aliasVersion ||
+        this.row.revision !== blocklistRevision ||
+        this.row.version !== blocklistVersion
+      )
+        return result(0)
+      Object.assign(this.validationRow, {
+        state: "valid",
+        validator_revision: validatorRevision,
+        scanner_version: scannerVersion,
+        alias_revision: aliasRevision,
+        alias_version: aliasVersion,
+        blocklist_revision: blocklistRevision,
+        blocklist_version: blocklistVersion,
+        validated_at: validatedAt,
+        validation_lease_token: null,
+        validation_lease_expires_at: null,
+        last_validation_error: null,
+      })
+      return result(1)
+    }
+
+    if (statement.sql.includes("SET state = 'unvalidated'")) {
+      const [
+        validatorRevision,
+        scannerVersion,
+        aliasRevision,
+        aliasVersion,
+        blocklistRevision,
+        blocklistVersion,
+        token,
+        expiresAt,
+      ] = statement.values
+      Object.assign(this.validationRow, {
+        state: "unvalidated",
+        validator_revision: validatorRevision,
+        scanner_version: scannerVersion,
+        alias_revision: aliasRevision,
+        alias_version: aliasVersion,
+        blocklist_revision: blocklistRevision,
+        blocklist_version: blocklistVersion,
+        validated_at: null,
+        validation_lease_token: token,
+        validation_lease_expires_at: expiresAt,
+        last_validation_error: null,
+      })
+      return result(1)
+    }
+
+    if (statement.sql.includes("SET state = ?1")) {
+      const [
+        state,
+        validatedAt,
+        errorMessage,
+        ,
+        validatorRevision,
+        scannerVersion,
+        aliasRevision,
+        aliasVersion,
+        blocklistRevision,
+        blocklistVersion,
+        token,
+      ] = statement.values
+      if (this.validationRow.validation_lease_token !== token) return result(0)
+      Object.assign(this.validationRow, {
+        state,
+        validator_revision: validatorRevision,
+        scanner_version: scannerVersion,
+        alias_revision: aliasRevision,
+        alias_version: aliasVersion,
+        blocklist_revision: blocklistRevision,
+        blocklist_version: blocklistVersion,
+        validated_at: validatedAt,
+        validation_lease_token: null,
+        validation_lease_expires_at: null,
+        last_validation_error: errorMessage,
+      })
+      return result(1)
+    }
 
     if (statement.sql.includes("SET terms_json = ?1")) {
       const [
@@ -220,11 +315,14 @@ class FakeKv {
     )
     this.puts = []
     this.deletes = []
+    this.gets = []
+    this.lists = []
     this.failPut = false
     this.onPut = null
   }
 
   async get(key) {
+    this.gets.push(key)
     return this.entries.get(key) ?? null
   }
 
@@ -236,6 +334,7 @@ class FakeKv {
   }
 
   async list({ prefix = "", limit = 1_000 } = {}) {
+    this.lists.push(prefix)
     const names = [...this.entries.keys()].filter((key) => key.startsWith(prefix)).sort()
     return {
       keys: names.slice(0, limit).map((name) => ({ name })),
@@ -264,6 +363,23 @@ function publicationAliasPolicyRow() {
     projection_lease_token: null,
     projection_lease_expires_at: null,
     last_projection_error: null,
+  }
+}
+
+function recognitionValidationRow(aliasRow, blocklistRow) {
+  return {
+    policy_key: "shared",
+    state: "unvalidated",
+    validator_revision: 1,
+    scanner_version: "",
+    alias_revision: aliasRow.revision,
+    alias_version: aliasRow.version,
+    blocklist_revision: blocklistRow.revision,
+    blocklist_version: blocklistRow.version,
+    validated_at: null,
+    validation_lease_token: null,
+    validation_lease_expires_at: null,
+    last_validation_error: null,
   }
 }
 
@@ -479,6 +595,51 @@ test("KV failure preserves the newer desired policy and old public projection, t
   const idempotent = await publishIconoplasmExtensionBlocklistPolicy(db, kv)
   assert.equal(idempotent.skipped, true)
   assert.equal(kv.puts.length, putCount)
+})
+
+test("foreground fresh blocklist publication and retry never list histories or rescan", async () => {
+  const row = policyRow({
+    revision: 2,
+    version: ARCH_VERSION,
+    terms: ["ARCH"],
+    publishedRevision: 1,
+    publishedVersion: AMID_VERSION,
+  })
+  row.depends_on_alias_revision = 1
+  const db = new FakeDb(row)
+  const kv = new FakeKv({
+    ...scannerEntries(),
+    [iconoplasmExtensionBlocklistKvKey(1)]: projection({
+      revision: 1,
+      version: AMID_VERSION,
+      terms: ["AMID"],
+    }),
+  })
+  const readPublishedAliases = async () => ({
+    revision: 1,
+    overlay: {
+      ...ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
+      version: "v1-bf7d4149d6b2df6c",
+    },
+  })
+
+  const first = await publishIconoplasmExtensionBlocklistPolicy(db, kv, {
+    exactDesired: true,
+    cleanup: false,
+    readPublishedAliases,
+  })
+  assert.equal(first.changed, true)
+  assert.equal(kv.lists.length, 0)
+  assert.equal(kv.gets.filter((key) => key.startsWith("iconoplasm:scanner-catalog:")).length, 1)
+
+  const retry = await publishIconoplasmExtensionBlocklistPolicy(db, kv, {
+    exactDesired: true,
+    cleanup: false,
+    readPublishedAliases,
+  })
+  assert.equal(retry.changed, false)
+  assert.equal(kv.lists.length, 0)
+  assert.equal(kv.gets.filter((key) => key.startsWith("iconoplasm:scanner-catalog:")).length, 1)
 })
 
 test("immutable projection publication refuses a valid revision ahead of D1 and a same-revision content collision", async () => {

@@ -480,6 +480,189 @@ test("the 45-addition alias policy publishes without collapsing or reordering ca
   assert.deepEqual(Array.from(publishedRequest.by_symbol.CXCL8), ["IL8"])
 })
 
+test("publication aliases adopt a saved rev2 baseline and retry it without changing dictionaries", async () => {
+  const helpersStart = ICONOPLASM_ADMIN_RUNTIME.indexOf("function normalizePublicationAlias")
+  const statusStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function setPublicationAliasStatus",
+    helpersStart,
+  )
+  const payloadStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function applyPublicationAliasPayload",
+    statusStart,
+  )
+  const payloadEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function publicationAliasMappingMarkup",
+    payloadStart,
+  )
+  const retryStart = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function publicationAliasErrorCarriesSavedPolicy",
+    payloadEnd,
+  )
+  const retryEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function normalizeExtensionBlocklistTerm",
+    retryStart,
+  )
+  assert.notEqual(helpersStart, -1)
+  assert.notEqual(statusStart, -1)
+  assert.notEqual(payloadStart, -1)
+  assert.notEqual(payloadEnd, -1)
+  assert.notEqual(retryStart, -1)
+  assert.notEqual(retryEnd, -1)
+
+  const source = `${ICONOPLASM_ADMIN_RUNTIME.slice(helpersStart, statusStart)}\n${ICONOPLASM_ADMIN_RUNTIME.slice(payloadStart, payloadEnd)}\n${ICONOPLASM_ADMIN_RUNTIME.slice(retryStart, retryEnd)}\nthis.contract = { publishPublicationAliases }`
+  const desiredBySymbol = {
+    CDH1: ["E-cadherin", "E-Cadherin"],
+    CXCL8: ["IL8"],
+  }
+  const removals = { CDH17: ["cadherin"] }
+
+  function fakeTimers() {
+    let nextId = 1
+    const pending = new Map()
+    return {
+      window: {
+        setTimeout(callback, delayMs) {
+          const id = nextId
+          nextId += 1
+          pending.set(id, { callback, delayMs })
+          return id
+        },
+        clearTimeout(id) {
+          pending.delete(id)
+        },
+      },
+      count() {
+        return pending.size
+      },
+      async runNext() {
+        const next = Array.from(pending.entries()).sort(
+          (left, right) => left[1].delayMs - right[1].delayMs || left[0] - right[0],
+        )[0]
+        assert.ok(next, "expected an automatic alias publication retry timer")
+        pending.delete(next[0])
+        next[1].callback()
+        await new Promise((resolve) => setImmediate(resolve))
+      },
+    }
+  }
+
+  function savedProjectionNotVisible() {
+    const error = new Error("projection not visible")
+    error.status = 503
+    error.response = {
+      saved: true,
+      code: "publication_alias_projection_not_visible",
+      error: "Saved projection is not visible yet",
+      policy: {
+        schema_version: 1,
+        revision: 2,
+        version: "pa1-rev2",
+        by_symbol: desiredBySymbol,
+        remove_by_symbol: removals,
+      },
+      publication: { version: "", revision: 2, in_sync: false },
+    }
+    return error
+  }
+
+  function harness() {
+    const timers = fakeTimers()
+    const requests = []
+    const statuses = []
+    const state = {
+      activeTab: "extension",
+      recognitionSection: "aliases",
+      publicationAliasLoaded: true,
+      publicationAliasPolicy: {
+        schema_version: 1,
+        revision: 1,
+        version: "pa1-rev1",
+        by_symbol: { CDH1: desiredBySymbol.CDH1 },
+        remove_by_symbol: removals,
+      },
+      publicationAliasPublication: { version: "pa1-rev1", revision: 1, in_sync: true },
+      publicationAliasLimits: { max_aliases: 500, max_alias_length: 64 },
+      publicationAliasDraftBySymbol: desiredBySymbol,
+      publicationAliasBusy: false,
+      publicationAliasPublicationRetry: null,
+      publicationAliasPublicationRetryTimer: null,
+      publicationAliasPublicationRetryRunId: 0,
+    }
+    const sandbox = {
+      state,
+      window: timers.window,
+      PUBLICATION_ALIAS_MAX_OPERATIONS: 500,
+      PUBLICATION_ALIAS_MAX_LENGTH: 64,
+      PUBLICATION_ALIAS_PUBLICATION_RETRY_DELAYS_MS: [1, 2, 3],
+      setPublicationAliasStatus: (message, tone) => statuses.push({ message, tone }),
+      renderPublicationAliases: () => {},
+      cancelPublicationAliasSearch: () => {},
+      resetPublicationAliasComposer: () => {},
+      refreshPublicationAliases: async () => {},
+      setLog: () => {},
+      requestErrorMessage: (error, fallback) =>
+        String(error?.response?.error || error?.message || fallback),
+      isRequestCanceled: () => false,
+      apiJson: async (path, options) => {
+        requests.push({ path, body: JSON.parse(options.body) })
+        if (requests.length === 1) throw savedProjectionNotVisible()
+        return {
+          policy: {
+            schema_version: 1,
+            revision: 2,
+            version: "pa1-rev2",
+            by_symbol: desiredBySymbol,
+            remove_by_symbol: removals,
+          },
+          publication: { version: "pa1-rev2", revision: 2, in_sync: true },
+        }
+      },
+    }
+    new Script(source, {
+      filename: "iconoplasm-admin-publication-alias-automatic-retry.js",
+    }).runInNewContext(sandbox)
+    return { requests, sandbox, state, statuses, timers }
+  }
+
+  const eventuallyVisible = harness()
+  await eventuallyVisible.sandbox.contract.publishPublicationAliases()
+  assert.equal(eventuallyVisible.requests.length, 1)
+  assert.equal(eventuallyVisible.requests[0].body.expected_revision, 1)
+  assert.equal(eventuallyVisible.state.publicationAliasPolicy.revision, 2)
+  assert.equal(eventuallyVisible.state.publicationAliasPolicy.version, "pa1-rev2")
+  assert.equal(eventuallyVisible.timers.count(), 1)
+  await eventuallyVisible.timers.runNext()
+  assert.equal(eventuallyVisible.requests.length, 2, "saved publication should converge unaided")
+  assert.deepEqual(eventuallyVisible.requests[1].body, {
+    expected_revision: 2,
+    by_symbol: desiredBySymbol,
+    remove_by_symbol: removals,
+  })
+  assert.equal(eventuallyVisible.state.publicationAliasPublication.in_sync, true)
+  assert.equal(eventuallyVisible.state.publicationAliasPublicationRetry, null)
+  assert.equal(eventuallyVisible.timers.count(), 0, "success must leave no retry timer behind")
+  assert.match(eventuallyVisible.statuses.at(-1).message, /^Published;/)
+
+  const editedDraft = harness()
+  await editedDraft.sandbox.contract.publishPublicationAliases()
+  editedDraft.state.publicationAliasDraftBySymbol = {
+    ...desiredBySymbol,
+    CXCL8: ["IL8", "IL-8"],
+  }
+  await editedDraft.timers.runNext()
+  assert.equal(editedDraft.requests.length, 1, "a changed draft must cancel the scheduled POST")
+  assert.equal(editedDraft.state.publicationAliasPublicationRetry, null)
+  assert.equal(editedDraft.timers.count(), 0)
+
+  const switchedTab = harness()
+  await switchedTab.sandbox.contract.publishPublicationAliases()
+  switchedTab.state.activeTab = "styles"
+  await switchedTab.timers.runNext()
+  assert.equal(switchedTab.requests.length, 1, "leaving the tab must cancel the scheduled POST")
+  assert.equal(switchedTab.state.publicationAliasPublicationRetry, null)
+  assert.equal(switchedTab.timers.count(), 0)
+})
+
 test("extension blocklist draft normalization matches the worker contract", () => {
   const constantsStart = ICONOPLASM_ADMIN_RUNTIME.indexOf("var EXTENSION_BLOCKLIST_MAX_TERMS")
   const constantsEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf(
