@@ -75,8 +75,19 @@ import {
 } from "./iconoplasm-publication-aliases.js"
 import {
   readPublishedIconoplasmPublicationAliasesByVersionToken,
+  readIconoplasmPublicationAliasPolicy,
   resetIconoplasmPublicationAliasPublicCacheForTests,
+  validateIconoplasmPublicationAliasesAgainstPublishedScanner,
 } from "./iconoplasm-publication-alias-policy.js"
+import { readIconoplasmExtensionBlocklistPolicy } from "./iconoplasm-extension-blocklist-policy.js"
+import {
+  buildIconoplasmRecognitionValidationIndex,
+  publishIconoplasmRecognitionValidationIndex,
+} from "./iconoplasm-recognition-validation-index.js"
+import {
+  iconoplasmRecognitionValidationTarget,
+  recordIconoplasmRecognitionValidationReceipt,
+} from "./iconoplasm-recognition-policy-validation.js"
 import {
   readCoherentPublishedIconoplasmRecognitionPolicies,
   resetIconoplasmRecognitionPolicyPublicCacheForTests,
@@ -27899,6 +27910,26 @@ async function publishCatalogArtifact(env) {
     .slice(0, 12)
   const filename = `catalog.${hash}.json`
   const scannerFilename = publicScannerArtifactFilename(hash)
+  const recognitionIndex = buildIconoplasmRecognitionValidationIndex(scanner.genes, {
+    scannerVersion: hash,
+  })
+  const [desiredAliases, desiredBlocklist] = await Promise.all([
+    readIconoplasmPublicationAliasPolicy(env.ICONOPLASM_DB),
+    readIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB),
+  ])
+  await validateIconoplasmPublicationAliasesAgainstPublishedScanner(
+    env.KV,
+    desiredAliases.by_symbol,
+    desiredAliases.remove_by_symbol,
+    {
+      baselinePolicy: desiredAliases,
+      requiredAliasTerms: desiredBlocklist.terms,
+      scannerContext: {
+        scanner_version: hash,
+        ...recognitionIndex.recognitionContext,
+      },
+    },
+  )
   const catalogJsonl = `${hydrated.genes.map((gene) => JSON.stringify(gene)).join("\n")}\n`
   if (env.ICONOPLASM_PORTRAITS || canWriteExternalPortraitStorage(env)) {
     // Keep dumps alongside portraits under a separate prefix so public sync clients
@@ -27931,6 +27962,15 @@ async function publishCatalogArtifact(env) {
 
   await env.KV.put(`${KV_CATALOG_PREFIX}${hash}`, artifactJson)
   await env.KV.put(`${KV_SCANNER_CATALOG_PREFIX}${hash}`, scannerJson)
+  await publishIconoplasmRecognitionValidationIndex(env.KV, recognitionIndex)
+  const validationTarget = iconoplasmRecognitionValidationTarget({
+    scannerVersion: hash,
+    aliases: desiredAliases,
+    blocklist: desiredBlocklist,
+  })
+  if (!(await recordIconoplasmRecognitionValidationReceipt(env.ICONOPLASM_DB, validationTarget))) {
+    throw new Error("Recognition policy changed during catalog publication")
+  }
   await env.KV.put(KV_CATALOG_MANIFEST, JSON.stringify(manifest))
 
   catalogCache.hash = null

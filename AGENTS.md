@@ -140,12 +140,16 @@ projection is available, and keep per-user removals and custom terms
 browser-local. Alias and blocklist saves persist and CAS-check the exact
 counterpart revision they validated; only one atomic pair value may advance the
 public plane, so a blocklisted term is never published without one unambiguous
-alias. A true semantic mutation may build the published scanner recognition
-context only once. That same D1 CAS stores one bounded validation receipt bound
-to the validator revision, scanner build, and exact alias/blocklist
+alias. Catalog publication builds one immutable 64-shard recognition-validation
+index while the scanner genes are already in memory and records the exact D1
+validation receipt before advancing the manifest. A foreground semantic mutation
+must validate only the changed aliases or newly added blocklist terms from the
+small touched shards plus the current receipt; it must never fetch, parse, or
+rebuild the 1.9 MiB scanner artifact. The same D1 CAS stores the next bounded
+receipt bound to the validator revision, scanner build, and exact alias/blocklist
 revision-version tuple. Publication retries use direct immutable-key GETs plus
-that receipt; they must not parse or rebuild the scanner while waiting for KV
-list propagation. A semantic no-op skips scanner validation. Because v1 pair
+that receipt and remain scanner-free while waiting for KV propagation. A semantic
+no-op skips recognition-index validation. Because v1 pair
 keys do not encode the scanner build, even an existing exact pair requires a
 valid receipt for the current manifest before it can be accepted.
 Foreground admin reconciliation disables history cleanup so propagation retries

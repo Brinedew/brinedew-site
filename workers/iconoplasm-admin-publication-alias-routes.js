@@ -12,15 +12,18 @@ import {
   IconoplasmPublicationAliasPolicyError,
   iconoplasmPublicationAliasPoliciesEqual,
   iconoplasmPublicationAliasPublicationState,
-  loadIconoplasmPublishedScannerRecognitionContext,
   normalizeIconoplasmPublicationAliasPolicyCandidate,
   readAuthoritativePublishedIconoplasmPublicationAliases,
   readIconoplasmPublicationAliasPolicy,
   readIconoplasmPublishedScannerVersion,
   saveIconoplasmPublicationAliasPolicy,
-  validateIconoplasmPublicationAliasesAgainstPublishedScanner,
+  validateIconoplasmPublicationAliasesIncrementallyAgainstPublishedIndex,
 } from "./iconoplasm-publication-alias-policy.js"
-import { iconoplasmRecognitionValidationTarget } from "./iconoplasm-recognition-policy-validation.js"
+import {
+  iconoplasmRecognitionValidationReceiptMatches,
+  iconoplasmRecognitionValidationTarget,
+  readIconoplasmRecognitionValidationReceipt,
+} from "./iconoplasm-recognition-policy-validation.js"
 import {
   reconcileIconoplasmRecognitionPolicies,
   readAuthoritativePublishedIconoplasmRecognitionPolicies,
@@ -236,19 +239,32 @@ export function createIconoplasmAdminPublicationAliasHandlers(services) {
       if (iconoplasmPublicationAliasPoliciesEqual(loadedPolicy, normalized)) {
         saved = { changed: false, policy: loadedPolicy }
       } else {
-        const scannerContext = await loadIconoplasmPublishedScannerRecognitionContext(env.KV)
-        const validated = await validateIconoplasmPublicationAliasesAgainstPublishedScanner(
-          env.KV,
-          normalized.by_symbol,
-          normalized.remove_by_symbol,
-          {
-            baselinePolicy: loadedPolicy,
-            requiredAliasTerms: blocklist.terms,
-            scannerContext,
-          },
-        )
+        const scannerVersion = await readIconoplasmPublishedScannerVersion(env.KV)
+        const baselineTarget = iconoplasmRecognitionValidationTarget({
+          scannerVersion,
+          aliases: loadedPolicy,
+          blocklist,
+        })
+        const receipt = await readIconoplasmRecognitionValidationReceipt(env.ICONOPLASM_DB)
+        if (!iconoplasmRecognitionValidationReceiptMatches(receipt, baselineTarget, "valid")) {
+          throw new IconoplasmPublicationAliasPolicyError(
+            "recognition_validation_baseline_unavailable",
+            "Current recognition policy is not validated for this catalog; republish the catalog before editing aliases",
+            503,
+          )
+        }
+        const validated =
+          await validateIconoplasmPublicationAliasesIncrementallyAgainstPublishedIndex(
+            env.KV,
+            normalized,
+            {
+              baselinePolicy: loadedPolicy,
+              requiredAliasTerms: blocklist.terms,
+              scannerVersion,
+            },
+          )
         const scannerAfterValidation = await readIconoplasmPublishedScannerVersion(env.KV)
-        if (scannerAfterValidation !== scannerContext.scanner_version) {
+        if (scannerAfterValidation !== scannerVersion) {
           throw new IconoplasmPublicationAliasPolicyError(
             "published_scanner_changed_during_validation",
             "Published scanner changed during alias validation; retry against the new build",
@@ -256,7 +272,7 @@ export function createIconoplasmAdminPublicationAliasHandlers(services) {
           )
         }
         const validationTarget = iconoplasmRecognitionValidationTarget({
-          scannerVersion: scannerContext.scanner_version,
+          scannerVersion,
           aliases: { revision: loadedPolicy.revision + 1, version: validated.version },
           blocklist,
         })

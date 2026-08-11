@@ -228,6 +228,17 @@ export function prepareIconoplasmRecognitionValidationReceiptUpsert(
   )
 }
 
+export async function recordIconoplasmRecognitionValidationReceipt(
+  db,
+  target,
+  { now = new Date() } = {},
+) {
+  const result = await prepareIconoplasmRecognitionValidationReceiptUpsert(db, target, {
+    now,
+  }).run()
+  return changedRows(result) === 1
+}
+
 function leaseToken() {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID()
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
