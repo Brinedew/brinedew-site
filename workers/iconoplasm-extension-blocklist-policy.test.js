@@ -421,6 +421,7 @@ function policyRow({
 function scannerEntries() {
   const hash = "scannerfixture01"
   const genes = {
+    APC: {},
     AIFM2: { a: ["AMID"] },
     ZBTB8OS: { a: ["ARCH"] },
     NOTCH1: {},
@@ -495,7 +496,7 @@ test("migration 0065 seeds the exact 76 packaged defaults and bounded history", 
   assert.equal(ICONOPLASM_EXTENSION_BLOCKLIST_CONTRACT_REVISION, 1)
 })
 
-test("published scanner validation accepts aliases only and rejects canonical, missing, or ambiguous terms", async () => {
+test("published scanner validation accepts aliases and larger phrases containing recognized labels", async () => {
   const kv = new FakeKv(scannerEntries())
   assert.deepEqual(
     await validateIconoplasmExtensionBlocklistAgainstPublishedScanner(new FakeKv(), []),
@@ -509,12 +510,18 @@ test("published scanner validation accepts aliases only and rejects canonical, m
     await validateIconoplasmExtensionBlocklistAgainstPublishedScanner(kv, ["N1ICD"]),
     ["N1ICD"],
   )
+  assert.deepEqual(
+    await validateIconoplasmExtensionBlocklistAgainstPublishedScanner(kv, ["APC/C"]),
+    ["APC/C"],
+    "a larger protected phrase may contain a canonical symbol even though the symbol alone is forbidden",
+  )
 
   for (const [term, reason] of [
+    ["APC", "canonical_symbol"],
     ["AIFM2", "canonical_symbol"],
-    ["UNKNOWN", "not_published_alias"],
+    ["UNKNOWN", "not_recognition_target"],
     ["SHARED", "ambiguous_alias"],
-    ["cadherin", "not_published_alias"],
+    ["cadherin", "not_recognition_target"],
   ]) {
     await assert.rejects(
       validateIconoplasmExtensionBlocklistAgainstPublishedScanner(kv, [term]),

@@ -464,6 +464,29 @@ function mutableOwners(source, key, cache) {
   return cache.get(key)
 }
 
+const RECOGNITION_BOUNDARY_CHARACTER_RE = /[\p{L}\p{N}]/u
+
+function containsRecognizedNestedTerm(term, context, publishedOwners) {
+  const characters = Array.from(term)
+  for (let start = 0; start < characters.length; start += 1) {
+    if (start > 0 && RECOGNITION_BOUNDARY_CHARACTER_RE.test(characters[start - 1])) continue
+    for (let end = start + 1; end <= characters.length; end += 1) {
+      if (start === 0 && end === characters.length) continue
+      if (end < characters.length && RECOGNITION_BOUNDARY_CHARACTER_RE.test(characters[end])) {
+        continue
+      }
+      const candidate = publishedAliasTermKey(characters.slice(start, end).join(""))
+      if (!candidate) continue
+      if (context.canonicalSymbols.has(candidate)) return true
+      const owners = publishedOwners.has(candidate)
+        ? publishedOwners.get(candidate)
+        : context.publishedOwners.get(candidate)
+      if (owners?.size === 1) return true
+    }
+  }
+  return false
+}
+
 function invalidRequiredAliasTerms(context, policy, terms) {
   const publishedOwners = new Map()
   for (const [symbol, aliases] of Object.entries(policy.remove_by_symbol)) {
@@ -490,7 +513,9 @@ function invalidRequiredAliasTerms(context, policy, terms) {
     if (!term || context.canonicalSymbols.has(term)) {
       invalidTerms.push({ term: term || String(rawTerm || ""), reason: "canonical_symbol" })
     } else if (!owners?.size) {
-      invalidTerms.push({ term, reason: "not_published_alias" })
+      if (!containsRecognizedNestedTerm(term, context, publishedOwners)) {
+        invalidTerms.push({ term, reason: "not_recognition_target" })
+      }
     } else if (owners.size !== 1) {
       invalidTerms.push({ term, reason: "ambiguous_alias" })
     }

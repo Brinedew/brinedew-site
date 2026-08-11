@@ -670,6 +670,7 @@
   function unwrapBlockedGeneHighlights(blocklist) {
     if (!(blocklist instanceof Set) || blocklist.size === 0) return 0
     const genes = Array.from(document.querySelectorAll(".iconoplasm-gene"))
+    const acceptedMatchesByParent = new Map()
     let removed = 0
     for (const el of genes) {
       const symbol = String((el.dataset && el.dataset.gene) || "")
@@ -679,7 +680,26 @@
         .trim()
         .toUpperCase()
       if (!symbol && !label) continue
-      if (!blocklist.has(symbol) && !blocklist.has(label)) continue
+      let remainsAccepted = !blocklist.has(symbol) && !blocklist.has(label)
+      const parent = el.parentNode
+      if (remainsAccepted && parent && geneMatcher) {
+        if (!acceptedMatchesByParent.has(parent)) {
+          acceptedMatchesByParent.set(parent, geneMatcher.findMatches(parent.textContent || ""))
+        }
+        const range = document.createRange()
+        range.setStart(parent, 0)
+        range.setEndBefore(el)
+        const start = range.toString().length
+        range.detach()
+        remainsAccepted = acceptedMatchesByParent.get(parent).some((match) => {
+          return (
+            match.symbol === symbol &&
+            match.index === start &&
+            match.length === String(el.textContent || "").length
+          )
+        })
+      }
+      if (remainsAccepted) continue
       if (activeSymbol === symbol) hideTooltip()
       if (unwrapGeneElement(el)) removed += 1
     }

@@ -563,6 +563,7 @@ function scannerEntries({
     ...Object.keys(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol),
     ...Object.keys(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.remove_by_symbol),
     "AIFM2",
+    "APC",
     "CXCL8",
     "OTHER",
   ])
@@ -658,6 +659,17 @@ test("scanner validation accepts IL8 to CXCL8 and protects desired blocklist ter
   )
   assert.deepEqual(accepted.by_symbol.CXCL8, ["IL8"])
 
+  const protectedPhrase = await validateIconoplasmPublicationAliasesAgainstPublishedScanner(
+    new FakeKv(scannerEntries()),
+    ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol,
+    ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.remove_by_symbol,
+    {
+      baselinePolicy: ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
+      requiredAliasTerms: ["APC/C"],
+    },
+  )
+  assert.equal(protectedPhrase.alias_count, ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.alias_count)
+
   await assert.rejects(
     validateIconoplasmPublicationAliasesAgainstPublishedScanner(
       new FakeKv(scannerEntries()),
@@ -667,7 +679,7 @@ test("scanner validation accepts IL8 to CXCL8 and protects desired blocklist ter
     ),
     (error) => {
       assert.equal(error.code, "publication_alias_policy_invalidates_blocklist")
-      assert.equal(error.details.invalid_terms[0].reason, "not_published_alias")
+      assert.equal(error.details.invalid_terms[0].reason, "not_recognition_target")
       return true
     },
   )

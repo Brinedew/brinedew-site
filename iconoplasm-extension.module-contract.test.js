@@ -3,6 +3,7 @@ import test from "node:test"
 import { existsSync, readFileSync } from "node:fs"
 import { brotliDecompressSync } from "node:zlib"
 import vm from "node:vm"
+import { parseHTML } from "linkedom"
 
 function readUtf8(path) {
   return readFileSync(new URL(path, import.meta.url), "utf8")
@@ -513,6 +514,33 @@ test("DO NOT DELETE: canonical gene symbols require word-like boundaries while a
     normalizeMatcherResults(matcher.findMatches("(SYMBOL)/that")),
     [{ symbol: "SYMBOL", index: 1, length: 6, text: "SYMBOL", matchedBy: "symbol" }],
     "punctuation should separate a canonical gene symbol from surrounding prose",
+  )
+})
+
+test("DO NOT DELETE: a blocked phrase suppresses nested highlights without blocking the gene elsewhere", () => {
+  const matcherApi = loadContentMatcher()
+  const matcher = matcherApi.createGeneMatcher(
+    {
+      APC: { c: "#123456", n: "Adenomatous polyposis coli" },
+      CXCL8: { a: ["IL8"], c: "#654321", n: "C-X-C motif chemokine ligand 8" },
+    },
+    { blocklist: new Set(["APC/C", "IL8/STAT3"]) },
+  )
+
+  assert.deepEqual(
+    normalizeMatcherResults(matcher.findMatches("APC/C activity")),
+    [],
+    "APC/C should protect the complete phrase from the nested APC symbol match",
+  )
+  assert.deepEqual(
+    normalizeMatcherResults(matcher.findMatches("APC/C and APC")),
+    [{ symbol: "APC", index: 10, length: 3, text: "APC", matchedBy: "symbol" }],
+    "the same APC symbol should still highlight when it appears outside the protected phrase",
+  )
+  assert.deepEqual(
+    normalizeMatcherResults(matcher.findMatches("IL8/STAT3 and IL8")),
+    [{ symbol: "CXCL8", index: 14, length: 3, text: "IL8", matchedBy: "alias" }],
+    "protected phrases should suppress nested curated aliases as well as canonical symbols",
   )
 })
 
@@ -1222,6 +1250,71 @@ test("DO NOT DELETE: blocklist changes live-unhighlight already wrapped page tex
     /rebuildGeneMatcher\(nextBlocklist\)[\s\S]*unwrapBlockedGeneHighlights\(nextBlocklist\)/,
     "content.js should rebuild the matcher before rescanning so blocked words are not immediately rewrapped",
   )
+})
+
+test("DO NOT DELETE: a newly protected phrase removes only overlapping live highlights", () => {
+  const contentSource = readUtf8("./iconoplasm-extension/content.js")
+  const functionStart = contentSource.indexOf("  function unwrapBlockedGeneHighlights(blocklist)")
+  const functionEnd = contentSource.indexOf(
+    "\n\n  async function loadEffectiveBlocklist",
+    functionStart,
+  )
+  assert.ok(functionStart >= 0 && functionEnd > functionStart)
+
+  const { document } = parseHTML(
+    '<p><span class="iconoplasm-gene" data-gene="APC" data-gene-label="APC">APC</span>/C and <span class="iconoplasm-gene" data-gene="APC" data-gene-label="APC">APC</span></p>',
+  )
+  document.createRange = () => {
+    let parent = null
+    let endNode = null
+    return {
+      setStart(node) {
+        parent = node
+      },
+      setEndBefore(node) {
+        endNode = node
+      },
+      toString() {
+        let text = ""
+        for (const child of parent?.childNodes || []) {
+          if (child === endNode) break
+          text += child.textContent || ""
+        }
+        return text
+      },
+      detach() {},
+    }
+  }
+
+  const geneMatcher = loadContentMatcher().createGeneMatcher(
+    { APC: { c: "#123456", n: "Adenomatous polyposis coli" } },
+    { blocklist: ["APC/C"] },
+  )
+  const sandbox = {
+    Set,
+    document,
+    geneMatcher,
+    activeSymbol: null,
+    hideTooltip() {},
+    scheduleHighlightGeometryRefresh() {},
+    unwrapGeneElement(el) {
+      const textNode = document.createTextNode(el.textContent || "")
+      const parent = el.parentNode
+      parent.replaceChild(textNode, el)
+      parent.normalize()
+      return true
+    },
+    blocklist: new Set(["APC/C"]),
+  }
+  vm.runInNewContext(
+    `${contentSource.slice(functionStart, functionEnd)}; result = unwrapBlockedGeneHighlights(blocklist)`,
+    sandbox,
+  )
+
+  assert.equal(sandbox.result, 1)
+  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 1)
+  assert.equal(document.querySelector(".iconoplasm-gene")?.textContent, "APC")
+  assert.equal(document.querySelector("p")?.textContent, "APC/C and APC")
 })
 
 test("DO NOT DELETE: user-facing card style copy calls the blot-only card a blot, not an image", () => {

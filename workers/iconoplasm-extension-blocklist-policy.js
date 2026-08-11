@@ -727,7 +727,7 @@ export async function validateIconoplasmExtensionBlocklistAgainstPublishedScanne
   if (invalidTerms.length) {
     throw policyError(
       "extension_blocklist_terms_not_aliases",
-      "Every shared blocklist term must be an unambiguous alias in the published scanner catalog, never a canonical symbol",
+      "Every shared blocklist term must be an unambiguous published alias or a larger phrase containing a recognized gene label, never a canonical symbol by itself",
       422,
       { invalid_terms: invalidTerms },
     )
