@@ -1092,7 +1092,7 @@ import {
   deliverPendingRequestFulfillmentNotifications,
   reconcileDeliveredRequestFulfillments,
 } from "./iconoplasm-request-notifications.js"
-import { reconcileIconoplasmExtensionBlocklistPolicy } from "./iconoplasm-extension-blocklist-policy.js"
+import { reconcileIconoplasmRecognitionPolicies } from "./iconoplasm-recognition-policy-reconciliation.js"
 import { archiveColdIconoplasmPublishEvents } from "./iconoplasm-publish-event-archive.js"
 import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate } from "./benchmark/the-only-allowed-benchmark-stateful-runtime-do-not-duplicate.js"
 
@@ -2992,13 +2992,13 @@ export default {
         notificationDelivery,
         sharedDiscoveryPublication,
         geneCardMaterializationRecovery,
-        extensionBlocklistReconciliation,
+        recognitionPolicyReconciliation,
       ] = await Promise.allSettled([
         runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx),
         deliverPendingRequestFulfillmentNotifications(env, { limit: 20 }),
         sharedDiscoveryPublicationPromise,
         recoverDueIconoplasmGeneCardMaterializationsForScheduled(env),
-        reconcileIconoplasmExtensionBlocklistPolicy(env),
+        reconcileIconoplasmRecognitionPolicies(env),
       ])
       if (notificationDelivery.status === "fulfilled") {
         const notificationSettlement = await reconcileDeliveredRequestFulfillments(env)
@@ -3051,6 +3051,18 @@ export default {
           ),
         )
       }
+      const extensionBlocklistReconciliation =
+        recognitionPolicyReconciliation.status === "fulfilled"
+          ? recognitionPolicyReconciliation.value.extension_blocklist
+          : recognitionPolicyReconciliation
+      const publicationAliasReconciliation =
+        recognitionPolicyReconciliation.status === "fulfilled"
+          ? recognitionPolicyReconciliation.value.publication_aliases
+          : recognitionPolicyReconciliation
+      const recognitionPairReconciliation =
+        recognitionPolicyReconciliation.status === "fulfilled"
+          ? recognitionPolicyReconciliation.value.pair
+          : recognitionPolicyReconciliation
       if (
         extensionBlocklistReconciliation.status === "fulfilled" &&
         extensionBlocklistReconciliation.value.changed
@@ -3065,6 +3077,42 @@ export default {
           String(
             extensionBlocklistReconciliation.reason?.message ||
               extensionBlocklistReconciliation.reason ||
+              "unknown error",
+          ),
+        )
+      }
+      if (
+        publicationAliasReconciliation.status === "fulfilled" &&
+        publicationAliasReconciliation.value.changed
+      ) {
+        console.log(
+          "[CRON] Iconoplasm publication alias policy:",
+          publicationAliasReconciliation.value,
+        )
+      } else if (publicationAliasReconciliation.status === "rejected") {
+        console.error(
+          "[CRON] Iconoplasm publication alias policy failed:",
+          String(
+            publicationAliasReconciliation.reason?.message ||
+              publicationAliasReconciliation.reason ||
+              "unknown error",
+          ),
+        )
+      }
+      if (
+        recognitionPairReconciliation.status === "fulfilled" &&
+        recognitionPairReconciliation.value.changed
+      ) {
+        console.log(
+          "[CRON] Iconoplasm recognition policy pair:",
+          recognitionPairReconciliation.value,
+        )
+      } else if (recognitionPairReconciliation.status === "rejected") {
+        console.error(
+          "[CRON] Iconoplasm recognition policy pair failed:",
+          String(
+            recognitionPairReconciliation.reason?.message ||
+              recognitionPairReconciliation.reason ||
               "unknown error",
           ),
         )

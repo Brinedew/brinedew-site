@@ -6,18 +6,30 @@ import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  listIconoplasmTestKv,
+  seedIconoplasmTestRecognitionPair,
+} from "./iconoplasm-recognition-policy-test-fixture.js"
 
 class FakeKV {
   constructor(entries = {}) {
     this.entries = new Map(Object.entries(entries))
+    this.recognitionPairReady = seedIconoplasmTestRecognitionPair(this.entries)
   }
 
   async get(key) {
+    await this.recognitionPairReady
     return this.entries.has(key) ? this.entries.get(key) : null
   }
 
   async put(key, value) {
+    await this.recognitionPairReady
     this.entries.set(key, String(value))
+  }
+
+  async list(options) {
+    await this.recognitionPairReady
+    return listIconoplasmTestKv(this.entries, options)
   }
 }
 

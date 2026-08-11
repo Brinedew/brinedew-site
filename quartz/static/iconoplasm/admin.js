@@ -6,6 +6,12 @@
   var EXTENSION_BLOCKLIST_MAX_TERM_LENGTH = 64
   var EXTENSION_BLOCKLIST_CONTROL_CHAR_PATTERN = /[\u0000-\u001f\u007f]/
   var EXTENSION_BLOCKLIST_PUBLICATION_RETRY_DELAYS_MS = [2000, 5000, 10000, 20000, 30000]
+  var PUBLICATION_ALIAS_MAX_OPERATIONS = 500
+  var PUBLICATION_ALIAS_MAX_LENGTH = 64
+  var PUBLICATION_ALIAS_CONTROL_CHAR_PATTERN = /[\u0000-\u001f\u007f]/
+  var PUBLICATION_ALIAS_SEARCH_MIN_LENGTH = 2
+  var PUBLICATION_ALIAS_SEARCH_DEBOUNCE_MS = 200
+  var PUBLICATION_ALIAS_PUBLICATION_RETRY_DELAYS_MS = [2000, 5000, 10000, 20000, 30000]
   function defaultVisionPageSize() {
     return typeof window.matchMedia === "function" &&
       window.matchMedia("(max-width: 700px)").matches
@@ -54,6 +60,27 @@
     extensionBlocklistPublicationRetry: null,
     extensionBlocklistPublicationRetryTimer: null,
     extensionBlocklistPublicationRetryRunId: 0,
+    recognitionSection: "aliases",
+    publicationAliasPolicy: null,
+    publicationAliasPublication: null,
+    publicationAliasLimits: {
+      max_aliases: PUBLICATION_ALIAS_MAX_OPERATIONS,
+      max_alias_length: PUBLICATION_ALIAS_MAX_LENGTH,
+    },
+    publicationAliasDraftBySymbol: {},
+    publicationAliasLoaded: false,
+    publicationAliasBusy: false,
+    publicationAliasEditing: null,
+    publicationAliasSelectedGene: null,
+    publicationAliasSearchResults: [],
+    publicationAliasSearchActiveIndex: -1,
+    publicationAliasSearchError: "",
+    publicationAliasSearchTimer: null,
+    publicationAliasSearchController: null,
+    publicationAliasSearchRequestId: 0,
+    publicationAliasPublicationRetry: null,
+    publicationAliasPublicationRetryTimer: null,
+    publicationAliasPublicationRetryRunId: 0,
     visionPage: 1,
     visionPageSize: defaultVisionPageSize(),
     selectedVisionId: "",
@@ -149,6 +176,32 @@
     promptTemplateStatus: document.getElementById("prompt-template-status"),
     promptTemplateSave: document.querySelector("[data-prompt-save]"),
     promptSuffixSave: document.querySelector("[data-prompt-suffix-save]"),
+    recognitionTabs: document.querySelector(".recognition-tabs"),
+    recognitionPanels: {
+      aliases: document.getElementById("recognition-panel-aliases"),
+      blocklist: document.getElementById("recognition-panel-blocklist"),
+    },
+    publicationAliasTabCount: document.getElementById("publication-alias-tab-count"),
+    publicationAliasRefresh: document.getElementById("publication-alias-refresh"),
+    publicationAliasCount: document.getElementById("publication-alias-count"),
+    publicationAliasRemovalCount: document.getElementById("publication-alias-removal-count"),
+    publicationAliasRevision: document.getElementById("publication-alias-revision"),
+    publicationAliasSync: document.getElementById("publication-alias-sync"),
+    publicationAliasForm: document.getElementById("publication-alias-form"),
+    publicationAliasInput: document.getElementById("publication-alias-input"),
+    publicationAliasGeneQuery: document.getElementById("publication-alias-gene-query"),
+    publicationAliasGeneResults: document.getElementById("publication-alias-gene-results"),
+    publicationAliasGeneStatus: document.getElementById("publication-alias-gene-status"),
+    publicationAliasTargetPreview: document.getElementById("publication-alias-target-preview"),
+    publicationAliasAdd: document.getElementById("publication-alias-add"),
+    publicationAliasCancelEdit: document.getElementById("publication-alias-cancel-edit"),
+    publicationAliasEditing: document.getElementById("publication-alias-editing"),
+    publicationAliasFilter: document.getElementById("publication-alias-filter"),
+    publicationAliasMappings: document.getElementById("publication-alias-mappings"),
+    publicationAliasDirty: document.getElementById("publication-alias-dirty"),
+    publicationAliasStatus: document.getElementById("publication-alias-status"),
+    publicationAliasPublish: document.getElementById("publication-alias-publish"),
+    extensionBlocklistTabCount: document.getElementById("extension-blocklist-tab-count"),
     extensionBlocklistRefresh: document.getElementById("extension-blocklist-refresh"),
     extensionBlocklistCount: document.getElementById("extension-blocklist-count"),
     extensionBlocklistRevision: document.getElementById("extension-blocklist-revision"),
@@ -224,7 +277,11 @@
     ],
     requests: ["requests-summary", "requests-list", "requests-detail"],
     prompts: ["prompt-template-list"],
-    extension: ["extension-blocklist-terms"],
+    extension: [
+      "publication-alias-mappings",
+      "publication-alias-gene-results",
+      "extension-blocklist-terms",
+    ],
     archive: ["gallery-grid", "gallery-detail"],
     styles: [
       "vision-stats-list",
@@ -249,6 +306,7 @@
       state.visionPreviewRequestId += 1
       state.visionDetailRequestId += 1
     }
+    if (tab === "extension") cancelPublicationAliasSearch()
     clearAdminTabRenderRoots(tab)
   }
 
@@ -274,8 +332,7 @@
       return
     }
     if (tab === "extension") {
-      if (state.extensionBlocklistLoaded) renderExtensionBlocklist()
-      else refreshExtensionBlocklist()
+      setRecognitionSection(state.recognitionSection || "aliases", { force: true })
       return
     }
     if (tab === "archive") {
@@ -304,9 +361,13 @@
     if (!els.panels[tab]) return
     var changed = mountedAdminTab !== tab
     if (changed && mountedAdminTab === "extension" && tab !== "extension") {
+      cancelPublicationAliasPublicationRetry(
+        "Automatic publication retry stopped because you left this tab. Use Retry publication to try again.",
+      )
       cancelExtensionBlocklistPublicationRetry(
         "Automatic publication retry stopped because you left this tab. Use Retry publication to try again.",
       )
+      cancelPublicationAliasSearch()
     }
     if (changed && activeTabReadController) activeTabReadController.abort()
     if (changed && mountedAdminTab) unmountAdminTab(mountedAdminTab)
@@ -342,6 +403,57 @@
       })
     }
     if (changed) mountAdminTab(tab)
+  }
+
+  function renderRecognitionSectionTabs() {
+    var activeSection = state.recognitionSection === "blocklist" ? "blocklist" : "aliases"
+    if (els.recognitionTabs) {
+      els.recognitionTabs.querySelectorAll("[data-recognition-section]").forEach(function (button) {
+        var selected = button.getAttribute("data-recognition-section") === activeSection
+        button.classList.toggle("active", selected)
+        button.setAttribute("aria-selected", selected ? "true" : "false")
+        button.setAttribute("tabindex", selected ? "0" : "-1")
+      })
+    }
+    Object.keys(els.recognitionPanels || {}).forEach(function (section) {
+      var panel = els.recognitionPanels[section]
+      if (!panel) return
+      var selected = section === activeSection
+      panel.classList.toggle("active", selected)
+      panel.hidden = !selected
+    })
+  }
+
+  function mountRecognitionSection(section) {
+    if (section === "blocklist") {
+      if (state.extensionBlocklistLoaded) renderExtensionBlocklist()
+      else refreshExtensionBlocklist()
+      return
+    }
+    if (state.publicationAliasLoaded) renderPublicationAliases()
+    else refreshPublicationAliases()
+  }
+
+  function setRecognitionSection(section, options) {
+    var nextSection = section === "blocklist" ? "blocklist" : "aliases"
+    var previousSection = state.recognitionSection === "blocklist" ? "blocklist" : "aliases"
+    var changed = previousSection !== nextSection
+    if (changed && previousSection === "aliases") {
+      cancelPublicationAliasPublicationRetry(
+        "Automatic publication retry stopped because you switched sections. Use Retry publication to try again.",
+      )
+      cancelPublicationAliasSearch()
+    }
+    if (changed && previousSection === "blocklist") {
+      cancelExtensionBlocklistPublicationRetry(
+        "Automatic publication retry stopped because you switched sections. Use Retry publication to try again.",
+      )
+    }
+    state.recognitionSection = nextSection
+    renderRecognitionSectionTabs()
+    if ((changed || options?.force) && state.activeTab === "extension") {
+      mountRecognitionSection(nextSection)
+    }
   }
 
   function esc(v) {
@@ -1262,6 +1374,1272 @@
     }
   }
 
+  function normalizePublicationAlias(value) {
+    return String(value || "")
+      .trim()
+      .replace(/[\u2010-\u2015\u2212]/g, "-")
+      .replace(/\s+/g, " ")
+  }
+
+  function publicationAliasCollisionKey(value) {
+    return normalizePublicationAlias(value).toUpperCase()
+  }
+
+  function publicationAliasValidationMessage(value, maxLength) {
+    var alias = normalizePublicationAlias(value)
+    if (!alias) return "Enter an alias first."
+    if (alias.length > Number(maxLength || PUBLICATION_ALIAS_MAX_LENGTH)) {
+      return (
+        "Alias exceeds the " +
+        String(maxLength || PUBLICATION_ALIAS_MAX_LENGTH) +
+        " character limit."
+      )
+    }
+    if (PUBLICATION_ALIAS_CONTROL_CHAR_PATTERN.test(alias)) {
+      return "Alias contains a control character."
+    }
+    if (!/[A-Za-z\u0370-\u03ff]/u.test(alias)) {
+      return "Alias must contain a letter."
+    }
+    return ""
+  }
+
+  function normalizePublicationAliasMap(value) {
+    var bySymbol = {}
+    if (!value || typeof value !== "object" || Array.isArray(value)) return bySymbol
+    Object.keys(value).forEach(function (rawSymbol) {
+      var symbol = String(rawSymbol || "")
+        .trim()
+        .toUpperCase()
+      if (!symbol || !Array.isArray(value[rawSymbol])) return
+      var aliases = value[rawSymbol].map(normalizePublicationAlias).filter(function (alias) {
+        return Boolean(alias)
+      })
+      if (!aliases.length) return
+      bySymbol[symbol] = (bySymbol[symbol] || []).concat(aliases)
+    })
+    return bySymbol
+  }
+
+  function clonePublicationAliasMap(value) {
+    var normalized = normalizePublicationAliasMap(value)
+    return Object.fromEntries(
+      Object.keys(normalized).map(function (symbol) {
+        return [symbol, normalized[symbol].slice()]
+      }),
+    )
+  }
+
+  function publicationAliasMapRows(value) {
+    var rows = []
+    var normalized = normalizePublicationAliasMap(value)
+    Object.keys(normalized).forEach(function (symbol) {
+      normalized[symbol].forEach(function (alias) {
+        rows.push({ alias: alias, symbol: symbol, key: alias })
+      })
+    })
+    rows.sort(function (left, right) {
+      return left.alias.localeCompare(right.alias) || left.symbol.localeCompare(right.symbol)
+    })
+    return rows
+  }
+
+  function publicationAliasMapsMatch(left, right) {
+    function comparable(value) {
+      var normalized = normalizePublicationAliasMap(value)
+      return Object.keys(normalized)
+        .sort()
+        .map(function (symbol) {
+          return [
+            symbol,
+            normalized[symbol].slice().sort(function (leftAlias, rightAlias) {
+              return leftAlias.localeCompare(rightAlias)
+            }),
+          ]
+        })
+    }
+    return JSON.stringify(comparable(left)) === JSON.stringify(comparable(right))
+  }
+
+  function publicationAliasRowIndex(value) {
+    return new Map(
+      publicationAliasMapRows(value).map(function (row) {
+        return [row.key, row]
+      }),
+    )
+  }
+
+  function publicationAliasCollisionRows(value, alias) {
+    var collisionKey = publicationAliasCollisionKey(alias)
+    return publicationAliasMapRows(value).filter(function (row) {
+      return publicationAliasCollisionKey(row.alias) === collisionKey
+    })
+  }
+
+  function publicationAliasDraftRows() {
+    var baseline = publicationAliasRowIndex(state.publicationAliasPolicy?.by_symbol || {})
+    var draft = publicationAliasRowIndex(state.publicationAliasDraftBySymbol || {})
+    var keys = new Set([...baseline.keys(), ...draft.keys()])
+    return Array.from(keys)
+      .map(function (key) {
+        var before = baseline.get(key) || null
+        var after = draft.get(key) || null
+        var change = "unchanged"
+        if (!before && after) change = "new"
+        else if (before && !after) change = "removed"
+        else if (
+          before &&
+          after &&
+          (before.symbol !== after.symbol || before.alias !== after.alias)
+        )
+          change = "changed"
+        return {
+          key: key,
+          alias: after?.alias || before?.alias || "",
+          symbol: after?.symbol || before?.symbol || "",
+          before: before,
+          after: after,
+          change: change,
+        }
+      })
+      .sort(function (left, right) {
+        return left.alias.localeCompare(right.alias) || left.symbol.localeCompare(right.symbol)
+      })
+  }
+
+  function publicationAliasMapWithout(value, alias) {
+    var exactAlias = normalizePublicationAlias(alias)
+    var next = clonePublicationAliasMap(value)
+    Object.keys(next).forEach(function (symbol) {
+      next[symbol] = next[symbol].filter(function (candidate) {
+        return candidate !== exactAlias
+      })
+      if (!next[symbol].length) delete next[symbol]
+    })
+    return next
+  }
+
+  function publicationAliasMapWith(value, alias, symbol) {
+    var exactAlias = normalizePublicationAlias(alias)
+    var next = publicationAliasMapWithout(value, exactAlias)
+    var canonicalSymbol = String(symbol || "")
+      .trim()
+      .toUpperCase()
+    if (!canonicalSymbol) return next
+    next[canonicalSymbol] = (next[canonicalSymbol] || []).concat([exactAlias])
+    return next
+  }
+
+  function publicationAliasMapRestoringBaseline(value, alias, baselineValue) {
+    var exactAlias = normalizePublicationAlias(alias)
+    var baseline = normalizePublicationAliasMap(baselineValue)
+    var baselineRow = publicationAliasRowIndex(baseline).get(exactAlias)
+    if (!baselineRow) return clonePublicationAliasMap(value)
+    var next = publicationAliasMapWithout(value, exactAlias)
+    var target = (next[baselineRow.symbol] || []).slice()
+    var baselineAliases = baseline[baselineRow.symbol] || []
+    var baselineIndex = baselineAliases.indexOf(exactAlias)
+    var insertionIndex = target.length
+    for (var nextIndex = baselineIndex + 1; nextIndex < baselineAliases.length; nextIndex += 1) {
+      var nextSiblingIndex = target.indexOf(baselineAliases[nextIndex])
+      if (nextSiblingIndex >= 0) {
+        insertionIndex = nextSiblingIndex
+        break
+      }
+    }
+    if (insertionIndex === target.length) {
+      for (var previousIndex = baselineIndex - 1; previousIndex >= 0; previousIndex -= 1) {
+        var previousSiblingIndex = target.indexOf(baselineAliases[previousIndex])
+        if (previousSiblingIndex >= 0) {
+          insertionIndex = previousSiblingIndex + 1
+          break
+        }
+      }
+    }
+    target.splice(insertionIndex, 0, exactAlias)
+    next[baselineRow.symbol] = target
+    return next
+  }
+
+  function publicationAliasIsDirty() {
+    return Boolean(
+      state.publicationAliasLoaded &&
+      state.publicationAliasPolicy &&
+      !publicationAliasMapsMatch(
+        state.publicationAliasDraftBySymbol,
+        state.publicationAliasPolicy.by_symbol,
+      ),
+    )
+  }
+
+  function publicationAliasNeedsPublicationRetry() {
+    return Boolean(
+      state.publicationAliasLoaded &&
+      state.publicationAliasPolicy &&
+      state.publicationAliasPublication?.in_sync === false,
+    )
+  }
+
+  function setPublicationAliasStatus(message, tone) {
+    if (!els.publicationAliasStatus) return
+    els.publicationAliasStatus.textContent = String(message || "")
+    if (tone) els.publicationAliasStatus.dataset.tone = tone
+    else delete els.publicationAliasStatus.dataset.tone
+  }
+
+  function applyPublicationAliasPayload(data) {
+    var policy = data && data.policy && typeof data.policy === "object" ? data.policy : null
+    if (!policy) throw new Error("Publication alias response is missing its policy.")
+    var revision = Number.parseInt(String(policy.revision || 0), 10)
+    if (!Number.isInteger(revision) || revision < 1) {
+      throw new Error("Publication alias response has an invalid revision.")
+    }
+    if (!policy.by_symbol || typeof policy.by_symbol !== "object") {
+      throw new Error("Publication alias response is missing its mappings.")
+    }
+    var bySymbol = normalizePublicationAliasMap(policy.by_symbol)
+    var removeBySymbol = normalizePublicationAliasMap(policy.remove_by_symbol || {})
+    var aliasCount = publicationAliasMapRows(bySymbol).length
+    var removalCount = publicationAliasMapRows(removeBySymbol).length
+    if (Number.isFinite(Number(policy.alias_count)) && Number(policy.alias_count) !== aliasCount) {
+      throw new Error("Publication alias response has an inconsistent alias count.")
+    }
+    if (
+      Number.isFinite(Number(policy.removal_count)) &&
+      Number(policy.removal_count) !== removalCount
+    ) {
+      throw new Error("Publication alias response has an inconsistent correction count.")
+    }
+    var publication =
+      data && data.publication && typeof data.publication === "object" ? data.publication : {}
+    var limits = data && data.limits && typeof data.limits === "object" ? data.limits : {}
+    var maxAliases = Number.parseInt(
+      String(
+        limits.max_aliases ||
+          limits.max_operations ||
+          limits.max_alias_count ||
+          PUBLICATION_ALIAS_MAX_OPERATIONS,
+      ),
+      10,
+    )
+    var maxAliasLength = Number.parseInt(
+      String(limits.max_alias_length || limits.max_length || PUBLICATION_ALIAS_MAX_LENGTH),
+      10,
+    )
+    state.publicationAliasPolicy = {
+      schema_version: Number.parseInt(String(policy.schema_version || 0), 10) || null,
+      revision: revision,
+      version: String(policy.version || ""),
+      alias_count: aliasCount,
+      removal_count: removalCount,
+      by_symbol: bySymbol,
+      remove_by_symbol: removeBySymbol,
+      updated_at: String(policy.updated_at || ""),
+      updated_by: String(policy.updated_by || ""),
+    }
+    state.publicationAliasPublication = {
+      version: String(publication.version || ""),
+      revision: Number.parseInt(String(publication.revision || 0), 10) || null,
+      in_sync: publication.in_sync === true,
+      published_at: String(publication.published_at || ""),
+      last_error: String(publication.last_error || ""),
+    }
+    state.publicationAliasLimits = {
+      max_aliases:
+        Number.isFinite(maxAliases) && maxAliases > 0
+          ? maxAliases
+          : PUBLICATION_ALIAS_MAX_OPERATIONS,
+      max_alias_length:
+        Number.isFinite(maxAliasLength) && maxAliasLength > 0
+          ? maxAliasLength
+          : PUBLICATION_ALIAS_MAX_LENGTH,
+    }
+    state.publicationAliasLoaded = true
+  }
+
+  function publicationAliasMappingMarkup(row) {
+    var encodedAlias = encodeURIComponent(row.alias)
+    var classes = ["publication-alias-mapping"]
+    if (row.change !== "unchanged") classes.push("publication-alias-mapping--" + row.change)
+    var stateLabel =
+      row.change === "new"
+        ? "New"
+        : row.change === "changed"
+          ? "Changed"
+          : row.change === "removed"
+            ? "Will remove"
+            : ""
+    var target = row.after || row.before || { symbol: row.symbol }
+    var previousTarget = row.change === "changed" && row.before ? row.before.symbol : ""
+    var actions = []
+    if (row.change === "removed") {
+      actions.push(
+        '<button type="button" data-publication-alias-undo="' +
+          esc(encodedAlias) +
+          '">Undo</button>',
+      )
+    } else {
+      actions.push(
+        '<button type="button" data-publication-alias-change="' +
+          esc(encodedAlias) +
+          '">Change</button>',
+      )
+      actions.push(
+        '<button type="button" class="publication-alias-remove" data-publication-alias-remove="' +
+          esc(encodedAlias) +
+          '">Remove</button>',
+      )
+      if (row.change === "changed") {
+        actions.push(
+          '<button type="button" data-publication-alias-undo="' +
+            esc(encodedAlias) +
+            '">Undo</button>',
+        )
+      }
+    }
+    return [
+      '<li class="' + classes.join(" ") + '" data-change="' + esc(row.change) + '">',
+      '<div class="publication-alias-mapping-copy">',
+      '<span class="publication-alias-mapping-alias mono">' + esc(row.alias) + "</span>",
+      '<span class="publication-alias-arrow" aria-hidden="true">→</span>',
+      '<strong class="publication-alias-mapping-symbol">' + esc(target.symbol) + "</strong>",
+      previousTarget
+        ? '<span class="publication-alias-mapping-previous">was ' + esc(previousTarget) + "</span>"
+        : "",
+      stateLabel
+        ? '<span class="publication-alias-change-state">' + esc(stateLabel) + "</span>"
+        : "",
+      "</div>",
+      '<div class="publication-alias-mapping-actions">' + actions.join("") + "</div>",
+      "</li>",
+    ].join("")
+  }
+
+  function publicationAliasComposerCanSubmit() {
+    var alias = normalizePublicationAlias(
+      state.publicationAliasEditing?.alias || els.publicationAliasInput?.value || "",
+    )
+    var selectedSymbol = String(state.publicationAliasSelectedGene?.symbol || "")
+    if (!alias || !selectedSymbol || state.publicationAliasBusy) return false
+    if (
+      publicationAliasValidationMessage(
+        alias,
+        state.publicationAliasLimits?.max_alias_length || PUBLICATION_ALIAS_MAX_LENGTH,
+      )
+    )
+      return false
+    if (
+      state.publicationAliasEditing &&
+      String(state.publicationAliasEditing.symbol || "") === selectedSymbol
+    )
+      return false
+    return true
+  }
+
+  function renderPublicationAliases() {
+    var policy = state.publicationAliasPolicy
+    var publication = state.publicationAliasPublication || {}
+    var rows = publicationAliasDraftRows()
+    var aliasCount = rows.filter(function (row) {
+      return row.change !== "removed"
+    }).length
+    var removalCount = Number(policy?.removal_count || 0)
+    var maxAliases = Number(
+      state.publicationAliasLimits?.max_aliases || PUBLICATION_ALIAS_MAX_OPERATIONS,
+    )
+    var maxAliasLength = Number(
+      state.publicationAliasLimits?.max_alias_length || PUBLICATION_ALIAS_MAX_LENGTH,
+    )
+    var dirty = publicationAliasIsDirty()
+    var retryPublication = publicationAliasNeedsPublicationRetry()
+    var busy = Boolean(state.publicationAliasBusy)
+    var filter = String(els.publicationAliasFilter?.value || "")
+      .trim()
+      .toUpperCase()
+    var visibleRows = filter
+      ? rows.filter(function (row) {
+          return (
+            row.alias.toUpperCase().includes(filter) || row.symbol.toUpperCase().includes(filter)
+          )
+        })
+      : rows
+
+    if (els.publicationAliasTabCount)
+      els.publicationAliasTabCount.textContent = state.publicationAliasLoaded
+        ? String(aliasCount)
+        : "—"
+    if (els.publicationAliasCount)
+      els.publicationAliasCount.textContent = state.publicationAliasLoaded
+        ? String(aliasCount) + " / " + String(maxAliases)
+        : "—"
+    if (els.publicationAliasRemovalCount)
+      els.publicationAliasRemovalCount.textContent = state.publicationAliasLoaded
+        ? String(removalCount)
+        : "—"
+    if (els.publicationAliasRevision) {
+      els.publicationAliasRevision.textContent = policy ? String(policy.revision) : "—"
+      els.publicationAliasRevision.title = policy?.updated_at
+        ? "Updated " +
+          formatTimestampShort(policy.updated_at) +
+          (policy.updated_by ? " by " + policy.updated_by : "")
+        : "No recorded update"
+    }
+    if (els.publicationAliasSync) {
+      var syncState = state.publicationAliasLoaded
+        ? publication.in_sync
+          ? "synced"
+          : "pending"
+        : "unknown"
+      els.publicationAliasSync.dataset.sync = syncState
+      els.publicationAliasSync.textContent =
+        syncState === "synced" ? "Published" : syncState === "pending" ? "Pending" : "Not loaded"
+      els.publicationAliasSync.title = publication.version
+        ? "Published version " + publication.version
+        : "Published version unavailable"
+    }
+    if (els.publicationAliasDirty) {
+      els.publicationAliasDirty.dataset.dirty = dirty ? "true" : "false"
+      els.publicationAliasDirty.textContent = dirty ? "Unpublished changes" : "Saved policy"
+    }
+    if (els.publicationAliasMappings) {
+      els.publicationAliasMappings.innerHTML = visibleRows.length
+        ? visibleRows.map(publicationAliasMappingMarkup).join("")
+        : filter
+          ? '<li class="publication-alias-empty"><strong>No mappings match this filter.</strong><span>Clear the filter to see the complete draft.</span></li>'
+          : '<li class="publication-alias-empty"><strong>No curated aliases yet.</strong><span>Add an exact page label and choose its canonical gene above.</span></li>'
+    }
+    if (els.publicationAliasInput) {
+      els.publicationAliasInput.maxLength = maxAliasLength
+      els.publicationAliasInput.disabled =
+        !state.publicationAliasLoaded || busy || Boolean(state.publicationAliasEditing)
+    }
+    if (els.publicationAliasGeneQuery)
+      els.publicationAliasGeneQuery.disabled = !state.publicationAliasLoaded || busy
+    if (els.publicationAliasFilter)
+      els.publicationAliasFilter.disabled = !state.publicationAliasLoaded || busy
+    if (els.publicationAliasRefresh) els.publicationAliasRefresh.disabled = busy
+    if (els.publicationAliasAdd) {
+      els.publicationAliasAdd.disabled = !publicationAliasComposerCanSubmit()
+      els.publicationAliasAdd.textContent = state.publicationAliasEditing
+        ? "Update draft"
+        : "Add mapping to draft"
+    }
+    if (els.publicationAliasTargetPreview) {
+      var previewAlias = normalizePublicationAlias(
+        state.publicationAliasEditing?.alias || els.publicationAliasInput?.value || "",
+      )
+      var previewGene = state.publicationAliasSelectedGene
+      var showPreview = Boolean(previewAlias && previewGene?.symbol)
+      els.publicationAliasTargetPreview.hidden = !showPreview
+      els.publicationAliasTargetPreview.innerHTML = showPreview
+        ? '<span class="mono">' +
+          esc(previewAlias) +
+          '</span><span class="publication-alias-target-arrow" aria-hidden="true">→</span><strong class="mono">' +
+          esc(previewGene.symbol) +
+          '</strong><span class="publication-alias-target-name"> · ' +
+          esc(previewGene.full_name || previewGene.symbol) +
+          "</span>"
+        : ""
+    }
+    if (els.publicationAliasEditing) {
+      els.publicationAliasEditing.hidden = !state.publicationAliasEditing
+      els.publicationAliasEditing.textContent = state.publicationAliasEditing
+        ? "Changing " + state.publicationAliasEditing.alias
+        : ""
+    }
+    if (els.publicationAliasCancelEdit)
+      els.publicationAliasCancelEdit.hidden = !state.publicationAliasEditing
+    if (els.publicationAliasPublish) {
+      els.publicationAliasPublish.disabled = (!dirty && !retryPublication) || busy
+      els.publicationAliasPublish.textContent = busy
+        ? "Working…"
+        : retryPublication && !dirty
+          ? "Retry publication"
+          : "Publish alias changes"
+    }
+  }
+
+  function closePublicationAliasSearch(options) {
+    var opts = options || {}
+    state.publicationAliasSearchResults = []
+    state.publicationAliasSearchActiveIndex = -1
+    state.publicationAliasSearchError = ""
+    if (els.publicationAliasGeneResults) {
+      els.publicationAliasGeneResults.hidden = true
+      els.publicationAliasGeneResults.replaceChildren()
+    }
+    if (els.publicationAliasGeneQuery) {
+      els.publicationAliasGeneQuery.setAttribute("aria-expanded", "false")
+      els.publicationAliasGeneQuery.removeAttribute("aria-activedescendant")
+      els.publicationAliasGeneQuery.removeAttribute("aria-busy")
+    }
+    if (opts.clearStatus && els.publicationAliasGeneStatus) {
+      els.publicationAliasGeneStatus.textContent = ""
+    }
+  }
+
+  function publicationAliasSearchIndexAfter(currentIndex, direction, resultCount) {
+    var count = Math.max(0, Number.parseInt(String(resultCount || 0), 10) || 0)
+    if (!count) return -1
+    var current = Number(currentIndex)
+    if (!Number.isInteger(current)) current = -1
+    return direction === "previous" ? Math.max(current - 1, 0) : Math.min(current + 1, count - 1)
+  }
+
+  function cancelPublicationAliasSearch() {
+    state.publicationAliasSearchRequestId = Number(state.publicationAliasSearchRequestId || 0) + 1
+    if (state.publicationAliasSearchTimer != null && typeof window.clearTimeout === "function") {
+      window.clearTimeout(state.publicationAliasSearchTimer)
+    }
+    state.publicationAliasSearchTimer = null
+    if (state.publicationAliasSearchController) state.publicationAliasSearchController.abort()
+    state.publicationAliasSearchController = null
+    closePublicationAliasSearch({ clearStatus: true })
+  }
+
+  function renderPublicationAliasSearchResults() {
+    if (!els.publicationAliasGeneResults || !els.publicationAliasGeneQuery) return
+    var results = Array.isArray(state.publicationAliasSearchResults)
+      ? state.publicationAliasSearchResults
+      : []
+    var error = String(state.publicationAliasSearchError || "")
+    var html = ""
+    if (error) {
+      html =
+        '<li class="publication-alias-gene-empty" role="option" aria-disabled="true">' +
+        esc(error) +
+        "</li>"
+    } else if (!results.length) {
+      html =
+        '<li class="publication-alias-gene-empty" role="option" aria-disabled="true">No genes found.</li>'
+    } else {
+      html = results
+        .map(function (gene, index) {
+          var symbol = String(gene.symbol || "")
+            .trim()
+            .toUpperCase()
+          var name = String(gene.full_name || symbol)
+          var matched =
+            gene.matched_by === "alias" && gene.matched_value
+              ? '<span class="publication-alias-gene-match">Matched alias ' +
+                esc(gene.matched_value) +
+                "</span>"
+              : ""
+          return [
+            '<li class="publication-alias-gene-option' +
+              (index === state.publicationAliasSearchActiveIndex ? " active" : "") +
+              '" id="publication-alias-gene-option-' +
+              String(index) +
+              '" role="option" aria-selected="' +
+              (index === state.publicationAliasSearchActiveIndex ? "true" : "false") +
+              '" data-publication-alias-gene-index="' +
+              String(index) +
+              '">',
+            '<strong class="mono">' + esc(symbol) + "</strong>",
+            '<span class="publication-alias-gene-name">' + esc(name) + "</span>",
+            matched,
+            "</li>",
+          ].join("")
+        })
+        .join("")
+    }
+    els.publicationAliasGeneResults.innerHTML = html
+    els.publicationAliasGeneResults.hidden = false
+    els.publicationAliasGeneQuery.setAttribute("aria-expanded", "true")
+    if (
+      state.publicationAliasSearchActiveIndex >= 0 &&
+      results[state.publicationAliasSearchActiveIndex]
+    ) {
+      els.publicationAliasGeneQuery.setAttribute(
+        "aria-activedescendant",
+        "publication-alias-gene-option-" + String(state.publicationAliasSearchActiveIndex),
+      )
+    } else {
+      els.publicationAliasGeneQuery.removeAttribute("aria-activedescendant")
+    }
+  }
+
+  function selectPublicationAliasGene(index) {
+    var gene = state.publicationAliasSearchResults?.[Number(index)]
+    var symbol = String(gene?.symbol || "")
+      .trim()
+      .toUpperCase()
+    if (!symbol) return
+    state.publicationAliasSelectedGene = {
+      symbol: symbol,
+      full_name: String(gene.full_name || symbol),
+    }
+    if (els.publicationAliasGeneQuery) {
+      els.publicationAliasGeneQuery.value = symbol
+      els.publicationAliasGeneQuery.removeAttribute("aria-invalid")
+    }
+    closePublicationAliasSearch()
+    if (els.publicationAliasGeneStatus) {
+      els.publicationAliasGeneStatus.textContent =
+        "Selected " + symbol + ", " + state.publicationAliasSelectedGene.full_name + "."
+    }
+    renderPublicationAliases()
+  }
+
+  async function runPublicationAliasGeneSearch() {
+    var query = String(els.publicationAliasGeneQuery?.value || "").trim()
+    if (query.length < PUBLICATION_ALIAS_SEARCH_MIN_LENGTH) {
+      closePublicationAliasSearch({ clearStatus: true })
+      return
+    }
+    if (state.publicationAliasSearchController) state.publicationAliasSearchController.abort()
+    var controller = typeof AbortController === "function" ? new AbortController() : null
+    var requestId = Number(state.publicationAliasSearchRequestId || 0) + 1
+    state.publicationAliasSearchRequestId = requestId
+    state.publicationAliasSearchController = controller
+    state.publicationAliasSearchError = ""
+    if (els.publicationAliasGeneQuery)
+      els.publicationAliasGeneQuery.setAttribute("aria-busy", "true")
+    if (els.publicationAliasGeneStatus)
+      els.publicationAliasGeneStatus.textContent = "Searching genes."
+    var timeoutId = null
+    var timedOut = false
+    if (controller) {
+      timeoutId = window.setTimeout(function () {
+        timedOut = true
+        controller.abort()
+      }, ADMIN_READ_TIMEOUT_MS)
+    }
+    try {
+      var response = await fetch(
+        "/api/public/v1/genes/search?scope=catalog&limit=8&q=" + encodeURIComponent(query),
+        {
+          credentials: "include",
+          ...(controller ? { signal: controller.signal } : {}),
+        },
+      )
+      if (!response.ok)
+        throw new Error("Gene search failed with HTTP " + String(response.status) + ".")
+      var data = await response.json()
+      if (
+        requestId !== state.publicationAliasSearchRequestId ||
+        String(els.publicationAliasGeneQuery?.value || "").trim() !== query
+      )
+        return
+      state.publicationAliasSearchResults = (Array.isArray(data?.genes) ? data.genes : []).filter(
+        function (gene) {
+          return Boolean(String(gene?.symbol || "").trim())
+        },
+      )
+      state.publicationAliasSearchActiveIndex = -1
+      state.publicationAliasSearchError = ""
+      renderPublicationAliasSearchResults()
+      if (els.publicationAliasGeneStatus) {
+        els.publicationAliasGeneStatus.textContent = state.publicationAliasSearchResults.length
+          ? String(state.publicationAliasSearchResults.length) + " gene matches available."
+          : "No genes found."
+      }
+    } catch (error) {
+      if (requestId !== state.publicationAliasSearchRequestId) return
+      if (controller?.signal.aborted && !timedOut) return
+      state.publicationAliasSearchResults = []
+      state.publicationAliasSearchActiveIndex = -1
+      state.publicationAliasSearchError = timedOut
+        ? "Gene search timed out. Try again."
+        : requestErrorMessage(error, "Gene search failed.")
+      renderPublicationAliasSearchResults()
+      if (els.publicationAliasGeneStatus)
+        els.publicationAliasGeneStatus.textContent = state.publicationAliasSearchError
+    } finally {
+      if (timeoutId != null) window.clearTimeout(timeoutId)
+      if (requestId === state.publicationAliasSearchRequestId) {
+        state.publicationAliasSearchController = null
+        if (els.publicationAliasGeneQuery)
+          els.publicationAliasGeneQuery.removeAttribute("aria-busy")
+      }
+    }
+  }
+
+  function schedulePublicationAliasGeneSearch() {
+    if (state.publicationAliasSearchTimer != null)
+      window.clearTimeout(state.publicationAliasSearchTimer)
+    state.publicationAliasSearchTimer = window.setTimeout(function () {
+      state.publicationAliasSearchTimer = null
+      runPublicationAliasGeneSearch()
+    }, PUBLICATION_ALIAS_SEARCH_DEBOUNCE_MS)
+  }
+
+  function resetPublicationAliasComposer(options) {
+    var opts = options || {}
+    cancelPublicationAliasSearch()
+    state.publicationAliasEditing = null
+    state.publicationAliasSelectedGene = null
+    if (els.publicationAliasInput) {
+      els.publicationAliasInput.value = ""
+      els.publicationAliasInput.removeAttribute("aria-invalid")
+    }
+    if (els.publicationAliasGeneQuery) {
+      els.publicationAliasGeneQuery.value = ""
+      els.publicationAliasGeneQuery.removeAttribute("aria-invalid")
+    }
+    renderPublicationAliases()
+    if (opts.focus && els.publicationAliasInput) els.publicationAliasInput.focus()
+  }
+
+  function startPublicationAliasEdit(alias) {
+    var exactAlias = normalizePublicationAlias(alias)
+    var current = publicationAliasRowIndex(state.publicationAliasDraftBySymbol).get(exactAlias)
+    if (!current) return
+    cancelPublicationAliasPublicationRetry()
+    cancelPublicationAliasSearch()
+    state.publicationAliasEditing = { alias: current.alias, symbol: current.symbol }
+    state.publicationAliasSelectedGene = {
+      symbol: current.symbol,
+      full_name: current.symbol,
+    }
+    if (els.publicationAliasInput) els.publicationAliasInput.value = current.alias
+    if (els.publicationAliasGeneQuery) {
+      els.publicationAliasGeneQuery.value = current.symbol
+      els.publicationAliasGeneQuery.focus()
+      els.publicationAliasGeneQuery.select()
+    }
+    renderPublicationAliases()
+    setPublicationAliasStatus(
+      "Choose a different canonical gene for " + current.alias + ", then update the draft.",
+      "",
+    )
+  }
+
+  function submitPublicationAliasDraftMapping() {
+    if (!state.publicationAliasLoaded || state.publicationAliasBusy) return
+    var alias = normalizePublicationAlias(
+      state.publicationAliasEditing?.alias || els.publicationAliasInput?.value || "",
+    )
+    var maxLength = Number(
+      state.publicationAliasLimits?.max_alias_length || PUBLICATION_ALIAS_MAX_LENGTH,
+    )
+    var invalidMessage = publicationAliasValidationMessage(alias, maxLength)
+    if (invalidMessage) {
+      if (els.publicationAliasInput) els.publicationAliasInput.setAttribute("aria-invalid", "true")
+      setPublicationAliasStatus(invalidMessage, "error")
+      return
+    }
+    var selectedSymbol = String(state.publicationAliasSelectedGene?.symbol || "")
+      .trim()
+      .toUpperCase()
+    if (!selectedSymbol) {
+      if (els.publicationAliasGeneQuery)
+        els.publicationAliasGeneQuery.setAttribute("aria-invalid", "true")
+      setPublicationAliasStatus("Choose a canonical gene from the search results.", "error")
+      return
+    }
+    if (state.publicationAliasEditing && state.publicationAliasEditing.symbol === selectedSymbol) {
+      setPublicationAliasStatus("Choose a different canonical gene before updating.", "error")
+      return
+    }
+    var current = publicationAliasRowIndex(state.publicationAliasDraftBySymbol).get(alias)
+    if (!state.publicationAliasEditing && current) {
+      setPublicationAliasStatus(
+        alias + " is already mapped to " + current.symbol + ". Use Change to reassign it.",
+        "error",
+      )
+      return
+    }
+    var conflictingVariant = publicationAliasCollisionRows(
+      state.publicationAliasDraftBySymbol,
+      alias,
+    ).find(function (row) {
+      return row.alias !== alias && row.symbol !== selectedSymbol
+    })
+    if (conflictingVariant) {
+      setPublicationAliasStatus(
+        alias +
+          " conflicts with the existing variant " +
+          conflictingVariant.alias +
+          " → " +
+          conflictingVariant.symbol +
+          ". Keep collision variants on one canonical gene.",
+        "error",
+      )
+      return
+    }
+    var baseline = publicationAliasRowIndex(state.publicationAliasPolicy?.by_symbol || {}).get(
+      alias,
+    )
+    var restoredBaseline = Boolean(baseline && baseline.symbol === selectedSymbol)
+    var next = restoredBaseline
+      ? publicationAliasMapRestoringBaseline(
+          state.publicationAliasDraftBySymbol,
+          alias,
+          state.publicationAliasPolicy?.by_symbol || {},
+        )
+      : publicationAliasMapWith(state.publicationAliasDraftBySymbol, alias, selectedSymbol)
+    var operationCount =
+      publicationAliasMapRows(next).length +
+      publicationAliasMapRows(state.publicationAliasPolicy?.remove_by_symbol || {}).length
+    var maxOperations = Number(
+      state.publicationAliasLimits?.max_aliases || PUBLICATION_ALIAS_MAX_OPERATIONS,
+    )
+    if (operationCount > maxOperations) {
+      setPublicationAliasStatus(
+        "This draft would exceed the " + String(maxOperations) + " operation limit.",
+        "error",
+      )
+      return
+    }
+    var wasEditing = Boolean(state.publicationAliasEditing)
+    cancelPublicationAliasPublicationRetry()
+    state.publicationAliasDraftBySymbol = next
+    resetPublicationAliasComposer()
+    setPublicationAliasStatus(
+      alias +
+        " → " +
+        selectedSymbol +
+        (restoredBaseline
+          ? " restored in the draft."
+          : wasEditing
+            ? " updated in the draft."
+            : " added to the draft."),
+      "success",
+    )
+    if (els.publicationAliasInput) els.publicationAliasInput.focus()
+  }
+
+  function removePublicationAliasDraftMapping(alias) {
+    var exactAlias = normalizePublicationAlias(alias)
+    var current = publicationAliasRowIndex(state.publicationAliasDraftBySymbol).get(exactAlias)
+    if (!current) return
+    cancelPublicationAliasPublicationRetry()
+    state.publicationAliasDraftBySymbol = publicationAliasMapWithout(
+      state.publicationAliasDraftBySymbol,
+      current.alias,
+    )
+    if (state.publicationAliasEditing && state.publicationAliasEditing.alias === current.key) {
+      resetPublicationAliasComposer()
+    } else {
+      renderPublicationAliases()
+    }
+    setPublicationAliasStatus(
+      current.alias + " will be removed on publish. Use Undo in its row to restore it.",
+      "",
+    )
+  }
+
+  function undoPublicationAliasDraftMapping(alias) {
+    var exactAlias = normalizePublicationAlias(alias)
+    var baseline = publicationAliasRowIndex(state.publicationAliasPolicy?.by_symbol || {}).get(
+      exactAlias,
+    )
+    if (!baseline) return
+    cancelPublicationAliasPublicationRetry()
+    state.publicationAliasDraftBySymbol = publicationAliasMapRestoringBaseline(
+      state.publicationAliasDraftBySymbol,
+      baseline.alias,
+      state.publicationAliasPolicy?.by_symbol || {},
+    )
+    renderPublicationAliases()
+    setPublicationAliasStatus(
+      baseline.alias + " → " + baseline.symbol + " restored in the draft.",
+      "success",
+    )
+  }
+
+  async function refreshPublicationAliases(options) {
+    cancelPublicationAliasPublicationRetry()
+    cancelPublicationAliasSearch()
+    var opts = options || {}
+    var preservedDraft = opts.preserveDraft
+      ? clonePublicationAliasMap(state.publicationAliasDraftBySymbol)
+      : null
+    try {
+      state.publicationAliasBusy = true
+      setPublicationAliasStatus("Loading curated aliases…", "")
+      renderPublicationAliases()
+      var data = await apiJson("/publication-aliases", { method: "GET" })
+      applyPublicationAliasPayload(data)
+      state.publicationAliasDraftBySymbol =
+        preservedDraft || clonePublicationAliasMap(state.publicationAliasPolicy.by_symbol)
+      resetPublicationAliasComposer()
+      var publicationPending = publicationAliasNeedsPublicationRetry()
+      setPublicationAliasStatus(
+        opts.message ||
+          (publicationPending
+            ? "Alias policy loaded, but publication is pending. Retry publication to publish the saved policy."
+            : "Alias policy loaded."),
+        opts.tone || (publicationPending ? "warning" : "success"),
+      )
+    } catch (error) {
+      if (isRequestCanceled(error)) return
+      var message = requestErrorMessage(error, "Alias policy failed to load.")
+      setPublicationAliasStatus(message, "error")
+      setLog({ error: "Publication alias load failed", details: error.response || message })
+    } finally {
+      state.publicationAliasBusy = false
+      renderPublicationAliases()
+    }
+  }
+
+  function publicationAliasErrorCarriesSavedPolicy(error) {
+    var response =
+      error && error.response && typeof error.response === "object" ? error.response : null
+    if (!response) return false
+    if (response.saved === true || response.policy_saved === true) return true
+    var code = String(response.code || "")
+    return (
+      code.startsWith("publication_alias_projection_") ||
+      code === "publication_alias_blocklist_dependency_not_published" ||
+      code === "recognition_pair_not_visible" ||
+      code === "recognition_pair_dependencies_not_published"
+    )
+  }
+
+  function publicationAliasErrorCanAutoRetry(error) {
+    var code = String(error?.response?.code || "")
+    return (
+      code === "publication_alias_projection_not_visible" ||
+      code === "publication_alias_projection_busy" ||
+      code === "publication_alias_blocklist_dependency_not_published" ||
+      code === "recognition_pair_not_visible" ||
+      code === "recognition_pair_dependencies_not_published"
+    )
+  }
+
+  function cancelPublicationAliasPublicationRetry(statusMessage) {
+    var wasActive = Boolean(
+      state.publicationAliasPublicationRetry || state.publicationAliasPublicationRetryTimer != null,
+    )
+    state.publicationAliasPublicationRetryRunId =
+      Number(state.publicationAliasPublicationRetryRunId || 0) + 1
+    if (
+      state.publicationAliasPublicationRetryTimer != null &&
+      typeof window.clearTimeout === "function"
+    ) {
+      window.clearTimeout(state.publicationAliasPublicationRetryTimer)
+    }
+    state.publicationAliasPublicationRetryTimer = null
+    state.publicationAliasPublicationRetry = null
+    if (wasActive && statusMessage) setPublicationAliasStatus(statusMessage, "warning")
+    return wasActive
+  }
+
+  function publicationAliasPublicationRetryIsCurrent(retry) {
+    return Boolean(
+      retry &&
+      state.publicationAliasPublicationRetry === retry &&
+      Number(retry.run_id || 0) === Number(state.publicationAliasPublicationRetryRunId || 0),
+    )
+  }
+
+  function publicationAliasPublicationRetryPolicyMatches(policy, retry) {
+    if (!policy || !retry) return false
+    return Boolean(
+      Number(policy.revision || 0) === Number(retry.revision || 0) &&
+      String(policy.version || "") === String(retry.version || "") &&
+      publicationAliasMapsMatch(policy.by_symbol, retry.by_symbol) &&
+      publicationAliasMapsMatch(policy.remove_by_symbol, retry.remove_by_symbol),
+    )
+  }
+
+  function publicationAliasPublicationRetryEligibility(retry) {
+    if (!publicationAliasPublicationRetryIsCurrent(retry)) return "canceled"
+    if (state.activeTab !== "extension" || state.recognitionSection !== "aliases") return "inactive"
+    if (state.publicationAliasBusy) return "busy"
+    if (!state.publicationAliasLoaded || !state.publicationAliasPolicy) return "unavailable"
+    if (state.publicationAliasPublication?.in_sync === true) return "published"
+    if (!publicationAliasPublicationRetryPolicyMatches(state.publicationAliasPolicy, retry)) {
+      return "revision_changed"
+    }
+    if (
+      publicationAliasIsDirty() ||
+      !publicationAliasMapsMatch(state.publicationAliasDraftBySymbol, retry.by_symbol)
+    ) {
+      return "draft_changed"
+    }
+    return ""
+  }
+
+  function stopPublicationAliasPublicationRetry(retry, message, tone) {
+    if (!publicationAliasPublicationRetryIsCurrent(retry)) return
+    cancelPublicationAliasPublicationRetry()
+    if (message && state.activeTab === "extension" && state.recognitionSection === "aliases") {
+      setPublicationAliasStatus(message, tone || "warning")
+      renderPublicationAliases()
+    }
+  }
+
+  function queuePublicationAliasPublicationRetry(retry) {
+    if (!publicationAliasPublicationRetryIsCurrent(retry)) return false
+    var eligibility = publicationAliasPublicationRetryEligibility(retry)
+    if (eligibility) {
+      stopPublicationAliasPublicationRetry(
+        retry,
+        eligibility === "revision_changed"
+          ? "Automatic publication retry stopped because the saved alias policy changed. Refresh before trying again."
+          : "",
+        "warning",
+      )
+      return false
+    }
+    var attemptIndex = Number(retry.next_attempt_index || 0)
+    if (attemptIndex >= PUBLICATION_ALIAS_PUBLICATION_RETRY_DELAYS_MS.length) {
+      stopPublicationAliasPublicationRetry(
+        retry,
+        "Automatic publication retries ended after " +
+          String(PUBLICATION_ALIAS_PUBLICATION_RETRY_DELAYS_MS.length) +
+          " attempts. Use Retry publication to try again.",
+        "warning",
+      )
+      return false
+    }
+    var delayMs = PUBLICATION_ALIAS_PUBLICATION_RETRY_DELAYS_MS[attemptIndex]
+    retry.next_attempt_index = attemptIndex + 1
+    setPublicationAliasStatus(
+      "Publication is saved but still pending. Automatic retry " +
+        String(retry.next_attempt_index) +
+        " of " +
+        String(PUBLICATION_ALIAS_PUBLICATION_RETRY_DELAYS_MS.length) +
+        " starts in " +
+        String(Math.round(delayMs / 1000)) +
+        " seconds.",
+      "warning",
+    )
+    state.publicationAliasPublicationRetryTimer = window.setTimeout(function () {
+      state.publicationAliasPublicationRetryTimer = null
+      runPublicationAliasPublicationRetry(retry)
+    }, delayMs)
+    return true
+  }
+
+  function schedulePublicationAliasPublicationRetry(error) {
+    if (!publicationAliasErrorCanAutoRetry(error)) return false
+    if (
+      state.activeTab !== "extension" ||
+      state.recognitionSection !== "aliases" ||
+      state.publicationAliasBusy ||
+      !state.publicationAliasLoaded ||
+      !state.publicationAliasPolicy ||
+      state.publicationAliasPublication?.in_sync === true ||
+      publicationAliasIsDirty()
+    ) {
+      return false
+    }
+    var retryBySymbol = clonePublicationAliasMap(state.publicationAliasPolicy.by_symbol)
+    if (!publicationAliasMapsMatch(state.publicationAliasDraftBySymbol, retryBySymbol)) return false
+    cancelPublicationAliasPublicationRetry()
+    var retry = {
+      run_id: Number(state.publicationAliasPublicationRetryRunId || 0),
+      revision: Number(state.publicationAliasPolicy.revision || 0),
+      version: String(state.publicationAliasPolicy.version || ""),
+      by_symbol: retryBySymbol,
+      remove_by_symbol: clonePublicationAliasMap(
+        state.publicationAliasPolicy.remove_by_symbol || {},
+      ),
+      next_attempt_index: 0,
+    }
+    state.publicationAliasPublicationRetry = retry
+    return queuePublicationAliasPublicationRetry(retry)
+  }
+
+  function completePublicationAliasPublicationRetry(retry) {
+    if (!publicationAliasPublicationRetryIsCurrent(retry)) return
+    cancelPublicationAliasPublicationRetry()
+    setPublicationAliasStatus(
+      "Published; search and extensions pick up the alias policy after the manifest cache refreshes, which may take up to five minutes.",
+      "success",
+    )
+    setLog({ ok: true, publication_aliases: state.publicationAliasPolicy })
+  }
+
+  async function runPublicationAliasPublicationRetry(retry) {
+    var eligibility = publicationAliasPublicationRetryEligibility(retry)
+    if (eligibility) {
+      stopPublicationAliasPublicationRetry(
+        retry,
+        eligibility === "revision_changed"
+          ? "Automatic publication retry stopped because the saved alias policy changed. Refresh before trying again."
+          : "",
+        "warning",
+      )
+      return
+    }
+    try {
+      state.publicationAliasBusy = true
+      setPublicationAliasStatus(
+        "Automatic publication retry " +
+          String(retry.next_attempt_index) +
+          " of " +
+          String(PUBLICATION_ALIAS_PUBLICATION_RETRY_DELAYS_MS.length) +
+          " is running…",
+        "warning",
+      )
+      renderPublicationAliases()
+      var data = await apiJson("/publication-aliases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          expected_revision: retry.revision,
+          by_symbol: retry.by_symbol,
+          remove_by_symbol: retry.remove_by_symbol,
+        }),
+      })
+      if (!publicationAliasPublicationRetryIsCurrent(retry)) return
+      if (!publicationAliasPublicationRetryPolicyMatches(data?.policy, retry)) {
+        state.publicationAliasBusy = false
+        stopPublicationAliasPublicationRetry(
+          retry,
+          "Automatic publication retry stopped because the saved alias policy changed. Refresh before trying again.",
+          "warning",
+        )
+        return
+      }
+      applyPublicationAliasPayload(data)
+      state.publicationAliasDraftBySymbol = clonePublicationAliasMap(retry.by_symbol)
+      state.publicationAliasBusy = false
+      if (state.publicationAliasPublication?.in_sync === true) {
+        completePublicationAliasPublicationRetry(retry)
+        return
+      }
+      queuePublicationAliasPublicationRetry(retry)
+    } catch (error) {
+      if (!publicationAliasPublicationRetryIsCurrent(retry)) return
+      if (Number(error?.status || 0) === 409) {
+        state.publicationAliasBusy = false
+        cancelPublicationAliasPublicationRetry()
+        await refreshPublicationAliases({
+          preserveDraft: true,
+          message:
+            "Automatic publication retry stopped because a newer alias revision was saved elsewhere. Your draft is preserved.",
+          tone: "warning",
+        })
+        return
+      }
+      if (
+        Number(error?.status || 0) === 503 &&
+        publicationAliasErrorCarriesSavedPolicy(error) &&
+        publicationAliasErrorCanAutoRetry(error) &&
+        error?.response?.policy &&
+        error?.response?.publication &&
+        publicationAliasPublicationRetryPolicyMatches(error.response.policy, retry)
+      ) {
+        applyPublicationAliasPayload(error.response)
+        state.publicationAliasDraftBySymbol = clonePublicationAliasMap(retry.by_symbol)
+        state.publicationAliasBusy = false
+        if (state.publicationAliasPublication?.in_sync === true) {
+          completePublicationAliasPublicationRetry(retry)
+          return
+        }
+        queuePublicationAliasPublicationRetry(retry)
+        return
+      }
+      state.publicationAliasBusy = false
+      stopPublicationAliasPublicationRetry(
+        retry,
+        "Automatic publication retry stopped: " +
+          requestErrorMessage(error, "publication retry failed") +
+          ". Use Retry publication to try again.",
+        "warning",
+      )
+    } finally {
+      state.publicationAliasBusy = false
+      if (state.activeTab === "extension" && state.recognitionSection === "aliases")
+        renderPublicationAliases()
+    }
+  }
+
+  async function publishPublicationAliases() {
+    if (
+      !state.publicationAliasLoaded ||
+      (!publicationAliasIsDirty() && !publicationAliasNeedsPublicationRetry())
+    )
+      return
+    cancelPublicationAliasPublicationRetry()
+    cancelPublicationAliasSearch()
+    var expectedRevision = Number(state.publicationAliasPolicy?.revision || 0)
+    var draftBySymbol = clonePublicationAliasMap(state.publicationAliasDraftBySymbol)
+    var removeBySymbol = clonePublicationAliasMap(
+      state.publicationAliasPolicy?.remove_by_symbol || {},
+    )
+    try {
+      state.publicationAliasBusy = true
+      setPublicationAliasStatus("Publishing the complete curated alias policy…", "")
+      renderPublicationAliases()
+      var data = await apiJson("/publication-aliases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          expected_revision: expectedRevision,
+          by_symbol: draftBySymbol,
+          remove_by_symbol: removeBySymbol,
+        }),
+      })
+      if (data?.policy) {
+        applyPublicationAliasPayload(data)
+        state.publicationAliasDraftBySymbol = clonePublicationAliasMap(
+          state.publicationAliasPolicy.by_symbol,
+        )
+        resetPublicationAliasComposer()
+      } else {
+        state.publicationAliasBusy = false
+        await refreshPublicationAliases()
+      }
+      var inSync = state.publicationAliasPublication?.in_sync === true
+      setPublicationAliasStatus(
+        inSync
+          ? "Published; search and extensions pick up the alias policy after the manifest cache refreshes, which may take up to five minutes."
+          : "Alias policy saved. Publication is still catching up.",
+        inSync ? "success" : "warning",
+      )
+      setLog({ ok: true, publication_aliases: state.publicationAliasPolicy })
+    } catch (error) {
+      if (Number(error?.status || 0) === 409) {
+        state.publicationAliasBusy = false
+        await refreshPublicationAliases({
+          preserveDraft: true,
+          message:
+            "A newer alias revision was saved elsewhere. Your draft is preserved against the refreshed baseline; review it before publishing again.",
+          tone: "warning",
+        })
+        return
+      }
+      if (
+        Number(error?.status || 0) === 503 &&
+        publicationAliasErrorCarriesSavedPolicy(error) &&
+        error?.response?.policy &&
+        error?.response?.publication
+      ) {
+        var preservedDraft = clonePublicationAliasMap(state.publicationAliasDraftBySymbol)
+        try {
+          applyPublicationAliasPayload(error.response)
+          state.publicationAliasDraftBySymbol = preservedDraft
+          state.publicationAliasBusy = false
+          var retryScheduled =
+            publicationAliasNeedsPublicationRetry() &&
+            schedulePublicationAliasPublicationRetry(error)
+          if (!retryScheduled) {
+            setPublicationAliasStatus(
+              publicationAliasNeedsPublicationRetry()
+                ? "The alias policy is saved, but publication is still pending. Your draft is preserved; retry publication."
+                : "The alias policy is published. Your draft is preserved; the manifest cache may last up to five minutes.",
+              publicationAliasNeedsPublicationRetry() ? "warning" : "success",
+            )
+          }
+          setLog(
+            publicationAliasNeedsPublicationRetry()
+              ? {
+                  warning: "Publication alias projection incomplete",
+                  publication_aliases: state.publicationAliasPolicy,
+                }
+              : { ok: true, publication_aliases: state.publicationAliasPolicy },
+          )
+          return
+        } catch (_payloadError) {
+          // Fall through to the ordinary request error when the 503 payload is incomplete.
+        }
+      }
+      var message = requestErrorMessage(error, "Alias policy publish failed.")
+      setPublicationAliasStatus(message, "error")
+      setLog({ error: "Publication alias publish failed", details: error.response || message })
+    } finally {
+      state.publicationAliasBusy = false
+      renderPublicationAliases()
+    }
+  }
+
   function normalizeExtensionBlocklistTerm(value) {
     return String(value || "")
       .trim()
@@ -1449,6 +2827,11 @@
     var retryPublication = extensionBlocklistNeedsPublicationRetry()
     var busy = Boolean(state.extensionBlocklistBusy)
 
+    if (els.extensionBlocklistTabCount) {
+      els.extensionBlocklistTabCount.textContent = state.extensionBlocklistLoaded
+        ? String(draftTerms.length)
+        : "—"
+    }
     if (els.extensionBlocklistCount) {
       els.extensionBlocklistCount.textContent = state.extensionBlocklistLoaded
         ? draftTerms.length + " / " + String(limits.max_terms || EXTENSION_BLOCKLIST_MAX_TERMS)
@@ -1627,14 +3010,23 @@
     var response = err && err.response && typeof err.response === "object" ? err.response : null
     if (!response) return false
     if (response.saved === true) return true
-    return String(response.code || "").startsWith("extension_blocklist_projection_")
+    var code = String(response.code || "")
+    return (
+      code.startsWith("extension_blocklist_projection_") ||
+      code === "extension_blocklist_alias_dependency_not_published" ||
+      code === "recognition_pair_not_visible" ||
+      code === "recognition_pair_dependencies_not_published"
+    )
   }
 
   function extensionBlocklistErrorCanAutoRetry(err) {
     var code = String(err?.response?.code || "")
     return (
       code === "extension_blocklist_projection_not_visible" ||
-      code === "extension_blocklist_projection_busy"
+      code === "extension_blocklist_projection_busy" ||
+      code === "extension_blocklist_alias_dependency_not_published" ||
+      code === "recognition_pair_not_visible" ||
+      code === "recognition_pair_dependencies_not_published"
     )
   }
 
@@ -1678,7 +3070,9 @@
 
   function extensionBlocklistPublicationRetryEligibility(retry) {
     if (!extensionBlocklistPublicationRetryIsCurrent(retry)) return "canceled"
-    if (state.activeTab !== "extension") return "inactive"
+    if (state.activeTab !== "extension" || state.recognitionSection !== "blocklist") {
+      return "inactive"
+    }
     if (state.extensionBlocklistBusy) return "busy"
     if (!state.extensionBlocklistLoaded || !state.extensionBlocklistPolicy) return "unavailable"
     if (state.extensionBlocklistPublication?.in_sync === true) return "published"
@@ -1697,7 +3091,7 @@
   function stopExtensionBlocklistPublicationRetry(retry, message, tone) {
     if (!extensionBlocklistPublicationRetryIsCurrent(retry)) return
     cancelExtensionBlocklistPublicationRetry()
-    if (message && state.activeTab === "extension") {
+    if (message && state.activeTab === "extension" && state.recognitionSection === "blocklist") {
       setExtensionBlocklistStatus(message, tone || "warning")
       renderExtensionBlocklist()
     }
@@ -1748,6 +3142,7 @@
     if (!extensionBlocklistErrorCanAutoRetry(err)) return false
     if (
       state.activeTab !== "extension" ||
+      state.recognitionSection !== "blocklist" ||
       state.extensionBlocklistBusy ||
       !state.extensionBlocklistLoaded ||
       !state.extensionBlocklistPolicy ||
@@ -1869,7 +3264,9 @@
       )
     } finally {
       state.extensionBlocklistBusy = false
-      if (state.activeTab === "extension") renderExtensionBlocklist()
+      if (state.activeTab === "extension" && state.recognitionSection === "blocklist") {
+        renderExtensionBlocklist()
+      }
     }
   }
 
@@ -7468,6 +8865,12 @@
   }
 
   function bindActions() {
+    window.addEventListener("beforeunload", function (event) {
+      if (!publicationAliasIsDirty() && !extensionBlocklistIsDirty()) return
+      event.preventDefault()
+      event.returnValue = ""
+    })
+
     if (els.tabs) {
       els.tabs.addEventListener("click", function (ev) {
         var btn = ev.target.closest("[data-tab]")
@@ -7487,6 +8890,31 @@
         ev.preventDefault()
         var nextTab = tabs[next]
         setActiveTab(String(nextTab.getAttribute("data-tab") || "overview"))
+        nextTab.focus()
+      })
+    }
+
+    if (els.recognitionTabs) {
+      els.recognitionTabs.addEventListener("click", function (ev) {
+        var button = ev.target.closest("[data-recognition-section]")
+        if (!button) return
+        setRecognitionSection(String(button.getAttribute("data-recognition-section") || "aliases"))
+      })
+      els.recognitionTabs.addEventListener("keydown", function (ev) {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(ev.key)) return
+        var tabs = Array.from(
+          els.recognitionTabs.querySelectorAll('[role="tab"][data-recognition-section]'),
+        )
+        if (!tabs.length) return
+        var current = Math.max(0, tabs.indexOf(document.activeElement))
+        var next = current
+        if (ev.key === "ArrowLeft") next = (current - 1 + tabs.length) % tabs.length
+        if (ev.key === "ArrowRight") next = (current + 1) % tabs.length
+        if (ev.key === "Home") next = 0
+        if (ev.key === "End") next = tabs.length - 1
+        ev.preventDefault()
+        var nextTab = tabs[next]
+        setRecognitionSection(String(nextTab.getAttribute("data-recognition-section") || "aliases"))
         nextTab.focus()
       })
     }
@@ -7511,6 +8939,128 @@
     }
     if (els.promptPrefixSave) {
       els.promptPrefixSave.addEventListener("click", saveImageEditPromptPrefix)
+    }
+    if (els.publicationAliasRefresh) {
+      els.publicationAliasRefresh.addEventListener("click", function () {
+        if (
+          publicationAliasIsDirty() &&
+          !window.confirm("Discard this unpublished alias draft and reload the saved policy?")
+        ) {
+          setPublicationAliasStatus("Draft kept. Nothing was reloaded.", "")
+          return
+        }
+        refreshPublicationAliases()
+      })
+    }
+    if (els.publicationAliasForm) {
+      els.publicationAliasForm.addEventListener("submit", function (ev) {
+        ev.preventDefault()
+        submitPublicationAliasDraftMapping()
+      })
+    }
+    if (els.publicationAliasInput) {
+      els.publicationAliasInput.addEventListener("input", function () {
+        els.publicationAliasInput.removeAttribute("aria-invalid")
+        renderPublicationAliases()
+      })
+    }
+    if (els.publicationAliasGeneQuery) {
+      els.publicationAliasGeneQuery.addEventListener("input", function () {
+        state.publicationAliasSelectedGene = null
+        els.publicationAliasGeneQuery.removeAttribute("aria-invalid")
+        cancelPublicationAliasSearch()
+        if (
+          String(els.publicationAliasGeneQuery.value || "").trim().length >=
+          PUBLICATION_ALIAS_SEARCH_MIN_LENGTH
+        ) {
+          schedulePublicationAliasGeneSearch()
+        }
+        renderPublicationAliases()
+      })
+      els.publicationAliasGeneQuery.addEventListener("keydown", function (ev) {
+        var results = state.publicationAliasSearchResults || []
+        if (ev.key === "ArrowDown" && results.length) {
+          ev.preventDefault()
+          state.publicationAliasSearchActiveIndex = publicationAliasSearchIndexAfter(
+            state.publicationAliasSearchActiveIndex,
+            "next",
+            results.length,
+          )
+          renderPublicationAliasSearchResults()
+          return
+        }
+        if (ev.key === "ArrowUp" && results.length) {
+          ev.preventDefault()
+          state.publicationAliasSearchActiveIndex = publicationAliasSearchIndexAfter(
+            state.publicationAliasSearchActiveIndex,
+            "previous",
+            results.length,
+          )
+          renderPublicationAliasSearchResults()
+          return
+        }
+        if (ev.key === "Enter") {
+          ev.preventDefault()
+          if (results.length) {
+            selectPublicationAliasGene(
+              Math.max(0, Number(state.publicationAliasSearchActiveIndex || 0)),
+            )
+          } else {
+            submitPublicationAliasDraftMapping()
+          }
+          return
+        }
+        if (ev.key === "Escape") {
+          ev.preventDefault()
+          closePublicationAliasSearch({ clearStatus: true })
+        }
+      })
+    }
+    if (els.publicationAliasGeneResults) {
+      els.publicationAliasGeneResults.addEventListener("pointerdown", function (ev) {
+        var option = ev.target.closest("[data-publication-alias-gene-index]")
+        if (!option) return
+        ev.preventDefault()
+        selectPublicationAliasGene(
+          Number(option.getAttribute("data-publication-alias-gene-index") || 0),
+        )
+        if (els.publicationAliasGeneQuery) els.publicationAliasGeneQuery.focus()
+      })
+    }
+    if (els.publicationAliasCancelEdit) {
+      els.publicationAliasCancelEdit.addEventListener("click", function () {
+        resetPublicationAliasComposer({ focus: true })
+        setPublicationAliasStatus("Mapping edit canceled.", "")
+      })
+    }
+    if (els.publicationAliasFilter) {
+      els.publicationAliasFilter.addEventListener("input", renderPublicationAliases)
+    }
+    if (els.publicationAliasMappings) {
+      els.publicationAliasMappings.addEventListener("click", function (ev) {
+        var change = ev.target.closest("[data-publication-alias-change]")
+        var remove = ev.target.closest("[data-publication-alias-remove]")
+        var undo = ev.target.closest("[data-publication-alias-undo]")
+        var button = change || remove || undo
+        if (!button) return
+        var attribute = change
+          ? "data-publication-alias-change"
+          : remove
+            ? "data-publication-alias-remove"
+            : "data-publication-alias-undo"
+        var alias = ""
+        try {
+          alias = decodeURIComponent(String(button.getAttribute(attribute) || ""))
+        } catch {
+          return
+        }
+        if (change) startPublicationAliasEdit(alias)
+        else if (remove) removePublicationAliasDraftMapping(alias)
+        else undoPublicationAliasDraftMapping(alias)
+      })
+    }
+    if (els.publicationAliasPublish) {
+      els.publicationAliasPublish.addEventListener("click", publishPublicationAliases)
     }
     if (els.extensionBlocklistRefresh) {
       els.extensionBlocklistRefresh.addEventListener("click", function () {
@@ -7551,6 +9101,9 @@
     }
 
     document.body.addEventListener("click", async function (ev) {
+      if (els.publicationAliasGeneResults && !ev.target.closest(".publication-alias-combobox")) {
+        closePublicationAliasSearch()
+      }
       var jump = ev.target.closest("[data-jump-symbol]")
       if (!jump) return
       var symbol = String(jump.getAttribute("data-jump-symbol") || "")

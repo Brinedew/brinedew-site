@@ -1,18 +1,26 @@
+// ARCHITECTURE FENCE [IPD-008]: authenticated desired-state mutation may use
+// D1, but public recognition advances only through one immutable pair bundle.
 import {
   ICONOPLASM_EXTENSION_BLOCKLIST_LIMITS,
   ICONOPLASM_EXTENSION_BLOCKLIST_MAX_REQUEST_BYTES,
   ICONOPLASM_EXTENSION_BLOCKLIST_SCHEMA_VERSION,
   IconoplasmExtensionBlocklistPolicyError,
   iconoplasmExtensionBlocklistPublicationState,
-  publishIconoplasmExtensionBlocklistPolicy,
   readAuthoritativePublishedIconoplasmExtensionBlocklist,
   readIconoplasmExtensionBlocklistPolicy,
   saveIconoplasmExtensionBlocklistPolicy,
   validateIconoplasmExtensionBlocklistAgainstPublishedScanner,
 } from "./iconoplasm-extension-blocklist-policy.js"
-
-const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
-const JSON_MEDIA_TYPE = "application/json"
+import {
+  ICONOPLASM_ADMIN_POLICY_NO_STORE as NO_STORE,
+  iconoplasmAdminPolicyMutationAdmissionError,
+  readIconoplasmAdminPolicyBoundedJson,
+} from "./iconoplasm-admin-policy-http.js"
+import { readIconoplasmPublicationAliasPolicy } from "./iconoplasm-publication-alias-policy.js"
+import {
+  reconcileIconoplasmRecognitionPolicies,
+  readAuthoritativePublishedIconoplasmRecognitionPolicies,
+} from "./iconoplasm-recognition-policy-reconciliation.js"
 
 function assertServices(services) {
   for (const name of ["actor", "isAdmin", "json"]) {
@@ -30,117 +38,30 @@ function publicPolicy(policy) {
     terms: [...policy.terms],
     updated_at: policy.updated_at,
     updated_by: policy.updated_by,
+    depends_on_alias_revision: policy.depends_on_alias_revision,
   }
 }
 
-function trustedMutationOrigin(rawOrigin) {
-  const value = String(rawOrigin || "").trim()
-  if (!value) return true
-  let url
-  try {
-    url = new URL(value)
-  } catch {
-    return false
-  }
-  if (url.pathname !== "/" || url.search || url.hash) return false
-  const hostname = url.hostname.toLowerCase()
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
-    return url.protocol === "http:" || url.protocol === "https:"
-  }
-  return (
-    url.protocol === "https:" && (hostname === "brinedew.bio" || hostname.endsWith(".brinedew.bio"))
-  )
-}
-
-function mutationAdmissionError(request) {
-  if (
-    String(request.headers.get("Sec-Fetch-Site") || "")
-      .trim()
-      .toLowerCase() === "cross-site"
-  ) {
-    return {
-      code: "cross_site_request_forbidden",
-      error: "Cross-site extension blocklist mutations are forbidden",
-      status: 403,
-    }
-  }
-  if (!trustedMutationOrigin(request.headers.get("Origin"))) {
-    return {
-      code: "untrusted_origin",
-      error: "Extension blocklist mutation origin is not trusted",
-      status: 403,
-    }
-  }
-  const mediaType = String(request.headers.get("Content-Type") || "")
-    .split(";", 1)[0]
-    .trim()
-    .toLowerCase()
-  if (mediaType !== JSON_MEDIA_TYPE) {
-    return {
-      code: "application_json_required",
-      error: "Content-Type must be application/json",
-      status: 415,
-    }
-  }
-  return null
-}
-
-async function readBoundedJson(request) {
-  const declaredLength = Number(request.headers.get("Content-Length"))
-  if (
-    Number.isFinite(declaredLength) &&
-    declaredLength > ICONOPLASM_EXTENSION_BLOCKLIST_MAX_REQUEST_BYTES
-  ) {
-    throw Object.assign(new Error("Request body is too large"), {
-      code: "extension_blocklist_request_too_large",
-      status: 413,
-    })
-  }
-  const reader = request.body?.getReader()
-  if (!reader) {
-    throw Object.assign(new Error("Invalid JSON"), { code: "invalid_json", status: 400 })
-  }
-  const chunks = []
-  let totalBytes = 0
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    totalBytes += value.byteLength
-    if (totalBytes > ICONOPLASM_EXTENSION_BLOCKLIST_MAX_REQUEST_BYTES) {
-      await reader.cancel("request_too_large").catch(() => {})
-      throw Object.assign(new Error("Request body is too large"), {
-        code: "extension_blocklist_request_too_large",
-        status: 413,
-      })
-    }
-    chunks.push(value)
-  }
-  const bytes = new Uint8Array(totalBytes)
-  let offset = 0
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  try {
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
-  } catch {
-    throw Object.assign(new Error("Invalid JSON"), { code: "invalid_json", status: 400 })
-  }
-}
-
-function responsePayload(policy, projection, extra = {}) {
+function responsePayload(policy, projection, extra = {}, pair = null) {
+  const publication = iconoplasmExtensionBlocklistPublicationState(policy, projection)
   return {
     ...extra,
     policy: publicPolicy(policy),
-    publication: iconoplasmExtensionBlocklistPublicationState(policy, projection),
+    publication: {
+      ...publication,
+      in_sync: publication.in_sync && pair?.blocklist_revision === policy.revision,
+    },
     limits: ICONOPLASM_EXTENSION_BLOCKLIST_LIMITS,
   }
 }
 
 async function currentPayload(env, extra = {}) {
   const policy = await readIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB)
-  const projection = await readAuthoritativePublishedIconoplasmExtensionBlocklist(env.KV)
-  return responsePayload(policy, projection, extra)
+  const [projection, pair] = await Promise.all([
+    readAuthoritativePublishedIconoplasmExtensionBlocklist(env.KV),
+    readAuthoritativePublishedIconoplasmRecognitionPolicies(env.KV).catch(() => null),
+  ])
+  return responsePayload(policy, projection, extra, pair)
 }
 
 export function createIconoplasmAdminExtensionBlocklistHandlers(services) {
@@ -148,8 +69,19 @@ export function createIconoplasmAdminExtensionBlocklistHandlers(services) {
   const { actor, isAdmin, json } = services
 
   async function handle({ request, env, done }) {
+    if (!new Set(["GET", "HEAD", "POST"]).has(request.method)) {
+      return done(
+        "admin_extension_blocklist_405",
+        json({ error: "Method not allowed", code: "method_not_allowed" }, 405, {
+          ...NO_STORE,
+          Allow: "GET, HEAD, POST",
+        }),
+      )
+    }
     if (request.method === "POST") {
-      const admissionError = mutationAdmissionError(request)
+      const admissionError = iconoplasmAdminPolicyMutationAdmissionError(request, {
+        mutationLabel: "extension blocklist",
+      })
       if (admissionError) {
         return done(
           `admin_extension_blocklist_${admissionError.status}`,
@@ -233,8 +165,12 @@ export function createIconoplasmAdminExtensionBlocklistHandlers(services) {
 
     let body
     let policySaved = false
+    let policyChanged = false
     try {
-      body = await readBoundedJson(request)
+      body = await readIconoplasmAdminPolicyBoundedJson(request, {
+        maxBytes: ICONOPLASM_EXTENSION_BLOCKLIST_MAX_REQUEST_BYTES,
+        tooLargeCode: "extension_blocklist_request_too_large",
+      })
     } catch (error) {
       const status = Number(error?.status) || 400
       return done(
@@ -275,46 +211,46 @@ export function createIconoplasmAdminExtensionBlocklistHandlers(services) {
           { current: loadedPolicy },
         )
       }
+      const publicationAliasPolicy = await readIconoplasmPublicationAliasPolicy(env.ICONOPLASM_DB)
       const terms = await validateIconoplasmExtensionBlocklistAgainstPublishedScanner(
         env.KV,
         body?.terms,
+        { publicationAliases: publicationAliasPolicy },
       )
       const saved = await saveIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB, {
         terms,
         expectedRevision: body.expected_revision,
+        expectedPublicationAliasRevision: publicationAliasPolicy.revision,
         actor: await actor(request, env),
       })
       policySaved = true
-      const published = await publishIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB, env.KV)
-      if (published.busy) {
-        return done(
-          "admin_extension_blocklist_503",
-          json(
-            responsePayload(published.policy, published.projection, {
-              ok: false,
-              changed: saved.changed,
-              saved: true,
-              policy_saved: true,
-              error: "Policy was saved; another publication is already in progress",
-              code: "extension_blocklist_projection_busy",
-            }),
-            503,
-            NO_STORE,
-          ),
+      policyChanged = saved.changed
+      const reconciliation = await reconcileIconoplasmRecognitionPolicies(env)
+      if (reconciliation.extension_blocklist.status === "rejected") {
+        throw reconciliation.extension_blocklist.reason
+      }
+      if (reconciliation.pair.status === "rejected") throw reconciliation.pair.reason
+      const published = reconciliation.extension_blocklist.value
+      if (published?.busy || published?.reason === "projection_in_progress") {
+        throw new IconoplasmExtensionBlocklistPolicyError(
+          "extension_blocklist_projection_busy",
+          "Policy was saved; another publication is already in progress",
+          503,
         )
       }
-      return done(
-        "admin_extension_blocklist",
-        json(
-          responsePayload(published.policy, published.projection, {
-            ok: true,
-            changed: saved.changed,
-            republished: !saved.changed && published.changed,
-          }),
-          200,
-          NO_STORE,
-        ),
-      )
+      const payload = await currentPayload(env, {
+        ok: true,
+        changed: saved.changed,
+        republished: !saved.changed && Boolean(published?.changed),
+      })
+      if (!payload.publication.in_sync) {
+        throw new IconoplasmExtensionBlocklistPolicyError(
+          "extension_blocklist_projection_not_visible",
+          "Policy was saved but its coherent public recognition projection is not yet visible",
+          503,
+        )
+      }
+      return done("admin_extension_blocklist", json(payload, 200, NO_STORE))
     } catch (error) {
       const status =
         error instanceof IconoplasmExtensionBlocklistPolicyError
@@ -328,6 +264,7 @@ export function createIconoplasmAdminExtensionBlocklistHandlers(services) {
         error: String(error?.message || error),
         code: String(error?.code || "extension_blocklist_update_failed"),
         ...(policySaved ? { saved: true, policy_saved: true } : {}),
+        ...(policySaved ? { changed: policyChanged } : {}),
         ...invalidTerms,
       }
       try {

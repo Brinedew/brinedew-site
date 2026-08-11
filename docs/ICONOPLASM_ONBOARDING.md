@@ -43,7 +43,8 @@ It owns things like:
 - the only-allowed internal stateful runtime in `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`
 - the production D1 runtime tables
 - the shared settings/auth bridge that connects `brinedew.bio` and `iconoplasm.brinedew.bio`
-- the small, curated publication-alias overlay served in the catalog manifest
+- the administrator-owned publication-alias desired policy and its atomic
+  alias/blocklist manifest projection
 
 If the question is “what does the live site know right now?”, stay in this repo and query remote D1.
 
@@ -55,7 +56,9 @@ For gene-label matching and alias ownership, read `docs/ICONOPLASM_PUBLICATION_A
 
 The extension produces discovery events. The website displays the resulting shelf.
 
-The extension consumes generated biological aliases from the catalog and curated publication aliases from the Website manifest. It does not own either source list.
+The extension consumes generated biological aliases from the catalog and the
+administrator-curated alias/blocklist recognition pair from the Website
+manifest. It does not own either policy.
 
 Important consequence: if discovery behavior looks wrong on the site, do not assume it is only a frontend problem. The contract between extension, worker, and homepage matters.
 

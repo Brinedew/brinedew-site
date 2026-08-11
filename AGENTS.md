@@ -84,7 +84,10 @@ columns, materialized payloads, append-only ledgers, retention jobs, D1 bindings
 capacity charts, or bulk reconciliation paths.
 Labelled PNG bytes and render history do not belong in D1. Keep at most one
 compact materialization row per canonical gene and seven daily budget rows;
-store content-addressed image bytes in Bunny.
+store content-addressed image bytes in Bunny. Administrator recognition policy
+history is bounded operational state too: publication aliases and the shared
+extension blocklist retain only their newest 100 D1 revisions and 100 immutable
+KV projections.
 
 **ARCHITECTURE FENCE [IPD-006]** — one completed workstation publication is the
 Discord delivery and Request inbox receipt unit, partitioned by recipient and
@@ -122,12 +125,22 @@ cookie remains the credential. Extension detail batches project immutable
 published card artifacts and persist a bounded cache keyed by the card snapshot
 version; they must not compose public hover cards from D1 or turn transient
 failures into durable “missing gene” records. The admin-managed shared extension
-text blocklist is a tiny, versioned KV projection carried by the existing catalog
-manifest: public readers must never fall back to D1, create a second extension
-request, or rebuild the scanner artifact for a term-only change. Protocol-aware
-extensions retain the last valid authoritative list, use the packaged list only
-before any valid projection is available, and keep per-user removals and custom
-terms browser-local. Read
+text blocklist and curated publication aliases are one recognition policy: D1
+owns each desired state, while individual immutable KV revisions are bounded
+publication inputs and history. Anonymous manifest, search, and resolver paths
+split one newest valid immutable recognition-pair bundle, never select the two
+policies independently and never fall back to D1. A healthy cold read is one
+bounded prefix list plus one payload GET; a nonempty malformed or nonvisible
+pair namespace fails closed unless the isolate has last-known-good state.
+Bootstrap is allowed only while the pair namespace is truly empty and preserves
+the newest dependency-free legacy blocklist. Protocol-aware extensions retain
+the last valid authoritative policies, use packaged lists only before any valid
+projection is available, and keep per-user removals and custom terms
+browser-local. Alias and blocklist saves persist and CAS-check the exact
+counterpart revision they validated; only one atomic pair value may advance the
+public plane, so a blocklisted term is never published without one unambiguous
+alias.
+Read
 `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` and Linear B-673
 before changing anonymous bootstrap, the session-presence hint, catalog/card
 publication metadata, public batch reads, extension detail caching, or shared
@@ -256,7 +269,15 @@ Concrete rules:
 
 ## Iconoplasm publication aliases
 
-Before changing gene-label recognition, the catalog manifest, or extension alias caching, read `docs/ICONOPLASM_PUBLICATION_ALIASES.md`. Curated page labels are owned by `workers/iconoplasm-publication-aliases.js` and ship through a normal Website deployment. Generated biological synonyms and portraits remain workstation-owned. The architecture document defines the decision rule, invariants, tests, rollback, and the cases that require an extension protocol release.
+Before changing gene-label recognition, the catalog manifest, or extension
+alias caching, read `docs/ICONOPLASM_PUBLICATION_ALIASES.md`. Administrators own
+the curated desired policy in D1; bounded individual KV revisions stage it for
+one atomic alias/blocklist recognition-pair bundle, which alone serves the
+anonymous read plane. `workers/iconoplasm-publication-aliases.js` is the
+bootstrap seed and shared normalization contract, not the routine editing surface.
+Generated biological synonyms and portraits remain workstation-owned. Preserve
+cross-policy alias/blocklist revision dependencies, the unchanged manifest
+shape, the 4 KiB ceiling, and anonymous no-D1 reads.
 
 ## Verify live infrastructure — project-specific cases
 

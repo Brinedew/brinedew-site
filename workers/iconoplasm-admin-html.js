@@ -18,7 +18,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <button class="tab-btn" id="admin-tab-costs" role="tab" aria-selected="false" aria-controls="panel-costs" tabindex="-1" data-tab="costs">Observability</button>
       <button class="tab-btn" id="admin-tab-requests" role="tab" aria-selected="false" aria-controls="panel-requests" tabindex="-1" data-tab="requests">Requests</button>
       <button class="tab-btn" id="admin-tab-prompts" role="tab" aria-selected="false" aria-controls="panel-prompts" tabindex="-1" data-tab="prompts">Prompts</button>
-      <button class="tab-btn" id="admin-tab-extension" role="tab" aria-selected="false" aria-controls="panel-extension" tabindex="-1" data-tab="extension">Extension</button>
+      <button class="tab-btn" id="admin-tab-extension" role="tab" aria-selected="false" aria-controls="panel-extension" tabindex="-1" data-tab="extension">Recognition</button>
       <button class="tab-btn" id="admin-tab-archive" role="tab" aria-selected="false" aria-controls="panel-archive" tabindex="-1" data-tab="archive">Gallery</button>
       <button class="tab-btn" id="admin-tab-styles" role="tab" aria-selected="false" aria-controls="panel-styles" tabindex="-1" data-tab="styles">Visions</button>
       <button class="tab-btn" id="admin-tab-activity" role="tab" aria-selected="false" aria-controls="panel-activity" tabindex="-1" data-tab="activity">Log</button>
@@ -323,59 +323,152 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       </div>
     </div>
 
-    <!-- -- extension policy -- -->
+    <!-- -- recognition policy -- -->
     <div class="panel" id="panel-extension" role="tabpanel" aria-labelledby="admin-tab-extension" hidden>
-      <section class="extension-blocklist-workspace" aria-labelledby="extension-blocklist-heading">
-        <div class="extension-blocklist-head">
+      <section class="recognition-workspace" aria-labelledby="recognition-heading">
+        <header class="recognition-head">
           <div>
-            <p class="extension-blocklist-kicker">Extension policy</p>
-            <h2 id="extension-blocklist-heading">Shared text blocklist</h2>
-            <p class="extension-blocklist-intro">Publish the complete shared-default list received by every protocol-capable extension. The 76 packaged terms are only the first-run and offline fallback; a loaded policy replaces them.</p>
+            <p class="recognition-kicker">Text recognition</p>
+            <h2 id="recognition-heading">Recognition rules</h2>
+            <p class="recognition-intro">Control the labels Iconoplasm recognizes on pages. Alias mappings send a label to one canonical gene; the blocklist suppresses ambiguous aliases.</p>
           </div>
-          <button type="button" id="extension-blocklist-refresh">Refresh policy</button>
+        </header>
+
+        <div class="recognition-tabs" role="tablist" aria-label="Recognition rule sections">
+          <button class="recognition-tab active" id="recognition-tab-aliases" type="button" role="tab" aria-selected="true" aria-controls="recognition-panel-aliases" tabindex="0" data-recognition-section="aliases">Alias mappings <span class="recognition-tab-count" id="publication-alias-tab-count" aria-hidden="true">—</span></button>
+          <button class="recognition-tab" id="recognition-tab-blocklist" type="button" role="tab" aria-selected="false" aria-controls="recognition-panel-blocklist" tabindex="-1" data-recognition-section="blocklist">Blocklist <span class="recognition-tab-count" id="extension-blocklist-tab-count" aria-hidden="true">—</span></button>
         </div>
 
-        <div class="extension-blocklist-ledger" aria-label="Shared blocklist publication details">
-          <div>
-            <span class="extension-blocklist-ledger-label">Shared terms</span>
-            <strong id="extension-blocklist-count">—</strong>
-          </div>
-          <div>
-            <span class="extension-blocklist-ledger-label">Revision</span>
-            <strong class="mono" id="extension-blocklist-revision">—</strong>
-          </div>
-          <div>
-            <span class="extension-blocklist-ledger-label">Updated</span>
-            <strong id="extension-blocklist-updated">Not loaded</strong>
-          </div>
-          <div>
-            <span class="extension-blocklist-ledger-label">Publication</span>
-            <strong class="extension-blocklist-sync" id="extension-blocklist-sync" data-sync="unknown">Not loaded</strong>
-          </div>
+        <div class="recognition-panel active" id="recognition-panel-aliases" role="tabpanel" aria-labelledby="recognition-tab-aliases">
+          <section class="publication-alias-workspace" aria-labelledby="publication-alias-heading">
+            <div class="recognition-section-head">
+              <div>
+                <h3 id="publication-alias-heading">Alias mappings</h3>
+                <p class="small">Add exact labels found in papers and on web pages when the published catalog does not already recognize them.</p>
+              </div>
+              <button type="button" id="publication-alias-refresh">Refresh aliases</button>
+            </div>
+
+            <div class="recognition-ledger" aria-label="Alias publication details">
+              <div>
+                <span class="recognition-ledger-label">Curated aliases</span>
+                <strong id="publication-alias-count">—</strong>
+              </div>
+              <div>
+                <span class="recognition-ledger-label">Generated corrections</span>
+                <strong id="publication-alias-removal-count">—</strong>
+              </div>
+              <div>
+                <span class="recognition-ledger-label">Revision</span>
+                <strong class="mono" id="publication-alias-revision">—</strong>
+              </div>
+              <div>
+                <span class="recognition-ledger-label">Publication</span>
+                <strong class="recognition-sync" id="publication-alias-sync" data-sync="unknown">Not loaded</strong>
+              </div>
+            </div>
+
+            <form class="publication-alias-composer" id="publication-alias-form" novalidate>
+              <div class="publication-alias-fields">
+                <label for="publication-alias-input">Alias
+                  <input id="publication-alias-input" type="text" maxlength="64" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="publication-alias-input-help" placeholder="IL8" disabled />
+                </label>
+                <div class="publication-alias-gene-field">
+                  <label for="publication-alias-gene-query">Gene</label>
+                  <div class="publication-alias-combobox">
+                    <input id="publication-alias-gene-query" type="text" spellcheck="false" autocomplete="off" autocapitalize="characters" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="publication-alias-gene-results" aria-describedby="publication-alias-gene-help" placeholder="Search symbol or gene name" disabled />
+                    <ul class="publication-alias-gene-results" id="publication-alias-gene-results" role="listbox" aria-label="Canonical gene matches" hidden></ul>
+                  </div>
+                  <span class="small" id="publication-alias-gene-help">Type at least two characters, then choose a published canonical gene.</span>
+                  <span class="sr-only" id="publication-alias-gene-status" role="status" aria-live="polite"></span>
+                </div>
+              </div>
+              <p class="small" id="publication-alias-input-help">Enter the page label as readers see it. Case is preserved; repeated whitespace and dash variants are normalized. Adding only changes this draft.</p>
+              <div class="publication-alias-target-preview" id="publication-alias-target-preview" role="status" aria-live="polite" hidden></div>
+              <div class="publication-alias-composer-actions">
+                <span class="publication-alias-editing" id="publication-alias-editing" hidden></span>
+                <button type="button" id="publication-alias-cancel-edit" hidden>Cancel edit</button>
+                <button class="btn-primary" type="submit" id="publication-alias-add" disabled>Add mapping to draft</button>
+              </div>
+            </form>
+
+            <div class="publication-alias-list-head">
+              <div>
+                <h4>Publication draft</h4>
+                <p class="small">Each row maps one exact alias to one canonical gene. Generated corrections are preserved unchanged.</p>
+              </div>
+              <label class="publication-alias-filter" for="publication-alias-filter">Filter mappings
+                <input id="publication-alias-filter" type="search" autocomplete="off" placeholder="Alias or gene symbol" disabled />
+              </label>
+              <span class="recognition-dirty" id="publication-alias-dirty" data-dirty="false">Saved policy</span>
+            </div>
+
+            <ul class="publication-alias-mappings" id="publication-alias-mappings" aria-label="Curated alias publication draft" aria-live="polite"></ul>
+
+            <div class="recognition-actions">
+              <div class="recognition-status" id="publication-alias-status" role="status" aria-live="polite"></div>
+              <button class="btn-primary publication-alias-publish" type="button" id="publication-alias-publish" disabled>Publish alias changes</button>
+            </div>
+          </section>
         </div>
 
-        <div class="extension-blocklist-composer">
-          <label for="extension-blocklist-input">Add terms to this draft</label>
-          <div class="extension-blocklist-input-row">
-            <textarea id="extension-blocklist-input" rows="3" spellcheck="false" autocomplete="off" autocapitalize="characters" aria-describedby="extension-blocklist-input-help" placeholder="Paste terms separated by commas, spaces, or new lines" disabled></textarea>
-            <button class="btn-primary" type="button" id="extension-blocklist-add" disabled>Add to draft</button>
-          </div>
-          <p class="small" id="extension-blocklist-input-help">Every term must be an existing non-canonical catalog alias and a common-English ambiguity. Terms are normalized to uppercase. Adding only changes the draft; nothing reaches extensions until you publish.</p>
-        </div>
+        <div class="recognition-panel" id="recognition-panel-blocklist" role="tabpanel" aria-labelledby="recognition-tab-blocklist" hidden>
+          <section class="extension-blocklist-workspace" aria-labelledby="extension-blocklist-heading">
+            <div class="extension-blocklist-head">
+              <div>
+                <h3 id="extension-blocklist-heading">Shared text blocklist</h3>
+                <p class="extension-blocklist-intro">Suppress aliases that are too ambiguous to recognize safely across arbitrary pages.</p>
+              </div>
+              <button type="button" id="extension-blocklist-refresh">Refresh policy</button>
+            </div>
 
-        <div class="extension-blocklist-draft-head">
-          <div>
-            <h3>Publication draft</h3>
-            <p class="small">This draft replaces the full shared list. Remove a term here to unblock it for everyone on the next publish.</p>
-          </div>
-          <span class="extension-blocklist-dirty" id="extension-blocklist-dirty" data-dirty="false">Saved policy</span>
-        </div>
+            <div class="extension-blocklist-ledger" aria-label="Shared blocklist publication details">
+              <div>
+                <span class="extension-blocklist-ledger-label">Shared terms</span>
+                <strong id="extension-blocklist-count">—</strong>
+              </div>
+              <div>
+                <span class="extension-blocklist-ledger-label">Revision</span>
+                <strong class="mono" id="extension-blocklist-revision">—</strong>
+              </div>
+              <div>
+                <span class="extension-blocklist-ledger-label">Updated</span>
+                <strong id="extension-blocklist-updated">Not loaded</strong>
+              </div>
+              <div>
+                <span class="extension-blocklist-ledger-label">Publication</span>
+                <strong class="extension-blocklist-sync" id="extension-blocklist-sync" data-sync="unknown">Not loaded</strong>
+              </div>
+            </div>
 
-        <ul class="extension-blocklist-terms" id="extension-blocklist-terms" aria-label="Shared blocklist draft terms" aria-live="polite"></ul>
+            <div class="extension-blocklist-composer">
+              <label for="extension-blocklist-input">Add terms to this draft</label>
+              <div class="extension-blocklist-input-row">
+                <textarea id="extension-blocklist-input" rows="3" spellcheck="false" autocomplete="off" autocapitalize="characters" aria-describedby="extension-blocklist-input-help" placeholder="Paste terms separated by commas, spaces, or new lines" disabled></textarea>
+                <button class="btn-primary" type="button" id="extension-blocklist-add" disabled>Add to draft</button>
+              </div>
+              <p class="small" id="extension-blocklist-input-help">Every term must be an existing non-canonical catalog alias and a common-English ambiguity. Terms are normalized to uppercase. Adding only changes the draft; nothing reaches extensions until you publish.</p>
+              <details class="extension-blocklist-details">
+                <summary>How publishing works</summary>
+                <p class="small">The 76 packaged terms are only the first-run and offline fallback. A loaded policy replaces the complete shared list for every protocol-capable extension.</p>
+              </details>
+            </div>
 
-        <div class="extension-blocklist-actions">
-          <div class="extension-blocklist-status" id="extension-blocklist-status" role="status" aria-live="polite"></div>
-          <button class="btn-primary extension-blocklist-publish" type="button" id="extension-blocklist-publish" disabled>Publish shared terms</button>
+            <div class="extension-blocklist-draft-head">
+              <div>
+                <h4>Publication draft</h4>
+                <p class="small">This draft replaces the full shared list. Remove a term here to unblock it for everyone on the next publish.</p>
+              </div>
+              <span class="extension-blocklist-dirty" id="extension-blocklist-dirty" data-dirty="false">Saved policy</span>
+            </div>
+
+            <ul class="extension-blocklist-terms" id="extension-blocklist-terms" aria-label="Shared blocklist draft terms" aria-live="polite"></ul>
+
+            <div class="extension-blocklist-actions">
+              <div class="extension-blocklist-status" id="extension-blocklist-status" role="status" aria-live="polite"></div>
+              <button class="btn-primary extension-blocklist-publish" type="button" id="extension-blocklist-publish" disabled>Publish shared terms</button>
+            </div>
+          </section>
         </div>
       </section>
     </div>

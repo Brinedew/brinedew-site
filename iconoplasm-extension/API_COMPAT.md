@@ -27,8 +27,13 @@ asynchronously without cutting off installed users. The next human release
 replaces that entry with its own predecessor, so retired releases do not remain
 documented or supported indefinitely.
 
-Publication alias dictionary edits are projected into both contracts and do not
-require a store update. Protocol, permission, or packaged runtime changes do.
+Publication alias dictionary edits are administrator-owned desired state and are
+projected into both contracts through the existing `publication_aliases`
+manifest object. They do not rebuild the catalog/scanner or require a store
+update. The Website retains only bounded revision history and serves immutable
+KV projections; the source dictionary is first-deploy bootstrap only. Protocol,
+permission, packaged-runtime, or `publication_aliases` schema changes still
+require a human-authorized store release.
 
 The catalog manifest may expose an `extension_blocklist` object with schema,
 revision, and the complete authoritative shared text-term list. A protocol-aware
@@ -39,6 +44,12 @@ removed-default tombstones and custom terms remain local. The enabling runtime
 change requires one human-authorized store release. Later term revisions do not
 change the catalog/scanner contract, download a scanner artifact, or require a
 new store release; older extensions safely ignore the optional field.
+
+Alias and blocklist policy-only revisions are cross-validated and dependency-
+ordered by the Website. This changes neither public object: the dependency
+revisions remain server-side publication metadata, while installed clients keep
+receiving the same independent `publication_aliases` and `extension_blocklist`
+payloads in one manifest response.
 
 The manifest may also expose `card_snapshot_version`. It is an immutable
 publication boundary, not a new catalog schema: extensions that understand it
