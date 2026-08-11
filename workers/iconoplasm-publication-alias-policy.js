@@ -4,17 +4,21 @@
 // never fall back to D1. The bundled dictionary is bootstrap-only when no valid
 // KV projection has ever been published.
 import {
+  buildIconoplasmPublishedAliasRecognitionContext,
   iconoplasmPublicationAliasManifest,
   iconoplasmPublicationAliasManifestFromPolicy,
-  invalidIconoplasmPublishedAliasTerms,
   MAX_PUBLICATION_ALIAS_COUNT,
   MAX_PUBLICATION_ALIAS_LENGTH,
   normalizePublicationAlias,
-  normalizePublicationAliasSymbol,
   PUBLICATION_ALIAS_SCHEMA_VERSION,
   publicationAliasCollisionKey,
+  publishedAliasTermKey,
   validateIconoplasmPublicationAliases,
 } from "./iconoplasm-publication-aliases.js"
+import {
+  iconoplasmRecognitionValidationTargetMatches,
+  prepareIconoplasmRecognitionValidationReceiptUpsert,
+} from "./iconoplasm-recognition-policy-validation.js"
 
 export const ICONOPLASM_PUBLICATION_ALIAS_POLICY_KEY = "curated"
 export const ICONOPLASM_PUBLICATION_ALIAS_MAX_PROJECTION_BYTES = 4 * 1024
@@ -90,6 +94,26 @@ function nullableRevision(value) {
   return positiveRevision(value)
 }
 
+function assertValidatedRecognitionTargetMatchesAlias(target, policy) {
+  if (!target) return
+  if (
+    !iconoplasmRecognitionValidationTargetMatches(target, {
+      scannerVersion: target.scanner_version,
+      aliases: policy,
+      blocklist: {
+        revision: target.blocklist_revision,
+        version: target.blocklist_version,
+      },
+    })
+  ) {
+    throw policyError(
+      "publication_alias_validation_target_mismatch",
+      "Publication alias policy changed after recognition validation",
+      503,
+    )
+  }
+}
+
 function prepare(db, sql, values = []) {
   return db.prepare(sql).bind(...values)
 }
@@ -110,6 +134,25 @@ function publicPolicyShape(policy) {
 
 function samePolicy(left, right) {
   return JSON.stringify(publicPolicyShape(left)) === JSON.stringify(publicPolicyShape(right))
+}
+
+export function iconoplasmPublicationAliasPoliciesEqual(left, right) {
+  return samePolicy(left, right)
+}
+
+export async function normalizeIconoplasmPublicationAliasPolicyCandidate(
+  bySymbol,
+  removeBySymbol = {},
+) {
+  let policy
+  try {
+    policy = validateIconoplasmPublicationAliases(bySymbol, { rawRemovals: removeBySymbol })
+  } catch (error) {
+    throw policyError("invalid_publication_alias_policy", String(error?.message || error), 422)
+  }
+  const manifest = await iconoplasmPublicationAliasManifestFromPolicy(policy)
+  projectionForPolicy(manifest)
+  return manifest
 }
 
 async function normalizedManifest(rawPolicy) {
@@ -236,6 +279,7 @@ export async function saveIconoplasmPublicationAliasPolicy(
     removeBySymbol,
     expectedRevision,
     expectedBlocklistRevision = null,
+    recognitionValidationTarget = null,
     actor = "unknown",
     now = new Date(),
   },
@@ -278,6 +322,18 @@ export async function saveIconoplasmPublicationAliasPolicy(
   if (samePolicy(current, manifest)) return { changed: false, policy: current }
 
   const revision = current.revision + 1
+  if (
+    recognitionValidationTarget &&
+    (recognitionValidationTarget.alias_revision !== revision ||
+      recognitionValidationTarget.alias_version !== manifest.version ||
+      recognitionValidationTarget.blocklist_revision !== expectedBlocklistRevision)
+  ) {
+    throw policyError(
+      "publication_alias_validation_receipt_mismatch",
+      "Recognition validation receipt does not match the desired alias mutation",
+      409,
+    )
+  }
   const changedAt = new Date(now).toISOString()
   const changedBy =
     String(actor || "unknown")
@@ -332,6 +388,13 @@ export async function saveIconoplasmPublicationAliasPolicy(
           AND version = ?3`,
       [ICONOPLASM_PUBLICATION_ALIAS_POLICY_KEY, revision, manifest.version],
     ),
+    ...(recognitionValidationTarget
+      ? [
+          prepareIconoplasmRecognitionValidationReceiptUpsert(db, recognitionValidationTarget, {
+            now,
+          }),
+        ]
+      : []),
     prepare(
       db,
       `DELETE FROM icono_publication_alias_policy_history
@@ -363,28 +426,7 @@ async function readJsonFromKv(kv, key) {
   return safeJsonParse(await kv.get(key))
 }
 
-function scannerAliasOwners(genes) {
-  const owners = new Map()
-  for (const [rawSymbol, gene] of Object.entries(genes || {})) {
-    const symbol = normalizePublicationAliasSymbol(rawSymbol)
-    if (!symbol) continue
-    for (const rawAlias of Array.isArray(gene?.a) ? gene.a : []) {
-      const alias = normalizePublicationAlias(rawAlias)
-      const key = publicationAliasCollisionKey(alias)
-      if (!alias || !key) continue
-      if (!owners.has(key)) owners.set(key, new Set())
-      owners.get(key).add(symbol)
-    }
-  }
-  return owners
-}
-
-export async function validateIconoplasmPublicationAliasesAgainstPublishedScanner(
-  kv,
-  bySymbol,
-  removeBySymbol = {},
-  { baselinePolicy = null, requiredAliasTerms = [] } = {},
-) {
+export async function readIconoplasmPublishedScannerVersion(kv) {
   requireBinding(kv, "KV")
   const catalogManifest = await readJsonFromKv(kv, CATALOG_MANIFEST_KV_KEY)
   const scannerVersion = String(
@@ -397,6 +439,11 @@ export async function validateIconoplasmPublicationAliasesAgainstPublishedScanne
       503,
     )
   }
+  return scannerVersion
+}
+
+export async function loadIconoplasmPublishedScannerRecognitionContext(kv) {
+  const scannerVersion = await readIconoplasmPublishedScannerVersion(kv)
   const scanner = await readJsonFromKv(kv, `${SCANNER_CATALOG_KV_PREFIX}${scannerVersion}`)
   const genes = scanner?.genes
   if (!genes || typeof genes !== "object" || Array.isArray(genes)) {
@@ -406,20 +453,81 @@ export async function validateIconoplasmPublicationAliasesAgainstPublishedScanne
       503,
     )
   }
-  const canonicalSymbols = new Set(
-    Object.keys(genes).map(normalizePublicationAliasSymbol).filter(Boolean),
-  )
+  return Object.freeze({
+    scanner_version: scannerVersion,
+    ...buildIconoplasmPublishedAliasRecognitionContext(genes),
+  })
+}
+
+function mutableOwners(source, key, cache) {
+  if (!cache.has(key)) cache.set(key, new Set(source.get(key) || []))
+  return cache.get(key)
+}
+
+function invalidRequiredAliasTerms(context, policy, terms) {
+  const publishedOwners = new Map()
+  for (const [symbol, aliases] of Object.entries(policy.remove_by_symbol)) {
+    for (const alias of aliases) {
+      const collisionKey = publicationAliasCollisionKey(alias)
+      const publishedKeys = context.publishedKeysByCollisionOwner.get(collisionKey)?.get(symbol)
+      for (const publishedKey of publishedKeys || []) {
+        mutableOwners(context.publishedOwners, publishedKey, publishedOwners).delete(symbol)
+      }
+    }
+  }
+  for (const [symbol, aliases] of Object.entries(policy.by_symbol)) {
+    for (const alias of aliases) {
+      const publishedKey = publishedAliasTermKey(alias)
+      mutableOwners(context.publishedOwners, publishedKey, publishedOwners).add(symbol)
+    }
+  }
+  const invalidTerms = []
+  for (const rawTerm of terms || []) {
+    const term = publishedAliasTermKey(rawTerm)
+    const owners = publishedOwners.has(term)
+      ? publishedOwners.get(term)
+      : context.publishedOwners.get(term)
+    if (!term || context.canonicalSymbols.has(term)) {
+      invalidTerms.push({ term: term || String(rawTerm || ""), reason: "canonical_symbol" })
+    } else if (!owners?.size) {
+      invalidTerms.push({ term, reason: "not_published_alias" })
+    } else if (owners.size !== 1) {
+      invalidTerms.push({ term, reason: "ambiguous_alias" })
+    }
+  }
+  return invalidTerms
+}
+
+export function invalidIconoplasmRequiredAliasTermsAgainstScannerContext(
+  context,
+  publicationAliases,
+  requiredAliasTerms,
+) {
+  const policy = validateIconoplasmPublicationAliases(publicationAliases?.by_symbol || {}, {
+    rawRemovals: publicationAliases?.remove_by_symbol || {},
+  })
+  return invalidRequiredAliasTerms(context, policy, requiredAliasTerms)
+}
+
+export async function validateIconoplasmPublicationAliasesAgainstPublishedScanner(
+  kv,
+  bySymbol,
+  removeBySymbol = {},
+  { baselinePolicy = null, requiredAliasTerms = [], scannerContext = null } = {},
+) {
+  requireBinding(kv, "KV")
+  const context = scannerContext || (await loadIconoplasmPublishedScannerRecognitionContext(kv))
   let policy
   try {
     policy = validateIconoplasmPublicationAliases(bySymbol, {
-      canonicalSymbols,
+      canonicalSymbols: context.canonicalSymbols,
       rawRemovals: removeBySymbol,
     })
   } catch (error) {
     throw policyError("invalid_publication_alias_policy", String(error?.message || error), 422)
   }
 
-  const owners = scannerAliasOwners(genes)
+  const workingOwners = new Map()
   const invalidOperations = []
   for (const [symbol, aliases] of Object.entries(policy.remove_by_symbol)) {
     const baselineKeys = new Set(
@@ -429,7 +537,9 @@ export async function validateIconoplasmPublicationAliasesAgainstPublishedScanne
     )
     for (const alias of aliases) {
       const key = publicationAliasCollisionKey(alias)
-      const currentOwners = owners.get(key)
+      const currentOwners = workingOwners.has(key)
+        ? workingOwners.get(key)
+        : context.collisionOwners.get(key)
       if (!currentOwners?.has(symbol)) {
         if (baselineKeys.has(key)) continue
         invalidOperations.push({
@@ -441,8 +551,7 @@ export async function validateIconoplasmPublicationAliasesAgainstPublishedScanne
         })
         continue
       }
-      currentOwners.delete(symbol)
-      if (currentOwners.size === 0) owners.delete(key)
+      mutableOwners(context.collisionOwners, key, workingOwners).delete(symbol)
     }
   }
   for (const [symbol, aliases] of Object.entries(policy.by_symbol)) {
@@ -451,7 +560,9 @@ export async function validateIconoplasmPublicationAliasesAgainstPublishedScanne
     )
     for (const alias of aliases) {
       const key = publicationAliasCollisionKey(alias)
-      const currentOwners = owners.get(key)
+      const currentOwners = workingOwners.has(key)
+        ? workingOwners.get(key)
+        : context.collisionOwners.get(key)
       const conflictingOwners = currentOwners
         ? [...currentOwners].filter((owner) => owner !== symbol).sort()
         : []
@@ -475,8 +586,7 @@ export async function validateIconoplasmPublicationAliasesAgainstPublishedScanne
         })
         continue
       }
-      if (!owners.has(key)) owners.set(key, new Set())
-      owners.get(key).add(symbol)
+      mutableOwners(context.collisionOwners, key, workingOwners).add(symbol)
     }
   }
   if (invalidOperations.length) {
@@ -488,7 +598,11 @@ export async function validateIconoplasmPublicationAliasesAgainstPublishedScanne
     )
   }
   const manifest = await iconoplasmPublicationAliasManifestFromPolicy(policy)
-  const invalidTerms = invalidIconoplasmPublishedAliasTerms(genes, manifest, requiredAliasTerms)
+  const invalidTerms = invalidIconoplasmRequiredAliasTermsAgainstScannerContext(
+    context,
+    policy,
+    requiredAliasTerms,
+  )
   if (invalidTerms.length) {
     throw policyError(
       "publication_alias_policy_invalidates_blocklist",
@@ -619,6 +733,22 @@ async function projectionRecord(rawValue, keyRevision) {
       : null,
     overlay,
   })
+}
+
+export async function readPublishedIconoplasmPublicationAliasesForPolicy(kv, policy) {
+  requireBinding(kv, "KV")
+  if (!positiveRevision(policy?.revision) || !VERSION_RE.test(String(policy?.version || ""))) {
+    return null
+  }
+  const versionedKey = iconoplasmPublicationAliasKvKey(policy.revision, policy.version)
+  let record = await projectionRecord(await readJsonFromKv(kv, versionedKey), policy.revision)
+  if (!record && policy.revision === 1) {
+    record = await projectionRecord(
+      await readJsonFromKv(kv, iconoplasmPublicationAliasKvKey(policy.revision)),
+      policy.revision,
+    )
+  }
+  return record
 }
 
 export async function readAuthoritativePublishedIconoplasmPublicationAliases(kv) {
@@ -814,6 +944,13 @@ async function cleanupOldProjectionKeysBestEffort(kv, protectedRevision = null) 
   }
 }
 
+export function cleanupIconoplasmPublicationAliasProjectionHistory(
+  kv,
+  { protectedRevision = null } = {},
+) {
+  return cleanupOldProjectionKeysBestEffort(kv, protectedRevision)
+}
+
 function leaseToken() {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID()
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -859,12 +996,22 @@ async function releaseProjectionLease(db, token, errorMessage = null) {
 export async function publishIconoplasmPublicationAliasPolicy(
   db,
   kv,
-  { now = new Date(), maxAttempts = 3, readPublishedBlocklist = null } = {},
+  {
+    now = new Date(),
+    maxAttempts = 3,
+    readPublishedBlocklist = null,
+    exactDesired = false,
+    validatedRecognitionTarget = null,
+    cleanup = true,
+  } = {},
 ) {
   requireBinding(db, "ICONOPLASM_DB")
   requireBinding(kv, "KV")
   const before = await readIconoplasmPublicationAliasPolicy(db)
-  const publishedBefore = await readHighestValidProjectionFromKv(kv)
+  assertValidatedRecognitionTargetMatchesAlias(validatedRecognitionTarget, before)
+  const publishedBefore = exactDesired
+    ? await readPublishedIconoplasmPublicationAliasesForPolicy(kv, before)
+    : await readHighestValidProjectionFromKv(kv)
   assertProjectionDoesNotConflictWithPolicy(publishedBefore, before)
   if (iconoplasmPublicationAliasPublicationState(before, publishedBefore).in_sync) {
     await ensureVersionProjection(kv, publishedBefore.overlay)
@@ -874,7 +1021,9 @@ export async function publishIconoplasmPublicationAliasPolicy(
       skipped: true,
       policy: before,
       projection: publishedBefore,
-      cleanup: await cleanupOldProjectionKeysBestEffort(kv, before.revision),
+      cleanup: cleanup
+        ? await cleanupOldProjectionKeysBestEffort(kv, before.revision)
+        : { ok: true, skipped: true },
     }
   }
 
@@ -885,13 +1034,16 @@ export async function publishIconoplasmPublicationAliasPolicy(
       changed: false,
       busy: true,
       policy: await readIconoplasmPublicationAliasPolicy(db),
-      projection: await readHighestValidProjectionFromKv(kv),
+      projection: exactDesired
+        ? await readPublishedIconoplasmPublicationAliasesForPolicy(kv, before)
+        : await readHighestValidProjectionFromKv(kv),
     }
   }
 
   try {
     for (let attempt = 0; attempt < Math.max(1, Math.min(5, maxAttempts)); attempt += 1) {
       const policy = await readIconoplasmPublicationAliasPolicy(db)
+      assertValidatedRecognitionTargetMatchesAlias(validatedRecognitionTarget, policy)
       if (policy.projection_lease_token !== lease.token) {
         throw policyError(
           "publication_alias_projection_lease_lost",
@@ -922,17 +1074,21 @@ export async function publishIconoplasmPublicationAliasPolicy(
       } else if (typeof readPublishedBlocklist === "function") {
         publishedBlocklist = await readPublishedBlocklist()
       }
-      await validateIconoplasmPublicationAliasesAgainstPublishedScanner(
-        kv,
-        policy.by_symbol,
-        policy.remove_by_symbol,
-        {
-          baselinePolicy: policy,
-          requiredAliasTerms: publishedBlocklist?.terms || [],
-        },
-      )
+      if (!validatedRecognitionTarget) {
+        await validateIconoplasmPublicationAliasesAgainstPublishedScanner(
+          kv,
+          policy.by_symbol,
+          policy.remove_by_symbol,
+          {
+            baselinePolicy: policy,
+            requiredAliasTerms: publishedBlocklist?.terms || [],
+          },
+        )
+      }
       const { projection, raw } = projectionForPolicy(policy)
-      const publishedNow = await readHighestValidProjectionFromKv(kv)
+      const publishedNow = exactDesired
+        ? await readPublishedIconoplasmPublicationAliasesForPolicy(kv, policy)
+        : await readHighestValidProjectionFromKv(kv)
       assertProjectionDoesNotConflictWithPolicy(publishedNow, policy)
       const key = iconoplasmPublicationAliasKvKey(policy.revision, policy.version)
       const existingRaw = await kv.get(key)
@@ -952,7 +1108,9 @@ export async function publishIconoplasmPublicationAliasPolicy(
       // token-index write remains discoverable and bounded by normal history
       // cleanup. The atomic recognition pair is not published until both exist.
       await ensureVersionProjection(kv, projection)
-      const publishedAfter = await readHighestValidProjectionFromKv(kv)
+      const publishedAfter = exactDesired
+        ? await readPublishedIconoplasmPublicationAliasesForPolicy(kv, policy)
+        : await readHighestValidProjectionFromKv(kv)
       assertProjectionDoesNotConflictWithPolicy(publishedAfter, policy)
       if (!projectionMatchesPolicy(publishedAfter, policy)) {
         throw policyError(
@@ -993,7 +1151,9 @@ export async function publishIconoplasmPublicationAliasPolicy(
           skipped: false,
           policy: await readIconoplasmPublicationAliasPolicy(db),
           projection: publishedAfter,
-          cleanup: await cleanupOldProjectionKeysBestEffort(kv, policy.revision),
+          cleanup: cleanup
+            ? await cleanupOldProjectionKeysBestEffort(kv, policy.revision)
+            : { ok: true, skipped: true },
         }
       }
     }
@@ -1015,13 +1175,22 @@ export async function publishIconoplasmPublicationAliasPolicy(
 
 export async function reconcileIconoplasmPublicationAliasPolicy(
   env,
-  { now = new Date(), readPublishedBlocklist = null } = {},
+  {
+    now = new Date(),
+    readPublishedBlocklist = null,
+    exactDesired = false,
+    validatedRecognitionTarget = null,
+    cleanup = true,
+  } = {},
 ) {
   if (!env?.ICONOPLASM_DB || !env?.KV) {
     return { ok: false, skipped: true, reason: "binding_missing" }
   }
   const policy = await readIconoplasmPublicationAliasPolicy(env.ICONOPLASM_DB)
-  const projection = await readHighestValidProjectionFromKv(env.KV)
+  assertValidatedRecognitionTargetMatchesAlias(validatedRecognitionTarget, policy)
+  const projection = exactDesired
+    ? await readPublishedIconoplasmPublicationAliasesForPolicy(env.KV, policy)
+    : await readHighestValidProjectionFromKv(env.KV)
   const publication = iconoplasmPublicationAliasPublicationState(policy, projection)
   const leaseExpiresAt = Date.parse(policy.projection_lease_expires_at || "")
   const leaseIsActive =
@@ -1034,7 +1203,9 @@ export async function reconcileIconoplasmPublicationAliasPolicy(
       changed: false,
       skipped: true,
       reason: "already_published",
-      cleanup: await cleanupOldProjectionKeysBestEffort(env.KV, policy.revision),
+      cleanup: cleanup
+        ? await cleanupOldProjectionKeysBestEffort(env.KV, policy.revision)
+        : { ok: true, skipped: true },
     }
   }
   if (leaseIsActive) {
@@ -1048,12 +1219,17 @@ export async function reconcileIconoplasmPublicationAliasPolicy(
       skipped: true,
       cleaned_expired_lease: true,
       reason: "already_published",
-      cleanup: await cleanupOldProjectionKeysBestEffort(env.KV, policy.revision),
+      cleanup: cleanup
+        ? await cleanupOldProjectionKeysBestEffort(env.KV, policy.revision)
+        : { ok: true, skipped: true },
     }
   }
   return publishIconoplasmPublicationAliasPolicy(env.ICONOPLASM_DB, env.KV, {
     now,
     readPublishedBlocklist,
+    exactDesired,
+    validatedRecognitionTarget,
+    cleanup,
   })
 }
 
