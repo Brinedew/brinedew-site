@@ -293,44 +293,41 @@ export function applyIconoplasmPublicationAliasPolicyToGene(gene, symbol, overla
   return nextGene
 }
 
-export function indexIconoplasmPublishedAliases(genes, overlay) {
-  const canonicalSymbols = new Set(
-    Object.keys(genes || {})
-      .map(normalizePublicationAliasSymbol)
-      .filter(Boolean),
-  )
-  const aliasOwners = new Map()
+export function buildIconoplasmPublishedAliasRecognitionContext(genes) {
+  const canonicalSymbols = new Set()
+  const collisionOwners = new Map()
+  const publishedOwners = new Map()
+  const publishedKeysByCollisionOwner = new Map()
   for (const [rawSymbol, gene] of Object.entries(genes || {})) {
     const symbol = normalizePublicationAliasSymbol(rawSymbol)
     if (!symbol) continue
-    const effectiveGene = applyIconoplasmPublicationAliasPolicyToGene(gene, symbol, overlay)
-    for (const rawAlias of Array.isArray(effectiveGene?.a) ? effectiveGene.a : []) {
-      const key = publishedAliasTermKey(rawAlias)
-      if (!key || key === symbol || canonicalSymbols.has(key)) continue
-      if (!aliasOwners.has(key)) aliasOwners.set(key, symbol)
-      else if (aliasOwners.get(key) !== symbol) aliasOwners.set(key, null)
+    canonicalSymbols.add(symbol)
+    for (const rawAlias of Array.isArray(gene?.a) ? gene.a : []) {
+      const alias = normalizePublicationAlias(rawAlias)
+      const collisionKey = publicationAliasCollisionKey(alias)
+      const publishedKey = publishedAliasTermKey(rawAlias)
+      if (!alias || !collisionKey || !publishedKey) continue
+      if (!collisionOwners.has(collisionKey)) collisionOwners.set(collisionKey, new Set())
+      collisionOwners.get(collisionKey).add(symbol)
+      if (!publishedOwners.has(publishedKey)) publishedOwners.set(publishedKey, new Set())
+      publishedOwners.get(publishedKey).add(symbol)
+      if (!publishedKeysByCollisionOwner.has(collisionKey)) {
+        publishedKeysByCollisionOwner.set(collisionKey, new Map())
+      }
+      const byOwner = publishedKeysByCollisionOwner.get(collisionKey)
+      if (!byOwner.has(symbol)) byOwner.set(symbol, new Set())
+      byOwner.get(symbol).add(publishedKey)
     }
   }
-  return { canonicalSymbols, aliasOwners }
+  return Object.freeze({
+    canonicalSymbols,
+    collisionOwners,
+    publishedOwners,
+    publishedKeysByCollisionOwner,
+  })
 }
 
-export function invalidIconoplasmPublishedAliasTerms(genes, overlay, terms) {
-  const { canonicalSymbols, aliasOwners } = indexIconoplasmPublishedAliases(genes, overlay)
-  const invalidTerms = []
-  for (const rawTerm of terms || []) {
-    const term = publishedAliasTermKey(rawTerm)
-    if (!term || canonicalSymbols.has(term)) {
-      invalidTerms.push({ term: term || String(rawTerm || ""), reason: "canonical_symbol" })
-    } else if (!aliasOwners.has(term)) {
-      invalidTerms.push({ term, reason: "not_published_alias" })
-    } else if (!aliasOwners.get(term)) {
-      invalidTerms.push({ term, reason: "ambiguous_alias" })
-    }
-  }
-  return invalidTerms
-}
-
-function publishedAliasTermKey(value) {
+export function publishedAliasTermKey(value) {
   const term = String(value || "")
     .trim()
     .replace(/[\u2010-\u2015\u2212]/g, "-")

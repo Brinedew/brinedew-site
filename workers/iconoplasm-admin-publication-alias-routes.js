@@ -1,9 +1,6 @@
 // ARCHITECTURE FENCE [IPD-008]: authenticated desired-state mutation may use
 // D1, but public recognition advances only through one immutable pair bundle.
-import {
-  readIconoplasmExtensionBlocklistPolicy,
-  validateIconoplasmExtensionBlocklistAgainstPublishedScanner,
-} from "./iconoplasm-extension-blocklist-policy.js"
+import { readIconoplasmExtensionBlocklistPolicy } from "./iconoplasm-extension-blocklist-policy.js"
 import {
   ICONOPLASM_ADMIN_POLICY_NO_STORE as NO_STORE,
   iconoplasmAdminPolicyMutationAdmissionError,
@@ -13,12 +10,17 @@ import {
   ICONOPLASM_PUBLICATION_ALIAS_LIMITS,
   ICONOPLASM_PUBLICATION_ALIAS_MAX_REQUEST_BYTES,
   IconoplasmPublicationAliasPolicyError,
+  iconoplasmPublicationAliasPoliciesEqual,
   iconoplasmPublicationAliasPublicationState,
+  loadIconoplasmPublishedScannerRecognitionContext,
+  normalizeIconoplasmPublicationAliasPolicyCandidate,
   readAuthoritativePublishedIconoplasmPublicationAliases,
   readIconoplasmPublicationAliasPolicy,
+  readIconoplasmPublishedScannerVersion,
   saveIconoplasmPublicationAliasPolicy,
   validateIconoplasmPublicationAliasesAgainstPublishedScanner,
 } from "./iconoplasm-publication-alias-policy.js"
+import { iconoplasmRecognitionValidationTarget } from "./iconoplasm-recognition-policy-validation.js"
 import {
   reconcileIconoplasmRecognitionPolicies,
   readAuthoritativePublishedIconoplasmRecognitionPolicies,
@@ -49,12 +51,21 @@ function publicPolicy(policy) {
 
 function responsePayload(policy, projection, extra = {}, pair = null) {
   const publication = iconoplasmPublicationAliasPublicationState(policy, projection)
+  const pairInSync = Boolean(
+    pair?.alias_revision === policy.revision &&
+    pair?.publication_aliases?.version === policy.version &&
+    JSON.stringify(pair.publication_aliases.by_symbol) === JSON.stringify(policy.by_symbol) &&
+    JSON.stringify(pair.publication_aliases.remove_by_symbol) ===
+      JSON.stringify(policy.remove_by_symbol),
+  )
   return {
     ...extra,
     policy: publicPolicy(policy),
     publication: {
       ...publication,
-      in_sync: publication.in_sync && pair?.alias_revision === policy.revision,
+      version: pairInSync ? pair.publication_aliases.version : publication.version,
+      revision: pairInSync ? pair.alias_revision : publication.revision,
+      in_sync: pairInSync,
     },
     limits: ICONOPLASM_PUBLICATION_ALIAS_LIMITS,
   }
@@ -216,32 +227,56 @@ export function createIconoplasmAdminPublicationAliasHandlers(services) {
           { current: loadedPolicy },
         )
       }
-      const validated = await validateIconoplasmPublicationAliasesAgainstPublishedScanner(
-        env.KV,
+      const blocklist = await readIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB)
+      const normalized = await normalizeIconoplasmPublicationAliasPolicyCandidate(
         body?.by_symbol,
         body?.remove_by_symbol || {},
-        { baselinePolicy: loadedPolicy },
       )
-      const blocklist = await readIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB)
-      if (Array.isArray(blocklist?.terms) && blocklist.terms.length) {
-        await validateIconoplasmExtensionBlocklistAgainstPublishedScanner(env.KV, blocklist.terms, {
-          publicationAliases: validated,
+      let saved
+      if (iconoplasmPublicationAliasPoliciesEqual(loadedPolicy, normalized)) {
+        saved = { changed: false, policy: loadedPolicy }
+      } else {
+        const scannerContext = await loadIconoplasmPublishedScannerRecognitionContext(env.KV)
+        const validated = await validateIconoplasmPublicationAliasesAgainstPublishedScanner(
+          env.KV,
+          normalized.by_symbol,
+          normalized.remove_by_symbol,
+          {
+            baselinePolicy: loadedPolicy,
+            requiredAliasTerms: blocklist.terms,
+            scannerContext,
+          },
+        )
+        const scannerAfterValidation = await readIconoplasmPublishedScannerVersion(env.KV)
+        if (scannerAfterValidation !== scannerContext.scanner_version) {
+          throw new IconoplasmPublicationAliasPolicyError(
+            "published_scanner_changed_during_validation",
+            "Published scanner changed during alias validation; retry against the new build",
+            503,
+          )
+        }
+        const validationTarget = iconoplasmRecognitionValidationTarget({
+          scannerVersion: scannerContext.scanner_version,
+          aliases: { revision: loadedPolicy.revision + 1, version: validated.version },
+          blocklist,
+        })
+        saved = await saveIconoplasmPublicationAliasPolicy(env.ICONOPLASM_DB, {
+          bySymbol: validated.by_symbol,
+          removeBySymbol: validated.remove_by_symbol,
+          expectedRevision: body.expected_revision,
+          expectedBlocklistRevision: blocklist.revision,
+          recognitionValidationTarget: validationTarget,
+          actor: await actor(request, env),
         })
       }
-      const saved = await saveIconoplasmPublicationAliasPolicy(env.ICONOPLASM_DB, {
-        bySymbol: validated.by_symbol,
-        removeBySymbol: validated.remove_by_symbol,
-        expectedRevision: body.expected_revision,
-        expectedBlocklistRevision: blocklist.revision,
-        actor: await actor(request, env),
-      })
       policySaved = true
       policyChanged = saved.changed
-      const reconciliation = await reconcileIconoplasmRecognitionPolicies(env)
+      const reconciliation = await reconcileIconoplasmRecognitionPolicies(env, {
+        cleanup: false,
+      })
       if (reconciliation.publication_aliases.status === "rejected") {
         throw reconciliation.publication_aliases.reason
       }
-      if (reconciliation.pair.status === "rejected") throw reconciliation.pair.reason
       const published = reconciliation.publication_aliases.value
       if (published?.busy || published?.reason === "projection_in_progress") {
         throw new IconoplasmPublicationAliasPolicyError(
@@ -250,6 +285,7 @@ export function createIconoplasmAdminPublicationAliasHandlers(services) {
           503,
         )
       }
+      if (reconciliation.pair.status === "rejected") throw reconciliation.pair.reason
       const payload = await currentPayload(env, {
         ok: true,
         changed: saved.changed,

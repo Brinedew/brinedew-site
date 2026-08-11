@@ -74,7 +74,9 @@ Administrator recognition policies are bounded operational state too. D1 keeps
 one current publication-alias row, one current shared-blocklist row, and only
 the newest 100 audit revisions for each. Their immutable individual KV histories
 and the atomic recognition-pair history are likewise capped at 100; do not turn
-routine policy maintenance into append-only growth.
+routine policy maintenance into append-only growth. Recognition validation is
+one singleton D1 receipt for the current exact policy/scanner tuple; attempts,
+leases, scanner builds, and failures must never become an append-only ledger.
 
 ## ARCHITECTURE FENCE [IPD-007]: static-first, one dynamic Worker
 
@@ -230,6 +232,36 @@ propagation cannot expose a mixed policy pair. Their versions participate in
 the manifest ETag. Public reads never repair or fall back to D1, a policy-only
 revision never rebuilds or downloads the scanner artifact, and the extension
 makes no additional request or timer.
+
+Scanner validation is also bounded explicitly. Migration 0067 owns one
+singleton D1 receipt keyed by validator revision, scanner build, and the exact
+alias/blocklist revision-version tuple. A true semantic admin mutation builds
+one shared recognition context from one scanner-artifact read, validates both
+policies, rechecks the small manifest, and commits the valid receipt in the same
+D1 CAS batch as the new desired revision. A normalized no-op skips that
+pre-save scan. Receipt-backed retries directly GET exact immutable keys and do
+zero scanner-artifact reads or recognition-context builds, including while KV
+values are visible before their list indexes. Individual history cleanup stays
+off unchanged foreground retry paths.
+
+The reconciler never treats an existing v1 pair as scanner-bound proof because
+the public key and payload intentionally omit scanner version. It reads the
+small current manifest, requires an exact valid receipt, and re-reads the
+manifest and both D1 policies before success or publication. Thus the exact-pair
+path uses two bounded manifest GETs, and new-pair staging adds one final
+pre-publication manifest GET, while a matching receipt keeps scanner-artifact
+work at zero. A missing, stale-validator, or scanner-mismatched receipt performs
+one leased fused validation. Deterministic invalid state is durable so cron does
+not rescan it; a same-target active lease is a retryable zero-scan result. Lease
+claim and completion are CAS-guarded against both current policy rows.
+
+Cleanup responsibility is mode-specific. Admin POST reconciliation passes
+`cleanup: false`, keeping unchanged propagation retries free of history lists.
+The no-option scheduled caller is the cleanup owner: it performs one bounded
+best-effort cleanup pass over alias, blocklist, and pair namespaces on an exact
+pair, enables cleanup while converging individual projections, and cleans the
+pair namespace after new publication. A transient cleanup failure does not
+invalidate the current pair; subsequent scheduled ticks continue convergence.
 
 Alias and blocklist desired state is cross-validated before either CAS. Each
 revision persists the exact counterpart revision it validated, and publication

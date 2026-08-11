@@ -2,11 +2,16 @@
 // bounded KV history stages publication; anonymous reads consume the atomic
 // recognition-pair bundle assembled by the shared reconciler.
 import ICONOPLASM_CANDIDATE_CONTRACT from "../iconoplasm-extension/candidate-contract.json" with { type: "json" }
-import { invalidIconoplasmPublishedAliasTerms } from "./iconoplasm-publication-aliases.js"
 import {
+  loadIconoplasmPublishedScannerRecognitionContext,
+  invalidIconoplasmRequiredAliasTermsAgainstScannerContext,
   readAuthoritativePublishedIconoplasmPublicationAliases,
   readPublishedIconoplasmPublicationAliases,
 } from "./iconoplasm-publication-alias-policy.js"
+import {
+  iconoplasmRecognitionValidationTargetMatches,
+  prepareIconoplasmRecognitionValidationReceiptUpsert,
+} from "./iconoplasm-recognition-policy-validation.js"
 
 export const ICONOPLASM_EXTENSION_BLOCKLIST_POLICY_KEY = "shared"
 export const ICONOPLASM_EXTENSION_BLOCKLIST_SCHEMA_VERSION = Number(
@@ -24,8 +29,6 @@ export const ICONOPLASM_EXTENSION_BLOCKLIST_KV_RETENTION = 100
 export const ICONOPLASM_EXTENSION_BLOCKLIST_KV_PREFIX =
   "iconoplasm:extension-blocklist-policy:v1:revision:"
 
-const CATALOG_MANIFEST_KV_KEY = "iconoplasm:catalog-manifest"
-const SCANNER_CATALOG_KV_PREFIX = "iconoplasm:scanner-catalog:"
 const PUBLIC_CACHE_TTL_MS = 5_000
 const PROJECTION_LEASE_MS = 60_000
 const KV_REVISION_WIDTH = 20
@@ -149,6 +152,21 @@ export async function iconoplasmExtensionBlocklistContentVersion(terms) {
   return `ebl1-${hex.slice(0, 16)}`
 }
 
+export async function planIconoplasmExtensionBlocklistPolicyCandidate(
+  rawTerms,
+  { revision, dependsOnAliasRevision = null } = {},
+) {
+  const terms = normalizeIconoplasmExtensionBlocklistTerms(rawTerms)
+  const version = await iconoplasmExtensionBlocklistContentVersion(terms)
+  projectionForPolicy({
+    revision,
+    version,
+    terms,
+    depends_on_alias_revision: dependsOnAliasRevision,
+  })
+  return Object.freeze({ terms: Object.freeze([...terms]), revision, version })
+}
+
 function safeJsonParse(raw) {
   try {
     return JSON.parse(String(raw || ""))
@@ -165,6 +183,26 @@ function positiveRevision(value) {
 function nullableRevision(value) {
   if (value == null) return null
   return positiveRevision(value)
+}
+
+function assertValidatedRecognitionTargetMatchesBlocklist(target, policy) {
+  if (!target) return
+  if (
+    !iconoplasmRecognitionValidationTargetMatches(target, {
+      scannerVersion: target.scanner_version,
+      aliases: {
+        revision: target.alias_revision,
+        version: target.alias_version,
+      },
+      blocklist: policy,
+    })
+  ) {
+    throw policyError(
+      "extension_blocklist_validation_target_mismatch",
+      "Extension blocklist policy changed after recognition validation",
+      503,
+    )
+  }
 }
 
 function policyFromRow(row) {
@@ -245,6 +283,7 @@ export async function saveIconoplasmExtensionBlocklistPolicy(
     terms: rawTerms,
     expectedRevision,
     expectedPublicationAliasRevision = null,
+    recognitionValidationTarget = null,
     actor = "unknown",
     now = new Date(),
   },
@@ -281,10 +320,23 @@ export async function saveIconoplasmExtensionBlocklistPolicy(
   if (sameTerms(current.terms, terms)) return { changed: false, policy: current }
 
   const revision = current.revision + 1
-  const version = await iconoplasmExtensionBlocklistContentVersion(terms)
-  // Validate the exact public representation before the D1 CAS. A policy that
-  // cannot fit in the bounded KV artifact must never become desired state.
-  projectionForPolicy({ revision, version, terms })
+  const candidate = await planIconoplasmExtensionBlocklistPolicyCandidate(terms, {
+    revision,
+    dependsOnAliasRevision: expectedPublicationAliasRevision,
+  })
+  const version = candidate.version
+  if (
+    recognitionValidationTarget &&
+    (recognitionValidationTarget.blocklist_revision !== revision ||
+      recognitionValidationTarget.blocklist_version !== version ||
+      recognitionValidationTarget.alias_revision !== expectedPublicationAliasRevision)
+  ) {
+    throw policyError(
+      "extension_blocklist_validation_receipt_mismatch",
+      "Recognition validation receipt does not match the desired blocklist mutation",
+      409,
+    )
+  }
   const changedAt = new Date(now).toISOString()
   const changedBy =
     String(actor || "unknown")
@@ -339,6 +391,13 @@ export async function saveIconoplasmExtensionBlocklistPolicy(
           AND version = ?3`,
       [ICONOPLASM_EXTENSION_BLOCKLIST_POLICY_KEY, revision, version],
     ),
+    ...(recognitionValidationTarget
+      ? [
+          prepareIconoplasmRecognitionValidationReceiptUpsert(db, recognitionValidationTarget, {
+            now,
+          }),
+        ]
+      : []),
     prepare(
       db,
       `DELETE FROM icono_extension_blocklist_policy_history
@@ -468,6 +527,24 @@ async function readHighestValidProjectionFromKv(kv) {
     if (parsed?.revision === entry.revision) return parsed
   }
   return null
+}
+
+export async function readPublishedIconoplasmExtensionBlocklistForPolicy(kv, policy) {
+  requireBinding(kv, "KV")
+  if (!positiveRevision(policy?.revision)) return null
+  const parsed = await parseIconoplasmPublishedExtensionBlocklistProjection(
+    await kv.get(iconoplasmExtensionBlocklistKvKey(policy.revision)),
+  )
+  return parsed?.revision === policy.revision ? parsed : null
+}
+
+export async function readPublishedIconoplasmExtensionBlocklistAtRevision(kv, revision) {
+  const normalized = positiveRevision(revision)
+  if (!normalized) return null
+  const parsed = await parseIconoplasmPublishedExtensionBlocklistProjection(
+    await kv.get(iconoplasmExtensionBlocklistKvKey(normalized)),
+  )
+  return parsed?.revision === normalized ? parsed : null
 }
 
 export async function readRetainedPublishedIconoplasmExtensionBlocklists(kv) {
@@ -605,6 +682,13 @@ async function cleanupOldProjectionKeysBestEffort(kv, protectedRevision = null) 
   }
 }
 
+export function cleanupIconoplasmExtensionBlocklistProjectionHistory(
+  kv,
+  { protectedRevision = null } = {},
+) {
+  return cleanupOldProjectionKeysBestEffort(kv, protectedRevision)
+}
+
 export function iconoplasmExtensionBlocklistPublicationState(policy, projection) {
   const inSync = Boolean(
     policy &&
@@ -624,44 +708,19 @@ export function iconoplasmExtensionBlocklistPublicationState(policy, projection)
   }
 }
 
-async function readJsonFromKv(kv, key) {
-  const raw = await kv.get(key)
-  return safeJsonParse(raw)
-}
-
 export async function validateIconoplasmExtensionBlocklistAgainstPublishedScanner(
   kv,
   terms,
-  { publicationAliases = null } = {},
+  { publicationAliases = null, scannerContext = null } = {},
 ) {
   requireBinding(kv, "KV")
   const normalizedTerms = normalizeIconoplasmExtensionBlocklistTerms(terms)
   if (normalizedTerms.length === 0) return normalizedTerms
-  const manifest = await readJsonFromKv(kv, CATALOG_MANIFEST_KV_KEY)
-  const scannerVersion = String(
-    manifest?.scanner_artifact?.build_version || manifest?.current_hash || "",
-  ).trim()
-  if (!scannerVersion) {
-    throw policyError(
-      "published_scanner_unavailable",
-      "Published scanner catalog is unavailable; publish the catalog before editing this policy",
-      503,
-    )
-  }
-  const scanner = await readJsonFromKv(kv, `${SCANNER_CATALOG_KV_PREFIX}${scannerVersion}`)
-  const genes = scanner?.genes
-  if (!genes || typeof genes !== "object" || Array.isArray(genes)) {
-    throw policyError(
-      "published_scanner_unavailable",
-      "Published scanner catalog is unavailable; publish the catalog before editing this policy",
-      503,
-    )
-  }
-
   const effectivePublicationAliases =
     publicationAliases || (await readPublishedIconoplasmPublicationAliases(kv))
-  const invalidTerms = invalidIconoplasmPublishedAliasTerms(
-    genes,
+  const context = scannerContext || (await loadIconoplasmPublishedScannerRecognitionContext(kv))
+  const invalidTerms = invalidIconoplasmRequiredAliasTermsAgainstScannerContext(
+    context,
     effectivePublicationAliases,
     normalizedTerms,
   )
@@ -721,12 +780,22 @@ async function releaseProjectionLease(db, token, errorMessage = null) {
 export async function publishIconoplasmExtensionBlocklistPolicy(
   db,
   kv,
-  { now = new Date(), maxAttempts = 3 } = {},
+  {
+    now = new Date(),
+    maxAttempts = 3,
+    exactDesired = false,
+    validatedRecognitionTarget = null,
+    cleanup = true,
+    readPublishedAliases = null,
+  } = {},
 ) {
   requireBinding(db, "ICONOPLASM_DB")
   requireBinding(kv, "KV")
   const before = await readIconoplasmExtensionBlocklistPolicy(db)
-  const publishedBefore = await readHighestValidProjectionFromKv(kv)
+  assertValidatedRecognitionTargetMatchesBlocklist(validatedRecognitionTarget, before)
+  const publishedBefore = exactDesired
+    ? await readPublishedIconoplasmExtensionBlocklistForPolicy(kv, before)
+    : await readHighestValidProjectionFromKv(kv)
   assertProjectionDoesNotConflictWithPolicy(publishedBefore, before)
   if (iconoplasmExtensionBlocklistPublicationState(before, publishedBefore).in_sync) {
     return {
@@ -735,20 +804,25 @@ export async function publishIconoplasmExtensionBlocklistPolicy(
       skipped: true,
       policy: before,
       projection: publishedBefore,
-      cleanup: await cleanupOldProjectionKeysBestEffort(kv, before.revision),
+      cleanup: cleanup
+        ? await cleanupOldProjectionKeysBestEffort(kv, before.revision)
+        : { ok: true, skipped: true },
     }
   }
 
   const lease = await claimProjectionLease(db, { now })
   if (!lease) {
     const policy = await readIconoplasmExtensionBlocklistPolicy(db)
-    const projection = await readHighestValidProjectionFromKv(kv)
+    const projection = exactDesired
+      ? await readPublishedIconoplasmExtensionBlocklistForPolicy(kv, policy)
+      : await readHighestValidProjectionFromKv(kv)
     return { ok: false, changed: false, busy: true, policy, projection }
   }
 
   try {
     for (let attempt = 0; attempt < Math.max(1, Math.min(5, maxAttempts)); attempt += 1) {
       const policy = await readIconoplasmExtensionBlocklistPolicy(db)
+      assertValidatedRecognitionTargetMatchesBlocklist(validatedRecognitionTarget, policy)
       if (policy.projection_lease_token !== lease.token) {
         throw policyError(
           "extension_blocklist_projection_lease_lost",
@@ -758,7 +832,9 @@ export async function publishIconoplasmExtensionBlocklistPolicy(
       }
       if (policy.depends_on_alias_revision) {
         const authoritativeAliases =
-          await readAuthoritativePublishedIconoplasmPublicationAliases(kv)
+          typeof readPublishedAliases === "function"
+            ? await readPublishedAliases()
+            : await readAuthoritativePublishedIconoplasmPublicationAliases(kv)
         if (
           !authoritativeAliases ||
           authoritativeAliases.revision < policy.depends_on_alias_revision
@@ -769,12 +845,16 @@ export async function publishIconoplasmExtensionBlocklistPolicy(
             503,
           )
         }
-        await validateIconoplasmExtensionBlocklistAgainstPublishedScanner(kv, policy.terms, {
-          publicationAliases: authoritativeAliases.overlay,
-        })
+        if (!validatedRecognitionTarget) {
+          await validateIconoplasmExtensionBlocklistAgainstPublishedScanner(kv, policy.terms, {
+            publicationAliases: authoritativeAliases.overlay,
+          })
+        }
       }
       const { projection, raw } = projectionForPolicy(policy)
-      const publishedNow = await readHighestValidProjectionFromKv(kv)
+      const publishedNow = exactDesired
+        ? await readPublishedIconoplasmExtensionBlocklistForPolicy(kv, policy)
+        : await readHighestValidProjectionFromKv(kv)
       assertProjectionDoesNotConflictWithPolicy(publishedNow, policy)
       const key = iconoplasmExtensionBlocklistKvKey(policy.revision)
       const existingRaw = await kv.get(key)
@@ -790,7 +870,9 @@ export async function publishIconoplasmExtensionBlocklistPolicy(
       } else {
         await kv.put(key, raw)
       }
-      const publishedAfter = await readHighestValidProjectionFromKv(kv)
+      const publishedAfter = exactDesired
+        ? await readPublishedIconoplasmExtensionBlocklistForPolicy(kv, policy)
+        : await readHighestValidProjectionFromKv(kv)
       assertProjectionDoesNotConflictWithPolicy(publishedAfter, policy)
       if (!projectionMatchesPolicy(publishedAfter, policy)) {
         throw policyError(
@@ -831,7 +913,9 @@ export async function publishIconoplasmExtensionBlocklistPolicy(
           skipped: false,
           policy: await readIconoplasmExtensionBlocklistPolicy(db),
           projection: publishedAfter,
-          cleanup: await cleanupOldProjectionKeysBestEffort(kv, policy.revision),
+          cleanup: cleanup
+            ? await cleanupOldProjectionKeysBestEffort(kv, policy.revision)
+            : { ok: true, skipped: true },
         }
       }
     }
@@ -851,12 +935,24 @@ export async function publishIconoplasmExtensionBlocklistPolicy(
   }
 }
 
-export async function reconcileIconoplasmExtensionBlocklistPolicy(env, { now = new Date() } = {}) {
+export async function reconcileIconoplasmExtensionBlocklistPolicy(
+  env,
+  {
+    now = new Date(),
+    exactDesired = false,
+    validatedRecognitionTarget = null,
+    cleanup = true,
+    readPublishedAliases = null,
+  } = {},
+) {
   if (!env?.ICONOPLASM_DB || !env?.KV) {
     return { ok: false, skipped: true, reason: "binding_missing" }
   }
   const policy = await readIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB)
-  const projection = await readHighestValidProjectionFromKv(env.KV)
+  assertValidatedRecognitionTargetMatchesBlocklist(validatedRecognitionTarget, policy)
+  const projection = exactDesired
+    ? await readPublishedIconoplasmExtensionBlocklistForPolicy(env.KV, policy)
+    : await readHighestValidProjectionFromKv(env.KV)
   const publication = iconoplasmExtensionBlocklistPublicationState(policy, projection)
   const leaseExpiresAt = Date.parse(policy.projection_lease_expires_at || "")
   const leaseIsActive =
@@ -869,7 +965,9 @@ export async function reconcileIconoplasmExtensionBlocklistPolicy(env, { now = n
       changed: false,
       skipped: true,
       reason: "already_published",
-      cleanup: await cleanupOldProjectionKeysBestEffort(env.KV, policy.revision),
+      cleanup: cleanup
+        ? await cleanupOldProjectionKeysBestEffort(env.KV, policy.revision)
+        : { ok: true, skipped: true },
     }
   }
   if (leaseIsActive) {
@@ -883,10 +981,18 @@ export async function reconcileIconoplasmExtensionBlocklistPolicy(env, { now = n
       skipped: true,
       cleaned_expired_lease: true,
       reason: "already_published",
-      cleanup: await cleanupOldProjectionKeysBestEffort(env.KV, policy.revision),
+      cleanup: cleanup
+        ? await cleanupOldProjectionKeysBestEffort(env.KV, policy.revision)
+        : { ok: true, skipped: true },
     }
   }
-  return publishIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB, env.KV, { now })
+  return publishIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB, env.KV, {
+    now,
+    exactDesired,
+    validatedRecognitionTarget,
+    cleanup,
+    readPublishedAliases,
+  })
 }
 
 export const ICONOPLASM_EXTENSION_BLOCKLIST_LIMITS = Object.freeze({

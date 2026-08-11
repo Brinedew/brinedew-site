@@ -6,6 +6,8 @@ import {
   ICONOPLASM_EXTENSION_BLOCKLIST_SCHEMA_VERSION,
   IconoplasmExtensionBlocklistPolicyError,
   iconoplasmExtensionBlocklistPublicationState,
+  normalizeIconoplasmExtensionBlocklistTerms,
+  planIconoplasmExtensionBlocklistPolicyCandidate,
   readAuthoritativePublishedIconoplasmExtensionBlocklist,
   readIconoplasmExtensionBlocklistPolicy,
   saveIconoplasmExtensionBlocklistPolicy,
@@ -16,7 +18,12 @@ import {
   iconoplasmAdminPolicyMutationAdmissionError,
   readIconoplasmAdminPolicyBoundedJson,
 } from "./iconoplasm-admin-policy-http.js"
-import { readIconoplasmPublicationAliasPolicy } from "./iconoplasm-publication-alias-policy.js"
+import {
+  loadIconoplasmPublishedScannerRecognitionContext,
+  readIconoplasmPublicationAliasPolicy,
+  readIconoplasmPublishedScannerVersion,
+} from "./iconoplasm-publication-alias-policy.js"
+import { iconoplasmRecognitionValidationTarget } from "./iconoplasm-recognition-policy-validation.js"
 import {
   reconcileIconoplasmRecognitionPolicies,
   readAuthoritativePublishedIconoplasmRecognitionPolicies,
@@ -44,12 +51,19 @@ function publicPolicy(policy) {
 
 function responsePayload(policy, projection, extra = {}, pair = null) {
   const publication = iconoplasmExtensionBlocklistPublicationState(policy, projection)
+  const pairInSync = Boolean(
+    pair?.blocklist_revision === policy.revision &&
+    pair?.extension_blocklist?.version === policy.version &&
+    JSON.stringify(pair.extension_blocklist.terms) === JSON.stringify(policy.terms),
+  )
   return {
     ...extra,
     policy: publicPolicy(policy),
     publication: {
       ...publication,
-      in_sync: publication.in_sync && pair?.blocklist_revision === policy.revision,
+      version: pairInSync ? pair.extension_blocklist.version : publication.version,
+      revision: pairInSync ? pair.blocklist_revision : publication.revision,
+      in_sync: pairInSync,
     },
     limits: ICONOPLASM_EXTENSION_BLOCKLIST_LIMITS,
   }
@@ -212,24 +226,50 @@ export function createIconoplasmAdminExtensionBlocklistHandlers(services) {
         )
       }
       const publicationAliasPolicy = await readIconoplasmPublicationAliasPolicy(env.ICONOPLASM_DB)
-      const terms = await validateIconoplasmExtensionBlocklistAgainstPublishedScanner(
-        env.KV,
-        body?.terms,
-        { publicationAliases: publicationAliasPolicy },
-      )
-      const saved = await saveIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB, {
-        terms,
-        expectedRevision: body.expected_revision,
-        expectedPublicationAliasRevision: publicationAliasPolicy.revision,
-        actor: await actor(request, env),
-      })
+      const normalizedTerms = normalizeIconoplasmExtensionBlocklistTerms(body?.terms)
+      let saved
+      if (JSON.stringify(loadedPolicy.terms) === JSON.stringify(normalizedTerms)) {
+        saved = { changed: false, policy: loadedPolicy }
+      } else {
+        const candidate = await planIconoplasmExtensionBlocklistPolicyCandidate(normalizedTerms, {
+          revision: loadedPolicy.revision + 1,
+          dependsOnAliasRevision: publicationAliasPolicy.revision,
+        })
+        const scannerContext = await loadIconoplasmPublishedScannerRecognitionContext(env.KV)
+        const terms = await validateIconoplasmExtensionBlocklistAgainstPublishedScanner(
+          env.KV,
+          candidate.terms,
+          { publicationAliases: publicationAliasPolicy, scannerContext },
+        )
+        const scannerAfterValidation = await readIconoplasmPublishedScannerVersion(env.KV)
+        if (scannerAfterValidation !== scannerContext.scanner_version) {
+          throw new IconoplasmExtensionBlocklistPolicyError(
+            "published_scanner_changed_during_validation",
+            "Published scanner changed during blocklist validation; retry against the new build",
+            503,
+          )
+        }
+        const validationTarget = iconoplasmRecognitionValidationTarget({
+          scannerVersion: scannerContext.scanner_version,
+          aliases: publicationAliasPolicy,
+          blocklist: { revision: candidate.revision, version: candidate.version },
+        })
+        saved = await saveIconoplasmExtensionBlocklistPolicy(env.ICONOPLASM_DB, {
+          terms,
+          expectedRevision: body.expected_revision,
+          expectedPublicationAliasRevision: publicationAliasPolicy.revision,
+          recognitionValidationTarget: validationTarget,
+          actor: await actor(request, env),
+        })
+      }
       policySaved = true
       policyChanged = saved.changed
-      const reconciliation = await reconcileIconoplasmRecognitionPolicies(env)
+      const reconciliation = await reconcileIconoplasmRecognitionPolicies(env, {
+        cleanup: false,
+      })
       if (reconciliation.extension_blocklist.status === "rejected") {
         throw reconciliation.extension_blocklist.reason
       }
-      if (reconciliation.pair.status === "rejected") throw reconciliation.pair.reason
       const published = reconciliation.extension_blocklist.value
       if (published?.busy || published?.reason === "projection_in_progress") {
         throw new IconoplasmExtensionBlocklistPolicyError(
@@ -238,6 +278,7 @@ export function createIconoplasmAdminExtensionBlocklistHandlers(services) {
           503,
         )
       }
+      if (reconciliation.pair.status === "rejected") throw reconciliation.pair.reason
       const payload = await currentPayload(env, {
         ok: true,
         changed: saved.changed,
