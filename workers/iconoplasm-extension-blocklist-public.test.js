@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import test from "node:test"
 
 // ARCHITECTURE FENCE [IPD-008]: public manifest traffic must stay entirely on
@@ -8,6 +9,7 @@ import {
   iconoplasmExtensionBlocklistKvKey,
   resetIconoplasmExtensionBlocklistPublicCacheForTests,
 } from "./iconoplasm-extension-blocklist-policy.js"
+import { resetIconoplasmRecognitionPolicyPublicCacheForTests } from "./iconoplasm-recognition-policy-reconciliation.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class FakeKv {
@@ -52,6 +54,13 @@ function projection(revision, version, terms) {
   })
 }
 
+function blocklistVersion(terms) {
+  return `ebl1-${createHash("sha256").update(JSON.stringify(terms)).digest("hex").slice(0, 16)}`
+}
+
+const AMID_VERSION = blocklistVersion(["AMID"])
+const ARCH_VERSION = blocklistVersion(["ARCH"])
+
 function publicManifestKv() {
   const hash = "blocklistfixture01"
   return new FakeKv({
@@ -82,7 +91,7 @@ function publicManifestKv() {
       schema: 1,
       status: "active",
     }),
-    [iconoplasmExtensionBlocklistKvKey(1)]: projection(1, "ebl1-1111111111111111", ["AMID"]),
+    [iconoplasmExtensionBlocklistKvKey(1)]: projection(1, AMID_VERSION, ["AMID"]),
     [iconoplasmExtensionBlocklistKvKey(999)]: "{corrupt projection",
   })
 }
@@ -97,6 +106,7 @@ async function getManifest(env, headers = {}) {
 
 test("public manifest skips a corrupt higher key, stays KV-only, and includes revision in ETag", async () => {
   resetIconoplasmExtensionBlocklistPublicCacheForTests()
+  resetIconoplasmRecognitionPolicyPublicCacheForTests()
   const kv = publicManifestKv()
   const env = { KV: kv, ICONOPLASM_DB: new ThrowingDb() }
   const first = await getManifest(env)
@@ -107,20 +117,18 @@ test("public manifest skips a corrupt higher key, stays KV-only, and includes re
   assert.deepEqual(firstPayload.extension_blocklist, {
     schema_version: 1,
     revision: 1,
-    version: "ebl1-1111111111111111",
+    version: AMID_VERSION,
     term_count: 1,
     terms: ["AMID"],
   })
-  assert.match(firstEtag, /blocklist-ebl1-1111111111111111-r1/)
+  assert.match(firstEtag, new RegExp(`blocklist-${AMID_VERSION}-r1`))
 
   const unchanged = await getManifest(env, { "If-None-Match": firstEtag })
   assert.equal(unchanged.status, 304)
 
-  kv.entries.set(
-    iconoplasmExtensionBlocklistKvKey(2),
-    projection(2, "ebl1-2222222222222222", ["ARCH"]),
-  )
+  kv.entries.set(iconoplasmExtensionBlocklistKvKey(2), projection(2, ARCH_VERSION, ["ARCH"]))
   resetIconoplasmExtensionBlocklistPublicCacheForTests()
+  resetIconoplasmRecognitionPolicyPublicCacheForTests()
   const changed = await getManifest(env, { "If-None-Match": firstEtag })
   const changedPayload = await changed.json()
   assert.equal(changed.status, 200)

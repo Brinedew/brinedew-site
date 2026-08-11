@@ -70,6 +70,12 @@ and only then deletes those IDs from the primary database. A failed copy or
 verification leaves the hot rows untouched. The archive operation is idempotent
 because the original event ID is the cold primary key.
 
+Administrator recognition policies are bounded operational state too. D1 keeps
+one current publication-alias row, one current shared-blocklist row, and only
+the newest 100 audit revisions for each. Their immutable individual KV histories
+and the atomic recognition-pair history are likewise capped at 100; do not turn
+routine policy maintenance into append-only growth.
+
 ## ARCHITECTURE FENCE [IPD-007]: static-first, one dynamic Worker
 
 `iconoplasm.brinedew.bio/*` belongs directly to `geneguessr-api`. Matching
@@ -207,26 +213,52 @@ Extension hover detail is immutable within a published card snapshot:
 - only an explicit `missing` result is negative-cached, and transient failures
   remain retryable.
 
-The shared extension text blocklist follows the same published-read-plane
-boundary without becoming a catalog artifact. Administrators replace one
-normalized, revisioned policy; D1 retains its canonical revision and bounded
-recent audit history, while bounded immutable KV revision records contain the
-complete public projections. Public readers select the highest valid revision,
-so an expired older publisher cannot overwrite or hide a newer policy. The
-existing catalog manifest carries that projection as `extension_blocklist`, and
-its revision participates in the manifest ETag. Public manifest reads never
-repair or fall back to D1, a term-only revision never rebuilds or downloads the
-scanner artifact, and the extension makes no additional request or timer.
-Admin writes normalize, sort, and deduplicate terms, reject canonical symbols,
-and require every term to be one unambiguous alias in the currently published
-scanner. Whether that alias is an unwanted common-English ambiguity remains an
-explicit administrator judgment; the system must not pretend to infer it.
+The shared extension text blocklist and curated publication aliases follow the
+same published-read-plane boundary without becoming catalog artifacts.
+Administrators replace one normalized desired policy for each; D1 retains each
+current revision and only the newest 100 audit revisions. At most 100 immutable
+KV records per policy are retained as dependency-aware publication inputs and
+history. They are not selected independently by anonymous traffic.
 
-Once an extension has accepted a valid projection, it retains that last-known-
-good authoritative list through missing, malformed, stale, or failed refreshes.
-A valid empty list is an intentional empty policy. The packaged list is used
-only before a valid projection has ever been accepted; per-user removed-default
-tombstones and custom terms remain browser-local and retain user authority.
+After both individual inputs are visible and mutually valid, the reconciler
+writes one immutable bundle under `iconoplasm:recognition-policy-pair:v1:`. The
+bundle atomically nests the exact outward `extension_blocklist` and
+`publication_aliases` shapes plus private dependency metadata. Manifest,
+search, and resolver readers list that prefix and normally GET only the newest
+valid value, so public work is O(1) in retained history and eventual cross-key
+propagation cannot expose a mixed policy pair. Their versions participate in
+the manifest ETag. Public reads never repair or fall back to D1, a policy-only
+revision never rebuilds or downloads the scanner artifact, and the extension
+makes no additional request or timer.
+
+Alias and blocklist desired state is cross-validated before either CAS. Each
+revision persists the exact counterpart revision it validated, and publication
+requires that dependency (or newer) to be visible before staging the individual
+KV record. Scheduled reconciliation runs blocklist, aliases, blocklist again,
+then the atomic pair publisher: removals therefore stage blocklist-first,
+additions alias-first, and sequential saved-but-pending revisions converge
+without deadlock. Only the final pair value advances the anonymous read plane.
+Admin blocklist writes normalize, sort, and deduplicate terms, reject canonical
+symbols, and require every term to be one unambiguous alias after the desired
+alias policy. Alias writes reject unknown targets, cross-owner collisions, and
+new aliases already supplied by the generated scanner while ensuring every
+desired blocklist term remains valid. Whether an alias is an unwanted common-
+English ambiguity remains explicit administrator judgment.
+
+Once an extension has accepted a valid blocklist or alias projection, it retains
+that last-known-good authoritative state through missing, malformed, stale, or
+failed refreshes. A valid empty blocklist is an intentional empty policy. On a
+true first deployment with no pair keys, the server combines its alias seed with
+the newest dependency-free legacy blocklist. Any nonempty but unreadable pair
+namespace fails closed instead of silently dropping policy. Packaged extension
+fallbacks remain first-run/offline state; per-user removed-default tombstones
+and custom terms remain browser-local and retain user authority.
+
+Historical compatibility URLs resolve aliases through a direct
+content-addressed version key within the bounded 100-revision horizon; the seed
+token remains source-backed. A current pair that propagates before its version
+key supplies the same snapshot directly. A syntactically valid but not-yet-
+visible alias or portrait snapshot returns a retryable 503, never a false 404.
 
 Catalog portrait fingerprints and portrait-reference snapshots are publication
 artifacts too, but they do not belong in the per-tab scanner. Visible and hovered

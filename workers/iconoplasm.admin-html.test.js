@@ -5,6 +5,7 @@ import { Script } from "node:vm"
 import { parseHTML } from "linkedom"
 
 import { ICONOPLASM_ADMIN_HTML as ICONOPLASM_ADMIN_SHELL } from "./iconoplasm-admin-html.js"
+import { ICONOPLASM_DEFAULT_PUBLICATION_ALIASES } from "./iconoplasm-publication-aliases.js"
 
 const ICONOPLASM_ADMIN_CSS = readFileSync(
   new URL("../quartz/static/iconoplasm/admin.css", import.meta.url),
@@ -166,16 +167,18 @@ test("iconoplasm admin exposes image edit checkmark prompt editing as its own ta
   assert.match(ICONOPLASM_ADMIN_HTML, /apiJson\(["']\/image-edit-prompts["'],\s*\{/)
 })
 
-test("iconoplasm admin publishes a revisioned full shared extension blocklist", () => {
-  assert.match(ICONOPLASM_ADMIN_SHELL, /data-tab="extension">Extension<\/button>/)
+test("iconoplasm admin keeps the shared blocklist inside the Recognition workspace", () => {
+  assert.match(ICONOPLASM_ADMIN_SHELL, /data-tab="extension">Recognition<\/button>/)
   assert.match(
     ICONOPLASM_ADMIN_SHELL,
     /id="panel-extension" role="tabpanel" aria-labelledby="admin-tab-extension"/,
   )
-  assert.match(ICONOPLASM_ADMIN_SHELL, /Publish the complete shared-default list/)
+  assert.match(ICONOPLASM_ADMIN_SHELL, /id="recognition-tab-aliases"[\s\S]*aria-selected="true"/)
+  assert.match(ICONOPLASM_ADMIN_SHELL, /id="recognition-tab-blocklist"[\s\S]*aria-selected="false"/)
+  assert.match(ICONOPLASM_ADMIN_SHELL, /Shared text blocklist/)
   assert.match(
     ICONOPLASM_ADMIN_SHELL,
-    /76 packaged terms are only the first-run and offline fallback; a loaded policy replaces them/,
+    /76 packaged terms are only the first-run and offline fallback\. A loaded policy replaces the complete shared list/,
   )
   assert.match(
     ICONOPLASM_ADMIN_SHELL,
@@ -208,6 +211,7 @@ test("iconoplasm admin publishes a revisioned full shared extension blocklist", 
     /EXTENSION_BLOCKLIST_PUBLICATION_RETRY_DELAYS_MS = \[2000, 5000, 10000, 20000, 30000\]/,
   )
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /extension_blocklist_projection_not_visible/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /extension_blocklist_alias_dependency_not_published/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /Automatic publication retries ended/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /applyExtensionBlocklistPayload\(err\.response\)/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /state\.extensionBlocklistDraft = preservedDraft/)
@@ -233,6 +237,247 @@ test("iconoplasm admin publishes a revisioned full shared extension blocklist", 
   )
   assert.match(ICONOPLASM_ADMIN_CSS, /\.extension-blocklist-remove \{[\s\S]*min-width: 44px/)
   assert.match(ICONOPLASM_ADMIN_CSS, /@media \(max-width: 600px\)[\s\S]*extension-blocklist-ledger/)
+})
+
+test("Recognition defaults to an accessible alias-mapping draft workspace", () => {
+  assert.match(
+    ICONOPLASM_ADMIN_SHELL,
+    /class="recognition-panel active" id="recognition-panel-aliases"/,
+  )
+  assert.match(ICONOPLASM_ADMIN_SHELL, /id="publication-alias-form"/)
+  assert.match(
+    ICONOPLASM_ADMIN_SHELL,
+    /id="publication-alias-gene-query"[\s\S]*role="combobox"[\s\S]*aria-autocomplete="list"[\s\S]*aria-controls="publication-alias-gene-results"/,
+  )
+  assert.match(ICONOPLASM_ADMIN_SHELL, /id="publication-alias-gene-results" role="listbox"/)
+  assert.match(
+    ICONOPLASM_ADMIN_SHELL,
+    /id="publication-alias-target-preview" role="status" aria-live="polite" hidden/,
+  )
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /PUBLICATION_ALIAS_SEARCH_MIN_LENGTH = 2/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /PUBLICATION_ALIAS_SEARCH_DEBOUNCE_MS = 200/)
+  assert.match(
+    ICONOPLASM_ADMIN_RUNTIME,
+    /\/api\/public\/v1\/genes\/search\?scope=catalog&limit=8&q=/,
+  )
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /state\.publicationAliasSearchRequestId/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /state\.publicationAliasSearchController\.abort\(\)/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /\["ArrowLeft", "ArrowRight", "Home", "End"\]/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /ev\.key === "ArrowDown"/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /ev\.key === "ArrowUp"/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /ev\.key === "Enter"/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /ev\.key === "Escape"/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /Choose a canonical gene from the search results\./)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /publicationAliasTargetPreview\.innerHTML/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /apiJson\("\/publication-aliases", \{ method: "GET" \}\)/)
+  assert.match(
+    ICONOPLASM_ADMIN_RUNTIME,
+    /body: JSON\.stringify\(\{[\s\S]*expected_revision: expectedRevision,[\s\S]*by_symbol: draftBySymbol,[\s\S]*remove_by_symbol: removeBySymbol/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_RUNTIME,
+    /PUBLICATION_ALIAS_PUBLICATION_RETRY_DELAYS_MS = \[2000, 5000, 10000, 20000, 30000\]/,
+  )
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /publication_alias_blocklist_dependency_not_published/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /recognition_pair_not_visible/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /recognition_pair_dependencies_not_published/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /window\.addEventListener\("beforeunload"/)
+  assert.match(
+    ICONOPLASM_ADMIN_CSS,
+    /@media \(max-width: 600px\)[\s\S]*\.publication-alias-fields,[\s\S]*grid-template-columns: 1fr/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_CSS,
+    /\.publication-alias-mapping-actions button \{[\s\S]*min-height: 44px/,
+  )
+})
+
+test("the 45-addition alias policy publishes without collapsing or reordering case variants", async () => {
+  assert.equal(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.alias_count, 45)
+  assert.equal(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.removal_count, 1)
+
+  const constantsStart = ICONOPLASM_ADMIN_RUNTIME.indexOf("var PUBLICATION_ALIAS_MAX_OPERATIONS")
+  const constantsEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function defaultVisionPageSize",
+    constantsStart,
+  )
+  const helpersStart = ICONOPLASM_ADMIN_RUNTIME.indexOf("function normalizePublicationAlias")
+  const helpersEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function normalizeExtensionBlocklistTerm",
+    helpersStart,
+  )
+  assert.notEqual(constantsStart, -1)
+  assert.notEqual(constantsEnd, -1)
+  assert.notEqual(helpersStart, -1)
+  assert.notEqual(helpersEnd, -1)
+
+  const seededBySymbol = JSON.parse(
+    JSON.stringify(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol),
+  )
+  const seededRemovals = JSON.parse(
+    JSON.stringify(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.remove_by_symbol),
+  )
+  const seededCdh1Aliases = seededBySymbol.CDH1.slice()
+  let publishedRequest = null
+  const sandbox = {
+    state: {
+      activeTab: "extension",
+      recognitionSection: "aliases",
+      publicationAliasPolicy: null,
+      publicationAliasPublication: null,
+      publicationAliasLimits: { max_aliases: 500, max_alias_length: 64 },
+      publicationAliasDraftBySymbol: {},
+      publicationAliasLoaded: false,
+      publicationAliasBusy: false,
+      publicationAliasEditing: null,
+      publicationAliasSelectedGene: null,
+      publicationAliasSearchResults: [],
+      publicationAliasSearchActiveIndex: -1,
+      publicationAliasSearchError: "",
+      publicationAliasSearchTimer: null,
+      publicationAliasSearchController: null,
+      publicationAliasSearchRequestId: 0,
+      publicationAliasPublicationRetry: null,
+      publicationAliasPublicationRetryTimer: null,
+      publicationAliasPublicationRetryRunId: 0,
+    },
+    els: {},
+    window: {
+      clearTimeout() {},
+      setTimeout() {
+        return 1
+      },
+    },
+    formatTimestampShort(value) {
+      return String(value || "")
+    },
+    esc(value) {
+      return String(value || "")
+    },
+    isRequestCanceled() {
+      return false
+    },
+    requestErrorMessage(error, fallback) {
+      return String(error?.message || fallback)
+    },
+    setLog() {},
+    async apiJson(path, options) {
+      assert.equal(path, "/publication-aliases")
+      assert.equal(options.method, "POST")
+      publishedRequest = JSON.parse(options.body)
+      const aliasCount = Object.values(publishedRequest.by_symbol).reduce(
+        (count, aliases) => count + aliases.length,
+        0,
+      )
+      return {
+        policy: {
+          schema_version: 1,
+          revision: 2,
+          version: "v1-published",
+          alias_count: aliasCount,
+          removal_count: 1,
+          by_symbol: publishedRequest.by_symbol,
+          remove_by_symbol: publishedRequest.remove_by_symbol,
+          updated_at: "2026-08-11T00:00:00.000Z",
+          updated_by: "test@example.com",
+        },
+        publication: {
+          version: "v1-published",
+          revision: 2,
+          in_sync: true,
+          published_at: "2026-08-11T00:00:00.000Z",
+          last_error: "",
+        },
+        limits: { max_operations: 500, max_alias_length: 64 },
+      }
+    },
+  }
+  new Script(
+    `${ICONOPLASM_ADMIN_RUNTIME.slice(constantsStart, constantsEnd)}\n${ICONOPLASM_ADMIN_RUNTIME.slice(helpersStart, helpersEnd)}\nthis.contract = { applyPublicationAliasPayload, clonePublicationAliasMap, publicationAliasErrorCanAutoRetry, publicationAliasMapRestoringBaseline, publicationAliasMapWith, publicationAliasMapWithout, publicationAliasMapRows, publicationAliasSearchIndexAfter, publishPublicationAliases }`,
+    { filename: "iconoplasm-admin-publication-aliases.js" },
+  ).runInNewContext(sandbox)
+
+  assert.equal(
+    sandbox.contract.publicationAliasErrorCanAutoRetry({
+      response: { code: "publication_alias_blocklist_dependency_not_published" },
+    }),
+    true,
+  )
+  assert.equal(
+    sandbox.contract.publicationAliasErrorCanAutoRetry({
+      response: { code: "recognition_pair_not_visible" },
+    }),
+    true,
+  )
+  assert.equal(
+    sandbox.contract.publicationAliasErrorCanAutoRetry({
+      response: { code: "recognition_pair_dependencies_not_published" },
+    }),
+    true,
+  )
+  assert.equal(sandbox.contract.publicationAliasSearchIndexAfter(-1, "next", 3), 0)
+  assert.equal(sandbox.contract.publicationAliasSearchIndexAfter(0, "next", 3), 1)
+  assert.equal(sandbox.contract.publicationAliasSearchIndexAfter(1, "previous", 3), 0)
+
+  sandbox.contract.applyPublicationAliasPayload({
+    policy: {
+      schema_version: 1,
+      revision: 1,
+      version: "v1-seeded",
+      alias_count: 45,
+      removal_count: 1,
+      by_symbol: seededBySymbol,
+      remove_by_symbol: seededRemovals,
+      updated_at: "2026-08-10T00:00:00.000Z",
+      updated_by: "seed@example.com",
+    },
+    publication: {
+      version: "v1-seeded",
+      revision: 1,
+      in_sync: true,
+      published_at: "2026-08-10T00:00:00.000Z",
+      last_error: "",
+    },
+    limits: { max_operations: 500, max_alias_length: 64 },
+  })
+  sandbox.state.publicationAliasDraftBySymbol = sandbox.contract.clonePublicationAliasMap(
+    sandbox.state.publicationAliasPolicy.by_symbol,
+  )
+  assert.deepEqual(Array.from(sandbox.state.publicationAliasDraftBySymbol.CDH1), seededCdh1Aliases)
+
+  const oneVariantRemoved = sandbox.contract.publicationAliasMapWithout(
+    sandbox.state.publicationAliasDraftBySymbol,
+    "E-cadherin",
+  )
+  assert.equal(oneVariantRemoved.CDH1.includes("E-cadherin"), false)
+  assert.equal(oneVariantRemoved.CDH1.includes("E-Cadherin"), true)
+  assert.equal(oneVariantRemoved.CDH1.includes("E cadherin"), true)
+  const oneVariantMoved = sandbox.contract.publicationAliasMapWith(
+    sandbox.state.publicationAliasDraftBySymbol,
+    "E-cadherin",
+    "TEST",
+  )
+  assert.equal(oneVariantMoved.CDH1.includes("E-cadherin"), false)
+  assert.equal(oneVariantMoved.CDH1.includes("E-Cadherin"), true)
+  assert.deepEqual(Array.from(oneVariantMoved.TEST), ["E-cadherin"])
+  const variantRestored = sandbox.contract.publicationAliasMapRestoringBaseline(
+    oneVariantRemoved,
+    "E-cadherin",
+    sandbox.state.publicationAliasPolicy.by_symbol,
+  )
+  assert.deepEqual(Array.from(variantRestored.CDH1), seededCdh1Aliases)
+
+  sandbox.state.publicationAliasDraftBySymbol = sandbox.contract.publicationAliasMapWith(
+    sandbox.state.publicationAliasDraftBySymbol,
+    "IL8",
+    "CXCL8",
+  )
+  await sandbox.contract.publishPublicationAliases()
+
+  assert.ok(publishedRequest)
+  assert.deepEqual(Array.from(publishedRequest.by_symbol.CDH1), seededCdh1Aliases)
+  assert.deepEqual(JSON.parse(JSON.stringify(publishedRequest.remove_by_symbol)), seededRemovals)
+  assert.deepEqual(Array.from(publishedRequest.by_symbol.CXCL8), ["IL8"])
 })
 
 test("extension blocklist draft normalization matches the worker contract", () => {
@@ -367,7 +612,7 @@ test("extension blocklist automatically retries transient saved publication lag 
   assert.notEqual(decisionStart, -1)
   assert.notEqual(publishStart, -1)
   assert.notEqual(publishEnd, -1)
-  const source = `${ICONOPLASM_ADMIN_RUNTIME.slice(decisionStart, publishEnd)}\nthis.publishExtensionBlocklist = publishExtensionBlocklist; this.cancelExtensionBlocklistPublicationRetry = cancelExtensionBlocklistPublicationRetry`
+  const source = `${ICONOPLASM_ADMIN_RUNTIME.slice(decisionStart, publishEnd)}\nthis.publishExtensionBlocklist = publishExtensionBlocklist; this.cancelExtensionBlocklistPublicationRetry = cancelExtensionBlocklistPublicationRetry; this.extensionBlocklistErrorCanAutoRetry = extensionBlocklistErrorCanAutoRetry`
 
   function fakeTimers() {
     let nextId = 1
@@ -421,6 +666,7 @@ test("extension blocklist automatically retries transient saved publication lag 
     const statuses = []
     const state = {
       activeTab: "extension",
+      recognitionSection: "blocklist",
       extensionBlocklistLoaded: true,
       extensionBlocklistPolicy: { revision: 1, version: "ebl1-seed", terms: ["AMID"] },
       extensionBlocklistPublication: { version: "", in_sync: false },
@@ -483,6 +729,24 @@ test("extension blocklist automatically retries transient saved publication lag 
       publication: { version: "ebl1-seed", in_sync: true },
     }
   })
+  assert.equal(
+    eventuallyVisible.sandbox.extensionBlocklistErrorCanAutoRetry({
+      response: { code: "extension_blocklist_alias_dependency_not_published" },
+    }),
+    true,
+  )
+  assert.equal(
+    eventuallyVisible.sandbox.extensionBlocklistErrorCanAutoRetry({
+      response: { code: "recognition_pair_not_visible" },
+    }),
+    true,
+  )
+  assert.equal(
+    eventuallyVisible.sandbox.extensionBlocklistErrorCanAutoRetry({
+      response: { code: "recognition_pair_dependencies_not_published" },
+    }),
+    true,
+  )
   await eventuallyVisible.sandbox.publishExtensionBlocklist()
   assert.equal(eventuallyVisible.requests.length, 1)
   assert.equal(eventuallyVisible.timers.count(), 1)
@@ -509,6 +773,21 @@ test("extension blocklist automatically retries transient saved publication lag 
   assert.equal(leftTab.state.extensionBlocklistPublicationRetry, null)
   assert.match(leftTab.statuses.at(-1).message, /stopped because you left this tab/)
   assert.doesNotMatch(leftTab.statuses.at(-1).message, /starts in/)
+
+  const switchedSection = harness(async () => {
+    throw projectionNotVisible()
+  })
+  await switchedSection.sandbox.publishExtensionBlocklist()
+  assert.equal(switchedSection.timers.count(), 1)
+  switchedSection.state.recognitionSection = "aliases"
+  await switchedSection.timers.runNext()
+  assert.equal(
+    switchedSection.requests.length,
+    1,
+    "a subsection switch must prevent the scheduled blocklist POST",
+  )
+  assert.equal(switchedSection.timers.count(), 0)
+  assert.equal(switchedSection.state.extensionBlocklistPublicationRetry, null)
 
   const edited = harness(async () => {
     throw projectionNotVisible()
@@ -855,6 +1134,8 @@ test("admin tab lifecycle unmounts inactive render roots and aborts their reads"
     costReport: null,
     requestsLoaded: false,
     promptsLoaded: false,
+    recognitionSection: "aliases",
+    publicationAliasLoaded: false,
     extensionBlocklistLoaded: false,
     archiveLoaded: false,
     visionStats: [],
@@ -880,6 +1161,11 @@ test("admin tab lifecycle unmounts inactive render roots and aborts their reads"
     refreshGenerationRequests: () => calls.push("refresh-requests"),
     renderImageEditPrompts: () => calls.push("render-prompts"),
     refreshImageEditPrompts: () => calls.push("refresh-prompts"),
+    renderPublicationAliases: () => calls.push("render-aliases"),
+    refreshPublicationAliases: () => calls.push("refresh-aliases"),
+    cancelPublicationAliasPublicationRetry: (message) =>
+      calls.push(["cancel-alias-retry", message]),
+    cancelPublicationAliasSearch: () => calls.push("cancel-alias-search"),
     renderExtensionBlocklist: () => calls.push("render-extension"),
     refreshExtensionBlocklist: () => calls.push("refresh-extension"),
     cancelExtensionBlocklistPublicationRetry: (message) =>
@@ -918,7 +1204,7 @@ test("admin tab lifecycle unmounts inactive render roots and aborts their reads"
   sandbox.setActiveTab("extension")
   assert.equal(document.querySelector("#panel-extension").hidden, false)
   assert.equal(document.querySelector("#vision-stats-list").children.length, 0)
-  assert.ok(calls.includes("refresh-extension"))
+  assert.ok(calls.includes("refresh-aliases"))
 
   sandbox.setActiveTab("activity")
   assert.equal(document.querySelector("#vision-stats-list").children.length, 0)

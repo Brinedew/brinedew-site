@@ -8,7 +8,11 @@ The short version: if the question is about what the live site knows right now, 
 
 For canonical portrait voting and public card artifact consistency, read `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md` before touching data. It contains the PRL split-brain incident, the safe repair path, and the forbidden shortcuts.
 
-For gene-label recognition, read `docs/ICONOPLASM_PUBLICATION_ALIASES.md`. Curated page labels are Website manifest configuration, not D1 data and not a Website Ops catalog publication.
+For gene-label recognition, read `docs/ICONOPLASM_PUBLICATION_ALIASES.md`.
+Curated page labels are administrator-owned desired state in the primary D1 and
+publish first to bounded immutable KV history; they are not a Website Ops catalog
+publication. Anonymous manifest, search, and resolver paths split one atomic
+alias/blocklist recognition-pair bundle and remain KV-only.
 
 ## where to run queries
 

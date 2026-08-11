@@ -1,9 +1,9 @@
 // Iconoplasm service worker
 // Symbol-first contract: gene symbols are canonical keys.
 // Chesterton's fence: generated gene facts still come from the immutable catalog
-// artifact. The small human-curated publication alias overlay is intentionally
-// website-owned so an alias edit does not force a 19k-gene workstation sync or a
-// multi-megabyte catalog refetch.
+// artifact. The small administrator-owned publication alias overlay is delivered
+// by the Website manifest so an alias edit does not force a 19k-gene workstation
+// sync or a multi-megabyte catalog refetch.
 
 if (typeof importScripts === "function") {
   if (!globalThis.IconoplasmCatalogContract) {

@@ -777,6 +777,13 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_extension_blocklist",
     "admin_extension_blocklist.policy",
   ),
+  adminApiContract(
+    "admin_publication_aliases",
+    "/publication-aliases",
+    GET_POST,
+    "admin_publication_aliases",
+    "admin_publication_aliases.policy",
+  ),
   ...[
     "publish",
     "clear-override",

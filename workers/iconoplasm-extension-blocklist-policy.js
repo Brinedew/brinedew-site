@@ -1,10 +1,12 @@
-// ARCHITECTURE FENCE [IPD-008]: D1 owns desired administrator policy, while
-// anonymous manifest reads consume only the bounded KV projection below.
+// ARCHITECTURE FENCE [IPD-008]: D1 owns desired administrator policy. This
+// bounded KV history stages publication; anonymous reads consume the atomic
+// recognition-pair bundle assembled by the shared reconciler.
 import ICONOPLASM_CANDIDATE_CONTRACT from "../iconoplasm-extension/candidate-contract.json" with { type: "json" }
+import { invalidIconoplasmPublishedAliasTerms } from "./iconoplasm-publication-aliases.js"
 import {
-  applyIconoplasmPublicationAliasPolicyToGene,
-  ICONOPLASM_PUBLICATION_ALIASES,
-} from "./iconoplasm-publication-aliases.js"
+  readAuthoritativePublishedIconoplasmPublicationAliases,
+  readPublishedIconoplasmPublicationAliases,
+} from "./iconoplasm-publication-alias-policy.js"
 
 export const ICONOPLASM_EXTENSION_BLOCKLIST_POLICY_KEY = "shared"
 export const ICONOPLASM_EXTENSION_BLOCKLIST_SCHEMA_VERSION = Number(
@@ -136,7 +138,7 @@ export function normalizeIconoplasmExtensionBlocklistTerms(rawTerms) {
   return [...new Set(rawTerms.map(normalizedTerm))].sort()
 }
 
-async function contentVersion(terms) {
+export async function iconoplasmExtensionBlocklistContentVersion(terms) {
   const digest = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(JSON.stringify(terms)),
@@ -170,7 +172,14 @@ function policyFromRow(row) {
   const revision = positiveRevision(row.revision)
   const version = String(row.version || "").trim()
   const rawTerms = safeJsonParse(row.terms_json)
-  if (!revision || !VERSION_RE.test(version) || !Array.isArray(rawTerms)) return null
+  if (
+    !revision ||
+    !VERSION_RE.test(version) ||
+    !Array.isArray(rawTerms) ||
+    (row.depends_on_alias_revision != null && !positiveRevision(row.depends_on_alias_revision))
+  ) {
+    return null
+  }
   let terms
   try {
     terms = normalizeIconoplasmExtensionBlocklistTerms(rawTerms)
@@ -185,6 +194,7 @@ function policyFromRow(row) {
     terms,
     updated_at: String(row.updated_at || "") || null,
     updated_by: String(row.updated_by || "") || "unknown",
+    depends_on_alias_revision: nullableRevision(row.depends_on_alias_revision),
     published_revision: nullableRevision(row.published_revision),
     published_version: String(row.published_version || "").trim() || null,
     published_at: String(row.published_at || "").trim() || null,
@@ -207,6 +217,7 @@ export async function readIconoplasmExtensionBlocklistPolicy(db) {
   const row = await prepare(
     db,
     `SELECT policy_key, terms_json, revision, version, updated_at, updated_by,
+            depends_on_alias_revision,
             published_revision, published_version, published_at,
             projection_lease_token, projection_lease_expires_at, last_projection_error
        FROM icono_extension_blocklist_policy
@@ -230,7 +241,13 @@ function sameTerms(left, right) {
 
 export async function saveIconoplasmExtensionBlocklistPolicy(
   db,
-  { terms: rawTerms, expectedRevision, actor = "unknown", now = new Date() },
+  {
+    terms: rawTerms,
+    expectedRevision,
+    expectedPublicationAliasRevision = null,
+    actor = "unknown",
+    now = new Date(),
+  },
 ) {
   requireBinding(db, "ICONOPLASM_DB")
   if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
@@ -238,6 +255,17 @@ export async function saveIconoplasmExtensionBlocklistPolicy(
       "expected_revision_required",
       "expected_revision must be a positive integer",
       428,
+    )
+  }
+  if (
+    expectedPublicationAliasRevision != null &&
+    (!Number.isSafeInteger(expectedPublicationAliasRevision) ||
+      expectedPublicationAliasRevision < 1)
+  ) {
+    throw policyError(
+      "invalid_publication_alias_revision_dependency",
+      "Expected publication alias revision must be a positive integer",
+      500,
     )
   }
   const terms = normalizeIconoplasmExtensionBlocklistTerms(rawTerms)
@@ -253,7 +281,7 @@ export async function saveIconoplasmExtensionBlocklistPolicy(
   if (sameTerms(current.terms, terms)) return { changed: false, policy: current }
 
   const revision = current.revision + 1
-  const version = await contentVersion(terms)
+  const version = await iconoplasmExtensionBlocklistContentVersion(terms)
   // Validate the exact public representation before the D1 CAS. A policy that
   // cannot fit in the bounded KV artifact must never become desired state.
   projectionForPolicy({ revision, version, terms })
@@ -272,25 +300,39 @@ export async function saveIconoplasmExtensionBlocklistPolicy(
               version = ?3,
               updated_at = ?4,
               updated_by = ?5,
+              depends_on_alias_revision = ?6,
               last_projection_error = NULL
-        WHERE policy_key = ?6
-          AND revision = ?7`,
+        WHERE policy_key = ?7
+          AND revision = ?8
+          AND (
+            ?9 IS NULL
+            OR EXISTS (
+              SELECT 1
+                FROM icono_publication_alias_policy
+               WHERE policy_key = 'curated'
+                 AND revision = ?9
+            )
+          )`,
       [
         termsJson,
         revision,
         version,
         changedAt,
         changedBy,
+        expectedPublicationAliasRevision,
         ICONOPLASM_EXTENSION_BLOCKLIST_POLICY_KEY,
         expectedRevision,
+        expectedPublicationAliasRevision,
       ],
     ),
     prepare(
       db,
       `INSERT OR IGNORE INTO icono_extension_blocklist_policy_history (
-         policy_key, revision, version, terms_json, changed_at, changed_by
+         policy_key, revision, version, terms_json, changed_at, changed_by,
+         depends_on_alias_revision
        )
-       SELECT policy_key, revision, version, terms_json, updated_at, updated_by
+       SELECT policy_key, revision, version, terms_json, updated_at, updated_by,
+              depends_on_alias_revision
          FROM icono_extension_blocklist_policy
         WHERE policy_key = ?1
           AND revision = ?2
@@ -315,8 +357,8 @@ export async function saveIconoplasmExtensionBlocklistPolicy(
   if (changedRows(results?.[0]) !== 1) {
     const latest = await readIconoplasmExtensionBlocklistPolicy(db)
     throw policyError(
-      "extension_blocklist_revision_conflict",
-      "Extension blocklist changed since it was loaded",
+      "extension_blocklist_dependency_revision_conflict",
+      "Extension blocklist or publication alias policy changed since validation",
       409,
       { current: latest },
     )
@@ -324,15 +366,41 @@ export async function saveIconoplasmExtensionBlocklistPolicy(
   return { changed: true, policy: await readIconoplasmExtensionBlocklistPolicy(db) }
 }
 
-function parsePublishedProjection(raw) {
+export async function parseIconoplasmPublishedExtensionBlocklistProjection(raw) {
   const projection = typeof raw === "string" ? safeJsonParse(raw) : raw
   if (!projection || typeof projection !== "object" || Array.isArray(projection)) return null
-  if (Number(projection.schema_version) !== ICONOPLASM_EXTENSION_BLOCKLIST_SCHEMA_VERSION) {
+  const fields = Object.keys(projection).sort()
+  const publicFields = ["revision", "schema_version", "term_count", "terms", "version"]
+  const internalFields = [...publicFields, "depends_on_alias_revision"].sort()
+  if (
+    JSON.stringify(fields) !== JSON.stringify(publicFields) &&
+    JSON.stringify(fields) !== JSON.stringify(internalFields)
+  ) {
     return null
   }
-  const revision = positiveRevision(projection.revision)
+  if (
+    typeof projection.schema_version !== "number" ||
+    projection.schema_version !== ICONOPLASM_EXTENSION_BLOCKLIST_SCHEMA_VERSION
+  ) {
+    return null
+  }
+  const revision =
+    typeof projection.revision === "number" ? positiveRevision(projection.revision) : null
   const version = String(projection.version || "").trim()
-  if (!revision || !VERSION_RE.test(version) || !Array.isArray(projection.terms)) return null
+  const dependency =
+    projection.depends_on_alias_revision == null
+      ? null
+      : typeof projection.depends_on_alias_revision === "number"
+        ? positiveRevision(projection.depends_on_alias_revision)
+        : null
+  if (
+    !revision ||
+    !VERSION_RE.test(version) ||
+    !Array.isArray(projection.terms) ||
+    (projection.depends_on_alias_revision != null && !dependency)
+  ) {
+    return null
+  }
   let terms
   try {
     terms = normalizeIconoplasmExtensionBlocklistTerms(projection.terms)
@@ -340,13 +408,21 @@ function parsePublishedProjection(raw) {
     return null
   }
   if (!sameTerms(terms, projection.terms)) return null
-  if (Number(projection.term_count) !== terms.length) return null
+  if (
+    typeof projection.term_count !== "number" ||
+    !Number.isSafeInteger(projection.term_count) ||
+    projection.term_count !== terms.length ||
+    version !== (await iconoplasmExtensionBlocklistContentVersion(terms))
+  ) {
+    return null
+  }
   const normalized = {
     schema_version: ICONOPLASM_EXTENSION_BLOCKLIST_SCHEMA_VERSION,
     revision,
     version,
     term_count: terms.length,
     terms,
+    depends_on_alias_revision: dependency,
   }
   if (
     utf8ByteLength(JSON.stringify(normalized)) > ICONOPLASM_EXTENSION_BLOCKLIST_MAX_PROJECTION_BYTES
@@ -386,10 +462,26 @@ async function readHighestValidProjectionFromKv(kv) {
   const keys = await listProjectionKeys(kv)
   for (let index = keys.length - 1; index >= 0; index -= 1) {
     const entry = keys[index]
-    const parsed = parsePublishedProjection(await kv.get(entry.key))
+    const parsed = await parseIconoplasmPublishedExtensionBlocklistProjection(
+      await kv.get(entry.key),
+    )
     if (parsed?.revision === entry.revision) return parsed
   }
   return null
+}
+
+export async function readRetainedPublishedIconoplasmExtensionBlocklists(kv) {
+  requireBinding(kv, "KV")
+  const keys = await listProjectionKeys(kv)
+  const projections = []
+  for (let index = keys.length - 1; index >= 0; index -= 1) {
+    const entry = keys[index]
+    const parsed = await parseIconoplasmPublishedExtensionBlocklistProjection(
+      await kv.get(entry.key),
+    )
+    if (parsed?.revision === entry.revision) projections.push(parsed)
+  }
+  return projections
 }
 
 export async function readAuthoritativePublishedIconoplasmExtensionBlocklist(kv) {
@@ -419,7 +511,17 @@ export async function readPublishedIconoplasmExtensionBlocklist(
   const candidate = await readHighestValidProjectionFromKv(kv)
   const value = monotonicProjection(cached?.value || null, candidate)
   publicProjectionCache.set(kv, { value, expiresAt: nowMs + PUBLIC_CACHE_TTL_MS })
-  return value
+  return value ? publicBlocklistProjection(value) : null
+}
+
+function publicBlocklistProjection(projection) {
+  return Object.freeze({
+    schema_version: projection.schema_version,
+    revision: projection.revision,
+    version: projection.version,
+    term_count: projection.term_count,
+    terms: projection.terms,
+  })
 }
 
 function cachePublishedProjection(kv, candidate) {
@@ -437,6 +539,7 @@ function projectionForPolicy(policy) {
     version: policy.version,
     term_count: policy.terms.length,
     terms: [...policy.terms],
+    depends_on_alias_revision: nullableRevision(policy.depends_on_alias_revision),
   }
   const raw = JSON.stringify(projection)
   if (utf8ByteLength(raw) > ICONOPLASM_EXTENSION_BLOCKLIST_MAX_PROJECTION_BYTES) {
@@ -454,6 +557,7 @@ function projectionMatchesPolicy(projection, policy) {
     projection &&
     policy &&
     projection.revision === policy.revision &&
+    projection.depends_on_alias_revision === nullableRevision(policy.depends_on_alias_revision) &&
     projection.version === policy.version &&
     sameTerms(projection.terms, policy.terms),
   )
@@ -525,7 +629,11 @@ async function readJsonFromKv(kv, key) {
   return safeJsonParse(raw)
 }
 
-export async function validateIconoplasmExtensionBlocklistAgainstPublishedScanner(kv, terms) {
+export async function validateIconoplasmExtensionBlocklistAgainstPublishedScanner(
+  kv,
+  terms,
+  { publicationAliases = null } = {},
+) {
   requireBinding(kv, "KV")
   const normalizedTerms = normalizeIconoplasmExtensionBlocklistTerms(terms)
   if (normalizedTerms.length === 0) return normalizedTerms
@@ -550,51 +658,13 @@ export async function validateIconoplasmExtensionBlocklistAgainstPublishedScanne
     )
   }
 
-  const canonicalSymbols = new Set(
-    Object.keys(genes)
-      .map((symbol) =>
-        String(symbol || "")
-          .trim()
-          .toUpperCase(),
-      )
-      .filter(Boolean),
+  const effectivePublicationAliases =
+    publicationAliases || (await readPublishedIconoplasmPublicationAliases(kv))
+  const invalidTerms = invalidIconoplasmPublishedAliasTerms(
+    genes,
+    effectivePublicationAliases,
+    normalizedTerms,
   )
-  const aliasOwners = new Map()
-  for (const [rawSymbol, gene] of Object.entries(genes)) {
-    const symbol = String(rawSymbol || "")
-      .trim()
-      .toUpperCase()
-    const effectiveGene = applyIconoplasmPublicationAliasPolicyToGene(
-      gene,
-      symbol,
-      ICONOPLASM_PUBLICATION_ALIASES,
-    )
-    for (const rawAlias of Array.isArray(effectiveGene?.a) ? effectiveGene.a : []) {
-      let alias
-      try {
-        alias = normalizedTerm(String(rawAlias || ""), 0)
-      } catch {
-        continue
-      }
-      if (!alias || alias === symbol || canonicalSymbols.has(alias)) continue
-      if (!aliasOwners.has(alias)) {
-        aliasOwners.set(alias, symbol)
-      } else if (aliasOwners.get(alias) !== symbol) {
-        aliasOwners.set(alias, null)
-      }
-    }
-  }
-
-  const invalidTerms = []
-  for (const term of normalizedTerms) {
-    if (canonicalSymbols.has(term)) {
-      invalidTerms.push({ term, reason: "canonical_symbol" })
-    } else if (!aliasOwners.has(term)) {
-      invalidTerms.push({ term, reason: "not_published_alias" })
-    } else if (!aliasOwners.get(term)) {
-      invalidTerms.push({ term, reason: "ambiguous_alias" })
-    }
-  }
   if (invalidTerms.length) {
     throw policyError(
       "extension_blocklist_terms_not_aliases",
@@ -686,13 +756,30 @@ export async function publishIconoplasmExtensionBlocklistPolicy(
           503,
         )
       }
+      if (policy.depends_on_alias_revision) {
+        const authoritativeAliases =
+          await readAuthoritativePublishedIconoplasmPublicationAliases(kv)
+        if (
+          !authoritativeAliases ||
+          authoritativeAliases.revision < policy.depends_on_alias_revision
+        ) {
+          throw policyError(
+            "extension_blocklist_alias_dependency_not_published",
+            `Publication alias revision ${policy.depends_on_alias_revision} must be visible before this blocklist revision`,
+            503,
+          )
+        }
+        await validateIconoplasmExtensionBlocklistAgainstPublishedScanner(kv, policy.terms, {
+          publicationAliases: authoritativeAliases.overlay,
+        })
+      }
       const { projection, raw } = projectionForPolicy(policy)
       const publishedNow = await readHighestValidProjectionFromKv(kv)
       assertProjectionDoesNotConflictWithPolicy(publishedNow, policy)
       const key = iconoplasmExtensionBlocklistKvKey(policy.revision)
       const existingRaw = await kv.get(key)
       if (existingRaw != null) {
-        const existing = parsePublishedProjection(existingRaw)
+        const existing = await parseIconoplasmPublishedExtensionBlocklistProjection(existingRaw)
         if (!projectionMatchesPolicy(existing, policy)) {
           throw policyError(
             "extension_blocklist_projection_revision_collision",

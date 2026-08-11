@@ -3,7 +3,7 @@
 
   // Chesterton's fence: this matcher scores text against published data only. Broad
   // HGNC coverage belongs in the workstation export; deliberately curated page
-  // labels belong in the website-owned publication-alias manifest overlay. Do not
+  // labels belong in the administrator-owned publication-alias manifest overlay. Do not
   // teach the content script to guess missing biology facts on its own.
 
   const LETTER_OR_NUMBER_RE = /[\p{L}\p{N}]/u

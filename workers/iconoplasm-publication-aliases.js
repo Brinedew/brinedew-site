@@ -1,6 +1,8 @@
-const PUBLICATION_ALIAS_SCHEMA_VERSION = 1
-const MAX_PUBLICATION_ALIAS_COUNT = 500
-const MAX_PUBLICATION_ALIAS_LENGTH = 64
+export const PUBLICATION_ALIAS_SCHEMA_VERSION = 1
+export const MAX_PUBLICATION_ALIAS_COUNT = 500
+export const MAX_PUBLICATION_ALIAS_LENGTH = 64
+
+const CONTROL_CHARACTER_RE = /[\u0000-\u001f\u007f]/u
 
 export function expandIconoplasmPublicationAliasForms({
   parts,
@@ -39,10 +41,10 @@ export function expandIconoplasmPublicationAliasForms({
   ])
 }
 
-// Human-curated labels belong to the website release, not to a workstation
-// publication run. Keep this list small: the generated HGNC alias catalog still
-// owns broad synonym coverage; this overlay only admits labels that are useful
-// enough to instrument across arbitrary web pages. Maintenance contract:
+// This immutable dictionary is the first-deploy bootstrap and normalization
+// contract. Routine curated-label authority lives in administrator-managed D1;
+// the generated HGNC alias catalog still owns broad biological coverage. Keep
+// the bootstrap small and aligned with the migration seed. Maintenance contract:
 // docs/ICONOPLASM_PUBLICATION_ALIASES.md
 const RAW_PUBLICATION_ALIASES_BY_SYMBOL = Object.freeze({
   BABAM2: Object.freeze(["BRE"]),
@@ -89,24 +91,25 @@ const RAW_PUBLICATION_ALIAS_REMOVALS_BY_SYMBOL = Object.freeze({
   CDH17: Object.freeze(["cadherin"]),
 })
 
-function normalizeSymbol(value) {
+export function normalizePublicationAliasSymbol(value) {
   return String(value || "")
     .trim()
     .toUpperCase()
 }
 
-function normalizeAlias(value) {
+export function normalizePublicationAlias(value) {
   const alias = String(value || "")
     .trim()
     .replace(/[\u2010-\u2015\u2212]/g, "-")
     .replace(/\s+/g, " ")
   if (!alias || alias.length > MAX_PUBLICATION_ALIAS_LENGTH) return ""
+  if (CONTROL_CHARACTER_RE.test(alias)) return ""
   if (!/[A-Za-z\u0370-\u03ff]/u.test(alias)) return ""
   return alias
 }
 
-function aliasCollisionKey(value) {
-  return normalizeAlias(value).toUpperCase()
+export function publicationAliasCollisionKey(value) {
+  return normalizePublicationAlias(value).toUpperCase()
 }
 
 export function validateIconoplasmPublicationAliases(
@@ -120,7 +123,11 @@ export function validateIconoplasmPublicationAliases(
   const canonicalSet =
     canonicalSymbols == null
       ? null
-      : new Set(Array.from(canonicalSymbols, (symbol) => normalizeSymbol(symbol)).filter(Boolean))
+      : new Set(
+          Array.from(canonicalSymbols, (symbol) => normalizePublicationAliasSymbol(symbol)).filter(
+            Boolean,
+          ),
+        )
   const aliasesBySymbol = {}
   const removalsBySymbol = {}
   const aliasOwners = new Map()
@@ -128,7 +135,7 @@ export function validateIconoplasmPublicationAliases(
   let removalCount = 0
 
   for (const rawSymbol of Object.keys(rawAliases).sort()) {
-    const symbol = normalizeSymbol(rawSymbol)
+    const symbol = normalizePublicationAliasSymbol(rawSymbol)
     if (!symbol || symbol !== rawSymbol) {
       throw new TypeError(`Invalid canonical publication-alias symbol: ${rawSymbol}`)
     }
@@ -143,11 +150,11 @@ export function validateIconoplasmPublicationAliases(
     const aliases = []
     const localAliases = new Set()
     for (const rawAlias of rawValues) {
-      const alias = normalizeAlias(rawAlias)
+      const alias = normalizePublicationAlias(rawAlias)
       if (!alias || alias !== rawAlias) {
         throw new TypeError(`Invalid publication alias for ${symbol}: ${String(rawAlias || "")}`)
       }
-      const key = aliasCollisionKey(alias)
+      const key = publicationAliasCollisionKey(alias)
       if (!key || (key === symbol && alias === symbol)) {
         throw new TypeError(
           `Publication alias for ${symbol} duplicates its canonical symbol: ${alias}`,
@@ -178,7 +185,7 @@ export function validateIconoplasmPublicationAliases(
     throw new TypeError("Iconoplasm publication alias removals must be an object")
   }
   for (const rawSymbol of Object.keys(rawRemovals).sort()) {
-    const symbol = normalizeSymbol(rawSymbol)
+    const symbol = normalizePublicationAliasSymbol(rawSymbol)
     if (!symbol || symbol !== rawSymbol) {
       throw new TypeError(`Invalid canonical publication-alias removal symbol: ${rawSymbol}`)
     }
@@ -193,11 +200,11 @@ export function validateIconoplasmPublicationAliases(
     const removals = []
     const localRemovalKeys = new Set()
     const localAdditionKeys = new Set(
-      (aliasesBySymbol[symbol] || []).map(aliasCollisionKey).filter(Boolean),
+      (aliasesBySymbol[symbol] || []).map(publicationAliasCollisionKey).filter(Boolean),
     )
     for (const rawAlias of rawValues) {
-      const alias = normalizeAlias(rawAlias)
-      const key = aliasCollisionKey(alias)
+      const alias = normalizePublicationAlias(rawAlias)
+      const key = publicationAliasCollisionKey(alias)
       if (!alias || alias !== rawAlias || !key) {
         throw new TypeError(
           `Invalid publication alias removal for ${symbol}: ${String(rawAlias || "")}`,
@@ -228,30 +235,38 @@ export function validateIconoplasmPublicationAliases(
   })
 }
 
-export const ICONOPLASM_PUBLICATION_ALIASES = validateIconoplasmPublicationAliases()
+export const ICONOPLASM_DEFAULT_PUBLICATION_ALIASES = validateIconoplasmPublicationAliases()
+
+export async function iconoplasmPublicationAliasManifestFromPolicy(rawPolicy) {
+  const source = rawPolicy && typeof rawPolicy === "object" ? rawPolicy : {}
+  const policy = validateIconoplasmPublicationAliases(source.by_symbol || {}, {
+    rawRemovals: source.remove_by_symbol || {},
+  })
+  const versionInput = JSON.stringify(policy)
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(versionInput))
+  const versionHash = Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 16)
+  return Object.freeze({
+    ...policy,
+    version: `v${PUBLICATION_ALIAS_SCHEMA_VERSION}-${versionHash}`,
+  })
+}
 
 let publicationAliasManifestPromise = null
 
 export async function iconoplasmPublicationAliasManifest() {
   if (!publicationAliasManifestPromise) {
-    publicationAliasManifestPromise = (async () => {
-      const versionInput = JSON.stringify(ICONOPLASM_PUBLICATION_ALIASES)
-      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(versionInput))
-      const versionHash = Array.from(new Uint8Array(digest))
-        .map((value) => value.toString(16).padStart(2, "0"))
-        .join("")
-        .slice(0, 16)
-      return Object.freeze({
-        ...ICONOPLASM_PUBLICATION_ALIASES,
-        version: `v${PUBLICATION_ALIAS_SCHEMA_VERSION}-${versionHash}`,
-      })
-    })()
+    publicationAliasManifestPromise = iconoplasmPublicationAliasManifestFromPolicy(
+      ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
+    )
   }
   return publicationAliasManifestPromise
 }
 
 export function applyIconoplasmPublicationAliasPolicyToGene(gene, symbol, overlay) {
-  const canonicalSymbol = normalizeSymbol(symbol || gene?.s)
+  const canonicalSymbol = normalizePublicationAliasSymbol(symbol || gene?.s)
   if (!gene) return gene
   const additions = overlay?.by_symbol?.[canonicalSymbol]
   const removals = overlay?.remove_by_symbol?.[canonicalSymbol]
@@ -262,9 +277,9 @@ export function applyIconoplasmPublicationAliasPolicyToGene(gene, symbol, overla
     return gene
   }
 
-  const removalKeys = new Set((removals || []).map(aliasCollisionKey).filter(Boolean))
+  const removalKeys = new Set((removals || []).map(publicationAliasCollisionKey).filter(Boolean))
   const mergedAliases = (Array.isArray(gene.a) ? gene.a : []).filter(
-    (alias) => !removalKeys.has(aliasCollisionKey(alias)),
+    (alias) => !removalKeys.has(publicationAliasCollisionKey(alias)),
   )
   const seen = new Set(mergedAliases)
   for (const alias of additions || []) {
@@ -276,4 +291,52 @@ export function applyIconoplasmPublicationAliasPolicyToGene(gene, symbol, overla
   if (mergedAliases.length) nextGene.a = mergedAliases
   else delete nextGene.a
   return nextGene
+}
+
+export function indexIconoplasmPublishedAliases(genes, overlay) {
+  const canonicalSymbols = new Set(
+    Object.keys(genes || {})
+      .map(normalizePublicationAliasSymbol)
+      .filter(Boolean),
+  )
+  const aliasOwners = new Map()
+  for (const [rawSymbol, gene] of Object.entries(genes || {})) {
+    const symbol = normalizePublicationAliasSymbol(rawSymbol)
+    if (!symbol) continue
+    const effectiveGene = applyIconoplasmPublicationAliasPolicyToGene(gene, symbol, overlay)
+    for (const rawAlias of Array.isArray(effectiveGene?.a) ? effectiveGene.a : []) {
+      const key = publishedAliasTermKey(rawAlias)
+      if (!key || key === symbol || canonicalSymbols.has(key)) continue
+      if (!aliasOwners.has(key)) aliasOwners.set(key, symbol)
+      else if (aliasOwners.get(key) !== symbol) aliasOwners.set(key, null)
+    }
+  }
+  return { canonicalSymbols, aliasOwners }
+}
+
+export function invalidIconoplasmPublishedAliasTerms(genes, overlay, terms) {
+  const { canonicalSymbols, aliasOwners } = indexIconoplasmPublishedAliases(genes, overlay)
+  const invalidTerms = []
+  for (const rawTerm of terms || []) {
+    const term = publishedAliasTermKey(rawTerm)
+    if (!term || canonicalSymbols.has(term)) {
+      invalidTerms.push({ term: term || String(rawTerm || ""), reason: "canonical_symbol" })
+    } else if (!aliasOwners.has(term)) {
+      invalidTerms.push({ term, reason: "not_published_alias" })
+    } else if (!aliasOwners.get(term)) {
+      invalidTerms.push({ term, reason: "ambiguous_alias" })
+    }
+  }
+  return invalidTerms
+}
+
+function publishedAliasTermKey(value) {
+  const term = String(value || "")
+    .trim()
+    .replace(/[\u2010-\u2015\u2212]/g, "-")
+    .toUpperCase()
+  if (!term || term.length > MAX_PUBLICATION_ALIAS_LENGTH || CONTROL_CHARACTER_RE.test(term)) {
+    return ""
+  }
+  return term
 }
