@@ -368,7 +368,9 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               </div>
             </div>
 
-            <form class="publication-alias-composer" id="publication-alias-form" novalidate>
+            <div class="recognition-editor">
+              <div class="recognition-command-rail">
+                <form class="publication-alias-composer" id="publication-alias-form" novalidate>
               <div class="publication-alias-fields">
                 <label for="publication-alias-input">Alias
                   <input id="publication-alias-input" type="text" maxlength="64" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="publication-alias-input-help" placeholder="IL8" disabled />
@@ -390,24 +392,28 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
                 <button type="button" id="publication-alias-cancel-edit" hidden>Cancel edit</button>
                 <button class="btn-primary" type="submit" id="publication-alias-add" disabled>Add mapping to draft</button>
               </div>
-            </form>
+                </form>
 
-            <div class="publication-alias-list-head">
-              <div>
-                <h4>Publication draft</h4>
-                <p class="small">Each row maps one exact alias to one canonical gene. Generated corrections are preserved unchanged.</p>
+                <div class="recognition-actions">
+                  <div class="recognition-status" id="publication-alias-status" role="status" aria-live="polite"></div>
+                  <button class="btn-primary publication-alias-publish" type="button" id="publication-alias-publish" disabled>Publish alias changes</button>
+                </div>
               </div>
-              <label class="publication-alias-filter" for="publication-alias-filter">Filter mappings
-                <input id="publication-alias-filter" type="search" autocomplete="off" placeholder="Alias or gene symbol" disabled />
-              </label>
-              <span class="recognition-dirty" id="publication-alias-dirty" data-dirty="false">Saved policy</span>
-            </div>
 
-            <ul class="publication-alias-mappings" id="publication-alias-mappings" aria-label="Curated alias publication draft" aria-live="polite"></ul>
+              <section class="recognition-draft-pane" aria-labelledby="publication-alias-draft-heading">
+                <div class="publication-alias-list-head">
+                  <div>
+                    <h4 id="publication-alias-draft-heading">Publication draft</h4>
+                    <p class="small">Each row maps one exact alias to one canonical gene. Generated corrections are preserved unchanged.</p>
+                  </div>
+                  <label class="publication-alias-filter" for="publication-alias-filter">Filter mappings
+                    <input id="publication-alias-filter" type="search" autocomplete="off" placeholder="Alias or gene symbol" disabled />
+                  </label>
+                  <span class="recognition-dirty" id="publication-alias-dirty" data-dirty="false">Saved policy</span>
+                </div>
 
-            <div class="recognition-actions">
-              <div class="recognition-status" id="publication-alias-status" role="status" aria-live="polite"></div>
-              <button class="btn-primary publication-alias-publish" type="button" id="publication-alias-publish" disabled>Publish alias changes</button>
+                <ul class="publication-alias-mappings" id="publication-alias-mappings" aria-label="Curated alias publication draft" aria-live="polite"></ul>
+              </section>
             </div>
           </section>
         </div>
@@ -441,32 +447,38 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               </div>
             </div>
 
-            <div class="extension-blocklist-composer">
-              <label for="extension-blocklist-input">Add terms to this draft</label>
-              <div class="extension-blocklist-input-row">
-                <textarea id="extension-blocklist-input" rows="3" spellcheck="false" autocomplete="off" autocapitalize="characters" aria-describedby="extension-blocklist-input-help" placeholder="Paste terms separated by commas, spaces, or new lines" disabled></textarea>
-                <button class="btn-primary" type="button" id="extension-blocklist-add" disabled>Add to draft</button>
+            <div class="recognition-editor">
+              <div class="recognition-command-rail">
+                <div class="extension-blocklist-composer">
+                  <label for="extension-blocklist-input">Add terms to this draft</label>
+                  <div class="extension-blocklist-input-row">
+                    <textarea id="extension-blocklist-input" rows="3" spellcheck="false" autocomplete="off" autocapitalize="characters" aria-describedby="extension-blocklist-input-help" placeholder="Paste terms separated by commas, spaces, or new lines" disabled></textarea>
+                    <button class="btn-primary" type="button" id="extension-blocklist-add" disabled>Add to draft</button>
+                  </div>
+                  <p class="small" id="extension-blocklist-input-help">Use an existing non-canonical catalog alias, or protect a larger phrase that contains a recognized gene label (for example, APC/C). A protected phrase suppresses every gene highlight inside it while the same gene still highlights elsewhere. Terms are normalized to uppercase. Adding only changes the draft; nothing reaches extensions until you publish.</p>
+                  <details class="extension-blocklist-details">
+                    <summary>How publishing works</summary>
+                    <p class="small">The 76 packaged terms are only the first-run and offline fallback. A loaded policy replaces the complete shared list for every protocol-capable extension.</p>
+                  </details>
+                </div>
+
+                <div class="extension-blocklist-actions">
+                  <div class="extension-blocklist-status" id="extension-blocklist-status" role="status" aria-live="polite"></div>
+                  <button class="btn-primary extension-blocklist-publish" type="button" id="extension-blocklist-publish" disabled>Publish shared terms</button>
+                </div>
               </div>
-              <p class="small" id="extension-blocklist-input-help">Use an existing non-canonical catalog alias, or protect a larger phrase that contains a recognized gene label (for example, APC/C). A protected phrase suppresses every gene highlight inside it while the same gene still highlights elsewhere. Terms are normalized to uppercase. Adding only changes the draft; nothing reaches extensions until you publish.</p>
-              <details class="extension-blocklist-details">
-                <summary>How publishing works</summary>
-                <p class="small">The 76 packaged terms are only the first-run and offline fallback. A loaded policy replaces the complete shared list for every protocol-capable extension.</p>
-              </details>
-            </div>
 
-            <div class="extension-blocklist-draft-head">
-              <div>
-                <h4>Publication draft</h4>
-                <p class="small">This draft replaces the full shared list. Remove a term here to unblock it for everyone on the next publish.</p>
-              </div>
-              <span class="extension-blocklist-dirty" id="extension-blocklist-dirty" data-dirty="false">Saved policy</span>
-            </div>
+              <section class="recognition-draft-pane" aria-labelledby="extension-blocklist-draft-heading">
+                <div class="extension-blocklist-draft-head">
+                  <div>
+                    <h4 id="extension-blocklist-draft-heading">Publication draft</h4>
+                    <p class="small">This draft replaces the full shared list. Remove a term here to unblock it for everyone on the next publish.</p>
+                  </div>
+                  <span class="extension-blocklist-dirty" id="extension-blocklist-dirty" data-dirty="false">Saved policy</span>
+                </div>
 
-            <ul class="extension-blocklist-terms" id="extension-blocklist-terms" aria-label="Shared blocklist draft terms" aria-live="polite"></ul>
-
-            <div class="extension-blocklist-actions">
-              <div class="extension-blocklist-status" id="extension-blocklist-status" role="status" aria-live="polite"></div>
-              <button class="btn-primary extension-blocklist-publish" type="button" id="extension-blocklist-publish" disabled>Publish shared terms</button>
+                <ul class="extension-blocklist-terms" id="extension-blocklist-terms" aria-label="Shared blocklist draft terms" aria-live="polite"></ul>
+              </section>
             </div>
           </section>
         </div>
