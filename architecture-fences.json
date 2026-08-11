@@ -171,9 +171,9 @@
     {
       "id": "IPD-005",
       "title": "The primary Iconoplasm D1 is bounded operational state",
-      "decision": "The primary D1 stays below an 80% target of its 500,000,000-byte per-database wall by storing immutable profile prose once and moving publish events older than 30 days to a separately bound cold audit D1 after row-level verification.",
-      "reason": "Duplicated manifestation prose and an unbounded 297,818-row publish ledger filled the database and stopped all writes. The old dashboard compared the database to the unrelated 5 GB account allowance, so it reported roughly 10% usage at the per-database hard limit.",
-      "change_control": "Large payload placement, read-model columns, append-only ledgers, retention, archive bindings, capacity thresholds, observability, migrations, tests, instructions, runbook, and deploy enforcement must change atomically. Cold history may be removed from the hot database only after verified archival.",
+      "decision": "The primary D1 stays below an 80% target of its 500,000,000-byte per-database wall by storing immutable profile prose once, moving publish events older than 30 days to a separately bound cold audit D1 after row-level verification, and retaining only one current row plus the newest 100 audit revisions for each administrator recognition policy.",
+      "reason": "Duplicated manifestation prose and an unbounded 297,818-row publish ledger filled the database and stopped all writes. The old dashboard compared the database to the unrelated 5 GB account allowance, so it reported roughly 10% usage at the per-database hard limit. Administrator policy revisions are operational audit state, not another unbounded event ledger.",
+      "change_control": "Large payload placement, read-model columns, append-only ledgers, recognition-policy desired rows and 100-revision retention, archive bindings, capacity thresholds, observability, migrations, tests, instructions, runbook, and deploy enforcement must change atomically. Cold history may be removed from the hot database only after verified archival.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-667",
       "additional_required_marker_categories": ["config", "deploy", "migration"],
@@ -199,6 +199,11 @@
           "token": "ARCHITECTURE FENCE [IPD-005]"
         },
         {
+          "category": "source",
+          "file": "workers/iconoplasm-publication-alias-policy.js",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        },
+        {
           "category": "migration",
           "file": "migrations-iconoplasm/0063_gene_card_materializations.sql",
           "token": "ARCHITECTURE FENCE [IPD-005]"
@@ -206,6 +211,11 @@
         {
           "category": "migration",
           "file": "migrations-iconoplasm/0065_extension_blocklist_policy.sql",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        },
+        {
+          "category": "migration",
+          "file": "migrations-iconoplasm/0066_publication_alias_policy.sql",
           "token": "ARCHITECTURE FENCE [IPD-005]"
         },
         {
@@ -221,6 +231,11 @@
         {
           "category": "test",
           "file": "workers/iconoplasm-gene-card-materialization.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        },
+        {
+          "category": "test",
+          "file": "workers/iconoplasm-publication-alias-policy.test.js",
           "token": "ARCHITECTURE FENCE [IPD-005]"
         },
         {
@@ -326,9 +341,9 @@
     {
       "id": "IPD-008",
       "title": "Anonymous startup and extension hover use the published read plane",
-      "decision": "Anonymous homepage startup avoids auth, settings, inventory, and admin probes; authenticated startup is gated by a non-authoritative session-presence hint. The visible signed-out archive contains the four fixed published starters INS, RHO, PRL, and CD4; decorative reverse-card continuation is inert markup and never expands the discovery set or triggers reads. Signed-out dossier visits persist across the full 19,023-gene browser-local shelf; an authenticated page session merges at most 200 pending symbols and retains the remainder for later sessions. Extension pages receive a separately versioned scanner artifact capped at 3 MiB with no portrait references. Visible and hovered genes hydrate immutable published card details into a 4 MiB revision-keyed cache. The complete admin-managed shared text blocklist is a separately revisioned KV projection carried by the existing catalog manifest; clients retain the last valid projection and use the packaged list only as first-run or offline fallback.",
-      "reason": "The shoutout risk is sustained daily request and D1 consumption, while the browser risk is cloning cold portrait metadata into every tab and crossing Chromium's 10 MiB storage quota. Separating the compact matcher from bounded on-demand card detail keeps both public infrastructure work and per-user browser cost proportional to real use. Carrying the tiny shared-term policy in the manifest avoids a second polling path, catalog rebuilds, and divergent packaged default lists.",
-      "change_control": "Anonymous bootstrap, session-presence semantics, catalog, scanner, card and shared-term publication metadata, public batch projection, extension scanner and shared-term migration, storage budgets, cache invalidation, tests, instructions, and this runbook must change atomically. The readable marker must never carry identity or authority, public shared-term reads must never fall back to D1, term-only revisions must not rebuild the scanner, transient public-read failures must remain retryable, and portrait references must not return to the per-tab scanner map.",
+      "decision": "Anonymous homepage startup avoids auth, settings, inventory, and admin probes; authenticated startup is gated by a non-authoritative session-presence hint. The visible signed-out archive contains the four fixed published starters INS, RHO, PRL, and CD4; decorative reverse-card continuation is inert markup and never expands the discovery set or triggers reads. Signed-out dossier visits persist across the full 19,023-gene browser-local shelf; an authenticated page session merges at most 200 pending symbols and retains the remainder for later sessions. Extension pages receive a separately versioned scanner artifact capped at 3 MiB with no portrait references. Visible and hovered genes hydrate immutable published card details into a 4 MiB revision-keyed cache. Administrator-owned publication aliases and the complete shared text blocklist have separate bounded D1 desired state and immutable KV staging histories, but anonymous manifest, search, and resolver paths split only the newest valid immutable recognition-pair bundle. That single value is the cross-region consistency boundary; its outward alias and blocklist schemas remain unchanged, and clients retain the last valid pair while packaged lists are only first-run or offline fallback.",
+      "reason": "The shoutout risk is sustained daily request and D1 consumption, while the browser risk is cloning cold portrait metadata into every tab and crossing Chromium's 10 MiB storage quota. Separating the compact matcher from bounded on-demand card detail keeps both public infrastructure work and per-user browser cost proportional to real use. Carrying both tiny administrator policies in one manifest bundle avoids a second polling path, catalog rebuilds, divergent packaged defaults, and eventually consistent KV regions exposing a blocklist term without its required unambiguous alias. A healthy cold read stays O(1): one bounded pair-key list and one value GET regardless of individual history size.",
+      "change_control": "Anonymous bootstrap, session-presence semantics, catalog, scanner, card and recognition-policy publication metadata, the atomic pair boundary, public batch projection, extension scanner and recognition-policy migration, historical compatibility snapshots, storage budgets, cache invalidation, tests, verification, instructions, and this runbook must change atomically. The readable marker must never carry identity or authority; anonymous recognition reads must never fall back to D1 or independently combine alias and blocklist revisions; a nonempty malformed or nonvisible pair namespace must fail closed unless an isolate has last-known-good state; bootstrap is allowed only while the pair namespace is empty and must preserve the newest dependency-free legacy blocklist; policy-only revisions must not rebuild the scanner; valid but not-yet-visible compatibility snapshots must remain retryable; and portrait references must not return to the per-tab scanner map.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-673",
       "additional_required_marker_categories": [],
@@ -369,8 +384,33 @@
           "token": "ARCHITECTURE FENCE [IPD-008]"
         },
         {
+          "category": "source",
+          "file": "workers/iconoplasm-publication-alias-policy.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm-admin-publication-alias-routes.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm-admin-extension-blocklist-routes.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm-recognition-policy-reconciliation.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
           "category": "migration",
           "file": "migrations-iconoplasm/0065_extension_blocklist_policy.sql",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "migration",
+          "file": "migrations-iconoplasm/0066_publication_alias_policy.sql",
           "token": "ARCHITECTURE FENCE [IPD-008]"
         },
         {
@@ -401,6 +441,26 @@
         {
           "category": "test",
           "file": "workers/iconoplasm-extension-blocklist-public.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "test",
+          "file": "workers/iconoplasm-publication-alias-policy.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "test",
+          "file": "scripts/verify-iconoplasm-publication-aliases.mjs",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "test",
+          "file": "scripts/verify-iconoplasm-publication-aliases.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "deploy",
+          "file": ".github/workflows/deploy-quartz.yml",
           "token": "ARCHITECTURE FENCE [IPD-008]"
         }
       ]

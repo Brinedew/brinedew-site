@@ -8,6 +8,10 @@ import {
   publishIconoplasmGalleryDirtyShardsForTest,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  listIconoplasmTestKv,
+  seedIconoplasmTestRecognitionPair,
+} from "./iconoplasm-recognition-policy-test-fixture.js"
 
 const source = readFileSync(
   new URL(
@@ -474,11 +478,13 @@ function buildEnv({
   extraEnv = {},
 } = {}) {
   resetIconoplasmRuntimeCachesForTest()
+  const recognitionPairReady = seedIconoplasmTestRecognitionPair(kvStore)
   return {
     ICONOPLASM_DB: db,
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     KV: {
       async get(key) {
+        await recognitionPairReady
         if (typeof onKvGet === "function") onKvGet(key)
         if (kvStore.has(key)) return kvStore.get(key)
         if (key === "iconoplasm:gallery-version") return version
@@ -488,9 +494,14 @@ function buildEnv({
         return kvStore.get(key) || null
       },
       async put(key, value) {
+        await recognitionPairReady
         if (typeof onKvPut === "function") onKvPut(key, value)
         kvStore.set(key, value)
         return true
+      },
+      async list(options) {
+        await recognitionPairReady
+        return listIconoplasmTestKv(kvStore, options)
       },
     },
     ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",

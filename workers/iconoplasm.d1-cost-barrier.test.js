@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import test from "node:test"
 
 import {
@@ -7,6 +8,11 @@ import {
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { iconoplasmExtensionBlocklistKvKey } from "./iconoplasm-extension-blocklist-policy.js"
+
+const amidBlocklistVersion = `ebl1-${createHash("sha256")
+  .update(JSON.stringify(["AMID"]))
+  .digest("hex")
+  .slice(0, 16)}`
 
 // DO NOT DELETE THIS FILE.
 //
@@ -255,7 +261,7 @@ class FakeSharedKv {
         JSON.stringify({
           schema_version: 1,
           revision: 1,
-          version: "ebl1-1111111111111111",
+          version: amidBlocklistVersion,
           term_count: 1,
           terms: ["AMID"],
         }),

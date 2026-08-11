@@ -6,6 +6,10 @@ import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  listIconoplasmTestKv,
+  seedIconoplasmTestRecognitionPair,
+} from "./iconoplasm-recognition-policy-test-fixture.js"
 
 class FakeVotesStatement {
   constructor(db, sql) {
@@ -92,9 +96,13 @@ class FakeKv {
   constructor(hash, artifact) {
     this.hash = hash
     this.artifact = artifact
+    this.entries = new Map()
+    this.recognitionPairReady = seedIconoplasmTestRecognitionPair(this.entries)
   }
 
   async get(key) {
+    await this.recognitionPairReady
+    if (this.entries.has(key)) return this.entries.get(key)
     if (key === "iconoplasm:catalog-manifest") {
       return JSON.stringify({ current_hash: this.hash, gene_count: this.artifact.genes.length })
     }
@@ -115,6 +123,11 @@ class FakeKv {
       ])
     }
     return null
+  }
+
+  async list(options) {
+    await this.recognitionPairReady
+    return listIconoplasmTestKv(this.entries, options)
   }
 }
 

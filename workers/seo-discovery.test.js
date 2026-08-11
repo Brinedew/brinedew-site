@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import test, { afterEach } from "node:test"
 
@@ -10,6 +11,8 @@ import {
   buildPortraitAwareManifestHash,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { iconoplasmPublicationAliasManifest } from "./iconoplasm-publication-aliases.js"
+import { iconoplasmRecognitionPairKvKey } from "./iconoplasm-recognition-policy-reconciliation.js"
 
 const originalFetch = globalThis.fetch
 const rootRobotsSource = new URL("../content/robots.txt", import.meta.url)
@@ -43,7 +46,7 @@ function publishedGene(symbol, name, { published = true } = {}) {
   }
 }
 
-function buildPublishedCatalogEnv(genes) {
+async function buildPublishedCatalogEnv(genes) {
   catalogFixtureSequence += 1
   resetIconoplasmRuntimeCachesForTest()
   const hash = `seofixture${catalogFixtureSequence}`
@@ -57,6 +60,18 @@ function buildPublishedCatalogEnv(genes) {
     genes,
   }
   const cardVersion = `card-${hash}`
+  const publicationAliases = await iconoplasmPublicationAliasManifest()
+  const blocklistTerms = []
+  const extensionBlocklist = {
+    schema_version: 1,
+    revision: 1,
+    version: `ebl1-${createHash("sha256")
+      .update(JSON.stringify(blocklistTerms))
+      .digest("hex")
+      .slice(0, 16)}`,
+    term_count: blocklistTerms.length,
+    terms: blocklistTerms,
+  }
   const cards = genes.map((gene) => {
     const portrait = gene.p?.asset_sha256
       ? { status: "published", asset_sha256: gene.p.asset_sha256 }
@@ -126,6 +141,18 @@ function buildPublishedCatalogEnv(genes) {
         cards,
       }),
     ],
+    [
+      iconoplasmRecognitionPairKvKey(1, 1),
+      JSON.stringify({
+        schema_version: 1,
+        alias_revision: 1,
+        blocklist_revision: 1,
+        alias_depends_on_blocklist_revision: null,
+        blocklist_depends_on_alias_revision: null,
+        publication_aliases: publicationAliases,
+        extension_blocklist: extensionBlocklist,
+      }),
+    ],
   ])
   const env = {
     KV: {
@@ -134,6 +161,13 @@ function buildPublishedCatalogEnv(genes) {
       },
       async put(key, value) {
         store.set(key, String(value))
+      },
+      async list({ prefix = "", limit = 1_000 } = {}) {
+        const matching = [...store.keys()].filter((key) => key.startsWith(prefix)).sort()
+        return {
+          keys: matching.slice(0, limit).map((name) => ({ name })),
+          list_complete: matching.length <= limit,
+        }
       },
     },
     ICONOPLASM_DB: {
@@ -240,7 +274,7 @@ test("apps index delegates descriptions to the canonical folder listing", async 
 })
 
 test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent contract", async () => {
-  const env = buildPublishedCatalogEnv([
+  const env = await buildPublishedCatalogEnv([
     publishedGene("TP53", "tumor protein p53"),
     publishedGene("TRIM1", "tripartite motif containing 1", { published: false }),
   ])
@@ -452,7 +486,7 @@ test("complete gene metadata is indexable while incomplete records retain noinde
 })
 
 test("gene discovery redirects aliases, rejects junk URLs, and fail-closes missing profiles", async () => {
-  const env = buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")])
+  const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")])
 
   globalThis.fetch = async (url) => {
     const requestUrl = new URL(String(url))
@@ -491,7 +525,7 @@ test("gene discovery redirects aliases, rejects junk URLs, and fail-closes missi
 })
 
 test("known incomplete gene shells remain noindex", async () => {
-  const env = buildPublishedCatalogEnv([
+  const env = await buildPublishedCatalogEnv([
     publishedGene("TRIM1", "tripartite motif containing 1", { published: false }),
   ])
 

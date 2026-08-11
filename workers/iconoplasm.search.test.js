@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import test from "node:test"
 
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
@@ -6,6 +7,9 @@ import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { iconoplasmPublicationAliasManifestFromPolicy } from "./iconoplasm-publication-aliases.js"
+import { iconoplasmPublicationAliasKvKey } from "./iconoplasm-publication-alias-policy.js"
+import { iconoplasmRecognitionPairKvKey } from "./iconoplasm-recognition-policy-reconciliation.js"
 
 class FakeKV {
   constructor(entries = {}) {
@@ -18,6 +22,14 @@ class FakeKV {
 
   async put(key, value) {
     this.entries.set(key, value)
+  }
+
+  async list({ prefix = "", limit = 1_000 } = {}) {
+    const names = [...this.entries.keys()].filter((key) => key.startsWith(prefix)).sort()
+    return {
+      keys: names.slice(0, limit).map((name) => ({ name })),
+      list_complete: names.length <= limit,
+    }
   }
 }
 
@@ -555,7 +567,7 @@ test("catalog search ranks symbol matches before full names before aliases", asy
   )
 })
 
-test("catalog search resolves website-owned publication aliases", async () => {
+test("catalog search resolves bootstrap publication aliases", async () => {
   const artifact = buildCatalogArtifact()
   artifact.genes.push(
     {
@@ -592,6 +604,58 @@ test("catalog search resolves website-owned publication aliases", async () => {
     assert.equal(payload?.genes?.[0]?.symbol, expectedSymbol)
     assert.equal(payload?.genes?.[0]?.matched_by, "alias")
   }
+})
+
+test("catalog search resolves an administrator-published alias KV revision", async () => {
+  const artifact = buildCatalogArtifact()
+  artifact.genes.push({
+    s: "CXCL8",
+    n: "C-X-C motif chemokine ligand 8",
+    c: "#89685f",
+    tmh: false,
+    a: [],
+  })
+  artifact.gene_count = artifact.genes.length
+  const aliases = await iconoplasmPublicationAliasManifestFromPolicy({
+    by_symbol: { CXCL8: ["IL8"] },
+    remove_by_symbol: {},
+  })
+  const blocklistVersion = `ebl1-${createHash("sha256")
+    .update(JSON.stringify([]))
+    .digest("hex")
+    .slice(0, 16)}`
+  const env = buildEnv({
+    artifact,
+    kvEntries: {
+      [iconoplasmPublicationAliasKvKey(2)]: JSON.stringify(aliases),
+      [iconoplasmRecognitionPairKvKey(2, 1)]: JSON.stringify({
+        schema_version: 1,
+        alias_revision: 2,
+        blocklist_revision: 1,
+        alias_depends_on_blocklist_revision: null,
+        blocklist_depends_on_alias_revision: null,
+        publication_aliases: aliases,
+        extension_blocklist: {
+          schema_version: 1,
+          revision: 1,
+          version: blocklistVersion,
+          term_count: 0,
+          terms: [],
+        },
+      }),
+    },
+  })
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      buildRequest("/api/public/v1/genes/search?q=IL8&scope=catalog&limit=5"),
+      env,
+      {},
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.genes?.[0]?.symbol, "CXCL8")
+  assert.equal(payload?.genes?.[0]?.matched_by, "alias")
 })
 
 test("guest discovery search falls back to the starter trio instead of the full catalog", async () => {

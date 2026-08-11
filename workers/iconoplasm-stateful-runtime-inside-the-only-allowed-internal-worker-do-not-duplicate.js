@@ -16,13 +16,13 @@ import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
 import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-routes.js"
 import { createIconoplasmAdminExtensionBlocklistHandlers } from "./iconoplasm-admin-extension-blocklist-routes.js"
+import { createIconoplasmAdminPublicationAliasHandlers } from "./iconoplasm-admin-publication-alias-routes.js"
 import { createIconoplasmAdminGalleryHandlers } from "./iconoplasm-admin-gallery-routes.js"
 import { createIconoplasmAdminPublicationHandlers } from "./iconoplasm-admin-publication-routes.js"
 import { createIconoplasmAdminReadModelHandlers } from "./iconoplasm-admin-read-model-routes.js"
 import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
 import { iconoplasmCacheControl } from "./iconoplasm-cache-policy.js"
 import { iconoplasmObservabilitySnapshotForAdmin } from "./iconoplasm-observability-freshness.js"
-import { readPublishedIconoplasmExtensionBlocklist } from "./iconoplasm-extension-blocklist-policy.js"
 import {
   ICONOPLASM_API_SCHEMA_VERSION as API_SCHEMA_VERSION,
   ICONOPLASM_PUBLIC_API_VERSION as PUBLIC_API_VERSION,
@@ -71,9 +71,16 @@ import {
 } from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import {
   applyIconoplasmPublicationAliasPolicyToGene,
-  ICONOPLASM_PUBLICATION_ALIASES,
-  iconoplasmPublicationAliasManifest,
+  ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
 } from "./iconoplasm-publication-aliases.js"
+import {
+  readPublishedIconoplasmPublicationAliasesByVersionToken,
+  resetIconoplasmPublicationAliasPublicCacheForTests,
+} from "./iconoplasm-publication-alias-policy.js"
+import {
+  readCoherentPublishedIconoplasmRecognitionPolicies,
+  resetIconoplasmRecognitionPolicyPublicCacheForTests,
+} from "./iconoplasm-recognition-policy-reconciliation.js"
 import { normalizeIconoplasmHomeOrder } from "../quartz/static/iconoplasm/home-orders.js"
 import { WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE } from "../quartz/static/iconoplasm/guest-discovery-contract.js"
 import { skinColorPromptTagsFromHex } from "../shared/iconoplasm-card/skin-color-prompt-terms.js"
@@ -1530,6 +1537,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_requests_fulfill" ||
     family === "admin_image_edit_prompts" ||
     family === "admin_extension_blocklist" ||
+    family === "admin_publication_aliases" ||
     family === "admin_gene_request_diagnostics" ||
     family === "admin_local_removals_pending" ||
     family === "admin_local_removals_ack" ||
@@ -3086,6 +3094,7 @@ export function projectPublishedCompatibilityArtifact(
     schemaVersion: PUBLISHED_CATALOG_SCHEMA_VERSION,
     revision: PUBLISHED_CATALOG_CONTRACT_REVISION,
   },
+  publicationAliases = ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
 ) {
   if (!artifact || typeof artifact !== "object" || !Array.isArray(artifact.genes)) return null
   if (
@@ -3103,11 +3112,7 @@ export function projectPublishedCompatibilityArtifact(
   if (!supportsCurrentContract && !supportsLegacyPortraitContract) return null
   const genes = artifact.genes.map((rawGene) => {
     if (!rawGene || typeof rawGene !== "object") return rawGene
-    const gene = applyIconoplasmPublicationAliasPolicyToGene(
-      rawGene,
-      rawGene.s,
-      ICONOPLASM_PUBLICATION_ALIASES,
-    )
+    const gene = applyIconoplasmPublicationAliasPolicyToGene(rawGene, rawGene.s, publicationAliases)
     if (targetSchemaVersion >= 5) return gene
     const { p: portrait, ...compatible } = gene
     const mediumPath = String(portrait?.renditions?.medium?.path || "").trim()
@@ -10965,10 +10970,11 @@ async function extensionManifestObj(url, env, clientVersion = null) {
   // the mistake globally. Keep it on the shared fingerprint cache.
   // This is the complete extension contract: artifact compatibility, minimum
   // client version, aliases, and portrait delivery policy travel together.
-  const publicationAliases = await iconoplasmPublicationAliasManifest()
-  // Shared extension policy is a dedicated, short-lived KV projection. Never
-  // add a D1 fallback here: this manifest is global browser traffic.
-  const extensionBlocklist = await readPublishedIconoplasmExtensionBlocklist(env.KV)
+  // Both administrator policies are dedicated, short-lived KV projections.
+  // Never add a D1 fallback here: this manifest is global browser traffic.
+  const recognitionPolicies = await readCoherentPublishedIconoplasmRecognitionPolicies(env.KV)
+  const publicationAliases = recognitionPolicies.publication_aliases
+  const extensionBlocklist = recognitionPolicies.extension_blocklist
   const compatibilityContract = publishedCompatibilityContractForClientVersion(clientVersion)
   const portraitFingerprint = await sharedPublishedPortraitFingerprint(env)
   if (!portraitFingerprint) {
@@ -11434,7 +11440,8 @@ async function warmCatalogCache(env) {
   const portraitAwareHash =
     buildPortraitAwareManifestHash(baseHash, await sharedPublishedPortraitFingerprint(env)) ||
     baseHash
-  const publicationAliases = await iconoplasmPublicationAliasManifest()
+  const publicationAliases = (await readCoherentPublishedIconoplasmRecognitionPolicies(env.KV))
+    .publication_aliases
   const cacheHash = `${portraitAwareHash}:${publicationAliases.version}`
   const now = Date.now()
   if (
@@ -11466,7 +11473,7 @@ async function warmCatalogCache(env) {
     }
   }
 
-  for (const [symbol, aliases] of Object.entries(ICONOPLASM_PUBLICATION_ALIASES.remove_by_symbol)) {
+  for (const [symbol, aliases] of Object.entries(publicationAliases.remove_by_symbol)) {
     if (!bySymbol.has(symbol)) continue
     for (const alias of aliases) {
       const key = normalizeCatalogAliasLookupKey(alias)
@@ -11480,15 +11487,11 @@ async function warmCatalogCache(env) {
     }
     bySymbol.set(
       symbol,
-      applyIconoplasmPublicationAliasPolicyToGene(
-        bySymbol.get(symbol),
-        symbol,
-        ICONOPLASM_PUBLICATION_ALIASES,
-      ),
+      applyIconoplasmPublicationAliasPolicyToGene(bySymbol.get(symbol), symbol, publicationAliases),
     )
   }
 
-  for (const [symbol, aliases] of Object.entries(ICONOPLASM_PUBLICATION_ALIASES.by_symbol)) {
+  for (const [symbol, aliases] of Object.entries(publicationAliases.by_symbol)) {
     // A generated catalog may legitimately predate a newly curated symbol. Do
     // not take the entire public search API down during that deployment window;
     // the extension rejects an overlay whose target is absent from its cache.
@@ -11511,7 +11514,7 @@ async function warmCatalogCache(env) {
     const gene = applyIconoplasmPublicationAliasPolicyToGene(
       bySymbol.get(symbol),
       symbol,
-      ICONOPLASM_PUBLICATION_ALIASES,
+      publicationAliases,
     )
     bySymbol.set(symbol, gene)
     for (const alias of aliases) {
@@ -22767,6 +22770,8 @@ export function resetIconoplasmRuntimeCachesForTest() {
   cardCatalogArtifactCache.value = null
   galleryVersionCache.value = "0"
   galleryVersionCache.loadedAt = 0
+  resetIconoplasmPublicationAliasPublicCacheForTests()
+  resetIconoplasmRecognitionPolicyPublicCacheForTests()
 }
 
 async function readVersionedSharedJson(env, prefix, version) {
@@ -22802,7 +22807,11 @@ function isCurrentCatalogArtifact(value) {
   )
 }
 
-async function hydratedCatalogArtifact(env, hash, { fresh = false } = {}) {
+async function hydratedCatalogArtifact(
+  env,
+  hash,
+  { fresh = false, portraitFingerprint = null, portraitRows = null } = {},
+) {
   if (!env?.KV || !hash) return null
   const requestedHash = String(hash || "").trim()
   const baseHash = catalogBaseHash(requestedHash)
@@ -22841,10 +22850,12 @@ async function hydratedCatalogArtifact(env, hash, { fresh = false } = {}) {
   // Cost barrier: this is the last whole-artifact hydration seam. Keep it behind
   // the shared versioned cache so a fresh isolate does not reparse + rehydrate
   // ~20k genes on its own just because it has never seen traffic before.
-  const hydrated = mergePublishedPortraitRefsIntoArtifact(
-    artifact,
-    await publishedPortraitRefs(env, fresh ? { fresh: true } : undefined),
-  )
+  const resolvedPortraitRows =
+    portraitRows ||
+    (portraitFingerprint
+      ? await publishedPortraitRefsForFingerprint(env, portraitFingerprint)
+      : await publishedPortraitRefs(env, fresh ? { fresh: true } : undefined))
+  const hydrated = mergePublishedPortraitRefsIntoArtifact(artifact, resolvedPortraitRows)
   hydratedCatalogArtifactCache.key = cacheKey
   hydratedCatalogArtifactCache.value = hydrated
   if (!fresh) {
@@ -22867,21 +22878,74 @@ function isPublishedCompatibilityHash(hash) {
   return Boolean(publishedCompatibilityContractForHash(hash))
 }
 
-async function publishedCompatibilityArtifact(env, requestedHash) {
-  const contract = publishedCompatibilityContractForHash(requestedHash)
-  if (!env?.KV || !requestedHash || !contract) return null
-  const hash = String(requestedHash).trim()
+function parsedPublishedCompatibilityHash(rawHash, contract) {
+  const hash = String(rawHash || "").trim()
   const baseHash = catalogBaseHash(hash)
-  if (!baseHash) return null
-  const portraitFingerprint = await sharedPublishedPortraitFingerprint(env)
-  const aliases = await iconoplasmPublicationAliasManifest()
-  const aliasToken = portraitHashToken(aliases.version) || "aliases"
-  const expectedHash = `${buildContractAwareManifestHash(
+  if (!baseHash || !contract?.token) return null
+  const prefix = `${baseHash}-${contract.token}-`
+  if (!hash.startsWith(prefix)) return null
+  const tokens = hash.slice(prefix.length).split("-")
+  const aliasToken = tokens.pop() || ""
+  if (!/^v1[a-f0-9]{16}$/.test(aliasToken)) return null
+
+  let portraitFingerprint
+  if (tokens.length === 0) {
+    portraitFingerprint = { published_count: 0, latest: null }
+  } else {
+    if (
+      tokens.length < 2 ||
+      tokens.length > 3 ||
+      tokens[0] !== PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION ||
+      !/^\d+$/.test(tokens[1])
+    ) {
+      return null
+    }
+    const publishedCount = Number(tokens[1])
+    const latest = tokens[2] || null
+    if (
+      !Number.isSafeInteger(publishedCount) ||
+      publishedCount < 0 ||
+      (latest && portraitHashToken(latest) !== latest)
+    ) {
+      return null
+    }
+    portraitFingerprint = { published_count: publishedCount, latest }
+  }
+  const expectedBaseHash = buildContractAwareManifestHash(
     baseHash,
     portraitFingerprint,
     contract.token,
-  )}-${aliasToken}`
-  if (hash !== expectedHash) return null
+  )
+  if (hash !== `${expectedBaseHash}-${aliasToken}`) return null
+  return { hash, baseHash, aliasToken, portraitFingerprint }
+}
+
+async function publishedPortraitRefsForFingerprint(env, fingerprint) {
+  const requestedVersion = portraitSnapshotVersion(fingerprint)
+  const currentFingerprint = await sharedPublishedPortraitFingerprint(env)
+  if (portraitSnapshotVersion(currentFingerprint) === requestedVersion) {
+    return publishedPortraitRefs(env)
+  }
+  const retained = await readVersionedSharedJson(
+    env,
+    KV_PUBLISHED_PORTRAIT_REFS_PREFIX,
+    requestedVersion,
+  )
+  if (!publishedPortraitRefSnapshotMatchesFingerprint(retained, fingerprint)) {
+    const error = new Error(
+      `Published portrait reference snapshot ${requestedVersion} is unavailable`,
+    )
+    error.code = "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE"
+    throw error
+  }
+  return retained
+}
+
+export async function materializePublishedCompatibilityArtifact(env, requestedHash, contract) {
+  if (!env?.KV || !requestedHash || !contract) return null
+  const parsedHash = parsedPublishedCompatibilityHash(requestedHash, contract)
+  if (!parsedHash) return null
+  const { hash, baseHash, aliasToken: requestedAliasToken, portraitFingerprint } = parsedHash
 
   if (
     publishedCompatibilityArtifactCache.key === hash &&
@@ -22900,14 +22964,38 @@ async function publishedCompatibilityArtifact(env, requestedHash) {
     return cached
   }
 
+  const currentPolicies = await readCoherentPublishedIconoplasmRecognitionPolicies(env.KV)
+  const currentAliases = currentPolicies.publication_aliases
+  const aliasRecord =
+    portraitHashToken(currentAliases?.version) === requestedAliasToken
+      ? { overlay: currentAliases }
+      : await readPublishedIconoplasmPublicationAliasesByVersionToken(env.KV, requestedAliasToken)
+  const aliases = aliasRecord?.overlay
+  if (!aliases) {
+    const error = new Error(`Published alias snapshot ${requestedAliasToken} is not yet visible`)
+    error.code = "ICONOPLASM_PUBLISHED_ALIAS_SNAPSHOT_UNAVAILABLE"
+    throw error
+  }
+  const aliasToken = portraitHashToken(aliases.version) || "aliases"
+  if (aliasToken !== requestedAliasToken) return null
+
   const candidateHash = buildPortraitAwareManifestHash(baseHash, portraitFingerprint)
-  const candidate = await hydratedCatalogArtifact(env, candidateHash)
-  const compatible = projectPublishedCompatibilityArtifact(candidate, contract)
+  const portraitRows = await publishedPortraitRefsForFingerprint(env, portraitFingerprint)
+  const candidate = await hydratedCatalogArtifact(env, candidateHash, {
+    portraitFingerprint,
+    portraitRows,
+  })
+  const compatible = projectPublishedCompatibilityArtifact(candidate, contract, aliases)
   if (!compatible) return null
   publishedCompatibilityArtifactCache.key = hash
   publishedCompatibilityArtifactCache.value = compatible
   await writeVersionedSharedJson(env, KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX, hash, compatible)
   return compatible
+}
+
+async function publishedCompatibilityArtifact(env, requestedHash) {
+  const contract = publishedCompatibilityContractForHash(requestedHash)
+  return contract ? materializePublishedCompatibilityArtifact(env, requestedHash, contract) : null
 }
 
 function gallerySnapshotMaxAgeMs(order) {
@@ -27531,7 +27619,12 @@ async function handleCatalogArtifact(env, path) {
       ? await publishedCompatibilityArtifact(env, hash)
       : await hydratedCatalogArtifact(env, hash)
   } catch (error) {
-    if (error?.code !== "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE") throw error
+    if (
+      error?.code !== "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE" &&
+      error?.code !== "ICONOPLASM_PUBLISHED_ALIAS_SNAPSHOT_UNAVAILABLE"
+    ) {
+      throw error
+    }
     return json({ error: "Published catalog artifact is temporarily unavailable" }, 503, {
       "Cache-Control": "no-store",
       "Retry-After": "60",
@@ -27738,6 +27831,11 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     stateSymbolMax: 25000,
   }),
   ...createIconoplasmAdminExtensionBlocklistHandlers({
+    actor,
+    isAdmin: isIconoplasmAdmin,
+    json,
+  }),
+  ...createIconoplasmAdminPublicationAliasHandlers({
     actor,
     isAdmin: isIconoplasmAdmin,
     json,

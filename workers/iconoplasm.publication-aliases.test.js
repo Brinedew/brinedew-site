@@ -4,7 +4,7 @@ import test from "node:test"
 import {
   applyIconoplasmPublicationAliasPolicyToGene,
   expandIconoplasmPublicationAliasForms,
-  ICONOPLASM_PUBLICATION_ALIASES,
+  ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
   iconoplasmPublicationAliasManifest,
   validateIconoplasmPublicationAliases,
 } from "./iconoplasm-publication-aliases.js"
@@ -30,14 +30,14 @@ test("spelling families expand into an inspectable concrete dictionary", () => {
 })
 
 test("tracked publication aliases cover the curated labels that failed on real pages", () => {
-  assert.deepEqual(ICONOPLASM_PUBLICATION_ALIASES.by_symbol.CEBPB, ["C/EBPβ"])
-  assert.deepEqual(ICONOPLASM_PUBLICATION_ALIASES.by_symbol.CGAS, ["cGAS"])
-  assert.deepEqual(ICONOPLASM_PUBLICATION_ALIASES.by_symbol.IL1A, ["IL-1", "IL-1α"])
-  assert.deepEqual(ICONOPLASM_PUBLICATION_ALIASES.by_symbol.IL1B, ["IL-1β"])
-  assert.deepEqual(ICONOPLASM_PUBLICATION_ALIASES.by_symbol.NOTCH1, ["N1ICD"])
-  assert.deepEqual(ICONOPLASM_PUBLICATION_ALIASES.by_symbol.RELA, ["p65"])
-  assert.deepEqual(ICONOPLASM_PUBLICATION_ALIASES.by_symbol.TGFB1, ["TGF-β"])
-  assert.deepEqual(ICONOPLASM_PUBLICATION_ALIASES.by_symbol.CDH1, [
+  assert.deepEqual(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol.CEBPB, ["C/EBPβ"])
+  assert.deepEqual(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol.CGAS, ["cGAS"])
+  assert.deepEqual(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol.IL1A, ["IL-1", "IL-1α"])
+  assert.deepEqual(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol.IL1B, ["IL-1β"])
+  assert.deepEqual(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol.NOTCH1, ["N1ICD"])
+  assert.deepEqual(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol.RELA, ["p65"])
+  assert.deepEqual(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol.TGFB1, ["TGF-β"])
+  assert.deepEqual(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol.CDH1, [
     "E-cadherin",
     "E-Cadherin",
     "E cadherin",
@@ -47,7 +47,7 @@ test("tracked publication aliases cover the curated labels that failed on real p
     "E cadherins",
     "E Cadherins",
   ])
-  assert.deepEqual(ICONOPLASM_PUBLICATION_ALIASES.by_symbol.CDH2, [
+  assert.deepEqual(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol.CDH2, [
     "N-cadherin",
     "N-Cadherin",
     "N cadherin",
@@ -57,7 +57,7 @@ test("tracked publication aliases cover the curated labels that failed on real p
     "N cadherins",
     "N Cadherins",
   ])
-  assert.deepEqual(ICONOPLASM_PUBLICATION_ALIASES.remove_by_symbol.CDH17, ["cadherin"])
+  assert.deepEqual(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.remove_by_symbol.CDH17, ["cadherin"])
 })
 
 test("publication alias manifest is deterministic and small enough to inline", async () => {
@@ -106,13 +106,13 @@ test("server-side gene views apply additions and ownership-scoped removals immut
   const merged = applyIconoplasmPublicationAliasPolicyToGene(
     baseGene,
     "RELA",
-    ICONOPLASM_PUBLICATION_ALIASES,
+    ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
   )
   const baseCadherin = Object.freeze({ s: "CDH17", a: Object.freeze(["HPT-1", "cadherin"]) })
   const correctedCadherin = applyIconoplasmPublicationAliasPolicyToGene(
     baseCadherin,
     "CDH17",
-    ICONOPLASM_PUBLICATION_ALIASES,
+    ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
   )
 
   assert.deepEqual(baseGene.a, ["NFKB3"])

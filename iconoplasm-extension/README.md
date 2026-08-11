@@ -2,7 +2,13 @@
 
 This folder is the canonical unpacked Chrome extension root for Iconoplasm.
 
-Generated catalog facts and portraits are authored by the Iconoplasm workstation. The small publication-alias overlay is website-owned. Edit `workers/iconoplasm-publication-aliases.js` for a curated page label; use Website Ops only for generated catalog or portrait state.
+Generated catalog facts and portraits are authored by the Iconoplasm
+workstation. Administrators maintain the small publication-alias desired policy
+in `/admin#extension`; the Website stages bounded immutable policy history and
+publishes one atomic alias/blocklist recognition pair in the existing catalog
+manifest. `workers/iconoplasm-publication-aliases.js` is the first-deploy
+bootstrap seed, not the routine editing surface. Use Website Ops only for
+generated catalog or portrait state.
 
 The complete ownership, runtime, performance, maintenance, and rollback contract is in `../docs/ICONOPLASM_PUBLICATION_ALIASES.md`.
 

@@ -1,33 +1,65 @@
 # Iconoplasm publication aliases
 
-Read this before changing which names the Iconoplasm browser extension recognizes.
+Read this before changing which names the Iconoplasm browser extension, public
+search, resolver, or compatibility artifacts recognize.
 
 ## Ownership
 
 Iconoplasm has two complementary alias sources:
 
-| Data                                                       | Owner                            | Source                                      | Release path                     |
-| ---------------------------------------------------------- | -------------------------------- | ------------------------------------------- | -------------------------------- |
-| Broad biological synonyms from the approved gene authority | Workstation publication pipeline | Generated catalog field `a`                 | Website Ops catalog publication  |
-| Small, human-curated labels seen in papers and web pages   | Website runtime                  | `workers/iconoplasm-publication-aliases.js` | Normal Website commit and deploy |
+| Data                                             | Owner                            | Authority                                      | Release path                                    |
+| ------------------------------------------------ | -------------------------------- | ---------------------------------------------- | ----------------------------------------------- |
+| Broad biological synonyms                        | Workstation publication pipeline | Generated catalog field `a`                    | Website Ops catalog publication                 |
+| Small, observed labels from papers and web pages | Administrator                    | `icono_publication_alias_policy` desired state | Save in `/admin#extension`; Worker publishes KV |
+| First-deploy/offline seed                        | Website source                   | `workers/iconoplasm-publication-aliases.js`    | Normal Website deployment                       |
 
-Use the generated catalog for authoritative biological synonym coverage. Use the curated overlay when a real page uses a useful label that the generated catalog does not recognize correctly.
+The generated catalog owns broad biological synonym coverage. The curated
+policy is for useful page labels that the published scanner does not already
+provide correctly. The source dictionary is not the routine editing surface;
+it is the revision-1 bootstrap used only before a valid recognition-pair bundle
+exists.
+The extension consumes both sources and owns neither.
 
-The browser extension is a consumer of both sources. It does not own either alias list.
+## Desired state and public projection
 
-## Runtime contract
+Migration `0066_publication_alias_policy.sql` seeds the exact existing 45
+additions and one ownership-scoped removal. D1 stores one current desired row
+plus the newest 100 audit revisions. Every successful save uses
+`expected_revision` compare-and-swap and records the exact desired blocklist
+revision against which it was validated.
 
-The Website publishes the curated aliases inside the existing catalog manifest:
+The alias publisher writes immutable, zero-padded revision keys under
+`iconoplasm:publication-alias-policy:v1:revision:` and retains at most 100.
+Those individual records are publication inputs and audit/history, not the
+anonymous read authority. A content-addressed record under
+`iconoplasm:publication-alias-policy:v1:version:` gives old immutable
+compatibility URLs a one-GET historical alias lookup.
+
+Anonymous manifest, search, and resolver paths select one newest valid atomic
+bundle under `iconoplasm:recognition-policy-pair:v1:`. Each bundle contains an
+exact six-field alias payload and exact five-field blocklist payload plus
+private dependency revisions. One KV value is therefore the cross-region
+consistency boundary: a colo can observe the old bundle or the new bundle, but
+never a mixed alias/blocklist pair. The normal cold read is one bounded key
+list and one value GET, then a five-second isolate cache. It never queries D1.
+
+The source alias seed is used only while the pair namespace is genuinely
+empty. During the first deployment, it is combined with the newest retained
+legacy blocklist that has no alias dependency. Once any pair key exists,
+missing, malformed, or corrupt values fail closed (or retain the isolate's
+last-known-good pair); they never reactivate bootstrap state.
+
+The existing public protocol is unchanged:
 
 ```json
 {
   "publication_aliases": {
     "schema_version": 1,
     "version": "v1-<content hash>",
-    "alias_count": 45,
+    "alias_count": 1,
     "removal_count": 1,
     "by_symbol": {
-      "RELA": ["p65"]
+      "CXCL8": ["IL8"]
     },
     "remove_by_symbol": {
       "CDH17": ["cadherin"]
@@ -36,108 +68,130 @@ The Website publishes the curated aliases inside the existing catalog manifest:
 }
 ```
 
-`by_symbol` is the complete effective addition dictionary. Source code may use the generic Cartesian-product helper to keep a spelling family readable, but expansion happens before validation and publication. The manifest, server cache, extension cache, and live verifier all contain the concrete strings; consumers never interpret spelling rules.
+Revision and dependency metadata are deliberately not added to this object.
+The content-derived `version` still participates in the catalog-manifest ETag,
+so an alias-only change refreshes the manifest without rebuilding the catalog
+or changing the extension protocol.
 
-`remove_by_symbol` contains ownership-scoped retractions from the generated catalog. A retraction removes a string only when the named canonical gene currently owns it. It cannot globally block that spelling or erase a mapping owned by another gene.
+`by_symbol` is the complete curated addition dictionary. Consumers receive
+concrete strings and never interpret spelling rules. `remove_by_symbol`
+contains owner-scoped corrections: a removal affects only the named canonical
+gene and cannot suppress the same spelling when another gene owns it.
 
-The overlay version is derived from the validated payload. The catalog-manifest ETag contains both the generated catalog build version and the overlay version, so either kind of change invalidates the short-lived manifest cache without changing the immutable catalog artifact URL.
+## Cross-policy safety
 
-The stateful Website runtime merges the overlay into its in-memory gene views so public search and identifier resolution use the same curated labels as the extension. The cache key includes the overlay version.
+Publication aliases and the shared extension blocklist are one recognition
+system even though their public payloads remain separate. Each D1 save validates
+the other desired policy and its SQL CAS asserts the exact counterpart revision.
+Each saved row persists that dependency. An individual publisher may stage a
+revision only after the required counterpart revision (or newer) is visible in
+KV and the candidate still validates against the published scanner. The
+reconciler then validates both visible individual projections and writes one
+immutable recognition-pair bundle. Public readers advance only at that final
+single-value boundary.
 
-The current extension validates and applies the overlay to its locally cached projection of the generated catalog. It records exact additions and retractions separately. On the next manifest refresh it reverses only the prior policy operations, applies the new concrete dictionary, and preserves unrelated generated aliases.
+The scheduled reconciler runs blocklist, aliases, then blocklist once more. This
+orders both safe transition shapes in one bounded pass:
 
-## Performance contract
+- adding an alias before adding that alias to the blocklist; and
+- removing a blocklist term before removing the alias that justified it.
 
-An alias-only release must preserve all of these properties:
+A save may therefore succeed while publication remains pending. This is not a
+partial write: D1 keeps the durable desired revision and the 15-minute
+reconciler retries the dependency-ordered projection. The admin response marks
+the saved-but-pending state explicitly.
 
-- no additional network request; the overlay stays in the catalog manifest
-- no new generated catalog build
-- no change to the immutable catalog artifact URL or base build version
-- no full catalog download when the base build version is already cached
-- overlay payload below 4 KiB
-- five-minute manifest refresh timestamp advances even when neither the catalog nor overlay changed
-- server cache rebuild merges only affected genes after indexing the generated catalog
+## Validation
 
-If the curated set can no longer fit comfortably under the payload limit, do not raise the limit by reflex. Reassess whether the entries belong in the generated biological catalog or whether the transport contract needs a deliberately versioned redesign.
+The server enforces all of the following before the D1 CAS:
 
-## Validation and failure behavior
+- uppercase canonical symbols that exist in the published scanner;
+- exact normalized aliases, no control characters, and at most 64 characters;
+- at most 500 total additions and removals and a public payload below 4 KiB;
+- no collision with another canonical symbol or another gene's generated alias;
+- a newly added alias already generated for the same target is rejected as
+  `already_generated_for_target` (the catalog already provides it);
+- a newly introduced removal must currently belong to the named target; and
+- every desired shared-blocklist term remains one unambiguous non-canonical
+  alias after applying the candidate policy.
 
-The overlay validator enforces:
+Persisted additions and removals are grandfathered when the generated scanner
+later evolves. Existing additions that become generated are harmless; an
+existing owner-scoped removal that becomes a no-op is also harmless. This lets
+an unrelated admin edit succeed without silently deleting historical intent.
 
-- uppercase canonical symbols
-- non-empty alias arrays
-- exact, normalized alias strings of at most 64 characters
-- at most 500 total additions and retractions in the overlay
-- no alias shared by two canonical symbols after case and dash normalization
-- no collision with a different canonical symbol when the catalog symbols are available
+The extension independently validates the complete manifest overlay. A bad
+refresh never replaces its last-known-good gene map and never triggers a full
+catalog download.
 
-The server checks curated aliases against generated canonical symbols and generated alias ownership while warming its catalog cache. A symbol that is not present in the current generated catalog is omitted from the server-side merge so a catalog deployment window does not take down the public API. A collision with an existing canonical symbol or another gene's generated alias fails loudly.
+## Adding `IL8` to `CXCL8`
 
-The extension is stricter because it owns a complete local catalog snapshot: an unknown target, ambiguity, or canonical collision rejects that overlay update. The previously stored gene map remains available, the contract error is surfaced, and retrying the overlay does not trigger a full catalog download.
+1. Open `/admin#extension` and choose **Alias mappings**.
+2. Enter `IL8`, search the published canonical-gene picker for `CXCL8`, and add
+   the mapping to the draft.
+3. Review the draft and publish it. The request sends the complete desired
+   `by_symbol` and `remove_by_symbol` dictionaries with `expected_revision`.
+4. Confirm that the response is in sync. If it is saved but pending, leave the
+   desired policy intact; reconciliation will publish it after its persisted
+   dependency becomes visible.
+5. Verify a fresh public catalog manifest and public search/resolution after the
+   Website deployment containing migration 0066 is live.
 
-## Adding or changing a mapping
+Routine mapping changes require no source edit, catalog publication, extension
+version bump, package build, or store submission. The installed extension
+already understands this unchanged optional manifest object.
 
-1. Confirm the canonical target symbol exists in the published catalog.
-2. Edit `RAW_PUBLICATION_ALIASES_BY_SYMBOL` in `workers/iconoplasm-publication-aliases.js`.
-3. Preserve every spelling, case, punctuation mark, Greek letter, and spacing form that should match on real pages. When several independent choices produce a spelling family, use `expandIconoplasmPublicationAliasForms`; its returned strings become ordinary dictionary entries in the published manifest.
-4. Run the focused contract tests:
+## Performance and failure contract
 
-   ```powershell
-   node --test workers/iconoplasm.publication-aliases.test.js iconoplasm-extension/publication-alias-overlay.test.js iconoplasm-extension/service-worker.test.js workers/iconoplasm.public-media.test.js workers/iconoplasm.search.test.js
-   ```
+An alias-only revision preserves these properties:
 
-5. Run the repository gates:
+- no additional extension request or polling timer;
+- no generated-catalog or scanner rebuild;
+- no full-catalog download when the base build remains cached;
+- public payload strictly below 4 KiB;
+- anonymous reads never use D1;
+- immutable KV history and D1 audit history are each bounded to 100 revisions;
+- a normal public refresh costs one pair-key list plus one value GET, independent
+  of the 100-record individual histories;
+- transient KV failure serves last-known-good state; bootstrap is allowed only
+  before any pair key exists, while admin and authoritative reads fail loud;
+- historical compatibility alias lookup is one content-addressed GET within the
+  bounded 100-revision horizon, uses the current pair directly when that bundle
+  reached a colo first, and treats a valid but not-yet-visible snapshot as a
+  retryable 503 rather than a permanent 404; and
+- cold requests for retained compatibility hashes reconstruct from the matching
+  alias version and portrait-reference snapshot, not whichever versions are
+  current now.
 
-   ```powershell
-   pnpm check
-   pnpm test
-   pnpm build
-   ```
+If the curated set no longer fits comfortably, do not raise the limit by
+reflex. Move broad biological coverage to the generated catalog or deliberately
+version the transport contract.
 
-6. Commit and push through the normal Website deployment pipeline.
-7. Verify the live manifest payload and every curated alias through the public resolver:
+## Rollback and schema changes
 
-   ```powershell
-   pnpm run verify:iconoplasm-publication-aliases
-   ```
+Rollback is another CAS-protected admin revision: restore the prior complete
+dictionary from the bounded audit record and publish a new individual revision
+and recognition-pair bundle. Never overwrite an immutable KV revision or pair.
+Search, resolver, manifest, and extension caches converge on the new content
+hash.
 
-The production deployment runs the same verifier after assigning the live Worker routes. It gives both the manifest and resolver a bounded propagation window, then fails the deployment run if the manifest payload differs from the tracked configuration or any alias resolves to the wrong canonical symbol.
-
-An alias-policy change does not require Website Ops, an extension version bump, a new package, or a browser-store submission. The published compatibility artifact contains the concrete aliases older clients understand; candidate clients receive the inspectable dictionary from the manifest.
-
-## Retracting an incorrect generated mapping
-
-Add the alias under its current canonical owner in `RAW_PUBLICATION_ALIAS_REMOVALS_BY_SYMBOL`. Do not add the same spelling to a blocklist: retractions are data corrections, and the spelling may later be valid for a different gene.
-
-If the label should resolve to another canonical gene, add that concrete mapping to `RAW_PUBLICATION_ALIASES_BY_SYMBOL` in the same release. Validation and live verification ensure that the old ownership is removed before the new ownership is applied.
-
-## Rollback
-
-Revert the curated mapping change and deploy the Website normally. The overlay content hash and manifest ETag change automatically. On its next manifest refresh, the extension removes the reverted overlay aliases without downloading the base catalog again. Server search and resolution rebuild against the reverted overlay version.
-
-## Changing the schema
-
-Changing mappings is ordinary data maintenance. Changing the shape or semantics of `publication_aliases` is a protocol change.
-
-For a protocol change:
-
-1. update Website serialization and validation
-2. update the extension overlay validator and cache bookkeeping
-3. bump the overlay schema version
-4. add compatibility tests for the previous and new extension behavior
-5. update `iconoplasm-extension/API_COMPAT.md`
-6. bump, package, and release the extension before making the new schema mandatory
+Changing mappings is data maintenance. Changing the shape or semantics of
+`publication_aliases` is a protocol change and requires Website serialization,
+extension validation/cache changes, a schema bump, compatibility tests,
+`iconoplasm-extension/API_COMPAT.md`, and a human-authorized extension release
+before the new schema becomes mandatory.
 
 ## Code map
 
-| Responsibility                                          | File                                                                                              |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Curated mappings, validation, content hash              | `workers/iconoplasm-publication-aliases.js`                                                       |
-| Manifest publication, ETag, server search/resolve merge | `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js` |
-| Extension overlay validation and reversible application | `iconoplasm-extension/publication-alias-overlay.js`                                               |
-| Extension manifest refresh and cache decisions          | `iconoplasm-extension/service-worker.js`                                                          |
-| Website validation and payload-size tests               | `workers/iconoplasm.publication-aliases.test.js`                                                  |
-| Extension matching and rollback tests                   | `iconoplasm-extension/publication-alias-overlay.test.js`                                          |
-| No-refetch and retry tests                              | `iconoplasm-extension/service-worker.test.js`                                                     |
-| Live manifest and resolver verification                 | `scripts/verify-iconoplasm-publication-aliases.mjs`                                               |
-| API compatibility boundary                              | `iconoplasm-extension/API_COMPAT.md`                                                              |
+| Responsibility                                                                                    | File                                                                                              |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Bootstrap seed, normalization, effective-gene merge                                               | `workers/iconoplasm-publication-aliases.js`                                                       |
+| D1 desired state, individual KV history, content-addressed alias versions, publication validation | `workers/iconoplasm-publication-alias-policy.js`                                                  |
+| Authenticated GET/POST route                                                                      | `workers/iconoplasm-admin-publication-alias-routes.js`                                            |
+| Cross-policy reconciliation order and atomic public recognition-pair bundle                       | `workers/iconoplasm-recognition-policy-reconciliation.js`                                         |
+| Migration and exact revision-1 seed                                                               | `migrations-iconoplasm/0066_publication_alias_policy.sql`                                         |
+| Manifest, ETag, search/resolve, compatibility projection                                          | `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js` |
+| Extension overlay validation/application                                                          | `iconoplasm-extension/publication-alias-overlay.js`                                               |
+| Policy, route, race, fallback, and migration tests                                                | `workers/iconoplasm-publication-alias-policy.test.js`                                             |
+| Runtime projection tests                                                                          | `workers/iconoplasm.public-media.test.js`, `workers/iconoplasm.search.test.js`                    |
+| Live manifest and resolver verification                                                           | `scripts/verify-iconoplasm-publication-aliases.mjs`                                               |

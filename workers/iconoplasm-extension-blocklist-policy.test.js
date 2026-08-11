@@ -4,10 +4,17 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 import vm from "node:vm"
 
-// ARCHITECTURE FENCE [IPD-008]: these tests keep policy mutation on D1 and
-// public consumption on the separately revisioned, bounded KV projection.
+// ARCHITECTURE FENCE [IPD-008]: these tests keep policy mutation on D1,
+// individual KV history bounded, and anonymous consumption on one atomic pair.
 
 import { createIconoplasmAdminExtensionBlocklistHandlers } from "./iconoplasm-admin-extension-blocklist-routes.js"
+import { ICONOPLASM_DEFAULT_PUBLICATION_ALIASES } from "./iconoplasm-publication-aliases.js"
+import { iconoplasmPublicationAliasKvKey } from "./iconoplasm-publication-alias-policy.js"
+import {
+  ICONOPLASM_RECOGNITION_PAIR_KV_PREFIX,
+  iconoplasmRecognitionPairKvKey,
+  resetIconoplasmRecognitionPolicyPublicCacheForTests,
+} from "./iconoplasm-recognition-policy-reconciliation.js"
 import {
   ICONOPLASM_EXTENSION_BLOCKLIST_HISTORY_RETENTION,
   ICONOPLASM_EXTENSION_BLOCKLIST_CONTRACT_REVISION,
@@ -23,6 +30,14 @@ import {
   saveIconoplasmExtensionBlocklistPolicy,
   validateIconoplasmExtensionBlocklistAgainstPublishedScanner,
 } from "./iconoplasm-extension-blocklist-policy.js"
+
+function blocklistVersion(terms) {
+  const digest = createHash("sha256").update(JSON.stringify(terms)).digest("hex")
+  return `ebl1-${digest.slice(0, 16)}`
+}
+
+const AMID_VERSION = blocklistVersion(["AMID"])
+const ARCH_VERSION = blocklistVersion(["ARCH"])
 
 class FakeStatement {
   constructor(db, sql) {
@@ -46,8 +61,9 @@ class FakeStatement {
 }
 
 class FakeDb {
-  constructor(row, history = []) {
+  constructor(row, history = [], aliasRow = publicationAliasPolicyRow()) {
     this.row = { ...row }
+    this.aliasRow = { ...aliasRow }
     this.history = history.map((entry) => ({ ...entry }))
     this.calls = []
   }
@@ -67,6 +83,9 @@ class FakeDb {
     if (statement.sql.includes("FROM icono_extension_blocklist_policy")) {
       return { ...this.row }
     }
+    if (statement.sql.includes("FROM icono_publication_alias_policy")) {
+      return { ...this.aliasRow }
+    }
     throw new Error(`Unexpected first(): ${statement.sql}`)
   }
 
@@ -75,15 +94,31 @@ class FakeDb {
     const result = (changes) => ({ meta: { changes } })
 
     if (statement.sql.includes("SET terms_json = ?1")) {
-      const [termsJson, revision, version, updatedAt, updatedBy, key, expectedRevision] =
-        statement.values
-      if (key !== "shared" || this.row.revision !== expectedRevision) return result(0)
+      const [
+        termsJson,
+        revision,
+        version,
+        updatedAt,
+        updatedBy,
+        expectedAliasRevision,
+        key,
+        expectedRevision,
+        dependencyRevision,
+      ] = statement.values
+      if (
+        key !== "shared" ||
+        this.row.revision !== expectedRevision ||
+        (dependencyRevision != null && this.aliasRow.revision !== dependencyRevision)
+      ) {
+        return result(0)
+      }
       Object.assign(this.row, {
         terms_json: termsJson,
         revision,
         version,
         updated_at: updatedAt,
         updated_by: updatedBy,
+        depends_on_alias_revision: expectedAliasRevision,
         last_projection_error: null,
       })
       return result(1)
@@ -123,28 +158,31 @@ class FakeDb {
 
     if (statement.sql.includes("SET projection_lease_token = ?1")) {
       const [token, expiresAt, key, now] = statement.values
+      const target = key === "shared" ? this.row : key === "curated" ? this.aliasRow : null
       const canClaim =
-        !this.row.projection_lease_token ||
-        !this.row.projection_lease_expires_at ||
-        this.row.projection_lease_expires_at <= now
-      if (key !== "shared" || !canClaim) return result(0)
-      this.row.projection_lease_token = token
-      this.row.projection_lease_expires_at = expiresAt
+        target &&
+        (!target.projection_lease_token ||
+          !target.projection_lease_expires_at ||
+          target.projection_lease_expires_at <= now)
+      if (!canClaim) return result(0)
+      target.projection_lease_token = token
+      target.projection_lease_expires_at = expiresAt
       return result(1)
     }
 
     if (statement.sql.includes("SET published_revision = ?1")) {
       const [revision, version, publishedAt, key, expectedRevision, expectedVersion, token] =
         statement.values
+      const target = key === "shared" ? this.row : key === "curated" ? this.aliasRow : null
       if (
-        key !== "shared" ||
-        this.row.revision !== expectedRevision ||
-        this.row.version !== expectedVersion ||
-        this.row.projection_lease_token !== token
+        !target ||
+        target.revision !== expectedRevision ||
+        target.version !== expectedVersion ||
+        target.projection_lease_token !== token
       ) {
         return result(0)
       }
-      Object.assign(this.row, {
+      Object.assign(target, {
         published_revision: revision,
         published_version: version,
         published_at: publishedAt,
@@ -157,10 +195,11 @@ class FakeDb {
 
     if (statement.sql.includes("SET projection_lease_token = NULL")) {
       const [errorMessage, key, token] = statement.values
-      if (key !== "shared" || this.row.projection_lease_token !== token) return result(0)
-      this.row.projection_lease_token = null
-      this.row.projection_lease_expires_at = null
-      this.row.last_projection_error = errorMessage
+      const target = key === "shared" ? this.row : key === "curated" ? this.aliasRow : null
+      if (!target || target.projection_lease_token !== token) return result(0)
+      target.projection_lease_token = null
+      target.projection_lease_expires_at = null
+      target.last_projection_error = errorMessage
       return result(1)
     }
 
@@ -170,7 +209,15 @@ class FakeDb {
 
 class FakeKv {
   constructor(entries = {}) {
-    this.entries = new Map(Object.entries(entries))
+    this.entries = new Map(
+      Object.entries({
+        [iconoplasmPublicationAliasKvKey(1)]: JSON.stringify({
+          ...ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
+          version: "v1-bf7d4149d6b2df6c",
+        }),
+        ...entries,
+      }),
+    )
     this.puts = []
     this.deletes = []
     this.failPut = false
@@ -202,6 +249,24 @@ class FakeKv {
   }
 }
 
+function publicationAliasPolicyRow() {
+  return {
+    policy_key: "curated",
+    policy_json: JSON.stringify(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES),
+    revision: 1,
+    version: "v1-bf7d4149d6b2df6c",
+    updated_at: "2026-08-11T00:00:00.000Z",
+    updated_by: "migration:0066",
+    depends_on_blocklist_revision: null,
+    published_revision: 1,
+    published_version: "v1-bf7d4149d6b2df6c",
+    published_at: "2026-08-11T00:01:00.000Z",
+    projection_lease_token: null,
+    projection_lease_expires_at: null,
+    last_projection_error: null,
+  }
+}
+
 function projection({ revision, version, terms }) {
   return JSON.stringify({
     schema_version: 1,
@@ -214,7 +279,7 @@ function projection({ revision, version, terms }) {
 
 function policyRow({
   revision = 1,
-  version = "ebl1-1111111111111111",
+  version = AMID_VERSION,
   terms = ["AMID"],
   publishedRevision = revision,
   publishedVersion = version,
@@ -239,6 +304,21 @@ function policyRow({
 
 function scannerEntries() {
   const hash = "scannerfixture01"
+  const genes = {
+    AIFM2: { a: ["AMID"] },
+    ZBTB8OS: { a: ["ARCH"] },
+    NOTCH1: {},
+    CDH17: { a: ["cadherin"] },
+    OWNER1: { a: ["SHARED"] },
+    OWNER2: { a: ["SHARED"] },
+    OWNER3: { a: ["SHARED"] },
+  }
+  for (const symbol of [
+    ...Object.keys(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol),
+    ...Object.keys(ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.remove_by_symbol),
+  ]) {
+    if (!genes[symbol]) genes[symbol] = {}
+  }
   return {
     "iconoplasm:catalog-manifest": JSON.stringify({
       current_hash: hash,
@@ -246,15 +326,7 @@ function scannerEntries() {
     }),
     [`iconoplasm:scanner-catalog:${hash}`]: JSON.stringify({
       schema_version: 1,
-      genes: {
-        AIFM2: { a: ["AMID"] },
-        ZBTB8OS: { a: ["ARCH"] },
-        NOTCH1: {},
-        CDH17: { a: ["cadherin"] },
-        OWNER1: { a: ["SHARED"] },
-        OWNER2: { a: ["SHARED"] },
-        OWNER3: { a: ["SHARED"] },
-      },
+      genes,
     }),
   }
 }
@@ -372,7 +444,7 @@ test("save uses expected_revision CAS, records actor audit, and retains only the
 
 test("KV failure preserves the newer desired policy and old public projection, then idempotent publication repairs it", async () => {
   resetIconoplasmExtensionBlocklistPublicCacheForTests()
-  const oldVersion = "ebl1-1111111111111111"
+  const oldVersion = AMID_VERSION
   const db = new FakeDb(policyRow({ version: oldVersion }))
   const kv = new FakeKv({
     [iconoplasmExtensionBlocklistKvKey(1)]: projection({
@@ -414,16 +486,16 @@ test("immutable projection publication refuses a valid revision ahead of D1 and 
   const db = new FakeDb(
     policyRow({
       revision: 2,
-      version: "ebl1-2222222222222222",
+      version: ARCH_VERSION,
       terms: ["ARCH"],
       publishedRevision: 1,
-      publishedVersion: "ebl1-1111111111111111",
+      publishedVersion: AMID_VERSION,
     }),
   )
   const kv = new FakeKv({
     [iconoplasmExtensionBlocklistKvKey(3)]: projection({
       revision: 3,
-      version: "ebl1-3333333333333333",
+      version: AMID_VERSION,
       terms: ["AMID"],
     }),
   })
@@ -442,15 +514,15 @@ test("immutable projection publication refuses a valid revision ahead of D1 and 
   const collisionDb = new FakeDb(
     policyRow({
       revision: 2,
-      version: "ebl1-2222222222222222",
+      version: ARCH_VERSION,
       terms: ["ARCH"],
       publishedRevision: 1,
-      publishedVersion: "ebl1-1111111111111111",
+      publishedVersion: AMID_VERSION,
     }),
   )
   const conflictingRaw = projection({
     revision: 2,
-    version: "ebl1-9999999999999999",
+    version: AMID_VERSION,
     terms: ["AMID"],
   })
   const collisionKv = new FakeKv({
@@ -469,11 +541,11 @@ test("immutable projection publication refuses a valid revision ahead of D1 and 
 
 test("an expired stale lease holder cannot hide a newer immutable projection", async () => {
   resetIconoplasmExtensionBlocklistPublicCacheForTests()
-  const version1 = "ebl1-1111111111111111"
+  const version1 = AMID_VERSION
   const db = new FakeDb(
     policyRow({
       revision: 2,
-      version: "ebl1-2222222222222222",
+      version: ARCH_VERSION,
       terms: ["ARCH"],
       publishedRevision: 1,
       publishedVersion: version1,
@@ -554,8 +626,8 @@ test("projection lease holder loops to the newest revision when a save races its
 
 test("scheduled reconciliation repairs stale projection and clears an expired in-sync lease", async () => {
   resetIconoplasmExtensionBlocklistPublicCacheForTests()
-  const oldVersion = "ebl1-1111111111111111"
-  const newVersion = "ebl1-2222222222222222"
+  const oldVersion = AMID_VERSION
+  const newVersion = ARCH_VERSION
   const db = new FakeDb(
     policyRow({
       revision: 2,
@@ -612,19 +684,23 @@ test("scheduled reconciliation repairs stale projection and clears an expired in
   )
   assert.match(
     cronSource,
-    /cronExpr === "\*\/15 \* \* \* \*"[\s\S]*reconcileIconoplasmExtensionBlocklistPolicy\(env\)/,
+    /cronExpr === "\*\/15 \* \* \* \*"[\s\S]*reconcileIconoplasmRecognitionPolicies\(env\)/,
+  )
+  assert.match(
+    cronSource,
+    /recognitionPairReconciliation[\s\S]*Iconoplasm recognition policy pair:[\s\S]*Iconoplasm recognition policy pair failed:/,
   )
 })
 
 test("scheduled reconciliation bounds immutable KV history while retaining the current revision", async () => {
   resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const revision = ICONOPLASM_EXTENSION_BLOCKLIST_KV_RETENTION + 5
-  const version = `ebl1-${String(revision).padStart(16, "0")}`
+  const version = AMID_VERSION
   const entries = {}
   for (let candidate = 1; candidate <= revision; candidate += 1) {
     entries[iconoplasmExtensionBlocklistKvKey(candidate)] = projection({
       revision: candidate,
-      version: `ebl1-${String(candidate).padStart(16, "0")}`,
+      version: AMID_VERSION,
       terms: ["AMID"],
     })
   }
@@ -646,7 +722,7 @@ test("scheduled reconciliation bounds immutable KV history while retaining the c
 
 test("admin route enforces auth, body bound, CAS, scanner validation, and identical-policy republish", async () => {
   resetIconoplasmExtensionBlocklistPublicCacheForTests()
-  const version = "ebl1-1111111111111111"
+  const version = AMID_VERSION
   const db = new FakeDb(policyRow({ version }))
   const kv = new FakeKv({
     ...scannerEntries(),
@@ -673,7 +749,7 @@ test("admin route enforces auth, body bound, CAS, scanner validation, and identi
   assert.equal(getResponse.status, 200)
   assert.equal(getPayload.policy.schema_version, 1)
   assert.equal(getPayload.policy.revision, 1)
-  assert.equal(getPayload.publication.in_sync, true)
+  assert.equal(getPayload.publication.in_sync, false)
   assert.equal(getPayload.limits.max_terms, 500)
 
   const oversized = await callHandler(
@@ -756,6 +832,71 @@ test("admin route enforces auth, body bound, CAS, scanner validation, and identi
   assert.equal(republishedPayload.publication.in_sync, true)
 })
 
+test("a blocklist save bootstraps the missing alias projection and publishes one coherent pair", async () => {
+  resetIconoplasmExtensionBlocklistPublicCacheForTests()
+  const db = new FakeDb(policyRow({ version: AMID_VERSION }))
+  const kv = new FakeKv({
+    ...scannerEntries(),
+    [iconoplasmExtensionBlocklistKvKey(1)]: projection({
+      revision: 1,
+      version: AMID_VERSION,
+      terms: ["AMID"],
+    }),
+  })
+  kv.entries.delete(iconoplasmPublicationAliasKvKey(1))
+
+  const response = await callHandler(
+    handlers(),
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/extension-blocklist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ terms: ["ARCH"], expected_revision: 1 }),
+    }),
+    { ICONOPLASM_DB: db, KV: kv },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.publication.in_sync, true)
+  assert.equal(db.row.revision, 2)
+  assert.equal(db.aliasRow.published_revision, 1)
+  assert.equal(kv.entries.has(iconoplasmPublicationAliasKvKey(1, "v1-bf7d4149d6b2df6c")), true)
+  assert.equal(kv.entries.has(iconoplasmRecognitionPairKvKey(1, 2)), true)
+})
+
+test("blocklist admin returns saved policy state when the new pair key is listed before its value", async () => {
+  resetIconoplasmExtensionBlocklistPublicCacheForTests()
+  resetIconoplasmRecognitionPolicyPublicCacheForTests()
+  const db = new FakeDb(policyRow({ version: AMID_VERSION }))
+  const kv = new FakeKv({
+    ...scannerEntries(),
+    [iconoplasmExtensionBlocklistKvKey(1)]: projection({
+      revision: 1,
+      version: AMID_VERSION,
+      terms: ["AMID"],
+    }),
+  })
+  const get = kv.get.bind(kv)
+  kv.get = async (key) =>
+    String(key).startsWith(ICONOPLASM_RECOGNITION_PAIR_KV_PREFIX) ? null : get(key)
+  const response = await callHandler(
+    handlers(),
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/extension-blocklist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ terms: ["ARCH"], expected_revision: 1 }),
+    }),
+    { ICONOPLASM_DB: db, KV: kv },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 503)
+  assert.equal(payload.code, "recognition_pair_not_visible")
+  assert.equal(payload.saved, true)
+  assert.equal(payload.policy.revision, 2)
+  assert.equal(payload.publication.in_sync, false)
+})
+
 test("admin rejects an exact 500-term projection over 48 KiB before the D1 CAS", async () => {
   resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const terms = Array.from(
@@ -783,7 +924,7 @@ test("admin rejects an exact 500-term projection over 48 KiB before the D1 CAS",
   const genes = Object.fromEntries(
     terms.map((term, index) => [`GENE${String(index).padStart(3, "0")}`, { a: [term] }]),
   )
-  const version = "ebl1-1111111111111111"
+  const version = AMID_VERSION
   const db = new FakeDb(policyRow({ version }))
   const kv = new FakeKv({
     "iconoplasm:catalog-manifest": JSON.stringify({
@@ -819,7 +960,7 @@ test("admin rejects an exact 500-term projection over 48 KiB before the D1 CAS",
 
 test("admin distinguishes pre-save scanner failure from post-save publication busy", async () => {
   resetIconoplasmExtensionBlocklistPublicCacheForTests()
-  const version = "ebl1-1111111111111111"
+  const version = AMID_VERSION
   const unavailableDb = new FakeDb(policyRow({ version }))
   const unavailableKv = new FakeKv({
     [iconoplasmExtensionBlocklistKvKey(1)]: projection({
@@ -953,7 +1094,7 @@ test("admin mutation admission blocks CSRF before D1 or KV and allows trusted br
   }
 
   resetIconoplasmExtensionBlocklistPublicCacheForTests()
-  const version = "ebl1-1111111111111111"
+  const version = AMID_VERSION
   const db = new FakeDb(policyRow({ version }))
   const kv = new FakeKv({
     ...scannerEntries(),
@@ -996,9 +1137,33 @@ test("admin mutation admission blocks CSRF before D1 or KV and allows trusted br
   assert.equal(originlessToken.status, 200)
 })
 
+test("blocklist admin route rejects unsupported methods before auth or bindings", async () => {
+  let authChecks = 0
+  const handler = handlers(async () => {
+    authChecks += 1
+    return true
+  })
+  const env = new Proxy({}, { get: () => assert.fail("unsupported method touched bindings") })
+  for (const method of ["PUT", "DELETE"]) {
+    const response = await callHandler(
+      handler,
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/extension-blocklist", {
+        method,
+      }),
+      env,
+    )
+    const payload = await response.json()
+    assert.equal(response.status, 405)
+    assert.equal(payload.code, "method_not_allowed")
+    assert.equal(response.headers.get("Allow"), "GET, HEAD, POST")
+    assert.equal(response.headers.get("Cache-Control"), "no-store")
+  }
+  assert.equal(authChecks, 0)
+})
+
 test("admin route returns the newer saved policy when KV projection fails", async () => {
   resetIconoplasmExtensionBlocklistPublicCacheForTests()
-  const version = "ebl1-1111111111111111"
+  const version = AMID_VERSION
   const db = new FakeDb(policyRow({ version }))
   const kv = new FakeKv({
     ...scannerEntries(),
