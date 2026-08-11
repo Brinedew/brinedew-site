@@ -202,10 +202,10 @@ body.iconoplasm-highlight-on-hover
   z-index: 2147483647;
   pointer-events: none;
   opacity: 0;
-  transform: translateY(8px) scale(0.96);
+  transform: translateY(3px) scale(0.99);
   transition:
-    opacity 260ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+    opacity 60ms linear,
+    transform 60ms cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Horizontal layout */
   display: flex;
@@ -340,6 +340,7 @@ body.iconoplasm-highlight-on-hover
   --icono-card-subrow-group-pad-top: 3px;
   --icono-card-subrow-group-pad-bottom: 5px;
   --icono-card-subrow-gap: 1px;
+  position: relative;
   flex: 1;
   padding: 20px 20px 14px 14px;
   display: flex;
@@ -361,6 +362,31 @@ body.iconoplasm-highlight-on-hover
   min-height: 298px;
 }
 
+.iconoplasm-tooltip-simple-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-width: 0;
+  min-height: 100%;
+}
+
+/* Both renderer hosts are permanent children of the tooltip body. The iframe is
+   never reparented: moving a loaded iframe reloads its browsing context and loses
+   both the decoded-neighbor cache and an in-flight first-hover payload. */
+.iconoplasm-tooltip:not(.iconoplasm-tooltip--frame-card) .iconoplasm-tooltip-lit-frame-shell {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 1px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.iconoplasm-tooltip--frame-card .iconoplasm-tooltip-simple-content {
+  display: none;
+}
+
 .iconoplasm-tooltip-lit-frame {
   display: block;
   width: 100%;
@@ -368,6 +394,17 @@ body.iconoplasm-highlight-on-hover
   min-height: 298px;
   border: 0;
   background: transparent;
+}
+
+/* postMessage crosses an event-loop boundary. Hide the previous gene immediately
+   when a new-symbol render is pending, then reveal only after the frame's exact
+   request acknowledgement. Otherwise a fast A -> B hover briefly shows A as B. */
+.iconoplasm-tooltip-lit-frame[data-icono-frame-render-state="pending"] {
+  opacity: 0;
+}
+
+.iconoplasm-tooltip-lit-frame[data-icono-frame-render-state="current"] {
+  opacity: 1;
 }
 
 .iconoplasm-tooltip-lit-frame--prewarm {
@@ -379,7 +416,6 @@ body.iconoplasm-highlight-on-hover
   min-height: 1px !important;
   opacity: 0 !important;
   pointer-events: none !important;
-  visibility: hidden !important;
 }
 
 .iconoplasm-tooltip.iconoplasm-tooltip--frame-card {

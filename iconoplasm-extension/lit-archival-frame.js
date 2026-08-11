@@ -1,9 +1,13 @@
 ;(function () {
   "use strict"
 
+  // ARCHITECTURE FENCE [IPD-008]: one persistent renderer owns bounded decoded
+  // readiness; useful text paints before portrait bytes and decorative Rough work.
+
   const FRAME_MESSAGE_SOURCE = "iconoplasm-lit-archival-frame"
   const FRAME_RENDER_TYPE = "ICONOPLASM_LIT_ARCHIVAL_RENDER"
   const FRAME_PREWARM_TYPE = "ICONOPLASM_LIT_ARCHIVAL_PREWARM"
+  const FRAME_PREWARMED_TYPE = "ICONOPLASM_LIT_ARCHIVAL_PREWARMED"
   const FRAME_READY_TYPE = "ICONOPLASM_LIT_ARCHIVAL_READY"
   const FRAME_RENDERED_TYPE = "ICONOPLASM_LIT_ARCHIVAL_RENDERED"
   const FRAME_OPEN_TYPE = "ICONOPLASM_LIT_ARCHIVAL_OPEN"
@@ -15,10 +19,24 @@
   let renderSerial = 0
   const portraitDecodePromiseCache = new Map()
   const portraitDecodedSourceCache = new Set()
+  const PORTRAIT_DECODE_CACHE_LIMIT = 48
+
+  function rememberDecodedPortraitSource(src) {
+    portraitDecodedSourceCache.delete(src)
+    portraitDecodedSourceCache.add(src)
+    while (portraitDecodedSourceCache.size > PORTRAIT_DECODE_CACHE_LIMIT) {
+      const oldest = portraitDecodedSourceCache.values().next().value
+      portraitDecodedSourceCache.delete(oldest)
+    }
+  }
 
   function prewarmPortraitSource(src) {
     const usableSrc = String(src || "").trim()
-    if (!usableSrc) return Promise.resolve()
+    if (!usableSrc) return Promise.resolve(false)
+    if (portraitDecodedSourceCache.has(usableSrc)) {
+      rememberDecodedPortraitSource(usableSrc)
+      return Promise.resolve(true)
+    }
     if (portraitDecodePromiseCache.has(usableSrc)) {
       return portraitDecodePromiseCache.get(usableSrc)
     }
@@ -26,8 +44,6 @@
       const img = new Image()
       img.decoding = "async"
       img.loading = "eager"
-      img.src = usableSrc
-      const finish = () => resolve()
       img.addEventListener(
         "load",
         () => {
@@ -35,17 +51,23 @@
             img
               .decode()
               .catch(() => null)
-              .finally(finish)
+              .finally(() => resolve(true))
             return
           }
-          finish()
+          resolve(true)
         },
         { once: true },
       )
-      img.addEventListener("error", finish, { once: true })
-    }).then(() => {
-      portraitDecodedSourceCache.add(usableSrc)
+      img.addEventListener("error", () => resolve(false), { once: true })
+      img.src = usableSrc
     })
+      .then((decoded) => {
+        if (decoded) rememberDecodedPortraitSource(usableSrc)
+        return decoded
+      })
+      .finally(() => {
+        portraitDecodePromiseCache.delete(usableSrc)
+      })
     portraitDecodePromiseCache.set(usableSrc, promise)
     return promise
   }
@@ -442,9 +464,6 @@
       slot,
       isImageOnlyVariant(payload) ? imageOnlyCardMarkup(payload) : cardMarkup(payload),
     )
-    if (shared && typeof shared.hydrateRoughLoops === "function") {
-      shared.hydrateRoughLoops(slot, true)
-    }
     wireImageOnlyPortraitLoadState()
     wireVoteBox(payload)
     const portraitSrc = String((payload && payload.portraitSrc) || "").trim()
@@ -453,16 +472,42 @@
       requestId: String((payload && payload.requestId) || ""),
       symbol: String((payload && payload.symbol) || ""),
     })
+    // Rough.js decoration is visual polish, not first value. It used to consume
+    // roughly 100 ms before identity text could paint on a warm card. Wait until
+    // one frame has painted the useful card, then decorate only the current render.
+    if (shared && typeof shared.hydrateRoughLoops === "function") {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          if (serial === renderSerial) shared.hydrateRoughLoops(slot, true)
+        })
+      })
+    }
   }
 
   window.addEventListener("message", (event) => {
     const data = event && event.data && typeof event.data === "object" ? event.data : null
     if (!data) return
     if (data.type === FRAME_PREWARM_TYPE) {
-      const sources = Array.isArray(data.sources) ? data.sources : []
-      for (const source of sources) {
-        void prewarmPortraitSource(source)
-      }
+      const sources = Array.from(
+        new Set(
+          (Array.isArray(data.sources) ? data.sources : [])
+            .map((source) => String(source || "").trim())
+            .filter(Boolean),
+        ),
+      )
+      void Promise.all(sources.map(async (source) => [source, await prewarmPortraitSource(source)]))
+        .then(
+          (results) =>
+            new Promise((resolve) => {
+              window.requestAnimationFrame(() => resolve(results))
+            }),
+        )
+        .then((results) => {
+          postToParent(FRAME_PREWARMED_TYPE, {
+            sources: results.filter((entry) => entry[1]).map((entry) => entry[0]),
+            failedSources: results.filter((entry) => !entry[1]).map((entry) => entry[0]),
+          })
+        })
       return
     }
     if (data.type !== FRAME_RENDER_TYPE) return

@@ -1,6 +1,9 @@
 ;(function (root) {
   "use strict"
 
+  // ARCHITECTURE FENCE [IPD-008]: detail remains a bounded, revision-keyed
+  // projection of the published card artifact; persistence never blocks paint.
+
   function normalizeSymbol(rawSymbol) {
     return String(rawSymbol || "")
       .trim()
@@ -20,8 +23,6 @@
     const batchUrl = String(options.batchUrl || "")
     const fields = Array.isArray(options.fields) ? options.fields : []
     const onError = typeof options.onError === "function" ? options.onError : () => {}
-    const onResolvedBatch =
-      typeof options.onResolvedBatch === "function" ? options.onResolvedBatch : () => {}
     const storageApi = options.storageApi || null
     const storageKey = String(options.storageKey || "iconoplasm_published_gene_detail_cache_v1")
     const persistentLimit = Math.max(1, Number(options.persistentLimit || 512))
@@ -35,10 +36,19 @@
       typeof options.deferTask === "function"
         ? options.deferTask
         : (task) => windowRef.setTimeout(task, 0)
+    const deferPersistenceTask =
+      typeof options.deferPersistenceTask === "function"
+        ? options.deferPersistenceTask
+        : (task) => windowRef.setTimeout(task, 0)
     let warmScheduled = false
     let draining = false
     let persistentHydrationPromise = null
     let activeRevision = ""
+    let persistenceDirty = false
+    let persistenceRevisionHint = ""
+    let persistencePromise = null
+    let nextRequestSerial = 0
+    let latestAdoptedResponseSerial = 0
 
     function utf8ByteLength(value) {
       let bytes = 0
@@ -114,6 +124,9 @@
       persistentHydrationPromise = (async () => {
         const revision = await resolveRevision()
         if (!revision) return
+        if (activeRevision && revision !== activeRevision) {
+          cache.clear()
+        }
         activeRevision = revision
         const stored = await storageApi.get([storageKey])
         const payload = stored && stored[storageKey]
@@ -151,9 +164,12 @@
       const revision =
         normalizeRevision(revisionHint) || activeRevision || (await resolveRevision())
       if (!revision) return
-      if (activeRevision && revision !== activeRevision) cache.clear()
-      activeRevision = revision
+      // Persistence follows the network revision; it never elects one. A delayed
+      // v1 write must not roll in-memory v2 state backward while storage IPC is slow.
+      if (activeRevision && revision !== activeRevision) return
+      if (!activeRevision) activeRevision = revision
       const stored = await storageApi.get([storageKey])
+      if (activeRevision !== revision) return
       const previous = stored && stored[storageKey]
       const merged = new Map()
       if (
@@ -174,6 +190,7 @@
         merged.set(symbol, record)
       }
       const entries = boundedPersistentEntries(Array.from(merged.entries()), revision)
+      if (activeRevision !== revision) return
       await storageApi.set({
         [storageKey]: {
           schema_version: 1,
@@ -181,6 +198,36 @@
           entries,
         },
       })
+    }
+
+    function schedulePersistentWrite(revisionHint = "") {
+      if (!storageApi?.get || !storageApi?.set) return null
+      persistenceDirty = true
+      persistenceRevisionHint = normalizeRevision(revisionHint) || persistenceRevisionHint
+      if (persistencePromise) return persistencePromise
+
+      // Persistence protects the next navigation; it must never hold the current
+      // hover open. Serialize and coalesce writes in the background so a burst of
+      // warm batches does not repeatedly rewrite the bounded 4 MiB cache.
+      persistencePromise = new Promise((resolve) => deferPersistenceTask(resolve))
+        .then(async () => {
+          while (persistenceDirty) {
+            persistenceDirty = false
+            const revision = persistenceRevisionHint
+            persistenceRevisionHint = ""
+            await persistResolvedRecords(revision)
+          }
+        })
+        .catch((err) => onError(err))
+        .finally(() => {
+          persistencePromise = null
+          if (persistenceDirty) schedulePersistentWrite(persistenceRevisionHint)
+        })
+      return persistencePromise
+    }
+
+    async function flushPersistence() {
+      while (persistencePromise) await persistencePromise
     }
 
     async function fetchBatch(symbols) {
@@ -199,6 +246,7 @@
       )
 
       if (unresolvedSymbols.length) {
+        const requestSerial = ++nextRequestSerial
         const batchRequest = (async () => {
           try {
             if (!fetchImpl || !batchUrl) throw new Error("Gene detail fetch is not configured")
@@ -214,10 +262,20 @@
 
             const payload = (await resp.json()) || {}
             const responseRevision = normalizeRevision(payload.snapshot_version)
-            if (responseRevision && activeRevision && responseRevision !== activeRevision) {
-              cache.clear()
+            const changesRevision =
+              responseRevision && activeRevision && responseRevision !== activeRevision
+            if (changesRevision && requestSerial < latestAdoptedResponseSerial) {
+              // This request began before a newer request whose response has
+              // already been accepted. Its different snapshot cannot replace
+              // that newer choice. Leave these symbols uncached so a later
+              // request can retry them against the adopted snapshot.
+              return
             }
-            if (responseRevision) activeRevision = responseRevision
+            if (responseRevision) {
+              if (changesRevision) cache.clear()
+              activeRevision = responseRevision
+              latestAdoptedResponseSerial = Math.max(latestAdoptedResponseSerial, requestSerial)
+            }
             const genes = Array.isArray(payload.genes) ? payload.genes : []
             const resolvedMap = new Map()
             for (const record of genes) {
@@ -227,7 +285,6 @@
               if (safeRecord) rememberRecord(symbol, safeRecord)
               resolvedMap.set(symbol, safeRecord)
             }
-            if (genes.length) onResolvedBatch(genes)
             const missingSymbols = Array.isArray(payload.missing) ? payload.missing : []
             for (const rawMissing of missingSymbols) {
               const symbol = normalizeSymbol(rawMissing)
@@ -235,7 +292,7 @@
               cache.set(symbol, null)
               resolvedMap.set(symbol, null)
             }
-            await persistResolvedRecords(responseRevision)
+            schedulePersistentWrite(responseRevision)
           } catch (err) {
             onError(err)
           } finally {
@@ -284,10 +341,11 @@
       for (const rawSymbol of Array.isArray(symbols) ? symbols : []) {
         const symbol = normalizeSymbol(rawSymbol)
         if (!symbol || seen.has(symbol)) continue
-        if (cache.has(symbol) || promiseCache.has(symbol) || queuedSymbols.has(symbol)) continue
+        if (seen.size >= max) break
         seen.add(symbol)
+        if (cache.has(symbol)) continue
+        if (promiseCache.has(symbol) || queuedSymbols.has(symbol)) continue
         uniqueSymbols.push(symbol)
-        if (uniqueSymbols.length >= max) break
       }
       for (const symbol of uniqueSymbols) {
         queuedSymbols.add(symbol)
@@ -317,6 +375,7 @@
       get: (symbol) => cache.get(normalizeSymbol(symbol)) || null,
       hydratePersistentCache,
       persistResolvedRecords,
+      flushPersistence,
       persistentByteLimit,
       persistentPayloadBytes: () =>
         utf8ByteLength(

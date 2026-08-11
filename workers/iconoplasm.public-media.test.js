@@ -19,6 +19,7 @@ import {
   mergePublishedPortraitRefsIntoArtifact,
   projectPublishedCompatibilityArtifact,
   publishedCatalogContractForClientVersion,
+  readIconoplasmPublishedCardCatalogArtifactForTest,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
@@ -297,6 +298,126 @@ class FakeKV {
       cursor: nextOffset < names.length ? String(nextOffset) : "",
     }
   }
+}
+
+class CountedJsonValue {
+  constructor(value, onParse) {
+    this.serialized = JSON.stringify(value)
+    this.onParse = onParse
+  }
+
+  [Symbol.toPrimitive]() {
+    this.onParse()
+    return this.serialized
+  }
+}
+
+class CountingCardCatalogKv {
+  constructor({ pauseReads = false } = {}) {
+    this.pauseReads = pauseReads
+    this.entries = new Map()
+    this.readCounts = new Map()
+    this.parseCounts = new Map()
+  }
+
+  setJson(key, value) {
+    this.entries.set(
+      key,
+      new CountedJsonValue(value, () => {
+        this.parseCounts.set(key, Number(this.parseCounts.get(key) || 0) + 1)
+      }),
+    )
+  }
+
+  async get(key) {
+    this.readCounts.set(key, Number(this.readCounts.get(key) || 0) + 1)
+    if (this.pauseReads) await Promise.resolve()
+    return this.entries.get(key) || null
+  }
+
+  reads(key) {
+    return Number(this.readCounts.get(key) || 0)
+  }
+
+  parses(key) {
+    return Number(this.parseCounts.get(key) || 0)
+  }
+}
+
+function completeCardCatalogCacheVm(symbol, label = symbol) {
+  return {
+    __complete: true,
+    schema_version: "iconoplasm.mobileCard.v1",
+    snapshot_version: "content-addressed",
+    data_source: "published_card_catalog",
+    symbol,
+    full_name: label,
+    display_color: "#667788",
+    portrait: { status: "missing" },
+    field_status: { symbol: "present", portrait: "known_absent" },
+    payload: {
+      api_version: "v1",
+      schema_version: 1,
+      canonical_key: "symbol",
+      canonical_symbol: symbol,
+      symbol,
+      full_name: label,
+      color: "#667788",
+      portrait: { status: "missing" },
+    },
+  }
+}
+
+function putContentAddressedCardCatalog(kv, { version, shardCards }) {
+  const shards = []
+  const symbolShardIndex = {}
+  let cardCount = 0
+  shardCards.forEach((cards, index) => {
+    const contentHash = `${version}-shard-${index}`
+    const key = `iconoplasm:card-catalog-shard:${contentHash}`
+    const normalizedCards = cards.map((card) => ({ ...card }))
+    kv.setJson(key, {
+      schema: "iconoplasm.cardCatalog.v1",
+      storage: "kv_card_catalog_content_addressed_shards",
+      content_hash: contentHash,
+      cards: normalizedCards,
+    })
+    shards.push({
+      key,
+      index,
+      card_count: normalizedCards.length,
+      content_hash: contentHash,
+      first_symbol: normalizedCards[0]?.symbol || null,
+      last_symbol: normalizedCards.at(-1)?.symbol || null,
+    })
+    for (const card of normalizedCards) symbolShardIndex[card.symbol] = index
+    cardCount += normalizedCards.length
+  })
+  const manifestKey = `iconoplasm:card-catalog:${version}`
+  kv.setJson(manifestKey, {
+    schema: "iconoplasm.cardCatalog.v1",
+    artifact_version: version,
+    snapshot_version: version,
+    source: "published_card_catalog",
+    storage: "kv_card_catalog_content_addressed_shards",
+    shard_count: shards.length,
+    catalog_gene_count: cardCount,
+    card_count: cardCount,
+    symbol_shard_index: symbolShardIndex,
+    shards,
+  })
+  return { manifestKey, shards }
+}
+
+function publicGeneBatchRequest(symbols) {
+  return new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Iconoplasm-Extension-Version": "0.4.13",
+    },
+    body: JSON.stringify({ symbols }),
+  })
 }
 
 function buildCatalogResolveKv() {
@@ -1150,6 +1271,176 @@ test("public gene batch honors lean field projection for extension traffic", asy
   assert.equal("portrait_candidates" in (gene || {}), false)
   assert.equal("source_links" in (gene || {}), false)
   assert.equal("page_url" in (gene || {}), false)
+})
+
+test("overlapping public gene batches share manifest and parsed shard work", async () => {
+  const kv = new CountingCardCatalogKv({ pauseReads: true })
+  const version = "batch-cache-v1"
+  kv.setJson("iconoplasm:gallery-version", { current: version, status: "active" })
+  const cards = ["G000", "G001", "G002"].map((symbol) => completeCardCatalogCacheVm(symbol))
+  const { manifestKey, shards } = putContentAddressedCardCatalog(kv, {
+    version,
+    shardCards: [cards.slice(0, 2), cards.slice(2)],
+  })
+  const env = { KV: kv }
+
+  const [firstResponse, secondResponse] = await Promise.all([
+    handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      publicGeneBatchRequest(["G000", "G001"]),
+      env,
+    ),
+    handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      publicGeneBatchRequest(["G001", "G002"]),
+      env,
+    ),
+  ])
+  const firstPayload = await firstResponse.json()
+  const secondPayload = await secondResponse.json()
+
+  assert.equal(firstResponse.status, 200)
+  assert.equal(secondResponse.status, 200)
+  assert.deepEqual(
+    firstPayload.genes.map((gene) => gene.symbol),
+    ["G000", "G001"],
+  )
+  assert.deepEqual(
+    secondPayload.genes.map((gene) => gene.symbol),
+    ["G001", "G002"],
+  )
+  assert.equal(kv.reads(manifestKey), 1)
+  assert.equal(kv.parses(manifestKey), 1)
+  for (const shard of shards) {
+    assert.equal(kv.reads(shard.key), 1)
+    assert.equal(kv.parses(shard.key), 1)
+  }
+
+  const warmResponse =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      publicGeneBatchRequest(["G001"]),
+      env,
+    )
+  assert.equal(warmResponse.status, 200)
+  assert.equal(kv.reads(manifestKey), 1)
+  assert.equal(kv.parses(manifestKey), 1)
+  assert.equal(kv.reads(shards[0].key), 1)
+  assert.equal(kv.parses(shards[0].key), 1)
+})
+
+test("parsed content-addressed shard cache retains no more than four entries", async () => {
+  const kv = new CountingCardCatalogKv()
+  const version = "shard-lru-v1"
+  const cards = Array.from({ length: 5 }, (_, index) =>
+    completeCardCatalogCacheVm(`G${String(index).padStart(3, "0")}`),
+  )
+  const { manifestKey, shards } = putContentAddressedCardCatalog(kv, {
+    version,
+    shardCards: cards.map((card) => [card]),
+  })
+  const env = { KV: kv }
+
+  for (const card of cards) {
+    const artifact = await readIconoplasmPublishedCardCatalogArtifactForTest(env, version, [
+      card.symbol,
+    ])
+    assert.equal(artifact?.bySymbol.get(card.symbol)?.symbol, card.symbol)
+  }
+  assert.equal(kv.reads(manifestKey), 1)
+  assert.equal(kv.parses(manifestKey), 1)
+  assert.equal(kv.reads(shards[0].key), 1)
+  assert.equal(kv.reads(shards.at(-1).key), 1)
+
+  await readIconoplasmPublishedCardCatalogArtifactForTest(env, version, [cards.at(-1).symbol])
+  assert.equal(kv.reads(shards.at(-1).key), 1, "newest shard remains hot")
+
+  await readIconoplasmPublishedCardCatalogArtifactForTest(env, version, [cards[0].symbol])
+  assert.equal(kv.reads(shards[0].key), 2, "oldest shard is reread after the four-entry bound")
+  assert.equal(kv.parses(shards[0].key), 2)
+})
+
+test("an oversized parsed shard is served but never retained", async () => {
+  const kv = new CountingCardCatalogKv()
+  const version = "shard-oversized-v1"
+  const card = completeCardCatalogCacheVm("G000")
+  card.payload.cache_padding = "x".repeat(3 * 1024 * 1024)
+  const { manifestKey, shards } = putContentAddressedCardCatalog(kv, {
+    version,
+    shardCards: [[card]],
+  })
+  const env = { KV: kv }
+
+  for (let read = 0; read < 2; read += 1) {
+    const artifact = await readIconoplasmPublishedCardCatalogArtifactForTest(env, version, [
+      card.symbol,
+    ])
+    assert.equal(artifact?.bySymbol.get(card.symbol)?.symbol, card.symbol)
+  }
+
+  assert.equal(kv.reads(manifestKey), 1, "the small manifest remains cached")
+  assert.equal(kv.parses(manifestKey), 1)
+  assert.equal(kv.reads(shards[0].key), 2, "the shard exceeds the estimated 16 MiB ceiling")
+  assert.equal(kv.parses(shards[0].key), 2)
+})
+
+test("parsed shard cache evicts the least-recent entry before aggregate weight exceeds its ceiling", async () => {
+  const kv = new CountingCardCatalogKv()
+  const version = "shard-weight-lru-v1"
+  const cards = [completeCardCatalogCacheVm("G000"), completeCardCatalogCacheVm("G001")]
+  for (const card of cards) card.payload.cache_padding = "x".repeat(1536 * 1024)
+  const { manifestKey, shards } = putContentAddressedCardCatalog(kv, {
+    version,
+    shardCards: cards.map((card) => [card]),
+  })
+  const env = { KV: kv }
+
+  for (const card of cards) {
+    const artifact = await readIconoplasmPublishedCardCatalogArtifactForTest(env, version, [
+      card.symbol,
+    ])
+    assert.equal(artifact?.bySymbol.get(card.symbol)?.symbol, card.symbol)
+  }
+  await readIconoplasmPublishedCardCatalogArtifactForTest(env, version, [cards[1].symbol])
+  assert.equal(kv.reads(shards[1].key), 1, "newest weighted shard remains cached")
+
+  await readIconoplasmPublishedCardCatalogArtifactForTest(env, version, [cards[0].symbol])
+  assert.equal(kv.reads(manifestKey), 1)
+  assert.equal(kv.parses(manifestKey), 1)
+  assert.equal(kv.reads(shards[0].key), 2, "aggregate weight evicts the oldest shard")
+  assert.equal(kv.parses(shards[0].key), 2)
+})
+
+test("manifest cache is bounded and cannot cross published artifact versions", async () => {
+  const kv = new CountingCardCatalogKv()
+  const manifests = []
+  for (let index = 1; index <= 4; index += 1) {
+    const version = `manifest-lru-v${index}`
+    manifests.push(
+      putContentAddressedCardCatalog(kv, {
+        version,
+        shardCards: [[completeCardCatalogCacheVm("G000", `version ${index}`)]],
+      }),
+    )
+    const artifact = await readIconoplasmPublishedCardCatalogArtifactForTest({ KV: kv }, version, [
+      "G000",
+    ])
+    assert.equal(artifact?.bySymbol.get("G000")?.payload?.full_name, `version ${index}`)
+  }
+
+  const newest = await readIconoplasmPublishedCardCatalogArtifactForTest(
+    { KV: kv },
+    "manifest-lru-v4",
+    ["G000"],
+  )
+  assert.equal(newest?.bySymbol.get("G000")?.payload?.full_name, "version 4")
+  assert.equal(kv.reads(manifests[3].manifestKey), 1, "newest version remains cached")
+
+  const oldest = await readIconoplasmPublishedCardCatalogArtifactForTest(
+    { KV: kv },
+    "manifest-lru-v1",
+    ["G000"],
+  )
+  assert.equal(oldest?.bySymbol.get("G000")?.payload?.full_name, "version 1")
+  assert.equal(kv.reads(manifests[0].manifestKey), 2, "oldest manifest is reread after the bound")
+  assert.equal(kv.parses(manifests[0].manifestKey), 2)
 })
 
 test("public media hot path uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when bound", async () => {

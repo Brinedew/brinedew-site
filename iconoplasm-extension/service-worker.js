@@ -72,6 +72,7 @@ const CONTRACT_ERROR_INVALID_MANIFEST = "invalid_manifest"
 const CONTRACT_ERROR_INCOMPATIBLE_ARTIFACT = "incompatible_artifact"
 const CONTRACT_ERROR_INCOMPATIBLE_EXTENSION = "incompatible_extension"
 const portraitDataUrlCache = new Map()
+const portraitDataUrlPromiseCache = new Map()
 const portraitDataUrlErrorCache = new Map()
 const portraitSourceByTab = new Map()
 const portraitDeliverySessionByTab = new Map()
@@ -558,6 +559,7 @@ function hasFreshPortraitDataUrlError(url) {
 function clearPortraitDataUrlCaches() {
   portraitDataUrlCache.clear()
   portraitDataUrlErrorCache.clear()
+  portraitDataUrlPromiseCache.clear()
 }
 
 async function clearPortraitSourceStates() {
@@ -621,41 +623,57 @@ function configurePortraitDeliveryPolicy(rawPolicy) {
 }
 
 async function fetchPortraitBytes(resolvedUrl, cacheKey) {
-  if (portraitDataUrlCache.has(cacheKey)) return portraitDataUrlCache.get(cacheKey)
-  if (hasFreshPortraitDataUrlError(resolvedUrl)) return ""
-  const controller = typeof AbortController === "function" ? new AbortController() : null
-  const timer = setTimeout(() => controller?.abort(), portraitDeliveryPolicy.probe_timeout_ms)
-  try {
-    const resp = await fetch(resolvedUrl, {
-      headers: {
-        "X-Iconoplasm-Extension-Version": currentExtensionVersion(),
-      },
-      ...(controller ? { signal: controller.signal } : {}),
-    })
-    if (!resp.ok) {
-      console.error("[Iconoplasm] Portrait fetch failed:", resp.status, resolvedUrl)
-      rememberPortraitDataUrlError(resolvedUrl, `http_${resp.status}`)
-      return ""
-    }
-    const contentType = resp.headers.get("Content-Type") || "image/webp"
-    const buffer = await resp.arrayBuffer()
-    const dataUrl = `data:${contentType};base64,${arrayBufferToBase64(buffer)}`
-    // Chesterton's fence: only successful portrait bytes enter the cache.
-    // Earlier blank-image behavior became hard to reason about because a caller
-    // could treat an empty string like a valid warmed result. Keep failures
-    // uncached so the next request can recover as soon as the CDN/object is healthy.
+  if (portraitDataUrlCache.has(cacheKey)) {
+    const dataUrl = portraitDataUrlCache.get(cacheKey)
     rememberPortraitDataUrl(cacheKey, dataUrl)
     return dataUrl
-  } catch (err) {
-    console.error("[Iconoplasm] Portrait fetch error:", err)
-    rememberPortraitDataUrlError(
-      resolvedUrl,
-      err && err.message ? err.message : String(err || "fetch_error"),
-    )
-    return ""
-  } finally {
-    clearTimeout(timer)
   }
+  if (hasFreshPortraitDataUrlError(resolvedUrl)) return ""
+  const promiseKey = String(cacheKey || "") + "\n" + String(resolvedUrl || "")
+  if (portraitDataUrlPromiseCache.has(promiseKey)) {
+    return portraitDataUrlPromiseCache.get(promiseKey)
+  }
+  const request = (async () => {
+    const controller = typeof AbortController === "function" ? new AbortController() : null
+    const timer = setTimeout(() => controller?.abort(), portraitDeliveryPolicy.probe_timeout_ms)
+    try {
+      const resp = await fetch(resolvedUrl, {
+        headers: {
+          "X-Iconoplasm-Extension-Version": currentExtensionVersion(),
+        },
+        ...(controller ? { signal: controller.signal } : {}),
+      })
+      if (!resp.ok) {
+        console.error("[Iconoplasm] Portrait fetch failed:", resp.status, resolvedUrl)
+        rememberPortraitDataUrlError(resolvedUrl, `http_${resp.status}`)
+        return ""
+      }
+      const contentType = resp.headers.get("Content-Type") || "image/webp"
+      const buffer = await resp.arrayBuffer()
+      const dataUrl = `data:${contentType};base64,${arrayBufferToBase64(buffer)}`
+      // Chesterton's fence: only successful portrait bytes enter the cache.
+      // Earlier blank-image behavior became hard to reason about because a caller
+      // could treat an empty string like a valid warmed result. Keep failures
+      // uncached so the next request can recover as soon as the CDN/object is healthy.
+      rememberPortraitDataUrl(cacheKey, dataUrl)
+      return dataUrl
+    } catch (err) {
+      console.error("[Iconoplasm] Portrait fetch error:", err)
+      rememberPortraitDataUrlError(
+        resolvedUrl,
+        err && err.message ? err.message : String(err || "fetch_error"),
+      )
+      return ""
+    } finally {
+      clearTimeout(timer)
+    }
+  })().finally(() => {
+    if (portraitDataUrlPromiseCache.get(promiseKey) === request) {
+      portraitDataUrlPromiseCache.delete(promiseKey)
+    }
+  })
+  portraitDataUrlPromiseCache.set(promiseKey, request)
+  return request
 }
 
 async function portraitDeliverySession(tabId) {
