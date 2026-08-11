@@ -930,6 +930,22 @@ const CARD_CATALOG_ARTIFACT_CONTENT_VERSION_PREFIX = "ccv1"
 // loading/hashing the whole ~19k-card artifact in one Worker invocation.
 const CARD_CATALOG_CONTENT_ADDRESSED_STORAGE = "kv_card_catalog_content_addressed_shards"
 const KV_CARD_CATALOG_CONTENT_ADDRESSED_SHARD_PREFIX = "iconoplasm:card-catalog-shard:"
+// Successful partial card reads are the extension hover hot path. Keep parsed
+// immutable manifests and shards in a small isolate-local LRU so overlapping
+// batches do not repeatedly pay KV transfer + JSON.parse. This is only a speed
+// layer: KV remains the published authority, entries are keyed by immutable
+// publication identity, and malformed/missing values are never cached.
+const CARD_CATALOG_PARSED_MANIFEST_CACHE_LIMIT = 3
+// The earlier count-only cache could retain 16 * 750 rich cards with no memory
+// ceiling. A prior capacity trace measured about 6.3 MiB of serialized data for
+// 2,250 cards (three normal shards). We deliberately estimate a parsed object at
+// six times its raw UTF-8 JSON bytes to cover strings, arrays, property slots,
+// and allocator overhead without claiming an exact V8 heap measurement. The
+// 16 MiB estimate ceiling reserves only about one eighth of a 128 MiB Workers
+// isolate for this optional cache; an oversized shard is served but not kept.
+const CARD_CATALOG_PARSED_SHARD_CACHE_ENTRY_LIMIT = 4
+const CARD_CATALOG_PARSED_SHARD_CACHE_ESTIMATED_BYTE_LIMIT = 16 * 1024 * 1024
+const CARD_CATALOG_PARSED_SHARD_HEAP_MULTIPLIER = 6
 const CARD_ARTIFACT_UNAVAILABLE = "CARD_ARTIFACT_UNAVAILABLE"
 const MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT = 25000
 const CARD_CATALOG_DAILY_KV_WRITE_BUDGET_DEFAULT = 900
@@ -1081,6 +1097,10 @@ const cardCatalogArtifactCache = {
   version: null,
   value: null,
 }
+const cardCatalogParsedManifestCache = new Map()
+const cardCatalogParsedManifestReadPromises = new Map()
+const cardCatalogParsedShardCache = new Map()
+const cardCatalogParsedShardReadPromises = new Map()
 const ADMIN_DASHBOARD_SUMMARY_KEY = "default"
 const ADMIN_READ_MODEL_BOOTSTRAP_KEY = "default"
 const ADMIN_READ_MODEL_BOOTSTRAP_PHASE_SYMBOLS = "symbols"
@@ -22768,6 +22788,10 @@ export function resetIconoplasmRuntimeCachesForTest() {
   clearSharedD1CostCaches()
   cardCatalogArtifactCache.version = null
   cardCatalogArtifactCache.value = null
+  cardCatalogParsedManifestCache.clear()
+  cardCatalogParsedManifestReadPromises.clear()
+  cardCatalogParsedShardCache.clear()
+  cardCatalogParsedShardReadPromises.clear()
   galleryVersionCache.value = "0"
   galleryVersionCache.loadedAt = 0
   resetIconoplasmPublicationAliasPublicCacheForTests()
@@ -25683,19 +25707,109 @@ function stableJsonStringify(value) {
     .join(",")}}`
 }
 
+function readCardCatalogLru(cache, key) {
+  if (!cache.has(key)) return null
+  const entry = cache.get(key)
+  cache.delete(key)
+  cache.set(key, entry)
+  return entry.value
+}
+
+function writeCardCatalogLru(
+  cache,
+  key,
+  value,
+  { entryLimit, estimatedByteLimit = Number.POSITIVE_INFINITY, estimatedBytes = 0 },
+) {
+  const boundedEstimatedBytes = Math.max(0, Number(estimatedBytes) || 0)
+  if (boundedEstimatedBytes > estimatedByteLimit) return value
+
+  cache.delete(key)
+  cache.set(key, { value, estimatedBytes: boundedEstimatedBytes })
+  let retainedEstimatedBytes = 0
+  for (const entry of cache.values()) {
+    retainedEstimatedBytes += Math.max(0, Number(entry?.estimatedBytes) || 0)
+  }
+  while (cache.size > entryLimit || retainedEstimatedBytes > estimatedByteLimit) {
+    const oldestKey = cache.keys().next().value
+    const oldestEntry = cache.get(oldestKey)
+    cache.delete(oldestKey)
+    retainedEstimatedBytes -= Math.max(0, Number(oldestEntry?.estimatedBytes) || 0)
+  }
+  return value
+}
+
+async function readParsedCardCatalogJson(
+  env,
+  storageKey,
+  {
+    cache,
+    readPromises,
+    cacheKey,
+    cacheEntryLimit,
+    cacheEstimatedByteLimit = Number.POSITIVE_INFINITY,
+    cacheParsedHeapMultiplier = 1,
+    validate,
+    shouldCache = () => true,
+  },
+) {
+  if (!env?.KV?.get || !storageKey || !cacheKey) return null
+  const cached = readCardCatalogLru(cache, cacheKey)
+  if (cached) return cached
+
+  const pending = readPromises.get(cacheKey)
+  if (pending) return pending
+
+  const readPromise = (async () => {
+    const raw = await env.KV.get(storageKey)
+    if (!raw) return null
+    const serialized = typeof raw === "string" ? raw : String(raw)
+    const rawUtf8Bytes = new TextEncoder().encode(serialized).byteLength
+    let parsed = null
+    try {
+      parsed = JSON.parse(serialized)
+    } catch {
+      return null
+    }
+    if (!validate(parsed)) return null
+    return shouldCache(parsed)
+      ? writeCardCatalogLru(cache, cacheKey, parsed, {
+          entryLimit: cacheEntryLimit,
+          estimatedByteLimit: cacheEstimatedByteLimit,
+          estimatedBytes: rawUtf8Bytes * Math.max(1, Number(cacheParsedHeapMultiplier) || 1),
+        })
+      : parsed
+  })()
+  readPromises.set(cacheKey, readPromise)
+  try {
+    return await readPromise
+  } finally {
+    if (readPromises.get(cacheKey) === readPromise) readPromises.delete(cacheKey)
+  }
+}
+
+async function readPublishedCardCatalogManifest(env, artifactVersion) {
+  const version = String(artifactVersion || "").trim()
+  if (!version) return null
+  return readParsedCardCatalogJson(env, cardCatalogArtifactStoreKey(version), {
+    cache: cardCatalogParsedManifestCache,
+    readPromises: cardCatalogParsedManifestReadPromises,
+    cacheKey: version,
+    cacheEntryLimit: CARD_CATALOG_PARSED_MANIFEST_CACHE_LIMIT,
+    validate: (parsed) =>
+      parsed?.schema === CARD_CATALOG_ARTIFACT_SCHEMA &&
+      String(parsed.artifact_version || parsed.snapshot_version || "") === version,
+    // Whole legacy artifacts already enter cardCatalogArtifactCache after
+    // normalization. This LRU is for sharded manifests, not a second multi-
+    // version whole-catalog retention layer.
+    shouldCache: (parsed) => Array.isArray(parsed?.shards),
+  })
+}
+
 async function readCardCatalogArtifactManifest(env, artifactVersion) {
   if (!env?.KV?.get || !artifactVersion) return null
   try {
-    const raw = await env.KV.get(cardCatalogArtifactStoreKey(artifactVersion))
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    if (
-      parsed?.schema !== CARD_CATALOG_ARTIFACT_SCHEMA ||
-      String(parsed.artifact_version || parsed.snapshot_version || "") !== artifactVersion
-    ) {
-      return null
-    }
-    return parsed
+    return await readPublishedCardCatalogManifest(env, artifactVersion)
   } catch {
     return null
   }
@@ -25765,6 +25879,40 @@ function cardCatalogIndexedShardsForSymbols(manifest, requestedSymbols) {
     selected.set(index, shard)
   }
   return shards.filter((shard) => selected.has(Number(shard?.index)))
+}
+
+function cardCatalogParsedShardCacheKey(artifactVersion, shard, contentAddressed) {
+  const storageKey = String(shard?.key || "")
+  if (!storageKey) return ""
+  return contentAddressed
+    ? `content-addressed:${storageKey}`
+    : `versioned:${String(artifactVersion || "")}:${storageKey}`
+}
+
+function parsedCardCatalogShardMatchesManifest(parsed, shard, artifactVersion, contentAddressed) {
+  if (parsed?.schema !== CARD_CATALOG_ARTIFACT_SCHEMA) return false
+  if (!Array.isArray(parsed.cards)) return false
+  if (parsed.cards.length !== Number(shard?.card_count || 0)) return false
+  return contentAddressed
+    ? String(parsed.content_hash || "") === String(shard?.content_hash || "")
+    : String(parsed.artifact_version || "") === String(artifactVersion || "") &&
+        Number(parsed.shard_index) === Number(shard?.index)
+}
+
+async function readPublishedCardCatalogShard(env, artifactVersion, shard, contentAddressed) {
+  const storageKey = String(shard?.key || "")
+  const cacheKey = cardCatalogParsedShardCacheKey(artifactVersion, shard, contentAddressed)
+  if (!storageKey || !cacheKey) return null
+  return readParsedCardCatalogJson(env, storageKey, {
+    cache: cardCatalogParsedShardCache,
+    readPromises: cardCatalogParsedShardReadPromises,
+    cacheKey,
+    cacheEntryLimit: CARD_CATALOG_PARSED_SHARD_CACHE_ENTRY_LIMIT,
+    cacheEstimatedByteLimit: CARD_CATALOG_PARSED_SHARD_CACHE_ESTIMATED_BYTE_LIMIT,
+    cacheParsedHeapMultiplier: CARD_CATALOG_PARSED_SHARD_HEAP_MULTIPLIER,
+    validate: (parsed) =>
+      parsedCardCatalogShardMatchesManifest(parsed, shard, artifactVersion, contentAddressed),
+  })
 }
 
 function cardCatalogContentAddressedShardKey(contentHash) {
@@ -25890,13 +26038,7 @@ async function readPublishedCardCatalogArtifact(
   ) {
     return cardCatalogArtifactCache.value
   }
-  const raw = await env.KV.get(cardCatalogArtifactStoreKey(artifactVersion))
-  let parsed = null
-  try {
-    parsed = raw ? JSON.parse(raw) : null
-  } catch {
-    parsed = null
-  }
+  let parsed = await readPublishedCardCatalogManifest(env, artifactVersion)
   const contentAddressed = parsed?.storage === CARD_CATALOG_CONTENT_ADDRESSED_STORAGE
   if (
     parsed?.schema === CARD_CATALOG_ARTIFACT_SCHEMA &&
@@ -25917,13 +26059,12 @@ async function readPublishedCardCatalogArtifact(
       : parsed.shards
     const shardPayloads = await Promise.all(
       shards.map(async (shard) => {
-        const shardRaw = await env.KV.get(String(shard?.key || ""))
-        let shardParsed = null
-        try {
-          shardParsed = shardRaw ? JSON.parse(shardRaw) : null
-        } catch {
-          shardParsed = null
-        }
+        const shardParsed = await readPublishedCardCatalogShard(
+          env,
+          artifactVersion,
+          shard,
+          contentAddressed,
+        )
         return { shard, shardParsed }
       }),
     )
@@ -25933,15 +26074,14 @@ async function readPublishedCardCatalogArtifact(
       // (which IS the KV key) plus card_count — NOT by artifact_version or
       // shard_index, which are manifest-level concerns. Version-keyed (legacy)
       // shards keep the strict artifact_version + shard_index check.
-      const schemaOk = shardParsed?.schema === CARD_CATALOG_ARTIFACT_SCHEMA
-      const cardsOk =
-        Array.isArray(shardParsed?.cards) &&
-        shardParsed.cards.length === Number(shard.card_count || 0)
-      const identityOk = contentAddressed
-        ? String(shardParsed?.content_hash || "") === String(shard?.content_hash || "")
-        : String(shardParsed?.artifact_version || "") === artifactVersion &&
-          Number(shardParsed?.shard_index) === Number(shard.index)
-      if (!schemaOk || !cardsOk || !identityOk) {
+      if (
+        !parsedCardCatalogShardMatchesManifest(
+          shardParsed,
+          shard,
+          artifactVersion,
+          contentAddressed,
+        )
+      ) {
         return null
       }
       cards.push(...shardParsed.cards)
@@ -25962,6 +26102,15 @@ async function readPublishedCardCatalogArtifact(
   cardCatalogArtifactCache.version = artifactVersion
   cardCatalogArtifactCache.value = artifact
   return artifact
+}
+
+export async function readIconoplasmPublishedCardCatalogArtifactForTest(
+  env,
+  version,
+  symbols = null,
+  options = {},
+) {
+  return readPublishedCardCatalogArtifact(env, version, symbols, options)
 }
 
 // ARCHITECTURE FENCE [IPD-003] + [IPD-011]: range pages and image sitemaps

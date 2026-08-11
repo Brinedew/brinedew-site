@@ -83,6 +83,14 @@
         pointer-events: auto;
       }
 
+      /* Extension latency fence: identity is useful before portrait bytes exist.
+         Keep the caption and its contrast scrim visible over the stable reverse
+         face while the portrait independently fades in. */
+      #iconoplasm-root .icono-image-only-link::after,
+      #iconoplasm-root .icono-image-only-overlay {
+        opacity: 1;
+      }
+
       .icono-card--variant-lab-label.icono-card--brick
         .icono-label-specimen-viewport
         .iconoplasm-tooltip-portrait-img {

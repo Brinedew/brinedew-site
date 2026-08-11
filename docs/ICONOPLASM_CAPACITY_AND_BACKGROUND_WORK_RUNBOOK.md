@@ -209,11 +209,49 @@ Extension hover detail is immutable within a published card snapshot:
 - extension upgrades atomically compact any legacy portrait-heavy scanner map
   before returning gene data to a tab;
 - public gene batches read the corresponding published card artifact, not D1;
+  partial reads reuse at most three parsed manifests and four parsed shards per
+  Worker isolate, with a 16 MiB estimated parsed-heap ceiling and one in-flight
+  KV read/parse per immutable key;
+  missing or malformed values are never cached;
 - installed extensions keep a detail cache capped at both 512 entries and
   4 MiB, keyed by that version;
-- a version change invalidates the cache;
+- a version change invalidates the cache, and an older-started response from a
+  different snapshot cannot displace a newer-started response already adopted;
 - only an explicit `missing` result is negative-cached, and transient failures
-  remain retryable.
+  remain retryable;
+- a successful detail response resolves the visible card from memory before a
+  coalesced idle writer reads, merges, stringifies, or writes the persistent
+  cache; an old queued write cannot roll a newer snapshot backward;
+- generic viewport work hydrates detail only and yields while a hover is active;
+  speculative work uses the browser's background task priority when available
+  and is suppressed for Data Saver, `slow-2g`, and `2g` connections;
+- the hovered portrait owns the foreground adapter request, followed by at most
+  four DOM-neighbor portraits in a two-transfer background lane. A newer hover
+  replaces queued, not-yet-started neighbors from the older intent;
+- the rich variants boot one iframe inside its permanent tooltip-owned parent
+  during initialization. That same browsing context decodes neighbors and
+  renders every hover; it is never reparented or duplicated;
+- the cold rich card paints identity over its stable reverse face without
+  assigning the raw canonical portrait URL. Only the shared portrait adapter may
+  hydrate the image, so a successful hover cannot race two read planes; and
+- a neighbor is paint-ready only after bytes arrive, `img.decode()` settles, and
+  the renderer acknowledges a frame boundary. Content and worker data-URL caches
+  retain at most 48 portraits, the frame retains 48 decoded sources, and the
+  simple renderer retains 96; same-source work is deduplicated in both the
+  content script and service worker.
+
+This follows the current small-queue discipline used by modern router
+prefetchers: explicit intent outranks viewport speculation, newer intent
+replaces older queued work, and finished results remain reusable. We evaluated
+[ForesightJS](https://foresightjs.com/docs/getting-started/what-is-foresightjs),
+which the current [Next.js prefetching guide](https://nextjs.org/docs/app/guides/prefetching)
+names for cursor-trajectory prediction, but did not vendor it. Its roughly
+120 ms prediction window cannot hide this system's 300–900 ms cold network
+floor; its approximately 32 KiB runtime would be injected into every eligible
+page; and its required per-element `unregister()` lifecycle is not compatible
+with the current removal-unaware scanner. Reconsider it only with a
+removal-aware registry and a measured non-adjacent-hover win that outweighs the
+startup and memory cost.
 
 The shared extension text blocklist and curated publication aliases follow the
 same published-read-plane boundary without becoming catalog artifacts.
@@ -303,9 +341,13 @@ manifest, search, and artifact reads consume the published metadata even after
 its former five-minute timestamp; they never scan D1 or write KV to "repair" it.
 Missing or corrupt publication state returns a retryable 503.
 
-The batch endpoint still costs one Worker invocation on a cache miss. Persistence
-changes the unit of cost from page navigation to unique gene detail per
-publication snapshot, while the published artifact removes D1 read pressure.
+The batch endpoint still costs one Worker invocation on a cache miss. Its bounded
+isolate LRU prevents repeated parsing of overlapping immutable manifest/shard
+reads without becoming an alternate authority or touching D1. Persistence and
+predictive neighbor readiness change the unit of cost from page navigation to
+unique gene detail and portrait per publication snapshot, while the published
+artifact removes D1 read pressure. Useful identity never waits for portrait
+transfer, storage persistence, iframe boot, or decorative Rough.js hydration.
 Writes, votes, authenticated account feeds, and complete gene HTML remain
 dynamic and keep their existing authority.
 
