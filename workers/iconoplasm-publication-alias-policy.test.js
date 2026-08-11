@@ -36,6 +36,7 @@ import {
   validateIconoplasmPublicationAliasesAgainstPublishedScanner,
 } from "./iconoplasm-publication-alias-policy.js"
 import { iconoplasmRecognitionValidationTarget } from "./iconoplasm-recognition-policy-validation.js"
+import { buildIconoplasmRecognitionValidationIndex } from "./iconoplasm-recognition-validation-index.js"
 import {
   ICONOPLASM_RECOGNITION_PAIR_KV_RETENTION,
   ICONOPLASM_RECOGNITION_PAIR_KV_PREFIX,
@@ -474,14 +475,14 @@ function blocklistPolicyRow({
 function recognitionValidationRow(aliasRow, blocklistRow) {
   return {
     policy_key: "shared",
-    state: "unvalidated",
+    state: "valid",
     validator_revision: 1,
-    scanner_version: "",
+    scanner_version: "alias-scanner-fixture",
     alias_revision: aliasRow.revision,
     alias_version: aliasRow.version,
     blocklist_revision: blocklistRow.revision,
     blocklist_version: blocklistRow.version,
-    validated_at: null,
+    validated_at: "2026-08-11T00:00:30.000Z",
     validation_lease_token: null,
     validation_lease_expires_at: null,
     last_validation_error: null,
@@ -572,12 +573,17 @@ function scannerEntries({
   genes.CXCL8 = { a: cxcl8Aliases }
   genes.OTHER = { a: ["TAKEN"] }
   genes.CDH17 = includeCadherin ? { a: ["cadherin"] } : {}
+  const recognitionIndex = buildIconoplasmRecognitionValidationIndex(genes, {
+    scannerVersion: hash,
+  })
   return {
     "iconoplasm:catalog-manifest": JSON.stringify({
       current_hash: hash,
       scanner_artifact: { build_version: hash },
     }),
     [`iconoplasm:scanner-catalog:${hash}`]: JSON.stringify({ schema_version: 1, genes }),
+    ...Object.fromEntries(recognitionIndex.shards.map((shard) => [shard.key, shard.value])),
+    [recognitionIndex.manifestKey]: recognitionIndex.manifestValue,
   }
 }
 
@@ -907,12 +913,24 @@ test("an older pair publisher finishing last cannot regress the isolate cache", 
   })
   const oldPairKey = iconoplasmRecognitionPairKvKey(2, 1)
   const gate = kv.pauseNextGet(oldPairKey)
-  const olderPublication = publishIconoplasmRecognitionPolicyPair(kv)
+  const olderPublication = publishIconoplasmRecognitionPolicyPair(kv, {
+    validatedRecognitionTarget: iconoplasmRecognitionValidationTarget({
+      scannerVersion: "alias-scanner-fixture",
+      aliases: { revision: 2, version: SEED_ALIAS_VERSION },
+      blocklist: { revision: 1, version: SEED_BLOCKLIST_VERSION },
+    }),
+  })
   await gate.reached
 
   const newerAliases = await iconoplasmPublicationAliasManifestFromPolicy(candidateWithIl8())
   kv.entries.set(iconoplasmPublicationAliasKvKey(3), JSON.stringify(newerAliases))
-  const newerPublication = await publishIconoplasmRecognitionPolicyPair(kv)
+  const newerPublication = await publishIconoplasmRecognitionPolicyPair(kv, {
+    validatedRecognitionTarget: iconoplasmRecognitionValidationTarget({
+      scannerVersion: "alias-scanner-fixture",
+      aliases: { revision: 3, version: newerAliases.version },
+      blocklist: { revision: 1, version: SEED_BLOCKLIST_VERSION },
+    }),
+  })
   assert.equal(newerPublication.pair.alias_revision, 3)
 
   gate.release()
@@ -1055,7 +1073,7 @@ test("foreground fresh mutation and receipt retries never list histories or rebu
   assert.equal(kv.gets.filter((key) => key.startsWith("iconoplasm:scanner-catalog:")).length, 1)
 })
 
-test("GET visibility retries staged alias and pair values without rescanning", async () => {
+test("GET visibility retries stage alias and pair values without reading the scanner artifact", async () => {
   resetIconoplasmPublicationAliasPublicCacheForTests()
   resetIconoplasmRecognitionPolicyPublicCacheForTests()
   const db = new FakeDb()
@@ -1108,7 +1126,7 @@ test("GET visibility retries staged alias and pair values without rescanning", a
   assert.equal(first.payload.saved, true)
   assert.equal(db.aliasRow.revision, 2)
   assert.equal(db.aliasHistory.length, 1)
-  assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 1)
+  assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 0)
 
   hideAliasProjection = false
   const second = await post(2)
@@ -1116,7 +1134,7 @@ test("GET visibility retries staged alias and pair values without rescanning", a
   assert.equal(second.payload.code, "recognition_pair_not_visible")
   assert.equal(db.aliasRow.revision, 2)
   assert.equal(db.aliasHistory.length, 1)
-  assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 1)
+  assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 0)
 
   hidePairProjection = false
   const third = await post(2)
@@ -1125,10 +1143,10 @@ test("GET visibility retries staged alias and pair values without rescanning", a
   assert.deepEqual(third.payload.policy.by_symbol.CXCL8, ["IL8"])
   assert.equal(db.aliasRow.revision, 2)
   assert.equal(db.aliasHistory.length, 1)
-  assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 1)
+  assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 0)
 })
 
-test("3-POST 1102 value-before-list retries never rebuild the scanner context", async () => {
+test("3-POST 1102 value-before-list mutation and retries never read the scanner artifact", async () => {
   resetIconoplasmPublicationAliasPublicCacheForTests()
   resetIconoplasmRecognitionPolicyPublicCacheForTests()
   const db = new FakeDb()
@@ -1172,7 +1190,7 @@ test("3-POST 1102 value-before-list retries never rebuild the scanner context", 
   assert.equal(kv.entries.has(pairKey), true)
   assert.equal(db.aliasRow.revision, 2)
   assert.equal(db.aliasHistory.length, 1)
-  assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 1)
+  assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 0)
 
   kv.hiddenListPrefixes.delete(aliasRevisionPrefix)
   const second = await post(2)
@@ -1181,7 +1199,7 @@ test("3-POST 1102 value-before-list retries never rebuild the scanner context", 
   assert.equal(kv.entries.has(pairKey), true)
   assert.equal(db.aliasRow.revision, 2)
   assert.equal(db.aliasHistory.length, 1)
-  assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 1)
+  assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 0)
 
   kv.hiddenListPrefixes.delete(pairKey)
   const third = await post(2)
@@ -1190,7 +1208,7 @@ test("3-POST 1102 value-before-list retries never rebuild the scanner context", 
   assert.deepEqual(third.payload.policy.by_symbol.CXCL8, ["IL8"])
   assert.equal(db.aliasRow.revision, 2)
   assert.equal(db.aliasHistory.length, 1)
-  assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 1)
+  assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 0)
   assert.equal(kv.puts.filter(({ key }) => key === pairKey).length, 1)
 })
 
@@ -1278,6 +1296,18 @@ test("ordered reconciliation resolves a pending alias then blocklist dependency 
     expectedRevision: 1,
     expectedPublicationAliasRevision: 2,
   })
+  Object.assign(db.validationRow, {
+    state: "valid",
+    scanner_version: "alias-scanner-fixture",
+    alias_revision: db.aliasRow.revision,
+    alias_version: db.aliasRow.version,
+    blocklist_revision: db.blocklistRow.revision,
+    blocklist_version: db.blocklistRow.version,
+    validated_at: "2026-08-11T00:02:00.000Z",
+    validation_lease_token: null,
+    validation_lease_expires_at: null,
+    last_validation_error: null,
+  })
 
   const result = await reconcileIconoplasmRecognitionPolicies({ ICONOPLASM_DB: db, KV: kv })
   assert.equal(result.passes.blocklist_first.status, "rejected")
@@ -1291,32 +1321,24 @@ test("ordered reconciliation resolves a pending alias then blocklist dependency 
   assert.equal(db.blocklistRow.published_revision, 2)
 })
 
-test("same published pair revalidates once per scanner build and then uses the exact receipt", async () => {
+test("an unvalidated pair requires catalog publication and never reads the scanner", async () => {
   resetIconoplasmRecognitionPolicyPublicCacheForTests()
   const db = new FakeDb()
+  Object.assign(db.validationRow, {
+    state: "unvalidated",
+    scanner_version: "",
+    validated_at: null,
+  })
   const pairKey = iconoplasmRecognitionPairKvKey(1, 1)
   const kv = new FakeKv({
     ...publicEntries(),
     [pairKey]: recognitionPairProjection(),
   })
-  const firstArtifact = "iconoplasm:scanner-catalog:alias-scanner-fixture"
-
-  const first = await reconcileIconoplasmRecognitionPolicies({ ICONOPLASM_DB: db, KV: kv })
-  assert.equal(first.pair.value.reason, "already_published")
-  assert.equal(kv.gets.filter((key) => key === firstArtifact).length, 1)
-
-  await reconcileIconoplasmRecognitionPolicies({ ICONOPLASM_DB: db, KV: kv })
-  assert.equal(kv.gets.filter((key) => key === firstArtifact).length, 1)
-
-  for (const [key, value] of Object.entries(scannerEntries({ hash: "alias-scanner-fixture-v2" }))) {
-    kv.entries.set(key, value)
-  }
-  const secondArtifact = "iconoplasm:scanner-catalog:alias-scanner-fixture-v2"
-  await reconcileIconoplasmRecognitionPolicies({ ICONOPLASM_DB: db, KV: kv })
-  assert.equal(kv.gets.filter((key) => key === secondArtifact).length, 1)
-
-  await reconcileIconoplasmRecognitionPolicies({ ICONOPLASM_DB: db, KV: kv })
-  assert.equal(kv.gets.filter((key) => key === secondArtifact).length, 1)
+  await assert.rejects(
+    reconcileIconoplasmRecognitionPolicies({ ICONOPLASM_DB: db, KV: kv }),
+    (error) => error.status === 503 && error.code === "recognition_validation_baseline_unavailable",
+  )
+  assert.equal(kv.gets.filter((key) => key.startsWith("iconoplasm:scanner-catalog:")).length, 0)
 })
 
 test("malformed valid receipt fails closed without touching the scanner artifact", async () => {
@@ -1341,7 +1363,7 @@ test("malformed valid receipt fails closed without touching the scanner artifact
   assert.equal(kv.gets.filter((key) => key.startsWith("iconoplasm:scanner-catalog:")).length, 0)
 })
 
-test("stale validator revision performs one fused revalidation and repairs the receipt", async () => {
+test("stale validator revision requires catalog publication without scanner work", async () => {
   const db = new FakeDb()
   Object.assign(db.validationRow, {
     state: "valid",
@@ -1356,18 +1378,15 @@ test("stale validator revision performs one fused revalidation and repairs the r
     ...publicEntries(),
     [iconoplasmRecognitionPairKvKey(1, 1)]: recognitionPairProjection(),
   })
-  const artifactKey = "iconoplasm:scanner-catalog:alias-scanner-fixture"
-
-  await reconcileIconoplasmRecognitionPolicies({ ICONOPLASM_DB: db, KV: kv })
-  assert.equal(db.validationRow.state, "valid")
-  assert.equal(db.validationRow.validator_revision, 1)
-  assert.equal(kv.gets.filter((key) => key === artifactKey).length, 1)
-
-  await reconcileIconoplasmRecognitionPolicies({ ICONOPLASM_DB: db, KV: kv })
-  assert.equal(kv.gets.filter((key) => key === artifactKey).length, 1)
+  await assert.rejects(
+    reconcileIconoplasmRecognitionPolicies({ ICONOPLASM_DB: db, KV: kv }),
+    (error) => error.code === "recognition_validation_baseline_unavailable",
+  )
+  assert.equal(db.validationRow.validator_revision, 2)
+  assert.equal(kv.gets.filter((key) => key.startsWith("iconoplasm:scanner-catalog:")).length, 0)
 })
 
-test("active same-target validation lease is retryable without reading scanner artifacts", async () => {
+test("an unvalidated leased receipt still requires catalog publication without scanner work", async () => {
   const db = new FakeDb()
   Object.assign(db.validationRow, {
     state: "unvalidated",
@@ -1388,7 +1407,7 @@ test("active same-target validation lease is retryable without reading scanner a
       { ICONOPLASM_DB: db, KV: kv },
       { now: new Date("2026-08-11T00:30:00.000Z") },
     ),
-    (error) => error.status === 503 && error.code === "recognition_policy_validation_in_progress",
+    (error) => error.status === 503 && error.code === "recognition_validation_baseline_unavailable",
   )
   assert.equal(kv.gets.filter((key) => key.startsWith("iconoplasm:scanner-catalog:")).length, 0)
 })
@@ -1497,7 +1516,7 @@ test("matching receipt stages a new pair with exactly three manifest TOCTOU read
   assert.equal(kv.gets.filter((key) => key.startsWith("iconoplasm:scanner-catalog:")).length, 0)
 })
 
-test("deterministic invalid receipt prevents cron scanner-rescan loops", async () => {
+test("deterministic invalid receipt prevents scanner reads on every cron", async () => {
   const invalidTerms = ["NOPE"]
   const blocklistVersion = `ebl1-${createHash("sha256")
     .update(JSON.stringify(invalidTerms))
@@ -1513,6 +1532,14 @@ test("deterministic invalid receipt prevents cron scanner-rescan loops", async (
       publishedVersion: SEED_BLOCKLIST_VERSION,
     }),
   })
+  Object.assign(db.validationRow, {
+    state: "invalid",
+    scanner_version: "alias-scanner-fixture",
+    validated_at: null,
+    validation_lease_token: null,
+    validation_lease_expires_at: null,
+    last_validation_error: "Desired recognition policy is invalid",
+  })
   const kv = new FakeKv(publicEntries())
   const artifactKey = "iconoplasm:scanner-catalog:alias-scanner-fixture"
 
@@ -1520,15 +1547,13 @@ test("deterministic invalid receipt prevents cron scanner-rescan loops", async (
     reconcileIconoplasmRecognitionPolicies({ ICONOPLASM_DB: db, KV: kv }),
     (error) => error.status === 422,
   )
-  assert.equal(db.validationRow.state, "invalid")
-  assert.ok(db.validationRow.last_validation_error)
-  assert.equal(kv.gets.filter((key) => key === artifactKey).length, 1)
+  assert.equal(kv.gets.filter((key) => key === artifactKey).length, 0)
 
   await assert.rejects(
     reconcileIconoplasmRecognitionPolicies({ ICONOPLASM_DB: db, KV: kv }),
     (error) => error.code === "recognition_policy_validation_invalid",
   )
-  assert.equal(kv.gets.filter((key) => key === artifactKey).length, 1)
+  assert.equal(kv.gets.filter((key) => key === artifactKey).length, 0)
 })
 
 test("policy race after receipt lookup cannot publish under the older validation target", async () => {

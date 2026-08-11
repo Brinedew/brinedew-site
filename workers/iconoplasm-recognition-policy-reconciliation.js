@@ -10,7 +10,6 @@ import {
   readPublishedIconoplasmExtensionBlocklistForPolicy,
   readRetainedPublishedIconoplasmExtensionBlocklists,
   reconcileIconoplasmExtensionBlocklistPolicy,
-  validateIconoplasmExtensionBlocklistAgainstPublishedScanner,
 } from "./iconoplasm-extension-blocklist-policy.js"
 import {
   iconoplasmPublicationAliasManifest,
@@ -19,22 +18,16 @@ import {
 import {
   cleanupIconoplasmPublicationAliasProjectionHistory,
   readAuthoritativePublishedIconoplasmPublicationAliases,
-  loadIconoplasmPublishedScannerRecognitionContext,
   readIconoplasmPublicationAliasPolicy,
   readIconoplasmPublishedScannerVersion,
   readPublishedIconoplasmPublicationAliasesForPolicy,
   reconcileIconoplasmPublicationAliasPolicy,
-  validateIconoplasmPublicationAliasesAgainstPublishedScanner,
 } from "./iconoplasm-publication-alias-policy.js"
 import {
-  claimIconoplasmRecognitionValidationLease,
-  completeIconoplasmRecognitionValidationLease,
   iconoplasmRecognitionValidationReceiptMatches,
   iconoplasmRecognitionValidationTarget,
   iconoplasmRecognitionValidationTargetMatches,
   readIconoplasmRecognitionValidationReceipt,
-  rejectIconoplasmRecognitionValidationLease,
-  releaseIconoplasmRecognitionValidationLease,
 } from "./iconoplasm-recognition-policy-validation.js"
 
 export const ICONOPLASM_RECOGNITION_PAIR_KV_PREFIX = "iconoplasm:recognition-policy-pair:v1:"
@@ -395,9 +388,11 @@ export async function publishIconoplasmRecognitionPolicyPair(
     )
   }
   if (!validatedRecognitionTarget) {
-    await validateIconoplasmExtensionBlocklistAgainstPublishedScanner(kv, blocklist.terms, {
-      publicationAliases: aliases.overlay,
-    })
+    throw policyError(
+      "recognition_validation_baseline_unavailable",
+      "Recognition pair publication requires an exact durable validation receipt",
+      503,
+    )
   }
   if (existing == null) await kv.put(key, raw)
   const visible = await parsePair(await kv.get(key), {
@@ -479,84 +474,11 @@ async function ensureRecognitionValidationReceipt(env, aliases, blocklist, scann
       422,
     )
   }
-  const claim = await claimIconoplasmRecognitionValidationLease(env.ICONOPLASM_DB, target, { now })
-  if (claim.status === "valid") return target
-  if (claim.status === "invalid") {
-    throw policyError(
-      "recognition_policy_validation_invalid",
-      claim.receipt?.last_validation_error ||
-        "Desired recognition policy is invalid for this scanner",
-      422,
-    )
-  }
-  if (claim.status !== "owned") {
-    throw policyError(
-      "recognition_policy_validation_in_progress",
-      "Recognition policy validation is already in progress",
-      503,
-    )
-  }
-  try {
-    const scannerContext = await loadIconoplasmPublishedScannerRecognitionContext(env.KV)
-    if (scannerContext.scanner_version !== scannerVersion) {
-      throw policyError(
-        "published_scanner_changed_during_validation",
-        "Published scanner changed before recognition validation began",
-        503,
-      )
-    }
-    await validateIconoplasmPublicationAliasesAgainstPublishedScanner(
-      env.KV,
-      aliases.by_symbol,
-      aliases.remove_by_symbol,
-      {
-        baselinePolicy: aliases,
-        requiredAliasTerms: blocklist.terms,
-        scannerContext,
-      },
-    )
-    if ((await readIconoplasmPublishedScannerVersion(env.KV)) !== scannerVersion) {
-      throw policyError(
-        "published_scanner_changed_during_validation",
-        "Published scanner changed during recognition validation",
-        503,
-      )
-    }
-    const completed = await completeIconoplasmRecognitionValidationLease(
-      env.ICONOPLASM_DB,
-      target,
-      claim.token,
-      { now },
-    )
-    if (!completed) {
-      throw policyError(
-        "recognition_policy_validation_contended",
-        "Recognition policy changed during validation",
-        503,
-      )
-    }
-    return target
-  } catch (error) {
-    const deterministic = Number(error?.status) === 422
-    if (deterministic) {
-      await rejectIconoplasmRecognitionValidationLease(
-        env.ICONOPLASM_DB,
-        target,
-        claim.token,
-        error?.message || error,
-        { now },
-      )
-    } else {
-      await releaseIconoplasmRecognitionValidationLease(
-        env.ICONOPLASM_DB,
-        target,
-        claim.token,
-        error?.message || error,
-        { now },
-      )
-    }
-    throw error
-  }
+  throw policyError(
+    "recognition_validation_baseline_unavailable",
+    "Recognition validation must be refreshed by catalog publication before policy reconciliation",
+    503,
+  )
 }
 
 export async function reconcileIconoplasmRecognitionPolicies(

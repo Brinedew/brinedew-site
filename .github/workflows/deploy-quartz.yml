@@ -108,6 +108,7 @@ jobs:
             workers/iconoplasm-extension-blocklist-policy.test.js \
             workers/iconoplasm-extension-blocklist-public.test.js \
             workers/iconoplasm-publication-alias-policy.test.js \
+            workers/iconoplasm-recognition-validation-index.test.js \
             workers/iconoplasm.publication-aliases.test.js \
             workers/iconoplasm.public-media.test.js \
             workers/iconoplasm.search.test.js \

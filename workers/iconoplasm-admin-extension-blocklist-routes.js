@@ -11,7 +11,6 @@ import {
   readAuthoritativePublishedIconoplasmExtensionBlocklist,
   readIconoplasmExtensionBlocklistPolicy,
   saveIconoplasmExtensionBlocklistPolicy,
-  validateIconoplasmExtensionBlocklistAgainstPublishedScanner,
 } from "./iconoplasm-extension-blocklist-policy.js"
 import {
   ICONOPLASM_ADMIN_POLICY_NO_STORE as NO_STORE,
@@ -19,11 +18,15 @@ import {
   readIconoplasmAdminPolicyBoundedJson,
 } from "./iconoplasm-admin-policy-http.js"
 import {
-  loadIconoplasmPublishedScannerRecognitionContext,
   readIconoplasmPublicationAliasPolicy,
   readIconoplasmPublishedScannerVersion,
+  validateIconoplasmRequiredAliasTermsAgainstPublishedIndex,
 } from "./iconoplasm-publication-alias-policy.js"
-import { iconoplasmRecognitionValidationTarget } from "./iconoplasm-recognition-policy-validation.js"
+import {
+  iconoplasmRecognitionValidationReceiptMatches,
+  iconoplasmRecognitionValidationTarget,
+  readIconoplasmRecognitionValidationReceipt,
+} from "./iconoplasm-recognition-policy-validation.js"
 import {
   reconcileIconoplasmRecognitionPolicies,
   readAuthoritativePublishedIconoplasmRecognitionPolicies,
@@ -235,14 +238,31 @@ export function createIconoplasmAdminExtensionBlocklistHandlers(services) {
           revision: loadedPolicy.revision + 1,
           dependsOnAliasRevision: publicationAliasPolicy.revision,
         })
-        const scannerContext = await loadIconoplasmPublishedScannerRecognitionContext(env.KV)
-        const terms = await validateIconoplasmExtensionBlocklistAgainstPublishedScanner(
+        const scannerVersion = await readIconoplasmPublishedScannerVersion(env.KV)
+        const baselineTarget = iconoplasmRecognitionValidationTarget({
+          scannerVersion,
+          aliases: publicationAliasPolicy,
+          blocklist: loadedPolicy,
+        })
+        const receipt = await readIconoplasmRecognitionValidationReceipt(env.ICONOPLASM_DB)
+        if (!iconoplasmRecognitionValidationReceiptMatches(receipt, baselineTarget, "valid")) {
+          throw new IconoplasmExtensionBlocklistPolicyError(
+            "recognition_validation_baseline_unavailable",
+            "Current recognition policy is not validated for this catalog; republish the catalog before editing the blocklist",
+            503,
+          )
+        }
+        const previousTerms = new Set(loadedPolicy.terms)
+        const addedTerms = candidate.terms.filter((term) => !previousTerms.has(term))
+        await validateIconoplasmRequiredAliasTermsAgainstPublishedIndex(
           env.KV,
-          candidate.terms,
-          { publicationAliases: publicationAliasPolicy, scannerContext },
+          publicationAliasPolicy,
+          addedTerms,
+          { scannerVersion },
         )
+        const terms = candidate.terms
         const scannerAfterValidation = await readIconoplasmPublishedScannerVersion(env.KV)
-        if (scannerAfterValidation !== scannerContext.scanner_version) {
+        if (scannerAfterValidation !== scannerVersion) {
           throw new IconoplasmExtensionBlocklistPolicyError(
             "published_scanner_changed_during_validation",
             "Published scanner changed during blocklist validation; retry against the new build",
@@ -250,7 +270,7 @@ export function createIconoplasmAdminExtensionBlocklistHandlers(services) {
           )
         }
         const validationTarget = iconoplasmRecognitionValidationTarget({
-          scannerVersion: scannerContext.scanner_version,
+          scannerVersion,
           aliases: publicationAliasPolicy,
           blocklist: { revision: candidate.revision, version: candidate.version },
         })

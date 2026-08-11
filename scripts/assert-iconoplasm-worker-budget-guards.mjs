@@ -20,6 +20,26 @@ const publicationAliasPolicyTests = readFileSync(
   new URL("../workers/iconoplasm-publication-alias-policy.test.js", import.meta.url),
   "utf8",
 )
+const recognitionValidationIndex = readFileSync(
+  new URL("../workers/iconoplasm-recognition-validation-index.js", import.meta.url),
+  "utf8",
+)
+const recognitionValidationIndexTests = readFileSync(
+  new URL("../workers/iconoplasm-recognition-validation-index.test.js", import.meta.url),
+  "utf8",
+)
+const publicationAliasRoute = readFileSync(
+  new URL("../workers/iconoplasm-admin-publication-alias-routes.js", import.meta.url),
+  "utf8",
+)
+const extensionBlocklistRoute = readFileSync(
+  new URL("../workers/iconoplasm-admin-extension-blocklist-routes.js", import.meta.url),
+  "utf8",
+)
+const recognitionReconciliation = readFileSync(
+  new URL("../workers/iconoplasm-recognition-policy-reconciliation.js", import.meta.url),
+  "utf8",
+)
 const workflow = readFileSync(
   new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
   "utf8",
@@ -148,8 +168,43 @@ includesOrFail(
 )
 includesOrFail(
   publicationAliasPolicyTests,
-  'test("3-POST 1102 value-before-list retries never rebuild the scanner context"',
+  'test("3-POST 1102 value-before-list mutation and retries never read the scanner artifact"',
   "The alias policy suite must keep the loud 3-POST 1102 scanner-cost regression.",
+)
+includesOrFail(
+  recognitionValidationIndex,
+  "ICONOPLASM_RECOGNITION_INDEX_SHARD_COUNT = 64",
+  "Recognition validation must retain its bounded immutable shard count.",
+)
+includesOrFail(
+  recognitionValidationIndexTests,
+  'test("cyclin P to CCNP validates from bounded lookup shards without a scanner read"',
+  "The exact production 1102 alias must remain a bounded scanner-free regression.",
+)
+includesOrFail(
+  workflow,
+  "workers/iconoplasm-recognition-validation-index.test.js",
+  "Production workflow must run the targeted recognition-index gate.",
+)
+for (const [source, label] of [
+  [publicationAliasRoute, "Publication-alias admin route"],
+  [extensionBlocklistRoute, "Extension-blocklist admin route"],
+  [recognitionReconciliation, "Recognition reconciler"],
+]) {
+  doesNotMatchOrFail(
+    source,
+    /loadIconoplasmPublishedScannerRecognitionContext/,
+    `${label} must never rebuild the full scanner recognition context.`,
+  )
+}
+const indexPublishOffset = worker.indexOf("await publishIconoplasmRecognitionValidationIndex")
+const receiptOffset = worker.indexOf("await recordIconoplasmRecognitionValidationReceipt")
+const manifestAdvanceOffset = worker.indexOf("await env.KV.put(KV_CATALOG_MANIFEST")
+assert.ok(indexPublishOffset >= 0, "Catalog publication must write the recognition index.")
+assert.ok(receiptOffset >= 0, "Catalog publication must record the exact recognition receipt.")
+assert.ok(
+  indexPublishOffset < receiptOffset && receiptOffset < manifestAdvanceOffset,
+  "Catalog publication must write index, then receipt, then advance the public manifest.",
 )
 doesNotMatchOrFail(
   workflow,
