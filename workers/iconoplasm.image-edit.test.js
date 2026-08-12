@@ -49,13 +49,10 @@ test("candidate prompt authority migration renames every stored mode without los
       .prepare("SELECT id, prompt_body_mode FROM icono_candidate_generation_jobs ORDER BY id")
       .all()
       .map((row) => ({ id: row.id, prompt_body_mode: row.prompt_body_mode }))
-    assert.deepEqual(
-      migratedJobs,
-      [
-        { id: "prose-job", prompt_body_mode: "prose_prompt" },
-        { id: "tag-job", prompt_body_mode: "taggerizer_prompt" },
-      ],
-    )
+    assert.deepEqual(migratedJobs, [
+      { id: "prose-job", prompt_body_mode: "prose_prompt" },
+      { id: "tag-job", prompt_body_mode: "taggerizer_prompt" },
+    ])
     db.prepare(
       `INSERT INTO icono_candidate_generation_jobs
          (id, user_id, provider_id, gene_symbol)
