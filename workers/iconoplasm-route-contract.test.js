@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+// ARCHITECTURE FENCE [IPD-008]: immutable hover-detail routing remains explicit and covered.
+
 import {
   ICONOPLASM_API_SCHEMA_VERSION,
   ICONOPLASM_ROUTE_CONTRACTS,
@@ -19,6 +21,7 @@ const PATTERN_EXAMPLES = Object.freeze({
   public_catalog_artifact: "/api/public/v1/catalog/catalog.abc123.json",
   public_scanner_artifact: "/api/public/v1/catalog/scanner.abc123.json",
   public_catalog_dump: "/api/public/v1/dumps/catalog.abc123.jsonl",
+  public_card_snapshot_gene: "/api/public/v1/card-snapshots/card-v1/genes/TP53",
   mobile_card_symbol: "/api/iconoplasm/cards/TP53",
   print_copy_png: "/api/iconoplasm/print-copy/TP53.png",
   print_copy_enrollment: "/api/iconoplasm/print-copy-requests/TP53",

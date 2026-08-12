@@ -22,8 +22,11 @@ startup, scheduling, model routing, credential handling, or result anchoring.
 
 **ARCHITECTURE FENCE [IPD-001]** — Bunny is Iconoplasm's healthy-path portrait
 accelerator because direct delivery avoids charging each image to the
-Cloudflare Worker budget. The first real image probes once per tab; a regional
-DNS failure selects the canonical first-party fallback for that tab. Never turn
+Cloudflare Worker budget. The extension starts one real browser-native image
+per tab and begins the canonical first-party hedge after 350 ms if Bunny is
+still unresolved; the first successful source becomes the tab decision. A
+regional DNS failure therefore selects canonical without putting the old 2.5 s
+worker-byte probe on the visible-hover path. Never turn
 one network's DNS result into a global accelerator disable. Read
 `docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md` before changing portrait policy,
 storage, CDN configuration, preconnects, or fallback behavior. Requested
@@ -122,9 +125,13 @@ hover detail use the published read plane. A guest homepage must not probe
 authentication, settings, discoveries, inventory statistics, admin state, or
 D1. The readable shared-session marker carries no identity or authority; it may
 only gate one direct authenticated-user lookup, while the HttpOnly session
-cookie remains the credential. Extension detail batches project immutable
-published card artifacts and persist a bounded cache keyed by the card snapshot
-version; they must not compose public hover cards from D1 or turn transient
+cookie remains the credential. Extension foreground detail uses a
+version-addressed immutable per-symbol GET; older clients retain the batch
+compatibility route. Foreground intent must not wait for whole-cache hydration
+or speculative batches, and a newer hover aborts obsolete network work through
+the service worker. Both routes project immutable published card artifacts and
+persist a bounded cache keyed by the card snapshot version; they must not
+compose public hover cards from D1 or turn transient
 failures into durable “missing gene” records. The admin-managed shared extension
 text blocklist and curated publication aliases are one recognition policy: D1
 owns each desired state, while individual immutable KV revisions are bounded

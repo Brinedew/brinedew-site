@@ -295,6 +295,33 @@ test("legacy portrait-heavy storage is compacted before a tab can receive it", a
   }
 })
 
+test("native portrait source planning is fetch-free and persists the winning regional source", async () => {
+  const originalFetch = globalThis.fetch
+  let fetchCount = 0
+  globalThis.fetch = async () => {
+    fetchCount += 1
+    throw new Error("source planning must not fetch portrait bytes")
+  }
+  await hooks.clearPortraitSourceStates()
+  try {
+    const canonical = "https://iconoplasm.brinedew.bio/portraits/v1/aa/asset/medium.webp"
+    const plan = await hooks.portraitSourcePlan(canonical, 77)
+    assert.equal(plan.primarySource, "accelerator")
+    assert.equal(plan.fallbackSource, "canonical")
+    assert.equal(plan.hedgeDelayMs, 350)
+    assert.equal(plan.timeoutMs, 2500)
+    assert.match(plan.primaryUrl, /^https:\/\/iconoplasmportraits\.b-cdn\.net\//)
+
+    const result = await hooks.reportPortraitSourceResult(plan.fallbackUrl, true, 77)
+    assert.equal(result.state.state, "canonical")
+    assert.equal((await hooks.portraitSourcePlan(canonical, 77)).primarySource, "canonical")
+    assert.equal(fetchCount, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+    await hooks.clearPortraitSourceStates()
+  }
+})
+
 test("portrait fetch failures back off briefly but recover after the error TTL", async () => {
   const originalDateNow = Date.now
   const originalFetch = globalThis.fetch
@@ -732,6 +759,7 @@ test("an overlay contract retry does not turn into a scanner artifact download",
   storageState.set("iconoplasm_schema_version", 5)
   storageState.set("iconoplasm_contract_revision", 1)
   storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
+  storageState.set("iconoplasm_card_snapshot_version", "ccv1-stale")
   storageState.set("iconoplasm_alias_overlay_version", "v1-test")
   storageState.set("iconoplasm_alias_overlay_applied", { RELA: ["p65"] })
   storageState.set("iconoplasm_contract_error", { code: "invalid_manifest" })
@@ -749,6 +777,7 @@ test("an overlay contract retry does not turn into a scanner artifact download",
         artifact_schema_version: 5,
         artifact_contract_revision: 1,
         min_extension_version: "1.0.0",
+        card_snapshot_version: "ccv1-stale",
         gene_count: 1,
         publication_aliases: {
           schema_version: 1,
@@ -766,6 +795,7 @@ test("an overlay contract retry does not turn into a scanner artifact download",
     const result = await hooks.ensureFreshGeneData()
     assert.equal(artifactFetches, 0)
     assert.deepEqual(result.genes.RELA.a, ["p65"])
+    assert.equal(result.cardSnapshotVersion, "ccv1-stale")
     assert.equal(storageState.has("iconoplasm_contract_error"), false)
   } finally {
     globalThis.fetch = originalFetch

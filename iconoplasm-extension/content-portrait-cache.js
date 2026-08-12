@@ -42,6 +42,110 @@
       return dataUrl
     }
 
+    function runtimeMessage(message) {
+      return new Promise((resolve) => {
+        runtime.sendMessage(message, (result) => {
+          if (runtime.lastError) {
+            resolve(null)
+            return
+          }
+          resolve(result)
+        })
+      })
+    }
+
+    function loadBrowserImage(url, timeoutMs, signal) {
+      return new Promise((resolve, reject) => {
+        if (!url) {
+          reject(new Error("Missing portrait source"))
+          return
+        }
+        const ImageCtor = options.ImageCtor || windowRef.Image
+        if (typeof ImageCtor !== "function") {
+          resolve(url)
+          return
+        }
+        const image = new ImageCtor()
+        let settled = false
+        const onAbort = () => {
+          try {
+            if (typeof image.removeAttribute === "function") image.removeAttribute("src")
+            else image.src = ""
+          } catch (_error) {}
+          const error = new Error("Portrait source aborted")
+          error.name = "AbortError"
+          finish(reject, error)
+        }
+        const finish = (callback, value) => {
+          if (settled) return
+          settled = true
+          windowRef.clearTimeout(timer)
+          image.onload = null
+          image.onerror = null
+          signal?.removeEventListener?.("abort", onAbort)
+          callback(value)
+        }
+        const timer = windowRef.setTimeout(
+          () => finish(reject, new Error("Portrait source timed out")),
+          Math.max(250, Number(timeoutMs || 2500)),
+        )
+        image.onload = () => {
+          const decoded = typeof image.decode === "function" ? image.decode() : Promise.resolve()
+          Promise.resolve(decoded)
+            .catch(() => null)
+            .then(() => finish(resolve, url))
+        }
+        image.onerror = () => finish(reject, new Error("Portrait source failed"))
+        if (signal?.aborted) {
+          onAbort()
+          return
+        }
+        signal?.addEventListener?.("abort", onAbort, { once: true })
+        image.decoding = "async"
+        image.src = url
+      })
+    }
+
+    async function loadPlannedSource(plan) {
+      const primaryUrl = String(plan?.primaryUrl || "").trim()
+      const fallbackUrl = String(plan?.fallbackUrl || "").trim()
+      const timeoutMs = Number(plan?.timeoutMs || 2500)
+      const hedgeDelayMs = Math.max(0, Number(plan?.hedgeDelayMs || 0))
+      if (!fallbackUrl || fallbackUrl === primaryUrl) return loadBrowserImage(primaryUrl, timeoutMs)
+
+      const primaryController = typeof AbortController === "function" ? new AbortController() : null
+      const fallbackController =
+        typeof AbortController === "function" ? new AbortController() : null
+      let startFallback
+      let fallbackStarted = false
+      let hedgeTimer = null
+      const fallbackPromise = new Promise((resolve, reject) => {
+        startFallback = () => {
+          if (fallbackStarted) return
+          fallbackStarted = true
+          loadBrowserImage(fallbackUrl, timeoutMs, fallbackController?.signal).then(
+            (url) => resolve({ url, lane: "fallback" }),
+            reject,
+          )
+        }
+        hedgeTimer = windowRef.setTimeout(startFallback, hedgeDelayMs)
+      })
+      const primaryPromise = loadBrowserImage(primaryUrl, timeoutMs, primaryController?.signal)
+        .then((url) => ({ url, lane: "primary" }))
+        .catch((error) => {
+          startFallback()
+          throw error
+        })
+      try {
+        const winner = await Promise.any([primaryPromise, fallbackPromise])
+        if (winner.lane === "primary") fallbackController?.abort()
+        else primaryController?.abort()
+        return winner.url
+      } finally {
+        if (hedgeTimer) windowRef.clearTimeout(hedgeTimer)
+      }
+    }
+
     async function getUsableSrc(portraitSrc) {
       const url = String(portraitSrc || "").trim()
       if (!url) return ""
@@ -52,21 +156,32 @@
       const request = (async () => {
         try {
           if (!runtime || typeof runtime.sendMessage !== "function") return url
-          const response = await new Promise((resolve) => {
-            runtime.sendMessage({ type: "GET_PORTRAIT_DATA_URL", url }, (result) => {
-              if (runtime.lastError) {
-                resolve(null)
-                return
-              }
-              resolve(result)
-            })
-          })
-          const dataUrl = response && response.ok && response.dataUrl ? response.dataUrl : ""
+          const plan = await runtimeMessage({ type: "GET_PORTRAIT_SOURCE_PLAN", url })
+          if (plan?.ok && plan.primaryUrl) {
+            try {
+              const sourceUrl = await loadPlannedSource(plan)
+              await runtimeMessage({
+                type: "REPORT_PORTRAIT_SOURCE_RESULT",
+                url: sourceUrl,
+                succeeded: true,
+              })
+              rememberDataUrl(url, sourceUrl)
+              return sourceUrl
+            } catch (_sourceError) {
+              // A host-page CSP failure is indistinguishable from a network
+              // failure here. Let the privileged worker fallback perform the
+              // authoritative source transition instead of poisoning tab state.
+            }
+          }
+          // Compatibility/correctness fallback for host pages whose CSP blocks
+          // extension-owned HTTPS images. It is no longer the normal hot path.
+          const response = await runtimeMessage({ type: "GET_PORTRAIT_DATA_URL", url })
+          const dataUrl = response?.ok && response.dataUrl ? response.dataUrl : ""
           if (dataUrl) {
             rememberDataUrl(url, dataUrl)
             return dataUrl
           }
-          const sourceUrl = response && response.ok && response.sourceUrl ? response.sourceUrl : ""
+          const sourceUrl = response?.ok && response.sourceUrl ? response.sourceUrl : ""
           if (sourceUrl) return sourceUrl
         } catch (_) {
           // Fall back to the direct site URL below.

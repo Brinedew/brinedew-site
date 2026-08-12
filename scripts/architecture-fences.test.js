@@ -67,6 +67,7 @@ test("IPD-001 keeps Bunny primary on healthy tabs and canonical as the one-probe
   })
   assert.equal(DEFAULT_PORTRAIT_DELIVERY_POLICY.decision_scope, "tab")
   assert.equal(DEFAULT_PORTRAIT_DELIVERY_POLICY.probe_timeout_ms, 2500)
+  assert.equal(DEFAULT_PORTRAIT_DELIVERY_POLICY.fallback_hedge_delay_ms, 350)
 
   const canonicalUrl = "https://iconoplasm.brinedew.bio/portraits/v1/aa/asset/medium.webp"
   let healthyProbeCount = 0
@@ -76,6 +77,14 @@ test("IPD-001 keeps Bunny primary on healthy tabs and canonical as the one-probe
       return true
     },
   })
+  assert.deepEqual(
+    {
+      primarySource: healthy.plan(canonicalUrl).primarySource,
+      fallbackSource: healthy.plan(canonicalUrl).fallbackSource,
+      hedgeDelayMs: healthy.plan(canonicalUrl).hedgeDelayMs,
+    },
+    { primarySource: "accelerator", fallbackSource: "canonical", hedgeDelayMs: 350 },
+  )
   assert.equal(
     await healthy.ensure(canonicalUrl),
     "https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/asset/medium.webp",
@@ -125,6 +134,31 @@ test("IPD-001 keeps Bunny primary on healthy tabs and canonical as the one-probe
   assert.match(
     readRepositoryFile("quartz/components/Head.tsx"),
     /<link rel="preconnect" href="https:\/\/iconoplasmportraits\.b-cdn\.net" \/>/,
+  )
+})
+
+// ARCHITECTURE FENCE [IPD-008]
+test("IPD-008 keeps foreground hover on immutable cancellable reads and native portrait loading", () => {
+  const contentSource = readRepositoryFile("iconoplasm-extension/content.js")
+  const apiSource = readRepositoryFile("iconoplasm-extension/content-api.js")
+  const portraitSource = readRepositoryFile("iconoplasm-extension/content-portrait-cache.js")
+  const routeSource = readRepositoryFile("workers/iconoplasm-route-contract.js")
+  const runtimeSource = readRepositoryFile(
+    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+  )
+
+  assert.match(contentSource, /\/api\/public\/v1\/card-snapshots\//)
+  assert.match(contentSource, /priority:\s*"foreground"/)
+  assert.match(apiSource, /CANCEL_ICONOPLASM_API_FETCH/)
+  assert.match(portraitSource, /GET_PORTRAIT_SOURCE_PLAN/)
+  assert.match(portraitSource, /new ImageCtor\(\)/)
+  assert.match(portraitSource, /Promise\.any\(\[primaryPromise, fallbackPromise\]\)/)
+  assert.match(routeSource, /public_card_snapshot_gene/)
+  assert.match(runtimeSource, /max-age=31536000, immutable/)
+  assert.doesNotMatch(
+    contentSource,
+    /if \(geneDetailStore\.promiseCache\.has\(normalizedSymbol\)\)/,
+    "Foreground hover must not inherit speculative batch tail latency",
   )
 })
 
