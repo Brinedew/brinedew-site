@@ -8,7 +8,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=20260730-module-cache"
-import { createRequestInbox } from "./request-inbox.js?v=20260809-portrait-thumbnails"
+import { createRequestInbox } from "./request-inbox.js?v=20260812-persistent-sidebar"
 import { portraitDelivery } from "./portrait-delivery.js?v=20260730-module-cache"
 import {
   createEmulsionFavoriteStore,
@@ -29,7 +29,7 @@ import {
   hasSharedSessionPresenceHint,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=ec70a3b0941d0a38"
+} from "../shared/sidebar-shell.js?v=d8bcfb8f19d3a065"
 import "./vendor/img-comparison-slider.js?v=20260516b517"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=20260730-native-dialog"
 import {
@@ -591,6 +591,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     escapeHtml: esc,
     ensurePortraitSource: portraitDelivery.ensure,
     resolvePortraitUrl: portraitDelivery.resolve,
+    navigate: function (href, link) {
+      navigateTo(href, link)
+    },
   })
 
   function normalizedSymbol(symbol) {
@@ -2487,6 +2490,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         id: "icono-request-inbox-panel",
         className: "brd-sidebar-panel--request-inbox",
         markup: requestInboxMarkup,
+        preserveScrollSelector: ".icono-request-inbox__group-body",
       })
     }
     if (iconoSidebarMarkup) {
@@ -2498,6 +2502,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     var stack = mountSidebarStack({
       stackId: "brd-sidebar-stack",
+      preserveExisting: true,
       panels: panels,
     })
     wireSharedUserPanel(stack, {

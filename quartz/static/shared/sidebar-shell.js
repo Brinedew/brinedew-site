@@ -433,20 +433,72 @@ export function mountSidebarStack(options) {
 
   var stackId = String(source.stackId || "brd-sidebar-stack").trim() || "brd-sidebar-stack"
   var existing = document.getElementById(stackId)
-  if (existing && existing.parentNode) existing.parentNode.removeChild(existing)
+  var preserveExisting = source.preserveExisting === true
+  if (existing && !preserveExisting && existing.parentNode)
+    existing.parentNode.removeChild(existing)
 
-  var stack = document.createElement("div")
+  var stack = preserveExisting && existing ? existing : document.createElement("div")
   stack.id = stackId
   stack.className = "brd-sidebar-stack"
 
   var panels = Array.isArray(source.panels) ? source.panels : []
+  var retainedPanels = []
   for (var i = 0; i < panels.length; i++) {
     var panel = panels[i] || {}
-    var section = document.createElement("section")
+    var panelId = String(panel.id || "").trim()
+    var section = panelId ? document.getElementById(panelId) : null
+    if (!section || section.parentNode !== stack) {
+      section = document.createElement("section")
+      if (panelId) section.id = panelId
+    }
+    retainedPanels.push(section)
     section.className = "brd-sidebar-panel" + (panel.className ? " " + panel.className : "")
-    if (panel.id) section.id = panel.id
-    section.innerHTML = String(panel.markup || "")
-    stack.appendChild(section)
+
+    var markup = String(panel.markup || "")
+    if (!preserveExisting || section._brdSidebarMarkup !== markup) {
+      var scrollPositions = []
+      var preserveScrollSelector = String(panel.preserveScrollSelector || "").trim()
+      if (preserveExisting && preserveScrollSelector) {
+        var scrollElements = section.querySelectorAll(preserveScrollSelector)
+        for (var scrollIndex = 0; scrollIndex < scrollElements.length; scrollIndex++) {
+          var scrollElement = scrollElements[scrollIndex]
+          var scrollGroup = scrollElement.closest("[data-icono-request-group]")
+          scrollPositions.push({
+            key: scrollGroup
+              ? String(scrollGroup.getAttribute("data-icono-request-group") || scrollIndex)
+              : String(scrollIndex),
+            top: Number(scrollElement.scrollTop || 0),
+          })
+        }
+      }
+      section.innerHTML = markup
+      section._brdSidebarMarkup = markup
+      if (scrollPositions.length && preserveScrollSelector) {
+        var nextScrollElements = section.querySelectorAll(preserveScrollSelector)
+        for (var nextIndex = 0; nextIndex < nextScrollElements.length; nextIndex++) {
+          var nextScrollElement = nextScrollElements[nextIndex]
+          var nextScrollGroup = nextScrollElement.closest("[data-icono-request-group]")
+          var nextKey = nextScrollGroup
+            ? String(nextScrollGroup.getAttribute("data-icono-request-group") || nextIndex)
+            : String(nextIndex)
+          var saved = scrollPositions.find(function (position) {
+            return position.key === nextKey
+          })
+          if (saved) nextScrollElement.scrollTop = saved.top
+        }
+      }
+    }
+
+    var expectedAtIndex = stack.children[i] || null
+    if (expectedAtIndex !== section) stack.insertBefore(section, expectedAtIndex)
+  }
+
+  if (preserveExisting) {
+    var mountedPanels = Array.prototype.slice.call(stack.children)
+    for (var mountedIndex = 0; mountedIndex < mountedPanels.length; mountedIndex++) {
+      var mountedPanel = mountedPanels[mountedIndex]
+      if (retainedPanels.indexOf(mountedPanel) === -1) mountedPanel.remove()
+    }
   }
 
   var insertBefore = null
@@ -455,10 +507,12 @@ export function mountSidebarStack(options) {
   } else {
     insertBefore = sidebar.querySelector(".page-tags-section")
   }
-  if (insertBefore) {
-    sidebar.insertBefore(stack, insertBefore)
-  } else {
-    sidebar.appendChild(stack)
+  if (!stack.parentNode) {
+    if (insertBefore) {
+      sidebar.insertBefore(stack, insertBefore)
+    } else {
+      sidebar.appendChild(stack)
+    }
   }
   return stack
 }
@@ -468,6 +522,8 @@ export function wireSharedUserPanel(root, options) {
   var source = options || {}
   var logoutButtons = root.querySelectorAll("[data-brd-user-logout]")
   for (var i = 0; i < logoutButtons.length; i++) {
+    if (logoutButtons[i].getAttribute("data-brd-user-logout-wired") === "true") continue
+    logoutButtons[i].setAttribute("data-brd-user-logout-wired", "true")
     logoutButtons[i].addEventListener("click", function () {
       var button = this
       button.disabled = true
