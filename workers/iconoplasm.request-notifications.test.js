@@ -1686,14 +1686,20 @@ test("request inbox receipt click acknowledges the durable group instead of one 
     open_requests: [],
   }
   const calls = []
+  const interactionOrder = []
   const inbox = createRequestInbox({
     fetchJSON: async (url, options) => {
+      interactionOrder.push(url)
       calls.push({ url, options })
       return payload
     },
     getCurrentUser: () => ({ id: BRINEDEW_USER_ID }),
     renderSidebar() {},
     escapeHtml: (value) => String(value ?? ""),
+    navigate: (href, link) => {
+      interactionOrder.push("navigate:" + href)
+      assert.equal(link, receipt)
+    },
   })
   const attributes = {
     "data-icono-request-notification-ids": "7,8,9",
@@ -1710,40 +1716,33 @@ test("request inbox receipt click acknowledges the durable group instead of one 
       handlers[name] = handler
     },
   }
-  const previousWindow = globalThis.window
-  let resolveNavigation
-  const navigation = new Promise((resolve) => {
-    resolveNavigation = resolve
+  inbox.wire({
+    querySelector() {
+      return null
+    },
+    querySelectorAll(selector) {
+      return selector === "[data-icono-request-receipt]" ? [receipt] : []
+    },
   })
-  globalThis.window = { location: { assign: resolveNavigation } }
-  try {
-    inbox.wire({
-      querySelector() {
-        return null
-      },
-      querySelectorAll(selector) {
-        return selector === "[data-icono-request-receipt]" ? [receipt] : []
-      },
-    })
-    let prevented = false
-    handlers.click({
-      preventDefault() {
-        prevented = true
-      },
-    })
-    const acknowledgement = calls.find((call) => call.url === "/api/iconoplasm/notifications/read")
-    assert.equal(prevented, true)
-    assert.ok(acknowledgement)
-    assert.deepEqual(JSON.parse(acknowledgement.options.body), {
-      notification_ids: [7, 8, 9],
-      fulfillment_publication_id: "pub-hpn-three",
-      gene_symbol: "HPN",
-      all: false,
-    })
-    await navigation
-  } finally {
-    globalThis.window = previousWindow
-  }
+  let prevented = false
+  handlers.click({
+    preventDefault() {
+      prevented = true
+    },
+  })
+  const acknowledgement = calls.find((call) => call.url === "/api/iconoplasm/notifications/read")
+  assert.equal(prevented, true)
+  assert.deepEqual(interactionOrder.slice(0, 2), [
+    "navigate:/gene/HPN",
+    "/api/iconoplasm/notifications/read",
+  ])
+  assert.ok(acknowledgement)
+  assert.deepEqual(JSON.parse(acknowledgement.options.body), {
+    notification_ids: [7, 8, 9],
+    fulfillment_publication_id: "pub-hpn-three",
+    gene_symbol: "HPN",
+    all: false,
+  })
 })
 
 test("every Shoelace component used by the request inbox has a deployable public entry", () => {
