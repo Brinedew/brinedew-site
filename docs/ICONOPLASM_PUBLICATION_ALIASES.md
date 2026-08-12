@@ -150,7 +150,9 @@ The server enforces all of the following before the D1 CAS:
 - uppercase canonical symbols that exist in the published scanner;
 - exact normalized aliases, no control characters, and at most 64 characters;
 - at most 500 total additions and removals and a public payload below 4 KiB;
-- no collision with another canonical symbol or another gene's generated alias;
+- no collision with another canonical symbol or another gene's generated alias
+  for the same exact, normalized spelling. Alias matching is intentionally
+  case-sensitive, so `P130` and `p130` may have different deterministic owners;
 - a newly added alias already generated for the same target is rejected as
   `already_generated_for_target` (the catalog already provides it);
 - a newly introduced removal must currently belong to the named target; and

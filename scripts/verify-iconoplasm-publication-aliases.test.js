@@ -93,7 +93,7 @@ test("manifest alias validation rejects malformed counts, hashes, ambiguity, con
   assert.throws(
     () =>
       validatePublicationAliasOverlay(
-        signedOverlay({ bySymbol: { CXCL8: ["IL8"], RELA: ["il8"] } }),
+        signedOverlay({ bySymbol: { CXCL8: ["IL8"], RELA: ["IL8"] } }),
       ),
     /ambiguous between CXCL8 and RELA/,
   )
@@ -102,7 +102,7 @@ test("manifest alias validation rejects malformed counts, hashes, ambiguity, con
       validatePublicationAliasOverlay(
         signedOverlay({
           bySymbol: { CXCL8: ["IL8"] },
-          removeBySymbol: { CXCL8: ["il8"] },
+          removeBySymbol: { CXCL8: ["IL8"] },
         }),
       ),
     /cannot be added and removed/,

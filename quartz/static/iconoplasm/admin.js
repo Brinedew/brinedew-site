@@ -70,6 +70,7 @@
     publicationAliasDraftBySymbol: {},
     publicationAliasLoaded: false,
     publicationAliasBusy: false,
+    publicationAliasConflictOperations: [],
     publicationAliasEditing: null,
     publicationAliasSelectedGene: null,
     publicationAliasSearchResults: [],
@@ -193,6 +194,7 @@
     publicationAliasGeneResults: document.getElementById("publication-alias-gene-results"),
     publicationAliasGeneStatus: document.getElementById("publication-alias-gene-status"),
     publicationAliasTargetPreview: document.getElementById("publication-alias-target-preview"),
+    publicationAliasConflict: document.getElementById("publication-alias-conflict"),
     publicationAliasAdd: document.getElementById("publication-alias-add"),
     publicationAliasCancelEdit: document.getElementById("publication-alias-cancel-edit"),
     publicationAliasEditing: document.getElementById("publication-alias-editing"),
@@ -1382,7 +1384,7 @@
   }
 
   function publicationAliasCollisionKey(value) {
-    return normalizePublicationAlias(value).toUpperCase()
+    return normalizePublicationAlias(value)
   }
 
   function publicationAliasValidationMessage(value, maxLength) {
@@ -1585,6 +1587,86 @@
     els.publicationAliasStatus.textContent = String(message || "")
     if (tone) els.publicationAliasStatus.dataset.tone = tone
     else delete els.publicationAliasStatus.dataset.tone
+  }
+
+  function publicationAliasConflictOperations(response) {
+    return Array.isArray(response?.invalid_operations)
+      ? response.invalid_operations.filter(function (operation) {
+          return operation && typeof operation === "object"
+        })
+      : []
+  }
+
+  function clearPublicationAliasConflict() {
+    state.publicationAliasConflictOperations = []
+    if (!els.publicationAliasConflict) return
+    els.publicationAliasConflict.hidden = true
+    els.publicationAliasConflict.replaceChildren()
+  }
+
+  function showPublicationAliasConflict(operations) {
+    var safeOperations = Array.isArray(operations) ? operations : []
+    state.publicationAliasConflictOperations = safeOperations
+    if (!els.publicationAliasConflict) return
+    var rows = safeOperations.map(function (operation) {
+      var alias = normalizePublicationAlias(operation.alias || "")
+      var requested = String(operation.symbol || "")
+        .trim()
+        .toUpperCase()
+      var owners = Array.isArray(operation.owners)
+        ? operation.owners
+            .map(function (owner) {
+              return String(owner || "")
+                .trim()
+                .toUpperCase()
+            })
+            .filter(Boolean)
+        : []
+      if (operation.reason === "owned_by_other_gene" && alias && requested && owners.length) {
+        return (
+          '<p>The exact label <span class="mono">' +
+          esc(alias) +
+          "</span> is already owned by <strong>" +
+          esc(owners.join(", ")) +
+          "</strong> in the published catalog. Adding it to <strong>" +
+          esc(requested) +
+          "</strong> would give that same exact label two owners, so the deterministic safety policy rejected it.</p>"
+        )
+      }
+      if (operation.reason === "already_generated_for_target" && alias && requested) {
+        return (
+          '<p><span class="mono">' +
+          esc(alias) +
+          "</span> already resolves to <strong>" +
+          esc(requested) +
+          "</strong>; a duplicate curated mapping is not allowed.</p>"
+        )
+      }
+      return "<p>This mapping conflicts with the published recognition catalog and was rejected.</p>"
+    })
+    els.publicationAliasConflict.innerHTML =
+      "<strong>Not added — unsafe alias</strong>" +
+      rows.join("") +
+      "<p>Nothing from this rejected mapping was saved or published.</p>"
+    els.publicationAliasConflict.hidden = false
+  }
+
+  function removeRejectedPublicationAliasAdditionsFromDraft(operations) {
+    var next = clonePublicationAliasMap(state.publicationAliasDraftBySymbol)
+    var removed = 0
+    ;(Array.isArray(operations) ? operations : []).forEach(function (operation) {
+      if (operation?.operation !== "add") return
+      var alias = normalizePublicationAlias(operation.alias || "")
+      var symbol = String(operation.symbol || "")
+        .trim()
+        .toUpperCase()
+      var current = publicationAliasRowIndex(next).get(alias)
+      if (!current || current.symbol !== symbol) return
+      next = publicationAliasMapWithout(next, current.alias)
+      removed += 1
+    })
+    state.publicationAliasDraftBySymbol = next
+    return removed
   }
 
   function applyPublicationAliasPayload(data) {
@@ -2069,6 +2151,7 @@
     cancelPublicationAliasSearch()
     state.publicationAliasEditing = null
     state.publicationAliasSelectedGene = null
+    if (!opts.keepConflict) clearPublicationAliasConflict()
     if (els.publicationAliasInput) {
       els.publicationAliasInput.value = ""
       els.publicationAliasInput.removeAttribute("aria-invalid")
@@ -2105,7 +2188,7 @@
     )
   }
 
-  function submitPublicationAliasDraftMapping() {
+  async function submitPublicationAliasDraftMapping() {
     if (!state.publicationAliasLoaded || state.publicationAliasBusy) return
     var alias = normalizePublicationAlias(
       state.publicationAliasEditing?.alias || els.publicationAliasInput?.value || "",
@@ -2184,8 +2267,46 @@
     }
     var wasEditing = Boolean(state.publicationAliasEditing)
     cancelPublicationAliasPublicationRetry()
+    clearPublicationAliasConflict()
+    try {
+      state.publicationAliasBusy = true
+      setPublicationAliasStatus("Checking this label against the published catalog…", "")
+      renderPublicationAliases()
+      await apiJson("/publication-aliases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          validate_only: true,
+          expected_revision: Number(state.publicationAliasPolicy?.revision || 0),
+          by_symbol: next,
+          remove_by_symbol: clonePublicationAliasMap(
+            state.publicationAliasPolicy?.remove_by_symbol || {},
+          ),
+        }),
+      })
+    } catch (error) {
+      var operations = publicationAliasConflictOperations(error?.response)
+      state.publicationAliasBusy = false
+      if (operations.length) {
+        showPublicationAliasConflict(operations)
+        setPublicationAliasStatus(
+          "Unsafe mapping rejected. Nothing was added to the draft.",
+          "error",
+        )
+        setLog("Unsafe alias rejected before it entered the publication draft.")
+        renderPublicationAliases()
+        return
+      }
+      setPublicationAliasStatus(
+        requestErrorMessage(error, "Alias safety check failed. Nothing was added."),
+        "error",
+      )
+      renderPublicationAliases()
+      return
+    }
+    state.publicationAliasBusy = false
     state.publicationAliasDraftBySymbol = next
-    resetPublicationAliasComposer()
+    resetPublicationAliasComposer({ keepConflict: true })
     setPublicationAliasStatus(
       alias +
         " → " +
@@ -2586,6 +2707,23 @@
       )
       setLog({ ok: true, publication_aliases: state.publicationAliasPolicy })
     } catch (error) {
+      var invalidOperations = publicationAliasConflictOperations(error?.response)
+      if (invalidOperations.length) {
+        var rejectedCount = removeRejectedPublicationAliasAdditionsFromDraft(invalidOperations)
+        state.publicationAliasBusy = false
+        showPublicationAliasConflict(invalidOperations)
+        setPublicationAliasStatus(
+          rejectedCount
+            ? String(rejectedCount) +
+                " unsafe mapping " +
+                (rejectedCount === 1 ? "was" : "were") +
+                " removed from the draft. Nothing was published."
+            : "Unsafe alias policy rejected. Nothing was published.",
+          "error",
+        )
+        setLog("Unsafe alias rejected; the saved publication policy was not changed.")
+        return
+      }
       if (Number(error?.status || 0) === 409) {
         state.publicationAliasBusy = false
         await refreshPublicationAliases({
@@ -8962,6 +9100,7 @@
     if (els.publicationAliasInput) {
       els.publicationAliasInput.addEventListener("input", function () {
         els.publicationAliasInput.removeAttribute("aria-invalid")
+        clearPublicationAliasConflict()
         renderPublicationAliases()
       })
     }
@@ -8969,6 +9108,7 @@
       els.publicationAliasGeneQuery.addEventListener("input", function () {
         state.publicationAliasSelectedGene = null
         els.publicationAliasGeneQuery.removeAttribute("aria-invalid")
+        clearPublicationAliasConflict()
         cancelPublicationAliasSearch()
         if (
           String(els.publicationAliasGeneQuery.value || "").trim().length >=

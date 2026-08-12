@@ -202,7 +202,7 @@ function buildCatalogArtifact() {
   return {
     schema_version: 4,
     generated_at: "2026-04-05T00:00:00Z",
-    gene_count: 7,
+    gene_count: 9,
     genes: [
       { s: "CCNH", n: "Cyclin H", c: "#6b705c", tmh: false, a: [] },
       { s: "CDH1", n: "cadherin 1", c: "#6b705c", tmh: true, a: ["CD324"] },
@@ -215,7 +215,15 @@ function buildCatalogArtifact() {
         a: ["HPT-1", "cadherin"],
       },
       { s: "INS", n: "Insulin", c: "#d85c57", tmh: false, a: ["INSULIN"] },
+      { s: "NOLC1", n: "nucleolar phosphoprotein", c: "#444d4c", tmh: false, a: ["P130"] },
       { s: "PRL", n: "Prolactin", c: "#7a5861", tmh: false, a: [] },
+      {
+        s: "RBL2",
+        n: "RB transcriptional corepressor like 2",
+        c: "#43474b",
+        tmh: false,
+        a: ["p130"],
+      },
       { s: "TP53", n: "Tumor protein p53", c: "#5f6e52", tmh: false, a: ["P53"] },
     ],
   }
@@ -294,6 +302,8 @@ test("public resolve route works through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT
             "N-cadherin",
             "N-Cadherins",
             "N cadherins",
+            "P130",
+            "p130",
             "INS",
           ],
         }),
@@ -321,6 +331,8 @@ test("public resolve route works through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT
       { requested: "N-cadherin", canonical_symbol: "CDH2", matched_by: "alias" },
       { requested: "N-Cadherins", canonical_symbol: "CDH2", matched_by: "alias" },
       { requested: "N cadherins", canonical_symbol: "CDH2", matched_by: "alias" },
+      { requested: "P130", canonical_symbol: "NOLC1", matched_by: "alias" },
+      { requested: "p130", canonical_symbol: "RBL2", matched_by: "alias" },
       { requested: "INS", canonical_symbol: "INS", matched_by: "symbol" },
     ],
   )
