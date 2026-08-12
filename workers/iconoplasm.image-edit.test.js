@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
+import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
@@ -13,6 +14,65 @@ const REFERENCE_SHA_2 = "c".repeat(64)
 function base64(bytes) {
   return Buffer.from(bytes).toString("base64")
 }
+
+test("candidate prompt authority migration renames every stored mode without losing jobs", () => {
+  const db = new DatabaseSync(":memory:")
+  try {
+    db.exec("CREATE TABLE icono_gene_essence (gene_symbol TEXT PRIMARY KEY)")
+    for (const name of [
+      "0034_candidate_generation_jobs.sql",
+      "0037_candidate_generation_jobs_novel_mode.sql",
+      "0038_candidate_generation_prompt_body_mode.sql",
+      "0045_gene_comments_and_clans_backend.sql",
+    ]) {
+      db.exec(readFileSync(new URL(`../migrations-iconoplasm/${name}`, import.meta.url), "utf8"))
+    }
+    const insert = db.prepare(
+      `INSERT INTO icono_candidate_generation_jobs
+         (id, user_id, provider_id, gene_symbol, prompt_body_mode)
+       VALUES (?, 'user-1', 'openai', 'TP53', ?)`,
+    )
+    insert.run("tag-job", "tags_sample")
+    insert.run("prose-job", "prose_sample")
+
+    db.exec(
+      readFileSync(
+        new URL(
+          "../migrations-iconoplasm/0068_candidate_prompt_authority_names.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    )
+
+    const migratedJobs = db
+      .prepare("SELECT id, prompt_body_mode FROM icono_candidate_generation_jobs ORDER BY id")
+      .all()
+      .map((row) => ({ id: row.id, prompt_body_mode: row.prompt_body_mode }))
+    assert.deepEqual(
+      migratedJobs,
+      [
+        { id: "prose-job", prompt_body_mode: "prose_prompt" },
+        { id: "tag-job", prompt_body_mode: "taggerizer_prompt" },
+      ],
+    )
+    db.prepare(
+      `INSERT INTO icono_candidate_generation_jobs
+         (id, user_id, provider_id, gene_symbol)
+       VALUES ('default-job', 'user-1', 'openai', 'BRCA1')`,
+    ).run()
+    assert.equal(
+      db
+        .prepare(
+          "SELECT prompt_body_mode FROM icono_candidate_generation_jobs WHERE id = 'default-job'",
+        )
+        .get().prompt_body_mode,
+      "taggerizer_prompt",
+    )
+  } finally {
+    db.close()
+  }
+})
 
 function syntheticExtendedWebpWithLeadingChunk(width, height) {
   const widthMinusOne = width - 1
@@ -193,6 +253,7 @@ class FakeStatement {
           full_name: "Alpha-1-B Glycoprotein",
           manifestation:
             "A1BG appears as a calm archivist with pearl varnish and measured posture.",
+          manifestation_tags: "calm_archivist, pearl_varnish, measured_posture",
           sample_label: "A1BG-7",
           sample_number: 7,
           sample_text_hash: "d".repeat(64),
@@ -754,7 +815,7 @@ function seedSucceededCandidateGenerationJob(db, id = "candidate-publish-test") 
     gene_symbol: "A1BG",
     request_mode: "novel",
     reference_assets_json: "[]",
-    prompt_body_mode: "prose_sample",
+    prompt_body_mode: "prose_prompt",
     status: "succeeded",
     result_asset_sha256: "e".repeat(64),
     result_r2_key_full: `portraits/v1/ee/${"e".repeat(64)}/full.webp`,
@@ -1411,7 +1472,8 @@ test("candidate generation jobs use novel provider generation and publish explic
       const body = JSON.parse(String(init.body || "{}"))
       assert.equal(body.model, "gpt-image-2")
       assert.match(String(body.prompt || ""), /Alpha-1-B Glycoprotein/)
-      assert.match(String(body.prompt || ""), /calm archivist/)
+      assert.match(String(body.prompt || ""), /calm_archivist, pearl_varnish, measured_posture/)
+      assert.doesNotMatch(String(body.prompt || ""), /A1BG appears as a calm archivist/)
       assert.match(String(body.prompt || ""), /Reference images: none/)
       assert.doesNotMatch(String(body.prompt || ""), /A1-93-19/)
       return new Response(JSON.stringify({ data: [{ b64_json: base64(GENERATED_BYTES) }] }), {
@@ -1479,7 +1541,7 @@ test("candidate generation jobs use novel provider generation and publish explic
     assert.equal(created.job.requested_emulsion_label, "TESTER-0")
     assert.equal(created.job.requested_emulsion_id, "TESTER-0")
     assert.equal(created.job.requested_vision_id, "")
-    assert.equal(created.job.prompt_body_mode, "prose_sample")
+    assert.equal(created.job.prompt_body_mode, "taggerizer_prompt")
     assert.equal(created.job.sample_label, "A1BG-7")
     assert.equal(
       "prompt" in created.job,
@@ -1579,6 +1641,7 @@ test("candidate generation appends the signed-in user's saved emulsion and publi
               provider_id: "openai",
               symbol: "A1BG",
               request_mode: "novel",
+              prompt_body_mode: "prose_prompt",
             }),
           },
         ),
@@ -1810,6 +1873,7 @@ test("candidate generation labels legacy current manifestations with sample zero
               provider_id: "openai",
               symbol: "A1BG",
               request_mode: "novel",
+              prompt_body_mode: "prose_prompt",
             }),
           },
         ),
@@ -1828,14 +1892,20 @@ test("candidate generation labels legacy current manifestations with sample zero
   }
 })
 
-test("candidate generation can use tag sample mode with appended essence facts", async () => {
+test("candidate generation uses the complete Taggerizer prompt with appended essence facts", async () => {
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
+  const trailingTag = "tail_tag_after_4000_chars"
+  const tagPrefix = "pearl_archivist, ".repeat(220)
+  const taggerizerPrompt = `${tagPrefix}${"x".repeat(
+    4001 - tagPrefix.length - trailingTag.length - 2,
+  )}, ${trailingTag}`
+  assert.equal(taggerizerPrompt.length, 4001)
   db.geneContext = {
     gene_symbol: "A1BG",
     full_name: "Alpha-1-B Glycoprotein",
     manifestation: "A prose body that should not be used for tags mode.",
-    manifestation_tags: "pearl_archivist, measured_posture",
+    manifestation_tags: taggerizerPrompt,
     weight_kg: 75,
     sex: "female",
     age_years: 39,
@@ -1853,8 +1923,8 @@ test("candidate generation can use tag sample mode with appended essence facts",
     const url = String(input)
     if (url === "https://api.openai.com/v1/images/generations") {
       const body = JSON.parse(String(init.body || "{}"))
-      assert.match(String(body.prompt || ""), /Prompt body mode: tags sample/)
-      assert.match(String(body.prompt || ""), /pearl_archivist, measured_posture/)
+      assert.match(String(body.prompt || ""), /Prompt body authority: complete Taggerizer prompt/)
+      assert.match(String(body.prompt || ""), /tail_tag_after_4000_chars/)
       assert.match(String(body.prompt || ""), /39 years old/)
       assert.match(String(body.prompt || ""), /75 kg/)
       assert.match(String(body.prompt || ""), /Tropical Night Blue/)
@@ -1912,7 +1982,7 @@ test("candidate generation can use tag sample mode with appended essence facts",
               provider_id: "openai",
               symbol: "A1BG",
               request_mode: "novel",
-              prompt_body_mode: "tags_sample",
+              prompt_body_mode: "taggerizer_prompt",
             }),
           },
         ),
@@ -1922,7 +1992,7 @@ test("candidate generation can use tag sample mode with appended essence facts",
     const body = await response.json()
 
     assert.equal(response.status, 200)
-    assert.equal(body.job.prompt_body_mode, "tags_sample")
+    assert.equal(body.job.prompt_body_mode, "taggerizer_prompt")
     assert.equal(body.job.sample_label, "A1BG-7")
   } finally {
     globalThis.fetch = originalFetch

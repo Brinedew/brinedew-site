@@ -5182,8 +5182,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<fieldset class="icono-request-mode-field">' +
       "<legend>Prompt body</legend>" +
       '<div class="icono-request-segmented" role="radiogroup" aria-label="Prompt body">' +
-      '<label class="icono-request-segment"><input type="radio" name="icono-request-prompt-body-mode" value="prose_sample" checked data-icono-request-prompt-body-mode><span>Prose</span></label>' +
-      '<label class="icono-request-segment"><input type="radio" name="icono-request-prompt-body-mode" value="tags_sample" data-icono-request-prompt-body-mode><span>Tags</span></label>' +
+      '<label class="icono-request-segment"><input type="radio" name="icono-request-prompt-body-mode" value="taggerizer_prompt" checked data-icono-request-prompt-body-mode><span>Tags</span></label>' +
+      '<label class="icono-request-segment"><input type="radio" name="icono-request-prompt-body-mode" value="prose_prompt" data-icono-request-prompt-body-mode><span>Prose</span></label>' +
       "</div>" +
       "</fieldset>" +
       "</div>" +
@@ -6265,7 +6265,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         loading: false,
         job: null,
         selectedUserEmulsion: null,
-        promptBodyMode: "prose_sample",
+        promptBodyMode: "taggerizer_prompt",
       }
       var requestOptions = []
       var requestOptionsByVisionId = Object.create(null)
@@ -6423,7 +6423,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
 
       function selectedDirectPromptBodyMode() {
-        return requestDirectState.promptBodyMode === "tags_sample" ? "tags_sample" : "prose_sample"
+        return requestDirectState.promptBodyMode === "taggerizer_prompt"
+          ? "taggerizer_prompt"
+          : "prose_prompt"
       }
 
       function selectedDirectUserEmulsionId() {
@@ -6501,7 +6503,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           directSubjectSource.textContent =
             candidateGenerationSampleLabel() +
             " · " +
-            (selectedDirectPromptBodyMode() === "tags_sample" ? "tags" : "prose")
+            (selectedDirectPromptBodyMode() === "taggerizer_prompt" ? "tags" : "prose")
         }
       }
 
@@ -7160,7 +7162,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         directPromptBodyModeInputs[modeInputIndex].addEventListener("change", function (event) {
           if (!event.target || !event.target.checked) return
           requestDirectState.promptBodyMode =
-            String(event.target.value || "") === "tags_sample" ? "tags_sample" : "prose_sample"
+            String(event.target.value || "") === "taggerizer_prompt"
+              ? "taggerizer_prompt"
+              : "prose_prompt"
           updateDirectGenerationPreview()
         })
       }

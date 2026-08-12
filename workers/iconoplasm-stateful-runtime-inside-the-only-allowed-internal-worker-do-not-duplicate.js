@@ -3438,6 +3438,10 @@ function sanitizeText(raw, maxLen) {
   return v.slice(0, maxLen)
 }
 
+function normalizeTaggerizerPrompt(raw) {
+  return String(raw || "").trim()
+}
+
 function normalizeUserEmulsionText(raw) {
   const value = String(raw || "")
     .replace(/\s+/g, " ")
@@ -3722,9 +3726,12 @@ function normalizeCandidatePromptBodyMode(raw) {
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, "_")
-  if (value === "tags" || value === "tag" || value === "tags_only" || value === "tags_sample")
-    return "tags_sample"
-  return "prose_sample"
+  if (value === "prose" || value === "full_manifestation" || value === "prose_prompt") {
+    return "prose_prompt"
+  }
+  // The canonical mode means the complete stored Taggerizer derivative;
+  // generation never samples, truncates, or selects a subset of its tags.
+  return "taggerizer_prompt"
 }
 
 function sanitizeGenerationRequestPrompt(raw) {
@@ -7434,25 +7441,27 @@ function candidateGenerationCommunityCommentsSnapshot(comments, { limit = 12 } =
 function buildCandidateGenerationPrompt({
   symbol,
   geneContext,
-  promptBodyMode = "prose_sample",
+  promptBodyMode = "taggerizer_prompt",
   userEmulsion = null,
   communityCommentsSnapshot = "",
 }) {
   const geneSymbol = normalizeSymbol(symbol || geneContext?.gene_symbol || "") || ""
   const fullName = sanitizeText(geneContext?.full_name || "", 255) || ""
   const manifestation = sanitizeText(geneContext?.manifestation || "", 4000) || ""
-  const tags = sanitizeText(geneContext?.manifestation_tags || "", 4000) || ""
+  const tags = normalizeTaggerizerPrompt(geneContext?.manifestation_tags)
   const bodyMode = normalizeCandidatePromptBodyMode(promptBodyMode)
   const essenceSuffix = candidateGenerationEssenceSuffix(geneContext)
-  let promptBody = bodyMode === "tags_sample" ? tags : manifestation
-  if (bodyMode === "tags_sample" && essenceSuffix) {
+  let promptBody = bodyMode === "taggerizer_prompt" ? tags : manifestation
+  if (bodyMode === "taggerizer_prompt" && essenceSuffix) {
     promptBody = `${promptBody}, ${essenceSuffix}`.replace(/^,\s*/, "").trim()
   }
   const parts = [
     "Generate one new Iconoplasm candidate blot.",
     iconoplasmBlotRequestPromptLine(),
     `Subject gene: ${geneSymbol}${fullName ? ` - ${fullName}` : ""}.`,
-    `Prompt body mode: ${bodyMode === "tags_sample" ? "tags sample" : "prose sample"}.`,
+    `Prompt body authority: ${
+      bodyMode === "taggerizer_prompt" ? "complete Taggerizer prompt" : "complete prose prompt"
+    }.`,
     "Use this private prompt body as the subject brief:",
     promptBody || "No prompt body is available; infer only from the gene symbol and full name.",
   ]
@@ -7529,7 +7538,9 @@ function mapCandidateGenerationJobRow(row, baseUrl = "") {
     requested_vision_id: sanitizeVoteVisionId(row?.requested_vision_id || "") || "",
     requested_emulsion_id: sanitizeText(row?.requested_emulsion_id || "", 64) || "",
     requested_emulsion_label: sanitizeText(row?.requested_emulsion_label || "", 255) || "",
-    prompt_body_mode: normalizeCandidatePromptBodyMode(row?.prompt_body_mode || "prose_sample"),
+    prompt_body_mode: normalizeCandidatePromptBodyMode(
+      row?.prompt_body_mode || "taggerizer_prompt",
+    ),
     community_comments_snapshot: sanitizeText(row?.community_comments_snapshot || "", 3000) || "",
     sample_label: sanitizeText(row?.sample_label || "", 64) || "",
     sample_number: optionalInt(row?.sample_number),
@@ -10529,7 +10540,7 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
   const familyMembers = optionalInt(payload.family_members)
   const familyFeature = sanitizeText(payload.family_feature, 255)
   const manifestation = sanitizeText(payload.manifestation || payload.description, 4000)
-  const manifestationTags = sanitizeText(payload.manifestation_tags || payload.tags || "", 4000)
+  const manifestationTags = normalizeTaggerizerPrompt(payload.manifestation_tags || payload.tags)
   const manifestationFieldsJson = sanitizeText(
     payload.manifestation_fields_json || payload.fields_json || "",
     8000,
@@ -30283,7 +30294,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         return done("candidate_generation_jobs_400", json({ error: "Missing gene symbol" }, 400))
       const requestMode = "novel"
       const promptBodyMode = normalizeCandidatePromptBodyMode(
-        p?.prompt_body_mode || p?.sample_mode || p?.body_mode || "prose_sample",
+        p?.prompt_body_mode || p?.sample_mode || p?.body_mode || "taggerizer_prompt",
       )
       const geneContext = (await candidateGenerationGeneContext(env, symbol)) || {
         gene_symbol: symbol,
@@ -30295,12 +30306,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         sample_text_hash: "",
       }
       if (
-        promptBodyMode === "tags_sample" &&
-        !sanitizeText(geneContext.manifestation_tags || "", 4000)
+        promptBodyMode === "taggerizer_prompt" &&
+        !normalizeTaggerizerPrompt(geneContext.manifestation_tags)
       ) {
         return done(
           "candidate_generation_jobs_409",
-          json({ ok: false, error: `No tags sample is available for ${symbol}.` }, 409),
+          json({ ok: false, error: `Taggerizer has not compiled a prompt for ${symbol}.` }, 409),
         )
       }
       const manifestation = sanitizeText(geneContext.manifestation || "", 4000) || ""

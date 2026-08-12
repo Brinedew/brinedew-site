@@ -335,7 +335,7 @@ test("new candidate modal tabs separate free queue and configured image API gene
   )
   assert.match(
     app,
-    /value="prose_sample"[\s\S]*data-icono-request-prompt-body-mode[\s\S]*value="tags_sample"[\s\S]*data-icono-request-prompt-body-mode/,
+    /value="taggerizer_prompt"[\s\S]*checked[\s\S]*data-icono-request-prompt-body-mode[\s\S]*value="prose_prompt"[\s\S]*data-icono-request-prompt-body-mode/,
     "direct generation should expose a prose/tags prompt body switch",
   )
   assert.match(
