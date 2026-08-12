@@ -144,6 +144,7 @@ deploy-blocking guard together.
     "enabled": true
   },
   "probe_timeout_ms": 2500,
+  "fallback_hedge_delay_ms": 350,
   "decision_scope": "tab"
 }
 ```
@@ -152,8 +153,10 @@ The website and extension use the same state machine from
 `shared/iconoplasm-portrait/portrait-delivery-core.js`. Its states are
 `undecided`, `accelerator`, `canonical`, and `terminal_failure`.
 
-- The first real portrait probe selects the accelerator or canonical origin for
-  the tab.
+- The extension gives the first real portrait to the browser as an HTTPS URL.
+  If Bunny is still unresolved after 350 ms, it starts the canonical URL in a
+  second bounded lane. The first successfully decoded source selects the tab.
+  The 2.5 s timeout remains a per-source ceiling, not a serial pre-fallback wait.
 - Requested labelled-card thumbnails bind to this same decision. A Bunny DNS
   failure must never leave broken alt text in the crawlable archive.
 - Simultaneous portraits share that one decision.
@@ -165,8 +168,10 @@ The website and extension use the same state machine from
 - After both sources fail, the state is terminal and does not oscillate.
 
 The website adapter owns explicit DOM image bindings. The extension adapter
-owns tab-scoped persistence and conversion to data URLs. Neither adapter owns
-source-selection rules.
+owns tab-scoped persistence, the one bounded delayed hedge, native HTTPS image
+loading, and decoded-source reuse. A worker-fetched data URL exists only as a
+compatibility fallback for host-page CSPs that reject both extension-owned HTTPS
+bindings. Neither adapter owns source-selection rules.
 
 ## Release contract
 
@@ -177,8 +182,9 @@ source-selection rules.
 - Published portrait snapshot schema: `v3`
 - Minimum extension version: the value in `iconoplasm-extension/publisher-release.json`
 - Full catalog portrait field: `p` (`PortraitAssetRefV1`)
-- Extension scanner portrait fields: none; visible and hovered genes hydrate
-  portraits from the published card-detail batch
+- Extension scanner portrait fields: none; version-addressed immutable gene
+  detail GETs provide portrait references, and exactly one first-visible detail
+  may prepare the tab source decision before hover
 - Image-edit and candidate-generation result field: `result_asset`
 
 The catalog artifact schema and contract revision are part of both its

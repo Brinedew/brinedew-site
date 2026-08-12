@@ -9,6 +9,7 @@ const source = await readFile(new URL("./content-detail-cache.js", import.meta.u
 
 function loadFactory() {
   const sandbox = {
+    AbortController,
     console,
     setTimeout,
     clearTimeout,
@@ -396,4 +397,81 @@ test("an older-started response may still merge into the same adopted snapshot",
     ),
     new Set(["BRCA1", "TP53"]),
   )
+})
+
+test("foreground immutable detail starts without waiting for multi-megabyte persistence hydration", async () => {
+  const createGeneDetailStore = loadFactory()
+  const hydrationGate = deferred()
+  let fetchStarted = false
+  const storage = {
+    async get() {
+      return hydrationGate.promise
+    },
+    async set() {},
+    async remove() {},
+  }
+  const store = createGeneDetailStore({
+    windowRef: globalThis,
+    storageApi: storage,
+    getRevision: async () => "card-v1",
+    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
+    fetchImpl: async () => {
+      fetchStarted = true
+      return response({
+        snapshot_version: "card-v1",
+        gene: { symbol: "TP53", full_name: "tumor protein p53" },
+        missing: [],
+      })
+    },
+  })
+  store.setRevision("card-v1")
+  void store.hydratePersistentCache()
+
+  const result = await store.fetchBatch(["TP53"], { priority: "foreground" })
+  assert.equal(fetchStarted, true)
+  assert.equal(result.get("TP53")?.full_name, "tumor protein p53")
+  hydrationGate.resolve({})
+  await store.hydratePersistentCache()
+})
+
+test("foreground immutable detail aborts and replaces stale speculative work", async () => {
+  const createGeneDetailStore = loadFactory()
+  const calls = []
+  const store = createGeneDetailStore({
+    windowRef: globalThis,
+    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
+    fetchImpl: async (_url, init) => {
+      const call = { signal: init.signal, gate: deferred() }
+      calls.push(call)
+      if (calls.length === 1) {
+        return new Promise((_resolve, reject) => {
+          init.signal.addEventListener(
+            "abort",
+            () => {
+              const error = new Error("aborted")
+              error.name = "AbortError"
+              reject(error)
+            },
+            { once: true },
+          )
+        })
+      }
+      return response({
+        snapshot_version: "card-v1",
+        gene: { symbol: "TP53", full_name: "foreground" },
+        missing: [],
+      })
+    },
+  })
+  store.setRevision("card-v1")
+
+  const background = store.fetchBatch(["TP53"], { priority: "background" })
+  await new Promise((resolve) => setImmediate(resolve))
+  const foreground = store.fetchBatch(["TP53"], { priority: "foreground" })
+  const result = await foreground
+  await background
+
+  assert.equal(calls.length, 2)
+  assert.equal(calls[0].signal.aborted, true)
+  assert.equal(result.get("TP53")?.full_name, "foreground")
 })

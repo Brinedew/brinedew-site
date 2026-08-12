@@ -99,6 +99,7 @@
   const USER_BLOCKLIST_KEY = CONTENT_STORAGE_KEYS.userBlocklist
   const ICONOPLASM_API_BASE = IconoCardShared.resolveApiBase("https://iconoplasm.brinedew.bio")
   const ICONOPLASM_GENE_BATCH_URL = ICONOPLASM_API_BASE + "/api/public/v1/genes/batch"
+  const ICONOPLASM_GENE_DETAIL_PREFIX = ICONOPLASM_API_BASE + "/api/public/v1/card-snapshots/"
   const ICONOPLASM_DISCOVERY_ENCOUNTER_URL =
     ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/encounter"
   const ICONOPLASM_DISCOVERY_STATE_URL = ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/me"
@@ -508,6 +509,7 @@
   let authToast = null
   let activeSymbol = null
   const hoverIntentTracker = IconoContentTooltip.createHoverIntentTracker()
+  let activeDetailAbortController = null
   let neighborPrewarmAbortController = null
   let hideTimer = null
   const discoveryTimerBySymbol = new Map()
@@ -557,7 +559,7 @@
   const warnedMissingTraitOrigins = new Set()
   // Fence: keep background detail batches small. Large batches made the hovered gene wait behind
   // bulk prewarm work, which is why "simple text loads seconds later" showed up in practice.
-  const GENE_DETAIL_WARM_BATCH_SIZE = 8
+  const GENE_DETAIL_BACKGROUND_CONCURRENCY = 2
   const GENE_DETAIL_NEIGHBOR_LIMIT = 4
   const PORTRAIT_WARM_BATCH_SIZE = 2
   const GENE_DETAIL_VIEWPORT_ABOVE_PX = 160
@@ -569,6 +571,7 @@
   const decodedPortraitSrcPromises = new Map()
   const DECODED_PORTRAIT_CACHE_LIMIT = 96
   const LIT_ARCHIVAL_PREWARM_CACHE_LIMIT = 48
+  let leadPortraitWarmStarted = false
 
   function rememberReadyLitArchivalPrewarmSource(src) {
     readyLitArchivalPrewarmSources.delete(src)
@@ -651,6 +654,19 @@
     return urls
   }
 
+  function onGeneDetailResolvedBatch(records, priority) {
+    // ARCHITECTURE FENCE [IPD-008]: 0.4.14 removed all viewport portrait
+    // preparation and exposed the entire regional source decision on first
+    // hover. Warm exactly one real, visible-detail portrait per page. This
+    // elects Bunny or canonical before intent without restoring the old
+    // multi-image viewport fanout.
+    if (priority !== "background" || leadPortraitWarmStarted) return
+    const [leadPortraitUrl] = portraitUrlsFromGeneDetails(records)
+    if (!leadPortraitUrl) return
+    leadPortraitWarmStarted = true
+    warmPortraitUrls([leadPortraitUrl])
+  }
+
   const portraitCache = IconoContentPortraitCache.createPortraitCache({
     windowRef: window,
     chromeApi: chrome,
@@ -662,8 +678,10 @@
     windowRef: window,
     fetchImpl: extensionApiFetch,
     batchUrl: ICONOPLASM_GENE_BATCH_URL,
+    detailUrlForSymbol: (symbol, revision) =>
+      `${ICONOPLASM_GENE_DETAIL_PREFIX}${encodeURIComponent(revision)}/genes/${encodeURIComponent(symbol)}`,
     fields: GENE_DETAIL_BATCH_FIELDS,
-    warmBatchSize: GENE_DETAIL_WARM_BATCH_SIZE,
+    warmBatchSize: GENE_DETAIL_BACKGROUND_CONCURRENCY,
     visibleLimit: GENE_DETAIL_VISIBLE_LIMIT,
     delayMs: 20,
     deferTask: deferGeneDetailWarm,
@@ -674,6 +692,8 @@
     storageApi: chrome.storage.local,
     persistentLimit: 512,
     persistentByteLimit: GENE_DETAIL_PERSISTENT_MAX_BYTES,
+    requestTimeoutMs: 4000,
+    onResolvedBatch: onGeneDetailResolvedBatch,
     getRevision: async () => {
       const stored = await chrome.storage.local.get([
         "iconoplasm_card_snapshot_version",
@@ -1271,8 +1291,8 @@
     return symbols
   }
 
-  async function fetchGeneDetailsBatch(symbols) {
-    return geneDetailStore.fetchBatch(symbols)
+  async function fetchGeneDetailsBatch(symbols, options = {}) {
+    return geneDetailStore.fetchBatch(symbols, options)
   }
 
   function warmGeneDetails(symbols, limit = GENE_DETAIL_VISIBLE_LIMIT) {
@@ -1419,10 +1439,6 @@
   }
 
   async function initialize() {
-    // Start the bounded detail-cache read immediately. It runs alongside settings,
-    // worker startup, and page scanning so a first hover never becomes the event
-    // that pays for a multi-megabyte chrome.storage read.
-    void geneDetailStore.hydratePersistentCache()
     await Promise.all([
       loadHighlightMode(),
       loadHighlightVisibility(),
@@ -1452,6 +1468,7 @@
     // The worker returns the schema-5 catalog projection and contract state.
     if (payload && payload.genes && typeof payload.genes === "object") {
       geneMap = payload.genes
+      geneDetailStore.setRevision(payload.cardSnapshotVersion)
     } else {
       geneMap = payload
     }
@@ -1460,6 +1477,10 @@
       scheduleInitializationRetry()
       return
     }
+    // Hydration starts only after the worker returns the exact snapshot version.
+    // Foreground GETs do not await this multi-megabyte read; background warming
+    // and persistence may reuse it when it arrives.
+    void geneDetailStore.hydratePersistentCache()
 
     // Fence: candidate generation now lives in a dedicated matcher module. Keep content.js acting
     // as the page adapter that applies matches, not the place where lexical rules accrete forever.
@@ -1819,16 +1840,16 @@
     })
   }
 
-  async function fetchGeneDetailForTooltip(symbol) {
+  async function fetchGeneDetailForTooltip(symbol, signal) {
     const normalizedSymbol = String(symbol || "")
       .trim()
       .toUpperCase()
     if (!normalizedSymbol) return null
     if (geneDetailCache.has(normalizedSymbol)) return geneDetailCache.get(normalizedSymbol)
-    if (geneDetailStore.promiseCache.has(normalizedSymbol)) {
-      return geneDetailStore.promiseCache.get(normalizedSymbol)
-    }
-    const responses = await fetchGeneDetailsBatch([normalizedSymbol])
+    const responses = await fetchGeneDetailsBatch([normalizedSymbol], {
+      priority: "foreground",
+      signal,
+    })
     return responses.get(normalizedSymbol) || null
   }
 
@@ -1894,8 +1915,11 @@
     }
     activeSymbol = symbol
     const hoverIntent = hoverIntentTracker.enter(symbol)
+    if (activeDetailAbortController) activeDetailAbortController.abort()
     if (neighborPrewarmAbortController) neighborPrewarmAbortController.abort()
     portraitCache.replaceWarmUrls([])
+    activeDetailAbortController =
+      typeof AbortController === "function" ? new AbortController() : null
     neighborPrewarmAbortController =
       typeof AbortController === "function" ? new AbortController() : null
     const neighborPrewarmSignal = neighborPrewarmAbortController
@@ -1907,7 +1931,7 @@
     // symbol into the warm queue first, so the visible card waits on background work.
     const hoverGeneDetailPromise = geneDetailCache.has(symbol)
       ? Promise.resolve(geneDetailCache.get(symbol) || null)
-      : fetchGeneDetailForTooltip(symbol)
+      : fetchGeneDetailForTooltip(symbol, activeDetailAbortController?.signal)
     const allowsNeighborPrewarm = IconoContentTooltip.allowsSpeculativePrewarm(
       window.navigator?.connection,
     )
@@ -1915,7 +1939,10 @@
       ? collectNeighborGeneSymbols(target, GENE_DETAIL_NEIGHBOR_LIMIT)
       : []
     const neighborDetailsPromise = neighborSymbols.length
-      ? fetchGeneDetailsBatch(neighborSymbols)
+      ? fetchGeneDetailsBatch(neighborSymbols, {
+          priority: "background",
+          signal: neighborPrewarmSignal,
+        })
       : Promise.resolve(new Map())
     // Metadata can batch in parallel, but speculative portrait transfers never own
     // the tab's source probe. Start the active portrait first; after it settles, use
@@ -2079,6 +2106,8 @@
     cancelHideTimer()
     clearPendingDiscovery(activeSymbol)
     hoverIntentTracker.invalidate()
+    if (activeDetailAbortController) activeDetailAbortController.abort()
+    activeDetailAbortController = null
     if (neighborPrewarmAbortController) neighborPrewarmAbortController.abort()
     neighborPrewarmAbortController = null
     activeSymbol = null

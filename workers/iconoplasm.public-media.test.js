@@ -937,6 +937,7 @@ test("public catalog manifest publishes explicit extension contract fields", asy
       enabled: true,
     },
     probe_timeout_ms: 2500,
+    fallback_hedge_delay_ms: 350,
     decision_scope: "tab",
   })
   assert.equal(payload?.publication_aliases?.version, publishedAliases.version)
@@ -1230,6 +1231,48 @@ test("public gene batch is limited to first-party clients and extension traffic"
   assert.equal(Array.isArray(extensionPayload?.genes), true)
   assert.equal(extensionPayload?.genes?.[0]?.symbol, "A1BG")
   assert.equal(extensionResponse.headers.get("x-iconoplasm-data-source"), "published-card-catalog")
+})
+
+test("versioned public gene detail is immutable, extension-only, and published-artifact backed", async () => {
+  const requestUrl =
+    "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/test-card-v1/genes/A1BG"
+  const deniedResponse =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request(requestUrl),
+      buildEnv({ KV: buildPublishedCardReadKv() }),
+      {},
+    )
+  assert.equal(deniedResponse.status, 403)
+
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request(requestUrl, {
+        headers: { "X-Iconoplasm-Extension-Version": "0.4.15" },
+      }),
+      buildEnv({ KV: buildPublishedCardReadKv() }),
+      {},
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.snapshot_version, "test-card-v1")
+  assert.equal(payload?.gene?.symbol, "A1BG")
+  assert.equal(payload?.gene?.full_name, "alpha-1-B glycoprotein")
+  assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable")
+  assert.equal(response.headers.get("x-iconoplasm-data-source"), "published-card-catalog")
+  assert.match(String(response.headers.get("etag") || ""), /card-detail-test-card-v1-A1BG/)
+
+  const retiredResponse =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/retired/genes/A1BG",
+        { headers: { "X-Iconoplasm-Extension-Version": "0.4.15" } },
+      ),
+      buildEnv({ KV: buildPublishedCardReadKv() }),
+      {},
+    )
+  assert.equal(retiredResponse.status, 404)
+  assert.equal(retiredResponse.headers.get("cache-control"), "no-store")
 })
 
 test("public gene batch honors lean field projection for extension traffic", async () => {
