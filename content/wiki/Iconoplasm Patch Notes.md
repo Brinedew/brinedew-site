@@ -10,6 +10,10 @@ draft: false
 
 ## Unreleased
 
+## 0.4.14 - 2026-08-12
+
+* Hover pop-up now loads faster
+* Fixed some highlight parsing edge cases
 ## 0.4.13 - 2026-08-11
 
 * updated the gene alias blocklist retrieval to rely on online storage instead of purely local storage
