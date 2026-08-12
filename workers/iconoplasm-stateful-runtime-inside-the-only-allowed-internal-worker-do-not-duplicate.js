@@ -25626,7 +25626,15 @@ async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbo
   cacheUrl.hash = ""
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" })
   const cached = cache ? await cache.match(cacheKey) : null
-  if (cached) return cached
+  if (cached) {
+    const headers = new Headers(cached.headers)
+    headers.set("X-Iconoplasm-Detail-Cache", "HIT")
+    return new Response(cached.body, {
+      status: cached.status,
+      statusText: cached.statusText,
+      headers,
+    })
+  }
 
   const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, [symbol])
   if (!artifact) {
@@ -25651,6 +25659,7 @@ async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbo
     "Cache-Control": "public, max-age=31536000, immutable",
     ETag: `"card-detail-${snapshotVersion}-${symbol}"`,
     "X-Iconoplasm-Data-Source": "published-card-catalog",
+    "X-Iconoplasm-Detail-Cache": "MISS",
     "X-Iconoplasm-VM-Version": snapshotVersion,
   })
   if (cache) ctx?.waitUntil?.(cache.put(cacheKey, response.clone()))
