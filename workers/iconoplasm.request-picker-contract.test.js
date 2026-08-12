@@ -336,12 +336,27 @@ test("new candidate modal tabs separate free queue and configured image API gene
   assert.match(
     app,
     /value="taggerizer_prompt"[\s\S]*checked[\s\S]*data-icono-request-prompt-body-mode[\s\S]*value="prose_prompt"[\s\S]*data-icono-request-prompt-body-mode/,
-    "direct generation should expose a prose/tags prompt body switch",
+    "the request modal should expose the Tags/Prose prompt body switch",
+  )
+  assert.ok(
+    app.indexOf('<fieldset class="icono-request-mode-field">') <
+      app.indexOf('<div class="icono-request-lanes">'),
+    "the shared Tags/Prose control should stay above both potentially long request lanes",
   )
   assert.match(
     app,
-    /prompt_body_mode:\s*selectedDirectPromptBodyMode\(\)/,
+    /prompt_body_mode:\s*selectedPromptBodyMode\(\)/,
     "direct generation should send the selected prompt body mode",
+  )
+  assert.match(
+    app,
+    /requested_vision_ids:[\s\S]{0,300}prompt_body_mode:\s*selectedPromptBodyMode\(\)/,
+    "the free queue batch should persist the selected prompt body mode",
+  )
+  assert.match(
+    app,
+    /request_mode:\s*"random"[\s\S]{0,200}prompt_body_mode:\s*selectedPromptBodyMode\(\)/,
+    "the free random queue should persist the selected prompt body mode",
   )
   assert.doesNotMatch(
     app,

@@ -4270,6 +4270,7 @@ async function createGenerationRequest(
     clientRequestId = "",
     requestBatchId = "",
     requestBatchSize = 1,
+    promptBodyMode = "taggerizer_prompt",
   } = {},
 ) {
   if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
@@ -4300,6 +4301,7 @@ async function createGenerationRequest(
     return { ok: false, error: "Invalid request batch identifier" }
   }
   const batchSizeNorm = Math.max(1, Math.min(500, Math.trunc(Number(requestBatchSize) || 1)))
+  const promptBodyModeNorm = normalizeCandidatePromptBodyMode(promptBodyMode)
   let requestedReferenceAssetSha = ""
   let requestedReferenceGeneSymbol = ""
   let resolvedVisionId = visionNorm
@@ -4366,9 +4368,11 @@ async function createGenerationRequest(
        client_request_id,
        request_batch_id,
        request_batch_size,
+       prompt_body_mode,
+       seed_mode,
        status,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'random', 'open', CURRENT_TIMESTAMP)
      ON CONFLICT(requester_user_id, client_request_id) WHERE client_request_id <> ''
      DO NOTHING`,
   )
@@ -4387,6 +4391,7 @@ async function createGenerationRequest(
       clientRequestNorm,
       batchIdNorm,
       batchSizeNorm,
+      promptBodyModeNorm,
     )
     .run()
   let requestId =
@@ -4435,7 +4440,14 @@ const ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT = 20
 
 async function createGenerationRequestBatch(
   env,
-  { geneSymbol, requesterUserId, requesterUsername = "", requestedVisionIds, clientBatchId } = {},
+  {
+    geneSymbol,
+    requesterUserId,
+    requesterUsername = "",
+    requestedVisionIds,
+    clientBatchId,
+    promptBodyMode = "taggerizer_prompt",
+  } = {},
 ) {
   const rawIds = Array.isArray(requestedVisionIds) ? requestedVisionIds : []
   if (!rawIds.length) return { ok: false, error: "Choose at least one emulsion." }
@@ -4474,6 +4486,7 @@ async function createGenerationRequestBatch(
       clientRequestId: `${batchId}:${index}`,
       requestBatchId: batchId,
       requestBatchSize: uniqueVisionIds.length,
+      promptBodyMode,
     })
     if (result.ok) requests.push(result.request || null)
     else failures.push({ requested_vision_id: visionId, error: String(result.error || "Failed") })
@@ -28963,6 +28976,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           requesterUsername: sessionUser.username || "",
           requestedVisionIds: p.requested_vision_ids,
           clientBatchId: p?.client_batch_id || "",
+          promptBodyMode: p?.prompt_body_mode || "taggerizer_prompt",
         })
         if (!batchResult.ok) {
           return done(
@@ -29005,6 +29019,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         sourceGeneSymbol:
           p?.source_gene_symbol || p?.source_symbol || p?.symbol || p?.gene_symbol || "",
         sourceAssetSha256: p?.source_asset_sha256 || p?.asset_sha256 || "",
+        promptBodyMode: p?.prompt_body_mode || "taggerizer_prompt",
       })
       if (!result.ok) {
         return done(

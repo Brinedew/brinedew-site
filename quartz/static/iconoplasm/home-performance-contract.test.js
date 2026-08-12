@@ -1929,11 +1929,11 @@ test("direct candidate image API panel stays compact and hides transport details
   assert.match(app, /data-icono-request-prompt-body-mode/)
   assert.match(app, /value="taggerizer_prompt" checked/)
   assert.match(app, /value="prose_prompt"/)
-  assert.match(app, /function selectedDirectPromptBodyMode\(\)/)
+  assert.match(app, /function selectedPromptBodyMode\(\)/)
   assert.doesNotMatch(app, /uploaded image reference\(s\) only as emulsion examples/)
   assert.match(app, /request_kind:\s*"new_candidate"/)
   assert.match(app, /request_mode:\s*"novel"/)
-  assert.match(app, /prompt_body_mode:\s*selectedDirectPromptBodyMode\(\)/)
+  assert.match(app, /prompt_body_mode:\s*selectedPromptBodyMode\(\)/)
   assert.doesNotMatch(app, /Not sent separately by this live API path\./)
   assert.match(
     app,
