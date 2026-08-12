@@ -25599,7 +25599,7 @@ async function handlePublicGeneBatch(request, env) {
   )
 }
 
-async function handlePublicGeneDetail(request, env, snapshotFromPath, symbolFromPath) {
+async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbolFromPath) {
   const snapshotVersion = String(snapshotFromPath || "").trim()
   const symbol = normalizeSymbol(symbolFromPath)
   if (!snapshotVersion || !/^[A-Za-z0-9._:-]+$/.test(snapshotVersion) || !symbol) {
@@ -25620,6 +25620,14 @@ async function handlePublicGeneDetail(request, env, snapshotFromPath, symbolFrom
       "Cache-Control": "no-store",
     })
   }
+  const cache = typeof caches !== "undefined" && caches?.default ? caches.default : null
+  const cacheUrl = new URL(request.url)
+  cacheUrl.search = ""
+  cacheUrl.hash = ""
+  const cacheKey = new Request(cacheUrl.toString(), { method: "GET" })
+  const cached = cache ? await cache.match(cacheKey) : null
+  if (cached) return cached
+
   const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, [symbol])
   if (!artifact) {
     return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
@@ -25639,12 +25647,14 @@ async function handlePublicGeneDetail(request, env, snapshotFromPath, symbolFrom
     gene: record ? projectGeneRecord(record, null) : null,
     missing: record ? [] : [symbol],
   }
-  return json(payload, record ? 200 : 404, {
+  const response = json(payload, record ? 200 : 404, {
     "Cache-Control": "public, max-age=31536000, immutable",
     ETag: `"card-detail-${snapshotVersion}-${symbol}"`,
     "X-Iconoplasm-Data-Source": "published-card-catalog",
     "X-Iconoplasm-VM-Version": snapshotVersion,
   })
+  if (cache) ctx?.waitUntil?.(cache.put(cacheKey, response.clone()))
+  return response
 }
 
 function mobileCardFieldStatusForGeneRecord(record) {
@@ -27498,12 +27508,13 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     asHead(request, await handlePublicCatalogJsonlDump(env, path)),
   public_gallery: ({ request, env, ctx }) => handlePublicGallery(request, env, ctx),
   public_gene_search: ({ request, env }) => handlePublicGeneSearch(request, env),
-  public_card_snapshot_gene: ({ match, request, env }) =>
+  public_card_snapshot_gene: async ({ match, request, env, ctx }) =>
     asHead(
       request,
-      handlePublicGeneDetail(
+      await handlePublicGeneDetail(
         request,
         env,
+        ctx,
         decodeURIComponent(match.params.snapshot || ""),
         decodeURIComponent(match.params.symbol || ""),
       ),
