@@ -22,7 +22,7 @@
   }
 
   function aliasCollisionKey(value) {
-    return normalizeAlias(value).toUpperCase()
+    return normalizeAlias(value)
   }
 
   function emptyOverlay() {

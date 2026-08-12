@@ -2322,6 +2322,31 @@ textarea:focus {
 .publication-alias-target-preview[hidden] {
   display: none;
 }
+.publication-alias-conflict {
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--danger-light) 68%, var(--surface));
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+.publication-alias-conflict[hidden] {
+  display: none;
+}
+.publication-alias-conflict strong {
+  color: var(--danger);
+  font-size: 12px;
+}
+.publication-alias-conflict p {
+  margin: 0;
+}
+.publication-alias-conflict .mono {
+  font-weight: 700;
+}
 .publication-alias-target-arrow {
   color: var(--accent);
   font-weight: 700;

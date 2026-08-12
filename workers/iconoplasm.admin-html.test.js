@@ -254,6 +254,7 @@ test("Recognition defaults to an accessible alias-mapping draft workspace", () =
     ICONOPLASM_ADMIN_SHELL,
     /id="publication-alias-target-preview" role="status" aria-live="polite" hidden/,
   )
+  assert.match(ICONOPLASM_ADMIN_SHELL, /id="publication-alias-conflict" role="alert" hidden/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /PUBLICATION_ALIAS_SEARCH_MIN_LENGTH = 2/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /PUBLICATION_ALIAS_SEARCH_DEBOUNCE_MS = 200/)
   assert.match(
@@ -270,6 +271,21 @@ test("Recognition defaults to an accessible alias-mapping draft workspace", () =
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /Choose a canonical gene from the search results\./)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /publicationAliasTargetPreview\.innerHTML/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /apiJson\("\/publication-aliases", \{ method: "GET" \}\)/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /validate_only: true/)
+  assert.match(
+    ICONOPLASM_ADMIN_RUNTIME,
+    /await apiJson\("\/publication-aliases", \{[\s\S]*validate_only: true[\s\S]*state\.publicationAliasDraftBySymbol = next/,
+  )
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /Not added — unsafe alias/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /same exact label two owners/)
+  assert.match(
+    ICONOPLASM_ADMIN_RUNTIME,
+    /Nothing from this rejected mapping was saved or published/,
+  )
+  assert.match(
+    ICONOPLASM_ADMIN_CSS,
+    /\.publication-alias-conflict \{[\s\S]*border: 1px solid color-mix\(in srgb, var\(--danger\)/,
+  )
   assert.match(
     ICONOPLASM_ADMIN_RUNTIME,
     /body: JSON\.stringify\(\{[\s\S]*expected_revision: expectedRevision,[\s\S]*by_symbol: draftBySymbol,[\s\S]*remove_by_symbol: removeBySymbol/,
@@ -638,6 +654,7 @@ test("publication aliases adopt a saved rev2 baseline and retry it without chang
       setLog: () => {},
       requestErrorMessage: (error, fallback) =>
         String(error?.response?.error || error?.message || fallback),
+      publicationAliasConflictOperations: () => [],
       isRequestCanceled: () => false,
       apiJson: async (path, options) => {
         requests.push({ path, body: JSON.parse(options.body) })

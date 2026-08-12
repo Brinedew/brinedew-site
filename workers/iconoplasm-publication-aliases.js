@@ -109,7 +109,7 @@ export function normalizePublicationAlias(value) {
 }
 
 export function publicationAliasCollisionKey(value) {
-  return normalizePublicationAlias(value).toUpperCase()
+  return normalizePublicationAlias(value)
 }
 
 export function validateIconoplasmPublicationAliases(

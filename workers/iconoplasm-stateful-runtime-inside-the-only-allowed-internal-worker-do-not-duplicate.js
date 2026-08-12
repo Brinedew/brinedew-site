@@ -10406,7 +10406,7 @@ function normalizeCatalogAliases(raw, { maxItems = 48, maxLen = 64, allowSpaces 
 
 function normalizeCatalogAliasLookupKey(raw) {
   const aliases = normalizeCatalogAliases([raw], { maxItems: 1, allowSpaces: true })
-  return aliases.length ? String(aliases[0]).toUpperCase() : ""
+  return aliases.length ? String(aliases[0]) : ""
 }
 
 function normalizeAestheticsList(raw) {
@@ -11492,6 +11492,7 @@ async function warmCatalogCache(env) {
   const bySymbol = new Map()
   const symbolByUniprot = new Map()
   const symbolByAlias = new Map()
+  const ambiguousAliases = new Set()
   for (const g of artifact?.genes || []) {
     const s = normalizeSymbol(g?.s)
     if (!s) continue
@@ -11500,7 +11501,14 @@ async function warmCatalogCache(env) {
     if (u) symbolByUniprot.set(u, s)
     for (const alias of normalizeCatalogAliases(g?.a || [])) {
       const key = normalizeCatalogAliasLookupKey(alias)
-      if (key && !symbolByAlias.has(key)) symbolByAlias.set(key, s)
+      if (!key || ambiguousAliases.has(key)) continue
+      const existingOwner = symbolByAlias.get(key)
+      if (existingOwner && existingOwner !== s) {
+        symbolByAlias.delete(key)
+        ambiguousAliases.add(key)
+      } else if (!existingOwner) {
+        symbolByAlias.set(key, s)
+      }
     }
   }
 
@@ -11529,7 +11537,7 @@ async function warmCatalogCache(env) {
     if (!bySymbol.has(symbol)) continue
     for (const alias of aliases) {
       const key = normalizeCatalogAliasLookupKey(alias)
-      if (key && bySymbol.has(key) && key !== symbol) {
+      if (key === key.toUpperCase() && bySymbol.has(key) && key !== symbol) {
         throw new TypeError(
           `Publication alias ${alias} for ${symbol} conflicts with canonical catalog symbol ${key}`,
         )

@@ -78,7 +78,7 @@ test("publication aliases reject ambiguous and unknown canonical mappings", () =
   assert.throws(
     () =>
       validateIconoplasmPublicationAliases(
-        { RELA: ["p65"], RPRM: ["P65"] },
+        { RELA: ["p65"], RPRM: ["p65"] },
         { canonicalSymbols: ["RELA", "RPRM"] },
       ),
     /Ambiguous publication alias/,
@@ -99,6 +99,16 @@ test("publication aliases reject ambiguous and unknown canonical mappings", () =
       ),
     /cannot be added and removed/,
   )
+})
+
+test("publication aliases preserve exact-case ownership while rejecting exact duplicates", () => {
+  const policy = validateIconoplasmPublicationAliases(
+    { NOLC1: ["P130"], RBL2: ["p130"] },
+    { canonicalSymbols: ["NOLC1", "RBL2"], rawRemovals: {} },
+  )
+
+  assert.deepEqual(policy.by_symbol.NOLC1, ["P130"])
+  assert.deepEqual(policy.by_symbol.RBL2, ["p130"])
 })
 
 test("server-side gene views apply additions and ownership-scoped removals immutably", () => {

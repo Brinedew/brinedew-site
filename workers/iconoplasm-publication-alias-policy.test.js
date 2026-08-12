@@ -558,6 +558,7 @@ function candidateWithIl8() {
 function scannerEntries({
   cxcl8Aliases = [],
   includeCadherin = true,
+  p130Owner = null,
   hash = "alias-scanner-fixture",
 } = {}) {
   const symbols = new Set([
@@ -566,11 +567,14 @@ function scannerEntries({
     "AIFM2",
     "APC",
     "CXCL8",
+    "NOLC1",
     "OTHER",
+    "RBL2",
   ])
   const genes = Object.fromEntries([...symbols].map((symbol) => [symbol, {}]))
   genes.AIFM2 = { a: ["AMID"] }
   genes.CXCL8 = { a: cxcl8Aliases }
+  genes.NOLC1 = p130Owner === "NOLC1" ? { a: ["P130"] } : {}
   genes.OTHER = { a: ["TAKEN"] }
   genes.CDH17 = includeCadherin ? { a: ["cadherin"] } : {}
   const recognitionIndex = buildIconoplasmRecognitionValidationIndex(genes, {
@@ -1021,6 +1025,111 @@ test("admin POST saves IL8 to CXCL8 against desired blocklist state and publishe
   assert.equal(payload.policy.revision, 2)
   assert.deepEqual(payload.policy.by_symbol.CXCL8, ["IL8"])
   assert.equal(payload.publication.in_sync, true)
+})
+
+test("alias validation preflight rejects exact P130 to RBL2 without changing desired or public state", async () => {
+  resetIconoplasmPublicationAliasPublicCacheForTests()
+  const db = new FakeDb()
+  const kv = new FakeKv({
+    ...publicEntries(),
+    ...scannerEntries({ p130Owner: "NOLC1" }),
+  })
+  const handler = createIconoplasmAdminPublicationAliasHandlers({
+    actor: async () => "vladimir",
+    isAdmin: async () => true,
+    json,
+  })["admin_publication_aliases.policy"]
+  const candidate = {
+    ...ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
+    by_symbol: {
+      ...ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol,
+      RBL2: ["P130"],
+    },
+  }
+  const beforeKvKeys = new Set(kv.entries.keys())
+  const response = await handler({
+    request: new Request(
+      "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/publication-aliases",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          validate_only: true,
+          expected_revision: 1,
+          by_symbol: candidate.by_symbol,
+          remove_by_symbol: candidate.remove_by_symbol,
+        }),
+      },
+    ),
+    env: { ICONOPLASM_DB: db, KV: kv },
+    done: async (_route, result) => result,
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 422)
+  assert.equal(payload.code, "publication_alias_operations_conflict_with_scanner")
+  assert.deepEqual(payload.invalid_operations, [
+    {
+      operation: "add",
+      symbol: "RBL2",
+      alias: "P130",
+      reason: "owned_by_other_gene",
+      owners: ["NOLC1"],
+    },
+  ])
+  assert.equal(db.aliasRow.revision, 1)
+  assert.deepEqual(db.aliasHistory, [])
+  assert.equal(db.aliasRow.policy_json.includes("P130"), false)
+  assert.deepEqual(new Set(kv.entries.keys()), beforeKvKeys)
+  assert.deepEqual(kv.puts, [])
+})
+
+test("alias validation preflight accepts lowercase p130 to RBL2 without saving or publishing it", async () => {
+  resetIconoplasmPublicationAliasPublicCacheForTests()
+  const db = new FakeDb()
+  const kv = new FakeKv(publicEntries())
+  const handler = createIconoplasmAdminPublicationAliasHandlers({
+    actor: async () => "vladimir",
+    isAdmin: async () => true,
+    json,
+  })["admin_publication_aliases.policy"]
+  const candidate = {
+    ...ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
+    by_symbol: {
+      ...ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol,
+      RBL2: ["p130"],
+    },
+  }
+  const response = await handler({
+    request: new Request(
+      "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/publication-aliases",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          validate_only: true,
+          expected_revision: 1,
+          by_symbol: candidate.by_symbol,
+          remove_by_symbol: candidate.remove_by_symbol,
+        }),
+      },
+    ),
+    env: { ICONOPLASM_DB: db, KV: kv },
+    done: async (_route, result) => result,
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(payload, {
+    ok: true,
+    valid: true,
+    changed: true,
+    limits: payload.limits,
+  })
+  assert.equal(db.aliasRow.revision, 1)
+  assert.deepEqual(db.aliasHistory, [])
+  assert.equal(db.aliasRow.policy_json.includes("p130"), false)
+  assert.deepEqual(kv.puts, [])
 })
 
 test("foreground fresh mutation and receipt retries never list histories or rebuild the scanner", async () => {
