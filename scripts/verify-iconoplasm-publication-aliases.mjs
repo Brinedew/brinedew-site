@@ -375,11 +375,15 @@ export function resolutionMismatches(payload, expectedOperations) {
       const found = result?.found === true
       const canonicalSymbolIsValid =
         Boolean(actualSymbol) && normalizeSymbol(actualSymbol) === actualSymbol
-      if (requestedMatches && found && canonicalSymbolIsValid && actualSymbol !== expected.alias) {
+      const unresolved = result?.found === false && !actualSymbol
+      if (
+        requestedMatches &&
+        (unresolved || (found && canonicalSymbolIsValid && actualSymbol !== expected.alias))
+      ) {
         return []
       }
       return [
-        `blocklist term ${JSON.stringify(expected.alias)} expected one non-canonical alias owner, received ${JSON.stringify(result || null)}`,
+        `blocklist term ${JSON.stringify(expected.alias)} expected either no exact-case resolution or one non-canonical alias owner, received ${JSON.stringify(result || null)}`,
       ]
     }
     if (expected.kind === "removal") {

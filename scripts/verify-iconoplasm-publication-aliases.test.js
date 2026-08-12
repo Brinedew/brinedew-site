@@ -154,7 +154,7 @@ test("manifest blocklist validation requires the exact nonempty hashed public pr
   )
 })
 
-test("blocklist resolver checks require a distinct canonical alias owner", () => {
+test("blocklist resolver checks allow no exact-case alias while rejecting canonical terms", () => {
   const expected = buildExpectedBlocklistOperations(signedBlocklist(["IL8"]))
   assert.deepEqual(
     resolutionMismatches(
@@ -168,14 +168,14 @@ test("blocklist resolver checks require a distinct canonical alias owner", () =>
       { results: [{ requested: "IL8", canonical_symbol: "IL8", found: true }] },
       expected,
     )[0],
-    /expected one non-canonical alias owner/,
+    /expected either no exact-case resolution or one non-canonical alias owner/,
   )
-  assert.match(
+  assert.deepEqual(
     resolutionMismatches(
       { results: [{ requested: "IL8", canonical_symbol: null, found: false }] },
       expected,
-    )[0],
-    /expected one non-canonical alias owner/,
+    ),
+    [],
   )
 })
 
