@@ -9,7 +9,7 @@ import vm from "node:vm"
 const source = await readFile(new URL("./content-portrait-cache.js", import.meta.url), "utf8")
 
 function loadFactory() {
-  const sandbox = { console, setTimeout, clearTimeout }
+  const sandbox = { AbortController, console, setTimeout, clearTimeout }
   sandbox.globalThis = sandbox
   vm.runInNewContext(source, sandbox)
   return sandbox.IconoplasmContentPortraitCache.createPortraitCache
@@ -76,7 +76,11 @@ test("concurrent hover and prewarm requests share one portrait transfer", async 
   let sendCount = 0
   const runtime = {
     lastError: null,
-    sendMessage(_message, callback) {
+    sendMessage(message, callback) {
+      if (message.type === "GET_PORTRAIT_SOURCE_PLAN") {
+        queueMicrotask(() => callback({ ok: false }))
+        return
+      }
       sendCount += 1
       queueMicrotask(() => callback({ ok: true, dataUrl: "data:image/webp;base64,shared" }))
     },
@@ -103,6 +107,10 @@ test("portrait data URLs use a bounded LRU and cached neighbors are announced fo
   const runtime = {
     lastError: null,
     sendMessage(message, callback) {
+      if (message.type === "GET_PORTRAIT_SOURCE_PLAN") {
+        callback({ ok: false })
+        return
+      }
       sendCount += 1
       callback({ ok: true, dataUrl: `data:image/webp;base64,${message.url.at(-1)}` })
     },
@@ -141,6 +149,10 @@ test("new hover intent drops queued stale neighbors while active work starts imm
   const runtime = {
     lastError: null,
     sendMessage(message, callback) {
+      if (message.type === "GET_PORTRAIT_SOURCE_PLAN") {
+        queueMicrotask(() => callback({ ok: false }))
+        return
+      }
       requested.push(message.url)
       if (requested.length === 3) resolveThirdRequest()
       releases.set(message.url, () =>
@@ -163,6 +175,7 @@ test("new hover intent drops queued stale neighbors while active work starts imm
   await new Promise((resolve) => setImmediate(resolve))
   const activePromise = cache.getUsableSrc(active)
   cache.replaceWarmUrls([currentNeighbor])
+  await new Promise((resolve) => setImmediate(resolve))
 
   assert.deepEqual(requested, [staleRunning, active])
   releases.get(active)()
@@ -172,4 +185,103 @@ test("new hover intent drops queued stale neighbors while active work starts imm
   assert.deepEqual(requested, [staleRunning, active, currentNeighbor])
   assert.equal(requested.includes(staleQueued), false)
   releases.get(currentNeighbor)()
+})
+
+test("regional DNS failure falls through to a native canonical image without base64 transport", async () => {
+  const createPortraitCache = loadFactory()
+  const messages = []
+  const bunny = "https://iconoplasmportraits.b-cdn.net/portraits/v1/a/medium.webp"
+  const canonical = "https://iconoplasm.brinedew.bio/portraits/v1/a/medium.webp"
+  class FakeImage {
+    decode() {
+      return Promise.resolve()
+    }
+    set src(value) {
+      this._src = value
+      queueMicrotask(() => {
+        if (value === bunny) this.onerror?.(new Error("dns"))
+        else this.onload?.()
+      })
+    }
+    get src() {
+      return this._src
+    }
+  }
+  const runtime = {
+    lastError: null,
+    sendMessage(message, callback) {
+      messages.push(message)
+      if (message.type === "GET_PORTRAIT_SOURCE_PLAN") {
+        callback({
+          ok: true,
+          primaryUrl: bunny,
+          fallbackUrl: canonical,
+          hedgeDelayMs: 350,
+          timeoutMs: 2500,
+        })
+        return
+      }
+      if (message.type === "REPORT_PORTRAIT_SOURCE_RESULT") {
+        callback({ ok: true })
+        return
+      }
+      callback({ ok: false })
+    },
+  }
+  const cache = createPortraitCache({
+    windowRef: globalThis,
+    chromeApi: { runtime },
+    ImageCtor: FakeImage,
+  })
+
+  const source = await cache.getUsableSrc(canonical)
+
+  assert.equal(source, canonical)
+  assert.deepEqual(
+    messages.map((message) => message.type),
+    ["GET_PORTRAIT_SOURCE_PLAN", "REPORT_PORTRAIT_SOURCE_RESULT"],
+  )
+  assert.equal(messages[1].url, canonical)
+  assert.equal(messages[1].succeeded, true)
+})
+
+test("an unresolved Bunny load starts the canonical hedge before the old 2.5 second timeout", async () => {
+  const createPortraitCache = loadFactory()
+  const bunny = "https://iconoplasmportraits.b-cdn.net/portraits/v1/b/medium.webp"
+  const canonical = "https://iconoplasm.brinedew.bio/portraits/v1/b/medium.webp"
+  const started = []
+  class FakeImage {
+    decode() {
+      return Promise.resolve()
+    }
+    set src(value) {
+      started.push(value)
+      if (value === canonical) queueMicrotask(() => this.onload?.())
+    }
+  }
+  const runtime = {
+    lastError: null,
+    sendMessage(message, callback) {
+      if (message.type === "GET_PORTRAIT_SOURCE_PLAN") {
+        callback({
+          ok: true,
+          primaryUrl: bunny,
+          fallbackUrl: canonical,
+          hedgeDelayMs: 5,
+          timeoutMs: 2500,
+        })
+        return
+      }
+      callback({ ok: true })
+    },
+  }
+  const cache = createPortraitCache({
+    windowRef: globalThis,
+    chromeApi: { runtime },
+    ImageCtor: FakeImage,
+  })
+
+  const source = await cache.getUsableSrc(canonical)
+  assert.equal(source, canonical)
+  assert.deepEqual(started.filter(Boolean), [bunny, canonical])
 })

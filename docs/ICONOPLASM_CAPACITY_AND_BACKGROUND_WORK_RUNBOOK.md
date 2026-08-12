@@ -208,7 +208,9 @@ Extension hover detail is immutable within a published card snapshot:
   and aliases, is capped at 3 MiB, and never contains portrait references;
 - extension upgrades atomically compact any legacy portrait-heavy scanner map
   before returning gene data to a tab;
-- public gene batches read the corresponding published card artifact, not D1;
+- foreground hover reads one version-addressed immutable per-symbol GET. The
+  compatibility batch route remains for older installations; both read the
+  corresponding published card artifact, not D1;
   partial reads reuse at most three parsed manifests and four parsed shards per
   Worker isolate, with a 16 MiB estimated parsed-heap ceiling and one in-flight
   KV read/parse per immutable key;
@@ -219,10 +221,15 @@ Extension hover detail is immutable within a published card snapshot:
   different snapshot cannot displace a newer-started response already adopted;
 - only an explicit `missing` result is negative-cached, and transient failures
   remain retryable;
+- foreground GETs do not wait for whole-cache hydration, carry a four-second
+  deadline, and can preempt and abort an older speculative request for that
+  symbol through the content-to-service-worker bridge;
 - a successful detail response resolves the visible card from memory before a
   coalesced idle writer reads, merges, stringifies, or writes the persistent
   cache; an old queued write cannot roll a newer snapshot backward;
-- generic viewport work hydrates detail only and yields while a hover is active;
+- generic viewport work hydrates detail and may prepare exactly one real lead
+  portrait per page to move the tab-scoped regional decision off first hover;
+  it never restores the old all-visible portrait fanout and yields while a hover is active;
   speculative work uses the browser's background task priority when available
   and is suppressed for Data Saver, `slow-2g`, and `2g` connections;
 - the hovered portrait owns the foreground adapter request, followed by at most
@@ -231,14 +238,15 @@ Extension hover detail is immutable within a published card snapshot:
 - the rich variants boot one iframe inside its permanent tooltip-owned parent
   during initialization. That same browsing context decodes neighbors and
   renders every hover; it is never reparented or duplicated;
-- the cold rich card paints identity over its stable reverse face without
-  assigning the raw canonical portrait URL. Only the shared portrait adapter may
-  hydrate the image, so a successful hover cannot race two read planes; and
+- the cold rich card paints identity over its stable reverse face. Only the
+  shared portrait adapter may assign resolved HTTPS sources: Bunny begins first,
+  canonical starts after a 350 ms unresolved hedge, and the first decoded source
+  becomes the tab decision. Worker-buffered base64 is CSP compatibility only; and
 - a neighbor is paint-ready only after bytes arrive, `img.decode()` settles, and
-  the renderer acknowledges a frame boundary. Content and worker data-URL caches
-  retain at most 48 portraits, the frame retains 48 decoded sources, and the
-  simple renderer retains 96; same-source work is deduplicated in both the
-  content script and service worker.
+  the renderer acknowledges a frame boundary. Content retains at most 48 resolved
+  native sources, the legacy worker compatibility cache retains 48 data URLs,
+  the frame retains 48 decoded sources, and the simple renderer retains 96;
+  same-source work is deduplicated.
 
 This follows the current small-queue discipline used by modern router
 prefetchers: explicit intent outranks viewport speculation, newer intent

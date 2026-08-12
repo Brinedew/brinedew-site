@@ -13,6 +13,7 @@ export const DEFAULT_PORTRAIT_DELIVERY_POLICY = Object.freeze({
     enabled: true,
   }),
   probe_timeout_ms: 2500,
+  fallback_hedge_delay_ms: 350,
   decision_scope: "tab",
 })
 
@@ -46,6 +47,7 @@ export function normalizePortraitDeliveryPolicy(
   const acceleratorEnabled =
     (rawAccelerator.enabled ?? fallbackAccelerator.enabled) === true && Boolean(acceleratorOrigin)
   const timeout = Number(raw.probe_timeout_ms ?? fallback.probe_timeout_ms)
+  const hedgeDelay = Number(raw.fallback_hedge_delay_ms ?? fallback.fallback_hedge_delay_ms)
 
   if (!canonicalOrigin)
     throw new Error("Portrait delivery policy requires an HTTPS canonical_origin")
@@ -62,6 +64,9 @@ export function normalizePortraitDeliveryPolicy(
     probe_timeout_ms: Number.isFinite(timeout)
       ? Math.max(100, Math.min(10_000, Math.round(timeout)))
       : 2500,
+    fallback_hedge_delay_ms: Number.isFinite(hedgeDelay)
+      ? Math.max(0, Math.min(2000, Math.round(hedgeDelay)))
+      : 350,
     decision_scope: "tab",
   })
 }
@@ -184,6 +189,38 @@ export function createPortraitDeliverySession(options = {}) {
     return portraitUrlForSource(path, selectedSource(), policy)
   }
 
+  function plan(rawUrl) {
+    const path = portraitPath(rawUrl, policy)
+    if (!path) {
+      const url = String(rawUrl || "").trim()
+      return {
+        path: "",
+        primarySource: "",
+        primaryUrl: url,
+        fallbackSource: "",
+        fallbackUrl: "",
+        hedgeDelayMs: 0,
+        timeoutMs: policy.probe_timeout_ms,
+        state: snapshot(),
+      }
+    }
+    const primarySource = selectedSource()
+    const fallbackSource = primarySource === "accelerator" ? "canonical" : "accelerator"
+    const canFallback =
+      !state.failed.includes(fallbackSource) &&
+      (fallbackSource !== "accelerator" || policy.accelerator.enabled)
+    return {
+      path,
+      primarySource,
+      primaryUrl: portraitUrlForSource(path, primarySource, policy),
+      fallbackSource: canFallback ? fallbackSource : "",
+      fallbackUrl: canFallback ? portraitUrlForSource(path, fallbackSource, policy) : "",
+      hedgeDelayMs: state.state === "undecided" ? policy.fallback_hedge_delay_ms : 0,
+      timeoutMs: policy.probe_timeout_ms,
+      state: snapshot(),
+    }
+  }
+
   function configure(rawPolicy) {
     policy = normalizePortraitDeliveryPolicy(rawPolicy, policy)
     commit(state)
@@ -244,9 +281,27 @@ export function createPortraitDeliverySession(options = {}) {
     return { changed, state: snapshot(), replacementUrl: resolve(rawUrl), failedSource: source }
   }
 
+  function reportSuccess(rawUrl) {
+    const source = portraitSourceFromUrl(rawUrl, policy)
+    if (!source) return { changed: false, state: snapshot() }
+    const changed = commit(
+      transitionPortraitDelivery(state, { type: "source_succeeded", source }, policy),
+    )
+    return { changed, state: snapshot(), successfulSource: source }
+  }
+
   function snapshot() {
     return { ...state, failed: [...state.failed] }
   }
 
-  return { configure, ensure, policy: () => policy, reportFailure, resolve, state: snapshot }
+  return {
+    configure,
+    ensure,
+    plan,
+    policy: () => policy,
+    reportFailure,
+    reportSuccess,
+    resolve,
+    state: snapshot,
+  }
 }

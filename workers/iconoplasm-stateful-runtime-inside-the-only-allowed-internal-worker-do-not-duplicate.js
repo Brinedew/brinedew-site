@@ -3019,6 +3019,7 @@ function portraitDeliveryPolicy(url, env) {
       enabled: Boolean(acceleratorOrigin),
     },
     probe_timeout_ms: 2500,
+    fallback_hedge_delay_ms: 350,
     decision_scope: "tab",
   }
 }
@@ -11087,6 +11088,7 @@ function catalogManifestEtag(manifest) {
     accelerator.origin || "",
     accelerator.enabled === false ? "off" : "on",
     delivery.probe_timeout_ms || 0,
+    delivery.fallback_hedge_delay_ms || 0,
   ].join(":")
   const version = [
     buildVersion,
@@ -25597,6 +25599,54 @@ async function handlePublicGeneBatch(request, env) {
   )
 }
 
+async function handlePublicGeneDetail(request, env, snapshotFromPath, symbolFromPath) {
+  const snapshotVersion = String(snapshotFromPath || "").trim()
+  const symbol = normalizeSymbol(symbolFromPath)
+  if (!snapshotVersion || !/^[A-Za-z0-9._:-]+$/.test(snapshotVersion) || !symbol) {
+    return json({ error: "Invalid published card detail path" }, 400, {
+      "Cache-Control": "no-store",
+    })
+  }
+
+  // ARCHITECTURE FENCE [IPD-008]: the version is part of the URL, so this read
+  // is immutable and can be cached by the browser and CDN. It reads only the
+  // published card artifact selected by that version; D1 is never a fallback.
+  const barrier = await currentMobileCardSnapshotVersion(env)
+  const publishedVersions = new Set(
+    [barrier.current, barrier.previous].map((value) => String(value || "").trim()).filter(Boolean),
+  )
+  if (!publishedVersions.has(snapshotVersion)) {
+    return json({ error: "Published card snapshot is not active" }, 404, {
+      "Cache-Control": "no-store",
+    })
+  }
+  const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, [symbol])
+  if (!artifact) {
+    return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+      "Cache-Control": "no-store",
+      "X-Iconoplasm-Data-Source": "artifact-unavailable",
+      "X-Iconoplasm-VM-Version": snapshotVersion,
+    })
+  }
+
+  const card = artifact.bySymbol.get(symbol)
+  const record = card && card.payload && typeof card.payload === "object" ? card.payload : null
+  const payload = {
+    api_version: PUBLIC_API_VERSION,
+    schema_version: API_SCHEMA_VERSION,
+    snapshot_version: snapshotVersion,
+    canonical_key: "symbol",
+    gene: record ? projectGeneRecord(record, null) : null,
+    missing: record ? [] : [symbol],
+  }
+  return json(payload, record ? 200 : 404, {
+    "Cache-Control": "public, max-age=31536000, immutable",
+    ETag: `"card-detail-${snapshotVersion}-${symbol}"`,
+    "X-Iconoplasm-Data-Source": "published-card-catalog",
+    "X-Iconoplasm-VM-Version": snapshotVersion,
+  })
+}
+
 function mobileCardFieldStatusForGeneRecord(record) {
   const essence = record?.essence && typeof record.essence === "object" ? record.essence : {}
   const portrait = record?.portrait && typeof record.portrait === "object" ? record.portrait : null
@@ -27448,6 +27498,16 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     asHead(request, await handlePublicCatalogJsonlDump(env, path)),
   public_gallery: ({ request, env, ctx }) => handlePublicGallery(request, env, ctx),
   public_gene_search: ({ request, env }) => handlePublicGeneSearch(request, env),
+  public_card_snapshot_gene: ({ match, request, env }) =>
+    asHead(
+      request,
+      handlePublicGeneDetail(
+        request,
+        env,
+        decodeURIComponent(match.params.snapshot || ""),
+        decodeURIComponent(match.params.symbol || ""),
+      ),
+    ),
   public_gene_batch: ({ request, env }) => handlePublicGeneBatch(request, env),
   mobile_card_manifest: ({ request, env }) => handleMobileCardManifest(request, env),
   mobile_card_symbol: ({ match, request, env, ctx }) =>

@@ -1,4 +1,5 @@
 export const ICONOPLASM_PUBLIC_API_VERSION = "v1"
+// ARCHITECTURE FENCE [IPD-008]: immutable snapshot-addressed hover detail is the modern read path.
 export const ICONOPLASM_API_SCHEMA_VERSION = 4
 export const ICONOPLASM_PUBLIC_API_PREFIX = `/api/public/${ICONOPLASM_PUBLIC_API_VERSION}`
 export const ICONOPLASM_SITE_GENE_API_PREFIX = "/api/iconoplasm/site/genes"
@@ -160,6 +161,19 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "public_gene_search",
     gatewayHandler: "public_gene_search",
     rateLimit: rateLimit("gene_search", 120),
+  }),
+  contract({
+    id: "public_card_snapshot_gene",
+    match: pattern(/^\/api\/public\/v1\/card-snapshots\/([^/]+)\/genes\/([^/]+)$/, [
+      "snapshot",
+      "symbol",
+    ]),
+    methods: GET,
+    auth: "trusted-client",
+    cache: "immutable",
+    budgetFamily: "public_gene_detail",
+    gatewayHandler: "public_card_snapshot_gene",
+    rateLimit: rateLimit("gene_detail", 240),
   }),
   contract({
     id: "public_gene_batch",

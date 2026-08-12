@@ -77,6 +77,7 @@ const portraitDataUrlErrorCache = new Map()
 const portraitSourceByTab = new Map()
 const portraitDeliverySessionByTab = new Map()
 const portraitDeliverySessionPromiseByTab = new Map()
+const apiFetchAbortControllers = new Map()
 let portraitSourceStateLoaded = false
 let portraitDeliveryPolicy = IconoPortraitDelivery.normalizePortraitDeliveryPolicy()
 let geneDataRefreshState = null
@@ -111,7 +112,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true
   }
   if (msg.type === "ICONOPLASM_API_FETCH") {
-    fetchIconoplasmApi(msg).then((result) => sendResponse(result))
+    fetchIconoplasmApi(msg, sender).then((result) => sendResponse(result))
+    return true
+  }
+  if (msg.type === "CANCEL_ICONOPLASM_API_FETCH") {
+    const key = iconoplasmApiRequestKey(msg.requestId, sender)
+    const controller = apiFetchAbortControllers.get(key)
+    if (controller) controller.abort()
+    sendResponse({ ok: true, canceled: Boolean(controller) })
     return true
   }
   if (msg.type === "WARM_PORTRAIT_DATA_URLS") {
@@ -144,6 +152,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         dataUrl: result?.dataUrl || "",
         sourceUrl: result?.sourceUrl || "",
       }),
+    )
+    return true
+  }
+  if (msg.type === "GET_PORTRAIT_SOURCE_PLAN") {
+    portraitSourcePlan(msg.url, sender?.tab?.id).then((plan) =>
+      sendResponse({ ok: Boolean(plan?.primaryUrl), ...(plan || {}) }),
+    )
+    return true
+  }
+  if (msg.type === "REPORT_PORTRAIT_SOURCE_RESULT") {
+    reportPortraitSourceResult(msg.url, Boolean(msg.succeeded), sender?.tab?.id).then((result) =>
+      sendResponse({ ok: true, ...(result || {}) }),
     )
     return true
   }
@@ -222,7 +242,13 @@ function normalizeIconoplasmApiPath(rawUrl) {
   }
 }
 
-async function fetchIconoplasmApi(msg) {
+function iconoplasmApiRequestKey(requestId, sender = {}) {
+  const tabId = Number.isInteger(sender?.tab?.id) ? sender.tab.id : "extension"
+  const frameId = Number.isInteger(sender?.frameId) ? sender.frameId : 0
+  return `${tabId}:${frameId}:${String(requestId || "")}`
+}
+
+async function fetchIconoplasmApi(msg, sender = {}) {
   const path = normalizeIconoplasmApiPath(msg.url || msg.path)
   if (!path) {
     return {
@@ -231,6 +257,10 @@ async function fetchIconoplasmApi(msg) {
       text: JSON.stringify({ error: "Invalid Iconoplasm API path" }),
     }
   }
+  const requestId = String(msg.requestId || "").trim()
+  const requestKey = requestId ? iconoplasmApiRequestKey(requestId, sender) : ""
+  const controller = typeof AbortController === "function" ? new AbortController() : null
+  if (requestKey && controller) apiFetchAbortControllers.set(requestKey, controller)
   try {
     const resp = await fetch(`${HOST}${path}`, {
       method: String(msg.method || "GET").toUpperCase(),
@@ -240,6 +270,7 @@ async function fetchIconoplasmApi(msg) {
       },
       body: typeof msg.body === "string" ? msg.body : undefined,
       credentials: msg.credentials === "include" ? "include" : "same-origin",
+      ...(controller ? { signal: controller.signal } : {}),
     })
     return {
       ok: resp.ok,
@@ -250,7 +281,12 @@ async function fetchIconoplasmApi(msg) {
     return {
       ok: false,
       status: 0,
+      aborted: Boolean(controller?.signal.aborted),
       text: JSON.stringify({ error: String(err && err.message ? err.message : err) }),
+    }
+  } finally {
+    if (requestKey && apiFetchAbortControllers.get(requestKey) === controller) {
+      apiFetchAbortControllers.delete(requestKey)
     }
   }
 }
@@ -258,11 +294,13 @@ async function fetchIconoplasmApi(msg) {
 async function getStoredGeneData() {
   const result = await chrome.storage.local.get([
     "iconoplasm_genes",
+    "iconoplasm_card_snapshot_version",
     "iconoplasm_contract_error",
     "iconoplasm_min_extension_version",
   ])
   return {
     genes: result.iconoplasm_genes || null,
+    cardSnapshotVersion: result.iconoplasm_card_snapshot_version || null,
     contractError: result.iconoplasm_contract_error || null,
     minExtensionVersion: result.iconoplasm_min_extension_version || null,
   }
@@ -472,6 +510,7 @@ async function ensureFreshGeneData() {
     if (needsRefresh) void refreshGeneData()
     return {
       genes: stored.iconoplasm_genes,
+      cardSnapshotVersion: stored.iconoplasm_card_snapshot_version || null,
       contractError: null,
       minExtensionVersion: stored.iconoplasm_min_extension_version || null,
     }
@@ -700,6 +739,23 @@ async function portraitDeliverySession(tabId) {
   })().finally(() => portraitDeliverySessionPromiseByTab.delete(key))
   portraitDeliverySessionPromiseByTab.set(key, loading)
   return loading
+}
+
+async function portraitSourcePlan(url, tabId) {
+  const normalizedUrl = String(url || "").trim()
+  if (!normalizedUrl) return null
+  const session = await portraitDeliverySession(tabId)
+  return session.plan(normalizedUrl)
+}
+
+async function reportPortraitSourceResult(url, succeeded, tabId) {
+  const normalizedUrl = String(url || "").trim()
+  if (!normalizedUrl) return null
+  const session = await portraitDeliverySession(tabId)
+  const result = succeeded
+    ? session.reportSuccess(normalizedUrl)
+    : session.reportFailure(normalizedUrl)
+  return { state: result.state, plan: session.plan(normalizedUrl) }
 }
 
 async function fetchPortraitDataUrl(url, tabId) {
@@ -1085,6 +1141,8 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
 if (globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__) {
   Object.assign(globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__, {
     fetchPortraitDataUrl,
+    portraitSourcePlan,
+    reportPortraitSourceResult,
     warmPortraitDataUrls,
     clearPortraitDataUrlCaches,
     clearPortraitSourceStates,
@@ -1100,6 +1158,8 @@ if (globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__) {
     scannerArtifactMaxBytes: SCANNER_ARTIFACT_MAX_BYTES,
     scannerIndexMaxBytes: SCANNER_INDEX_MAX_BYTES,
     fetchGeneData,
+    fetchIconoplasmApi,
+    apiFetchAbortControllers,
     fetchWithTimeout,
     refreshGeneData,
     ensureFreshGeneData,

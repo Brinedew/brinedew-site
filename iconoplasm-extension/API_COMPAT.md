@@ -54,9 +54,24 @@ payloads in one manifest response.
 The manifest may also expose `card_snapshot_version`. It is an immutable
 publication boundary, not a new catalog schema: extensions that understand it
 invalidate their bounded persistent hover-detail cache when it changes, while
-older extensions safely ignore it. `POST /api/public/v1/genes/batch` projects
-records from that published card snapshot and echoes `snapshot_version`;
-transient failures are never durable negative-cache entries.
+older extensions safely ignore it. Current extensions read one gene through
+`GET /api/public/v1/card-snapshots/:snapshot/genes/:symbol`. That URL is
+content-addressed and immutable, so the browser and CDN can reuse it without
+re-running a body-keyed Worker POST. The endpoint reads only the named
+published snapshot and never falls back to mutable D1 state. The compatibility
+`POST /api/public/v1/genes/batch` projection remains available to the one
+supported predecessor and echoes `snapshot_version`; transient failures are
+never durable negative-cache entries. Only the current and immediately
+previous publication barriers are addressable, matching the documented
+one-release compatibility window; retired or invented snapshot versions fail
+closed without becoming immutable negative cache entries.
+
+Foreground detail reads have a four-second deadline and propagate cancellation
+from the current hover through the content bridge to the service-worker fetch.
+Speculative reads are bounded, yield to foreground intent, and may prepare only
+one lead portrait for a page. Portraits normally load as native HTTPS image
+sources with a 350 ms canonical hedge behind Bunny; service-worker-buffered
+data URLs exist only for page-CSP compatibility.
 
 The persistent detail cache is capped at 512 records and 4 MiB. Extension
 updates compact legacy portrait-heavy scanner storage before returning data to

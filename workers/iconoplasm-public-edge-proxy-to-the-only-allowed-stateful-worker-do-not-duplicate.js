@@ -11,6 +11,8 @@ import {
   matchIconoplasmRouteContract,
 } from "./iconoplasm-route-contract.js"
 
+// ARCHITECTURE FENCE [IPD-008]: trusted hover reads are admitted from the shared route contract.
+
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const PUBLIC_DUMP_PREFIX = "public-dumps"
 const PUBLIC_DEFAULT_GENE_BATCH_LIMIT = 100
@@ -548,7 +550,11 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
         request.method,
       )
     ) {
-      if (path === publicApiPath("/genes/batch") && !canAccessRichBatchRoute(request, env)) {
+      const declaredRoute = matchIconoplasmRouteContract(path, request.method)
+      if (
+        declaredRoute?.route?.auth === "trusted-client" &&
+        !canAccessRichBatchRoute(request, env)
+      ) {
         return done(
           request,
           json(

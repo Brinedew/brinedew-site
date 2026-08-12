@@ -14,6 +14,7 @@
     const windowRef = options.windowRef || root
     const cache = new Map()
     const promiseCache = new Map()
+    const requestStateBySymbol = new Map()
     const warmQueue = []
     const queuedSymbols = new Set()
     const warmBatchSize = Math.max(1, Number(options.warmBatchSize || 8))
@@ -21,7 +22,12 @@
     const delayMs = Math.max(0, Number(options.delayMs || 20))
     const fetchImpl = options.fetchImpl
     const batchUrl = String(options.batchUrl || "")
+    const detailUrlForSymbol =
+      typeof options.detailUrlForSymbol === "function" ? options.detailUrlForSymbol : null
     const fields = Array.isArray(options.fields) ? options.fields : []
+    const requestTimeoutMs = Math.max(250, Number(options.requestTimeoutMs || 4000))
+    const onResolvedBatch =
+      typeof options.onResolvedBatch === "function" ? options.onResolvedBatch : () => {}
     const onError = typeof options.onError === "function" ? options.onError : () => {}
     const storageApi = options.storageApi || null
     const storageKey = String(options.storageKey || "iconoplasm_published_gene_detail_cache_v1")
@@ -49,6 +55,14 @@
     let persistencePromise = null
     let nextRequestSerial = 0
     let latestAdoptedResponseSerial = 0
+
+    function setRevision(rawRevision) {
+      const revision = normalizeRevision(rawRevision)
+      if (!revision || revision === activeRevision) return activeRevision
+      cache.clear()
+      activeRevision = revision
+      return activeRevision
+    }
 
     function utf8ByteLength(value) {
       let bytes = 0
@@ -230,8 +244,97 @@
       while (persistencePromise) await persistencePromise
     }
 
-    async function fetchBatch(symbols) {
-      await hydratePersistentCache()
+    function linkedAbortController(externalSignal) {
+      const controller = typeof AbortController === "function" ? new AbortController() : null
+      if (!controller || !externalSignal) return { controller, unlink: () => {} }
+      const abort = () => controller.abort()
+      if (externalSignal.aborted) abort()
+      else externalSignal.addEventListener("abort", abort, { once: true })
+      return {
+        controller,
+        unlink: () => externalSignal.removeEventListener?.("abort", abort),
+      }
+    }
+
+    async function fetchImmutableDetail(symbol, revision, options = {}) {
+      const requestSerial = ++nextRequestSerial
+      const linked = linkedAbortController(options.signal)
+      const timer = windowRef.setTimeout(() => linked.controller?.abort(), requestTimeoutMs)
+      try {
+        const url = detailUrlForSymbol ? detailUrlForSymbol(symbol, revision) : ""
+        if (!fetchImpl || !url) throw new Error("Immutable gene detail fetch is not configured")
+        const resp = await fetchImpl(url, {
+          method: "GET",
+          ...(linked.controller ? { signal: linked.controller.signal } : {}),
+        })
+        if (!resp.ok && Number(resp.status || 0) !== 404) {
+          throw new Error("HTTP " + String(resp.status || 0))
+        }
+        const payload = (await resp.json()) || {}
+        const responseRevision = normalizeRevision(payload.snapshot_version)
+        if (responseRevision && responseRevision !== revision) {
+          throw new Error("Published detail revision mismatch")
+        }
+        if (requestSerial < latestAdoptedResponseSerial && activeRevision !== revision) return null
+        latestAdoptedResponseSerial = Math.max(latestAdoptedResponseSerial, requestSerial)
+        const record = payload.gene && typeof payload.gene === "object" ? payload.gene : null
+        if (record) {
+          rememberRecord(symbol, record)
+          onResolvedBatch([record], options.priority || "foreground")
+        } else if (Array.isArray(payload.missing) && payload.missing.includes(symbol)) {
+          cache.set(symbol, null)
+        }
+        schedulePersistentWrite(revision)
+        return record
+      } finally {
+        windowRef.clearTimeout(timer)
+        linked.unlink()
+      }
+    }
+
+    async function fetchLegacyBatch(unresolvedSymbols, options = {}) {
+      const requestSerial = ++nextRequestSerial
+      const linked = linkedAbortController(options.signal)
+      const timer = windowRef.setTimeout(() => linked.controller?.abort(), requestTimeoutMs)
+      try {
+        if (!fetchImpl || !batchUrl) throw new Error("Gene detail fetch is not configured")
+        const resp = await fetchImpl(batchUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbols: unresolvedSymbols, fields }),
+          ...(linked.controller ? { signal: linked.controller.signal } : {}),
+        })
+        if (!resp.ok) throw new Error("HTTP " + String(resp.status || 0))
+        const payload = (await resp.json()) || {}
+        const responseRevision = normalizeRevision(payload.snapshot_version)
+        const changesRevision =
+          responseRevision && activeRevision && responseRevision !== activeRevision
+        if (changesRevision && requestSerial < latestAdoptedResponseSerial) return
+        if (responseRevision) {
+          if (changesRevision) cache.clear()
+          activeRevision = responseRevision
+          latestAdoptedResponseSerial = Math.max(latestAdoptedResponseSerial, requestSerial)
+        }
+        const genes = Array.isArray(payload.genes) ? payload.genes : []
+        for (const record of genes) {
+          const symbol = normalizeSymbol(record && record.symbol)
+          if (symbol && record && typeof record === "object") rememberRecord(symbol, record)
+        }
+        if (genes.length) onResolvedBatch(genes, options.priority || "foreground")
+        for (const rawMissing of Array.isArray(payload.missing) ? payload.missing : []) {
+          const symbol = normalizeSymbol(rawMissing)
+          if (symbol) cache.set(symbol, null)
+        }
+        schedulePersistentWrite(responseRevision)
+      } finally {
+        windowRef.clearTimeout(timer)
+        linked.unlink()
+      }
+    }
+
+    async function fetchBatch(symbols, options = {}) {
+      const priority = options.priority === "foreground" ? "foreground" : "background"
+      if (priority === "background") await hydratePersistentCache()
       const uniqueSymbols = []
       const seenSymbols = new Set()
       for (const rawSymbol of Array.isArray(symbols) ? symbols : []) {
@@ -241,70 +344,54 @@
         uniqueSymbols.push(symbol)
       }
 
-      const unresolvedSymbols = uniqueSymbols.filter(
-        (symbol) => !cache.has(symbol) && !promiseCache.has(symbol),
-      )
+      const unresolvedSymbols = uniqueSymbols.filter((symbol) => !cache.has(symbol))
 
       if (unresolvedSymbols.length) {
-        const requestSerial = ++nextRequestSerial
-        const batchRequest = (async () => {
-          try {
-            if (!fetchImpl || !batchUrl) throw new Error("Gene detail fetch is not configured")
-            const resp = await fetchImpl(batchUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                symbols: unresolvedSymbols,
-                fields,
-              }),
+        const revision = activeRevision || (await resolveRevision())
+        if (revision && !activeRevision) activeRevision = revision
+        if (detailUrlForSymbol && revision) {
+          for (const symbol of unresolvedSymbols) {
+            const existing = requestStateBySymbol.get(symbol)
+            if (existing && (priority === "background" || existing.priority === "foreground")) {
+              continue
+            }
+            if (existing) existing.controller?.abort()
+            const controller = typeof AbortController === "function" ? new AbortController() : null
+            const forwardAbort = () => controller?.abort()
+            if (options.signal?.aborted) forwardAbort()
+            else options.signal?.addEventListener?.("abort", forwardAbort, { once: true })
+            const request = fetchImmutableDetail(symbol, revision, {
+              priority,
+              ...(controller ? { signal: controller.signal } : {}),
             })
-            if (!resp.ok) throw new Error("HTTP " + String(resp.status || 0))
-
-            const payload = (await resp.json()) || {}
-            const responseRevision = normalizeRevision(payload.snapshot_version)
-            const changesRevision =
-              responseRevision && activeRevision && responseRevision !== activeRevision
-            if (changesRevision && requestSerial < latestAdoptedResponseSerial) {
-              // This request began before a newer request whose response has
-              // already been accepted. Its different snapshot cannot replace
-              // that newer choice. Leave these symbols uncached so a later
-              // request can retry them against the adopted snapshot.
-              return
-            }
-            if (responseRevision) {
-              if (changesRevision) cache.clear()
-              activeRevision = responseRevision
-              latestAdoptedResponseSerial = Math.max(latestAdoptedResponseSerial, requestSerial)
-            }
-            const genes = Array.isArray(payload.genes) ? payload.genes : []
-            const resolvedMap = new Map()
-            for (const record of genes) {
-              const symbol = normalizeSymbol(record && record.symbol)
-              if (!symbol) continue
-              const safeRecord = record && typeof record === "object" ? record : null
-              if (safeRecord) rememberRecord(symbol, safeRecord)
-              resolvedMap.set(symbol, safeRecord)
-            }
-            const missingSymbols = Array.isArray(payload.missing) ? payload.missing : []
-            for (const rawMissing of missingSymbols) {
-              const symbol = normalizeSymbol(rawMissing)
-              if (!symbol) continue
-              cache.set(symbol, null)
-              resolvedMap.set(symbol, null)
-            }
-            schedulePersistentWrite(responseRevision)
-          } catch (err) {
-            onError(err)
-          } finally {
-            for (const symbol of unresolvedSymbols) promiseCache.delete(symbol)
+              .catch((err) => {
+                if (err?.name !== "AbortError") onError(err)
+                return null
+              })
+              .finally(() => {
+                if (promiseCache.get(symbol) === request) promiseCache.delete(symbol)
+                if (requestStateBySymbol.get(symbol)?.promise === request) {
+                  requestStateBySymbol.delete(symbol)
+                }
+                options.signal?.removeEventListener?.("abort", forwardAbort)
+              })
+            promiseCache.set(symbol, request)
+            requestStateBySymbol.set(symbol, { controller, priority, promise: request })
           }
-        })()
-
-        for (const symbol of unresolvedSymbols) {
-          promiseCache.set(
-            symbol,
-            batchRequest.then(() => cache.get(symbol) || null),
+        } else {
+          const batchRequest = fetchLegacyBatch(unresolvedSymbols, { ...options, priority }).catch(
+            (err) => {
+              if (err?.name !== "AbortError") onError(err)
+            },
           )
+          for (const symbol of unresolvedSymbols) {
+            const symbolRequest = batchRequest
+              .then(() => cache.get(symbol) || null)
+              .finally(() => {
+                if (promiseCache.get(symbol) === symbolRequest) promiseCache.delete(symbol)
+              })
+            promiseCache.set(symbol, symbolRequest)
+          }
         }
       }
 
@@ -325,7 +412,7 @@
         while (warmQueue.length) {
           const batch = warmQueue.splice(0, warmBatchSize)
           for (const symbol of batch) queuedSymbols.delete(symbol)
-          await fetchBatch(batch)
+          await fetchBatch(batch, { priority: "background" })
           if (warmQueue.length) await delay(delayMs)
         }
       } finally {
@@ -368,6 +455,7 @@
     return {
       cache,
       promiseCache,
+      requestStateBySymbol,
       fetchBatch,
       warm,
       scheduleWarm,
@@ -376,6 +464,7 @@
       hydratePersistentCache,
       persistResolvedRecords,
       flushPersistence,
+      setRevision,
       persistentByteLimit,
       persistentPayloadBytes: () =>
         utf8ByteLength(

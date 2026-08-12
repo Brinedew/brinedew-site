@@ -863,7 +863,7 @@ test("DO NOT DELETE: simple card title uses stable label typography and ink", ()
   )
 })
 
-test("DO NOT DELETE: simple card portrait warmup decodes hover-neighbor images", () => {
+test("DO NOT DELETE: simple card portrait warmup decodes one visible lead and hover neighbors", () => {
   const source = readUtf8("./iconoplasm-extension/content.js")
   assert.match(
     source,
@@ -885,10 +885,10 @@ test("DO NOT DELETE: simple card portrait warmup decodes hover-neighbor images",
     /const PORTRAIT_WARM_BATCH_SIZE = 2/,
     "background portrait warming should stay within a two-transfer lane",
   )
-  assert.doesNotMatch(
+  assert.match(
     source,
-    /onResolvedBatch:/,
-    "generic viewport metadata warming must not start arbitrary portrait transfers",
+    /let leadPortraitWarmStarted = false[\s\S]*function onGeneDetailResolvedBatch\(records, priority\)[\s\S]*priority !== "background" \|\| leadPortraitWarmStarted[\s\S]*leadPortraitWarmStarted = true[\s\S]*warmPortraitUrls\(\[leadPortraitUrl\]\)[\s\S]*onResolvedBatch: onGeneDetailResolvedBatch/,
+    "viewport metadata may warm exactly one visible lead portrait, never arbitrary fanout",
   )
   assert.match(
     source,
