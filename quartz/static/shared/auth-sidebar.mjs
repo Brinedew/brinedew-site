@@ -2,7 +2,7 @@ import {
   mountSidebarStack,
   wireSharedUserPanel,
   buildSharedUserPanelMarkup,
-} from "./sidebar-shell.js?v=ec70a3b0941d0a38"
+} from "./sidebar-shell.js?v=d8bcfb8f19d3a065"
 
 function isAccountChromePath(pathname) {
   // Account UI belongs on apps / settings only. Those pages mount their own

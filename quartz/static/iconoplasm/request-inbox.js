@@ -11,6 +11,7 @@ export function createRequestInbox({
   escapeHtml,
   ensurePortraitSource,
   resolvePortraitUrl,
+  navigate,
 }) {
   var state = {
     loaded: false,
@@ -445,7 +446,8 @@ export function createRequestInbox({
   function wire(stack) {
     if (!stack) return
     var readAll = stack.querySelector("[data-icono-request-inbox-read-all]")
-    if (readAll) {
+    if (readAll && !readAll._iconoRequestInboxWired) {
+      readAll._iconoRequestInboxWired = true
       readAll.addEventListener("click", function () {
         readAll.disabled = true
         void markRead([], true).finally(function () {
@@ -456,6 +458,8 @@ export function createRequestInbox({
     var groups = stack.querySelectorAll("[data-icono-request-group]")
     for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) {
       ;(function (group) {
+        if (group._iconoRequestInboxWired) return
+        group._iconoRequestInboxWired = true
         var groupName = group.getAttribute("data-icono-request-group") || ""
         group.addEventListener("sl-show", function () {
           state.active_group = groupName
@@ -477,6 +481,8 @@ export function createRequestInbox({
     var links = stack.querySelectorAll("[data-icono-request-receipt]")
     for (var i = 0; i < links.length; i++) {
       ;(function (link) {
+        if (link._iconoRequestInboxWired) return
+        link._iconoRequestInboxWired = true
         link.addEventListener("click", function (event) {
           var ids = String(link.getAttribute("data-icono-request-notification-ids") || "")
             .split(",")
@@ -489,14 +495,15 @@ export function createRequestInbox({
           if (!ids.length && !(publicationId && symbol)) return
           event.preventDefault()
           var href = link.getAttribute("href") || "/"
+          if (typeof navigate === "function") {
+            navigate(href, link)
+          } else {
+            window.location.assign(href)
+          }
           void markRead(ids, false, {
             fulfillment_publication_id: publicationId,
             gene_symbol: symbol,
-          })
-            .catch(function () {})
-            .finally(function () {
-              window.location.assign(href)
-            })
+          }).catch(function () {})
         })
       })(links[i])
     }
