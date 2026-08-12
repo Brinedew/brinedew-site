@@ -32,6 +32,11 @@ import {
 } from "../shared/sidebar-shell.js?v=ec70a3b0941d0a38"
 import "./vendor/img-comparison-slider.js?v=20260516b517"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=20260730-native-dialog"
+import {
+  openCandidateDeleteDialog,
+  removeCandidateFromPageState,
+  showCandidateDeleteNotice,
+} from "./candidate-delete-dialog.js?v=20260812-in-place-delete"
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
 // appearance settings. Loading the cross-subdomain bridge during anonymous
@@ -4682,37 +4687,52 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             .toLowerCase()
           var candidateImageId =
             Number(button.getAttribute("data-icono-candidate-image-id") || 0) || 0
+          var sampleLabel = String(button.getAttribute("data-icono-sample-label") || "").trim()
+          var emulsionLabel = String(button.getAttribute("data-icono-emulsion-label") || "").trim()
           if (!symbol || !assetSha) return
-          if (
-            !window.confirm(
-              "Remove this candidate from the website and queue local deletion so it will not sync back?",
-            )
-          ) {
-            return
-          }
-          var priorLabel = button.textContent || "Remove"
-          button.disabled = true
-          button.textContent = "Removing..."
-          fetchJSON("/api/iconoplasm/admin/remove-candidate", {
-            method: "POST",
-            credentials: "include",
-            headers: {
-              "Content-Type": "application/json; charset=utf-8",
+          openCandidateDeleteDialog({
+            document: document,
+            symbol: symbol,
+            sampleLabel: sampleLabel,
+            emulsionLabel: emulsionLabel,
+            returnFocus: button,
+            onConfirm: function () {
+              button.disabled = true
+              return fetchJSON("/api/iconoplasm/admin/remove-candidate", {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                  "Content-Type": "application/json; charset=utf-8",
+                },
+                body: JSON.stringify({
+                  symbol: symbol,
+                  asset_sha256: assetSha,
+                  candidate_image_id: candidateImageId > 0 ? candidateImageId : null,
+                }),
+              })
+                .then(function () {
+                  var candidateCount = removeCandidateFromPageState({
+                    genePayload: genePayload,
+                    assetSha: assetSha,
+                    card: button.closest(".icono-candidate-card"),
+                  })
+                  portraitDetailCache[normalizedSymbol(symbol)] = genePayload
+                  if (iconoSidebarState.gene) {
+                    iconoSidebarState.gene.candidateCount = candidateCount
+                    renderIconoplasmSidebar()
+                  }
+                  refreshPortraitLightbox()
+                  showCandidateDeleteNotice({
+                    document: document,
+                    message: (sampleLabel || symbol) + " candidate deleted.",
+                  })
+                })
+                .catch(function (error) {
+                  button.disabled = false
+                  throw error
+                })
             },
-            body: JSON.stringify({
-              symbol: symbol,
-              asset_sha256: assetSha,
-              candidate_image_id: candidateImageId > 0 ? candidateImageId : null,
-            }),
           })
-            .then(function () {
-              rerenderCurrentGeneRoute({ forceFresh: true })
-            })
-            .catch(function (error) {
-              button.disabled = false
-              button.textContent = priorLabel
-              window.alert(String((error && error.message) || "Failed to remove candidate blot."))
-            })
         })
       })(buttons[i])
     }
@@ -8332,6 +8352,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           esc(assetSha) +
           '" data-icono-candidate-image-id="' +
           esc(candidateImageId > 0 ? String(Math.round(candidateImageId)) : "") +
+          '" data-icono-sample-label="' +
+          esc(sampleLabel) +
+          '" data-icono-emulsion-label="' +
+          esc(emulsionInfo.primary) +
           '" aria-label="Remove candidate blot for ' +
           esc(genePayload.symbol) +
           '" title="Remove candidate blot">' +
