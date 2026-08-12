@@ -1320,6 +1320,9 @@ test("versioned public gene detail reuses the Worker edge cache and serves HEAD"
     assert.equal(second.status, 200)
     assert.equal(head.status, 200)
     assert.equal(await head.text(), "")
+    assert.equal(first.headers.get("x-iconoplasm-detail-cache"), "MISS")
+    assert.equal(second.headers.get("x-iconoplasm-detail-cache"), "HIT")
+    assert.equal(head.headers.get("x-iconoplasm-detail-cache"), "HIT")
     assert.equal(puts, 1)
     assert.equal(matches, 3)
   } finally {
