@@ -219,6 +219,7 @@ export function createIconoplasmAdminPublicationAliasHandlers(services) {
         ),
       )
     }
+    const validateOnly = body?.validate_only === true
 
     try {
       const loadedPolicy = await readIconoplasmPublicationAliasPolicy(env.ICONOPLASM_DB)
@@ -235,6 +236,21 @@ export function createIconoplasmAdminPublicationAliasHandlers(services) {
         body?.by_symbol,
         body?.remove_by_symbol || {},
       )
+      if (validateOnly && iconoplasmPublicationAliasPoliciesEqual(loadedPolicy, normalized)) {
+        return done(
+          "admin_publication_aliases_validate",
+          json(
+            {
+              ok: true,
+              valid: true,
+              changed: false,
+              limits: ICONOPLASM_PUBLICATION_ALIAS_LIMITS,
+            },
+            200,
+            NO_STORE,
+          ),
+        )
+      }
       let saved
       if (iconoplasmPublicationAliasPoliciesEqual(loadedPolicy, normalized)) {
         saved = { changed: false, policy: loadedPolicy }
@@ -269,6 +285,21 @@ export function createIconoplasmAdminPublicationAliasHandlers(services) {
             "published_scanner_changed_during_validation",
             "Published scanner changed during alias validation; retry against the new build",
             503,
+          )
+        }
+        if (validateOnly) {
+          return done(
+            "admin_publication_aliases_validate",
+            json(
+              {
+                ok: true,
+                valid: true,
+                changed: true,
+                limits: ICONOPLASM_PUBLICATION_ALIAS_LIMITS,
+              },
+              200,
+              NO_STORE,
+            ),
           )
         }
         const validationTarget = iconoplasmRecognitionValidationTarget({

@@ -76,7 +76,7 @@ function normalizeAlias(value) {
 }
 
 export function publicationAliasCollisionKey(value) {
-  return normalizeAlias(value).toUpperCase()
+  return normalizeAlias(value)
 }
 
 function sortedDictionary(rawDictionary) {

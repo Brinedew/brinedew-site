@@ -181,7 +181,7 @@ test("malformed or ambiguous manifest overlays fail validation", () => {
       schema_version: 1,
       version: "v1-ambiguous",
       alias_count: 2,
-      by_symbol: { RELA: ["p65"], RPRM: ["P65"] },
+      by_symbol: { RELA: ["p65"], RPRM: ["p65"] },
     }),
     null,
   )
@@ -203,8 +203,35 @@ test("malformed or ambiguous manifest overlays fail validation", () => {
       alias_count: 1,
       removal_count: 1,
       by_symbol: { CDH17: ["cadherin"] },
-      remove_by_symbol: { CDH17: ["Cadherin"] },
+      remove_by_symbol: { CDH17: ["cadherin"] },
     }),
     null,
+  )
+})
+
+test("case-distinct aliases retain deterministic owners in the browser matcher", () => {
+  const overlay = overlayApi.normalizePublishedAliasOverlay({
+    schema_version: 1,
+    version: "v1-case-distinct",
+    alias_count: 1,
+    removal_count: 0,
+    by_symbol: { RBL2: ["p130"] },
+    remove_by_symbol: {},
+  })
+  const applied = overlayApi.applyPublishedAliasOverlay(
+    {
+      NOLC1: { a: ["P130"] },
+      RBL2: {},
+    },
+    overlay,
+  )
+
+  assert.deepEqual(applied.errors, [])
+  assert.deepEqual(
+    matcherApi
+      .createGeneMatcher(applied.genes)
+      .findMatches("P130 p130")
+      .map(({ text, symbol }) => `${text}:${symbol}`),
+    ["P130:NOLC1", "p130:RBL2"],
   )
 })

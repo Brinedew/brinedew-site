@@ -387,6 +387,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
               </div>
               <p class="small" id="publication-alias-input-help">Enter the page label as readers see it. Case is preserved; repeated whitespace and dash variants are normalized. Adding only changes this draft.</p>
               <div class="publication-alias-target-preview" id="publication-alias-target-preview" role="status" aria-live="polite" hidden></div>
+              <div class="publication-alias-conflict" id="publication-alias-conflict" role="alert" hidden></div>
               <div class="publication-alias-composer-actions">
                 <span class="publication-alias-editing" id="publication-alias-editing" hidden></span>
                 <button type="button" id="publication-alias-cancel-edit" hidden>Cancel edit</button>

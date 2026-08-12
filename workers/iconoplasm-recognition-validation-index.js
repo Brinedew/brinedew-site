@@ -7,13 +7,13 @@ import {
 // ARCHITECTURE FENCE [IPD-008]: admin recognition validation reads only the
 // immutable lookup shards touched by a semantic change. It must never rebuild
 // the 1.9 MiB scanner artifact inside a foreground Worker request.
-export const ICONOPLASM_RECOGNITION_INDEX_SCHEMA_VERSION = 1
+export const ICONOPLASM_RECOGNITION_INDEX_SCHEMA_VERSION = 2
 export const ICONOPLASM_RECOGNITION_INDEX_SHARD_COUNT = 64
 export const ICONOPLASM_RECOGNITION_INDEX_MAX_SHARD_BYTES = 128 * 1024
 export const ICONOPLASM_RECOGNITION_INDEX_MANIFEST_PREFIX =
-  "iconoplasm:recognition-validation-index:v1:manifest:"
+  "iconoplasm:recognition-validation-index:v2:manifest:"
 export const ICONOPLASM_RECOGNITION_INDEX_SHARD_PREFIX =
-  "iconoplasm:recognition-validation-index:v1:shard:"
+  "iconoplasm:recognition-validation-index:v2:shard:"
 
 const textEncoder = new TextEncoder()
 
