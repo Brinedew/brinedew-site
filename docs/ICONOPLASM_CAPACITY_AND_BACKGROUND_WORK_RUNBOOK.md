@@ -211,6 +211,9 @@ Extension hover detail is immutable within a published card snapshot:
 - foreground hover reads one version-addressed immutable per-symbol GET. The
   compatibility batch route remains for older installations; both read the
   corresponding published card artifact, not D1;
+  active current/previous versions reuse the Cloudflare Worker Cache API before
+  reading the manifest or shard, and the same immutable URL remains reusable in
+  the browser HTTP cache;
   partial reads reuse at most three parsed manifests and four parsed shards per
   Worker isolate, with a 16 MiB estimated parsed-heap ceiling and one in-flight
   KV read/parse per immutable key;

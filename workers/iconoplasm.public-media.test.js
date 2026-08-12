@@ -1275,6 +1275,59 @@ test("versioned public gene detail is immutable, extension-only, and published-a
   assert.equal(retiredResponse.headers.get("cache-control"), "no-store")
 })
 
+test("versioned public gene detail reuses the Worker edge cache and serves HEAD", async () => {
+  const previousCaches = globalThis.caches
+  const entries = new Map()
+  let matches = 0
+  let puts = 0
+  globalThis.caches = {
+    default: {
+      async match(request) {
+        matches += 1
+        return entries.get(request.url)?.clone() || null
+      },
+      async put(request, response) {
+        puts += 1
+        entries.set(request.url, response.clone())
+      },
+    },
+  }
+  try {
+    const env = buildEnv({ KV: buildPublishedCardReadKv() })
+    const url =
+      "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/test-card-v1/genes/A1BG"
+    const headers = { "X-Iconoplasm-Extension-Version": "0.4.15" }
+    const first =
+      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        new Request(url, { headers }),
+        env,
+        {},
+      )
+    const second =
+      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        new Request(url, { headers }),
+        env,
+        {},
+      )
+    const head =
+      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        new Request(url, { method: "HEAD", headers }),
+        env,
+        {},
+      )
+
+    assert.equal(first.status, 200)
+    assert.equal(second.status, 200)
+    assert.equal(head.status, 200)
+    assert.equal(await head.text(), "")
+    assert.equal(puts, 1)
+    assert.equal(matches, 3)
+  } finally {
+    if (previousCaches === undefined) delete globalThis.caches
+    else globalThis.caches = previousCaches
+  }
+})
+
 test("public gene batch honors lean field projection for extension traffic", async () => {
   const response =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
