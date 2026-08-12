@@ -56,6 +56,8 @@ class FakeStatement {
         requested_vision_id: this.db.lastGenerationRequest?.requested_vision_id || "",
         request_batch_id: this.db.lastGenerationRequest?.request_batch_id || "",
         request_batch_size: this.db.lastGenerationRequest?.request_batch_size || 1,
+        prompt_body_mode: this.db.lastGenerationRequest?.prompt_body_mode || "taggerizer_prompt",
+        seed_mode: this.db.lastGenerationRequest?.seed_mode || "random",
         status: "open",
         created_at: "2026-04-25T12:00:00Z",
         updated_at: "2026-04-25T12:00:00Z",
@@ -136,6 +138,8 @@ class FakeStatement {
         client_request_id: clientRequestId,
         request_batch_id: this.args[12],
         request_batch_size: this.args[13],
+        prompt_body_mode: this.args[14],
+        seed_mode: "random",
       }
       this.db.generationRequests.push(this.db.lastGenerationRequest)
       return { meta: { last_row_id: this.db.lastRequestId, changes: 1 } }
@@ -302,6 +306,7 @@ test("one request action queues a bounded idempotent emulsion batch", async () =
     request_kind: "new_candidate",
     requested_vision_ids: ["anima-v1-101", "anima-v1-102", "anima-v1-103"],
     client_batch_id: "batch-123",
+    prompt_body_mode: "taggerizer_prompt",
   }
   const send = () =>
     handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -331,6 +336,8 @@ test("one request action queues a bounded idempotent emulsion batch", async () =
   )
   assert.ok(db.generationRequests.every((item) => item.request_batch_id === "batch-123"))
   assert.ok(db.generationRequests.every((item) => item.request_batch_size === 3))
+  assert.ok(db.generationRequests.every((item) => item.prompt_body_mode === "taggerizer_prompt"))
+  assert.ok(db.generationRequests.every((item) => item.seed_mode === "random"))
 
   const retryResponse = await send()
   const retryPayload = await retryResponse.json()

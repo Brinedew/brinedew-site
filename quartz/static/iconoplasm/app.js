@@ -5179,13 +5179,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<p class="icono-request-direct-status" data-icono-request-direct-status hidden></p>' +
       '<div class="icono-request-direct-preview" data-icono-request-direct-preview>' +
       '<div class="icono-request-direct-preview-row"><span>Sample</span><strong data-icono-request-subject-source>Loading sample</strong></div>' +
-      '<fieldset class="icono-request-mode-field">' +
-      "<legend>Prompt body</legend>" +
-      '<div class="icono-request-segmented" role="radiogroup" aria-label="Prompt body">' +
-      '<label class="icono-request-segment"><input type="radio" name="icono-request-prompt-body-mode" value="taggerizer_prompt" checked data-icono-request-prompt-body-mode><span>Tags</span></label>' +
-      '<label class="icono-request-segment"><input type="radio" name="icono-request-prompt-body-mode" value="prose_prompt" data-icono-request-prompt-body-mode><span>Prose</span></label>' +
-      "</div>" +
-      "</fieldset>" +
       "</div>" +
       "</div>" +
       "</div>"
@@ -5209,6 +5202,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       esc(safeSymbol) +
       '" data-icono-request-tab="api">Image API</button>' +
       "</div>" +
+      '<fieldset class="icono-request-mode-field">' +
+      "<legend>Prompt body</legend>" +
+      '<div class="icono-request-segmented" role="radiogroup" aria-label="Prompt body">' +
+      '<label class="icono-request-segment"><input type="radio" name="icono-request-prompt-body-mode" value="taggerizer_prompt" checked data-icono-request-prompt-body-mode><span>Tags</span></label>' +
+      '<label class="icono-request-segment"><input type="radio" name="icono-request-prompt-body-mode" value="prose_prompt" data-icono-request-prompt-body-mode><span>Prose</span></label>' +
+      "</div>" +
+      "</fieldset>" +
       '<div class="icono-request-lanes">' +
       '<section class="icono-request-lane icono-request-lane--queue" id="icono-request-panel-free-' +
       esc(safeSymbol) +
@@ -6251,9 +6251,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var directImage = body.querySelector("[data-icono-request-direct-image]")
       var directStatus = body.querySelector("[data-icono-request-direct-status]")
       var directSubjectSource = body.querySelector("[data-icono-request-subject-source]")
-      var directPromptBodyModeInputs = body.querySelectorAll(
-        "[data-icono-request-prompt-body-mode]",
-      )
+      var promptBodyModeInputs = body.querySelectorAll("[data-icono-request-prompt-body-mode]")
       var directEmulsionPicker = body.querySelector("[data-icono-request-direct-emulsion-picker]")
       var directEmulsionQuery = body.querySelector("[data-icono-request-direct-emulsion-query]")
       var directEmulsionResults = body.querySelector("[data-icono-request-direct-emulsion-results]")
@@ -6265,8 +6263,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         loading: false,
         job: null,
         selectedUserEmulsion: null,
-        promptBodyMode: "taggerizer_prompt",
       }
+      var requestPromptBodyMode = "taggerizer_prompt"
       var requestOptions = []
       var requestOptionsByVisionId = Object.create(null)
       var requestOptionsByQuery = Object.create(null)
@@ -6422,10 +6420,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         return { providerId: raw.slice(0, idx), model: raw.slice(idx + 1) }
       }
 
-      function selectedDirectPromptBodyMode() {
-        return requestDirectState.promptBodyMode === "taggerizer_prompt"
-          ? "taggerizer_prompt"
-          : "prose_prompt"
+      function selectedPromptBodyMode() {
+        return requestPromptBodyMode === "taggerizer_prompt" ? "taggerizer_prompt" : "prose_prompt"
       }
 
       function selectedDirectUserEmulsionId() {
@@ -6503,7 +6499,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           directSubjectSource.textContent =
             candidateGenerationSampleLabel() +
             " · " +
-            (selectedDirectPromptBodyMode() === "taggerizer_prompt" ? "tags" : "prose")
+            (selectedPromptBodyMode() === "taggerizer_prompt" ? "tags" : "prose")
         }
       }
 
@@ -6556,7 +6552,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           symbol: symbol,
           request_kind: "new_candidate",
           request_mode: "novel",
-          prompt_body_mode: selectedDirectPromptBodyMode(),
+          prompt_body_mode: selectedPromptBodyMode(),
           user_emulsion_id: selectedDirectUserEmulsionId(),
         }
         if (selected.model) body.model = selected.model
@@ -7154,14 +7150,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (providerSelect) {
         providerSelect.addEventListener("change", updateDirectGenerationButtons)
       }
-      for (
-        var modeInputIndex = 0;
-        modeInputIndex < directPromptBodyModeInputs.length;
-        modeInputIndex++
-      ) {
-        directPromptBodyModeInputs[modeInputIndex].addEventListener("change", function (event) {
+      for (var modeInputIndex = 0; modeInputIndex < promptBodyModeInputs.length; modeInputIndex++) {
+        promptBodyModeInputs[modeInputIndex].addEventListener("change", function (event) {
           if (!event.target || !event.target.checked) return
-          requestDirectState.promptBodyMode =
+          requestPromptBodyMode =
             String(event.target.value || "") === "taggerizer_prompt"
               ? "taggerizer_prompt"
               : "prose_prompt"
@@ -7196,12 +7188,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               request_mode: "specific",
               requested_vision_ids: requestedVisionIds,
               client_batch_id: crypto.randomUUID(),
+              prompt_body_mode: selectedPromptBodyMode(),
             }
           : {
               symbol: symbol,
               request_kind: "new_candidate",
               request_mode: "random",
               requested_vision_id: null,
+              prompt_body_mode: selectedPromptBodyMode(),
             }
         var button = event.submitter || queueSubmitButton
         if (button) {

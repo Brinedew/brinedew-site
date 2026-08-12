@@ -71,6 +71,58 @@ test("candidate prompt authority migration renames every stored mode without los
   }
 })
 
+test("website generation requests default to complete Tags prompts and fresh seeds", () => {
+  const db = new DatabaseSync(":memory:")
+  try {
+    db.exec(`
+      CREATE TABLE icono_generation_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        gene_symbol TEXT NOT NULL
+      );
+    `)
+    db.exec(
+      readFileSync(
+        new URL(
+          "../migrations-iconoplasm/0069_generation_request_prompt_and_seed_authority.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    )
+    db.prepare("INSERT INTO icono_generation_requests (gene_symbol) VALUES ('CDK1')").run()
+    assert.deepEqual(
+      {
+        ...db
+          .prepare(
+            "SELECT prompt_body_mode, seed_mode FROM icono_generation_requests WHERE gene_symbol = 'CDK1'",
+          )
+          .get(),
+      },
+      { prompt_body_mode: "taggerizer_prompt", seed_mode: "random" },
+    )
+    assert.throws(
+      () =>
+        db
+          .prepare(
+            "INSERT INTO icono_generation_requests (gene_symbol, prompt_body_mode) VALUES ('TP53', 'sampled_tags')",
+          )
+          .run(),
+      /CHECK constraint failed/,
+    )
+    assert.throws(
+      () =>
+        db
+          .prepare(
+            "INSERT INTO icono_generation_requests (gene_symbol, seed_mode) VALUES ('TP53', 'custom')",
+          )
+          .run(),
+      /CHECK constraint failed/,
+    )
+  } finally {
+    db.close()
+  }
+})
+
 function syntheticExtendedWebpWithLeadingChunk(width, height) {
   const widthMinusOne = width - 1
   const heightMinusOne = height - 1
