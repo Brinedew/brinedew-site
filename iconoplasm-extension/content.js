@@ -17,6 +17,7 @@
   const IconoContentVoteBridge = globalThis.IconoplasmContentVoteBridge
   const IconoHighlightRuntime = globalThis.IconoplasmHighlightRuntime
   const IconoVisibilityScheduler = globalThis.IconoplasmVisibilityScheduler
+  const IconoPredictiveWarm = globalThis.IconoplasmPredictiveWarm
   if (!IconoCardShared) {
     console.error(
       "[Iconoplasm] shared card runtime missing: load generated/shared-card-runtime.js first",
@@ -50,7 +51,6 @@
   if (
     !IconoContentTooltip ||
     typeof IconoContentTooltip.createTooltipShell !== "function" ||
-    typeof IconoContentTooltip.createHoverIntentTracker !== "function" ||
     typeof IconoContentTooltip.allowsSpeculativePrewarm !== "function" ||
     typeof IconoContentTooltip.postBackgroundTask !== "function" ||
     typeof IconoContentTooltip.createAdapterOwnedPortraitState !== "function" ||
@@ -84,6 +84,15 @@
     typeof IconoHighlightRuntime.createHighlightRuntime !== "function"
   ) {
     console.error("[Iconoplasm] highlight runtime missing: load highlight-runtime.js first")
+    return
+  }
+  if (
+    !IconoPredictiveWarm ||
+    typeof IconoPredictiveWarm.predictionPolicy !== "function" ||
+    typeof IconoPredictiveWarm.rankSpatialCandidates !== "function" ||
+    typeof IconoPredictiveWarm.rankScrollCandidates !== "function"
+  ) {
+    console.error("[Iconoplasm] predictive warming missing: load content-predictive-warm.js first")
     return
   }
 
@@ -509,7 +518,6 @@
   let tooltip = null
   let authToast = null
   let activeSymbol = null
-  const hoverIntentTracker = IconoContentTooltip.createHoverIntentTracker()
   let activeDetailAbortController = null
   let neighborPrewarmAbortController = null
   let hideTimer = null
@@ -527,6 +535,15 @@
   }
   let portraitLoadToken = 0
   let viewportWarmFrame = 0
+  let pointerWarmFrame = 0
+  let lastPointerPredictionAt = 0
+  let lastPointerSample = null
+  let lastApproachPredictionKey = ""
+  let lastScrollY = window.scrollY
+  let predictionPolicy = IconoPredictiveWarm.predictionPolicy(
+    window.navigator?.connection,
+    window.navigator?.deviceMemory,
+  )
   let visibilityScheduler = null
   let mutationScanController = null
   let pageScanner = null
@@ -561,10 +578,11 @@
   // Fence: keep background detail batches small. Large batches made the hovered gene wait behind
   // bulk prewarm work, which is why "simple text loads seconds later" showed up in practice.
   const GENE_DETAIL_BACKGROUND_CONCURRENCY = 2
-  const GENE_DETAIL_NEIGHBOR_LIMIT = 4
   const PORTRAIT_WARM_BATCH_SIZE = 2
-  const GENE_DETAIL_VIEWPORT_ABOVE_PX = 160
+  const GENE_DETAIL_VIEWPORT_ABOVE_PX = 960
   const GENE_DETAIL_VIEWPORT_BELOW_PX = 960
+  const POINTER_PREDICTION_INTERVAL_MS = 80
+  const PREDICTED_SYMBOL_CACHE_LIMIT = 64
   const TOOLTIP_VIEWPORT_MARGIN_PX = 8
   const TOOLTIP_TARGET_GAP_PX = 8
   const TOOLTIP_NAVIGATION_DELAY_MS = 500
@@ -572,8 +590,8 @@
   const decodedPortraitSrcPromises = new Map()
   const DECODED_PORTRAIT_CACHE_LIMIT = 96
   const LIT_ARCHIVAL_PREWARM_CACHE_LIMIT = 48
-  const initialHoverPreloadSymbols = new Set()
-  const initialPortraitWarmUrls = new Set()
+  const portraitPreloadSymbols = new Set()
+  const predictedPortraitWarmUrls = new Set()
   let initialHoverPreloadStarted = false
   let initialHoverPreloadFinished = false
 
@@ -646,33 +664,20 @@
     ).trim()
   }
 
-  function portraitUrlsFromGeneDetails(records) {
-    const urls = []
-    const seenUrls = new Set()
-    for (const record of Array.isArray(records) ? records : []) {
-      const portraitSrc = portraitUrlFromGeneDetail(record)
-      if (!portraitSrc || seenUrls.has(portraitSrc)) continue
-      seenUrls.add(portraitSrc)
-      urls.push(portraitSrc)
-    }
-    return urls
-  }
-
   function onGeneDetailResolvedBatch(records, priority) {
-    // ARCHITECTURE FENCE [IPD-008]: the first ten highlighted strings are the
-    // page's immediate interaction surface. Resolve and decode their published
-    // portraits before pointer intent, while keeping later viewport work
-    // metadata-only and retaining the bounded two-transfer portrait lane.
-    if (priority !== "background" || !initialHoverPreloadSymbols.size) return
+    // ARCHITECTURE FENCE [IPD-008]: only symbols selected by a bounded page-local
+    // predictor feed portrait warming. Later generic metadata hydration does not
+    // become an unbounded image fanout.
+    if (priority !== "background" || !portraitPreloadSymbols.size) return
     const portraitUrls = []
     for (const record of Array.isArray(records) ? records : []) {
       const symbol = String((record && record.symbol) || "")
         .trim()
         .toUpperCase()
-      if (!initialHoverPreloadSymbols.has(symbol)) continue
+      if (!portraitPreloadSymbols.has(symbol)) continue
       const portraitUrl = portraitUrlFromGeneDetail(record)
-      if (!portraitUrl || initialPortraitWarmUrls.has(portraitUrl)) continue
-      initialPortraitWarmUrls.add(portraitUrl)
+      if (!portraitUrl || predictedPortraitWarmUrls.has(portraitUrl)) continue
+      predictedPortraitWarmUrls.add(portraitUrl)
       portraitUrls.push(portraitUrl)
     }
     if (portraitUrls.length) portraitCache.warmUrls(portraitUrls)
@@ -1212,10 +1217,6 @@
     portraitStatus.textContent = ""
   }
 
-  function warmPortraitUrls(urls) {
-    portraitCache.replaceWarmUrls(urls)
-  }
-
   function collectPageGeneSymbols(limit = INITIAL_HOVER_PRELOAD_LIMIT) {
     const symbols = []
     const seenSymbols = new Set()
@@ -1231,15 +1232,60 @@
     return symbols
   }
 
+  function rememberPortraitPreloadSymbol(rawSymbol) {
+    const symbol = String(rawSymbol || "")
+      .trim()
+      .toUpperCase()
+    if (!symbol) return ""
+    portraitPreloadSymbols.delete(symbol)
+    portraitPreloadSymbols.add(symbol)
+    while (portraitPreloadSymbols.size > PREDICTED_SYMBOL_CACHE_LIMIT) {
+      portraitPreloadSymbols.delete(portraitPreloadSymbols.values().next().value)
+    }
+    return symbol
+  }
+
+  function predictionEnabled() {
+    return predictionPolicy.enabled && document.visibilityState !== "hidden"
+  }
+
+  function refreshPredictionPolicy() {
+    predictionPolicy = IconoPredictiveWarm.predictionPolicy(
+      window.navigator?.connection,
+      window.navigator?.deviceMemory,
+    )
+  }
+
+  function warmPredictedHoverAssets(rawSymbols, options = {}) {
+    if (!predictionEnabled()) return Promise.resolve(new Map())
+    const symbols = []
+    const seen = new Set()
+    for (const rawSymbol of Array.isArray(rawSymbols) ? rawSymbols : []) {
+      const symbol = rememberPortraitPreloadSymbol(rawSymbol)
+      if (!symbol || seen.has(symbol)) continue
+      seen.add(symbol)
+      symbols.push(symbol)
+    }
+    if (!symbols.length) return Promise.resolve(new Map())
+    return fetchGeneDetailsBatch(symbols, {
+      priority: "background",
+      awaitPersistentCache: false,
+      ...(options.signal ? { signal: options.signal } : {}),
+    }).catch(() => new Map())
+  }
+
   async function warmInitialHoverAssets() {
     if (initialHoverPreloadStarted) return
     initialHoverPreloadStarted = true
-    if (!IconoContentTooltip.allowsSpeculativePrewarm(window.navigator?.connection)) {
+    refreshPredictionPolicy()
+    if (!predictionEnabled()) {
       initialHoverPreloadFinished = true
       return
     }
-    const symbols = collectPageGeneSymbols(INITIAL_HOVER_PRELOAD_LIMIT)
-    for (const symbol of symbols) initialHoverPreloadSymbols.add(symbol)
+    const symbols = collectPageGeneSymbols(
+      Math.min(INITIAL_HOVER_PRELOAD_LIMIT, predictionPolicy.startupLimit),
+    )
+    for (const symbol of symbols) rememberPortraitPreloadSymbol(symbol)
     try {
       for (let index = 0; index < symbols.length; index += GENE_DETAIL_BACKGROUND_CONCURRENCY) {
         const batch = symbols.slice(index, index + GENE_DETAIL_BACKGROUND_CONCURRENCY)
@@ -1279,12 +1325,25 @@
       .filter((symbol) => geneMap && geneMap[symbol])
   }
 
+  function collectVisiblePredictionCandidates(limit = 96) {
+    const elements =
+      visibilityScheduler && typeof visibilityScheduler.getVisibleElements === "function"
+        ? visibilityScheduler.getVisibleElements(limit)
+        : Array.from(document.querySelectorAll(".iconoplasm-gene")).slice(0, limit)
+    return elements.map((element) => ({
+      element,
+      symbol: String(element?.dataset?.gene || "")
+        .trim()
+        .toUpperCase(),
+      rect: element.getBoundingClientRect(),
+    }))
+  }
+
   function ensureVisibilityObserver() {
     if (visibilityScheduler) return visibilityScheduler
     if (!IconoVisibilityScheduler) return null
-    // Fence: warming should follow observer-driven visibility rather than repeated layout reads on
-    // scroll/resize. The old getBoundingClientRect loop worked, but it turned visibility into a
-    // hand-rolled scheduler with more main-thread tax than necessary.
+    // Fence: the observer maintains the bounded candidate set. Pointer and scroll prediction may
+    // measure that set, but never rescan every highlight during a movement event.
     visibilityScheduler = IconoVisibilityScheduler.createVisibilityScheduler({
       abovePx: GENE_DETAIL_VIEWPORT_ABOVE_PX,
       belowPx: GENE_DETAIL_VIEWPORT_BELOW_PX,
@@ -1301,7 +1360,7 @@
     if (scheduler) scheduler.observe(el)
   }
 
-  function collectNeighborGeneSymbols(targetEl, limit = GENE_DETAIL_NEIGHBOR_LIMIT) {
+  function collectDomNeighborGeneSymbols(targetEl, limit) {
     if (!targetEl) return []
     const genes = Array.from(document.querySelectorAll(".iconoplasm-gene"))
     const targetIndex = genes.indexOf(targetEl)
@@ -1322,7 +1381,7 @@
       symbols.push(normalized)
     }
 
-    const max = Math.max(0, Number(limit || GENE_DETAIL_NEIGHBOR_LIMIT))
+    const max = Math.max(0, Number(limit || 0))
     for (let distance = 1; symbols.length < max; distance += 1) {
       const left = targetIndex - distance
       const right = targetIndex + distance
@@ -1338,6 +1397,38 @@
       }
     }
     return symbols
+  }
+
+  function collectSpatialNeighborGeneSymbols(targetEl, limit) {
+    const max = Math.max(0, Number(limit || 0))
+    if (!targetEl || !max) return []
+    const targetRect = targetEl.getBoundingClientRect()
+    const targetSymbol = String(targetEl?.dataset?.gene || "")
+      .trim()
+      .toUpperCase()
+    const pointerVector = lastPointerSample?.vector || { x: 0, y: 0 }
+    const spatial = IconoPredictiveWarm.rankSpatialCandidates(
+      collectVisiblePredictionCandidates(),
+      {
+        x: targetRect.left + targetRect.width / 2,
+        y: targetRect.top + targetRect.height / 2,
+      },
+      pointerVector,
+      {
+        excludeSymbol: targetSymbol,
+        radius: Math.max(window.innerWidth, window.innerHeight, 720),
+        limit: max,
+      },
+    )
+    if (spatial.length >= max) return spatial
+    const seen = new Set(spatial)
+    for (const symbol of collectDomNeighborGeneSymbols(targetEl, max)) {
+      if (seen.has(symbol)) continue
+      seen.add(symbol)
+      spatial.push(symbol)
+      if (spatial.length >= max) break
+    }
+    return spatial
   }
 
   async function fetchGeneDetailsBatch(symbols, options = {}) {
@@ -1364,7 +1455,56 @@
     if (viewportWarmFrame) return
     viewportWarmFrame = window.requestAnimationFrame(() => {
       viewportWarmFrame = 0
+      const currentScrollY = window.scrollY
+      const scrollDirection = Math.sign(currentScrollY - lastScrollY)
+      lastScrollY = currentScrollY
       scheduleWarmVisibleGeneDetails()
+      if (!predictionEnabled() || !scrollDirection) return
+      const symbols = IconoPredictiveWarm.rankScrollCandidates(
+        collectVisiblePredictionCandidates(),
+        scrollDirection,
+        window.innerHeight,
+        predictionPolicy.scrollPortraitLimit,
+      )
+      void warmPredictedHoverAssets(symbols)
+    })
+  }
+
+  function schedulePointerApproachWarm(event) {
+    const pointerType = String(event?.pointerType || "mouse")
+    if (pointerType === "touch") return
+    const sample = {
+      x: Number(event?.clientX || 0),
+      y: Number(event?.clientY || 0),
+      at: Date.now(),
+      vector: lastPointerSample
+        ? {
+            x: Number(event?.clientX || 0) - lastPointerSample.x,
+            y: Number(event?.clientY || 0) - lastPointerSample.y,
+          }
+        : { x: 0, y: 0 },
+    }
+    lastPointerSample = sample
+    if (!initialized || !predictionEnabled()) return
+    if (sample.at - lastPointerPredictionAt < POINTER_PREDICTION_INTERVAL_MS) return
+    if (pointerWarmFrame) return
+    pointerWarmFrame = window.requestAnimationFrame(() => {
+      pointerWarmFrame = 0
+      lastPointerPredictionAt = Date.now()
+      const symbols = IconoPredictiveWarm.rankSpatialCandidates(
+        collectVisiblePredictionCandidates(),
+        sample,
+        sample.vector,
+        {
+          excludeSymbol: activeSymbol,
+          radius: predictionPolicy.pointerRadius,
+          limit: predictionPolicy.approachLimit,
+        },
+      )
+      const key = symbols.join("|")
+      if (!key || key === lastApproachPredictionKey) return
+      lastApproachPredictionKey = key
+      void warmPredictedHoverAssets(symbols)
     })
   }
 
@@ -1559,16 +1699,19 @@
     scanPage(document.body)
     refreshHighlightStyles()
     scheduleDiscoveryBufferFlush()
-    void warmInitialHoverAssets()
-    if (!ensureVisibilityObserver()) {
-      window.addEventListener("scroll", scheduleViewportWarm, { passive: true })
-      window.addEventListener("resize", scheduleViewportWarm, { passive: true })
-    }
+    void warmInitialHoverAssets().catch(() => null)
+    ensureVisibilityObserver()
+    window.addEventListener("scroll", scheduleViewportWarm, { passive: true })
+    window.addEventListener("resize", scheduleViewportWarm, { passive: true })
+    document.addEventListener("pointermove", schedulePointerApproachWarm, { passive: true })
+    window.navigator?.connection?.addEventListener?.("change", refreshPredictionPolicy)
     window.addEventListener("resize", scheduleHighlightGeometryRefresh, { passive: true })
     window.addEventListener("focus", scheduleDiscoveryBufferFlush)
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
+        refreshPredictionPolicy()
         scheduleDiscoveryBufferFlush()
+        scheduleWarmVisibleGeneDetails()
       }
     })
     observeMutations()
@@ -1972,58 +2115,30 @@
       clearPendingDiscovery(activeSymbol)
     }
     activeSymbol = symbol
-    const hoverIntent = hoverIntentTracker.enter(symbol)
+    const previousNeighborPrewarmAbortController = neighborPrewarmAbortController
     if (activeDetailAbortController) activeDetailAbortController.abort()
-    if (neighborPrewarmAbortController) neighborPrewarmAbortController.abort()
-    portraitCache.replaceWarmUrls([])
     activeDetailAbortController =
       typeof AbortController === "function" ? new AbortController() : null
-    neighborPrewarmAbortController =
-      typeof AbortController === "function" ? new AbortController() : null
-    const neighborPrewarmSignal = neighborPrewarmAbortController
-      ? neighborPrewarmAbortController.signal
-      : null
     activeGeneSummary = Object.assign({ symbol }, gene)
     tooltipNavigationArmedAt = Date.now() + TOOLTIP_NAVIGATION_DELAY_MS
-    // Fence: fetch the hovered gene before warming neighbors. Reversing this puts the hovered
-    // symbol into the warm queue first, so the visible card waits on background work.
+    // Fetching the hovered symbol first promotes a matching speculative request
+    // before the prior predictor is cancelled. A successful prediction therefore
+    // keeps its immutable transfer instead of restarting from byte zero.
     const hoverGeneDetailPromise = geneDetailCache.has(symbol)
       ? Promise.resolve(geneDetailCache.get(symbol) || null)
       : fetchGeneDetailForTooltip(symbol, activeDetailAbortController?.signal)
-    const allowsNeighborPrewarm = IconoContentTooltip.allowsSpeculativePrewarm(
-      window.navigator?.connection,
-    )
-    const neighborSymbols = allowsNeighborPrewarm
-      ? collectNeighborGeneSymbols(target, GENE_DETAIL_NEIGHBOR_LIMIT)
+    void hoverGeneDetailPromise.then((detail) => {
+      const portraitSrc = portraitUrlFromGeneDetail(detail)
+      return portraitSrc ? getUsablePortraitSrc(portraitSrc).catch(() => "") : ""
+    })
+    previousNeighborPrewarmAbortController?.abort()
+    neighborPrewarmAbortController =
+      typeof AbortController === "function" ? new AbortController() : null
+    const neighborSymbols = predictionEnabled()
+      ? collectSpatialNeighborGeneSymbols(target, predictionPolicy.neighborLimit)
       : []
-    const neighborDetailsPromise = neighborSymbols.length
-      ? fetchGeneDetailsBatch(neighborSymbols, {
-          priority: "background",
-          signal: neighborPrewarmSignal,
-        })
-      : Promise.resolve(new Map())
-    // Metadata can batch in parallel, but speculative portrait transfers never own
-    // the tab's source probe. Start the active portrait first; after it settles, use
-    // the two-slot background lane to make the four closest genes paint-ready.
-    Promise.all([
-      hoverGeneDetailPromise.then((detail) => {
-        const portraitSrc = portraitUrlFromGeneDetail(detail)
-        return portraitSrc ? getUsablePortraitSrc(portraitSrc).catch(() => "") : ""
-      }),
-      neighborDetailsPromise,
-    ]).then(([, neighborDetails]) => {
-      if (!hoverIntentTracker.isCurrent(hoverIntent) || activeSymbol !== symbol) return
-      if (neighborPrewarmSignal && neighborPrewarmSignal.aborted) return
-      if (!(neighborDetails instanceof Map)) return
-      const portraitUrls = portraitUrlsFromGeneDetails(Array.from(neighborDetails.values()))
-      if (!portraitUrls.length) return
-      IconoContentTooltip.postBackgroundTask(
-        () => {
-          if (!hoverIntentTracker.isCurrent(hoverIntent) || activeSymbol !== symbol) return
-          warmPortraitUrls(portraitUrls)
-        },
-        { windowRef: window, signal: neighborPrewarmSignal, timeout: 500 },
-      ).catch(() => null)
+    void warmPredictedHoverAssets(neighborSymbols, {
+      signal: neighborPrewarmAbortController?.signal,
     })
 
     const color = gene.c || PLACEHOLDER_COLOR
@@ -2163,11 +2278,11 @@
   function hideTooltip() {
     cancelHideTimer()
     clearPendingDiscovery(activeSymbol)
-    hoverIntentTracker.invalidate()
     if (activeDetailAbortController) activeDetailAbortController.abort()
     activeDetailAbortController = null
-    if (neighborPrewarmAbortController) neighborPrewarmAbortController.abort()
-    neighborPrewarmAbortController = null
+    // Recently hovered neighbors remain useful during the short gap after the
+    // tooltip closes. The next hover selectively promotes its symbol, then
+    // cancels only the remaining obsolete detail requests.
     activeSymbol = null
     activeGeneSummary = null
     tooltipNavigationArmedAt = 0
