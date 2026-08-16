@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -7,6 +8,14 @@ import {
   SHARED_SESSION_PRESENCE_COOKIE,
 } from "./auth.js"
 import worker from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
+
+const statefulRuntimeSource = readFileSync(
+  new URL(
+    "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
+    import.meta.url,
+  ),
+  "utf8",
+)
 
 test("the readable session marker carries presence only, never identity or authority", () => {
   const cookie = sharedSessionPresenceCookie({
@@ -52,4 +61,24 @@ test("the stateful security boundary makes every auth response non-cacheable", a
   assert.equal(response.status, 401)
   assert.deepEqual(await response.json(), { authenticated: false })
   assert.equal(response.headers.get("Cache-Control"), "no-store")
+})
+
+test("dynamic HTML repairs only the presence hint and never caches that personalized header", () => {
+  const cacheWrite = statefulRuntimeSource.indexOf("caches.default.put(")
+  const hintRepair = statefulRuntimeSource.indexOf(
+    'sharedSessionPresenceCookie({ present: true, cookieDomain: ".brinedew.bio" })',
+  )
+  const finalResponse = statefulRuntimeSource.indexOf("return new Response(body", hintRepair)
+
+  assert.notEqual(cacheWrite, -1)
+  assert.ok(hintRepair > cacheWrite)
+  assert.ok(finalResponse > hintRepair)
+  assert.match(
+    statefulRuntimeSource.slice(cacheWrite, hintRepair),
+    /body = injectAnalyticsConsentBootstrap\(body, request\)/,
+  )
+  assert.doesNotMatch(
+    statefulRuntimeSource.slice(cacheWrite, hintRepair),
+    /sharedSessionPresenceCookie/,
+  )
 })

@@ -125,7 +125,12 @@ hover detail use the published read plane. A guest homepage must not probe
 authentication, settings, discoveries, inventory statistics, admin state, or
 D1. The readable shared-session marker carries no identity or authority; it may
 only gate one direct authenticated-user lookup, while the HttpOnly session
-cookie remains the credential. Extension foreground detail uses a
+cookie remains the credential. Brinedew identity is independent of Discord's
+short-lived access token: the session owner refreshes provider tokens atomically,
+retains the Brinedew identity through provider outages or revocation, and rolls
+the browser credential on authenticated activity. Dynamic HTML may restore the
+presence-only marker when an HttpOnly session cookie is already present; it must
+not perform an anonymous auth lookup. Extension foreground detail uses a
 version-addressed immutable per-symbol GET; older clients retain the batch
 compatibility route. Foreground intent must not wait for whole-cache hydration
 or speculative batches, and a newer hover aborts obsolete network work through

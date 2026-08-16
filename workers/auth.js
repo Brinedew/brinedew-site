@@ -11,7 +11,9 @@ const DISCORD_CLIENT_ID_FALLBACK = "1438111252730875984"
 const INVALID_ENV_MARKERS = new Set(["", "undefined", "null"])
 const OAUTH_SESSION_COOKIE_PREFIX = "oauth_session_"
 export const SHARED_SESSION_PRESENCE_COOKIE = "brinedew_session_present"
-const SHARED_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+export const PERSISTENT_SESSION_MAX_AGE_SECONDS = 400 * 24 * 60 * 60
+const SHARED_SESSION_MAX_AGE_SECONDS = PERSISTENT_SESSION_MAX_AGE_SECONDS
+const ACCESS_TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000
 
 export function sharedSessionPresenceCookie({
   present,
@@ -23,6 +25,14 @@ export function sharedSessionPresenceCookie({
   return `${SHARED_SESSION_PRESENCE_COOKIE}=${present ? "1" : ""}; Path=/; Secure; SameSite=Lax; Max-Age=${
     present ? Math.max(0, Number(maxAge) || SHARED_SESSION_MAX_AGE_SECONDS) : 0
   }${domainAttr}`
+}
+
+export function persistentSessionCookie({ sessionId, cookieDomain = "" } = {}) {
+  const id = String(sessionId || "").trim()
+  if (!id) throw new Error("A session id is required")
+  const domain = String(cookieDomain || "").trim()
+  const domainAttr = domain ? `; Domain=${domain}` : ""
+  return `session=${id}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${PERSISTENT_SESSION_MAX_AGE_SECONDS}${domainAttr}`
 }
 
 function readEnvString(value) {
@@ -39,6 +49,93 @@ function resolveDiscordClientId(env) {
     readEnvString(env.DISCORD_APPLICATION_ID) ||
     DISCORD_CLIENT_ID_FALLBACK
   )
+}
+
+function discordAuthorizationUnavailable(session, now) {
+  return {
+    ...session,
+    access_token: null,
+    refresh_token: null,
+    expires_at: 0,
+    tier: "registered",
+    is_guild_member: false,
+    discord_authorization_status: "reauthorization_required",
+    discord_authorization_checked_at: now,
+  }
+}
+
+export async function resolveDiscordSessionAuthorization(
+  session,
+  env,
+  { now = Date.now(), fetchImpl = fetch } = {},
+) {
+  const current = session && typeof session === "object" ? session : {}
+  const expiresAt = Number(current.expires_at) || 0
+  if (!current.user_id || expiresAt > now + ACCESS_TOKEN_REFRESH_SKEW_MS) {
+    return { session: current, outcome: "fresh", changed: false }
+  }
+
+  const refreshToken = String(current.refresh_token || "").trim()
+  if (!refreshToken) {
+    return {
+      session: discordAuthorizationUnavailable(current, now),
+      outcome: "reauthorization_required",
+      changed: true,
+    }
+  }
+
+  const tokenParams = new URLSearchParams({
+    client_id: resolveDiscordClientId(env),
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+  })
+  const clientSecret = readEnvString(env.DISCORD_CLIENT_SECRET)
+  if (clientSecret) tokenParams.set("client_secret", clientSecret)
+
+  let response
+  try {
+    response = await fetchImpl(DISCORD_TOKEN, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: tokenParams.toString(),
+      signal: AbortSignal.timeout(8000),
+    })
+  } catch {
+    return { session: current, outcome: "temporarily_unavailable", changed: false }
+  }
+
+  if (!response.ok) {
+    const errorPayload = await response.json().catch(() => null)
+    if (String(errorPayload?.error || "").trim() === "invalid_grant") {
+      return {
+        session: discordAuthorizationUnavailable(current, now),
+        outcome: "reauthorization_required",
+        changed: true,
+      }
+    }
+    return { session: current, outcome: "temporarily_unavailable", changed: false }
+  }
+
+  const tokens = await response.json().catch(() => null)
+  const accessToken = String(tokens?.access_token || "").trim()
+  const expiresInSeconds = Number(tokens?.expires_in) || 0
+  if (!accessToken || expiresInSeconds <= 0) {
+    return { session: current, outcome: "temporarily_unavailable", changed: false }
+  }
+
+  return {
+    session: {
+      ...current,
+      access_token: accessToken,
+      refresh_token: String(tokens?.refresh_token || "").trim() || refreshToken,
+      expires_at: now + expiresInSeconds * 1000,
+      discord_authorization_status: "active",
+      discord_authorization_checked_at: now,
+      last_discord_token_refresh_at: now,
+    },
+    outcome: "refreshed",
+    changed: true,
+  }
 }
 
 export function getDiscordAuthConfigStatus(env) {
@@ -480,10 +577,7 @@ export async function handleCallback(request, env) {
     "Set-Cookie",
     `${oauthCookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0${cookieDomainAttr}`,
   )
-  headers.append(
-    "Set-Cookie",
-    `session=${sessionId}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${30 * 24 * 60 * 60}${cookieDomainAttr}`,
-  ) // 30 days
+  headers.append("Set-Cookie", persistentSessionCookie({ sessionId, cookieDomain }))
   // This marker contains no identity or authority. Static pages use it only to
   // avoid asking /api/auth/me for every anonymous visitor. The HttpOnly session
   // cookie remains the sole authentication credential.
@@ -515,17 +609,18 @@ export async function handleMe(request, env) {
 
   const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
   const stub = env.GAME_SESSIONS.get(id)
-  const resp = await stub.fetch("http://internal/get")
+  let resp = await stub.fetch(new Request("http://internal/auth/resolve", { method: "POST" }))
+  if (resp.status === 404) resp = await stub.fetch("http://internal/get")
+  const discordAuthorizationOutcome = String(
+    resp.headers.get("X-Brinedew-Discord-Authorization") || "",
+  ).trim()
+  if (discordAuthorizationOutcome && discordAuthorizationOutcome !== "fresh") {
+    console.info("Discord OAuth session lifecycle", { outcome: discordAuthorizationOutcome })
+  }
   const session = await resp.json()
 
   if (!session || !session.user_id) {
     return Response.json({ authenticated: false }, { status: 401 })
-  }
-
-  // Check if token needs refresh
-  if (Date.now() > session.expires_at) {
-    // TODO: Implement token refresh
-    return Response.json({ authenticated: false, error: "Token expired" }, { status: 401 })
   }
 
   // Re-check Discord roles to detect both upgrades (registered → supporter)
@@ -533,9 +628,13 @@ export async function handleMe(request, env) {
   // (e.g. Boosty bot). Cached to at most once per 5 minutes via
   // session last_discord_role_verify timestamp.
   let tier = session.tier
+  const providerAccessUsable =
+    discordAuthorizationOutcome !== "temporarily_unavailable" &&
+    Number(session.expires_at) > Date.now()
   if (
     readEnvString(env.DISCORD_SUPPORTER_ROLE_ID) &&
     session.access_token &&
+    providerAccessUsable &&
     (!session.last_discord_role_verify ||
       Date.now() - session.last_discord_role_verify > ROLE_VERIFY_TTL)
   ) {
@@ -550,6 +649,7 @@ export async function handleMe(request, env) {
         const roles = Array.isArray(memberData.roles) ? memberData.roles : []
         hasRole = roles.includes(readEnvString(env.DISCORD_SUPPORTER_ROLE_ID))
       }
+      if (!guildResp.ok) throw new Error(`Discord role verification failed (${guildResp.status})`)
       if (hasRole !== (tier === "supporter")) {
         tier = hasRole ? "supporter" : "registered"
         session.tier = tier
@@ -561,13 +661,26 @@ export async function handleMe(request, env) {
       // retry within the TTL window. Always update the store so the
       // timestamp persists across worker isolates.
       session.last_discord_role_verify = Date.now()
-      await stub.fetch(
-        new Request("http://internal/store", {
+      const patchResponse = await stub.fetch(
+        new Request("http://internal/auth/patch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(session),
+          body: JSON.stringify({
+            expected_access_token: session.access_token,
+            tier: session.tier,
+            last_discord_role_verify: session.last_discord_role_verify,
+          }),
         }),
       )
+      if (patchResponse.status === 404) {
+        await stub.fetch(
+          new Request("http://internal/store", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(session),
+          }),
+        )
+      }
     } catch {
       // Network error / timeout — do NOT cache; next page load retries.
     }
@@ -575,18 +688,29 @@ export async function handleMe(request, env) {
 
   const adminUserId = String(env.ADMIN_DISCORD_USER_ID || "").trim()
 
-  return Response.json({
-    authenticated: true,
-    user: {
-      id: session.user_id,
-      username: session.username,
-      avatar_url: toClientAvatarUrl(session.avatar_url) || session.avatar_url || null,
-      tier,
-      leaderboard_opt_in: Boolean(session.leaderboard_opt_in),
-      is_guild_member: session.is_guild_member,
-      is_admin: adminUserId.length > 0 && session.user_id === adminUserId,
+  const url = new URL(request.url)
+  const cookieDomain = getSharedCookieDomain(url.hostname)
+  const headers = new Headers()
+  headers.append("Set-Cookie", persistentSessionCookie({ sessionId, cookieDomain }))
+  headers.append("Set-Cookie", sharedSessionPresenceCookie({ present: true, cookieDomain }))
+
+  return Response.json(
+    {
+      authenticated: true,
+      user: {
+        id: session.user_id,
+        username: session.username,
+        avatar_url: toClientAvatarUrl(session.avatar_url) || session.avatar_url || null,
+        tier,
+        leaderboard_opt_in: Boolean(session.leaderboard_opt_in),
+        is_guild_member: session.is_guild_member,
+        is_admin: adminUserId.length > 0 && session.user_id === adminUserId,
+        discord_authorization_status:
+          String(session.discord_authorization_status || "").trim() || "active",
+      },
     },
-  })
+    { headers },
+  )
 }
 
 /**
