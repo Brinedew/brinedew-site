@@ -89,6 +89,7 @@ const runtimeFiles = [
   "content-detail-cache.js",
   "content-vote-bridge.js",
   "content-visibility-scheduler.js",
+  "content-predictive-warm.js",
   "content.css",
   "highlight-runtime.js",
   "content.js",

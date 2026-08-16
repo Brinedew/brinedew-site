@@ -252,12 +252,18 @@ Extension hover detail is immutable within a published card snapshot:
   immediately enter a two-detail lane and feed the existing two-transfer
   portrait decoder without waiting for whole-cache hydration; packaged fonts
   begin loading during initialization in both the host and persistent frame;
-- later generic viewport work remains metadata-only and yields while a hover is active;
-  speculative work uses the browser's background task priority when available
+- later generic viewport work remains metadata-only. Pointer approach warms one
+  to three real spatial candidates before hover; scroll direction warms two to
+  six candidates approaching the viewport edge; and a hover warms two to six
+  spatial neighbors ranked by geometry and pointer trajectory. The adaptive
+  budget expands only on measured fast connections and contracts on constrained
+  devices;
+- speculative work uses the browser's background task priority when available
   and is suppressed for Data Saver, `slow-2g`, and `2g` connections;
-- the hovered portrait owns the foreground adapter request, followed by at most
-  four DOM-neighbor portraits in a two-transfer background lane. A newer hover
-  replaces queued, not-yet-started neighbors from the older intent;
+- the hovered portrait owns the foreground adapter request. If its immutable
+  detail GET is already speculative, the foreground caller promotes and reuses
+  that transfer before cancelling superseded hover-neighbor work. Portrait decode
+  remains bounded to the existing two-transfer lane;
 - the rich variants boot one iframe inside its permanent tooltip-owned parent
   during initialization. That same browsing context decodes neighbors and
   renders every hover; it is never reparented or duplicated;
@@ -272,7 +278,8 @@ Extension hover detail is immutable within a published card snapshot:
   same-source work is deduplicated.
 
 This follows the current small-queue discipline used by modern router
-prefetchers: explicit intent outranks viewport speculation, newer intent
+prefetchers: explicit intent outranks viewport speculation, matching predicted
+immutable work is promoted rather than restarted, newer intent
 replaces older queued work, and finished results remain reusable. We evaluated
 [ForesightJS](https://foresightjs.com/docs/getting-started/what-is-foresightjs),
 which the current [Next.js prefetching guide](https://nextjs.org/docs/app/guides/prefetching)

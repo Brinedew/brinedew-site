@@ -72,9 +72,14 @@ On ordinary connections, the first ten distinct highlighted strings begin
 bounded detail reads and portrait decode as soon as scanning finishes; this
 initial lane does not wait for whole-cache hydration. Packaged card fonts begin
 loading during initialization, including inside the persistent rich-card frame.
-Later speculative reads remain metadata-only, yield to foreground intent, and
-stay disabled on Data Saver and 2G. Portraits normally load as native HTTPS
-image sources with a 350 ms canonical hedge behind Bunny; service-worker-
+Later generic viewport reads remain metadata-only. Pointer approach, real spatial
+neighbors, and scroll direction select bounded detail-and-portrait candidates;
+the budget contracts on constrained devices and expands only with measured fast
+network capacity. A foreground hover promotes and reuses a matching immutable
+prediction before cancelling superseded hover-neighbor work. All speculative
+reads yield to foreground intent and stay disabled on Data Saver and 2G.
+Portraits normally load as native HTTPS image sources with a 350 ms canonical
+hedge behind Bunny; service-worker-
 buffered data URLs exist only for page-CSP compatibility.
 
 The persistent detail cache is capped at 512 records and 4 MiB. Extension

@@ -461,44 +461,84 @@ test("foreground immutable detail starts without waiting for multi-megabyte pers
   await store.hydratePersistentCache()
 })
 
-test("foreground immutable detail aborts and replaces stale speculative work", async () => {
+test("foreground immutable detail promotes and reuses matching speculative work", async () => {
   const createGeneDetailStore = loadFactory()
   const calls = []
+  const responseGate = deferred()
+  const backgroundController = new AbortController()
   const store = createGeneDetailStore({
     windowRef: globalThis,
     detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
     fetchImpl: async (_url, init) => {
-      const call = { signal: init.signal, gate: deferred() }
+      const call = { signal: init.signal }
       calls.push(call)
-      if (calls.length === 1) {
-        return new Promise((_resolve, reject) => {
-          init.signal.addEventListener(
-            "abort",
-            () => {
-              const error = new Error("aborted")
-              error.name = "AbortError"
-              reject(error)
-            },
-            { once: true },
-          )
-        })
-      }
-      return response({
-        snapshot_version: "card-v1",
-        gene: { symbol: "TP53", full_name: "foreground" },
-        missing: [],
+      return responseGate.promise
+    },
+  })
+  store.setRevision("card-v1")
+
+  const background = store.fetchBatch(["TP53"], {
+    priority: "background",
+    signal: backgroundController.signal,
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  const foreground = store.fetchBatch(["TP53"], { priority: "foreground" })
+  backgroundController.abort()
+  responseGate.resolve(
+    response({
+      snapshot_version: "card-v1",
+      gene: { symbol: "TP53", full_name: "promoted" },
+      missing: [],
+    }),
+  )
+  const result = await foreground
+  await background
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].signal.aborted, false)
+  assert.equal(result.get("TP53")?.full_name, "promoted")
+})
+
+test("promoted immutable detail follows foreground cancellation", async () => {
+  const createGeneDetailStore = loadFactory()
+  const calls = []
+  const backgroundController = new AbortController()
+  const foregroundController = new AbortController()
+  const store = createGeneDetailStore({
+    windowRef: globalThis,
+    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
+    fetchImpl: async (_url, init) => {
+      calls.push({ signal: init.signal })
+      return new Promise((_resolve, reject) => {
+        init.signal.addEventListener(
+          "abort",
+          () => {
+            const error = new Error("aborted")
+            error.name = "AbortError"
+            reject(error)
+          },
+          { once: true },
+        )
       })
     },
   })
   store.setRevision("card-v1")
 
-  const background = store.fetchBatch(["TP53"], { priority: "background" })
+  const background = store.fetchBatch(["TP53"], {
+    priority: "background",
+    signal: backgroundController.signal,
+  })
   await new Promise((resolve) => setImmediate(resolve))
-  const foreground = store.fetchBatch(["TP53"], { priority: "foreground" })
-  const result = await foreground
-  await background
+  const foreground = store.fetchBatch(["TP53"], {
+    priority: "foreground",
+    signal: foregroundController.signal,
+  })
 
-  assert.equal(calls.length, 2)
+  backgroundController.abort()
+  assert.equal(calls[0].signal.aborted, false)
+  foregroundController.abort()
+  await Promise.all([background, foreground])
+
+  assert.equal(calls.length, 1)
   assert.equal(calls[0].signal.aborted, true)
-  assert.equal(result.get("TP53")?.full_name, "foreground")
 })
