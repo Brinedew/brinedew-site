@@ -120,6 +120,7 @@
   const DISCOVERY_AUTH_CACHE_TTL_MS = 5 * 60 * 1000
   const GUEST_DISCOVERY_SYMBOL_MAX = 2000
   const GENE_DETAIL_VISIBLE_LIMIT = 16
+  const INITIAL_HOVER_PRELOAD_LIMIT = 10
   const GENE_DETAIL_PERSISTENT_MAX_BYTES = 4 * 1024 * 1024
   const GENE_DATA_REQUEST_TIMEOUT_MS = 5000
   const GENE_DATA_RETRY_DELAY_MS = 750
@@ -571,7 +572,10 @@
   const decodedPortraitSrcPromises = new Map()
   const DECODED_PORTRAIT_CACHE_LIMIT = 96
   const LIT_ARCHIVAL_PREWARM_CACHE_LIMIT = 48
-  let leadPortraitWarmStarted = false
+  const initialHoverPreloadSymbols = new Set()
+  const initialPortraitWarmUrls = new Set()
+  let initialHoverPreloadStarted = false
+  let initialHoverPreloadFinished = false
 
   function rememberReadyLitArchivalPrewarmSource(src) {
     readyLitArchivalPrewarmSources.delete(src)
@@ -655,16 +659,23 @@
   }
 
   function onGeneDetailResolvedBatch(records, priority) {
-    // ARCHITECTURE FENCE [IPD-008]: 0.4.14 removed all viewport portrait
-    // preparation and exposed the entire regional source decision on first
-    // hover. Warm exactly one real, visible-detail portrait per page. This
-    // elects Bunny or canonical before intent without restoring the old
-    // multi-image viewport fanout.
-    if (priority !== "background" || leadPortraitWarmStarted) return
-    const [leadPortraitUrl] = portraitUrlsFromGeneDetails(records)
-    if (!leadPortraitUrl) return
-    leadPortraitWarmStarted = true
-    warmPortraitUrls([leadPortraitUrl])
+    // ARCHITECTURE FENCE [IPD-008]: the first ten highlighted strings are the
+    // page's immediate interaction surface. Resolve and decode their published
+    // portraits before pointer intent, while keeping later viewport work
+    // metadata-only and retaining the bounded two-transfer portrait lane.
+    if (priority !== "background" || !initialHoverPreloadSymbols.size) return
+    const portraitUrls = []
+    for (const record of Array.isArray(records) ? records : []) {
+      const symbol = String((record && record.symbol) || "")
+        .trim()
+        .toUpperCase()
+      if (!initialHoverPreloadSymbols.has(symbol)) continue
+      const portraitUrl = portraitUrlFromGeneDetail(record)
+      if (!portraitUrl || initialPortraitWarmUrls.has(portraitUrl)) continue
+      initialPortraitWarmUrls.add(portraitUrl)
+      portraitUrls.push(portraitUrl)
+    }
+    if (portraitUrls.length) portraitCache.warmUrls(portraitUrls)
   }
 
   const portraitCache = IconoContentPortraitCache.createPortraitCache({
@@ -1205,6 +1216,44 @@
     portraitCache.replaceWarmUrls(urls)
   }
 
+  function collectPageGeneSymbols(limit = INITIAL_HOVER_PRELOAD_LIMIT) {
+    const symbols = []
+    const seenSymbols = new Set()
+    for (const geneEl of document.querySelectorAll(".iconoplasm-gene")) {
+      const symbol = String((geneEl.dataset && geneEl.dataset.gene) || "")
+        .trim()
+        .toUpperCase()
+      if (!symbol || seenSymbols.has(symbol)) continue
+      seenSymbols.add(symbol)
+      symbols.push(symbol)
+      if (symbols.length >= limit) break
+    }
+    return symbols
+  }
+
+  async function warmInitialHoverAssets() {
+    if (initialHoverPreloadStarted) return
+    initialHoverPreloadStarted = true
+    if (!IconoContentTooltip.allowsSpeculativePrewarm(window.navigator?.connection)) {
+      initialHoverPreloadFinished = true
+      return
+    }
+    const symbols = collectPageGeneSymbols(INITIAL_HOVER_PRELOAD_LIMIT)
+    for (const symbol of symbols) initialHoverPreloadSymbols.add(symbol)
+    try {
+      for (let index = 0; index < symbols.length; index += GENE_DETAIL_BACKGROUND_CONCURRENCY) {
+        const batch = symbols.slice(index, index + GENE_DETAIL_BACKGROUND_CONCURRENCY)
+        await fetchGeneDetailsBatch(batch, {
+          priority: "background",
+          awaitPersistentCache: false,
+        })
+      }
+    } finally {
+      initialHoverPreloadFinished = true
+      scheduleWarmVisibleGeneDetails()
+    }
+  }
+
   function collectVisibleGeneSymbols(limit = GENE_DETAIL_VISIBLE_LIMIT) {
     if (!geneMap) return []
     const symbols = []
@@ -1301,6 +1350,7 @@
 
   function scheduleWarmVisibleGeneDetails(limit = GENE_DETAIL_VISIBLE_LIMIT) {
     if (!IconoContentTooltip.allowsSpeculativePrewarm(window.navigator?.connection)) return
+    if (initialHoverPreloadStarted && !initialHoverPreloadFinished) return
     geneDetailStore.scheduleWarm(
       () =>
         visibilityScheduler && visibilityScheduler.hasVisibleSymbols()
@@ -1410,10 +1460,18 @@
 
   // -- Font ownership ------------------------------------------------
   // generated/shared-card-label.css owns the extension font faces. Keep this
-  // helper as a no-op compatibility hook so content init stays simple without
-  // reintroducing ad hoc legacy font injection.
+  // helper limited to asking the browser's FontFaceSet to load those canonical
+  // faces before hover; it must not inject a second font transport contract.
   function injectFonts() {
-    return undefined
+    if (!document.fonts || typeof document.fonts.load !== "function") return Promise.resolve([])
+    const probes = [
+      ['400 16px "IBM Plex Mono"', "molecular character"],
+      ['500 15px "IBM Plex Mono"', "origin expression"],
+      ['800 38px "League Spartan"', "ICONOPLASM"],
+      ['400 16px "Special Elite"', "gene identity"],
+      ['400 18px "Caveat"', "character"],
+    ]
+    return Promise.allSettled(probes.map(([font, text]) => document.fonts.load(font, text)))
   }
 
   // -- Init ----------------------------------------------------------
@@ -1497,11 +1555,11 @@
     })
 
     console.log("[Iconoplasm] Loaded", Object.keys(geneMap).length, "genes. Scanning...")
-    injectFonts()
+    void injectFonts()
     scanPage(document.body)
     refreshHighlightStyles()
     scheduleDiscoveryBufferFlush()
-    scheduleWarmVisibleGeneDetails()
+    void warmInitialHoverAssets()
     if (!ensureVisibilityObserver()) {
       window.addEventListener("scroll", scheduleViewportWarm, { passive: true })
       window.addEventListener("resize", scheduleViewportWarm, { passive: true })

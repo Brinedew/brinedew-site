@@ -863,7 +863,7 @@ test("DO NOT DELETE: simple card title uses stable label typography and ink", ()
   )
 })
 
-test("DO NOT DELETE: simple card portrait warmup decodes one visible lead and hover neighbors", () => {
+test("DO NOT DELETE: first-ten hover warmup decodes portraits before pointer intent", () => {
   const source = readUtf8("./iconoplasm-extension/content.js")
   assert.match(
     source,
@@ -887,8 +887,13 @@ test("DO NOT DELETE: simple card portrait warmup decodes one visible lead and ho
   )
   assert.match(
     source,
-    /let leadPortraitWarmStarted = false[\s\S]*function onGeneDetailResolvedBatch\(records, priority\)[\s\S]*priority !== "background" \|\| leadPortraitWarmStarted[\s\S]*leadPortraitWarmStarted = true[\s\S]*warmPortraitUrls\(\[leadPortraitUrl\]\)[\s\S]*onResolvedBatch: onGeneDetailResolvedBatch/,
-    "viewport metadata may warm exactly one visible lead portrait, never arbitrary fanout",
+    /const INITIAL_HOVER_PRELOAD_LIMIT = 10[\s\S]*function onGeneDetailResolvedBatch\(records, priority\)[\s\S]*initialHoverPreloadSymbols\.has\(symbol\)[\s\S]*portraitCache\.warmUrls\(portraitUrls\)[\s\S]*onResolvedBatch: onGeneDetailResolvedBatch/,
+    "the first ten highlighted strings should feed decoded portrait warming before hover",
+  )
+  assert.match(
+    source,
+    /async function warmInitialHoverAssets\(\)[\s\S]*collectPageGeneSymbols\(INITIAL_HOVER_PRELOAD_LIMIT\)[\s\S]*index \+= GENE_DETAIL_BACKGROUND_CONCURRENCY[\s\S]*priority: "background"[\s\S]*awaitPersistentCache: false[\s\S]*void warmInitialHoverAssets\(\)/,
+    "initial detail warming should start eagerly in bounded pairs without waiting for persistent hydration",
   )
   assert.match(
     source,
@@ -1033,6 +1038,16 @@ test("DO NOT DELETE: extension runtime typography uses Iconoplasm fonts, not leg
     frameHtml,
     /--headerFont:\s*"League Spartan"[\s\S]*--codeFont:\s*"IBM Plex Mono"/,
     "extension iframe card shell should expose Iconoplasm font tokens to shared card CSS",
+  )
+  assert.equal(
+    frameHtml.match(/rel="preload"[\s\S]*?href="fonts\/[^"]+\.woff2"/g)?.length,
+    5,
+    "the persistent card frame should request every packaged card font before its first render",
+  )
+  assert.match(
+    contentSource,
+    /function injectFonts\(\)[\s\S]*document\.fonts\.load[\s\S]*void injectFonts\(\)[\s\S]*scanPage\(document\.body\)/,
+    "the simple card should begin loading packaged fonts before page highlights can be hovered",
   )
 })
 

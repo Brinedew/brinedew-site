@@ -68,10 +68,14 @@ closed without becoming immutable negative cache entries.
 
 Foreground detail reads have a four-second deadline and propagate cancellation
 from the current hover through the content bridge to the service-worker fetch.
-Speculative reads are bounded, yield to foreground intent, and may prepare only
-one lead portrait for a page. Portraits normally load as native HTTPS image
-sources with a 350 ms canonical hedge behind Bunny; service-worker-buffered
-data URLs exist only for page-CSP compatibility.
+On ordinary connections, the first ten distinct highlighted strings begin
+bounded detail reads and portrait decode as soon as scanning finishes; this
+initial lane does not wait for whole-cache hydration. Packaged card fonts begin
+loading during initialization, including inside the persistent rich-card frame.
+Later speculative reads remain metadata-only, yield to foreground intent, and
+stay disabled on Data Saver and 2G. Portraits normally load as native HTTPS
+image sources with a 350 ms canonical hedge behind Bunny; service-worker-
+buffered data URLs exist only for page-CSP compatibility.
 
 The persistent detail cache is capped at 512 records and 4 MiB. Extension
 updates compact legacy portrait-heavy scanner storage before returning data to
