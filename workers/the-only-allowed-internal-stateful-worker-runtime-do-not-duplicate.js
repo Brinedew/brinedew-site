@@ -685,6 +685,17 @@ async function iconoplasmCacheableHtmlShellResponse(
     }
   }
   body = injectAnalyticsConsentBootstrap(body, request)
+  if (parseCookies(request.headers.get("Cookie") || "").session) {
+    // ARCHITECTURE FENCE [IPD-008]: this readable cookie carries presence only.
+    // Re-issuing it from a dynamic HTML response repairs browsers whose old
+    // frontend cleared the hint after confusing Discord token expiry with logout.
+    // The HttpOnly session remains the sole credential and anonymous requests do
+    // not perform an auth or D1 lookup.
+    headers.append(
+      "Set-Cookie",
+      sharedSessionPresenceCookie({ present: true, cookieDomain: ".brinedew.bio" }),
+    )
+  }
   return new Response(body, {
     status: response.status,
     statusText: response.statusText,
@@ -1076,6 +1087,8 @@ import {
   handleCallback,
   handleMe,
   handleLogout,
+  resolveDiscordSessionAuthorization,
+  sharedSessionPresenceCookie,
 } from "./auth.js"
 // Import Iconoplasm stateful handlers
 import {
@@ -1798,16 +1811,20 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       }
       if (url.pathname === "/api/auth/me" && request.method === "GET") {
         const response = await handleMe(request, env)
+        const headers = new Headers(response.headers)
+        for (const [name, value] of Object.entries(corsHeaders)) headers.set(name, value)
         return new Response(response.body, {
           status: response.status,
-          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+          headers,
         })
       }
       if (url.pathname === "/api/auth/logout" && request.method === "POST") {
         const response = await handleLogout(request, env)
+        const headers = new Headers(response.headers)
+        for (const [name, value] of Object.entries(corsHeaders)) headers.set(name, value)
         return new Response(response.body, {
           status: response.status,
-          headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
+          headers,
         })
       }
     }
@@ -3560,6 +3577,10 @@ export class GameSession {
     } else if (path === "/reset" && request.method === "POST") {
       // Internal route for clearing OAuth session
       return this.clearData()
+    } else if (path === "/auth/resolve" && request.method === "POST") {
+      return this.resolveAuthSession()
+    } else if (path === "/auth/patch" && request.method === "POST") {
+      return this.patchAuthSession(request)
     } else {
       return new Response("Not found", { status: 404 })
     }
@@ -3604,6 +3625,56 @@ export class GameSession {
     return new Response(JSON.stringify(data || {}), {
       headers: { "Content-Type": "application/json" },
     })
+  }
+
+  async resolveAuthSession() {
+    const resolve = async () => {
+      const stored = (await this.state.storage.get("data")) || {}
+      const result = await resolveDiscordSessionAuthorization(stored, this.env)
+      if (result.changed) {
+        await this.state.storage.put("data", result.session)
+        if (
+          result.outcome === "reauthorization_required" &&
+          stored.tier !== "registered" &&
+          this.env?.DB
+        ) {
+          try {
+            await this.env.DB.prepare(
+              `UPDATE users SET tier = ?, updated_at = ? WHERE discord_id = ?`,
+            )
+              .bind("registered", Date.now(), stored.user_id)
+              .run()
+          } catch (error) {
+            console.warn("Discord authorization downgrade could not update the user projection", {
+              error: error?.message || String(error || "unknown"),
+            })
+          }
+        }
+      }
+      return new Response(JSON.stringify(result.session || {}), {
+        headers: {
+          "Content-Type": "application/json",
+          "X-Brinedew-Discord-Authorization": result.outcome,
+        },
+      })
+    }
+    return typeof this.state.blockConcurrencyWhile === "function"
+      ? this.state.blockConcurrencyWhile(resolve)
+      : resolve()
+  }
+
+  async patchAuthSession(request) {
+    const patch = await request.json()
+    const stored = (await this.state.storage.get("data")) || {}
+    const expectedAccessToken = String(patch?.expected_access_token || "")
+    if (expectedAccessToken && expectedAccessToken !== String(stored.access_token || "")) {
+      return Response.json({ applied: false }, { status: 409 })
+    }
+    for (const key of ["tier", "is_guild_member", "last_discord_role_verify"]) {
+      if (Object.hasOwn(patch || {}, key)) stored[key] = patch[key]
+    }
+    await this.state.storage.put("data", stored)
+    return Response.json({ applied: true })
   }
 
   /**

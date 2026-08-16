@@ -199,6 +199,24 @@ homepage may make one direct `/api/auth/me` request to the Iconoplasm route
 owner; a 401 clears the stale hint. This deliberately avoids charging every
 lurker for an auth check.
 
+Brinedew account identity must not expire with Discord's OAuth access token.
+The `GameSession` Durable Object is the serialization and persistence owner for
+provider-token refresh: it refreshes within five minutes of expiry, stores a
+rotated refresh token before another request can use the old one, and returns
+the durable Brinedew identity even when Discord is temporarily unavailable. An
+`invalid_grant` revokes only Discord-derived authorization and safely downgrades
+supporter state; it does not log the user out of Brinedew or remove configured
+administrator authority. The HttpOnly browser cookie and presence hint use a
+rolling 400-day lifetime and renew on authenticated activity, which keeps an
+active account signed in indefinitely within current browser cookie limits.
+
+Dynamic Iconoplasm HTML responses may reissue the presence-only hint whenever
+the request already carries an HttpOnly session cookie. This is a no-read repair
+path for hints cleared by older clients: it performs no auth, D1, or Durable
+Object lookup, never places the hint in a shared cache object, and a truly stale
+session still fails the one gated `/api/auth/me` lookup. Do not replace this with
+an unconditional anonymous auth probe.
+
 Extension hover detail is immutable within a published card snapshot:
 
 - the catalog manifest exposes `card_snapshot_version`;
