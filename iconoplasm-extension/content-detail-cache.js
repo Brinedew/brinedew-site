@@ -354,14 +354,36 @@
         if (detailUrlForSymbol && revision) {
           for (const symbol of unresolvedSymbols) {
             const existing = requestStateBySymbol.get(symbol)
-            if (existing && (priority === "background" || existing.priority === "foreground")) {
+            if (existing) {
+              if (priority === "foreground" && existing.priority === "background") {
+                existing.replaceCallerAbort?.(options.signal)
+                existing.priority = "foreground"
+              }
               continue
             }
-            if (existing) existing.controller?.abort()
             const controller = typeof AbortController === "function" ? new AbortController() : null
             const forwardAbort = () => controller?.abort()
-            if (options.signal?.aborted) forwardAbort()
-            else options.signal?.addEventListener?.("abort", forwardAbort, { once: true })
+            let callerSignal = null
+            let callerAbortAttached = false
+            const detachCallerAbort = () => {
+              const signal = callerSignal
+              callerSignal = null
+              if (!callerAbortAttached) return
+              callerAbortAttached = false
+              signal?.removeEventListener?.("abort", forwardAbort)
+            }
+            const replaceCallerAbort = (signal) => {
+              detachCallerAbort()
+              callerSignal = signal || null
+              if (!callerSignal) return
+              if (callerSignal.aborted) {
+                forwardAbort()
+                return
+              }
+              callerAbortAttached = true
+              callerSignal.addEventListener?.("abort", forwardAbort, { once: true })
+            }
+            replaceCallerAbort(options.signal)
             const request = fetchImmutableDetail(symbol, revision, {
               priority,
               ...(controller ? { signal: controller.signal } : {}),
@@ -375,10 +397,16 @@
                 if (requestStateBySymbol.get(symbol)?.promise === request) {
                   requestStateBySymbol.delete(symbol)
                 }
-                options.signal?.removeEventListener?.("abort", forwardAbort)
+                detachCallerAbort()
               })
             promiseCache.set(symbol, request)
-            requestStateBySymbol.set(symbol, { controller, priority, promise: request })
+            requestStateBySymbol.set(symbol, {
+              controller,
+              priority,
+              promise: request,
+              detachCallerAbort,
+              replaceCallerAbort,
+            })
           }
         } else {
           const batchRequest = fetchLegacyBatch(unresolvedSymbols, { ...options, priority }).catch(

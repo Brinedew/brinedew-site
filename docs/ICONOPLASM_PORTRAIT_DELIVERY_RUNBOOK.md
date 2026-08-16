@@ -184,7 +184,10 @@ bindings. Neither adapter owns source-selection rules.
 - Full catalog portrait field: `p` (`PortraitAssetRefV1`)
 - Extension scanner portrait fields: none; version-addressed immutable gene
   detail GETs provide portrait references, and the first ten distinct page
-  highlights enter a bounded detail-and-decode lane before hover
+  highlights enter a bounded detail-and-decode lane before hover. Pointer
+  approach, real spatial neighbors, and scroll direction add connection-aware
+  bounded predictions; a matching foreground hover promotes the same immutable
+  transfer instead of restarting it
 - Image-edit and candidate-generation result field: `result_asset`
 
 The catalog artifact schema and contract revision are part of both its

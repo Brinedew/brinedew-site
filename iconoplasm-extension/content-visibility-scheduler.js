@@ -5,7 +5,7 @@
     const opts = options && typeof options === "object" ? options : {}
     if (typeof root.IntersectionObserver !== "function") return null
 
-    const visibleSymbols = new Set()
+    const visibleElements = new Set()
     const onVisibleChange =
       typeof opts.onVisibleChange === "function" ? opts.onVisibleChange : () => {}
     const observer = new root.IntersectionObserver(
@@ -16,10 +16,10 @@
           const symbol = target && target.dataset ? String(target.dataset.gene || "").trim() : ""
           if (!symbol) continue
           if (entry.isIntersecting) {
-            visibleSymbols.add(symbol)
+            visibleElements.add(target)
             sawVisible = true
           } else {
-            visibleSymbols.delete(symbol)
+            visibleElements.delete(target)
           }
         }
         if (sawVisible) onVisibleChange()
@@ -40,20 +40,33 @@
         observer.observe(el)
       },
       disconnect() {
-        visibleSymbols.clear()
+        visibleElements.clear()
         observer.disconnect()
+      },
+      getVisibleElements(limit) {
+        const elements = []
+        const max = Math.max(0, Number(limit || 0)) || Infinity
+        for (const element of visibleElements) {
+          elements.push(element)
+          if (elements.length >= max) break
+        }
+        return elements
       },
       getVisibleSymbols(limit) {
         const symbols = []
+        const seen = new Set()
         const max = Math.max(0, Number(limit || 0)) || Infinity
-        for (const symbol of visibleSymbols) {
+        for (const element of visibleElements) {
+          const symbol = String(element?.dataset?.gene || "").trim()
+          if (!symbol || seen.has(symbol)) continue
+          seen.add(symbol)
           symbols.push(symbol)
           if (symbols.length >= max) break
         }
         return symbols
       },
       hasVisibleSymbols() {
-        return visibleSymbols.size > 0
+        return visibleElements.size > 0
       },
     }
   }

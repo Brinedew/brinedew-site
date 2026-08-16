@@ -192,6 +192,7 @@ const requiredContentModules = [
   "content-detail-cache.js",
   "content-vote-bridge.js",
   "content-visibility-scheduler.js",
+  "content-predictive-warm.js",
   "highlight-runtime.js",
 ]
 
@@ -887,33 +888,38 @@ test("DO NOT DELETE: first-ten hover warmup decodes portraits before pointer int
   )
   assert.match(
     source,
-    /const INITIAL_HOVER_PRELOAD_LIMIT = 10[\s\S]*function onGeneDetailResolvedBatch\(records, priority\)[\s\S]*initialHoverPreloadSymbols\.has\(symbol\)[\s\S]*portraitCache\.warmUrls\(portraitUrls\)[\s\S]*onResolvedBatch: onGeneDetailResolvedBatch/,
+    /const INITIAL_HOVER_PRELOAD_LIMIT = 10[\s\S]*function onGeneDetailResolvedBatch\(records, priority\)[\s\S]*portraitPreloadSymbols\.has\(symbol\)[\s\S]*portraitCache\.warmUrls\(portraitUrls\)[\s\S]*onResolvedBatch: onGeneDetailResolvedBatch/,
     "the first ten highlighted strings should feed decoded portrait warming before hover",
   )
   assert.match(
     source,
-    /async function warmInitialHoverAssets\(\)[\s\S]*collectPageGeneSymbols\(INITIAL_HOVER_PRELOAD_LIMIT\)[\s\S]*index \+= GENE_DETAIL_BACKGROUND_CONCURRENCY[\s\S]*priority: "background"[\s\S]*awaitPersistentCache: false[\s\S]*void warmInitialHoverAssets\(\)/,
+    /async function warmInitialHoverAssets\(\)[\s\S]*Math\.min\(INITIAL_HOVER_PRELOAD_LIMIT, predictionPolicy\.startupLimit\)[\s\S]*index \+= GENE_DETAIL_BACKGROUND_CONCURRENCY[\s\S]*priority: "background"[\s\S]*awaitPersistentCache: false[\s\S]*void warmInitialHoverAssets\(\)/,
     "initial detail warming should start eagerly in bounded pairs without waiting for persistent hydration",
   )
   assert.match(
     source,
-    /const neighborDetailsPromise =[\s\S]*Promise\.all\(\[[\s\S]*getUsablePortraitSrc\(portraitSrc\)[\s\S]*neighborDetailsPromise[\s\S]*portraitUrlsFromGeneDetails[\s\S]*warmPortraitUrls\(portraitUrls\)/,
-    "the hovered portrait should own the active request before four neighbor portraits enter the background lane",
+    /const previousNeighborPrewarmAbortController =[\s\S]*const hoverGeneDetailPromise =[\s\S]*previousNeighborPrewarmAbortController\?\.abort\(\)[\s\S]*collectSpatialNeighborGeneSymbols[\s\S]*warmPredictedHoverAssets/,
+    "a matching predicted detail should be promoted before obsolete neighbor requests are cancelled",
   )
   assert.match(
     source,
-    /const hoverIntent = hoverIntentTracker\.enter\(symbol\)[\s\S]*Promise\.all\([\s\S]*hoverIntentTracker\.isCurrent\(hoverIntent\)[\s\S]*warmPortraitUrls\(portraitUrls\)/,
-    "a superseded hover must not launch stale neighbor portrait work, including A to B to A pointer movement",
+    /function schedulePointerApproachWarm\(event\)[\s\S]*POINTER_PREDICTION_INTERVAL_MS[\s\S]*rankSpatialCandidates[\s\S]*pointerRadius[\s\S]*approachLimit[\s\S]*warmPredictedHoverAssets/,
+    "pointer approach should warm spatially ranked candidates before mouseover",
   )
   assert.match(
     source,
-    /hoverIntentTracker\.enter\(symbol\)[\s\S]*portraitCache\.replaceWarmUrls\(\[\]\)/,
-    "new hover intent should discard queued, not-yet-started portraits from the previous hover",
+    /function scheduleViewportWarm\(\)[\s\S]*scrollDirection[\s\S]*rankScrollCandidates[\s\S]*scrollPortraitLimit[\s\S]*warmPredictedHoverAssets/,
+    "scroll direction should warm a bounded number of approaching portraits",
   )
   assert.match(
     source,
-    /allowsSpeculativePrewarm\([\s\S]*window\.navigator\?\.connection[\s\S]*postBackgroundTask\([\s\S]*signal:\s*neighborPrewarmSignal/,
-    "neighbor speculation should respect the user's connection policy and run in a cancellable browser-priority task",
+    /predictionPolicy = IconoPredictiveWarm\.predictionPolicy[\s\S]*window\.navigator\?\.connection[\s\S]*window\.navigator\?\.deviceMemory/,
+    "prediction budgets should adapt to the measured connection and device memory",
+  )
+  assert.doesNotMatch(
+    source,
+    /portraitCache\.replaceWarmUrls\(\[\]\)/,
+    "a successful queued portrait prediction must not be erased when its target becomes active",
   )
   assert.match(
     source,
@@ -924,11 +930,6 @@ test("DO NOT DELETE: first-ten hover warmup decodes portraits before pointer int
     source,
     /function deferGeneDetailWarm\(task\)[\s\S]*postBackgroundTask\([\s\S]*if \(activeSymbol\)[\s\S]*deferGeneDetailWarm\(task\)/,
     "generic viewport metadata should use browser background priority and yield to an active hover instead of launching a third request lane",
-  )
-  assert.doesNotMatch(
-    source,
-    /pushSymbol\(targetEl\.dataset[\s\S]*let left = targetIndex - 1[\s\S]*let right = targetIndex \+ 1/,
-    "neighbor warming should not let the hovered symbol consume a prewarm slot before left/right neighbors are collected",
   )
 })
 
