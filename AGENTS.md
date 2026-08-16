@@ -134,7 +134,11 @@ not perform an anonymous auth lookup. Extension foreground detail uses a
 version-addressed immutable per-symbol GET; older clients retain the batch
 compatibility route. Foreground intent must not wait for whole-cache hydration
 or speculative batches, and a newer hover aborts obsolete network work through
-the service worker. Both routes project immutable published card artifacts and
+the service worker. On ordinary connections, the first ten distinct highlighted
+strings begin bounded detail reads and portrait decode immediately after scanning;
+later viewport speculation remains metadata-only. Packaged card fonts begin loading
+during initialization in both the host page and persistent card frame. Both routes
+project immutable published card artifacts and
 persist a bounded cache keyed by the card snapshot version; they must not
 compose public hover cards from D1 or turn transient
 failures into durable “missing gene” records. The admin-managed shared extension

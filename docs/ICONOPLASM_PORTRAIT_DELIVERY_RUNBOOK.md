@@ -183,8 +183,8 @@ bindings. Neither adapter owns source-selection rules.
 - Minimum extension version: the value in `iconoplasm-extension/publisher-release.json`
 - Full catalog portrait field: `p` (`PortraitAssetRefV1`)
 - Extension scanner portrait fields: none; version-addressed immutable gene
-  detail GETs provide portrait references, and exactly one first-visible detail
-  may prepare the tab source decision before hover
+  detail GETs provide portrait references, and the first ten distinct page
+  highlights enter a bounded detail-and-decode lane before hover
 - Image-edit and candidate-generation result field: `result_asset`
 
 The catalog artifact schema and contract revision are part of both its

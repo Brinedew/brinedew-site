@@ -248,9 +248,11 @@ Extension hover detail is immutable within a published card snapshot:
 - a successful detail response resolves the visible card from memory before a
   coalesced idle writer reads, merges, stringifies, or writes the persistent
   cache; an old queued write cannot roll a newer snapshot backward;
-- generic viewport work hydrates detail and may prepare exactly one real lead
-  portrait per page to move the tab-scoped regional decision off first hover;
-  it never restores the old all-visible portrait fanout and yields while a hover is active;
+- after the scanner marks the page, the first ten distinct highlighted strings
+  immediately enter a two-detail lane and feed the existing two-transfer
+  portrait decoder without waiting for whole-cache hydration; packaged fonts
+  begin loading during initialization in both the host and persistent frame;
+- later generic viewport work remains metadata-only and yields while a hover is active;
   speculative work uses the browser's background task priority when available
   and is suppressed for Data Saver, `slow-2g`, and `2g` connections;
 - the hovered portrait owns the foreground adapter request, followed by at most
