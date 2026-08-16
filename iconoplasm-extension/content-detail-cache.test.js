@@ -227,6 +227,33 @@ test("visible detail resolves before the bounded cache finishes persisting", asy
   assert.equal(storage.values.iconoplasm_published_gene_detail_cache_v1.entries[0][0], "TP53")
 })
 
+test("initial hover preload does not wait for whole-cache hydration", async () => {
+  const createGeneDetailStore = loadFactory()
+  const store = createGeneDetailStore({
+    windowRef: globalThis,
+    storageApi: {
+      async get() {
+        throw new Error("initial preload must not read the multi-megabyte persistent cache first")
+      },
+    },
+    getRevision: async () => "card-v1",
+    batchUrl: "https://example.test/batch",
+    fetchImpl: async () =>
+      response({
+        snapshot_version: "card-v1",
+        genes: [{ symbol: "TP53", full_name: "tumor protein p53" }],
+        missing: [],
+      }),
+  })
+
+  const records = await store.fetchBatch(["TP53"], {
+    priority: "background",
+    awaitPersistentCache: false,
+  })
+
+  assert.equal(records.get("TP53")?.full_name, "tumor protein p53")
+})
+
 test("a delayed old-revision persistence write cannot roll current detail state backward", async () => {
   const createGeneDetailStore = loadFactory()
   const values = {}

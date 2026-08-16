@@ -334,7 +334,9 @@
 
     async function fetchBatch(symbols, options = {}) {
       const priority = options.priority === "foreground" ? "foreground" : "background"
-      if (priority === "background") await hydratePersistentCache()
+      if (priority === "background" && options.awaitPersistentCache !== false) {
+        await hydratePersistentCache()
+      }
       const uniqueSymbols = []
       const seenSymbols = new Set()
       for (const rawSymbol of Array.isArray(symbols) ? symbols : []) {
