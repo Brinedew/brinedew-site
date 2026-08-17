@@ -432,6 +432,32 @@
           return [symbol, null]
         }),
       )
+
+      // An interrupted speculative transfer is not evidence that a published
+      // card is missing. A foreground hover can arrive while an older request
+      // is settling after cancellation; without this distinction the adapter
+      // renders the summary-only fallback for the entire hover. Retry that
+      // indeterminate state once while the foreground caller is still active.
+      // A real immutable `missing` response is stored in `cache` and therefore
+      // never enters this retry path.
+      if (
+        priority === "foreground" &&
+        options.retryAfterInterrupted !== false &&
+        !options.signal?.aborted
+      ) {
+        const retrySymbols = entries
+          .filter(([symbol, record]) => !record && !cache.has(symbol))
+          .map(([symbol]) => symbol)
+        if (retrySymbols.length) {
+          const retried = await fetchBatch(retrySymbols, {
+            ...options,
+            retryAfterInterrupted: false,
+          })
+          for (const entry of entries) {
+            if (retried.has(entry[0])) entry[1] = retried.get(entry[0]) || null
+          }
+        }
+      }
       return new Map(entries)
     }
 

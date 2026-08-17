@@ -23,14 +23,17 @@ const rootTemplateFiles = [
 const includeFiles = [
   "wxt.config.ts",
   "scripts/sync-iconoplasm-shared.mjs",
+  "scripts/sync-iconoplasm-pdfjs.mjs",
   "scripts/package-iconoplasm-extension.mjs",
   "scripts/verify-iconoplasm-publisher-authority.mjs",
+  "scripts/verify-iconoplasm-pdf-release-gate.mjs",
   "scripts/lib/iconoplasm-publisher-authority.mjs",
   "iconoplasm-extension/AMO-SOURCE-README.md",
   "iconoplasm-extension/README.md",
   "iconoplasm-extension/manifest.json",
   "iconoplasm-extension/publisher-release.json",
   "iconoplasm-extension/candidate-contract.json",
+  "iconoplasm-extension/pdf-ownership-certification.json",
   "iconoplasm-extension/blocklist-defaults.js",
   "iconoplasm-extension/content-api.js",
   "iconoplasm-extension/content-settings.js",
@@ -41,11 +44,18 @@ const includeFiles = [
   "iconoplasm-extension/content-portrait-cache.js",
   "iconoplasm-extension/content-detail-cache.js",
   "iconoplasm-extension/content-vote-bridge.js",
-  "iconoplasm-extension/content-visibility-scheduler.js",
-  "iconoplasm-extension/content-predictive-warm.js",
+  "iconoplasm-extension/content-reading-session.js",
   "iconoplasm-extension/content.css",
   "iconoplasm-extension/content.js",
   "iconoplasm-extension/highlight-runtime.js",
+  "iconoplasm-extension/pdf-byte-store.js",
+  "iconoplasm-extension/pdf-gecko-ownership.js",
+  "iconoplasm-extension/pdf-gecko-redirect.js",
+  "iconoplasm-extension/pdf-reader.html",
+  "iconoplasm-extension/pdf-reader.css",
+  "iconoplasm-extension/pdf-reader.mjs",
+  "iconoplasm-extension/pdf-reader-core.js",
+  "iconoplasm-extension/pdf-stream-bootstrap.js",
   "iconoplasm-extension/lit-archival-frame.html",
   "iconoplasm-extension/lit-archival-frame.js",
   "iconoplasm-extension/popup.css",
@@ -61,6 +71,9 @@ const includeDirs = [
   "shared/iconoplasm-portrait",
   "iconoplasm-extension/icons",
   "iconoplasm-extension/store-assets",
+  "iconoplasm-extension/vendor/pdfjs-clean",
+  "iconoplasm-extension/vendor/pdfjs-patch",
+  "iconoplasm-extension/vendor/pdfjs-runtime",
 ]
 
 function fail(message) {
@@ -124,7 +137,9 @@ function zipPayload() {
     "Compress-Archive -Path (Join-Path $stagePath '*') -DestinationPath $zipPath -Force",
   ].join("; ")
 
-  const result = spawnSync("pwsh", ["-NoLogo", "-NoProfile", "-Command", command], {
+  const powerShell =
+    process.platform === "win32" ? "C:\\Program Files\\PowerShell\\7\\pwsh.exe" : "pwsh"
+  const result = spawnSync(powerShell, ["-NoLogo", "-NoProfile", "-Command", command], {
     cwd: repoRoot,
     encoding: "utf8",
     timeout: 120_000,

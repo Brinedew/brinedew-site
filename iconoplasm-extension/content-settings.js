@@ -4,6 +4,7 @@
   const storageKeys = Object.freeze({
     highlightMode: "iconoplasm_highlight_mode",
     highlightVisibility: "iconoplasm_highlight_visibility",
+    pdfHighlightingEnabled: "iconoplasm_pdf_highlighting_enabled",
     cardVariant: "iconoplasm_card_variant",
     guestDiscoveries: "iconoplasm_guest_discoveries_v1",
     removedDefaults: "iconoplasm_removed_defaults",
@@ -16,6 +17,26 @@
   const SHARED_BLOCKLIST_MAX_TERMS = 500
   const SHARED_BLOCKLIST_MAX_TERM_LENGTH = 64
   const SHARED_BLOCKLIST_MAX_BYTES = 48 * 1024
+
+  function normalizeHighlightMode(raw) {
+    const value = String(raw || "")
+      .trim()
+      .toLowerCase()
+    return value === "underline" ||
+      value === "pill" ||
+      value === "pill-outline" ||
+      value === "ellipse"
+      ? value
+      : "pill"
+  }
+
+  function normalizeHighlightVisibility(raw) {
+    return String(raw || "")
+      .trim()
+      .toLowerCase() === "hover"
+      ? "hover"
+      : "always"
+  }
 
   function normalizeBlocklistTerm(rawTerm) {
     return String(rawTerm || "")
@@ -102,7 +123,14 @@
       const normalized = cardShared.normalizeCardVariant(raw)
       return normalized === "simple" && raw == null ? "image-only" : normalized
     }
+    if (raw === "simple") return "simple"
+    if (raw === "image-only") return "image-only"
+    if (raw === "lab-label" || raw === "lit-archival") return "lit-archival"
     return "image-only"
+  }
+
+  function normalizeBooleanSetting(raw, defaultValue = false) {
+    return typeof raw === "boolean" ? raw : Boolean(defaultValue)
   }
 
   function buildEffectiveBlocklist(defaults, userEntries, removedDefaults) {
@@ -175,7 +203,10 @@
     sharedBlocklistMaxTerms: SHARED_BLOCKLIST_MAX_TERMS,
     sharedBlocklistMaxTermLength: SHARED_BLOCKLIST_MAX_TERM_LENGTH,
     sharedBlocklistMaxBytes: SHARED_BLOCKLIST_MAX_BYTES,
+    normalizeHighlightMode,
+    normalizeHighlightVisibility,
     normalizeCardVariant,
+    normalizeBooleanSetting,
     normalizeBlocklistTerm,
     normalizeBlocklistTerms,
     normalizeSharedBlocklistProjection,

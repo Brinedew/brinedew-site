@@ -1,9 +1,10 @@
 const versionEl = document.getElementById("version-text")
-const HIGHLIGHT_MODE_KEY = "iconoplasm_highlight_mode"
-const HIGHLIGHT_VISIBILITY_KEY = "iconoplasm_highlight_visibility"
-const CARD_VARIANT_KEY = "iconoplasm_card_variant"
 const CONTENT_STORAGE_KEYS = IconoplasmContentSettings.storageKeys
+const HIGHLIGHT_MODE_KEY = CONTENT_STORAGE_KEYS.highlightMode
+const HIGHLIGHT_VISIBILITY_KEY = CONTENT_STORAGE_KEYS.highlightVisibility
+const CARD_VARIANT_KEY = CONTENT_STORAGE_KEYS.cardVariant
 const USER_BLOCKLIST_KEY = CONTENT_STORAGE_KEYS.userBlocklist
+const PDF_HIGHLIGHTING_KEY = CONTENT_STORAGE_KEYS.pdfHighlightingEnabled
 
 if (versionEl) {
   versionEl.textContent = "v" + chrome.runtime.getManifest().version
@@ -33,25 +34,10 @@ for (const tab of tabs) {
 
 // ---- Appearance settings ----
 
-function normalizeCardVariant(value) {
-  if (value === "simple") return "simple"
-  if (value === "image-only") return "image-only"
-  if (value === "lab-label" || value === "lit-archival") return "lit-archival"
-  return "image-only"
-}
-
-function normalizeHighlightMode(value) {
-  return value === "underline" ||
-    value === "pill" ||
-    value === "pill-outline" ||
-    value === "ellipse"
-    ? value
-    : "pill"
-}
-
-function normalizeHighlightVisibility(value) {
-  return value === "hover" ? "hover" : "always"
-}
+const normalizeCardVariant = (value) => IconoplasmContentSettings.normalizeCardVariant(value)
+const normalizeHighlightMode = (value) => IconoplasmContentSettings.normalizeHighlightMode(value)
+const normalizeHighlightVisibility = (value) =>
+  IconoplasmContentSettings.normalizeHighlightVisibility(value)
 
 function setCheckedValue(groupName, value) {
   const radio = document.querySelector(`input[name="${groupName}"][value="${value}"]`)
@@ -73,6 +59,7 @@ async function loadSettings() {
     HIGHLIGHT_MODE_KEY,
     HIGHLIGHT_VISIBILITY_KEY,
     CARD_VARIANT_KEY,
+    PDF_HIGHLIGHTING_KEY,
   ])
   setCheckedValue("highlight-mode", normalizeHighlightMode(localSettings[HIGHLIGHT_MODE_KEY]))
   setCheckedValue(
@@ -80,11 +67,56 @@ async function loadSettings() {
     normalizeHighlightVisibility(localSettings[HIGHLIGHT_VISIBILITY_KEY]),
   )
   setCheckedValue("card-variant", normalizeCardVariant(localSettings[CARD_VARIANT_KEY]))
+  await loadPdfHighlightingSetting(localSettings[PDF_HIGHLIGHTING_KEY])
 }
 
 bindRadioGroup("highlight-mode", normalizeHighlightMode, HIGHLIGHT_MODE_KEY)
 bindRadioGroup("highlight-visibility", normalizeHighlightVisibility, HIGHLIGHT_VISIBILITY_KEY)
 bindRadioGroup("card-variant", normalizeCardVariant, CARD_VARIANT_KEY)
+
+async function loadPdfHighlightingSetting(storedValue) {
+  const field = document.getElementById("pdf-highlighting-field")
+  let capability
+  try {
+    capability = await chrome.runtime.sendMessage({ type: "PDF_OWNERSHIP_GET_CAPABILITY" })
+  } catch (_) {
+    capability = null
+  }
+  if (!capability?.ok || !capability.supported) {
+    if (field) field.hidden = true
+    return
+  }
+  if (field) field.hidden = false
+  try {
+    const enabled = Boolean(capability.enabled)
+    setCheckedValue("pdf-highlighting", enabled ? "on" : "off")
+    if (storedValue !== enabled) {
+      await chrome.storage.local.set({ [PDF_HIGHLIGHTING_KEY]: enabled })
+    }
+  } catch (_) {
+    if (field) field.hidden = true
+  }
+}
+
+for (const radio of document.querySelectorAll('input[name="pdf-highlighting"]')) {
+  radio.addEventListener("change", async () => {
+    if (!radio.checked) return
+    const enabled = radio.value === "on"
+    const radios = document.querySelectorAll('input[name="pdf-highlighting"]')
+    for (const option of radios) option.disabled = true
+    try {
+      const result = await chrome.runtime.sendMessage({
+        type: "PDF_OWNERSHIP_SET_ENABLED",
+        enabled,
+      })
+      if (!result?.ok) throw new Error(result?.error || "PDF highlighting is unavailable")
+    } catch (_) {
+      await loadPdfHighlightingSetting(undefined)
+    } finally {
+      for (const option of radios) option.disabled = false
+    }
+  })
+}
 
 loadSettings().catch(() => null)
 

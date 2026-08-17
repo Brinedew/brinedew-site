@@ -41,6 +41,8 @@ function resolveTarget(argv) {
 }
 
 const packageTarget = resolveTarget(process.argv.slice(2))
+const supportsPdfReader = packageTarget !== "safari"
+const usesGeckoPdfOwnership = packageTarget === "firefox"
 const targetConfig =
   packageTarget === "firefox"
     ? {
@@ -76,7 +78,7 @@ const wxtOutRoot = resolve(distRoot, "wxt")
 const wxtBuildRoot = resolve(wxtOutRoot, `${targetConfig.browser}-mv3`)
 const wxtZipPath = resolve(wxtOutRoot, `iconoplasm-${targetConfig.browser}-v${packageVersion}.zip`)
 
-const runtimeFiles = [
+const commonRuntimeFiles = [
   "manifest.json",
   "blocklist-defaults.js",
   "content-api.js",
@@ -88,8 +90,7 @@ const runtimeFiles = [
   "content-portrait-cache.js",
   "content-detail-cache.js",
   "content-vote-bridge.js",
-  "content-visibility-scheduler.js",
-  "content-predictive-warm.js",
+  "content-reading-session.js",
   "content.css",
   "highlight-runtime.js",
   "content.js",
@@ -102,6 +103,28 @@ const runtimeFiles = [
   "service-worker.js",
   "site-bridge.js",
 ]
+
+const pdfReaderRuntimeFiles = [
+  "pdf-reader.html",
+  "pdf-reader.css",
+  "pdf-stream-bootstrap.js",
+  "pdf-reader.mjs",
+  "pdf-reader-core.js",
+]
+
+const geckoPdfOwnershipFiles = [
+  "pdf-byte-store.js",
+  "pdf-gecko-ownership.js",
+  "pdf-gecko-redirect.js",
+]
+
+const runtimeFiles = supportsPdfReader
+  ? [
+      ...commonRuntimeFiles,
+      ...pdfReaderRuntimeFiles,
+      ...(usesGeckoPdfOwnership ? geckoPdfOwnershipFiles : []),
+    ]
+  : commonRuntimeFiles
 
 const runtimeDirs = ["fonts", "generated", "icons"]
 
@@ -205,6 +228,9 @@ function copyRuntimePayload() {
     ensureExists(src, "runtime directory")
     cpSync(src, resolve(wxtPublicRoot, dir), { recursive: true })
   }
+  if (!supportsPdfReader) {
+    rmSync(resolve(wxtPublicRoot, "generated", "pdfjs"), { recursive: true, force: true })
+  }
 }
 
 function scanPayload(rootDir) {
@@ -266,6 +292,8 @@ function validatePackagedBackground() {
   const packagedManifest = JSON.parse(readFileSync(packagedManifestPath, "utf8"))
   if (packageTarget === "firefox") {
     const expectedScripts = [
+      "pdf-byte-store.js",
+      "pdf-gecko-ownership.js",
       "generated/catalog-contract.js",
       "generated/portrait-delivery-core.js",
       "publication-alias-overlay.js",
@@ -288,7 +316,49 @@ function validatePackagedBackground() {
   }
 }
 
-function main() {
+function validatePackagedPdfSurface() {
+  const packagedManifestPath = resolve(stageRoot, "manifest.json")
+  const packagedManifest = JSON.parse(readFileSync(packagedManifestPath, "utf8"))
+  if (supportsPdfReader) {
+    if (usesGeckoPdfOwnership) {
+      if (packagedManifest.mime_types_handler) {
+        fail("Firefox package retained the Chromium-only PDF MIME handler")
+      }
+      for (const permission of ["webRequest", "webRequestBlocking", "webRequestFilterResponse"]) {
+        if (!packagedManifest.permissions?.includes(permission)) {
+          fail(`Firefox package lost required ${permission} permission`)
+        }
+      }
+      for (const file of geckoPdfOwnershipFiles) {
+        ensureExists(resolve(stageRoot, file), `Firefox PDF ownership file ${file}`)
+      }
+    } else if (!packagedManifest.mime_types_handler?.["application/pdf"]) {
+      fail(`${packageTarget} package lost the PDF MIME handler`)
+    }
+    for (const file of pdfReaderRuntimeFiles) {
+      ensureExists(resolve(stageRoot, file), `${packageTarget} PDF reader runtime file`)
+    }
+    ensureExists(resolve(stageRoot, "generated", "pdfjs"), `${packageTarget} PDF.js runtime`)
+    return
+  }
+  if (packagedManifest.mime_types_handler) {
+    fail(`${packageTarget} package retained the unsupported PDF MIME handler`)
+  }
+  for (const file of pdfReaderRuntimeFiles) {
+    if (existsSync(resolve(stageRoot, file))) {
+      fail(`${packageTarget} package retained unused PDF reader file ${file}`)
+    }
+  }
+  if (existsSync(resolve(stageRoot, "generated", "pdfjs"))) {
+    fail(`${packageTarget} package retained the unused PDF.js runtime`)
+  }
+}
+
+async function main() {
+  if (supportsPdfReader) {
+    const { syncIconoplasmPdfJs } = await import("./sync-iconoplasm-pdfjs.mjs")
+    syncIconoplasmPdfJs()
+  }
   ensureExists(extensionRoot, "extension root")
   ensureExists(manifestPath, "manifest")
   checkForbiddenRootEntries()
@@ -296,6 +366,7 @@ function main() {
   scanPayload(wxtPublicRoot)
   runWxtZip()
   validatePackagedBackground()
+  validatePackagedPdfSurface()
   const stagedFiles = scanPayload(stageRoot)
 
   console.log(`[package-iconoplasm-extension] Created ${relative(repoRoot, zipPath)}`)
@@ -310,4 +381,4 @@ function main() {
   )
 }
 
-main()
+await main()
