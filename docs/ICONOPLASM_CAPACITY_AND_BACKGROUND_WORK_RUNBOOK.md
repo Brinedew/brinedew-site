@@ -243,27 +243,22 @@ Extension hover detail is immutable within a published card snapshot:
 - only an explicit `missing` result is negative-cached, and transient failures
   remain retryable;
 - foreground GETs do not wait for whole-cache hydration, carry a four-second
-  deadline, and can preempt and abort an older speculative request for that
-  symbol through the content-to-service-worker bridge;
+  deadline, and may promote the same reading-session request for that symbol
+  through the content-to-service-worker bridge;
 - a successful detail response resolves the visible card from memory before a
   coalesced idle writer reads, merges, stringifies, or writes the persistent
   cache; an old queued write cannot roll a newer snapshot backward;
-- after the scanner marks the page, the first ten distinct highlighted strings
-  immediately enter a two-detail lane and feed the existing two-transfer
-  portrait decoder without waiting for whole-cache hydration; packaged fonts
-  begin loading during initialization in both the host and persistent frame;
-- later generic viewport work remains metadata-only. Pointer approach warms one
-  to three real spatial candidates before hover; scroll direction warms two to
-  six candidates approaching the viewport edge; and a hover warms two to six
-  spatial neighbors ranked by geometry and pointer trajectory. The adaptive
-  budget expands only on measured fast connections and contracts on constrained
-  devices;
-- speculative work uses the browser's background task priority when available
-  and is suppressed for Data Saver, `slow-2g`, and `2g` connections;
-- the hovered portrait owns the foreground adapter request. If its immutable
-  detail GET is already speculative, the foreground caller promotes and reuses
-  that transfer before cancelling superseded hover-neighbor work. Portrait decode
-  remains bounded to the existing two-transfer lane;
+- HTML and PDF register recognized anchors with one tab-scoped reading session.
+  Ordinary documents prepare their unique-symbol inventory as complete immutable
+  cards—detail, delivery resolution, bytes, decode, and frame acknowledgement—before
+  hover. The adaptive ceilings are 16 symbols/3 workers on constrained connections,
+  64/6 ordinarily, and 128/8 only on measured fast connections;
+- large documents use the same session and deterministic near-viewport working
+  windows instead of pointer trajectory, DOM-neighbor, or scroll-direction guesses.
+  Data Saver, `slow-2g`, and `2g` disable preparation;
+- hover is a selector over the ready-card set. Its foreground request exists only
+  for immediate-startup interaction, a transient preparation failure, or suppressed
+  preparation, and reuses matching in-flight immutable detail/portrait work;
 - the rich variants boot one iframe inside its permanent tooltip-owned parent
   during initialization. That same browsing context decodes neighbors and
   renders every hover; it is never reparented or duplicated;

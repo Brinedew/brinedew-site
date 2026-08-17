@@ -17,10 +17,16 @@ const firefoxSourcePackageText = readFileSync(
   "utf8",
 )
 const amoSourceReadmeText = readFileSync("iconoplasm-extension/AMO-SOURCE-README.md", "utf8")
+function quoteWindowsCommandArg(arg) {
+  return /[\s"&|<>^]/u.test(arg) ? `"${arg.replaceAll('"', '""')}"` : arg
+}
+
 function runPnpm(args, cwd, timeout = 180_000) {
   const command = process.platform === "win32" ? "cmd.exe" : "pnpm"
   const commandArgs =
-    process.platform === "win32" ? ["/d", "/s", "/c", ["pnpm", ...args].join(" ")] : args
+    process.platform === "win32"
+      ? ["/d", "/s", "/c", `pnpm ${args.map(quoteWindowsCommandArg).join(" ")}`]
+      : args
   const result = spawnSync(command, commandArgs, {
     cwd,
     encoding: "utf8",
@@ -33,6 +39,7 @@ function runPnpm(args, cwd, timeout = 180_000) {
     0,
     `pnpm ${args.join(" ")} failed${result.error ? `: ${result.error.message}` : ""}:\n${output}`,
   )
+  return result
 }
 
 async function extractZip(zipPath, destination) {
@@ -82,6 +89,24 @@ test("Firefox store publish workflow stays behind the human GUI gate", () => {
   assert.match(workflowText, /wait-for-iconoplasm-release-ci\.mjs/)
   assert.match(workflowText, /actions:\s*read/)
   assert.doesNotMatch(workflowText, /^on:\s*\n\s*push:/m)
+})
+
+test("Firefox publication also requires a certified ownership adapter", () => {
+  const workflow = readFileSync(".github/workflows/publish-iconoplasm-firefox.yml", "utf8")
+  const certification = JSON.parse(
+    readFileSync("iconoplasm-extension/pdf-ownership-certification.json", "utf8"),
+  )
+  assert.match(workflow, /verify-iconoplasm-pdf-release-gate\.mjs --target=firefox/)
+  assert.equal(certification.targets.chrome.store_release_ready, true)
+  assert.equal(certification.targets.edge.store_release_ready, true)
+  assert.equal(certification.targets.firefox.implementation_complete, true)
+  assert.equal(certification.targets.firefox.store_release_ready, false)
+  assert.equal(certification.targets.safari.store_release_ready, false)
+})
+
+test("Edge publication requires the same certified ownership contract", () => {
+  const workflow = readFileSync(".github/workflows/publish-iconoplasm-edge.yml", "utf8")
+  assert.match(workflow, /verify-iconoplasm-pdf-release-gate\.mjs --target=edge/)
 })
 
 test("Edge store publish workflow stays behind the human GUI gate", () => {
@@ -145,6 +170,16 @@ test("store publish packaging goes through WXT browser targets", () => {
     packageScriptText,
     /function validatePackagedBackground\(\)[\s\S]*Firefox background dependency order is invalid/,
     "packaging must validate the final Firefox manifest instead of trusting source configuration",
+  )
+  assert.match(
+    packageScriptText,
+    /const supportsPdfReader = packageTarget !== "safari"/,
+    "Chrome, Edge, and Firefox should package the shared reader while Safari stays capability-gated",
+  )
+  assert.match(
+    packageScriptText,
+    /function validatePackagedPdfSurface\(\)/,
+    "packaging must reject PDF-reader drift in every final browser payload",
   )
   assert.match(
     wxtConfigText,
@@ -258,8 +293,16 @@ test(
     runPnpm(["run", "package:iconoplasm-firefox-source"], repoRoot)
     await extractZip(sourceZip, extractedRoot)
 
+    const storeDir = runPnpm(["store", "path", "--silent"], repoRoot).stdout.trim()
     runPnpm(
-      ["install", "--frozen-lockfile", "--offline", "--config.block-exotic-subdeps=false"],
+      [
+        "install",
+        "--frozen-lockfile",
+        "--offline",
+        "--config.block-exotic-subdeps=false",
+        "--store-dir",
+        storeDir,
+      ],
       extractedRoot,
     )
     runPnpm(["run", "sync:iconoplasm-extension"], extractedRoot)
@@ -273,6 +316,20 @@ test(
     )
     const submittedFiles = await zipFileContents(submittedZip)
     const rebuiltFiles = await zipFileContents(rebuiltZip)
+
+    assert.equal(
+      [...submittedFiles.keys()].some((name) => name.startsWith("generated/pdfjs/")),
+      true,
+      "Firefox must ship the shared PDF.js renderer instead of deleting the capability",
+    )
+    for (const name of [
+      "pdf-byte-store.js",
+      "pdf-gecko-ownership.js",
+      "pdf-gecko-shell.js",
+      "pdf-reader.mjs",
+    ]) {
+      assert.equal(submittedFiles.has(name), true, `Firefox package is missing ${name}`)
+    }
 
     assert.deepEqual([...rebuiltFiles.keys()].sort(), [...submittedFiles.keys()].sort())
     for (const [name, expected] of submittedFiles) {

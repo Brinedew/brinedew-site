@@ -3,9 +3,9 @@
 `publisher-release.json` is the complete, inspectable authority for browser
 releases. `version` and `catalog_contract` identify the newest human-authorized
 package. `minimum_supported_version` and `compatibility_contracts` define the
-only older package the API must still serve. The current human-authorized
-package is 0.4.12 and the compatibility floor is 0.4.11. Both receive catalog
-schema 5 from `GET /api/public/v1/catalog/manifest`.
+only older package the API must still serve. The current package and compatibility
+floor are the values declared in that file; both receive catalog schema 5 from
+`GET /api/public/v1/catalog/manifest`.
 
 `candidate-contract.json` describes the unreleased source contract. The current
 candidate uses full catalog schema 5 plus scanner schema 1. The full catalog
@@ -68,16 +68,15 @@ closed without becoming immutable negative cache entries.
 
 Foreground detail reads have a four-second deadline and propagate cancellation
 from the current hover through the content bridge to the service-worker fetch.
-On ordinary connections, the first ten distinct highlighted strings begin
-bounded detail reads and portrait decode as soon as scanning finishes; this
-initial lane does not wait for whole-cache hydration. Packaged card fonts begin
-loading during initialization, including inside the persistent rich-card frame.
-Later generic viewport reads remain metadata-only. Pointer approach, real spatial
-neighbors, and scroll direction select bounded detail-and-portrait candidates;
-the budget contracts on constrained devices and expands only with measured fast
-network capacity. A foreground hover promotes and reuses a matching immutable
-prediction before cancelling superseded hover-neighbor work. All speculative
-reads yield to foreground intent and stay disabled on Data Saver and 2G.
+One tab-scoped reading session receives recognized anchors from both HTML and PDF.
+Ordinary documents prepare their unique-symbol cards through immutable detail,
+portrait resolution, decode, and persistent-frame acknowledgement before hover;
+large documents prepare deterministic near-viewport working windows. The ceiling
+contracts to 16 symbols/3 workers on constrained devices, is 64/6 ordinarily, and
+expands to 128/8 only with measured fast capacity. Data Saver and 2G disable
+preparation. A foreground hover reuses matching in-flight work and is otherwise a
+recovery path, not the normal loading trigger. Packaged card fonts begin loading
+during initialization, including inside the persistent rich-card frame.
 Portraits normally load as native HTTPS image sources with a 350 ms canonical
 hedge behind Bunny; service-worker-
 buffered data URLs exist only for page-CSP compatibility.

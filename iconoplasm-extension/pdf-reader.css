@@ -1,0 +1,284 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  --toolbar-height: 56px;
+  --viewer-toolbar: #3c4043;
+  --viewer-toolbar-hover: #515457;
+  --viewer-canvas: #282828;
+  --viewer-ink: #f1f3f4;
+  --viewer-muted: #bdc1c6;
+  --viewer-divider: #64676a;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--viewer-canvas);
+}
+
+.reader-toolbar {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 100;
+  height: var(--toolbar-height);
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 16px;
+  color: var(--viewer-ink);
+  background: var(--viewer-toolbar);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 32%);
+  font-size: 0.8125rem;
+  user-select: none;
+}
+
+.reader-toolbar-center,
+.reader-toolbar-end {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reader-toolbar-center {
+  justify-self: center;
+}
+
+.reader-toolbar-end {
+  justify-self: end;
+}
+
+.reader-filename {
+  min-width: 0;
+  padding-left: 44px;
+  overflow: hidden;
+  color: var(--viewer-ink);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-toolbar > .reader-icon-button:first-of-type {
+  position: absolute;
+  left: 16px;
+}
+
+.reader-icon-button {
+  width: 36px;
+  height: 36px;
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--viewer-ink);
+  background: transparent;
+  cursor: pointer;
+}
+
+.reader-icon-button:hover {
+  background: var(--viewer-toolbar-hover);
+}
+
+.reader-icon-button:active {
+  background: #5f6366;
+}
+
+.reader-icon-button:focus-visible,
+#find-query:focus-visible,
+.reader-password input:focus-visible,
+.reader-password button:focus-visible {
+  outline: 2px solid #a8c7fa;
+  outline-offset: 2px;
+}
+
+.reader-icon-button:disabled {
+  color: #80868b;
+  background: transparent;
+  cursor: default;
+}
+
+.reader-icon-button svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+#pdf-file,
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+#page-number {
+  min-width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 4px;
+  color: var(--viewer-ink);
+  background: #202124;
+  font-variant-numeric: tabular-nums;
+}
+
+#page-count,
+.reader-page-separator {
+  color: var(--viewer-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+#zoom-value {
+  min-width: 46px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--viewer-ink);
+  background: #202124;
+  font-variant-numeric: tabular-nums;
+}
+
+.reader-divider {
+  width: 1px;
+  height: 28px;
+  margin: 0 8px;
+  background: var(--viewer-divider);
+}
+
+#find-form {
+  height: 36px;
+  align-items: center;
+}
+
+#find-form:not([hidden]) {
+  display: flex;
+}
+
+#find-query {
+  width: min(22vw, 260px);
+  height: 32px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 2px;
+  padding: 0 10px;
+  color: #202124;
+  background: #f8f9fa;
+  font: inherit;
+}
+
+#reader-status,
+.reader-password {
+  position: fixed;
+  z-index: 90;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: min(560px, calc(100vw - 40px));
+  box-sizing: border-box;
+  color: var(--viewer-ink);
+  background: transparent;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+#reader-status[data-kind="error"],
+#reader-status[data-kind="warning"] {
+  padding: 12px 16px;
+  border-radius: 2px;
+  background: #3c4043;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 42%);
+}
+
+.reader-password {
+  padding: 20px;
+  background: #3c4043;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 48%);
+}
+
+.reader-password input,
+.reader-password button {
+  min-height: 32px;
+  margin: 12px 4px 0;
+  border: 0;
+  border-radius: 2px;
+  padding: 0 10px;
+  font: inherit;
+}
+
+#viewerContainer {
+  position: absolute;
+  inset: var(--toolbar-height) 0 0;
+  overflow: auto;
+  outline: none;
+  background: var(--viewer-canvas);
+}
+
+.pdfViewer {
+  padding: 18px 0 48px;
+}
+
+.pdfViewer .page {
+  overflow: visible;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 50%);
+}
+
+.pdfViewer .textLayer {
+  z-index: 3;
+}
+
+.pdfViewer .page .canvasWrapper {
+  position: relative;
+}
+
+.pdfViewer .page .iconoplasm-pdf-hit-anchor {
+  position: absolute;
+  z-index: 4;
+  display: block;
+  box-sizing: border-box;
+  pointer-events: none;
+  background: transparent;
+}
+
+.pdfViewer .canvasWrapper .iconoplasm-pdf-ellipse-decoration {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  pointer-events: none;
+}
+
+.pdfViewer .canvasWrapper .iconoplasm-pdf-ellipse-decoration[hidden] {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .reader-toolbar {
+    grid-template-columns: minmax(88px, 1fr) auto minmax(88px, 1fr);
+    padding: 0 8px;
+  }
+
+  .reader-toolbar > .reader-icon-button:first-of-type {
+    left: 8px;
+  }
+
+  .reader-filename {
+    padding-left: 40px;
+    font-weight: 400;
+  }
+
+  #fit-page,
+  #rotate,
+  .reader-divider,
+  #find-form {
+    display: none !important;
+  }
+}

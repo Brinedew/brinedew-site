@@ -13,6 +13,41 @@
   const ELLIPSE_RANDOMNESS = 1.08
   const ELLIPSE_CURVE_FITTING = 0.9
   const ELLIPSE_CURVE_STEP_COUNT = 8
+  const CANVAS_SHAPE_CONTRACTS = Object.freeze({
+    underline: Object.freeze({
+      kind: "underline",
+      thicknessEm: 0.16,
+      bottomInsetEm: 0.01,
+    }),
+    pill: Object.freeze({
+      kind: "pill",
+      radiusEm: 0.18,
+      fillSpreadEm: 0.1,
+      fillAlpha: 0.72,
+      ringSpreadEm: 0.145,
+      ringColor: "rgba(22, 18, 16, 0.58)",
+      recolorGlyphs: true,
+    }),
+    "pill-outline": Object.freeze({
+      kind: "pill-outline",
+      radiusEm: 0.18,
+      outerSpreadEm: 0.11,
+      outerAlpha: 0.76,
+      innerSpreadEm: 0.08,
+      innerColor: "rgba(255, 255, 255, 0.3)",
+    }),
+    ellipse: Object.freeze({
+      kind: "ellipse",
+      inlineBleedCharsPerSide: ELLIPSE_INLINE_BLEED_CHARS_PER_SIDE,
+      verticalBleedEm: ELLIPSE_VERTICAL_BLEED_EM,
+      strokeWidthPx: ELLIPSE_STROKE_WIDTH,
+      roughness: ELLIPSE_ROUGHNESS,
+      bowing: ELLIPSE_BOWING,
+      maxRandomnessOffset: ELLIPSE_RANDOMNESS,
+      curveFitting: ELLIPSE_CURVE_FITTING,
+      curveStepCount: ELLIPSE_CURVE_STEP_COUNT,
+    }),
+  })
 
   function createHighlightRuntime(options = {}) {
     const resolveTextColors =
@@ -106,13 +141,19 @@
       svg.appendChild(ellipse)
     }
 
-    function buildMeasuredRoughEllipseSvgNode(widthPx, heightPx) {
+    function buildMeasuredRoughEllipseSvgNode(widthPx, heightPx, options = {}) {
       const svgNs = "http://www.w3.org/2000/svg"
       const svg = document.createElementNS(svgNs, "svg")
       const width = Math.max(4, Number(widthPx || 0))
       const height = Math.max(4, Number(heightPx || 0))
-      roughEllipseSerial += 1
-      const loopSeed = 9001 + roughEllipseSerial * 97
+      const requestedSeed = Number(options.seed)
+      let loopSeed
+      if (Number.isFinite(requestedSeed) && requestedSeed > 0) {
+        loopSeed = Math.trunc(requestedSeed)
+      } else {
+        roughEllipseSerial += 1
+        loopSeed = 9001 + roughEllipseSerial * 97
+      }
 
       svg.setAttribute("class", "iconoplasm-gene-rough-loop")
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`)
@@ -235,6 +276,7 @@
         family: "underline",
         substrate: "host-paint",
         variant: "underline",
+        canvasShape: CANVAS_SHAPE_CONTRACTS.underline,
         render() {},
       }),
       pill: Object.freeze({
@@ -243,6 +285,7 @@
         family: "pill",
         substrate: "host-paint",
         variant: "filled",
+        canvasShape: CANVAS_SHAPE_CONTRACTS.pill,
         render() {},
       }),
       "pill-outline": Object.freeze({
@@ -251,6 +294,7 @@
         family: "pill",
         substrate: "host-paint",
         variant: "outline",
+        canvasShape: CANVAS_SHAPE_CONTRACTS["pill-outline"],
         render() {},
       }),
       ellipse: Object.freeze({
@@ -259,6 +303,7 @@
         family: "ellipse",
         substrate: "anchored-scene",
         variant: "ellipse",
+        canvasShape: CANVAS_SHAPE_CONTRACTS.ellipse,
         render(sceneLayer, scene, context) {
           appendEllipseFragmentsToScene(sceneLayer, scene, context.color)
         },
@@ -328,6 +373,12 @@
       normalizeHighlightMode,
       setMode,
       getMode,
+      getCanvasShape(mode = highlightMode) {
+        return CANVAS_SHAPE_CONTRACTS[normalizeHighlightMode(mode)]
+      },
+      createRoughEllipseNode(widthPx, heightPx, options) {
+        return buildMeasuredRoughEllipseSvgNode(widthPx, heightPx, options)
+      },
       ensureHighlightTextWrapper,
       ensureHighlightPaintLayer,
       applyHighlightStyle,

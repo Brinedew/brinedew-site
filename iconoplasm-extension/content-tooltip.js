@@ -36,41 +36,6 @@
     return toast
   }
 
-  function createHoverIntentTracker() {
-    let serial = 0
-    let activeSymbol = ""
-
-    function enter(rawSymbol) {
-      activeSymbol = String(rawSymbol || "")
-        .trim()
-        .toUpperCase()
-      serial += 1
-      return Object.freeze({ serial, symbol: activeSymbol })
-    }
-
-    function invalidate() {
-      activeSymbol = ""
-      serial += 1
-    }
-
-    function isCurrent(intent) {
-      return Boolean(
-        intent && Number(intent.serial) === serial && String(intent.symbol || "") === activeSymbol,
-      )
-    }
-
-    return Object.freeze({ enter, invalidate, isCurrent })
-  }
-
-  function allowsSpeculativePrewarm(connection = root.navigator && root.navigator.connection) {
-    if (!connection) return true
-    if (connection.saveData === true) return false
-    const effectiveType = String(connection.effectiveType || "")
-      .trim()
-      .toLowerCase()
-    return effectiveType !== "slow-2g" && effectiveType !== "2g"
-  }
-
   function postBackgroundTask(task, options = {}) {
     const windowRef = options.windowRef || root
     const signal = options.signal || null
@@ -267,8 +232,6 @@
   root.IconoplasmContentTooltip = {
     createTooltipShell,
     createAuthToast,
-    createHoverIntentTracker,
-    allowsSpeculativePrewarm,
     postBackgroundTask,
     isFrameRequestCurrent,
     createAdapterOwnedPortraitState,

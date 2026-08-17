@@ -117,6 +117,7 @@ scripts/embedding_dump.json
 /nul
 /tmp/
 /artifacts/
+/iconoplasm-extension/artifacts/
 /workers/generated/iconoplasm-observability-snapshot.json
 /.tmp_quartz_dev*.log
 /.tmp_quartz_dev_pid.txt

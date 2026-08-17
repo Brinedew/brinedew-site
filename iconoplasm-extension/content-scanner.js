@@ -10,8 +10,8 @@
     const getGeneMap = typeof options.getGeneMap === "function" ? options.getGeneMap : () => null
     const applyHighlightStyle =
       typeof options.applyHighlightStyle === "function" ? options.applyHighlightStyle : () => {}
-    const observeGeneElement =
-      typeof options.observeGeneElement === "function" ? options.observeGeneElement : () => {}
+    const registerGeneAnchor =
+      typeof options.registerGeneAnchor === "function" ? options.registerGeneAnchor : () => {}
 
     function isEditableTextSurface(element) {
       if (!element || typeof element.closest !== "function") return false
@@ -64,7 +64,7 @@
 
         const gene = geneMap[symbol] || {}
         applyHighlightStyle(span, symbol, gene.c || placeholderColor)
-        observeGeneElement(span)
+        registerGeneAnchor(span)
         fragment.appendChild(span)
         cursor = index + length
       }

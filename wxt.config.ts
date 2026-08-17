@@ -20,6 +20,8 @@ export default defineConfig({
       // script can fail before it registers the gene-data message listener.
       manifest.background = {
         scripts: [
+          "pdf-byte-store.js",
+          "pdf-gecko-ownership.js",
           "generated/catalog-contract.js",
           "generated/portrait-delivery-core.js",
           "publication-alias-overlay.js",
@@ -27,6 +29,27 @@ export default defineConfig({
           "service-worker.js",
         ],
       }
+      manifest.permissions = [
+        ...new Set([
+          ...(manifest.permissions || []),
+          "webRequest",
+          "webRequestBlocking",
+          "webRequestFilterResponse",
+        ]),
+      ]
+      manifest.host_permissions = [...new Set([...(manifest.host_permissions || []), "<all_urls>"])]
+      manifest.content_scripts = [
+        {
+          matches: ["http://*/*", "https://*/*"],
+          js: ["pdf-gecko-redirect.js"],
+          run_at: "document_start",
+        },
+        ...manifest.content_scripts,
+      ]
+      delete manifest.mime_types_handler
+    }
+    if (browser === "safari") {
+      delete manifest.mime_types_handler
     }
     if (browser !== "firefox") {
       delete manifest.browser_specific_settings

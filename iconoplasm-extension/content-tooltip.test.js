@@ -13,70 +13,7 @@ async function loadTooltipModule() {
   return sandbox.globalThis.IconoplasmContentTooltip
 }
 
-test("superseded hover intents cannot launch stale neighbor portrait work", async () => {
-  const tooltipModule = await loadTooltipModule()
-  const tracker = tooltipModule.createHoverIntentTracker()
-  const warmed = []
-  const pending = new Map()
-
-  function deferred(label) {
-    let resolve
-    const promise = new Promise((settle) => {
-      resolve = settle
-    })
-    pending.set(label, resolve)
-    return promise
-  }
-
-  function startIntent(symbol, activePortraitPromise, neighborDetailsPromise) {
-    const intent = tracker.enter(symbol)
-    return Promise.all([activePortraitPromise, neighborDetailsPromise]).then(
-      ([, neighborSymbols]) => {
-        if (!tracker.isCurrent(intent)) return
-        warmed.push(...neighborSymbols)
-      },
-    )
-  }
-
-  const staleA = startIntent("A", deferred("active-a"), deferred("neighbors-a"))
-  const currentB = startIntent("B", deferred("active-b"), deferred("neighbors-b"))
-  pending.get("neighbors-a")(["A1", "A2"])
-  pending.get("active-a")()
-  await staleA
-  assert.deepEqual(warmed, [])
-
-  pending.get("neighbors-b")(["B1", "B2"])
-  pending.get("active-b")()
-  await currentB
-  assert.deepEqual(warmed, ["B1", "B2"])
-
-  const staleFirstA = startIntent("A", Promise.resolve(), Promise.resolve(["A-old"]))
-  const middleB = tracker.enter("B")
-  const latestA = tracker.enter("A")
-  await staleFirstA
-  assert.equal(tracker.isCurrent(middleB), false)
-  assert.equal(tracker.isCurrent(latestA), true)
-  assert.deepEqual(warmed, ["B1", "B2"])
-
-  tracker.invalidate()
-  assert.equal(tracker.isCurrent(latestA), false)
-})
-
-test("speculative warming respects Data Saver and 2G without disabling normal connections", async () => {
-  const tooltipModule = await loadTooltipModule()
-
-  assert.equal(tooltipModule.allowsSpeculativePrewarm(undefined), true)
-  assert.equal(tooltipModule.allowsSpeculativePrewarm({ effectiveType: "4g" }), true)
-  assert.equal(tooltipModule.allowsSpeculativePrewarm({ effectiveType: "3g" }), true)
-  assert.equal(
-    tooltipModule.allowsSpeculativePrewarm({ effectiveType: "4g", saveData: true }),
-    false,
-  )
-  assert.equal(tooltipModule.allowsSpeculativePrewarm({ effectiveType: "2g" }), false)
-  assert.equal(tooltipModule.allowsSpeculativePrewarm({ effectiveType: "slow-2g" }), false)
-})
-
-test("speculative callbacks use browser background priority and can be superseded", async () => {
+test("background callbacks use browser background priority and can be superseded", async () => {
   const tooltipModule = await loadTooltipModule()
   const posted = []
   let runTask
@@ -261,6 +198,13 @@ test("newly shown cards wait 500ms before they can navigate", async () => {
   assert.match(content, /navigationArmedAt: tooltipNavigationArmedAt/)
   assert.match(frame, /Date\.now\(\) < Number\([\s\S]*navigationArmedAt/)
   assert.doesNotMatch(css, /touch-sheet|tooltip-backdrop/)
+})
+
+test("raw file PDF wrappers do not initialize a second extension surface", async () => {
+  const content = await readFile(new URL("./content.js", import.meta.url), "utf8")
+
+  assert.match(content, /window\.location\.protocol === "file:"/)
+  assert.match(content, /if \(isOuterRawFilePdfDocument\) return/)
 })
 
 test("extension hover-card fonts never hide text while packaged fonts load", async () => {
