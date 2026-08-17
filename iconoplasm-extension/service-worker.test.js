@@ -6,6 +6,7 @@ import test from "node:test"
 
 const storageState = new Map()
 const sessionState = new Map()
+const mimeHandlerOptions = []
 const requestedOverlay = {
   schema_version: 1,
   version: "v1-test",
@@ -97,6 +98,14 @@ function storageArea(state) {
 }
 
 globalThis.chrome = {
+  mimeHandler: {
+    async getMimeHandlerOptions() {
+      return mimeHandlerOptions.at(-1)?.options || { enabled: false }
+    },
+    async setMimeHandlerOptions(mimeType, options) {
+      mimeHandlerOptions.push({ mimeType, options })
+    },
+  },
   runtime: {
     getManifest() {
       return { version: "1.2.3" }
@@ -128,6 +137,16 @@ await import("./content-settings.js")
 await import("./service-worker.js")
 
 const hooks = globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__
+
+test("shared appearance settings have one canonical two-state timing policy", () => {
+  const settings = globalThis.IconoplasmContentSettings
+  assert.equal(settings.normalizeHighlightVisibility("hover"), "hover")
+  assert.equal(settings.normalizeHighlightVisibility(" HOVER "), "hover")
+  assert.equal(settings.normalizeHighlightVisibility("always"), "always")
+  assert.equal(settings.normalizeHighlightVisibility("unexpected"), "always")
+  assert.equal(settings.normalizeHighlightMode("ellipse"), "ellipse")
+  assert.equal(settings.normalizeHighlightMode("unexpected"), "pill")
+})
 
 test("shared blocklist projections normalize to the bounded public contract", () => {
   const settings = globalThis.IconoplasmContentSettings
@@ -249,6 +268,50 @@ test("Chromium builds keep the scanner index bounded without unlimited storage",
     Object.values(scannerIndex).some((gene) => "p" in gene),
     false,
   )
+})
+
+test("Chromium manifest owns PDFs through the public MIME handler without broad host access", () => {
+  const manifest = JSON.parse(readFileSync(new URL("./manifest.json", import.meta.url), "utf8"))
+
+  assert.deepEqual(manifest.mime_types_handler, {
+    "application/pdf": {
+      handler_url: "pdf-reader.html",
+      can_embed: true,
+    },
+  })
+  assert.equal(manifest.host_permissions.includes("<all_urls>"), false)
+})
+
+test("PDF highlighting has only native-off and highlighted-on states", async () => {
+  storageState.clear()
+  mimeHandlerOptions.length = 0
+
+  await hooks.initializePdfPreferences()
+  assert.equal(storageState.get("iconoplasm_pdf_highlighting_enabled"), false)
+  assert.deepEqual(mimeHandlerOptions.at(-1), {
+    mimeType: "application/pdf",
+    options: { enabled: false },
+  })
+
+  storageState.set("iconoplasm_pdf_highlighting_enabled", true)
+  await hooks.initializePdfPreferences()
+  assert.deepEqual(mimeHandlerOptions.at(-1), {
+    mimeType: "application/pdf",
+    options: { enabled: true },
+  })
+  assert.equal(storageState.has("iconoplasm_pdf_automatic_open_enabled"), false)
+
+  const capability = await hooks.getPdfOwnershipCapability()
+  assert.deepEqual(capability, {
+    supported: true,
+    driver: "chromium-mime-handler",
+    enabled: true,
+  })
+
+  const disabled = await hooks.setPdfOwnershipEnabled(false)
+  assert.equal(disabled.supported, true)
+  assert.equal(disabled.enabled, false)
+  assert.equal(storageState.get("iconoplasm_pdf_highlighting_enabled"), false)
 })
 
 test("legacy portrait-heavy storage is compacted before a tab can receive it", async () => {

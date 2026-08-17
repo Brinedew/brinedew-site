@@ -542,3 +542,50 @@ test("promoted immutable detail follows foreground cancellation", async () => {
   assert.equal(calls.length, 1)
   assert.equal(calls[0].signal.aborted, true)
 })
+
+test("active foreground hover retries one interrupted immutable transfer", async () => {
+  const createGeneDetailStore = loadFactory()
+  let calls = 0
+  const store = createGeneDetailStore({
+    windowRef: globalThis,
+    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
+    fetchImpl: async () => {
+      calls += 1
+      if (calls === 1) {
+        const error = new Error("interrupted speculative request")
+        error.name = "AbortError"
+        throw error
+      }
+      return response({
+        snapshot_version: "card-v1",
+        gene: { symbol: "BRCA2", full_name: "BRCA2 DNA repair associated" },
+        missing: [],
+      })
+    },
+  })
+  store.setRevision("card-v1")
+
+  const result = await store.fetchBatch(["BRCA2"], { priority: "foreground" })
+
+  assert.equal(calls, 2)
+  assert.equal(result.get("BRCA2")?.full_name, "BRCA2 DNA repair associated")
+})
+
+test("foreground hover does not retry an immutable missing record", async () => {
+  const createGeneDetailStore = loadFactory()
+  let calls = 0
+  const store = createGeneDetailStore({
+    windowRef: globalThis,
+    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
+    fetchImpl: async () => {
+      calls += 1
+      return response({ snapshot_version: "card-v1", gene: null, missing: ["PRL"] }, 404)
+    },
+  })
+  store.setRevision("card-v1")
+
+  const result = await store.fetchBatch(["PRL"], { priority: "foreground" })
+
+  assert.equal(calls, 1)
+  assert.equal(result.get("PRL"), null)
+})

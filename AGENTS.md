@@ -130,16 +130,17 @@ short-lived access token: the session owner refreshes provider tokens atomically
 retains the Brinedew identity through provider outages or revocation, and rolls
 the browser credential on authenticated activity. Dynamic HTML may restore the
 presence-only marker when an HttpOnly session cookie is already present; it must
-not perform an anonymous auth lookup. Extension foreground detail uses a
-version-addressed immutable per-symbol GET; older clients retain the batch
-compatibility route. Foreground intent must not wait for whole-cache hydration
-or speculative batches. A matching predicted immutable request is promoted and
-reused before a newer hover aborts superseded hover-neighbor work through the
-service worker. On ordinary connections, the first ten distinct highlighted
-strings begin bounded detail reads and portrait decode immediately after scanning.
-Later generic viewport speculation remains metadata-only, while pointer approach,
-real spatial neighbors, and scroll direction select bounded detail-and-portrait
-candidates under an adaptive connection and device budget. Packaged card fonts begin loading
+not perform an anonymous auth lookup. Extension detail uses a version-addressed
+immutable per-symbol GET; older clients retain the batch compatibility route.
+HTML and PDF feed one tab-scoped reading session. That session compiles the
+recognized unique-symbol inventory and prepares complete card detail plus decoded
+portrait before pointer intent: up to 16/64/128 ordinary-document symbols with
+3/6/8 workers on constrained/ordinary/measured-fast connections, plus deterministic
+near-viewport windows for larger documents. Data Saver and 2G disable preparation.
+Hover selects an already-ready card; its foreground GET is only a recovery path
+and may promote the same in-flight immutable request without waiting for whole-cache
+hydration. Do not restore pointer-trajectory, DOM-neighbor, scroll-direction, or
+surface-specific prediction. Packaged card fonts begin loading
 during initialization in both the host page and persistent card frame. Both routes
 project immutable published card artifacts and
 persist a bounded cache keyed by the card snapshot version; they must not

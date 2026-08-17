@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises"
 import test from "node:test"
 import vm from "node:vm"
 
-// ARCHITECTURE FENCE [IPD-008]: bounded neighbor warming is useful only when
+// ARCHITECTURE FENCE [IPD-008]: bounded reading-session preparation is useful only when
 // each successful portrait becomes paint-ready without waiting for its batch.
 
 const source = await readFile(new URL("./content-portrait-cache.js", import.meta.url), "utf8")

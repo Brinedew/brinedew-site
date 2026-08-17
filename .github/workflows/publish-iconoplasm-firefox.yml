@@ -75,6 +75,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node ./scripts/wait-for-iconoplasm-release-ci.mjs
 
+      - name: Require a certified Firefox PDF ownership adapter
+        run: node ./scripts/verify-iconoplasm-pdf-release-gate.mjs --target=firefox
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

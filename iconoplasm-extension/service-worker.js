@@ -82,11 +82,71 @@ let portraitSourceStateLoaded = false
 let portraitDeliveryPolicy = IconoPortraitDelivery.normalizePortraitDeliveryPolicy()
 let geneDataRefreshState = null
 
+async function initializePdfPreferences() {
+  const keys = IconoContentSettings.storageKeys
+  const stored = await chrome.storage.local.get([keys.pdfHighlightingEnabled])
+  const enabled = IconoContentSettings.normalizeBooleanSetting(
+    stored[keys.pdfHighlightingEnabled],
+    false,
+  )
+  if (typeof stored[keys.pdfHighlightingEnabled] !== "boolean") {
+    await chrome.storage.local.set({ [keys.pdfHighlightingEnabled]: enabled })
+  }
+  if (chrome.mimeHandler?.setMimeHandlerOptions) {
+    try {
+      await chrome.mimeHandler.setMimeHandlerOptions("application/pdf", { enabled })
+    } catch (_error) {}
+  }
+  globalThis.IconoplasmPdfGeckoOwnership?.setEnabled(enabled)
+}
+
+async function getPdfOwnershipCapability() {
+  const keys = IconoContentSettings.storageKeys
+  if (chrome.mimeHandler?.getMimeHandlerOptions) {
+    const options = await chrome.mimeHandler.getMimeHandlerOptions("application/pdf")
+    return { supported: true, driver: "chromium-mime-handler", enabled: Boolean(options?.enabled) }
+  }
+  if (globalThis.IconoplasmPdfGeckoOwnership?.isSupported?.()) {
+    await globalThis.IconoplasmPdfGeckoOwnership.ready?.()
+    return {
+      supported: true,
+      driver: "firefox-response-filter",
+      enabled: globalThis.IconoplasmPdfGeckoOwnership.isEnabled(),
+    }
+  }
+  const stored = await chrome.storage.local.get([keys.pdfHighlightingEnabled])
+  return { supported: false, driver: "none", enabled: Boolean(stored[keys.pdfHighlightingEnabled]) }
+}
+
+async function setPdfOwnershipEnabled(enabled) {
+  const value = Boolean(enabled)
+  if (chrome.mimeHandler?.setMimeHandlerOptions) {
+    await chrome.mimeHandler.setMimeHandlerOptions("application/pdf", { enabled: value })
+  } else if (globalThis.IconoplasmPdfGeckoOwnership?.isSupported?.()) {
+    globalThis.IconoplasmPdfGeckoOwnership.setEnabled(value)
+  } else {
+    return { supported: false, driver: "none", enabled: false }
+  }
+  await chrome.storage.local.set({
+    [IconoContentSettings.storageKeys.pdfHighlightingEnabled]: value,
+  })
+  return getPdfOwnershipCapability()
+}
+
+function ownedPdfRecordForSender(sourceId, sender) {
+  const store = globalThis.IconoplasmPdfByteStore
+  const record = store?.describe?.(String(sourceId || ""))
+  if (!record || record.metadata?.tabId !== sender?.tab?.id) return null
+  return record
+}
+
 chrome.runtime.onInstalled.addListener(() => {
+  void initializePdfPreferences()
   void refreshGeneData()
 })
 
 chrome.runtime.onStartup.addListener(() => {
+  void initializePdfPreferences()
   void refreshGeneData()
 })
 
@@ -107,6 +167,60 @@ if (chrome.tabs?.onRemoved?.addListener) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === "PDF_OWNERSHIP_GET_CAPABILITY") {
+    getPdfOwnershipCapability().then((capability) => sendResponse({ ok: true, ...capability }))
+    return true
+  }
+  if (msg.type === "PDF_OWNERSHIP_SET_ENABLED") {
+    setPdfOwnershipEnabled(msg.enabled)
+      .then((capability) => sendResponse({ ok: capability.supported, ...capability }))
+      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }))
+    return true
+  }
+  if (msg.type === "PDF_BYTE_STORE_DESCRIBE") {
+    const record = ownedPdfRecordForSender(msg.sourceId, sender)
+    sendResponse(
+      record
+        ? { ok: true, size: record.size, metadata: record.metadata }
+        : { ok: false, error: "unavailable" },
+    )
+    return false
+  }
+  if (msg.type === "PDF_BYTE_STORE_READ") {
+    const record = ownedPdfRecordForSender(msg.sourceId, sender)
+    const bytes = record
+      ? globalThis.IconoplasmPdfByteStore.read(msg.sourceId, msg.offset, msg.length)
+      : null
+    sendResponse(bytes ? { ok: true, bytes } : { ok: false, error: "unavailable" })
+    return false
+  }
+  if (msg.type === "PDF_OPEN_OWNED_READER") {
+    const sourceId = String(msg.sourceId || "")
+    const record = ownedPdfRecordForSender(sourceId, sender)
+    if (!record) {
+      sendResponse({ ok: false, error: "invalid_source" })
+      return false
+    }
+    const readerUrl = `${chrome.runtime.getURL("pdf-reader.html")}?geckoSource=${encodeURIComponent(sourceId)}`
+    chrome.tabs.update(sender.tab.id, { url: readerUrl }).then(
+      () => sendResponse({ ok: true }),
+      (error) => {
+        globalThis.IconoplasmPdfByteStore.dispose(sourceId)
+        sendResponse({ ok: false, error: String(error?.message || error) })
+      },
+    )
+    return true
+  }
+  if (msg.type === "PDF_RELEASE_OWNED_SOURCE") {
+    const record = ownedPdfRecordForSender(msg.sourceId, sender)
+    if (!record) {
+      sendResponse({ ok: false, error: "invalid_source" })
+      return false
+    }
+    globalThis.IconoplasmPdfByteStore.dispose(msg.sourceId)
+    sendResponse({ ok: true })
+    return false
+  }
   if (msg.type === "GET_GENE_DATA") {
     ensureFreshGeneData().then((data) => sendResponse(data))
     return true
@@ -1140,6 +1254,9 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
 
 if (globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__) {
   Object.assign(globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__, {
+    initializePdfPreferences,
+    getPdfOwnershipCapability,
+    setPdfOwnershipEnabled,
     fetchPortraitDataUrl,
     portraitSourcePlan,
     reportPortraitSourceResult,

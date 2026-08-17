@@ -5,6 +5,17 @@
 ;(function () {
   "use strict"
 
+  const isPdfReaderDocument = document.documentElement?.dataset?.iconoplasmPdfReader === "true"
+  const isOuterRawFilePdfDocument =
+    !isPdfReaderDocument &&
+    window.location.protocol === "file:" &&
+    /(?:\.pdf|%2epdf)$/iu.test(window.location.pathname)
+  // Chrome keeps the raw file URL as an outer document around the registered
+  // MIME handler. The extension reader inside that document owns all PDF UI.
+  // Initializing a second scanner here creates duplicate hidden tooltips and
+  // makes the off state observably different from the native PDF path.
+  if (isOuterRawFilePdfDocument) return
+
   const IconoCardShared = globalThis.IconoplasmCardShared
   const IconoContentApi = globalThis.IconoplasmContentApi
   const IconoContentSettings = globalThis.IconoplasmContentSettings
@@ -16,8 +27,7 @@
   const IconoContentDetailCache = globalThis.IconoplasmContentDetailCache
   const IconoContentVoteBridge = globalThis.IconoplasmContentVoteBridge
   const IconoHighlightRuntime = globalThis.IconoplasmHighlightRuntime
-  const IconoVisibilityScheduler = globalThis.IconoplasmVisibilityScheduler
-  const IconoPredictiveWarm = globalThis.IconoplasmPredictiveWarm
+  const IconoReadingSession = globalThis.IconoplasmReadingSession
   if (!IconoCardShared) {
     console.error(
       "[Iconoplasm] shared card runtime missing: load generated/shared-card-runtime.js first",
@@ -51,7 +61,6 @@
   if (
     !IconoContentTooltip ||
     typeof IconoContentTooltip.createTooltipShell !== "function" ||
-    typeof IconoContentTooltip.allowsSpeculativePrewarm !== "function" ||
     typeof IconoContentTooltip.postBackgroundTask !== "function" ||
     typeof IconoContentTooltip.createAdapterOwnedPortraitState !== "function" ||
     typeof IconoContentTooltip.createPersistentFrameController !== "function"
@@ -86,13 +95,8 @@
     console.error("[Iconoplasm] highlight runtime missing: load highlight-runtime.js first")
     return
   }
-  if (
-    !IconoPredictiveWarm ||
-    typeof IconoPredictiveWarm.predictionPolicy !== "function" ||
-    typeof IconoPredictiveWarm.rankSpatialCandidates !== "function" ||
-    typeof IconoPredictiveWarm.rankScrollCandidates !== "function"
-  ) {
-    console.error("[Iconoplasm] predictive warming missing: load content-predictive-warm.js first")
+  if (!IconoReadingSession || typeof IconoReadingSession.createReadingSession !== "function") {
+    console.error("[Iconoplasm] reading session missing: load content-reading-session.js first")
     return
   }
 
@@ -128,8 +132,6 @@
   const DISCOVERY_SYMBOL_COOLDOWN_MS = 30 * 1000
   const DISCOVERY_AUTH_CACHE_TTL_MS = 5 * 60 * 1000
   const GUEST_DISCOVERY_SYMBOL_MAX = 2000
-  const GENE_DETAIL_VISIBLE_LIMIT = 16
-  const INITIAL_HOVER_PRELOAD_LIMIT = 10
   const GENE_DETAIL_PERSISTENT_MAX_BYTES = 4 * 1024 * 1024
   const GENE_DATA_REQUEST_TIMEOUT_MS = 5000
   const GENE_DATA_RETRY_DELAY_MS = 750
@@ -243,7 +245,6 @@
   const HIGHLIGHT_RENDER_CONTRACT = IconoHighlightRuntime.HIGHLIGHT_RENDER_CONTRACT
   const HIGHLIGHT_RENDERERS = highlightRuntime.renderers
   const normalizeHighlightMode = highlightRuntime.normalizeHighlightMode
-  const ensureHighlightTextWrapper = highlightRuntime.ensureHighlightTextWrapper
   const applyHighlightStyle = highlightRuntime.applyHighlightStyle
   const refreshHighlightStyles = highlightRuntime.refreshHighlightStyles
   const scheduleHighlightGeometryRefresh = highlightRuntime.scheduleHighlightGeometryRefresh
@@ -261,13 +262,7 @@
     }
   }
 
-  function normalizeHighlightVisibility(raw) {
-    return String(raw || "")
-      .trim()
-      .toLowerCase() === "hover"
-      ? "hover"
-      : "always"
-  }
+  const normalizeHighlightVisibility = IconoContentSettings.normalizeHighlightVisibility
 
   function applyHighlightVisibility() {
     document.body.classList.toggle("iconoplasm-highlight-on-hover", highlightVisibility === "hover")
@@ -519,7 +514,6 @@
   let authToast = null
   let activeSymbol = null
   let activeDetailAbortController = null
-  let neighborPrewarmAbortController = null
   let hideTimer = null
   const discoveryTimerBySymbol = new Map()
   const discoveryCooldownUntilBySymbol = new Map()
@@ -534,17 +528,6 @@
     discoveredSymbols: [],
   }
   let portraitLoadToken = 0
-  let viewportWarmFrame = 0
-  let pointerWarmFrame = 0
-  let lastPointerPredictionAt = 0
-  let lastPointerSample = null
-  let lastApproachPredictionKey = ""
-  let lastScrollY = window.scrollY
-  let predictionPolicy = IconoPredictiveWarm.predictionPolicy(
-    window.navigator?.connection,
-    window.navigator?.deviceMemory,
-  )
-  let visibilityScheduler = null
   let mutationScanController = null
   let pageScanner = null
   let initializationPromise = null
@@ -577,12 +560,6 @@
   const warnedMissingTraitOrigins = new Set()
   // Fence: keep background detail batches small. Large batches made the hovered gene wait behind
   // bulk prewarm work, which is why "simple text loads seconds later" showed up in practice.
-  const GENE_DETAIL_BACKGROUND_CONCURRENCY = 2
-  const PORTRAIT_WARM_BATCH_SIZE = 2
-  const GENE_DETAIL_VIEWPORT_ABOVE_PX = 960
-  const GENE_DETAIL_VIEWPORT_BELOW_PX = 960
-  const POINTER_PREDICTION_INTERVAL_MS = 80
-  const PREDICTED_SYMBOL_CACHE_LIMIT = 64
   const TOOLTIP_VIEWPORT_MARGIN_PX = 8
   const TOOLTIP_TARGET_GAP_PX = 8
   const TOOLTIP_NAVIGATION_DELAY_MS = 500
@@ -590,10 +567,6 @@
   const decodedPortraitSrcPromises = new Map()
   const DECODED_PORTRAIT_CACHE_LIMIT = 96
   const LIT_ARCHIVAL_PREWARM_CACHE_LIMIT = 48
-  const portraitPreloadSymbols = new Set()
-  const predictedPortraitWarmUrls = new Set()
-  let initialHoverPreloadStarted = false
-  let initialHoverPreloadFinished = false
 
   function rememberReadyLitArchivalPrewarmSource(src) {
     readyLitArchivalPrewarmSources.delete(src)
@@ -664,29 +637,10 @@
     ).trim()
   }
 
-  function onGeneDetailResolvedBatch(records, priority) {
-    // ARCHITECTURE FENCE [IPD-008]: only symbols selected by a bounded page-local
-    // predictor feed portrait warming. Later generic metadata hydration does not
-    // become an unbounded image fanout.
-    if (priority !== "background" || !portraitPreloadSymbols.size) return
-    const portraitUrls = []
-    for (const record of Array.isArray(records) ? records : []) {
-      const symbol = String((record && record.symbol) || "")
-        .trim()
-        .toUpperCase()
-      if (!portraitPreloadSymbols.has(symbol)) continue
-      const portraitUrl = portraitUrlFromGeneDetail(record)
-      if (!portraitUrl || predictedPortraitWarmUrls.has(portraitUrl)) continue
-      predictedPortraitWarmUrls.add(portraitUrl)
-      portraitUrls.push(portraitUrl)
-    }
-    if (portraitUrls.length) portraitCache.warmUrls(portraitUrls)
-  }
-
   const portraitCache = IconoContentPortraitCache.createPortraitCache({
     windowRef: window,
     chromeApi: chrome,
-    batchSize: PORTRAIT_WARM_BATCH_SIZE,
+    batchSize: 6,
     delayMs: 20,
     onWarmSource: onPortraitWarmSource,
   })
@@ -697,8 +651,8 @@
     detailUrlForSymbol: (symbol, revision) =>
       `${ICONOPLASM_GENE_DETAIL_PREFIX}${encodeURIComponent(revision)}/genes/${encodeURIComponent(symbol)}`,
     fields: GENE_DETAIL_BATCH_FIELDS,
-    warmBatchSize: GENE_DETAIL_BACKGROUND_CONCURRENCY,
-    visibleLimit: GENE_DETAIL_VISIBLE_LIMIT,
+    warmBatchSize: 6,
+    visibleLimit: 64,
     delayMs: 20,
     deferTask: deferGeneDetailWarm,
     deferPersistenceTask: deferGeneDetailPersistence,
@@ -709,7 +663,6 @@
     persistentLimit: 512,
     persistentByteLimit: GENE_DETAIL_PERSISTENT_MAX_BYTES,
     requestTimeoutMs: 4000,
-    onResolvedBatch: onGeneDetailResolvedBatch,
     getRevision: async () => {
       const stored = await chrome.storage.local.get([
         "iconoplasm_card_snapshot_version",
@@ -810,11 +763,14 @@
   async function refreshBlocklistFromStorage({ rescan = true } = {}) {
     const nextBlocklist = await loadEffectiveBlocklist()
     rebuildGeneMatcher(nextBlocklist)
+    if (isPdfReaderDocument) {
+      window.dispatchEvent(new CustomEvent("iconoplasm-reader-matcher-changed"))
+      return
+    }
     unwrapBlockedGeneHighlights(nextBlocklist)
     if (rescan) {
       scanPage(document.body)
       refreshHighlightStyles()
-      scheduleWarmVisibleGeneDetails()
     }
   }
 
@@ -1217,295 +1173,37 @@
     portraitStatus.textContent = ""
   }
 
-  function collectPageGeneSymbols(limit = INITIAL_HOVER_PRELOAD_LIMIT) {
-    const symbols = []
-    const seenSymbols = new Set()
-    for (const geneEl of document.querySelectorAll(".iconoplasm-gene")) {
-      const symbol = String((geneEl.dataset && geneEl.dataset.gene) || "")
-        .trim()
-        .toUpperCase()
-      if (!symbol || seenSymbols.has(symbol)) continue
-      seenSymbols.add(symbol)
-      symbols.push(symbol)
-      if (symbols.length >= limit) break
-    }
-    return symbols
-  }
-
-  function rememberPortraitPreloadSymbol(rawSymbol) {
-    const symbol = String(rawSymbol || "")
-      .trim()
-      .toUpperCase()
-    if (!symbol) return ""
-    portraitPreloadSymbols.delete(symbol)
-    portraitPreloadSymbols.add(symbol)
-    while (portraitPreloadSymbols.size > PREDICTED_SYMBOL_CACHE_LIMIT) {
-      portraitPreloadSymbols.delete(portraitPreloadSymbols.values().next().value)
-    }
-    return symbol
-  }
-
-  function predictionEnabled() {
-    return predictionPolicy.enabled && document.visibilityState !== "hidden"
-  }
-
-  function refreshPredictionPolicy() {
-    predictionPolicy = IconoPredictiveWarm.predictionPolicy(
-      window.navigator?.connection,
-      window.navigator?.deviceMemory,
-    )
-  }
-
-  function warmPredictedHoverAssets(rawSymbols, options = {}) {
-    if (!predictionEnabled()) return Promise.resolve(new Map())
-    const symbols = []
-    const seen = new Set()
-    for (const rawSymbol of Array.isArray(rawSymbols) ? rawSymbols : []) {
-      const symbol = rememberPortraitPreloadSymbol(rawSymbol)
-      if (!symbol || seen.has(symbol)) continue
-      seen.add(symbol)
-      symbols.push(symbol)
-    }
-    if (!symbols.length) return Promise.resolve(new Map())
-    return fetchGeneDetailsBatch(symbols, {
-      priority: "background",
-      awaitPersistentCache: false,
-      ...(options.signal ? { signal: options.signal } : {}),
-    }).catch(() => new Map())
-  }
-
-  async function warmInitialHoverAssets() {
-    if (initialHoverPreloadStarted) return
-    initialHoverPreloadStarted = true
-    refreshPredictionPolicy()
-    if (!predictionEnabled()) {
-      initialHoverPreloadFinished = true
-      return
-    }
-    const symbols = collectPageGeneSymbols(
-      Math.min(INITIAL_HOVER_PRELOAD_LIMIT, predictionPolicy.startupLimit),
-    )
-    for (const symbol of symbols) rememberPortraitPreloadSymbol(symbol)
-    try {
-      for (let index = 0; index < symbols.length; index += GENE_DETAIL_BACKGROUND_CONCURRENCY) {
-        const batch = symbols.slice(index, index + GENE_DETAIL_BACKGROUND_CONCURRENCY)
-        await fetchGeneDetailsBatch(batch, {
-          priority: "background",
-          awaitPersistentCache: false,
-        })
-      }
-    } finally {
-      initialHoverPreloadFinished = true
-      scheduleWarmVisibleGeneDetails()
-    }
-  }
-
-  function collectVisibleGeneSymbols(limit = GENE_DETAIL_VISIBLE_LIMIT) {
-    if (!geneMap) return []
-    const symbols = []
-    const seenSymbols = new Set()
-    const genes = document.querySelectorAll(".iconoplasm-gene")
-    for (const geneEl of genes) {
-      const rect = geneEl.getBoundingClientRect()
-      if (rect.bottom < -GENE_DETAIL_VIEWPORT_ABOVE_PX) continue
-      if (rect.top > window.innerHeight + GENE_DETAIL_VIEWPORT_BELOW_PX) continue
-      const symbol = geneEl.dataset ? geneEl.dataset.gene : ""
-      if (!symbol || seenSymbols.has(symbol)) continue
-      seenSymbols.add(symbol)
-      symbols.push(symbol)
-      if (symbols.length >= limit) break
-    }
-    return symbols
-  }
-
-  function collectObservedVisibleGeneSymbols(limit = GENE_DETAIL_VISIBLE_LIMIT) {
-    if (!visibilityScheduler) return []
-    return visibilityScheduler
-      .getVisibleSymbols(limit)
-      .filter((symbol) => geneMap && geneMap[symbol])
-  }
-
-  function collectVisiblePredictionCandidates(limit = 96) {
-    const elements =
-      visibilityScheduler && typeof visibilityScheduler.getVisibleElements === "function"
-        ? visibilityScheduler.getVisibleElements(limit)
-        : Array.from(document.querySelectorAll(".iconoplasm-gene")).slice(0, limit)
-    return elements.map((element) => ({
-      element,
-      symbol: String(element?.dataset?.gene || "")
-        .trim()
-        .toUpperCase(),
-      rect: element.getBoundingClientRect(),
-    }))
-  }
-
-  function ensureVisibilityObserver() {
-    if (visibilityScheduler) return visibilityScheduler
-    if (!IconoVisibilityScheduler) return null
-    // Fence: the observer maintains the bounded candidate set. Pointer and scroll prediction may
-    // measure that set, but never rescan every highlight during a movement event.
-    visibilityScheduler = IconoVisibilityScheduler.createVisibilityScheduler({
-      abovePx: GENE_DETAIL_VIEWPORT_ABOVE_PX,
-      belowPx: GENE_DETAIL_VIEWPORT_BELOW_PX,
-      onVisibleChange: () => {
-        scheduleWarmVisibleGeneDetails()
-      },
-    })
-    return visibilityScheduler
-  }
-
-  function observeGeneElement(el) {
-    if (!el || !el.dataset || !el.dataset.gene) return
-    const scheduler = ensureVisibilityObserver()
-    if (scheduler) scheduler.observe(el)
-  }
-
-  function collectDomNeighborGeneSymbols(targetEl, limit) {
-    if (!targetEl) return []
-    const genes = Array.from(document.querySelectorAll(".iconoplasm-gene"))
-    const targetIndex = genes.indexOf(targetEl)
-    if (targetIndex === -1) return []
-
-    const symbols = []
-    const seenSymbols = new Set()
-    const targetSymbol = String((targetEl.dataset && targetEl.dataset.gene) || "")
-      .trim()
-      .toUpperCase()
-    if (targetSymbol) seenSymbols.add(targetSymbol)
-    const pushSymbol = (symbol) => {
-      const normalized = String(symbol || "")
-        .trim()
-        .toUpperCase()
-      if (!normalized || seenSymbols.has(normalized)) return
-      seenSymbols.add(normalized)
-      symbols.push(normalized)
-    }
-
-    const max = Math.max(0, Number(limit || 0))
-    for (let distance = 1; symbols.length < max; distance += 1) {
-      const left = targetIndex - distance
-      const right = targetIndex + distance
-      if (left < 0 && right >= genes.length) break
-      // DOM order is the best reading-direction signal available without pointer
-      // history. Warm the likely forward neighbor first, then the matching prior one.
-      if (right < genes.length) {
-        pushSymbol(genes[right].dataset ? genes[right].dataset.gene : "")
-        if (symbols.length >= max) break
-      }
-      if (left >= 0) {
-        pushSymbol(genes[left].dataset ? genes[left].dataset.gene : "")
-      }
-    }
-    return symbols
-  }
-
-  function collectSpatialNeighborGeneSymbols(targetEl, limit) {
-    const max = Math.max(0, Number(limit || 0))
-    if (!targetEl || !max) return []
-    const targetRect = targetEl.getBoundingClientRect()
-    const targetSymbol = String(targetEl?.dataset?.gene || "")
-      .trim()
-      .toUpperCase()
-    const pointerVector = lastPointerSample?.vector || { x: 0, y: 0 }
-    const spatial = IconoPredictiveWarm.rankSpatialCandidates(
-      collectVisiblePredictionCandidates(),
-      {
-        x: targetRect.left + targetRect.width / 2,
-        y: targetRect.top + targetRect.height / 2,
-      },
-      pointerVector,
-      {
-        excludeSymbol: targetSymbol,
-        radius: Math.max(window.innerWidth, window.innerHeight, 720),
-        limit: max,
-      },
-    )
-    if (spatial.length >= max) return spatial
-    const seen = new Set(spatial)
-    for (const symbol of collectDomNeighborGeneSymbols(targetEl, max)) {
-      if (seen.has(symbol)) continue
-      seen.add(symbol)
-      spatial.push(symbol)
-      if (spatial.length >= max) break
-    }
-    return spatial
-  }
-
   async function fetchGeneDetailsBatch(symbols, options = {}) {
     return geneDetailStore.fetchBatch(symbols, options)
   }
 
-  function warmGeneDetails(symbols, limit = GENE_DETAIL_VISIBLE_LIMIT) {
-    geneDetailStore.warm(symbols, limit)
-  }
-
-  function scheduleWarmVisibleGeneDetails(limit = GENE_DETAIL_VISIBLE_LIMIT) {
-    if (!IconoContentTooltip.allowsSpeculativePrewarm(window.navigator?.connection)) return
-    if (initialHoverPreloadStarted && !initialHoverPreloadFinished) return
-    geneDetailStore.scheduleWarm(
-      () =>
-        visibilityScheduler && visibilityScheduler.hasVisibleSymbols()
-          ? collectObservedVisibleGeneSymbols(limit)
-          : collectVisibleGeneSymbols(limit),
-      limit,
-    )
-  }
-
-  function scheduleViewportWarm() {
-    if (viewportWarmFrame) return
-    viewportWarmFrame = window.requestAnimationFrame(() => {
-      viewportWarmFrame = 0
-      const currentScrollY = window.scrollY
-      const scrollDirection = Math.sign(currentScrollY - lastScrollY)
-      lastScrollY = currentScrollY
-      scheduleWarmVisibleGeneDetails()
-      if (!predictionEnabled() || !scrollDirection) return
-      const symbols = IconoPredictiveWarm.rankScrollCandidates(
-        collectVisiblePredictionCandidates(),
-        scrollDirection,
-        window.innerHeight,
-        predictionPolicy.scrollPortraitLimit,
-      )
-      void warmPredictedHoverAssets(symbols)
+  async function prepareReadingSessionSymbol(symbol) {
+    const details = await fetchGeneDetailsBatch([symbol], {
+      priority: "background",
+      awaitPersistentCache: false,
     })
+    const detail = details.get(symbol) || null
+    if (!detail) return null
+    const portraitUrl = portraitUrlFromGeneDetail(detail)
+    if (!portraitUrl) return { detail, portraitSrc: "" }
+    const portraitSrc = await getUsablePortraitSrc(portraitUrl)
+    if (portraitSrc) onPortraitWarmSource(portraitSrc)
+    return { detail, portraitSrc }
   }
 
-  function schedulePointerApproachWarm(event) {
-    const pointerType = String(event?.pointerType || "mouse")
-    if (pointerType === "touch") return
-    const sample = {
-      x: Number(event?.clientX || 0),
-      y: Number(event?.clientY || 0),
-      at: Date.now(),
-      vector: lastPointerSample
-        ? {
-            x: Number(event?.clientX || 0) - lastPointerSample.x,
-            y: Number(event?.clientY || 0) - lastPointerSample.y,
-          }
-        : { x: 0, y: 0 },
-    }
-    lastPointerSample = sample
-    if (!initialized || !predictionEnabled()) return
-    if (sample.at - lastPointerPredictionAt < POINTER_PREDICTION_INTERVAL_MS) return
-    if (pointerWarmFrame) return
-    pointerWarmFrame = window.requestAnimationFrame(() => {
-      pointerWarmFrame = 0
-      lastPointerPredictionAt = Date.now()
-      const symbols = IconoPredictiveWarm.rankSpatialCandidates(
-        collectVisiblePredictionCandidates(),
-        sample,
-        sample.vector,
-        {
-          excludeSymbol: activeSymbol,
-          radius: predictionPolicy.pointerRadius,
-          limit: predictionPolicy.approachLimit,
-        },
-      )
-      const key = symbols.join("|")
-      if (!key || key === lastApproachPredictionKey) return
-      lastApproachPredictionKey = key
-      void warmPredictedHoverAssets(symbols)
-    })
+  const readingSession = IconoReadingSession.createReadingSession({
+    windowRef: window,
+    connection: window.navigator?.connection,
+    deviceMemory: window.navigator?.deviceMemory,
+    rootMarginPx: 960,
+    prepareSymbol: prepareReadingSessionSymbol,
+    onError: (error, symbol) => {
+      console.error(`[Iconoplasm] failed to prepare ${symbol} for this reading session:`, error)
+    },
+  })
+
+  function registerGeneAnchor(anchor) {
+    readingSession.registerAnchor(anchor)
   }
 
   async function getUsablePortraitSrc(portraitSrc) {
@@ -1683,6 +1381,67 @@
     // Fence: candidate generation now lives in a dedicated matcher module. Keep content.js acting
     // as the page adapter that applies matches, not the place where lexical rules accrete forever.
     rebuildGeneMatcher(effectiveBlocklist)
+    if (isPdfReaderDocument) {
+      globalThis.IconoplasmReaderBridge = Object.freeze({
+        findMatches(text) {
+          return geneMatcher.findMatches(String(text || ""))
+        },
+        getGene(rawSymbol) {
+          const symbol = String(rawSymbol || "")
+            .trim()
+            .toUpperCase()
+          return geneMap[symbol] || null
+        },
+        getHighlightMode() {
+          return highlightMode
+        },
+        getHighlightVisibility() {
+          return highlightVisibility
+        },
+        getHighlightPresentation(rawSymbol) {
+          const symbol = String(rawSymbol || "")
+            .trim()
+            .toUpperCase()
+          const gene = geneMap[symbol]
+          if (!gene) return null
+          const color = gene.c || PLACEHOLDER_COLOR
+          return Object.freeze({
+            color,
+            foreground: textColors(color).primary,
+            mode: highlightMode,
+            shape: highlightRuntime.getCanvasShape(highlightMode),
+          })
+        },
+        decorateAnchor(anchor, rawSymbol) {
+          const symbol = String(rawSymbol || "")
+            .trim()
+            .toUpperCase()
+          const gene = geneMap[symbol]
+          if (!anchor || !gene) return false
+          applyHighlightStyle(anchor, symbol, gene.c || PLACEHOLDER_COLOR)
+          return true
+        },
+        replaceAnchorGroup(groupId, anchors) {
+          readingSession.replaceAnchorGroup(groupId, anchors)
+        },
+        activateAnchor(anchor) {
+          if (!anchor || !anchor.dataset?.gene) return false
+          activateTooltipForAnchor(anchor)
+          return activeSymbol === anchor.dataset.gene
+        },
+        leaveAnchor(anchor, relatedTarget = null) {
+          if (!anchor) return
+          leaveTooltipAnchor(relatedTarget)
+        },
+        closeCard() {
+          hideTooltip()
+        },
+      })
+      void injectFonts()
+      initialized = true
+      window.dispatchEvent(new CustomEvent("iconoplasm-reader-bridge-ready"))
+      return
+    }
     pageScanner = IconoContentScanner.createPageScanner({
       documentRef: document,
       nodeFilter: NodeFilter,
@@ -1691,7 +1450,7 @@
       getGeneMap: () => geneMap,
       getMatcher: () => geneMatcher,
       applyHighlightStyle,
-      observeGeneElement,
+      registerGeneAnchor,
     })
 
     console.log("[Iconoplasm] Loaded", Object.keys(geneMap).length, "genes. Scanning...")
@@ -1699,19 +1458,18 @@
     scanPage(document.body)
     refreshHighlightStyles()
     scheduleDiscoveryBufferFlush()
-    void warmInitialHoverAssets().catch(() => null)
-    ensureVisibilityObserver()
-    window.addEventListener("scroll", scheduleViewportWarm, { passive: true })
-    window.addEventListener("resize", scheduleViewportWarm, { passive: true })
-    document.addEventListener("pointermove", schedulePointerApproachWarm, { passive: true })
-    window.navigator?.connection?.addEventListener?.("change", refreshPredictionPolicy)
+    window.navigator?.connection?.addEventListener?.("change", () => {
+      readingSession.updateConnection(window.navigator?.connection, window.navigator?.deviceMemory)
+    })
     window.addEventListener("resize", scheduleHighlightGeometryRefresh, { passive: true })
     window.addEventListener("focus", scheduleDiscoveryBufferFlush)
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
-        refreshPredictionPolicy()
+        readingSession.updateConnection(
+          window.navigator?.connection,
+          window.navigator?.deviceMemory,
+        )
         scheduleDiscoveryBufferFlush()
-        scheduleWarmVisibleGeneDetails()
       }
     })
     observeMutations()
@@ -1734,7 +1492,6 @@
       scanPage,
       onScanComplete() {
         scheduleHighlightGeometryRefresh()
-        scheduleWarmVisibleGeneDetails()
       },
     })
     mutationScanController.start()
@@ -1774,10 +1531,16 @@
     if (changes[HIGHLIGHT_MODE_KEY]) {
       highlightMode = highlightRuntime.setMode(changes[HIGHLIGHT_MODE_KEY].newValue)
       refreshHighlightStyles()
+      if (isPdfReaderDocument) {
+        window.dispatchEvent(new CustomEvent("iconoplasm-reader-highlight-mode-changed"))
+      }
     }
     if (changes[HIGHLIGHT_VISIBILITY_KEY]) {
       highlightVisibility = normalizeHighlightVisibility(changes[HIGHLIGHT_VISIBILITY_KEY].newValue)
       applyHighlightVisibility()
+      if (isPdfReaderDocument) {
+        window.dispatchEvent(new CustomEvent("iconoplasm-reader-highlight-visibility-changed"))
+      }
     }
     if (changes[CARD_VARIANT_KEY]) {
       cardVariant = normalizeCardVariant(changes[CARD_VARIANT_KEY].newValue)
@@ -2098,12 +1861,10 @@
     return { left, top, showBelow }
   }
 
-  function onMouseOver(e) {
-    const target = e.target.closest(".iconoplasm-gene")
-    if (!target) return
+  function activateTooltipForAnchor(target, relatedTarget = null) {
     const relatedGene =
-      e.relatedTarget && typeof e.relatedTarget.closest === "function"
-        ? e.relatedTarget.closest(".iconoplasm-gene")
+      relatedTarget && typeof relatedTarget.closest === "function"
+        ? relatedTarget.closest(".iconoplasm-gene")
         : null
     if (relatedGene === target) return
     cancelHideTimer()
@@ -2115,15 +1876,15 @@
       clearPendingDiscovery(activeSymbol)
     }
     activeSymbol = symbol
-    const previousNeighborPrewarmAbortController = neighborPrewarmAbortController
+    readingSession.prioritize(symbol)
     if (activeDetailAbortController) activeDetailAbortController.abort()
     activeDetailAbortController =
       typeof AbortController === "function" ? new AbortController() : null
     activeGeneSummary = Object.assign({ symbol }, gene)
     tooltipNavigationArmedAt = Date.now() + TOOLTIP_NAVIGATION_DELAY_MS
-    // Fetching the hovered symbol first promotes a matching speculative request
-    // before the prior predictor is cancelled. A successful prediction therefore
-    // keeps its immutable transfer instead of restarting from byte zero.
+    // Hover is a selector over the reading session's ready-card set. The
+    // foreground request below is only the recovery path for Data Saver, a
+    // transient preparation failure, or an immediate hover during startup.
     const hoverGeneDetailPromise = geneDetailCache.has(symbol)
       ? Promise.resolve(geneDetailCache.get(symbol) || null)
       : fetchGeneDetailForTooltip(symbol, activeDetailAbortController?.signal)
@@ -2131,16 +1892,6 @@
       const portraitSrc = portraitUrlFromGeneDetail(detail)
       return portraitSrc ? getUsablePortraitSrc(portraitSrc).catch(() => "") : ""
     })
-    previousNeighborPrewarmAbortController?.abort()
-    neighborPrewarmAbortController =
-      typeof AbortController === "function" ? new AbortController() : null
-    const neighborSymbols = predictionEnabled()
-      ? collectSpatialNeighborGeneSymbols(target, predictionPolicy.neighborLimit)
-      : []
-    void warmPredictedHoverAssets(neighborSymbols, {
-      signal: neighborPrewarmAbortController?.signal,
-    })
-
     const color = gene.c || PLACEHOLDER_COLOR
     const usesFrameRenderer = usesTooltipFrameRenderer()
 
@@ -2206,14 +1957,27 @@
     scheduleDiscoveryEncounter(symbol)
   }
 
+  function onMouseOver(e) {
+    const target = e.target.closest(".iconoplasm-gene")
+    if (target) activateTooltipForAnchor(target, e.relatedTarget)
+  }
+
+  function leaveTooltipAnchor(relatedTarget = null) {
+    if (
+      relatedTarget &&
+      typeof relatedTarget.closest === "function" &&
+      (relatedTarget.closest(".iconoplasm-tooltip") || relatedTarget.closest(".iconoplasm-gene"))
+    ) {
+      return
+    }
+    clearPendingDiscovery(activeSymbol)
+    scheduleHideTooltip()
+  }
+
   function onMouseOut(e) {
     const target = e.target.closest(".iconoplasm-gene")
     if (!target) return
-    const related = e.relatedTarget
-    if (related && (related.closest(".iconoplasm-tooltip") || related.closest(".iconoplasm-gene")))
-      return
-    clearPendingDiscovery(activeSymbol)
-    scheduleHideTooltip()
+    leaveTooltipAnchor(e.relatedTarget)
   }
 
   function onTooltipMouseLeave(e) {
@@ -2291,5 +2055,17 @@
   }
 
   // -- Go ------------------------------------------------------------
-  init()
+  function launchContentRuntime() {
+    init()
+    window.dispatchEvent(new CustomEvent("iconoplasm-content-runtime-loaded"))
+  }
+
+  if (
+    document.documentElement.dataset.iconoplasmGeckoPdfSource &&
+    !document.documentElement.dataset.iconoplasmPdfReader
+  ) {
+    window.addEventListener("iconoplasm-gecko-reader-mounted", launchContentRuntime, { once: true })
+  } else {
+    launchContentRuntime()
+  }
 })()

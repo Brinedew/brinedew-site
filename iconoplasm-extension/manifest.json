@@ -22,6 +22,12 @@
   "background": {
     "service_worker": "service-worker.js"
   },
+  "mime_types_handler": {
+    "application/pdf": {
+      "handler_url": "pdf-reader.html",
+      "can_embed": true
+    }
+  },
   "content_scripts": [
     {
       "matches": ["https://iconoplasm.brinedew.bio/*", "https://staging.brinedew.bio/*"],
@@ -44,8 +50,7 @@
         "content-portrait-cache.js",
         "content-detail-cache.js",
         "content-vote-bridge.js",
-        "content-visibility-scheduler.js",
-        "content-predictive-warm.js",
+        "content-reading-session.js",
         "highlight-runtime.js",
         "content.js"
       ],
