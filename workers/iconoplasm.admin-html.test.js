@@ -112,6 +112,19 @@ test("factory selector activates accepted immutable recipes without exposing int
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /candidate UUID|job UUID|#ID|@A/)
 })
 
+test("factory admin runs and displays a diagnostic matrix without leaving the panel", () => {
+  assert.match(ICONOPLASM_ADMIN_HTML, /Diagnostic Matrix/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="diagnostic-gene"/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="diagnostic-pipeline-options"/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="diagnostic-emulsion-input"/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="diagnostic-run"/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="diagnostic-matrix"/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Download PNG/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /\/diagnostic-matrices/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /\[30593, 255, 343, 21329, 24210\]/)
+  assert.match(ICONOPLASM_ADMIN_CSS, /object-fit:\s*contain/)
+})
+
 test("iconoplasm admin exposes individual generation requests for debugging", () => {
   assert.match(ICONOPLASM_ADMIN_HTML, /data-tab="requests">Requests<\/button>/)
   assert.match(ICONOPLASM_ADMIN_HTML, /id="panel-requests"/)
