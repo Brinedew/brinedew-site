@@ -12242,66 +12242,77 @@ async function fetchEssenceStateRows(env, requestedSymbols = null) {
   }
 
   const out = []
-  for (const row of results) {
-    const rawEssence = {
-      gene_symbol: row?.gene_symbol || "",
-      full_name: row?.full_name || "",
-      weight_kg: row?.weight_kg,
-      molecular_weight_kda: row?.molecular_weight_kda,
-      height_cm: row?.height_cm,
-      sex: row?.sex || "",
-      age: row?.age || "",
-      age_years: row?.age_years,
-      first_publication_year: row?.first_publication_year,
-      faction: row?.faction || "",
-      skin_hex: row?.skin_hex || "",
-      skin_name: row?.skin_name || "",
-      tissue_tau: row?.tissue_tau,
-      primary_tissue: row?.primary_tissue,
-      loeuf: row?.loeuf,
-      constraint_percentile: row?.constraint_percentile,
-      leakage_percent: row?.leakage_percent,
-      leakage_hits: row?.leakage_hits,
-      leakage_total: row?.leakage_total,
-      aesthetics: (() => {
-        try {
-          const parsed = JSON.parse(String(row?.aesthetics_json || "[]"))
-          return Array.isArray(parsed) ? parsed : []
-        } catch {
-          return []
+  // WebCrypto hashing is asynchronous. Awaiting 19,023 digests serially made
+  // the admin sync planner sit on one request for minutes even after D1 had
+  // returned the rows. Bound concurrency so a full-catalog state proof uses
+  // parallel digest work without creating an unbounded promise fan-out.
+  const hashBatchSize = 128
+  for (let start = 0; start < results.length; start += hashBatchSize) {
+    const batch = results.slice(start, start + hashBatchSize)
+    const hashedRows = await Promise.all(
+      batch.map(async (row) => {
+        const rawEssence = {
+          gene_symbol: row?.gene_symbol || "",
+          full_name: row?.full_name || "",
+          weight_kg: row?.weight_kg,
+          molecular_weight_kda: row?.molecular_weight_kda,
+          height_cm: row?.height_cm,
+          sex: row?.sex || "",
+          age: row?.age || "",
+          age_years: row?.age_years,
+          first_publication_year: row?.first_publication_year,
+          faction: row?.faction || "",
+          skin_hex: row?.skin_hex || "",
+          skin_name: row?.skin_name || "",
+          tissue_tau: row?.tissue_tau,
+          primary_tissue: row?.primary_tissue,
+          loeuf: row?.loeuf,
+          constraint_percentile: row?.constraint_percentile,
+          leakage_percent: row?.leakage_percent,
+          leakage_hits: row?.leakage_hits,
+          leakage_total: row?.leakage_total,
+          aesthetics: (() => {
+            try {
+              const parsed = JSON.parse(String(row?.aesthetics_json || "[]"))
+              return Array.isArray(parsed) ? parsed : []
+            } catch {
+              return []
+            }
+          })(),
+          aesthetics_origin: (() => {
+            try {
+              const parsed = JSON.parse(String(row?.aesthetics_origin_json || "[]"))
+              return Array.isArray(parsed) ? parsed : []
+            } catch {
+              return []
+            }
+          })(),
+          politics_origin: (() => {
+            try {
+              const parsed = JSON.parse(String(row?.politics_origin_json || "[]"))
+              return Array.isArray(parsed) ? parsed : []
+            } catch {
+              return []
+            }
+          })(),
+          family_surname: row?.family_surname || "",
+          family_members: row?.family_members,
+          family_feature: row?.family_feature || "",
+          manifestation: row?.manifestation || "",
+          sample_label: row?.sample_label || "",
+          sample_number: row?.sample_number,
+          sample_text_hash: row?.sample_text_hash || "",
         }
-      })(),
-      aesthetics_origin: (() => {
-        try {
-          const parsed = JSON.parse(String(row?.aesthetics_origin_json || "[]"))
-          return Array.isArray(parsed) ? parsed : []
-        } catch {
-          return []
+        const symbol = normalizeSymbol(row?.gene_symbol || "")
+        if (!symbol) return null
+        return {
+          symbol,
+          hash: await hashEssencePayload(rawEssence, symbol),
+          updated_at: row?.updated_at ? String(row.updated_at) : null,
         }
-      })(),
-      politics_origin: (() => {
-        try {
-          const parsed = JSON.parse(String(row?.politics_origin_json || "[]"))
-          return Array.isArray(parsed) ? parsed : []
-        } catch {
-          return []
-        }
-      })(),
-      family_surname: row?.family_surname || "",
-      family_members: row?.family_members,
-      family_feature: row?.family_feature || "",
-      manifestation: row?.manifestation || "",
-      sample_label: row?.sample_label || "",
-      sample_number: row?.sample_number,
-      sample_text_hash: row?.sample_text_hash || "",
-    }
-    const symbol = normalizeSymbol(row?.gene_symbol || "")
-    if (!symbol) continue
-    out.push({
-      symbol,
-      hash: await hashEssencePayload(rawEssence, symbol),
-      updated_at: row?.updated_at ? String(row.updated_at) : null,
-    })
+      }),
+    )
+    out.push(...hashedRows.filter(Boolean))
   }
   return out
 }
