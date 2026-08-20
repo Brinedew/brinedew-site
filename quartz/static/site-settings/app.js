@@ -326,15 +326,18 @@ import {
     var text = String(emulsion.text || "")
     var maxLength = Number(emulsion.max_length || 140) || 140
     var emulsionId = String(emulsion.id || "")
+    var emulsionSlot = Number(emulsion.slot || 0) || 0
+    var emulsionLabel = emulsionSlot > 0 ? "Emulsion " + String(emulsionSlot) : "Saved emulsion"
     var history = Array.isArray(userEmulsionState.history) ? userEmulsionState.history : []
     var historyOptions = '<option value="">Current draft</option>'
     for (var i = 0; i < history.length; i++) {
       var version = history[i] || {}
       var versionId = String(version.id || "")
       if (!versionId) continue
+      var versionSlot = Number(version.slot || 0) || 0
       historyOptions +=
         '<option value="' +
-        esc(versionId) +
+        esc(versionSlot > 0 ? "Emulsion " + String(versionSlot) : "Saved revision") +
         '"' +
         (versionId === emulsionId ? " selected" : "") +
         ">" +
@@ -349,7 +352,7 @@ import {
         ? '<div class="site-settings-plain-value">' + esc(userEmulsionState.error) + "</div>"
         : "") +
       '<label class="site-settings-field"><span>Current</span><div class="site-settings-plain-value" id="site-settings-user-emulsion-id">' +
-      esc(emulsionId) +
+      esc(emulsionLabel) +
       "</div></label>" +
       '<label class="site-settings-field"><span>Load version</span><select class="site-settings-select" id="site-settings-user-emulsion-version">' +
       historyOptions +

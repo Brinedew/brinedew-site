@@ -102,6 +102,16 @@ test("iconoplasm admin exposes the observability snapshot as a first-class tab",
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /refreshOverview\(\)/)
 })
 
+test("factory selector activates accepted immutable recipes without exposing internal IDs", () => {
+  assert.match(ICONOPLASM_ADMIN_HTML, /data-tab="factory">Factory<\/button>/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="panel-factory"/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="factory-pipeline"/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="factory-vision"/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Activate for future jobs/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Queued jobs are unchanged/)
+  assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /candidate UUID|job UUID|#ID|@A/)
+})
+
 test("iconoplasm admin exposes individual generation requests for debugging", () => {
   assert.match(ICONOPLASM_ADMIN_HTML, /data-tab="requests">Requests<\/button>/)
   assert.match(ICONOPLASM_ADMIN_HTML, /id="panel-requests"/)

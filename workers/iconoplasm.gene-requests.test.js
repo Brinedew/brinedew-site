@@ -897,7 +897,8 @@ test("authenticated request options include shared user emulsions with preview t
   assert.equal(response.status, 200)
   assert.ok(userOption)
   assert.equal(userOption.emulsion_id, "LOWEREN-2")
-  assert.equal(userOption.label, "LOWEREN-2")
+  assert.equal(userOption.label, "Saved emulsion")
+  assert.notEqual(userOption.label, userOption.emulsion_id)
   assert.equal(userOption.owner_username, "loweren")
   assert.equal(userOption.preview_assets.length, 1)
   assert.match(
