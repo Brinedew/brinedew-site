@@ -1639,12 +1639,64 @@
     }, 5000)
   }
 
+  function newDiagnosticRunId() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function")
+      return "diag-" + window.crypto.randomUUID()
+    var bytes = new Uint8Array(16)
+    window.crypto.getRandomValues(bytes)
+    bytes[6] = (bytes[6] & 15) | 64
+    bytes[8] = (bytes[8] & 63) | 128
+    var hex = Array.prototype.map
+      .call(bytes, function (value) {
+        return value.toString(16).padStart(2, "0")
+      })
+      .join("")
+    return (
+      "diag-" +
+      hex.slice(0, 8) +
+      "-" +
+      hex.slice(8, 12) +
+      "-" +
+      hex.slice(12, 16) +
+      "-" +
+      hex.slice(16, 20) +
+      "-" +
+      hex.slice(20)
+    )
+  }
+
+  function waitForDiagnosticRecovery(ms) {
+    return new Promise(function (resolve) {
+      window.setTimeout(resolve, ms)
+    })
+  }
+
+  async function recoverDiagnosticRun(runId) {
+    for (var attempt = 0; attempt < 10; attempt += 1) {
+      await waitForDiagnosticRecovery(1000)
+      try {
+        var payload = await apiJson("/diagnostic-matrices?id=" + encodeURIComponent(runId), {
+          method: "GET",
+        })
+        if (
+          payload &&
+          payload.run &&
+          Number(payload.run.cell_count || 0) === Number(payload.run.counts?.total || 0)
+        )
+          return payload
+      } catch {}
+    }
+    return null
+  }
+
   async function refreshDiagnosticMatrix(options) {
     var opts = options || {}
     if (!els.diagnosticMatrix) return
     if (!opts.quiet) setDiagnosticStatus("Loading latest diagnostic…", "")
     try {
-      var id = String(opts.id || (state.diagnosticRun && state.diagnosticRun.id) || "").trim()
+      var id = opts.latest
+        ? ""
+        : String(opts.id || (state.diagnosticRun && state.diagnosticRun.id) || "").trim()
       var payload = await apiJson(
         "/diagnostic-matrices" + (id ? "?id=" + encodeURIComponent(id) : ""),
         { method: "GET" },
@@ -1680,21 +1732,37 @@
     state.diagnosticBusy = true
     renderDiagnosticBuilder()
     setDiagnosticStatus("Queueing " + count + " immutable cells…", "")
+    var runId = newDiagnosticRunId()
+    var requestOptions = {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        run_id: runId,
+        gene_symbol: gene,
+        pipeline_codes: state.diagnosticSelectedPipelines,
+        emulsion_slots: state.diagnosticEmulsionSlots,
+        vision_revision:
+          Number.parseInt(String((els.factoryVision && els.factoryVision.value) || "1"), 10) || 1,
+        prompt_body_mode: String(
+          (els.diagnosticPromptMode && els.diagnosticPromptMode.value) || "taggerizer_prompt",
+        ),
+      }),
+    }
     try {
-      var payload = await apiJson("/diagnostic-matrices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          gene_symbol: gene,
-          pipeline_codes: state.diagnosticSelectedPipelines,
-          emulsion_slots: state.diagnosticEmulsionSlots,
-          vision_revision:
-            Number.parseInt(String((els.factoryVision && els.factoryVision.value) || "1"), 10) || 1,
-          prompt_body_mode: String(
-            (els.diagnosticPromptMode && els.diagnosticPromptMode.value) || "taggerizer_prompt",
-          ),
-        }),
-      })
+      var payload
+      try {
+        payload = await apiJson("/diagnostic-matrices", requestOptions)
+      } catch (err) {
+        if (!err || err.code !== "TIMEOUT") throw err
+        setDiagnosticStatus("Finishing the complete " + count + "-cell matrix…", "")
+        payload = await recoverDiagnosticRun(runId)
+        if (!payload) {
+          payload = await apiJson(
+            "/diagnostic-matrices",
+            Object.assign({}, requestOptions, { timeoutMs: 60000 }),
+          )
+        }
+      }
       state.diagnosticRun = payload.run || null
       persistDiagnosticDefaults()
       renderDiagnosticMatrix()
@@ -9743,7 +9811,7 @@
       els.diagnosticRunButton.addEventListener("click", startDiagnosticMatrix)
     if (els.diagnosticRefresh)
       els.diagnosticRefresh.addEventListener("click", function () {
-        refreshDiagnosticMatrix({ quiet: false })
+        refreshDiagnosticMatrix({ quiet: false, latest: true })
       })
     if (els.diagnosticDownload)
       els.diagnosticDownload.addEventListener("click", downloadDiagnosticPng)

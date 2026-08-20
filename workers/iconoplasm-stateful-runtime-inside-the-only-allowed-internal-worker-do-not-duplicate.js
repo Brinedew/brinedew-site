@@ -5425,6 +5425,11 @@ function normalizeDiagnosticEmulsionSlots(raw) {
   )
 }
 
+function normalizeDiagnosticRunId(raw) {
+  const value = sanitizeText(raw || "", 80) || ""
+  return /^diag-[a-f0-9-]{36}$/i.test(value) ? value.toLowerCase() : ""
+}
+
 async function diagnosticMatrixRunPayload(env, url, runId = "") {
   const requestedId = sanitizeText(runId || "", 80) || ""
   const run = requestedId
@@ -5533,6 +5538,7 @@ async function createDiagnosticMatrixRun(
     promptBodyMode,
     createdBy,
     createdUsername,
+    clientRunId,
   } = {},
 ) {
   const gene = normalizeSymbol(geneSymbol || "") || ""
@@ -5557,83 +5563,109 @@ async function createDiagnosticMatrixRun(
   const cellCount = pipelines.length * emulsions.length
   if (cellCount > 100) return { ok: false, error: "A diagnostic matrix is limited to 100 cells." }
   const actor = normalizeUserId(createdBy || "") || "admin"
-  const runId = `diag-${crypto.randomUUID()}`
+  const requestedRunId = clientRunId ? normalizeDiagnosticRunId(clientRunId) : ""
+  if (clientRunId && !requestedRunId) {
+    return { ok: false, error: "Invalid diagnostic run identity." }
+  }
+  const runId = requestedRunId || `diag-${crypto.randomUUID()}`
   const promptMode = normalizeCandidatePromptBodyMode(promptBodyMode)
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_diagnostic_matrix_runs (
-       id, gene_symbol, vision_revision, pipeline_codes_json,
-       emulsion_slots_json, cell_count, prompt_body_mode, created_by
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  const pipelineJson = JSON.stringify(pipelines)
+  const emulsionJson = JSON.stringify(emulsions)
+  const existing = await env.ICONOPLASM_DB.prepare(
+    `SELECT gene_symbol, vision_revision, pipeline_codes_json, emulsion_slots_json,
+            cell_count, prompt_body_mode, created_by
+     FROM icono_diagnostic_matrix_runs
+     WHERE id = ?
+     LIMIT 1`,
   )
-    .bind(
-      runId,
-      gene,
-      vision,
-      JSON.stringify(pipelines),
-      JSON.stringify(emulsions),
-      cellCount,
-      promptMode,
-      actor,
-    )
-    .run()
-  const createdRequestIds = []
-  try {
-    let cellIndex = 0
-    for (const pipeline of pipelines) {
-      for (const slot of emulsions) {
-        const request = await createGenerationRequest(env, {
-          geneSymbol: gene,
-          requesterUserId: actor,
-          requesterUsername: sanitizeText(createdUsername || "", 255) || "admin",
-          requestMode: "specific",
-          requestedVisionId: `anima-v1-${slot}`,
-          requestKind: "new_candidate",
-          sourceGeneSymbol: gene,
-          clientRequestId: `${runId}:${cellIndex}`,
-          requestBatchId: runId,
-          requestBatchSize: cellCount,
-          promptBodyMode: promptMode,
-          factoryPipelineCode: pipeline,
-          factoryVisionRevision: vision,
-          requestedEmulsionSlot: slot,
-          requestOrigin: "diagnostic_matrix",
-          diagnosticRunId: runId,
-        })
-        const requestId = optionalInt(request?.request?.id)
-        if (!request?.ok || !requestId) {
-          throw new Error(String(request?.error || "A diagnostic cell could not be queued."))
-        }
-        createdRequestIds.push(requestId)
-        await env.ICONOPLASM_DB.prepare(
-          `INSERT INTO icono_diagnostic_matrix_cells (
-             run_id, pipeline_code, vision_revision, emulsion_slot, generation_request_id
-           ) VALUES (?, ?, ?, ?, ?)`,
-        )
-          .bind(runId, pipeline, vision, slot, requestId)
-          .run()
-        cellIndex += 1
-      }
-    }
-    await env.ICONOPLASM_DB.prepare(
-      `UPDATE icono_diagnostic_matrix_runs SET queue_state = 'queued' WHERE id = ?`,
-    )
-      .bind(runId)
-      .run()
-  } catch (error) {
-    await env.ICONOPLASM_DB.prepare(`DELETE FROM icono_diagnostic_matrix_runs WHERE id = ?`)
-      .bind(runId)
-      .run()
-    if (createdRequestIds.length) {
-      await env.ICONOPLASM_DB.prepare(
-        `DELETE FROM icono_generation_requests
-         WHERE diagnostic_run_id = ? AND status = 'open'`,
+    .bind(runId)
+    .first()
+  if (existing) {
+    const matches =
+      normalizeSymbol(existing.gene_symbol || "") === gene &&
+      optionalInt(existing.vision_revision) === vision &&
+      String(existing.pipeline_codes_json || "") === pipelineJson &&
+      String(existing.emulsion_slots_json || "") === emulsionJson &&
+      optionalInt(existing.cell_count) === cellCount &&
+      normalizeCandidatePromptBodyMode(existing.prompt_body_mode) === promptMode &&
+      normalizeUserId(existing.created_by || "") === actor
+    if (!matches) return { ok: false, error: "That diagnostic run identity is already in use." }
+    return diagnosticMatrixRunPayload(env, url, runId)
+  }
+
+  const username = sanitizeText(createdUsername || "", 255) || "admin"
+  const statements = [
+    env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_diagnostic_matrix_runs (
+         id, gene_symbol, vision_revision, pipeline_codes_json,
+         emulsion_slots_json, cell_count, prompt_body_mode, created_by
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(runId, gene, vision, pipelineJson, emulsionJson, cellCount, promptMode, actor),
+  ]
+  let cellIndex = 0
+  for (const pipeline of pipelines) {
+    for (const slot of emulsions) {
+      statements.push(
+        env.ICONOPLASM_DB.prepare(
+          `INSERT INTO icono_generation_requests (
+             gene_symbol, requester_user_id, requester_username, request_kind,
+             request_prompt, source_gene_symbol, source_asset_sha256, request_mode,
+             requested_vision_id, requested_emulsion_slot, client_request_id,
+             request_batch_id, request_batch_size, prompt_body_mode, seed_mode,
+             factory_pipeline_code, factory_vision_revision, request_origin,
+             diagnostic_run_id, status, updated_at
+           ) VALUES (?, ?, ?, 'new_candidate', '', ?, '', 'specific', ?, ?, ?, ?, ?, ?,
+                     'random', ?, ?, 'diagnostic_matrix', ?, 'open', CURRENT_TIMESTAMP)`,
+        ).bind(
+          gene,
+          actor,
+          username,
+          gene,
+          `anima-v1-${slot}`,
+          slot,
+          `${runId}:${cellIndex}`,
+          runId,
+          cellCount,
+          promptMode,
+          pipeline,
+          vision,
+          runId,
+        ),
       )
-        .bind(runId)
-        .run()
+      cellIndex += 1
     }
+  }
+  statements.push(
+    env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_diagnostic_matrix_cells (
+         run_id, pipeline_code, vision_revision, emulsion_slot, generation_request_id
+       )
+       SELECT diagnostic_run_id, factory_pipeline_code, factory_vision_revision,
+              requested_emulsion_slot, id
+       FROM icono_generation_requests
+       WHERE diagnostic_run_id = ?`,
+    ).bind(runId),
+    env.ICONOPLASM_DB.prepare(
+      `UPDATE icono_diagnostic_matrix_runs
+       SET queue_state = 'queued'
+       WHERE id = ?
+         AND (SELECT COUNT(*) FROM icono_diagnostic_matrix_cells WHERE run_id = ?) = ?`,
+    ).bind(runId, runId, cellCount),
+  )
+  try {
+    const results = await env.ICONOPLASM_DB.batch(statements)
+    const readyResult = Array.isArray(results) ? results.at(-1) : null
+    if (Number(readyResult?.meta?.changes || 0) !== 1) {
+      throw new Error("The complete diagnostic matrix was not committed.")
+    }
+  } catch (error) {
     return { ok: false, error: String(error?.message || error || "Diagnostic creation failed.") }
   }
   return diagnosticMatrixRunPayload(env, url, runId)
+}
+
+export async function createDiagnosticMatrixRunForTest(env, url, options) {
+  return createDiagnosticMatrixRun(env, url, options)
 }
 
 async function saveImageEditPromptTemplate(env, { kind, promptTemplate, updatedBy }) {
@@ -29341,6 +29373,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         emulsionSlots: p?.emulsion_slots,
         visionRevision: p?.vision_revision,
         promptBodyMode: p?.prompt_body_mode,
+        clientRunId: p?.run_id,
         createdBy: sessionUser?.user_id || "admin-token",
         createdUsername: sessionUser?.username || "admin",
       })
