@@ -9,8 +9,8 @@
     "./components": "./dist/index.js"
   },
   "dependencies": {
-    "@quartz-community/types": "github:quartz-community/types#d342893db8240099cfd9d4499996333f1ca636b4",
-    "@quartz-community/utils": "github:quartz-community/utils#ff02040c07d0dcb2075994b2acd7cfec710326fa",
+    "@quartz-community/types": "0.2.1",
+    "@quartz-community/utils": "0.1.1",
     "hsluv": "^1.0.2",
     "preact": "^10.28.2"
   },
