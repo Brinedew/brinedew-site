@@ -44,6 +44,9 @@
     imageEditPrompts: [],
     imageEditPromptPrefix: null,
     imageEditPromptSuffix: null,
+    factoryRecipe: null,
+    factoryLoaded: false,
+    factoryBusy: false,
     selectedPromptKind: "",
     promptsLoaded: false,
     promptMaxLength: 2400,
@@ -107,6 +110,7 @@
     tabs: document.getElementById("admin-tabs"),
     panels: {
       overview: document.getElementById("panel-overview"),
+      factory: document.getElementById("panel-factory"),
       costs: document.getElementById("panel-costs"),
       requests: document.getElementById("panel-requests"),
       prompts: document.getElementById("panel-prompts"),
@@ -163,6 +167,13 @@
     requestsList: document.getElementById("requests-list"),
     requestsDetail: document.getElementById("requests-detail"),
     promptsRefresh: document.getElementById("prompts-refresh"),
+    factoryPipeline: document.getElementById("factory-pipeline"),
+    factoryVision: document.getElementById("factory-vision"),
+    factoryActiveCode: document.getElementById("factory-active-code"),
+    factoryRecipeDetail: document.getElementById("factory-recipe-detail"),
+    factorySave: document.getElementById("factory-save"),
+    factoryRefresh: document.getElementById("factory-refresh"),
+    factoryStatus: document.getElementById("factory-status"),
     promptTemplateList: document.getElementById("prompt-template-list"),
     promptTemplateEditor: document.getElementById("prompt-template-editor"),
     promptTemplateHeading: document.getElementById("prompt-template-heading"),
@@ -250,6 +261,7 @@
   var activeTabReadController = null
   var ADMIN_TAB_RENDER_ROOTS = {
     overview: ["overview-metrics", "overview-coverage", "attention-list", "overview-events"],
+    factory: ["factory-recipe-detail"],
     costs: [
       "cost-context-strip",
       "cost-metrics",
@@ -321,6 +333,11 @@
     if (tab === "costs") {
       if (state.costReport) renderCostUsage(state.costReport)
       else refreshCostUsage()
+      return
+    }
+    if (tab === "factory") {
+      if (state.factoryLoaded) renderFactoryRecipe()
+      else refreshFactoryRecipe()
       return
     }
     if (tab === "requests") {
@@ -1199,6 +1216,108 @@
         : ""
     }
     if (els.promptSuffixSave) els.promptSuffixSave.disabled = !suffix
+  }
+
+  function setFactoryStatus(message, tone) {
+    if (!els.factoryStatus) return
+    els.factoryStatus.textContent = String(message || "")
+    els.factoryStatus.className = "small" + (tone ? " text-" + tone : "")
+  }
+
+  function selectedFactoryRecipe() {
+    return {
+      pipeline: String((els.factoryPipeline && els.factoryPipeline.value) || "").trim(),
+      vision: Number.parseInt(String((els.factoryVision && els.factoryVision.value) || "0"), 10) || 0,
+    }
+  }
+
+  function renderFactoryRecipe() {
+    if (state.activeTab !== "factory" || !state.factoryRecipe) return
+    var data = state.factoryRecipe
+    var active = data.active_recipe || { pipeline: "A", vision: 1 }
+    var pipelines = Array.isArray(data.pipelines) ? data.pipelines : []
+    var visions = Array.isArray(data.visions) ? data.visions : []
+    if (els.factoryPipeline) {
+      els.factoryPipeline.innerHTML = pipelines
+        .map(function (item) {
+          return '<option value="' + esc(item.code) + '">' + esc(item.code + " · " + item.label) + "</option>"
+        })
+        .join("")
+      els.factoryPipeline.value = String(active.pipeline || "A")
+    }
+    if (els.factoryVision) {
+      els.factoryVision.innerHTML = visions
+        .map(function (item) {
+          return '<option value="' + esc(String(item.revision)) + '">' + esc(item.label) + "</option>"
+        })
+        .join("")
+      els.factoryVision.value = String(active.vision || 1)
+    }
+    renderFactoryRecipeSelection()
+    if (els.factorySave) els.factorySave.disabled = state.factoryBusy
+    if (els.factoryRefresh) els.factoryRefresh.disabled = state.factoryBusy
+  }
+
+  function renderFactoryRecipeSelection() {
+    if (!state.factoryRecipe) return
+    var selected = selectedFactoryRecipe()
+    var pipeline = (state.factoryRecipe.pipelines || []).find(function (item) {
+      return item.code === selected.pipeline
+    })
+    var vision = (state.factoryRecipe.visions || []).find(function (item) {
+      return Number(item.revision) === selected.vision
+    })
+    var code = (selected.pipeline || "—") + (selected.vision || "—")
+    if (els.factoryActiveCode) els.factoryActiveCode.textContent = code
+    if (els.factoryRecipeDetail) {
+      els.factoryRecipeDetail.innerHTML = pipeline && vision
+        ? [
+            '<div><span>Model</span><strong>' + esc(pipeline.model || "") + "</strong></div>",
+            '<div><span>Sampling</span><strong>' + esc(String(pipeline.steps) + " steps · CFG " + String(pipeline.cfg) + " · " + pipeline.sampler) + "</strong></div>",
+            '<div><span>Vision</span><strong>' + esc(vision.label + " · " + vision.source_id) + "</strong></div>",
+          ].join("")
+        : ""
+    }
+  }
+
+  async function refreshFactoryRecipe() {
+    if (!els.factoryPipeline) return
+    state.factoryBusy = true
+    setFactoryStatus("Loading accepted recipes…", "")
+    try {
+      state.factoryRecipe = await apiJson("/factory-recipe", { method: "GET" })
+      state.factoryLoaded = true
+      setFactoryStatus("", "")
+      renderFactoryRecipe()
+    } catch (err) {
+      if (isRequestCanceled(err)) return
+      setFactoryStatus(requestErrorMessage(err, "Factory recipe failed to load."), "danger")
+    } finally {
+      state.factoryBusy = false
+      renderFactoryRecipe()
+    }
+  }
+
+  async function saveFactoryRecipe() {
+    var selected = selectedFactoryRecipe()
+    state.factoryBusy = true
+    renderFactoryRecipe()
+    setFactoryStatus("Activating " + selected.pipeline + selected.vision + " for future jobs…", "")
+    try {
+      state.factoryRecipe = await apiJson("/factory-recipe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(selected),
+      })
+      state.factoryLoaded = true
+      renderFactoryRecipe()
+      setFactoryStatus("Future jobs now use " + selected.pipeline + selected.vision + ". Queued jobs are unchanged.", "success")
+    } catch (err) {
+      setFactoryStatus(requestErrorMessage(err, "Factory recipe was not changed."), "danger")
+    } finally {
+      state.factoryBusy = false
+      renderFactoryRecipe()
+    }
   }
 
   function renderImageEditPrompts() {
@@ -9061,6 +9180,10 @@
     if (els.promptsRefresh) {
       els.promptsRefresh.addEventListener("click", refreshImageEditPrompts)
     }
+    if (els.factoryRefresh) els.factoryRefresh.addEventListener("click", refreshFactoryRecipe)
+    if (els.factorySave) els.factorySave.addEventListener("click", saveFactoryRecipe)
+    if (els.factoryPipeline) els.factoryPipeline.addEventListener("change", renderFactoryRecipeSelection)
+    if (els.factoryVision) els.factoryVision.addEventListener("change", renderFactoryRecipeSelection)
     if (els.promptTemplateList) {
       els.promptTemplateList.addEventListener("click", function (ev) {
         var row = ev.target.closest("[data-prompt-kind]")
