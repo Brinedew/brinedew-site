@@ -100,13 +100,13 @@ test("catalog upsert owns its write boundary and can defer read models", async (
         prepare(sql) {
           return {
             bind(...args) {
-              return {
-                async run() {
-                  writes.push({ sql, args })
-                },
-              }
+              return { sql, args }
             },
           }
+        },
+        async batch(statements, options) {
+          assert.deepEqual(options, { maxRowsWritten: 4 })
+          writes.push(...statements)
         },
       },
     },
@@ -144,6 +144,9 @@ test("catalog upsert rejects request shapes that are too heavy for one Worker re
               }
             },
           }
+        },
+        async batch() {
+          writes += 1
         },
       },
     },

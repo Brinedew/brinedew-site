@@ -2216,10 +2216,41 @@ async function iconoplasmD1DailyBudgetRecordUsage(state, { rowsRead = 0, rowsWri
   return projectedSnapshot
 }
 
-async function assertIconoplasmD1DailyBudgetStillAvailable(state) {
+async function assertIconoplasmD1DailyBudgetStillAvailable(state, { maxRowsWritten = 0 } = {}) {
   const snapshot = iconoplasmD1DailyBudgetProjectedSnapshot(state) || state?.lastSnapshot || null
   if (state?.exhausted || snapshot?.exhausted) {
     throw new IconoplasmD1DailyBudgetExceededError(snapshot)
+  }
+  const reservedRowsWritten = Math.max(0, Math.trunc(Number(maxRowsWritten || 0) || 0))
+  if (reservedRowsWritten <= 0) return
+
+  const hardRemaining = [
+    ["rows_written_daily_smart", snapshot?.rows_written_daily_remaining],
+    ["rows_written_monthly", snapshot?.rows_written_monthly_remaining],
+  ]
+  for (const [exhaustedBy, rawRemaining] of hardRemaining) {
+    if (rawRemaining === null || rawRemaining === undefined) continue
+    const remaining = Math.max(0, Number(rawRemaining || 0) || 0)
+    if (reservedRowsWritten <= remaining) continue
+    throw new IconoplasmD1DailyBudgetExceededError({
+      ...(snapshot || {}),
+      exhausted: true,
+      exhausted_by: exhaustedBy,
+    })
+  }
+
+  if (state?.mutationLimiter?.active) {
+    const budgetStatus = iconoplasmMutationLimiterBudgetStatus(state, snapshot)
+    const targetRemaining = budgetStatus.rows_written_target_remaining
+    if (targetRemaining !== null && reservedRowsWritten > targetRemaining) {
+      throw new IconoplasmAdminMutationLimiterActiveError(
+        iconoplasmAdminMutationLimiterDetail(state, {
+          stage: "in_flight",
+          reason: "reserved_batch_would_cross_rows_written_target_cap",
+          reservedRowsWritten,
+        }),
+      )
+    }
   }
 }
 
@@ -2276,8 +2307,8 @@ function wrapIconoplasmD1DatabaseWithDailyBudgetKillSwitch(db, state) {
     prepare(sql) {
       return wrapIconoplasmD1PreparedStatementWithDailyBudgetKillSwitch(db.prepare(sql), state)
     },
-    async batch(statements) {
-      await assertIconoplasmD1DailyBudgetStillAvailable(state)
+    async batch(statements, { maxRowsWritten = 0 } = {}) {
+      await assertIconoplasmD1DailyBudgetStillAvailable(state, { maxRowsWritten })
       const rawStatements = Array.isArray(statements)
         ? statements.map(function (statement) {
             return statement?.[RAW_ICONOPLASM_D1_PREPARED_STATEMENT_DO_NOT_DUPLICATE] || statement
