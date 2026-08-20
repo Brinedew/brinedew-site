@@ -522,16 +522,19 @@ class FakeStatement {
         requested_vision_id: this.args[5],
         requested_emulsion_id: this.args[6],
         requested_emulsion_label: this.args[7],
-        gene_full_name: this.args[8],
-        manifestation: this.args[9],
-        sample_label: this.args[10],
-        sample_number: this.args[11],
-        sample_text_hash: this.args[12],
-        reference_assets_json: this.args[13],
-        prompt_body_mode: this.args[14],
-        community_comments_snapshot: this.args[15],
-        prompt: this.args[16],
-        status: this.args[17],
+        requested_emulsion_slot: this.args[8],
+        gene_full_name: this.args[9],
+        manifestation: this.args[10],
+        sample_label: this.args[11],
+        sample_number: this.args[12],
+        sample_text_hash: this.args[13],
+        reference_assets_json: this.args[14],
+        prompt_body_mode: this.args[15],
+        community_comments_snapshot: this.args[16],
+        prompt: this.args[17],
+        factory_pipeline_code: this.args[18],
+        factory_vision_revision: this.args[19],
+        status: this.args[20],
         created_at: "2026-05-16T00:00:00.000Z",
         updated_at: "2026-05-16T00:00:00.000Z",
       }
@@ -588,20 +591,21 @@ class FakeStatement {
         r2_key_thumb: this.args[4],
         vision_id: this.args[9],
         emulsion_id: isImageEdit ? (this.args[10] ?? null) : this.args[10],
+        public_emulsion_code: this.args[11] ?? null,
         sample_label: isImageEdit
-          ? (this.args[11] ?? null)
-          : this.sql.includes("'image-gen'")
-            ? (this.args[11] ?? null)
-            : null,
-        sample_number: isImageEdit
           ? (this.args[12] ?? null)
           : this.sql.includes("'image-gen'")
             ? (this.args[12] ?? null)
             : null,
-        sample_text_hash: isImageEdit
+        sample_number: isImageEdit
           ? (this.args[13] ?? null)
           : this.sql.includes("'image-gen'")
             ? (this.args[13] ?? null)
+            : null,
+        sample_text_hash: isImageEdit
+          ? (this.args[14] ?? null)
+          : this.sql.includes("'image-gen'")
+            ? (this.args[14] ?? null)
             : null,
         created_by: this.args[this.args.length - 1],
       }

@@ -15,6 +15,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
     <nav id="admin-tabs" aria-label="Admin sections" role="tablist">
       <button class="tab-btn active" id="admin-tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview" tabindex="0" data-tab="overview">Home</button>
+      <button class="tab-btn" id="admin-tab-factory" role="tab" aria-selected="false" aria-controls="panel-factory" tabindex="-1" data-tab="factory">Factory</button>
       <button class="tab-btn" id="admin-tab-costs" role="tab" aria-selected="false" aria-controls="panel-costs" tabindex="-1" data-tab="costs">Observability</button>
       <button class="tab-btn" id="admin-tab-requests" role="tab" aria-selected="false" aria-controls="panel-requests" tabindex="-1" data-tab="requests">Requests</button>
       <button class="tab-btn" id="admin-tab-prompts" role="tab" aria-selected="false" aria-controls="panel-prompts" tabindex="-1" data-tab="prompts">Prompts</button>
@@ -50,6 +51,33 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <div class="list" id="overview-events"></div>
         </section>
       </div>
+    </div>
+
+    <div class="panel" id="panel-factory" role="tabpanel" aria-labelledby="admin-tab-factory" hidden>
+      <section class="factory-console" aria-labelledby="factory-heading">
+        <div class="section-head factory-console__head">
+          <div>
+            <p class="factory-kicker">Future jobs</p>
+            <h2 id="factory-heading">Choose the active factory recipe</h2>
+            <p class="small">Letters are immutable Pipelines. Numbers are immutable Visions. Changing this pointer never rewrites queued jobs or existing candidates.</p>
+          </div>
+          <output id="factory-active-code" class="factory-code" aria-live="polite">A1</output>
+        </div>
+        <div class="factory-selector-grid">
+          <label>Pipeline
+            <select id="factory-pipeline"></select>
+          </label>
+          <label>Vision
+            <select id="factory-vision"></select>
+          </label>
+        </div>
+        <div id="factory-recipe-detail" class="factory-recipe-detail"></div>
+        <div class="controls factory-actions">
+          <button type="button" id="factory-save">Activate for future jobs</button>
+          <button type="button" id="factory-refresh">Reload</button>
+          <span id="factory-status" class="small" role="status"></span>
+        </div>
+      </section>
     </div>
 
     <div class="panel" id="panel-costs" role="tabpanel" aria-labelledby="admin-tab-costs" hidden>

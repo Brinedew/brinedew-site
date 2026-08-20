@@ -10476,10 +10476,11 @@
     }
     function candidateEmulsionLabel(candidate) {
       var item = candidate || {};
+      var publicCode = String(item.public_emulsion_code || "").trim();
       var emulsionId = String(item.emulsion_id || "").trim();
       var label = String(item.emulsion_label || "").trim();
       var artistId = String(item.artist_id || "").trim();
-      return emulsionId || label || (artistId ? "Emulsion " + artistId : "");
+      return publicCode || emulsionId || label || (artistId ? "Emulsion " + artistId : "");
     }
     function renderCandidateGalleryHtml(geneDetail, options) {
       var gene = geneDetail || {};

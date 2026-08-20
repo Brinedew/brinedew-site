@@ -1567,6 +1567,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_requests_drain_plan" ||
     family === "admin_requests_fulfill" ||
     family === "admin_image_edit_prompts" ||
+    family === "admin_factory_recipe" ||
     family === "admin_extension_blocklist" ||
     family === "admin_publication_aliases" ||
     family === "admin_gene_request_diagnostics" ||
@@ -3482,6 +3483,7 @@ function mapUserEmulsionRow(row, sessionUser = null) {
   return {
     id,
     label: id,
+    slot: Math.max(0, optionalInt(row?.public_slot) || 0),
     text,
     revision: publicRevision,
     max_length: USER_EMULSION_MAX_LENGTH,
@@ -3496,6 +3498,7 @@ function mapUserEmulsionVersionRow(row, sessionUser = null) {
       iconoplasm_emulsion_text: row?.emulsion_text || row?.iconoplasm_emulsion_text || "",
       iconoplasm_emulsion_revision: row?.revision || row?.iconoplasm_emulsion_revision || 0,
       iconoplasm_emulsion_public_id: row?.public_id || row?.iconoplasm_emulsion_public_id || "",
+      public_slot: row?.public_slot || row?.slot || 0,
     },
     sessionUser,
   )
@@ -3509,8 +3512,12 @@ async function getUserEmulsionForSession(env, sessionUser) {
   const userId = normalizeUserId(sessionUser?.user_id || "")
   if (!userId || !env.DB) return mapUserEmulsionRow(null, sessionUser)
   const row = await env.DB.prepare(
-    `SELECT discord_id, username, iconoplasm_emulsion_text, iconoplasm_emulsion_revision, iconoplasm_emulsion_public_id
-       FROM users
+    `SELECT u.discord_id, u.username, u.iconoplasm_emulsion_text, u.iconoplasm_emulsion_revision,
+            u.iconoplasm_emulsion_public_id, COALESCE(s.slot, 0) AS public_slot
+       FROM users u
+       LEFT JOIN iconoplasm_user_emulsion_public_slots s
+         ON s.user_id = u.discord_id
+        AND s.revision = u.iconoplasm_emulsion_revision
       WHERE discord_id = ?
       LIMIT 1`,
   )
@@ -3523,10 +3530,12 @@ async function listUserEmulsionHistoryForSession(env, sessionUser) {
   const userId = normalizeUserId(sessionUser?.user_id || "")
   if (!userId || !env.DB) return []
   const resp = await env.DB.prepare(
-    `SELECT user_id, username, public_id, revision, emulsion_text, created_at
-       FROM iconoplasm_user_emulsion_versions
-      WHERE user_id = ?
-      ORDER BY revision DESC
+    `SELECT v.user_id, v.username, v.public_id, v.revision, v.emulsion_text, v.created_at,
+            COALESCE(s.slot, 0) AS public_slot
+       FROM iconoplasm_user_emulsion_versions v
+       LEFT JOIN iconoplasm_user_emulsion_public_slots s ON s.public_id = v.public_id
+      WHERE v.user_id = ?
+      ORDER BY v.revision DESC
       LIMIT 40`,
   )
     .bind(userId)
@@ -3551,9 +3560,11 @@ async function getUserEmulsionByPublicId(env, publicId) {
   const parsed = parseUserEmulsionPublicId(publicId)
   if (!parsed || !env.DB) return null
   const versionRow = await env.DB.prepare(
-    `SELECT user_id, username, public_id, revision, emulsion_text
-       FROM iconoplasm_user_emulsion_versions
-      WHERE public_id = ?
+    `SELECT v.user_id, v.username, v.public_id, v.revision, v.emulsion_text,
+            COALESCE(s.slot, 0) AS public_slot
+       FROM iconoplasm_user_emulsion_versions v
+       LEFT JOIN iconoplasm_user_emulsion_public_slots s ON s.public_id = v.public_id
+      WHERE v.public_id = ?
         AND COALESCE(emulsion_text, '') <> ''
       LIMIT 1`,
   )
@@ -3583,10 +3594,12 @@ async function getUserEmulsionByPublicIdForSession(env, sessionUser, publicId) {
   if (current?.text && current.id === parsed.publicId) return current
 
   const versionRow = await env.DB.prepare(
-    `SELECT user_id, username, public_id, revision, emulsion_text
-       FROM iconoplasm_user_emulsion_versions
-      WHERE user_id = ?
-        AND public_id = ?
+    `SELECT v.user_id, v.username, v.public_id, v.revision, v.emulsion_text,
+            COALESCE(s.slot, 0) AS public_slot
+       FROM iconoplasm_user_emulsion_versions v
+       LEFT JOIN iconoplasm_user_emulsion_public_slots s ON s.public_id = v.public_id
+      WHERE v.user_id = ?
+        AND v.public_id = ?
         AND COALESCE(emulsion_text, '') <> ''
       LIMIT 1`,
   )
@@ -3659,7 +3672,21 @@ async function updateUserEmulsionForSession(env, sessionUser, rawText) {
     )
       .bind(userId, username, publicEmulsionId, nextStoredRevision, text, now)
       .run()
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO iconoplasm_user_emulsion_public_slots (
+         user_id, revision, public_id, created_at
+       ) VALUES (?, ?, ?, ?)`,
+    )
+      .bind(userId, nextStoredRevision, publicEmulsionId, now)
+      .run()
   }
+  const slotRow = text
+    ? await env.DB.prepare(
+        `SELECT slot FROM iconoplasm_user_emulsion_public_slots WHERE public_id = ? LIMIT 1`,
+      )
+        .bind(publicEmulsionId)
+        .first()
+    : null
   return mapUserEmulsionRow(
     {
       ...(existingRow || {}),
@@ -3668,6 +3695,7 @@ async function updateUserEmulsionForSession(env, sessionUser, rawText) {
       iconoplasm_emulsion_text: text,
       iconoplasm_emulsion_revision: nextStoredRevision,
       iconoplasm_emulsion_public_id: publicEmulsionId,
+      public_slot: slotRow?.slot || 0,
     },
     sessionUser,
   )
@@ -3824,6 +3852,10 @@ function mapGenerationRequestRow(row, { portraitBaseUrl = "" } = {}) {
     requested_emulsion_id: requestMode === "specific" ? publicEmulsionIdForRow(row) : "",
     requested_emulsion_label:
       requestMode === "specific" ? generationRequestVisionLabel(row) : "Random default",
+    factory_pipeline_code: normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A",
+    factory_vision_revision:
+      normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1,
+    factory_code: `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}`,
     requested_reference_asset_sha256:
       requestMode === "specific"
         ? normalizeSha256(row?.requested_reference_asset_sha256 || "") || ""
@@ -4303,6 +4335,7 @@ async function createGenerationRequest(
   }
   const batchSizeNorm = Math.max(1, Math.min(500, Math.trunc(Number(requestBatchSize) || 1)))
   const promptBodyModeNorm = normalizeCandidatePromptBodyMode(promptBodyMode)
+  const factoryRecipe = await activeFactoryRecipe(env)
   let requestedReferenceAssetSha = ""
   let requestedReferenceGeneSymbol = ""
   let resolvedVisionId = visionNorm
@@ -4371,9 +4404,11 @@ async function createGenerationRequest(
        request_batch_size,
        prompt_body_mode,
        seed_mode,
+       factory_pipeline_code,
+       factory_vision_revision,
        status,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'random', 'open', CURRENT_TIMESTAMP)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'random', ?, ?, 'open', CURRENT_TIMESTAMP)
      ON CONFLICT(requester_user_id, client_request_id) WHERE client_request_id <> ''
      DO NOTHING`,
   )
@@ -4393,6 +4428,8 @@ async function createGenerationRequest(
       batchIdNorm,
       batchSizeNorm,
       promptBodyModeNorm,
+      factoryRecipe.pipeline,
+      factoryRecipe.vision,
     )
     .run()
   let requestId =
@@ -5256,6 +5293,72 @@ async function imageEditPromptTemplatesPayload(env) {
   }
 }
 
+const ICONOPLASM_FACTORY_PIPELINES = Object.freeze([
+  Object.freeze({ code: "A", label: "Aesthetic 1.1", model: "anima-aesthetic-v1.1.safetensors", steps: 38, cfg: 3.5, sampler: "dpmpp_2m_sde_gpu", status: "accepted" }),
+  Object.freeze({ code: "B", label: "Aesthetic 1.0b", model: "anima-aesthetic-v1.0b.safetensors", steps: 36, cfg: 3.2, sampler: "dpmpp_2m_sde_gpu", status: "accepted" }),
+  Object.freeze({ code: "C", label: "Preview 3", model: "anima-preview3-base.safetensors", steps: 38, cfg: 4.5, sampler: "dpmpp_2m_sde_gpu", status: "accepted" }),
+  Object.freeze({ code: "D", label: "Base 1.0", model: "anima-base-v1.0.safetensors", steps: 40, cfg: 4.5, sampler: "dpmpp_2m_sde_gpu", status: "accepted" }),
+  Object.freeze({ code: "E", label: "Turbo 1.0", model: "anima-turbo-v1.0.safetensors", steps: 10, cfg: 1, sampler: "euler", status: "accepted" }),
+])
+const ICONOPLASM_FACTORY_VISIONS = Object.freeze([
+  Object.freeze({ revision: 1, label: "Vision 1", source_id: "artist-random-anima", status: "accepted" }),
+])
+
+function normalizeFactoryPipelineCode(raw) {
+  const code = String(raw || "").trim().toUpperCase()
+  return ICONOPLASM_FACTORY_PIPELINES.some((item) => item.code === code) ? code : ""
+}
+
+function normalizeFactoryVisionRevision(raw) {
+  const revision = Number.parseInt(String(raw || ""), 10)
+  return ICONOPLASM_FACTORY_VISIONS.some((item) => item.revision === revision) ? revision : 0
+}
+
+async function activeFactoryRecipe(env) {
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT pipeline_code, vision_revision, updated_by, updated_at
+       FROM icono_factory_active_recipe
+      WHERE singleton_id = 1
+      LIMIT 1`,
+  ).first()
+  return {
+    pipeline: normalizeFactoryPipelineCode(row?.pipeline_code || "A") || "A",
+    vision: normalizeFactoryVisionRevision(row?.vision_revision || 1) || 1,
+    updated_by: sanitizeText(row?.updated_by || "migration", 255) || "migration",
+    updated_at: sanitizeText(row?.updated_at || "", 64) || "",
+  }
+}
+
+async function factoryRecipePayload(env) {
+  return {
+    ok: true,
+    active_recipe: await activeFactoryRecipe(env),
+    pipelines: ICONOPLASM_FACTORY_PIPELINES,
+    visions: ICONOPLASM_FACTORY_VISIONS,
+  }
+}
+
+async function saveActiveFactoryRecipe(env, { pipeline, vision, updatedBy }) {
+  const pipelineCode = normalizeFactoryPipelineCode(pipeline)
+  const visionRevision = normalizeFactoryVisionRevision(vision)
+  if (!pipelineCode) return { ok: false, error: "Choose an accepted factory Pipeline." }
+  if (!visionRevision) return { ok: false, error: "Choose an accepted Vision revision." }
+  const actor = sanitizeText(updatedBy || "admin", 255) || "admin"
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_factory_active_recipe (
+       singleton_id, pipeline_code, vision_revision, updated_by, updated_at
+     ) VALUES (1, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(singleton_id) DO UPDATE SET
+       pipeline_code = excluded.pipeline_code,
+       vision_revision = excluded.vision_revision,
+       updated_by = excluded.updated_by,
+       updated_at = CURRENT_TIMESTAMP`,
+  )
+    .bind(pipelineCode, visionRevision, actor)
+    .run()
+  return factoryRecipePayload(env)
+}
+
 async function saveImageEditPromptTemplate(env, { kind, promptTemplate, updatedBy }) {
   const normalizedKind = normalizeStoredImageEditPromptKind(kind)
   if (!normalizedKind) return { ok: false, error: "Unknown image edit prompt kind" }
@@ -5403,6 +5506,7 @@ async function sourceImageEditAssetRow(env, { symbol, assetSha256 }) {
         pa.status,
         pa.vision_id,
         pa.emulsion_id,
+        pa.public_emulsion_code,
         pa.workflow_id,
         pa.workflow_label,
         pa.workflow_path,
@@ -7125,6 +7229,7 @@ async function publishImageEditCandidateAsset(env, job, userId) {
        is_legacy,
        vision_id,
        emulsion_id,
+       public_emulsion_code,
        workflow_id,
        workflow_label,
        workflow_path,
@@ -7138,7 +7243,7 @@ async function publishImageEditCandidateAsset(env, job, userId) {
        artist_name,
        created_by,
        created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 1, 0, 0, ?, ?, 'image-edit', 'Image edit', NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, ?, CURRENT_TIMESTAMP)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 1, 0, 0, ?, ?, ?, 'image-edit', 'Image edit', NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
        status='approved',
        autopick_eligible=1,
@@ -7153,6 +7258,7 @@ async function publishImageEditCandidateAsset(env, job, userId) {
        bytes=COALESCE(excluded.bytes, icono_portrait_assets.bytes),
        vision_id=COALESCE(excluded.vision_id, icono_portrait_assets.vision_id),
        emulsion_id=COALESCE(excluded.emulsion_id, icono_portrait_assets.emulsion_id),
+       public_emulsion_code=COALESCE(excluded.public_emulsion_code, icono_portrait_assets.public_emulsion_code),
        workflow_id=COALESCE(excluded.workflow_id, icono_portrait_assets.workflow_id),
        workflow_label=COALESCE(excluded.workflow_label, icono_portrait_assets.workflow_label),
        sample_label=COALESCE(excluded.sample_label, icono_portrait_assets.sample_label),
@@ -7172,6 +7278,7 @@ async function publishImageEditCandidateAsset(env, job, userId) {
       optionalInt(job.result_bytes),
       sanitizeVoteVisionId(`image-edit:${job.id}`),
       editedEmulsionId || null,
+      sanitizeText(sourceRow?.public_emulsion_code || "", 64) || null,
       sourceSampleLabel,
       sourceSampleNumber,
       sourceSampleTextHash,
@@ -7552,6 +7659,10 @@ function mapCandidateGenerationJobRow(row, baseUrl = "") {
     requested_vision_id: sanitizeVoteVisionId(row?.requested_vision_id || "") || "",
     requested_emulsion_id: sanitizeText(row?.requested_emulsion_id || "", 64) || "",
     requested_emulsion_label: sanitizeText(row?.requested_emulsion_label || "", 255) || "",
+    factory_code: `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}`,
+    public_emulsion_code: optionalInt(row?.requested_emulsion_slot) > 0
+      ? `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}-${optionalInt(row?.requested_emulsion_slot)}`
+      : `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}`,
     prompt_body_mode: normalizeCandidatePromptBodyMode(
       row?.prompt_body_mode || "taggerizer_prompt",
     ),
@@ -7573,6 +7684,7 @@ function mapCandidateGenerationJobRow(row, baseUrl = "") {
 }
 
 async function insertCandidateGenerationJob(env, row) {
+  const factoryRecipe = await activeFactoryRecipe(env)
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_candidate_generation_jobs (
        id,
@@ -7583,6 +7695,7 @@ async function insertCandidateGenerationJob(env, row) {
        requested_vision_id,
        requested_emulsion_id,
        requested_emulsion_label,
+       requested_emulsion_slot,
        gene_full_name,
        manifestation,
        sample_label,
@@ -7592,10 +7705,12 @@ async function insertCandidateGenerationJob(env, row) {
        prompt_body_mode,
        community_comments_snapshot,
        prompt,
+       factory_pipeline_code,
+       factory_vision_revision,
        status,
        created_at,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
   )
     .bind(
       row.id,
@@ -7606,6 +7721,7 @@ async function insertCandidateGenerationJob(env, row) {
       row.requested_vision_id,
       row.requested_emulsion_id,
       row.requested_emulsion_label,
+      Math.max(0, optionalInt(row.requested_emulsion_slot) || 0),
       row.gene_full_name,
       row.manifestation,
       row.sample_label,
@@ -7615,6 +7731,8 @@ async function insertCandidateGenerationJob(env, row) {
       row.prompt_body_mode,
       row.community_comments_snapshot,
       row.prompt,
+      factoryRecipe.pipeline,
+      factoryRecipe.vision,
       row.status,
     )
     .run()
@@ -7700,6 +7818,7 @@ async function publishCandidateGenerationAsset(env, job, userId) {
        is_legacy,
        vision_id,
        emulsion_id,
+       public_emulsion_code,
        workflow_id,
        workflow_label,
        workflow_path,
@@ -7713,7 +7832,7 @@ async function publishCandidateGenerationAsset(env, job, userId) {
        artist_name,
        created_by,
        created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 1, 0, 0, ?, ?, 'image-gen', 'Image generation', NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, ?, CURRENT_TIMESTAMP)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 1, 0, 0, ?, ?, ?, 'image-gen', 'Image generation', NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
        status='approved',
        autopick_eligible=1,
@@ -7728,6 +7847,7 @@ async function publishCandidateGenerationAsset(env, job, userId) {
        bytes=COALESCE(excluded.bytes, icono_portrait_assets.bytes),
        vision_id=COALESCE(excluded.vision_id, icono_portrait_assets.vision_id),
        emulsion_id=COALESCE(excluded.emulsion_id, icono_portrait_assets.emulsion_id),
+       public_emulsion_code=COALESCE(excluded.public_emulsion_code, icono_portrait_assets.public_emulsion_code),
        workflow_id=COALESCE(excluded.workflow_id, icono_portrait_assets.workflow_id),
        workflow_label=COALESCE(excluded.workflow_label, icono_portrait_assets.workflow_label),
        sample_label=COALESCE(excluded.sample_label, icono_portrait_assets.sample_label),
@@ -7747,6 +7867,9 @@ async function publishCandidateGenerationAsset(env, job, userId) {
       optionalInt(job.result_bytes),
       generatedVisionId,
       sanitizeText(job.requested_emulsion_id || "", 64) || null,
+      optionalInt(job.requested_emulsion_slot) > 0
+        ? `${normalizeFactoryPipelineCode(job.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(job.factory_vision_revision || 1) || 1}-${optionalInt(job.requested_emulsion_slot)}`
+        : `${normalizeFactoryPipelineCode(job.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(job.factory_vision_revision || 1) || 1}`,
       sanitizeText(job.sample_label || "", 64) || null,
       optionalInt(job.sample_number),
       normalizeSha256(job.sample_text_hash || "") || null,
@@ -8508,14 +8631,15 @@ function mapSharedUserEmulsionOptionRows(env, url, userRows, rollupRows) {
       const rollup = rollupByEmulsionId.get(emulsionId) || {}
       const pseudoVisionId = sanitizeVoteVisionId(`user-emulsion:${emulsionId}`)
       if (!pseudoVisionId) return null
+      const publicLabel = mapped.slot > 0 ? `Emulsion ${mapped.slot}` : "Saved emulsion"
       return {
         option_type: "user_emulsion",
         vision_id: pseudoVisionId,
         emulsion_id: emulsionId,
         user_emulsion_id: emulsionId,
-        label: emulsionId,
-        primary_label: emulsionId,
-        secondary_label: ownerUsername ? `@${ownerUsername}` : "User emulsion",
+        label: publicLabel,
+        primary_label: publicLabel,
+        secondary_label: ownerUsername || "User emulsion",
         owner_username: ownerUsername,
         search_text: [emulsionId, ownerUsername].filter(Boolean).join(" "),
         image_count: Math.max(0, Number(rollup?.image_count || 0) || 0),
@@ -8547,15 +8671,17 @@ async function listSharedUserEmulsionOptions(env, url, favoriteEmulsionIds = [])
     const emulsionPrefix = compactGenerationRequestOptionIdentityPrefix(searchQuery, "upper")
     const emulsionUpper = textPrefixUpperBound(emulsionPrefix)
     const resp = await env.DB.prepare(
-      `SELECT user_id, username, public_id, revision, emulsion_text, created_at
-       FROM iconoplasm_user_emulsion_versions
-       WHERE revision > 0
-         AND COALESCE(emulsion_text, '') <> ''
+      `SELECT v.user_id, v.username, v.public_id, v.revision, v.emulsion_text, v.created_at,
+              COALESCE(s.slot, 0) AS public_slot
+       FROM iconoplasm_user_emulsion_versions v
+       LEFT JOIN iconoplasm_user_emulsion_public_slots s ON s.public_id = v.public_id
+       WHERE v.revision > 0
+         AND COALESCE(v.emulsion_text, '') <> ''
          AND (
-           (username >= ? AND username < ?)
-           OR (public_id >= ? AND public_id < ?)
+           (v.username >= ? AND v.username < ?)
+           OR (v.public_id >= ? AND v.public_id < ?)
          )
-       ORDER BY revision DESC, created_at DESC
+       ORDER BY v.revision DESC, v.created_at DESC
        LIMIT 80`,
     )
       .bind(usernamePrefix, usernameUpper, emulsionPrefix, emulsionUpper)
@@ -8563,11 +8689,13 @@ async function listSharedUserEmulsionOptions(env, url, favoriteEmulsionIds = [])
     userRows = Array.isArray(resp?.results) ? resp.results : []
   } else {
     const resp = await env.DB.prepare(
-      `SELECT user_id, username, public_id, revision, emulsion_text, created_at
-       FROM iconoplasm_user_emulsion_versions
-       WHERE revision > 0
-         AND COALESCE(emulsion_text, '') <> ''
-       ORDER BY revision DESC, created_at DESC
+      `SELECT v.user_id, v.username, v.public_id, v.revision, v.emulsion_text, v.created_at,
+              COALESCE(s.slot, 0) AS public_slot
+       FROM iconoplasm_user_emulsion_versions v
+       LEFT JOIN iconoplasm_user_emulsion_public_slots s ON s.public_id = v.public_id
+       WHERE v.revision > 0
+         AND COALESCE(v.emulsion_text, '') <> ''
+       ORDER BY v.revision DESC, v.created_at DESC
        LIMIT 40`,
     ).all()
     userRows = Array.isArray(resp?.results) ? resp.results : []
@@ -8581,14 +8709,16 @@ async function listSharedUserEmulsionOptions(env, url, favoriteEmulsionIds = [])
   )
   if (!searchQuery && favoriteIds.length) {
     const favoriteResp = await env.DB.prepare(
-      `SELECT user_id, username, public_id, revision, emulsion_text, created_at
-       FROM iconoplasm_user_emulsion_versions
-       WHERE revision > 0
-         AND COALESCE(emulsion_text, '') <> ''
-         AND upper(public_id) IN (
+      `SELECT v.user_id, v.username, v.public_id, v.revision, v.emulsion_text, v.created_at,
+              COALESCE(s.slot, 0) AS public_slot
+       FROM iconoplasm_user_emulsion_versions v
+       LEFT JOIN iconoplasm_user_emulsion_public_slots s ON s.public_id = v.public_id
+       WHERE v.revision > 0
+         AND COALESCE(v.emulsion_text, '') <> ''
+         AND upper(v.public_id) IN (
            SELECT value FROM json_each(?)
          )
-       ORDER BY revision DESC, created_at DESC`,
+       ORDER BY v.revision DESC, v.created_at DESC`,
     )
       .bind(JSON.stringify(favoriteIds))
       .all()
@@ -13752,7 +13882,7 @@ async function portraitState(env, symbol, base) {
     const row = await env.ICONOPLASM_DB.prepare(
       // D1 cost fence: gene_symbol is the lookup key on both tables. Leave it
       // unwrapped so public media/gene detail stays O(1).
-      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.width, pa.height, pa.vision_id, pa.candidate_image_id, pa.emulsion_id,
+      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.width, pa.height, pa.vision_id, pa.candidate_image_id, pa.emulsion_id, pa.public_emulsion_code,
               pa.sample_label, pa.sample_number, pa.sample_text_hash
          FROM icono_publish_state ps
          LEFT JOIN icono_portrait_assets pa
@@ -13790,6 +13920,7 @@ async function portraitState(env, symbol, base) {
       candidate_image_id: optionalInt(row?.candidate_image_id),
       vision_id: String(row?.vision_id || "").trim() || null,
       emulsion_id: publicEmulsionIdForRow(row) || null,
+      public_emulsion_code: sanitizeText(row?.public_emulsion_code || "", 64) || null,
       emulsion_label: generationRequestVisionLabel(row) || null,
       sample_label: sanitizeText(row?.sample_label || "", 64) || null,
       sample_number: optionalInt(row?.sample_number),
@@ -20922,6 +21053,7 @@ async function listAutopromoteCandidateAssetsForSymbol(env, rawSymbol) {
        COALESCE(pa.is_legacy, 0) AS is_legacy,
        pa.vision_id,
        pa.emulsion_id,
+       pa.public_emulsion_code,
        pa.artist_tag,
        pa.artist_name,
        pa.created_at
@@ -25203,6 +25335,7 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
       candidate_image_id: optionalInt(row?.candidate_image_id),
       vision_id: String(row?.vision_id || "").trim() || null,
       emulsion_id: publicEmulsionIdForRow(row) || null,
+      public_emulsion_code: sanitizeText(row?.public_emulsion_code || "", 64) || null,
       emulsion_label: generationRequestVisionLabel(row) || null,
       sample_label: sanitizeText(row?.sample_label || "", 64) || null,
       sample_number: optionalInt(row?.sample_number),
@@ -28815,6 +28948,43 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     }
 
     if (
+      path === "/api/iconoplasm/admin/factory-recipe" &&
+      (request.method === "GET" || request.method === "HEAD")
+    ) {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_factory_recipe_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done("admin_factory_recipe_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      return done(
+        "admin_factory_recipe",
+        json(await factoryRecipePayload(env), 200, { "Cache-Control": "no-store" }),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/factory-recipe" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_factory_recipe_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done("admin_factory_recipe_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_factory_recipe_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      const saved = await saveActiveFactoryRecipe(env, {
+        pipeline: p?.pipeline,
+        vision: p?.vision,
+        updatedBy: sessionUser?.user_id || "admin-token",
+      })
+      return done(
+        saved.ok ? "admin_factory_recipe" : "admin_factory_recipe_400",
+        json(saved, saved.ok ? 200 : 400, { "Cache-Control": "no-store" }),
+      )
+    }
+
+    if (
       path === "/api/iconoplasm/admin/image-edit-prompts" &&
       (request.method === "GET" || request.method === "HEAD")
     ) {
@@ -30449,6 +30619,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         requested_vision_id: "",
         requested_emulsion_id: userEmulsion.id,
         requested_emulsion_label: userEmulsion.label,
+        requested_emulsion_slot: userEmulsion.slot,
         gene_full_name: sanitizeText(geneContext.full_name || "", 255) || "",
         manifestation,
         sample_label: sampleLabel,

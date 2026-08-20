@@ -6457,14 +6457,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       function directUserEmulsionOptionFromSaved(emulsion, kind) {
         var id = String((emulsion && emulsion.id) || "").trim()
         if (!id) return null
+        var slot = Number((emulsion && emulsion.slot) || 0) || 0
+        var publicLabel = slot > 0 ? "Emulsion " + String(slot) : "Saved emulsion"
         return {
           option_type: "user_emulsion",
           user_emulsion_id: id,
           emulsion_id: id,
-          label: id,
-          primary_label: id,
+          label: publicLabel,
+          primary_label: publicLabel,
           secondary_label: kind === "current" ? "Current saved emulsion" : "Saved revision",
-          search_text: id,
+          search_text: publicLabel,
           image_count: 0,
           live_count: 0,
           score: 0,
