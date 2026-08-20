@@ -115,7 +115,7 @@ class FakeStatement {
 
   async run() {
     if (this.sql.includes("INSERT INTO icono_generation_requests")) {
-      const clientRequestId = this.args[11] || ""
+      const clientRequestId = this.args[10] || ""
       const existing = clientRequestId
         ? this.db.generationRequests.find(
             (item) =>
@@ -135,10 +135,11 @@ class FakeStatement {
         source_asset_sha256: this.args[6],
         request_mode: this.args[7],
         requested_vision_id: this.args[8],
+        requested_emulsion_slot: this.args[9],
         client_request_id: clientRequestId,
-        request_batch_id: this.args[12],
-        request_batch_size: this.args[13],
-        prompt_body_mode: this.args[14],
+        request_batch_id: this.args[11],
+        request_batch_size: this.args[12],
+        prompt_body_mode: this.args[13],
         seed_mode: "random",
       }
       this.db.generationRequests.push(this.db.lastGenerationRequest)
