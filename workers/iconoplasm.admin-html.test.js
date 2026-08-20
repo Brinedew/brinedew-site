@@ -128,6 +128,10 @@ test("factory admin runs and displays a diagnostic matrix without leaving the pa
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /\/diagnostic-matrices/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /run_id:\s*runId/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /recoverDiagnosticRun\(runId\)/)
+  assert.match(
+    ICONOPLASM_ADMIN_RUNTIME,
+    /async function refreshDiagnosticMatrix[\s\S]*finally\s*\{[\s\S]*scheduleDiagnosticPoll\(\)/,
+  )
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /latest:\s*true/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /\[30593, 255, 343, 21329, 24210\]/)
   assert.match(ICONOPLASM_ADMIN_CSS, /\.diagnostic-cell\s*\{[^}]*display:\s*table-cell/s)
