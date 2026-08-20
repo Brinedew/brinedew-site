@@ -103,8 +103,8 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     )
     if (!items.length)
       return done("admin_catalog_upsert_400", json({ error: "No items provided" }, 400))
-    if (items.length > 1000)
-      return done("admin_catalog_upsert_400", json({ error: "Too many items (max 1000)" }, 400))
+    if (items.length > 100)
+      return done("admin_catalog_upsert_400", json({ error: "Too many items (max 100)" }, 400))
 
     const actorId = await actor(request, env)
     const source =
