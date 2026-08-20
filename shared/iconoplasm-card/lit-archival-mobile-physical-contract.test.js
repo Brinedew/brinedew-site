@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
 const appPath = path.join(repoRoot, "quartz", "static", "iconoplasm", "app.js")
+const lightboxPath = path.join(repoRoot, "quartz", "static", "iconoplasm", "lightbox.js")
 const headPath = path.join(repoRoot, "quartz", "components", "Head.tsx")
 const cssPath = path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-label.css")
 const generatedCssPath = path.join(
@@ -1517,6 +1518,7 @@ test("mobile infocard gestures keep voting and navigation isolated from the view
 
 test("portrait lightbox is delegated so mobile object wrappers cannot orphan the blot action", async () => {
   const app = await sourceText(appPath)
+  const lightbox = await sourceText(lightboxPath)
   const start = app.indexOf("function refreshPortraitLightbox")
   const end = app.indexOf("function fetchGeneDetail", start)
   assert.notEqual(start, -1, "missing portrait lightbox refresh helper")
@@ -1525,21 +1527,26 @@ test("portrait lightbox is delegated so mobile object wrappers cannot orphan the
 
   assert.match(
     helper,
-    /document\.addEventListener\("click",\s*handler/,
+    /installIconoplasmLightbox\(document\)/,
+    "the public runtime must install the shared lightbox contract",
+  )
+  assert.match(
+    lightbox,
+    /targetDocument\.addEventListener\("click",\s*handler/,
     "full-size blot viewing must be delegated from the document, not stranded on a stale gallery wrapper",
   )
   assert.match(
-    helper,
+    lightbox,
     /trigger\.closest\("\[data-icono-lightbox\]"\)/,
     "delegated lightbox clicks must scope the gallery from the clicked blot trigger",
   )
   assert.match(
-    helper,
+    lightbox,
     /querySelectorAll\("\[data-icono-pswp\]"\)/,
     "the selected gallery still owns its own ordered image list",
   )
   assert.doesNotMatch(
-    helper,
+    lightbox,
     /gallery\.addEventListener\("click"/,
     "per-gallery listeners are too brittle for mobile wrapper swaps and SPA rerenders",
   )
