@@ -11,6 +11,10 @@ const publicSlotMigration = readFileSync(
   new URL("../migrations/0026_iconoplasm_user_emulsion_public_slots.sql", import.meta.url),
   "utf8",
 )
+const diagnosticMigration = readFileSync(
+  new URL("../migrations-iconoplasm/0071_diagnostic_matrices.sql", import.meta.url),
+  "utf8",
+)
 const workerSource = readFileSync(
   new URL(
     "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
@@ -20,6 +24,10 @@ const workerSource = readFileSync(
 )
 const cardSource = readFileSync(
   new URL("../shared/iconoplasm-card/shared-card-runtime.js", import.meta.url),
+  "utf8",
+)
+const factoryCatalogSource = readFileSync(
+  new URL("./generated/iconoplasm-factory-catalog.js", import.meta.url),
   "utf8",
 )
 
@@ -90,10 +98,43 @@ test("saved emulsion revisions receive stable plain numeric slots", () => {
 })
 
 test("public factory identity stays clean while private IDs remain internal", () => {
-  assert.match(workerSource, /code: "B"[\s\S]*cfg: 3\.2/)
-  assert.match(workerSource, /code: "C"[\s\S]*cfg: 4\.5/)
-  assert.match(workerSource, /code: "D"[\s\S]*cfg: 4\.5/)
+  assert.match(factoryCatalogSource, /code: "B"[\s\S]*cfg: 3\.2/)
+  assert.match(factoryCatalogSource, /code: "C"[\s\S]*cfg: 4/)
+  assert.match(factoryCatalogSource, /code: "D"[\s\S]*cfg: 4\.5/)
   assert.match(workerSource, /public_emulsion_code/)
   assert.match(cardSource, /publicCode \|\| emulsionId/)
   assert.doesNotMatch(cardSource, /candidate_image_id[^\n]*<strong>/)
+})
+
+test("diagnostic matrix schema owns explicit recipes and removes reference-gene snapshots", () => {
+  const db = new DatabaseSync(":memory:")
+  try {
+    db.exec(`CREATE TABLE icono_generation_requests (
+      id INTEGER PRIMARY KEY,
+      requested_reference_asset_sha256 TEXT,
+      requested_reference_gene_symbol TEXT
+    )`)
+    db.exec(diagnosticMigration)
+    const requestColumns = db
+      .prepare("PRAGMA table_info(icono_generation_requests)")
+      .all()
+      .map((column) => column.name)
+    assert.ok(requestColumns.includes("requested_emulsion_slot"))
+    assert.ok(requestColumns.includes("request_origin"))
+    assert.ok(requestColumns.includes("diagnostic_run_id"))
+    assert.ok(!requestColumns.includes("requested_reference_asset_sha256"))
+    assert.ok(!requestColumns.includes("requested_reference_gene_symbol"))
+    assert.ok(
+      db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+        .get("icono_diagnostic_matrix_runs"),
+    )
+    assert.ok(
+      db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+        .get("icono_diagnostic_matrix_cells"),
+    )
+  } finally {
+    db.close()
+  }
 })
