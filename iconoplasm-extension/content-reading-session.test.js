@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises"
 import test from "node:test"
 import vm from "node:vm"
 
+// ARCHITECTURE FENCE [IPD-008]
 const source = await readFile(new URL("./content-reading-session.js", import.meta.url), "utf8")
 
 function loadApi() {

@@ -59,7 +59,10 @@ test("rejected approximate renderers cannot silently return", () => {
 
 test("PDF rough ellipses reuse HTML SVG in the canvas-wrapper coordinate system", () => {
   assert.match(readerSource, /const wrapper = sourceCanvas\?\.parentElement/u)
-  assert.match(readerSource, /sourceRect\.left - wrapperRect\.left \+ deviceBounds\.left \* scaleX/u)
+  assert.match(
+    readerSource,
+    /sourceRect\.left - wrapperRect\.left \+ deviceBounds\.left \* scaleX/u,
+  )
   assert.match(readerSource, /highlightRuntime\.createRoughEllipseNode\(rect\.width, rect\.height/u)
   assert.match(readerSource, /refreshEllipseDecorationGeometry\(state\)/u)
   assert.doesNotMatch(readerSource, /roughImpl\.canvas/u)
