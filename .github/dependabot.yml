@@ -54,6 +54,11 @@ updates:
 
   - package-ecosystem: "github-actions"
     directory: "/"
+    # The PDF.js source is a pinned upstream submodule, not part of this
+    # repository's Actions surface. Scanning its workflows makes Dependabot
+    # modify the submodule worktree and then fail while refreshing our PRs.
+    exclude-paths:
+      - "iconoplasm-extension/vendor/pdfjs-src/**"
     schedule:
       interval: "weekly"
       day: "monday"
