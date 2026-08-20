@@ -8,6 +8,7 @@ const REQUIRED_SERVICE_NAMES = Object.freeze([
   "fetchCatalogState",
   "fetchCatalogStateRows",
   "fetchEssenceStateRows",
+  "fetchManifestationStateRows",
   "isAdmin",
   "json",
   "mutationLimiterSnapshot",
@@ -37,6 +38,7 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     fetchCatalogState,
     fetchCatalogStateRows,
     fetchEssenceStateRows,
+    fetchManifestationStateRows,
     isAdmin,
     json,
     mutationLimiterSnapshot,
@@ -496,6 +498,35 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     )
   }
 
+  async function manifestationState({ request, env, done }) {
+    if (!(await isAdmin(request, env)))
+      return done("admin_manifestation_state_403", json({ error: "Unauthorized" }, 403))
+    if (!env.ICONOPLASM_DB)
+      return done(
+        "admin_manifestation_state_500",
+        json({ error: "ICONOPLASM_DB binding missing" }, 500),
+      )
+    let payload
+    try {
+      payload = await request.json()
+    } catch {
+      return done("admin_manifestation_state_400", json({ error: "Invalid JSON" }, 400))
+    }
+    const rawSymbols = Array.isArray(payload?.symbols) ? payload.symbols : []
+    if (!rawSymbols.length)
+      return done("admin_manifestation_state_400", json({ error: "No symbols provided" }, 400))
+    if (rawSymbols.length > 1000)
+      return done(
+        "admin_manifestation_state_400",
+        json({ error: "Too many symbols (max 1000)" }, 400),
+      )
+    const rows = await fetchManifestationStateRows(env, rawSymbols)
+    return done(
+      "admin_manifestation_state",
+      json({ ok: true, count: rows.length, rows }, 200, NO_STORE),
+    )
+  }
+
   async function sharedDiscoveries({ request, env, done }) {
     if (!(await isAdmin(request, env)))
       return done("admin_read_models_shared_discoveries_403", json({ error: "Unauthorized" }, 403))
@@ -516,6 +547,7 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     "admin_publication.essence_state": essenceState,
     "admin_publication.essence_upsert": essenceUpsert,
     "admin_publication.manifestation_upsert": manifestationUpsert,
+    "admin_publication.manifestation_state": manifestationState,
     "admin_publication.shared_discoveries": sharedDiscoveries,
   })
 }

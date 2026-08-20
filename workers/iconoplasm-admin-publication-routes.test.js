@@ -17,6 +17,7 @@ function publicationServices(overrides = {}) {
     fetchCatalogState: async () => ({ gene_count: 1, content_hash: "hash" }),
     fetchCatalogStateRows: async () => [],
     fetchEssenceStateRows: async () => [],
+    fetchManifestationStateRows: async () => [],
     isAdmin: async () => true,
     json,
     mutationLimiterSnapshot: () => ({ active: true }),
@@ -68,6 +69,7 @@ test("publication handler registry is immutable and domain-complete", () => {
     "admin_publication.catalog_upsert",
     "admin_publication.essence_state",
     "admin_publication.essence_upsert",
+    "admin_publication.manifestation_state",
     "admin_publication.manifestation_upsert",
     "admin_publication.shared_discoveries",
   ])
@@ -268,6 +270,27 @@ test("manifestation upsert changes only manifestation columns in bounded transac
     ],
   )
   assert.equal(readModelCalls, 0)
+})
+
+test("manifestation state is authenticated, bounded, and no-store", async () => {
+  const requested = []
+  const handlers = createIconoplasmAdminPublicationHandlers(
+    publicationServices({
+      fetchManifestationStateRows: async (_env, symbols) => {
+        requested.push(...symbols)
+        return [{ symbol: "TP53", hash: "abc" }]
+      },
+    }),
+  )
+  const response = await responseFrom(handlers["admin_publication.manifestation_state"], {
+    body: { symbols: ["TP53"] },
+    env: { ICONOPLASM_DB: {} },
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("Cache-Control"), "no-store")
+  assert.deepEqual(requested, ["TP53"])
+  assert.deepEqual((await response.json()).rows, [{ symbol: "TP53", hash: "abc" }])
 })
 
 test("catalog reconcile deletes only explicit normalized symbols", async () => {
