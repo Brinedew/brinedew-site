@@ -354,6 +354,21 @@
   background: #e8e4da;
   box-shadow: inset 0 0 0 1px rgb(31 41 34 / 12%);
 }
+
+.diagnostic-cell-image {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: zoom-in;
+}
+
+.diagnostic-cell-image:focus-visible {
+  outline: 3px solid var(--accent, #6f4cff);
+  outline-offset: 3px;
+}
 .diagnostic-cell-state {
   display: grid;
   place-items: center;

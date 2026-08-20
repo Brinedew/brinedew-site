@@ -1563,12 +1563,24 @@
       emulsions.forEach(function (slot) {
         var cell = byKey.get(String(pipeline) + ":" + String(slot)) || {}
         var status = String(cell.status || "open")
+        var imageAlt =
+          String(run.gene_symbol || "Gene") +
+          " diagnostic, factory " +
+          String(pipeline) +
+          ", emulsion " +
+          String(slot)
         var image = cell.full_url
-          ? '<img src="' +
+          ? '<button type="button" class="diagnostic-cell-image" data-icono-pswp data-icono-pswp-src="' +
+            esc(cell.full_url) +
+            '" data-icono-pswp-alt="' +
+            esc(imageAlt) +
+            '" aria-label="Open full-size ' +
+            esc(imageAlt) +
+            '"><img src="' +
             esc(cell.full_url) +
             '" alt="' +
-            esc(cell.emulsion_code || "") +
-            '" loading="lazy" />'
+            esc(imageAlt) +
+            '" loading="lazy" /></button>'
           : '<div class="diagnostic-cell-state"><span class="diagnostic-cell-pulse"></span>' +
             esc(status === "open" ? "Queued" : status) +
             "</div>"
