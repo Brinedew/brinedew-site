@@ -902,6 +902,13 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_essence",
     "admin_publication.manifestation_upsert",
   ),
+  adminApiContract(
+    "admin_manifestation_state",
+    "/manifestation/state",
+    POST,
+    "admin_essence",
+    "admin_publication.manifestation_state",
+  ),
   adminApiContract("admin_cost_usage", "/cost/usage", GET),
   adminApiContract("admin_cost_snapshot", "/cost/snapshot", GET, "admin_cost_usage"),
   iconoplasmApiContract({
