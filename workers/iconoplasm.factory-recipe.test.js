@@ -15,6 +15,10 @@ const diagnosticMigration = readFileSync(
   new URL("../migrations-iconoplasm/0071_diagnostic_matrices.sql", import.meta.url),
   "utf8",
 )
+const atomicDiagnosticMigration = readFileSync(
+  new URL("../migrations-iconoplasm/0072_atomic_diagnostic_matrices.sql", import.meta.url),
+  "utf8",
+)
 const workerSource = readFileSync(
   new URL(
     "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
@@ -134,6 +138,39 @@ test("diagnostic matrix schema owns explicit recipes and removes reference-gene 
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
         .get("icono_diagnostic_matrix_cells"),
     )
+  } finally {
+    db.close()
+  }
+})
+
+test("atomic diagnostic migration removes every interrupted legacy builder", () => {
+  const db = new DatabaseSync(":memory:")
+  try {
+    db.exec(`
+      PRAGMA foreign_keys = ON;
+      CREATE TABLE icono_generation_requests (
+        id INTEGER PRIMARY KEY,
+        request_origin TEXT NOT NULL,
+        diagnostic_run_id TEXT NOT NULL
+      );
+      CREATE TABLE icono_diagnostic_matrix_runs (
+        id TEXT PRIMARY KEY,
+        queue_state TEXT NOT NULL
+      );
+      CREATE TABLE icono_diagnostic_matrix_cells (
+        run_id TEXT NOT NULL,
+        generation_request_id INTEGER NOT NULL,
+        FOREIGN KEY (run_id) REFERENCES icono_diagnostic_matrix_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY (generation_request_id) REFERENCES icono_generation_requests(id) ON DELETE CASCADE
+      );
+      INSERT INTO icono_diagnostic_matrix_runs VALUES ('partial', 'building');
+      INSERT INTO icono_generation_requests VALUES (1, 'diagnostic_matrix', 'partial');
+      INSERT INTO icono_diagnostic_matrix_cells VALUES ('partial', 1);
+    `)
+    db.exec(atomicDiagnosticMigration)
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM icono_diagnostic_matrix_runs").get().n, 0)
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM icono_generation_requests").get().n, 0)
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM icono_diagnostic_matrix_cells").get().n, 0)
   } finally {
     db.close()
   }
