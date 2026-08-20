@@ -20,15 +20,15 @@
     "harper.js": "2.7.0"
   },
   "devDependencies": {
-    "@codemirror/lint": "6.8.5",
-    "@codemirror/state": "6.5.2",
-    "@codemirror/view": "6.38.6",
-    "@types/node": "24.10.1",
-    "obsidian": "1.7.2",
+    "@codemirror/lint": "6.9.7",
+    "@codemirror/state": "6.7.1",
+    "@codemirror/view": "6.43.9",
+    "@types/node": "24.13.3",
+    "obsidian": "1.13.1",
     "typescript": "5.9.3",
-    "tsx": "4.23.1",
+    "tsx": "4.23.12",
     "vite": "6.4.1",
-    "vitest": "4.0.16"
+    "vitest": "4.1.10"
   },
   "peerDependencies": {
     "@codemirror/lint": "^6.8.1",
