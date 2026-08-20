@@ -1722,10 +1722,14 @@
       renderDiagnosticBuilder()
       renderDiagnosticMatrix()
       if (!opts.quiet && !state.diagnosticRun) setDiagnosticStatus("No diagnostic runs yet.", "")
-      scheduleDiagnosticPoll()
     } catch (err) {
       if (isRequestCanceled(err)) return
       setDiagnosticStatus(requestErrorMessage(err, "Diagnostic status failed to load."), "danger")
+    } finally {
+      // A transient read failure must not freeze a still-running matrix. The
+      // durable run remains authoritative, so keep polling until it reports
+      // completion or the Factory tab is unmounted.
+      scheduleDiagnosticPoll()
     }
   }
 
