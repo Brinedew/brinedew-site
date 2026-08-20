@@ -33,6 +33,7 @@ import {
 } from "./iconoplasm-route-contract.js"
 import { ICONOPLASM_CLAN_CATALOG } from "./generated/iconoplasm-clan-catalog.js"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/iconoplasm-anima-emulsion-slot-contract.js"
+import { ICONOPLASM_FACTORY_CATALOG } from "./generated/iconoplasm-factory-catalog.js"
 import { renderIconoplasmArtistStylesHtml } from "./iconoplasm-artist-styles-html.js"
 import {
   addFavoriteEmulsion,
@@ -3852,17 +3853,15 @@ function mapGenerationRequestRow(row, { portraitBaseUrl = "" } = {}) {
     requested_emulsion_id: requestMode === "specific" ? publicEmulsionIdForRow(row) : "",
     requested_emulsion_label:
       requestMode === "specific" ? generationRequestVisionLabel(row) : "Random default",
+    requested_emulsion_slot: Math.max(0, optionalInt(row?.requested_emulsion_slot) || 0),
     factory_pipeline_code: normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A",
     factory_vision_revision: normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1,
     factory_code: `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}`,
-    requested_reference_asset_sha256:
-      requestMode === "specific"
-        ? normalizeSha256(row?.requested_reference_asset_sha256 || "") || ""
-        : "",
-    requested_reference_gene_symbol:
-      requestMode === "specific"
-        ? normalizeSymbol(row?.requested_reference_gene_symbol || "") || ""
-        : "",
+    request_origin:
+      String(row?.request_origin || "").trim() === "diagnostic_matrix"
+        ? "diagnostic_matrix"
+        : "user",
+    diagnostic_run_id: sanitizeText(row?.diagnostic_run_id || "", 80) || "",
     status: sanitizeText(row?.status || "", 64) || "open",
     created_at: sanitizeText(row?.created_at || "", 64) || "",
     updated_at: sanitizeText(row?.updated_at || "", 64) || "",
@@ -4117,6 +4116,7 @@ function openGenerationRequestFilters({
   geneSymbol = "",
   requesterUserId = "",
   statuses = ["open"],
+  includeDiagnostics = false,
 } = {}) {
   const symbolNorm = normalizeSymbol(geneSymbol || "") || ""
   const requesterNorm = normalizeUserId(requesterUserId || "")
@@ -4130,12 +4130,25 @@ function openGenerationRequestFilters({
   const safeStatuses = requestStatuses.length ? requestStatuses : ["open"]
   const whereParts = [`gr.status IN (${safeStatuses.map(() => "?").join(",")})`]
   const params = [...safeStatuses]
+  // A matrix becomes visible to Drain atomically only after every cell exists.
+  // This keeps the polling workstation from consuming a half-built experiment.
+  whereParts.push(
+    `(gr.request_origin <> 'diagnostic_matrix' OR EXISTS (
+       SELECT 1 FROM icono_diagnostic_matrix_runs diagnostic_run
+       WHERE diagnostic_run.id = gr.diagnostic_run_id
+         AND diagnostic_run.queue_state = 'queued'
+     ))`,
+  )
   if (symbolNorm) {
     whereParts.push("gr.gene_symbol = ?")
     params.push(symbolNorm)
   }
   if (requesterNorm && !isGuestUserId(requesterNorm)) {
-    whereParts.push("gr.requester_user_id = ?")
+    whereParts.push(
+      includeDiagnostics
+        ? "(gr.request_origin = 'diagnostic_matrix' OR gr.requester_user_id = ?)"
+        : "gr.requester_user_id = ?",
+    )
     params.push(requesterNorm)
   }
   return { whereParts, params }
@@ -4143,7 +4156,13 @@ function openGenerationRequestFilters({
 
 async function listOpenGenerationRequests(
   env,
-  { limit = 500, geneSymbol = "", requesterUserId = "", statuses = ["open"] } = {},
+  {
+    limit = 500,
+    geneSymbol = "",
+    requesterUserId = "",
+    statuses = ["open"],
+    includeDiagnostics = false,
+  } = {},
 ) {
   if (!env.ICONOPLASM_DB) return []
   const cleanedLimit = Math.max(
@@ -4154,6 +4173,7 @@ async function listOpenGenerationRequests(
     geneSymbol,
     requesterUserId,
     statuses,
+    includeDiagnostics,
   })
   return queryGenerationRequests(env, {
     whereParts,
@@ -4273,7 +4293,11 @@ async function generationRequestDrainPlan(env, { limit = 500 } = {}) {
   const openFilters = { statuses: ["open"] }
   const eligibleFilters = policy.all_requesters
     ? openFilters
-    : { ...openFilters, requesterUserId: policy.test_recipient_id }
+    : {
+        ...openFilters,
+        requesterUserId: policy.test_recipient_id,
+        includeDiagnostics: true,
+      }
   const [totalOpenCount, eligibleCount, eligibleRows] = await Promise.all([
     countOpenGenerationRequests(env, openFilters),
     countOpenGenerationRequests(env, eligibleFilters),
@@ -4303,6 +4327,11 @@ async function createGenerationRequest(
     requestBatchId = "",
     requestBatchSize = 1,
     promptBodyMode = "taggerizer_prompt",
+    factoryPipelineCode = "",
+    factoryVisionRevision = 0,
+    requestedEmulsionSlot = 0,
+    requestOrigin = "user",
+    diagnosticRunId = "",
   } = {},
 ) {
   if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
@@ -4334,10 +4363,25 @@ async function createGenerationRequest(
   }
   const batchSizeNorm = Math.max(1, Math.min(500, Math.trunc(Number(requestBatchSize) || 1)))
   const promptBodyModeNorm = normalizeCandidatePromptBodyMode(promptBodyMode)
-  const factoryRecipe = await activeFactoryRecipe(env)
-  let requestedReferenceAssetSha = ""
-  let requestedReferenceGeneSymbol = ""
+  const activeRecipe = await activeFactoryRecipe(env)
+  const pipelineOverride = normalizeFactoryPipelineCode(factoryPipelineCode)
+  const visionOverride = normalizeFactoryVisionRevision(factoryVisionRevision)
+  if ((factoryPipelineCode && !pipelineOverride) || (factoryVisionRevision && !visionOverride)) {
+    return { ok: false, error: "Choose an accepted factory recipe." }
+  }
+  const factoryRecipe = {
+    pipeline: pipelineOverride || activeRecipe.pipeline,
+    vision: visionOverride || activeRecipe.vision,
+  }
+  const origin =
+    String(requestOrigin || "").trim() === "diagnostic_matrix" ? "diagnostic_matrix" : "user"
+  const diagnosticId =
+    origin === "diagnostic_matrix" ? sanitizeText(diagnosticRunId || "", 80) || "" : ""
+  if (origin === "diagnostic_matrix" && !diagnosticId) {
+    return { ok: false, error: "Diagnostic requests require a run identity." }
+  }
   let resolvedVisionId = visionNorm
+  let emulsionSlot = Math.max(0, optionalInt(requestedEmulsionSlot) || 0)
   if (mode === "specific") {
     let optionRow = await env.ICONOPLASM_DB.prepare(
       `SELECT vision_id, emulsion_id, preview_assets_json
@@ -4364,12 +4408,6 @@ async function createGenerationRequest(
       if (baseOptionRow) optionRow = baseOptionRow
     }
     resolvedVisionId = sanitizeVoteVisionId(optionRow?.vision_id || "") || visionNorm
-    const rankedReferences = parseGenerationRequestPreviewAssetsJson(
-      optionRow?.preview_assets_json || "[]",
-    )
-    const selectedReference = rankedReferences[0] || null
-    requestedReferenceAssetSha = normalizeSha256(selectedReference?.asset_sha256 || "") || ""
-    requestedReferenceGeneSymbol = normalizeSymbol(selectedReference?.gene_symbol || "") || ""
     const animaSlot = iconoplasmAnimaEmulsionSlotFromExactAlias(resolvedVisionId)
     if (animaSlot && !iconoplasmAnimaEmulsionSlotIsPreallocated(animaSlot)) {
       return {
@@ -4384,6 +4422,10 @@ async function createGenerationRequest(
         error: "This emulsion is not available. Refresh the picker and choose again.",
       }
     }
+    if (emulsionSlot && animaSlot && emulsionSlot !== animaSlot) {
+      return { ok: false, error: "The emulsion slot does not match the selected emulsion." }
+    }
+    emulsionSlot = emulsionSlot || animaSlot || 0
   }
   const insertResp = await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_generation_requests (
@@ -4396,8 +4438,7 @@ async function createGenerationRequest(
        source_asset_sha256,
        request_mode,
        requested_vision_id,
-       requested_reference_asset_sha256,
-       requested_reference_gene_symbol,
+       requested_emulsion_slot,
        client_request_id,
        request_batch_id,
        request_batch_size,
@@ -4405,9 +4446,11 @@ async function createGenerationRequest(
        seed_mode,
        factory_pipeline_code,
        factory_vision_revision,
+       request_origin,
+       diagnostic_run_id,
        status,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'random', ?, ?, 'open', CURRENT_TIMESTAMP)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'random', ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)
      ON CONFLICT(requester_user_id, client_request_id) WHERE client_request_id <> ''
      DO NOTHING`,
   )
@@ -4421,14 +4464,15 @@ async function createGenerationRequest(
       sourceAssetNorm,
       mode,
       resolvedVisionId,
-      requestedReferenceAssetSha,
-      requestedReferenceGeneSymbol,
+      emulsionSlot,
       clientRequestNorm,
       batchIdNorm,
       batchSizeNorm,
       promptBodyModeNorm,
       factoryRecipe.pipeline,
       factoryRecipe.vision,
+      origin,
+      diagnosticId,
     )
     .run()
   let requestId =
@@ -5292,61 +5336,8 @@ async function imageEditPromptTemplatesPayload(env) {
   }
 }
 
-const ICONOPLASM_FACTORY_PIPELINES = Object.freeze([
-  Object.freeze({
-    code: "A",
-    label: "Aesthetic 1.1",
-    model: "anima-aesthetic-v1.1.safetensors",
-    steps: 38,
-    cfg: 3.5,
-    sampler: "dpmpp_2m_sde_gpu",
-    status: "accepted",
-  }),
-  Object.freeze({
-    code: "B",
-    label: "Aesthetic 1.0b",
-    model: "anima-aesthetic-v1.0b.safetensors",
-    steps: 36,
-    cfg: 3.2,
-    sampler: "dpmpp_2m_sde_gpu",
-    status: "accepted",
-  }),
-  Object.freeze({
-    code: "C",
-    label: "Preview 3",
-    model: "anima-preview3-base.safetensors",
-    steps: 38,
-    cfg: 4.5,
-    sampler: "dpmpp_2m_sde_gpu",
-    status: "accepted",
-  }),
-  Object.freeze({
-    code: "D",
-    label: "Base 1.0",
-    model: "anima-base-v1.0.safetensors",
-    steps: 40,
-    cfg: 4.5,
-    sampler: "dpmpp_2m_sde_gpu",
-    status: "accepted",
-  }),
-  Object.freeze({
-    code: "E",
-    label: "Turbo 1.0",
-    model: "anima-turbo-v1.0.safetensors",
-    steps: 10,
-    cfg: 1,
-    sampler: "euler",
-    status: "accepted",
-  }),
-])
-const ICONOPLASM_FACTORY_VISIONS = Object.freeze([
-  Object.freeze({
-    revision: 1,
-    label: "Vision 1",
-    source_id: "artist-random-anima",
-    status: "accepted",
-  }),
-])
+const ICONOPLASM_FACTORY_PIPELINES = ICONOPLASM_FACTORY_CATALOG.pipelines
+const ICONOPLASM_FACTORY_VISIONS = ICONOPLASM_FACTORY_CATALOG.visions
 
 function normalizeFactoryPipelineCode(raw) {
   const code = String(raw || "")
@@ -5403,6 +5394,242 @@ async function saveActiveFactoryRecipe(env, { pipeline, vision, updatedBy }) {
     .bind(pipelineCode, visionRevision, actor)
     .run()
   return factoryRecipePayload(env)
+}
+
+function normalizeDiagnosticPipelineCodes(raw) {
+  const values = Array.isArray(raw) ? raw : []
+  return Array.from(new Set(values.map(normalizeFactoryPipelineCode).filter(Boolean)))
+}
+
+function parseDiagnosticJsonArray(raw) {
+  try {
+    const parsed = JSON.parse(String(raw || "[]"))
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function normalizeDiagnosticEmulsionSlots(raw) {
+  const values = Array.isArray(raw) ? raw : []
+  return Array.from(
+    new Set(
+      values
+        .map((value) => optionalInt(value))
+        .filter((slot) => slot > 0 && iconoplasmAnimaEmulsionSlotIsPreallocated(slot)),
+    ),
+  )
+}
+
+async function diagnosticMatrixRunPayload(env, url, runId = "") {
+  const requestedId = sanitizeText(runId || "", 80) || ""
+  const run = requestedId
+    ? await env.ICONOPLASM_DB.prepare(
+        `SELECT * FROM icono_diagnostic_matrix_runs WHERE id = ? LIMIT 1`,
+      )
+        .bind(requestedId)
+        .first()
+    : await env.ICONOPLASM_DB.prepare(
+        `SELECT * FROM icono_diagnostic_matrix_runs ORDER BY created_at DESC, id DESC LIMIT 1`,
+      ).first()
+  if (!run?.id) {
+    return {
+      ok: true,
+      run: null,
+      catalog: await factoryRecipePayload(env),
+    }
+  }
+  const cellRows = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       cell.pipeline_code,
+       cell.vision_revision,
+       cell.emulsion_slot,
+       cell.generation_request_id,
+       request.status,
+       request.fulfilled_asset_sha256,
+       request.fulfilled_vision_id,
+       request.fulfillment_note,
+       request.updated_at
+     FROM icono_diagnostic_matrix_cells cell
+     JOIN icono_generation_requests request
+       ON request.id = cell.generation_request_id
+     WHERE cell.run_id = ?
+     ORDER BY cell.pipeline_code ASC, cell.emulsion_slot ASC`,
+  )
+    .bind(run.id)
+    .all()
+  const base = portraitBase(url, env)
+  const cells = (Array.isArray(cellRows?.results) ? cellRows.results : []).map((row) => {
+    const assetSha = normalizeSha256(row?.fulfilled_asset_sha256 || "") || ""
+    const pipeline = normalizeFactoryPipelineCode(row?.pipeline_code || "") || ""
+    const vision = normalizeFactoryVisionRevision(row?.vision_revision || 0) || 0
+    const slot = Math.max(0, optionalInt(row?.emulsion_slot) || 0)
+    return {
+      pipeline,
+      vision,
+      emulsion_slot: slot,
+      emulsion_code: pipeline && vision && slot ? `${pipeline}${vision}-${slot}` : "",
+      generation_request_id: optionalInt(row?.generation_request_id),
+      status: sanitizeText(row?.status || "open", 32) || "open",
+      asset_sha256: assetSha,
+      fulfilled_vision_id: sanitizeVoteVisionId(row?.fulfilled_vision_id || "") || "",
+      note: sanitizeText(row?.fulfillment_note || "", 1000) || "",
+      updated_at: sanitizeText(row?.updated_at || "", 64) || "",
+      thumb_url: assetSha ? adminPortraitUrl(base, assetSha, "thumb") : "",
+      full_url: assetSha ? adminPortraitUrl(base, assetSha, "full") : "",
+    }
+  })
+  const counts = {
+    total: cells.length,
+    open: cells.filter((cell) => cell.status === "open").length,
+    processing: cells.filter((cell) => cell.status === "delivery_pending").length,
+    completed: cells.filter((cell) => cell.status === "fulfilled").length,
+    failed: cells.filter((cell) => cell.status === "cancelled").length,
+  }
+  const status =
+    counts.failed > 0
+      ? "attention"
+      : counts.total > 0 && counts.completed === counts.total
+        ? "completed"
+        : counts.completed > 0 || counts.processing > 0
+          ? "running"
+          : "queued"
+  return {
+    ok: true,
+    catalog: await factoryRecipePayload(env),
+    run: {
+      id: sanitizeText(run.id || "", 80) || "",
+      gene_symbol: normalizeSymbol(run.gene_symbol || "") || "",
+      vision_revision: normalizeFactoryVisionRevision(run.vision_revision || 0) || 0,
+      pipeline_codes: normalizeDiagnosticPipelineCodes(
+        parseDiagnosticJsonArray(run.pipeline_codes_json || "[]"),
+      ),
+      emulsion_slots: normalizeDiagnosticEmulsionSlots(
+        parseDiagnosticJsonArray(run.emulsion_slots_json || "[]"),
+      ),
+      cell_count: Math.max(0, optionalInt(run.cell_count) || 0),
+      prompt_body_mode: normalizeCandidatePromptBodyMode(run.prompt_body_mode),
+      created_by: sanitizeText(run.created_by || "", 255) || "",
+      created_at: sanitizeText(run.created_at || "", 64) || "",
+      status,
+      counts,
+      cells,
+    },
+  }
+}
+
+async function createDiagnosticMatrixRun(
+  env,
+  url,
+  {
+    geneSymbol,
+    pipelineCodes,
+    emulsionSlots,
+    visionRevision,
+    promptBodyMode,
+    createdBy,
+    createdUsername,
+  } = {},
+) {
+  const gene = normalizeSymbol(geneSymbol || "") || ""
+  if (!gene) return { ok: false, error: "Choose one valid gene." }
+  const catalogRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT gene_symbol FROM icono_gene_catalog WHERE gene_symbol = ? LIMIT 1`,
+  )
+    .bind(gene)
+    .first()
+  if (!catalogRow?.gene_symbol) return { ok: false, error: "That gene is not in the catalog." }
+  const pipelines = normalizeDiagnosticPipelineCodes(pipelineCodes)
+  if (!pipelines.length) return { ok: false, error: "Choose at least one factory line." }
+  const emulsions = normalizeDiagnosticEmulsionSlots(emulsionSlots)
+  if (
+    !emulsions.length ||
+    emulsions.length !== new Set(Array.isArray(emulsionSlots) ? emulsionSlots.map(Number) : []).size
+  ) {
+    return { ok: false, error: "Every emulsion must be an assigned numeric code." }
+  }
+  const vision = normalizeFactoryVisionRevision(visionRevision || 1)
+  if (!vision) return { ok: false, error: "Choose an accepted Vision revision." }
+  const cellCount = pipelines.length * emulsions.length
+  if (cellCount > 100) return { ok: false, error: "A diagnostic matrix is limited to 100 cells." }
+  const actor = normalizeUserId(createdBy || "") || "admin"
+  const runId = `diag-${crypto.randomUUID()}`
+  const promptMode = normalizeCandidatePromptBodyMode(promptBodyMode)
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_diagnostic_matrix_runs (
+       id, gene_symbol, vision_revision, pipeline_codes_json,
+       emulsion_slots_json, cell_count, prompt_body_mode, created_by
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      runId,
+      gene,
+      vision,
+      JSON.stringify(pipelines),
+      JSON.stringify(emulsions),
+      cellCount,
+      promptMode,
+      actor,
+    )
+    .run()
+  const createdRequestIds = []
+  try {
+    let cellIndex = 0
+    for (const pipeline of pipelines) {
+      for (const slot of emulsions) {
+        const request = await createGenerationRequest(env, {
+          geneSymbol: gene,
+          requesterUserId: actor,
+          requesterUsername: sanitizeText(createdUsername || "", 255) || "admin",
+          requestMode: "specific",
+          requestedVisionId: `anima-v1-${slot}`,
+          requestKind: "new_candidate",
+          sourceGeneSymbol: gene,
+          clientRequestId: `${runId}:${cellIndex}`,
+          requestBatchId: runId,
+          requestBatchSize: cellCount,
+          promptBodyMode: promptMode,
+          factoryPipelineCode: pipeline,
+          factoryVisionRevision: vision,
+          requestedEmulsionSlot: slot,
+          requestOrigin: "diagnostic_matrix",
+          diagnosticRunId: runId,
+        })
+        const requestId = optionalInt(request?.request?.id)
+        if (!request?.ok || !requestId) {
+          throw new Error(String(request?.error || "A diagnostic cell could not be queued."))
+        }
+        createdRequestIds.push(requestId)
+        await env.ICONOPLASM_DB.prepare(
+          `INSERT INTO icono_diagnostic_matrix_cells (
+             run_id, pipeline_code, vision_revision, emulsion_slot, generation_request_id
+           ) VALUES (?, ?, ?, ?, ?)`,
+        )
+          .bind(runId, pipeline, vision, slot, requestId)
+          .run()
+        cellIndex += 1
+      }
+    }
+    await env.ICONOPLASM_DB.prepare(
+      `UPDATE icono_diagnostic_matrix_runs SET queue_state = 'queued' WHERE id = ?`,
+    )
+      .bind(runId)
+      .run()
+  } catch (error) {
+    await env.ICONOPLASM_DB.prepare(`DELETE FROM icono_diagnostic_matrix_runs WHERE id = ?`)
+      .bind(runId)
+      .run()
+    if (createdRequestIds.length) {
+      await env.ICONOPLASM_DB.prepare(
+        `DELETE FROM icono_generation_requests
+         WHERE diagnostic_run_id = ? AND status = 'open'`,
+      )
+        .bind(runId)
+        .run()
+    }
+    return { ok: false, error: String(error?.message || error || "Diagnostic creation failed.") }
+  }
+  return diagnosticMatrixRunPayload(env, url, runId)
 }
 
 async function saveImageEditPromptTemplate(env, { kind, promptTemplate, updatedBy }) {
@@ -9170,6 +9397,7 @@ export async function fulfillGenerationRequests(
   const requestedRequestIds = new Set()
   const deliveryRequestIds = new Set()
   const startedDeliveryIds = new Set()
+  const completedWithoutDeliveryIds = new Set()
   const settledRequestIds = new Set()
   const conflicts = []
   let skipped = 0
@@ -9240,6 +9468,7 @@ export async function fulfillGenerationRequests(
               status,
               requester_user_id,
               gene_symbol,
+              COALESCE(request_origin, 'user') AS request_origin,
               COALESCE(fulfilled_asset_sha256, '') AS fulfilled_asset_sha256,
               COALESCE(fulfilled_vision_id, '') AS fulfilled_vision_id,
               COALESCE(fulfillment_publication_id, '') AS fulfillment_publication_id,
@@ -9347,6 +9576,37 @@ export async function fulfillGenerationRequests(
       continue
     }
     if (preflightStatus === "open") {
+      if (String(preflightRow?.request_origin || "") === "diagnostic_matrix") {
+        const completedResp = await env.ICONOPLASM_DB.prepare(
+          `UPDATE icono_generation_requests
+           SET status = 'fulfilled',
+               updated_at = CURRENT_TIMESTAMP,
+               fulfilled_at = CURRENT_TIMESTAMP,
+               fulfilled_by = ?,
+               fulfilled_asset_sha256 = ?,
+               fulfilled_vision_id = ?,
+               fulfillment_note = ?,
+               fulfillment_publication_id = ?,
+               fulfillment_group_size = 1
+           WHERE id = ?
+             AND status = 'open'
+             AND request_origin = 'diagnostic_matrix'`,
+        )
+          .bind(
+            actorNorm,
+            intent.fulfilledAssetSha,
+            intent.fulfilledVisionId,
+            intent.note,
+            publicationIdNorm,
+            intent.requestId,
+          )
+          .run()
+        if (Number(completedResp?.meta?.changes || 0) > 0) {
+          completedWithoutDeliveryIds.add(intent.requestId)
+          settledRequestIds.add(intent.requestId)
+          continue
+        }
+      }
       const beginResp = await env.ICONOPLASM_DB.prepare(
         `UPDATE icono_generation_requests
          SET status = 'delivery_pending',
@@ -9442,7 +9702,7 @@ export async function fulfillGenerationRequests(
   return {
     ok: conflicts.length === 0,
     fulfillment_started: startedDeliveryIds.size,
-    fulfilled: 0,
+    fulfilled: completedWithoutDeliveryIds.size,
     skipped,
     request_ids: Array.from(deliveryRequestIds).sort(function (a, b) {
       return a - b
@@ -29034,6 +29294,55 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       return done(
         saved.ok ? "admin_factory_recipe" : "admin_factory_recipe_400",
         json(saved, saved.ok ? 200 : 400, { "Cache-Control": "no-store" }),
+      )
+    }
+
+    if (
+      path === "/api/iconoplasm/admin/diagnostic-matrices" &&
+      (request.method === "GET" || request.method === "HEAD")
+    ) {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_diagnostic_matrix_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_diagnostic_matrix_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      return done(
+        "admin_diagnostic_matrix",
+        json(await diagnosticMatrixRunPayload(env, url, url.searchParams.get("id") || ""), 200, {
+          "Cache-Control": "no-store",
+        }),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/diagnostic-matrices" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_diagnostic_matrix_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_diagnostic_matrix_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_diagnostic_matrix_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      const created = await createDiagnosticMatrixRun(env, url, {
+        geneSymbol: p?.gene_symbol,
+        pipelineCodes: p?.pipeline_codes,
+        emulsionSlots: p?.emulsion_slots,
+        visionRevision: p?.vision_revision,
+        promptBodyMode: p?.prompt_body_mode,
+        createdBy: sessionUser?.user_id || "admin-token",
+        createdUsername: sessionUser?.username || "admin",
+      })
+      return done(
+        created.ok ? "admin_diagnostic_matrix" : "admin_diagnostic_matrix_400",
+        json(created, created.ok ? 201 : 400, { "Cache-Control": "no-store" }),
       )
     }
 

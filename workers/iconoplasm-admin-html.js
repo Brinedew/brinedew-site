@@ -78,6 +78,54 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <span id="factory-status" class="small" role="status"></span>
         </div>
       </section>
+      <section class="diagnostic-console" aria-labelledby="diagnostic-heading">
+        <div class="section-head diagnostic-console__head">
+          <div>
+            <p class="factory-kicker">Controlled comparison</p>
+            <h2 id="diagnostic-heading">Diagnostic Matrix</h2>
+            <p class="small">Hold one gene constant, cross selected factory lines with selected emulsions, and inspect every result here. The run snapshots all choices before it enters the workstation queue.</p>
+          </div>
+          <output id="diagnostic-cell-count" class="diagnostic-cell-count" aria-live="polite">25 cells</output>
+        </div>
+        <div class="diagnostic-builder">
+          <label class="diagnostic-gene-field">Gene
+            <input id="diagnostic-gene" type="text" value="FMR1" autocomplete="off" spellcheck="false" maxlength="24" />
+          </label>
+          <fieldset class="diagnostic-pipelines">
+            <legend>Factory lines</legend>
+            <div id="diagnostic-pipeline-options" class="diagnostic-option-grid"></div>
+          </fieldset>
+          <div class="diagnostic-emulsions">
+            <span class="diagnostic-label">Emulsions</span>
+            <div class="diagnostic-emulsion-entry">
+              <input id="diagnostic-emulsion-input" type="number" min="1" step="1" inputmode="numeric" placeholder="Emulsion code" />
+              <button type="button" id="diagnostic-emulsion-add" class="secondary">Add</button>
+            </div>
+            <div id="diagnostic-emulsion-chips" class="diagnostic-emulsion-chips" aria-live="polite"></div>
+          </div>
+          <label>Prompt body
+            <select id="diagnostic-prompt-mode">
+              <option value="taggerizer_prompt" selected>Tags</option>
+              <option value="prose_prompt">Full manifestation</option>
+            </select>
+          </label>
+        </div>
+        <div class="controls diagnostic-actions">
+          <button type="button" id="diagnostic-run">Run diagnostic matrix</button>
+          <button type="button" id="diagnostic-download" class="secondary" disabled>Download PNG</button>
+          <button type="button" id="diagnostic-refresh" class="secondary">Reload latest</button>
+          <span id="diagnostic-status" class="small" role="status"></span>
+        </div>
+        <div id="diagnostic-progress" class="diagnostic-progress" hidden></div>
+        <figure id="diagnostic-figure" class="diagnostic-figure" hidden>
+          <div class="diagnostic-figure__title-row">
+            <figcaption id="diagnostic-caption"></figcaption>
+            <span id="diagnostic-run-code" class="mono"></span>
+          </div>
+          <div id="diagnostic-matrix" class="diagnostic-matrix"></div>
+          <p id="diagnostic-legend" class="diagnostic-legend"></p>
+        </figure>
+      </section>
     </div>
 
     <div class="panel" id="panel-costs" role="tabpanel" aria-labelledby="admin-tab-costs" hidden>

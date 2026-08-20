@@ -47,6 +47,11 @@
     factoryRecipe: null,
     factoryLoaded: false,
     factoryBusy: false,
+    diagnosticRun: null,
+    diagnosticBusy: false,
+    diagnosticEmulsionSlots: [30593, 255, 343, 21329, 24210],
+    diagnosticSelectedPipelines: ["A", "B", "C", "D", "E"],
+    diagnosticPollTimer: null,
     selectedPromptKind: "",
     promptsLoaded: false,
     promptMaxLength: 2400,
@@ -174,6 +179,23 @@
     factorySave: document.getElementById("factory-save"),
     factoryRefresh: document.getElementById("factory-refresh"),
     factoryStatus: document.getElementById("factory-status"),
+    diagnosticGene: document.getElementById("diagnostic-gene"),
+    diagnosticPipelineOptions: document.getElementById("diagnostic-pipeline-options"),
+    diagnosticEmulsionInput: document.getElementById("diagnostic-emulsion-input"),
+    diagnosticEmulsionAdd: document.getElementById("diagnostic-emulsion-add"),
+    diagnosticEmulsionChips: document.getElementById("diagnostic-emulsion-chips"),
+    diagnosticPromptMode: document.getElementById("diagnostic-prompt-mode"),
+    diagnosticCellCount: document.getElementById("diagnostic-cell-count"),
+    diagnosticRunButton: document.getElementById("diagnostic-run"),
+    diagnosticDownload: document.getElementById("diagnostic-download"),
+    diagnosticRefresh: document.getElementById("diagnostic-refresh"),
+    diagnosticStatus: document.getElementById("diagnostic-status"),
+    diagnosticProgress: document.getElementById("diagnostic-progress"),
+    diagnosticFigure: document.getElementById("diagnostic-figure"),
+    diagnosticCaption: document.getElementById("diagnostic-caption"),
+    diagnosticRunCode: document.getElementById("diagnostic-run-code"),
+    diagnosticMatrix: document.getElementById("diagnostic-matrix"),
+    diagnosticLegend: document.getElementById("diagnostic-legend"),
     promptTemplateList: document.getElementById("prompt-template-list"),
     promptTemplateEditor: document.getElementById("prompt-template-editor"),
     promptTemplateHeading: document.getElementById("prompt-template-heading"),
@@ -261,7 +283,12 @@
   var activeTabReadController = null
   var ADMIN_TAB_RENDER_ROOTS = {
     overview: ["overview-metrics", "overview-coverage", "attention-list", "overview-events"],
-    factory: ["factory-recipe-detail"],
+    factory: [
+      "factory-recipe-detail",
+      "diagnostic-pipeline-options",
+      "diagnostic-emulsion-chips",
+      "diagnostic-matrix",
+    ],
     costs: [
       "cost-context-strip",
       "cost-metrics",
@@ -321,6 +348,10 @@
       state.visionDetailRequestId += 1
     }
     if (tab === "extension") cancelPublicationAliasSearch()
+    if (tab === "factory" && state.diagnosticPollTimer) {
+      window.clearTimeout(state.diagnosticPollTimer)
+      state.diagnosticPollTimer = null
+    }
     clearAdminTabRenderRoots(tab)
   }
 
@@ -336,8 +367,12 @@
       return
     }
     if (tab === "factory") {
-      if (state.factoryLoaded) renderFactoryRecipe()
-      else refreshFactoryRecipe()
+      if (state.factoryLoaded) {
+        renderFactoryRecipe()
+        renderDiagnosticBuilder()
+        renderDiagnosticMatrix()
+      } else refreshFactoryRecipe()
+      refreshDiagnosticMatrix({ quiet: true })
       return
     }
     if (tab === "requests") {
@@ -1263,6 +1298,7 @@
       els.factoryVision.value = String(active.vision || 1)
     }
     renderFactoryRecipeSelection()
+    renderDiagnosticBuilder()
     if (els.factorySave) els.factorySave.disabled = state.factoryBusy
     if (els.factoryRefresh) els.factoryRefresh.disabled = state.factoryBusy
   }
@@ -1343,6 +1379,459 @@
     } finally {
       state.factoryBusy = false
       renderFactoryRecipe()
+    }
+  }
+
+  function setDiagnosticStatus(message, tone) {
+    if (!els.diagnosticStatus) return
+    els.diagnosticStatus.textContent = String(message || "")
+    els.diagnosticStatus.className = "small" + (tone ? " text-" + tone : "")
+  }
+
+  function persistDiagnosticDefaults() {
+    try {
+      window.localStorage.setItem(
+        "iconoplasmDiagnosticMatrixDefaults",
+        JSON.stringify({
+          pipeline_codes: state.diagnosticSelectedPipelines,
+          emulsion_slots: state.diagnosticEmulsionSlots,
+        }),
+      )
+    } catch {}
+  }
+
+  function restoreDiagnosticDefaults() {
+    try {
+      var parsed = JSON.parse(
+        window.localStorage.getItem("iconoplasmDiagnosticMatrixDefaults") || "null",
+      )
+      if (parsed && Array.isArray(parsed.pipeline_codes) && parsed.pipeline_codes.length) {
+        state.diagnosticSelectedPipelines = parsed.pipeline_codes
+          .map(function (code) {
+            return String(code || "")
+              .trim()
+              .toUpperCase()
+          })
+          .filter(Boolean)
+      }
+      if (parsed && Array.isArray(parsed.emulsion_slots) && parsed.emulsion_slots.length) {
+        state.diagnosticEmulsionSlots = parsed.emulsion_slots
+          .map(function (slot) {
+            return Number.parseInt(String(slot || "0"), 10) || 0
+          })
+          .filter(function (slot) {
+            return slot > 0
+          })
+      }
+    } catch {}
+  }
+
+  function diagnosticCellCount() {
+    return state.diagnosticSelectedPipelines.length * state.diagnosticEmulsionSlots.length
+  }
+
+  function renderDiagnosticBuilder() {
+    if (state.activeTab !== "factory") return
+    var catalog = state.factoryRecipe || {}
+    var pipelines = Array.isArray(catalog.pipelines) ? catalog.pipelines : []
+    var accepted = new Set(
+      pipelines.map(function (pipeline) {
+        return String(pipeline.code || "")
+      }),
+    )
+    state.diagnosticSelectedPipelines = state.diagnosticSelectedPipelines.filter(function (code) {
+      return accepted.has(code)
+    })
+    if (!state.diagnosticSelectedPipelines.length && pipelines.length) {
+      state.diagnosticSelectedPipelines = pipelines.map(function (pipeline) {
+        return String(pipeline.code || "")
+      })
+    }
+    if (els.diagnosticPipelineOptions) {
+      els.diagnosticPipelineOptions.innerHTML = pipelines
+        .map(function (pipeline) {
+          var code = String(pipeline.code || "")
+          var checked = state.diagnosticSelectedPipelines.includes(code) ? " checked" : ""
+          return (
+            '<label class="diagnostic-option">' +
+            '<input type="checkbox" data-diagnostic-pipeline="' +
+            esc(code) +
+            '"' +
+            checked +
+            " />" +
+            "<span><strong>" +
+            esc(code) +
+            "</strong> " +
+            esc(pipeline.label || "") +
+            "</span></label>"
+          )
+        })
+        .join("")
+    }
+    if (els.diagnosticEmulsionChips) {
+      els.diagnosticEmulsionChips.innerHTML = state.diagnosticEmulsionSlots
+        .map(function (slot) {
+          return (
+            '<button type="button" class="diagnostic-emulsion-chip" data-diagnostic-emulsion-remove="' +
+            esc(String(slot)) +
+            '" aria-label="Remove emulsion ' +
+            esc(String(slot)) +
+            '"><span>' +
+            esc(String(slot)) +
+            '</span><span aria-hidden="true">×</span></button>'
+          )
+        })
+        .join("")
+    }
+    var count = diagnosticCellCount()
+    if (els.diagnosticCellCount) els.diagnosticCellCount.textContent = count + " cells"
+    if (els.diagnosticRunButton) {
+      els.diagnosticRunButton.disabled = state.diagnosticBusy || count < 1
+      els.diagnosticRunButton.textContent = state.diagnosticBusy
+        ? "Queueing matrix…"
+        : "Run " + count + "-cell diagnostic"
+    }
+    if (els.diagnosticRefresh) els.diagnosticRefresh.disabled = state.diagnosticBusy
+  }
+
+  function addDiagnosticEmulsion() {
+    var slot =
+      Number.parseInt(
+        String((els.diagnosticEmulsionInput && els.diagnosticEmulsionInput.value) || "0"),
+        10,
+      ) || 0
+    if (slot < 1) {
+      setDiagnosticStatus("Enter an assigned numeric emulsion code.", "danger")
+      return
+    }
+    if (!state.diagnosticEmulsionSlots.includes(slot)) state.diagnosticEmulsionSlots.push(slot)
+    if (els.diagnosticEmulsionInput) els.diagnosticEmulsionInput.value = ""
+    persistDiagnosticDefaults()
+    renderDiagnosticBuilder()
+    setDiagnosticStatus("", "")
+  }
+
+  function diagnosticPipelineLabel(code) {
+    var pipeline = ((state.factoryRecipe && state.factoryRecipe.pipelines) || []).find(
+      function (item) {
+        return String(item.code || "") === String(code || "")
+      },
+    )
+    return pipeline ? String(pipeline.label || code) : String(code || "")
+  }
+
+  function renderDiagnosticMatrix() {
+    if (state.activeTab !== "factory") return
+    var run = state.diagnosticRun
+    if (!run || !els.diagnosticFigure || !els.diagnosticMatrix) {
+      if (els.diagnosticFigure) els.diagnosticFigure.hidden = true
+      if (els.diagnosticDownload) els.diagnosticDownload.disabled = true
+      return
+    }
+    var pipelines = Array.isArray(run.pipeline_codes) ? run.pipeline_codes : []
+    var emulsions = Array.isArray(run.emulsion_slots) ? run.emulsion_slots : []
+    var cells = Array.isArray(run.cells) ? run.cells : []
+    var byKey = new Map()
+    cells.forEach(function (cell) {
+      byKey.set(String(cell.pipeline) + ":" + String(cell.emulsion_slot), cell)
+    })
+    els.diagnosticFigure.hidden = false
+    if (els.diagnosticCaption) {
+      els.diagnosticCaption.innerHTML =
+        "<strong>" +
+        esc(run.gene_symbol || "") +
+        " diagnostic matrix</strong>" +
+        "<span>One gene · " +
+        pipelines.length +
+        " factory lines · " +
+        emulsions.length +
+        " emulsions</span>"
+    }
+    if (els.diagnosticRunCode) els.diagnosticRunCode.textContent = String(run.id || "")
+    var html = '<table class="diagnostic-table"><thead><tr><th scope="col">Factory / emulsion</th>'
+    emulsions.forEach(function (slot) {
+      html += '<th scope="col">' + esc(String(slot)) + "</th>"
+    })
+    html += "</tr></thead><tbody>"
+    pipelines.forEach(function (pipeline) {
+      html +=
+        '<tr><th scope="row"><strong>' +
+        esc(pipeline + String(run.vision_revision || "")) +
+        "</strong><span>" +
+        esc(diagnosticPipelineLabel(pipeline)) +
+        "</span></th>"
+      emulsions.forEach(function (slot) {
+        var cell = byKey.get(String(pipeline) + ":" + String(slot)) || {}
+        var status = String(cell.status || "open")
+        var image = cell.full_url
+          ? '<img src="' +
+            esc(cell.full_url) +
+            '" alt="' +
+            esc(cell.emulsion_code || "") +
+            '" loading="lazy" />'
+          : '<div class="diagnostic-cell-state"><span class="diagnostic-cell-pulse"></span>' +
+            esc(status === "open" ? "Queued" : status) +
+            "</div>"
+        html +=
+          '<td class="diagnostic-cell" data-status="' +
+          esc(status) +
+          '"><div class="diagnostic-cell-code">' +
+          esc(cell.emulsion_code || pipeline + String(run.vision_revision || "") + "-" + slot) +
+          "</div>" +
+          image +
+          "</td>"
+      })
+      html += "</tr>"
+    })
+    els.diagnosticMatrix.innerHTML = html + "</tbody></table>"
+    var counts = run.counts || {}
+    var total = Number(counts.total || run.cell_count || 0)
+    var completed = Number(counts.completed || 0)
+    if (els.diagnosticProgress) {
+      els.diagnosticProgress.hidden = false
+      els.diagnosticProgress.innerHTML =
+        '<div class="diagnostic-progress-copy"><strong>' +
+        esc(
+          run.status === "completed" ? "Matrix complete" : completed + " of " + total + " complete",
+        ) +
+        "</strong><span>" +
+        esc(
+          Number(counts.failed || 0)
+            ? String(counts.failed) + " need attention"
+            : "The workstation advances one immutable factory group at a time.",
+        ) +
+        '</span></div><progress max="' +
+        esc(String(Math.max(1, total))) +
+        '" value="' +
+        esc(String(completed)) +
+        '"></progress>'
+    }
+    if (els.diagnosticLegend) {
+      els.diagnosticLegend.textContent =
+        "Rows identify immutable factory Pipeline + Vision recipes; columns identify emulsion slots. " +
+        "Every cell holds gene " +
+        String(run.gene_symbol || "") +
+        " and prompt body " +
+        (run.prompt_body_mode === "prose_prompt"
+          ? "constant full manifestation"
+          : "constant Tags") +
+        ". Images retain their native portrait aspect ratio."
+    }
+    if (els.diagnosticDownload) els.diagnosticDownload.disabled = run.status !== "completed"
+    if (run.status === "completed")
+      setDiagnosticStatus(
+        "Diagnostic complete. All " + total + " cells are receipt-backed.",
+        "success",
+      )
+  }
+
+  function scheduleDiagnosticPoll() {
+    if (state.diagnosticPollTimer) window.clearTimeout(state.diagnosticPollTimer)
+    state.diagnosticPollTimer = null
+    if (
+      state.activeTab !== "factory" ||
+      !state.diagnosticRun ||
+      state.diagnosticRun.status === "completed"
+    )
+      return
+    state.diagnosticPollTimer = window.setTimeout(function () {
+      refreshDiagnosticMatrix({ quiet: true, id: state.diagnosticRun && state.diagnosticRun.id })
+    }, 5000)
+  }
+
+  async function refreshDiagnosticMatrix(options) {
+    var opts = options || {}
+    if (!els.diagnosticMatrix) return
+    if (!opts.quiet) setDiagnosticStatus("Loading latest diagnostic…", "")
+    try {
+      var id = String(opts.id || (state.diagnosticRun && state.diagnosticRun.id) || "").trim()
+      var payload = await apiJson(
+        "/diagnostic-matrices" + (id ? "?id=" + encodeURIComponent(id) : ""),
+        { method: "GET" },
+      )
+      if (payload && payload.catalog) {
+        state.factoryRecipe = payload.catalog
+        state.factoryLoaded = true
+      }
+      state.diagnosticRun = payload && payload.run ? payload.run : null
+      renderFactoryRecipe()
+      renderDiagnosticBuilder()
+      renderDiagnosticMatrix()
+      if (!opts.quiet && !state.diagnosticRun) setDiagnosticStatus("No diagnostic runs yet.", "")
+      scheduleDiagnosticPoll()
+    } catch (err) {
+      if (isRequestCanceled(err)) return
+      setDiagnosticStatus(requestErrorMessage(err, "Diagnostic status failed to load."), "danger")
+    }
+  }
+
+  async function startDiagnosticMatrix() {
+    var gene = String((els.diagnosticGene && els.diagnosticGene.value) || "")
+      .trim()
+      .toUpperCase()
+    var count = diagnosticCellCount()
+    if (!gene || !count) {
+      setDiagnosticStatus(
+        "Choose one gene, at least one factory line, and at least one emulsion.",
+        "danger",
+      )
+      return
+    }
+    state.diagnosticBusy = true
+    renderDiagnosticBuilder()
+    setDiagnosticStatus("Queueing " + count + " immutable cells…", "")
+    try {
+      var payload = await apiJson("/diagnostic-matrices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          gene_symbol: gene,
+          pipeline_codes: state.diagnosticSelectedPipelines,
+          emulsion_slots: state.diagnosticEmulsionSlots,
+          vision_revision:
+            Number.parseInt(String((els.factoryVision && els.factoryVision.value) || "1"), 10) || 1,
+          prompt_body_mode: String(
+            (els.diagnosticPromptMode && els.diagnosticPromptMode.value) || "taggerizer_prompt",
+          ),
+        }),
+      })
+      state.diagnosticRun = payload.run || null
+      persistDiagnosticDefaults()
+      renderDiagnosticMatrix()
+      setDiagnosticStatus(
+        "Queued " + count + " cells. This page will update as the factory publishes them.",
+        "success",
+      )
+      scheduleDiagnosticPoll()
+    } catch (err) {
+      setDiagnosticStatus(requestErrorMessage(err, "Diagnostic matrix was not queued."), "danger")
+    } finally {
+      state.diagnosticBusy = false
+      renderDiagnosticBuilder()
+    }
+  }
+
+  function loadDiagnosticCanvasImage(url) {
+    return new Promise(function (resolve, reject) {
+      var image = new Image()
+      image.onload = function () {
+        resolve(image)
+      }
+      image.onerror = reject
+      image.src = url
+    })
+  }
+
+  async function downloadDiagnosticPng() {
+    var run = state.diagnosticRun
+    if (!run || run.status !== "completed") return
+    setDiagnosticStatus("Rendering full-resolution matrix…", "")
+    try {
+      var pipelines = run.pipeline_codes || []
+      var emulsions = run.emulsion_slots || []
+      var cellWidth = 448
+      var cellHeight = 640
+      var rowLabelWidth = 320
+      var headerHeight = 250
+      var legendHeight = 210
+      var canvas = document.createElement("canvas")
+      canvas.width = rowLabelWidth + emulsions.length * cellWidth
+      canvas.height = headerHeight + pipelines.length * cellHeight + legendHeight
+      var ctx = canvas.getContext("2d")
+      ctx.fillStyle = "#f5f1e8"
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.fillStyle = "#18221c"
+      ctx.font = "700 56px Georgia, serif"
+      ctx.fillText(String(run.gene_symbol || "") + " diagnostic matrix", 36, 70)
+      ctx.font = "28px Georgia, serif"
+      ctx.fillText(
+        pipelines.length +
+          " factory lines × " +
+          emulsions.length +
+          " emulsions · Vision " +
+          run.vision_revision,
+        38,
+        118,
+      )
+      ctx.textAlign = "center"
+      ctx.font = "700 30px Georgia, serif"
+      emulsions.forEach(function (slot, index) {
+        ctx.fillText(String(slot), rowLabelWidth + index * cellWidth + cellWidth / 2, 205)
+      })
+      var cellsByKey = new Map(
+        (run.cells || []).map(function (cell) {
+          return [cell.pipeline + ":" + cell.emulsion_slot, cell]
+        }),
+      )
+      for (var row = 0; row < pipelines.length; row += 1) {
+        var pipeline = pipelines[row]
+        var y = headerHeight + row * cellHeight
+        ctx.textAlign = "left"
+        ctx.font = "700 40px Georgia, serif"
+        ctx.fillText(pipeline + String(run.vision_revision), 36, y + 70)
+        ctx.font = "24px Georgia, serif"
+        var label = diagnosticPipelineLabel(pipeline)
+        ctx.fillText(label, 36, y + 108)
+        for (var column = 0; column < emulsions.length; column += 1) {
+          var slot = emulsions[column]
+          var cell = cellsByKey.get(pipeline + ":" + slot)
+          if (!cell || !cell.full_url) continue
+          var image = await loadDiagnosticCanvasImage(cell.full_url)
+          var x = rowLabelWidth + column * cellWidth
+          var padding = 18
+          var labelBand = 48
+          var availableWidth = cellWidth - padding * 2
+          var availableHeight = cellHeight - padding * 2 - labelBand
+          var scale = Math.min(
+            availableWidth / image.naturalWidth,
+            availableHeight / image.naturalHeight,
+          )
+          var drawWidth = image.naturalWidth * scale
+          var drawHeight = image.naturalHeight * scale
+          var drawX = x + (cellWidth - drawWidth) / 2
+          var drawY = y + labelBand + (availableHeight - drawHeight) / 2
+          ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight)
+          ctx.strokeStyle = "#b8b09f"
+          ctx.strokeRect(drawX, drawY, drawWidth, drawHeight)
+          ctx.fillStyle = "#18221c"
+          ctx.textAlign = "center"
+          ctx.font = "700 24px Georgia, serif"
+          ctx.fillText(cell.emulsion_code, x + cellWidth / 2, y + 34)
+        }
+      }
+      ctx.textAlign = "left"
+      ctx.fillStyle = "#18221c"
+      ctx.font = "24px Georgia, serif"
+      var legendY = canvas.height - legendHeight + 54
+      ctx.fillText(
+        "Rows: immutable factory Pipeline + Vision. Columns: emulsion slot.",
+        36,
+        legendY,
+      )
+      ctx.fillText(
+        "Gene and " +
+          (run.prompt_body_mode === "prose_prompt" ? "full manifestation" : "Tags") +
+          " prompt held constant. Native portrait aspect ratio retained.",
+        36,
+        legendY + 42,
+      )
+      ctx.font = "20px Georgia, serif"
+      ctx.fillStyle = "#566259"
+      ctx.fillText(String(run.id || "") + " · " + String(run.created_at || ""), 36, legendY + 88)
+      var blob = await new Promise(function (resolve) {
+        canvas.toBlob(resolve, "image/png")
+      })
+      if (!blob) throw new Error("PNG encoder returned no image.")
+      var link = document.createElement("a")
+      link.href = URL.createObjectURL(blob)
+      link.download = String(run.gene_symbol || "gene") + "-diagnostic-matrix.png"
+      link.click()
+      window.setTimeout(function () {
+        URL.revokeObjectURL(link.href)
+      }, 1000)
+      setDiagnosticStatus("PNG downloaded.", "success")
+    } catch (err) {
+      setDiagnosticStatus(requestErrorMessage(err, "PNG could not be rendered."), "danger")
     }
   }
 
@@ -9212,6 +9701,52 @@
       els.factoryPipeline.addEventListener("change", renderFactoryRecipeSelection)
     if (els.factoryVision)
       els.factoryVision.addEventListener("change", renderFactoryRecipeSelection)
+    if (els.diagnosticPipelineOptions) {
+      els.diagnosticPipelineOptions.addEventListener("change", function (ev) {
+        var input = ev.target.closest("[data-diagnostic-pipeline]")
+        if (!input) return
+        state.diagnosticSelectedPipelines = Array.from(
+          els.diagnosticPipelineOptions.querySelectorAll("[data-diagnostic-pipeline]:checked"),
+        ).map(function (node) {
+          return String(node.getAttribute("data-diagnostic-pipeline") || "")
+        })
+        persistDiagnosticDefaults()
+        renderDiagnosticBuilder()
+      })
+    }
+    if (els.diagnosticEmulsionAdd)
+      els.diagnosticEmulsionAdd.addEventListener("click", addDiagnosticEmulsion)
+    if (els.diagnosticEmulsionInput) {
+      els.diagnosticEmulsionInput.addEventListener("keydown", function (ev) {
+        if (ev.key !== "Enter") return
+        ev.preventDefault()
+        addDiagnosticEmulsion()
+      })
+    }
+    if (els.diagnosticEmulsionChips) {
+      els.diagnosticEmulsionChips.addEventListener("click", function (ev) {
+        var button = ev.target.closest("[data-diagnostic-emulsion-remove]")
+        if (!button) return
+        var slot =
+          Number.parseInt(
+            String(button.getAttribute("data-diagnostic-emulsion-remove") || "0"),
+            10,
+          ) || 0
+        state.diagnosticEmulsionSlots = state.diagnosticEmulsionSlots.filter(function (value) {
+          return value !== slot
+        })
+        persistDiagnosticDefaults()
+        renderDiagnosticBuilder()
+      })
+    }
+    if (els.diagnosticRunButton)
+      els.diagnosticRunButton.addEventListener("click", startDiagnosticMatrix)
+    if (els.diagnosticRefresh)
+      els.diagnosticRefresh.addEventListener("click", function () {
+        refreshDiagnosticMatrix({ quiet: false })
+      })
+    if (els.diagnosticDownload)
+      els.diagnosticDownload.addEventListener("click", downloadDiagnosticPng)
     if (els.promptTemplateList) {
       els.promptTemplateList.addEventListener("click", function (ev) {
         var row = ev.target.closest("[data-prompt-kind]")
@@ -9792,6 +10327,7 @@
   }
 
   function init() {
+    restoreDiagnosticDefaults()
     var initialTab = String(window.location.hash || "")
       .replace(/^#/, "")
       .trim()
