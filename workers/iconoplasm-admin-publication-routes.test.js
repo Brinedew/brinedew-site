@@ -68,6 +68,7 @@ test("publication handler registry is immutable and domain-complete", () => {
     "admin_publication.catalog_upsert",
     "admin_publication.essence_state",
     "admin_publication.essence_upsert",
+    "admin_publication.manifestation_upsert",
     "admin_publication.shared_discoveries",
   ])
 })
@@ -178,6 +179,67 @@ test("essence upsert uses quota-reserved bounded transactions and can defer read
     env: {
       ICONOPLASM_DB: {
         prepare(sql) {
+          return {
+            bind(...args) {
+              return { sql, args }
+            },
+          }
+        },
+        async batch(statements, options) {
+          transactions.push({ statements, options })
+        },
+      },
+    },
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.processed, 25)
+  assert.deepEqual(
+    transactions.map(({ statements, options }) => ({
+      size: statements.length,
+      maxRowsWritten: options.maxRowsWritten,
+    })),
+    [
+      { size: 10, maxRowsWritten: 40 },
+      { size: 10, maxRowsWritten: 40 },
+      { size: 5, maxRowsWritten: 20 },
+    ],
+  )
+  assert.equal(readModelCalls, 0)
+})
+
+test("manifestation upsert changes only manifestation columns in bounded transactions", async () => {
+  const transactions = []
+  let readModelCalls = 0
+  const handlers = createIconoplasmAdminPublicationHandlers(
+    publicationServices({
+      normalizeEssencePayload: (item, fallbackSymbol) => ({
+        gene_symbol: fallbackSymbol,
+        manifestation: String(item.manifestation || ""),
+        manifestation_tags: String(item.manifestation_tags || ""),
+        manifestation_fields_json: String(item.manifestation_fields_json || ""),
+        sample_label: String(item.sample_label || ""),
+        sample_number: item.sample_number ?? null,
+        sample_text_hash: String(item.sample_text_hash || ""),
+      }),
+      syncAdminReadModels: async () => {
+        readModelCalls += 1
+      },
+    }),
+  )
+  const items = Array.from({ length: 25 }, (_, index) => ({
+    symbol: `gene${index}`,
+    manifestation: `Manifestation ${index}`,
+  }))
+
+  const response = await responseFrom(handlers["admin_publication.manifestation_upsert"], {
+    body: { defer_read_models: true, items },
+    env: {
+      ICONOPLASM_DB: {
+        prepare(sql) {
+          assert.match(sql, /^UPDATE icono_gene_essence SET/)
+          assert.doesNotMatch(sql, /full_name|skin_hex|aesthetics_json/)
           return {
             bind(...args) {
               return { sql, args }
