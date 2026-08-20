@@ -12345,6 +12345,50 @@ async function fetchEssenceStateRows(env, requestedSymbols = null) {
   return out
 }
 
+function manifestationStateHashPayload(rawItem, fallbackSymbol = "") {
+  const item = normalizeEssencePayload(rawItem, fallbackSymbol)
+  if (!item || item.validation_error) return null
+  return [
+    item.gene_symbol,
+    item.manifestation || "",
+    item.manifestation_tags || "",
+    item.manifestation_fields_json || "",
+    item.sample_label || "",
+    item.sample_number ?? null,
+    item.sample_text_hash || "",
+  ]
+}
+
+async function fetchManifestationStateRows(env, requestedSymbols) {
+  if (!env.ICONOPLASM_DB) return []
+  const wantedSymbols = Array.isArray(requestedSymbols)
+    ? requestedSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)
+    : []
+  if (!wantedSymbols.length || wantedSymbols.length > 1000) return []
+  const placeholders = wantedSymbols.map(() => "?").join(", ")
+  const response = await env.ICONOPLASM_DB.prepare(
+    `SELECT gene_symbol, manifestation, manifestation_tags, manifestation_fields_json,
+            sample_label, sample_number, sample_text_hash, updated_at
+       FROM icono_gene_essence
+      WHERE gene_symbol IN (${placeholders})
+      ORDER BY gene_symbol ASC`,
+  )
+    .bind(...wantedSymbols)
+    .all()
+  const results = Array.isArray(response?.results) ? response.results : []
+  return Promise.all(
+    results.map(async (row) => {
+      const symbol = normalizeSymbol(row?.gene_symbol || "")
+      const hashPayload = manifestationStateHashPayload(row, symbol)
+      return {
+        symbol,
+        hash: hashPayload ? await sha256Hex(JSON.stringify(hashPayload)) : "",
+        updated_at: row?.updated_at ? String(row.updated_at) : null,
+      }
+    }),
+  )
+}
+
 async function fetchAssetStateRows(env, requestedSymbols = null) {
   if (!env.ICONOPLASM_DB) return []
   const wantedSymbols = Array.isArray(requestedSymbols)
@@ -28675,6 +28719,7 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     fetchCatalogState,
     fetchCatalogStateRows,
     fetchEssenceStateRows,
+    fetchManifestationStateRows,
     isAdmin: isIconoplasmAdmin,
     json,
     mutationLimiterSnapshot: iconoplasmAdminMutationLimiterSnapshotFromEnv,
