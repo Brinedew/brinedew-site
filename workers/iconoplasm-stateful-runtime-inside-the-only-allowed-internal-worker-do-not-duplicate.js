@@ -1569,6 +1569,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_requests_fulfill" ||
     family === "admin_image_edit_prompts" ||
     family === "admin_factory_recipe" ||
+    family === "admin_diagnostic_matrix" ||
     family === "admin_extension_blocklist" ||
     family === "admin_publication_aliases" ||
     family === "admin_gene_request_diagnostics" ||
