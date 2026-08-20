@@ -57,7 +57,7 @@
     }
   },
   "dependencies": {
-    "@quartz-community/types": "github:quartz-community/types"
+    "@quartz-community/types": "0.2.1"
   },
   "devDependencies": {
     "@napi-rs/simple-git": "^0.1.19",
