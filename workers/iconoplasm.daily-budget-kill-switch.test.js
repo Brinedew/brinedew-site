@@ -111,6 +111,10 @@ class CatalogUpsertDb {
   prepare(sql) {
     return new CatalogUpsertStatement(this, sql)
   }
+
+  async batch(statements) {
+    return Promise.all(statements.map((statement) => statement.run()))
+  }
 }
 
 class FakeDailyBudgetNamespace {
@@ -1023,7 +1027,7 @@ test("write-heavy admin mutations fail before starting once the configured targe
   )
 })
 
-test("write-heavy admin mutations clamp mid-run without chattering to the ledger on every query", async () => {
+test("write-heavy admin mutations reserve atomic batch headroom before writing", async () => {
   class FixedSnapshotBudgetNamespace {
     constructor(initialSnapshot) {
       this.snapshot = { ...initialSnapshot }
@@ -1172,15 +1176,13 @@ test("write-heavy admin mutations clamp mid-run without chattering to the ledger
 
   assert.equal(response.status, 503)
   assert.equal(payload?.code, "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED")
-  assert.equal(payload?.budget?.rows_written, 12)
+  assert.equal(payload?.budget?.rows_written, 4)
   assert.equal(payload?.budget?.exhausted_by, "rows_written_daily_smart")
-  assert.equal(db.catalogUpsertRuns, 4)
+  assert.equal(db.catalogUpsertRuns, 0)
   assert.deepEqual(
     budgetNamespace.calls.map((call) => call.pathname),
-    ["/snapshot", "/record"],
+    ["/snapshot"],
   )
-  assert.equal(budgetNamespace.calls[1]?.payload?.query_count, 4)
-  assert.equal(budgetNamespace.calls[1]?.payload?.rows_written, 8)
 })
 
 test("iconoplasm health stays up and does not touch the limiter DO on read-only paths", async () => {
