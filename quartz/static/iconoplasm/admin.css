@@ -265,7 +265,8 @@
   white-space: nowrap;
 }
 .diagnostic-matrix {
-  overflow: hidden;
+  max-width: 100%;
+  overflow: auto;
 }
 .diagnostic-table {
   width: 100%;
@@ -281,6 +282,9 @@
   border: 1px solid #beb9ae;
 }
 .diagnostic-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   height: 54px;
   text-align: center;
   vertical-align: middle;
@@ -301,7 +305,15 @@
 .diagnostic-table tbody th {
   width: 168px;
 }
+.diagnostic-table thead th:first-child {
+  left: 0;
+  z-index: 5;
+}
 .diagnostic-table tbody th {
+  position: sticky;
+  top: auto;
+  left: 0;
+  z-index: 2;
   padding: 14px;
   text-align: left;
   vertical-align: top;
@@ -322,10 +334,9 @@
 }
 .diagnostic-cell {
   position: relative;
-  display: grid;
-  align-content: start;
-  min-height: 246px;
+  display: table-cell;
   padding: 8px;
+  vertical-align: top;
 }
 .diagnostic-cell-code {
   min-height: 24px;

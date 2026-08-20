@@ -125,6 +125,9 @@ test("factory admin runs and displays a diagnostic matrix without leaving the pa
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /recoverDiagnosticRun\(runId\)/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /latest:\s*true/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /\[30593, 255, 343, 21329, 24210\]/)
+  assert.match(ICONOPLASM_ADMIN_CSS, /\.diagnostic-cell\s*\{[^}]*display:\s*table-cell/s)
+  assert.doesNotMatch(ICONOPLASM_ADMIN_CSS, /\.diagnostic-cell\s*\{[^}]*display:\s*grid/s)
+  assert.match(ICONOPLASM_ADMIN_CSS, /\.diagnostic-table tbody th\s*\{[^}]*left:\s*0/s)
   assert.match(ICONOPLASM_ADMIN_CSS, /object-fit:\s*contain/)
 })
 
