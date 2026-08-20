@@ -122,7 +122,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             <figcaption id="diagnostic-caption"></figcaption>
             <span id="diagnostic-run-code" class="mono"></span>
           </div>
-          <div id="diagnostic-matrix" class="diagnostic-matrix"></div>
+          <div id="diagnostic-matrix" class="diagnostic-matrix" data-icono-lightbox></div>
           <p id="diagnostic-legend" class="diagnostic-legend"></p>
         </figure>
       </section>
@@ -733,6 +733,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     <pre class="log" id="action-log">No actions yet.</pre>
   </div>
 
+  <script type="module" src="/static/iconoplasm/lightbox-bootstrap.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__"></script>
   <script src="/static/iconoplasm/admin.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
 </body>
 </html>

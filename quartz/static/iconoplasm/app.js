@@ -32,6 +32,7 @@ import {
 } from "../shared/sidebar-shell.js?v=d8bcfb8f19d3a065"
 import "./vendor/img-comparison-slider.js?v=20260516b517"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=20260730-native-dialog"
+import { installIconoplasmLightbox } from "./lightbox.js?v=20260820-admin-matrix"
 import {
   openCandidateDeleteDialog,
   removeCandidateFromPageState,
@@ -141,15 +142,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var VOTE_PROJECTION_REFRESH_DELAYS_MS = [600, 1200, 2000, 3200, 5000, 8000, 13000]
   var portraitImageCache = Object.create(null)
   var portraitImagePromiseCache = Object.create(null)
-  var portraitImageDimensionsCache = Object.create(null)
-  var portraitImageDimensionsPromiseCache = Object.create(null)
   var portraitRetainedImageCache = Object.create(null)
   var portraitRetainedImageOrder = []
   var geneRequestSummaryCache = Object.create(null)
   var imageEditProvidersCache = Object.create(null)
   var imageEditProvidersPromise = Object.create(null)
   var homeMasonryInstances = new Map()
-  var portraitLightboxCleanup = null
   var activeGeneRenderId = 0
   var lastGenePageDiscoveryVisitKey = ""
   var websiteGuestDiscoveryMergePromise = null
@@ -157,7 +155,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var currentUser = null
   var currentUserIsIconoAdmin = false
   var masonryLibsPromise = null
-  var photoSwipeModulePromise = null
   var hasResolvedAuthState = false
   var websiteGuestDiscoveries = createWebsiteGuestDiscoveryStore({
     storage: (function () {
@@ -753,19 +750,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     window.setTimeout(task, 120)
   }
 
-  function ensureStylesheetOnce(href, marker) {
-    if (!href) return
-    var existingSelector = marker
-      ? 'link[data-icono-style="' + marker + '"]'
-      : 'link[href="' + href.replace(/"/g, '\\"') + '"]'
-    if (document.querySelector(existingSelector)) return
-    var link = document.createElement("link")
-    link.rel = "stylesheet"
-    link.href = href
-    if (marker) link.setAttribute("data-icono-style", marker)
-    document.head.appendChild(link)
-  }
-
   function loadScriptOnce(src, test) {
     if (typeof test === "function" && test()) return Promise.resolve()
     var existing = document.querySelector('script[data-icono-script="' + src + '"]')
@@ -818,23 +802,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         throw error
       })
     return masonryLibsPromise
-  }
-
-  function ensurePhotoSwipe() {
-    ensureStylesheetOnce(
-      new URL("./vendor/photoswipe.css?v=20260311a", import.meta.url).href,
-      "photoswipe",
-    )
-    if (photoSwipeModulePromise) return photoSwipeModulePromise
-    photoSwipeModulePromise = import("./vendor/photoswipe.esm.js?v=20260306d")
-      .then(function (module) {
-        return module && module.default ? module.default : module
-      })
-      .catch(function (error) {
-        photoSwipeModulePromise = null
-        throw error
-      })
-    return photoSwipeModulePromise
   }
 
   function rememberRetainedPortraitImage(url, img) {
@@ -901,133 +868,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return portraitImagePromiseCache[resolvedUrl]
   }
 
-  function lightboxDimensionsForLink(link) {
-    var width = Number((link && link.getAttribute("data-pswp-width")) || 0)
-    var height = Number((link && link.getAttribute("data-pswp-height")) || 0)
-    if (width > 0 && height > 0) {
-      return { width: width, height: height }
-    }
-    var img = link && link.querySelector ? link.querySelector("img") : null
-    if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
-      return { width: img.naturalWidth, height: img.naturalHeight }
-    }
-    return { width: 1, height: 1 }
-  }
-
-  function measureLightboxSourceDimensions(url) {
-    var resolvedUrl = String(url || "").trim()
-    if (!resolvedUrl) return Promise.resolve(null)
-    if (portraitImageDimensionsCache[resolvedUrl]) {
-      return Promise.resolve(portraitImageDimensionsCache[resolvedUrl])
-    }
-    if (portraitImageDimensionsPromiseCache[resolvedUrl]) {
-      return portraitImageDimensionsPromiseCache[resolvedUrl]
-    }
-    portraitImageDimensionsPromiseCache[resolvedUrl] = new Promise(function (resolve) {
-      var img = new Image()
-      var finished = false
-      function finish(value) {
-        if (finished) return
-        finished = true
-        delete portraitImageDimensionsPromiseCache[resolvedUrl]
-        if (value && value.width > 0 && value.height > 0) {
-          portraitImageDimensionsCache[resolvedUrl] = value
-          resolve(value)
-          return
-        }
-        resolve(null)
-      }
-      img.addEventListener(
-        "load",
-        function () {
-          finish({ width: img.naturalWidth || 0, height: img.naturalHeight || 0 })
-        },
-        { once: true },
-      )
-      img.addEventListener(
-        "error",
-        function () {
-          finish(null)
-        },
-        { once: true },
-      )
-      img.src = resolvedUrl
-    })
-    return portraitImageDimensionsPromiseCache[resolvedUrl]
-  }
-
   function refreshPortraitLightbox() {
-    if (typeof portraitLightboxCleanup === "function") {
-      portraitLightboxCleanup()
-      portraitLightboxCleanup = null
-    }
-    if (!document.querySelector("[data-icono-lightbox] [data-icono-pswp]")) return
-    var handler = function (event) {
-      var trigger =
-        event.target && event.target.closest ? event.target.closest("[data-icono-pswp]") : null
-      if (!trigger) return
-      var gallery = trigger.closest("[data-icono-lightbox]")
-      if (!gallery || !document.documentElement.contains(gallery)) return
-      event.preventDefault()
-      event.stopPropagation()
-      var links = gallery.querySelectorAll("[data-icono-pswp]")
-      var items = []
-      var index = 0
-      for (var j = 0; j < links.length; j++) {
-        var link = links[j]
-        var dimensions = lightboxDimensionsForLink(link)
-        items.push({
-          src: link.getAttribute("data-icono-pswp-src"),
-          width: dimensions.width,
-          height: dimensions.height,
-          alt: link.getAttribute("data-icono-pswp-alt") || link.getAttribute("aria-label") || "",
-        })
-        if (link === trigger) index = j
-      }
-      void Promise.all([
-        ensurePhotoSwipe(),
-        measureLightboxSourceDimensions(items[index] && items[index].src),
-      ])
-        .then(function (results) {
-          var PhotoSwipe = results[0]
-          var measuredDimensions = results[1]
-          if (
-            measuredDimensions &&
-            measuredDimensions.width > 0 &&
-            measuredDimensions.height > 0 &&
-            items[index]
-          ) {
-            items[index].width = measuredDimensions.width
-            items[index].height = measuredDimensions.height
-            trigger.setAttribute("data-pswp-width", String(measuredDimensions.width))
-            trigger.setAttribute("data-pswp-height", String(measuredDimensions.height))
-          }
-          var pswp = new PhotoSwipe({
-            dataSource: items,
-            index: index,
-            bgOpacity: 0.92,
-            spacing: 0.12,
-            wheelToZoom: true,
-            mouseMovePan: true,
-            loop: false,
-            imageClickAction: "zoom",
-            tapAction: "toggle-controls",
-            bgClickAction: "close",
-            showHideAnimationType: "fade",
-            paddingFn: function () {
-              return { top: 28, bottom: 28, left: 28, right: 28 }
-            },
-          })
-          pswp.init()
-        })
-        .catch(function (error) {
-          console.error("[Iconoplasm] failed to load PhotoSwipe:", error)
-        })
-    }
-    document.addEventListener("click", handler, true)
-    portraitLightboxCleanup = function () {
-      document.removeEventListener("click", handler, true)
-    }
+    installIconoplasmLightbox(document)
   }
 
   var printCopyRequestState = Object.create(null)
