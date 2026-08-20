@@ -1,7 +1,8 @@
 version: 2
 
 # Dependabot hardening (2026):
-#   - daily cadence (default for npm/github-actions ecosystems)
+#   - weekly cadence batches routine maintenance instead of reopening and
+#     refreshing the same pull requests every day
 #   - groups split into auto-mergeable minor+patch and manual major batches
 #   - open-pull-requests-limit caps the back-log so a missed week does not
 #     generate 20+ PRs at once under minimumReleaseAge=1440
@@ -16,7 +17,10 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Asia/Bangkok"
     open-pull-requests-limit: 8
     target-branch: "main"
     labels:
@@ -51,12 +55,15 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Asia/Bangkok"
     open-pull-requests-limit: 5
     target-branch: "main"
     labels:
       - "dependencies"
-      - "github-actions"
+      - "github_actions"
     groups:
       github-actions-minor-and-patch:
         applies-to: "version-updates"
