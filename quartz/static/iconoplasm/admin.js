@@ -1227,7 +1227,8 @@
   function selectedFactoryRecipe() {
     return {
       pipeline: String((els.factoryPipeline && els.factoryPipeline.value) || "").trim(),
-      vision: Number.parseInt(String((els.factoryVision && els.factoryVision.value) || "0"), 10) || 0,
+      vision:
+        Number.parseInt(String((els.factoryVision && els.factoryVision.value) || "0"), 10) || 0,
     }
   }
 
@@ -1240,7 +1241,13 @@
     if (els.factoryPipeline) {
       els.factoryPipeline.innerHTML = pipelines
         .map(function (item) {
-          return '<option value="' + esc(item.code) + '">' + esc(item.code + " · " + item.label) + "</option>"
+          return (
+            '<option value="' +
+            esc(item.code) +
+            '">' +
+            esc(item.code + " · " + item.label) +
+            "</option>"
+          )
         })
         .join("")
       els.factoryPipeline.value = String(active.pipeline || "A")
@@ -1248,7 +1255,9 @@
     if (els.factoryVision) {
       els.factoryVision.innerHTML = visions
         .map(function (item) {
-          return '<option value="' + esc(String(item.revision)) + '">' + esc(item.label) + "</option>"
+          return (
+            '<option value="' + esc(String(item.revision)) + '">' + esc(item.label) + "</option>"
+          )
         })
         .join("")
       els.factoryVision.value = String(active.vision || 1)
@@ -1270,13 +1279,24 @@
     var code = (selected.pipeline || "—") + (selected.vision || "—")
     if (els.factoryActiveCode) els.factoryActiveCode.textContent = code
     if (els.factoryRecipeDetail) {
-      els.factoryRecipeDetail.innerHTML = pipeline && vision
-        ? [
-            '<div><span>Model</span><strong>' + esc(pipeline.model || "") + "</strong></div>",
-            '<div><span>Sampling</span><strong>' + esc(String(pipeline.steps) + " steps · CFG " + String(pipeline.cfg) + " · " + pipeline.sampler) + "</strong></div>",
-            '<div><span>Vision</span><strong>' + esc(vision.label + " · " + vision.source_id) + "</strong></div>",
-          ].join("")
-        : ""
+      els.factoryRecipeDetail.innerHTML =
+        pipeline && vision
+          ? [
+              "<div><span>Model</span><strong>" + esc(pipeline.model || "") + "</strong></div>",
+              "<div><span>Sampling</span><strong>" +
+                esc(
+                  String(pipeline.steps) +
+                    " steps · CFG " +
+                    String(pipeline.cfg) +
+                    " · " +
+                    pipeline.sampler,
+                ) +
+                "</strong></div>",
+              "<div><span>Vision</span><strong>" +
+                esc(vision.label + " · " + vision.source_id) +
+                "</strong></div>",
+            ].join("")
+          : ""
     }
   }
 
@@ -1311,7 +1331,13 @@
       })
       state.factoryLoaded = true
       renderFactoryRecipe()
-      setFactoryStatus("Future jobs now use " + selected.pipeline + selected.vision + ". Queued jobs are unchanged.", "success")
+      setFactoryStatus(
+        "Future jobs now use " +
+          selected.pipeline +
+          selected.vision +
+          ". Queued jobs are unchanged.",
+        "success",
+      )
     } catch (err) {
       setFactoryStatus(requestErrorMessage(err, "Factory recipe was not changed."), "danger")
     } finally {
@@ -9182,8 +9208,10 @@
     }
     if (els.factoryRefresh) els.factoryRefresh.addEventListener("click", refreshFactoryRecipe)
     if (els.factorySave) els.factorySave.addEventListener("click", saveFactoryRecipe)
-    if (els.factoryPipeline) els.factoryPipeline.addEventListener("change", renderFactoryRecipeSelection)
-    if (els.factoryVision) els.factoryVision.addEventListener("change", renderFactoryRecipeSelection)
+    if (els.factoryPipeline)
+      els.factoryPipeline.addEventListener("change", renderFactoryRecipeSelection)
+    if (els.factoryVision)
+      els.factoryVision.addEventListener("change", renderFactoryRecipeSelection)
     if (els.promptTemplateList) {
       els.promptTemplateList.addEventListener("click", function (ev) {
         var row = ev.target.closest("[data-prompt-kind]")

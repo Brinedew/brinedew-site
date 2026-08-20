@@ -31,19 +31,25 @@ test("factory migration adds immutable recipe snapshots and a future-only active
     db.exec("CREATE TABLE icono_portrait_assets (gene_symbol TEXT, asset_sha256 TEXT)")
     db.exec(factoryMigration)
 
-    const active = { ...db.prepare(
-      "SELECT pipeline_code, vision_revision FROM icono_factory_active_recipe WHERE singleton_id = 1",
-    ).get() }
+    const active = {
+      ...db
+        .prepare(
+          "SELECT pipeline_code, vision_revision FROM icono_factory_active_recipe WHERE singleton_id = 1",
+        )
+        .get(),
+    }
     assert.deepEqual(active, { pipeline_code: "A", vision_revision: 1 })
     assert.ok(
-      db.prepare("PRAGMA table_info(icono_generation_requests)").all().some(
-        (column) => column.name === "factory_pipeline_code",
-      ),
+      db
+        .prepare("PRAGMA table_info(icono_generation_requests)")
+        .all()
+        .some((column) => column.name === "factory_pipeline_code"),
     )
     assert.ok(
-      db.prepare("PRAGMA table_info(icono_portrait_assets)").all().some(
-        (column) => column.name === "public_emulsion_code",
-      ),
+      db
+        .prepare("PRAGMA table_info(icono_portrait_assets)")
+        .all()
+        .some((column) => column.name === "public_emulsion_code"),
     )
   } finally {
     db.close()
@@ -74,7 +80,10 @@ test("saved emulsion revisions receive stable plain numeric slots", () => {
       ],
     )
     db.exec(publicSlotMigration)
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM iconoplasm_user_emulsion_public_slots").get().n, 2)
+    assert.equal(
+      db.prepare("SELECT COUNT(*) AS n FROM iconoplasm_user_emulsion_public_slots").get().n,
+      2,
+    )
   } finally {
     db.close()
   }

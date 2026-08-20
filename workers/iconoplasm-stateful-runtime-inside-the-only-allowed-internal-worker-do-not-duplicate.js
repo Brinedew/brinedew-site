@@ -3853,8 +3853,7 @@ function mapGenerationRequestRow(row, { portraitBaseUrl = "" } = {}) {
     requested_emulsion_label:
       requestMode === "specific" ? generationRequestVisionLabel(row) : "Random default",
     factory_pipeline_code: normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A",
-    factory_vision_revision:
-      normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1,
+    factory_vision_revision: normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1,
     factory_code: `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}`,
     requested_reference_asset_sha256:
       requestMode === "specific"
@@ -5294,18 +5293,65 @@ async function imageEditPromptTemplatesPayload(env) {
 }
 
 const ICONOPLASM_FACTORY_PIPELINES = Object.freeze([
-  Object.freeze({ code: "A", label: "Aesthetic 1.1", model: "anima-aesthetic-v1.1.safetensors", steps: 38, cfg: 3.5, sampler: "dpmpp_2m_sde_gpu", status: "accepted" }),
-  Object.freeze({ code: "B", label: "Aesthetic 1.0b", model: "anima-aesthetic-v1.0b.safetensors", steps: 36, cfg: 3.2, sampler: "dpmpp_2m_sde_gpu", status: "accepted" }),
-  Object.freeze({ code: "C", label: "Preview 3", model: "anima-preview3-base.safetensors", steps: 38, cfg: 4.5, sampler: "dpmpp_2m_sde_gpu", status: "accepted" }),
-  Object.freeze({ code: "D", label: "Base 1.0", model: "anima-base-v1.0.safetensors", steps: 40, cfg: 4.5, sampler: "dpmpp_2m_sde_gpu", status: "accepted" }),
-  Object.freeze({ code: "E", label: "Turbo 1.0", model: "anima-turbo-v1.0.safetensors", steps: 10, cfg: 1, sampler: "euler", status: "accepted" }),
+  Object.freeze({
+    code: "A",
+    label: "Aesthetic 1.1",
+    model: "anima-aesthetic-v1.1.safetensors",
+    steps: 38,
+    cfg: 3.5,
+    sampler: "dpmpp_2m_sde_gpu",
+    status: "accepted",
+  }),
+  Object.freeze({
+    code: "B",
+    label: "Aesthetic 1.0b",
+    model: "anima-aesthetic-v1.0b.safetensors",
+    steps: 36,
+    cfg: 3.2,
+    sampler: "dpmpp_2m_sde_gpu",
+    status: "accepted",
+  }),
+  Object.freeze({
+    code: "C",
+    label: "Preview 3",
+    model: "anima-preview3-base.safetensors",
+    steps: 38,
+    cfg: 4.5,
+    sampler: "dpmpp_2m_sde_gpu",
+    status: "accepted",
+  }),
+  Object.freeze({
+    code: "D",
+    label: "Base 1.0",
+    model: "anima-base-v1.0.safetensors",
+    steps: 40,
+    cfg: 4.5,
+    sampler: "dpmpp_2m_sde_gpu",
+    status: "accepted",
+  }),
+  Object.freeze({
+    code: "E",
+    label: "Turbo 1.0",
+    model: "anima-turbo-v1.0.safetensors",
+    steps: 10,
+    cfg: 1,
+    sampler: "euler",
+    status: "accepted",
+  }),
 ])
 const ICONOPLASM_FACTORY_VISIONS = Object.freeze([
-  Object.freeze({ revision: 1, label: "Vision 1", source_id: "artist-random-anima", status: "accepted" }),
+  Object.freeze({
+    revision: 1,
+    label: "Vision 1",
+    source_id: "artist-random-anima",
+    status: "accepted",
+  }),
 ])
 
 function normalizeFactoryPipelineCode(raw) {
-  const code = String(raw || "").trim().toUpperCase()
+  const code = String(raw || "")
+    .trim()
+    .toUpperCase()
   return ICONOPLASM_FACTORY_PIPELINES.some((item) => item.code === code) ? code : ""
 }
 
@@ -7660,9 +7706,10 @@ function mapCandidateGenerationJobRow(row, baseUrl = "") {
     requested_emulsion_id: sanitizeText(row?.requested_emulsion_id || "", 64) || "",
     requested_emulsion_label: sanitizeText(row?.requested_emulsion_label || "", 255) || "",
     factory_code: `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}`,
-    public_emulsion_code: optionalInt(row?.requested_emulsion_slot) > 0
-      ? `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}-${optionalInt(row?.requested_emulsion_slot)}`
-      : `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}`,
+    public_emulsion_code:
+      optionalInt(row?.requested_emulsion_slot) > 0
+        ? `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}-${optionalInt(row?.requested_emulsion_slot)}`
+        : `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}`,
     prompt_body_mode: normalizeCandidatePromptBodyMode(
       row?.prompt_body_mode || "taggerizer_prompt",
     ),
@@ -28954,7 +29001,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_factory_recipe_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
-        return done("admin_factory_recipe_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+        return done(
+          "admin_factory_recipe_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
       return done(
         "admin_factory_recipe",
         json(await factoryRecipePayload(env), 200, { "Cache-Control": "no-store" }),
@@ -28965,7 +29015,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_factory_recipe_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
-        return done("admin_factory_recipe_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+        return done(
+          "admin_factory_recipe_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
       let p
       try {
         p = await request.json()
