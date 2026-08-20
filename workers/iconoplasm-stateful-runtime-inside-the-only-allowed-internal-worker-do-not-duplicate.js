@@ -4163,6 +4163,7 @@ async function listOpenGenerationRequests(
     requesterUserId = "",
     statuses = ["open"],
     includeDiagnostics = false,
+    diagnosticsFirst = false,
   } = {},
 ) {
   if (!env.ICONOPLASM_DB) return []
@@ -4179,7 +4180,9 @@ async function listOpenGenerationRequests(
   return queryGenerationRequests(env, {
     whereParts,
     params,
-    orderBy: "gr.created_at ASC, gr.id ASC",
+    orderBy: diagnosticsFirst
+      ? "CASE WHEN gr.request_origin = 'diagnostic_matrix' THEN 0 ELSE 1 END ASC, gr.created_at ASC, gr.id ASC"
+      : "gr.created_at ASC, gr.id ASC",
     limit: cleanedLimit,
   })
 }
@@ -4302,7 +4305,7 @@ async function generationRequestDrainPlan(env, { limit = 500 } = {}) {
   const [totalOpenCount, eligibleCount, eligibleRows] = await Promise.all([
     countOpenGenerationRequests(env, openFilters),
     countOpenGenerationRequests(env, eligibleFilters),
-    listOpenGenerationRequests(env, { limit, ...eligibleFilters }),
+    listOpenGenerationRequests(env, { limit, diagnosticsFirst: true, ...eligibleFilters }),
   ])
   return {
     delivery_mode: policy.mode,
