@@ -642,6 +642,13 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "admin_factory_recipe",
   }),
   iconoplasmApiContract({
+    id: "admin_diagnostic_matrix",
+    match: exact("/api/iconoplasm/admin/diagnostic-matrices"),
+    methods: GET_POST,
+    auth: "administrator",
+    budgetFamily: "admin_diagnostic_matrix",
+  }),
+  iconoplasmApiContract({
     id: "admin_image_edit_prompts",
     match: exact("/api/iconoplasm/admin/image-edit-prompts"),
     methods: GET_POST,
