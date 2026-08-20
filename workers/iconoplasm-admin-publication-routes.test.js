@@ -120,6 +120,40 @@ test("catalog upsert owns its write boundary and can defer read models", async (
   assert.equal(readModelCalls, 0)
 })
 
+test("catalog upsert rejects request shapes that are too heavy for one Worker request", async () => {
+  let writes = 0
+  const handlers = createIconoplasmAdminPublicationHandlers(publicationServices())
+  const items = Array.from({ length: 101 }, (_, index) => ({
+    gene_symbol: `GENE${index}`,
+    full_name: `Gene ${index}`,
+    aliases_json: "[]",
+  }))
+
+  const response = await responseFrom(handlers["admin_publication.catalog_upsert"], {
+    body: { defer_read_models: true, items },
+    env: {
+      ICONOPLASM_DB: {
+        prepare(sql) {
+          return {
+            bind(...args) {
+              return {
+                async run() {
+                  writes += 1
+                  return { sql, args }
+                },
+              }
+            },
+          }
+        },
+      },
+    },
+  })
+
+  assert.equal(response.status, 400)
+  assert.match((await response.json()).error, /max 100/)
+  assert.equal(writes, 0)
+})
+
 test("catalog reconcile deletes only explicit normalized symbols", async () => {
   const deleted = []
   const handlers = createIconoplasmAdminPublicationHandlers(publicationServices())
