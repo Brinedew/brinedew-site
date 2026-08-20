@@ -1,4 +1,6 @@
 const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
+const D1_UPSERT_TRANSACTION_SIZE = 10
+const MAX_ROWS_WRITTEN_PER_UPSERT = 4
 
 const REQUIRED_SERVICE_NAMES = Object.freeze([
   "actor",
@@ -12,11 +14,11 @@ const REQUIRED_SERVICE_NAMES = Object.freeze([
   "normalizeCatalogPayloadItem",
   "normalizeEssencePayload",
   "normalizeSymbol",
+  "prepareGeneEssenceUpsertStatement",
   "publishCatalogArtifact",
   "rebuildSharedGeneDiscoveryRollup",
   "sanitizeText",
   "syncAdminReadModels",
-  "upsertGeneEssence",
 ])
 
 function assertPublicationServices(services) {
@@ -41,11 +43,11 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     normalizeCatalogPayloadItem,
     normalizeEssencePayload,
     normalizeSymbol,
+    prepareGeneEssenceUpsertStatement,
     publishCatalogArtifact,
     rebuildSharedGeneDiscoveryRollup,
     sanitizeText,
     syncAdminReadModels,
-    upsertGeneEssence,
   } = services
 
   async function catalogState({ request, env, done }) {
@@ -159,12 +161,10 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     // the configured 90% mutation ceiling, then records actual D1 metadata.
     // This preserves exact guard authority without paying one network round
     // trip for every catalog row.
-    const D1_CATALOG_TRANSACTION_SIZE = 10
-    const MAX_ROWS_WRITTEN_PER_CATALOG_ITEM = 4
-    for (let offset = 0; offset < statements.length; offset += D1_CATALOG_TRANSACTION_SIZE) {
-      const transaction = statements.slice(offset, offset + D1_CATALOG_TRANSACTION_SIZE)
+    for (let offset = 0; offset < statements.length; offset += D1_UPSERT_TRANSACTION_SIZE) {
+      const transaction = statements.slice(offset, offset + D1_UPSERT_TRANSACTION_SIZE)
       await env.ICONOPLASM_DB.batch(transaction, {
-        maxRowsWritten: transaction.length * MAX_ROWS_WRITTEN_PER_CATALOG_ITEM,
+        maxRowsWritten: transaction.length * MAX_ROWS_WRITTEN_PER_UPSERT,
       })
     }
     if (processed > 0 && !deferReadModels) {
@@ -328,6 +328,7 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     let processed = 0
     let invalid = 0
     const results = []
+    const statements = []
     for (const rawItem of items) {
       const rawEssence =
         rawItem &&
@@ -354,9 +355,18 @@ export function createIconoplasmAdminPublicationHandlers(services) {
         })
         continue
       }
-      await upsertGeneEssence(env, essence, actorId, source)
+      statements.push(prepareGeneEssenceUpsertStatement(env, essence, actorId, source))
       processed += 1
       results.push({ ok: true, symbol: essence.gene_symbol })
+    }
+    // Essence is a roster-wide bulk write. Execute the already validated rows
+    // as small atomic D1 transactions, reserving conservative quota headroom
+    // before each transaction through the metered database wrapper.
+    for (let offset = 0; offset < statements.length; offset += D1_UPSERT_TRANSACTION_SIZE) {
+      const transaction = statements.slice(offset, offset + D1_UPSERT_TRANSACTION_SIZE)
+      await env.ICONOPLASM_DB.batch(transaction, {
+        maxRowsWritten: transaction.length * MAX_ROWS_WRITTEN_PER_UPSERT,
+      })
     }
     if (processed > 0 && !deferReadModels) {
       await syncAdminReadModels(env, {

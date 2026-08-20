@@ -26,11 +26,16 @@ function publicationServices(overrides = {}) {
       String(value || "")
         .trim()
         .toUpperCase(),
+    prepareGeneEssenceUpsertStatement: (env, essence, actorId, source) =>
+      env.ICONOPLASM_DB.prepare("UPSERT ESSENCE").bind(
+        essence.gene_symbol,
+        actorId,
+        source,
+      ),
     publishCatalogArtifact: async () => ({ ok: true }),
     rebuildSharedGeneDiscoveryRollup: async () => ({ ok: true, count: 0 }),
     sanitizeText: (value, limit) => String(value || "").slice(0, limit),
     syncAdminReadModels: async () => ({ ok: true }),
-    upsertGeneEssence: async () => true,
     ...overrides,
   }
 }
@@ -155,6 +160,56 @@ test("catalog upsert rejects request shapes that are too heavy for one Worker re
   assert.equal(response.status, 400)
   assert.match((await response.json()).error, /max 100/)
   assert.equal(writes, 0)
+})
+
+test("essence upsert uses quota-reserved bounded transactions and can defer read models", async () => {
+  const transactions = []
+  let readModelCalls = 0
+  const handlers = createIconoplasmAdminPublicationHandlers(
+    publicationServices({
+      syncAdminReadModels: async () => {
+        readModelCalls += 1
+      },
+    }),
+  )
+  const items = Array.from({ length: 25 }, (_, index) => ({
+    gene_symbol: `GENE${index}`,
+    full_name: `Gene ${index}`,
+  }))
+
+  const response = await responseFrom(handlers["admin_publication.essence_upsert"], {
+    body: { defer_read_models: true, items },
+    env: {
+      ICONOPLASM_DB: {
+        prepare(sql) {
+          return {
+            bind(...args) {
+              return { sql, args }
+            },
+          }
+        },
+        async batch(statements, options) {
+          transactions.push({ statements, options })
+        },
+      },
+    },
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.processed, 25)
+  assert.deepEqual(
+    transactions.map(({ statements, options }) => ({
+      size: statements.length,
+      maxRowsWritten: options.maxRowsWritten,
+    })),
+    [
+      { size: 10, maxRowsWritten: 40 },
+      { size: 10, maxRowsWritten: 40 },
+      { size: 5, maxRowsWritten: 20 },
+    ],
+  )
+  assert.equal(readModelCalls, 0)
 })
 
 test("catalog reconcile deletes only explicit normalized symbols", async () => {
