@@ -27,11 +27,7 @@ function publicationServices(overrides = {}) {
         .trim()
         .toUpperCase(),
     prepareGeneEssenceUpsertStatement: (env, essence, actorId, source) =>
-      env.ICONOPLASM_DB.prepare("UPSERT ESSENCE").bind(
-        essence.gene_symbol,
-        actorId,
-        source,
-      ),
+      env.ICONOPLASM_DB.prepare("UPSERT ESSENCE").bind(essence.gene_symbol, actorId, source),
     publishCatalogArtifact: async () => ({ ok: true }),
     rebuildSharedGeneDiscoveryRollup: async () => ({ ok: true, count: 0 }),
     sanitizeText: (value, limit) => String(value || "").slice(0, limit),
