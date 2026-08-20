@@ -38,9 +38,7 @@ export function syncIconoplasmPdfJs() {
   const runtimeVersion = pdfJsVersion(resolve(patchedRuntimeRoot, "pdf.mjs"))
   const viewerVersion = pdfJsVersion(resolve(packageRoot, "legacy", "web", "pdf_viewer.mjs"))
   if (runtimeVersion !== viewerVersion) {
-    throw new Error(
-      `Patched PDF.js API ${runtimeVersion} does not match viewer ${viewerVersion}`,
-    )
+    throw new Error(`Patched PDF.js API ${runtimeVersion} does not match viewer ${viewerVersion}`)
   }
   rmSync(targetRoot, { recursive: true, force: true })
   mkdirSync(targetRoot, { recursive: true })
