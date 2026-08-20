@@ -325,7 +325,7 @@ test(
     for (const name of [
       "pdf-byte-store.js",
       "pdf-gecko-ownership.js",
-      "pdf-gecko-shell.js",
+      "pdf-gecko-redirect.js",
       "pdf-reader.mjs",
     ]) {
       assert.equal(submittedFiles.has(name), true, `Firefox package is missing ${name}`)

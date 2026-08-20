@@ -74,8 +74,7 @@
   function unionBounds(boundsList) {
     const valid = (Array.isArray(boundsList) ? boundsList : []).filter(
       (bounds) =>
-        bounds &&
-        [bounds.left, bounds.top, bounds.right, bounds.bottom].every(Number.isFinite),
+        bounds && [bounds.left, bounds.top, bounds.right, bounds.bottom].every(Number.isFinite),
     )
     if (!valid.length) return null
     return {
@@ -176,11 +175,11 @@
 
     if (kind === "ellipse") {
       const text = String(label || "")
-      const averageCharWidth = Math.max(em * 0.24, (bounds.right - bounds.left) / Math.max(1, text.length))
-      const inlineBleed = Math.max(
-        2,
-        averageCharWidth * Number(shape.inlineBleedCharsPerSide || 0),
+      const averageCharWidth = Math.max(
+        em * 0.24,
+        (bounds.right - bounds.left) / Math.max(1, text.length),
       )
+      const inlineBleed = Math.max(2, averageCharWidth * Number(shape.inlineBleedCharsPerSide || 0))
       const verticalBleed = Math.max(2, em * Number(shape.verticalBleedEm || 0))
       return {
         kind,
@@ -270,7 +269,9 @@
         const exactBoundaries =
           selected.length > 0 && selected[0].start === start && selected.at(-1).end === end
         const supported = exactBoundaries && selected.every((entry) => entry.record?.supported)
-        const collision = selected.some((entry) => claimedGlyphOrdinals.has(entry.record.glyphOrdinal))
+        const collision = selected.some((entry) =>
+          claimedGlyphOrdinals.has(entry.record.glyphOrdinal),
+        )
         const polygons = supported
           ? selected.map((entry) => polygonForGlyphRecord(entry.record)).filter(Boolean)
           : []

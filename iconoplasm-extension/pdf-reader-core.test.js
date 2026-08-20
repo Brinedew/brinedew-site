@@ -47,11 +47,13 @@ const shapes = {
   },
 }
 
-const presentation = (mode = "pill") => () => ({
-  color: "#234567",
-  foreground: "#ffffff",
-  shape: shapes[mode],
-})
+const presentation =
+  (mode = "pill") =>
+  () => ({
+    color: "#234567",
+    foreground: "#ffffff",
+    shape: shapes[mode],
+  })
 
 test("glyph cells are transformed by the authoritative canvas matrix", () => {
   assert.deepEqual(core.polygonForGlyphRecord(glyph(0, "H", 0)), [

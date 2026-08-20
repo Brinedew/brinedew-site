@@ -191,8 +191,7 @@ const requiredContentModules = [
   "content-portrait-cache.js",
   "content-detail-cache.js",
   "content-vote-bridge.js",
-  "content-visibility-scheduler.js",
-  "content-predictive-warm.js",
+  "content-reading-session.js",
   "highlight-runtime.js",
 ]
 
@@ -864,8 +863,9 @@ test("DO NOT DELETE: simple card title uses stable label typography and ink", ()
   )
 })
 
-test("DO NOT DELETE: first-ten hover warmup decodes portraits before pointer intent", () => {
+test("DO NOT DELETE: reading-session preparation replaces pointer prediction before intent", () => {
   const source = readUtf8("./iconoplasm-extension/content.js")
+  const readingSessionSource = readUtf8("./iconoplasm-extension/content-reading-session.js")
   assert.match(
     source,
     /const decodedPortraitSrcCache = new Set\(\)/,
@@ -878,58 +878,28 @@ test("DO NOT DELETE: first-ten hover warmup decodes portraits before pointer int
   )
   assert.match(
     source,
-    /function onPortraitWarmSource\(usableSource\)[\s\S]*if \(usesTooltipFrameRenderer\(\)\)[\s\S]*prewarmLitArchivalFramePortraitSrcs\(\[usableSource\]\)[\s\S]*warmDecodedPortraitSources\(\[usableSource\]\)/,
-    "neighbor portrait warming should decode only in the renderer mode that can paint it",
+    /async function prepareReadingSessionSymbol\(symbol\)[\s\S]*priority: "background"[\s\S]*awaitPersistentCache: false[\s\S]*getUsablePortraitSrc\(portraitUrl\)/,
+    "the reading session should prepare immutable detail and a usable portrait without waiting for whole-cache hydration",
   )
   assert.match(
     source,
-    /const PORTRAIT_WARM_BATCH_SIZE = 2/,
-    "background portrait warming should stay within a two-transfer lane",
+    /IconoReadingSession\.createReadingSession\(\{[\s\S]*connection: window\.navigator\?\.connection[\s\S]*deviceMemory: window\.navigator\?\.deviceMemory[\s\S]*prepareSymbol: prepareReadingSessionSymbol/,
+    "one tab-scoped reading session should own adaptive preparation budgets",
   )
   assert.match(
-    source,
-    /const INITIAL_HOVER_PRELOAD_LIMIT = 10[\s\S]*function onGeneDetailResolvedBatch\(records, priority\)[\s\S]*portraitPreloadSymbols\.has\(symbol\)[\s\S]*portraitCache\.warmUrls\(portraitUrls\)[\s\S]*onResolvedBatch: onGeneDetailResolvedBatch/,
-    "the first ten highlighted strings should feed decoded portrait warming before hover",
-  )
-  assert.match(
-    source,
-    /async function warmInitialHoverAssets\(\)[\s\S]*Math\.min\(INITIAL_HOVER_PRELOAD_LIMIT, predictionPolicy\.startupLimit\)[\s\S]*index \+= GENE_DETAIL_BACKGROUND_CONCURRENCY[\s\S]*priority: "background"[\s\S]*awaitPersistentCache: false[\s\S]*void warmInitialHoverAssets\(\)/,
-    "initial detail warming should start eagerly in bounded pairs without waiting for persistent hydration",
-  )
-  assert.match(
-    source,
-    /const previousNeighborPrewarmAbortController =[\s\S]*const hoverGeneDetailPromise =[\s\S]*previousNeighborPrewarmAbortController\?\.abort\(\)[\s\S]*collectSpatialNeighborGeneSymbols[\s\S]*warmPredictedHoverAssets/,
-    "a matching predicted detail should be promoted before obsolete neighbor requests are cancelled",
-  )
-  assert.match(
-    source,
-    /function schedulePointerApproachWarm\(event\)[\s\S]*POINTER_PREDICTION_INTERVAL_MS[\s\S]*rankSpatialCandidates[\s\S]*pointerRadius[\s\S]*approachLimit[\s\S]*warmPredictedHoverAssets/,
-    "pointer approach should warm spatially ranked candidates before mouseover",
-  )
-  assert.match(
-    source,
-    /function scheduleViewportWarm\(\)[\s\S]*scrollDirection[\s\S]*rankScrollCandidates[\s\S]*scrollPortraitLimit[\s\S]*warmPredictedHoverAssets/,
-    "scroll direction should warm a bounded number of approaching portraits",
-  )
-  assert.match(
-    source,
-    /predictionPolicy = IconoPredictiveWarm\.predictionPolicy[\s\S]*window\.navigator\?\.connection[\s\S]*window\.navigator\?\.deviceMemory/,
-    "prediction budgets should adapt to the measured connection and device memory",
+    readingSessionSource,
+    /const PRIORITY = Object\.freeze\(\{ active: 0, visible: 1, document: 2 \}\)[\s\S]*function workingSetPolicy\(connection = \{\}, deviceMemory = 0\)/,
+    "preparation should prioritize active and visible symbols inside one bounded policy",
   )
   assert.doesNotMatch(
     source,
-    /portraitCache\.replaceWarmUrls\(\[\]\)/,
-    "a successful queued portrait prediction must not be erased when its target becomes active",
+    /schedulePointerApproachWarm|collectSpatialNeighborGeneSymbols|rankScrollCandidates|IconoPredictiveWarm/,
+    "pointer trajectory, DOM-neighbor, scroll-direction, and predictive warm paths must stay retired",
   )
   assert.match(
     source,
     /litArchivalFrameController[\s\S]*\.postHydrated\([\s\S]*payload\.requestId/,
     "a late portrait adapter result must match the exact frame request, not only the current symbol",
-  )
-  assert.match(
-    source,
-    /function deferGeneDetailWarm\(task\)[\s\S]*postBackgroundTask\([\s\S]*if \(activeSymbol\)[\s\S]*deferGeneDetailWarm\(task\)/,
-    "generic viewport metadata should use browser background priority and yield to an active hover instead of launching a third request lane",
   )
 })
 
@@ -1222,7 +1192,7 @@ test("DO NOT DELETE: highlight timing setting is wired through popup, shared set
   )
   assert.match(
     popupSource,
-    /const HIGHLIGHT_VISIBILITY_KEY = "iconoplasm_highlight_visibility"/,
+    /const HIGHLIGHT_VISIBILITY_KEY = CONTENT_STORAGE_KEYS\.highlightVisibility/,
     "popup.js should write the shared highlight timing storage key",
   )
   assert.match(
@@ -1236,9 +1206,9 @@ test("DO NOT DELETE: highlight timing setting is wired through popup, shared set
     "content.js should consume the shared settings key instead of inventing a second one",
   )
   assert.match(
-    contentSource,
+    settingsSource,
     /function normalizeHighlightVisibility\(raw\)[\s\S]*\? "hover"[\s\S]*: "always"/,
-    "content.js should normalize unknown values back to always-on highlighting",
+    "shared settings should normalize unknown values back to always-on highlighting",
   )
   assert.match(
     contentSource,
@@ -1627,25 +1597,36 @@ test("DO NOT DELETE: new-user extension defaults stay pill, always-on, and blot-
     "segmented labels should wrap at real word boundaries instead of splitting short words",
   )
   assert.match(
-    popupSource,
-    /function normalizeHighlightMode\(value\)[\s\S]*: "pill"/,
-    "popup.js should select Color pills when a new user has no stored highlight mode",
+    settingsSource,
+    /function normalizeHighlightMode\(raw\)[\s\S]*: "pill"/,
+    "shared settings should select Color pills when a new user has no stored highlight mode",
   )
   assert.match(
-    popupSource,
+    settingsSource,
     /value === "underline"[\s\S]*value === "pill"[\s\S]*value === "pill-outline"[\s\S]*value === "ellipse"/,
-    "popup.js must preserve an explicit underline highlight choice instead of normalizing it back to pills",
+    "shared settings must preserve an explicit underline highlight choice instead of normalizing it back to pills",
   )
   assert.match(
-    popupSource,
-    /function normalizeHighlightVisibility\(value\)[\s\S]*return value === "hover" \? "hover" : "always"/,
-    "popup.js should select Always on when a new user has no stored timing setting",
+    settingsSource,
+    /function normalizeHighlightVisibility\(raw\)[\s\S]*\? "hover"[\s\S]*: "always"/,
+    "shared settings should select Always on when a new user has no stored timing setting",
   )
   assert.match(
-    popupSource,
-    /function normalizeCardVariant\(value\)[\s\S]*if \(value === "simple"\) return "simple"[\s\S]*return "image-only"/,
-    "popup.js should select Blot only when a new user has no stored card style",
+    settingsSource,
+    /function normalizeCardVariant\(raw, cardShared\)[\s\S]*if \(raw === "simple"\) return "simple"[\s\S]*return "image-only"/,
+    "shared settings should select Blot only when a new user has no stored card style",
   )
+  for (const normalizer of [
+    "normalizeHighlightMode",
+    "normalizeHighlightVisibility",
+    "normalizeCardVariant",
+  ]) {
+    assert.match(
+      popupSource,
+      new RegExp(`IconoplasmContentSettings\\.${normalizer}\\(value\\)`),
+      `popup.js should delegate ${normalizer} to the shared settings authority`,
+    )
+  }
   assert.match(
     contentSource,
     /let highlightMode = highlightRuntime\.setMode\("pill"\)/,
