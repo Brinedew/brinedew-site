@@ -391,6 +391,111 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     )
   }
 
+  async function manifestationUpsert({ request, env, done }) {
+    if (!(await isAdmin(request, env)))
+      return done("admin_manifestation_upsert_403", json({ error: "Unauthorized" }, 403))
+    if (!env.ICONOPLASM_DB)
+      return done(
+        "admin_manifestation_upsert_500",
+        json({ error: "ICONOPLASM_DB binding missing" }, 500),
+      )
+    let payload
+    try {
+      payload = await request.json()
+    } catch {
+      return done("admin_manifestation_upsert_400", json({ error: "Invalid JSON" }, 400))
+    }
+    const items = Array.isArray(payload?.items) ? payload.items : []
+    const deferReadModels = coerceBoolean(
+      payload?.defer_read_models ?? payload?.deferReadModels,
+      false,
+    )
+    if (!items.length)
+      return done("admin_manifestation_upsert_400", json({ error: "No items provided" }, 400))
+    if (items.length > 1000)
+      return done(
+        "admin_manifestation_upsert_400",
+        json({ error: "Too many items (max 1000)" }, 400),
+      )
+
+    const actorId = await actor(request, env)
+    const source =
+      sanitizeText(payload?.source || "nicegui_manifestation_sync", 64) ||
+      "nicegui_manifestation_sync"
+    let processed = 0
+    let invalid = 0
+    const results = []
+    const statements = []
+    for (const rawItem of items) {
+      const symbolHint = normalizeSymbol(rawItem?.symbol || rawItem?.gene_symbol || "")
+      const normalized = normalizeEssencePayload(rawItem, symbolHint)
+      if (!symbolHint || !normalized || normalized.validation_error) {
+        invalid += 1
+        results.push({
+          ok: false,
+          symbol: symbolHint || normalized?.gene_symbol || "",
+          error: normalized?.validation_error || "Invalid manifestation item",
+        })
+        continue
+      }
+      statements.push(
+        env.ICONOPLASM_DB.prepare(
+          `UPDATE icono_gene_essence SET
+             manifestation=?,
+             manifestation_tags=?,
+             manifestation_fields_json=?,
+             sample_label=?,
+             sample_number=?,
+             sample_text_hash=?,
+             source=?,
+             updated_by=?,
+             updated_at=CURRENT_TIMESTAMP
+           WHERE gene_symbol=?`,
+        ).bind(
+          normalized.manifestation || null,
+          normalized.manifestation_tags || null,
+          normalized.manifestation_fields_json || null,
+          normalized.sample_label || null,
+          normalized.sample_number,
+          normalized.sample_text_hash || null,
+          source,
+          actorId,
+          symbolHint,
+        ),
+      )
+      processed += 1
+      results.push({ ok: true, symbol: symbolHint })
+    }
+    for (let offset = 0; offset < statements.length; offset += D1_UPSERT_TRANSACTION_SIZE) {
+      const transaction = statements.slice(offset, offset + D1_UPSERT_TRANSACTION_SIZE)
+      await env.ICONOPLASM_DB.batch(transaction, {
+        maxRowsWritten: transaction.length * MAX_ROWS_WRITTEN_PER_UPSERT,
+      })
+    }
+    const successfulSymbols = results
+      .filter((row) => row?.ok && row?.symbol)
+      .map((row) => row.symbol)
+    if (processed > 0 && !deferReadModels) {
+      await syncAdminReadModels(env, { symbols: successfulSymbols })
+    }
+    return done(
+      "admin_manifestation_upsert",
+      json(
+        {
+          ok: invalid === 0,
+          processed,
+          invalid,
+          total: items.length,
+          defer_read_models: deferReadModels,
+          mutation_limiter: mutationLimiterSnapshot(env),
+          results,
+        },
+        invalid > 0 && processed === 0 ? 400 : 200,
+        NO_STORE,
+      ),
+    )
+  }
+
   async function sharedDiscoveries({ request, env, done }) {
     if (!(await isAdmin(request, env)))
       return done("admin_read_models_shared_discoveries_403", json({ error: "Unauthorized" }, 403))
@@ -410,6 +515,7 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     "admin_publication.catalog_upsert": catalogUpsert,
     "admin_publication.essence_state": essenceState,
     "admin_publication.essence_upsert": essenceUpsert,
+    "admin_publication.manifestation_upsert": manifestationUpsert,
     "admin_publication.shared_discoveries": sharedDiscoveries,
   })
 }
