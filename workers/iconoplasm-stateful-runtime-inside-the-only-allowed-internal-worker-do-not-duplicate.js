@@ -11185,9 +11185,9 @@ async function hashEssencePayload(rawEssence, fallbackSymbol = "") {
   return sha256Hex(JSON.stringify(payload))
 }
 
-async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync") {
-  if (!env.ICONOPLASM_DB || !essence?.gene_symbol) return false
-  await env.ICONOPLASM_DB.prepare(
+function prepareGeneEssenceUpsertStatement(env, essence, updatedBy, source = "nicegui_sync") {
+  if (!env.ICONOPLASM_DB || !essence?.gene_symbol) return null
+  return env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_gene_essence (
        gene_symbol,
        full_name,
@@ -11294,8 +11294,6 @@ async function upsertGeneEssence(env, essence, updatedBy, source = "nicegui_sync
       String(source || "nicegui_sync").slice(0, 64),
       normalizeUserId(updatedBy || "nicegui_sync"),
     )
-    .run()
-  return true
 }
 
 function decodeBase64Bytes(raw) {
@@ -28684,11 +28682,11 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     normalizeCatalogPayloadItem,
     normalizeEssencePayload,
     normalizeSymbol,
+    prepareGeneEssenceUpsertStatement,
     publishCatalogArtifact,
     rebuildSharedGeneDiscoveryRollup,
     sanitizeText,
     syncAdminReadModels,
-    upsertGeneEssence,
   }),
   ...createIconoplasmAdminReadModelHandlers({
     bootstrapCompleteStatus: ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE,
