@@ -57,6 +57,10 @@ class CatalogUpsertDb {
   prepare(sql) {
     return new CatalogUpsertStatement(this, sql)
   }
+
+  async batch(statements) {
+    return Promise.all(statements.map((statement) => statement.run()))
+  }
 }
 
 class FixedSnapshotBudgetNamespace {

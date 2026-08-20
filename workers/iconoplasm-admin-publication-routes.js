@@ -112,6 +112,7 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     let processed = 0
     let invalid = 0
     const results = []
+    const statements = []
     for (const rawItem of items) {
       const item = normalizeCatalogPayloadItem(rawItem)
       if (!item || item.validation_error) {
@@ -124,8 +125,9 @@ export function createIconoplasmAdminPublicationHandlers(services) {
         })
         continue
       }
-      await env.ICONOPLASM_DB.prepare(
-        `INSERT INTO icono_gene_catalog (
+      statements.push(
+        env.ICONOPLASM_DB.prepare(
+          `INSERT INTO icono_gene_catalog (
            gene_symbol, full_name, uniprot, color_hex, tmh, aliases_json, source, updated_by, updated_at
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
          ON CONFLICT(gene_symbol) DO UPDATE SET
@@ -137,8 +139,7 @@ export function createIconoplasmAdminPublicationHandlers(services) {
            source=excluded.source,
            updated_by=excluded.updated_by,
            updated_at=CURRENT_TIMESTAMP`,
-      )
-        .bind(
+        ).bind(
           item.gene_symbol,
           item.full_name,
           item.uniprot || null,
@@ -147,10 +148,24 @@ export function createIconoplasmAdminPublicationHandlers(services) {
           item.aliases_json || "[]",
           source,
           actorId,
-        )
-        .run()
+        ),
+      )
       processed += 1
       results.push({ ok: true, symbol: item.gene_symbol })
+    }
+    // Reserve more write headroom than this table normally consumes before
+    // each atomic D1 transaction. The metered database wrapper rejects the
+    // whole batch before execution if it could cross either a hard quota or
+    // the configured 90% mutation ceiling, then records actual D1 metadata.
+    // This preserves exact guard authority without paying one network round
+    // trip for every catalog row.
+    const D1_CATALOG_TRANSACTION_SIZE = 10
+    const MAX_ROWS_WRITTEN_PER_CATALOG_ITEM = 4
+    for (let offset = 0; offset < statements.length; offset += D1_CATALOG_TRANSACTION_SIZE) {
+      const transaction = statements.slice(offset, offset + D1_CATALOG_TRANSACTION_SIZE)
+      await env.ICONOPLASM_DB.batch(transaction, {
+        maxRowsWritten: transaction.length * MAX_ROWS_WRITTEN_PER_CATALOG_ITEM,
+      })
     }
     if (processed > 0 && !deferReadModels) {
       await syncAdminReadModels(env, {
