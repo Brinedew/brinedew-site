@@ -184,7 +184,7 @@
     diagnosticEmulsionInput: document.getElementById("diagnostic-emulsion-input"),
     diagnosticEmulsionAdd: document.getElementById("diagnostic-emulsion-add"),
     diagnosticEmulsionChips: document.getElementById("diagnostic-emulsion-chips"),
-    diagnosticPromptMode: document.getElementById("diagnostic-prompt-mode"),
+    diagnosticVisionPolicy: document.getElementById("diagnostic-vision-policy"),
     diagnosticCellCount: document.getElementById("diagnostic-cell-count"),
     diagnosticRunButton: document.getElementById("diagnostic-run"),
     diagnosticDownload: document.getElementById("diagnostic-download"),
@@ -1313,7 +1313,16 @@
       return Number(item.revision) === selected.vision
     })
     var code = (selected.pipeline || "—") + (selected.vision || "—")
+    var isRecommended = Boolean(
+      pipeline && Number(pipeline.recommended_vision || 0) === Number(selected.vision || 0),
+    )
     if (els.factoryActiveCode) els.factoryActiveCode.textContent = code
+    if (els.diagnosticVisionPolicy && vision) {
+      els.diagnosticVisionPolicy.textContent =
+        vision.label +
+        " · " +
+        (vision.prompt_content_mode === "full_manifestation" ? "full manifestation" : "tags")
+    }
     if (els.factoryRecipeDetail) {
       els.factoryRecipeDetail.innerHTML =
         pipeline && vision
@@ -1329,11 +1338,32 @@
                 ) +
                 "</strong></div>",
               "<div><span>Vision</span><strong>" +
-                esc(vision.label + " · " + vision.source_id) +
+                esc(vision.label + (isRecommended ? " · recommended for this model" : "")) +
+                "</strong></div>",
+              "<div><span>Prompt assembly</span><strong>" +
+                esc(
+                  (vision.prompt_order_mode === "vision_then_manifestation"
+                    ? "Vision → manifestation"
+                    : "Manifestation → Vision") +
+                    " · " +
+                    (vision.prompt_content_mode === "full_manifestation"
+                      ? "full manifestation"
+                      : "tags"),
+                ) +
                 "</strong></div>",
             ].join("")
           : ""
     }
+  }
+
+  function selectRecommendedVisionForPipeline() {
+    if (!state.factoryRecipe || !els.factoryPipeline || !els.factoryVision) return
+    var pipeline = (state.factoryRecipe.pipelines || []).find(function (item) {
+      return item.code === String(els.factoryPipeline.value || "")
+    })
+    var recommendation = Number(pipeline && pipeline.recommended_vision)
+    if (recommendation > 0) els.factoryVision.value = String(recommendation)
+    renderFactoryRecipeSelection()
   }
 
   async function refreshFactoryRecipe() {
@@ -1759,9 +1789,19 @@
         emulsion_slots: state.diagnosticEmulsionSlots,
         vision_revision:
           Number.parseInt(String((els.factoryVision && els.factoryVision.value) || "1"), 10) || 1,
-        prompt_body_mode: String(
-          (els.diagnosticPromptMode && els.diagnosticPromptMode.value) || "taggerizer_prompt",
-        ),
+        prompt_body_mode: (function () {
+          var revision =
+            Number.parseInt(String((els.factoryVision && els.factoryVision.value) || "1"), 10) || 1
+          var vision = (state.factoryRecipe && state.factoryRecipe.visions
+            ? state.factoryRecipe.visions
+            : []
+          ).find(function (item) {
+            return Number(item.revision) === revision
+          })
+          return vision && vision.prompt_content_mode === "full_manifestation"
+            ? "prose_prompt"
+            : "taggerizer_prompt"
+        })(),
       }),
     }
     try {
@@ -9782,7 +9822,7 @@
     if (els.factoryRefresh) els.factoryRefresh.addEventListener("click", refreshFactoryRecipe)
     if (els.factorySave) els.factorySave.addEventListener("click", saveFactoryRecipe)
     if (els.factoryPipeline)
-      els.factoryPipeline.addEventListener("change", renderFactoryRecipeSelection)
+      els.factoryPipeline.addEventListener("change", selectRecommendedVisionForPipeline)
     if (els.factoryVision)
       els.factoryVision.addEventListener("change", renderFactoryRecipeSelection)
     if (els.diagnosticPipelineOptions) {
