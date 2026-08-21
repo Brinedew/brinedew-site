@@ -642,6 +642,13 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "admin_factory_recipe",
   }),
   iconoplasmApiContract({
+    id: "admin_factory_recommendation",
+    match: exact("/api/iconoplasm/admin/factory-recommendation"),
+    methods: POST,
+    auth: "administrator",
+    budgetFamily: "admin_factory_recipe",
+  }),
+  iconoplasmApiContract({
     id: "admin_factory_visions",
     match: exact("/api/iconoplasm/admin/factory-visions"),
     methods: GET_POST,
