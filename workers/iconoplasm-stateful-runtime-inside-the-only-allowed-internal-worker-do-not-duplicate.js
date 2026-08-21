@@ -8467,8 +8467,8 @@ async function applyCandidateGenerationUserVote(env, ctx, job, userId) {
 }
 
 function generationRequestVisionOptionLabels(row) {
-  const emulsionId = publicEmulsionIdForRow(row)
-  const displayEmulsionCode = displayEmulsionCodeForRow(row)
+  const emulsionId = unqualifiedEmulsionDisplayCode(publicEmulsionIdForRow(row))
+  const displayEmulsionCode = emulsionId
   const artistId = publicArtistIdForRow(row)
   const artistTag = sanitizeText(row?.artist_tag || "", 255) || ""
   const artistName = sanitizeText(row?.artist_name || "", 255) || ""
@@ -8748,6 +8748,7 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
   for (const row of summaryRows) {
     const visionId = validAdminRollupVisionId(row?.vision_id || "")
     if (!visionId) continue
+    const emulsionId = unqualifiedEmulsionDisplayCode(row?.emulsion_id || "")
     await env.ICONOPLASM_DB.prepare(
       `INSERT INTO icono_generation_request_vision_option_rollup (
          vision_id,
@@ -8786,8 +8787,8 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
     )
       .bind(
         visionId,
-        sanitizeText(row?.emulsion_id || "", 64) || "",
-        normalizeFavoriteEmulsionFamilyId(row?.emulsion_id || ""),
+        emulsionId,
+        normalizeFavoriteEmulsionFamilyId(emulsionId),
         sanitizeText(row?.workflow_id || "", 32) || "",
         sanitizeText(row?.workflow_label || "", 255) || "",
         sanitizeText(row?.prompt_version || "", 16) || "",
@@ -9165,7 +9166,7 @@ export function iconoplasmAnimaEmulsionSlotIsPreallocated(slot) {
 export function iconoplasmPreallocatedAnimaEmulsionOption(raw) {
   const slot = iconoplasmAnimaEmulsionSlotFromExactAlias(raw)
   if (!iconoplasmAnimaEmulsionSlotIsPreallocated(slot)) return null
-  const emulsionId = `A1-${slot}`
+  const emulsionId = `0-${slot}`
   const visionId = `anima-v1-${slot}`
   return {
     vision_id: visionId,
@@ -9222,7 +9223,7 @@ export function iconoplasmPreallocatedFactoryEmulsionOptions(
       secondary_label: "Ready for first blot",
       search_text: `${publicId} ${slot}`,
       emulsion_id: publicId,
-      emulsion_family_id: `A1-${slot}`,
+      emulsion_family_id: `0-${slot}`,
       image_count: 0,
       live_count: 0,
       score: 0,
@@ -9606,7 +9607,7 @@ function mapGenerationRequestFactoryOptionRows(env, url, rows) {
         secondary_label: "",
         search_text: `${recipe.publicId} ${recipe.slot}`,
         emulsion_id: recipe.publicId,
-        emulsion_family_id: `A1-${recipe.slot}`,
+        emulsion_family_id: `0-${recipe.slot}`,
         image_count: Math.max(0, Number(row?.image_count || 0) || 0),
         live_count: Math.max(0, Number(row?.live_count || 0) || 0),
         score: Number(row?.score || 0) || 0,
@@ -9659,7 +9660,7 @@ async function listGenerationRequestFactorySlotOptions(env, url, searchIntent) {
      ORDER BY live_count DESC, image_count DESC, score DESC, vision_id ASC
      LIMIT 40`,
   )
-    .bind(`A1-${slot}`)
+    .bind(`0-${slot}`)
     .all()
   const legacyOptions = groupGenerationRequestVisionOptions(
     mapGenerationRequestVisionOptionRows(env, url, legacyResponse?.results || []),
@@ -9736,7 +9737,7 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
     const artistUpper = textPrefixUpperBound(artistPrefix)
     const artistTagUpper = textPrefixUpperBound(artistTagPrefix)
     // D1 cost fence: this is query-aware search, not live discovery. It must
-    // stay on the precomputed request-option rollup so typing "A1-2" cannot
+    // stay on the precomputed request-option rollup so typing "0-2" cannot
     // fan out into admin/portrait scans on every logged-in gene page.
     const resp = await env.ICONOPLASM_DB.prepare(
       `SELECT
@@ -18104,7 +18105,13 @@ async function rebuildVisionRollupsBatch(env, rawVisionIds) {
      )
      SELECT
        pa.vision_id,
-       MAX(NULLIF(pa.emulsion_id, '')) AS emulsion_id,
+       CASE
+         WHEN MAX(NULLIF(pa.emulsion_id, '')) GLOB '[A-Za-z][0-9]*-[0-9]*'
+           THEN '0-' ||
+             CAST(substr(MAX(NULLIF(pa.emulsion_id, '')), instr(MAX(NULLIF(pa.emulsion_id, '')), '-') + 1) AS INTEGER) ||
+             CASE WHEN lower(MAX(NULLIF(pa.emulsion_id, ''))) GLOB '*-e' THEN '-e' ELSE '' END
+         ELSE MAX(NULLIF(pa.emulsion_id, ''))
+       END AS emulsion_id,
        MAX(NULLIF(pa.workflow_id, '')) AS workflow_id,
        MAX(NULLIF(pa.workflow_label, '')) AS workflow_label,
        MAX(NULLIF(pa.prompt_version, '')) AS prompt_version,
@@ -18796,7 +18803,7 @@ async function rebuildVisionRollups(env, rawVisionIds, { full = false } = {}) {
     )
       .bind(
         visionId,
-        sanitizeText(row?.emulsion_id || "", 64) || "",
+        unqualifiedEmulsionDisplayCode(row?.emulsion_id || ""),
         sanitizeText(row?.workflow_id || "", 32) || "",
         sanitizeText(row?.workflow_label || "", 255) || "",
         sanitizeText(row?.prompt_version || "", 16) || "",
@@ -19099,7 +19106,13 @@ async function bulkRebuildAdminReadModels(env) {
      )
      SELECT
        pa.vision_id,
-       MAX(NULLIF(pa.emulsion_id, '')) AS emulsion_id,
+       CASE
+         WHEN MAX(NULLIF(pa.emulsion_id, '')) GLOB '[A-Za-z][0-9]*-[0-9]*'
+           THEN '0-' ||
+             CAST(substr(MAX(NULLIF(pa.emulsion_id, '')), instr(MAX(NULLIF(pa.emulsion_id, '')), '-') + 1) AS INTEGER) ||
+             CASE WHEN lower(MAX(NULLIF(pa.emulsion_id, ''))) GLOB '*-e' THEN '-e' ELSE '' END
+         ELSE MAX(NULLIF(pa.emulsion_id, ''))
+       END AS emulsion_id,
        MAX(NULLIF(pa.workflow_id, '')) AS workflow_id,
        MAX(NULLIF(pa.workflow_label, '')) AS workflow_label,
        MAX(NULLIF(pa.prompt_version, '')) AS prompt_version,
