@@ -299,6 +299,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
   }
 
+  function syncSelectAllFavoriteButtons(root) {
+    var buttons = (root || document).querySelectorAll("[data-icono-request-select-all-favorites]")
+    var favoriteCount = emulsionFavorites.ids().length
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].textContent = "Select all " + favoriteCount + " favorites"
+      buttons[i].hidden = !emulsionFavorites.isLoaded() || favoriteCount === 0
+    }
+  }
+
   function announceEmulsionFavoriteStatus(message) {
     var root = document.getElementById(ROOT_ID) || document.body
     var status = document.getElementById("icono-emulsion-favorite-status")
@@ -368,6 +377,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   emulsionFavorites.subscribe(function (state) {
     syncEmulsionFavoriteButtons(document, state && state.changedId)
+    syncSelectAllFavoriteButtons(document)
   })
 
   function publishFailureMessage(error, fallback, resultLabel) {
@@ -5146,6 +5156,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "</div>" +
       '<div class="icono-request-footer" slot="footer">' +
       '<div class="icono-request-free-actions" data-icono-request-free-footer>' +
+      '<button type="button" class="icono-request-select-all-favorites" data-icono-request-select-all-favorites hidden>Select all 0 favorites</button>' +
       '<button type="submit" form="icono-request-form-' +
       esc(safeSymbol) +
       '" class="icono-request-free-submit" data-icono-request-free-submit data-default-label="Queue random">Queue random</button>' +
@@ -6126,6 +6137,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var queueSubmitButton = dialog
         ? dialog.querySelector("[data-icono-request-free-submit]")
         : null
+      var selectAllFavoritesButton = dialog
+        ? dialog.querySelector("[data-icono-request-select-all-favorites]")
+        : null
+      syncSelectAllFavoriteButtons(dialog || body)
       var providerSelect = body.querySelector("[data-icono-request-provider]")
       var directGenerateButton = dialog
         ? dialog.querySelector("[data-icono-request-image-generate]")
@@ -6855,6 +6870,38 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         }
       }
 
+      function requestOptionForFavoriteFamilyId(rawFamilyId) {
+        var familyId = normalizeEmulsionFamilyId(rawFamilyId)
+        if (!familyId) return null
+        var knownOptions = Object.values(requestOptionsByVisionId)
+        for (var i = 0; i < knownOptions.length; i++) {
+          var knownFamilyId = normalizeEmulsionFamilyId(
+            knownOptions[i] && (knownOptions[i].emulsion_family_id || knownOptions[i].emulsion_id),
+          )
+          if (knownFamilyId === familyId) return knownOptions[i]
+        }
+        var neutralSlot = /^0-([1-9][0-9]*)$/.exec(familyId)
+        return neutralSlot ? requestOptionFromImmediateNumericQuery(neutralSlot[1]) : null
+      }
+
+      function selectAllFavoriteRequestOptions() {
+        var favorites = emulsionFavorites
+          .ids()
+          .map(requestOptionForFavoriteFamilyId)
+          .filter(Boolean)
+        var selectable = favorites.slice(0, requestSelectionLimit)
+        if (!selectable.length) return
+        selectedRequestVisionIds.clear()
+        rememberRequestOptions(selectable)
+        for (var i = 0; i < selectable.length; i++) {
+          selectedRequestVisionIds.add(selectable[i].vision_id)
+        }
+        updateQueueSelectionControls()
+        if (favorites.length > selectable.length) {
+          setStatus("Selected the first " + selectable.length + " favorites for this batch.", "")
+        }
+      }
+
       function setSelection(option) {
         var visionId = String((option && option.vision_id) || "").trim()
         if (!visionId) {
@@ -7127,6 +7174,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       closeDirectUserEmulsionResults()
       if (providerSelect) {
         providerSelect.addEventListener("change", updateDirectGenerationButtons)
+      }
+      if (selectAllFavoritesButton) {
+        selectAllFavoritesButton.addEventListener("click", selectAllFavoriteRequestOptions)
       }
       if (directGenerateButton) {
         directGenerateButton.addEventListener("click", submitDirectCandidateGeneration)

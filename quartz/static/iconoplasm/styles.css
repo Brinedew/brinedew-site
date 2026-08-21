@@ -742,6 +742,7 @@ body:has(.icono-vote-login-dialog[open]) {
 
 .icono-request-free-actions {
   justify-content: flex-start;
+  flex-wrap: wrap;
 }
 
 .icono-request-free-actions[hidden],
@@ -750,6 +751,7 @@ body:has(.icono-vote-login-dialog[open]) {
 }
 
 .icono-request-free-submit,
+.icono-request-select-all-favorites,
 .icono-request-direct-generate,
 .icono-request-direct-publish {
   appearance: none;
@@ -785,6 +787,8 @@ body:has(.icono-vote-login-dialog[open]) {
 
 .icono-request-free-submit:not(:disabled):hover,
 .icono-request-free-submit:not(:disabled):focus-visible,
+.icono-request-select-all-favorites:not(:disabled):hover,
+.icono-request-select-all-favorites:not(:disabled):focus-visible,
 .icono-request-direct-generate:not(:disabled):hover,
 .icono-request-direct-generate:not(:disabled):focus-visible,
 .icono-request-direct-publish:not(:disabled):hover,
@@ -795,6 +799,8 @@ body:has(.icono-vote-login-dialog[open]) {
 
 .icono-request-free-submit:not(:disabled):hover,
 .icono-request-free-submit:not(:disabled):focus-visible,
+.icono-request-select-all-favorites:not(:disabled):hover,
+.icono-request-select-all-favorites:not(:disabled):focus-visible,
 .icono-request-direct-generate:not(:disabled):hover,
 .icono-request-direct-generate:not(:disabled):focus-visible {
   background: var(--icono-action-secondary-bg-hover);
@@ -1707,6 +1713,7 @@ img-comparison-slider.rendered [slot="second"] {
   height: 22rem;
   max-height: calc(100dvh - 15rem);
   contain: layout paint;
+  align-content: start;
   overscroll-behavior: contain;
 }
 
