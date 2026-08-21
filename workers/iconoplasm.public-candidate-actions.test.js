@@ -141,6 +141,8 @@ class FakeStatement {
         request_batch_size: this.args[12],
         prompt_body_mode: this.args[13],
         seed_mode: "random",
+        factory_pipeline_code: this.args[14],
+        factory_vision_revision: this.args[15],
       }
       this.db.generationRequests.push(this.db.lastGenerationRequest)
       return { meta: { last_row_id: this.db.lastRequestId, changes: 1 } }
@@ -371,6 +373,35 @@ test("a preallocated emulsion queues its first blot without inventing a referenc
   assert.equal(response.status, 200)
   assert.equal(payload.failed_count, 0)
   assert.equal(db.generationRequests[0]?.requested_vision_id, "anima-v1-50817")
+})
+
+test("a public recipe ID snapshots its own factory recipe instead of the active default", async () => {
+  const db = new FakeDb({ noVisionOption: true })
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/requests",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          body: JSON.stringify({
+            symbol: "TP53",
+            requested_vision_ids: ["C2-50817"],
+            client_batch_id: "preview-three-first-blot",
+          }),
+        },
+      ),
+      buildEnv(db),
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.failed_count, 0)
+  assert.equal(db.generationRequests[0]?.requested_vision_id, "anima-v1-50817")
+  assert.equal(db.generationRequests[0]?.requested_emulsion_slot, 50817)
+  assert.equal(db.generationRequests[0]?.factory_pipeline_code, "C")
+  assert.equal(db.generationRequests[0]?.factory_vision_revision, 2)
 })
 
 test("an unassigned emulsion number is rejected instead of reconstructed", async () => {
