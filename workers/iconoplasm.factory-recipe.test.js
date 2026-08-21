@@ -45,6 +45,13 @@ const duplicatePortraitIdentityRemoval = readFileSync(
   ),
   "utf8",
 )
+const unqualifiedProjectionRebuild = readFileSync(
+  new URL(
+    "../migrations-iconoplasm/0078_rebuild_unqualified_emulsion_projections.sql",
+    import.meta.url,
+  ),
+  "utf8",
+)
 const workerSource = readFileSync(
   new URL(
     "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
@@ -168,6 +175,50 @@ test("portrait assets retain only one emulsion identity field", () => {
     const columns = db.prepare("PRAGMA table_info(icono_portrait_assets)").all()
     assert.ok(columns.some((column) => column.name === "emulsion_id"))
     assert.ok(!columns.some((column) => column.name === "public_emulsion_code"))
+  } finally {
+    db.close()
+  }
+})
+
+test("legacy projections derive unqualified identity from canonical portraits", () => {
+  const db = new DatabaseSync(":memory:")
+  try {
+    db.exec(`
+      CREATE TABLE icono_portrait_assets (gene_symbol TEXT, asset_sha256 TEXT, emulsion_id TEXT);
+      CREATE TABLE icono_generation_request_vision_option_rollup (
+        vision_id TEXT PRIMARY KEY, emulsion_id TEXT, emulsion_family_id TEXT
+      );
+      CREATE TABLE icono_admin_vision_rollup (vision_id TEXT PRIMARY KEY, emulsion_id TEXT);
+      CREATE TABLE icono_admin_gene_rollup (
+        gene_symbol TEXT PRIMARY KEY, current_asset_sha256 TEXT, leader_asset_sha256 TEXT,
+        live_emulsion_id TEXT, leader_emulsion_id TEXT
+      );
+      CREATE TABLE icono_user_emulsion_favorites (
+        user_id TEXT, emulsion_family_id TEXT, created_at TEXT,
+        PRIMARY KEY (user_id, emulsion_family_id)
+      );
+      INSERT INTO icono_portrait_assets VALUES ('KIN', 'sha', 'C9-21103');
+      INSERT INTO icono_generation_request_vision_option_rollup VALUES ('anima-v1-21103', 'A1-21103', 'A1-21103');
+      INSERT INTO icono_admin_vision_rollup VALUES ('anima-v1-21103', 'A1-21103');
+      INSERT INTO icono_admin_gene_rollup VALUES ('KIN', 'sha', 'sha', 'A1-21103', 'A1-21103');
+      INSERT INTO icono_user_emulsion_favorites VALUES ('brinedew', 'A1-21103', CURRENT_TIMESTAMP);
+    `)
+    db.exec(unqualifiedProjectionRebuild)
+
+    assert.equal(
+      db.prepare("SELECT emulsion_id FROM icono_generation_request_vision_option_rollup").get()
+        .emulsion_id,
+      "0-21103",
+    )
+    assert.equal(
+      db.prepare("SELECT live_emulsion_id FROM icono_admin_gene_rollup").get().live_emulsion_id,
+      "C9-21103",
+    )
+    assert.equal(
+      db.prepare("SELECT emulsion_family_id FROM icono_user_emulsion_favorites").get()
+        .emulsion_family_id,
+      "0-21103",
+    )
   } finally {
     db.close()
   }

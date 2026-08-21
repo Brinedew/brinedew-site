@@ -461,12 +461,12 @@ test("assigned Anima emulsion contract accepts exact aliases and rejects unassig
 
   assert.deepEqual(iconoplasmPreallocatedAnimaEmulsionOption("A1-50817"), {
     vision_id: "anima-v1-50817",
-    label: "A1-50817",
-    primary_label: "A1-50817",
+    label: "0-50817",
+    primary_label: "0-50817",
     secondary_label: "Ready for first blot",
-    search_text: "A1-50817 anima-v1-50817",
-    emulsion_id: "A1-50817",
-    emulsion_family_id: "A1-50817",
+    search_text: "0-50817 anima-v1-50817",
+    emulsion_id: "0-50817",
+    emulsion_family_id: "0-50817",
     image_count: 0,
     live_count: 0,
     score: 0,
@@ -730,8 +730,8 @@ test("authenticated request options return rich emulsion rows from the dedicated
 test("request options include a favorite outside the normal ranked window and place it first", async () => {
   const favoriteVisionRow = {
     vision_id: "anima-v1-9999",
-    emulsion_id: "A1-9999",
-    emulsion_family_id: "A1-9999",
+    emulsion_id: "0-9999",
+    emulsion_family_id: "0-9999",
     artist_tag: "anima",
     artist_name: "Anima Archive",
     workflow_id: "A1-",
@@ -745,9 +745,9 @@ test("request options include a favorite outside the normal ranked window and pl
     preview_assets_json: "[]",
   }
   const env = buildEnv({ dbOptions: { favoriteVisionRows: [favoriteVisionRow] } })
-  env.gatewayDb.favoriteRows.set("user-1:A1-9999", {
+  env.gatewayDb.favoriteRows.set("user-1:0-9999", {
     user_id: "user-1",
-    emulsion_family_id: "A1-9999",
+    emulsion_family_id: "0-9999",
     created_at: "2026-07-20T10:00:00Z",
   })
   env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
@@ -775,7 +775,7 @@ test("request options include a favorite outside the normal ranked window and pl
   const payload = await response.json()
   assert.equal(response.status, 200)
   assert.equal(payload.favorite_count, 1)
-  assert.equal(payload.request_options[0]?.emulsion_id, "A1-9999")
+  assert.equal(payload.request_options[0]?.emulsion_id, "0-9999")
   assert.equal(payload.request_options[0]?.is_favorite, true)
 })
 
@@ -1056,7 +1056,7 @@ test("a bare slot ranks real blots first while exact codes use only proven linea
       legacySlotOptionRows: [
         {
           vision_id: "anima-v1-1003",
-          emulsion_id: "A1-1003",
+          emulsion_id: "0-1003",
           artist_tag: "anima",
           artist_name: "Anima Archive",
           workflow_id: "A1-",
@@ -1234,7 +1234,7 @@ test("authenticated request options infer emulsion code from vision id when roll
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload.request_options[0]?.label, "A1-3696")
+  assert.equal(payload.request_options[0]?.label, "0-3696")
 })
 
 test("user emulsion request examples are rebuilt from portrait assets instead of narrow increments", () => {
