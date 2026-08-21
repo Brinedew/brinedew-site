@@ -4430,16 +4430,17 @@ async function createGenerationRequest(
   const batchSizeNorm = Math.max(1, Math.min(500, Math.trunc(Number(requestBatchSize) || 1)))
   const promptBodyModeNorm = normalizeCandidatePromptBodyMode(promptBodyMode)
   const activeRecipe = await activeFactoryRecipe(env)
+  const origin =
+    String(requestOrigin || "").trim() === "diagnostic_matrix" ? "diagnostic_matrix" : "user"
   const requestedRecipe =
     mode === "specific" ? iconoplasmFactoryRecipeFromPublicEmulsionId(visionNorm) : null
   const pipelineOverride =
-    normalizeFactoryPipelineCode(factoryPipelineCode) || requestedRecipe?.pipeline || ""
+    origin === "diagnostic_matrix" ? normalizeFactoryPipelineCode(factoryPipelineCode) : ""
   const visionOverride =
-    normalizeFactoryVisionRevision(factoryVisionRevision) || requestedRecipe?.vision || 0
+    origin === "diagnostic_matrix" ? normalizeFactoryVisionRevision(factoryVisionRevision) : 0
   if (
-    (factoryPipelineCode && !pipelineOverride) ||
-    ((factoryVisionRevision || requestedRecipe) &&
-      (!visionOverride || !(await isAcceptedFactoryVision(env, visionOverride))))
+    origin === "diagnostic_matrix" &&
+    (!pipelineOverride || !visionOverride || !(await isAcceptedFactoryVision(env, visionOverride)))
   ) {
     return { ok: false, error: "Choose an accepted factory recipe." }
   }
@@ -4447,8 +4448,6 @@ async function createGenerationRequest(
     pipeline: pipelineOverride || activeRecipe.pipeline,
     vision: visionOverride || activeRecipe.vision,
   }
-  const origin =
-    String(requestOrigin || "").trim() === "diagnostic_matrix" ? "diagnostic_matrix" : "user"
   const diagnosticId =
     origin === "diagnostic_matrix" ? sanitizeText(diagnosticRunId || "", 80) || "" : ""
   if (origin === "diagnostic_matrix" && !diagnosticId) {
@@ -9199,41 +9198,6 @@ function iconoplasmFactoryRecipeFromPublicEmulsionId(raw) {
   return { pipeline, vision, slot, publicId: `${pipeline}${vision}-${slot}` }
 }
 
-export function iconoplasmPreallocatedFactoryEmulsionOptions(
-  raw,
-  pipelines = ICONOPLASM_FACTORY_PIPELINES,
-) {
-  const compact = String(raw || "")
-    .replace(/\s+/g, "")
-    .trim()
-  const exactRecipe = iconoplasmFactoryRecipeFromPublicEmulsionId(compact)
-  const numericSlot = /^[1-9][0-9]*$/.test(compact) ? Number.parseInt(compact, 10) : 0
-  const slot = exactRecipe?.slot || numericSlot
-  if (!iconoplasmAnimaEmulsionSlotIsPreallocated(slot)) return []
-  const recipes = exactRecipe
-    ? [{ code: exactRecipe.pipeline, recommended_vision: exactRecipe.vision }]
-    : pipelines
-  return recipes.map((pipeline) => {
-    const vision = normalizeFactoryVisionRevision(pipeline.recommended_vision) || 1
-    const publicId = `${pipeline.code}${vision}-${slot}`
-    return {
-      vision_id: publicId,
-      label: publicId,
-      primary_label: publicId,
-      secondary_label: "Ready for first blot",
-      search_text: `${publicId} ${slot}`,
-      emulsion_id: publicId,
-      emulsion_family_id: `0-${slot}`,
-      image_count: 0,
-      live_count: 0,
-      score: 0,
-      vote_h_index: 0,
-      preview_assets: [],
-      is_preallocated_without_preview: true,
-    }
-  })
-}
-
 function compactGenerationRequestOptionIdentityPrefix(raw, transform) {
   const compact = String(raw || "")
     .replace(/\s+/g, "")
@@ -9592,7 +9556,7 @@ function generationRequestFactorySearchIntent(raw) {
   const numericSlot = /^[1-9][0-9]*$/.test(compact) ? Number.parseInt(compact, 10) : 0
   const slot = exactRecipe?.slot || numericSlot
   if (!iconoplasmAnimaEmulsionSlotIsPreallocated(slot)) return null
-  return { exactRecipe, slot }
+  return { slot }
 }
 
 function mapGenerationRequestFactoryOptionRows(env, url, rows) {
@@ -9623,32 +9587,20 @@ function mapGenerationRequestFactoryOptionRows(env, url, rows) {
 }
 
 async function listGenerationRequestFactorySlotOptions(env, url, searchIntent) {
-  const exactRecipe = searchIntent?.exactRecipe || null
   const slot = Math.max(0, Number(searchIntent?.slot || 0) || 0)
   if (!env.ICONOPLASM_DB || !slot) return []
 
-  const exactResponse = exactRecipe
-    ? await env.ICONOPLASM_DB.prepare(
-        `SELECT public_emulsion_code, emulsion_slot, image_count, live_count,
-                score, vote_h_index, preview_assets_json
-         FROM icono_generation_request_factory_option_rollup
-         WHERE public_emulsion_code = ?
-         LIMIT 1`,
-      )
-        .bind(exactRecipe.publicId)
-        .all()
-    : await env.ICONOPLASM_DB.prepare(
-        `SELECT public_emulsion_code, emulsion_slot, image_count, live_count,
-                score, vote_h_index, preview_assets_json
-         FROM icono_generation_request_factory_option_rollup
-         WHERE emulsion_slot = ?
-         ORDER BY live_count DESC, image_count DESC, score DESC, public_emulsion_code ASC
-         LIMIT 120`,
-      )
-        .bind(slot)
-        .all()
+  const exactResponse = await env.ICONOPLASM_DB.prepare(
+    `SELECT public_emulsion_code, emulsion_slot, image_count, live_count,
+            score, vote_h_index, preview_assets_json
+     FROM icono_generation_request_factory_option_rollup
+     WHERE emulsion_slot = ?
+     ORDER BY live_count DESC, image_count DESC, score DESC, public_emulsion_code ASC
+     LIMIT 120`,
+  )
+    .bind(slot)
+    .all()
   const exactOptions = mapGenerationRequestFactoryOptionRows(env, url, exactResponse?.results || [])
-  if (exactRecipe) return exactOptions
 
   const legacyResponse = await env.ICONOPLASM_DB.prepare(
     `SELECT vision_id, emulsion_id, artist_tag, artist_name, workflow_id,
@@ -9673,18 +9625,47 @@ async function listGenerationRequestFactorySlotOptions(env, url, searchIntent) {
     is_unqualified_legacy: true,
   }))
 
-  return [...exactOptions, ...legacyOptions].sort((left, right) => {
-    const imageDifference = Number(right?.image_count || 0) - Number(left?.image_count || 0)
-    if (imageDifference) return imageDifference
-    const liveDifference = Number(right?.live_count || 0) - Number(left?.live_count || 0)
-    if (liveDifference) return liveDifference
-    return compareNullableTextAsc(left?.label, right?.label)
-  })
+  const option = iconoplasmPreallocatedAnimaEmulsionOption(`anima-v1-${slot}`)
+  if (!option) return []
+  const sources = [...legacyOptions, ...exactOptions]
+  const previewAssets = []
+  const seenAssets = new Set()
+  for (const source of sources) {
+    for (const preview of Array.isArray(source?.preview_assets) ? source.preview_assets : []) {
+      const assetSha = normalizeSha256(preview?.asset_sha256 || "") || ""
+      if (!assetSha || seenAssets.has(assetSha)) continue
+      seenAssets.add(assetSha)
+      previewAssets.push(preview)
+      if (previewAssets.length >= 4) break
+    }
+    if (previewAssets.length >= 4) break
+  }
+  const collapsed = {
+    ...option,
+    image_count: sources.reduce(
+      (sum, source) => sum + Math.max(0, Number(source?.image_count) || 0),
+      0,
+    ),
+    live_count: sources.reduce(
+      (sum, source) => sum + Math.max(0, Number(source?.live_count) || 0),
+      0,
+    ),
+    score: sources.reduce((best, source) => Math.max(best, Number(source?.score) || 0), 0),
+    vote_h_index: sources.reduce(
+      (best, source) => Math.max(best, Number(source?.vote_h_index) || 0),
+      0,
+    ),
+    preview_assets: previewAssets,
+  }
+  if (previewAssets.length) {
+    collapsed.secondary_label = ""
+    delete collapsed.is_preallocated_without_preview
+  }
+  return [collapsed]
 }
 
 async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds = []) {
   if (!env.ICONOPLASM_DB) return []
-  const sharedUserOptionsPromise = listSharedUserEmulsionOptions(env, url, favoriteEmulsionIds)
   const searchQuery = normalizeGenerationRequestOptionSearchQuery(
     url?.searchParams?.get("query") || "",
   )
@@ -9696,33 +9677,9 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
         url,
         factorySearchIntent,
       )
-      const acceptedVisions = await factoryVisionCatalog(env)
-      const firstBlotOptions = iconoplasmPreallocatedFactoryEmulsionOptions(
-        searchQuery,
-        await factoryPipelineCatalog(env, acceptedVisions),
-      )
-      const existingIds = new Set(
-        imageOptions.map((option) =>
-          String(option?.label || "")
-            .trim()
-            .toUpperCase(),
-        ),
-      )
-      return annotateFavoriteGenerationRequestOptions(
-        [
-          ...imageOptions,
-          ...firstBlotOptions.filter(
-            (option) =>
-              !existingIds.has(
-                String(option?.label || "")
-                  .trim()
-                  .toUpperCase(),
-              ),
-          ),
-        ],
-        favoriteEmulsionIds,
-      )
+      return annotateFavoriteGenerationRequestOptions(imageOptions, favoriteEmulsionIds)
     }
+    const sharedUserOptionsPromise = listSharedUserEmulsionOptions(env, url, favoriteEmulsionIds)
     const emulsionPrefix = generationRequestEmulsionFamilyId(
       compactGenerationRequestOptionIdentityPrefix(searchQuery, "upper"),
     )
@@ -9809,29 +9766,12 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
     const groupedDatabaseOptions = groupGenerationRequestVisionOptions(
       mapGenerationRequestVisionOptionRows(env, url, resp?.results || []),
     )
-    const existingPublicIds = new Set(
-      groupedDatabaseOptions.map((option) =>
-        String(option?.label || "")
-          .trim()
-          .toUpperCase(),
-      ),
-    )
-    const acceptedVisions = await factoryVisionCatalog(env)
-    const preallocatedRecipeOptions = iconoplasmPreallocatedFactoryEmulsionOptions(
-      searchQuery,
-      await factoryPipelineCatalog(env, acceptedVisions),
-    )
-    for (let index = preallocatedRecipeOptions.length - 1; index >= 0; index -= 1) {
-      const option = preallocatedRecipeOptions[index]
-      if (!existingPublicIds.has(String(option.label || "").toUpperCase())) {
-        groupedDatabaseOptions.unshift(option)
-      }
-    }
     return annotateFavoriteGenerationRequestOptions(
       [...groupedDatabaseOptions, ...(await sharedUserOptionsPromise)],
       favoriteEmulsionIds,
     )
   }
+  const sharedUserOptionsPromise = listSharedUserEmulsionOptions(env, url, favoriteEmulsionIds)
   const [favoriteRows, resp] = await Promise.all([
     listFavoriteGenerationRequestVisionRows(env, favoriteEmulsionIds),
     env.ICONOPLASM_DB.prepare(

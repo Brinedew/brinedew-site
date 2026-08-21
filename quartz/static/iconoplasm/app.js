@@ -6723,7 +6723,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           }
         } else {
           html +=
-            '<div class="icono-request-results-empty">No emulsions match that search. Try a workflow code, artist tag, or full vision ID.</div>'
+            '<div class="icono-request-results-empty">No emulsions match that number or artist.</div>'
         }
         results.innerHTML = html
         results.removeAttribute("aria-busy")
