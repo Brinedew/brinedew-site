@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
+import { ICONOPLASM_FACTORY_CATALOG } from "./generated/iconoplasm-factory-catalog.js"
 
 const factoryMigration = readFileSync(
   new URL("../migrations-iconoplasm/0070_factory_recipe_authority.sql", import.meta.url),
@@ -150,6 +151,33 @@ test("public factory identity stays clean while private IDs remain internal", ()
   assert.match(workerSource, /public_emulsion_code/)
   assert.match(cardSource, /publicCode \|\| emulsionId/)
   assert.doesNotMatch(cardSource, /candidate_image_id[^\n]*<strong>/)
+})
+
+test("factory recommendations point each Anima family at its corrected prompt policy", () => {
+  assert.deepEqual(
+    ICONOPLASM_FACTORY_CATALOG.pipelines.map(({ code, recommended_vision }) => [
+      code,
+      recommended_vision,
+    ]),
+    [
+      ["A", 4],
+      ["B", 4],
+      ["C", 7],
+      ["D", 7],
+      ["E", 8],
+    ],
+  )
+  assert.deepEqual(
+    ICONOPLASM_FACTORY_CATALOG.visions.slice(-2).map((vision) => ({
+      revision: vision.revision,
+      content: vision.prompt_content_mode,
+      order: vision.prompt_order_mode,
+    })),
+    [
+      { revision: 7, content: "tags_only", order: "vision_then_manifestation" },
+      { revision: 8, content: "full_manifestation", order: "vision_then_manifestation" },
+    ],
+  )
 })
 
 test("diagnostic matrix schema owns explicit recipes and removes reference-gene snapshots", () => {

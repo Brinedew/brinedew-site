@@ -448,7 +448,7 @@ test("assigned Anima emulsion contract accepts exact aliases and rejects unassig
   assert.equal(iconoplasmPreallocatedAnimaEmulsionOption("A1-5000"), null)
   assert.deepEqual(
     iconoplasmPreallocatedFactoryEmulsionOptions("50817").map((option) => option.label),
-    ["A1-50817", "B1-50817", "C2-50817", "D2-50817", "E3-50817"],
+    ["A4-50817", "B4-50817", "C7-50817", "D7-50817", "E8-50817"],
   )
   assert.deepEqual(
     iconoplasmPreallocatedFactoryEmulsionOptions("C2-50817").map((option) => option.label),
@@ -981,14 +981,14 @@ test("an exact preallocated emulsion search returns a selectable first-blot opti
       {},
     )
   const payload = await response.json()
-  const option = payload.request_options.find((candidate) => candidate.vision_id === "A1-50817")
+  const option = payload.request_options.find((candidate) => candidate.vision_id === "A4-50817")
 
   assert.equal(response.status, 200)
   assert.deepEqual(
     payload.request_options.slice(0, 5).map((candidate) => candidate.label),
-    ["A1-50817", "B1-50817", "C2-50817", "D2-50817", "E3-50817"],
+    ["A4-50817", "B4-50817", "C7-50817", "D7-50817", "E8-50817"],
   )
-  assert.equal(option?.label, "A1-50817")
+  assert.equal(option?.label, "A4-50817")
   assert.equal(option?.secondary_label, "Ready for first blot")
   assert.equal(option?.is_preallocated_without_preview, true)
   assert.deepEqual(option?.preview_assets, [])
