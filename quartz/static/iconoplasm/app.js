@@ -6375,7 +6375,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
       function updateDirectGenerationPreview() {
         if (directSubjectSource) {
-          directSubjectSource.textContent = candidateGenerationSampleLabel() + " · active factory Vision"
+          directSubjectSource.textContent =
+            candidateGenerationSampleLabel() + " · active factory Vision"
         }
       }
 
