@@ -102,6 +102,55 @@
 .factory-actions {
   margin-top: 24px;
 }
+.factory-wiring {
+  display: grid;
+  gap: 12px;
+  margin-top: 34px;
+  padding-top: 26px;
+  border-top: 1px solid #cfc3b1;
+}
+.factory-wiring-table-wrap {
+  overflow-x: auto;
+}
+.factory-wiring-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  background: #f7f2e9;
+}
+.factory-wiring-table th,
+.factory-wiring-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #ded4c5;
+  text-align: left;
+  vertical-align: middle;
+}
+.factory-wiring-table th {
+  color: #7e7264;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.factory-wiring-table tbody th {
+  color: #29241d;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.factory-wiring-table td {
+  font-size: 12px;
+}
+.factory-wiring-table select {
+  width: 100%;
+  min-width: 240px;
+  min-height: 38px;
+  border: 1px solid #b9ab97;
+  border-radius: 6px;
+  background: #fff;
+  color: #29241d;
+  font: inherit;
+}
 .diagnostic-console {
   margin-top: 28px;
   padding: clamp(22px, 4vw, 48px);

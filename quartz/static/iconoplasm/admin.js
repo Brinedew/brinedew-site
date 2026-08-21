@@ -180,6 +180,8 @@
     factorySave: document.getElementById("factory-save"),
     factoryRefresh: document.getElementById("factory-refresh"),
     factoryStatus: document.getElementById("factory-status"),
+    factoryWiringRows: document.getElementById("factory-wiring-rows"),
+    factoryWiringStatus: document.getElementById("factory-wiring-status"),
     diagnosticGene: document.getElementById("diagnostic-gene"),
     diagnosticPipelineOptions: document.getElementById("diagnostic-pipeline-options"),
     diagnosticEmulsionInput: document.getElementById("diagnostic-emulsion-input"),
@@ -1260,6 +1262,61 @@
     els.factoryStatus.className = "small" + (tone ? " text-" + tone : "")
   }
 
+  function setFactoryWiringStatus(message, tone) {
+    if (!els.factoryWiringStatus) return
+    els.factoryWiringStatus.textContent = String(message || "")
+    els.factoryWiringStatus.className = "small" + (tone ? " text-" + tone : "")
+  }
+
+  function renderFactoryWiring() {
+    if (!els.factoryWiringRows || !state.factoryRecipe) return
+    var visions = Array.isArray(state.factoryRecipe.visions) ? state.factoryRecipe.visions : []
+    els.factoryWiringRows.innerHTML = (state.factoryRecipe.pipelines || [])
+      .map(function (pipeline) {
+        var options = visions
+          .map(function (vision) {
+            var selected = Number(vision.revision) === Number(pipeline.recommended_vision)
+            return (
+              '<option value="' +
+              esc(String(vision.revision)) +
+              '"' +
+              (selected ? " selected" : "") +
+              ">" +
+              esc(vision.label) +
+              "</option>"
+            )
+          })
+          .join("")
+        return (
+          "<tr>" +
+          '<th scope="row">' +
+          esc(pipeline.code + " · " + pipeline.label) +
+          "</th>" +
+          "<td>" +
+          esc(pipeline.model || "") +
+          "</td>" +
+          "<td>" +
+          esc(
+            String(pipeline.steps) +
+              " steps · CFG " +
+              String(pipeline.cfg) +
+              " · " +
+              pipeline.sampler,
+          ) +
+          "</td>" +
+          '<td><select data-factory-recommendation="' +
+          esc(pipeline.code) +
+          '" aria-label="Recommended Vision for Pipeline ' +
+          esc(pipeline.code) +
+          '">' +
+          options +
+          "</select></td>" +
+          "</tr>"
+        )
+      })
+      .join("")
+  }
+
   function selectedFactoryRecipe() {
     return {
       pipeline: String((els.factoryPipeline && els.factoryPipeline.value) || "").trim(),
@@ -1299,6 +1356,7 @@
       els.factoryVision.value = String(active.vision || 1)
     }
     renderFactoryRecipeSelection()
+    renderFactoryWiring()
     renderDiagnosticBuilder()
     if (els.factorySave) els.factorySave.disabled = state.factoryBusy
     if (els.factoryRefresh) els.factoryRefresh.disabled = state.factoryBusy
@@ -1404,6 +1462,27 @@
     } finally {
       state.factoryBusy = false
       renderFactoryRecipe()
+    }
+  }
+
+  async function saveFactoryRecommendation(select) {
+    if (!select || !state.factoryRecipe) return
+    var pipeline = String(select.getAttribute("data-factory-recommendation") || "")
+    var vision = Number.parseInt(String(select.value || "0"), 10) || 0
+    select.disabled = true
+    setFactoryWiringStatus("Saving " + pipeline + "…", "")
+    try {
+      state.factoryRecipe = await apiJson("/factory-recommendation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pipeline: pipeline, vision: vision }),
+      })
+      renderFactoryWiring()
+      renderFactoryRecipeSelection()
+      setFactoryWiringStatus(pipeline + " recommends Vision " + vision + ".", "success")
+    } catch (err) {
+      renderFactoryWiring()
+      setFactoryWiringStatus(requestErrorMessage(err, "Recommendation failed to save."), "danger")
     }
   }
 
@@ -9847,6 +9926,12 @@
       els.factoryPipeline.addEventListener("change", selectRecommendedVisionForPipeline)
     if (els.factoryVision)
       els.factoryVision.addEventListener("change", renderFactoryRecipeSelection)
+    if (els.factoryWiringRows) {
+      els.factoryWiringRows.addEventListener("change", function (ev) {
+        var select = ev.target.closest("[data-factory-recommendation]")
+        if (select) saveFactoryRecommendation(select)
+      })
+    }
     if (els.diagnosticVision) {
       els.diagnosticVision.addEventListener("change", function () {
         state.diagnosticVisionRevision =

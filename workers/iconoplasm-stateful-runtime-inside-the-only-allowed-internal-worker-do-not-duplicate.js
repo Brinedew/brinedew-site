@@ -5399,6 +5399,36 @@ async function imageEditPromptTemplatesPayload(env) {
 const ICONOPLASM_FACTORY_PIPELINES = ICONOPLASM_FACTORY_CATALOG.pipelines
 const ICONOPLASM_FACTORY_VISIONS = ICONOPLASM_FACTORY_CATALOG.visions
 
+async function factoryPipelineCatalog(env, visions = ICONOPLASM_FACTORY_VISIONS) {
+  if (!env?.ICONOPLASM_DB) return ICONOPLASM_FACTORY_PIPELINES
+  const result = await env.ICONOPLASM_DB.prepare(
+    `SELECT pipeline_code, vision_revision
+       FROM icono_factory_pipeline_vision_recommendations`,
+  ).all()
+  const rows = Array.isArray(result?.results) ? result.results : []
+  const acceptedVisions = new Set(
+    visions
+      .filter((vision) => vision.status === "accepted")
+      .map((vision) => normalizeFactoryVisionRevision(vision.revision))
+      .filter(Boolean),
+  )
+  const recommendations = new Map(
+    rows
+      .map((row) => [
+        normalizeFactoryPipelineCode(row?.pipeline_code || ""),
+        normalizeFactoryVisionRevision(row?.vision_revision || 0),
+      ])
+      .filter(([pipeline, vision]) => pipeline && acceptedVisions.has(vision)),
+  )
+  return ICONOPLASM_FACTORY_PIPELINES.map((pipeline) => ({
+    ...pipeline,
+    recommended_vision:
+      recommendations.get(pipeline.code) ||
+      normalizeFactoryVisionRevision(pipeline.recommended_vision) ||
+      1,
+  }))
+}
+
 function normalizeFactoryPipelineCode(raw) {
   const code = String(raw || "")
     .trim()
@@ -5469,12 +5499,34 @@ async function activeFactoryRecipe(env) {
 }
 
 async function factoryRecipePayload(env) {
+  const visions = await factoryVisionCatalog(env)
   return {
     ok: true,
     active_recipe: await activeFactoryRecipe(env),
-    pipelines: ICONOPLASM_FACTORY_PIPELINES,
-    visions: await factoryVisionCatalog(env),
+    pipelines: await factoryPipelineCatalog(env, visions),
+    visions,
   }
+}
+
+async function saveFactoryPipelineVisionRecommendation(env, { pipeline, vision, updatedBy }) {
+  const pipelineCode = normalizeFactoryPipelineCode(pipeline)
+  const visionRevision = normalizeFactoryVisionRevision(vision)
+  if (!pipelineCode) return { ok: false, error: "Choose an accepted factory Pipeline." }
+  if (!visionRevision || !(await isAcceptedFactoryVision(env, visionRevision)))
+    return { ok: false, error: "Choose an accepted Vision revision." }
+  const actor = sanitizeText(updatedBy || "admin", 255) || "admin"
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_factory_pipeline_vision_recommendations (
+       pipeline_code, vision_revision, updated_by, updated_at
+     ) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(pipeline_code) DO UPDATE SET
+       vision_revision = excluded.vision_revision,
+       updated_by = excluded.updated_by,
+       updated_at = CURRENT_TIMESTAMP`,
+  )
+    .bind(pipelineCode, visionRevision, actor)
+    .run()
+  return factoryRecipePayload(env)
 }
 
 async function saveActiveFactoryRecipe(env, { pipeline, vision, updatedBy }) {
@@ -8952,7 +9004,10 @@ function iconoplasmFactoryRecipeFromPublicEmulsionId(raw) {
   return { pipeline, vision, slot, publicId: `${pipeline}${vision}-${slot}` }
 }
 
-export function iconoplasmPreallocatedFactoryEmulsionOptions(raw) {
+export function iconoplasmPreallocatedFactoryEmulsionOptions(
+  raw,
+  pipelines = ICONOPLASM_FACTORY_PIPELINES,
+) {
   const compact = String(raw || "")
     .replace(/\s+/g, "")
     .trim()
@@ -8962,7 +9017,7 @@ export function iconoplasmPreallocatedFactoryEmulsionOptions(raw) {
   if (!iconoplasmAnimaEmulsionSlotIsPreallocated(slot)) return []
   const recipes = exactRecipe
     ? [{ code: exactRecipe.pipeline, recommended_vision: exactRecipe.vision }]
-    : ICONOPLASM_FACTORY_PIPELINES
+    : pipelines
   return recipes.map((pipeline) => {
     const vision = normalizeFactoryVisionRevision(pipeline.recommended_vision) || 1
     const publicId = `${pipeline.code}${vision}-${slot}`
@@ -9434,7 +9489,11 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
           .toUpperCase(),
       ),
     )
-    const preallocatedRecipeOptions = iconoplasmPreallocatedFactoryEmulsionOptions(searchQuery)
+    const acceptedVisions = await factoryVisionCatalog(env)
+    const preallocatedRecipeOptions = iconoplasmPreallocatedFactoryEmulsionOptions(
+      searchQuery,
+      await factoryPipelineCatalog(env, acceptedVisions),
+    )
     for (let index = preallocatedRecipeOptions.length - 1; index >= 0; index -= 1) {
       const option = preallocatedRecipeOptions[index]
       if (!existingPublicIds.has(String(option.label || "").toUpperCase())) {
@@ -29597,6 +29656,32 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       })
       return done(
         saved.ok ? "admin_factory_recipe" : "admin_factory_recipe_400",
+        json(saved, saved.ok ? 200 : 400, { "Cache-Control": "no-store" }),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/factory-recommendation" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_factory_recommendation_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_factory_recommendation_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_factory_recommendation_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      const saved = await saveFactoryPipelineVisionRecommendation(env, {
+        pipeline: p?.pipeline,
+        vision: p?.vision,
+        updatedBy: sessionUser?.user_id || "admin-token",
+      })
+      return done(
+        saved.ok ? "admin_factory_recommendation" : "admin_factory_recommendation_400",
         json(saved, saved.ok ? 200 : 400, { "Cache-Control": "no-store" }),
       )
     }
