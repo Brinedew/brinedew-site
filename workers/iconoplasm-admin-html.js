@@ -103,12 +103,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             </div>
             <div id="diagnostic-emulsion-chips" class="diagnostic-emulsion-chips" aria-live="polite"></div>
           </div>
-          <label>Prompt body
-            <select id="diagnostic-prompt-mode">
-              <option value="taggerizer_prompt" selected>Tags</option>
-              <option value="prose_prompt">Full manifestation</option>
-            </select>
-          </label>
+          <div class="diagnostic-vision-policy">
+            <span class="diagnostic-label">Prompt policy</span>
+            <strong id="diagnostic-vision-policy">Selected Vision</strong>
+          </div>
         </div>
         <div class="controls diagnostic-actions">
           <button type="button" id="diagnostic-run">Run diagnostic matrix</button>

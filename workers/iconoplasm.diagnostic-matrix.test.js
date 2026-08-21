@@ -82,6 +82,26 @@ function diagnosticDatabase(options) {
       updated_at TEXT NOT NULL
     );
     INSERT INTO icono_factory_active_recipe VALUES (1, 'A', 1, 'test', CURRENT_TIMESTAMP);
+    CREATE TABLE icono_factory_vision_definitions (
+      revision INTEGER PRIMARY KEY,
+      source_id TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      source_sha256 TEXT NOT NULL,
+      positive_prefix TEXT NOT NULL,
+      negative_prompt TEXT NOT NULL,
+      prompt_content_mode TEXT NOT NULL,
+      prompt_order_mode TEXT NOT NULL,
+      prompt_replace_underscores INTEGER NOT NULL,
+      emulsion_base_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      accepted_by TEXT NOT NULL,
+      accepted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT INTO icono_factory_vision_definitions VALUES (
+      1, 'artist-random-anima', 'Vision 1', '${"0".repeat(64)}', '', '',
+      'tags_only', 'manifestation_then_vision', 0, 'artist-random-anima',
+      'accepted', 'test', CURRENT_TIMESTAMP
+    );
     CREATE TABLE icono_generation_requests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       gene_symbol TEXT NOT NULL,
