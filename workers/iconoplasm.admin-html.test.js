@@ -117,6 +117,7 @@ test("factory admin runs and displays a diagnostic matrix without leaving the pa
   assert.match(ICONOPLASM_ADMIN_HTML, /id="diagnostic-gene"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /id="diagnostic-pipeline-options"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /id="diagnostic-emulsion-input"/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /id="diagnostic-vision"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /id="diagnostic-run"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /id="diagnostic-matrix"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /id="diagnostic-matrix"[^>]*data-icono-lightbox/)
@@ -127,6 +128,11 @@ test("factory admin runs and displays a diagnostic matrix without leaving the pa
   assert.match(ICONOPLASM_ADMIN_HTML, /Download PNG/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /\/diagnostic-matrices/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /run_id:\s*runId/)
+  assert.match(ICONOPLASM_ADMIN_RUNTIME, /vision_revision:\s*visionRevision/)
+  assert.doesNotMatch(
+    ICONOPLASM_ADMIN_RUNTIME,
+    /vision_revision:\s*[\s\S]{0,120}els\.factoryVision/,
+  )
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /recoverDiagnosticRun\(runId\)/)
   assert.match(
     ICONOPLASM_ADMIN_RUNTIME,
