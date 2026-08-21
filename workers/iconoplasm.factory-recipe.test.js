@@ -38,6 +38,13 @@ const portraitIdentityNormalization = readFileSync(
   ),
   "utf8",
 )
+const duplicatePortraitIdentityRemoval = readFileSync(
+  new URL(
+    "../migrations-iconoplasm/0077_remove_duplicate_portrait_emulsion_code.sql",
+    import.meta.url,
+  ),
+  "utf8",
+)
 const workerSource = readFileSync(
   new URL(
     "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
@@ -139,6 +146,28 @@ test("portrait identity normalization keeps proven lineage and marks legacy IDs 
       },
       { public_emulsion_code: "C9-21103", image_count: 1 },
     )
+  } finally {
+    db.close()
+  }
+})
+
+test("portrait assets retain only one emulsion identity field", () => {
+  const db = new DatabaseSync(":memory:")
+  try {
+    db.exec("CREATE TABLE icono_generation_requests (id INTEGER PRIMARY KEY)")
+    db.exec("CREATE TABLE icono_candidate_generation_jobs (id TEXT PRIMARY KEY)")
+    db.exec(
+      "CREATE TABLE icono_portrait_assets (gene_symbol TEXT, asset_sha256 TEXT, emulsion_id TEXT)",
+    )
+    db.exec(factoryMigration)
+    db.exec(
+      "CREATE INDEX idx_icono_portrait_assets_public_emulsion_code ON icono_portrait_assets (public_emulsion_code)",
+    )
+    db.exec(duplicatePortraitIdentityRemoval)
+
+    const columns = db.prepare("PRAGMA table_info(icono_portrait_assets)").all()
+    assert.ok(columns.some((column) => column.name === "emulsion_id"))
+    assert.ok(!columns.some((column) => column.name === "public_emulsion_code"))
   } finally {
     db.close()
   }
