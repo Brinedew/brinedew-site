@@ -226,7 +226,12 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   )
   assert.match(
     app,
-    /if \(immediateOption\) \{[\s\S]*paintRequestResults\(renderQuery, \[immediateOption\]\)[\s\S]*scheduleNumericRequestHydration\(renderQuery, immediateOption\)[\s\S]*return/,
+    /var match = \/\^\(\?:\(\?:\[a-z\]\[1-9\]\[0-9\]\*\|anima-v1\)-\)\?\(\[1-9\]\[0-9\]\*\)\(\?:-e\)\?\$\/i/,
+    "numeric lookup should accept public factory aliases such as A1-10 and edited aliases such as A1-10-E",
+  )
+  assert.match(
+    app,
+    /if \(immediateOption\) \{[\s\S]*paintRequestResults\(requestOptionPrimaryLabel\(immediateOption\), \[immediateOption\]\)[\s\S]*scheduleNumericRequestHydration\(renderQuery, immediateOption\)[\s\S]*return/,
     "numeric search rendering must not wait for preview hydration",
   )
   assert.match(
@@ -238,6 +243,11 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     app,
     /scheduleNumericRequestHydration[\s\S]*window\.setTimeout[\s\S]*ensureRequestOptionsLoaded\(renderQuery\)/,
     "numeric preview hydration should be debounced behind the immediate result",
+  )
+  assert.match(
+    app,
+    /paintRequestResults\(\s*requestOptionPrimaryLabel\(immediateOption\),/,
+    "preview hydration should keep filtering by the normalized number so an A1-10 result cannot disappear",
   )
   assert.match(slotContract, /"callable_slot_intervals"/)
   assert.doesNotMatch(

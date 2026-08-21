@@ -6531,7 +6531,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         var compact = String(query || "")
           .trim()
           .replace(/\s+/g, "")
-        var match = /^(?:anima-v1-)?([1-9][0-9]*)$/i.exec(compact)
+        var match = /^(?:(?:[a-z][1-9][0-9]*|anima-v1)-)?([1-9][0-9]*)(?:-e)?$/i.exec(compact)
         if (!match) return null
         var slot = Number(match[1])
         if (!Number.isSafeInteger(slot)) return null
@@ -6566,7 +6566,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
 
       function isNumericRequestQuery(query) {
-        return /^(?:anima-v1-)?[0-9]+$/i.test(
+        return /^(?:(?:[a-z][1-9][0-9]*|anima-v1)-)?[0-9]+(?:-e)?$/i.test(
           String(query || "")
             .trim()
             .replace(/\s+/g, ""),
@@ -6786,7 +6786,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             .then(function (loadedOptions) {
               if (queryInput.value !== renderQuery) return
               paintRequestResults(
-                renderQuery,
+                requestOptionPrimaryLabel(immediateOption),
                 Array.isArray(loadedOptions) && loadedOptions.length
                   ? loadedOptions
                   : [immediateOption],
@@ -6805,7 +6805,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         var immediateOption = requestOptionFromImmediateNumericQuery(renderQuery)
         if (immediateOption) {
           rememberRequestOptions([immediateOption])
-          paintRequestResults(renderQuery, [immediateOption])
+          paintRequestResults(requestOptionPrimaryLabel(immediateOption), [immediateOption])
           scheduleNumericRequestHydration(renderQuery, immediateOption)
           return
         }
