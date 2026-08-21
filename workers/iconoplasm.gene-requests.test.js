@@ -116,6 +116,20 @@ class FakeRequestStatement {
         ],
       }
     }
+    if (this.sql.includes("FROM icono_generation_request_factory_option_rollup")) {
+      this.db.factoryOptionRollupReads += 1
+      const rows = this.db.factoryOptionRows
+      if (this.sql.includes("public_emulsion_code = ?")) {
+        const publicId = String(this.args[0] || "").toUpperCase()
+        return {
+          results: rows.filter(
+            (row) => String(row.public_emulsion_code || "").toUpperCase() === publicId,
+          ),
+        }
+      }
+      const slot = Number(this.args[0] || 0)
+      return { results: rows.filter((row) => Number(row.emulsion_slot || 0) === slot) }
+    }
     if (this.sql.includes("FROM icono_generation_request_vision_option_rollup")) {
       this.db.optionRollupReads += 1
       this.db.lastOptionRollupSql = this.sql
@@ -178,6 +192,14 @@ class FakeRequestStatement {
         ]
         return {
           results: rows.filter((row) => row.emulsion_id >= lower && row.emulsion_id < upper),
+        }
+      }
+      if (this.sql.includes("AND emulsion_id = ?")) {
+        const emulsionId = String(this.args[0] || "")
+        return {
+          results: this.db.legacySlotOptionRows.filter(
+            (row) => String(row.emulsion_id || "") === emulsionId,
+          ),
         }
       }
       if (this.db.manyVisionOptions) {
@@ -349,6 +371,7 @@ class FakeRequestDb {
     this.requestReads = 0
     this.visionRollupReads = 0
     this.optionRollupReads = 0
+    this.factoryOptionRollupReads = 0
     this.userEmulsionReads = 0
     this.userEmulsionPreviewReads = 0
     this.previewReads = 0
@@ -361,6 +384,12 @@ class FakeRequestDb {
     this.favoriteRows = new Map()
     this.favoriteVisionRows = Array.isArray(options.favoriteVisionRows)
       ? options.favoriteVisionRows
+      : []
+    this.factoryOptionRows = Array.isArray(options.factoryOptionRows)
+      ? options.factoryOptionRows
+      : []
+    this.legacySlotOptionRows = Array.isArray(options.legacySlotOptionRows)
+      ? options.legacySlotOptionRows
       : []
   }
 
@@ -855,6 +884,23 @@ test("request-option v2 migration repairs previews from canonical SHA identity",
   assert.match(migration, /NOT EXISTS \(\s*SELECT 1\s*FROM icono_portrait_assets pa/)
 })
 
+test("factory request options are projected only from authoritative public lineage", () => {
+  const migration = readFileSync(
+    new URL("../migrations-iconoplasm/0075_factory_request_option_rollup.sql", import.meta.url),
+    "utf8",
+  )
+
+  assert.match(migration, /icono_generation_request_factory_option_rollup/)
+  assert.match(migration, /public_emulsion_code TEXT PRIMARY KEY/)
+  assert.match(migration, /PARTITION BY public_emulsion_code/)
+  assert.match(migration, /idx_icono_generation_request_factory_option_slot/)
+  assert.doesNotMatch(
+    migration,
+    /COALESCE\([^\n]*public_emulsion_code[^\n]*emulsion_id/i,
+    "legacy emulsion IDs must never be promoted into exact factory lineage",
+  )
+})
+
 test("authenticated request options include shared user emulsions with preview thumbnails", async () => {
   const env = buildEnv()
   env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
@@ -902,7 +948,7 @@ test("authenticated request options include shared user emulsions with preview t
   assert.equal(env.gatewayDb.userEmulsionPreviewReads, 1)
 })
 
-test("authenticated request options search the dedicated rollup by emulsion prefix", async () => {
+test("a fully qualified factory code is treated as one exact recipe", async () => {
   const env = buildEnv({ dbOptions: { queryVisionOptions: true } })
   env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
   env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
@@ -933,20 +979,10 @@ test("authenticated request options search the dedicated rollup by emulsion pref
   assert.equal(response.status, 200)
   assert.deepEqual(
     payload.request_options.map((option) => option.label),
-    ["A1-2", "A1-2070", "A1-2375"],
+    ["A1-2"],
   )
-  assert.equal(env.gatewayDb.optionRollupReads, 1)
-  assert.equal(env.gatewayDb.lastOptionRollupArgs[0], "A1-2")
-  assert.equal(env.gatewayDb.lastOptionRollupArgs[1], "A1-3")
-  assert.match(
-    String(env.gatewayDb.lastOptionRollupSql || ""),
-    /FROM icono_generation_request_vision_option_rollup/,
-  )
-  assert.match(String(env.gatewayDb.lastOptionRollupSql || ""), /emulsion_id >= \?/)
-  assert.doesNotMatch(
-    String(env.gatewayDb.lastOptionRollupSql || ""),
-    /FROM icono_admin_vision_rollup|FROM icono_portrait_assets|lower\(emulsion_id\)|upper\(emulsion_id\)/i,
-  )
+  assert.equal(env.gatewayDb.factoryOptionRollupReads, 1)
+  assert.equal(env.gatewayDb.optionRollupReads, 0)
   assert.equal(env.gatewayDb.visionRollupReads, 0)
   assert.equal(env.gatewayDb.previewReads, 0)
 })
@@ -990,7 +1026,105 @@ test("an exact preallocated emulsion search returns a selectable first-blot opti
   assert.deepEqual(option?.preview_assets, [])
 })
 
-test("authenticated request options search is not pinned to A1-1 emulsions", async () => {
+test("a bare slot ranks real blots first while exact codes use only proven lineage", async () => {
+  const preview = (geneSymbol, character) => ({
+    gene_symbol: geneSymbol,
+    asset_sha256: character.repeat(64),
+    is_current: true,
+    preview_rank: 1,
+  })
+  const legacyPreviews = [
+    preview("CHST10", "a"),
+    preview("VAPA", "b"),
+    preview("GLMP", "c"),
+    preview("CRNKL1", "d"),
+  ]
+  const exactPreviews = [preview("AFF2", "e"), preview("VAMP7", "f")]
+  const env = buildEnv({
+    dbOptions: {
+      factoryOptionRows: [
+        {
+          public_emulsion_code: "C9-1003",
+          emulsion_slot: 1003,
+          image_count: 2,
+          live_count: 2,
+          score: 4,
+          vote_h_index: 1,
+          preview_assets_json: JSON.stringify(exactPreviews),
+        },
+      ],
+      legacySlotOptionRows: [
+        {
+          vision_id: "anima-v1-1003",
+          emulsion_id: "A1-1003",
+          artist_tag: "anima",
+          artist_name: "Anima Archive",
+          workflow_id: "A1-",
+          workflow_label: "Anima v1",
+          prompt_version: "1",
+          variant_slot: "1003",
+          image_count: 4,
+          live_count: 2,
+          score: 2,
+          vote_h_index: 1,
+          preview_assets_json: JSON.stringify(legacyPreviews),
+        },
+      ],
+    },
+  })
+  env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
+  env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
+    fetch(request) {
+      return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        request,
+        {
+          DB: env.gatewayDb,
+          ICONOPLASM_DB: env.gatewayDb,
+          GAME_SESSIONS: env.GAME_SESSIONS,
+        },
+        { waitUntil() {} },
+      )
+    },
+  }
+  const load = async (query) => {
+    const response =
+      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        new Request(
+          `https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options?query=${encodeURIComponent(query)}`,
+          { headers: { Cookie: "session=abc123" } },
+        ),
+        env,
+        {},
+      )
+    assert.equal(response.status, 200)
+    return response.json()
+  }
+
+  const bare = await load("1003")
+  assert.equal(bare.request_options[0]?.label, "1003")
+  assert.equal(bare.request_options[0]?.preview_assets.length, 4)
+  assert.equal(bare.request_options[1]?.label, "C9-1003")
+  assert.equal(bare.request_options[1]?.preview_assets.length, 2)
+  assert.equal(bare.request_options[2]?.is_preallocated_without_preview, true)
+
+  const unprovenExact = await load("A1-1003")
+  assert.deepEqual(
+    unprovenExact.request_options.map((option) => option.label),
+    ["A1-1003"],
+  )
+  assert.equal(unprovenExact.request_options[0]?.is_preallocated_without_preview, true)
+  assert.deepEqual(unprovenExact.request_options[0]?.preview_assets, [])
+
+  const provenExact = await load("C9-1003")
+  assert.deepEqual(
+    provenExact.request_options.map((option) => option.label),
+    ["C9-1003"],
+  )
+  assert.equal(provenExact.request_options[0]?.preview_assets.length, 2)
+  assert.equal(provenExact.request_options[0]?.is_preallocated_without_preview, undefined)
+})
+
+test("another fully qualified factory code also stays exact", async () => {
   const env = buildEnv({ dbOptions: { queryVisionOptions: true } })
   env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
   env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
@@ -1021,11 +1155,10 @@ test("authenticated request options search is not pinned to A1-1 emulsions", asy
   assert.equal(response.status, 200)
   assert.deepEqual(
     payload.request_options.map((option) => option.label),
-    ["A1-3", "A1-3127"],
+    ["A1-3"],
   )
-  assert.equal(env.gatewayDb.lastOptionRollupArgs[0], "A1-3")
-  assert.equal(env.gatewayDb.lastOptionRollupArgs[1], "A1-4")
-  assert.equal(env.gatewayDb.optionRollupReads, 1)
+  assert.equal(env.gatewayDb.factoryOptionRollupReads, 1)
+  assert.equal(env.gatewayDb.optionRollupReads, 0)
   assert.equal(env.gatewayDb.visionRollupReads, 0)
   assert.equal(env.gatewayDb.previewReads, 0)
 })
