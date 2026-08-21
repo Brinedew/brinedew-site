@@ -380,6 +380,19 @@ test("archival cards expose one labelled accessible equivalent of the visual cha
     includeCharacterProfile: true,
     layoutVariant: "lit-archival",
   })
+  assert.equal(
+    sharedRuntime.labLabelEmulsionNumber(fixture.portrait),
+    "0-15527-e",
+    "historical lookup identity must not masquerade as recorded A1 factory lineage",
+  )
+  assert.equal(
+    sharedRuntime.labLabelEmulsionNumber({
+      emulsion_id: "A1-15527-e",
+      public_emulsion_code: "C9-15527-e",
+    }),
+    "C9-15527-e",
+    "recorded immutable factory lineage must remain visible",
+  )
   assert.doesNotMatch(
     sharedRuntime.renderLabLabelCardHtml(fixture, { layoutVariant: "lit-archival" }),
     /icono-card-semantic-profile/,

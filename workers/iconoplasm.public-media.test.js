@@ -190,6 +190,8 @@ class FakeIconoplasmDb {
           width: 384,
           height: 512,
           vision_id: "anima-v1-2397",
+          emulsion_id: "A1-2397",
+          public_emulsion_code: "C9-2397",
           candidate_image_id: 4155,
           sample_label: "A1BG-3",
           sample_number: 3,
@@ -690,6 +692,8 @@ test("site gene payload includes published portrait dimensions for first-party b
   assert.equal(payload?.portrait?.status, "published")
   assert.equal(payload?.portrait?.width, 384)
   assert.equal(payload?.portrait?.height, 512)
+  assert.equal(payload?.portrait?.emulsion_id, "A1-2397")
+  assert.equal(payload?.portrait?.public_emulsion_code, "C9-2397")
   assert.equal(payload?.portrait?.sample_label, "A1BG-3")
   assert.equal(payload?.portrait?.sample_number, 3)
   assert.equal(typeof payload?.essence, "object")

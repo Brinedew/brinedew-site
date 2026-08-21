@@ -188,7 +188,7 @@ test("public factory identity stays clean while private IDs remain internal", ()
   assert.match(factoryCatalogSource, /code: "C"[\s\S]*cfg: 4/)
   assert.match(factoryCatalogSource, /code: "D"[\s\S]*cfg: 4\.5/)
   assert.match(workerSource, /public_emulsion_code/)
-  assert.match(cardSource, /publicCode \|\| emulsionId/)
+  assert.match(cardSource, /displayEmulsionCode\(item\.public_emulsion_code, emulsionId\)/)
   assert.doesNotMatch(cardSource, /candidate_image_id[^\n]*<strong>/)
 })
 
