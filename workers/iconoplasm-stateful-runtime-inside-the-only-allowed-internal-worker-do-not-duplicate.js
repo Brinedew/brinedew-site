@@ -9166,11 +9166,12 @@ export function iconoplasmPreallocatedAnimaEmulsionOption(raw) {
   const slot = iconoplasmAnimaEmulsionSlotFromExactAlias(raw)
   if (!iconoplasmAnimaEmulsionSlotIsPreallocated(slot)) return null
   const emulsionId = `0-${slot}`
+  const displayLabel = String(slot)
   const visionId = `anima-v1-${slot}`
   return {
     vision_id: visionId,
-    label: emulsionId,
-    primary_label: emulsionId,
+    label: displayLabel,
+    primary_label: displayLabel,
     secondary_label: "Ready for first blot",
     search_text: `${emulsionId} ${visionId}`,
     emulsion_id: emulsionId,
@@ -9223,6 +9224,12 @@ function generationRequestEmulsionFamilyId(raw) {
   const emulsionId = sanitizeText(raw || "", 64) || ""
   if (!emulsionId) return ""
   return emulsionId.replace(/(?:-e)+$/gi, "") || emulsionId
+}
+
+function generationRequestPublicEmulsionLabel(rawFamilyId) {
+  const familyId = sanitizeText(rawFamilyId || "", 64) || ""
+  const neutralSlot = /^0-([1-9][0-9]*)$/.exec(familyId)
+  return neutralSlot ? neutralSlot[1] : familyId
 }
 
 function uniqueGenerationRequestPreviews(previews) {
@@ -9288,7 +9295,11 @@ export function groupGenerationRequestVisionOptions(options) {
         members.map((member) => sanitizeText(member?.emulsion_id || "", 64) || "").filter(Boolean),
       ),
     )
-    const primaryLabel = familyId || canonical?.primary_label || canonical?.label || ""
+    const primaryLabel =
+      generationRequestPublicEmulsionLabel(familyId) ||
+      canonical?.primary_label ||
+      canonical?.label ||
+      ""
     // Edited `-e` members are searchable aliases for the base family, not
     // additional picker content. When the base exists, it alone supplies the
     // thumbnails, counts, strength, and immutable request reference.

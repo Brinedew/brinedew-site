@@ -460,8 +460,8 @@ test("assigned Anima emulsion contract accepts exact aliases and rejects unassig
 
   assert.deepEqual(iconoplasmPreallocatedAnimaEmulsionOption("A1-50817"), {
     vision_id: "anima-v1-50817",
-    label: "0-50817",
-    primary_label: "0-50817",
+    label: "50817",
+    primary_label: "50817",
     secondary_label: "Ready for first blot",
     search_text: "0-50817 anima-v1-50817",
     emulsion_id: "0-50817",
@@ -974,7 +974,7 @@ test("a fully qualified factory code resolves to one pipeline-neutral emulsion",
   assert.equal(response.status, 200)
   assert.deepEqual(
     payload.request_options.map((option) => option.label),
-    ["0-2"],
+    ["2"],
   )
   assert.equal(env.gatewayDb.factoryOptionRollupReads, 1)
   assert.equal(env.gatewayDb.optionRollupReads, 1)
@@ -1013,7 +1013,7 @@ test("a preallocated emulsion search returns one pipeline-neutral first-blot opt
   assert.equal(response.status, 200)
   assert.equal(payload.request_options.length, 1)
   assert.equal(option?.vision_id, "anima-v1-50817")
-  assert.equal(option?.label, "0-50817")
+  assert.equal(option?.label, "50817")
   assert.equal(option?.secondary_label, "Ready for first blot")
   assert.equal(option?.is_preallocated_without_preview, true)
   assert.deepEqual(option?.preview_assets, [])
@@ -1095,21 +1095,21 @@ test("a slot collapses every factory line into one image-backed emulsion", async
 
   const bare = await load("1003")
   assert.equal(bare.request_options.length, 1)
-  assert.equal(bare.request_options[0]?.label, "0-1003")
+  assert.equal(bare.request_options[0]?.label, "1003")
   assert.equal(bare.request_options[0]?.preview_assets.length, 4)
   assert.equal(bare.request_options[0]?.image_count, 6)
 
   const unprovenExact = await load("A1-1003")
   assert.deepEqual(
     unprovenExact.request_options.map((option) => option.label),
-    ["0-1003"],
+    ["1003"],
   )
   assert.equal(unprovenExact.request_options[0]?.preview_assets.length, 4)
 
   const provenExact = await load("C9-1003")
   assert.deepEqual(
     provenExact.request_options.map((option) => option.label),
-    ["0-1003"],
+    ["1003"],
   )
   assert.equal(provenExact.request_options[0]?.preview_assets.length, 4)
   assert.equal(provenExact.request_options[0]?.is_preallocated_without_preview, undefined)
@@ -1146,7 +1146,7 @@ test("another fully qualified factory code also resolves to one neutral emulsion
   assert.equal(response.status, 200)
   assert.deepEqual(
     payload.request_options.map((option) => option.label),
-    ["0-3"],
+    ["3"],
   )
   assert.equal(env.gatewayDb.factoryOptionRollupReads, 1)
   assert.equal(env.gatewayDb.optionRollupReads, 1)
@@ -1225,7 +1225,7 @@ test("authenticated request options infer emulsion code from vision id when roll
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload.request_options[0]?.label, "0-3696")
+  assert.equal(payload.request_options[0]?.label, "3696")
 })
 
 test("user emulsion request examples are rebuilt from portrait assets instead of narrow increments", () => {
