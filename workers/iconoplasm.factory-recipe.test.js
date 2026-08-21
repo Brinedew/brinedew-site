@@ -24,6 +24,13 @@ const factoryVisionMigration = readFileSync(
   new URL("../migrations-iconoplasm/0073_factory_vision_definitions.sql", import.meta.url),
   "utf8",
 )
+const factoryRecommendationMigration = readFileSync(
+  new URL(
+    "../migrations-iconoplasm/0074_factory_pipeline_vision_recommendations.sql",
+    import.meta.url,
+  ),
+  "utf8",
+)
 const workerSource = readFileSync(
   new URL(
     "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
@@ -67,6 +74,38 @@ test("factory migration adds immutable recipe snapshots and a future-only active
         .prepare("PRAGMA table_info(icono_portrait_assets)")
         .all()
         .some((column) => column.name === "public_emulsion_code"),
+    )
+  } finally {
+    db.close()
+  }
+})
+
+test("factory Vision recommendations are mutable without changing Pipeline definitions", () => {
+  const db = new DatabaseSync(":memory:")
+  try {
+    db.exec(factoryRecommendationMigration)
+    db.prepare(
+      `INSERT INTO icono_factory_pipeline_vision_recommendations (
+         pipeline_code, vision_revision, updated_by
+       ) VALUES (?, ?, ?)`,
+    ).run("F", 7, "admin")
+    db.prepare(
+      `INSERT INTO icono_factory_pipeline_vision_recommendations (
+         pipeline_code, vision_revision, updated_by
+       ) VALUES (?, ?, ?)
+       ON CONFLICT(pipeline_code) DO UPDATE SET
+         vision_revision = excluded.vision_revision,
+         updated_by = excluded.updated_by`,
+    ).run("F", 9, "admin")
+    assert.deepEqual(
+      {
+        ...db
+          .prepare(
+            "SELECT pipeline_code, vision_revision FROM icono_factory_pipeline_vision_recommendations",
+          )
+          .get(),
+      },
+      { pipeline_code: "F", vision_revision: 9 },
     )
   } finally {
     db.close()

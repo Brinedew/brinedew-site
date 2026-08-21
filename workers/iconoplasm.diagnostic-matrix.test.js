@@ -82,6 +82,12 @@ function diagnosticDatabase(options) {
       updated_at TEXT NOT NULL
     );
     INSERT INTO icono_factory_active_recipe VALUES (1, 'A', 1, 'test', CURRENT_TIMESTAMP);
+    CREATE TABLE icono_factory_pipeline_vision_recommendations (
+      pipeline_code TEXT PRIMARY KEY,
+      vision_revision INTEGER NOT NULL,
+      updated_by TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     CREATE TABLE icono_factory_vision_definitions (
       revision INTEGER PRIMARY KEY,
       source_id TEXT NOT NULL UNIQUE,
