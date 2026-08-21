@@ -37,7 +37,7 @@ import {
   openCandidateDeleteDialog,
   removeCandidateFromPageState,
   showCandidateDeleteNotice,
-} from "./candidate-delete-dialog.js?v=20260812-in-place-delete"
+} from "./candidate-delete-dialog.js?v=20260821-nonblocking-delete"
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
 // appearance settings. Loading the cross-subdomain bridge during anonymous
@@ -4543,8 +4543,23 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             sampleLabel: sampleLabel,
             emulsionLabel: emulsionLabel,
             returnFocus: button,
+            onFailure: function (error) {
+              showCandidateDeleteNotice({
+                document: document,
+                message:
+                  "Couldn’t delete " +
+                  (sampleLabel || symbol) +
+                  ". Nothing changed. " +
+                  String((error && error.message) || "Please try again."),
+              })
+            },
             onConfirm: function () {
+              var card = button.closest(".icono-candidate-card")
               button.disabled = true
+              if (card) {
+                card.classList.add("is-deleting")
+                card.setAttribute("aria-busy", "true")
+              }
               return fetchJSON("/api/iconoplasm/admin/remove-candidate", {
                 method: "POST",
                 credentials: "include",
@@ -4561,7 +4576,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                   var candidateCount = removeCandidateFromPageState({
                     genePayload: genePayload,
                     assetSha: assetSha,
-                    card: button.closest(".icono-candidate-card"),
+                    card: card,
                   })
                   portraitDetailCache[normalizedSymbol(symbol)] = genePayload
                   if (iconoSidebarState.gene) {
@@ -4576,6 +4591,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                 })
                 .catch(function (error) {
                   button.disabled = false
+                  if (card) {
+                    card.classList.remove("is-deleting")
+                    card.removeAttribute("aria-busy")
+                  }
                   throw error
                 })
             },
