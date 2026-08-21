@@ -1792,9 +1792,8 @@
         prompt_body_mode: (function () {
           var revision =
             Number.parseInt(String((els.factoryVision && els.factoryVision.value) || "1"), 10) || 1
-          var vision = (state.factoryRecipe && state.factoryRecipe.visions
-            ? state.factoryRecipe.visions
-            : []
+          var vision = (
+            state.factoryRecipe && state.factoryRecipe.visions ? state.factoryRecipe.visions : []
           ).find(function (item) {
             return Number(item.revision) === revision
           })

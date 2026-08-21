@@ -29534,7 +29534,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_factory_visions_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
-        return done("admin_factory_visions_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+        return done(
+          "admin_factory_visions_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
       return done(
         "admin_factory_visions",
         json({ ok: true, visions: await factoryVisionCatalog(env) }, 200, {
@@ -29547,7 +29550,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_factory_visions_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
-        return done("admin_factory_visions_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+        return done(
+          "admin_factory_visions_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
       let p
       try {
         p = await request.json()
