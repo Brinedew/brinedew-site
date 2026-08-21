@@ -211,6 +211,11 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   )
   assert.match(
     app,
+    /if \(isNumericRequestQuery\(renderQuery\)\) \{[\s\S]*paintRequestResults\(renderQuery, \[\]\)[\s\S]*return/,
+    "unallocated numbers should show the empty result immediately instead of entering the network path",
+  )
+  assert.match(
+    app,
     /scheduleNumericRequestHydration[\s\S]*window\.setTimeout[\s\S]*ensureRequestOptionsLoaded\(renderQuery\)/,
     "numeric preview hydration should be debounced behind the immediate result",
   )
