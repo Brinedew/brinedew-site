@@ -9,6 +9,8 @@ export const ICONOPLASM_FACTORY_CATALOG = Object.freeze({
     Object.freeze({ code: "C", label: "Preview 3", model: "anima-preview3-base.safetensors", steps: 30, cfg: 4, sampler: "er_sde", recommended_vision: 7, status: "accepted" }),
     Object.freeze({ code: "D", label: "Base 1.0", model: "anima-base-v1.0.safetensors", steps: 40, cfg: 4.5, sampler: "dpmpp_2m_sde_gpu", recommended_vision: 7, status: "accepted" }),
     Object.freeze({ code: "E", label: "Turbo 1.0", model: "anima-turbo-v1.0.safetensors", steps: 10, cfg: 1, sampler: "euler", recommended_vision: 8, status: "accepted" }),
+    Object.freeze({ code: "F", label: "Preview 3 · DPM++ 2M SDE", model: "anima-preview3-base.safetensors", steps: 30, cfg: 4, sampler: "dpmpp_2m_sde_gpu", recommended_vision: 7, status: "accepted" }),
+    Object.freeze({ code: "G", label: "Preview 3 · Euler a", model: "anima-preview3-base.safetensors", steps: 30, cfg: 4, sampler: "euler_ancestral", recommended_vision: 7, status: "accepted" }),
   ]),
   visions: Object.freeze([
     Object.freeze({ revision: 1, label: "Vision 1 · Aesthetic", source_id: "artist-random-anima", prompt_content_mode: "tags_only", prompt_order_mode: "manifestation_then_vision", status: "accepted" }),

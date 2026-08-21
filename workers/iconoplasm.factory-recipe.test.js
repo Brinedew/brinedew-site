@@ -165,6 +165,29 @@ test("factory catalog keeps corrected recommendations and the recovered RAX2-era
       ["C", 7],
       ["D", 7],
       ["E", 8],
+      ["F", 7],
+      ["G", 7],
+    ],
+  )
+  assert.deepEqual(
+    ICONOPLASM_FACTORY_CATALOG.pipelines
+      .filter(({ code }) => code === "F" || code === "G")
+      .map(({ code, model, sampler, steps, cfg }) => ({ code, model, sampler, steps, cfg })),
+    [
+      {
+        code: "F",
+        model: "anima-preview3-base.safetensors",
+        sampler: "dpmpp_2m_sde_gpu",
+        steps: 30,
+        cfg: 4,
+      },
+      {
+        code: "G",
+        model: "anima-preview3-base.safetensors",
+        sampler: "euler_ancestral",
+        steps: 30,
+        cfg: 4,
+      },
     ],
   )
   assert.deepEqual(
