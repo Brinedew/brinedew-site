@@ -153,7 +153,7 @@ test("public factory identity stays clean while private IDs remain internal", ()
   assert.doesNotMatch(cardSource, /candidate_image_id[^\n]*<strong>/)
 })
 
-test("factory recommendations point each Anima family at its corrected prompt policy", () => {
+test("factory catalog keeps corrected recommendations and the recovered RAX2-era Vision", () => {
   assert.deepEqual(
     ICONOPLASM_FACTORY_CATALOG.pipelines.map(({ code, recommended_vision }) => [
       code,
@@ -168,14 +168,17 @@ test("factory recommendations point each Anima family at its corrected prompt po
     ],
   )
   assert.deepEqual(
-    ICONOPLASM_FACTORY_CATALOG.visions.slice(-2).map((vision) => ({
-      revision: vision.revision,
-      content: vision.prompt_content_mode,
-      order: vision.prompt_order_mode,
-    })),
+    ICONOPLASM_FACTORY_CATALOG.visions
+      .filter((vision) => vision.revision >= 7)
+      .map((vision) => ({
+        revision: vision.revision,
+        content: vision.prompt_content_mode,
+        order: vision.prompt_order_mode,
+      })),
     [
       { revision: 7, content: "tags_only", order: "vision_then_manifestation" },
       { revision: 8, content: "full_manifestation", order: "vision_then_manifestation" },
+      { revision: 9, content: "tags_only", order: "vision_then_manifestation" },
     ],
   )
 })
