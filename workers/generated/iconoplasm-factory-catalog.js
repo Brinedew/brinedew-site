@@ -19,5 +19,6 @@ export const ICONOPLASM_FACTORY_CATALOG = Object.freeze({
     Object.freeze({ revision: 6, label: "Vision 6 · Turbo superseded", source_id: "turbo-prompt-policy-corrected", prompt_content_mode: "tags_only", prompt_order_mode: "manifestation_then_vision", status: "accepted" }),
     Object.freeze({ revision: 7, label: "Vision 7 · Preview / Base corrected", source_id: "preview-and-base-corrected", prompt_content_mode: "tags_only", prompt_order_mode: "vision_then_manifestation", status: "accepted" }),
     Object.freeze({ revision: 8, label: "Vision 8 · Turbo corrected", source_id: "turbo-corrected", prompt_content_mode: "full_manifestation", prompt_order_mode: "vision_then_manifestation", status: "accepted" }),
+    Object.freeze({ revision: 9, label: "Vision 9 · RAX2-era Anima", source_id: "rax2-era-anima", prompt_content_mode: "tags_only", prompt_order_mode: "vision_then_manifestation", status: "accepted" }),
   ]),
 })
