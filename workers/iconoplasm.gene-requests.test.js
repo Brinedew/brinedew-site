@@ -1101,7 +1101,7 @@ test("a bare slot ranks real blots first while exact codes use only proven linea
   }
 
   const bare = await load("1003")
-  assert.equal(bare.request_options[0]?.label, "1003")
+  assert.equal(bare.request_options[0]?.label, "0-1003")
   assert.equal(bare.request_options[0]?.preview_assets.length, 4)
   assert.equal(bare.request_options[1]?.label, "C9-1003")
   assert.equal(bare.request_options[1]?.preview_assets.length, 2)

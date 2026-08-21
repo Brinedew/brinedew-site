@@ -892,7 +892,11 @@
         esc(result.status || "unknown") +
         "</strong></div>",
       '<div class="request-detail-card"><span>Emulsion</span><strong>' +
-        esc(result.emulsion_id || "unknown") +
+        esc(
+          result.display_emulsion_code ||
+            displayEmulsionCode(result.public_emulsion_code, result.emulsion_id) ||
+            "unknown",
+        ) +
         "</strong></div>",
       '<div class="request-detail-card"><span>Candidate ID</span><strong>' +
         esc(result.candidate_image_id || "none") +
@@ -8537,9 +8541,21 @@
   }
 
   function visionArtistId(value) {
-    var artistId = String((value && (value.artist_id || value.emulsion_id)) || "").trim()
+    var artistId =
+      displayEmulsionCode(value && value.public_emulsion_code, value && value.emulsion_id) ||
+      String((value && value.artist_id) || "").trim()
     if (artistId) return artistId
     return ""
+  }
+
+  function displayEmulsionCode(rawPublicCode, rawUnqualifiedId) {
+    var publicCode = String(rawPublicCode || "").trim()
+    if (publicCode) return publicCode
+    var value = String(rawUnqualifiedId || "").trim()
+    var match = value.match(/^[A-Z][0-9]+-(\d+)(-e)?$/i)
+    if (match) return "0-" + String(Number.parseInt(match[1], 10)) + (match[2] || "")
+    if (/^\d+$/.test(value)) return "0-" + String(Number.parseInt(value, 10))
+    return value
   }
 
   function seedVisionDetailFromPreview(row, assetSha) {
