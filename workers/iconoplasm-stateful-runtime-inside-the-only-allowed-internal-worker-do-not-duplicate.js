@@ -4401,7 +4401,11 @@ async function createGenerationRequest(
   const activeRecipe = await activeFactoryRecipe(env)
   const pipelineOverride = normalizeFactoryPipelineCode(factoryPipelineCode)
   const visionOverride = normalizeFactoryVisionRevision(factoryVisionRevision)
-  if ((factoryPipelineCode && !pipelineOverride) || (factoryVisionRevision && !visionOverride)) {
+  if (
+    (factoryPipelineCode && !pipelineOverride) ||
+    (factoryVisionRevision &&
+      (!visionOverride || !(await isAcceptedFactoryVision(env, visionOverride))))
+  ) {
     return { ok: false, error: "Choose an accepted factory recipe." }
   }
   const factoryRecipe = {
@@ -5383,7 +5387,48 @@ function normalizeFactoryPipelineCode(raw) {
 
 function normalizeFactoryVisionRevision(raw) {
   const revision = Number.parseInt(String(raw || ""), 10)
-  return ICONOPLASM_FACTORY_VISIONS.some((item) => item.revision === revision) ? revision : 0
+  return Number.isInteger(revision) && revision > 0 ? revision : 0
+}
+
+async function factoryVisionCatalog(env) {
+  if (!env?.ICONOPLASM_DB) return ICONOPLASM_FACTORY_VISIONS
+  const result = await env.ICONOPLASM_DB.prepare(
+    `SELECT revision, source_id, label, source_sha256, positive_prefix, negative_prompt,
+            prompt_content_mode, prompt_order_mode, prompt_replace_underscores,
+            emulsion_base_id, status
+       FROM icono_factory_vision_definitions
+      WHERE status = 'accepted'
+      ORDER BY revision ASC`,
+  ).all()
+  const rows = Array.isArray(result?.results) ? result.results : []
+  return rows.length
+    ? rows.map((row) => ({
+        revision: optionalInt(row?.revision),
+        source_id: sanitizeText(row?.source_id || "", 160) || "",
+        label: sanitizeText(row?.label || "", 180) || `Vision ${optionalInt(row?.revision)}`,
+        source_sha256: normalizeSha256(row?.source_sha256 || "") || "",
+        positive_prefix: String(row?.positive_prefix || ""),
+        negative_prompt: String(row?.negative_prompt || ""),
+        prompt_content_mode:
+          String(row?.prompt_content_mode || "") === "full_manifestation"
+            ? "full_manifestation"
+            : "tags_only",
+        prompt_order_mode:
+          String(row?.prompt_order_mode || "") === "vision_then_manifestation"
+            ? "vision_then_manifestation"
+            : "manifestation_then_vision",
+        prompt_replace_underscores: Boolean(optionalInt(row?.prompt_replace_underscores)),
+        emulsion_base_id: sanitizeText(row?.emulsion_base_id || "", 160) || "artist-random-anima",
+        status: "accepted",
+      }))
+    : ICONOPLASM_FACTORY_VISIONS
+}
+
+async function isAcceptedFactoryVision(env, revision) {
+  const normalized = normalizeFactoryVisionRevision(revision)
+  if (!normalized) return false
+  const visions = await factoryVisionCatalog(env)
+  return visions.some((item) => Number(item.revision) === normalized)
 }
 
 async function activeFactoryRecipe(env) {
@@ -5393,9 +5438,10 @@ async function activeFactoryRecipe(env) {
       WHERE singleton_id = 1
       LIMIT 1`,
   ).first()
+  const storedVision = normalizeFactoryVisionRevision(row?.vision_revision || 1) || 1
   return {
     pipeline: normalizeFactoryPipelineCode(row?.pipeline_code || "A") || "A",
-    vision: normalizeFactoryVisionRevision(row?.vision_revision || 1) || 1,
+    vision: (await isAcceptedFactoryVision(env, storedVision)) ? storedVision : 1,
     updated_by: sanitizeText(row?.updated_by || "migration", 255) || "migration",
     updated_at: sanitizeText(row?.updated_at || "", 64) || "",
   }
@@ -5406,7 +5452,7 @@ async function factoryRecipePayload(env) {
     ok: true,
     active_recipe: await activeFactoryRecipe(env),
     pipelines: ICONOPLASM_FACTORY_PIPELINES,
-    visions: ICONOPLASM_FACTORY_VISIONS,
+    visions: await factoryVisionCatalog(env),
   }
 }
 
@@ -5414,7 +5460,8 @@ async function saveActiveFactoryRecipe(env, { pipeline, vision, updatedBy }) {
   const pipelineCode = normalizeFactoryPipelineCode(pipeline)
   const visionRevision = normalizeFactoryVisionRevision(vision)
   if (!pipelineCode) return { ok: false, error: "Choose an accepted factory Pipeline." }
-  if (!visionRevision) return { ok: false, error: "Choose an accepted Vision revision." }
+  if (!visionRevision || !(await isAcceptedFactoryVision(env, visionRevision)))
+    return { ok: false, error: "Choose an accepted Vision revision." }
   const actor = sanitizeText(updatedBy || "admin", 255) || "admin"
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_factory_active_recipe (
@@ -5429,6 +5476,68 @@ async function saveActiveFactoryRecipe(env, { pipeline, vision, updatedBy }) {
     .bind(pipelineCode, visionRevision, actor)
     .run()
   return factoryRecipePayload(env)
+}
+
+async function acceptFactoryVisionDefinition(env, raw, acceptedBy) {
+  const sourceId = sanitizeText(raw?.source_id || "", 160) || ""
+  const label = sanitizeText(raw?.label || "", 180) || ""
+  const sourceSha256 = normalizeSha256(raw?.source_sha256 || "") || ""
+  const positivePrefix = String(raw?.positive_prefix || "")
+  const negativePrompt = String(raw?.negative_prompt || "")
+  const promptContentMode =
+    String(raw?.prompt_content_mode || "") === "full_manifestation"
+      ? "full_manifestation"
+      : "tags_only"
+  const promptOrderMode =
+    String(raw?.prompt_order_mode || "") === "vision_then_manifestation"
+      ? "vision_then_manifestation"
+      : "manifestation_then_vision"
+  const replaceUnderscores = raw?.prompt_replace_underscores ? 1 : 0
+  const emulsionBaseId = sanitizeText(raw?.emulsion_base_id || "", 160) || "artist-random-anima"
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(sourceId))
+    return { ok: false, error: "Vision source id is invalid." }
+  if (!label || !sourceSha256 || !positivePrefix.trim())
+    return { ok: false, error: "Vision name, positive prompt, and source hash are required." }
+  if (positivePrefix.length > 12000 || negativePrompt.length > 12000)
+    return { ok: false, error: "Vision prompt policy is too long." }
+
+  const existing = await env.ICONOPLASM_DB.prepare(
+    `SELECT revision, source_sha256 FROM icono_factory_vision_definitions
+      WHERE source_id = ? LIMIT 1`,
+  )
+    .bind(sourceId)
+    .first()
+  if (existing) {
+    if (normalizeSha256(existing.source_sha256 || "") === sourceSha256)
+      return factoryRecipePayload(env)
+    return { ok: false, error: "That Vision id is already accepted with different content." }
+  }
+  const maxRow = await env.ICONOPLASM_DB.prepare(
+    `SELECT COALESCE(MAX(revision), 0) AS revision FROM icono_factory_vision_definitions`,
+  ).first()
+  const revision = Math.max(1, optionalInt(maxRow?.revision) + 1)
+  await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_factory_vision_definitions (
+       revision, source_id, label, source_sha256, positive_prefix, negative_prompt,
+       prompt_content_mode, prompt_order_mode, prompt_replace_underscores,
+       emulsion_base_id, status, accepted_by, accepted_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted', ?, CURRENT_TIMESTAMP)`,
+  )
+    .bind(
+      revision,
+      sourceId,
+      `Vision ${revision} · ${label}`,
+      sourceSha256,
+      positivePrefix,
+      negativePrompt,
+      promptContentMode,
+      promptOrderMode,
+      replaceUnderscores,
+      emulsionBaseId,
+      sanitizeText(acceptedBy || "admin", 255) || "admin",
+    )
+    .run()
+  return { ...(await factoryRecipePayload(env)), accepted_revision: revision }
 }
 
 function normalizeDiagnosticPipelineCodes(raw) {
@@ -5590,7 +5699,8 @@ async function createDiagnosticMatrixRun(
     return { ok: false, error: "Every emulsion must be an assigned numeric code." }
   }
   const vision = normalizeFactoryVisionRevision(visionRevision || 1)
-  if (!vision) return { ok: false, error: "Choose an accepted Vision revision." }
+  if (!vision || !(await isAcceptedFactoryVision(env, vision)))
+    return { ok: false, error: "Choose an accepted Vision revision." }
   const cellCount = pipelines.length * emulsions.length
   if (cellCount > 100) return { ok: false, error: "A diagnostic matrix is limited to 100 cells." }
   const actor = normalizeUserId(createdBy || "") || "admin"
@@ -29413,6 +29523,45 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       })
       return done(
         saved.ok ? "admin_factory_recipe" : "admin_factory_recipe_400",
+        json(saved, saved.ok ? 200 : 400, { "Cache-Control": "no-store" }),
+      )
+    }
+
+    if (
+      path === "/api/iconoplasm/admin/factory-visions" &&
+      (request.method === "GET" || request.method === "HEAD")
+    ) {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_factory_visions_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done("admin_factory_visions_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      return done(
+        "admin_factory_visions",
+        json({ ok: true, visions: await factoryVisionCatalog(env) }, 200, {
+          "Cache-Control": "no-store",
+        }),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/factory-visions" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_factory_visions_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done("admin_factory_visions_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_factory_visions_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      const saved = await acceptFactoryVisionDefinition(
+        env,
+        p,
+        sessionUser?.user_id || "admin-token",
+      )
+      return done(
+        saved.ok ? "admin_factory_visions" : "admin_factory_visions_400",
         json(saved, saved.ok ? 200 : 400, { "Cache-Control": "no-store" }),
       )
     }

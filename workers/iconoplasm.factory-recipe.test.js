@@ -19,6 +19,10 @@ const atomicDiagnosticMigration = readFileSync(
   new URL("../migrations-iconoplasm/0072_atomic_diagnostic_matrices.sql", import.meta.url),
   "utf8",
 )
+const factoryVisionMigration = readFileSync(
+  new URL("../migrations-iconoplasm/0073_factory_vision_definitions.sql", import.meta.url),
+  "utf8",
+)
 const workerSource = readFileSync(
   new URL(
     "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
@@ -95,6 +99,44 @@ test("saved emulsion revisions receive stable plain numeric slots", () => {
     assert.equal(
       db.prepare("SELECT COUNT(*) AS n FROM iconoplasm_user_emulsion_public_slots").get().n,
       2,
+    )
+  } finally {
+    db.close()
+  }
+})
+
+test("factory Vision catalog starts with three immutable numbered prompt policies", () => {
+  const db = new DatabaseSync(":memory:")
+  try {
+    db.exec(factoryVisionMigration)
+    assert.deepEqual(
+      db
+        .prepare(
+          `SELECT revision, source_id, prompt_content_mode, prompt_order_mode
+             FROM icono_factory_vision_definitions ORDER BY revision`,
+        )
+        .all()
+        .map((row) => ({ ...row })),
+      [
+        {
+          revision: 1,
+          source_id: "artist-random-anima",
+          prompt_content_mode: "tags_only",
+          prompt_order_mode: "manifestation_then_vision",
+        },
+        {
+          revision: 2,
+          source_id: "artist-random-anima-preview-base",
+          prompt_content_mode: "tags_only",
+          prompt_order_mode: "vision_then_manifestation",
+        },
+        {
+          revision: 3,
+          source_id: "artist-random-anima-turbo",
+          prompt_content_mode: "full_manifestation",
+          prompt_order_mode: "vision_then_manifestation",
+        },
+      ],
     )
   } finally {
     db.close()
