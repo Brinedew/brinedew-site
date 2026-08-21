@@ -6664,9 +6664,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           return
         }
         filteredOptions = filterRequestOptions(renderQuery, loadedOptions, isQueueRequestOption)
-        var html = renderRequestOptionButtonMarkup(null, selectedRequestVisionIds, true, null, true)
+        var hasQuery = !!String(renderQuery || "").trim()
+        var html = hasQuery
+          ? ""
+          : renderRequestOptionButtonMarkup(null, selectedRequestVisionIds, true, null, true)
         if (filteredOptions.length) {
-          var hasQuery = !!String(renderQuery || "").trim()
           var favoriteOptions = filteredOptions.filter(isFavoriteRequestOption)
           var otherOptions = filteredOptions.filter(function (option) {
             return !isFavoriteRequestOption(option)
