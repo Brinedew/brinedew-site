@@ -38,6 +38,7 @@ import {
   removeCandidateFromPageState,
   showCandidateDeleteNotice,
 } from "./candidate-delete-dialog.js?v=20260821-nonblocking-delete"
+import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=20260822-immediate-picker"
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
 // appearance settings. Loading the cross-subdomain bridge during anonymous
@@ -6152,6 +6153,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var requestOptionsByVisionId = Object.create(null)
       var requestOptionsByQuery = Object.create(null)
       var requestOptionsLoadingByQuery = Object.create(null)
+      var numericRequestHydrationTimer = null
       var optionsLoaded = false
       var selectedRequestVisionIds = new Set([""])
       var requestSelectionLimit = 20
@@ -6510,6 +6512,44 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         return cleaned.length >= 2 ? cleaned.slice(0, 80) : ""
       }
 
+      function requestOptionFromImmediateNumericQuery(query) {
+        var compact = String(query || "")
+          .trim()
+          .replace(/\s+/g, "")
+        var match = /^(?:anima-v1-)?([1-9][0-9]*)$/i.exec(compact)
+        if (!match) return null
+        var slot = Number(match[1])
+        if (!Number.isSafeInteger(slot)) return null
+        var intervals = Array.isArray(
+          ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT.callable_slot_intervals,
+        )
+          ? ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT.callable_slot_intervals
+          : []
+        var callable = intervals.some(function (interval) {
+          return (
+            Array.isArray(interval) &&
+            interval.length === 2 &&
+            slot >= Number(interval[0]) &&
+            slot <= Number(interval[1])
+          )
+        })
+        if (!callable) return null
+        return {
+          vision_id: "anima-v1-" + slot,
+          label: String(slot),
+          primary_label: String(slot),
+          secondary_label: "",
+          search_text: String(slot),
+          emulsion_id: "0-" + slot,
+          emulsion_family_id: "0-" + slot,
+          image_count: 0,
+          live_count: 0,
+          score: 0,
+          vote_h_index: 0,
+          preview_assets: [],
+        }
+      }
+
       function rememberRequestOptions(options) {
         var list = Array.isArray(options) ? options : []
         for (var i = 0; i < list.length; i++) {
@@ -6518,7 +6558,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         }
       }
 
-      function ensureRequestOptionsLoaded(query) {
+      function ensureRequestOptionsLoaded(query, options) {
+        var config = options || {}
         var queryKey = requestOptionsQueryKey(query)
         if (!queryKey && optionsLoaded) return Promise.resolve(requestOptions)
         if (requestOptionsByQuery[queryKey]) return Promise.resolve(requestOptionsByQuery[queryKey])
@@ -6543,7 +6584,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           })
           .catch(function (error) {
             delete requestOptionsLoadingByQuery[queryKey]
-            setStatus(String((error && error.message) || "Could not load emulsion lanes."), "error")
+            if (!config.silent) {
+              setStatus(
+                String((error && error.message) || "Could not load emulsion lanes."),
+                "error",
+              )
+            }
             throw error
           })
         return requestOptionsLoadingByQuery[queryKey]
@@ -6647,28 +6693,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         }
       }
 
-      async function renderResultsList() {
-        var renderQuery = queryInput.value
-        openResults()
-        results.setAttribute("aria-busy", "true")
-        if (currentUser && !emulsionFavorites.isLoaded()) {
-          await emulsionFavorites.load().catch(function () {
-            return null
-          })
-        }
-        var loadedOptions
-        try {
-          loadedOptions = await ensureRequestOptionsLoaded(renderQuery)
-        } catch (error) {
-          results.removeAttribute("aria-busy")
-          results.innerHTML =
-            '<div class="icono-request-results-empty">Could not load emulsions. Try again.</div>'
-          return
-        }
-        if (queryInput.value !== renderQuery) {
-          void renderResultsList()
-          return
-        }
+      function paintRequestResults(renderQuery, loadedOptions) {
         filteredOptions = filterRequestOptions(renderQuery, loadedOptions, isQueueRequestOption)
         var hasQuery = !!String(renderQuery || "").trim()
         var html = hasQuery
@@ -6728,6 +6753,63 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         results.innerHTML = html
         results.removeAttribute("aria-busy")
         paintActiveOption()
+      }
+
+      function scheduleNumericRequestHydration(renderQuery, immediateOption) {
+        if (numericRequestHydrationTimer) window.clearTimeout(numericRequestHydrationTimer)
+        numericRequestHydrationTimer = window.setTimeout(function () {
+          numericRequestHydrationTimer = null
+          ensureRequestOptionsLoaded(renderQuery, { silent: true })
+            .then(function (loadedOptions) {
+              if (queryInput.value !== renderQuery) return
+              paintRequestResults(
+                renderQuery,
+                Array.isArray(loadedOptions) && loadedOptions.length
+                  ? loadedOptions
+                  : [immediateOption],
+              )
+            })
+            .catch(function () {
+              // The immediately selectable canonical option remains usable when
+              // optional preview enrichment is unavailable.
+            })
+        }, 250)
+      }
+
+      async function renderResultsList() {
+        var renderQuery = queryInput.value
+        openResults()
+        var immediateOption = requestOptionFromImmediateNumericQuery(renderQuery)
+        if (immediateOption) {
+          rememberRequestOptions([immediateOption])
+          paintRequestResults(renderQuery, [immediateOption])
+          scheduleNumericRequestHydration(renderQuery, immediateOption)
+          return
+        }
+        if (numericRequestHydrationTimer) {
+          window.clearTimeout(numericRequestHydrationTimer)
+          numericRequestHydrationTimer = null
+        }
+        results.setAttribute("aria-busy", "true")
+        if (currentUser && !emulsionFavorites.isLoaded()) {
+          await emulsionFavorites.load().catch(function () {
+            return null
+          })
+        }
+        var loadedOptions
+        try {
+          loadedOptions = await ensureRequestOptionsLoaded(renderQuery)
+        } catch (error) {
+          results.removeAttribute("aria-busy")
+          results.innerHTML =
+            '<div class="icono-request-results-empty">Could not load emulsions. Try again.</div>'
+          return
+        }
+        if (queryInput.value !== renderQuery) {
+          void renderResultsList()
+          return
+        }
+        paintRequestResults(renderQuery, loadedOptions)
       }
 
       function updateQueueSelectionControls() {

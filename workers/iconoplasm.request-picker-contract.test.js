@@ -15,6 +15,10 @@ const deployWorkflow = readFileSync(
   new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
   "utf8",
 )
+const slotContract = readFileSync(
+  new URL("./generated/iconoplasm-anima-emulsion-slot-contract.js", import.meta.url),
+  "utf8",
+)
 
 test("Iconoplasm request picker uses a searchable list with sibling favorite controls", () => {
   assert.match(
@@ -194,6 +198,27 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     app,
     /requestOptionsUrl \+= "\?query=" \+ encodeURIComponent\(queryKey\)/,
     "request picker should ask the split options endpoint for query-specific rollup matches",
+  )
+  assert.match(
+    app,
+    /function requestOptionFromImmediateNumericQuery\(query\)[\s\S]*ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT\.callable_slot_intervals[\s\S]*primary_label: String\(slot\)/,
+    "numeric searches should render their plain number immediately from the canonical allocation contract",
+  )
+  assert.match(
+    app,
+    /if \(immediateOption\) \{[\s\S]*paintRequestResults\(renderQuery, \[immediateOption\]\)[\s\S]*scheduleNumericRequestHydration\(renderQuery, immediateOption\)[\s\S]*return/,
+    "numeric search rendering must not wait for preview hydration",
+  )
+  assert.match(
+    app,
+    /scheduleNumericRequestHydration[\s\S]*window\.setTimeout[\s\S]*ensureRequestOptionsLoaded\(renderQuery\)/,
+    "numeric preview hydration should be debounced behind the immediate result",
+  )
+  assert.match(slotContract, /"callable_slot_intervals"/)
+  assert.doesNotMatch(
+    app,
+    /slot\s*>=\s*1[\s\S]*slot\s*<=\s*4563|slot\s*>=\s*20001[\s\S]*slot\s*<=\s*58250/,
+    "the picker must not duplicate slot allocation ranges",
   )
   assert.doesNotMatch(
     app,
