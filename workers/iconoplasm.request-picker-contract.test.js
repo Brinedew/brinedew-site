@@ -92,6 +92,11 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     /Random emulsion/,
     "request picker should present Random emulsion as the default first option",
   )
+  assert.match(
+    app,
+    /var hasQuery = !!String\(renderQuery \|\| ""\)\.trim\(\)[\s\S]*var html = hasQuery[\s\S]*\? ""[\s\S]*: renderRequestOptionButtonMarkup/,
+    "a typed search should show matching emulsions rather than keeping Random above them",
+  )
   assert.doesNotMatch(
     app,
     /No examples yet/,
