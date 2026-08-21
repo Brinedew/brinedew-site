@@ -67,6 +67,11 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     "the Free queue picker should reserve its final height before options load",
   )
   assert.match(
+    css,
+    /\.icono-request-dialog \.icono-request-results\s*\{[\s\S]*align-content:\s*start;/,
+    "one result row must stay content-height instead of stretching across the reserved list area",
+  )
+  assert.match(
     app,
     /class="icono-request-option-row'[\s\S]{0,120}'" role="listitem"/,
     "every selectable emulsion should be wrapped in a non-interactive list row",
@@ -126,6 +131,21 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     app,
     /queueLabel = "Queue " \+ selectedVisionIds\.length \+ " candidates"/,
     "the footer action should expose the exact batch size",
+  )
+  assert.match(
+    app,
+    /data-icono-request-select-all-favorites hidden>Select all 0 favorites/,
+    "the footer should reserve one unobtrusive bulk-favorite action",
+  )
+  assert.match(
+    app,
+    /buttons\[i\]\.textContent = "Select all " \+ favoriteCount \+ " favorites"/,
+    "the bulk-favorite action should expose the user's current favorite count",
+  )
+  assert.match(
+    app,
+    /function selectAllFavoriteRequestOptions\(\)[\s\S]*selectedRequestVisionIds\.clear\(\)[\s\S]*selectedRequestVisionIds\.add\(selectable\[i\]\.vision_id\)[\s\S]*updateQueueSelectionControls\(\)/,
+    "one footer click should replace the batch with every selectable favorite",
   )
   assert.match(app, /requested_vision_ids: requestedVisionIds/)
   assert.match(app, /client_batch_id: crypto\.randomUUID\(\)/)
