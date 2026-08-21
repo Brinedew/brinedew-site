@@ -1375,27 +1375,6 @@ img-comparison-slider.rendered [slot="second"] {
   overflow-wrap: anywhere;
 }
 
-.icono-request-mode-field {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  align-items: center;
-  gap: 0.75rem;
-  min-width: 0;
-  margin: 0.1rem 0 0;
-  padding: 0;
-  border: 0;
-}
-
-.icono-request-mode-field legend {
-  display: contents;
-  color: var(--secondary, var(--darkgray));
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  line-height: 1.2;
-  text-transform: uppercase;
-}
-
 .icono-request-segmented {
   display: flex;
   width: min(14rem, 100%);
@@ -1636,11 +1615,6 @@ img-comparison-slider.rendered [slot="second"] {
   .icono-request-direct-preview-row {
     grid-template-columns: 1fr;
     gap: 0.12rem;
-  }
-
-  .icono-request-mode-field {
-    grid-template-columns: 1fr;
-    gap: 0.38rem;
   }
 
   .icono-request-direct-generate,

@@ -5088,10 +5088,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       esc(safeSymbol) +
       '" data-icono-request-tab="api">Image API</button>' +
       "</div>" +
-      '<fieldset class="icono-request-mode-field">' +
-      "<legend>Prompt policy</legend>" +
-      '<p class="icono-request-note">The active factory Vision supplies the prompt structure. Your selected emulsion supplies only the visual style.</p>' +
-      "</fieldset>" +
       '<div class="icono-request-lanes">' +
       '<section class="icono-request-lane icono-request-lane--queue" id="icono-request-panel-free-' +
       esc(safeSymbol) +
