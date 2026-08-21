@@ -3804,6 +3804,8 @@ function buildGenerationRequestLaneKey({
   geneSymbol,
   requestMode,
   requestedVisionId,
+  factoryPipelineCode,
+  factoryVisionRevision,
   requestKind,
   requestPrompt,
   sourceGeneSymbol,
@@ -3812,6 +3814,8 @@ function buildGenerationRequestLaneKey({
   const symbol = normalizeSymbol(geneSymbol || "") || ""
   const mode = normalizeGenerationRequestMode(requestMode)
   const visionId = mode === "specific" ? sanitizeVoteVisionId(requestedVisionId || "") : ""
+  const pipeline = normalizeFactoryPipelineCode(factoryPipelineCode || "A") || "A"
+  const factoryVision = normalizeFactoryVisionRevision(factoryVisionRevision || 1) || 1
   const kind = normalizeGenerationRequestKind(requestKind)
   const prompt = sanitizeGenerationRequestPrompt(requestPrompt || "")
   const sourceSymbol = normalizeSymbol(sourceGeneSymbol || "") || ""
@@ -3821,6 +3825,7 @@ function buildGenerationRequestLaneKey({
     kind,
     mode,
     visionId || "random",
+    `${pipeline}${factoryVision}`,
     sourceSymbol || "none",
     sourceAsset || "none",
     prompt || "none",
@@ -3843,6 +3848,9 @@ function mapGenerationRequestRow(row, { portraitBaseUrl = "" } = {}) {
   const requestedVisionId =
     requestMode === "specific" ? sanitizeVoteVisionId(row?.requested_vision_id || "") : ""
   const requestKind = normalizeGenerationRequestKind(row?.request_kind || "")
+  const factoryPipeline = normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"
+  const factoryVision = normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1
+  const requestedEmulsionSlot = Math.max(0, optionalInt(row?.requested_emulsion_slot) || 0)
   const requestPrompt = sanitizeGenerationRequestPrompt(row?.request_prompt || "")
   const sourceGeneSymbol = normalizeSymbol(row?.source_gene_symbol || "") || ""
   const sourceAssetSha = normalizeSha256(row?.source_asset_sha256 || "") || ""
@@ -3884,11 +3892,15 @@ function mapGenerationRequestRow(row, { portraitBaseUrl = "" } = {}) {
     requested_vision_id: requestedVisionId,
     requested_emulsion_id: requestMode === "specific" ? publicEmulsionIdForRow(row) : "",
     requested_emulsion_label:
-      requestMode === "specific" ? generationRequestVisionLabel(row) : "Random default",
-    requested_emulsion_slot: Math.max(0, optionalInt(row?.requested_emulsion_slot) || 0),
-    factory_pipeline_code: normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A",
-    factory_vision_revision: normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1,
-    factory_code: `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}`,
+      requestMode === "specific"
+        ? requestedEmulsionSlot > 0
+          ? `${factoryPipeline}${factoryVision}-${requestedEmulsionSlot}`
+          : generationRequestVisionLabel(row)
+        : "Random default",
+    requested_emulsion_slot: requestedEmulsionSlot,
+    factory_pipeline_code: factoryPipeline,
+    factory_vision_revision: factoryVision,
+    factory_code: `${factoryPipeline}${factoryVision}`,
     request_origin:
       String(row?.request_origin || "").trim() === "diagnostic_matrix"
         ? "diagnostic_matrix"
@@ -3907,6 +3919,8 @@ function mapGenerationRequestRow(row, { portraitBaseUrl = "" } = {}) {
       geneSymbol,
       requestMode,
       requestedVisionId,
+      factoryPipelineCode: factoryPipeline,
+      factoryVisionRevision: factoryVision,
       requestKind,
       requestPrompt,
       sourceGeneSymbol,
@@ -4399,11 +4413,15 @@ async function createGenerationRequest(
   const batchSizeNorm = Math.max(1, Math.min(500, Math.trunc(Number(requestBatchSize) || 1)))
   const promptBodyModeNorm = normalizeCandidatePromptBodyMode(promptBodyMode)
   const activeRecipe = await activeFactoryRecipe(env)
-  const pipelineOverride = normalizeFactoryPipelineCode(factoryPipelineCode)
-  const visionOverride = normalizeFactoryVisionRevision(factoryVisionRevision)
+  const requestedRecipe =
+    mode === "specific" ? iconoplasmFactoryRecipeFromPublicEmulsionId(visionNorm) : null
+  const pipelineOverride =
+    normalizeFactoryPipelineCode(factoryPipelineCode) || requestedRecipe?.pipeline || ""
+  const visionOverride =
+    normalizeFactoryVisionRevision(factoryVisionRevision) || requestedRecipe?.vision || 0
   if (
     (factoryPipelineCode && !pipelineOverride) ||
-    (factoryVisionRevision &&
+    ((factoryVisionRevision || requestedRecipe) &&
       (!visionOverride || !(await isAcceptedFactoryVision(env, visionOverride))))
   ) {
     return { ok: false, error: "Choose an accepted factory recipe." }
@@ -4419,7 +4437,7 @@ async function createGenerationRequest(
   if (origin === "diagnostic_matrix" && !diagnosticId) {
     return { ok: false, error: "Diagnostic requests require a run identity." }
   }
-  let resolvedVisionId = visionNorm
+  let resolvedVisionId = requestedRecipe ? `anima-v1-${requestedRecipe.slot}` : visionNorm
   let emulsionSlot = Math.max(0, optionalInt(requestedEmulsionSlot) || 0)
   if (mode === "specific") {
     let optionRow = await env.ICONOPLASM_DB.prepare(
@@ -4446,8 +4464,11 @@ async function createGenerationRequest(
         .first()
       if (baseOptionRow) optionRow = baseOptionRow
     }
-    resolvedVisionId = sanitizeVoteVisionId(optionRow?.vision_id || "") || visionNorm
-    const animaSlot = iconoplasmAnimaEmulsionSlotFromExactAlias(resolvedVisionId)
+    resolvedVisionId = requestedRecipe
+      ? `anima-v1-${requestedRecipe.slot}`
+      : sanitizeVoteVisionId(optionRow?.vision_id || "") || visionNorm
+    const animaSlot =
+      requestedRecipe?.slot || iconoplasmAnimaEmulsionSlotFromExactAlias(resolvedVisionId)
     if (animaSlot && !iconoplasmAnimaEmulsionSlotIsPreallocated(animaSlot)) {
       return {
         ok: false,
@@ -8875,9 +8896,11 @@ export function iconoplasmAnimaEmulsionSlotFromExactAlias(raw) {
   const compact = String(raw || "")
     .replace(/\s+/g, "")
     .trim()
-  const match = /^(?:A1-|ANIMA-V1-)([1-9][0-9]*)(?:-E)?$/i.exec(compact)
+  const match = /^([A-Z][1-9][0-9]*|ANIMA-V1)-([1-9][0-9]*)(?:-E)?$/i.exec(compact)
   if (!match) return 0
-  const slot = Number.parseInt(match[1], 10)
+  const recipePrefix = String(match[1] || "").toUpperCase()
+  if (recipePrefix !== "ANIMA-V1" && !normalizeFactoryPipelineCode(recipePrefix.charAt(0))) return 0
+  const slot = Number.parseInt(match[2], 10)
   return Number.isSafeInteger(slot) && slot > 0 ? slot : 0
 }
 
@@ -8913,6 +8936,52 @@ export function iconoplasmPreallocatedAnimaEmulsionOption(raw) {
     preview_assets: [],
     is_preallocated_without_preview: true,
   }
+}
+
+function iconoplasmFactoryRecipeFromPublicEmulsionId(raw) {
+  const compact = String(raw || "")
+    .replace(/\s+/g, "")
+    .trim()
+    .toUpperCase()
+  const match = /^([A-Z])([1-9][0-9]*)-([1-9][0-9]*)(?:-E)?$/.exec(compact)
+  if (!match) return null
+  const pipeline = normalizeFactoryPipelineCode(match[1])
+  const vision = normalizeFactoryVisionRevision(match[2])
+  const slot = Number.parseInt(match[3], 10)
+  if (!pipeline || !vision || !iconoplasmAnimaEmulsionSlotIsPreallocated(slot)) return null
+  return { pipeline, vision, slot, publicId: `${pipeline}${vision}-${slot}` }
+}
+
+export function iconoplasmPreallocatedFactoryEmulsionOptions(raw) {
+  const compact = String(raw || "")
+    .replace(/\s+/g, "")
+    .trim()
+  const exactRecipe = iconoplasmFactoryRecipeFromPublicEmulsionId(compact)
+  const numericSlot = /^[1-9][0-9]*$/.test(compact) ? Number.parseInt(compact, 10) : 0
+  const slot = exactRecipe?.slot || numericSlot
+  if (!iconoplasmAnimaEmulsionSlotIsPreallocated(slot)) return []
+  const recipes = exactRecipe
+    ? [{ code: exactRecipe.pipeline, recommended_vision: exactRecipe.vision }]
+    : ICONOPLASM_FACTORY_PIPELINES
+  return recipes.map((pipeline) => {
+    const vision = normalizeFactoryVisionRevision(pipeline.recommended_vision) || 1
+    const publicId = `${pipeline.code}${vision}-${slot}`
+    return {
+      vision_id: publicId,
+      label: publicId,
+      primary_label: publicId,
+      secondary_label: "Ready for first blot",
+      search_text: `${publicId} ${slot}`,
+      emulsion_id: publicId,
+      emulsion_family_id: `A1-${slot}`,
+      image_count: 0,
+      live_count: 0,
+      score: 0,
+      vote_h_index: 0,
+      preview_assets: [],
+      is_preallocated_without_preview: true,
+    }
+  })
 }
 
 function compactGenerationRequestOptionIdentityPrefix(raw, transform) {
@@ -9358,14 +9427,19 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
     const groupedDatabaseOptions = groupGenerationRequestVisionOptions(
       mapGenerationRequestVisionOptionRows(env, url, resp?.results || []),
     )
-    const preallocatedExactOption = iconoplasmPreallocatedAnimaEmulsionOption(searchQuery)
-    if (
-      preallocatedExactOption &&
-      !groupedDatabaseOptions.some(
-        (option) => option?.vision_id === preallocatedExactOption.vision_id,
-      )
-    ) {
-      groupedDatabaseOptions.unshift(preallocatedExactOption)
+    const existingPublicIds = new Set(
+      groupedDatabaseOptions.map((option) =>
+        String(option?.label || "")
+          .trim()
+          .toUpperCase(),
+      ),
+    )
+    const preallocatedRecipeOptions = iconoplasmPreallocatedFactoryEmulsionOptions(searchQuery)
+    for (let index = preallocatedRecipeOptions.length - 1; index >= 0; index -= 1) {
+      const option = preallocatedRecipeOptions[index]
+      if (!existingPublicIds.has(String(option.label || "").toUpperCase())) {
+        groupedDatabaseOptions.unshift(option)
+      }
     }
     return annotateFavoriteGenerationRequestOptions(
       [...groupedDatabaseOptions, ...(await sharedUserOptionsPromise)],

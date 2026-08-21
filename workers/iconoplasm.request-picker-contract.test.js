@@ -334,16 +334,8 @@ test("new candidate modal tabs separate free queue and configured image API gene
     "direct generation should identify API candidates as novel jobs",
   )
   assert.doesNotMatch(app, /data-icono-request-prompt-body-mode/)
-  assert.match(
-    app,
-    /The active factory Vision supplies the prompt structure\. Your selected emulsion supplies only the visual style\./,
-    "the request modal should explain the visible Vision and emulsion ownership boundary",
-  )
-  assert.ok(
-    app.indexOf('<fieldset class="icono-request-mode-field">') <
-      app.indexOf('<div class="icono-request-lanes">'),
-    "the shared prompt-policy explanation should stay above both potentially long request lanes",
-  )
+  assert.doesNotMatch(app, /<fieldset class="icono-request-mode-field">/)
+  assert.doesNotMatch(app, /The active factory Vision supplies the prompt structure\./)
   assert.doesNotMatch(app, /prompt_body_mode:/)
   assert.match(
     app,

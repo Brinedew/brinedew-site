@@ -8,6 +8,7 @@ import {
   iconoplasmAnimaEmulsionSlotFromExactAlias,
   iconoplasmAnimaEmulsionSlotIsPreallocated,
   iconoplasmPreallocatedAnimaEmulsionOption,
+  iconoplasmPreallocatedFactoryEmulsionOptions,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class FakeRequestStatement {
@@ -419,6 +420,8 @@ function buildSessionBinding(session) {
 
 test("assigned Anima emulsion contract accepts exact aliases and rejects unassigned numbers", () => {
   assert.equal(iconoplasmAnimaEmulsionSlotFromExactAlias("A1-50817"), 50817)
+  assert.equal(iconoplasmAnimaEmulsionSlotFromExactAlias("C2-50817"), 50817)
+  assert.equal(iconoplasmAnimaEmulsionSlotFromExactAlias("Z9-50817"), 0)
   assert.equal(iconoplasmAnimaEmulsionSlotFromExactAlias("anima-v1-50817"), 50817)
   assert.equal(iconoplasmAnimaEmulsionSlotFromExactAlias("A1-50817-e"), 50817)
   assert.equal(iconoplasmAnimaEmulsionSlotFromExactAlias("A1-50817 trailing"), 0)
@@ -443,6 +446,14 @@ test("assigned Anima emulsion contract accepts exact aliases and rejects unassig
     is_preallocated_without_preview: true,
   })
   assert.equal(iconoplasmPreallocatedAnimaEmulsionOption("A1-5000"), null)
+  assert.deepEqual(
+    iconoplasmPreallocatedFactoryEmulsionOptions("50817").map((option) => option.label),
+    ["A1-50817", "B1-50817", "C2-50817", "D2-50817", "E3-50817"],
+  )
+  assert.deepEqual(
+    iconoplasmPreallocatedFactoryEmulsionOptions("C2-50817").map((option) => option.label),
+    ["C2-50817"],
+  )
 })
 
 test("public Anima allocation contract contains numeric facts but no private artist identities", () => {
@@ -963,21 +974,20 @@ test("an exact preallocated emulsion search returns a selectable first-blot opti
 
   const response =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options?query=A1-50817",
-        {
-          headers: { Cookie: "session=abc123" },
-        },
-      ),
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options?query=50817", {
+        headers: { Cookie: "session=abc123" },
+      }),
       env,
       {},
     )
   const payload = await response.json()
-  const option = payload.request_options.find(
-    (candidate) => candidate.vision_id === "anima-v1-50817",
-  )
+  const option = payload.request_options.find((candidate) => candidate.vision_id === "A1-50817")
 
   assert.equal(response.status, 200)
+  assert.deepEqual(
+    payload.request_options.slice(0, 5).map((candidate) => candidate.label),
+    ["A1-50817", "B1-50817", "C2-50817", "D2-50817", "E3-50817"],
+  )
   assert.equal(option?.label, "A1-50817")
   assert.equal(option?.secondary_label, "Ready for first blot")
   assert.equal(option?.is_preallocated_without_preview, true)
