@@ -9836,7 +9836,7 @@
     }
     function labLabelEmulsionNumber(portrait) {
       var safePortrait = portrait && typeof portrait === "object" ? portrait : {};
-      var explicitArtistId = displayEmulsionCode(safePortrait.public_emulsion_code, safePortrait.emulsion_id) || String(safePortrait.artist_id || "").trim();
+      var explicitArtistId = displayEmulsionCode(safePortrait.emulsion_id) || String(safePortrait.artist_id || "").trim();
       if (explicitArtistId) return explicitArtistId;
       var visionArtistId = labLabelArtistIdFromVision(safePortrait.vision_id);
       if (visionArtistId) return visionArtistId;
@@ -10479,16 +10479,10 @@
       var emulsionId = String(item.emulsion_id || "").trim();
       var label = String(item.emulsion_label || "").trim();
       var artistId = String(item.artist_id || "").trim();
-      return displayEmulsionCode(item.public_emulsion_code, emulsionId) || label || (artistId ? "Emulsion " + artistId : "");
+      return displayEmulsionCode(emulsionId) || label || (artistId ? "Emulsion " + artistId : "");
     }
-    function displayEmulsionCode(rawPublicCode, rawUnqualifiedId) {
-      var publicCode = String(rawPublicCode || "").trim();
-      if (publicCode) return publicCode;
-      var value = String(rawUnqualifiedId || "").trim();
-      var match = value.match(/^[A-Z][0-9]+-(\d+)(-e)?$/i);
-      if (match) return "0-" + String(Number.parseInt(match[1], 10)) + (match[2] || "");
-      if (/^\d+$/.test(value)) return "0-" + String(Number.parseInt(value, 10));
-      return value;
+    function displayEmulsionCode(rawEmulsionId) {
+      return String(rawEmulsionId || "").trim();
     }
     function renderCandidateGalleryHtml(geneDetail, options) {
       var gene = geneDetail || {};

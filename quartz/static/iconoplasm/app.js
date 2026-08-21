@@ -246,7 +246,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function renderEmulsionFavoriteButtonMarkup(rawEmulsionId, extraClass) {
     var emulsionId = normalizeEmulsionFamilyId(rawEmulsionId)
     if (!emulsionId) return ""
-    var displayCode = displayEmulsionCode("", emulsionId)
+    var displayCode = displayEmulsionCode(emulsionId)
     var isFavorite = emulsionFavorites.has(emulsionId)
     var isPending = emulsionFavorites.isPending(emulsionId)
     var authenticated = !!currentUser
@@ -290,8 +290,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (pending) button.setAttribute("aria-busy", "true")
       else button.removeAttribute("aria-busy")
       var label = currentUser
-        ? (favorite ? "Remove " : "Add ") + displayEmulsionCode("", emulsionId) + " from favorites"
-        : "Log in to favorite " + displayEmulsionCode("", emulsionId)
+        ? (favorite ? "Remove " : "Add ") + displayEmulsionCode(emulsionId) + " from favorites"
+        : "Log in to favorite " + displayEmulsionCode(emulsionId)
       button.setAttribute("aria-label", label)
       var hiddenLabel = button.querySelector(".icono-visually-hidden")
       if (hiddenLabel) hiddenLabel.textContent = label
@@ -336,7 +336,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         .then(function () {
           announceEmulsionFavoriteStatus(
             (emulsionFavorites.has(emulsionId) ? "Added " : "Removed ") +
-              displayEmulsionCode("", emulsionId) +
+              displayEmulsionCode(emulsionId) +
               (emulsionFavorites.has(emulsionId) ? " to favorites." : " from favorites."),
           )
         })
@@ -670,9 +670,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var artistId = String(source.artist_id || "").trim()
     var label = String(source.emulsion_label || "").trim()
     var primary =
-      displayEmulsionCode(source.public_emulsion_code, emulsionId) ||
-      label ||
-      (artistId ? "Emulsion " + artistId : "")
+      displayEmulsionCode(emulsionId) || label || (artistId ? "Emulsion " + artistId : "")
     return {
       emulsionId: emulsionId,
       artistId: artistId,
@@ -681,14 +679,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
   }
 
-  function displayEmulsionCode(rawPublicCode, rawUnqualifiedId) {
-    var publicCode = String(rawPublicCode || "").trim()
-    if (publicCode) return publicCode
-    var value = String(rawUnqualifiedId || "").trim()
-    var match = value.match(/^[A-Z][0-9]+-(\d+)(-e)?$/i)
-    if (match) return "0-" + String(Number.parseInt(match[1], 10)) + (match[2] || "")
-    if (/^\d+$/.test(value)) return "0-" + String(Number.parseInt(value, 10))
-    return value
+  function displayEmulsionCode(rawEmulsionId) {
+    return String(rawEmulsionId || "").trim()
   }
 
   function renderCanonicalToolbarMetaMarkup(genePayload) {

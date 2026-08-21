@@ -104,9 +104,10 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   )
   assert.match(
     app,
-    /function displayEmulsionCode\(rawPublicCode, rawUnqualifiedId\)/,
-    "the site must separate visible lineage from the historical lookup identity",
+    /function displayEmulsionCode\(rawEmulsionId\)/,
+    "the site must render the one canonical emulsion identity",
   )
+  assert.doesNotMatch(app, /public_emulsion_code/)
   assert.match(
     app,
     /event\.detail\.tab === "free"\) void renderResultsList\(\)/,

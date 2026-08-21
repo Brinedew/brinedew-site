@@ -154,7 +154,7 @@ test("admin ingest dry-run accepts a normal sync payload without crashing", asyn
   assert.equal(payload?.failed, 0)
   assert.equal(payload?.results?.[0]?.ok, true)
   assert.equal(payload?.results?.[0]?.symbol, "ABCA1")
-  assert.equal(payload?.results?.[0]?.emulsion_id, "A1-42")
+  assert.equal(payload?.results?.[0]?.emulsion_id, "0-42")
   assert.equal(payload?.results?.[0]?.sample_label, "ABCA1-2")
   assert.equal(payload?.results?.[0]?.sample_number, 2)
   assert.equal(payload?.results?.[0]?.blacklisted, false)

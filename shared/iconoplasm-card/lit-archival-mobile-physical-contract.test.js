@@ -360,7 +360,7 @@ test("archival cards expose one labelled accessible equivalent of the visual cha
     tissue_tau: 0.26,
     loeuf: 0.449,
     first_publication_year: 1976,
-    portrait: { emulsion_id: "A1-15527-e" },
+    portrait: { emulsion_id: "0-15527-e" },
     essence: {
       age_years: 44,
       aesthetics: ["Kingcore"],
@@ -387,8 +387,7 @@ test("archival cards expose one labelled accessible equivalent of the visual cha
   )
   assert.equal(
     sharedRuntime.labLabelEmulsionNumber({
-      emulsion_id: "A1-15527-e",
-      public_emulsion_code: "C9-15527-e",
+      emulsion_id: "C9-15527-e",
     }),
     "C9-15527-e",
     "recorded immutable factory lineage must remain visible",

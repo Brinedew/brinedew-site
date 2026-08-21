@@ -31,6 +31,13 @@ const factoryRecommendationMigration = readFileSync(
   ),
   "utf8",
 )
+const portraitIdentityNormalization = readFileSync(
+  new URL(
+    "../migrations-iconoplasm/0076_normalize_portrait_emulsion_identity.sql",
+    import.meta.url,
+  ),
+  "utf8",
+)
 const workerSource = readFileSync(
   new URL(
     "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
@@ -74,6 +81,63 @@ test("factory migration adds immutable recipe snapshots and a future-only active
         .prepare("PRAGMA table_info(icono_portrait_assets)")
         .all()
         .some((column) => column.name === "public_emulsion_code"),
+    )
+  } finally {
+    db.close()
+  }
+})
+
+test("portrait identity normalization keeps proven lineage and marks legacy IDs unqualified", () => {
+  const db = new DatabaseSync(":memory:")
+  try {
+    db.exec(`
+      CREATE TABLE icono_portrait_assets (
+        gene_symbol TEXT, asset_sha256 TEXT, emulsion_id TEXT, vision_id TEXT, created_at TEXT
+      );
+      CREATE TABLE icono_generation_requests (
+        id INTEGER PRIMARY KEY, gene_symbol TEXT, fulfilled_asset_sha256 TEXT,
+        factory_pipeline_code TEXT, factory_vision_revision INTEGER, requested_emulsion_slot INTEGER
+      );
+      CREATE TABLE icono_diagnostic_matrix_cells (generation_request_id INTEGER);
+      CREATE TABLE icono_publish_state (gene_symbol TEXT, current_asset_sha256 TEXT);
+      CREATE TABLE icono_vote_asset_summary (
+        gene_symbol TEXT, asset_sha256 TEXT, upvotes INTEGER, score INTEGER
+      );
+      CREATE TABLE icono_generation_request_factory_option_sources (
+        public_emulsion_code TEXT, vision_id TEXT
+      );
+      CREATE TABLE icono_generation_request_factory_option_rollup (
+        public_emulsion_code TEXT PRIMARY KEY, emulsion_slot INTEGER, image_count INTEGER,
+        live_count INTEGER, score INTEGER, vote_h_index INTEGER, preview_assets_json TEXT,
+        updated_at TEXT
+      );
+      INSERT INTO icono_portrait_assets VALUES
+        ('KIN', 'matrix-sha', 'A1-21103', 'anima-v1-21103', CURRENT_TIMESTAMP),
+        ('VAPA', 'legacy-sha', 'A1-1003', 'anima-v1-1003', CURRENT_TIMESTAMP);
+      INSERT INTO icono_generation_requests VALUES
+        (2076, 'KIN', 'matrix-sha', 'C', 9, 21103);
+      INSERT INTO icono_diagnostic_matrix_cells VALUES (2076);
+    `)
+    db.exec(portraitIdentityNormalization)
+    assert.equal(
+      db.prepare("SELECT emulsion_id FROM icono_portrait_assets WHERE gene_symbol='KIN'").get()
+        .emulsion_id,
+      "C9-21103",
+    )
+    assert.equal(
+      db.prepare("SELECT emulsion_id FROM icono_portrait_assets WHERE gene_symbol='VAPA'").get()
+        .emulsion_id,
+      "0-1003",
+    )
+    assert.deepEqual(
+      {
+        ...db
+          .prepare(
+            "SELECT public_emulsion_code, image_count FROM icono_generation_request_factory_option_rollup",
+          )
+          .get(),
+      },
+      { public_emulsion_code: "C9-21103", image_count: 1 },
     )
   } finally {
     db.close()
@@ -187,8 +251,9 @@ test("public factory identity stays clean while private IDs remain internal", ()
   assert.match(factoryCatalogSource, /code: "B"[\s\S]*cfg: 3\.2/)
   assert.match(factoryCatalogSource, /code: "C"[\s\S]*cfg: 4/)
   assert.match(factoryCatalogSource, /code: "D"[\s\S]*cfg: 4\.5/)
-  assert.match(workerSource, /public_emulsion_code/)
-  assert.match(cardSource, /displayEmulsionCode\(item\.public_emulsion_code, emulsionId\)/)
+  assert.match(workerSource, /upper\(trim\(pa\.emulsion_id\)\) AS public_emulsion_code/)
+  assert.match(cardSource, /displayEmulsionCode\(emulsionId\)/)
+  assert.doesNotMatch(cardSource, /item\.public_emulsion_code/)
   assert.doesNotMatch(cardSource, /candidate_image_id[^\n]*<strong>/)
 })
 
