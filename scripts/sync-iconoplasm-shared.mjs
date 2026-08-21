@@ -23,6 +23,24 @@ function selectedOutputs(outputs) {
 
 const targets = [
   {
+    source: path.join(
+      repoRoot,
+      "workers",
+      "generated",
+      "iconoplasm-anima-emulsion-slot-contract.js",
+    ),
+    outputs: [
+      path.join(
+        repoRoot,
+        "quartz",
+        "static",
+        "iconoplasm",
+        "generated",
+        "anima-emulsion-slot-contract.js",
+      ),
+    ],
+  },
+  {
     source: path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-vote.css"),
     outputs: [
       path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "shared-card-vote.css"),
