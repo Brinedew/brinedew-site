@@ -77,6 +77,23 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <button type="button" id="factory-refresh">Reload</button>
           <span id="factory-status" class="small" role="status"></span>
         </div>
+        <section class="factory-wiring" aria-labelledby="factory-wiring-heading">
+          <h3 id="factory-wiring-heading">Recommended visions</h3>
+          <div class="factory-wiring-table-wrap">
+            <table class="factory-wiring-table">
+              <thead>
+                <tr>
+                  <th scope="col">Pipeline</th>
+                  <th scope="col">Model</th>
+                  <th scope="col">Sampling</th>
+                  <th scope="col">Recommended Vision</th>
+                </tr>
+              </thead>
+              <tbody id="factory-wiring-rows"></tbody>
+            </table>
+          </div>
+          <output id="factory-wiring-status" class="small" aria-live="polite"></output>
+        </section>
       </section>
       <section class="diagnostic-console" aria-labelledby="diagnostic-heading">
         <div class="section-head diagnostic-console__head">
