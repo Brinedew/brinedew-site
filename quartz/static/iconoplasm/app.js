@@ -6550,6 +6550,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         }
       }
 
+      function isNumericRequestQuery(query) {
+        return /^(?:anima-v1-)?[0-9]+$/i.test(
+          String(query || "")
+            .trim()
+            .replace(/\s+/g, ""),
+        )
+      }
+
       function rememberRequestOptions(options) {
         var list = Array.isArray(options) ? options : []
         for (var i = 0; i < list.length; i++) {
@@ -6784,6 +6792,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           rememberRequestOptions([immediateOption])
           paintRequestResults(renderQuery, [immediateOption])
           scheduleNumericRequestHydration(renderQuery, immediateOption)
+          return
+        }
+        if (isNumericRequestQuery(renderQuery)) {
+          if (numericRequestHydrationTimer) {
+            window.clearTimeout(numericRequestHydrationTimer)
+            numericRequestHydrationTimer = null
+          }
+          paintRequestResults(renderQuery, [])
           return
         }
         if (numericRequestHydrationTimer) {
