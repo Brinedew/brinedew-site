@@ -2891,6 +2891,30 @@ function publicEmulsionIdForRow(row) {
   return ""
 }
 
+function unqualifiedEmulsionDisplayCode(raw) {
+  const value = sanitizeText(raw || "", 64) || ""
+  if (!value) return ""
+  const match = value.match(/^[A-Z][0-9]+-(\d+)(-e)?$/i)
+  if (match) return `0-${Number.parseInt(match[1], 10)}${match[2] || ""}`
+  if (/^\d+$/.test(value)) return `0-${Number.parseInt(value, 10)}`
+  return value
+}
+
+function displayEmulsionCodeForRow(row) {
+  const recordedCode = sanitizeText(row?.public_emulsion_code || "", 64) || ""
+  const recordedRecipe = iconoplasmFactoryRecipeFromPublicEmulsionId(recordedCode)
+  if (recordedRecipe) return recordedRecipe.publicId
+
+  const requestedSlot = Math.max(0, optionalInt(row?.requested_emulsion_slot) || 0)
+  const requestedPipeline = normalizeFactoryPipelineCode(row?.factory_pipeline_code || "")
+  const requestedVision = normalizeFactoryVisionRevision(row?.factory_vision_revision)
+  if (requestedSlot && requestedPipeline && requestedVision) {
+    return `${requestedPipeline}${requestedVision}-${requestedSlot}`
+  }
+
+  return unqualifiedEmulsionDisplayCode(publicEmulsionIdForRow(row))
+}
+
 function publicArtistIdForRow(row) {
   return sanitizeText(row?.artist_id || "", 64) || deriveAdminArtistId(row?.vision_id || "")
 }
@@ -3833,7 +3857,7 @@ function buildGenerationRequestLaneKey({
 }
 
 function generationRequestVisionLabel(row) {
-  const emulsionId = publicEmulsionIdForRow(row)
+  const emulsionId = displayEmulsionCodeForRow(row)
   if (emulsionId) return emulsionId
   const artistTag = sanitizeText(row?.requested_artist_tag || row?.artist_tag || "", 255) || ""
   if (artistTag) return artistTag
@@ -3863,6 +3887,11 @@ function mapGenerationRequestRow(row, { portraitBaseUrl = "" } = {}) {
         vision_id: sanitizeVoteVisionId(row?.fulfilled_asset_vision_id || "") || "",
         emulsion_id: publicEmulsionIdForRow({
           emulsion_id: row?.fulfilled_asset_emulsion_id,
+          vision_id: row?.fulfilled_asset_vision_id,
+        }),
+        display_emulsion_code: displayEmulsionCodeForRow({
+          emulsion_id: row?.fulfilled_asset_emulsion_id,
+          public_emulsion_code: row?.fulfilled_asset_public_emulsion_code,
           vision_id: row?.fulfilled_asset_vision_id,
         }),
         width: optionalInt(row?.fulfilled_asset_width),
@@ -4279,6 +4308,7 @@ async function queryGenerationRequests(
        pa.candidate_image_id AS fulfilled_candidate_image_id,
        COALESCE(pa.vision_id, '') AS fulfilled_asset_vision_id,
        COALESCE(pa.emulsion_id, '') AS fulfilled_asset_emulsion_id,
+       COALESCE(pa.public_emulsion_code, '') AS fulfilled_asset_public_emulsion_code,
        pa.width AS fulfilled_asset_width,
        pa.height AS fulfilled_asset_height
      FROM icono_generation_requests gr
@@ -8459,12 +8489,13 @@ async function applyCandidateGenerationUserVote(env, ctx, job, userId) {
 
 function generationRequestVisionOptionLabels(row) {
   const emulsionId = publicEmulsionIdForRow(row)
+  const displayEmulsionCode = displayEmulsionCodeForRow(row)
   const artistId = publicArtistIdForRow(row)
   const artistTag = sanitizeText(row?.artist_tag || "", 255) || ""
   const artistName = sanitizeText(row?.artist_name || "", 255) || ""
   const visionId = sanitizeVoteVisionId(row?.vision_id || "")
   const workflowLabel = sanitizeText(row?.workflow_label || "", 255) || ""
-  const primaryLabel = emulsionId || artistTag || artistName || artistId || visionId
+  const primaryLabel = displayEmulsionCode || artistTag || artistName || artistId || visionId
   const secondaryParts = []
   if (artistTag && artistTag !== primaryLabel) secondaryParts.push(artistTag)
   if (artistName && artistName !== primaryLabel && artistName !== artistTag)
@@ -8481,7 +8512,15 @@ function generationRequestVisionOptionLabels(row) {
     visionId,
     primaryLabel: primaryLabel || "Specific emulsion",
     secondaryLabel: secondaryParts.join(" · "),
-    searchText: [emulsionId, artistId, artistTag, artistName, workflowLabel, visionId]
+    searchText: [
+      displayEmulsionCode,
+      emulsionId,
+      artistId,
+      artistTag,
+      artistName,
+      workflowLabel,
+      visionId,
+    ]
       .filter(Boolean)
       .join(" "),
   }
@@ -9647,10 +9686,10 @@ async function listGenerationRequestFactorySlotOptions(env, url, searchIntent) {
     mapGenerationRequestVisionOptionRows(env, url, legacyResponse?.results || []),
   ).map((option) => ({
     ...option,
-    label: String(slot),
-    primary_label: String(slot),
+    label: `0-${slot}`,
+    primary_label: `0-${slot}`,
     secondary_label: "",
-    search_text: `${slot} ${option.search_text || ""}`.trim(),
+    search_text: `0-${slot} ${slot} ${option.search_text || ""}`.trim(),
     is_unqualified_legacy: true,
   }))
 
@@ -25443,6 +25482,7 @@ function cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }) {
         candidate_image_id: optionalInt(row?.candidate_image_id),
         vision_id: sanitizeText(row?.vision_id || "", 128) || null,
         emulsion_id: publicEmulsionIdForRow(row) || null,
+        public_emulsion_code: sanitizeText(row?.public_emulsion_code || "", 64) || null,
         emulsion_label: generationRequestVisionLabel(row) || null,
         sample_label: sanitizeText(row?.sample_label || "", 64) || null,
         sample_number: optionalInt(row?.sample_number),
@@ -25565,6 +25605,7 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
        pa.vision_id,
        pa.candidate_image_id,
        pa.emulsion_id,
+       pa.public_emulsion_code,
        pa.workflow_id,
        pa.workflow_label,
        pa.workflow_path,
@@ -25801,7 +25842,8 @@ async function queryGalleryPublishedRows(env) {
        pa.asset_sha256,
        pa.candidate_image_id,
        pa.vision_id,
-      pa.emulsion_id,
+       pa.emulsion_id,
+       pa.public_emulsion_code,
        pa.width,
        pa.height,
        COALESCE(vs.upvotes, 0) AS image_upvotes,
@@ -25944,6 +25986,7 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
         candidate_image_id: optionalInt(row?.candidate_image_id),
         vision_id: String(row?.vision_id || "").trim() || null,
         emulsion_id: publicEmulsionIdForRow(row) || null,
+        public_emulsion_code: sanitizeText(row?.public_emulsion_code || "", 64) || null,
         artist_id: publicArtistIdForRow(row) || null,
         ...(width != null ? { width } : {}),
         ...(height != null ? { height } : {}),
@@ -26134,6 +26177,7 @@ async function galleryMetricFeed(env, url, order, rawLimit, rawOffset) {
          0 AS candidate_image_id,
          gr.live_vision_id AS vision_id,
          gr.live_emulsion_id AS emulsion_id,
+         pa.public_emulsion_code,
          NULL AS width,
          NULL AS height,
          COALESCE(gr.live_upvotes, 0) AS image_upvotes,
@@ -26148,6 +26192,9 @@ async function galleryMetricFeed(env, url, order, rawLimit, rawOffset) {
          ON gc.gene_symbol = gr.gene_symbol
        LEFT JOIN icono_gene_essence ge
          ON ge.gene_symbol = gr.gene_symbol
+       LEFT JOIN icono_portrait_assets pa
+         ON pa.gene_symbol = gr.gene_symbol
+        AND pa.asset_sha256 = gr.current_asset_sha256
        WHERE COALESCE(gr.current_asset_sha256, '') <> ''
          AND COALESCE(gr.current_asset_missing, 0) = 0
        ORDER BY ${orderByClause}
@@ -26203,6 +26250,7 @@ async function galleryMetricFeed(env, url, order, rawLimit, rawOffset) {
           candidate_image_id: optionalInt(row?.candidate_image_id),
           vision_id: String(row?.vision_id || "").trim() || null,
           emulsion_id: publicEmulsionIdForRow(row) || null,
+          public_emulsion_code: sanitizeText(row?.public_emulsion_code || "", 64) || null,
           artist_id: publicArtistIdForRow(row) || null,
           ...(width != null ? { width } : {}),
           ...(height != null ? { height } : {}),
@@ -26289,6 +26337,7 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
        pa.candidate_image_id,
        pa.vision_id,
        pa.emulsion_id,
+       pa.public_emulsion_code,
        pa.sample_label,
        pa.sample_number,
        pa.sample_text_hash,
