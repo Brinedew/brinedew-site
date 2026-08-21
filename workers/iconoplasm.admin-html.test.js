@@ -142,6 +142,34 @@ test("factory admin runs and displays a diagnostic matrix without leaving the pa
     ICONOPLASM_ADMIN_RUNTIME,
     /async function refreshDiagnosticMatrix[\s\S]*finally\s*\{[\s\S]*scheduleDiagnosticPoll\(\)/,
   )
+  const refreshStart = ICONOPLASM_ADMIN_RUNTIME.indexOf("async function refreshDiagnosticMatrix")
+  const refreshEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "async function startDiagnosticMatrix",
+    refreshStart,
+  )
+  const diagnosticRefreshSource = ICONOPLASM_ADMIN_RUNTIME.slice(refreshStart, refreshEnd)
+  assert.doesNotMatch(diagnosticRefreshSource, /renderDiagnosticBuilder\(\)/)
+  assert.match(diagnosticRefreshSource, /payload\.catalog\s*&&\s*!state\.factoryLoaded/)
+  const startEnd = ICONOPLASM_ADMIN_RUNTIME.indexOf(
+    "function loadDiagnosticCanvasImage",
+    refreshEnd,
+  )
+  const diagnosticStartSource = ICONOPLASM_ADMIN_RUNTIME.slice(refreshEnd, startEnd)
+  assert.match(
+    diagnosticStartSource,
+    /submittedPipelines\s*=\s*state\.diagnosticSelectedPipelines\.slice\(\)/,
+  )
+  assert.match(
+    diagnosticStartSource,
+    /submittedEmulsions\s*=\s*state\.diagnosticEmulsionSlots\.slice\(\)/,
+  )
+  assert.ok(
+    diagnosticStartSource.indexOf("persistDiagnosticDefaults()") <
+      diagnosticStartSource.indexOf('await apiJson("/diagnostic-matrices"'),
+    "diagnostic choices must be saved before the long queue request starts",
+  )
+  assert.match(diagnosticStartSource, /pipeline_codes:\s*submittedPipelines/)
+  assert.match(diagnosticStartSource, /emulsion_slots:\s*submittedEmulsions/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /latest:\s*true/)
   assert.match(ICONOPLASM_ADMIN_RUNTIME, /\[30593, 255, 343, 21329, 24210\]/)
   assert.match(ICONOPLASM_ADMIN_CSS, /\.diagnostic-cell\s*\{[^}]*display:\s*table-cell/s)

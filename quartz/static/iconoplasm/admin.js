@@ -1845,13 +1845,14 @@
         "/diagnostic-matrices" + (id ? "?id=" + encodeURIComponent(id) : ""),
         { method: "GET" },
       )
-      if (payload && payload.catalog) {
+      // A status read describes an existing immutable run. It must never
+      // rebuild or normalize the operator's draft for the next run.
+      if (payload && payload.catalog && !state.factoryLoaded) {
         state.factoryRecipe = payload.catalog
         state.factoryLoaded = true
+        renderFactoryRecipe()
       }
       state.diagnosticRun = payload && payload.run ? payload.run : null
-      renderFactoryRecipe()
-      renderDiagnosticBuilder()
       renderDiagnosticMatrix()
       if (!opts.quiet && !state.diagnosticRun) setDiagnosticStatus("No diagnostic runs yet.", "")
     } catch (err) {
@@ -1880,6 +1881,12 @@
       return
     }
     state.diagnosticVisionRevision = visionRevision
+    // Freeze and save the exact draft before the request begins. The POST can
+    // take long enough for status polling and tab lifecycle work to run; none
+    // of that may replace the choices for the next diagnostic.
+    var submittedPipelines = state.diagnosticSelectedPipelines.slice()
+    var submittedEmulsions = state.diagnosticEmulsionSlots.slice()
+    persistDiagnosticDefaults()
     state.diagnosticBusy = true
     renderDiagnosticBuilder()
     setDiagnosticStatus("Queueing " + count + " immutable cells…", "")
@@ -1890,8 +1897,8 @@
       body: JSON.stringify({
         run_id: runId,
         gene_symbol: gene,
-        pipeline_codes: state.diagnosticSelectedPipelines,
-        emulsion_slots: state.diagnosticEmulsionSlots,
+        pipeline_codes: submittedPipelines,
+        emulsion_slots: submittedEmulsions,
         vision_revision: visionRevision,
         prompt_body_mode: (function () {
           var vision = (
@@ -1921,7 +1928,6 @@
         }
       }
       state.diagnosticRun = payload.run || null
-      persistDiagnosticDefaults()
       renderDiagnosticMatrix()
       setDiagnosticStatus(
         "Queued " + count + " cells. This page will update as the factory publishes them.",
