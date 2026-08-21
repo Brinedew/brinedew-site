@@ -2901,18 +2901,7 @@ function unqualifiedEmulsionDisplayCode(raw) {
 }
 
 function displayEmulsionCodeForRow(row) {
-  const recordedCode = sanitizeText(row?.public_emulsion_code || "", 64) || ""
-  const recordedRecipe = iconoplasmFactoryRecipeFromPublicEmulsionId(recordedCode)
-  if (recordedRecipe) return recordedRecipe.publicId
-
-  const requestedSlot = Math.max(0, optionalInt(row?.requested_emulsion_slot) || 0)
-  const requestedPipeline = normalizeFactoryPipelineCode(row?.factory_pipeline_code || "")
-  const requestedVision = normalizeFactoryVisionRevision(row?.factory_vision_revision)
-  if (requestedSlot && requestedPipeline && requestedVision) {
-    return `${requestedPipeline}${requestedVision}-${requestedSlot}`
-  }
-
-  return unqualifiedEmulsionDisplayCode(publicEmulsionIdForRow(row))
+  return publicEmulsionIdForRow(row)
 }
 
 function publicArtistIdForRow(row) {
@@ -3891,7 +3880,6 @@ function mapGenerationRequestRow(row, { portraitBaseUrl = "" } = {}) {
         }),
         display_emulsion_code: displayEmulsionCodeForRow({
           emulsion_id: row?.fulfilled_asset_emulsion_id,
-          public_emulsion_code: row?.fulfilled_asset_public_emulsion_code,
           vision_id: row?.fulfilled_asset_vision_id,
         }),
         width: optionalInt(row?.fulfilled_asset_width),
@@ -4308,7 +4296,6 @@ async function queryGenerationRequests(
        pa.candidate_image_id AS fulfilled_candidate_image_id,
        COALESCE(pa.vision_id, '') AS fulfilled_asset_vision_id,
        COALESCE(pa.emulsion_id, '') AS fulfilled_asset_emulsion_id,
-       COALESCE(pa.public_emulsion_code, '') AS fulfilled_asset_public_emulsion_code,
        pa.width AS fulfilled_asset_width,
        pa.height AS fulfilled_asset_height
      FROM icono_generation_requests gr
@@ -6059,7 +6046,6 @@ async function sourceImageEditAssetRow(env, { symbol, assetSha256 }) {
         pa.status,
         pa.vision_id,
         pa.emulsion_id,
-        pa.public_emulsion_code,
         pa.workflow_id,
         pa.workflow_label,
         pa.workflow_path,
@@ -7782,7 +7768,6 @@ async function publishImageEditCandidateAsset(env, job, userId) {
        is_legacy,
        vision_id,
        emulsion_id,
-       public_emulsion_code,
        workflow_id,
        workflow_label,
        workflow_path,
@@ -7796,7 +7781,7 @@ async function publishImageEditCandidateAsset(env, job, userId) {
        artist_name,
        created_by,
        created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 1, 0, 0, ?, ?, ?, 'image-edit', 'Image edit', NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, ?, CURRENT_TIMESTAMP)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 1, 0, 0, ?, ?, 'image-edit', 'Image edit', NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
        status='approved',
        autopick_eligible=1,
@@ -7811,7 +7796,6 @@ async function publishImageEditCandidateAsset(env, job, userId) {
        bytes=COALESCE(excluded.bytes, icono_portrait_assets.bytes),
        vision_id=COALESCE(excluded.vision_id, icono_portrait_assets.vision_id),
        emulsion_id=COALESCE(excluded.emulsion_id, icono_portrait_assets.emulsion_id),
-       public_emulsion_code=COALESCE(excluded.public_emulsion_code, icono_portrait_assets.public_emulsion_code),
        workflow_id=COALESCE(excluded.workflow_id, icono_portrait_assets.workflow_id),
        workflow_label=COALESCE(excluded.workflow_label, icono_portrait_assets.workflow_label),
        sample_label=COALESCE(excluded.sample_label, icono_portrait_assets.sample_label),
@@ -7831,7 +7815,6 @@ async function publishImageEditCandidateAsset(env, job, userId) {
       optionalInt(job.result_bytes),
       sanitizeVoteVisionId(`image-edit:${job.id}`),
       editedEmulsionId || null,
-      sanitizeText(sourceRow?.public_emulsion_code || "", 64) || null,
       sourceSampleLabel,
       sourceSampleNumber,
       sourceSampleTextHash,
@@ -8213,10 +8196,6 @@ function mapCandidateGenerationJobRow(row, baseUrl = "") {
     requested_emulsion_id: sanitizeText(row?.requested_emulsion_id || "", 64) || "",
     requested_emulsion_label: sanitizeText(row?.requested_emulsion_label || "", 255) || "",
     factory_code: `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}`,
-    public_emulsion_code:
-      optionalInt(row?.requested_emulsion_slot) > 0
-        ? `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}-${optionalInt(row?.requested_emulsion_slot)}`
-        : `${normalizeFactoryPipelineCode(row?.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(row?.factory_vision_revision || 1) || 1}`,
     prompt_body_mode: normalizeCandidatePromptBodyMode(
       row?.prompt_body_mode || "taggerizer_prompt",
     ),
@@ -8355,6 +8334,11 @@ async function publishCandidateGenerationAsset(env, job, userId) {
   if (!symbol || !assetSha)
     return { ok: false, error: "Candidate generation job has no publishable result" }
   const generatedVisionId = sanitizeVoteVisionId(`image-gen:${job.id}`)
+  const requestedSlot = optionalInt(job.requested_emulsion_slot)
+  const generatedEmulsionId =
+    requestedSlot > 0
+      ? `${normalizeFactoryPipelineCode(job.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(job.factory_vision_revision || 1) || 1}-${requestedSlot}`
+      : sanitizeText(job.requested_emulsion_id || "", 64) || null
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_portrait_assets (
        gene_symbol,
@@ -8372,7 +8356,6 @@ async function publishCandidateGenerationAsset(env, job, userId) {
        is_legacy,
        vision_id,
        emulsion_id,
-       public_emulsion_code,
        workflow_id,
        workflow_label,
        workflow_path,
@@ -8386,7 +8369,7 @@ async function publishCandidateGenerationAsset(env, job, userId) {
        artist_name,
        created_by,
        created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 1, 0, 0, ?, ?, ?, 'image-gen', 'Image generation', NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, ?, CURRENT_TIMESTAMP)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 1, 0, 0, ?, ?, 'image-gen', 'Image generation', NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
        status='approved',
        autopick_eligible=1,
@@ -8401,7 +8384,6 @@ async function publishCandidateGenerationAsset(env, job, userId) {
        bytes=COALESCE(excluded.bytes, icono_portrait_assets.bytes),
        vision_id=COALESCE(excluded.vision_id, icono_portrait_assets.vision_id),
        emulsion_id=COALESCE(excluded.emulsion_id, icono_portrait_assets.emulsion_id),
-       public_emulsion_code=COALESCE(excluded.public_emulsion_code, icono_portrait_assets.public_emulsion_code),
        workflow_id=COALESCE(excluded.workflow_id, icono_portrait_assets.workflow_id),
        workflow_label=COALESCE(excluded.workflow_label, icono_portrait_assets.workflow_label),
        sample_label=COALESCE(excluded.sample_label, icono_portrait_assets.sample_label),
@@ -8420,10 +8402,7 @@ async function publishCandidateGenerationAsset(env, job, userId) {
       optionalInt(job.result_height),
       optionalInt(job.result_bytes),
       generatedVisionId,
-      sanitizeText(job.requested_emulsion_id || "", 64) || null,
-      optionalInt(job.requested_emulsion_slot) > 0
-        ? `${normalizeFactoryPipelineCode(job.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(job.factory_vision_revision || 1) || 1}-${optionalInt(job.requested_emulsion_slot)}`
-        : `${normalizeFactoryPipelineCode(job.factory_pipeline_code || "A") || "A"}${normalizeFactoryVisionRevision(job.factory_vision_revision || 1) || 1}`,
+      generatedEmulsionId,
       sanitizeText(job.sample_label || "", 64) || null,
       optionalInt(job.sample_number),
       normalizeSha256(job.sample_text_hash || "") || null,
@@ -8848,10 +8827,10 @@ async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, visionIds 
      FROM icono_generation_request_factory_option_sources sources
      JOIN incoming ON incoming.vision_id = sources.vision_id
      UNION
-     SELECT upper(trim(pa.public_emulsion_code)) AS public_emulsion_code
+     SELECT upper(trim(pa.emulsion_id)) AS public_emulsion_code
      FROM icono_portrait_assets pa
      JOIN incoming ON incoming.vision_id = pa.vision_id
-     WHERE COALESCE(trim(pa.public_emulsion_code), '') <> ''`,
+     WHERE COALESCE(trim(pa.emulsion_id), '') <> ''`,
   )
     .bind(visionIdsJson)
     .all()
@@ -8882,10 +8861,10 @@ async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, visionIds 
        public_emulsion_code,
        vision_id
      )
-     SELECT DISTINCT upper(trim(pa.public_emulsion_code)), pa.vision_id
+     SELECT DISTINCT upper(trim(pa.emulsion_id)), pa.vision_id
      FROM icono_portrait_assets pa
      JOIN incoming ON incoming.vision_id = pa.vision_id
-     WHERE COALESCE(trim(pa.public_emulsion_code), '') <> ''`,
+     WHERE COALESCE(trim(pa.emulsion_id), '') <> ''`,
   )
     .bind(visionIdsJson)
     .run()
@@ -8914,8 +8893,8 @@ async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, visionIds 
      ),
      source_assets AS (
        SELECT
-         upper(trim(pa.public_emulsion_code)) AS public_emulsion_code,
-         CAST(substr(pa.public_emulsion_code, instr(pa.public_emulsion_code, '-') + 1) AS INTEGER) AS emulsion_slot,
+         upper(trim(pa.emulsion_id)) AS public_emulsion_code,
+         CAST(substr(pa.emulsion_id, instr(pa.emulsion_id, '-') + 1) AS INTEGER) AS emulsion_slot,
          upper(pa.gene_symbol) AS gene_symbol,
          lower(pa.asset_sha256) AS asset_sha256,
          CASE WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1 ELSE 0 END AS is_current,
@@ -8924,7 +8903,7 @@ async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, visionIds 
          COALESCE(pa.created_at, '') AS created_at
        FROM icono_portrait_assets pa
        JOIN incoming
-         ON pa.public_emulsion_code = incoming.public_emulsion_code COLLATE NOCASE
+         ON pa.emulsion_id = incoming.public_emulsion_code COLLATE NOCASE
        LEFT JOIN icono_publish_state ps ON ps.gene_symbol = pa.gene_symbol
        LEFT JOIN icono_vote_asset_summary vs
          ON vs.gene_symbol = pa.gene_symbol
@@ -14898,7 +14877,7 @@ async function portraitState(env, symbol, base) {
     const row = await env.ICONOPLASM_DB.prepare(
       // D1 cost fence: gene_symbol is the lookup key on both tables. Leave it
       // unwrapped so public media/gene detail stays O(1).
-      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.width, pa.height, pa.vision_id, pa.candidate_image_id, pa.emulsion_id, pa.public_emulsion_code,
+      `SELECT ps.current_asset_sha256 AS asset_sha256, pa.width, pa.height, pa.vision_id, pa.candidate_image_id, pa.emulsion_id,
               pa.sample_label, pa.sample_number, pa.sample_text_hash
          FROM icono_publish_state ps
          LEFT JOIN icono_portrait_assets pa
@@ -14936,7 +14915,6 @@ async function portraitState(env, symbol, base) {
       candidate_image_id: optionalInt(row?.candidate_image_id),
       vision_id: String(row?.vision_id || "").trim() || null,
       emulsion_id: publicEmulsionIdForRow(row) || null,
-      public_emulsion_code: sanitizeText(row?.public_emulsion_code || "", 64) || null,
       emulsion_label: generationRequestVisionLabel(row) || null,
       sample_label: sanitizeText(row?.sample_label || "", 64) || null,
       sample_number: optionalInt(row?.sample_number),
@@ -22078,7 +22056,6 @@ async function listAutopromoteCandidateAssetsForSymbol(env, rawSymbol) {
        COALESCE(pa.is_legacy, 0) AS is_legacy,
        pa.vision_id,
        pa.emulsion_id,
-       pa.public_emulsion_code,
        pa.artist_tag,
        pa.artist_name,
        pa.created_at
@@ -25482,7 +25459,6 @@ function cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }) {
         candidate_image_id: optionalInt(row?.candidate_image_id),
         vision_id: sanitizeText(row?.vision_id || "", 128) || null,
         emulsion_id: publicEmulsionIdForRow(row) || null,
-        public_emulsion_code: sanitizeText(row?.public_emulsion_code || "", 64) || null,
         emulsion_label: generationRequestVisionLabel(row) || null,
         sample_label: sanitizeText(row?.sample_label || "", 64) || null,
         sample_number: optionalInt(row?.sample_number),
@@ -25605,7 +25581,6 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
        pa.vision_id,
        pa.candidate_image_id,
        pa.emulsion_id,
-       pa.public_emulsion_code,
        pa.workflow_id,
        pa.workflow_label,
        pa.workflow_path,
@@ -25843,7 +25818,6 @@ async function queryGalleryPublishedRows(env) {
        pa.candidate_image_id,
        pa.vision_id,
        pa.emulsion_id,
-       pa.public_emulsion_code,
        pa.width,
        pa.height,
        COALESCE(vs.upvotes, 0) AS image_upvotes,
@@ -25986,7 +25960,6 @@ async function gallerySnapshot(env, url, { order = "votes" } = {}) {
         candidate_image_id: optionalInt(row?.candidate_image_id),
         vision_id: String(row?.vision_id || "").trim() || null,
         emulsion_id: publicEmulsionIdForRow(row) || null,
-        public_emulsion_code: sanitizeText(row?.public_emulsion_code || "", 64) || null,
         artist_id: publicArtistIdForRow(row) || null,
         ...(width != null ? { width } : {}),
         ...(height != null ? { height } : {}),
@@ -26177,7 +26150,6 @@ async function galleryMetricFeed(env, url, order, rawLimit, rawOffset) {
          0 AS candidate_image_id,
          gr.live_vision_id AS vision_id,
          gr.live_emulsion_id AS emulsion_id,
-         pa.public_emulsion_code,
          NULL AS width,
          NULL AS height,
          COALESCE(gr.live_upvotes, 0) AS image_upvotes,
@@ -26250,7 +26222,6 @@ async function galleryMetricFeed(env, url, order, rawLimit, rawOffset) {
           candidate_image_id: optionalInt(row?.candidate_image_id),
           vision_id: String(row?.vision_id || "").trim() || null,
           emulsion_id: publicEmulsionIdForRow(row) || null,
-          public_emulsion_code: sanitizeText(row?.public_emulsion_code || "", 64) || null,
           artist_id: publicArtistIdForRow(row) || null,
           ...(width != null ? { width } : {}),
           ...(height != null ? { height } : {}),
@@ -26337,7 +26308,6 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
        pa.candidate_image_id,
        pa.vision_id,
        pa.emulsion_id,
-       pa.public_emulsion_code,
        pa.sample_label,
        pa.sample_number,
        pa.sample_text_hash,
@@ -26370,7 +26340,6 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
       candidate_image_id: optionalInt(row?.candidate_image_id),
       vision_id: String(row?.vision_id || "").trim() || null,
       emulsion_id: publicEmulsionIdForRow(row) || null,
-      public_emulsion_code: sanitizeText(row?.public_emulsion_code || "", 64) || null,
       emulsion_label: generationRequestVisionLabel(row) || null,
       sample_label: sanitizeText(row?.sample_label || "", 64) || null,
       sample_number: optionalInt(row?.sample_number),
@@ -34419,9 +34388,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             sanitizeText(
               item?.emulsion_id ||
                 existingAsset?.emulsion_id ||
-                (workflowId && promptVersion && variantSlot
-                  ? `${workflowId}${promptVersion}-${variantSlot}`
-                  : ""),
+                (variantSlot ? `0-${variantSlot}` : ""),
               64,
             ) || null
           const candidateImageId =
