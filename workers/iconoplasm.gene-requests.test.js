@@ -8,7 +8,6 @@ import {
   iconoplasmAnimaEmulsionSlotFromExactAlias,
   iconoplasmAnimaEmulsionSlotIsPreallocated,
   iconoplasmPreallocatedAnimaEmulsionOption,
-  iconoplasmPreallocatedFactoryEmulsionOptions,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class FakeRequestStatement {
@@ -475,10 +474,6 @@ test("assigned Anima emulsion contract accepts exact aliases and rejects unassig
     is_preallocated_without_preview: true,
   })
   assert.equal(iconoplasmPreallocatedAnimaEmulsionOption("A1-5000"), null)
-  assert.deepEqual(
-    iconoplasmPreallocatedFactoryEmulsionOptions("C2-50817").map((option) => option.label),
-    ["C2-50817"],
-  )
 })
 
 test("public Anima allocation contract contains numeric facts but no private artist identities", () => {
@@ -948,7 +943,7 @@ test("authenticated request options include shared user emulsions with preview t
   assert.equal(env.gatewayDb.userEmulsionPreviewReads, 1)
 })
 
-test("a fully qualified factory code is treated as one exact recipe", async () => {
+test("a fully qualified factory code resolves to one pipeline-neutral emulsion", async () => {
   const env = buildEnv({ dbOptions: { queryVisionOptions: true } })
   env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
   env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
@@ -979,15 +974,15 @@ test("a fully qualified factory code is treated as one exact recipe", async () =
   assert.equal(response.status, 200)
   assert.deepEqual(
     payload.request_options.map((option) => option.label),
-    ["A1-2"],
+    ["0-2"],
   )
   assert.equal(env.gatewayDb.factoryOptionRollupReads, 1)
-  assert.equal(env.gatewayDb.optionRollupReads, 0)
+  assert.equal(env.gatewayDb.optionRollupReads, 1)
   assert.equal(env.gatewayDb.visionRollupReads, 0)
   assert.equal(env.gatewayDb.previewReads, 0)
 })
 
-test("an exact preallocated emulsion search returns a selectable first-blot option", async () => {
+test("a preallocated emulsion search returns one pipeline-neutral first-blot option", async () => {
   const env = buildEnv({ dbOptions: { queryVisionOptions: true } })
   env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
   env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
@@ -1013,20 +1008,18 @@ test("an exact preallocated emulsion search returns a selectable first-blot opti
       {},
     )
   const payload = await response.json()
-  const option = payload.request_options.find((candidate) => candidate.vision_id === "A4-50817")
+  const option = payload.request_options[0]
 
   assert.equal(response.status, 200)
-  assert.deepEqual(
-    payload.request_options.slice(0, 5).map((candidate) => candidate.label),
-    ["A4-50817", "B4-50817", "C7-50817", "D7-50817", "E8-50817"],
-  )
-  assert.equal(option?.label, "A4-50817")
+  assert.equal(payload.request_options.length, 1)
+  assert.equal(option?.vision_id, "anima-v1-50817")
+  assert.equal(option?.label, "0-50817")
   assert.equal(option?.secondary_label, "Ready for first blot")
   assert.equal(option?.is_preallocated_without_preview, true)
   assert.deepEqual(option?.preview_assets, [])
 })
 
-test("a bare slot ranks real blots first while exact codes use only proven lineage", async () => {
+test("a slot collapses every factory line into one image-backed emulsion", async () => {
   const preview = (geneSymbol, character) => ({
     gene_symbol: geneSymbol,
     asset_sha256: character.repeat(64),
@@ -1101,30 +1094,28 @@ test("a bare slot ranks real blots first while exact codes use only proven linea
   }
 
   const bare = await load("1003")
+  assert.equal(bare.request_options.length, 1)
   assert.equal(bare.request_options[0]?.label, "0-1003")
   assert.equal(bare.request_options[0]?.preview_assets.length, 4)
-  assert.equal(bare.request_options[1]?.label, "C9-1003")
-  assert.equal(bare.request_options[1]?.preview_assets.length, 2)
-  assert.equal(bare.request_options[2]?.is_preallocated_without_preview, true)
+  assert.equal(bare.request_options[0]?.image_count, 6)
 
   const unprovenExact = await load("A1-1003")
   assert.deepEqual(
     unprovenExact.request_options.map((option) => option.label),
-    ["A1-1003"],
+    ["0-1003"],
   )
-  assert.equal(unprovenExact.request_options[0]?.is_preallocated_without_preview, true)
-  assert.deepEqual(unprovenExact.request_options[0]?.preview_assets, [])
+  assert.equal(unprovenExact.request_options[0]?.preview_assets.length, 4)
 
   const provenExact = await load("C9-1003")
   assert.deepEqual(
     provenExact.request_options.map((option) => option.label),
-    ["C9-1003"],
+    ["0-1003"],
   )
-  assert.equal(provenExact.request_options[0]?.preview_assets.length, 2)
+  assert.equal(provenExact.request_options[0]?.preview_assets.length, 4)
   assert.equal(provenExact.request_options[0]?.is_preallocated_without_preview, undefined)
 })
 
-test("another fully qualified factory code also stays exact", async () => {
+test("another fully qualified factory code also resolves to one neutral emulsion", async () => {
   const env = buildEnv({ dbOptions: { queryVisionOptions: true } })
   env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
   env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
@@ -1155,10 +1146,10 @@ test("another fully qualified factory code also stays exact", async () => {
   assert.equal(response.status, 200)
   assert.deepEqual(
     payload.request_options.map((option) => option.label),
-    ["A1-3"],
+    ["0-3"],
   )
   assert.equal(env.gatewayDb.factoryOptionRollupReads, 1)
-  assert.equal(env.gatewayDb.optionRollupReads, 0)
+  assert.equal(env.gatewayDb.optionRollupReads, 1)
   assert.equal(env.gatewayDb.visionRollupReads, 0)
   assert.equal(env.gatewayDb.previewReads, 0)
 })

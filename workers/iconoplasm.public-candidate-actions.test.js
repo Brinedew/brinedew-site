@@ -375,7 +375,7 @@ test("a preallocated emulsion queues its first blot without inventing a referenc
   assert.equal(db.generationRequests[0]?.requested_vision_id, "anima-v1-50817")
 })
 
-test("a public recipe ID snapshots its own factory recipe instead of the active default", async () => {
+test("a legacy public recipe ID still uses the admin-selected factory recipe", async () => {
   const db = new FakeDb({ noVisionOption: true })
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -400,8 +400,8 @@ test("a public recipe ID snapshots its own factory recipe instead of the active 
   assert.equal(payload.failed_count, 0)
   assert.equal(db.generationRequests[0]?.requested_vision_id, "anima-v1-50817")
   assert.equal(db.generationRequests[0]?.requested_emulsion_slot, 50817)
-  assert.equal(db.generationRequests[0]?.factory_pipeline_code, "C")
-  assert.equal(db.generationRequests[0]?.factory_vision_revision, 2)
+  assert.equal(db.generationRequests[0]?.factory_pipeline_code, "A")
+  assert.equal(db.generationRequests[0]?.factory_vision_revision, 1)
 })
 
 test("an unassigned emulsion number is rejected instead of reconstructed", async () => {
