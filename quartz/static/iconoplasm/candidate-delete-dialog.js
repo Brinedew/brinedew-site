@@ -149,22 +149,30 @@ export function openCandidateDeleteDialog(options = {}) {
   dialog.addEventListener("cancel", function (event) {
     if (isSubmitting) event.preventDefault()
   })
-  confirmButton.addEventListener("click", async function () {
+  function showSubmissionError(error) {
+    if (typeof options.onFailure === "function") {
+      options.onFailure(error)
+      return
+    }
+    showCandidateDeleteNotice({
+      document: ownerDocument,
+      message:
+        "Couldn’t delete the candidate. Nothing changed. " +
+        String((error && error.message) || "Please try again."),
+    })
+  }
+
+  confirmButton.addEventListener("click", function () {
     if (isSubmitting) return
     isSubmitting = true
-    dialog.setAttribute("aria-busy", "true")
     cancelButton.disabled = true
     confirmButton.disabled = true
-    confirmButton.textContent = "Deleting…"
-    status.hidden = true
-    status.textContent = ""
 
+    let submission
     try {
-      await options.onConfirm()
-      dialog.close("deleted")
+      submission = options.onConfirm()
     } catch (error) {
       isSubmitting = false
-      dialog.removeAttribute("aria-busy")
       cancelButton.disabled = false
       confirmButton.disabled = false
       confirmButton.textContent = "Try again"
@@ -173,14 +181,20 @@ export function openCandidateDeleteDialog(options = {}) {
         "Couldn’t delete the candidate. Nothing changed. " +
         String((error && error.message) || "Please try again.")
       focusWithoutScrolling(confirmButton)
+      return
     }
+
+    // Confirmation is complete once the request has been accepted by the page.
+    // The modal must not own the slow storage and publication lifecycle.
+    dialog.close("submitted")
+    Promise.resolve(submission).catch(showSubmissionError)
   })
   dialog.addEventListener(
     "close",
     function () {
-      const deleted = dialog.returnValue === "deleted"
+      const submitted = dialog.returnValue === "submitted"
       dialog.remove()
-      if (!deleted) focusWithoutScrolling(options.returnFocus)
+      if (!submitted) focusWithoutScrolling(options.returnFocus)
     },
     { once: true },
   )

@@ -66,7 +66,7 @@ test("candidate delete confirmation names the exact asset and starts on the safe
   )
 })
 
-test("candidate delete submits once, stays in place, and closes only after success", async () => {
+test("candidate delete submits once and closes immediately while deletion continues", async () => {
   const { document, window } = createDocument()
   const originalCreateElement = document.createElement.bind(document)
   document.createElement = function (tagName) {
@@ -92,17 +92,47 @@ test("candidate delete submits once, stays in place, and closes only after succe
   confirmButton.click()
 
   assert.equal(calls, 1)
-  assert.equal(dialog.getAttribute("aria-busy"), "true")
-  assert.equal(confirmButton.textContent, "Deleting…")
-  assert.equal(dialog.isConnected, true)
+  assert.equal(dialog.isConnected, false)
+
+  const nextDialog = openCandidateDeleteDialog({
+    document,
+    symbol: "MTOR",
+    onConfirm: async function () {},
+  })
+  assert.equal(nextDialog.isConnected, true)
+  nextDialog.querySelector("[data-icono-candidate-delete-cancel]").click()
 
   resolveDelete()
   await deletion
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  assert.equal(dialog.isConnected, false)
 })
 
-test("candidate delete failure keeps context and offers an inline retry", async () => {
+test("asynchronous delete failure reports non-modally after the dialog closes", async () => {
+  const { document, window } = createDocument()
+  const originalCreateElement = document.createElement.bind(document)
+  document.createElement = function (tagName) {
+    const element = originalCreateElement(tagName)
+    if (String(tagName).toLowerCase() === "dialog") installDialogLifecycle(element, window)
+    return element
+  }
+  let failure = null
+  const dialog = openCandidateDeleteDialog({
+    document,
+    symbol: "CDK1",
+    onConfirm: async function () {
+      throw new Error("The server is busy.")
+    },
+    onFailure: function (error) {
+      failure = error
+    },
+  })
+  dialog.querySelector("[data-icono-candidate-delete-confirm]").click()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  assert.equal(dialog.isConnected, false)
+  assert.equal(failure.message, "The server is busy.")
+})
+
+test("synchronous delete failure keeps the dialog open for retry", () => {
   const { document, window } = createDocument()
   const originalCreateElement = document.createElement.bind(document)
   document.createElement = function (tagName) {
@@ -113,20 +143,17 @@ test("candidate delete failure keeps context and offers an inline retry", async 
   const dialog = openCandidateDeleteDialog({
     document,
     symbol: "CDK1",
-    onConfirm: async function () {
-      throw new Error("The server is busy.")
+    onConfirm: function () {
+      throw new Error("The request could not start.")
     },
   })
   dialog.querySelector("[data-icono-candidate-delete-confirm]").click()
-  await new Promise((resolve) => setTimeout(resolve, 0))
 
   const status = dialog.querySelector("[data-icono-candidate-delete-status]")
-  const confirmButton = dialog.querySelector("[data-icono-candidate-delete-confirm]")
   assert.equal(dialog.isConnected, true)
   assert.equal(status.hidden, false)
-  assert.match(status.textContent, /Nothing changed\. The server is busy\./)
-  assert.equal(confirmButton.disabled, false)
-  assert.equal(confirmButton.textContent, "Try again")
+  assert.match(status.textContent, /Nothing changed\. The request could not start\./)
+  assert.equal(dialog.querySelector("[data-icono-candidate-delete-confirm]").disabled, false)
 })
 
 test("successful deletion removes only the matching card and updates page state", () => {
@@ -188,6 +215,8 @@ test("candidate removal wiring uses the in-place experience without browser dial
 
   assert.match(wiring, /openCandidateDeleteDialog\(/)
   assert.match(wiring, /removeCandidateFromPageState\(/)
+  assert.match(wiring, /classList\.add\("is-deleting"\)/)
+  assert.match(wiring, /classList\.remove\("is-deleting"\)/)
   assert.doesNotMatch(wiring, /window\.(confirm|alert)\(/)
   assert.doesNotMatch(wiring, /rerenderCurrentGeneRoute|location\.reload/)
 })
