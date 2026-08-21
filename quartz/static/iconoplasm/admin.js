@@ -51,6 +51,7 @@
     diagnosticBusy: false,
     diagnosticEmulsionSlots: [30593, 255, 343, 21329, 24210],
     diagnosticSelectedPipelines: ["A", "B", "C", "D", "E"],
+    diagnosticVisionRevision: 0,
     diagnosticPollTimer: null,
     selectedPromptKind: "",
     promptsLoaded: false,
@@ -184,7 +185,7 @@
     diagnosticEmulsionInput: document.getElementById("diagnostic-emulsion-input"),
     diagnosticEmulsionAdd: document.getElementById("diagnostic-emulsion-add"),
     diagnosticEmulsionChips: document.getElementById("diagnostic-emulsion-chips"),
-    diagnosticVisionPolicy: document.getElementById("diagnostic-vision-policy"),
+    diagnosticVision: document.getElementById("diagnostic-vision"),
     diagnosticCellCount: document.getElementById("diagnostic-cell-count"),
     diagnosticRunButton: document.getElementById("diagnostic-run"),
     diagnosticDownload: document.getElementById("diagnostic-download"),
@@ -1317,12 +1318,6 @@
       pipeline && Number(pipeline.recommended_vision || 0) === Number(selected.vision || 0),
     )
     if (els.factoryActiveCode) els.factoryActiveCode.textContent = code
-    if (els.diagnosticVisionPolicy && vision) {
-      els.diagnosticVisionPolicy.textContent =
-        vision.label +
-        " · " +
-        (vision.prompt_content_mode === "full_manifestation" ? "full manifestation" : "tags")
-    }
     if (els.factoryRecipeDetail) {
       els.factoryRecipeDetail.innerHTML =
         pipeline && vision
@@ -1425,6 +1420,7 @@
         JSON.stringify({
           pipeline_codes: state.diagnosticSelectedPipelines,
           emulsion_slots: state.diagnosticEmulsionSlots,
+          vision_revision: state.diagnosticVisionRevision,
         }),
       )
     } catch {}
@@ -1453,6 +1449,10 @@
             return slot > 0
           })
       }
+      if (parsed) {
+        state.diagnosticVisionRevision =
+          Number.parseInt(String(parsed.vision_revision || "0"), 10) || 0
+      }
     } catch {}
   }
 
@@ -1464,6 +1464,7 @@
     if (state.activeTab !== "factory") return
     var catalog = state.factoryRecipe || {}
     var pipelines = Array.isArray(catalog.pipelines) ? catalog.pipelines : []
+    var visions = Array.isArray(catalog.visions) ? catalog.visions : []
     var accepted = new Set(
       pipelines.map(function (pipeline) {
         return String(pipeline.code || "")
@@ -1476,6 +1477,28 @@
       state.diagnosticSelectedPipelines = pipelines.map(function (pipeline) {
         return String(pipeline.code || "")
       })
+    }
+    var acceptedVisionRevisions = new Set(
+      visions.map(function (vision) {
+        return Number(vision.revision) || 0
+      }),
+    )
+    if (!acceptedVisionRevisions.has(state.diagnosticVisionRevision)) {
+      state.diagnosticVisionRevision = Number(catalog.active_recipe?.vision) || 0
+    }
+    if (els.diagnosticVision) {
+      els.diagnosticVision.innerHTML = visions
+        .map(function (vision) {
+          return (
+            '<option value="' +
+            esc(String(vision.revision)) +
+            '">' +
+            esc(String(vision.label || "Vision " + vision.revision)) +
+            "</option>"
+          )
+        })
+        .join("")
+      els.diagnosticVision.value = String(state.diagnosticVisionRevision || "")
     }
     if (els.diagnosticPipelineOptions) {
       els.diagnosticPipelineOptions.innerHTML = pipelines
@@ -1768,13 +1791,16 @@
       .trim()
       .toUpperCase()
     var count = diagnosticCellCount()
-    if (!gene || !count) {
+    var visionRevision =
+      Number.parseInt(String((els.diagnosticVision && els.diagnosticVision.value) || "0"), 10) || 0
+    if (!gene || !count || !visionRevision) {
       setDiagnosticStatus(
-        "Choose one gene, at least one factory line, and at least one emulsion.",
+        "Choose one gene, at least one factory line, at least one emulsion, and one Vision.",
         "danger",
       )
       return
     }
+    state.diagnosticVisionRevision = visionRevision
     state.diagnosticBusy = true
     renderDiagnosticBuilder()
     setDiagnosticStatus("Queueing " + count + " immutable cells…", "")
@@ -1787,15 +1813,12 @@
         gene_symbol: gene,
         pipeline_codes: state.diagnosticSelectedPipelines,
         emulsion_slots: state.diagnosticEmulsionSlots,
-        vision_revision:
-          Number.parseInt(String((els.factoryVision && els.factoryVision.value) || "1"), 10) || 1,
+        vision_revision: visionRevision,
         prompt_body_mode: (function () {
-          var revision =
-            Number.parseInt(String((els.factoryVision && els.factoryVision.value) || "1"), 10) || 1
           var vision = (
             state.factoryRecipe && state.factoryRecipe.visions ? state.factoryRecipe.visions : []
           ).find(function (item) {
-            return Number(item.revision) === revision
+            return Number(item.revision) === visionRevision
           })
           return vision && vision.prompt_content_mode === "full_manifestation"
             ? "prose_prompt"
@@ -9824,6 +9847,13 @@
       els.factoryPipeline.addEventListener("change", selectRecommendedVisionForPipeline)
     if (els.factoryVision)
       els.factoryVision.addEventListener("change", renderFactoryRecipeSelection)
+    if (els.diagnosticVision) {
+      els.diagnosticVision.addEventListener("change", function () {
+        state.diagnosticVisionRevision =
+          Number.parseInt(String(els.diagnosticVision.value || "0"), 10) || 0
+        persistDiagnosticDefaults()
+      })
+    }
     if (els.diagnosticPipelineOptions) {
       els.diagnosticPipelineOptions.addEventListener("change", function (ev) {
         var input = ev.target.closest("[data-diagnostic-pipeline]")
