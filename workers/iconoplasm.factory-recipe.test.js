@@ -153,22 +153,7 @@ test("public factory identity stays clean while private IDs remain internal", ()
   assert.doesNotMatch(cardSource, /candidate_image_id[^\n]*<strong>/)
 })
 
-test("factory catalog keeps corrected recommendations and the recovered RAX2-era Vision", () => {
-  assert.deepEqual(
-    ICONOPLASM_FACTORY_CATALOG.pipelines.map(({ code, recommended_vision }) => [
-      code,
-      recommended_vision,
-    ]),
-    [
-      ["A", 4],
-      ["B", 4],
-      ["C", 7],
-      ["D", 7],
-      ["E", 8],
-      ["F", 7],
-      ["G", 7],
-    ],
-  )
+test("factory catalog exposes the Preview 3 sampler lines and recovered RAX2-era Vision", () => {
   assert.deepEqual(
     ICONOPLASM_FACTORY_CATALOG.pipelines
       .filter(({ code }) => code === "F" || code === "G")

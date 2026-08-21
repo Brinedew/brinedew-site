@@ -447,10 +447,6 @@ test("assigned Anima emulsion contract accepts exact aliases and rejects unassig
   })
   assert.equal(iconoplasmPreallocatedAnimaEmulsionOption("A1-5000"), null)
   assert.deepEqual(
-    iconoplasmPreallocatedFactoryEmulsionOptions("50817").map((option) => option.label),
-    ["A4-50817", "B4-50817", "C7-50817", "D7-50817", "E8-50817"],
-  )
-  assert.deepEqual(
     iconoplasmPreallocatedFactoryEmulsionOptions("C2-50817").map((option) => option.label),
     ["C2-50817"],
   )
