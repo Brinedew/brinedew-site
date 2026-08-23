@@ -10122,6 +10122,16 @@
         height: Math.max(1, Math.round(height))
       };
     }
+    function canonicalGenePortraitAlt(symbol) {
+      var resolvedSymbol = normalizedSymbol(symbol);
+      return resolvedSymbol ? resolvedSymbol + " canonical gene character portrait by Iconoplasm" : "Canonical gene character portrait by Iconoplasm";
+    }
+    function canonicalGenePortraitCaption(symbol, fullName) {
+      var resolvedSymbol = normalizedSymbol(symbol);
+      var resolvedName = normalizeHandwrittenText(fullName);
+      var identity = resolvedName ? resolvedSymbol + " (" + resolvedName + ")" : resolvedSymbol || "this human gene";
+      return "Canonical Iconoplasm portrait of human " + identity + ".";
+    }
     function renderLabLabelPortraitMediaHtml(symbol, portraitUrl, portraitFullUrl, dims, options) {
       var opts = options || {};
       var resolvedSymbol = normalizedSymbol(symbol);
@@ -10130,10 +10140,13 @@
       var buttonClassName = "iconoplasm-tooltip-portrait-media icono-brick-media-link" + (opts.extraButtonClass ? " " + String(opts.extraButtonClass).trim() : "");
       var loading = String(opts.loading || "eager").trim() || "eager";
       var fetchPriority = String(opts.fetchPriority || "low").trim() || "low";
+      var portraitAlt = String(opts.portraitAlt || "").trim() || (resolvedSymbol ? resolvedSymbol + " blot" : "Gene blot");
+      var buttonAriaLabel = String(opts.buttonAriaLabel || "").trim() || (resolvedSymbol ? "Open full-size blot for " + resolvedSymbol : "Open full-size gene blot");
+      var captionText = String(opts.captionText || "").trim();
       if (!portraitUrl) {
         return '<div class="iconoplasm-tooltip-portrait-fallback"><div class="iconoplasm-tooltip-portrait-status">Blot pending</div><div class="iconoplasm-tooltip-portrait-symbol">' + escapeHtml(resolvedSymbol) + "</div></div>";
       }
-      return '<button type="button" class="' + escapeHtml(buttonClassName) + '"' + (extraButtonAttrs ? " " + extraButtonAttrs : "") + ' aria-label="Open full-size blot for ' + escapeHtml(resolvedSymbol) + '"><img class="iconoplasm-tooltip-portrait-img" src="' + escapeHtml(portraitUrl) + '" alt="' + escapeHtml(resolvedSymbol) + ' blot" loading="' + escapeHtml(loading) + '" decoding="async" fetchpriority="' + escapeHtml(fetchPriority) + '" width="' + size.width + '" height="' + size.height + '"></button>';
+      return '<button type="button" class="' + escapeHtml(buttonClassName) + '"' + (extraButtonAttrs ? " " + extraButtonAttrs : "") + ' aria-label="' + escapeHtml(buttonAriaLabel) + '"><img class="iconoplasm-tooltip-portrait-img" src="' + escapeHtml(portraitUrl) + '" alt="' + escapeHtml(portraitAlt) + '" loading="' + escapeHtml(loading) + '" decoding="async" fetchpriority="' + escapeHtml(fetchPriority) + '" width="' + size.width + '" height="' + size.height + '"></button>' + (captionText ? '<span class="icono-visually-hidden icono-canonical-portrait-caption">' + escapeHtml(captionText) + "</span>" : "");
     }
     function renderLabLabelSpecimenRailHtml(mediaHtml, geneDetail) {
       return '<div class="icono-label-specimen-viewport">' + String(mediaHtml || "") + "</div>" + renderLabLabelSpecimenFooterHtml(geneDetail) + '<div class="iconoplasm-tooltip-portrait-fade"></div>';
@@ -10865,6 +10878,8 @@
       labLabelEmulsionNumber,
       labLabelDisplayName,
       portraitDimensions,
+      canonicalGenePortraitAlt,
+      canonicalGenePortraitCaption,
       resolveArchivalCardModel,
       buildLabLabelSemanticCharacterFacts,
       buildTooltipTraitOriginRows,

@@ -56,6 +56,23 @@ existing non-visual homepage description, not as new chrome in the immersive
 Archive/Clans switcher; feed skip links stay clipped until keyboard focus. Read
 `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md` before changing the renderer,
 gene HTML, range map, robots metadata, archive, sitemap, or `llms.txt`.
+The existing content-addressed first-party medium WebP for the published lead
+portrait is the single canonical portrait URL. Every complete gene page must
+project that exact URL through its server-rendered lead image with descriptive
+alt/accessibility text, gene-specific Open Graph and Twitter metadata, one linked
+`WebPage`/`ImageObject`/`Gene` JSON-LD graph, and its gene-sitemap entry. Do not
+mint a symbol-addressed portrait alias, redirect, mutable copy, or parallel
+portrait read plane. A ready labelled-card PNG may appear as a secondary image;
+it never replaces the canonical portrait. These discovery reads must not add a
+D1 scan or any request-time write, enrollment, vote lookup, Queue send, repair,
+or Browser Rendering work. Before emitting a gene-sitemap shard, batch-read the
+exact published card shards selected by `KV_GALLERY_VERSION` and require every
+portrait SHA to match the discovery snapshot; unavailable or divergent
+publication state returns an uncached `503` instead of a stale sitemap.
+The same fail-closed rule applies when a gene route record and rendered card
+payload disagree; do not leave that document indexable without image metadata.
+After first paint, IPD-001 may select Bunny's equivalent accelerator URL for
+browser delivery; that must not replace the first-party discovery identity.
 Requested labelled-card thumbnails are a projection of an already-published
 card artifact. Archive, sitemap, and image reads may expose only a ready object
 whose fingerprint still matches that exact card; those crawler reads must never

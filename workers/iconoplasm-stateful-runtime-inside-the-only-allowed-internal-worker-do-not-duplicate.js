@@ -27327,30 +27327,44 @@ export async function readIconoplasmPublishedCardCatalogArtifactForTest(
 }
 
 // ARCHITECTURE FENCE [IPD-003] + [IPD-011]: range pages and image sitemaps
-// project requested print copies from only the exact published card shards
-// selected by KV_GALLERY_VERSION. They never query votes, compose D1 cards, or
-// trigger rendering. A range normally overlaps one 750-card immutable shard.
-export async function readIconoplasmPublishedGeneCardPrintCopies(env, symbols) {
+// project canonical portrait identity and requested print copies from only the
+// exact published card shards selected by KV_GALLERY_VERSION. They never query
+// votes, compose D1 cards, or trigger rendering. A range normally overlaps one
+// 750-card immutable shard.
+export async function readIconoplasmPublishedGeneDiscoveryProjections(env, symbols) {
   const requestedSymbols = normalizeRequestedSymbols(
     Array.isArray(symbols) ? symbols : [],
     MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT,
   )
-  if (!requestedSymbols.length) return new Map()
+  if (!requestedSymbols.length) return { version: "", bySymbol: new Map() }
   const versionInfo = await currentMobileCardSnapshotVersion(env)
-  const artifact = await readPublishedCardCatalogArtifact(
-    env,
-    versionInfo.current,
-    requestedSymbols,
-    { allowWholeArtifact: false },
-  )
+  const version = String(versionInfo?.current || "").trim()
+  if (!version || version === "0") return null
+  const artifact = await readPublishedCardCatalogArtifact(env, version, requestedSymbols, {
+    allowWholeArtifact: false,
+  })
   if (!artifact) return null
-  const result = new Map()
+  const bySymbol = new Map()
   for (const symbol of requestedSymbols) {
     const card = artifact.bySymbol.get(symbol)
+    const portraitAssetSha256 = normalizeSha256(card?.payload?.portrait?.asset_sha256 || "")
+    if (!portraitAssetSha256) continue
     const printCopy = card?.payload?.print_copy
-    if (printCopy?.status === "ready" && printCopy.image_url && printCopy.card_fingerprint) {
-      result.set(symbol, { ...printCopy })
-    }
+    const readyPrintCopy =
+      printCopy?.status === "ready" && printCopy.image_url && printCopy.card_fingerprint
+        ? { ...printCopy }
+        : null
+    bySymbol.set(symbol, { portraitAssetSha256, printCopy: readyPrintCopy })
+  }
+  return { version, bySymbol }
+}
+
+export async function readIconoplasmPublishedGeneCardPrintCopies(env, symbols) {
+  const projection = await readIconoplasmPublishedGeneDiscoveryProjections(env, symbols)
+  if (!projection) return null
+  const result = new Map()
+  for (const [symbol, value] of projection.bySymbol) {
+    if (value.printCopy) result.set(symbol, value.printCopy)
   }
   return result
 }
