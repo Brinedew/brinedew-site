@@ -207,10 +207,115 @@ test("raw file PDF wrappers do not initialize a second extension surface", async
   assert.match(content, /if \(isOuterRawFilePdfDocument\) return/)
 })
 
-test("extension hover-card fonts never hide text while packaged fonts load", async () => {
-  const css = await readFile(new URL("./generated/shared-card-label.css", import.meta.url), "utf8")
-  assert.match(css, /font-display:\s*swap;/)
-  assert.doesNotMatch(css, /font-display:\s*block;/)
+test("DO NOT DELETE: extension fonts resolve from the extension runtime on every host", async () => {
+  const [css, runtimeSource, manifestSource, frameHtml, pdfReaderHtml] = await Promise.all([
+    readFile(new URL("./generated/shared-card-label.css", import.meta.url), "utf8"),
+    readFile(new URL("./generated/iconoplasm-font-runtime.js", import.meta.url), "utf8"),
+    readFile(new URL("./manifest.json", import.meta.url), "utf8"),
+    readFile(new URL("./lit-archival-frame.html", import.meta.url), "utf8"),
+    readFile(new URL("./pdf-reader.html", import.meta.url), "utf8"),
+  ])
+  const addedFaces = []
+  const requestedPaths = []
+  const warnings = []
+  class FakeFontFace {
+    constructor(family, source, descriptors) {
+      this.family = family
+      this.source = source
+      this.descriptors = descriptors
+    }
+  }
+  const sandbox = {
+    chrome: {
+      runtime: {
+        getURL(path) {
+          requestedPaths.push(path)
+          return `chrome-extension://unit-test/${path}`
+        },
+      },
+    },
+    console: { warn: (...args) => warnings.push(args) },
+    document: {
+      fonts: {
+        add(face) {
+          addedFaces.push(face)
+        },
+      },
+    },
+    FontFace: FakeFontFace,
+  }
+  sandbox.globalThis = sandbox
+  vm.runInNewContext(runtimeSource, sandbox)
+
+  assert.equal(addedFaces.length, 5)
+  assert.deepEqual(requestedPaths, [
+    "fonts/IBMPlexMono-Regular.woff2",
+    "fonts/IBMPlexMono-Medium.woff2",
+    "fonts/LeagueSpartan-800.woff2",
+    "fonts/SpecialElite-Regular.woff2",
+    "fonts/Caveat-400.woff2",
+  ])
+  for (const face of addedFaces) {
+    assert.match(face.source, /^url\("chrome-extension:\/\/unit-test\/fonts\//)
+    assert.equal(face.descriptors.display, "swap")
+    assert.equal(face.descriptors.style, "normal")
+  }
+  assert.deepEqual(Array.from(sandbox.IconoplasmExtensionFonts.install()), [])
+  const failedInstall = sandbox.IconoplasmExtensionFonts.install({
+    FontFaceCtor: class BrokenFontFace {
+      constructor() {
+        throw new Error("synthetic font failure")
+      }
+    },
+    fontSet: { add() {} },
+    runtime: sandbox.chrome.runtime,
+  })
+  assert.deepEqual(Array.from(failedInstall), [])
+  assert.equal(warnings.length, 1)
+
+  const firefoxFaces = []
+  const firefoxSandbox = {
+    browser: {
+      runtime: {
+        getURL(path) {
+          return `moz-extension://unit-test/${path}`
+        },
+      },
+    },
+    console: { warn() {} },
+    document: { fonts: { add: (face) => firefoxFaces.push(face) } },
+    FontFace: FakeFontFace,
+  }
+  firefoxSandbox.globalThis = firefoxSandbox
+  vm.runInNewContext(runtimeSource, firefoxSandbox)
+  assert.equal(firefoxFaces.length, 5)
+  for (const face of firefoxFaces) {
+    assert.match(face.source, /^url\("moz-extension:\/\/unit-test\/fonts\//)
+  }
+
+  assert.doesNotMatch(runtimeSource, /__MSG_@@extension_id__|(?:chrome|moz|safari-web)-extension:/)
+  assert.doesNotMatch(css, /(?:^|\n)\s*@font-face\s*\{/)
+  assert.doesNotMatch(css, /\.\.\/fonts\//)
+
+  const manifest = JSON.parse(manifestSource)
+  const contentScripts = manifest.content_scripts.find((entry) =>
+    entry.matches?.includes("<all_urls>"),
+  )
+  assert.ok(contentScripts)
+  assert.ok(
+    contentScripts.js.indexOf("generated/iconoplasm-font-runtime.js") <
+      contentScripts.js.indexOf("content.js"),
+  )
+  const exposedResources = manifest.web_accessible_resources.flatMap((entry) => entry.resources)
+  assert.ok(exposedResources.includes("generated/iconoplasm-font-runtime.js"))
+  assert.ok(
+    frameHtml.indexOf('src="generated/iconoplasm-font-runtime.js"') <
+      frameHtml.indexOf('href="generated/shared-card-label.css"'),
+  )
+  assert.ok(
+    pdfReaderHtml.indexOf('src="generated/iconoplasm-font-runtime.js"') <
+      pdfReaderHtml.indexOf('href="generated/shared-card-label.css"'),
+  )
 })
 
 test("image-only identity is visible before portrait readiness and hover motion stays sub-perceptual", async () => {

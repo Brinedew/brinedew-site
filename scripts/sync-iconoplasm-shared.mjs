@@ -55,25 +55,67 @@ const targets = [
   },
   {
     source: path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-label.css"),
-    prefix: renderIconoplasmExtensionFontFaceCss("../fonts/"),
     outputs: [path.join(repoRoot, "iconoplasm-extension", "generated", "shared-card-label.css")],
   },
 ]
 
-function renderIconoplasmExtensionFontFaceCss(baseUrl) {
-  return (
-    iconoplasmFontContract.fonts
-      .map(
-        (font) => `@font-face {
-  font-family: "${font.family}";
-  src: url("${baseUrl}${font.stem}.woff2") format("woff2");
-  font-weight: ${font.weight};
-  font-style: normal;
-  font-display: ${iconoplasmFontContract.extensionDisplay};
-}`,
-      )
-      .join("\n\n") + "\n\n"
+function renderIconoplasmExtensionFontRuntime() {
+  const definitions = iconoplasmFontContract.fonts.map((font) => ({
+    family: font.family,
+    path: `fonts/${font.stem}.woff2`,
+    weight: String(font.weight),
+    style: "normal",
+    display: iconoplasmFontContract.extensionDisplay,
+  }))
+  const definitionSource = JSON.stringify(definitions, null, 2)
+    .split("\n")
+    .map((line) => `    ${line}`)
+    .join("\n")
+
+  return `/* GENERATED FILE. Edit shared/iconoplasm-card/font-contract.json and rerun node scripts/sync-iconoplasm-shared.mjs. */
+
+;(function installIconoplasmExtensionFontRuntime(root) {
+  "use strict"
+
+  const FONT_DEFINITIONS = Object.freeze(
+${definitionSource}.map((font) => Object.freeze(font)),
   )
+  const installedFontSets = new WeakSet()
+
+  function install(options = {}) {
+    try {
+      const documentRef = options.documentRef || root.document
+      const runtime = options.runtime || root.browser?.runtime || root.chrome?.runtime
+      const FontFaceCtor = options.FontFaceCtor || root.FontFace
+      const fontSet = options.fontSet || documentRef?.fonts
+      if (!runtime || typeof runtime.getURL !== "function") return []
+      if (typeof FontFaceCtor !== "function" || !fontSet || typeof fontSet.add !== "function") {
+        return []
+      }
+      if (installedFontSets.has(fontSet)) return []
+
+      const faces = FONT_DEFINITIONS.map((font) => {
+        const source = \`url(\${JSON.stringify(runtime.getURL(font.path))}) format("woff2")\`
+        return new FontFaceCtor(font.family, source, {
+          weight: font.weight,
+          style: font.style,
+          display: font.display,
+        })
+      })
+      for (const face of faces) fontSet.add(face)
+      installedFontSets.add(fontSet)
+      return faces
+    } catch (error) {
+      root.console?.warn?.("[Iconoplasm] Packaged fonts could not be registered", error)
+      return []
+    }
+  }
+
+  const api = Object.freeze({ definitions: FONT_DEFINITIONS, install })
+  root.IconoplasmExtensionFonts = api
+  install()
+})(typeof globalThis !== "undefined" ? globalThis : this)
+`
 }
 
 const fontTargets = iconoplasmFontContract.fonts
@@ -153,6 +195,15 @@ async function syncTarget({ source, prefix = "", outputs }) {
 }
 
 await Promise.all(targets.map(syncTarget))
+
+const extensionFontRuntimePath = path.join(
+  repoRoot,
+  "iconoplasm-extension",
+  "generated",
+  "iconoplasm-font-runtime.js",
+)
+await mkdir(path.dirname(extensionFontRuntimePath), { recursive: true })
+await writeFile(extensionFontRuntimePath, renderIconoplasmExtensionFontRuntime(), "utf8")
 
 async function syncBinaryTarget({ source, outputs }) {
   const outputsToWrite = selectedOutputs(outputs)
