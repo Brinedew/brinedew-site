@@ -15,6 +15,23 @@ The product is a mnemonic world for life-science readers, not a generic gene
 database. User-facing changes must preserve the recognition → discovery →
 dossier → vote → coherent publication loop.
 
+## Local verification
+
+Use the repository commands below instead of guessing test paths or invoking a
+package-manager shim from a custom PowerShell pipeline:
+
+- `pnpm run test:architecture-fences` runs the canonical cross-system
+  architecture fence test. The test lives under `scripts/`, not `workers/`.
+- `pnpm run check:format` checks all formatter-owned files.
+- `pnpm run check:format:changed` checks only changed and untracked files.
+- `pnpm run format:changed` formats only changed and untracked files.
+- `pnpm run check` runs the full type and formatting gate; `pnpm test` runs the
+  full repository test suite.
+
+The formatting wrapper calls the pinned local Prettier directly, preserves
+spaces in changed filenames, honors `.prettierignore`, and skips unsupported
+file types such as SQL migrations.
+
 ## Upstream framework
 
 The site is built on Quartz v5.
