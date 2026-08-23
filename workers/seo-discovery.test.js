@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises"
 import test, { afterEach } from "node:test"
 
 import worker, {
+  iconoplasmGeneDocumentProjectionIsIndexable,
   rewriteIconoplasmGeneDiscoveryMetadata,
 } from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 import { resolvePostAuthAppUrl } from "./auth.js"
@@ -46,7 +47,7 @@ function publishedGene(symbol, name, { published = true } = {}) {
   }
 }
 
-async function buildPublishedCatalogEnv(genes) {
+async function buildPublishedCatalogEnv(genes, { cardPortraitShaBySymbol = {} } = {}) {
   catalogFixtureSequence += 1
   resetIconoplasmRuntimeCachesForTest()
   const hash = `seofixture${catalogFixtureSequence}`
@@ -73,8 +74,9 @@ async function buildPublishedCatalogEnv(genes) {
     terms: blocklistTerms,
   }
   const cards = genes.map((gene) => {
-    const portrait = gene.p?.asset_sha256
-      ? { status: "published", asset_sha256: gene.p.asset_sha256 }
+    const cardPortraitSha = cardPortraitShaBySymbol[gene.s] || gene.p?.asset_sha256
+    const portrait = cardPortraitSha
+      ? { status: "published", asset_sha256: cardPortraitSha }
       : { status: "missing", asset_sha256: null }
     return {
       __complete: true,
@@ -332,6 +334,8 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   )
   const rangeHtml = await range.text()
   assert.equal(range.status, 200)
+  assert.equal(range.headers.get("etag"), null)
+  assert.equal(range.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-23-v1")
   assert.match(rangeHtml, /href="\/gene\/TP53"/)
   assert.doesNotMatch(rangeHtml, /TRIM1/)
 
@@ -341,8 +345,15 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
     {},
   )
   const shardText = await shard.text()
+  assert.equal(shard.status, 200)
+  assert.match(shard.headers.get("x-iconoplasm-card-version") || "", /^card-seofixture/)
+  assert.equal(shard.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-23-v1")
+  assert.match(shard.headers.get("etag") || "", /2026-08-23-v1/)
+  assert.match(shard.headers.get("etag") || "", /TO-TR\.xml/)
   assert.match(shardText, /\/gene\/TP53/)
+  assert.match(shardText, /\/portraits\/v1\/aa\/[a-f0-9]{64}\/medium\.webp/)
   assert.doesNotMatch(shardText, /TRIM1/)
+  assert.doesNotMatch(shardText, /<image:(?:title|caption)>/)
 
   const llms = await worker.fetch(new Request("https://iconoplasm.brinedew.bio/llms.txt"), env, {})
   const llmsText = await llms.text()
@@ -353,6 +364,26 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   assert.match(llmsText, /https:\/\/iconoplasm\.brinedew\.bio\/privacy/)
   assert.match(llmsText, /\/gene\/\{HGNC_SYMBOL\}/)
   assert.match(llmsText, /PFAM clan → character aesthetic/)
+})
+
+test("gene sitemap fails closed when the card artifact and discovery portrait diverge", async () => {
+  const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")], {
+    cardPortraitShaBySymbol: { TP53: "b".repeat(64) },
+  })
+
+  const response = await worker.fetch(
+    new Request("https://iconoplasm.brinedew.bio/sitemaps/genes/TO-TR.xml"),
+    env,
+    {},
+  )
+  const body = await response.text()
+
+  assert.equal(response.status, 503)
+  assert.equal(response.headers.get("cache-control"), "no-store")
+  assert.equal(response.headers.get("retry-after"), "60")
+  assert.match(response.headers.get("content-type") || "", /application\/xml/)
+  assert.match(body, /Sitemap publication snapshot temporarily unavailable/)
+  assert.doesNotMatch(body, /\/portraits\/v1\//)
 })
 
 test("subdomain privacy pages use the short canonical privacy URL", async () => {
@@ -454,6 +485,14 @@ test("complete gene metadata is indexable while incomplete records retain noinde
     {
       record: publishedGene("TP53", "tumor protein p53"),
       cardPayload: {
+        symbol: "TP53",
+        full_name: "tumor protein p53",
+        portrait: {
+          status: "published",
+          asset_sha256: "a".repeat(64),
+          width: 768,
+          height: 1024,
+        },
         essence: {
           sex: "Female",
           age: "44",
@@ -476,13 +515,91 @@ test("complete gene metadata is indexable while incomplete records retain noinde
     completeHtml,
     /<link rel="canonical" href="https:\/\/iconoplasm\.brinedew\.bio\/gene\/TP53">/,
   )
+  const portraitUrl = `https://iconoplasm.brinedew.bio/portraits/v1/aa/${"a".repeat(64)}/medium.webp`
+  assert.match(completeHtml, new RegExp(`<meta property="og:image" content="${portraitUrl}">`))
+  assert.match(completeHtml, /<meta property="og:image:type" content="image\/webp">/)
+  assert.doesNotMatch(completeHtml, /og:image:(?:width|height)/)
+  assert.match(
+    completeHtml,
+    /<meta property="og:image:alt" content="TP53 canonical gene character portrait by Iconoplasm">/,
+  )
+  assert.match(completeHtml, /<meta name="twitter:card" content="summary_large_image">/)
+  assert.match(completeHtml, new RegExp(`<meta name="twitter:image" content="${portraitUrl}">`))
+  assert.match(completeHtml, /<meta name="twitter:title" content="TP53 — tumor protein p53/)
+  assert.match(
+    completeHtml,
+    /<meta name="twitter:description" content="TP53 \(tumor protein p53\) Iconoplasm character profile/,
+  )
+  const structuredDataMatch = completeHtml.match(
+    /<script type="application\/ld\+json" id="iconoplasm-gene-structured-data">([\s\S]*?)<\/script>/,
+  )
+  assert.ok(structuredDataMatch)
+  const structuredData = JSON.parse(structuredDataMatch[1])
+  const graphById = new Map(structuredData["@graph"].map((entry) => [entry["@id"], entry]))
+  const webpage = graphById.get("https://iconoplasm.brinedew.bio/gene/TP53#webpage")
+  const gene = graphById.get("https://iconoplasm.brinedew.bio/gene/TP53#gene")
+  const image = graphById.get("https://iconoplasm.brinedew.bio/gene/TP53#canonical-portrait")
+  assert.equal(webpage.primaryImageOfPage["@id"], image["@id"])
+  assert.equal(webpage.mainEntity["@id"], gene["@id"])
+  assert.equal(gene.image["@id"], image["@id"])
+  assert.equal(gene.identifier.propertyID, "HGNC approved symbol")
+  assert.equal(gene.identifier.value, "TP53")
+  assert.equal(image.contentUrl, portraitUrl)
+  assert.equal(image.caption, "Canonical Iconoplasm portrait of human TP53 (tumor protein p53).")
+  assert.equal(image.representativeOfPage, true)
+  assert.equal("width" in image, false)
+  assert.equal("height" in image, false)
   assert.doesNotMatch(completeHtml, /SoftwareApplication/)
+  assert.equal(
+    iconoplasmGeneDocumentProjectionIsIndexable({
+      record: publishedGene("TP53", "tumor protein p53"),
+      cardPayload: {
+        symbol: "TP53",
+        portrait: { status: "published", asset_sha256: "a".repeat(64) },
+      },
+      indexable: true,
+      profileComplete: true,
+    }),
+    true,
+  )
+
+  const mismatchedHtml = rewriteIconoplasmGeneDiscoveryMetadata(completeHtml, "/gene/TP53", {
+    record: {
+      ...publishedGene("TP53", "tumor protein p53"),
+      p: { asset_sha256: "b".repeat(64) },
+    },
+    cardPayload: {
+      symbol: "TP53",
+      portrait: { status: "published", asset_sha256: "a".repeat(64) },
+    },
+    indexable: true,
+  })
+  assert.match(mismatchedHtml, /<meta name="robots" content="noindex,follow,noarchive">/)
+  assert.equal(
+    iconoplasmGeneDocumentProjectionIsIndexable({
+      record: {
+        ...publishedGene("TP53", "tumor protein p53"),
+        p: { asset_sha256: "b".repeat(64) },
+      },
+      cardPayload: {
+        symbol: "TP53",
+        portrait: { status: "published", asset_sha256: "a".repeat(64) },
+      },
+      indexable: true,
+      profileComplete: true,
+    }),
+    false,
+  )
+  assert.doesNotMatch(mismatchedHtml, /iconoplasm-gene-structured-data/)
+  assert.doesNotMatch(mismatchedHtml, /(?:property|name)="(?:og:image|twitter:image)/)
 
   const incompleteHtml = rewriteIconoplasmGeneDiscoveryMetadata(completeHtml, "/gene/TP53", {
     record: publishedGene("TP53", "tumor protein p53", { published: false }),
     indexable: false,
   })
   assert.match(incompleteHtml, /<meta name="robots" content="noindex,follow,noarchive">/)
+  assert.doesNotMatch(incompleteHtml, /iconoplasm-gene-structured-data/)
+  assert.doesNotMatch(incompleteHtml, /(?:property|name)="(?:og:image|twitter:image)/)
 })
 
 test("gene discovery redirects aliases, rejects junk URLs, and fail-closes missing profiles", async () => {
@@ -585,4 +702,17 @@ test("gene hydration preserves and refreshes the canonical profile title", async
   assert.match(source, /function geneProfileDocumentTitle\(gene, fallbackSymbol\)/)
   assert.match(source, /document\.title = geneProfileDocumentTitle\(g, symbol\)/)
   assert.match(source, /!document\.title\.endsWith\(" \| Iconoplasm character profile"\)/)
+})
+
+test("gene lead rendering and hydration preserve canonical portrait alt text", async () => {
+  const source = await readFile(iconoplasmStaticAppSource, "utf8")
+
+  assert.match(source, /function buildGeneLeadCardMarkup\(g\)/)
+  assert.match(source, /var portraitUrl = publishedPortraitUrl\(g, "medium"\)/)
+  assert.match(source, /var portraitAlt = IconoCardShared\.canonicalGenePortraitAlt\(g\.symbol\)/)
+  assert.match(source, /var portraitCaption = IconoCardShared\.canonicalGenePortraitCaption\(/)
+  assert.match(
+    source,
+    /card\.classList\.contains\("icono-gene-lead-card"\)[\s\S]*IconoCardShared\.canonicalGenePortraitAlt\(genePayload\.symbol\)/,
+  )
 })

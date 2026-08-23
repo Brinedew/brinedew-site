@@ -1572,13 +1572,23 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.match(internalWorker, /renderLabLabelCardHtml\(cardPayload/)
   assert.match(
     internalWorker,
-    /function iconoplasmGeneHtmlCacheKey\(url, path, snapshotVersion, env\)/,
+    /function iconoplasmGeneHtmlCacheKey\(url, path, snapshotVersion, record, env\)/,
   )
   assert.match(internalWorker, /const snapshot = String\(snapshotVersion \|\| ""\)\.trim\(\)/)
   assert.match(
     internalWorker,
     /key\.searchParams\.set\("snapshot", snapshot\)/,
     "gene HTML cache entries must be keyed by the live canonical detail asset, not only by symbol",
+  )
+  assert.match(
+    internalWorker,
+    /normalizeIconoplasmPublishedGeneRecord\(record\)\.portraitAssetSha256/,
+    "gene HTML cache identity must include the exact published route portrait",
+  )
+  assert.match(
+    internalWorker,
+    /key\.searchParams\.set\("portrait", portraitAssetSha256\.toLowerCase\(\)\)/,
+    "a route/detail read that straddles publication must not hit an older gene document",
   )
   assert.match(
     internalWorker,

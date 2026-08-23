@@ -4,11 +4,13 @@ import test from "node:test"
 import {
   ICONOPLASM_GENE_RANGE_CONTRACT_VERSION,
   ICONOPLASM_GENE_RANGES,
+  ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION,
   buildIconoplasmGeneDiscoverySnapshot,
   buildIconoplasmGeneRangeSitemapXml,
   buildIconoplasmLlmsTxt,
   buildIconoplasmSitemapIndexXml,
   buildIconoplasmStaticPagesSitemapXml,
+  iconoplasmCanonicalPortraitUrl,
   iconoplasmGeneRangeBySlug,
   iconoplasmGeneRangeForSymbol,
   iconoplasmPublishedGeneRecordIsIndexable,
@@ -50,6 +52,7 @@ test("frozen ranges assign every eligible symbol exactly once", () => {
   const flattened = Array.from(snapshot.ranges.values()).flat()
 
   assert.equal(ICONOPLASM_GENE_RANGE_CONTRACT_VERSION, "2026-07-22-19023-v1")
+  assert.equal(ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION, "2026-08-23-v1")
   assert.equal(ICONOPLASM_GENE_RANGES.length, 58)
   assert.equal(snapshot.eligibleCount, genes.length)
   assert.equal(flattened.length, genes.length)
@@ -97,6 +100,11 @@ test("one shared eligibility predicate excludes incomplete catalog records", () 
   assert.equal(iconoplasmPublishedGeneRecordIsIndexable(missingPortrait), false)
   assert.equal(snapshot.knownBySymbol.size, 2)
   assert.deepEqual(Array.from(snapshot.eligibleBySymbol.keys()), ["TP53"])
+  assert.equal(
+    iconoplasmCanonicalPortraitUrl(complete),
+    `https://iconoplasm.brinedew.bio/portraits/v1/aa/${PORTRAIT_SHA}/medium.webp`,
+  )
+  assert.equal(iconoplasmCanonicalPortraitUrl(complete, "unsupported"), "")
 })
 
 test("raw archive HTML links every range and puts TP53 on TO–TR", () => {
@@ -135,11 +143,18 @@ test("sitemap index and shards use the same eligible range membership", () => {
   const geneXml = buildIconoplasmGeneRangeSitemapXml(snapshot, iconoplasmGeneRangeBySlug("TO-TR"))
 
   assert.match(indexXml, /<sitemapindex/)
+  assert.match(indexXml, /<lastmod>2026-08-23<\/lastmod>/)
   assert.match(indexXml, /\/sitemaps\/pages\.xml/)
   assert.match(indexXml, /\/sitemaps\/genes\/TO-TR\.xml/)
   assert.match(pagesXml, /<loc>https:\/\/iconoplasm\.brinedew\.bio\/genes<\/loc>/)
   assert.match(pagesXml, /<loc>https:\/\/iconoplasm\.brinedew\.bio\/genes\/TO-TR<\/loc>/)
   assert.match(geneXml, /<loc>https:\/\/iconoplasm\.brinedew\.bio\/gene\/TP53<\/loc>/)
+  assert.match(
+    geneXml,
+    new RegExp(
+      `<image:loc>https://iconoplasm\\.brinedew\\.bio/portraits/v1/aa/${PORTRAIT_SHA}/medium\\.webp</image:loc>`,
+    ),
+  )
   assert.doesNotMatch(geneXml, /TRIM1/)
 })
 
@@ -173,18 +188,29 @@ test("ready requested cards appear in raw range HTML and the matching image site
   )
   assert.match(html, /gene-card-thumb-delivery\.js\?v=20260803-gene-card-fallback/)
   assert.match(sitemap, /xmlns:image="http:\/\/www\.google\.com\/schemas\/sitemap-image\/1\.1"/)
+  assert.match(
+    sitemap,
+    new RegExp(
+      `<image:loc>https://iconoplasm\\.brinedew\\.bio/portraits/v1/aa/${PORTRAIT_SHA}/medium\\.webp</image:loc>`,
+    ),
+  )
   assert.match(sitemap, /<image:loc>https:\/\/iconoplasm\.brinedew\.bio\/gene-cards\/v1\/T\/TP53/)
+  assert.equal((sitemap.match(/<image:image>/g) || []).length, 2)
+  assert.doesNotMatch(sitemap, /<image:(?:title|caption)>/)
 
   const textOnlyHtml = renderIconoplasmGeneRangeHtml(snapshot, range, new Map())
   const textOnlySitemap = buildIconoplasmGeneRangeSitemapXml(snapshot, range, new Map())
   assert.doesNotMatch(textOnlyHtml, /<img class="gene-card-thumb"/)
-  assert.doesNotMatch(textOnlySitemap, /<image:image>/)
+  assert.equal((textOnlySitemap.match(/<image:image>/g) || []).length, 1)
+  assert.match(textOnlySitemap, /\/portraits\/v1\/aa\/[a-f0-9]{64}\/medium\.webp/)
 })
 
 test("llms.txt documents discovery and every card mapping", () => {
   const text = buildIconoplasmLlmsTxt({ catalogHash: "fixturehash" })
 
   assert.match(text, /\/gene\/\{HGNC_SYMBOL\}/)
+  assert.match(text, /Every complete gene page exposes one published, content-addressed/)
+  assert.match(text, /Gene\/ImageObject\/WebPage structured data/)
   assert.match(text, /\/genes/)
   assert.match(text, /First gene-symbol letter → color hue/)
   assert.match(text, /HPA tissue-specificity tau → character color vibrance/)
