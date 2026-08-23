@@ -13,8 +13,8 @@
    sizes and only switch layouts at a real breakpoint instead of scaling the plate. */
 
 /* Font delivery is generated from font-contract.json. The website installs embedded
-   FontFace objects before revealing its shell; the extension generates packaged
-   @font-face rules. This artboard stylesheet owns typography use, not transport. */
+   FontFace objects before revealing its shell; the extension registers packaged faces
+   through its runtime URL API. This artboard stylesheet owns use, not transport. */
 
 @property --icono-label-info-card-pull-y {
   syntax: "<length-percentage>";

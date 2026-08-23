@@ -1297,10 +1297,11 @@
   }
 
   // -- Font ownership ------------------------------------------------
-  // generated/shared-card-label.css owns the extension font faces. Keep this
-  // helper limited to asking the browser's FontFaceSet to load those canonical
-  // faces before hover; it must not inject a second font transport contract.
+  // The generated font runtime owns registration and resolves every packaged
+  // asset through runtime.getURL, which works in both Chromium and Firefox and
+  // cannot accidentally turn into a request against the host page.
   function injectFonts() {
+    globalThis.IconoplasmExtensionFonts?.install?.()
     if (!document.fonts || typeof document.fonts.load !== "function") return Promise.resolve([])
     const probes = [
       ['400 16px "IBM Plex Mono"', "molecular character"],

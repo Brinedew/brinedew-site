@@ -1,44 +1,4 @@
-/* GENERATED FILE. Edit shared/iconoplasm-card/shared-card-label.css and shared/iconoplasm-card/font-contract.json and rerun node scripts/sync-iconoplasm-shared.mjs. */
-
-@font-face {
-  font-family: "IBM Plex Mono";
-  src: url("../fonts/IBMPlexMono-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "IBM Plex Mono";
-  src: url("../fonts/IBMPlexMono-Medium.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "League Spartan";
-  src: url("../fonts/LeagueSpartan-800.woff2") format("woff2");
-  font-weight: 800;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Special Elite";
-  src: url("../fonts/SpecialElite-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Caveat";
-  src: url("../fonts/Caveat-400.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
+/* GENERATED FILE. Edit shared/iconoplasm-card/shared-card-label.css and rerun node scripts/sync-iconoplasm-shared.mjs. */
 
 /* Shared Iconoplasm lab-label card variant.
    Source of truth: Paper artboard "Vintage Lab Label Study / Type vs Pen" in
@@ -55,8 +15,8 @@
    sizes and only switch layouts at a real breakpoint instead of scaling the plate. */
 
 /* Font delivery is generated from font-contract.json. The website installs embedded
-   FontFace objects before revealing its shell; the extension generates packaged
-   @font-face rules. This artboard stylesheet owns typography use, not transport. */
+   FontFace objects before revealing its shell; the extension registers packaged faces
+   through its runtime URL API. This artboard stylesheet owns use, not transport. */
 
 @property --icono-label-info-card-pull-y {
   syntax: "<length-percentage>";
