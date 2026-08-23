@@ -73,3 +73,29 @@ test("published and candidate extension contracts remain explicit", () => {
     renderIconoplasmCatalogContractRuntime(verified),
   )
 })
+
+test("release workflows cannot mask a stale checked-in catalog contract", () => {
+  const ciWorkflow = readFileSync(".github/workflows/ci.yaml", "utf8")
+  const deployWorkflow = readFileSync(".github/workflows/deploy-quartz.yml", "utf8")
+  const authorityTestCommand =
+    "node scripts/run-tests.mjs iconoplasm-extension.publisher-authority.test.js"
+  const syncCommand = "pnpm run sync:iconoplasm-shared"
+  const releaseGuardName = "Verify Iconoplasm architecture and Worker budget guards"
+  const ciAuthorityIndex = ciWorkflow.indexOf(authorityTestCommand)
+  const ciSyncIndex = ciWorkflow.indexOf(syncCommand)
+  const deploySyncIndex = deployWorkflow.indexOf(syncCommand)
+  const deployGuardIndex = deployWorkflow.indexOf(releaseGuardName)
+
+  assert.notEqual(ciAuthorityIndex, -1, "CI must run the publisher-authority test")
+  assert.notEqual(ciSyncIndex, -1, "CI must retain the shared-asset sync")
+  assert.ok(
+    ciAuthorityIndex < ciSyncIndex,
+    "CI must validate the checked-in generated contract before sync can rewrite it",
+  )
+  assert.notEqual(deploySyncIndex, -1, "production must sync shared assets")
+  assert.notEqual(deployGuardIndex, -1, "production must retain the focused release guard")
+  assert.ok(
+    deploySyncIndex < deployGuardIndex,
+    "production must sync the generated contract before the focused release guard",
+  )
+})

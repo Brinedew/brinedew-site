@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
 """
 Use this script when a user reports "portraits not loading on iconoplasm.brinedew.bio
 for me, but the site is fine for everyone else" (or for most other people).
@@ -15,7 +19,7 @@ Bunny, not on the project, not on a code change. The fix was waiting for the
 ISP's negative cache to expire.
 
 Usage:
-  python scripts/probe_isp_resolvers_for_iconoplasm_cdn.py
+  uv run --managed-python --script scripts/probe_isp_resolvers_for_iconoplasm_cdn.py
   # or, via the wrapper:
   scripts/check-isp-dns-self-heal.cmd   (Windows)
 
@@ -47,9 +51,9 @@ also return NXDOMAIN/SERVFAIL, that's evidence the ISP changed filtering for
 this hostname. If they return NOERROR + answer, the problem is on a different
 network layer (proxy, IPv6 path, etc.).
 """
+import argparse
 import socket
 import struct
-import sys
 
 DOMAIN = b"iconoplasmportraits.b-cdn.net"
 RESOLVERS = [
@@ -137,13 +141,31 @@ RCODE_NAMES = {
     5: "REFUSED",
 }
 
-for r in RESOLVERS:
-    print(f"\n=== resolver {r} ===")
-    rcode, qd, an, answers, flags = query(r, DOMAIN)
-    if isinstance(rcode, int):
-        rcname = RCODE_NAMES.get(rcode, f"rcode={rcode}")
-        print(f"  rcode={rcname} ({rcode})  qd={qd} an={an}  flags={flags}")
-        for t, val, ttl in answers or []:
-            print(f"  answer: {t} {val} ttl={ttl}")
-    else:
-        print(f"  {rcode}")
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=5.0,
+        help="Per-resolver UDP timeout in seconds (default: 5).",
+    )
+    parser.add_argument("--no-pause", action="store_true", help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    if args.timeout <= 0:
+        parser.error("--timeout must be greater than zero")
+
+    for resolver in RESOLVERS:
+        print(f"\n=== resolver {resolver} ===")
+        rcode, qd, an, answers, flags = query(resolver, DOMAIN, timeout=args.timeout)
+        if isinstance(rcode, int):
+            rcname = RCODE_NAMES.get(rcode, f"rcode={rcode}")
+            print(f"  rcode={rcname} ({rcode})  qd={qd} an={an}  flags={flags}")
+            for record_type, value, ttl in answers or []:
+                print(f"  answer: {record_type} {value} ttl={ttl}")
+        else:
+            print(f"  {rcode}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
