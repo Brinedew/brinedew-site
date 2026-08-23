@@ -1,5 +1,6 @@
 import {
   ICONOPLASM_GENE_RANGE_CONTRACT_VERSION,
+  ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION,
   buildIconoplasmGeneDiscoverySnapshot,
   buildIconoplasmGeneRangeSitemapXml,
   buildIconoplasmLlmsTxt,
@@ -12,6 +13,7 @@ import {
 } from "./iconoplasm-gene-discovery.js"
 import {
   readIconoplasmPublishedGeneDiscoveryCatalog,
+  readIconoplasmPublishedGeneDiscoveryProjections,
   readIconoplasmPublishedGeneCardPrintCopies,
   resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
@@ -98,14 +100,63 @@ export function iconoplasmGeneNotFoundResponse(method) {
   })
 }
 
-function discoveryDocumentResponse(request, body, contentType, snapshot) {
+function discoveryDocumentResponse(
+  request,
+  body,
+  contentType,
+  snapshot,
+  { cardVersion = "" } = {},
+) {
   const headers = new Headers({
     "Content-Type": contentType,
     "Cache-Control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
     "X-Iconoplasm-Catalog-Version": snapshot.version,
+    "X-Iconoplasm-Portrait-Discovery-Version": ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION,
     "X-Iconoplasm-Range-Contract": ICONOPLASM_GENE_RANGE_CONTRACT_VERSION,
   })
+  if (cardVersion) {
+    const pathname = new URL(request.url).pathname
+    const responseVersion = [
+      ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION,
+      snapshot.version,
+      cardVersion,
+      pathname,
+    ].join(":")
+    headers.set("ETag", `"${encodeURIComponent(responseVersion)}"`)
+    headers.set("X-Iconoplasm-Card-Version", cardVersion)
+  }
   return new Response(request.method === "HEAD" ? null : body, { headers })
+}
+
+function iconoplasmGeneSitemapUnavailableResponse(method) {
+  const body = `<?xml version="1.0" encoding="UTF-8"?>\n<error>Sitemap publication snapshot temporarily unavailable.</error>\n`
+  return new Response(method === "HEAD" ? null : body, {
+    status: 503,
+    headers: {
+      "Content-Type": "application/xml; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Retry-After": "60",
+      "X-Robots-Tag": "noindex, follow, noarchive",
+    },
+  })
+}
+
+function iconoplasmGeneSitemapProjectionIsCurrent(genes, projection) {
+  if (!projection?.version || !(projection.bySymbol instanceof Map)) return false
+  return genes.every((gene) => {
+    const projected = projection.bySymbol.get(gene.symbol)
+    return Boolean(
+      projected?.portraitAssetSha256 && projected.portraitAssetSha256 === gene.portraitAssetSha256,
+    )
+  })
+}
+
+function printCopiesFromGeneDiscoveryProjection(projection) {
+  const printCopies = new Map()
+  for (const [symbol, value] of projection.bySymbol) {
+    if (value.printCopy) printCopies.set(symbol, value.printCopy)
+  }
+  return printCopies
 }
 
 // ARCHITECTURE FENCE [IPD-003]
@@ -170,16 +221,20 @@ export async function handleIconoplasmGeneDiscoveryDocument(request, env, path) 
     const range = iconoplasmGeneRangeBySlug(sitemapRangeMatch[1])
     if (!range) return iconoplasmGeneNotFoundResponse(request.method)
     const genes = snapshot.ranges.get(range.slug) || []
-    const printCopies =
-      (await readIconoplasmPublishedGeneCardPrintCopies(
-        env,
-        genes.map((gene) => gene.symbol),
-      )) || new Map()
+    const projection = await readIconoplasmPublishedGeneDiscoveryProjections(
+      env,
+      genes.map((gene) => gene.symbol),
+    )
+    if (!iconoplasmGeneSitemapProjectionIsCurrent(genes, projection)) {
+      return iconoplasmGeneSitemapUnavailableResponse(request.method)
+    }
+    const printCopies = printCopiesFromGeneDiscoveryProjection(projection)
     return discoveryDocumentResponse(
       request,
       buildIconoplasmGeneRangeSitemapXml(snapshot, range, printCopies),
       "application/xml; charset=utf-8",
       snapshot,
+      { cardVersion: projection.version },
     )
   }
   if (path === "/llms.txt") {

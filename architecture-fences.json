@@ -57,9 +57,9 @@
     {
       "id": "IPD-003",
       "title": "Gene discovery is eligibility-gated and range-stable",
-      "decision": "Complete canonical profiles are indexable through one published-catalog predicate, while aliases redirect, incomplete profiles remain noindex, unknown symbols return 404, and the crawlable archive uses frozen self-locating prefix ranges rather than numeric pages. Homepage discovery reuses the existing non-visual description instead of adding visible archive controls; accessibility skip links are clipped until focused. Decorative printed selector alternatives are CSS-rendered ink rather than peer DOM facts, while their noninteractive fields name the resolved molecular value and mapped character result. Model-training crawlers are blocked before Worker execution while AI search and user-directed retrieval agents remain allowed.",
-      "reason": "Agents need explicit card mappings and a link path they can choose from a known symbol, but that crawler frontier must not become perfunctory chrome that breaks the human card-gallery immersion or let model-training crawlers exhaust the shared Worker allowance. Frozen ranges provide the path without guessing, the shared eligibility gate prevents arbitrary application shells or incomplete cards from becoming an unbounded search corpus, and purpose-specific crawler policy preserves AI search without paying for training ingestion.",
-      "change_control": "Gene response headers, HTML metadata, homepage discovery placement, archive membership, sitemap membership, llms.txt, renderer semantics, crawler WAF policy, robots.txt, deploy reconciliation, tests, instructions, and runbook must change atomically. Range boundaries may change only through an explicit biological-inventory migration; routine catalog publications must never rebalance them. Do not add the archive to the immersive Archive/Clans switcher, expose feed skip links at rest, represent decorative selector ink as interactive controls or peer facts, or replace the purpose-specific crawler split with a blanket AI-bot block.",
+      "decision": "Complete canonical profiles are indexable through one published-catalog predicate, while aliases redirect, incomplete profiles remain noindex, unknown symbols return 404, and the crawlable archive uses frozen self-locating prefix ranges rather than numeric pages. The existing content-addressed first-party medium WebP is the single canonical portrait URL: each complete gene page projects that exact URL through descriptive server-rendered lead-image accessibility text, gene-specific Open Graph and Twitter metadata, one linked WebPage/ImageObject/Gene JSON-LD graph, and its gene-sitemap entry. IPD-001 may select Bunny's equivalent URL for browser delivery after first paint without changing the discovery identity. A route/card portrait-SHA divergence fails the whole gene document closed. Before emitting a shard, one range-batched exact-card-artifact read validates every portrait SHA against the discovery snapshot; unavailable or divergent state returns an uncached 503. A ready labelled-card PNG is secondary. Homepage discovery reuses the existing non-visual description instead of adding visible archive controls; accessibility skip links are clipped until focused. Decorative printed selector alternatives are CSS-rendered ink rather than peer DOM facts, while their noninteractive fields name the resolved molecular value and mapped character result. Model-training crawlers are blocked before Worker execution while AI search and user-directed retrieval agents remain allowed.",
+      "reason": "Agents need explicit card mappings, one unambiguous portrait identity, and a link path they can choose from a known symbol, but that crawler frontier must not become perfunctory chrome that breaks the human card-gallery immersion, introduce a mutable symbol-to-image timeline that can diverge from the published portrait, or let model-training crawlers exhaust the shared Worker allowance. Reusing the already-published content-addressed medium WebP keeps HTML, social metadata, structured data, and sitemaps on one immutable image identity without request-time writes or corpus scans. Frozen ranges provide the path without guessing, the shared eligibility gate prevents arbitrary application shells or incomplete cards from becoming an unbounded search corpus, and purpose-specific crawler policy preserves AI search without paying for training ingestion.",
+      "change_control": "Gene response headers, lead-image alt/accessibility text, Open Graph and Twitter metadata, WebPage/ImageObject/Gene JSON-LD, homepage discovery placement, archive membership, canonical portrait and optional labelled-card sitemap membership, card-artifact fingerprint validation and fail-closed behavior, llms.txt, renderer semantics, crawler WAF policy, robots.txt, deploy reconciliation, tests, instructions, and runbook must change atomically. Range boundaries may change only through an explicit biological-inventory migration; routine catalog publications must never rebalance them. Do not mint a symbol-addressed portrait alias, redirect, mutable copy, or parallel read plane; add D1 scans or request-time writes to crawler reads; emit a partial or stale sitemap after publication-state divergence; promote a labelled-card PNG over the canonical medium WebP; add the archive to the immersive Archive/Clans switcher; expose feed skip links at rest; represent decorative selector ink as interactive controls or peer facts; or replace the purpose-specific crawler split with a blanket AI-bot block.",
       "runbook": "docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md",
       "linear_issue": "B-666",
       "additional_required_marker_categories": ["config", "deploy"],
@@ -77,6 +77,11 @@
         {
           "category": "source",
           "file": "shared/iconoplasm-card/shared-card-runtime.js",
+          "token": "ARCHITECTURE FENCE [IPD-003]"
+        },
+        {
+          "category": "source",
+          "file": "quartz/static/iconoplasm/app.js",
           "token": "ARCHITECTURE FENCE [IPD-003]"
         },
         {
@@ -102,6 +107,16 @@
         {
           "category": "test",
           "file": "workers/iconoplasm-gene-discovery.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-003]"
+        },
+        {
+          "category": "test",
+          "file": "workers/seo-discovery.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-003]"
+        },
+        {
+          "category": "test",
+          "file": "shared/iconoplasm-card/lit-archival-mobile-physical-contract.test.js",
           "token": "ARCHITECTURE FENCE [IPD-003]"
         },
         {

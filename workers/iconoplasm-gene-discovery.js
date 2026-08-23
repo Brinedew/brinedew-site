@@ -1,8 +1,11 @@
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const ICONOPLASM_ORIGIN = `https://${ICONOPLASM_HOST}`
+const ICONOPLASM_PORTRAIT_RENDITIONS = new Set(["thumb", "medium", "full"])
 
 export const ICONOPLASM_GENE_RANGE_CONTRACT_VERSION = "2026-07-22-19023-v1"
 export const ICONOPLASM_SEMANTIC_PROFILE_CONTRACT_VERSION = 1
+export const ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION = "2026-08-23-v1"
+const ICONOPLASM_PORTRAIT_DISCOVERY_RELEASE_LASTMOD = "2026-08-23"
 
 function frozenRange(initial, slug, label, prefixes) {
   return Object.freeze({
@@ -531,8 +534,17 @@ export function normalizeIconoplasmPublishedGeneRecord(rawRecord) {
   return {
     symbol,
     fullName,
-    portraitAssetSha256: normalizeSha256(portrait.asset_sha256),
+    portraitAssetSha256: normalizeSha256(portrait.asset_sha256 || raw.portraitAssetSha256),
   }
+}
+
+export function iconoplasmCanonicalPortraitUrl(rawRecord, rendition = "medium") {
+  const gene = normalizeIconoplasmPublishedGeneRecord(rawRecord)
+  const size = String(rendition || "medium")
+    .trim()
+    .toLowerCase()
+  if (!gene.portraitAssetSha256 || !ICONOPLASM_PORTRAIT_RENDITIONS.has(size)) return ""
+  return `${ICONOPLASM_ORIGIN}/portraits/v1/${gene.portraitAssetSha256.slice(0, 2)}/${gene.portraitAssetSha256}/${size}.webp`
 }
 
 export function iconoplasmPublishedGeneRecordIsIndexable(rawRecord) {
@@ -735,7 +747,12 @@ function escapeXml(value) {
 
 function stableLastModified(snapshot) {
   const parsed = Date.parse(snapshot.generatedAt)
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString().slice(0, 10) : "2026-07-22"
+  const snapshotLastModified = Number.isFinite(parsed)
+    ? new Date(parsed).toISOString().slice(0, 10)
+    : "2026-07-22"
+  return snapshotLastModified > ICONOPLASM_PORTRAIT_DISCOVERY_RELEASE_LASTMOD
+    ? snapshotLastModified
+    : ICONOPLASM_PORTRAIT_DISCOVERY_RELEASE_LASTMOD
 }
 
 export function buildIconoplasmSitemapIndexXml(snapshot) {
@@ -771,12 +788,18 @@ export function buildIconoplasmGeneRangeSitemapXml(snapshot, range, printCopies 
   const lastmod = stableLastModified(snapshot)
   const entries = genes.map((gene) => {
     const loc = `${ICONOPLASM_ORIGIN}/gene/${encodeURIComponent(gene.symbol)}`
+    const portraitUrl = iconoplasmCanonicalPortraitUrl(gene, "medium")
     const printCopy = printCopies instanceof Map ? printCopies.get(gene.symbol) : null
     const imageUrls = geneCardImageUrls(printCopy?.image_url)
-    const image = imageUrls
-      ? `<image:image><image:loc>${escapeXml(imageUrls.canonical)}</image:loc><image:title>${escapeXml(`${gene.symbol} Iconoplasm labelled gene card`)}</image:title><image:caption>${escapeXml(`${gene.symbol} — ${gene.fullName}`)}</image:caption></image:image>`
-      : ""
-    return `  <url><loc>${escapeXml(loc)}</loc><lastmod>${lastmod}</lastmod>${image}</url>`
+    const images = [
+      portraitUrl
+        ? `<image:image><image:loc>${escapeXml(portraitUrl)}</image:loc></image:image>`
+        : "",
+      imageUrls
+        ? `<image:image><image:loc>${escapeXml(imageUrls.canonical)}</image:loc></image:image>`
+        : "",
+    ].join("")
+    return `  <url><loc>${escapeXml(loc)}</loc><lastmod>${lastmod}</lastmod>${images}</url>`
   })
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${entries.join("\n")}\n</urlset>`
 }
@@ -791,6 +814,7 @@ Iconoplasm maps human-gene biology onto memorable visual character cards called 
 
 - [Gene reference catalog](${ICONOPLASM_ORIGIN}/genes): Server-rendered, self-locating symbol ranges
 - Gene profile URL: ${ICONOPLASM_ORIGIN}/gene/{HGNC_SYMBOL}
+- Canonical portrait: Every complete gene page exposes one published, content-addressed first-party WebP through its lead image, Open Graph and Twitter metadata, linked Gene/ImageObject/WebPage structured data, and gene-sitemap entry.
 - [Sitemap index](${ICONOPLASM_ORIGIN}/sitemap.xml): Static pages and gene-profile shards
 
 ## Biological-to-character mappings

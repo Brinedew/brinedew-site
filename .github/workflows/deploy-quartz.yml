@@ -98,6 +98,8 @@ jobs:
           # guardrail caught real drift until the code proves otherwise.
           # ARCHITECTURE FENCE [IPD-004]: due-time Queue wakeups are behavioral.
           # ARCHITECTURE FENCE [IPD-005]: D1 capacity/retention is cross-system.
+          # ARCHITECTURE FENCE [IPD-003]: every complete gene profile and its
+          # canonical portrait must remain in the same crawlable sitemap shard.
           # ARCHITECTURE FENCE [IPD-008]: the atomic alias/blocklist read pair and
           # its live verifier are production-release invariants, not CI-only checks.
           node scripts/run-tests.mjs \
@@ -106,6 +108,8 @@ jobs:
             workers/iconoplasm.d1-cost-barrier.test.js \
             workers/iconoplasm.d1-hot-query-guard.test.js \
             workers/iconoplasm.do-not-delete-cost-guards.test.js \
+            workers/iconoplasm-gene-discovery.test.js \
+            workers/iconoplasm-gene-cold-path.test.js \
             workers/iconoplasm.sync-finalization-queue.test.js \
             workers/iconoplasm-publish-event-archive.test.js \
             workers/iconoplasm-extension-blocklist-policy.test.js \

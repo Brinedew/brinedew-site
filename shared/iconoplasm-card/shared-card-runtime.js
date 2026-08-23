@@ -1147,6 +1147,22 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     }
   }
 
+  function canonicalGenePortraitAlt(symbol) {
+    var resolvedSymbol = normalizedSymbol(symbol)
+    return resolvedSymbol
+      ? resolvedSymbol + " canonical gene character portrait by Iconoplasm"
+      : "Canonical gene character portrait by Iconoplasm"
+  }
+
+  function canonicalGenePortraitCaption(symbol, fullName) {
+    var resolvedSymbol = normalizedSymbol(symbol)
+    var resolvedName = normalizeHandwrittenText(fullName)
+    var identity = resolvedName
+      ? resolvedSymbol + " (" + resolvedName + ")"
+      : resolvedSymbol || "this human gene"
+    return "Canonical Iconoplasm portrait of human " + identity + "."
+  }
+
   function renderLabLabelPortraitMediaHtml(symbol, portraitUrl, portraitFullUrl, dims, options) {
     var opts = options || {}
     var resolvedSymbol = normalizedSymbol(symbol)
@@ -1157,6 +1173,13 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       (opts.extraButtonClass ? " " + String(opts.extraButtonClass).trim() : "")
     var loading = String(opts.loading || "eager").trim() || "eager"
     var fetchPriority = String(opts.fetchPriority || "low").trim() || "low"
+    var portraitAlt =
+      String(opts.portraitAlt || "").trim() ||
+      (resolvedSymbol ? resolvedSymbol + " blot" : "Gene blot")
+    var buttonAriaLabel =
+      String(opts.buttonAriaLabel || "").trim() ||
+      (resolvedSymbol ? "Open full-size blot for " + resolvedSymbol : "Open full-size gene blot")
+    var captionText = String(opts.captionText || "").trim()
     // Fence: the archival portrait rail is a shared visual contract. The website and browser
     // extension must render the same button/img/fallback structure or they drift on width, crop,
     // and loading behavior the next time one side evolves.
@@ -1175,14 +1198,14 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       escapeHtml(buttonClassName) +
       '"' +
       (extraButtonAttrs ? " " + extraButtonAttrs : "") +
-      ' aria-label="Open full-size blot for ' +
-      escapeHtml(resolvedSymbol) +
+      ' aria-label="' +
+      escapeHtml(buttonAriaLabel) +
       '">' +
       '<img class="iconoplasm-tooltip-portrait-img" src="' +
       escapeHtml(portraitUrl) +
       '" alt="' +
-      escapeHtml(resolvedSymbol) +
-      ' blot" loading="' +
+      escapeHtml(portraitAlt) +
+      '" loading="' +
       escapeHtml(loading) +
       '" decoding="async" fetchpriority="' +
       escapeHtml(fetchPriority) +
@@ -1191,7 +1214,12 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '" height="' +
       size.height +
       '">' +
-      "</button>"
+      "</button>" +
+      (captionText
+        ? '<span class="icono-visually-hidden icono-canonical-portrait-caption">' +
+          escapeHtml(captionText) +
+          "</span>"
+        : "")
     )
   }
 
@@ -2474,6 +2502,8 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     labLabelEmulsionNumber: labLabelEmulsionNumber,
     labLabelDisplayName: labLabelDisplayName,
     portraitDimensions: portraitDimensions,
+    canonicalGenePortraitAlt: canonicalGenePortraitAlt,
+    canonicalGenePortraitCaption: canonicalGenePortraitCaption,
     resolveArchivalCardModel: resolveArchivalCardModel,
     buildLabLabelSemanticCharacterFacts: buildLabLabelSemanticCharacterFacts,
     buildTooltipTraitOriginRows: buildTooltipTraitOriginRows,

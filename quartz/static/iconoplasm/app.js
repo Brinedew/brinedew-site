@@ -3268,7 +3268,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     portraitFullUrl,
     dims,
     fetchPriority,
+    options,
   ) {
+    var opts = options || {}
+    var portraitAlt = String(opts.portraitAlt || "").trim() || normalizedSymbol(symbol) + " blot"
     return IconoCardShared.renderLabLabelPortraitMediaHtml(
       symbol,
       portraitUrl,
@@ -3279,13 +3282,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           'data-icono-pswp data-icono-pswp-src="' +
           esc(portraitFullUrl) +
           '" data-icono-pswp-alt="' +
-          esc(normalizedSymbol(symbol)) +
-          ' blot" data-pswp-width="' +
+          esc(portraitAlt) +
+          '" data-pswp-width="' +
           dims.width +
           '" data-pswp-height="' +
           dims.height +
           '"',
         fetchPriority: fetchPriority || "low",
+        buttonAriaLabel: opts.buttonAriaLabel,
+        captionText: opts.captionText,
+        portraitAlt: portraitAlt,
       },
     )
   }
@@ -3454,6 +3460,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function buildGeneLeadCardMarkup(g) {
     var dims = portraitDimensions(g)
+    var portraitAlt = IconoCardShared.canonicalGenePortraitAlt(g.symbol)
+    var portraitCaption = IconoCardShared.canonicalGenePortraitCaption(
+      g.symbol,
+      g.full_name || g.name,
+    )
     var portraitUrl = publishedPortraitUrl(g, "medium")
     var portraitFullUrl = publishedPortraitUrl(g, "full") || portraitUrl
     var portraitAssetSha = String(((g || {}).portrait || {}).asset_sha256 || "")
@@ -3486,24 +3497,27 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               ? '<button type="button" class="iconoplasm-tooltip-portrait-media" data-icono-pswp data-icono-pswp-src="' +
                   esc(portraitFullUrl) +
                   '" data-icono-pswp-alt="' +
-                  esc(g.symbol) +
-                  ' blot" data-pswp-width="' +
+                  esc(portraitAlt) +
+                  '" data-pswp-width="' +
                   dims.width +
                   '" data-pswp-height="' +
                   dims.height +
-                  '" aria-label="Open full-size blot for ' +
+                  '" aria-label="Open full-size canonical gene character portrait for ' +
                   esc(g.symbol) +
                   '">' +
                   '<img class="iconoplasm-tooltip-portrait-img" src="' +
                   esc(portraitUrl) +
                   '" alt="' +
-                  esc(g.symbol) +
-                  ' blot" loading="eager" decoding="async" width="' +
+                  esc(portraitAlt) +
+                  '" loading="eager" decoding="async" width="' +
                   dims.width +
                   '" height="' +
                   dims.height +
                   '">' +
-                  "</button>"
+                  "</button>" +
+                  '<span class="icono-visually-hidden icono-canonical-portrait-caption">' +
+                  esc(portraitCaption) +
+                  "</span>"
               : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
                   '<div class="iconoplasm-tooltip-portrait-fallback">' +
                   '<div class="iconoplasm-tooltip-portrait-status">Blot pending</div>' +
@@ -3517,19 +3531,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           ? '<button type="button" class="iconoplasm-tooltip-portrait-media" data-icono-pswp data-icono-pswp-src="' +
             esc(portraitFullUrl) +
             '" data-icono-pswp-alt="' +
-            esc(g.symbol) +
-            ' blot" data-pswp-width="' +
+            esc(portraitAlt) +
+            '" data-pswp-width="' +
             dims.width +
             '" data-pswp-height="' +
             dims.height +
-            '" aria-label="Open full-size blot for ' +
+            '" aria-label="Open full-size canonical gene character portrait for ' +
             esc(g.symbol) +
             '">' +
             '<img class="iconoplasm-tooltip-portrait-img" src="' +
             esc(portraitUrl) +
             '" alt="' +
-            esc(g.symbol) +
-            ' blot" loading="eager" decoding="async" width="' +
+            esc(portraitAlt) +
+            '" loading="eager" decoding="async" width="' +
             dims.width +
             '" height="' +
             dims.height +
@@ -3537,7 +3551,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             '<span class="icono-card-badge">' +
             esc(g.symbol) +
             "</span>" +
-            "</button>"
+            "</button>" +
+            '<span class="icono-visually-hidden icono-canonical-portrait-caption">' +
+            esc(portraitCaption) +
+            "</span>"
           : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
             '<div class="iconoplasm-tooltip-portrait-fallback">' +
             '<div class="iconoplasm-tooltip-portrait-status">Blot pending</div>' +
@@ -3573,7 +3590,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           layoutVariant: litLayoutVariantForCard(cardVariant),
           mobileReview: heroMobileReview,
           includeCharacterProfile: true,
-          portraitAlt: g.symbol + " blot",
+          portraitAlt: portraitAlt,
           portraitSrc: portraitUrl,
           voteHtml: !isImageOnlyVariant
             ? labelVoteBoxMarkup(g, "data-icono-gene-vote-box", {
@@ -3634,6 +3651,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var portrait = card.querySelector(".iconoplasm-tooltip-portrait")
     var portraitImg = card.querySelector(".iconoplasm-tooltip-portrait-img")
     if (!portrait || !portraitImg) return
+    var isGeneLead = card.classList.contains("icono-gene-lead-card")
     var portraitUrl = publishedPortraitUrl(genePayload, "medium")
     if (!portraitUrl) {
       portrait.classList.remove("iconoplasm-tooltip-portrait--ready")
@@ -3651,7 +3669,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     portraitImg.setAttribute("fetchpriority", "low")
     portraitImg.setAttribute("width", String(dims.width))
     portraitImg.setAttribute("height", String(dims.height))
-    portraitImg.setAttribute("alt", normalizedSymbol(genePayload.symbol) + " blot")
+    portraitImg.setAttribute(
+      "alt",
+      isGeneLead
+        ? IconoCardShared.canonicalGenePortraitAlt(genePayload.symbol)
+        : normalizedSymbol(genePayload.symbol) + " blot",
+    )
     card.style.setProperty("--width", String(dims.width))
     card.style.setProperty("--height", String(dims.height))
   }
@@ -3724,14 +3747,33 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       ensureArchivalBrickVoteBox(card, genePayload)
       if (portraitShell) {
         var dims = portraitDimensions(genePayload)
+        var isGeneLead = card.classList.contains("icono-gene-lead-card")
         var portraitUrl = publishedPortraitUrl(genePayload, "medium")
         var portraitFullUrl = publishedPortraitUrl(genePayload, "full") || portraitUrl
+        var geneLeadPortraitAlt = isGeneLead
+          ? IconoCardShared.canonicalGenePortraitAlt(genePayload.symbol)
+          : ""
+        var geneLeadPortraitCaption = isGeneLead
+          ? IconoCardShared.canonicalGenePortraitCaption(
+              genePayload.symbol,
+              genePayload.full_name || genePayload.name,
+            )
+          : ""
         var labelPortraitHtml = buildLabLabelPortraitMediaMarkup(
           genePayload.symbol,
           portraitUrl,
           portraitFullUrl,
           dims,
           "low",
+          isGeneLead
+            ? {
+                portraitAlt: geneLeadPortraitAlt,
+                buttonAriaLabel:
+                  "Open full-size canonical gene character portrait for " +
+                  normalizedSymbol(genePayload.symbol),
+                captionText: geneLeadPortraitCaption,
+              }
+            : null,
         )
         card.style.setProperty("--width", String(dims.width))
         card.style.setProperty("--height", String(dims.height))

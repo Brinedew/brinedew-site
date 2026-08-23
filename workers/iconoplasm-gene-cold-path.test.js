@@ -4,6 +4,7 @@ import test from "node:test"
 
 import { iconoplasmGeneDiscoveryStateForPath } from "./iconoplasm-gene-discovery-worker.js"
 import { iconoplasmPublishedGeneRecordIsIndexable } from "./iconoplasm-gene-discovery.js"
+import { iconoplasmGeneHtmlCacheKeyForTest } from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 import {
   resetIconoplasmRuntimeCachesForTest,
   syncPublishedGeneRouteMembershipAfterPublicationForTest,
@@ -139,6 +140,40 @@ test("gene HTML cache lookup is structurally before payload parsing and shell re
   assert.ok(detailProbe >= 0)
   assert.ok(cacheMatch > detailProbe)
   assert.equal(route.slice(0, cacheMatch).includes("iconoplasmGeneCardBootstrapInjection("), false)
+})
+
+test("gene HTML cache cannot hit across a route portrait publication race", () => {
+  const url = new URL("https://iconoplasm.brinedew.bio/gene/TP53")
+  const snapshotVersion = 'W/"site-gene-detail:TP53:17"'
+  const firstPortraitSha = "a".repeat(64)
+  const nextPortraitSha = "b".repeat(64)
+  const firstKey = iconoplasmGeneHtmlCacheKeyForTest(
+    url,
+    url.pathname,
+    snapshotVersion,
+    { s: "TP53", n: "tumor protein p53", p: { asset_sha256: firstPortraitSha } },
+    {},
+  )
+  const nextKey = iconoplasmGeneHtmlCacheKeyForTest(
+    url,
+    url.pathname,
+    snapshotVersion,
+    { s: "TP53", n: "tumor protein p53", p: { asset_sha256: nextPortraitSha } },
+    {},
+  )
+
+  assert.ok(firstKey)
+  assert.ok(nextKey)
+  assert.notEqual(firstKey.url, nextKey.url)
+  assert.equal(new URL(firstKey.url).searchParams.get("portrait"), firstPortraitSha)
+  assert.equal(new URL(nextKey.url).searchParams.get("portrait"), nextPortraitSha)
+
+  const edgeCache = new Map([[firstKey.url, new Response("portrait A")]])
+  assert.equal(edgeCache.get(nextKey.url), undefined)
+  assert.equal(
+    iconoplasmGeneHtmlCacheKeyForTest(url, url.pathname, snapshotVersion, null, {}),
+    null,
+  )
 })
 
 test("the cold-path refactor preserves the loud single-owner filenames", () => {
