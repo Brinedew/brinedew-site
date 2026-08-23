@@ -64,3 +64,25 @@ test("README names the stable repository commands", () => {
     assert.match(readme, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
   }
 })
+
+test("ordinary source searches exclude generated and vendored trees", () => {
+  const rgIgnore = readRepositoryFile(".rgignore")
+
+  for (const pattern of ["*.map", "**/dist/", "**/generated/", "**/vendor/"]) {
+    assert.match(rgIgnore, new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m"))
+  }
+  assert.match(rgIgnore, /--no-ignore/)
+})
+
+test("ISP DNS checker stays inside the Website-owned uv script", () => {
+  const wrapper = readRepositoryFile("scripts/check-isp-dns-self-heal.cmd")
+  const probe = readRepositoryFile("scripts/probe_isp_resolvers_for_iconoplasm_cdn.py")
+
+  assert.match(wrapper, /uv run --managed-python --script/)
+  assert.match(wrapper, /%~dp0probe_isp_resolvers_for_iconoplasm_cdn\.py/)
+  assert.doesNotMatch(wrapper, /D:\\Coding\\Iconoplasm/i)
+  assert.match(probe, /^# \/\/\/ script$/m)
+  assert.match(probe, /^# requires-python = ">=3\.12"$/m)
+  assert.match(probe, /uv run --managed-python --script/)
+  assert.match(probe, /^if __name__ == "__main__":$/m)
+})
