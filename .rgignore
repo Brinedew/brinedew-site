@@ -1,0 +1,9 @@
+# Keep ordinary source searches out of generated and vendored trees. When one
+# of these trees is the intended target, name it explicitly and pass
+# --no-ignore so the expensive search is deliberate.
+*.map
+**/dist/
+**/generated/
+**/vendor/
+public/
+artifacts/

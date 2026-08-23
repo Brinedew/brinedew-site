@@ -8,6 +8,7 @@ import {
   enforceIconoplasmRateLimit,
   resolveIconoplasmRateLimitPolicy,
 } from "./iconoplasm-rate-limit.js"
+import { ICONOPLASM_ROUTE_CONTRACTS } from "./iconoplasm-route-contract.js"
 import worker from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 
 function request(path, init = {}) {
@@ -152,6 +153,22 @@ test("production and staging declare isolated native quota bindings on the route
   )
   const production = config.ratelimits
   const staging = config.env.staging.ratelimits
+  const routeBindings = new Set(
+    ICONOPLASM_ROUTE_CONTRACTS.flatMap(({ rateLimit }) => (rateLimit ? [rateLimit.binding] : [])),
+  )
+  const productionBindings = new Set(production.map(({ name }) => name))
+  const stagingBindings = new Set(staging.map(({ name }) => name))
+
+  assert.deepEqual(
+    [...routeBindings].sort(),
+    [...productionBindings].sort(),
+    "every route quota must have a production binding",
+  )
+  assert.deepEqual(
+    [...routeBindings].sort(),
+    [...stagingBindings].sort(),
+    "every route quota must have a staging binding",
+  )
 
   assert.deepEqual(
     production.map(({ name, simple }) => [name, simple.limit, simple.period]),
