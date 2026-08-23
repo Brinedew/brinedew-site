@@ -4,7 +4,7 @@
  * Animation: fade only, no movement.
  * Tooltip: portrait left, infobox right, full gene color as background. */
 
-/* Font faces are injected dynamically by content.js using chrome.runtime.getURL */
+/* Font faces are registered by generated/iconoplasm-font-runtime.js via runtime.getURL. */
 
 /* -- Gene highlight ------------------------------------------------- */
 .iconoplasm-gene {

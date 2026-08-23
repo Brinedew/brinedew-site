@@ -38,6 +38,7 @@
       "matches": ["<all_urls>"],
       "exclude_matches": ["https://iconoplasm.brinedew.bio/*", "https://staging.brinedew.bio/*"],
       "js": [
+        "generated/iconoplasm-font-runtime.js",
         "generated/rough.js",
         "generated/shared-card-runtime.js",
         "blocklist-defaults.js",
@@ -64,6 +65,7 @@
         "lit-archival-frame.html",
         "lit-archival-frame.js",
         "generated/rough.js",
+        "generated/iconoplasm-font-runtime.js",
         "generated/shared-card-runtime.js",
         "generated/shared-card-label.css",
         "generated/shared-card-vote.css",
