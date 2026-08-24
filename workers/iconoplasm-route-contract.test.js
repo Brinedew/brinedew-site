@@ -28,6 +28,7 @@ const PATTERN_EXAMPLES = Object.freeze({
   print_copy_status: "/api/iconoplasm/print-copy-status/TP53",
   print_copy_render: "/api/iconoplasm/print-copy-render/TP53",
   semantic_gene_blot: "/blots/TP53.webp",
+  semantic_source_portrait: "/portrait/TP53.webp",
   admin_blots_upload: "/api/iconoplasm/admin/blots/TP53",
   public_gene_detail: "/api/public/v1/genes/TP53",
   gene_request_summary: "/api/iconoplasm/requests/gene/TP53/summary",

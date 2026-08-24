@@ -997,6 +997,7 @@ const PUBLIC_DUMP_PREFIX = "public-dumps"
 const PUBLIC_DEFAULT_GENE_BATCH_LIMIT = 100
 const PUBLIC_MAX_GENE_BATCH_LIMIT = 250
 const PUBLIC_MAX_RESOLVE_BATCH_LIMIT = 250
+const PUBLIC_MAX_IMAGE_RESOLVE_BATCH_LIMIT = 50
 const PUBLIC_STATS_SCHEMA_VERSION = "iconoplasm.publicStats.v1"
 const DISCOVERY_SOURCE_EXTENSION_HOVER = "extension_hover"
 const DISCOVERY_SOURCE_EXTENSION_GUEST_MERGE = "extension_guest_merge"
@@ -11953,6 +11954,7 @@ function publicRichRouteDeniedPayload(url, routeKey) {
       catalog_manifest: publicUrl(url, "/catalog/manifest"),
       changes: publicUrl(url, "/changes"),
       resolve: publicUrl(url, "/resolve"),
+      images_resolve: publicUrl(url, "/images/resolve"),
     },
   }
 }
@@ -12437,6 +12439,7 @@ function publicSchemaDoc() {
       genes_batch_default: PUBLIC_DEFAULT_GENE_BATCH_LIMIT,
       genes_batch_max: PUBLIC_MAX_GENE_BATCH_LIMIT,
       resolve_batch_max: PUBLIC_MAX_RESOLVE_BATCH_LIMIT,
+      image_resolve_batch_max: PUBLIC_MAX_IMAGE_RESOLVE_BATCH_LIMIT,
     },
     field_projection: {
       supported: true,
@@ -12517,6 +12520,7 @@ function publicMediaEnvelope(url, symbol, portrait) {
     symbol,
     checksum_sha256: assetSha,
     canonical_url: portraitAssetUrl(asset, "full"),
+    semantic_url: `${url.origin}/portrait/${encodeURIComponent(symbol)}.webp`,
     info_url: publicUrl(url, `/media/${encodeURIComponent(symbol)}`),
     ...(width != null ? { width } : {}),
     ...(height != null ? { height } : {}),
@@ -28589,6 +28593,96 @@ async function handlePublicResolve(request, env) {
   })
 }
 
+async function handlePublicImageResolve(request, env) {
+  const body = await parseJsonBody(request)
+  const identifiers = Array.isArray(body.symbols)
+    ? body.symbols
+    : Array.isArray(body.identifiers)
+      ? body.identifiers
+      : []
+  if (!identifiers.length) {
+    return json({ error: "symbols must be a non-empty array" }, 400, {
+      "Cache-Control": "no-store",
+    })
+  }
+  if (identifiers.length > PUBLIC_MAX_IMAGE_RESOLVE_BATCH_LIMIT) {
+    return json(
+      {
+        error: `Too many symbols (max ${PUBLIC_MAX_IMAGE_RESOLVE_BATCH_LIMIT})`,
+        max_symbols: PUBLIC_MAX_IMAGE_RESOLVE_BATCH_LIMIT,
+      },
+      400,
+      { "Cache-Control": "no-store" },
+    )
+  }
+
+  const resolved = []
+  for (const identifier of identifiers) {
+    resolved.push(await resolvePublicIdentifier(env, identifier))
+  }
+  const canonicalSymbols = Array.from(
+    new Set(resolved.map((item) => item.canonical_symbol).filter(Boolean)),
+  )
+  const versionInfo = await currentMobileCardSnapshotVersion(env)
+  const version = String(versionInfo?.current || "").trim()
+  if (!version || version === "0") {
+    return json(cardArtifactUnavailablePayload(version), 503, { "Cache-Control": "no-store" })
+  }
+  const artifact = canonicalSymbols.length
+    ? await readPublishedCardCatalogArtifact(env, version, canonicalSymbols, {
+        allowWholeArtifact: false,
+      })
+    : { bySymbol: new Map() }
+  if (!artifact) {
+    return json(cardArtifactUnavailablePayload(version), 503, { "Cache-Control": "no-store" })
+  }
+
+  const url = new URL(request.url)
+  const results = resolved.map((identity) => {
+    if (!identity.found || !identity.canonical_symbol) return { ...identity, images: null }
+    const card = artifact.bySymbol.get(identity.canonical_symbol)
+    const payload = card?.payload && typeof card.payload === "object" ? card.payload : null
+    if (!payload) {
+      return {
+        ...identity,
+        page_url: `${url.origin}/gene/${encodeURIComponent(identity.canonical_symbol)}`,
+        images: null,
+      }
+    }
+    const portrait = portraitStateFromPublishedCardPayload(payload, portraitBase(url, env))
+    const sourcePortrait = publicMediaEnvelope(url, identity.canonical_symbol, portrait)
+    const geneBlot = publicGeneBlotMediaEnvelope(url, identity.canonical_symbol, {
+      ...payload,
+      portrait,
+    })
+    return {
+      ...identity,
+      page_url: `${url.origin}/gene/${encodeURIComponent(identity.canonical_symbol)}`,
+      images: {
+        gene_blot: geneBlot,
+        source_portrait_artwork: sourcePortrait,
+      },
+    }
+  })
+
+  return json(
+    {
+      api_version: PUBLIC_API_VERSION,
+      schema_version: API_SCHEMA_VERSION,
+      card_snapshot_version: version,
+      canonical_key: "symbol",
+      max_symbols: PUBLIC_MAX_IMAGE_RESOLVE_BATCH_LIMIT,
+      results,
+    },
+    200,
+    {
+      "Cache-Control": "no-store",
+      "X-Iconoplasm-Card-Version": version,
+      "X-Iconoplasm-Media-Source": "published-card-image-resolver",
+    },
+  )
+}
+
 async function handlePublicChanges(request, env) {
   if (!env.ICONOPLASM_DB) return json({ error: "ICONOPLASM_DB binding missing" }, 500)
   const url = new URL(request.url)
@@ -29192,6 +29286,49 @@ async function handleSemanticGeneBlot(request, env, symbolValue) {
   })
 }
 
+async function handleSemanticSourcePortrait(request, env, symbolValue) {
+  const symbol = normalizeSymbol(decodeURIComponent(symbolValue || ""))
+  if (!symbol) return json({ error: "Invalid gene symbol" }, 400, { "Cache-Control": "no-store" })
+  const published = await readPublishedGeneCardPortraitProjection(env, symbol)
+  if (published.kind === "unavailable") {
+    return json(cardArtifactUnavailablePayload(published.version), 503, {
+      "Cache-Control": "no-store",
+    })
+  }
+  const portrait =
+    published.kind === "available"
+      ? portraitStateFromPublishedCardPayload(published.payload, ICONOPLASM_CANONICAL_ORIGIN)
+      : null
+  const assetSha = normalizeSha256(portrait?.asset_sha256 || "")
+  if (portrait?.status !== "published" || !assetSha) {
+    return json({ error: "Published source portrait not found" }, 404, {
+      "Cache-Control": "no-store",
+    })
+  }
+  const asset = portraitAssetRef(ICONOPLASM_CANONICAL_ORIGIN, assetSha)
+  const rendition = asset?.renditions?.medium
+  if (!rendition?.canonical_url || !rendition?.path) {
+    return json({ error: "Published source portrait not found" }, 404, {
+      "Cache-Control": "no-store",
+    })
+  }
+  const acceleratorOrigin = String(externalPortraitCdnBase(env) || "").replace(/\/+$/, "")
+  const headers = {
+    Location: rendition.canonical_url,
+    "Cache-Control": "public, max-age=300, stale-while-revalidate=86400",
+    ETag: `"${assetSha}"`,
+    "Access-Control-Allow-Origin": "*",
+    "Cross-Origin-Resource-Policy": "cross-origin",
+    "X-Iconoplasm-Card-Version": published.version,
+    "X-Iconoplasm-Media-Type": "source_portrait_artwork",
+    "X-Iconoplasm-Portrait-Rendition": "medium",
+  }
+  if (acceleratorOrigin) {
+    headers.Link = `<${acceleratorOrigin}/${rendition.path}>; rel="alternate"`
+  }
+  return new Response(null, { status: 302, headers })
+}
+
 const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
   public_metadata: ({ request, env }) => handlePublicMetadata(request, env),
   public_stats: ({ request, env }) => handlePublicStats(request, env),
@@ -29248,11 +29385,14 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
       "Cache-Control": "no-store",
     }),
   public_resolve: ({ request, env }) => handlePublicResolve(request, env),
+  public_image_resolve: ({ request, env }) => handlePublicImageResolve(request, env),
   public_changes: ({ request, env }) => handlePublicChanges(request, env),
   public_media: ({ match, request, env }) =>
     handlePublicMedia(request, env, match.params.symbol || ""),
   portrait: ({ request, env, ctx, path }) =>
     handlePublishedImageAssetRoute(request, env, ctx, path),
+  semantic_source_portrait: ({ match, request, env }) =>
+    handleSemanticSourcePortrait(request, env, match.params.symbol || ""),
   gene_card_asset: ({ request, env, ctx, path }) =>
     handlePublishedImageAssetRoute(request, env, ctx, path, {
       fallbackContentType: "image/png",

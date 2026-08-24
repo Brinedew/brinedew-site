@@ -152,10 +152,17 @@ test("IPD-003 keeps discovery eligibility on the exact published card", () => {
     /missing requested card or invalid selected artifact[\s\S]*uncached 503/,
   )
   assert.match(fence.decision, /Only a workstation may render the 768x1024 WebP/)
+  assert.match(fence.decision, /bounded POST resolver of at most 50 identifiers/)
+  assert.match(fence.decision, /separately typed gene_blot and source_portrait_artwork fields/)
+  assert.match(
+    fence.decision,
+    /\/portrait\/\{SYMBOL\}\.webp is only the stable medium source-artwork alias/,
+  )
   assert.match(
     fence.change_control,
     /Do not promote raw portrait artwork as the canonical public image/,
   )
+  assert.match(fence.change_control, /publish a full-corpus image manifest/)
 })
 
 // ARCHITECTURE FENCE [IPD-001]
