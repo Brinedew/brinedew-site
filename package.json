@@ -19,6 +19,7 @@
     "build:iconoplasm-pdfjs": "pnpm --dir ./iconoplasm-extension/vendor/pdfjs-src exec gulp generic && node ./scripts/capture-iconoplasm-pdfjs-runtime.mjs",
     "package:iconoplasm-extension": "node ./scripts/package-iconoplasm-extension.mjs",
     "package:iconoplasm-firefox": "node ./scripts/package-iconoplasm-extension.mjs --target=firefox",
+    "package:iconoplasm-edge": "node ./scripts/package-iconoplasm-extension.mjs --target=edge",
     "package:iconoplasm-safari": "node ./scripts/package-iconoplasm-extension.mjs --target=safari",
     "package:iconoplasm-firefox-source": "node ./scripts/package-iconoplasm-firefox-source.mjs",
     "verify:iconoplasm-publisher-authority": "node ./scripts/verify-iconoplasm-publisher-authority.mjs",

@@ -8,9 +8,40 @@ const __filename = fileURLToPath(import.meta.url)
 const repoRoot = resolve(__filename, "..", "..")
 const extensionRoot = resolve(repoRoot, "iconoplasm-extension")
 const distRoot = resolve(extensionRoot, "dist")
-const stageRoot = resolve(distRoot, "firefox-source-package")
-const { version: packageVersion } = assertIconoplasmPublisherAuthority(repoRoot)
-const zipPath = resolve(distRoot, `iconoplasm-firefox-source-v${packageVersion}.zip`)
+
+function fail(message) {
+  console.error(`[package-iconoplasm-firefox-source] ${message}`)
+  process.exit(1)
+}
+
+function resolveBuildPurpose(argv) {
+  const release = argv.includes("--release")
+  const expectedVersionArgs = argv.filter((arg) => arg.startsWith("--expected-version="))
+  if (expectedVersionArgs.length > 1) fail("Pass --expected-version exactly once.")
+  const expectedVersion = String(
+    expectedVersionArgs[0]?.slice("--expected-version=".length) || "",
+  ).trim()
+  if (release && !expectedVersion) {
+    fail("Release packaging requires --expected-version=X.Y.Z.")
+  }
+  if (!release && expectedVersion) {
+    fail("--expected-version is release-only; add --release or build reviewer validation source.")
+  }
+  return { release, expectedVersion: expectedVersion || undefined }
+}
+
+const buildPurpose = resolveBuildPurpose(process.argv.slice(2))
+const { version: packageVersion } = assertIconoplasmPublisherAuthority(repoRoot, {
+  expectedVersion: buildPurpose.expectedVersion,
+})
+const validationRoot = resolve(distRoot, "validation", "firefox-source")
+const workRoot = buildPurpose.release
+  ? resolve(distRoot, "release-work", "firefox-source")
+  : validationRoot
+const stageRoot = resolve(workRoot, "package")
+const zipPath = buildPurpose.release
+  ? resolve(distRoot, `iconoplasm-firefox-source-v${packageVersion}.zip`)
+  : resolve(validationRoot, "iconoplasm-firefox-source-validation.zip")
 
 const rootTemplateFiles = [
   ["iconoplasm-extension/amo-source/package.json", "package.json"],
@@ -76,11 +107,6 @@ const includeDirs = [
   "iconoplasm-extension/vendor/pdfjs-runtime",
 ]
 
-function fail(message) {
-  console.error(`[package-iconoplasm-firefox-source] ${message}`)
-  process.exit(1)
-}
-
 function ensureExists(path, kind) {
   if (!existsSync(path)) fail(`Missing ${kind}: ${relative(repoRoot, path)}`)
 }
@@ -129,12 +155,17 @@ function listRelativeFiles(rootDir) {
 }
 
 function zipPayload() {
+  if (buildPurpose.release && existsSync(zipPath)) {
+    fail(`Refusing to overwrite release artifact ${relative(repoRoot, zipPath)}`)
+  }
   const command = [
     "$ErrorActionPreference = 'Stop'",
     `$zipPath = ${JSON.stringify(zipPath)}`,
     `$stagePath = ${JSON.stringify(stageRoot)}`,
-    "if (Test-Path $zipPath) { Remove-Item $zipPath -Force }",
-    "Compress-Archive -Path (Join-Path $stagePath '*') -DestinationPath $zipPath -Force",
+    buildPurpose.release
+      ? 'if (Test-Path -LiteralPath $zipPath) { throw "Refusing to overwrite release artifact: $zipPath" }'
+      : "if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }",
+    `Compress-Archive -Path (Join-Path $stagePath '*') -DestinationPath $zipPath${buildPurpose.release ? "" : " -Force"}`,
   ].join("; ")
 
   const powerShell =
@@ -165,6 +196,9 @@ const stagedFiles = listRelativeFiles(stageRoot)
 zipPayload()
 
 console.log(`[package-iconoplasm-firefox-source] Created ${relative(repoRoot, zipPath)}`)
+console.log(
+  `[package-iconoplasm-firefox-source] Purpose: ${buildPurpose.release ? "human-authorized release" : "replaceable validation"}`,
+)
 console.log("[package-iconoplasm-firefox-source] Included files:")
 for (const file of stagedFiles) {
   console.log(`  - ${file}`)

@@ -30,11 +30,17 @@ Do not zip this whole folder by hand.
 
 That will drag in `store-assets/`, screenshots, promo files, and any local Playwright install under `store-assets/node_modules/`, which are dev-only and should not ship.
 
-Use the repo-level package command instead:
+Use the repo-level package commands instead:
 
 - `pnpm run package:iconoplasm-extension`
 - `pnpm run package:iconoplasm-firefox`
+- `pnpm run package:iconoplasm-edge`
 - `pnpm run package:iconoplasm-safari`
+- `pnpm run package:iconoplasm-firefox-source`
+
+These commands create engineering validation builds. They deliberately do not
+produce a versioned store-release artifact and must not be uploaded to a browser
+store.
 
 What it does:
 
@@ -42,28 +48,30 @@ What it does:
 - regenerates the pinned local PDF.js runtime before staging
 - excludes `store-assets/`, docs, and other non-runtime files
 - scans the staged payload for obvious secret patterns before zipping
-- writes the clean package to `iconoplasm-extension/dist/`
+- writes replaceable validation output under `iconoplasm-extension/dist/validation/`
 
-Current output:
+Validation output:
 
-- Chromium/manual staged runtime payload: `iconoplasm-extension/dist/package/`
-- Chromium/manual zip: `iconoplasm-extension/dist/iconoplasm-extension-v<version>.zip`
-- Firefox staged runtime payload: `iconoplasm-extension/dist/firefox-package/`
-- Firefox/AMO upload zip: `iconoplasm-extension/dist/iconoplasm-firefox-v<version>.zip`
-- Safari web-extension staged payload: `iconoplasm-extension/dist/safari-package/`
-- Safari web-extension zip: `iconoplasm-extension/dist/iconoplasm-safari-webext-v<version>.zip`
+- Chromium stage: `iconoplasm-extension/dist/validation/generic/package/`
+- Chromium zip: `iconoplasm-extension/dist/validation/generic/iconoplasm-extension-validation.zip`
+- Firefox stage: `iconoplasm-extension/dist/validation/firefox/package/`
+- Firefox zip: `iconoplasm-extension/dist/validation/firefox/iconoplasm-firefox-validation.zip`
+- Edge stage: `iconoplasm-extension/dist/validation/edge/package/`
+- Edge zip: `iconoplasm-extension/dist/validation/edge/iconoplasm-edge-validation.zip`
+- Safari WebExtension stage: `iconoplasm-extension/dist/validation/safari/package/`
+- Safari WebExtension zip: `iconoplasm-extension/dist/validation/safari/iconoplasm-safari-webext-validation.zip`
+- Firefox reviewer-source stage: `iconoplasm-extension/dist/validation/firefox-source/package/`
+- Firefox reviewer-source zip: `iconoplasm-extension/dist/validation/firefox-source/iconoplasm-firefox-source-validation.zip`
 
-For AMO's first upload screen, select:
+Only the human-confirmed GUI release and its GitHub workflows may pass
+`--release --expected-version=<version>`. Release builds use
+`iconoplasm-extension/dist/release-work/<target>/` for staging and emit the
+versioned store ZIP to `iconoplasm-extension/dist/`. The explicit expected
+version must match both `manifest.json` and `publisher-release.json`.
 
-- `iconoplasm-extension/dist/iconoplasm-firefox-v<version>.zip`
-
-If AMO asks for a source code package during review, create it with:
-
-- `pnpm run package:iconoplasm-firefox-source`
-
-That writes:
-
-- `iconoplasm-extension/dist/iconoplasm-firefox-source-v<version>.zip`
+For AMO, use the exact Firefox package and reviewer-source ZIP retained by the
+human-authorized `iconoplasm-firefox-submission` workflow artifact. Do not
+rebuild a store upload from ordinary source.
 
 ## Store publishing
 
@@ -86,8 +94,7 @@ What the GUI-confirmed Firefox + Edge release does:
 - pushes the release commit to `main`
 - dispatches the Firefox workflow against that committed version
 - dispatches the Edge workflow against that committed version
-- builds the clean Firefox extension payload with `pnpm run package:iconoplasm-firefox`
-- builds the clean Chromium/Edge payload with `pnpm run package:iconoplasm-extension`
+- builds release-mode Firefox and Edge payloads for the exact authorized version
 - submits Firefox to AMO for signing/review
 - submits Edge to Microsoft Edge Add-ons for package validation and review
 - uploads store package artifacts back to the workflow runs
@@ -112,9 +119,16 @@ Notes:
 - Edge Product ID is `b8547df3-4156-4b56-b7dc-3752347b6794`
 - the workflows are manual on purpose so a website push does not accidentally submit a store build
 
-Chrome Web Store publishing remains human-dashboard only. Package with `pnpm run package:iconoplasm-extension`, then use the Chrome Web Store dashboard as a person; there is no automated Chrome publish runner here.
+Chrome Web Store publishing remains human-dashboard only. Upload the exact
+versioned Chrome developer package committed by the GUI release transaction at
+`quartz/static/iconoplasm/downloads/iconoplasm-extension-v<version>.zip`; do not
+rebuild it with the default validation command. There is no automated Chrome
+publish runner here.
 
-Safari publishing is not another browser ZIP upload. `pnpm run package:iconoplasm-safari` creates the Safari-targeted WebExtension payload that Apple tooling can consume, but App Store distribution still needs Xcode/App Store Connect to wrap, sign, and submit it as a native macOS/iOS app.
+Safari publishing is not another browser ZIP upload.
+`pnpm run package:iconoplasm-safari` creates validation output only. App Store
+distribution still needs a human-authorized release build plus Xcode/App Store
+Connect to wrap, sign, and submit it as a native macOS/iOS app.
 
 Mobile publishing is a separate release track, not a rename of the desktop cards:
 

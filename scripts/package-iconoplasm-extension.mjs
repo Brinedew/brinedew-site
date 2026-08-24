@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process"
 import {
+  constants,
   copyFileSync,
   cpSync,
   existsSync,
@@ -20,7 +21,11 @@ const repoRoot = __dirname
 const extensionRoot = resolve(repoRoot, "iconoplasm-extension")
 const distRoot = resolve(extensionRoot, "dist")
 const manifestPath = resolve(extensionRoot, "manifest.json")
-const { manifest, version: packageVersion } = assertIconoplasmPublisherAuthority(repoRoot)
+
+function fail(message) {
+  console.error(`[package-iconoplasm-extension] ${message}`)
+  process.exit(1)
+}
 
 function resolveTarget(argv) {
   for (const arg of argv) {
@@ -40,43 +45,72 @@ function resolveTarget(argv) {
   return "generic"
 }
 
-const packageTarget = resolveTarget(process.argv.slice(2))
+function resolveBuildPurpose(argv) {
+  const release = argv.includes("--release")
+  const expectedVersionArgs = argv.filter((arg) => arg.startsWith("--expected-version="))
+  if (expectedVersionArgs.length > 1) {
+    fail("Pass --expected-version exactly once.")
+  }
+  const expectedVersion = String(
+    expectedVersionArgs[0]?.slice("--expected-version=".length) || "",
+  ).trim()
+  if (release && !expectedVersion) {
+    fail("Release packaging requires --expected-version=X.Y.Z.")
+  }
+  if (!release && expectedVersion) {
+    fail("--expected-version is release-only; add --release or use the validation package command.")
+  }
+  return { release, expectedVersion: expectedVersion || undefined }
+}
+
+const packageArgs = process.argv.slice(2)
+const packageTarget = resolveTarget(packageArgs)
+const buildPurpose = resolveBuildPurpose(packageArgs)
+const { manifest, version: packageVersion } = assertIconoplasmPublisherAuthority(repoRoot, {
+  expectedVersion: buildPurpose.expectedVersion,
+})
 const supportsPdfReader = packageTarget !== "safari"
 const usesGeckoPdfOwnership = packageTarget === "firefox"
 const targetConfig =
   packageTarget === "firefox"
     ? {
         browser: "firefox",
-        stageDir: "firefox-package",
-        zipName: `iconoplasm-firefox-v${packageVersion}.zip`,
+        releaseZipName: `iconoplasm-firefox-v${packageVersion}.zip`,
+        validationZipName: "iconoplasm-firefox-validation.zip",
       }
     : packageTarget === "edge"
       ? {
           browser: "edge",
-          stageDir: "edge-package",
-          zipName: `iconoplasm-edge-v${packageVersion}.zip`,
+          releaseZipName: `iconoplasm-edge-v${packageVersion}.zip`,
+          validationZipName: "iconoplasm-edge-validation.zip",
         }
       : packageTarget === "safari"
         ? {
             browser: "safari",
-            stageDir: "safari-package",
-            zipName: `iconoplasm-safari-webext-v${packageVersion}.zip`,
+            releaseZipName: `iconoplasm-safari-webext-v${packageVersion}.zip`,
+            validationZipName: "iconoplasm-safari-webext-validation.zip",
           }
         : {
             browser: "chrome",
-            stageDir: "package",
-            zipName: `iconoplasm-extension-v${packageVersion}.zip`,
+            releaseZipName: `iconoplasm-extension-v${packageVersion}.zip`,
+            validationZipName: "iconoplasm-extension-validation.zip",
           }
 
-const stageRoot = resolve(distRoot, targetConfig.stageDir)
-const zipPath = resolve(distRoot, targetConfig.zipName)
+const validationRoot = resolve(distRoot, "validation", packageTarget)
+const workRoot = buildPurpose.release
+  ? resolve(distRoot, "release-work", packageTarget)
+  : validationRoot
+const stageRoot = resolve(workRoot, "package")
+const zipPath = buildPurpose.release
+  ? resolve(distRoot, targetConfig.releaseZipName)
+  : resolve(validationRoot, targetConfig.validationZipName)
 const wxtWorkRoot = resolve(extensionRoot, `.wxt-${targetConfig.browser}`)
 const wxtPublicRoot = resolve(wxtWorkRoot, "public")
 const wxtSrcRoot = resolve(wxtWorkRoot, "src")
 const wxtEntrypointsRoot = resolve(wxtSrcRoot, "entrypoints")
-const wxtOutRoot = resolve(distRoot, "wxt")
+const wxtOutRoot = resolve(workRoot, "wxt")
 const wxtBuildRoot = resolve(wxtOutRoot, `${targetConfig.browser}-mv3`)
-const wxtZipPath = resolve(wxtOutRoot, `iconoplasm-${targetConfig.browser}-v${packageVersion}.zip`)
+const wxtZipPath = resolve(wxtOutRoot, "wxt-build.zip")
 
 const commonRuntimeFiles = [
   "manifest.json",
@@ -154,11 +188,6 @@ const suspiciousContentPatterns = [
   { label: "Bearer token", pattern: /Bearer\s+[A-Za-z0-9._-]{20,}/ },
   { label: "PEM private key", pattern: /-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/ },
 ]
-
-function fail(message) {
-  console.error(`[package-iconoplasm-extension] ${message}`)
-  process.exit(1)
-}
 
 function ensureExists(path, kind) {
   if (!existsSync(path)) {
@@ -256,7 +285,10 @@ function runWxtZip() {
   rmSync(wxtBuildRoot, { recursive: true, force: true })
   rmSync(wxtZipPath, { force: true })
   rmSync(stageRoot, { recursive: true, force: true })
-  rmSync(zipPath, { force: true })
+  if (buildPurpose.release && existsSync(zipPath)) {
+    fail(`Refusing to overwrite release artifact ${relative(repoRoot, zipPath)}`)
+  }
+  if (!buildPurpose.release) rmSync(zipPath, { force: true })
 
   const wxtArgs = ["exec", "wxt", "zip", "--browser", targetConfig.browser, "--mv3"]
   const command = process.platform === "win32" ? "cmd.exe" : "pnpm"
@@ -268,6 +300,8 @@ function runWxtZip() {
     env: {
       ...process.env,
       ICONOPLASM_WXT_BROWSER: targetConfig.browser,
+      ICONOPLASM_WXT_OUT_DIR: wxtOutRoot,
+      ICONOPLASM_WXT_ARTIFACT_TEMPLATE: "wxt-build.zip",
     },
     timeout: 120_000,
   })
@@ -284,7 +318,7 @@ function runWxtZip() {
   ensureExists(wxtZipPath, "WXT extension ZIP")
 
   cpSync(wxtBuildRoot, stageRoot, { recursive: true })
-  copyFileSync(wxtZipPath, zipPath)
+  copyFileSync(wxtZipPath, zipPath, buildPurpose.release ? constants.COPYFILE_EXCL : 0)
 }
 
 function validatePackagedBackground() {
@@ -370,6 +404,9 @@ async function main() {
   const stagedFiles = scanPayload(stageRoot)
 
   console.log(`[package-iconoplasm-extension] Created ${relative(repoRoot, zipPath)}`)
+  console.log(
+    `[package-iconoplasm-extension] Purpose: ${buildPurpose.release ? "human-authorized release" : "replaceable validation"}`,
+  )
   console.log(`[package-iconoplasm-extension] Target: ${packageTarget}`)
   console.log(`[package-iconoplasm-extension] WXT browser: ${targetConfig.browser}`)
   console.log("[package-iconoplasm-extension] Packaged runtime files:")

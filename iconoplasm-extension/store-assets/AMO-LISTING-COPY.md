@@ -2,19 +2,23 @@
 
 ## upload file
 
-Upload this Firefox package on the AMO "Upload Version" screen if the GUI/GitHub publish flow is not being used:
+Upload only the files retained by the human-authorized
+`iconoplasm-firefox-submission` GitHub Actions artifact. The default local
+package commands create validation output and must not be uploaded to AMO.
 
-- `D:\Coding\Website\iconoplasm-extension\dist\iconoplasm-firefox-v<PUBLISHER_VERSION>.zip`
+Firefox package inside that release artifact:
+
+- `iconoplasm-firefox-v<PUBLISHER_VERSION>.zip`
 
 If AMO asks for source code, upload this file:
 
-- `D:\Coding\Website\iconoplasm-extension\dist\iconoplasm-firefox-source-v<PUBLISHER_VERSION>.zip`
+- `iconoplasm-firefox-source-v<PUBLISHER_VERSION>.zip`
 
 Store release guard:
 
-- normal Firefox publish starts from `D:\Coding\Iconoplasm` -> Website Ops -> Store publish
+- all Firefox publishing starts from `D:\Coding\Iconoplasm` -> Website Ops -> Store publish
 - `<PUBLISHER_VERSION>` is the value in `iconoplasm-extension/publisher-release.json`; never infer or bump it during ordinary development
-- the publish button is labeled `Yes, I'm a human, publish Firefox`
+- release packaging requires `--release --expected-version=<PUBLISHER_VERSION>` and is owned by the GUI/workflow, not an ordinary local package command
 - the workflow requires the phrase `YES, I AM A HUMAN, PUBLISH ICONOPLASM`
 - do not let LLMs, scripts, scheduled jobs, or website deploy automation submit store releases
 
@@ -103,6 +107,6 @@ Supports both Desktop Firefox and Firefox for Android 142 or newer.
 
 ## notes for reviewers
 
-- Generated files are produced by `npm run sync:iconoplasm-shared`.
+- Generated files are produced by `pnpm run sync:iconoplasm-shared`.
 - A matching source archive is attached for review.
 - The extension injects a minimal site bridge only on `iconoplasm.brinedew.bio` and `staging.brinedew.bio`; the main highlighting runtime explicitly excludes those hosts.
