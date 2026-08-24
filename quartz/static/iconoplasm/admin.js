@@ -1390,6 +1390,9 @@
                     pipeline.sampler,
                 ) +
                 "</strong></div>",
+              "<div><span>Resolution</span><strong>" +
+                esc(String(pipeline.width || "") + "×" + String(pipeline.height || "")) +
+                "</strong></div>",
               "<div><span>Vision</span><strong>" +
                 esc(vision.label + (isRecommended ? " · recommended for this model" : "")) +
                 "</strong></div>",
