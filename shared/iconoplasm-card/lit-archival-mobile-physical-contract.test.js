@@ -141,6 +141,33 @@ test("print-copy and seal lines use archival caption type with a bold print acti
   assert.match(printCopyBlock, /font-weight:\s*700\s*;/)
 })
 
+test("desktop specimen metrics fit above the fixed card edge", async () => {
+  const css = await sourceText(cssPath)
+  const footer = cssStandaloneBlockFor(css, ".icono-label-specimen-footer")
+  const swatchHex = cssStandaloneBlockFor(css, ".icono-label-specimen-swatch-hex")
+  const metricValue = cssStandaloneBlockFor(css, ".icono-label-specimen-metric-value")
+
+  assert.match(
+    footer,
+    /--icono-label-hand-size:\s*calc\(30 \/ 1220 \* 100cqw\)\s*;/,
+  )
+  assert.match(swatchHex, /line-height:\s*1\s*;/)
+  assert.match(metricValue, /line-height:\s*1\s*;/)
+
+  const availableFooterUnits = 634 - 18 - 442 - 12 - 16
+  const notesUnits = 10 * 1.1
+  const handLineUnits = 30 * 0.95
+  const colorRowUnits = Math.max(16, handLineUnits)
+  const decompositionUnits = 3 * Math.max(20, handLineUnits) + 2 * 3
+  const requiredFooterUnits = notesUnits + 1 + colorRowUnits + 4 + decompositionUnits
+
+  assert.equal(availableFooterUnits, 146)
+  assert.ok(
+    requiredFooterUnits <= availableFooterUnits,
+    `specimen footer requires ${requiredFooterUnits} artboard units but only ${availableFooterUnits} are available`,
+  )
+})
+
 test("first-paint fonts are embedded and revealed as one bounded transaction", async () => {
   const css = await sourceText(generatedCssPath)
   const head = await sourceText(headPath)

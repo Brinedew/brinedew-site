@@ -542,6 +542,11 @@
 }
 
 .icono-label-specimen-footer {
+  /* The fixed desktop sheet leaves 146/1220 artboard units below the
+     non-shrinking specimen viewport. Keep the local handwriting scale inside
+     that budget; the general 36-unit hand size makes the third LOEUF row
+     extend beyond the paper edge at narrower desktop card widths. */
+  --icono-label-hand-size: calc(30 / 1220 * 100cqw);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: min-content min-content;
@@ -602,6 +607,7 @@
   color: color-mix(in srgb, var(--icono-label-ink) 74%, transparent);
   font-family: var(--icono-label-type);
   font-size: calc(13 / 1220 * 100cqw);
+  line-height: 1;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -700,6 +706,7 @@
 .icono-label-specimen-metric-value {
   font-family: "Special Elite";
   font-size: calc(20 / 1220 * 100cqw);
+  line-height: 1;
   letter-spacing: 0.04em;
   text-align: left;
   display: block;
