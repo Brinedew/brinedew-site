@@ -847,6 +847,39 @@ test("complete gene metadata is indexable while incomplete records retain noinde
   assert.match(staleCatalogPortraitHtml, /\/blots\/TP53\.webp/)
   assert.doesNotMatch(staleCatalogPortraitHtml, /\/portraits\/v1\//)
 
+  const pendingBlotHtml = rewriteIconoplasmGeneDiscoveryMetadata(completeHtml, "/gene/TP53", {
+    record: publishedGene("TP53", "tumor protein p53"),
+    cardPayload: {
+      symbol: "TP53",
+      full_name: "tumor protein p53",
+      portrait: { status: "published", asset_sha256: "a".repeat(64) },
+    },
+    indexable: true,
+  })
+  assert.doesNotMatch(pendingBlotHtml, /name="robots"/)
+  assert.doesNotMatch(pendingBlotHtml, /(?:property|name)="(?:og:image|twitter:image)/)
+  assert.doesNotMatch(pendingBlotHtml, /canonical-blot/)
+  const pendingStructuredDataMatch = pendingBlotHtml.match(
+    /<script type="application\/ld\+json" id="iconoplasm-gene-structured-data">([\s\S]*?)<\/script>/,
+  )
+  assert.ok(pendingStructuredDataMatch)
+  const pendingGraph = JSON.parse(pendingStructuredDataMatch[1])["@graph"]
+  assert.equal(pendingGraph.length, 2)
+  assert.equal(pendingGraph[0]["@type"], "WebPage")
+  assert.equal(pendingGraph[1]["@type"], "Gene")
+  assert.equal(
+    iconoplasmGeneDocumentProjectionIsIndexable({
+      record: publishedGene("TP53", "tumor protein p53"),
+      cardPayload: {
+        symbol: "TP53",
+        portrait: { status: "published", asset_sha256: "a".repeat(64) },
+      },
+      indexable: true,
+      profileComplete: true,
+    }),
+    true,
+  )
+
   const incompleteHtml = rewriteIconoplasmGeneDiscoveryMetadata(completeHtml, "/gene/TP53", {
     record: publishedGene("TP53", "tumor protein p53", { published: false }),
     indexable: false,

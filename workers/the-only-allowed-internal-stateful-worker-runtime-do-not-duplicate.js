@@ -1040,60 +1040,67 @@ export function iconoplasmGeneDocumentProjectionIsIndexable({
   profileComplete = false,
 } = {}) {
   const gene = normalizeIconoplasmPublishedGeneRecord(record)
+  const portrait =
+    cardPayload?.portrait && typeof cardPayload.portrait === "object" ? cardPayload.portrait : null
+  // Page discovery and image discovery are separate contracts. A complete
+  // published gene profile remains indexable while its optional canonical blot
+  // is being materialized. Blot readiness only controls image metadata below.
   return Boolean(
     indexable &&
     gene.symbol &&
     gene.fullName &&
     profileComplete &&
-    iconoplasmGenePublishedCardBlotUrl(cardPayload),
+    portrait?.status === "published" &&
+    /^[a-f0-9]{64}$/i.test(String(portrait.asset_sha256 || "").trim()),
   )
 }
 
 function iconoplasmGeneStructuredData({ gene, geneUrl, title, description, blotUrl }) {
   const webpageId = `${geneUrl}#webpage`
   const geneId = `${geneUrl}#gene`
-  const imageId = `${geneUrl}#canonical-blot`
-  const blotAlt = `${gene.symbol} Iconoplasm gene blot — ${gene.fullName || gene.symbol}`
-  const caption = `Canonical Iconoplasm gene blot for human ${gene.symbol} (${gene.fullName || gene.symbol}), with the full gene name and symbol printed over the character artwork.`
-  const image = {
-    "@type": "ImageObject",
-    "@id": imageId,
-    contentUrl: blotUrl,
-    url: blotUrl,
-    name: blotAlt,
-    caption,
-    encodingFormat: "image/webp",
-    width: 768,
-    height: 1024,
-    representativeOfPage: true,
+  const webpage = {
+    "@type": "WebPage",
+    "@id": webpageId,
+    url: geneUrl,
+    name: title,
+    description,
+    mainEntity: { "@id": geneId },
+  }
+  const geneEntity = {
+    "@type": "Gene",
+    "@id": geneId,
+    name: gene.fullName || gene.symbol,
+    alternateName: gene.symbol,
+    url: geneUrl,
+    identifier: {
+      "@type": "PropertyValue",
+      propertyID: "HGNC approved symbol",
+      value: gene.symbol,
+    },
+  }
+  const graph = [webpage, geneEntity]
+  if (blotUrl) {
+    const imageId = `${geneUrl}#canonical-blot`
+    const blotAlt = `${gene.symbol} Iconoplasm gene blot — ${gene.fullName || gene.symbol}`
+    const caption = `Canonical Iconoplasm gene blot for human ${gene.symbol} (${gene.fullName || gene.symbol}), with the full gene name and symbol printed over the character artwork.`
+    webpage.primaryImageOfPage = { "@id": imageId }
+    geneEntity.image = { "@id": imageId }
+    graph.push({
+      "@type": "ImageObject",
+      "@id": imageId,
+      contentUrl: blotUrl,
+      url: blotUrl,
+      name: blotAlt,
+      caption,
+      encodingFormat: "image/webp",
+      width: 768,
+      height: 1024,
+      representativeOfPage: true,
+    })
   }
   return {
     "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "WebPage",
-        "@id": webpageId,
-        url: geneUrl,
-        name: title,
-        description,
-        mainEntity: { "@id": geneId },
-        primaryImageOfPage: { "@id": imageId },
-      },
-      {
-        "@type": "Gene",
-        "@id": geneId,
-        name: gene.fullName || gene.symbol,
-        alternateName: gene.symbol,
-        url: geneUrl,
-        identifier: {
-          "@type": "PropertyValue",
-          propertyID: "HGNC approved symbol",
-          value: gene.symbol,
-        },
-        image: { "@id": imageId },
-      },
-      image,
-    ],
+    "@graph": graph,
   }
 }
 
@@ -1113,7 +1120,6 @@ export function rewriteIconoplasmGeneDiscoveryMetadata(
   const description = iconoplasmGeneMetaDescription(record, cardPayload)
   const safeDescription = escapeIconoplasmHtmlAttribute(description)
   const blotUrl = indexable ? iconoplasmGenePublishedCardBlotUrl(cardPayload) : ""
-  const metadataIndexable = Boolean(indexable && blotUrl)
   const blotAlt = blotUrl ? `${symbol} Iconoplasm gene blot — ${gene.fullName || symbol}` : ""
   let next = String(html || "").replace(
     /\s*<script\b[^>]*\btype=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>\s*/gi,
@@ -1126,7 +1132,7 @@ export function rewriteIconoplasmGeneDiscoveryMetadata(
     /<meta\b[^>]*\bname=["']description["'][^>]*>/i,
     `<meta name="description" content="${safeDescription}">`,
   )
-  if (metadataIndexable) {
+  if (indexable) {
     next = next.replace(/\s*<meta\b[^>]*\bname=["']robots["'][^>]*>\s*/gi, "\n")
   } else {
     next = replaceOrInsertHeadMarkup(
@@ -1170,25 +1176,26 @@ export function rewriteIconoplasmGeneDiscoveryMetadata(
     /<meta\b[^>]*\b(?:property|name)=["']twitter:description["'][^>]*>/i,
     `<meta name="twitter:description" content="${safeDescription}">`,
   )
-  if (!blotUrl) return next
-
-  const imageMeta = [
-    `<meta property="og:image" content="${blotUrl}">`,
-    `<meta property="og:image:url" content="${blotUrl}">`,
-    `<meta property="og:image:secure_url" content="${blotUrl}">`,
-    `<meta property="og:image:type" content="image/webp">`,
-    `<meta property="og:image:alt" content="${escapeIconoplasmHtmlAttribute(blotAlt)}">`,
-    '<meta property="og:image:width" content="768">',
-    '<meta property="og:image:height" content="1024">',
-    '<meta name="twitter:card" content="summary_large_image">',
-    `<meta name="twitter:image" content="${blotUrl}">`,
-    `<meta name="twitter:image:alt" content="${escapeIconoplasmHtmlAttribute(blotAlt)}">`,
-  ].join("\n")
-  next = replaceOrInsertHeadMarkup(
-    next,
-    /<meta\b[^>]*\bdata-iconoplasm-gene-image=["']canonical["'][^>]*>/i,
-    imageMeta,
-  )
+  if (blotUrl) {
+    const imageMeta = [
+      `<meta property="og:image" content="${blotUrl}">`,
+      `<meta property="og:image:url" content="${blotUrl}">`,
+      `<meta property="og:image:secure_url" content="${blotUrl}">`,
+      `<meta property="og:image:type" content="image/webp">`,
+      `<meta property="og:image:alt" content="${escapeIconoplasmHtmlAttribute(blotAlt)}">`,
+      '<meta property="og:image:width" content="768">',
+      '<meta property="og:image:height" content="1024">',
+      '<meta name="twitter:card" content="summary_large_image">',
+      `<meta name="twitter:image" content="${blotUrl}">`,
+      `<meta name="twitter:image:alt" content="${escapeIconoplasmHtmlAttribute(blotAlt)}">`,
+    ].join("\n")
+    next = replaceOrInsertHeadMarkup(
+      next,
+      /<meta\b[^>]*\bdata-iconoplasm-gene-image=["']canonical["'][^>]*>/i,
+      imageMeta,
+    )
+  }
+  if (!indexable) return next
   const structuredData = iconoplasmGeneStructuredData({
     gene: { ...gene, symbol },
     geneUrl,

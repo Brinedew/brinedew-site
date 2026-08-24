@@ -25767,6 +25767,58 @@ async function currentGeneBlotSourceCard(env, { requestUrl, symbol, scope }) {
   return records[0] || null
 }
 
+export async function pagePublishedCardCatalogArtifact(
+  env,
+  artifactVersion,
+  { after = "", limit = 25 } = {},
+) {
+  const version = String(artifactVersion || "").trim()
+  const cursor = normalizeSymbol(after)
+  const pageLimit = Math.max(1, Math.min(100, Number(limit) || 25))
+  const manifest = await readPublishedCardCatalogManifest(env, version)
+  if (!manifest) return null
+
+  const records = []
+  const appendCards = (cards) => {
+    for (const card of Array.isArray(cards) ? cards : []) {
+      const symbol = normalizeSymbol(card?.symbol || card?.canonical_symbol || "")
+      if (!symbol || symbol <= cursor) continue
+      records.push(card?.payload && typeof card.payload === "object" ? card.payload : card)
+      if (records.length > pageLimit) return false
+    }
+    return true
+  }
+
+  if (Array.isArray(manifest.shards)) {
+    const contentAddressed = manifest.storage === CARD_CATALOG_CONTENT_ADDRESSED_STORAGE
+    const shards = manifest.shards.slice().sort((a, b) => Number(a?.index) - Number(b?.index))
+    for (const shard of shards) {
+      const last = normalizeSymbol(shard?.last_symbol || "")
+      if (last && last <= cursor) continue
+      const parsed = await readPublishedCardCatalogShard(env, version, shard, contentAddressed)
+      if (!parsed) return null
+      if (!appendCards(parsed.cards)) break
+    }
+  } else {
+    const whole = normalizeCardCatalogArtifact(manifest)
+    if (!whole || !appendCards(whole.cards)) {
+      if (!whole) return null
+    }
+  }
+
+  const hasMore = records.length > pageLimit
+  const page = records.slice(0, pageLimit)
+  return {
+    records: page,
+    done: !hasMore,
+    next_after: page.length
+      ? normalizeSymbol(
+          page[page.length - 1]?.symbol || page[page.length - 1]?.canonical_symbol || "",
+        )
+      : cursor || null,
+  }
+}
+
 async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
   const url = new URL(request.url)
   const scope = String(payload?.scope || url.searchParams.get("scope") || "published")
@@ -25812,44 +25864,34 @@ async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
     )
   }
   const after = normalizeSymbol(payload?.after || url.searchParams.get("after") || "")
-  const rows = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol
-       FROM icono_gene_catalog
-      WHERE gene_symbol > ?
-      ORDER BY gene_symbol ASC
-      LIMIT ?`,
-  )
-    .bind(after, limit)
-    .all()
-  const symbols = (Array.isArray(rows?.results) ? rows.results : [])
-    .map((row) => normalizeSymbol(row?.gene_symbol || ""))
-    .filter(Boolean)
-  let records = []
-  if (symbols.length) {
-    const versionInfo = await currentMobileCardSnapshotVersion(env)
-    const version = String(versionInfo?.current || "").trim()
-    const artifact = version
-      ? await readPublishedCardCatalogArtifact(env, version, symbols, { allowWholeArtifact: false })
-      : null
-    if (!artifact) {
-      throw geneBlotServiceError(
-        503,
-        "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
-        "The exact published card artifact is unavailable.",
-      )
-    }
-    records = symbols
-      .map((symbol) => artifact.bySymbol.get(symbol)?.payload || null)
-      .filter(Boolean)
+  const requestedVersion = String(
+    payload?.snapshot_version || url.searchParams.get("snapshot_version") || "",
+  ).trim()
+  const versionInfo = requestedVersion ? null : await currentMobileCardSnapshotVersion(env)
+  const version = requestedVersion || String(versionInfo?.current || "").trim()
+  const page = version
+    ? await pagePublishedCardCatalogArtifact(env, version, { after, limit })
+    : null
+  if (!page) {
+    throw geneBlotServiceError(
+      503,
+      "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
+      "The exact published card artifact is unavailable.",
+    )
   }
+  const records = page.records
+  const symbols = records
+    .map((record) => normalizeSymbol(record?.symbol || record?.canonical_symbol || ""))
+    .filter(Boolean)
   return {
     ok: true,
     scope,
     items: records.map((record) => geneBlotBacklogItem(record, scope)).filter(Boolean),
     symbols,
+    snapshot_version: version,
     scanned: symbols.length,
-    done: symbols.length < limit,
-    next_after: symbols.length ? symbols[symbols.length - 1] : after || null,
+    done: page.done,
+    next_after: page.next_after,
   }
 }
 
