@@ -8,19 +8,29 @@ import {
   publishIconoplasmGalleryDirtyShardsForTest,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  iconoplasmGeneBlotFingerprint,
+  iconoplasmGeneBlotObjectKey,
+} from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 
 const WATERMARK_KEY = "iconoplasm:card-catalog-publish-watermark:v1"
 const PUBLICATION_KEY = "iconoplasm:card-catalog-dirty-shard-publication:v1"
 const SHARD_PREFIX = "iconoplasm:card-catalog-shard:"
 
 function geneRow(symbol, sha = "7b".repeat(32)) {
+  const fullName = `full name ${symbol}`
+  const blotFingerprint = iconoplasmGeneBlotFingerprint({
+    symbol,
+    full_name: fullName,
+    portrait: { status: "published", asset_sha256: sha },
+  })
   return {
     gene_symbol: symbol,
-    catalog_full_name: `full name ${symbol}`,
+    catalog_full_name: fullName,
     color_hex: "#423D37",
     tmh: 1,
-    essence_full_name: `full name ${symbol}`,
-    full_name: `full name ${symbol}`,
+    essence_full_name: fullName,
+    full_name: fullName,
     weight_kg: 137.9,
     molecular_weight_kda: 137.9,
     age_years: 35,
@@ -43,6 +53,12 @@ function geneRow(symbol, sha = "7b".repeat(32)) {
     vision_id: "artist-random-v1",
     candidate_image_id: 5423,
     emulsion_id: "A1-5423",
+    gene_blot_fingerprint: blotFingerprint,
+    gene_blot_portrait_asset_sha256: sha,
+    gene_blot_asset_sha256: "ef".repeat(32),
+    gene_blot_object_key: iconoplasmGeneBlotObjectKey(symbol, blotFingerprint),
+    gene_blot_width: 768,
+    gene_blot_height: 1024,
   }
 }
 

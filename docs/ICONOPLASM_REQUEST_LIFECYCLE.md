@@ -16,9 +16,11 @@ For an exact published symbol, the cold path is bounded and ordered:
    This identity-only table has no portrait, ranking, or vote fields.
 3. Build the canonical route record without KV reads or hydration of the full
    19,023-gene catalog.
-4. Fetch the internal JSON detail response only far enough to derive its ETag
-   snapshot version. This current D1 detail is the vote-fresh page authority;
-   the coarse card artifact is not substituted for it.
+4. Build the internal JSON detail response from bounded rich D1 reads plus the
+   one-symbol card shard selected by `KV_GALLERY_VERSION`. D1 supplies live
+   facts/candidates; the card payload overrides the canonical portrait and
+   candidate `is_current` identity. Derive the HTML snapshot key from the
+   complete response ETag, which includes the card version.
 5. Check the HTML cache before parsing JSON or rendering the shell.
 6. Return the cached shell immediately on a hit. On a miss, parse and render
    using the same already-fetched detail response, then store the result.
@@ -31,10 +33,11 @@ turn a failed read into a publication or repair operation.
 After a successful card-catalog version flip, publication synchronizes route
 membership only for canonical-affecting event symbols in the watermark window.
 The operation is idempotent. It never copies mutable canon into the route table
-and never publishes KV per vote. A newly projected vote changes the detail ETag,
-so later navigation selects a new HTML cache key even while the browse artifact
-waits for the next successful 15-minute publication tick. That tick rewrites only
-the dirty content-addressed shard and atomically flips the browse manifest. A
+and never publishes KV per vote. A newly projected vote can change rich candidate
+state and therefore the detail ETag, but it cannot move the public portrait before
+publication. The next successful 15-minute publication tick rewrites only the
+dirty content-addressed shard and atomically flips the browse manifest, page
+portrait, media projection, and discovery documents together. A
 scattered delta may require multiple six-shard preparation ticks, but the old
 manifest remains coherent until the one final flip; it never falls back to a
 complete-catalog rebuild. See architecture fence IPD-010.

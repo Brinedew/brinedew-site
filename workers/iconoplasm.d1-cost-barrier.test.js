@@ -295,6 +295,8 @@ function completeMobileCard(symbol, version) {
   const normalized = String(symbol || "")
     .trim()
     .toUpperCase()
+  const portraitAssetSha256 = normalized === "TP53" ? "b".repeat(64) : "a".repeat(64)
+  const portraitUrl = `https://iconoplasmportraits.b-cdn.net/portraits/${normalized}/medium.webp`
   return {
     __complete: true,
     schema_version: "iconoplasm.mobileCard.v1",
@@ -304,13 +306,13 @@ function completeMobileCard(symbol, version) {
     full_name: `${normalized} full name`,
     display_color: "#5a7fff",
     portrait: {
-      status: "ready",
-      url: `https://iconoplasmportraits.b-cdn.net/portraits/${normalized}/medium.webp`,
+      status: "published",
+      url: portraitUrl,
       full_url: `https://iconoplasmportraits.b-cdn.net/portraits/${normalized}/full.webp`,
       thumb_url: `https://iconoplasmportraits.b-cdn.net/portraits/${normalized}/thumb.webp`,
       width: 384,
       height: 512,
-      asset_sha256: normalized === "TP53" ? "b".repeat(64) : "a".repeat(64),
+      asset_sha256: portraitAssetSha256,
       candidate_image_id: normalized === "TP53" ? 12 : 11,
       vision_id: `anima-v1-${normalized}`,
       emulsion_id: `A1-${normalized}`,
@@ -323,6 +325,11 @@ function completeMobileCard(symbol, version) {
     payload: {
       symbol: normalized,
       full_name: `${normalized} full name`,
+      portrait: {
+        status: "published",
+        medium_url: portraitUrl,
+        asset_sha256: portraitAssetSha256,
+      },
     },
   }
 }

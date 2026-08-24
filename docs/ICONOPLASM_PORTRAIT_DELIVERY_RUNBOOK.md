@@ -35,6 +35,27 @@ Domain payloads contain canonical first-party URLs only. A storage or CDN
 provider hostname is not an asset identifier and must not be added to gene,
 candidate, edit-job, or catalog payloads.
 
+Portrait selection happens before delivery policy. D1 owns authoring, vote,
+rich-detail, and candidate state and may legitimately name a newer leader while
+publication is pending. The exact card artifact selected by
+`KV_GALLERY_VERSION` is the sole published source-portrait selection used by
+signed-in and anonymous cards, gene detail, extension cards, and print-copy
+inputs. Missing exact-card state fails closed; there is no D1 or gene-detail
+portrait fallback.
+
+The source portrait is not Iconoplasm's canonical public/search image. That role
+belongs to the matching **gene blot**: the workstation-rendered 768x1024 WebP
+containing the portrait cover crop, protection gradient, full gene name, and
+symbol. Blots live under `blots/v1/<initial>/<SYMBOL>/<fingerprint>/...webp`;
+the stable first-party `/blots/<SYMBOL>.webp` route resolves only the immutable
+reference in the exact published card. Public media, page metadata, structured
+data, archives, and image sitemaps expose the blot, while raw portrait artwork
+is explicitly subordinate.
+
+For both portraits and blots, Bunny is the healthy-region accelerator for
+non-Vietnam users. Vietnam and any failed Bunny probe use the canonical
+first-party route. That choice changes only byte delivery, never identity.
+
 Labelled gene-card PNGs are a separate derived asset class under
 `gene-cards/v1/<prefix>/<card-fingerprint>/<SYMBOL>-iconoplasm-gene-card.png`.
 Their fingerprint comes from the exact versioned published card payload and the
@@ -61,8 +82,11 @@ requests, GET/HEAD source selection, PUT, and DELETE. Routes and notification
 senders must not reconstruct those operations independently.
 
 `https://iconoplasm.brinedew.bio/portraits/v1/...` and
-`https://iconoplasm.brinedew.bio/gene-cards/v1/...` first read authenticated
-Storage. Bunny can expose different truth through its Storage API and public CDN
+`https://iconoplasm.brinedew.bio/gene-cards/v1/...`, and immutable
+`https://iconoplasm.brinedew.bio/blots/v1/...` requests first read authenticated
+Storage. Stable `/blots/<SYMBOL>.webp` requests first resolve the current exact
+card's immutable blot reference, then use the same adapter. Bunny can expose
+different truth through its Storage API and public CDN
 replicas: the observed CASP8AP2 failure loaded from an American VPN while the
 Vietnam first-party Storage read returned 404. A Storage 404 or unreachable
 Storage view therefore advances inside the Worker to the public CDN view. The

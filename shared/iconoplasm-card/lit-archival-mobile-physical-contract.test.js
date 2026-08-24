@@ -345,10 +345,10 @@ test("real seven-clan KALRN infocard projects PFAM lanes into a 4 plus 3 column 
 })
 
 // ARCHITECTURE FENCE [IPD-003]
-test("gene lead portraits opt into canonical search and accessibility text", async () => {
+test("gene lead portrait artwork is labelled as source material, not the canonical blot", async () => {
   const shared = await import(pathToFileURL(runtimePath).href)
   const sharedRuntime = shared.IconoCardShared || globalThis.IconoplasmCardShared
-  const portraitAlt = sharedRuntime.canonicalGenePortraitAlt("tp53")
+  const portraitAlt = sharedRuntime.genePortraitArtworkAlt("tp53")
   const html = sharedRuntime.renderLabLabelPortraitMediaHtml(
     "TP53",
     "https://iconoplasm.brinedew.bio/portraits/v1/aa/asset/medium.webp",
@@ -356,20 +356,17 @@ test("gene lead portraits opt into canonical search and accessibility text", asy
     { width: 768, height: 1024 },
     {
       portraitAlt,
-      buttonAriaLabel: "Open full-size canonical gene character portrait for TP53",
-      captionText: sharedRuntime.canonicalGenePortraitCaption("TP53", "tumor protein p53"),
+      buttonAriaLabel: "Open full-size source character artwork for TP53",
+      captionText: sharedRuntime.genePortraitArtworkCaption("TP53", "tumor protein p53"),
     },
   )
 
-  assert.equal(portraitAlt, "TP53 canonical gene character portrait by Iconoplasm")
+  assert.equal(portraitAlt, "TP53 character artwork used inside the Iconoplasm gene blot")
+  assert.match(html, /aria-label="Open full-size source character artwork for TP53"/)
+  assert.match(html, /alt="TP53 character artwork used inside the Iconoplasm gene blot"/)
   assert.match(
     html,
-    /aria-label="Open full-size canonical gene character portrait for TP53"/,
-  )
-  assert.match(html, /alt="TP53 canonical gene character portrait by Iconoplasm"/)
-  assert.match(
-    html,
-    /class="icono-visually-hidden icono-canonical-portrait-caption">Canonical Iconoplasm portrait of human TP53 \(tumor protein p53\)\.<\/span>/,
+    /class="icono-visually-hidden icono-portrait-artwork-caption">Source character artwork used inside the Iconoplasm gene blot for TP53 \(tumor protein p53\)\.<\/span>/,
   )
   assert.doesNotMatch(html, /alt="TP53 blot"/)
 })

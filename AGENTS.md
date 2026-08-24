@@ -56,23 +56,29 @@ existing non-visual homepage description, not as new chrome in the immersive
 Archive/Clans switcher; feed skip links stay clipped until keyboard focus. Read
 `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md` before changing the renderer,
 gene HTML, range map, robots metadata, archive, sitemap, or `llms.txt`.
-The existing content-addressed first-party medium WebP for the published lead
-portrait is the single canonical portrait URL. Every complete gene page must
-project that exact URL through its server-rendered lead image with descriptive
-alt/accessibility text, gene-specific Open Graph and Twitter metadata, one linked
-`WebPage`/`ImageObject`/`Gene` JSON-LD graph, and its gene-sitemap entry. Do not
-mint a symbol-addressed portrait alias, redirect, mutable copy, or parallel
-portrait read plane. A ready labelled-card PNG may appear as a secondary image;
-it never replaces the canonical portrait. These discovery reads must not add a
-D1 scan or any request-time write, enrollment, vote lookup, Queue send, repair,
-or Browser Rendering work. Before emitting a gene-sitemap shard, batch-read the
-exact published card shards selected by `KV_GALLERY_VERSION` and require every
-portrait SHA to match the discovery snapshot; unavailable or divergent
-publication state returns an uncached `503` instead of a stale sitemap.
-The same fail-closed rule applies when a gene route record and rendered card
-payload disagree; do not leave that document indexable without image metadata.
-After first paint, IPD-001 may select Bunny's equivalent accelerator URL for
-browser delivery; that must not replace the first-party discovery identity.
+The canonical public machine image is the Iconoplasm gene blot, not its source
+portrait artwork. A blot is the exact image-only shared card composition:
+published portrait cover crop, protection gradient, full gene name at bottom
+left, and gene symbol at bottom right. The workstation renders its immutable
+768x1024 WebP from the exact selected published card; Cloudflare never renders
+it. Every complete gene page projects the exact ready blot through a normal
+server-rendered `<img>`, alt and caption text, gene-specific Open Graph and
+Twitter metadata, one linked `WebPage`/`ImageObject`/`Gene` JSON-LD graph, and
+its gene-sitemap entry. The stable first-party `/blots/{SYMBOL}.webp` route may
+resolve only the immutable blot referenced by the current exact card artifact.
+These discovery reads must not add a D1 scan or any request-time write,
+enrollment, vote lookup, Queue send, repair, or Browser Rendering work. Before
+emitting a gene-sitemap shard, batch-read the
+exact published card shards selected by `KV_GALLERY_VERSION`. Catalog and route
+records supply identity candidates only; never compare or substitute their
+legacy portrait SHA. Every requested candidate must resolve to a structurally
+valid card, while only cards with an exact ready blot enter the range or gene
+sitemap. An unavailable/incomplete artifact read returns uncached `503` instead
+of a partial sitemap. The source portrait remains available as subordinate
+character artwork; it must never be described as the canonical public gene
+image. In healthy non-Vietnam regions, IPD-001 selects Bunny's byte-equivalent
+accelerator URL; Vietnam and any failed Bunny probe stay on the first-party
+route. Delivery selection must not replace the first-party discovery identity.
 Requested labelled-card thumbnails are a projection of an already-published
 card artifact. Archive, sitemap, and image reads may expose only a ready object
 whose fingerprint still matches that exact card; those crawler reads must never
@@ -201,8 +207,10 @@ extension terms.
 
 **ARCHITECTURE FENCE [IPD-009]** — canonical Iconoplasm gene first paint is
 cold-safe: a tiny publication-owned D1 identity index resolves an exact symbol
-without KV or full-catalog reads, the current D1 detail ETag is probed before
-the HTML cache, and cache hits return before JSON parsing or shell rendering.
+without a full-catalog read, then the complete site-detail ETag is probed before
+the HTML cache. That detail combines bounded exact D1 reads with the one-symbol
+card shard selected by `KV_GALLERY_VERSION`; cache hits return before JSON
+parsing or shell rendering, though they still pay those bounded state reads.
 The route index stores no portrait or vote state. The existing loudly named
 stateful Worker and direct route remain the only owner. Never replace the
 protective prefix/suffix naming pattern with shorter responsibility-only names;
@@ -226,20 +234,23 @@ Read `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` and Linear B-695
 before changing gallery publication, its cron route, KV accounting, or mapper
 revision behavior.
 
-**ARCHITECTURE FENCE [IPD-011]** — every homepage portrait in a signed-in
-account window is projected from the exact versioned published card artifact
-selected by `KV_GALLERY_VERSION`. Discovery rows decide membership and order;
-they do not decide portrait identity. The image-only account view is a compact
-projection of the same card VM used by the ordinary account view, not a second
-portrait read plane. Never restore `publishedPortraitRefs(...)`, discovery-row
-`asset_sha256`, a browser-local portrait cache, or any other parallel snapshot
-as the image-only source. That split caused B-700: logged-in Edge showed the
-old light-purple ZNF25 on the homepage while the same session's gene page showed
-the current dark-gray canonical. Read `docs/ICONOPLASM_HOME_PERFORMANCE.md` and
-the B-700 section of `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md` before
-changing account-gallery card composition, `view=image-only`, or portrait
-freshness behavior. Any replacement must preserve one portrait authority and
-must pass a same-session visual comparison of the homepage and gene page.
+**ARCHITECTURE FENCE [IPD-011]** — the exact versioned card artifact selected by
+`KV_GALLERY_VERSION` owns both the published source-portrait selection and the
+canonical public blot reference. Discovery/catalog/D1 rows may decide
+membership, ordering, rich detail, candidates, and authoring state; they do not
+decide either public image identity. Ordinary and image-only account cards may
+render their blot composition from the exact card VM, while gene-page metadata,
+structured data, archives, image sitemaps, and public media use the matching
+workstation-materialized blot WebP. Never restore `publishedPortraitRefs(...)`,
+discovery-row or raw `icono_publish_state` SHA, a browser-local portrait cache,
+or another parallel snapshot as a public image source. That split caused B-700.
+Read
+`docs/ICONOPLASM_HOME_PERFORMANCE.md`,
+`docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md`, and the B-700 section of
+`docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md` before changing any public
+image projection. Any replacement must preserve the ontology and single exact
+card authority, and pass same-session visual comparison plus blot
+page/sitemap/public-media concordance tests.
 
 **ARCHITECTURE FENCE [GG-001]** — automatic GeneGuessr daily selection gives
 each normalized gene surname exactly one lottery slot. It first chooses a

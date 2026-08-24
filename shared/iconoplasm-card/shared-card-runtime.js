@@ -1147,20 +1147,20 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     }
   }
 
-  function canonicalGenePortraitAlt(symbol) {
+  function genePortraitArtworkAlt(symbol) {
     var resolvedSymbol = normalizedSymbol(symbol)
     return resolvedSymbol
-      ? resolvedSymbol + " canonical gene character portrait by Iconoplasm"
-      : "Canonical gene character portrait by Iconoplasm"
+      ? resolvedSymbol + " character artwork used inside the Iconoplasm gene blot"
+      : "Character artwork used inside an Iconoplasm gene blot"
   }
 
-  function canonicalGenePortraitCaption(symbol, fullName) {
+  function genePortraitArtworkCaption(symbol, fullName) {
     var resolvedSymbol = normalizedSymbol(symbol)
     var resolvedName = normalizeHandwrittenText(fullName)
     var identity = resolvedName
       ? resolvedSymbol + " (" + resolvedName + ")"
       : resolvedSymbol || "this human gene"
-    return "Canonical Iconoplasm portrait of human " + identity + "."
+    return "Source character artwork used inside the Iconoplasm gene blot for " + identity + "."
   }
 
   function renderLabLabelPortraitMediaHtml(symbol, portraitUrl, portraitFullUrl, dims, options) {
@@ -1216,7 +1216,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '">' +
       "</button>" +
       (captionText
-        ? '<span class="icono-visually-hidden icono-canonical-portrait-caption">' +
+        ? '<span class="icono-visually-hidden icono-portrait-artwork-caption">' +
           escapeHtml(captionText) +
           "</span>"
         : "")
@@ -2502,8 +2502,8 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     labLabelEmulsionNumber: labLabelEmulsionNumber,
     labLabelDisplayName: labLabelDisplayName,
     portraitDimensions: portraitDimensions,
-    canonicalGenePortraitAlt: canonicalGenePortraitAlt,
-    canonicalGenePortraitCaption: canonicalGenePortraitCaption,
+    genePortraitArtworkAlt: genePortraitArtworkAlt,
+    genePortraitArtworkCaption: genePortraitArtworkCaption,
     resolveArchivalCardModel: resolveArchivalCardModel,
     buildLabLabelSemanticCharacterFacts: buildLabLabelSemanticCharacterFacts,
     buildTooltipTraitOriginRows: buildTooltipTraitOriginRows,

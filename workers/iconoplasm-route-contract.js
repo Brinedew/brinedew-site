@@ -14,6 +14,7 @@ export function iconoplasmPublicApiPath(suffix = "") {
 
 const GET = Object.freeze(["GET", "HEAD"])
 const POST = Object.freeze(["POST"])
+const PUT = Object.freeze(["PUT"])
 const GET_POST = Object.freeze(["GET", "HEAD", "POST"])
 const COMMENT_METHODS = Object.freeze(["GET", "HEAD", "POST", "PATCH", "DELETE"])
 const FAVORITE_ITEM_METHODS = Object.freeze(["PUT", "DELETE"])
@@ -303,6 +304,26 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     cache: "immutable",
     budgetFamily: "public_gene_card_asset",
     gatewayHandler: "gene_card_asset",
+    rateLimit: null,
+  }),
+  contract({
+    id: "semantic_gene_blot",
+    match: pattern(/^\/blots\/([^/]+)\.webp$/, ["symbol"]),
+    methods: GET,
+    auth: "public",
+    cache: "handler-defined",
+    budgetFamily: "public_gene_blot",
+    gatewayHandler: "semantic_gene_blot",
+    rateLimit: null,
+  }),
+  contract({
+    id: "gene_blot_asset",
+    match: prefix("/blots/v1/", "storageKey"),
+    methods: GET,
+    auth: "public",
+    cache: "immutable",
+    budgetFamily: "public_gene_blot_asset",
+    gatewayHandler: "gene_blot_asset",
     rateLimit: null,
   }),
   contract({
@@ -797,6 +818,21 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_assets_state",
     "admin_assets.state",
   ),
+  adminApiContract(
+    "admin_blots_backlog",
+    "/blots/backlog",
+    GET_POST,
+    "admin_blots_backlog",
+    "admin_blots.backlog",
+  ),
+  iconoplasmApiContract({
+    id: "admin_blots_upload",
+    match: pattern(/^\/api\/iconoplasm\/admin\/blots\/([^/]+)$/, ["symbol"]),
+    methods: PUT,
+    auth: "administrator",
+    budgetFamily: "admin_blots_upload",
+    apiHandler: "admin_blots.upload",
+  }),
   adminApiContract(
     "admin_gallery_publish_status",
     "/gallery/publish-status",

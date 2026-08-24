@@ -30,8 +30,9 @@ experience; it is not the product.
    candidate portraits, requests, comments, and voting.
 5. The homepage becomes the reader's personal discovery shelf. The optional
    shared overlay answers what the community has uncovered.
-6. Votes and authoring produce a new canonical portrait. Publication propagates
-   one coherent version to the site, extension, archive, and outside clients.
+6. Votes and authoring choose the next portrait in D1. Publication alone
+   propagates one coherent public version to the site, extension, archive, and
+   outside clients.
 
 The `/genes` archive is a stable reference/crawl surface, not a replacement for
 the personal shelf. `/clans` shows personal progress through the worldbuilding
@@ -39,15 +40,15 @@ factions.
 
 ## What each surface is for
 
-| Surface              | User job                                                | State owner                                             |
-| -------------------- | ------------------------------------------------------- | ------------------------------------------------------- |
-| Extension hover      | Recognize a gene without leaving the page               | Published snapshot + bounded client cache               |
-| Gene dossier         | Understand, compare, vote, comment, request, and author | Current public card plus authenticated personal actions |
-| Homepage             | Resume the reader's own memory trail                    | Personal discovery shelf; optional shared overlay       |
-| `/genes`             | Browse/search a complete stable reference               | Published release/archive                               |
-| `/clans`             | See personal progress through the mnemonic world        | Personal discoveries grouped by clan                    |
-| Local workstation    | Create and curate portraits protein-first               | Local authoring/control plane                           |
-| Public APIs/releases | Let other clients consume the same canon                | Publish/distribution plane                              |
+| Surface              | User job                                                | State owner                                               |
+| -------------------- | ------------------------------------------------------- | --------------------------------------------------------- |
+| Extension hover      | Recognize a gene without leaving the page               | Published snapshot + bounded client cache                 |
+| Gene dossier         | Understand, compare, vote, comment, request, and author | Published card portrait plus live D1 rich/candidate state |
+| Homepage             | Resume the reader's own memory trail                    | Personal discovery shelf; optional shared overlay         |
+| `/genes`             | Browse/search a complete stable reference               | Published release/archive                                 |
+| `/clans`             | See personal progress through the mnemonic world        | Personal discoveries grouped by clan                      |
+| Local workstation    | Create and curate portraits protein-first               | Local authoring/control plane                             |
+| Public APIs/releases | Let other clients consume the same canon                | Publish/distribution plane                                |
 
 ## Discovery contract
 
@@ -67,13 +68,13 @@ factions.
 
 ## Change and freshness contract
 
-| Change                       | Current viewer                                           | Other open viewers                           | Later sessions/clients                                                                                  |
-| ---------------------------- | -------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Personal discovery           | Immediate shelf feedback                                 | No effect                                    | Persists for that person after local or signed-in storage succeeds                                      |
-| Vote                         | Immediate optimistic feedback, then authoritative result | Existing page remains coherent               | Gene page converges in seconds                                                                          |
-| Canon selection              | Do not replace a portrait underneath active reading      | Existing card remains on its loaded snapshot | Site converges in seconds; extension/archive at the next published snapshot, normally within 15 minutes |
-| Shared discovery count       | No interrupt                                             | No mutation                                  | Next hourly publication                                                                                 |
-| New candidate/request result | Relevant account UI may refresh                          | Unrelated readers do not poll                | Account inbox polls only while a request is open                                                        |
+| Change                       | Current viewer                                           | Other open viewers                           | Later sessions/clients                                                                                   |
+| ---------------------------- | -------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Personal discovery           | Immediate shelf feedback                                 | No effect                                    | Persists for that person after local or signed-in storage succeeds                                       |
+| Vote                         | Immediate optimistic feedback, then authoritative result | Existing page remains coherent               | Rich vote/candidate state may update immediately; public portrait waits for publication                  |
+| D1 portrait selection        | Do not replace a portrait underneath active reading      | Existing card remains on its loaded snapshot | Every public surface advances together at the next card-artifact publication, normally within 15 minutes |
+| Shared discovery count       | No interrupt                                             | No mutation                                  | Next hourly publication                                                                                  |
+| New candidate/request result | Relevant account UI may refresh                          | Unrelated readers do not poll                | Account inbox polls only while a request is open                                                         |
 
 The invariant is identity coherence: a gene must not become a different character
 mid-hover or mid-read. Freshness is useful only at a boundary a person can
@@ -84,13 +85,17 @@ understand.
 1. **Authoring plane:** the local Iconoplasm repo and dataset own Essence,
    Manifestation, Vision, generation, candidate assets, and operator workflow.
 2. **Publish plane:** one canonical selection engine owns eligibility,
-   vote/tie-break behavior, manual overrides, audit history, and live canon
-   pointers.
+   vote/tie-break behavior, manual overrides, audit history, and the D1
+   authoring pointer. The exact card artifact selected by `KV_GALLERY_VERSION`
+   alone owns the public portrait.
 3. **Distribution plane:** the Website repo owns public cards, APIs, immutable
    assets, releases, change feeds, extension packaging, and reader interaction.
 
-Readers consume publisher-owned immutable card/portrait metadata. A public read
-must never scan D1 or mutate shared state to repair publication.
+Readers consume publisher-owned immutable card/portrait metadata. D1 may
+legitimately lead while a dirty shard awaits publication, but signed-in cards,
+gene detail, public media, metadata, archives, sitemaps, extensions, and
+print-copy inputs remain on the selected artifact. A public read must never scan
+D1, fall back to its portrait SHA, or mutate shared state to repair publication.
 
 ## Cost and resilience rules
 

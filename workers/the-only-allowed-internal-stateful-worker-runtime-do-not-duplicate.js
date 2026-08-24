@@ -1,6 +1,6 @@
 import "../shared/iconoplasm-card/shared-card-runtime.js"
 import {
-  iconoplasmCanonicalPortraitUrl,
+  iconoplasmPublishedPortraitArtworkUrl,
   normalizeIconoplasmPublishedGeneRecord,
 } from "./iconoplasm-gene-discovery.js"
 import {
@@ -92,7 +92,7 @@ const ICONOPLASM_GENE_FONT_PRELOAD_LINKS = [
   "</static/iconoplasm/fonts/Caveat-400.woff2>; rel=preload; as=font; type=font/woff2; crossorigin",
 ]
 const ICONOPLASM_HTML_SHELL_EDGE_CACHE_TTL_SECONDS = 300
-const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-07-22-immersive-discovery-v2"
+const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-08-24-canonical-gene-blot-v1"
 const ICONOPLASM_PUBLIC_NO_VARY_SEARCH =
   'params=("utm_source" "utm_medium" "utm_campaign" "utm_content" "utm_term" "fbclid" "gclid" "mc_cid" "mc_eid" "codex_verify")'
 
@@ -205,11 +205,6 @@ function personalizeIconoplasmStaticGeneShell(html, path) {
   return next
 }
 
-function iconoplasmCardPayloadFromManifest(payload) {
-  const card = payload && (payload.card || (payload.cards && payload.cards[0]))
-  return (card && card.payload) || (payload && payload.payload) || null
-}
-
 function iconoplasmCanonicalAssetFromCardPayload(cardPayload) {
   const value = String(cardPayload?.portrait?.asset_sha256 || "")
     .trim()
@@ -217,15 +212,19 @@ function iconoplasmCanonicalAssetFromCardPayload(cardPayload) {
   return /^[a-f0-9]{64}$/.test(value) ? value : ""
 }
 
-function iconoplasmGeneDetailShellVersion(cardPayload, responseEtag = "") {
-  const etag = String(responseEtag || "")
+function iconoplasmGeneDetailShellVersion(cardPayload, response = null) {
+  const etag = String(response?.headers?.get("ETag") || "")
     .replace(/^W\//i, "")
     .replace(/^"|"$/g, "")
     .trim()
     .toLowerCase()
   if (/^[a-z0-9._:-]{8,160}$/.test(etag)) return `site-gene-detail-${etag}`
+  const cardVersion = String(response?.headers?.get("X-Iconoplasm-Card-Version") || "")
+    .trim()
+    .toLowerCase()
+  if (/^[a-z0-9._:-]{1,160}$/.test(cardVersion)) return `site-gene-card-${cardVersion}`
   const assetSha = iconoplasmCanonicalAssetFromCardPayload(cardPayload)
-  return assetSha ? `site-gene-detail-fallback-${assetSha}` : "site-gene-detail-fallback-empty"
+  return assetSha ? `site-gene-card-fallback-${assetSha}` : "site-gene-card-fallback-empty"
 }
 
 function iconoplasmPublishedPortraitUrlFromCardPayload(cardPayload, preferredSize) {
@@ -269,14 +268,11 @@ function iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) {
   if (!shared || !cardPayload) return ""
   const symbol = shared.normalizedSymbol(cardPayload.symbol || cardPayload.canonical_symbol)
   if (!symbol) return ""
-  const portraitAlt = shared.canonicalGenePortraitAlt(symbol)
-  const portraitCaption = shared.canonicalGenePortraitCaption(
-    symbol,
-    cardPayload.full_name || cardPayload.name,
-  )
+  const portraitAlt = `${symbol} character artwork used inside the Iconoplasm gene blot`
+  const portraitCaption = `Source character artwork for the ${symbol} Iconoplasm gene blot.`
   const dims = shared.portraitDimensions(cardPayload)
   const portraitUrl =
-    iconoplasmCanonicalPortraitUrl(cardPayload, "medium") ||
+    iconoplasmPublishedPortraitArtworkUrl(cardPayload, "medium") ||
     iconoplasmPublishedPortraitUrlFromCardPayload(cardPayload, "medium")
   const portraitFullUrl =
     iconoplasmPublishedPortraitUrlFromCardPayload(cardPayload, "full") || portraitUrl
@@ -287,7 +283,7 @@ function iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) {
   const portraitMediaHtml = portraitUrl
     ? shared.renderLabLabelPortraitMediaHtml(symbol, portraitUrl, portraitFullUrl, dims, {
         buttonAttrs: portraitAttrs,
-        buttonAriaLabel: `Open full-size canonical gene character portrait for ${symbol}`,
+        buttonAriaLabel: `Open full-size source character artwork for ${symbol}`,
         captionText: portraitCaption,
         fetchPriority: "high",
         portraitAlt,
@@ -338,6 +334,45 @@ function iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) {
   )
 }
 
+function iconoplasmPublishedGeneBlot(cardPayload) {
+  const blot = cardPayload?.blot && typeof cardPayload.blot === "object" ? cardPayload.blot : null
+  if (
+    blot?.status !== "ready" ||
+    !String(blot.image_url || "").startsWith("https://iconoplasmportraits.b-cdn.net/blots/v1/") ||
+    !String(blot.canonical_url || "").startsWith(`https://${ICONOPLASM_HOST}/blots/v1/`) ||
+    !String(blot.semantic_url || "").startsWith(`https://${ICONOPLASM_HOST}/blots/`)
+  )
+    return null
+  return blot
+}
+
+function iconoplasmCanonicalGeneBlotFigureHtml(cardPayload) {
+  const shared = globalThis.IconoplasmCardShared
+  const symbol = shared?.normalizedSymbol(cardPayload?.symbol || cardPayload?.canonical_symbol)
+  const blot = iconoplasmPublishedGeneBlot(cardPayload)
+  if (!symbol || !blot) return ""
+  const fullName = String(cardPayload?.full_name || cardPayload?.name || symbol).trim()
+  const alt = `${symbol} Iconoplasm gene blot — ${fullName}`
+  return (
+    '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot>' +
+    '<img class="icono-canonical-gene-blot-image" src="' +
+    escapeIconoplasmHtmlAttribute(blot.image_url) +
+    '" data-iconoplasm-canonical-image-src="' +
+    escapeIconoplasmHtmlAttribute(blot.canonical_url) +
+    '" width="' +
+    escapeIconoplasmHtmlAttribute(String(blot.width || 768)) +
+    '" height="' +
+    escapeIconoplasmHtmlAttribute(String(blot.height || 1024)) +
+    '" loading="eager" decoding="async" fetchpriority="high" alt="' +
+    escapeIconoplasmHtmlAttribute(alt) +
+    '"><figcaption>Canonical Iconoplasm gene blot for human ' +
+    escapeIconoplasmStaticShellText(symbol) +
+    " (" +
+    escapeIconoplasmStaticShellText(fullName) +
+    ").</figcaption></figure>"
+  )
+}
+
 function iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion) {
   const shared = globalThis.IconoplasmCardShared
   if (!shared || !cardPayload) return ""
@@ -363,6 +398,7 @@ function iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion) {
     '">' +
     '<section class="icono-gene-lead">' +
     iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) +
+    iconoplasmCanonicalGeneBlotFigureHtml(cardPayload) +
     '<div data-icono-canonical-toolbar-island><section class="icono-canonical-toolbar-shell"><div class="icono-gene-toolbar-rail" data-icono-canonical-rail><div class="icono-gene-edit-panel" aria-hidden="true"></div><section class="icono-gene-request-surface icono-gene-request-panel">' +
     canonicalMeta +
     '<div aria-hidden="true"></div></section></div></section></div>' +
@@ -409,7 +445,7 @@ async function iconoplasmGeneDetailResponseForHtmlCache(request, env, ctx, path)
 
 function iconoplasmGeneSnapshotVersionFromDetailResponse(detailResponse) {
   if (!detailResponse?.ok) return ""
-  return iconoplasmGeneDetailShellVersion(null, detailResponse.headers.get("ETag") || "")
+  return iconoplasmGeneDetailShellVersion(null, detailResponse)
 }
 
 async function iconoplasmGeneCardBootstrapInjection(
@@ -423,21 +459,10 @@ async function iconoplasmGeneCardBootstrapInjection(
   // Search terms: PRL split-brain, gene page bootstrap, canonical blot,
   // public card artifact, KV_GALLERY_VERSION.
   //
-  // Gene pages are the per-symbol freshness surface. The public card artifact
-  // remains the coarse browse/extension snapshot, but this first-paint shell
-  // must match the current D1 canonical exposed by /api/iconoplasm/site/genes.
-  // Keep this routed through the Iconoplasm runtime endpoint rather than adding
-  // a local SQL clone in the HTML worker.
-  if (request.method === "HEAD") {
-    return {
-      injection: "",
-      shellHtml: "",
-      snapshotVersion: "",
-      cardPayload: null,
-      profileComplete: false,
-      status: 200,
-    }
-  }
+  // Gene documents use the complete site-detail projection for their rich
+  // first paint. That endpoint reads live D1 detail and candidates, takes its
+  // source portrait and blot only from the exact card selected by
+  // KV_GALLERY_VERSION, and keeps every public image-discovery surface coherent.
   const symbol = iconoplasmStaticGeneSymbolFromPath(path)
   if (!symbol) {
     return {
@@ -463,7 +488,6 @@ async function iconoplasmGeneCardBootstrapInjection(
         status: detailResponse?.status || 503,
       }
     }
-    const detailEtag = detailResponse.headers.get("ETag") || ""
     const cardPayload = await detailResponse.clone().json()
     if (!cardPayload) {
       return {
@@ -475,7 +499,7 @@ async function iconoplasmGeneCardBootstrapInjection(
         status: 503,
       }
     }
-    const snapshotVersion = iconoplasmGeneDetailShellVersion(cardPayload, detailEtag)
+    const snapshotVersion = iconoplasmGeneDetailShellVersion(cardPayload, detailResponse)
     const shellHtml = iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion)
     const profileComplete =
       shellHtml.includes('class="icono-card-semantic-profile"') &&
@@ -499,7 +523,11 @@ async function iconoplasmGeneCardBootstrapInjection(
       snapshotVersion,
       cardPayload,
       profileComplete,
-      status: profileComplete ? 200 : 503,
+      // A valid published card may intentionally have no portrait yet. That is
+      // an incomplete, non-indexable profile rather than an infrastructure
+      // failure. Transport/card lookup failures return above with their real
+      // retryable status.
+      status: 200,
     }
   } catch (error) {
     console.warn("Iconoplasm gene card bootstrap injection failed:", error)
@@ -602,19 +630,16 @@ function iconoplasmHtmlShellCacheKey(url, env) {
   return new Request(key.toString(), { method: "GET" })
 }
 
-function iconoplasmGeneHtmlCacheKey(url, path, snapshotVersion, record, env) {
+function iconoplasmGeneHtmlCacheKey(url, path, snapshotVersion, env) {
   const symbol = iconoplasmStaticGeneSymbolFromPath(path)
   if (!symbol) return null
   const snapshot = String(snapshotVersion || "").trim()
   if (!snapshot) return null
-  const portraitAssetSha256 = normalizeIconoplasmPublishedGeneRecord(record).portraitAssetSha256
-  if (!/^[a-f0-9]{64}$/i.test(portraitAssetSha256)) return null
   const key = new URL("https://iconoplasm.brinedew.bio/__edge-cache/iconoplasm-gene-html")
   key.searchParams.set("version", iconoplasmHtmlShellCacheVersion(env))
   key.searchParams.set("staticOrigin", buildStaticSiteUrl(url, "/").origin)
   key.searchParams.set("symbol", symbol)
   key.searchParams.set("snapshot", snapshot)
-  key.searchParams.set("portrait", portraitAssetSha256.toLowerCase())
   return new Request(key.toString(), { method: "GET" })
 }
 
@@ -632,16 +657,11 @@ async function iconoplasmCacheableHtmlShellResponse(
   geneDiscovery = null,
   preloadedGeneDetailResponse = null,
 ) {
-  const indexable = Boolean(geneDiscovery?.indexable)
-  const headers = addIconoplasmGeneShellHeaders(response.headers, path, { indexable })
-  // The cached object is the generic rewritten shell in caches.default. The response
-  // returned to browsers is route-tailored, so Cloudflare's outer HTTP cache must
-  // not store it and replay a home shell for /gene/* or vice versa.
-  headers.set("Cache-Control", "no-store")
-  headers.set("X-Iconoplasm-HTML-Shell-Cache", cacheStatus)
+  const discoveryCandidate = Boolean(geneDiscovery?.discoveryCandidate)
+  let documentIndexable = discoveryCandidate
   let body = response.status === 204 ? null : personalizeIconoplasmStaticGeneShell(html, path)
   let geneShell = preloadedGeneShell
-  if (body && String(path || "").startsWith("/gene/")) {
+  if (String(path || "").startsWith("/gene/")) {
     if (!geneShell)
       geneShell = await iconoplasmGeneCardBootstrapInjection(
         request,
@@ -650,30 +670,37 @@ async function iconoplasmCacheableHtmlShellResponse(
         path,
         preloadedGeneDetailResponse,
       )
-    if (
-      request.method === "GET" &&
-      indexable &&
-      !iconoplasmGeneDocumentProjectionIsIndexable({
-        record: geneDiscovery?.record,
-        cardPayload: geneShell?.cardPayload,
-        indexable,
-        profileComplete: geneShell?.profileComplete,
-      })
-    ) {
+    if (discoveryCandidate && Number(geneShell?.status || 503) !== 200) {
       return iconoplasmGeneUnavailableResponse(request.method)
     }
-    if (geneShell && geneShell.shellHtml) {
-      body = replaceIconoplasmStaticGeneShell(body, geneShell.shellHtml)
-    }
-    if (geneShell && geneShell.injection) {
-      body = insertIconoplasmGeneCardBootstrap(body, geneShell.injection)
-    }
-    body = rewriteIconoplasmGeneDiscoveryMetadata(body, path, {
+    documentIndexable = iconoplasmGeneDocumentProjectionIsIndexable({
       record: geneDiscovery?.record,
       cardPayload: geneShell?.cardPayload,
-      indexable,
+      indexable: discoveryCandidate,
+      profileComplete: geneShell?.profileComplete,
     })
+    if (body) {
+      if (geneShell && geneShell.shellHtml) {
+        body = replaceIconoplasmStaticGeneShell(body, geneShell.shellHtml)
+      }
+      if (geneShell && geneShell.injection) {
+        body = insertIconoplasmGeneCardBootstrap(body, geneShell.injection)
+      }
+      body = rewriteIconoplasmGeneDiscoveryMetadata(body, path, {
+        record: geneDiscovery?.record,
+        cardPayload: geneShell?.cardPayload,
+        indexable: documentIndexable,
+      })
+    }
   }
+  const headers = addIconoplasmGeneShellHeaders(response.headers, path, {
+    indexable: documentIndexable,
+  })
+  // The cached object is the generic rewritten shell in caches.default. The response
+  // returned to browsers is route-tailored, so Cloudflare's outer HTTP cache must
+  // not store it and replay a home shell for /gene/* or vice versa.
+  headers.set("Cache-Control", "no-store")
+  headers.set("X-Iconoplasm-HTML-Shell-Cache", cacheStatus)
   if (
     body &&
     request.method === "GET" &&
@@ -682,17 +709,15 @@ async function iconoplasmCacheableHtmlShellResponse(
     caches.default
   ) {
     // This is only a short-lived HTML snapshot cache. The cache key includes the
-    // ETag of the complete site-gene-detail response and the route projection's
-    // exact portrait identity. A route/detail read that straddles publication
-    // therefore cannot reuse an older document before the fail-closed concordance
-    // check below renders a cache miss.
-    // Do not stretch this TTL or turn it into a symbol-only cache: D1 remains the
-    // freshness authority for the complete server-rendered snapshot.
+    // ETag of the complete site-detail response. ARCHITECTURE FENCE [IPD-011]:
+    // the response includes the exact published-card version and blot, so its
+    // ETag is also the canonical public-image cache identity. The D1 route
+    // record establishes membership only and must not select a parallel key.
+    // Do not stretch this TTL or turn it into a symbol-only cache.
     const geneCacheKey = iconoplasmGeneHtmlCacheKey(
       new URL(request.url),
       path,
       geneShell?.snapshotVersion,
-      geneDiscovery?.record,
       env,
     )
     if (geneCacheKey) {
@@ -726,7 +751,7 @@ async function iconoplasmCacheableHtmlShellResponse(
       sharedSessionPresenceCookie({ present: true, cookieDomain: ".brinedew.bio" }),
     )
   }
-  return new Response(body, {
+  return new Response(request.method === "HEAD" ? null : body, {
     status: response.status,
     statusText: response.statusText,
     headers,
@@ -1004,10 +1029,8 @@ function stripIconoplasmGeneImageMetadata(html) {
   )
 }
 
-function iconoplasmGenePortraitProjectionIsCurrent(record, cardPayload) {
-  const recordPortraitUrl = iconoplasmCanonicalPortraitUrl(record, "medium")
-  const cardPortraitUrl = iconoplasmCanonicalPortraitUrl(cardPayload, "medium")
-  return Boolean(recordPortraitUrl && cardPortraitUrl === recordPortraitUrl)
+function iconoplasmGenePublishedCardBlotUrl(cardPayload) {
+  return String(iconoplasmPublishedGeneBlot(cardPayload)?.semantic_url || "").trim()
 }
 
 export function iconoplasmGeneDocumentProjectionIsIndexable({
@@ -1016,28 +1039,32 @@ export function iconoplasmGeneDocumentProjectionIsIndexable({
   indexable = false,
   profileComplete = false,
 } = {}) {
+  const gene = normalizeIconoplasmPublishedGeneRecord(record)
   return Boolean(
-    indexable && profileComplete && iconoplasmGenePortraitProjectionIsCurrent(record, cardPayload),
+    indexable &&
+    gene.symbol &&
+    gene.fullName &&
+    profileComplete &&
+    iconoplasmGenePublishedCardBlotUrl(cardPayload),
   )
 }
 
-function iconoplasmGeneStructuredData({ gene, geneUrl, title, description, portraitUrl }) {
+function iconoplasmGeneStructuredData({ gene, geneUrl, title, description, blotUrl }) {
   const webpageId = `${geneUrl}#webpage`
   const geneId = `${geneUrl}#gene`
-  const imageId = `${geneUrl}#canonical-portrait`
-  const portraitAlt = globalThis.IconoplasmCardShared.canonicalGenePortraitAlt(gene.symbol)
-  const caption = globalThis.IconoplasmCardShared.canonicalGenePortraitCaption(
-    gene.symbol,
-    gene.fullName,
-  )
+  const imageId = `${geneUrl}#canonical-blot`
+  const blotAlt = `${gene.symbol} Iconoplasm gene blot — ${gene.fullName || gene.symbol}`
+  const caption = `Canonical Iconoplasm gene blot for human ${gene.symbol} (${gene.fullName || gene.symbol}), with the full gene name and symbol printed over the character artwork.`
   const image = {
     "@type": "ImageObject",
     "@id": imageId,
-    contentUrl: portraitUrl,
-    url: portraitUrl,
-    name: portraitAlt,
+    contentUrl: blotUrl,
+    url: blotUrl,
+    name: blotAlt,
     caption,
     encodingFormat: "image/webp",
+    width: 768,
+    height: 1024,
     representativeOfPage: true,
   }
   return {
@@ -1085,15 +1112,9 @@ export function rewriteIconoplasmGeneDiscoveryMetadata(
   const safeTitle = escapeIconoplasmStaticShellText(title)
   const description = iconoplasmGeneMetaDescription(record, cardPayload)
   const safeDescription = escapeIconoplasmHtmlAttribute(description)
-  const portraitProjectionIsCurrent = iconoplasmGenePortraitProjectionIsCurrent(record, cardPayload)
-  const portraitUrl =
-    indexable && portraitProjectionIsCurrent
-      ? iconoplasmCanonicalPortraitUrl(cardPayload, "medium")
-      : ""
-  const metadataIndexable = Boolean(indexable && portraitUrl)
-  const portraitAlt = portraitUrl
-    ? globalThis.IconoplasmCardShared.canonicalGenePortraitAlt(symbol)
-    : ""
+  const blotUrl = indexable ? iconoplasmGenePublishedCardBlotUrl(cardPayload) : ""
+  const metadataIndexable = Boolean(indexable && blotUrl)
+  const blotAlt = blotUrl ? `${symbol} Iconoplasm gene blot — ${gene.fullName || symbol}` : ""
   let next = String(html || "").replace(
     /\s*<script\b[^>]*\btype=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>\s*/gi,
     "\n",
@@ -1149,17 +1170,19 @@ export function rewriteIconoplasmGeneDiscoveryMetadata(
     /<meta\b[^>]*\b(?:property|name)=["']twitter:description["'][^>]*>/i,
     `<meta name="twitter:description" content="${safeDescription}">`,
   )
-  if (!portraitUrl) return next
+  if (!blotUrl) return next
 
   const imageMeta = [
-    `<meta property="og:image" content="${portraitUrl}">`,
-    `<meta property="og:image:url" content="${portraitUrl}">`,
-    `<meta property="og:image:secure_url" content="${portraitUrl}">`,
+    `<meta property="og:image" content="${blotUrl}">`,
+    `<meta property="og:image:url" content="${blotUrl}">`,
+    `<meta property="og:image:secure_url" content="${blotUrl}">`,
     `<meta property="og:image:type" content="image/webp">`,
-    `<meta property="og:image:alt" content="${escapeIconoplasmHtmlAttribute(portraitAlt)}">`,
+    `<meta property="og:image:alt" content="${escapeIconoplasmHtmlAttribute(blotAlt)}">`,
+    '<meta property="og:image:width" content="768">',
+    '<meta property="og:image:height" content="1024">',
     '<meta name="twitter:card" content="summary_large_image">',
-    `<meta name="twitter:image" content="${portraitUrl}">`,
-    `<meta name="twitter:image:alt" content="${escapeIconoplasmHtmlAttribute(portraitAlt)}">`,
+    `<meta name="twitter:image" content="${blotUrl}">`,
+    `<meta name="twitter:image:alt" content="${escapeIconoplasmHtmlAttribute(blotAlt)}">`,
   ].join("\n")
   next = replaceOrInsertHeadMarkup(
     next,
@@ -1171,7 +1194,7 @@ export function rewriteIconoplasmGeneDiscoveryMetadata(
     geneUrl,
     title,
     description,
-    portraitUrl,
+    blotUrl,
   })
   return replaceOrInsertHeadMarkup(
     next,
@@ -1475,7 +1498,9 @@ function crossOriginResourcePolicyForRequest(request) {
     const reqUrl = new URL(request.url)
     if (
       reqUrl.hostname === ICONOPLASM_HOST &&
-      (reqUrl.pathname.startsWith("/portraits/") || reqUrl.pathname.startsWith("/gene-cards/"))
+      (reqUrl.pathname.startsWith("/portraits/") ||
+        reqUrl.pathname.startsWith("/gene-cards/") ||
+        reqUrl.pathname.startsWith("/blots/"))
     ) {
       return "cross-origin"
     }
@@ -2004,7 +2029,11 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
     // Portrait binaries must resolve even after service-binding hops or route
     // reassignment, so do not make them depend on the incoming hostname still
     // looking like iconoplasm.brinedew.bio.
-    if (url.pathname.startsWith("/portraits/") || url.pathname.startsWith("/gene-cards/")) {
+    if (
+      url.pathname.startsWith("/portraits/") ||
+      url.pathname.startsWith("/gene-cards/") ||
+      url.pathname.startsWith("/blots/v1/")
+    ) {
       const key = url.pathname.replace(/^\/+/, "")
       const object = await env.ICONOPLASM_PORTRAITS?.get?.(key)
       if (object) {
@@ -2043,6 +2072,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         url.pathname.startsWith("/api/") ||
         url.pathname.startsWith("/portraits/") ||
         url.pathname.startsWith("/gene-cards/") ||
+        url.pathname.startsWith("/blots/") ||
         url.pathname === "/admin" ||
         url.pathname === "/blocklist" ||
         url.pathname === "/blocklist/" ||
@@ -2203,14 +2233,12 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         (request.method === "GET" || request.method === "HEAD") &&
         typeof caches !== "undefined" &&
         caches.default
-      // Read only the detail response headers before checking the per-gene
-      // HTML cache. The ETag is the freshness token; parsing and rendering the
-      // JSON payload belongs exclusively to a cache miss. This ordering is the
-      // cold-isolate CPU fence for canonical gene pages.
+      // Read only the detail response headers before checking the per-gene HTML
+      // cache. Its ETag covers the exact published-card version plus the rich
+      // detail projection; parsing and rendering JSON belongs exclusively to a
+      // cache miss. This ordering is the cold-isolate CPU fence.
       const geneDetailResponseForHtmlCache =
-        canUseHtmlShellEdgeCache &&
-        request.method === "GET" &&
-        String(url.pathname || "").startsWith("/gene/")
+        canUseHtmlShellEdgeCache && String(url.pathname || "").startsWith("/gene/")
           ? await iconoplasmGeneDetailResponseForHtmlCache(request, env, ctx, url.pathname)
           : null
 
@@ -2218,20 +2246,21 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         const geneSnapshotVersionForHtmlCache = iconoplasmGeneSnapshotVersionFromDetailResponse(
           geneDetailResponseForHtmlCache,
         )
-        const geneHtmlCacheKey = geneSnapshotVersionForHtmlCache
-          ? iconoplasmGeneHtmlCacheKey(
-              url,
-              url.pathname,
-              geneSnapshotVersionForHtmlCache,
-              geneDiscovery?.record,
-              env,
-            )
-          : null
+        const geneHtmlCacheKey =
+          geneSnapshotVersionForHtmlCache && geneDiscovery?.discoveryCandidate
+            ? iconoplasmGeneHtmlCacheKey(url, url.pathname, geneSnapshotVersionForHtmlCache, env)
+            : null
         if (geneHtmlCacheKey) {
           const cachedGeneHtml = await caches.default.match(geneHtmlCacheKey)
           if (cachedGeneHtml) {
+            const cachedGeneIsIndexable = !/\bnoindex\b/i.test(
+              cachedGeneHtml.headers.get("X-Robots-Tag") || "",
+            )
             const headers = addIconoplasmGeneShellHeaders(cachedGeneHtml.headers, url.pathname, {
-              indexable: Boolean(geneDiscovery?.indexable),
+              // The cached response already contains the final card-aware
+              // eligibility decision. The route record supplies membership,
+              // not permission to erase a cached noindex decision.
+              indexable: cachedGeneIsIndexable,
             })
             headers.set("Cache-Control", "no-store")
             headers.set("X-Iconoplasm-HTML-Shell-Cache", "HIT-GENE")

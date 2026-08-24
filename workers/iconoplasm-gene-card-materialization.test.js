@@ -8,6 +8,12 @@ import { readFileSync } from "node:fs"
 import {
   ICONOPLASM_GENE_CARD_HEIGHT,
   ICONOPLASM_GENE_CARD_WIDTH,
+  ICONOPLASM_GENE_BLOT_HEIGHT,
+  ICONOPLASM_GENE_BLOT_WIDTH,
+  iconoplasmGeneBlotFilename,
+  iconoplasmGeneBlotFingerprint,
+  iconoplasmGeneBlotObjectKey,
+  iconoplasmGeneBlotWebpDimensions,
   iconoplasmGeneCardDownloadFilename,
   iconoplasmGeneCardFingerprint,
   iconoplasmGeneCardObjectKey,
@@ -34,6 +40,10 @@ const portraitStorageSource = readFileSync(
 )
 const migrationSource = readFileSync(
   new URL("../migrations-iconoplasm/0063_gene_card_materializations.sql", import.meta.url),
+  "utf8",
+)
+const blotMigrationSource = readFileSync(
+  new URL("../migrations-iconoplasm/0079_gene_blot_materializations.sql", import.meta.url),
   "utf8",
 )
 const wranglerSource = readFileSync(
@@ -95,6 +105,41 @@ test("materialized print dimensions are verified from the PNG header", () => {
   assert.match(runtimeSource, /Browser screenshot dimensions were/)
 })
 
+test("canonical blot identity is visible-material-only and uses immutable WebP paths", () => {
+  const baseline = iconoplasmGeneBlotFingerprint(card())
+  assert.match(baseline, /^[a-f0-9]{32}$/)
+  assert.equal(
+    iconoplasmGeneBlotFingerprint({
+      ...card(),
+      snapshot_version: "new-publication",
+      blot: { status: "ready", asset_sha256: "f".repeat(64) },
+      essence: { sex: "Male", age_years: 99 },
+    }),
+    baseline,
+  )
+  assert.notEqual(iconoplasmGeneBlotFingerprint(card({ full_name: "changed" })), baseline)
+  const key = iconoplasmGeneBlotObjectKey("sox12", baseline)
+  assert.equal(key, `blots/v1/S/SOX12/${baseline}/SOX12-iconoplasm-gene-blot.webp`)
+  assert.equal(iconoplasmGeneBlotFilename("sox12"), "SOX12-iconoplasm-gene-blot.webp")
+  assert.equal(ICONOPLASM_GENE_BLOT_WIDTH, 768)
+  assert.equal(ICONOPLASM_GENE_BLOT_HEIGHT, 1024)
+  assert.match(blotMigrationSource, /icono_gene_blot_materializations/)
+  assert.doesNotMatch(blotMigrationSource, /BLOB/)
+})
+
+test("canonical blot WebP dimensions are verified before immutable storage", () => {
+  const webp = new Uint8Array(30)
+  webp.set([...Buffer.from("RIFF")], 0)
+  webp.set([...Buffer.from("WEBP")], 8)
+  webp.set([...Buffer.from("VP8X")], 12)
+  webp.set([10, 0, 0, 0], 16)
+  webp.set([0, 0, 0, 0], 20)
+  webp.set([0xff, 0x02, 0x00], 24)
+  webp.set([0xff, 0x03, 0x00], 27)
+  assert.deepEqual(iconoplasmGeneBlotWebpDimensions(webp), { width: 768, height: 1024 })
+  assert.equal(iconoplasmGeneBlotWebpDimensions(new Uint8Array([1, 2, 3])), null)
+})
+
 test("GET and HEAD cannot enroll, enqueue, cache in KV, or launch Browser Rendering", () => {
   const handler = runtimeSource.slice(
     runtimeSource.indexOf("async function handleIconoplasmPrintCopyPng"),
@@ -105,6 +150,18 @@ test("GET and HEAD cannot enroll, enqueue, cache in KV, or launch Browser Render
   assert.doesNotMatch(handler, /renderIconoplasmPrintCopyPngWithBrowser/)
   assert.doesNotMatch(handler, /enrollIconoplasmGeneCardMaterialization/)
   assert.doesNotMatch(handler, /\.KV\.put|env\.KV/)
+})
+
+test("print-copy card identity is artifact-only and cannot resolve through D1 detail", () => {
+  const resolver = runtimeSource.slice(
+    runtimeSource.indexOf("async function iconoplasmPrintCopyCardForRequest"),
+    runtimeSource.indexOf("function iconoplasmPrintCopyRenderHtml"),
+  )
+  assert.match(resolver, /iconoplasmPrintCopyCardFromMobileSymbol/)
+  assert.match(resolver, /PRINT_COPY_ASSET_MISMATCH/)
+  assert.doesNotMatch(resolver, /geneRecord|projectGeneRecord|site_gene_detail/)
+  assert.doesNotMatch(runtimeSource, /iconoplasmPrintCopyCardFromCurrentGeneDetail/)
+  assert.doesNotMatch(runtimeSource, /site-gene-detail-/)
 })
 
 test("the durable ledger is bounded and queue delivery is serialized", () => {

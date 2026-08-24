@@ -68,7 +68,10 @@ test("dynamic HTML repairs only the presence hint and never caches that personal
   const hintRepair = statefulRuntimeSource.indexOf(
     'sharedSessionPresenceCookie({ present: true, cookieDomain: ".brinedew.bio" })',
   )
-  const finalResponse = statefulRuntimeSource.indexOf("return new Response(body", hintRepair)
+  const finalResponse = statefulRuntimeSource.indexOf(
+    'return new Response(request.method === "HEAD" ? null : body',
+    hintRepair,
+  )
 
   assert.notEqual(cacheWrite, -1)
   assert.ok(hintRepair > cacheWrite)

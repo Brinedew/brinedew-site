@@ -15,6 +15,7 @@ export { putPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
 import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-routes.js"
+import { createIconoplasmAdminBlotHandlers } from "./iconoplasm-admin-blot-routes.js"
 import { createIconoplasmAdminExtensionBlocklistHandlers } from "./iconoplasm-admin-extension-blocklist-routes.js"
 import { createIconoplasmAdminPublicationAliasHandlers } from "./iconoplasm-admin-publication-alias-routes.js"
 import { createIconoplasmAdminGalleryHandlers } from "./iconoplasm-admin-gallery-routes.js"
@@ -69,6 +70,15 @@ import {
   recordIconoplasmGeneCardBrowserSeconds,
   recoverDueIconoplasmGeneCardMaterializations,
   reserveIconoplasmGeneCardBrowserLaunch,
+  ICONOPLASM_GENE_BLOT_HEIGHT,
+  ICONOPLASM_GENE_BLOT_RENDERER_REVISION,
+  ICONOPLASM_GENE_BLOT_WIDTH,
+  iconoplasmGeneBlotCdnUrl,
+  iconoplasmGeneBlotFilename,
+  iconoplasmGeneBlotFingerprint,
+  iconoplasmGeneBlotObjectKey,
+  iconoplasmGeneBlotWebpDimensions,
+  registerIconoplasmGeneBlot,
 } from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import {
   applyIconoplasmPublicationAliasPolicyToGene,
@@ -870,23 +880,22 @@ const KV_SCANNER_CATALOG_PREFIX = "iconoplasm:scanner-catalog:"
 // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
 // Search terms for future maintainers: PRL split-brain, canonical portrait,
 // canonical blot, logged-in logged-out mismatch, public card artifact,
-// KV_GALLERY_VERSION, VoteCoordinator, D1 source of truth.
+// KV_GALLERY_VERSION, VoteCoordinator, D1 authoring source.
 //
 // The D1 rows `icono_publish_state` and `icono_portrait_assets` are the durable
-// source of truth for which asset is canonical. Public browser traffic does not
-// read those D1 rows directly because a cold-isolate fanout over D1 can become a
-// real Cloudflare billing incident. Public `/api/iconoplasm/cards/:symbol` and
-// `/api/iconoplasm/mobile-card-manifest` traffic reads one published card-catalog
-// artifact from KV, selected by this shared version barrier.
+// authoring/vote-projection source. The exact card artifact selected by this
+// shared version barrier is the sole published source-portrait authority and
+// owns the matching workstation-rendered blot reference. Mobile manifests and
+// cards use that exact card VM; gene discovery/media project its blot, never the
+// raw portrait artwork, as the canonical public image.
 //
 // The PRL incident in May 2026 happened because D1 canonical state advanced
-// before the public artifact visible to logged-out users advanced. There are
-// now two separate read contracts:
-// 1. broad browse/mobile card traffic reads the immutable manifest selected by
-//    this barrier; routine publication replaces only event-owned dirty shards
-//    before atomically flipping KV_GALLERY_VERSION; and
-// 2. first-party individual gene pages refresh canonical detail from the D1
-//    read model after a vote projection settles.
+// before the public artifact visible to logged-out users advanced and different
+// surfaces chose different SHAs. There is now one exact-card image contract:
+// routine publication replaces only event-owned dirty shards before atomically
+// flipping KV_GALLERY_VERSION. Individual gene detail may read fresh D1 facts,
+// candidates, and votes, but it overrides the portrait and `is_current` marker
+// with the card from this published barrier.
 //
 // Do not publish this artifact from vote projection. A vote records durable D1
 // intent; the scheduled dirty-shard publisher applies the bounded KV change.
@@ -926,12 +935,15 @@ const CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS = [
   "unpublish",
   "purge_legacy",
   "gene_card_materialized",
+  "gene_blot_materialized",
 ]
 const CARD_CATALOG_ARTIFACT_SCHEMA = "iconoplasm.cardCatalog.v1"
 // Changes whenever source records are mapped into public card fields differently.
 // D1 publication events only detect data changes; this revision makes a deployed
 // mapping change invalidate an otherwise-fresh artifact and require an explicit
 // deployment migration instead of silently mixing cards produced by two mappers.
+// `blot` is an additive, optional projection on the revision-2 card artifact so it can be
+// backfilled shard-by-shard without taking every existing published card offline.
 const CARD_CATALOG_BUILD_REVISION = 2
 const CARD_CATALOG_ARTIFACT_SHARD_SIZE = 750
 const CARD_CATALOG_ARTIFACT_CONTENT_VERSION_PREFIX = "ccv1"
@@ -1545,6 +1557,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_catalog_upsert" ||
     family === "admin_catalog_reconcile" ||
     family === "admin_catalog_publish" ||
+    family === "admin_blots_upload" ||
     family === "admin_gallery_dirty_shard_publication" ||
     family === "admin_essence" ||
     family === "admin_essence_upsert" ||
@@ -1554,6 +1567,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   }
   if (
     family === "admin_votes" ||
+    family === "admin_blots_backlog" ||
     family === "admin_gallery" ||
     family === "admin_gallery_mutation" ||
     family === "admin_assets" ||
@@ -1604,6 +1618,8 @@ function iconoplasmBudgetSourceClassFromRequest(request, path, routeFamily) {
       routeFamily === "admin_ingest" ||
       routeFamily === "admin_reconcile" ||
       routeFamily === "admin_catalog" ||
+      routeFamily === "admin_blots_backlog" ||
+      routeFamily === "admin_blots_upload" ||
       routeFamily === "admin_essence" ||
       routeFamily === "admin_read_models"
     ) {
@@ -1661,6 +1677,7 @@ function isIconoplasmHighRiskAdminMutationRouteFamily(routeFamily) {
     "admin_read_models_bootstrap",
     "admin_finalization_enqueue",
     "admin_finalization_process",
+    "admin_blots_upload",
   ]).has(String(routeFamily || "").trim())
 }
 
@@ -12511,6 +12528,33 @@ function publicMediaEnvelope(url, symbol, portrait) {
   }
 }
 
+function publicGeneBlotMediaEnvelope(url, symbol, cardPayload) {
+  const blot = cardPayload?.blot
+  const assetSha = normalizeSha256(blot?.asset_sha256 || "")
+  if (blot?.status !== "ready" || !assetSha || !blot.semantic_url || !blot.canonical_url)
+    return null
+  const sourcePortrait = publicMediaEnvelope(url, symbol, cardPayload?.portrait || null)
+  return {
+    id: assetSha,
+    type: "gene_blot",
+    symbol,
+    checksum_sha256: assetSha,
+    blot_fingerprint: String(blot.blot_fingerprint || ""),
+    canonical_url: String(blot.semantic_url),
+    immutable_url: String(blot.canonical_url),
+    accelerator_url: String(blot.image_url || ""),
+    info_url: publicUrl(url, `/media/${encodeURIComponent(symbol)}`),
+    width: optionalInt(blot.width) || ICONOPLASM_GENE_BLOT_WIDTH,
+    height: optionalInt(blot.height) || ICONOPLASM_GENE_BLOT_HEIGHT,
+    filename: String(blot.filename || iconoplasmGeneBlotFilename(symbol)),
+    rights: "CC BY-NC-ND 4.0",
+    license_url: "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+    attribution: "Brinedew / Iconoplasm",
+    source: "iconoplasm-gene-blots",
+    ...(sourcePortrait ? { source_portrait_artwork: sourcePortrait } : {}),
+  }
+}
+
 async function warmCatalogCache(env) {
   const manifest = await catalogManifestObj(env)
   if (!manifest?.current_hash || !env.KV) return
@@ -14697,9 +14741,10 @@ async function fetchCatalogRow(env, symbol) {
 // ARCHITECTURE FENCE [IPD-007]
 // A canonical public gene URL must not hydrate the full 19k-record catalog or
 // spend KV reads merely to establish route membership. The tiny publication-
-// owned route table contains identity only; current portrait/vote state remains
-// in the existing D1 detail models and their ETag remains the HTML snapshot
-// version. Alias and UniProt resolution deliberately retain the immutable
+// owned route table contains identity only. ARCHITECTURE FENCE [IPD-011]: the
+// exact published card artifact and its detail ETag own portrait identity; the
+// route lookup must not read icono_publish_state and become a second portrait
+// authority. Alias and UniProt resolution deliberately retain the immutable
 // artifact fallback below; they must not grow a second alias state store here.
 export async function resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
   env,
@@ -14710,13 +14755,10 @@ export async function resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllo
     try {
       const publishedRoute = await env.ICONOPLASM_DB.prepare(
         `SELECT r.gene_symbol,
-                c.full_name,
-                ps.current_asset_sha256
+                c.full_name
            FROM icono_published_gene_routes r
            JOIN icono_gene_catalog c
              ON c.gene_symbol = r.gene_symbol
-           LEFT JOIN icono_publish_state ps
-             ON ps.gene_symbol = r.gene_symbol
           WHERE r.gene_symbol = ?
           LIMIT 1`,
       )
@@ -14730,9 +14772,6 @@ export async function resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllo
           record: {
             s: canonicalSymbol,
             n: String(publishedRoute.full_name || "").trim(),
-            p: publishedRoute.current_asset_sha256
-              ? { asset_sha256: String(publishedRoute.current_asset_sha256) }
-              : null,
           },
           source: "published_gene_route_d1",
         }
@@ -14763,15 +14802,12 @@ export async function resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllo
     const card = artifact.bySymbol.get(requestedSymbol)
     if (card) {
       const payload = card.payload && typeof card.payload === "object" ? card.payload : card
-      const portrait =
-        payload.portrait && typeof payload.portrait === "object" ? payload.portrait : {}
       return {
         kind: "canonical",
         canonicalSymbol: requestedSymbol,
         record: {
           s: requestedSymbol,
           n: String(payload.full_name || card.full_name || "").trim(),
-          p: portrait.asset_sha256 ? { asset_sha256: portrait.asset_sha256 } : null,
         },
         version: snapshotVersion,
         source: "published_card_catalog_shard",
@@ -14889,6 +14925,43 @@ async function portraitState(env, symbol, base) {
       emulsion_label: null,
       artist_id: null,
     }
+  }
+}
+
+function portraitStateFromPublishedCardPayload(cardPayload, base) {
+  const portrait =
+    cardPayload?.portrait && typeof cardPayload.portrait === "object" ? cardPayload.portrait : {}
+  const assetSha256 = normalizeSha256(portrait.asset_sha256 || "")
+  if (portrait.status !== "published" || !assetSha256) {
+    return {
+      status: "missing",
+      hero_url: null,
+      medium_url: null,
+      thumb_url: null,
+      width: null,
+      height: null,
+      asset_sha256: null,
+      candidate_image_id: null,
+      emulsion_label: null,
+      artist_id: null,
+    }
+  }
+  return {
+    status: "published",
+    hero_url: adminPortraitUrl(base, assetSha256, "full"),
+    medium_url: adminPortraitUrl(base, assetSha256, "medium"),
+    thumb_url: adminPortraitUrl(base, assetSha256, "thumb"),
+    width: optionalInt(portrait.width),
+    height: optionalInt(portrait.height),
+    asset_sha256: assetSha256,
+    candidate_image_id: optionalInt(portrait.candidate_image_id),
+    vision_id: sanitizeText(portrait.vision_id || "", 128) || null,
+    emulsion_id: sanitizeText(portrait.emulsion_id || portrait.emulsion_label || "", 128) || null,
+    emulsion_label: sanitizeText(portrait.emulsion_label || "", 128) || null,
+    sample_label: sanitizeText(portrait.sample_label || "", 64) || null,
+    sample_number: optionalInt(portrait.sample_number),
+    sample_text_hash: normalizeSha256(portrait.sample_text_hash || "") || null,
+    artist_id: optionalInt(portrait.artist_id),
   }
 }
 
@@ -15033,7 +15106,12 @@ function wantsProjectedField(fieldSet, field) {
   return !fieldSet || fieldSet.has(field)
 }
 
-async function geneRecord(env, url, rawId, { fields = null, resolvedGene = null } = {}) {
+async function geneRecord(
+  env,
+  url,
+  rawId,
+  { fields = null, resolvedGene = null, portraitOverride = undefined } = {},
+) {
   // Cost fence: extension hover traffic hits /genes/batch repeatedly across
   // arbitrary pages. When the caller projects a lean field set, treat that as a
   // real permission to skip the richer request-time work instead of building the
@@ -15076,7 +15154,11 @@ async function geneRecord(env, url, rawId, { fields = null, resolvedGene = null 
   const r = resolvedGene || (await resolveGene(env, rawId, { includeProtein: needsProtein }))
   if (!r?.symbol) return null
   const base = needsPortrait ? portraitBase(url, env) : null
-  const portrait = needsPortrait ? await portraitState(env, r.symbol, base) : null
+  const portrait = needsPortrait
+    ? portraitOverride !== undefined
+      ? portraitOverride
+      : await portraitState(env, r.symbol, base)
+    : null
   const portraitCandidates = needsPortraitCandidates
     ? await portraitCandidatesForGene(env, url, r.symbol, portrait?.asset_sha256 || null)
     : []
@@ -17173,8 +17255,8 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
   // follow this with read-model sync plus `publishIconoplasmGalleryDirtyShards`, or use the
   // VoteCoordinator projection path below, which also rolls D1 back if public
   // artifact publication fails. The searchable failure mode is the PRL
-  // split-brain incident: logged-in/private surfaces saw the new canonical blot
-  // while logged-out/public card traffic kept seeing the old artifact.
+  // split-brain incident: one surface exposed the new D1 source portrait while
+  // published card traffic kept the old exact-card image epoch.
   if (!env.ICONOPLASM_DB) return { ok: false, changed: false, code: "NO_DB" }
   const symbolNorm = normalizeSymbol(symbol)
   if (!symbolNorm) return { ok: false, changed: false, code: "BAD_SYMBOL" }
@@ -19664,13 +19746,13 @@ async function rollbackVoteAutoPromoteAfterProjectionFailure(
   env,
   { symbol, actorId, reason, autoPromote, error } = {},
 ) {
-  // ICONOPLASM CANONICAL PORTRAIT PROJECTION CONTRACT.
-  // A vote-driven auto-promotion may update D1 before the projected D1 read
-  // models are rebuilt. If projection fails after that mutation, individual
-  // first-party gene detail reads can observe an inconsistent state. Roll back
-  // only if `icono_publish_state` still points at the exact asset this job
-  // promoted; that protects a later admin publish or retry from being undone by
-  // an older failing job.
+  // ICONOPLASM D1 AUTHORING / READ-MODEL PROJECTION CONTRACT.
+  // A vote-driven auto-promotion may update the D1 authoring selection before
+  // the dependent D1 read models are rebuilt. The exact published card remains
+  // the public portrait authority and is not changed here. If projection fails
+  // after the D1 mutation, roll back only if `icono_publish_state` still points
+  // at the exact asset this job promoted; that keeps the D1 authoring/read-model
+  // state coherent without undoing a later admin publish or retry.
   if (!env?.ICONOPLASM_DB || !autoPromote?.changed) return { ok: true, changed: false }
   const symbolNorm = normalizeSymbol(symbol)
   const promotedAssetSha = normalizeSha256(autoPromote?.to_asset_sha256 || "")
@@ -19915,9 +19997,13 @@ async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
       if (visionIds.length) {
         await rebuildVisionRollupsBatch(env, visionIds)
       }
-      // Vote projection intentionally stops at D1/read-models. The broad
-      // versioned KV card catalog is a coarse browsing snapshot and must not be
-      // republished here; one vote cannot pay for every card shard.
+      // Vote projection intentionally stops at D1 authoring/read models. It
+      // records events that can make a card shard dirty, but it never moves the
+      // published source portrait or public blot. The exact card selected by
+      // KV_GALLERY_VERSION remains the sole published source-portrait authority,
+      // and its matching local blot remains the canonical public image until
+      // bounded publication prepares every dirty replacement and atomically flips the barrier. Never publish
+      // per vote; one vote cannot pay for shard preparation and release writes.
       adminReadModelState.ready = true
       for (const result of applied) {
         await clearVoteProjectionRefreshJob(env, result.symbol)
@@ -21958,12 +22044,13 @@ async function scheduleVoteProjectionRefresh(
   ctx,
   { symbol, actorId = "vote_projection", reason = "vote_projection_refresh" } = {},
 ) {
-  // Public vote requests must stay cheap and responsive, so canonical
+  // Public vote requests must stay cheap and responsive, so D1 authoring
   // auto-promotion and read-model projection run after the vote write. The D1
   // job row is the durable ledger and the Cloudflare Queue message is the only
   // live drain path. Do not run the projection directly from request waitUntil:
-  // Cloudflare can interrupt that task after D1 canonical state moves but before
-  // the read models used by the first-party gene detail endpoint settle.
+  // Cloudflare can interrupt that task after the D1 authoring selection moves
+  // but before its dependent read models settle. This queue does not publish the
+  // public portrait; only the later card-artifact barrier flip can do that.
   const safeSymbol = normalizeSymbol(symbol)
   if (!safeSymbol) return { ok: false, code: "BAD_SYMBOL", queued: false }
   const safeActorId = normalizeUserId(actorId || "vote_projection")
@@ -22049,13 +22136,14 @@ async function autoPromoteTopVotedPortraitFromCoordinatorState(
   env,
   { symbol, actorId, reason, assetSummaries = [] } = {},
 ) {
-  // ICONOPLASM CANONICAL PORTRAIT PROJECTION CONTRACT.
-  // This is the vote-projection variant of canonical auto-promotion. It ranks
-  // the already-settled VoteCoordinator summaries against renderable portrait
-  // assets, then mutates D1 `icono_publish_state`. It is intentionally called
-  // only from the Queue-backed projection pipeline that also refreshes the D1
-  // read models consumed by the first-party rich gene detail endpoint. Do not
-  // call this from a request handler and then return success.
+  // ICONOPLASM D1 PORTRAIT-AUTHORING PROJECTION CONTRACT.
+  // This vote projection ranks the already-settled VoteCoordinator summaries
+  // against renderable portrait assets, then mutates D1 `icono_publish_state`
+  // and records the publication event. It does not change the published source
+  // portrait or public blot; the exact card selected by KV_GALLERY_VERSION
+  // remains authoritative until dirty-shard publication flips the barrier. Call this only from the
+  // Queue-backed pipeline that also refreshes the dependent D1 read models, not
+  // from a request handler that immediately returns success.
   if (!env.ICONOPLASM_DB) return { ok: false, changed: false, code: "NO_DB" }
   const symbolNorm = normalizeSymbol(symbol)
   if (!symbolNorm) return { ok: false, changed: false, code: "BAD_SYMBOL" }
@@ -24245,12 +24333,13 @@ function nextGalleryVersionBarrier(previousBarrier, artifactVersion = "") {
 }
 
 async function publishGalleryVersionBarrier(env, barrier) {
-  // The barrier is the public release pointer, not just a cache token. Only call
-  // this after the card-catalog artifact for `barrier.current` has been fully
-  // written and validated. Flipping KV_GALLERY_VERSION first would make public
-  // card routes look for a version that may not exist; skipping the flip would
-  // leave logged-out users on the previous canonical portrait even though D1 has
-  // moved on.
+  // The barrier is the public release pointer and portrait epoch, not just a
+  // cache token. Only call this after the exact card-catalog artifact for
+  // `barrier.current` has been fully written and validated. Flipping
+  // KV_GALLERY_VERSION first would make public routes request a missing or
+  // invalid artifact and fail 503. Until the flip, D1 authoring may be ahead,
+  // but every public surface must remain on the previous exact card instead of
+  // falling back to a D1, route, or discovery/catalog portrait.
   galleryVersionCache.value = barrier
   galleryVersionCache.loadedAt = Date.now()
   if (env.KV) {
@@ -24335,10 +24424,11 @@ async function syncPublishedGeneRouteMembershipAfterPublication(
                                AND ${positionClause}`
   const actionBinds = [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS]
 
-  // Membership follows the artifact barrier, while the mutable portrait and
-  // vote result stay in their existing D1 models. Both statements are
-  // idempotent so a failed invocation can safely retry before advancing the
-  // publication watermark.
+  // The D1 route index and discovery/catalog rows are identity and membership
+  // only. This sync advances route membership after the exact-card barrier;
+  // mutable D1 portrait authoring and vote state never supply the public
+  // portrait. Both statements are idempotent so a failed invocation can safely
+  // retry before advancing the publication watermark.
   const inserted = await env.ICONOPLASM_DB.prepare(
     `INSERT OR IGNORE INTO icono_published_gene_routes (gene_symbol)
      SELECT c.gene_symbol
@@ -24888,6 +24978,12 @@ async function publishNextCardCatalogDirtyShardStep(
         cardBySymbol.delete(symbol)
         continue
       }
+      if (record?.portrait?.status === "published" && record?.blot?.status !== "ready") {
+        throw cardCatalogPublicationError(
+          "GENE_BLOT_NOT_READY",
+          `Dirty-shard publication is waiting for the workstation-rendered canonical blot for ${symbol}.`,
+        )
+      }
       const vm = buildMobileCardVMFromGeneRecord(record, {
         snapshotVersion: "content-addressed",
         source: "published_card_catalog",
@@ -25163,9 +25259,11 @@ async function publishIconoplasmGalleryDirtyShards(env, { triggerReason = "unspe
   // 3. Prepare one bounded dirty-shard step; reuse every unrelated shard ref.
   // 4. After the final step, write one manifest and flip KV_GALLERY_VERSION.
   //
-  // If step 2 or 3 fails, the old public artifact remains live. Vote projection
-  // callers that already changed D1 must roll the D1 canonical portrait back
-  // rather than leaving the PRL-style logged-in/logged-out split-brain behind.
+  // If step 2 or 3 fails, the old exact card artifact remains coherently live
+  // even when D1 authoring has moved ahead. Do not substitute a D1, route, or
+  // discovery/catalog SHA, and do not roll D1 back merely to match the old
+  // public card; retry bounded publication. Only the final barrier flip moves
+  // the published source-portrait and canonical-blot epoch.
   clearGallerySnapshotCache()
   clearSharedD1CostCaches()
   const previousPublicationWatermark = await readCardCatalogPublishWatermark(env)
@@ -25300,9 +25398,9 @@ async function publishIconoplasmGalleryDirtyShards(env, { triggerReason = "unspe
   try {
     version = await publishGalleryVersionBarrier(env, barrier)
     cardCatalog.publication_cost.kv_writes_used += 1
-    // Route membership and the watermark advance only after the version flip.
-    // This preserves one publication boundary without putting mutable vote state
-    // into the route table.
+    // Route membership and the watermark advance only after the exact-card
+    // version flip. The route table remains identity-only; portrait authority
+    // stays in the card artifact and mutable vote state stays out of the route.
     await syncPublishedRoutes()
     await recordWatermark()
     await finishPublicationAudit("completed")
@@ -25480,28 +25578,33 @@ function cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }) {
     resolved_from: "published_card_catalog_bulk",
     snapshot_version: snapshotVersion,
   }
-  const materializationFingerprint = iconoplasmGeneCardFingerprint(record)
-  const readyFingerprint = String(row?.gene_card_ready_fingerprint || "")
+  const blotFingerprint = iconoplasmGeneBlotFingerprint(record)
+  const readyBlotFingerprint = String(row?.gene_blot_fingerprint || "")
     .trim()
     .toLowerCase()
-  const readyAssetSha = normalizeSha256(row?.gene_card_ready_asset_sha256 || "")
-  const objectKey = String(row?.gene_card_object_key || "").trim()
+  const readyPortraitAssetSha = normalizeSha256(row?.gene_blot_portrait_asset_sha256 || "")
+  const readyBlotAssetSha = normalizeSha256(row?.gene_blot_asset_sha256 || "")
+  const blotObjectKey = String(row?.gene_blot_object_key || "").trim()
   if (
-    row?.gene_card_state === "ready" &&
-    readyFingerprint === materializationFingerprint &&
-    (!assetSha || readyAssetSha === assetSha) &&
-    objectKey
+    readyBlotFingerprint === blotFingerprint &&
+    assetSha &&
+    readyPortraitAssetSha === assetSha &&
+    readyBlotAssetSha &&
+    blotObjectKey === iconoplasmGeneBlotObjectKey(symbol, blotFingerprint)
   ) {
-    record.print_copy = {
+    record.blot = {
       status: "ready",
-      card_fingerprint: readyFingerprint,
-      asset_sha256: readyAssetSha || null,
-      object_key: objectKey,
-      image_url: iconoplasmGeneCardCdnUrl(null, objectKey),
-      width: optionalInt(row?.gene_card_width) || ICONOPLASM_GENE_CARD_WIDTH,
-      height: optionalInt(row?.gene_card_height) || ICONOPLASM_GENE_CARD_HEIGHT,
-      filename: iconoplasmGeneCardDownloadFilename(symbol),
-      renderer_revision: ICONOPLASM_GENE_CARD_RENDERER_REVISION,
+      blot_fingerprint: readyBlotFingerprint,
+      portrait_asset_sha256: readyPortraitAssetSha,
+      asset_sha256: readyBlotAssetSha,
+      object_key: blotObjectKey,
+      image_url: iconoplasmGeneBlotCdnUrl(null, blotObjectKey),
+      canonical_url: `${ICONOPLASM_CANONICAL_ORIGIN}/${blotObjectKey}`,
+      semantic_url: `${ICONOPLASM_CANONICAL_ORIGIN}/blots/${encodeURIComponent(symbol)}.webp`,
+      width: optionalInt(row?.gene_blot_width) || ICONOPLASM_GENE_BLOT_WIDTH,
+      height: optionalInt(row?.gene_blot_height) || ICONOPLASM_GENE_BLOT_HEIGHT,
+      filename: iconoplasmGeneBlotFilename(symbol),
+      renderer_revision: ICONOPLASM_GENE_BLOT_RENDERER_REVISION,
     }
   }
   return record
@@ -25558,7 +25661,13 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
        gcm.ready_asset_sha256 AS gene_card_ready_asset_sha256,
        gcm.object_key AS gene_card_object_key,
        gcm.width AS gene_card_width,
-       gcm.height AS gene_card_height
+       gcm.height AS gene_card_height,
+       gbm.blot_fingerprint AS gene_blot_fingerprint,
+       gbm.portrait_asset_sha256 AS gene_blot_portrait_asset_sha256,
+       gbm.blot_asset_sha256 AS gene_blot_asset_sha256,
+       gbm.object_key AS gene_blot_object_key,
+       gbm.width AS gene_blot_width,
+       gbm.height AS gene_blot_height
      FROM icono_gene_catalog gc
      LEFT JOIN icono_gene_essence ge
        ON ge.gene_symbol = gc.gene_symbol
@@ -25568,7 +25677,9 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
        ON pa.gene_symbol = ps.gene_symbol
       AND pa.asset_sha256 = ps.current_asset_sha256
      LEFT JOIN icono_gene_card_materializations gcm
-       ON gcm.gene_symbol = gc.gene_symbol`
+       ON gcm.gene_symbol = gc.gene_symbol
+     LEFT JOIN icono_gene_blot_materializations gbm
+       ON gbm.gene_symbol = gc.gene_symbol`
   // D1 caps bound parameters at 100 per query. Batch the symbol IN-list so a large
   // incremental delta or a rebuild chunk never trips "too many SQL variables". The
   // unscoped (full) path stays a single query.
@@ -25590,6 +25701,263 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
   return rows
     .map((row) => cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }))
     .filter(Boolean)
+}
+
+function geneBlotServiceError(status, code, message) {
+  const error = new Error(message)
+  error.status = status
+  error.code = code
+  return error
+}
+
+function geneBlotBacklogItem(card, scope) {
+  const symbol = normalizeSymbol(card?.symbol || card?.canonical_symbol || "")
+  const portrait = card?.portrait && typeof card.portrait === "object" ? card.portrait : null
+  if (!symbol || portrait?.status !== "published" || !normalizeSha256(portrait.asset_sha256)) {
+    return null
+  }
+  const fingerprint = iconoplasmGeneBlotFingerprint(card)
+  const current = card?.blot && typeof card.blot === "object" ? card.blot : null
+  if (
+    current?.status === "ready" &&
+    String(current.blot_fingerprint || "").toLowerCase() === fingerprint &&
+    normalizeSha256(current.portrait_asset_sha256 || "") ===
+      normalizeSha256(portrait.asset_sha256 || "")
+  ) {
+    return null
+  }
+  return {
+    symbol,
+    scope,
+    blot_fingerprint: fingerprint,
+    renderer_revision: ICONOPLASM_GENE_BLOT_RENDERER_REVISION,
+    width: ICONOPLASM_GENE_BLOT_WIDTH,
+    height: ICONOPLASM_GENE_BLOT_HEIGHT,
+    portrait_asset_sha256: normalizeSha256(portrait.asset_sha256),
+    portrait_url: String(portrait.hero_url || ""),
+    card_payload: card,
+    upload_url: `/api/iconoplasm/admin/blots/${encodeURIComponent(symbol)}?scope=${encodeURIComponent(scope)}&fingerprint=${encodeURIComponent(fingerprint)}`,
+  }
+}
+
+async function currentGeneBlotSourceCard(env, { requestUrl, symbol, scope }) {
+  if (scope === "published") {
+    const published = await readPublishedGeneCardPortraitProjection(env, symbol)
+    if (published.kind === "unavailable") {
+      throw geneBlotServiceError(
+        503,
+        "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
+        "The exact published card artifact is unavailable.",
+      )
+    }
+    return published.kind === "available" ? published.payload : null
+  }
+  if (scope !== "candidate") {
+    throw geneBlotServiceError(
+      400,
+      "INVALID_BLOT_SCOPE",
+      "Blot scope must be published or candidate.",
+    )
+  }
+  const records = await cardCatalogRecordsForArtifact(env, {
+    requestUrl,
+    symbols: [symbol],
+    snapshotVersion: "candidate",
+  })
+  return records[0] || null
+}
+
+async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
+  const url = new URL(request.url)
+  const scope = String(payload?.scope || url.searchParams.get("scope") || "published")
+    .trim()
+    .toLowerCase()
+  const requestedLimit = Number.parseInt(
+    String(payload?.limit || url.searchParams.get("limit") || "25"),
+    10,
+  )
+  const limit = Math.max(1, Math.min(100, Number.isFinite(requestedLimit) ? requestedLimit : 25))
+  if (scope === "candidate") {
+    const symbols = normalizeRequestedSymbols(
+      Array.isArray(payload?.symbols) ? payload.symbols : [],
+      100,
+    )
+    if (!symbols.length) {
+      throw geneBlotServiceError(
+        400,
+        "BLOT_SYMBOLS_REQUIRED",
+        "Candidate blot discovery requires one or more symbols.",
+      )
+    }
+    const records = await cardCatalogRecordsForArtifact(env, {
+      requestUrl: request.url,
+      symbols,
+      snapshotVersion: "candidate",
+    })
+    return {
+      ok: true,
+      scope,
+      items: records.map((record) => geneBlotBacklogItem(record, scope)).filter(Boolean),
+      symbols,
+      scanned: records.length,
+      done: true,
+      next_after: null,
+    }
+  }
+  if (scope !== "published") {
+    throw geneBlotServiceError(
+      400,
+      "INVALID_BLOT_SCOPE",
+      "Blot scope must be published or candidate.",
+    )
+  }
+  const after = normalizeSymbol(payload?.after || url.searchParams.get("after") || "")
+  const rows = await env.ICONOPLASM_DB.prepare(
+    `SELECT gene_symbol
+       FROM icono_gene_catalog
+      WHERE gene_symbol > ?
+      ORDER BY gene_symbol ASC
+      LIMIT ?`,
+  )
+    .bind(after, limit)
+    .all()
+  const symbols = (Array.isArray(rows?.results) ? rows.results : [])
+    .map((row) => normalizeSymbol(row?.gene_symbol || ""))
+    .filter(Boolean)
+  let records = []
+  if (symbols.length) {
+    const versionInfo = await currentMobileCardSnapshotVersion(env)
+    const version = String(versionInfo?.current || "").trim()
+    const artifact = version
+      ? await readPublishedCardCatalogArtifact(env, version, symbols, { allowWholeArtifact: false })
+      : null
+    if (!artifact) {
+      throw geneBlotServiceError(
+        503,
+        "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
+        "The exact published card artifact is unavailable.",
+      )
+    }
+    records = symbols
+      .map((symbol) => artifact.bySymbol.get(symbol)?.payload || null)
+      .filter(Boolean)
+  }
+  return {
+    ok: true,
+    scope,
+    items: records.map((record) => geneBlotBacklogItem(record, scope)).filter(Boolean),
+    symbols,
+    scanned: symbols.length,
+    done: symbols.length < limit,
+    next_after: symbols.length ? symbols[symbols.length - 1] : after || null,
+  }
+}
+
+async function uploadIconoplasmGeneBlot(env, { request, symbol: symbolValue }) {
+  const url = new URL(request.url)
+  const symbol = normalizeSymbol(decodeURIComponent(symbolValue || ""))
+  const scope = String(url.searchParams.get("scope") || "candidate")
+    .trim()
+    .toLowerCase()
+  const requestedFingerprint = String(url.searchParams.get("fingerprint") || "")
+    .trim()
+    .toLowerCase()
+  if (!symbol) throw geneBlotServiceError(400, "INVALID_GENE_SYMBOL", "Invalid gene symbol.")
+  if (
+    request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !== "image/webp"
+  ) {
+    throw geneBlotServiceError(
+      415,
+      "BLOT_WEBP_REQUIRED",
+      "Canonical gene blots must be image/webp.",
+    )
+  }
+  const declaredLength = Number.parseInt(request.headers.get("content-length") || "0", 10) || 0
+  if (declaredLength > 4 * 1024 * 1024) {
+    throw geneBlotServiceError(413, "BLOT_TOO_LARGE", "Canonical gene blot exceeds 4 MiB.")
+  }
+  const card = await currentGeneBlotSourceCard(env, { requestUrl: request.url, symbol, scope })
+  if (!card) throw geneBlotServiceError(404, "BLOT_SOURCE_NOT_FOUND", "Gene card source not found.")
+  const expectedFingerprint = iconoplasmGeneBlotFingerprint(card)
+  if (!requestedFingerprint || requestedFingerprint !== expectedFingerprint) {
+    throw geneBlotServiceError(
+      409,
+      "STALE_BLOT_FINGERPRINT",
+      "The gene blot source changed before upload; render the current source card.",
+    )
+  }
+  const portraitAssetSha = normalizeSha256(card?.portrait?.asset_sha256 || "")
+  if (card?.portrait?.status !== "published" || !portraitAssetSha) {
+    throw geneBlotServiceError(
+      409,
+      "BLOT_PORTRAIT_NOT_PUBLISHED",
+      "The source portrait is not published.",
+    )
+  }
+  const bytes = new Uint8Array(await request.arrayBuffer())
+  if (!bytes.byteLength || bytes.byteLength > 4 * 1024 * 1024) {
+    throw geneBlotServiceError(
+      413,
+      "BLOT_TOO_LARGE",
+      "Canonical gene blot must be between 1 byte and 4 MiB.",
+    )
+  }
+  const dimensions = iconoplasmGeneBlotWebpDimensions(bytes)
+  if (
+    dimensions?.width !== ICONOPLASM_GENE_BLOT_WIDTH ||
+    dimensions?.height !== ICONOPLASM_GENE_BLOT_HEIGHT
+  ) {
+    throw geneBlotServiceError(
+      422,
+      "INVALID_BLOT_DIMENSIONS",
+      `Canonical gene blot must be ${ICONOPLASM_GENE_BLOT_WIDTH}x${ICONOPLASM_GENE_BLOT_HEIGHT} WebP.`,
+    )
+  }
+  const blotAssetSha = await sha256HexBytes(bytes)
+  const objectKey = iconoplasmGeneBlotObjectKey(symbol, expectedFingerprint)
+  const existing = await readPortraitStorageObject(env, objectKey, {
+    fallbackContentType: "image/webp",
+    maxAttempts: 1,
+  })
+  if (existing) {
+    const existingBytes = new Uint8Array(await new Response(existing.body).arrayBuffer())
+    const existingSha = await sha256HexBytes(existingBytes)
+    if (existingSha !== blotAssetSha) {
+      throw geneBlotServiceError(
+        409,
+        "IMMUTABLE_BLOT_COLLISION",
+        "An immutable blot already exists for this fingerprint with different bytes.",
+      )
+    }
+  } else {
+    await putPortraitStorageObject(env, objectKey, bytes, {
+      contentType: "image/webp",
+      cacheControl: "public, max-age=31536000, immutable",
+      verifyAfterPut: true,
+    })
+  }
+  const registered = await registerIconoplasmGeneBlot(env, {
+    symbol,
+    blotFingerprint: expectedFingerprint,
+    portraitAssetSha256: portraitAssetSha,
+    blotAssetSha256: blotAssetSha,
+    objectKey,
+  })
+  return {
+    ok: true,
+    changed: registered.changed,
+    symbol,
+    scope,
+    blot_fingerprint: expectedFingerprint,
+    asset_sha256: blotAssetSha,
+    portrait_asset_sha256: portraitAssetSha,
+    object_key: objectKey,
+    image_url: iconoplasmGeneBlotCdnUrl(env, objectKey),
+    canonical_url: `${ICONOPLASM_CANONICAL_ORIGIN}/${objectKey}`,
+    semantic_url: `${ICONOPLASM_CANONICAL_ORIGIN}/blots/${encodeURIComponent(symbol)}.webp`,
+    width: ICONOPLASM_GENE_BLOT_WIDTH,
+    height: ICONOPLASM_GENE_BLOT_HEIGHT,
+  }
 }
 
 function galleryCanUseEdgeCache(url) {
@@ -26851,12 +27219,30 @@ function assertCompleteMobileCardVM(vm) {
   if (!vm || typeof vm !== "object") return false
   if (vm.__complete !== true) return false
   if (vm.schema_version !== MOBILE_CARD_VM_SCHEMA) return false
-  if (!normalizeSymbol(vm.symbol || "")) return false
+  const symbol = normalizeSymbol(vm.symbol || "")
+  if (!symbol) return false
   if (!vm.full_name) return false
   if (!vm.portrait || typeof vm.portrait !== "object") return false
   if (!vm.field_status || typeof vm.field_status !== "object") return false
-  if (String(vm.portrait.status || "").trim() === "pending") return false
-  return true
+  if (!vm.payload || typeof vm.payload !== "object") return false
+  if (normalizeSymbol(vm.payload.symbol || "") !== symbol) return false
+  const portraitStatus = String(vm.portrait.status || "").trim()
+  const payloadPortrait =
+    vm.payload.portrait && typeof vm.payload.portrait === "object" ? vm.payload.portrait : {}
+  const payloadPortraitStatus = String(payloadPortrait.status || "").trim()
+  if (portraitStatus !== "published" && portraitStatus !== "missing") return false
+  // The top-level VM is a cache-friendly projection of payload. Their public
+  // portrait decision must never disagree: downstream routes intentionally
+  // consume different shapes of the same exact card.
+  if (portraitStatus === "published") {
+    const portraitAssetSha256 = normalizeSha256(vm.portrait.asset_sha256 || "")
+    return Boolean(
+      portraitAssetSha256 &&
+      payloadPortraitStatus === "published" &&
+      normalizeSha256(payloadPortrait.asset_sha256 || "") === portraitAssetSha256,
+    )
+  }
+  return payloadPortraitStatus !== "published"
 }
 
 function normalizeCardCatalogArtifact(raw) {
@@ -27327,7 +27713,7 @@ export async function readIconoplasmPublishedCardCatalogArtifactForTest(
 }
 
 // ARCHITECTURE FENCE [IPD-003] + [IPD-011]: range pages and image sitemaps
-// project canonical portrait identity and requested print copies from only the
+// project canonical gene blot identity from only the
 // exact published card shards selected by KV_GALLERY_VERSION. They never query
 // votes, compose D1 cards, or trigger rendering. A range normally overlaps one
 // 750-card immutable shard.
@@ -27336,37 +27722,38 @@ export async function readIconoplasmPublishedGeneDiscoveryProjections(env, symbo
     Array.isArray(symbols) ? symbols : [],
     MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT,
   )
-  if (!requestedSymbols.length) return { version: "", bySymbol: new Map() }
   const versionInfo = await currentMobileCardSnapshotVersion(env)
   const version = String(versionInfo?.current || "").trim()
   if (!version || version === "0") return null
+  const publishedAt = String(versionInfo?.raw?.published_at || "").trim()
   const artifact = await readPublishedCardCatalogArtifact(env, version, requestedSymbols, {
     allowWholeArtifact: false,
   })
   if (!artifact) return null
+  if (!requestedSymbols.length) {
+    // Root/static sitemap documents do not need a shard body, but they still
+    // validate that the selected card manifest exists and is structurally
+    // readable before advertising its version.
+    return { version, publishedAt, bySymbol: new Map(), cardSymbols: new Set() }
+  }
   const bySymbol = new Map()
+  const cardSymbols = new Set()
   for (const symbol of requestedSymbols) {
     const card = artifact.bySymbol.get(symbol)
-    const portraitAssetSha256 = normalizeSha256(card?.payload?.portrait?.asset_sha256 || "")
-    if (!portraitAssetSha256) continue
-    const printCopy = card?.payload?.print_copy
-    const readyPrintCopy =
-      printCopy?.status === "ready" && printCopy.image_url && printCopy.card_fingerprint
-        ? { ...printCopy }
-        : null
-    bySymbol.set(symbol, { portraitAssetSha256, printCopy: readyPrintCopy })
+    if (!card) continue
+    cardSymbols.add(symbol)
+    const blot = card?.payload?.blot
+    if (
+      blot?.status !== "ready" ||
+      !blot.image_url ||
+      !blot.canonical_url ||
+      !blot.semantic_url ||
+      !blot.blot_fingerprint
+    )
+      continue
+    bySymbol.set(symbol, { blot: { ...blot } })
   }
-  return { version, bySymbol }
-}
-
-export async function readIconoplasmPublishedGeneCardPrintCopies(env, symbols) {
-  const projection = await readIconoplasmPublishedGeneDiscoveryProjections(env, symbols)
-  if (!projection) return null
-  const result = new Map()
-  for (const [symbol, value] of projection.bySymbol) {
-    if (value.printCopy) result.set(symbol, value.printCopy)
-  }
-  return result
+  return { version, publishedAt, bySymbol, cardSymbols }
 }
 
 async function advanceEnrolledIconoplasmGeneCardsAfterPublication(env, version, symbols) {
@@ -27772,67 +28159,64 @@ async function iconoplasmPrintCopyCardFromMobileSymbol(request, env, ctx, symbol
   }
 }
 
-function iconoplasmPrintCopyDetailSnapshotVersion(cardPayload) {
-  const assetSha = iconoplasmPrintCopyAssetSha(cardPayload)
-  return assetSha ? `site-gene-detail-${assetSha}` : "site-gene-detail-no-published-portrait"
-}
-
-async function iconoplasmPrintCopyCardFromCurrentGeneDetail(
-  request,
-  env,
-  symbolFromPath,
-  assetSha,
-) {
-  const requestedAssetSha = normalizeSha256(assetSha || "")
-  const symbol = normalizeSymbol(symbolFromPath)
-  if (!symbol || !requestedAssetSha) return null
-  const url = new URL(request.url)
-  const fields = "symbol,full_name,color,portrait"
-  const cardPayload = projectGeneRecord(await geneRecord(env, url, symbol, { fields }), fields)
-  const resolvedSymbol = normalizeSymbol(
-    cardPayload?.symbol || cardPayload?.canonical_symbol || symbol,
-  )
-  const currentAssetSha = iconoplasmPrintCopyAssetSha(cardPayload)
-  if (
-    !cardPayload ||
-    !resolvedSymbol ||
-    !currentAssetSha ||
-    currentAssetSha !== requestedAssetSha
-  ) {
-    return null
-  }
-  return {
-    ok: true,
-    card: null,
-    cardPayload,
-    snapshotVersion: iconoplasmPrintCopyDetailSnapshotVersion(cardPayload),
-    symbol: resolvedSymbol,
-    source: "site_gene_detail",
-  }
-}
-
 async function iconoplasmPrintCopyCardForRequest(request, env, ctx, symbolFromPath) {
   const url = new URL(request.url)
-  const requestedAssetSha = normalizeSha256(url.searchParams.get("asset") || "")
+  const requestedAsset = url.searchParams.get("asset")
+  const requestedAssetSha = normalizeSha256(requestedAsset || "")
+  if (requestedAsset !== null && !requestedAssetSha) {
+    return {
+      ok: false,
+      response: json(
+        {
+          error: "Print-copy asset must be a SHA-256 digest",
+          code: "INVALID_PRINT_COPY_ASSET",
+        },
+        400,
+        { "Cache-Control": "no-store" },
+      ),
+    }
+  }
   const artifactResolved = await iconoplasmPrintCopyCardFromMobileSymbol(
     request,
     env,
     ctx,
     symbolFromPath,
   )
-  if (artifactResolved.ok) {
-    const artifactAssetSha = iconoplasmPrintCopyAssetSha(artifactResolved.cardPayload)
-    if (!requestedAssetSha || artifactAssetSha === requestedAssetSha) return artifactResolved
+  if (!artifactResolved.ok) return artifactResolved
+
+  const publishedAssetSha = iconoplasmPrintCopyAssetSha(artifactResolved.cardPayload)
+  if (!publishedAssetSha) {
+    return {
+      ok: false,
+      response: json(
+        {
+          error: "Published card portrait not found",
+          code: "PUBLISHED_CARD_PORTRAIT_NOT_FOUND",
+          snapshot_version: artifactResolved.snapshotVersion,
+        },
+        404,
+        { "Cache-Control": "no-store" },
+      ),
+    }
   }
-  const detailResolved = requestedAssetSha
-    ? await iconoplasmPrintCopyCardFromCurrentGeneDetail(
-        request,
-        env,
-        symbolFromPath,
-        requestedAssetSha,
-      )
-    : null
-  if (detailResolved?.ok) return detailResolved
+
+  if (requestedAssetSha && requestedAssetSha !== publishedAssetSha) {
+    return {
+      ok: false,
+      response: json(
+        {
+          error: "Requested asset is not the published card portrait",
+          code: "PRINT_COPY_ASSET_MISMATCH",
+          requested_asset_sha256: requestedAssetSha,
+          published_asset_sha256: publishedAssetSha,
+          snapshot_version: artifactResolved.snapshotVersion,
+        },
+        409,
+        { "Cache-Control": "no-store" },
+      ),
+    }
+  }
+
   return artifactResolved
 }
 
@@ -28279,16 +28663,76 @@ async function handlePublicMedia(request, env, symbol) {
   const url = new URL(request.url)
   const resolvedSymbol = normalizeSymbol(symbol)
   if (!resolvedSymbol) return json({ error: "Invalid symbol" }, 400)
-  const portrait = await portraitState(env, resolvedSymbol, portraitBase(url, env))
-  const media = publicMediaEnvelope(url, resolvedSymbol, portrait)
-  if (!media) return json({ error: "Published media not found" }, 404)
-  return json({
-    api_version: PUBLIC_API_VERSION,
-    schema_version: API_SCHEMA_VERSION,
-    canonical_key: "symbol",
-    symbol: resolvedSymbol,
-    media,
+  const publishedCard = await readPublishedGeneCardPortraitProjection(env, resolvedSymbol)
+  if (publishedCard.kind === "unavailable") {
+    return json(cardArtifactUnavailablePayload(publishedCard.version), 503, {
+      "Cache-Control": "no-store",
+      "X-Iconoplasm-Card-Version": publishedCard.version,
+      "X-Iconoplasm-Portrait-Source": "artifact-unavailable",
+    })
+  }
+  if (publishedCard.kind !== "available") {
+    return json({ error: "Published media not found" }, 404, {
+      "Cache-Control": "no-store",
+      "X-Iconoplasm-Card-Version": publishedCard.version,
+    })
+  }
+  const portrait = portraitStateFromPublishedCardPayload(
+    publishedCard.payload,
+    portraitBase(url, env),
+  )
+  const media = publicGeneBlotMediaEnvelope(url, resolvedSymbol, {
+    ...publishedCard.payload,
+    portrait,
   })
+  if (!media) {
+    return json({ error: "Published media not found" }, 404, {
+      "Cache-Control": "no-store",
+      "X-Iconoplasm-Card-Version": publishedCard.version,
+    })
+  }
+  const etag = await etagFor({
+    card_snapshot_version: publishedCard.version,
+    symbol: resolvedSymbol,
+    asset_sha256: media.checksum_sha256,
+  })
+  const cacheControl = iconoplasmCacheControl("publicMutable")
+  const responseHeaders = {
+    ETag: etag,
+    "Cache-Control": cacheControl,
+    "X-Iconoplasm-Card-Version": publishedCard.version,
+    "X-Iconoplasm-Media-Source": "published-card-gene-blot",
+  }
+  if (etagMatches(request.headers.get("If-None-Match"), etag)) {
+    return new Response(null, { status: 304, headers: { ...corsHeaders(), ...responseHeaders } })
+  }
+  return json(
+    {
+      api_version: PUBLIC_API_VERSION,
+      schema_version: API_SCHEMA_VERSION,
+      card_snapshot_version: publishedCard.version,
+      canonical_key: "symbol",
+      symbol: resolvedSymbol,
+      media,
+    },
+    200,
+    responseHeaders,
+  )
+}
+
+async function readPublishedGeneCardPortraitProjection(env, symbol) {
+  const versionInfo = await currentMobileCardSnapshotVersion(env)
+  const version = String(versionInfo?.current || "").trim()
+  if (!version || version === "0") return { kind: "unavailable", version, payload: null }
+  const artifact = await readPublishedCardCatalogArtifact(env, version, [symbol], {
+    allowWholeArtifact: false,
+  })
+  if (!artifact) return { kind: "unavailable", version, payload: null }
+  const card = artifact.bySymbol.get(symbol)
+  const payload = card?.payload && typeof card.payload === "object" ? card.payload : null
+  return payload
+    ? { kind: "available", version, payload }
+    : { kind: "missing", version, payload: null }
 }
 
 async function handleSiteGeneDetail(request, env, path) {
@@ -28300,14 +28744,37 @@ async function handleSiteGeneDetail(request, env, path) {
   if (path !== canonicalPath) {
     return Response.redirect(`${url.origin}${canonicalPath}`, 302)
   }
+  // ARCHITECTURE FENCE [IPD-011]: D1 remains the live authoring/vote source
+  // for rich detail and candidates, but the exact versioned published card is
+  // the sole public portrait authority. This bounded one-symbol artifact read
+  // keeps the visible page, metadata, archive, and sitemap on one image epoch.
+  const publishedCard = await readPublishedGeneCardPortraitProjection(env, resolved.symbol)
+  if (publishedCard.kind !== "available") {
+    return json(cardArtifactUnavailablePayload(publishedCard.version), 503, {
+      "Cache-Control": "no-store",
+      "X-Iconoplasm-Card-Version": publishedCard.version,
+      "X-Iconoplasm-Portrait-Source": "artifact-unavailable",
+    })
+  }
+  const portraitOverride = portraitStateFromPublishedCardPayload(
+    publishedCard.payload,
+    portraitBase(url, env),
+  )
   const payload = projectGeneRecord(
     await geneRecord(env, url, resolved.symbol, {
       fields: url.searchParams.get("fields"),
       resolvedGene: resolved,
+      portraitOverride,
     }),
     url.searchParams.get("fields"),
   )
-  const etag = await etagFor(payload)
+  if (publishedCard.payload?.blot?.status === "ready") {
+    payload.blot = { ...publishedCard.payload.blot }
+  } else {
+    delete payload.blot
+  }
+  payload.card_snapshot_version = publishedCard.version
+  const etag = await etagFor({ card_snapshot_version: publishedCard.version, payload })
   const cacheControl = iconoplasmCacheControl("publicMutable")
   if (etagMatches(request.headers.get("If-None-Match"), etag)) {
     return new Response(null, {
@@ -28316,10 +28783,17 @@ async function handleSiteGeneDetail(request, env, path) {
         ...corsHeaders(),
         ETag: etag,
         "Cache-Control": cacheControl,
+        "X-Iconoplasm-Card-Version": publishedCard.version,
+        "X-Iconoplasm-Portrait-Source": "published-card-catalog",
       },
     })
   }
-  return json(payload, 200, { ETag: etag, "Cache-Control": cacheControl })
+  return json(payload, 200, {
+    ETag: etag,
+    "Cache-Control": cacheControl,
+    "X-Iconoplasm-Card-Version": publishedCard.version,
+    "X-Iconoplasm-Portrait-Source": "published-card-catalog",
+  })
 }
 
 async function listUserDiscoveredGeneSymbols(env, { userId, limit = 10000 } = {}) {
@@ -28619,6 +29093,59 @@ async function handlePublishedImageAssetRoute(
   })
 }
 
+async function handleSemanticGeneBlot(request, env, symbolValue) {
+  const symbol = normalizeSymbol(decodeURIComponent(symbolValue || ""))
+  if (!symbol) return json({ error: "Invalid gene symbol" }, 400, { "Cache-Control": "no-store" })
+  const published = await readPublishedGeneCardPortraitProjection(env, symbol)
+  if (published.kind === "unavailable") {
+    return json(cardArtifactUnavailablePayload(published.version), 503, {
+      "Cache-Control": "no-store",
+    })
+  }
+  const blot = published.kind === "available" ? published.payload?.blot : null
+  const objectKey = String(blot?.object_key || "").trim()
+  if (
+    blot?.status !== "ready" ||
+    !objectKey ||
+    objectKey !== iconoplasmGeneBlotObjectKey(symbol, blot?.blot_fingerprint)
+  ) {
+    return json({ error: "Canonical gene blot not found" }, 404, {
+      "Cache-Control": "no-store",
+    })
+  }
+  const object = await readPortraitStorageObject(env, objectKey, {
+    fallbackContentType: "image/webp",
+  })
+  if (!object) {
+    return json({ error: "Canonical gene blot is temporarily unavailable" }, 503, {
+      "Cache-Control": "no-store",
+      "Retry-After": "60",
+    })
+  }
+  const etag = `"${normalizeSha256(blot.asset_sha256 || "") || blot.blot_fingerprint}"`
+  if (etagMatches(request.headers.get("If-None-Match"), etag)) {
+    return new Response(null, {
+      status: 304,
+      headers: {
+        ETag: etag,
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=86400",
+      },
+    })
+  }
+  return new Response(request.method === "HEAD" ? null : object.body, {
+    headers: {
+      "Content-Type": "image/webp",
+      "Cache-Control": "public, max-age=300, stale-while-revalidate=86400",
+      ETag: etag,
+      "Content-Location": `${ICONOPLASM_CANONICAL_ORIGIN}/${objectKey}`,
+      Link: `<${iconoplasmGeneBlotCdnUrl(env, objectKey)}>; rel="alternate"`,
+      "Access-Control-Allow-Origin": "*",
+      "X-Iconoplasm-Blot-Fingerprint": String(blot.blot_fingerprint || ""),
+      "X-Iconoplasm-Card-Version": published.version,
+    },
+  })
+}
+
 const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
   public_metadata: ({ request, env }) => handlePublicMetadata(request, env),
   public_stats: ({ request, env }) => handlePublicStats(request, env),
@@ -28684,6 +29211,13 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     handlePublishedImageAssetRoute(request, env, ctx, path, {
       fallbackContentType: "image/png",
       label: "Gene card",
+    }),
+  semantic_gene_blot: ({ match, request, env }) =>
+    handleSemanticGeneBlot(request, env, match.params.symbol || ""),
+  gene_blot_asset: ({ request, env, ctx, path }) =>
+    handlePublishedImageAssetRoute(request, env, ctx, path, {
+      fallbackContentType: "image/webp",
+      label: "Gene blot",
     }),
   site_gene_detail: ({ request, env, path }) => handleSiteGeneDetail(request, env, path),
 })
@@ -29246,6 +29780,12 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     sanitizeText,
     stateSymbolMax: 25000,
   }),
+  ...createIconoplasmAdminBlotHandlers({
+    isAdmin: isIconoplasmAdmin,
+    json,
+    listBacklog: listIconoplasmGeneBlotBacklog,
+    upload: uploadIconoplasmGeneBlot,
+  }),
   ...createIconoplasmAdminExtensionBlocklistHandlers({
     actor,
     isAdmin: isIconoplasmAdmin,
@@ -29762,7 +30302,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       // shape differs below. Do not add an early image-only return backed by
       // publishedPortraitRefs, discovery rows, D1 composition, IndexedDB, or a
       // separate cache. Those paths can be internally consistent yet disagree
-      // with the gene page after a canonical portrait publication.
+      // with the gene page after an exact-card image publication.
       const artifact = await accountWindowStage("acct_catalog", () =>
         readPublishedCardCatalogArtifact(env, snapshotVersion, symbols),
       )
