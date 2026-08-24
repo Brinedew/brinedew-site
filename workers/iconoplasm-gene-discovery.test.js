@@ -10,7 +10,7 @@ import {
   buildIconoplasmLlmsTxt,
   buildIconoplasmSitemapIndexXml,
   buildIconoplasmStaticPagesSitemapXml,
-  iconoplasmPublishedPortraitArtworkUrl,
+  iconoplasmPublishedPortraitUrl,
   iconoplasmGeneRangeBySlug,
   iconoplasmGeneRangeForSymbol,
   iconoplasmPublishedGeneRecordIsDiscoveryCandidate,
@@ -52,7 +52,7 @@ function publishedCardProjection(genes, { missingBlotSymbols = [] } = {}) {
             blot_fingerprint: "b".repeat(32),
             image_url: `https://iconoplasmportraits.b-cdn.net/blots/v1/${gene.s[0]}/${gene.s}/${"b".repeat(32)}/${gene.s}-iconoplasm-gene-blot.webp`,
             canonical_url: `https://iconoplasm.brinedew.bio/blots/v1/${gene.s[0]}/${gene.s}/${"b".repeat(32)}/${gene.s}-iconoplasm-gene-blot.webp`,
-            semantic_url: `https://iconoplasm.brinedew.bio/blots/${gene.s}.webp`,
+            semantic_url: `https://iconoplasm.brinedew.bio/blot/${gene.s}.webp`,
             width: 768,
             height: 1024,
           },
@@ -73,7 +73,7 @@ test("frozen ranges assign every eligible symbol exactly once", () => {
   const flattened = Array.from(snapshot.ranges.values()).flat()
 
   assert.equal(ICONOPLASM_GENE_RANGE_CONTRACT_VERSION, "2026-07-22-19023-v1")
-  assert.equal(ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION, "2026-08-24-v3")
+  assert.equal(ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION, "2026-08-24-v4")
   assert.equal(ICONOPLASM_GENE_RANGES.length, 58)
   assert.equal(snapshot.candidateCount, genes.length)
   assert.equal(flattened.length, genes.length)
@@ -122,10 +122,10 @@ test("catalog discovery candidacy ignores non-authoritative portrait metadata", 
   assert.equal(snapshot.knownBySymbol.size, 2)
   assert.deepEqual(Array.from(snapshot.candidateBySymbol.keys()), ["TP53", "TRIM1"])
   assert.equal(
-    iconoplasmPublishedPortraitArtworkUrl(complete),
+    iconoplasmPublishedPortraitUrl(complete),
     `https://iconoplasm.brinedew.bio/portraits/v1/aa/${PORTRAIT_SHA}/medium.webp`,
   )
-  assert.equal(iconoplasmPublishedPortraitArtworkUrl(complete, "unsupported"), "")
+  assert.equal(iconoplasmPublishedPortraitUrl(complete, "unsupported"), "")
 })
 
 test("raw archive HTML links every range and puts TP53 on TO–TR", () => {
@@ -150,7 +150,7 @@ test("raw archive HTML links every range and puts TP53 on TO–TR", () => {
   assert.match(rangeHtml, /TP53/)
   assert.match(rangeHtml, /tumor protein p53/)
   assert.doesNotMatch(rootHtml, /<script\b/i)
-  assert.match(rangeHtml, /gene-card-thumb-delivery\.js/)
+  assert.doesNotMatch(rangeHtml, /gene-card-thumb-delivery\.js/)
 })
 
 test("sitemap index and shards use the same eligible range membership", () => {
@@ -180,12 +180,12 @@ test("sitemap index and shards use the same eligible range membership", () => {
   assert.match(geneXml, /<loc>https:\/\/iconoplasm\.brinedew\.bio\/gene\/TP53<\/loc>/)
   assert.match(
     geneXml,
-    /<image:loc>https:\/\/iconoplasm\.brinedew\.bio\/blots\/TP53\.webp<\/image:loc>/,
+    /<image:loc>https:\/\/iconoplasm\.brinedew\.bio\/blot\/TP53\.webp<\/image:loc>/,
   )
   assert.doesNotMatch(geneXml, /TRIM1/)
 })
 
-test("ready canonical blots appear in raw range HTML and the matching image sitemap only", () => {
+test("ready canonical blots stay out of range HTML and remain in the matching image sitemap", () => {
   const snapshot = buildIconoplasmGeneDiscoverySnapshot({
     version: "fixture-images-v1",
     catalogHash: "fixturehash",
@@ -197,17 +197,13 @@ test("ready canonical blots appear in raw range HTML and the matching image site
   const html = renderIconoplasmGeneRangeHtml(snapshot, range, readyProjection)
   const sitemap = buildIconoplasmGeneRangeSitemapXml(snapshot, range, readyProjection)
 
-  assert.match(html, /class="gene-card-thumb"/)
-  assert.match(html, /TP53 Iconoplasm gene blot — tumor protein p53/)
-  assert.match(
-    html,
-    /data-iconoplasm-canonical-image-src="https:\/\/iconoplasm\.brinedew\.bio\/blots\/v1\/T\/TP53/,
-  )
-  assert.match(html, /gene-card-thumb-delivery\.js\?v=20260803-gene-card-fallback/)
+  assert.doesNotMatch(html, /<img\b/i)
+  assert.doesNotMatch(html, /gene-card-thumb-delivery\.js/)
+  assert.match(html, /href="\/gene\/TP53"/)
   assert.match(sitemap, /xmlns:image="http:\/\/www\.google\.com\/schemas\/sitemap-image\/1\.1"/)
   assert.match(
     sitemap,
-    /<image:loc>https:\/\/iconoplasm\.brinedew\.bio\/blots\/TP53\.webp<\/image:loc>/,
+    /<image:loc>https:\/\/iconoplasm\.brinedew\.bio\/blot\/TP53\.webp<\/image:loc>/,
   )
   assert.equal((sitemap.match(/<image:image>/g) || []).length, 1)
   assert.doesNotMatch(sitemap, /<image:(?:title|caption)>/)

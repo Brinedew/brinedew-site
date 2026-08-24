@@ -57,7 +57,7 @@ Archive/Clans switcher; feed skip links stay clipped until keyboard focus. Read
 `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md` before changing the renderer,
 gene HTML, range map, robots metadata, archive, sitemap, or `llms.txt`.
 The canonical public machine image is the Iconoplasm gene blot, not its source
-portrait artwork. A blot is the exact image-only shared card composition:
+portrait. A blot is the exact image-only shared card composition:
 published portrait cover crop, protection gradient, full gene name at bottom
 left, and gene symbol at bottom right. The workstation renders its immutable
 768x1024 WebP from the exact selected published card; Cloudflare never renders
@@ -68,7 +68,7 @@ existing `request print copy` control; do not add a visible explanatory caption
 or a default-open duplicate image to the gene page. Search discovery remains
 independent of that presentation state through gene-specific Open Graph and
 Twitter metadata, one linked `WebPage`/`ImageObject`/`Gene` JSON-LD graph, and
-the gene-sitemap entry. The stable first-party `/blots/{SYMBOL}.webp` route may
+the gene-sitemap entry. The stable first-party `/blot/{SYMBOL}.webp` route may
 resolve only the immutable blot referenced by the current exact card artifact.
 These discovery reads must not add a D1 scan or any request-time write,
 enrollment, vote lookup, Queue send, repair, or Browser Rendering work. Before
@@ -79,23 +79,26 @@ legacy portrait SHA. Every requested candidate must resolve to a structurally
 valid card, while only cards with an exact ready blot enter the range or gene
 sitemap. An unavailable/incomplete artifact read returns uncached `503` instead
 of a partial sitemap. The source portrait remains available as subordinate
-character artwork; it must never be described as the canonical public gene
+source material; it must never be described as the canonical public gene
 image. In healthy non-Vietnam regions, IPD-001 selects Bunny's byte-equivalent
 accelerator URL; Vietnam and any failed Bunny probe stay on the first-party
 route. Delivery selection must not replace the first-party discovery identity.
-Requested labelled-card thumbnails are a projection of an already-published
-card artifact. Blot thumbnails and image metadata may expose only a ready object
-whose fingerprint still matches that exact card. Blot readiness must never gate
+Massive `/genes/{range}` pages are text-only discovery indexes and must not
+render portrait or blot thumbnails that bypass the gallery collection mechanic.
+Image metadata may expose only a ready object whose fingerprint still matches
+that exact card. Blot readiness must never gate
 the underlying complete gene profile: every eligible gene remains linked from
 its frozen archive range and listed in its gene-sitemap shard, while a gene with
-no ready blot simply has no thumbnail or image-sitemap child. Those crawler
+no ready blot simply has no image-sitemap child. Those crawler
 reads must never enroll work, consult votes, scan D1, or launch Browser Rendering.
 Agent image lookup reads that same exact published-card authority. The bounded
 `POST /api/public/v1/images/resolve` contract accepts at most 50 identifiers and
-returns separately typed `gene_blot` and `source_portrait_artwork` fields; it
-must not invent one generic "image" field. `/blots/{SYMBOL}.webp` is the stable
+returns separately typed `gene_blot` and temporary `portrait` fields; it must
+not invent one generic "image" field. `/blot/{SYMBOL}.webp` is the stable
 canonical gene-image identity. `/portrait/{SYMBOL}.webp` is only the stable
-medium source-artwork alias and must never be promoted to the canonical image.
+medium portrait alias and must never be promoted to the canonical image. Keep
+portrait coverage until all 19,023 published genes have ready blots; remove it
+from this resolver only after live complete-corpus proof.
 Do not publish a 19,023-image manifest or add source-portrait links to every
 archive row: agent retrieval stays exact and bounded.
 Model-training crawlers are not the search contract: GPTBot and ClaudeBot are

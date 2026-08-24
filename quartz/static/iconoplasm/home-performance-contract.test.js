@@ -1206,7 +1206,7 @@ test("extension install panel gives numbered click-by-click browser install inst
   assert.doesNotMatch(app, /browser\.family === "safari"\) return "safari"/)
 })
 
-test("home extension install surface stays outside virtualized artwork segments", async () => {
+test("home extension install surface stays outside virtualized portrait segments", async () => {
   const app = await readFile(appPath, "utf8")
   assert.match(app, /document\.getElementById\("icono-home-auxiliary"\)/)
   assert.match(app, /appendHomeInstallCard\(auxiliary\)/)
@@ -1327,7 +1327,7 @@ test("gene pages do not render raw sample prose as public copy", async () => {
   )
 })
 
-test("blot-only masonry keeps auxiliary login cards out of the artwork grid", async () => {
+test("blot-only masonry keeps auxiliary login cards out of the portrait grid", async () => {
   const app = await readFile(appPath, "utf8")
   const mounted = app.slice(
     app.indexOf("onPage: function"),

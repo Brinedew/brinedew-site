@@ -1,6 +1,6 @@
 # Iconoplasm published source-portrait pipeline
 
-This is the architecture and operations note for source-portrait selection, vote auto-promotion, the public card artifact, and the repair path used during the PRL incident on 2026-05-20. Historical code and incident notes call the selected source artwork the “canonical portrait”; that is an internal selection term, not the ontology of the finished public image.
+This is the architecture and operations note for source-portrait selection, vote auto-promotion, the public card artifact, and the repair path used during the PRL incident on 2026-05-20.
 
 If you remember one rule, remember this:
 
@@ -8,7 +8,7 @@ If you remember one rule, remember this:
 
 ## Image ontology
 
-- **Portrait artwork** is the generated character image selected by `asset_sha256`. It is source material.
+- **Portrait** is the generated character image selected by `asset_sha256`. It is source material.
 - **Gene blot** is the exact shared `image-only` card composition: portrait cover crop, protection gradient, full gene name at bottom left, and symbol at bottom right. Its verified 768x1024 WebP is the canonical public/search image.
 - **High-resolution print copy** is the separate requested 1536x2048 PNG workflow. It is not the canonical search image.
 

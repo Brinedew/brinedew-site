@@ -67,7 +67,7 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
     "KV_GALLERY_VERSION",
     "gene-page standard images and metadata",
     "structured data",
-    "archive thumbnails",
+    "Massive gene-range pages remain text-only",
     "image-sitemap children",
     "public media",
     "matching immutable blot WebP",
@@ -134,7 +134,7 @@ test("IPD-003 keeps discovery eligibility on the exact published card", () => {
   assert.ok(fence, "IPD-003 must remain registered")
   assert.match(
     fence.decision,
-    /canonical public machine image is the Iconoplasm gene blot, not its source portrait artwork/,
+    /canonical public machine image is the Iconoplasm gene blot, not its source portrait/,
   )
   assert.match(
     fence.decision,
@@ -144,23 +144,23 @@ test("IPD-003 keeps discovery eligibility on the exact published card", () => {
     fence.decision,
     /valid complete card without a ready matching blot remains indexable/,
   )
-  assert.match(fence.decision, /linked from its frozen archive range/)
+  assert.match(fence.decision, /linked from its frozen text-only archive range/)
   assert.match(fence.decision, /listed in its gene-sitemap shard/)
-  assert.match(fence.decision, /only its thumbnail and image-specific projections are absent/)
+  assert.match(fence.decision, /only its image-specific projections are absent/)
   assert.match(
     fence.decision,
     /missing requested card or invalid selected artifact[\s\S]*uncached 503/,
   )
   assert.match(fence.decision, /Only a workstation may render the 768x1024 WebP/)
   assert.match(fence.decision, /bounded POST resolver of at most 50 identifiers/)
-  assert.match(fence.decision, /separately typed gene_blot and source_portrait_artwork fields/)
+  assert.match(fence.decision, /separately typed gene_blot and temporary portrait fields/)
   assert.match(
     fence.decision,
-    /\/portrait\/\{SYMBOL\}\.webp is only the stable medium source-artwork alias/,
+    /\/portrait\/\{SYMBOL\}\.webp remains only until a live exact-card audit proves ready blots for all 19,023 published genes/,
   )
   assert.match(
     fence.change_control,
-    /Do not promote raw portrait artwork as the canonical public image/,
+    /Do not promote a raw portrait as the canonical public image/,
   )
   assert.match(fence.change_control, /publish a full-corpus image manifest/)
 })

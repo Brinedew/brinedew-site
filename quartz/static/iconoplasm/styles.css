@@ -4421,7 +4421,7 @@ body:has(.icono-candidate-delete-dialog[open]) {
 
 /* Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Visual Details) +
    C:\Users\Admin\.codex\skills\polish\SKILL.md (Icons & Images).
-   Portrait-bearing surfaces intentionally keep a faint edge definition so artwork does not melt
+   Portrait-bearing surfaces intentionally keep a faint edge definition so portraits do not melt
    into similarly toned shells or backgrounds during dark/light theme changes. */
 .icono-card-media img,
 .icono-card--brick .iconoplasm-tooltip-portrait,
