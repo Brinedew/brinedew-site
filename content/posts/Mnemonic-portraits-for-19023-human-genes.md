@@ -8,6 +8,8 @@ draft: false
 
 # Mnemonic portraits for 19,023 human genes
 
+I call this visual gene-humanization database **Iconoplasm**: “humanization” here means turning genes into mnemonic characters, not replacing animal genes with human orthologs. Its labelled character images are called **blots**.
+
 Back in 2013, Scott Alexander wrote in [Extreme mnemonics](https://slatestarcodex.com/2013/08/14/extreme-mnemonics/):
 
 > JS-154 is one of five metabolic products of netamine; however, the enzyme that produces it is unknown. It is manufactured in cells in the far rostral region of of the cerebrum, but after binding with a leukocynoid it takes a role in maintaining the blood-brain barrier -- in particular guiding the movements of lipid molecules.
