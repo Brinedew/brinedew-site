@@ -12592,7 +12592,10 @@ function publicGeneBlotMediaEnvelope(url, symbol, cardPayload) {
     symbol,
     checksum_sha256: assetSha,
     blot_fingerprint: String(blot.blot_fingerprint || ""),
-    canonical_url: String(blot.semantic_url),
+    // Published card artifacts are immutable and older ones may retain the
+    // historical plural semantic route. Project the current singular public
+    // contract here without mutating the card or any stored image object.
+    canonical_url: `${url.origin}/blot/${encodeURIComponent(symbol)}.webp`,
     immutable_url: String(blot.canonical_url),
     accelerator_url: String(blot.image_url || ""),
     info_url: publicUrl(url, `/media/${encodeURIComponent(symbol)}`),
@@ -27872,7 +27875,13 @@ export async function readIconoplasmPublishedGeneDiscoveryProjections(env, symbo
       blot.semantic_url &&
       blot.blot_fingerprint
     ) {
-      projection.blot = { ...blot }
+      projection.blot = {
+        ...blot,
+        // Preserve the immutable asset URL while projecting the current
+        // singular semantic endpoint for cards published before the route
+        // migration.
+        semantic_url: `${ICONOPLASM_CANONICAL_ORIGIN}/blot/${encodeURIComponent(symbol)}.webp`,
+      }
     }
     bySymbol.set(symbol, projection)
   }
@@ -28984,7 +28993,10 @@ async function handleSiteGeneDetail(request, env, path) {
     url.searchParams.get("fields"),
   )
   if (publishedCard.payload?.blot?.status === "ready") {
-    payload.blot = { ...publishedCard.payload.blot }
+    payload.blot = {
+      ...publishedCard.payload.blot,
+      semantic_url: `${url.origin}/blot/${encodeURIComponent(resolved.symbol)}.webp`,
+    }
   } else {
     delete payload.blot
   }
