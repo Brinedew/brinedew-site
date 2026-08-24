@@ -140,6 +140,21 @@ test("canonical blot WebP dimensions are verified before immutable storage", () 
   assert.equal(iconoplasmGeneBlotWebpDimensions(new Uint8Array([1, 2, 3])), null)
 })
 
+test("published blot retries read exact versioned cards by explicit symbol", () => {
+  const backlog = runtimeSource.slice(
+    runtimeSource.indexOf("export async function listIconoplasmGeneBlotBacklog"),
+    runtimeSource.indexOf("export async function uploadIconoplasmGeneBlot"),
+  )
+  assert.match(backlog, /Array\.isArray\(payload\?\.symbols\)/)
+  assert.match(backlog, /readPublishedCardCatalogArtifact\(env, version, requestedSymbols/)
+  assert.match(backlog, /allowWholeArtifact: false/)
+  assert.match(backlog, /automatic: false/)
+  assert.doesNotMatch(
+    backlog.slice(backlog.indexOf("if (requestedSymbols.length)")),
+    /cardCatalogRecordsForArtifact/,
+  )
+})
+
 test("GET and HEAD cannot enroll, enqueue, cache in KV, or launch Browser Rendering", () => {
   const handler = runtimeSource.slice(
     runtimeSource.indexOf("async function handleIconoplasmPrintCopyPng"),
