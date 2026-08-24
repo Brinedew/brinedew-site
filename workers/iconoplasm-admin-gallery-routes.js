@@ -69,12 +69,27 @@ export function createIconoplasmAdminGalleryHandlers(services) {
         })),
       }
     } catch (error) {
+      const budgetPayload =
+        error?.payload && typeof error.payload === "object"
+          ? {
+              day_key: sanitizeText(String(error.payload.day_key || ""), 32) || null,
+              daily_limit: Math.max(0, Number(error.payload.daily_limit || 0) || 0),
+              estimated_writes: Math.max(0, Number(error.payload.estimated_writes || 0) || 0),
+              requested_writes: Math.max(0, Number(error.payload.requested_writes || 0) || 0),
+              projected_writes: Math.max(0, Number(error.payload.projected_writes || 0) || 0),
+              estimated_writes_remaining: Math.max(
+                0,
+                Number(error.payload.estimated_writes_remaining || 0) || 0,
+              ),
+            }
+          : null
       result = {
         ok: false,
         skipped: true,
         code:
           sanitizeText(String(error?.code || ""), 128) || "GALLERY_DIRTY_SHARD_PUBLICATION_SKIPPED",
         error: sanitizeText(String(error?.message || error), 500),
+        ...(budgetPayload ? { budget: budgetPayload } : {}),
       }
     }
     const status = await fetchPublishStatus(env)
