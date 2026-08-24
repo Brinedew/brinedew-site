@@ -79,6 +79,7 @@ test("published blot pagination walks the immutable published shards, not D1 cat
     ["A1BG", "A1CF", "A2M", "A2ML1"],
   )
   assert.equal(first.records[0].full_name, "A1BG full name")
+  assert.equal(first.total_count, 6)
   assert.equal(first.done, false)
   assert.equal(first.next_after, "A2ML1")
 
@@ -91,6 +92,7 @@ test("published blot pagination walks the immutable published shards, not D1 cat
     ["A4GALT", "ABAT"],
   )
   assert.equal(second.done, true)
+  assert.equal(second.total_count, 6)
   assert.equal(second.next_after, "ABAT")
 })
 
@@ -153,5 +155,6 @@ test("published blot pagination skips shards wholly before the resume cursor", a
     page.records.map((item) => item.symbol),
     ["TP53"],
   )
+  assert.equal(page.total_count, 2)
   assert.equal(kv.reads.includes(oldKey), false)
 })

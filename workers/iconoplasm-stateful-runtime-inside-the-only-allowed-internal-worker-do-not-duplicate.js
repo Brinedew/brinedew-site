@@ -25903,6 +25903,12 @@ export async function pagePublishedCardCatalogArtifact(
   const pageLimit = Math.max(1, Math.min(100, Number(limit) || 25))
   const manifest = await readPublishedCardCatalogManifest(env, version)
   if (!manifest) return null
+  const totalCount = Array.isArray(manifest.shards)
+    ? manifest.shards.reduce(
+        (sum, shard) => sum + Math.max(0, Number(shard?.card_count || 0) || 0),
+        0,
+      )
+    : Math.max(0, Number(manifest.card_count || manifest.catalog_gene_count || 0) || 0)
 
   const records = []
   const appendCards = (cards) => {
@@ -25936,6 +25942,7 @@ export async function pagePublishedCardCatalogArtifact(
   const page = records.slice(0, pageLimit)
   return {
     records: page,
+    total_count: totalCount,
     done: !hasMore,
     next_after: page.length
       ? normalizeSymbol(
@@ -26033,6 +26040,7 @@ export async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
     symbols,
     snapshot_version: version,
     scanned: symbols.length,
+    total_count: page.total_count,
     done: page.done,
     next_after: page.next_after,
   }
