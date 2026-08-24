@@ -5,7 +5,9 @@ import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWo
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   handleIconoplasmSyncFinalizationQueue,
+  iconoplasmCardCatalogKvWriteBudgetDeferral,
   IconoplasmSyncGovernor,
+  syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShardsForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 function finalizationPhasePriority(phase) {
@@ -697,6 +699,76 @@ function buildFakeQueue({ failMessage = "" } = {}) {
     },
   }
 }
+
+test("card-catalog KV exhaustion defers publication until the next UTC budget day", () => {
+  const error = Object.assign(new Error("budget exhausted"), {
+    code: "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED",
+    payload: {
+      day_key: "2026-08-24",
+      daily_limit: 20,
+      estimated_writes: 20,
+      requested_writes: 7,
+    },
+  })
+
+  assert.deepEqual(iconoplasmCardCatalogKvWriteBudgetDeferral(error), {
+    ok: true,
+    deferred: true,
+    code: "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED",
+    reason: "daily_kv_write_budget",
+    resume_after: "2026-08-25T00:00:00.000Z",
+    budget: error.payload,
+  })
+  assert.equal(iconoplasmCardCatalogKvWriteBudgetDeferral(new Error("network down")), null)
+})
+
+test("read-model finalization completes its ledger work when gallery KV publication is deferred", async () => {
+  const calls = []
+  const budgetError = Object.assign(new Error("budget exhausted"), {
+    code: "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED",
+    payload: { day_key: "2026-08-24", daily_limit: 20, estimated_writes: 20 },
+  })
+  const result = await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShardsForTest(
+    {},
+    { symbols: ["KDM6B"], skipDashboard: false },
+    {
+      syncReadModels: async (_env, options) => {
+        calls.push({ kind: "sync", options })
+        return { ok: true, updated: 1 }
+      },
+      publishDirtyShards: async (_env, options) => {
+        calls.push({ kind: "publish", options })
+        throw budgetError
+      },
+    },
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(result.updated, 1)
+  assert.equal(result.card_catalog, null)
+  assert.equal(result.card_catalog_publication.deferred, true)
+  assert.equal(result.card_catalog_publication.resume_after, "2026-08-25T00:00:00.000Z")
+  assert.deepEqual(
+    calls.map((call) => call.kind),
+    ["sync", "publish"],
+  )
+})
+
+test("non-budget gallery publication failures still fail the finalization ledger", async () => {
+  await assert.rejects(
+    syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShardsForTest(
+      {},
+      {},
+      {
+        syncReadModels: async () => ({ ok: true }),
+        publishDirtyShards: async () => {
+          throw new Error("storage unavailable")
+        },
+      },
+    ),
+    /storage unavailable/,
+  )
+})
 
 test("admin finalization pending exposes queued, retrying, and pending-finalize jobs", async () => {
   const env = buildEnv({

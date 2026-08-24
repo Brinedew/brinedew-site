@@ -1,5 +1,5 @@
 -- The canonical public gene image is a blot: the shared image-only card
--- composition (portrait artwork, protection gradient, full gene name, symbol).
+-- composition (portrait, protection gradient, full gene name, symbol).
 -- Rendering belongs to the Iconoplasm workstation; D1 stores only the bounded
 -- readiness identity needed to keep public card epochs coherent.
 CREATE TABLE IF NOT EXISTS icono_gene_blot_materializations (
