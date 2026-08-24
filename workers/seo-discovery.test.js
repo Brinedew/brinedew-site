@@ -21,6 +21,10 @@ const rootRobotsSource = new URL("../content/robots.txt", import.meta.url)
 const appsIndexSource = new URL("../content/apps/index.md", import.meta.url)
 const geneguessrStaticAppSource = new URL("../quartz/static/geneguessr/app.js", import.meta.url)
 const iconoplasmStaticAppSource = new URL("../quartz/static/iconoplasm/app.js", import.meta.url)
+const iconoplasmStaticStylesSource = new URL(
+  "../quartz/static/iconoplasm/styles.css",
+  import.meta.url,
+)
 const headComponentSource = new URL("../quartz/components/Head.tsx", import.meta.url)
 const deployWorkflowSource = new URL("../.github/workflows/deploy-quartz.yml", import.meta.url)
 const publicWorkerWranglerSource = new URL("../wrangler.toml", import.meta.url)
@@ -1091,7 +1095,10 @@ test("gene hydration preserves and refreshes the canonical profile title", async
 })
 
 test("gene lead keeps portrait artwork subordinate and renders the canonical blot", async () => {
-  const source = await readFile(iconoplasmStaticAppSource, "utf8")
+  const [source, styles] = await Promise.all([
+    readFile(iconoplasmStaticAppSource, "utf8"),
+    readFile(iconoplasmStaticStylesSource, "utf8"),
+  ])
 
   assert.match(source, /function buildGeneLeadCardMarkup\(g\)/)
   assert.match(source, /var portraitUrl = publishedPortraitUrl\(g, "medium"\)/)
@@ -1102,6 +1109,7 @@ test("gene lead keeps portrait artwork subordinate and renders the canonical blo
   assert.match(source, /function revealCanonicalGeneBlot\(trigger, symbol\)/)
   assert.match(source, /blot\.removeAttribute\("hidden"\)/)
   assert.doesNotMatch(source, /<figcaption>Canonical Iconoplasm gene blot/)
+  assert.match(styles, /\.icono-canonical-gene-blot\[hidden\][\s\S]*display: none !important/)
   assert.match(source, /blotImage\.setAttribute\("src", canonicalBlotUrl\)/)
   assert.match(source, /portraitDelivery\.ensure\(canonicalBlotUrl\)/)
   assert.match(source, /portraitDelivery\.bind\(blotImage, canonicalBlotUrl\)/)
