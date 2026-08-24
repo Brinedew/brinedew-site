@@ -454,16 +454,15 @@ priority symbols and renders at most 25 missing blots. The read is indexed by
 the existing event watermark and excludes blot/card materialization events, so
 the corpus backfill cannot repeatedly trigger the priority lane. Backfill scans
 ten published cards per quiet slice, checkpoints its exact artifact cursor and
-renderer revision, and publishes each 100-gene tranche through this same
-dirty-shard path. Its 5,000-gene UTC ceiling yields at most 50 ordinary tranche
-publications per day. No reader request, full-catalog scan, or Cloudflare render
-participates.
+renderer revision, persists each WebP locally, and uploads it to the
+deterministically derived Bunny key. It performs zero KV writes and never
+republishes a card solely to record blot readiness. No reader request,
+full-catalog scan, or Cloudflare render participates.
 
-Exact blot readiness is checked before a dirty-shard step reserves KV writes.
-`GENE_BLOT_NOT_READY` is a deterministic workstation dependency and must consume
-zero KV reservation and perform zero KV writes. This ordering prevents the
-15-minute publication retry from exhausting the conservative internal ledger
-while the real Cloudflare write counter remains low.
+Only a real canonical card change consumes the bounded dirty-shard KV budget.
+The published card immediately becomes the sole identity input for the stable
+blot route; a missing object is a materialization backlog item, not a
+publication barrier or a reason to reserve KV writes.
 
 Cold bootstrap, legacy storage conversion, and a changed card-mapper revision are
 deployment migrations, not runtime recovery modes. The routine route fails with

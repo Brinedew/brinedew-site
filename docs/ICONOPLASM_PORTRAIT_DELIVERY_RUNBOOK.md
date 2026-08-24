@@ -46,9 +46,11 @@ portrait fallback.
 The source portrait is not Iconoplasm's canonical public/search image. That role
 belongs to the matching **gene blot**: the workstation-rendered 768x1024 WebP
 containing the portrait cover crop, protection gradient, full gene name, and
-symbol. Blots live under `blots/v1/<initial>/<SYMBOL>/<fingerprint>/...webp`;
-the stable first-party `/blot/<SYMBOL>.webp` route resolves only the immutable
-reference in the exact published card. Public media, page metadata, structured
+symbol. Blots use versioned immutable keys derived from the exact card and
+renderer revision. The stable first-party `/blot/<SYMBOL>.webp` route recomputes
+that key from the exact published card, so backfill uploads require zero KV
+writes. During the renderer-v2 migration it falls back only to a ready legacy
+blot whose portrait SHA matches that same card. Public media, page metadata, structured
 data and image sitemaps expose the blot, while raw portraits
 is explicitly subordinate.
 
@@ -81,9 +83,9 @@ senders must not reconstruct those operations independently.
 
 `https://iconoplasm.brinedew.bio/portraits/v1/...` and
 `https://iconoplasm.brinedew.bio/gene-cards/v1/...`, and immutable
-`https://iconoplasm.brinedew.bio/blots/v1/...` requests first read authenticated
-Storage. Stable `/blots/<SYMBOL>.webp` requests first resolve the current exact
-card's immutable blot reference, then use the same adapter. Bunny can expose
+immutable blot requests first read authenticated Storage. Stable
+`/blot/<SYMBOL>.webp` requests derive the current exact card's immutable blot
+key, then use the same adapter. Bunny can expose
 different truth through its Storage API and public CDN
 replicas: the observed CASP8AP2 failure loaded from an American VPN while the
 Vietnam first-party Storage read returned 404. A Storage 404 or unreachable

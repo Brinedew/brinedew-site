@@ -965,14 +965,13 @@ const CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS = [
   "unpublish",
   "purge_legacy",
   "gene_card_materialized",
-  "gene_blot_materialized",
 ]
 // Workstation priority excludes materialization-only events. Those events are
 // the resumable corpus backfill itself and are intentionally released in
 // budgeted batches. Every other canonical-affecting event represents a human
 // or publication decision that should receive its exact blot before bulk work.
 const CARD_CATALOG_BLOT_PRIORITY_ACTIONS = CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS.filter(
-  (action) => action !== "gene_card_materialized" && action !== "gene_blot_materialized",
+  (action) => action !== "gene_card_materialized",
 )
 const CARD_CATALOG_ARTIFACT_SCHEMA = "iconoplasm.cardCatalog.v1"
 // Changes whenever source records are mapped into public card fields differently.
@@ -12590,25 +12589,31 @@ function publicMediaEnvelope(url, symbol, portrait) {
 
 function publicGeneBlotMediaEnvelope(url, symbol, cardPayload) {
   const blot = cardPayload?.blot
+  const portrait =
+    cardPayload?.portrait && typeof cardPayload.portrait === "object" ? cardPayload.portrait : null
+  const portraitAssetSha = normalizeSha256(portrait?.asset_sha256 || "")
+  if (portrait?.status !== "published" || !portraitAssetSha) return null
+  const expectedFingerprint = iconoplasmGeneBlotFingerprint(cardPayload)
+  const expectedObjectKey = iconoplasmGeneBlotObjectKey(symbol, expectedFingerprint)
   const assetSha = normalizeSha256(blot?.asset_sha256 || "")
-  if (blot?.status !== "ready" || !assetSha || !blot.semantic_url || !blot.canonical_url)
-    return null
+  const recordedReady =
+    blot?.status === "ready" &&
+    assetSha &&
+    normalizeSha256(blot.portrait_asset_sha256 || "") === portraitAssetSha
   return {
-    id: assetSha,
+    id: assetSha || `blot:${expectedFingerprint}`,
     type: "gene_blot",
     symbol,
-    checksum_sha256: assetSha,
-    blot_fingerprint: String(blot.blot_fingerprint || ""),
-    // Published card artifacts are immutable and older ones may retain the
-    // historical plural semantic route. Project the current singular public
-    // contract here without mutating the card or any stored image object.
+    ...(assetSha ? { checksum_sha256: assetSha } : {}),
+    blot_fingerprint: expectedFingerprint,
     canonical_url: `${url.origin}/blot/${encodeURIComponent(symbol)}.webp`,
-    immutable_url: String(blot.canonical_url),
-    accelerator_url: String(blot.image_url || ""),
+    immutable_url: `${ICONOPLASM_CANONICAL_ORIGIN}/${expectedObjectKey}`,
+    ...(recordedReady && blot.image_url ? { accelerator_url: String(blot.image_url) } : {}),
     info_url: publicUrl(url, `/media/${encodeURIComponent(symbol)}`),
-    width: optionalInt(blot.width) || ICONOPLASM_GENE_BLOT_WIDTH,
-    height: optionalInt(blot.height) || ICONOPLASM_GENE_BLOT_HEIGHT,
-    filename: String(blot.filename || iconoplasmGeneBlotFilename(symbol)),
+    width: ICONOPLASM_GENE_BLOT_WIDTH,
+    height: ICONOPLASM_GENE_BLOT_HEIGHT,
+    filename: iconoplasmGeneBlotFilename(symbol),
+    availability: recordedReady ? "recorded_ready" : "resolve_at_canonical_url",
     ...ICONOPLASM_IMAGE_LICENSE_FIELDS,
     attribution: "Brinedew / Iconoplasm",
     source: "iconoplasm-gene-blots",
@@ -24995,19 +25000,6 @@ async function publishNextCardCatalogDirtyShardStep(
     if (symbol) recordBySymbol.set(symbol, record)
   }
 
-  // A missing exact blot is a deterministic workstation dependency, not a KV
-  // operation. Reject it before reserving writes so the 15-minute publication
-  // retry cannot consume the daily reservation ledger while writing nothing.
-  for (const symbol of stepSymbols) {
-    const record = recordBySymbol.get(symbol)
-    if (record?.portrait?.status === "published" && record?.blot?.status !== "ready") {
-      throw cardCatalogPublicationError(
-        "GENE_BLOT_NOT_READY",
-        `Dirty-shard publication is waiting for the workstation-rendered canonical blot for ${symbol}.`,
-      )
-    }
-  }
-
   const finalStep = nextGroup + stepGroups.length >= groups.length
   const estimatedKvWrites =
     stepGroups.length * 2 + (finalStep ? 3 + (reserveGalleryVersionWrite ? 1 : 0) : 1)
@@ -25056,12 +25048,6 @@ async function publishNextCardCatalogDirtyShardStep(
       if (!record) {
         cardBySymbol.delete(symbol)
         continue
-      }
-      if (record?.portrait?.status === "published" && record?.blot?.status !== "ready") {
-        throw cardCatalogPublicationError(
-          "GENE_BLOT_NOT_READY",
-          `Dirty-shard publication is waiting for the workstation-rendered canonical blot for ${symbol}.`,
-        )
       }
       const vm = buildMobileCardVMFromGeneRecord(record, {
         snapshotVersion: "content-addressed",
@@ -29410,27 +29396,56 @@ async function handleSemanticGeneBlot(request, env, symbolValue) {
       "Cache-Control": "no-store",
     })
   }
-  const blot = published.kind === "available" ? published.payload?.blot : null
-  const objectKey = String(blot?.object_key || "").trim()
-  if (
-    blot?.status !== "ready" ||
-    !objectKey ||
-    objectKey !== iconoplasmGeneBlotObjectKey(symbol, blot?.blot_fingerprint)
-  ) {
+  const card = published.kind === "available" ? published.payload : null
+  const cardSymbol = normalizeSymbol(card?.symbol || card?.canonical_symbol || "")
+  const portrait = card?.portrait && typeof card.portrait === "object" ? card.portrait : null
+  const portraitAssetSha = normalizeSha256(portrait?.asset_sha256 || "")
+  if (cardSymbol !== symbol || portrait?.status !== "published" || !portraitAssetSha) {
     return json({ error: "Canonical gene blot not found" }, 404, {
       "Cache-Control": "no-store",
     })
   }
-  const object = await readPortraitStorageObject(env, objectKey, {
+  // The exact published card is the authority. Its renderer revision, symbol,
+  // name, and portrait SHA deterministically identify the immutable Bunny key.
+  // Blot materialization therefore never needs a second KV catalog publication.
+  const blotFingerprint = iconoplasmGeneBlotFingerprint(card)
+  const objectKey = iconoplasmGeneBlotObjectKey(symbol, blotFingerprint)
+  let selectedFingerprint = blotFingerprint
+  let selectedObjectKey = objectKey
+  let object = await readPortraitStorageObject(env, objectKey, {
     fallbackContentType: "image/webp",
   })
+  // During the renderer-v2 backfill, keep an exact-card v1 blot reachable when
+  // the replacement object has not arrived yet. This fallback is removed by
+  // data completion, not by a KV migration: the v2 key automatically wins as
+  // soon as Bunny contains it.
   if (!object) {
-    return json({ error: "Canonical gene blot is temporarily unavailable" }, 503, {
+    const legacy = card?.blot && typeof card.blot === "object" ? card.blot : null
+    const legacyFingerprint = String(legacy?.blot_fingerprint || "").toLowerCase()
+    const legacyObjectKey = String(legacy?.object_key || "").replace(/^\/+/, "")
+    const legacyPortraitSha = normalizeSha256(legacy?.portrait_asset_sha256 || "")
+    if (
+      legacy?.status === "ready" &&
+      /^[a-f0-9]{32}$/.test(legacyFingerprint) &&
+      legacyPortraitSha === portraitAssetSha &&
+      legacyObjectKey.startsWith("blots/")
+    ) {
+      const legacyObject = await readPortraitStorageObject(env, legacyObjectKey, {
+        fallbackContentType: "image/webp",
+      })
+      if (legacyObject) {
+        object = legacyObject
+        selectedFingerprint = legacyFingerprint
+        selectedObjectKey = legacyObjectKey
+      }
+    }
+  }
+  if (!object) {
+    return json({ error: "Canonical gene blot not found" }, 404, {
       "Cache-Control": "no-store",
-      "Retry-After": "60",
     })
   }
-  const etag = `"${normalizeSha256(blot.asset_sha256 || "") || blot.blot_fingerprint}"`
+  const etag = `"${selectedFingerprint}"`
   if (etagMatches(request.headers.get("If-None-Match"), etag)) {
     return new Response(null, {
       status: 304,
@@ -29446,10 +29461,10 @@ async function handleSemanticGeneBlot(request, env, symbolValue) {
       "Content-Type": "image/webp",
       "Cache-Control": "public, max-age=300, stale-while-revalidate=86400",
       ETag: etag,
-      "Content-Location": `${ICONOPLASM_CANONICAL_ORIGIN}/${objectKey}`,
-      ...iconoplasmImageLicenseResponseHeaders(iconoplasmGeneBlotCdnUrl(env, objectKey)),
+      "Content-Location": `${ICONOPLASM_CANONICAL_ORIGIN}/${selectedObjectKey}`,
+      ...iconoplasmImageLicenseResponseHeaders(iconoplasmGeneBlotCdnUrl(env, selectedObjectKey)),
       "Access-Control-Allow-Origin": "*",
-      "X-Iconoplasm-Blot-Fingerprint": String(blot.blot_fingerprint || ""),
+      "X-Iconoplasm-Blot-Fingerprint": selectedFingerprint,
       "X-Iconoplasm-Card-Version": published.version,
     },
   })

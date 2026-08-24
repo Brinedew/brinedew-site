@@ -71,12 +71,13 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
     "image-sitemap children",
     "public media",
     "matching immutable blot WebP",
+    "does not require a blot-only KV publication",
     "Every derived cache and ETag includes the selected card version",
     "fails closed",
   ]) {
     assert.match(
       fence.decision,
-      new RegExp(protectedTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      new RegExp(protectedTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
       `IPD-011 no longer protects ${protectedTerm}`,
     )
   }
@@ -138,7 +139,7 @@ test("IPD-003 keeps discovery eligibility on the exact published card", () => {
   )
   assert.match(
     fence.decision,
-    /exact versioned published card selected by KV_GALLERY_VERSION owns the blot fingerprint and immutable object reference/,
+    /exact versioned published card selected by KV_GALLERY_VERSION owns every input from which the renderer fingerprint and immutable object key are deterministically derived/,
   )
   assert.match(
     fence.decision,
@@ -153,7 +154,10 @@ test("IPD-003 keeps discovery eligibility on the exact published card", () => {
   )
   assert.match(fence.decision, /Only a workstation may render the 768x1024 WebP/)
   assert.match(fence.decision, /bounded POST resolver of at most 50 identifiers/)
-  assert.match(fence.decision, /separately typed gene_blot and temporary portrait fields/)
+  assert.match(
+    fence.decision,
+    /deterministically resolvable gene_blot plus a temporary portrait field/,
+  )
   assert.match(
     fence.decision,
     /\/portrait\/\{SYMBOL\}\.webp remains only until a live exact-card audit proves ready blots for all 19,023 published genes/,

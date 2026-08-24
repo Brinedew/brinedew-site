@@ -6,6 +6,10 @@ import { fileURLToPath } from "node:url"
 import { readIconoplasmPublisherAuthority } from "../scripts/lib/iconoplasm-publisher-authority.mjs"
 import { iconoplasmExtensionBlocklistKvKey } from "./iconoplasm-extension-blocklist-policy.js"
 import {
+  iconoplasmGeneBlotFingerprint,
+  iconoplasmGeneBlotObjectKey,
+} from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
+import {
   ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
   iconoplasmPublicationAliasManifestFromPolicy,
 } from "./iconoplasm-publication-aliases.js"
@@ -973,7 +977,7 @@ test("public image resolver separates gene blots from temporary portrait coverag
   assert.equal(payload.results[2]?.images, null)
 })
 
-test("public image resolver keeps portraits available until blot coverage is complete", async () => {
+test("public image resolver derives the stable blot URL before catalog metadata catches up", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const kv = buildAgentImageResolverKv({ version: "test-card-without-blot" })
   const shardKey = "iconoplasm:card-catalog-shard:test-card-without-blot:0"
@@ -993,7 +997,11 @@ test("public image resolver keeps portraits available until blot coverage is com
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload.results[0]?.images?.gene_blot, null)
+  assert.equal(
+    payload.results[0]?.images?.gene_blot?.canonical_url,
+    "https://iconoplasm.brinedew.bio/blot/A1BG.webp",
+  )
+  assert.equal(payload.results[0]?.images?.gene_blot?.availability, "resolve_at_canonical_url")
   assert.equal(payload.results[0]?.images?.portrait?.type, "portrait")
 })
 
@@ -1024,6 +1032,93 @@ test("stable source portrait alias redirects to the exact card's medium renditio
   assert.match(response.headers.get("Link") || "", /rel="alternate"/)
   assert.match(response.headers.get("Link") || "", /rel="license"/)
   assert.match(response.headers.get("Link") || "", /rel="describedby"/)
+})
+
+test("stable blot route derives the Bunny object from the published card without embedded blot metadata", async () => {
+  const kv = buildPublishedCardReadKv({ version: "test-card-derived-blot" })
+  const shardKey = "iconoplasm:card-catalog-shard:test-card-derived-blot:0"
+  const shard = JSON.parse(await kv.get(shardKey))
+  const cardPayload = shard.cards[0].payload
+  delete cardPayload.blot
+  await kv.put(shardKey, JSON.stringify(shard))
+  const fingerprint = iconoplasmGeneBlotFingerprint(cardPayload)
+  const expectedObjectKey = iconoplasmGeneBlotObjectKey("A1BG", fingerprint)
+  const reads = []
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/blot/A1BG.webp"),
+      buildEnv({
+        KV: kv,
+        ICONOPLASM_PORTRAITS: {
+          async get(key) {
+            reads.push(key)
+            return key === expectedObjectKey
+              ? {
+                  body: new Uint8Array([82, 73, 70, 70]),
+                  size: 4,
+                  httpEtag: '"derived-blot"',
+                  httpMetadata: { contentType: "image/webp" },
+                }
+              : null
+          },
+        },
+      }),
+      {},
+    )
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(reads, [expectedObjectKey])
+  assert.equal(
+    response.headers.get("Content-Location"),
+    `https://iconoplasm.brinedew.bio/${expectedObjectKey}`,
+  )
+  assert.equal(response.headers.get("X-Iconoplasm-Blot-Fingerprint"), fingerprint)
+  assert.equal(response.headers.get("X-Iconoplasm-Card-Version"), "test-card-derived-blot")
+})
+
+test("stable blot route preserves an exact-card legacy blot until its replacement arrives", async () => {
+  const kv = buildPublishedCardReadKv({ version: "test-card-legacy-blot" })
+  const shardKey = "iconoplasm:card-catalog-shard:test-card-legacy-blot:0"
+  const shard = JSON.parse(await kv.get(shardKey))
+  const cardPayload = shard.cards[0].payload
+  const expectedObjectKey = iconoplasmGeneBlotObjectKey(
+    "A1BG",
+    iconoplasmGeneBlotFingerprint(cardPayload),
+  )
+  const legacyObjectKey = cardPayload.blot.object_key
+  const reads = []
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/blot/A1BG.webp"),
+      buildEnv({
+        KV: kv,
+        ICONOPLASM_PORTRAITS: {
+          async get(key) {
+            reads.push(key)
+            return key === legacyObjectKey
+              ? {
+                  body: new Uint8Array([82, 73, 70, 70]),
+                  size: 4,
+                  httpEtag: '"legacy-blot"',
+                  httpMetadata: { contentType: "image/webp" },
+                }
+              : null
+          },
+        },
+      }),
+      {},
+    )
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(reads, [expectedObjectKey, legacyObjectKey])
+  assert.equal(
+    response.headers.get("Content-Location"),
+    `https://iconoplasm.brinedew.bio/${legacyObjectKey}`,
+  )
+  assert.equal(
+    response.headers.get("X-Iconoplasm-Blot-Fingerprint"),
+    cardPayload.blot.blot_fingerprint,
+  )
 })
 
 test("public media follows the published card barrier instead of D1 portrait changes", async () => {
