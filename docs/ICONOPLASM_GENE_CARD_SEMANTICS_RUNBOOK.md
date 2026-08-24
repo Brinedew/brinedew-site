@@ -154,6 +154,17 @@ to every archive row. Bunny may be returned as a byte-equivalent alternate for
 healthy non-Vietnam delivery, but the first-party URL remains the stable
 identity and works directly in Vietnam.
 
+Standards-aware clients discover that existing resolver from the RFC 8631
+`Link` relations on public HTML, crawler documents, and JSON responses.
+`rel="service-desc"` points to the small OpenAPI 3.1 document at
+`/api/public/v1/openapi.json`; `rel="service-meta"` points to the existing
+catalog metadata; and `llms.txt` is linked separately with `rel="describedby"`.
+The OpenAPI document describes the resolver but does not create a second API or
+image authority. Do not claim that HTTP headers alone make a search LLM use the
+API: cold-agent retrieval is a separate release test. Do not publish a fake
+`/.well-known/ai` or agent card; unimplemented experimental well-known routes
+must return an explicit 404 rather than the application shell.
+
 Crawler GET and HEAD paths remain projections, not workflows. Sitemap and
 archive generation continue to read the shared versioned KV catalog and must
 add no D1 scan. A canonical gene document may retain its existing bounded exact
@@ -251,12 +262,13 @@ event watermark, excludes materialization-only events, refuses more than 100
 pending symbols, and returns at most the requested render batch. The always-on
 Iconoplasm Drain checks this lane once per minute while its request queue is
 idle, renders at most 25 missing candidate blots, and publishes only after the
-whole bounded priority set is ready. It then scans at most 10 published genes
-for corpus backfill, releases those backfill events every 100 scanned genes,
-and stops after 5,000 scanned genes per UTC day. Priority work may run while the
-operator is active; bulk backfill still obeys the workstation quiet and resource
-gates. Ordinary transient failures wait five minutes rather than opening a hot
-retry loop; a daily KV-budget refusal sleeps until the next UTC budget day.
+whole bounded priority set is ready. It then scans at most 250 published genes
+per corpus-backfill batch, releases those backfill events every 100 scanned
+genes, and stops after 20,000 scanned genes per UTC day. Priority work may run
+while the operator is active; bulk backfill still obeys the workstation quiet
+and resource gates. Ordinary transient failures wait five minutes rather than
+opening a hot retry loop; a daily KV-budget refusal sleeps until the next UTC
+budget day.
 
 ## Requested high-resolution print copies
 

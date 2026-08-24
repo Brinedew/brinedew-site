@@ -74,6 +74,16 @@ function adminApiContract(id, suffix, methods, budgetFamily = id, apiHandler = n
 // A route cannot silently exist in one dispatcher while being absent in another.
 export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   contract({
+    id: "public_openapi",
+    match: exact(iconoplasmPublicApiPath("/openapi.json")),
+    methods: GET,
+    auth: "public",
+    cache: "public-1d",
+    budgetFamily: "public_openapi",
+    gatewayHandler: "public_openapi",
+    rateLimit: rateLimit("openapi", 60),
+  }),
+  contract({
     id: "public_metadata",
     match: exact(iconoplasmPublicApiPath("/metadata")),
     methods: GET,

@@ -1,6 +1,7 @@
 import { copyFile, cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { ICONOPLASM_SERVICE_DISCOVERY_LINKS } from "../workers/iconoplasm-service-discovery.js"
 
 // ARCHITECTURE FENCE [IPD-007]: this bundle is the static half of the
 // Iconoplasm failure boundary. Keep its security headers and platform-limit
@@ -28,6 +29,10 @@ const iconoplasmCsp = [
   "upgrade-insecure-requests",
 ].join("; ")
 
+const serviceDiscoveryHeaders = ICONOPLASM_SERVICE_DISCOVERY_LINKS.map(
+  (link) => `  Link: ${link}`,
+).join("\n")
+
 const headersFile = `/*
   Content-Security-Policy: ${iconoplasmCsp}
   Cross-Origin-Opener-Policy: same-origin
@@ -37,6 +42,7 @@ const headersFile = `/*
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
+${serviceDiscoveryHeaders}
 
 /
   Cache-Control: public, max-age=0, must-revalidate, no-transform

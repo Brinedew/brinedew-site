@@ -16,6 +16,7 @@ import {
   readIconoplasmPublishedGeneDiscoveryProjections,
   resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { appendIconoplasmServiceDiscoveryLinks } from "./iconoplasm-service-discovery.js"
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 
@@ -106,7 +107,7 @@ function discoveryDocumentResponse(
   snapshot,
   { cardVersion = "" } = {},
 ) {
-  const headers = new Headers({
+  const headers = appendIconoplasmServiceDiscoveryLinks({
     "Content-Type": contentType,
     "Cache-Control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
     "X-Iconoplasm-Catalog-Version": snapshot.version,
