@@ -37,15 +37,17 @@ From the repo root of this source package:
 3. `pnpm run sync:iconoplasm-extension`
 4. `pnpm run package:iconoplasm-firefox`
 
-That produces the Firefox review payload at:
+That reproduces the Firefox review payload at:
 
-- `iconoplasm-extension/dist/firefox-package/`
+- `iconoplasm-extension/dist/validation/firefox/package/`
 
-and the upload zip at:
+and a deterministic validation zip at:
 
-- `iconoplasm-extension/dist/iconoplasm-firefox-v<version>.zip`
+- `iconoplasm-extension/dist/validation/firefox/iconoplasm-firefox-validation.zip`
 
-The unsigned Firefox package should match the extension version uploaded to AMO for this release.
+The files in this unsigned validation package should match the payload uploaded
+to AMO for this release. Its unversioned filename is intentional: only the
+human-authorized publisher workflow creates a versioned store-upload ZIP.
 
 Notes about the build:
 

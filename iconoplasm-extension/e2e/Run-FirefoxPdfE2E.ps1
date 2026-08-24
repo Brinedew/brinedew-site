@@ -7,12 +7,9 @@ param(
 $ErrorActionPreference = 'Stop'
 $extensionRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $e2eRoot = (Resolve-Path $PSScriptRoot).Path
-$distRoot = Join-Path $extensionRoot 'dist'
-$zip = Get-ChildItem $distRoot -Filter 'iconoplasm-firefox-v*.zip' -File |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 1
-if (-not $zip) {
-    throw 'Build the Firefox package before running the Firefox PDF E2E suite.'
+$validationZip = Join-Path $extensionRoot 'dist\validation\firefox\iconoplasm-firefox-validation.zip'
+if (-not (Test-Path -LiteralPath $validationZip -PathType Leaf)) {
+    throw 'Firefox validation package not found. Run pnpm run package:iconoplasm-firefox before the Firefox PDF E2E suite.'
 }
 if (-not (Test-Path -LiteralPath $FirefoxBinary -PathType Leaf)) {
     throw "Firefox binary not found: $FirefoxBinary"
@@ -23,7 +20,7 @@ if (-not (Test-Path -LiteralPath $Paper -PathType Leaf)) {
 
 New-Item -ItemType Directory -Force -Path $Artifacts | Out-Null
 $xpi = Join-Path $Artifacts 'iconoplasm-firefox-under-test.xpi'
-Copy-Item -LiteralPath $zip.FullName -Destination $xpi -Force
+Copy-Item -LiteralPath $validationZip -Destination $xpi -Force
 
 Push-Location $e2eRoot
 try {

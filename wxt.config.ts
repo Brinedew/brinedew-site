@@ -9,7 +9,7 @@ function readIconoplasmManifest() {
 export default defineConfig({
   srcDir: `iconoplasm-extension/.wxt-${process.env.ICONOPLASM_WXT_BROWSER || "chrome"}/src`,
   publicDir: `iconoplasm-extension/.wxt-${process.env.ICONOPLASM_WXT_BROWSER || "chrome"}/public`,
-  outDir: "iconoplasm-extension/dist/wxt",
+  outDir: process.env.ICONOPLASM_WXT_OUT_DIR || "iconoplasm-extension/dist/validation/wxt",
   outDirTemplate: "{{browser}}-mv{{manifestVersion}}",
   manifest: ({ browser }) => {
     const manifest = readIconoplasmManifest()
@@ -58,7 +58,7 @@ export default defineConfig({
   },
   zip: {
     name: "iconoplasm",
-    artifactTemplate: "iconoplasm-{{browser}}-v{{version}}.zip",
+    artifactTemplate: process.env.ICONOPLASM_WXT_ARTIFACT_TEMPLATE || "wxt-validation.zip",
     sourcesTemplate: "iconoplasm-firefox-v{{version}}-sources.zip",
     zipSources: false,
   },
