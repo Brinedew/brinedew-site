@@ -442,6 +442,15 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   assert.match(sitemapText, /\/sitemaps\/pages\.xml/)
   assert.match(sitemapText, /\/sitemaps\/genes\/TO-TR\.xml/)
 
+  const pagesSitemap = await worker.fetch(
+    new Request("https://iconoplasm.brinedew.bio/sitemaps/pages.xml"),
+    env,
+    {},
+  )
+  const pagesSitemapText = await pagesSitemap.text()
+  assert.equal(pagesSitemap.status, 200)
+  assert.match(pagesSitemapText, /<loc>https:\/\/iconoplasm\.brinedew\.bio\/license<\/loc>/)
+
   const archive = await worker.fetch(new Request("https://iconoplasm.brinedew.bio/genes"), env, {})
   const archiveHtml = await archive.text()
   assert.equal(archive.status, 200)
@@ -483,6 +492,8 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   assert.match(llms.headers.get("content-type") || "", /text\/plain/)
   assert.match(llmsText, /^# Iconoplasm/m)
   assert.match(llmsText, /https:\/\/iconoplasm\.brinedew\.bio\/privacy/)
+  assert.match(llmsText, /https:\/\/iconoplasm\.brinedew\.bio\/license/)
+  assert.match(llmsText, /CC0 1\.0/)
   assert.match(llmsText, /\/gene\/\{HGNC_SYMBOL\}/)
   assert.match(llmsText, /PFAM clan → character fashion aesthetic/)
 })
@@ -638,6 +649,10 @@ test("gene document GET and HEAD use the same exact card blot as the sitemap", a
   )
   assert.match(pageHtml, /alt="TP53 Iconoplasm gene blot — tumor protein p53"/)
   assert.match(pageHtml, new RegExp(`"contentUrl":"${blotUrl}"`))
+  assert.match(pageHtml, /"license":"https:\/\/creativecommons\.org\/publicdomain\/zero\/1\.0\/"/)
+  assert.match(pageHtml, /"usageInfo":"https:\/\/iconoplasm\.brinedew\.bio\/license"/)
+  assert.match(pageHtml, /class="icono-image-license"/)
+  assert.match(pageHtml, /rel="license"/)
   assert.match(sitemapXml, new RegExp(`<image:loc>${blotUrl}</image:loc>`))
   assert.doesNotMatch(pageHtml, new RegExp(`/portraits/v1/aa/${staleD1PortraitSha}/`))
   assert.doesNotMatch(sitemapXml, new RegExp(`/portraits/v1/aa/${staleD1PortraitSha}/`))

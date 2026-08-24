@@ -43,11 +43,15 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   await mkdir(path.join(source, "static", "iconoplasm"), { recursive: true })
   await writeFile(
     path.join(source, "apps", "iconoplasm", "index.html"),
-    '<main id="iconoplasm-root"><a href="../../apps/iconoplasm/privacy">Privacy</a></main>',
+    '<main id="iconoplasm-root"><a href="../../apps/iconoplasm/privacy">Privacy</a><a href="../../apps/iconoplasm/license">License</a></main>',
   )
   await writeFile(
     path.join(source, "apps", "iconoplasm", "privacy.html"),
     "<main>Privacy Policy</main>",
+  )
+  await writeFile(
+    path.join(source, "apps", "iconoplasm", "license.html"),
+    "<main>Image License</main>",
   )
   await writeFile(path.join(source, "static", "iconoplasm", "styles.css"), "body{}")
   await writeFile(path.join(source, "runtime.js"), "export {}")
@@ -60,12 +64,16 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   })
   const home = readFileSync(path.join(target, "index.html"), "utf8")
   const privacy = readFileSync(path.join(target, "privacy.html"), "utf8")
+  const license = readFileSync(path.join(target, "license.html"), "utf8")
   const headers = readFileSync(path.join(target, "_headers"), "utf8")
 
-  assert.equal(report.fileCount, 7)
+  assert.equal(report.fileCount, 8)
   assert.match(home, /id="iconoplasm-root"/)
   assert.match(home, /href="\/privacy"/)
+  assert.match(home, /href="\/license"/)
   assert.match(privacy, /Privacy Policy/)
+  assert.match(license, /Image License/)
+  assert.match(headers, /\/license/)
   assert.match(headers, /Content-Security-Policy:/)
   assert.match(headers, /X-Frame-Options: DENY/)
   assert.match(headers, /\/static\/iconoplasm\/\*/)

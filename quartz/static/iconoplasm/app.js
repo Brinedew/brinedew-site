@@ -666,6 +666,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
+  function publishedImageLicenseMarkup() {
+    return (
+      '<p class="icono-image-license">Published gene portrait and blot images: ' +
+      '<a rel="license" href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a>. ' +
+      '<a href="/license">Copy, embed, hotlink, modify, and reuse without permission or attribution.</a></p>'
+    )
+  }
+
   function rawCandidatePortraitUrl(candidate, preferredSize) {
     var item = candidate || {}
     var fullUrl = String(item.full_url || "").trim()
@@ -9088,7 +9096,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function renderGeneContent(container, g) {
     var html =
-      '<section class="icono-gene-lead">' + buildGeneLeadCardMarkup(g) + canonicalGeneBlotMarkup(g)
+      '<section class="icono-gene-lead">' +
+      buildGeneLeadCardMarkup(g) +
+      canonicalGeneBlotMarkup(g) +
+      publishedImageLicenseMarkup()
 
     html += "<div data-icono-canonical-toolbar-island>" + renderCanonicalToolbarMarkup(g) + "</div>"
     html += "</section>"

@@ -921,6 +921,14 @@ test("public media exposes only the canonical gene blot", async () => {
   assert.equal(payload?.media?.canonical_url, "https://iconoplasm.brinedew.bio/blot/A1BG.webp")
   assert.equal(payload?.media?.info_url, "https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG")
   assert.equal(payload?.media?.checksum_sha256?.length, 64)
+  assert.equal(payload?.media?.rights, "CC0 1.0 Universal")
+  assert.equal(payload?.media?.license_url, "https://creativecommons.org/publicdomain/zero/1.0/")
+  assert.equal(payload?.media?.usage_url, "https://iconoplasm.brinedew.bio/license")
+  assert.equal(payload?.media?.embedding_permitted, true)
+  assert.equal(payload?.media?.hotlinking_permitted, true)
+  assert.equal(payload?.media?.modification_permitted, true)
+  assert.equal(payload?.media?.commercial_use_permitted, true)
+  assert.equal(payload?.media?.attribution_required, false)
   assert.equal("portrait" in payload.media, false)
 })
 
@@ -951,6 +959,8 @@ test("public image resolver separates gene blots from temporary portrait coverag
     "https://iconoplasm.brinedew.bio/blot/A1BG.webp",
   )
   assert.equal(payload.results[0]?.images?.portrait?.type, "portrait")
+  assert.equal(payload.results[0]?.images?.portrait?.rights, "CC0 1.0 Universal")
+  assert.equal(payload.results[0]?.images?.portrait?.attribution_required, false)
   assert.equal(
     payload.results[0]?.images?.portrait?.semantic_url,
     "https://iconoplasm.brinedew.bio/portrait/A1BG.webp",
@@ -1005,6 +1015,14 @@ test("stable source portrait alias redirects to the exact card's medium renditio
   assert.equal(response.headers.get("X-Iconoplasm-Portrait-Rendition"), "medium")
   assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*")
   assert.equal(response.headers.get("Cross-Origin-Resource-Policy"), "cross-origin")
+  assert.equal(response.headers.get("X-License"), "CC0-1.0")
+  assert.equal(
+    response.headers.get("X-Iconoplasm-Usage-Info"),
+    "https://iconoplasm.brinedew.bio/license",
+  )
+  assert.match(response.headers.get("Link") || "", /rel="alternate"/)
+  assert.match(response.headers.get("Link") || "", /rel="license"/)
+  assert.match(response.headers.get("Link") || "", /rel="describedby"/)
 })
 
 test("public media follows the published card barrier instead of D1 portrait changes", async () => {

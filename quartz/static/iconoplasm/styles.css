@@ -3613,6 +3613,18 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   background: #111;
 }
 
+.icono-image-license {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.icono-image-license a {
+  color: inherit;
+  text-underline-offset: 0.16em;
+}
+
 .icono-card--brick-static {
   text-decoration: none;
 }

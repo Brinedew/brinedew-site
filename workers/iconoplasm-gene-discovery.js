@@ -710,6 +710,8 @@ function iconoplasmCatalogStructuredData(snapshot) {
 }
 
 const ICONOPLASM_ACCELERATOR_ORIGIN = "https://iconoplasmportraits.b-cdn.net"
+const ICONOPLASM_IMAGE_LICENSE_URL = "https://creativecommons.org/publicdomain/zero/1.0/"
+const ICONOPLASM_IMAGE_USAGE_URL = `${ICONOPLASM_ORIGIN}/license`
 
 function geneBlotImageUrls(blot, symbol) {
   try {
@@ -825,6 +827,7 @@ export function buildIconoplasmStaticPagesSitemapXml(snapshot, projection = null
     [
       `${ICONOPLASM_ORIGIN}/`,
       `${ICONOPLASM_ORIGIN}/privacy`,
+      `${ICONOPLASM_ORIGIN}/license`,
       `${ICONOPLASM_ORIGIN}/genes`,
       ...ICONOPLASM_GENE_RANGES.map((range) => `${ICONOPLASM_ORIGIN}/genes/${range.slug}`),
     ],
@@ -885,5 +888,6 @@ Search-language bridge: people may look for cartoon gene characters, anthropomor
 - Agent image resolver (POST, up to 50 identifiers): ${ICONOPLASM_ORIGIN}/api/public/v1/images/resolve
 - Diagram workflow: resolve all pathway gene symbols in one POST, then embed each returned gene_blot canonical_url. Do not substitute the temporary portrait field when a blot is unavailable.
 - [Privacy policy](${ICONOPLASM_ORIGIN}/privacy)
+- [Published portrait and blot image license](${ICONOPLASM_IMAGE_USAGE_URL}): CC0 1.0; copying, embedding, hotlinking, modification, redistribution, commercial use, and use in diagrams or AI-generated documents are permitted without attribution
 `
 }

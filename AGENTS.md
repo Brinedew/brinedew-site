@@ -99,6 +99,12 @@ canonical gene-image identity. `/portrait/{SYMBOL}.webp` is only the stable
 medium portrait alias and must never be promoted to the canonical image. Keep
 portrait coverage until all 19,023 published genes have ready blots; remove it
 from this resolver only after live complete-corpus proof.
+Published gene portraits and published gene blots are the only two Iconoplasm
+asset classes under CC0 1.0 Universal. Keep the visible `/license` scope,
+resolver permission fields, ready-blot `ImageObject.license`/`usageInfo`, and
+raw-image HTTP `rel="license"` headers aligned. Never extend CC0 to catalog
+data, metadata, prose, software, prompts, unpublished images, services, or any
+other Brinedew asset without explicit author direction.
 Do not publish a 19,023-image manifest or add source-portrait links to every
 archive row: agent retrieval stays exact and bounded.
 Model-training crawlers are not the search contract: GPTBot and ClaudeBot are
