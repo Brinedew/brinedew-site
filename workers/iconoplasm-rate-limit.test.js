@@ -56,8 +56,10 @@ test("the registry owns every intentionally quota-limited public route class", (
     ["GET", "/api/public/v1/card-snapshots/card-v1/genes/TP53", "gene_detail", 120],
     ["POST", "/api/public/v1/genes/batch", "gene_batch", 60],
     ["POST", "/api/public/v1/resolve", "resolve", 60],
+    ["POST", "/api/public/v1/images/resolve", "image_resolve", 60],
     ["GET", "/api/public/v1/changes", "changes", 60],
     ["GET", "/api/public/v1/media/TP53", "media", 120],
+    ["GET", "/portrait/TP53.webp", "source_portrait", 120],
     ["GET", "/api/iconoplasm/site/genes/TP53", "site_gene", 120],
     ["POST", "/api/iconoplasm/artist-blacklist-submissions", "artist_blocklist_submission", 5],
   ]

@@ -68,6 +68,24 @@ test("portrait binaries stay wired even when they arrive through a non-iconoplas
   assert.equal(response.headers.get("content-type"), "image/webp")
 })
 
+test("stable source portrait aliases reach the stateful image resolver instead of the static shell", async () => {
+  const response = await worker.fetch(
+    new Request("https://iconoplasm.brinedew.bio/portrait/ABI1.webp", { method: "GET" }),
+    {
+      PUBLIC_RATE_LIMIT_120: {
+        async limit() {
+          return { success: true }
+        },
+      },
+    },
+    { waitUntil() {} },
+  )
+
+  assert.equal(response.status, 503)
+  assert.match(response.headers.get("content-type") || "", /application\/json/)
+  assert.equal((await response.json()).code, "CARD_ARTIFACT_UNAVAILABLE")
+})
+
 test("labelled gene-card binaries have the same first-party storage fallback", async () => {
   const key = "gene-cards/v1/S/SOX12/fingerprint/SOX12-iconoplasm-gene-card.png"
   const response = await worker.fetch(
