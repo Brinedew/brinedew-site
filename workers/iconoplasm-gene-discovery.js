@@ -4,7 +4,7 @@ const ICONOPLASM_PORTRAIT_RENDITIONS = new Set(["thumb", "medium", "full"])
 
 export const ICONOPLASM_GENE_RANGE_CONTRACT_VERSION = "2026-07-22-19023-v1"
 export const ICONOPLASM_SEMANTIC_PROFILE_CONTRACT_VERSION = 1
-export const ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION = "2026-08-24-v3"
+export const ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION = "2026-08-24-v4"
 const ICONOPLASM_PORTRAIT_DISCOVERY_RELEASE_LASTMOD = "2026-08-24"
 
 function frozenRange(initial, slug, label, prefixes) {
@@ -538,7 +538,7 @@ export function normalizeIconoplasmPublishedGeneRecord(rawRecord) {
   }
 }
 
-export function iconoplasmPublishedPortraitArtworkUrl(rawRecord, rendition = "medium") {
+export function iconoplasmPublishedPortraitUrl(rawRecord, rendition = "medium") {
   const gene = normalizeIconoplasmPublishedGeneRecord(rawRecord)
   const size = String(rendition || "medium")
     .trim()
@@ -648,7 +648,7 @@ function archiveDocument({ title, description, canonicalPath, body, scripts = ""
     .archive-shell{width:min(1120px,calc(100% - 32px));margin:0 auto;padding:24px 0 64px}.archive-nav{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;min-height:44px;border-bottom:1px solid var(--line);font-size:.84rem}.archive-nav a{min-height:44px;display:inline-flex;align-items:center}
     .archive-head{padding:clamp(36px,7vw,88px) 0 clamp(28px,5vw,54px);border-bottom:3px double var(--ink)}.archive-kicker{margin:0 0 8px;color:var(--accent);font-size:.75rem;letter-spacing:.16em;text-transform:uppercase}.archive-head h1{font-family:IconoDisplay,system-ui,sans-serif;font-size:clamp(2.7rem,8vw,6.8rem);line-height:.86;letter-spacing:-.045em;margin:0;max-width:900px}.archive-deck{max-width:720px;margin:24px 0 0;color:var(--muted);font-size:clamp(.9rem,1.5vw,1.05rem)}
     .letter-section{display:grid;grid-template-columns:72px 1fr;gap:18px;padding:28px 0;border-bottom:1px solid var(--line)}.letter-section h2{font-family:IconoDisplay,system-ui,sans-serif;font-size:3rem;line-height:1;margin:0}.range-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:0;padding:0;list-style:none}.range-link{display:flex;min-height:52px;padding:10px 12px;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);background:color-mix(in srgb,var(--wash) 72%,transparent);text-decoration:none}.range-link:hover{border-color:var(--accent)}.range-count{color:var(--muted);font-size:.76rem;white-space:nowrap}
-    .range-summary{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;padding:24px 0;border-bottom:1px solid var(--line);color:var(--muted)}.range-summary strong{color:var(--ink)}.gene-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 28px;margin:0;padding:18px 0 0;list-style:none}.gene-list li{border-bottom:1px solid color-mix(in srgb,var(--line) 65%,transparent)}.gene-entry{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px}.gene-entry-media{display:flex;gap:4px;align-items:center;margin:6px 0}.gene-card-thumb-link{display:block;width:54px;height:72px}.gene-card-thumb{display:block;width:54px;height:72px;object-fit:contain;background:var(--wash);border:1px solid var(--line)}.gene-portrait-thumb{object-fit:cover}.gene-link{display:grid;grid-template-columns:minmax(90px,auto) 1fr;gap:16px;align-items:baseline;min-height:48px;padding:11px 4px;text-decoration:none}.gene-symbol{font-weight:700;color:var(--accent)}.gene-name{font-size:.83rem;color:var(--muted)}
+    .range-summary{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;padding:24px 0;border-bottom:1px solid var(--line);color:var(--muted)}.range-summary strong{color:var(--ink)}.gene-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 28px;margin:0;padding:18px 0 0;list-style:none}.gene-list li{border-bottom:1px solid color-mix(in srgb,var(--line) 65%,transparent)}.gene-link{display:grid;grid-template-columns:minmax(90px,auto) 1fr;gap:16px;align-items:baseline;min-height:48px;padding:11px 4px;text-decoration:none}.gene-symbol{font-weight:700;color:var(--accent)}.gene-name{font-size:.83rem;color:var(--muted)}
     .archive-foot{padding:28px 0;color:var(--muted);font-size:.76rem}.archive-foot code{color:var(--ink)}
     @media(max-width:720px){.archive-shell{width:min(100% - 22px,1120px);padding-top:10px}.letter-section{grid-template-columns:44px 1fr;gap:10px}.letter-section h2{font-size:2.2rem}.range-list,.gene-list{grid-template-columns:1fr}.archive-head h1{font-size:clamp(2.7rem,17vw,5.2rem)}.gene-link{grid-template-columns:minmax(82px,auto) 1fr}}
     @media(prefers-color-scheme:dark){:root{--paper:#1d1c19;--ink:#efeadf;--muted:#aaa397;--line:#5b574f;--accent:#66c9c3;--wash:#2a2823}}
@@ -678,7 +678,7 @@ function geneBlotImageUrls(blot, symbol) {
     return {
       accelerator: `${ICONOPLASM_ACCELERATOR_ORIGIN}${path}`,
       canonical: `${ICONOPLASM_ORIGIN}${path}`,
-      semantic: `${ICONOPLASM_ORIGIN}/blots/${encodeURIComponent(symbol)}.webp`,
+      semantic: `${ICONOPLASM_ORIGIN}/blot/${encodeURIComponent(symbol)}.webp`,
     }
   } catch {
     return null
@@ -700,7 +700,7 @@ export function renderIconoplasmGeneIndexHtml(snapshot) {
       `<section class="letter-section" aria-labelledby="letter-${initial}"><h2 id="letter-${initial}">${initial}</h2><ul class="range-list">${links}</ul></section>`,
     )
   }
-  const body = `<header class="archive-head"><p class="archive-kicker">Iconoplasm · Human gene registry</p><h1>Gene blot catalog</h1><p class="archive-deck">Choose the frozen symbol range containing the gene. Complete entries expose the canonical Iconoplasm blot: portrait artwork with the full gene name and symbol printed over it.</p></header><main>${sections.join("")}</main><footer class="archive-foot">Catalog <code>${escapeHtml(snapshot.catalogHash || snapshot.version)}</code> · ${snapshot.candidateCount.toLocaleString("en-US")} catalogued human genes</footer>`
+  const body = `<header class="archive-head"><p class="archive-kicker">Iconoplasm · Human gene registry</p><h1>Gene blot catalog</h1><p class="archive-deck">Choose the frozen symbol range containing the gene. Complete entries expose the canonical Iconoplasm blot: a character portrait with the full gene name and symbol printed over it.</p></header><main>${sections.join("")}</main><footer class="archive-foot">Catalog <code>${escapeHtml(snapshot.catalogHash || snapshot.version)}</code> · ${snapshot.candidateCount.toLocaleString("en-US")} catalogued human genes</footer>`
   return archiveDocument({
     title: "Gene reference catalog | Iconoplasm",
     description: `Browse ${snapshot.candidateCount.toLocaleString("en-US")} catalogued human genes and their published Iconoplasm gene blots by stable symbol range.`,
@@ -722,28 +722,18 @@ function iconoplasmProjectedGenesForRange(snapshot, range, projection) {
 
 export function renderIconoplasmGeneRangeHtml(snapshot, range, projection) {
   const projectedGenes = iconoplasmProjectedGenesForRange(snapshot, range, projection)
-  let hasBlots = false
   const links = projectedGenes
-    .map(({ gene, projected }) => {
+    .map(({ gene }) => {
       const path = `/gene/${encodeURIComponent(gene.symbol)}`
-      const blot = projected.blot
-      const imageUrls = geneBlotImageUrls(blot, gene.symbol)
-      if (imageUrls) hasBlots = true
-      const thumbnail = imageUrls
-        ? `<a class="gene-card-thumb-link" href="${path}" aria-label="Open ${escapeHtml(gene.symbol)} gene profile"><img class="gene-card-thumb" src="${escapeHtml(imageUrls.accelerator)}" data-iconoplasm-canonical-image-src="${escapeHtml(imageUrls.canonical)}" width="${Number(blot.width || 768)}" height="${Number(blot.height || 1024)}" loading="lazy" decoding="async" alt="${escapeHtml(gene.symbol)} Iconoplasm gene blot — ${escapeHtml(gene.fullName)}"></a>`
-        : ""
-      return `<li class="gene-entry">${thumbnail}<a class="gene-link" href="${path}"><span class="gene-symbol">${escapeHtml(gene.symbol)}</span><span class="gene-name">${escapeHtml(gene.fullName)}</span></a></li>`
+      return `<li class="gene-entry"><a class="gene-link" href="${path}"><span class="gene-symbol">${escapeHtml(gene.symbol)}</span><span class="gene-name">${escapeHtml(gene.fullName)}</span></a></li>`
     })
     .join("")
-  const body = `<header class="archive-head"><p class="archive-kicker">Iconoplasm · ${escapeHtml(range.initial)} registry</p><h1>${escapeHtml(range.label)}</h1><p class="archive-deck">Published Iconoplasm gene profiles in the frozen ${escapeHtml(range.label)} reference range. Ready gene blots carry the full gene name and symbol over their character artwork.</p></header><main><div class="range-summary"><strong>${projectedGenes.length.toLocaleString("en-US")} published genes</strong><a href="/genes#letter-${range.initial}">All ${range.initial} ranges</a></div><ul class="gene-list">${links}</ul></main><footer class="archive-foot">Range contract <code>${ICONOPLASM_GENE_RANGE_CONTRACT_VERSION}</code> · Catalog <code>${escapeHtml(snapshot.catalogHash || snapshot.version)}</code></footer>`
+  const body = `<header class="archive-head"><p class="archive-kicker">Iconoplasm · ${escapeHtml(range.initial)} registry</p><h1>${escapeHtml(range.label)}</h1><p class="archive-deck">Published Iconoplasm gene profiles in the frozen ${escapeHtml(range.label)} reference range. Ready gene blots carry the full gene name and symbol over their character portrait.</p></header><main><div class="range-summary"><strong>${projectedGenes.length.toLocaleString("en-US")} published genes</strong><a href="/genes#letter-${range.initial}">All ${range.initial} ranges</a></div><ul class="gene-list">${links}</ul></main><footer class="archive-foot">Range contract <code>${ICONOPLASM_GENE_RANGE_CONTRACT_VERSION}</code> · Catalog <code>${escapeHtml(snapshot.catalogHash || snapshot.version)}</code></footer>`
   return archiveDocument({
     title: `${range.label} gene profiles | Iconoplasm`,
     description: `Published Iconoplasm profiles for ${projectedGenes.length.toLocaleString("en-US")} human genes in the frozen ${range.label} symbol range.`,
     canonicalPath: `/genes/${range.slug}`,
     body,
-    scripts: hasBlots
-      ? `<script type="module" src="/static/iconoplasm/gene-card-thumb-delivery.js?v=20260803-gene-card-fallback"></script>`
-      : "",
   })
 }
 
@@ -821,7 +811,7 @@ Iconoplasm maps human-gene biology onto memorable visual character cards called 
 
 - [Gene reference catalog](${ICONOPLASM_ORIGIN}/genes): Server-rendered, self-locating symbol ranges
 - Gene profile URL: ${ICONOPLASM_ORIGIN}/gene/{HGNC_SYMBOL}
-- Canonical gene blot: Every complete gene stays in the archive and gene sitemap. Once its exact labelled WebP is ready, the page also exposes it through a standard image, Open Graph and Twitter metadata, linked Gene/ImageObject/WebPage structured data, and an image-sitemap child. The portrait is source artwork inside the blot, not the canonical public image.
+- Canonical gene blot: Every complete gene stays in the archive and gene sitemap. Once its exact labelled WebP is ready, the page also exposes it through a standard image, Open Graph and Twitter metadata, linked Gene/ImageObject/WebPage structured data, and an image-sitemap child. The unlabelled portrait is source material inside the blot, not the canonical public image.
 - [Sitemap index](${ICONOPLASM_ORIGIN}/sitemap.xml): Static pages and gene-profile shards
 
 ## Biological-to-character mappings

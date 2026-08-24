@@ -1,6 +1,6 @@
 import "../shared/iconoplasm-card/shared-card-runtime.js"
 import {
-  iconoplasmPublishedPortraitArtworkUrl,
+  iconoplasmPublishedPortraitUrl,
   normalizeIconoplasmPublishedGeneRecord,
 } from "./iconoplasm-gene-discovery.js"
 import {
@@ -268,11 +268,11 @@ function iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) {
   if (!shared || !cardPayload) return ""
   const symbol = shared.normalizedSymbol(cardPayload.symbol || cardPayload.canonical_symbol)
   if (!symbol) return ""
-  const portraitAlt = `${symbol} character artwork used inside the Iconoplasm gene blot`
-  const portraitCaption = `Source character artwork for the ${symbol} Iconoplasm gene blot.`
+  const portraitAlt = `${symbol} character portrait used inside the Iconoplasm gene blot`
+  const portraitCaption = `Source portrait for the ${symbol} Iconoplasm gene blot.`
   const dims = shared.portraitDimensions(cardPayload)
   const portraitUrl =
-    iconoplasmPublishedPortraitArtworkUrl(cardPayload, "medium") ||
+    iconoplasmPublishedPortraitUrl(cardPayload, "medium") ||
     iconoplasmPublishedPortraitUrlFromCardPayload(cardPayload, "medium")
   const portraitFullUrl =
     iconoplasmPublishedPortraitUrlFromCardPayload(cardPayload, "full") || portraitUrl
@@ -283,7 +283,7 @@ function iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) {
   const portraitMediaHtml = portraitUrl
     ? shared.renderLabLabelPortraitMediaHtml(symbol, portraitUrl, portraitFullUrl, dims, {
         buttonAttrs: portraitAttrs,
-        buttonAriaLabel: `Open full-size source character artwork for ${symbol}`,
+        buttonAriaLabel: `Open full-size source portrait for ${symbol}`,
         captionText: portraitCaption,
         fetchPriority: "high",
         portraitAlt,
@@ -1078,7 +1078,7 @@ function iconoplasmGeneStructuredData({ gene, geneUrl, title, description, blotU
   if (blotUrl) {
     const imageId = `${geneUrl}#canonical-blot`
     const blotAlt = `${gene.symbol} Iconoplasm gene blot — ${gene.fullName || gene.symbol}`
-    const caption = `Canonical Iconoplasm gene blot for human ${gene.symbol} (${gene.fullName || gene.symbol}), with the full gene name and symbol printed over the character artwork.`
+    const caption = `Canonical Iconoplasm gene blot for human ${gene.symbol} (${gene.fullName || gene.symbol}), with the full gene name and symbol printed over the character portrait.`
     webpage.primaryImageOfPage = { "@id": imageId }
     geneEntity.image = { "@id": imageId }
     graph.push({
@@ -1504,6 +1504,7 @@ function crossOriginResourcePolicyForRequest(request) {
       (reqUrl.pathname.startsWith("/portraits/") ||
         reqUrl.pathname.startsWith("/portrait/") ||
         reqUrl.pathname.startsWith("/gene-cards/") ||
+        reqUrl.pathname.startsWith("/blot/") ||
         reqUrl.pathname.startsWith("/blots/"))
     ) {
       return "cross-origin"
@@ -2077,6 +2078,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         url.pathname.startsWith("/portrait/") ||
         url.pathname.startsWith("/portraits/") ||
         url.pathname.startsWith("/gene-cards/") ||
+        url.pathname.startsWith("/blot/") ||
         url.pathname.startsWith("/blots/") ||
         url.pathname === "/admin" ||
         url.pathname === "/blocklist" ||

@@ -328,7 +328,7 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   }),
   contract({
     id: "semantic_gene_blot",
-    match: pattern(/^\/blots\/([^/]+)\.webp$/, ["symbol"]),
+    match: pattern(/^\/blot\/([^/]+)\.webp$/, ["symbol"]),
     methods: GET,
     auth: "public",
     cache: "handler-defined",

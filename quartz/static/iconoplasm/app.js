@@ -3499,9 +3499,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function buildGeneLeadCardMarkup(g) {
     var dims = portraitDimensions(g)
     var portraitAlt =
-      normalizedSymbol(g.symbol) + " character artwork used inside the Iconoplasm gene blot"
+      normalizedSymbol(g.symbol) + " character portrait used inside the Iconoplasm gene blot"
     var portraitCaption =
-      "Source character artwork for the " + normalizedSymbol(g.symbol) + " Iconoplasm gene blot."
+      "Source portrait for the " + normalizedSymbol(g.symbol) + " Iconoplasm gene blot."
     var portraitUrl = publishedPortraitUrl(g, "medium")
     var portraitFullUrl = publishedPortraitUrl(g, "full") || portraitUrl
     var portraitAssetSha = String(((g || {}).portrait || {}).asset_sha256 || "")
@@ -3539,7 +3539,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                   dims.width +
                   '" data-pswp-height="' +
                   dims.height +
-                  '" aria-label="Open full-size source character artwork for ' +
+                  '" aria-label="Open full-size source portrait for ' +
                   esc(g.symbol) +
                   '">' +
                   '<img class="iconoplasm-tooltip-portrait-img" src="' +
@@ -3552,7 +3552,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                   dims.height +
                   '">' +
                   "</button>" +
-                  '<span class="icono-visually-hidden icono-portrait-artwork-caption">' +
+                  '<span class="icono-visually-hidden icono-portrait-caption">' +
                   esc(portraitCaption) +
                   "</span>"
               : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
@@ -3573,7 +3573,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             dims.width +
             '" data-pswp-height="' +
             dims.height +
-            '" aria-label="Open full-size source character artwork for ' +
+            '" aria-label="Open full-size source portrait for ' +
             esc(g.symbol) +
             '">' +
             '<img class="iconoplasm-tooltip-portrait-img" src="' +
@@ -3589,7 +3589,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             esc(g.symbol) +
             "</span>" +
             "</button>" +
-            '<span class="icono-visually-hidden icono-portrait-artwork-caption">' +
+            '<span class="icono-visually-hidden icono-portrait-caption">' +
             esc(portraitCaption) +
             "</span>"
           : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
@@ -3710,7 +3710,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "alt",
       isGeneLead
         ? normalizedSymbol(genePayload.symbol) +
-            " character artwork used inside the Iconoplasm gene blot"
+            " character portrait used inside the Iconoplasm gene blot"
         : normalizedSymbol(genePayload.symbol) + " blot",
     )
     card.style.setProperty("--width", String(dims.width))
@@ -3790,10 +3790,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         var portraitFullUrl = publishedPortraitUrl(genePayload, "full") || portraitUrl
         var geneLeadPortraitAlt = isGeneLead
           ? normalizedSymbol(genePayload.symbol) +
-            " character artwork used inside the Iconoplasm gene blot"
+            " character portrait used inside the Iconoplasm gene blot"
           : ""
         var geneLeadPortraitCaption = isGeneLead
-          ? "Source character artwork for the " +
+          ? "Source portrait for the " +
             normalizedSymbol(genePayload.symbol) +
             " Iconoplasm gene blot."
           : ""
@@ -3807,7 +3807,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             ? {
                 portraitAlt: geneLeadPortraitAlt,
                 buttonAriaLabel:
-                  "Open full-size source character artwork for " +
+                  "Open full-size source portrait for " +
                   normalizedSymbol(genePayload.symbol),
                 captionText: geneLeadPortraitCaption,
               }

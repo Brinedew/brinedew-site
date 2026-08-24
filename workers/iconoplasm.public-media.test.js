@@ -534,7 +534,7 @@ function buildPublishedCardReadKv({
       object_key: blotObjectKey,
       image_url: `https://iconoplasmportraits.b-cdn.net/${blotObjectKey}`,
       canonical_url: `https://iconoplasm.brinedew.bio/${blotObjectKey}`,
-      semantic_url: "https://iconoplasm.brinedew.bio/blots/A1BG.webp",
+      semantic_url: "https://iconoplasm.brinedew.bio/blot/A1BG.webp",
       width: 768,
       height: 1024,
       filename: "A1BG-iconoplasm-gene-blot.webp",
@@ -754,7 +754,7 @@ test("site gene payload includes published portrait dimensions for first-party b
   assert.equal(payload?.portrait?.sample_label, "A1BG-3")
   assert.equal(payload?.portrait?.sample_number, 3)
   assert.equal(payload?.blot?.status, "ready")
-  assert.equal(payload?.blot?.semantic_url, "https://iconoplasm.brinedew.bio/blots/A1BG.webp")
+  assert.equal(payload?.blot?.semantic_url, "https://iconoplasm.brinedew.bio/blot/A1BG.webp")
   assert.equal(typeof payload?.essence, "object")
   assert.ok(Array.isArray(payload?.portrait_candidates))
   assert.equal("manifestation" in payload, false)
@@ -902,7 +902,7 @@ test("site gene detail canonicalizes alias requests before rendering the gene pa
   )
 })
 
-test("public media exposes the canonical gene blot and nests its source artwork", async () => {
+test("public media exposes only the canonical gene blot", async () => {
   const response =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
@@ -918,17 +918,13 @@ test("public media exposes the canonical gene blot and nests its source artwork"
   assert.equal(payload?.media?.type, "gene_blot")
   assert.equal(payload?.media?.width, 768)
   assert.equal(payload?.media?.height, 1024)
-  assert.equal(payload?.media?.canonical_url, "https://iconoplasm.brinedew.bio/blots/A1BG.webp")
+  assert.equal(payload?.media?.canonical_url, "https://iconoplasm.brinedew.bio/blot/A1BG.webp")
   assert.equal(payload?.media?.info_url, "https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG")
   assert.equal(payload?.media?.checksum_sha256?.length, 64)
-  assert.equal(payload?.media?.source_portrait_artwork?.type, "portrait")
-  assert.match(
-    payload?.media?.source_portrait_artwork?.asset?.renditions?.medium?.canonical_url || "",
-    /^https:\/\/iconoplasm\.brinedew\.bio\/portraits\//,
-  )
+  assert.equal("portrait" in payload.media, false)
 })
 
-test("public image resolver separates gene blots from source portrait artwork", async () => {
+test("public image resolver separates gene blots from temporary portrait coverage", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const response =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
@@ -952,11 +948,11 @@ test("public image resolver separates gene blots from source portrait artwork", 
   assert.equal(payload.results[0]?.images?.gene_blot?.type, "gene_blot")
   assert.equal(
     payload.results[0]?.images?.gene_blot?.canonical_url,
-    "https://iconoplasm.brinedew.bio/blots/A1BG.webp",
+    "https://iconoplasm.brinedew.bio/blot/A1BG.webp",
   )
-  assert.equal(payload.results[0]?.images?.source_portrait_artwork?.type, "portrait")
+  assert.equal(payload.results[0]?.images?.portrait?.type, "portrait")
   assert.equal(
-    payload.results[0]?.images?.source_portrait_artwork?.semantic_url,
+    payload.results[0]?.images?.portrait?.semantic_url,
     "https://iconoplasm.brinedew.bio/portrait/A1BG.webp",
   )
   assert.equal(payload.results[1]?.canonical_symbol, "SOSTDC1")
@@ -966,7 +962,7 @@ test("public image resolver separates gene blots from source portrait artwork", 
   assert.equal(payload.results[2]?.images, null)
 })
 
-test("public image resolver keeps source portraits available before blot materialization", async () => {
+test("public image resolver keeps portraits available until blot coverage is complete", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const kv = buildAgentImageResolverKv({ version: "test-card-without-blot" })
   const shardKey = "iconoplasm:card-catalog-shard:test-card-without-blot:0"
@@ -987,7 +983,7 @@ test("public image resolver keeps source portraits available before blot materia
 
   assert.equal(response.status, 200)
   assert.equal(payload.results[0]?.images?.gene_blot, null)
-  assert.equal(payload.results[0]?.images?.source_portrait_artwork?.type, "portrait")
+  assert.equal(payload.results[0]?.images?.portrait?.type, "portrait")
 })
 
 test("stable source portrait alias redirects to the exact card's medium rendition", async () => {
@@ -1005,7 +1001,7 @@ test("stable source portrait alias redirects to the exact card's medium renditio
   assert.equal(response.status, 302)
   assert.match(response.headers.get("Location") || "", /\/portraits\/v1\/.+\/medium\.webp$/)
   assert.match(response.headers.get("Link") || "", /^<https:\/\/iconoplasmportraits\.b-cdn\.net\//)
-  assert.equal(response.headers.get("X-Iconoplasm-Media-Type"), "source_portrait_artwork")
+  assert.equal(response.headers.get("X-Iconoplasm-Media-Type"), "portrait")
   assert.equal(response.headers.get("X-Iconoplasm-Portrait-Rendition"), "medium")
   assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*")
   assert.equal(response.headers.get("Cross-Origin-Resource-Policy"), "cross-origin")
@@ -1039,12 +1035,10 @@ test("public media follows the published card barrier instead of D1 portrait cha
   assert.equal(before.response.status, 200)
   assert.equal(before.response.headers.get("X-Iconoplasm-Card-Version"), "test-card-media-v1")
   assert.equal(before.response.headers.get("X-Iconoplasm-Media-Source"), "published-card-gene-blot")
-  assert.equal(before.payload?.media?.source_portrait_artwork?.checksum_sha256, publishedCardB)
   assert.equal(
     before.payload?.media?.canonical_url,
-    "https://iconoplasm.brinedew.bio/blots/A1BG.webp",
+    "https://iconoplasm.brinedew.bio/blot/A1BG.webp",
   )
-  assert.notEqual(before.payload?.media?.source_portrait_artwork?.checksum_sha256, d1PortraitA)
 
   const unpublishedD1Portrait = "d".repeat(64)
   env.gatewayDb.published.set("A1BG", {
@@ -1058,10 +1052,6 @@ test("public media follows the published card barrier instead of D1 portrait cha
   assert.equal(afterD1Change.response.headers.get("ETag"), before.response.headers.get("ETag"))
   assert.equal(afterD1Change.payload?.card_snapshot_version, "test-card-media-v1")
   assert.deepEqual(afterD1Change.payload?.media, before.payload?.media)
-  assert.notEqual(
-    afterD1Change.payload?.media?.source_portrait_artwork?.checksum_sha256,
-    unpublishedD1Portrait,
-  )
 
   const nextPublishedKv = buildPublishedCardReadKv({
     version: "test-card-media-v2",
@@ -1086,12 +1076,8 @@ test("public media follows the published card barrier instead of D1 portrait cha
     createHash("sha256").update(`blot-bytes:${publishedCardC}`).digest("hex"),
   )
   assert.equal(
-    afterCardBarrierFlip.payload?.media?.source_portrait_artwork?.checksum_sha256,
-    publishedCardC,
-  )
-  assert.equal(
     afterCardBarrierFlip.payload?.media?.canonical_url,
-    "https://iconoplasm.brinedew.bio/blots/A1BG.webp",
+    "https://iconoplasm.brinedew.bio/blot/A1BG.webp",
   )
 })
 

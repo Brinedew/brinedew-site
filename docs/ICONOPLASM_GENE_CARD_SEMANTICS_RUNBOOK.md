@@ -88,8 +88,8 @@ for incomplete/noindex pages. Route/catalog records establish identity and
 membership only. If the requested card projection is unavailable or malformed,
 the whole document fails closed as uncached `503`. A valid complete card with no
 matching ready blot stays indexable, linked from its frozen archive range, and
-listed in its gene-sitemap shard; only its blot thumbnail, image metadata,
-`ImageObject`, and image-sitemap child are absent. Raw portrait artwork may
+listed in its gene-sitemap shard; only its blot image metadata, `ImageObject`,
+and image-sitemap child are absent. The raw portrait may
 remain visible in the interactive dossier as subordinate source material, but
 it is never `primaryImageOfPage`, `Gene.image`, the social image, or an
 image-sitemap entry.
@@ -106,17 +106,23 @@ Public assistants and other clients resolve images through the bounded
 minute. The existing public identifier resolver owns normalization, so a gene
 symbol, publication alias, or UniProt identifier reaches the same canonical
 symbol. The response preserves the ontology with distinct
-`images.gene_blot` and `images.source_portrait_artwork` fields. It never returns
+`images.gene_blot` and temporary `images.portrait` fields. It never returns
 an ambiguous generic image.
 
-The stable `/blots/{SYMBOL}.webp` URL is the canonical gene image. The singular
-`/portrait/{SYMBOL}.webp` URL is only the medium source-artwork alias; full and
+The stable `/blot/{SYMBOL}.webp` URL is the canonical gene image. The singular
+`/portrait/{SYMBOL}.webp` URL is only the medium portrait alias; full and
 thumbnail aliases are intentionally absent because the public product has four
 images per gene: full, medium, thumbnail, and blot. Both aliases resolve from
 the exact published card selected by `KV_GALLERY_VERSION`, so a vote changes
 public output only after the normal publication barrier advances. A published
-gene without a ready blot still resolves its source portrait and remains
+gene without a ready blot still resolves its portrait and remains
 published, with `gene_blot: null`.
+
+The portrait field and endpoint remain only while blot coverage is incomplete.
+Remove them from this agent workflow only after a live exact-card audit proves
+ready blots for all 19,023 published genes. The massive `/genes/{range}` pages
+remain text-only so they support discovery without replacing the gallery
+collection experience; image-sitemap children continue to expose ready blots.
 
 The resolver is the free HTTP foundation for any future MCP transport. Do not
 create a separate MCP authority, require users to configure MCP for ordinary
