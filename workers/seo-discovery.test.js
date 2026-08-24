@@ -484,7 +484,7 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   assert.match(llmsText, /PFAM clan → character aesthetic/)
 })
 
-test("gene archive and sitemap use the exact card blot when portrait metadata drifts", async () => {
+test("gene archive stays text-only while sitemap uses the exact card blot when portrait metadata drifts", async () => {
   const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")], {
     cardPortraitShaBySymbol: { TP53: "b".repeat(64) },
   })
@@ -494,12 +494,11 @@ test("gene archive and sitemap use the exact card blot when portrait metadata dr
     worker.fetch(new Request("https://iconoplasm.brinedew.bio/sitemaps/genes/TO-TR.xml"), env, {}),
   ])
   const [rangeHtml, sitemapXml] = await Promise.all([range.text(), sitemap.text()])
-  const exactBlotPath = `/blots/v1/T/TP53/${"b".repeat(32)}/TP53-iconoplasm-gene-blot.webp`
-
   assert.equal(range.status, 200)
   assert.equal(sitemap.status, 200)
   assert.match(rangeHtml, /href="\/gene\/TP53"/)
-  assert.match(rangeHtml, new RegExp(exactBlotPath))
+  assert.doesNotMatch(rangeHtml, /<img\b/)
+  assert.doesNotMatch(rangeHtml, /\/blots\/v1\//)
   assert.match(
     sitemapXml,
     /<image:loc>https:\/\/iconoplasm\.brinedew\.bio\/blot\/TP53\.webp<\/image:loc>/,
