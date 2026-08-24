@@ -362,14 +362,18 @@ function iconoplasmCanonicalGeneBlotFigureHtml(cardPayload) {
   const symbol = shared?.normalizedSymbol(cardPayload?.symbol || cardPayload?.canonical_symbol)
   const blot = iconoplasmPublishedGeneBlot(cardPayload)
   if (!symbol || !blot) return ""
+  // The stable route resolves the current renderer for this exact immutable
+  // card. The embedded canonical_url can legitimately point at an older
+  // renderer and must not win in user-visible markup.
+  const blotUrl = String(blot.semantic_url || "").trim()
   const fullName = String(cardPayload?.full_name || cardPayload?.name || symbol).trim()
   const alt = `${symbol} Iconoplasm gene blot — ${fullName}`
   return (
     '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot hidden>' +
     '<img class="icono-canonical-gene-blot-image" src="' +
-    escapeIconoplasmHtmlAttribute(blot.canonical_url) +
+    escapeIconoplasmHtmlAttribute(blotUrl) +
     '" data-iconoplasm-canonical-image-src="' +
-    escapeIconoplasmHtmlAttribute(blot.canonical_url) +
+    escapeIconoplasmHtmlAttribute(blotUrl) +
     '" width="' +
     escapeIconoplasmHtmlAttribute(String(blot.width || 768)) +
     '" height="' +
