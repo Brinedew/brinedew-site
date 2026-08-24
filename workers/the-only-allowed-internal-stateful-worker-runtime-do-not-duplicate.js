@@ -2074,6 +2074,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
 
       const isApiOrWorker =
         url.pathname.startsWith("/api/") ||
+        url.pathname.startsWith("/portrait/") ||
         url.pathname.startsWith("/portraits/") ||
         url.pathname.startsWith("/gene-cards/") ||
         url.pathname.startsWith("/blots/") ||
