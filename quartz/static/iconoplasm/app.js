@@ -3807,8 +3807,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             ? {
                 portraitAlt: geneLeadPortraitAlt,
                 buttonAriaLabel:
-                  "Open full-size source portrait for " +
-                  normalizedSymbol(genePayload.symbol),
+                  "Open full-size source portrait for " + normalizedSymbol(genePayload.symbol),
                 captionText: geneLeadPortraitCaption,
               }
             : null,
