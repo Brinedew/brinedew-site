@@ -109,6 +109,16 @@ symbol. The response preserves the ontology with distinct
 `images.gene_blot` and temporary `images.portrait` fields. It never returns
 an ambiguous generic image.
 
+Published gene portraits and published gene blots are the only two Iconoplasm
+asset classes dedicated under CC0 1.0 Universal. Every returned image envelope
+states `rights`, `license_url`, `usage_url`, `embedding_permitted`,
+`hotlinking_permitted`, `modification_permitted`, `commercial_use_permitted`,
+and `attribution_required` explicitly. The gene page links to `/license`, a
+ready blot's `ImageObject` carries `license` and `usageInfo`, and raw portrait
+and blot responses expose standard HTTP `rel="license"` plus the usage page.
+Do not broaden that dedication to catalog data, metadata, prose, software,
+prompts, unpublished images, services, or any other Brinedew asset.
+
 The stable `/blot/{SYMBOL}.webp` URL is the canonical gene image. The singular
 `/portrait/{SYMBOL}.webp` URL is only the medium portrait alias; full and
 thumbnail aliases are intentionally absent because the public product has four
