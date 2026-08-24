@@ -25747,6 +25747,44 @@ async function exactReadyGeneBlotForPublishedCard(env, symbolValue, cardPayload,
   return exactReadyGeneBlotProjection(cardPayload, row, { env, origin })
 }
 
+async function exactReadyGeneBlotsForPublishedCards(env, cardsBySymbol) {
+  if (!(cardsBySymbol instanceof Map) || !cardsBySymbol.size || !env?.ICONOPLASM_DB) {
+    return new Map()
+  }
+  const symbols = [...cardsBySymbol.keys()]
+  const rowsBySymbol = new Map()
+  // D1 accepts at most 100 bound parameters. Gene discovery ranges are bounded,
+  // but several ranges contain more than 100 symbols, so read only their exact
+  // materialization rows in stable chunks instead of scanning the blot ledger.
+  const D1_MAX_BOUND_PARAMS = 90
+  for (let index = 0; index < symbols.length; index += D1_MAX_BOUND_PARAMS) {
+    const batch = symbols.slice(index, index + D1_MAX_BOUND_PARAMS)
+    const result = await env.ICONOPLASM_DB.prepare(
+      `SELECT gene_symbol,
+              blot_fingerprint AS gene_blot_fingerprint,
+              portrait_asset_sha256 AS gene_blot_portrait_asset_sha256,
+              blot_asset_sha256 AS gene_blot_asset_sha256,
+              object_key AS gene_blot_object_key,
+              width AS gene_blot_width,
+              height AS gene_blot_height
+         FROM icono_gene_blot_materializations
+        WHERE gene_symbol IN (${batch.map(() => "?").join(",")})`,
+    )
+      .bind(...batch)
+      .all()
+    for (const row of Array.isArray(result?.results) ? result.results : []) {
+      const symbol = normalizeSymbol(row?.gene_symbol || "")
+      if (symbol && cardsBySymbol.has(symbol)) rowsBySymbol.set(symbol, row)
+    }
+  }
+  return new Map(
+    symbols.map((symbol) => [
+      symbol,
+      exactReadyGeneBlotProjection(cardsBySymbol.get(symbol), rowsBySymbol.get(symbol)),
+    ]),
+  )
+}
+
 async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, snapshotVersion }) {
   if (!env?.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
   const base = portraitBase(new URL(requestUrl || "https://iconoplasm.brinedew.bio/"), env)
@@ -27996,7 +28034,7 @@ export async function readIconoplasmPublishedCardCatalogArtifactForTest(
 // a gate on the underlying gene URL. These reads never query votes, compose D1
 // cards, or trigger rendering. A range normally overlaps one 750-card immutable
 // shard.
-export async function readIconoplasmPublishedGeneDiscoveryProjections(env, symbols) {
+export async function readIconoplasmPublishedGeneDiscoveryProjections(env, symbols, options = {}) {
   const requestedSymbols = normalizeRequestedSymbols(
     Array.isArray(symbols) ? symbols : [],
     MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT,
@@ -28015,7 +28053,7 @@ export async function readIconoplasmPublishedGeneDiscoveryProjections(env, symbo
     // readable before advertising its version.
     return { version, publishedAt, bySymbol: new Map(), cardSymbols: new Set() }
   }
-  const bySymbol = new Map()
+  const publishedCardsBySymbol = new Map()
   const cardSymbols = new Set()
   for (const symbol of requestedSymbols) {
     const card = artifact.bySymbol.get(symbol)
@@ -28025,9 +28063,22 @@ export async function readIconoplasmPublishedGeneDiscoveryProjections(env, symbo
     if (portrait?.status !== "published" || !normalizeSha256(portrait.asset_sha256 || "")) {
       continue
     }
-    const blot = card?.payload?.blot
+    publishedCardsBySymbol.set(symbol, card.payload)
+  }
+  // Corpus backfill deliberately performs zero KV writes. The exact published
+  // card still owns image identity; these bounded exact-row reads only prove
+  // that the matching immutable bytes are ready for sitemap projection.
+  const readyBlotsBySymbol = options.includeBlotReadiness
+    ? await exactReadyGeneBlotsForPublishedCards(env, publishedCardsBySymbol)
+    : new Map()
+  const bySymbol = new Map()
+  for (const [symbol, cardPayload] of publishedCardsBySymbol.entries()) {
+    const exactReadyBlot = readyBlotsBySymbol.get(symbol)
+    const blot = cardPayload?.blot
     const projection = { blot: null }
-    if (
+    if (exactReadyBlot) {
+      projection.blot = exactReadyBlot
+    } else if (
       blot?.status === "ready" &&
       blot.image_url &&
       blot.canonical_url &&
