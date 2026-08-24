@@ -1063,6 +1063,7 @@ export function iconoplasmGeneDocumentProjectionIsIndexable({
 function iconoplasmGeneStructuredData({ gene, geneUrl, title, description, blotUrl }) {
   const webpageId = `${geneUrl}#webpage`
   const geneId = `${geneUrl}#gene`
+  const datasetId = `https://${ICONOPLASM_HOST}/genes#dataset`
   const webpage = {
     "@type": "WebPage",
     "@id": webpageId,
@@ -1082,6 +1083,7 @@ function iconoplasmGeneStructuredData({ gene, geneUrl, title, description, blotU
       propertyID: "HGNC approved symbol",
       value: gene.symbol,
     },
+    isPartOf: { "@id": datasetId },
   }
   const graph = [webpage, geneEntity]
   if (blotUrl) {
