@@ -469,7 +469,7 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   assert.match(shard.headers.get("etag") || "", /2026-08-24-v4/)
   assert.match(shard.headers.get("etag") || "", /TO-TR\.xml/)
   assert.match(shardText, /\/gene\/TP53/)
-  assert.match(shardText, /\/blots\/TP53\.webp/)
+  assert.match(shardText, /\/blot\/TP53\.webp/)
   assert.doesNotMatch(shardText, /TRIM1/)
   assert.doesNotMatch(shardText, /<image:(?:title|caption)>/)
 
@@ -502,7 +502,7 @@ test("gene archive and sitemap use the exact card blot when portrait metadata dr
   assert.match(rangeHtml, new RegExp(exactBlotPath))
   assert.match(
     sitemapXml,
-    /<image:loc>https:\/\/iconoplasm\.brinedew\.bio\/blots\/TP53\.webp<\/image:loc>/,
+    /<image:loc>https:\/\/iconoplasm\.brinedew\.bio\/blot\/TP53\.webp<\/image:loc>/,
   )
   assert.doesNotMatch(rangeHtml, new RegExp(`/portraits/v1/aa/${"a".repeat(64)}/`))
   assert.doesNotMatch(sitemapXml, new RegExp(`/portraits/v1/aa/${"a".repeat(64)}/`))
@@ -861,7 +861,7 @@ test("complete gene metadata is indexable while incomplete records retain noinde
     true,
   )
   assert.match(staleCatalogPortraitHtml, /iconoplasm-gene-structured-data/)
-  assert.match(staleCatalogPortraitHtml, /\/blots\/TP53\.webp/)
+  assert.match(staleCatalogPortraitHtml, /\/blot\/TP53\.webp/)
   assert.doesNotMatch(staleCatalogPortraitHtml, /\/portraits\/v1\//)
 
   const pendingBlotHtml = rewriteIconoplasmGeneDiscoveryMetadata(completeHtml, "/gene/TP53", {
