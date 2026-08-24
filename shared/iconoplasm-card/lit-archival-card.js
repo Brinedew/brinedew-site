@@ -258,11 +258,8 @@ function titleTemplate(model) {
 function footerTemplate(model) {
   return html`<div class="icono-label-footer-copy">
     <div class="icono-label-footer-copy-main">
-      <div class="icono-label-footer-line icono-label-footer-line--caption">
-        labelled / inspected / filed
-      </div>
       <a
-        class="icono-label-footer-line icono-label-footer-line--typed icono-label-print-copy-request"
+        class="icono-label-footer-line icono-label-footer-line--caption icono-label-print-copy-request"
         data-icono-print-copy
         data-icono-print-copy-symbol=${model.symbol || ""}
         role="button"
@@ -270,7 +267,7 @@ function footerTemplate(model) {
       >
         request print copy
       </a>
-      <div class="icono-label-footer-line icono-label-footer-line--typed">
+      <div class="icono-label-footer-line icono-label-footer-line--caption">
         seal after review / do not expose to open air
       </div>
     </div>

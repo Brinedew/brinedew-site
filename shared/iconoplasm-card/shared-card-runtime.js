@@ -1251,11 +1251,10 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     return (
       '<div class="icono-label-footer-copy">' +
       '<div class="icono-label-footer-copy-main">' +
-      '<div class="icono-label-footer-line icono-label-footer-line--caption">labelled / inspected / filed</div>' +
-      '<a class="icono-label-footer-line icono-label-footer-line--typed icono-label-print-copy-request" data-icono-print-copy data-icono-print-copy-symbol="' +
+      '<a class="icono-label-footer-line icono-label-footer-line--caption icono-label-print-copy-request" data-icono-print-copy data-icono-print-copy-symbol="' +
       escapeHtml(model.symbol || "") +
       '" role="button" aria-disabled="true">request print copy</a>' +
-      '<div class="icono-label-footer-line icono-label-footer-line--typed">seal after review / do not expose to open air</div>' +
+      '<div class="icono-label-footer-line icono-label-footer-line--caption">seal after review / do not expose to open air</div>' +
       "</div>" +
       '<div class="icono-label-footer-copy-side">' +
       '<div class="icono-label-footer-line icono-label-footer-line--caption">brinedew institute / internal matter</div>' +
