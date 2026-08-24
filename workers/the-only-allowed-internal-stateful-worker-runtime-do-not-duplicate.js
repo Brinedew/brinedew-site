@@ -335,15 +335,24 @@ function iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) {
 }
 
 function iconoplasmPublishedGeneBlot(cardPayload) {
+  const shared = globalThis.IconoplasmCardShared
+  const symbol = shared?.normalizedSymbol(cardPayload?.symbol || cardPayload?.canonical_symbol)
   const blot = cardPayload?.blot && typeof cardPayload.blot === "object" ? cardPayload.blot : null
   if (
+    !symbol ||
     blot?.status !== "ready" ||
     !String(blot.image_url || "").startsWith("https://iconoplasmportraits.b-cdn.net/blots/v1/") ||
-    !String(blot.canonical_url || "").startsWith(`https://${ICONOPLASM_HOST}/blots/v1/`) ||
-    !String(blot.semantic_url || "").startsWith(`https://${ICONOPLASM_HOST}/blot/`)
+    !String(blot.canonical_url || "").startsWith(`https://${ICONOPLASM_HOST}/blots/v1/`)
   )
     return null
-  return blot
+  // Published card artifacts are immutable, so cards materialized before the
+  // singular route migration retain a historical /blots/{SYMBOL}.webp field.
+  // Canonicalize that derived semantic URL at the projection boundary without
+  // mutating the exact card or any remote object.
+  return {
+    ...blot,
+    semantic_url: `https://${ICONOPLASM_HOST}/blot/${encodeURIComponent(symbol)}.webp`,
+  }
 }
 
 function iconoplasmCanonicalGeneBlotFigureHtml(cardPayload) {
