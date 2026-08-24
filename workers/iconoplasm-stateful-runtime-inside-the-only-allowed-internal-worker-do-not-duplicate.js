@@ -1869,6 +1869,26 @@ class IconoplasmCardCatalogKvWriteBudgetConfigurationError extends Error {
   }
 }
 
+export function iconoplasmCardCatalogKvWriteBudgetDeferral(error) {
+  if (String(error?.code || "") !== "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED") return null
+  const payload = error?.payload && typeof error.payload === "object" ? error.payload : null
+  const dayKey = /^\d{4}-\d{2}-\d{2}$/.test(String(payload?.day_key || ""))
+    ? String(payload.day_key)
+    : null
+  const dayStartMs = dayKey ? Date.parse(`${dayKey}T00:00:00.000Z`) : Number.NaN
+  const resumeAfter = Number.isFinite(dayStartMs)
+    ? new Date(dayStartMs + 24 * 60 * 60 * 1000).toISOString()
+    : null
+  return {
+    ok: true,
+    deferred: true,
+    code: "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED",
+    reason: "daily_kv_write_budget",
+    resume_after: resumeAfter,
+    budget: payload,
+  }
+}
+
 class IconoplasmAdminMutationLimiterActiveError extends Error {
   constructor(detail) {
     super("ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE")
@@ -25427,6 +25447,7 @@ async function syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(
     skipVisionRollups = false,
     skipDashboard = false,
   } = {},
+  dependencies = {},
 ) {
   // This wrapper is a trap for well-meaning cleanup. It exists because callers
   // often want "refresh read models and then publish a fresh artifact", but the
@@ -25434,7 +25455,9 @@ async function syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(
   // Dropping any skip flag here turns a symbol-scoped phase into a surprise
   // rebuild and reintroduces the 2026-05 failure mode where a cheap GUI action
   // quietly spends D1 rows and may publish KV artifacts too early.
-  const result = await syncAdminReadModels(env, {
+  const syncReadModels = dependencies.syncReadModels || syncAdminReadModels
+  const publishDirtyShards = dependencies.publishDirtyShards || publishIconoplasmGalleryDirtyShards
+  const result = await syncReadModels(env, {
     symbols,
     visionIds,
     fullVision,
@@ -25448,10 +25471,34 @@ async function syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(
     skipVisionRollups,
     skipDashboard,
   })
-  const publication = await publishIconoplasmGalleryDirtyShards(env, {
-    triggerReason: "admin_read_model_sync",
-  })
+  let publication
+  try {
+    publication = await publishDirtyShards(env, {
+      triggerReason: "admin_read_model_sync",
+    })
+  } catch (error) {
+    const deferredPublication = iconoplasmCardCatalogKvWriteBudgetDeferral(error)
+    if (!deferredPublication) throw error
+    // The D1 read models are durable and the publish-event watermark still owns
+    // the exact dirty set. Completing this Queue ledger row is safe: the 15-minute
+    // gallery publisher will retry after the UTC budget resets. Retrying this same
+    // Queue message every 30 seconds only burns Queue/D1 operations and cannot
+    // create KV allowance.
+    return {
+      ...result,
+      card_catalog: null,
+      card_catalog_publication: deferredPublication,
+    }
+  }
   return { ...result, card_catalog: publication.card_catalog }
+}
+
+export async function syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShardsForTest(
+  env,
+  options,
+  dependencies,
+) {
+  return syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, options, dependencies)
 }
 
 function parseJsonTextList(raw) {
