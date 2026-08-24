@@ -356,7 +356,7 @@ function iconoplasmCanonicalGeneBlotFigureHtml(cardPayload) {
   return (
     '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot>' +
     '<img class="icono-canonical-gene-blot-image" src="' +
-    escapeIconoplasmHtmlAttribute(blot.image_url) +
+    escapeIconoplasmHtmlAttribute(blot.canonical_url) +
     '" data-iconoplasm-canonical-image-src="' +
     escapeIconoplasmHtmlAttribute(blot.canonical_url) +
     '" width="' +

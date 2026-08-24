@@ -653,7 +653,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return (
       '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot>' +
       '<img class="icono-canonical-gene-blot-image" src="' +
-      esc(portraitDelivery.resolve(blot.canonical_url)) +
+      esc(blot.canonical_url) +
+      '" data-iconoplasm-canonical-image-src="' +
+      esc(blot.canonical_url) +
       '" width="' +
       esc(String(blot.width || 768)) +
       '" height="' +
@@ -8744,6 +8746,23 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function wireGeneContent(container, genePayload) {
     if (!container || !genePayload) return
     container._iconoGenePayload = genePayload
+    var blot = publishedGeneBlot(genePayload)
+    var blotImage = container.querySelector(
+      ".icono-canonical-gene-blot-image[data-iconoplasm-canonical-image-src]",
+    )
+    if (blot && blotImage) {
+      var canonicalBlotUrl = String(blot.canonical_url || "").trim()
+      var currentBlotUrl = blotImage.currentSrc || blotImage.getAttribute("src") || ""
+      if (blotImage.complete && blotImage.naturalWidth === 0 && currentBlotUrl) {
+        portraitDelivery.reportFailure(currentBlotUrl)
+      }
+      // Server markup always starts first-party so Vietnam never depends on an
+      // accelerator decision made before the delivery handler is installed.
+      blotImage.setAttribute("src", canonicalBlotUrl)
+      portraitDelivery.ensure(canonicalBlotUrl).then(function () {
+        portraitDelivery.bind(blotImage, canonicalBlotUrl)
+      })
+    }
     syncServerGenePortraitUrls(container, genePayload)
     hydrateGeneInteractiveIslands(container, genePayload)
     wireGeneVoteControls(container, genePayload)
