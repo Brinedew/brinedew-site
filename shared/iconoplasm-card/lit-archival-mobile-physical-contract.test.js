@@ -109,11 +109,36 @@ test("card footer integrates the narrow image license into archival flavor copy"
     assert.match(source, /reuse permitted without attribution/)
     assert.doesNotMatch(source, /keep away from heat and moisture/)
     assert.doesNotMatch(source, /registry copy retained in cabinet 5A/)
+    assert.doesNotMatch(source, /labelled \/ inspected \/ filed/)
   }
   assert.match(runtime, /rel="license"/)
   assert.match(litCard, /rel="license"/)
   assert.doesNotMatch(geneShellRuntime, /icono-image-license/)
   assert.doesNotMatch(pageCss, /\.icono-image-license/)
+})
+
+test("print-copy and seal lines use archival caption type with a bold print action", async () => {
+  const runtime = await sourceText(runtimePath)
+  const litCard = await sourceText(litCardPath)
+  const css = await sourceText(cssPath)
+
+  for (const source of [runtime, litCard]) {
+    assert.match(
+      source,
+      /icono-label-footer-line icono-label-footer-line--caption icono-label-print-copy-request/,
+    )
+    assert.doesNotMatch(
+      source,
+      /icono-label-footer-line--typed icono-label-print-copy-request/,
+    )
+    assert.match(
+      source,
+      /icono-label-footer-line icono-label-footer-line--caption[^>]*>[^<]*seal after review \/ do not expose to open air/,
+    )
+  }
+
+  const printCopyBlock = cssStandaloneBlockFor(css, ".icono-label-print-copy-request")
+  assert.match(printCopyBlock, /font-weight:\s*700\s*;/)
 })
 
 test("first-paint fonts are embedded and revealed as one bounded transaction", async () => {
