@@ -131,6 +131,7 @@ async function buildPublishedCatalogEnv(
   {
     cardPortraitShaBySymbol = {},
     cardPortraitStatusBySymbol = {},
+    cardBlotSemanticUrlBySymbol = {},
     omitCardSymbols = [],
     omitBlotSymbols = [],
     withGenePageD1 = false,
@@ -184,7 +185,9 @@ async function buildPublishedCatalogEnv(
               object_key: `blots/v1/${gene.s[0]}/${gene.s}/${blotFingerprint}/${gene.s}-iconoplasm-gene-blot.webp`,
               image_url: `https://iconoplasmportraits.b-cdn.net/blots/v1/${gene.s[0]}/${gene.s}/${blotFingerprint}/${gene.s}-iconoplasm-gene-blot.webp`,
               canonical_url: `https://iconoplasm.brinedew.bio/blots/v1/${gene.s[0]}/${gene.s}/${blotFingerprint}/${gene.s}-iconoplasm-gene-blot.webp`,
-              semantic_url: `https://iconoplasm.brinedew.bio/blot/${gene.s}.webp`,
+              semantic_url:
+                cardBlotSemanticUrlBySymbol[gene.s] ||
+                `https://iconoplasm.brinedew.bio/blot/${gene.s}.webp`,
               width: 768,
               height: 1024,
             }
@@ -579,6 +582,9 @@ test("gene document GET and HEAD use the same exact card blot as the sitemap", a
   const publishedCardPortraitSha = "b".repeat(64)
   const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")], {
     cardPortraitShaBySymbol: { TP53: publishedCardPortraitSha },
+    cardBlotSemanticUrlBySymbol: {
+      TP53: "https://iconoplasm.brinedew.bio/blots/TP53.webp",
+    },
     withGenePageD1: true,
   })
   globalThis.fetch = async (url) => {
