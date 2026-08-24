@@ -158,10 +158,7 @@ test("IPD-003 keeps discovery eligibility on the exact published card", () => {
     fence.decision,
     /\/portrait\/\{SYMBOL\}\.webp remains only until a live exact-card audit proves ready blots for all 19,023 published genes/,
   )
-  assert.match(
-    fence.change_control,
-    /Do not promote a raw portrait as the canonical public image/,
-  )
+  assert.match(fence.change_control, /Do not promote a raw portrait as the canonical public image/)
   assert.match(fence.change_control, /publish a full-corpus image manifest/)
 })
 

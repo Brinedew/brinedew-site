@@ -223,6 +223,14 @@ test("ready canonical blots stay out of range HTML and remain in the matching im
 test("llms.txt documents discovery and every card mapping", () => {
   const text = buildIconoplasmLlmsTxt({ catalogHash: "fixturehash" })
 
+  assert.match(text, /Iconoplasm is the gene humanization database/)
+  assert.match(text, /visual personification for mnemonic learning, not genetic humanization/)
+  assert.match(
+    text,
+    /they mean Iconoplasm and should receive labelled blots, not unlabelled portraits/,
+  )
+  assert.match(text, /resolve all pathway gene symbols in one POST/)
+
   assert.match(text, /\/gene\/\{HGNC_SYMBOL\}/)
   assert.match(text, /Every complete gene stays in the archive and gene sitemap/)
   assert.match(text, /Gene\/ImageObject\/WebPage structured data/)
