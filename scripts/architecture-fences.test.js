@@ -67,8 +67,8 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
     "KV_GALLERY_VERSION",
     "gene-page standard images and metadata",
     "structured data",
-    "archive ranges",
-    "image sitemaps",
+    "archive thumbnails",
+    "image-sitemap children",
     "public media",
     "matching immutable blot WebP",
     "Every derived cache and ETag includes the selected card version",
@@ -82,6 +82,7 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
   }
   assert.match(fence.reason, /publishedPortraitRefs/)
   assert.match(fence.reason, /raw D1 portrait/)
+  assert.match(fence.decision, /remains an indexable gene profile and sitemap\/archive member/)
   assert.match(fence.change_control, /raw icono_publish_state as a public image source/)
   assert.match(fence.change_control, /Worker-side blot rendering/)
   assert.match(fence.change_control, /page, sitemap, and public media agree/)
@@ -141,9 +142,11 @@ test("IPD-003 keeps discovery eligibility on the exact published card", () => {
   )
   assert.match(
     fence.decision,
-    /valid requested card without a ready matching blot is omitted from archive ranges and sitemap shards/,
+    /valid complete card without a ready matching blot remains indexable/,
   )
-  assert.match(fence.decision, /ready matching blot[\s\S]*remains noindex/)
+  assert.match(fence.decision, /linked from its frozen archive range/)
+  assert.match(fence.decision, /listed in its gene-sitemap shard/)
+  assert.match(fence.decision, /only its thumbnail and image-specific projections are absent/)
   assert.match(
     fence.decision,
     /missing requested card or invalid selected artifact[\s\S]*uncached 503/,

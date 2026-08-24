@@ -27751,11 +27751,12 @@ export async function readIconoplasmPublishedCardCatalogArtifactForTest(
   return readPublishedCardCatalogArtifact(env, version, symbols, options)
 }
 
-// ARCHITECTURE FENCE [IPD-003] + [IPD-011]: range pages and image sitemaps
-// project canonical gene blot identity from only the
-// exact published card shards selected by KV_GALLERY_VERSION. They never query
-// votes, compose D1 cards, or trigger rendering. A range normally overlaps one
-// 750-card immutable shard.
+// ARCHITECTURE FENCE [IPD-003] + [IPD-011]: range pages and gene sitemaps
+// retain every complete card from the exact published shards selected by
+// KV_GALLERY_VERSION. A ready matching blot adds image projections; it is never
+// a gate on the underlying gene URL. These reads never query votes, compose D1
+// cards, or trigger rendering. A range normally overlaps one 750-card immutable
+// shard.
 export async function readIconoplasmPublishedGeneDiscoveryProjections(env, symbols) {
   const requestedSymbols = normalizeRequestedSymbols(
     Array.isArray(symbols) ? symbols : [],
@@ -27781,16 +27782,22 @@ export async function readIconoplasmPublishedGeneDiscoveryProjections(env, symbo
     const card = artifact.bySymbol.get(symbol)
     if (!card) continue
     cardSymbols.add(symbol)
-    const blot = card?.payload?.blot
-    if (
-      blot?.status !== "ready" ||
-      !blot.image_url ||
-      !blot.canonical_url ||
-      !blot.semantic_url ||
-      !blot.blot_fingerprint
-    )
+    const portrait = card?.payload?.portrait
+    if (portrait?.status !== "published" || !normalizeSha256(portrait.asset_sha256 || "")) {
       continue
-    bySymbol.set(symbol, { blot: { ...blot } })
+    }
+    const blot = card?.payload?.blot
+    const projection = { blot: null }
+    if (
+      blot?.status === "ready" &&
+      blot.image_url &&
+      blot.canonical_url &&
+      blot.semantic_url &&
+      blot.blot_fingerprint
+    ) {
+      projection.blot = { ...blot }
+    }
+    bySymbol.set(symbol, projection)
   }
   return { version, publishedAt, bySymbol, cardSymbols }
 }

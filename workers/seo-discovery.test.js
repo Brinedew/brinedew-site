@@ -453,7 +453,7 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   assert.equal(range.status, 200)
   assert.match(range.headers.get("etag") || "", /card-seofixture/)
   assert.match(range.headers.get("x-iconoplasm-card-version") || "", /^card-seofixture/)
-  assert.equal(range.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-24-v2")
+  assert.equal(range.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-24-v3")
   assert.match(rangeHtml, /href="\/gene\/TP53"/)
   assert.doesNotMatch(rangeHtml, /TRIM1/)
 
@@ -465,8 +465,8 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   const shardText = await shard.text()
   assert.equal(shard.status, 200)
   assert.match(shard.headers.get("x-iconoplasm-card-version") || "", /^card-seofixture/)
-  assert.equal(shard.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-24-v2")
-  assert.match(shard.headers.get("etag") || "", /2026-08-24-v2/)
+  assert.equal(shard.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-24-v3")
+  assert.match(shard.headers.get("etag") || "", /2026-08-24-v3/)
   assert.match(shard.headers.get("etag") || "", /TO-TR\.xml/)
   assert.match(shardText, /\/gene\/TP53/)
   assert.match(shardText, /\/blots\/TP53\.webp/)
@@ -508,10 +508,10 @@ test("gene archive and sitemap use the exact card blot when portrait metadata dr
   assert.doesNotMatch(sitemapXml, new RegExp(`/portraits/v1/aa/${"a".repeat(64)}/`))
 })
 
-test("nonpublished card portraits are omitted even when a stale SHA is present", async () => {
+test("published genes remain discoverable when their exact card has no ready blot", async () => {
   const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")], {
     cardPortraitShaBySymbol: { TP53: "b".repeat(64) },
-    cardPortraitStatusBySymbol: { TP53: "missing" },
+    omitBlotSymbols: ["TP53"],
   })
   const [range, sitemap] = await Promise.all([
     worker.fetch(new Request("https://iconoplasm.brinedew.bio/genes/TO-TR"), env, {}),
@@ -521,8 +521,10 @@ test("nonpublished card portraits are omitted even when a stale SHA is present",
 
   assert.equal(range.status, 200)
   assert.equal(sitemap.status, 200)
-  assert.doesNotMatch(rangeHtml, /\/gene\/TP53/)
-  assert.doesNotMatch(sitemapXml, /\/gene\/TP53/)
+  assert.match(rangeHtml, /\/gene\/TP53/)
+  assert.match(sitemapXml, /\/gene\/TP53/)
+  assert.doesNotMatch(rangeHtml, /<img class="gene-card-thumb"/)
+  assert.doesNotMatch(sitemapXml, /<image:image>/)
   assert.doesNotMatch(sitemapXml, /\/portraits\/v1\/bb\//)
 })
 
