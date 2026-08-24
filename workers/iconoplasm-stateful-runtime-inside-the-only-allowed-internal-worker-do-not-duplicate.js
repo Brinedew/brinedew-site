@@ -32,6 +32,10 @@ import {
   iconoplasmPublicApiPath as publicApiPath,
   matchIconoplasmRouteContract,
 } from "./iconoplasm-route-contract.js"
+import {
+  appendIconoplasmServiceDiscoveryLinks,
+  iconoplasmPublicOpenApiJson,
+} from "./iconoplasm-service-discovery.js"
 import { ICONOPLASM_CLAN_CATALOG } from "./generated/iconoplasm-clan-catalog.js"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/iconoplasm-anima-emulsion-slot-contract.js"
 import { ICONOPLASM_FACTORY_CATALOG } from "./generated/iconoplasm-factory-catalog.js"
@@ -2715,7 +2719,21 @@ function corsHeaders() {
 function json(data, status = 200, extra = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders(), "Content-Type": "application/json; charset=utf-8", ...extra },
+    headers: appendIconoplasmServiceDiscoveryLinks({
+      ...corsHeaders(),
+      "Content-Type": "application/json; charset=utf-8",
+      ...extra,
+    }),
+  })
+}
+
+function handlePublicOpenApi() {
+  return new Response(iconoplasmPublicOpenApiJson(), {
+    headers: appendIconoplasmServiceDiscoveryLinks({
+      ...corsHeaders(),
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+    }),
   })
 }
 
@@ -29606,6 +29624,7 @@ async function handleSemanticSourcePortrait(request, env, symbolValue) {
 }
 
 const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
+  public_openapi: ({ request }) => asHead(request, handlePublicOpenApi()),
   public_metadata: ({ request, env }) => handlePublicMetadata(request, env),
   public_stats: ({ request, env }) => handlePublicStats(request, env),
   public_schema: ({ request }) => asHead(request, handlePublicSchema()),

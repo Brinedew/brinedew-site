@@ -10,6 +10,7 @@ import {
   iconoplasmGeneUnavailableResponse,
   iconoplasmGeneNotFoundResponse,
 } from "./iconoplasm-gene-discovery-worker.js"
+import { appendIconoplasmServiceDiscoveryLinks } from "./iconoplasm-service-discovery.js"
 import {
   enforceIconoplasmRateLimit,
   withIconoplasmRateLimitHeaders,
@@ -104,7 +105,7 @@ const PRACTICE_RESOLVE_MAX_INPUTS = 10000
 const PRACTICE_RESOLVE_SQL_CHUNK = 100
 
 function addIconoplasmGeneShellHeaders(headers, path, { indexable = false } = {}) {
-  const next = new Headers(headers)
+  const next = appendIconoplasmServiceDiscoveryLinks(headers)
   if (!String(path || "").startsWith("/gene/")) return next
   // ARCHITECTURE FENCE [IPD-003]: response headers, HTML metadata, archive
   // membership, and sitemap membership must use the same published-catalog
@@ -2118,6 +2119,17 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       // These all consume one immutable-catalog snapshot so eligibility cannot
       // drift between archive HTML, sitemap XML, and llms.txt.
       if (request.method === "GET" || request.method === "HEAD") {
+        // No standard AI well-known document exists here. Fail explicitly so
+        // a missing experimental convention cannot masquerade as the app shell.
+        if (url.pathname === "/.well-known/ai") {
+          return new Response(null, {
+            status: 404,
+            headers: {
+              "Cache-Control": "public, max-age=300",
+              "X-Robots-Tag": "noindex, nofollow, noarchive",
+            },
+          })
+        }
         if (url.pathname === "/robots.txt") {
           return new Response(
             request.method === "HEAD" ? null : buildIconoplasmSubdomainRobotsTxt(),

@@ -158,6 +158,21 @@ test("the public schema route is admitted by the production stateful gateway", a
   assert.equal(response.headers.get("Cache-Control"), "public, max-age=3600")
 })
 
+test("the public OpenAPI route is executable and advertises service discovery", async () => {
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/public/v1/openapi.json"),
+      {},
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.openapi, "3.1.0")
+  assert.ok(payload.paths["/api/public/v1/images/resolve"])
+  assert.match(response.headers.get("Link") || "", /rel="service-desc"/)
+})
+
 test("declared route method mismatches return 405 with an Allow contract", async () => {
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(

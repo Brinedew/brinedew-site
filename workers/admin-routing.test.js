@@ -3,6 +3,18 @@ import test from "node:test"
 
 import worker from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 
+test("an unimplemented AI well-known route is a real 404, not the app shell", async () => {
+  const response = await worker.fetch(
+    new Request("https://iconoplasm.brinedew.bio/.well-known/ai"),
+    {},
+    { waitUntil() {} },
+  )
+
+  assert.equal(response.status, 404)
+  assert.equal(await response.text(), "")
+  assert.match(response.headers.get("X-Robots-Tag") || "", /noindex/)
+})
+
 test("apex admin route stays on the worker instead of getting swallowed by the static-site proxy", async () => {
   const response = await worker.fetch(
     new Request("https://brinedew.bio/admin", { method: "GET" }),
