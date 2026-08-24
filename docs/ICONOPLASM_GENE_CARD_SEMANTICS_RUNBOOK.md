@@ -124,6 +124,18 @@ ready blots for all 19,023 published genes. The massive `/genes/{range}` pages
 remain text-only so they support discovery without replacing the gallery
 collection experience; image-sitemap children continue to expose ready blots.
 
+Run that audit from the website repository without downloading image bytes:
+
+```sh
+node scripts/audit-iconoplasm-live-blot-coverage.mjs --require-complete
+```
+
+The command counts published gene URLs and singular `/blot/{SYMBOL}.webp`
+projections across every live gene-sitemap shard. Exit code `2` means coverage
+is incomplete and therefore forbids portrait removal. A successful zero exit
+with `complete: true` is necessary, but still requires spot-checking blot bytes
+from Vietnam and a healthy Bunny region before changing the delivery contract.
+
 The resolver is the free HTTP foundation for any future MCP transport. Do not
 create a separate MCP authority, require users to configure MCP for ordinary
 image retrieval, publish a 19,023-image manifest, or add source-portrait links
