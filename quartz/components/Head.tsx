@@ -257,11 +257,10 @@ export default (() => {
         // Search terms: PRL split-brain, gene page bootstrap, canonical blot,
         // public card artifact, KV_GALLERY_VERSION.
         //
-        // The worker may embed a first-paint card payload into gene pages. That
-        // payload is trusted only because it came from the same
-        // /api/iconoplasm/site/genes/:symbol canonical detail endpoint that the
-        // hydrated gene page uses. The public card artifact remains a coarse
-        // browse snapshot, not the freshness layer for individual gene pages.
+        // The worker embeds the complete site-detail payload. Its rich fields
+        // and candidate state come from live D1, while its canonical portrait
+        // is overridden by the exact published card used by metadata and
+        // sitemaps. That single response can satisfy first paint and hydration.
         var embeddedGeneCardNode = document.getElementById("iconoplasm-card-bootstrap")
         var embeddedGeneCardPayload =
           embeddedGeneCardNode && embeddedGeneCardNode.textContent

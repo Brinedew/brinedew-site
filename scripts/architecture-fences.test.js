@@ -55,6 +55,106 @@ test("architecture fence registry distributes every decision across independent 
   }
 })
 
+// ARCHITECTURE FENCE [IPD-011]
+test("IPD-011 keeps one exact-card blot authority across every public surface", () => {
+  const fence = registry.fences.find((entry) => entry.id === "IPD-011")
+  assert.ok(fence, "IPD-011 must remain registered")
+  assert.equal(fence.title, "Every public canonical blot uses one published card artifact")
+  assert.equal(fence.runbook, "docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md")
+
+  for (const protectedTerm of [
+    "canonical workstation-materialized blot",
+    "KV_GALLERY_VERSION",
+    "gene-page standard images and metadata",
+    "structured data",
+    "archive ranges",
+    "image sitemaps",
+    "public media",
+    "matching immutable blot WebP",
+    "Every derived cache and ETag includes the selected card version",
+    "fails closed",
+  ]) {
+    assert.match(
+      fence.decision,
+      new RegExp(protectedTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      `IPD-011 no longer protects ${protectedTerm}`,
+    )
+  }
+  assert.match(fence.reason, /publishedPortraitRefs/)
+  assert.match(fence.reason, /raw D1 portrait/)
+  assert.match(fence.change_control, /raw icono_publish_state as a public image source/)
+  assert.match(fence.change_control, /Worker-side blot rendering/)
+  assert.match(fence.change_control, /page, sitemap, and public media agree/)
+  assert.match(fence.change_control, /signed-in homepage and gene page visually match/)
+
+  const markerFiles = new Set(fence.markers.map((marker) => marker.file))
+  for (const protectedFile of [
+    "AGENTS.md",
+    "docs/ICONOPLASM_HOME_PERFORMANCE.md",
+    "docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md",
+    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+    "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
+    "workers/iconoplasm-gene-discovery.js",
+    "workers/iconoplasm.account-gallery-window.test.js",
+    "scripts/architecture-fences.test.js",
+  ]) {
+    assert.equal(markerFiles.has(protectedFile), true, `IPD-011 no longer guards ${protectedFile}`)
+  }
+
+  const instructions = readRepositoryFile("AGENTS.md")
+  assert.match(instructions, /canonical public machine image is the Iconoplasm gene blot/)
+  assert.match(instructions, /source portrait remains available as subordinate/)
+  assert.match(instructions, /healthy non-Vietnam regions/)
+
+  const runtime = readRepositoryFile(
+    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+  )
+  const siteDetailStart = runtime.indexOf("async function handleSiteGeneDetail")
+  const siteDetailEnd = runtime.indexOf("\nasync function ", siteDetailStart + 1)
+  assert.ok(siteDetailStart >= 0 && siteDetailEnd > siteDetailStart)
+  const siteDetail = runtime.slice(siteDetailStart, siteDetailEnd)
+  assert.match(siteDetail, /readPublishedGeneCardPortraitProjection/)
+  assert.match(siteDetail, /portraitOverride/)
+  assert.match(siteDetail, /etagFor\(\{ card_snapshot_version:/)
+  assert.doesNotMatch(siteDetail, /await portraitState\(env/)
+
+  const publicMediaStart = runtime.indexOf("async function handlePublicMedia")
+  const publicMediaEnd = runtime.indexOf("\nasync function ", publicMediaStart + 1)
+  assert.ok(publicMediaStart >= 0 && publicMediaEnd > publicMediaStart)
+  const publicMedia = runtime.slice(publicMediaStart, publicMediaEnd)
+  assert.match(publicMedia, /readPublishedGeneCardPortraitProjection/)
+  assert.match(publicMedia, /publicGeneBlotMediaEnvelope/)
+  assert.doesNotMatch(publicMedia, /await portraitState\(env/)
+})
+
+// ARCHITECTURE FENCE [IPD-003]
+test("IPD-003 keeps discovery eligibility on the exact published card", () => {
+  const fence = registry.fences.find((entry) => entry.id === "IPD-003")
+  assert.ok(fence, "IPD-003 must remain registered")
+  assert.match(
+    fence.decision,
+    /canonical public machine image is the Iconoplasm gene blot, not its source portrait artwork/,
+  )
+  assert.match(
+    fence.decision,
+    /exact versioned published card selected by KV_GALLERY_VERSION owns the blot fingerprint and immutable object reference/,
+  )
+  assert.match(
+    fence.decision,
+    /valid requested card without a ready matching blot is omitted from archive ranges and sitemap shards/,
+  )
+  assert.match(fence.decision, /ready matching blot[\s\S]*remains noindex/)
+  assert.match(
+    fence.decision,
+    /missing requested card or invalid selected artifact[\s\S]*uncached 503/,
+  )
+  assert.match(fence.decision, /Only a workstation may render the 768x1024 WebP/)
+  assert.match(
+    fence.change_control,
+    /Do not promote raw portrait artwork as the canonical public image/,
+  )
+})
+
 // ARCHITECTURE FENCE [IPD-001]
 // This test is deliberately independent of the website and extension adapter
 // tests. A future edit that changes the defaults and updates a nearby test must
@@ -198,6 +298,29 @@ test("IPD-005 uses the per-database wall and a verified cold archive", () => {
 
 // ARCHITECTURE FENCE [IPD-009]
 test("IPD-009 keeps the cold path and deployment topology explicit", () => {
+  const fence = registry.fences.find((entry) => entry.id === "IPD-009")
+  assert.ok(fence, "IPD-009 must remain registered")
+  assert.match(
+    fence.decision,
+    /route index and discovery\/catalog rows establish identity and membership only/,
+  )
+  assert.match(
+    fence.decision,
+    /requested exact card from the artifact selected by KV_GALLERY_VERSION[\s\S]*sole public portrait authority/,
+  )
+  assert.match(
+    fence.decision,
+    /complete detail response ETag and HTML cache key include the selected card version/,
+  )
+  assert.match(
+    fence.decision,
+    /valid exact card without a published portrait produces a noindex gene page/,
+  )
+  assert.match(
+    fence.decision,
+    /missing requested card or missing or invalid selected artifact produces an uncached 503/,
+  )
+
   const topology = JSON.parse(readRepositoryFile("cloudflare/deployment-topology.json"))
   assert.equal(topology.architectureFence, "IPD-009")
   assert.equal(topology.stateOwner.cloudflareScript, "geneguessr-api")
@@ -209,7 +332,10 @@ test("IPD-009 keeps the cold path and deployment topology explicit", () => {
   assert.match(lifecycle, /HTML cache before parsing JSON or rendering/i)
   assert.match(lifecycle, /Login can enable private action\s+islands/i)
   assert.match(lifecycle, /icono_published_gene_routes/)
-  assert.match(lifecycle, /detail response[\s\S]*ETag[\s\S]*vote-fresh/i)
+  assert.match(
+    lifecycle,
+    /detail response[\s\S]*card shard selected by `KV_GALLERY_VERSION`[\s\S]*ETag[\s\S]*card version/i,
+  )
 
   const runtime = readRepositoryFile(
     "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
@@ -217,6 +343,12 @@ test("IPD-009 keeps the cold path and deployment topology explicit", () => {
   assert.match(runtime, /ARCHITECTURE FENCE \[IPD-009\]/)
   assert.match(runtime, /FROM icono_published_gene_routes/)
   assert.match(runtime, /source: "published_gene_route_d1"/)
+  assert.match(runtime, /shared version barrier is the sole published source-portrait authority/)
+  assert.match(runtime, /matching workstation-rendered blot reference/)
+  assert.match(runtime, /D1 route index and discovery\/catalog rows are identity and membership/)
+  assert.match(runtime, /old exact card artifact remains coherently live/)
+  assert.doesNotMatch(runtime, /versioned KV card catalog is a coarse browsing snapshot/)
+  assert.doesNotMatch(runtime, /roll the D1 canonical portrait back/)
   assert.doesNotMatch(runtime, /iconoplasm-web/)
 
   const routeMigration = readRepositoryFile("migrations-iconoplasm/0059_published_gene_routes.sql")

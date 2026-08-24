@@ -46,9 +46,16 @@ It owns things like:
 - the administrator-owned publication-alias desired policy and its atomic
   alias/blocklist manifest projection
 
-If the question is “what does the live site know right now?”, stay in this repo and query remote D1.
+If the question is “what does the live authoring, vote, candidate, or rich-detail
+state know right now?”, stay in this repo and query remote D1. Public portrait
+identity is the exception: inspect the exact card artifact selected by
+`KV_GALLERY_VERSION`, because D1 may legitimately be ahead of the published
+public portrait.
 
-For canonical portrait changes and vote auto-promotion, also read `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`. That document explains why D1 publish state and the public card-catalog artifact must advance together.
+For canonical portrait changes and vote auto-promotion, also read
+`docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`. That document explains why D1
+owns authoring and vote state while only the exact versioned public card artifact
+owns the portrait exposed to readers.
 
 For gene-label matching and alias ownership, read `docs/ICONOPLASM_PUBLICATION_ALIASES.md` before editing the catalog, manifest, or extension cache path.
 
@@ -273,7 +280,8 @@ So the rule is:
 
 In `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`, treat these functions as the cost barrier:
 
-- `publishedPortraitRefs(...)`
+- `publishedPortraitRefs(...)` (legacy publication/discovery compatibility only;
+  never a public portrait source)
 - `publishedPortraitFingerprint(...)`
 - `galleryPublishedRows(...)`
 - `galleryUniquenessRows(...)`
@@ -284,21 +292,36 @@ If you change them, you are touching the thing that keeps the site from quietly 
 
 ### canonical portraits have a second barrier
 
-`icono_publish_state` is the D1 source of truth for the current portrait, but logged-out/public card traffic does not read that table directly. It reads the versioned full-catalog card artifact in KV through `KV_GALLERY_VERSION`.
+`icono_publish_state` is D1 authoring and vote-projection state. The exact
+versioned card artifact selected through `KV_GALLERY_VERSION` is the sole public
+portrait authority.
 
-That means a canonical portrait update is only really live when both of these are true:
+A newly selected D1 leader is allowed to exist before its dirty card shard is
+published. That is a legitimate publication window, not split-brain and not a
+reason for a reader route to reveal the unpublished SHA. The public portrait
+changes only when the shared card-version barrier advances.
 
-- D1 says the gene's `current_asset_sha256` changed.
-- the full public card-catalog artifact was republished and the shared version barrier advanced.
+During that window every public projection remains on the previous exact card
+artifact: signed-in and anonymous galleries, site-gene detail, gene-page lead
+and metadata, public media, extension cards, archive ranges, image sitemaps, and
+print-copy inputs. Site-gene detail may combine fresh D1 traits, candidates, and
+votes with that artifact, but its portrait and candidate `is_current` state are
+overridden by the published card SHA.
 
-If D1 changes first and artifact publication fails, signed-in/gene-detail views can show the new portrait while logged-out/home/extension card views keep showing the old one. That is the PRL failure from 2026-05-20.
+The 2026-05-20 PRL failure occurred because the old site-gene-detail path exposed
+the D1 leader before the artifact advanced. That behavior is historical. Do not
+restore a signed-in, site-gene-detail, public-media, or print-copy fallback to
+D1. If the selected card artifact is unavailable or incomplete, the public
+projection fails closed with an uncached unavailable or missing response.
 
-Do not "fix" that split by adding a D1 fallback to `/api/iconoplasm/cards/:symbol`; that would put public card traffic back on the expensive path. The correct fix is in the projection pipeline:
+If publication appears stuck, fix it at the publication boundary:
 
-- run the card-catalog budget preflight before canonical mutation
-- roll back a vote auto-promotion if artifact publication fails afterward
-- republish through the authenticated admin read-model sync path when repairing existing split-brain data
-- purge only the stale symbol API URL if the outer Cloudflare CDN still has the old response
+- distinguish an expected D1 lead from a failed dirty-shard release;
+- use the authenticated admin read-model sync path for genuinely stuck
+  publication state;
+- let the normal bounded dirty-shard publisher advance `KV_GALLERY_VERSION`; and
+- purge only a proven stale symbol API URL if an outer Cloudflare cache still
+  serves an older artifact after the barrier has advanced.
 
 Non-negotiable rules:
 
@@ -314,11 +337,15 @@ Non-negotiable rules:
    - if `gene_symbol` is already canonical, do not wrap it in `upper(...)`
    - if `asset_sha256` is already normalized, do not wrap it in `lower(...)`
 
-4. **Do not rehydrate immutable public artifacts from D1 on hot paths unless there is a shared cache barrier in front of that read.**
+4. **Do not select a public portrait from D1 on any hot path.**
+   - a shared cache in front of the wrong authority is still the wrong authority
+   - there is no signed-in or gene-detail exception
 
 5. **Regression tests are mandatory.**
    - the worker exports `resetIconoplasmRuntimeCachesForTest()` specifically so tests can simulate a fresh isolate
-   - if you touch the cost barrier, run the cost tests and make them stricter, not weaker
+   - if you touch the portrait barrier, prove a D1-only SHA change cannot move
+     public media, gene HTML, archive ranges, or sitemaps, and prove a card-version
+     flip moves them together
 
 ### do not delete the alarms
 

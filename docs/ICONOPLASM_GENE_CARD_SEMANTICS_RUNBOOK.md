@@ -47,48 +47,48 @@ a real 404 instead of the application shell.
 The same predicate owns response headers, HTML metadata, `/genes` membership,
 gene sitemap shards, and tests. Never update just one of those surfaces.
 
-## Canonical portrait discovery contract
+## Canonical blot discovery contract
 
-The published lead portrait already has one immutable, provider-independent
-identity: its content-addressed first-party medium WebP under
-`https://iconoplasm.brinedew.bio/portraits/v1/<prefix>/<sha>/medium.webp`.
-That existing URL is the single canonical portrait URL. Do not create
-`/portraits/{SYMBOL}.webp`, a symbol-addressed redirect, a mutable duplicate in
-storage, or another symbol-to-portrait snapshot. Any of those would add a
-second timeline that could disagree with the published card.
+Iconoplasm's public machine image is a **gene blot**, not the source character
+portrait. A blot is the shared card runtime's exact `image-only` composition:
+the selected published portrait as a cover crop, the protection gradient, the
+full gene name at bottom left, and the gene symbol at bottom right. The portrait
+is an ingredient; the labelled blot is the finished public image.
 
-For every complete, indexable gene page, the same exact medium WebP URL must be
-present in all of these projections:
+The workstation renders each exact published card to a verified 768x1024 WebP.
+Its visible-material fingerprint includes the renderer revision, normalized
+symbol, full gene name, and selected portrait SHA. The immutable object lives at
+`/blots/v1/<initial>/<SYMBOL>/<fingerprint>/<SYMBOL>-iconoplasm-gene-blot.webp`.
+The stable first-party `/blots/<SYMBOL>.webp` route resolves only the immutable
+object referenced by the card artifact selected by `KV_GALLERY_VERSION`; it is
+not a second selection timeline and never consults live D1 portrait state.
 
-- the server-rendered lead `<img src>` with descriptive alt text and nearby
-  accessibility-tree-preserving text that names it as the canonical
-  Iconoplasm portrait of that human gene;
+For every complete, indexable gene page, that exact ready blot must be present
+in all of these projections:
+
+- a normal server-rendered `<img>` with gene-specific alt text and a nearby
+  `<figcaption>` that identifies the canonical Iconoplasm gene blot;
 - gene-specific `og:image`, `og:image:url`, `og:image:alt`, `twitter:image`,
   and `twitter:image:alt` metadata, alongside gene-specific social title and
   description fields;
 - one linked JSON-LD graph in which `WebPage.primaryImageOfPage` and
   `Gene.image` reference the same `ImageObject`, whose `contentUrl` is that
-  medium WebP; and
-- the gene's entry in its existing image-sitemap shard, where the canonical
-  portrait is always the primary image.
+  first-party semantic blot URL; and
+- the gene's only image-sitemap entry.
 
-Use the same published lead-card payload that rendered the page; never select a
-portrait separately for metadata or structured data. Do not invent external
-identifiers that are absent from the authoritative payload. JSON-LD must be
-escaped for an HTML script context and omitted for incomplete/noindex pages.
-If the route record and rendered card payload disagree on portrait SHA, the
-whole gene document fails closed as `503`/noindex; merely omitting image
-metadata while leaving the divergent page indexable is forbidden.
-After first paint, the browser may select Bunny's equivalent accelerator URL
-through the existing IPD-001 health probe; that delivery optimization must not
-replace the first-party URL in server HTML, metadata, structured data, or the
-sitemap.
+Use the same exact card payload for blot readiness, visible page, metadata, and
+structured data. JSON-LD must be escaped for an HTML script context and omitted
+for incomplete/noindex pages. Route/catalog records establish identity and
+membership only. If the requested card projection is unavailable or malformed,
+the whole document fails closed as uncached `503`; if the valid card merely has
+no matching ready blot, the page remains noindex and discovery omits it. Raw
+portrait artwork may remain visible in the interactive dossier as subordinate
+source material, but it is never `primaryImageOfPage`, `Gene.image`, the social
+image, or an image-sitemap entry.
 
-The optional requested labelled-card PNG is a secondary derived image. It may
-follow the canonical portrait in archive HTML or the sitemap only when its ready
-fingerprint still matches the exact published card artifact. Its absence must
-never suppress the canonical portrait, and its presence must never make it the
-page's `primaryImageOfPage` or the `Gene.image`.
+In healthy non-Vietnam regions, the tab-scoped IPD-001 probe may select Bunny's
+byte-equivalent immutable URL for delivery. Vietnam and any failed Bunny probe
+use the first-party route. The first-party URL remains the discovery identity.
 
 Crawler GET and HEAD paths remain projections, not workflows. Sitemap and
 archive generation continue to read the shared versioned KV catalog and must
@@ -98,15 +98,15 @@ request-time write, enrollment, vote lookup, Queue send, repair, or Browser
 Rendering work.
 
 Before a gene-sitemap shard is emitted, one range-batched exact-shard read from
-the card artifact selected by `KV_GALLERY_VERSION` validates that every
-canonical portrait SHA still matches the discovery snapshot. Missing card
-publication state, a missing eligible symbol, or any SHA divergence returns an
-uncached `503` for the whole shard. It must never degrade to a partial or stale
-image sitemap. The response exposes both catalog and card versions so a crawler
-cache validator advances with either publication surface. The static portrait
-discovery contract version `2026-08-23-v1` is also part of the validator, and
-the sitemap `lastmod` floor is `2026-08-23`, so this renderer release itself is
-truthfully visible even when catalog data did not change.
+the card artifact selected by `KV_GALLERY_VERSION` must resolve a structurally
+valid card for every catalog identity candidate. Cards whose exact payload has
+no matching ready blot are omitted from discovery; a missing requested card or
+failed artifact read returns uncached `503` for the whole shard. Catalog/D1
+portrait SHAs are never compared or substituted. The response exposes both
+catalog and card versions so a crawler
+cache validator advances with either publication surface. The static blot
+discovery contract version is also part of the validator, so a blot renderer
+release itself is truthfully visible even when catalog data did not change.
 
 The crawl frontier exists for search indexing and user-directed retrieval, not
 for unbounded model-training ingestion. On 2026-07-24, GPTBot and ClaudeBot
@@ -114,7 +114,7 @@ generated more than 81,000 requests before 08:00 UTC by walking the new
 19,023-gene frontier and first-party portraits. That crossed the account's
 75,000-request warning threshold before the Scott Alexander referral.
 
-The project therefore separates bot purposes. Portrait indexing does not alter
+The project therefore separates bot purposes. Blot indexing does not alter
 this split:
 
 - GPTBot and ClaudeBot are model-training crawlers. A project-owned Cloudflare
@@ -158,7 +158,26 @@ documentation, sitemap expectations, and tests together.
 Archive and sitemap requests read the shared versioned KV catalog artifact.
 They must never add an on-request whole-catalog D1 scan.
 
-## Requested labelled-card images
+## Workstation-materialized gene blots
+
+Cloudflare does not render canonical blots. The local Iconoplasm workstation
+asks the authenticated bounded backlog endpoint for exact published-card
+identities, loads the Website checkout's shared card runtime and label CSS in
+local Chrome, renders the `image-only` composition at 768x1024, converts it to
+WebP, and uploads it through the authenticated admin route. The server verifies
+fingerprint, selected portrait SHA, content type, byte ceiling, WebP dimensions,
+immutable-key consistency, and Storage replication before atomically recording
+the ready row and publication event.
+
+The ledger contains one bounded row per gene, while every published card artifact
+retains its immutable blot reference. A portrait or full-name change produces a
+new fingerprint; unrelated essence changes do not. Dirty-shard publication
+fails with `GENE_BLOT_NOT_READY` until the workstation has materialized that
+exact candidate. Corpus backfill renders the currently published identity first,
+then the candidate identity, and advances the card barrier only in bounded
+batches. GET and HEAD routes never render, enroll, repair, or enqueue work.
+
+## Requested high-resolution print copies
 
 The print-copy action is explicit enrollment, not a GET side effect. Its POST
 records the current published card fingerprint in the bounded materialization
@@ -172,17 +191,20 @@ in flight, the stale completion cannot replace the newer desired fingerprint;
 the ledger remains due for the new card. Downloads use a useful per-gene name,
 for example `SOX12-iconoplasm-gene-card.png`.
 
-Archive range HTML and the image sitemap expose a thumbnail only after the ready
-fingerprint matches the card in that same catalog artifact. Their GET and HEAD
-paths remain immutable published reads: no enrollment, vote query, D1 repair,
-Queue send, or Browser Rendering is allowed. This keeps Google discovery cheap
-and makes crawling incapable of manufacturing the 19,023-image corpus.
+Every print-copy enrollment, status, render, and download resolves its identity
+through `/api/iconoplasm/cards/:symbol` and the artifact selected by
+`KV_GALLERY_VERSION`. An `asset=` query value can only assert the artifact's
+exact portrait SHA: malformed values return `400`, and a different valid SHA
+returns `409`. It must never select the current D1 authoring portrait or trigger
+a site-gene-detail fallback, even during the expected D1-to-artifact publication
+window.
 
-The canonical portrait is different: it is already part of every complete
-published gene record, so each eligible gene sitemap entry exposes its existing
-content-addressed first-party medium WebP whether or not a labelled-card PNG has
-been requested. When a ready labelled-card exists, it is an additional,
-secondary image after the portrait.
+High-resolution print copies remain an explicit user-requested PNG workflow.
+They are not the canonical search image and never appear in image sitemaps.
+Archive, sitemap, semantic blot, and gene-page GET/HEAD paths are immutable
+published reads: no enrollment, vote query, D1 repair, Queue send, or Browser
+Rendering is allowed. Crawling therefore cannot manufacture the 19,023-image
+corpus.
 
 ## Safe changes
 
@@ -198,7 +220,7 @@ noninteractive parent field. Never use selection-state ARIA intended for real
 controls on decorative label stock.
 
 Indexability changes are atomic discovery migrations: revise this fence, the
-range contract, canonical portrait and optional labelled-card sitemap
+range contract, canonical blot sitemap
 projections, `llms.txt`, robots headers, lead-image accessibility text,
 Open Graph and Twitter metadata, JSON-LD, tests, and release verification
 together. Do not add visible derivation prose to gene pages; the visual card

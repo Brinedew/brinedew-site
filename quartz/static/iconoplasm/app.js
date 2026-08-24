@@ -139,8 +139,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var portraitDetailCache = Object.create(null)
   var portraitDetailPromiseCache = Object.create(null)
   var geneCardArtifactCache = Object.create(null)
-  var voteProjectionRefreshPolls = Object.create(null)
-  var VOTE_PROJECTION_REFRESH_DELAYS_MS = [600, 1200, 2000, 3200, 5000, 8000, 13000]
   var portraitImageCache = Object.create(null)
   var portraitImagePromiseCache = Object.create(null)
   var portraitRetainedImageCache = Object.create(null)
@@ -637,6 +635,37 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function publishedPortraitUrl(genePayload, preferredSize) {
     return portraitDelivery.resolve(rawPublishedPortraitUrl(genePayload, preferredSize))
+  }
+
+  function publishedGeneBlot(genePayload) {
+    var blot = genePayload && genePayload.blot
+    return blot && blot.status === "ready" && blot.canonical_url && blot.semantic_url ? blot : null
+  }
+
+  function canonicalGeneBlotMarkup(genePayload) {
+    var blot = publishedGeneBlot(genePayload)
+    var symbol = normalizedSymbol(genePayload && genePayload.symbol)
+    if (!blot || !symbol) return ""
+    var fullName = String(
+      (genePayload && (genePayload.full_name || genePayload.name)) || symbol,
+    ).trim()
+    var alt = symbol + " Iconoplasm gene blot — " + fullName
+    return (
+      '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot>' +
+      '<img class="icono-canonical-gene-blot-image" src="' +
+      esc(portraitDelivery.resolve(blot.canonical_url)) +
+      '" width="' +
+      esc(String(blot.width || 768)) +
+      '" height="' +
+      esc(String(blot.height || 1024)) +
+      '" loading="eager" decoding="async" fetchpriority="high" alt="' +
+      esc(alt) +
+      '"><figcaption>Canonical Iconoplasm gene blot for human ' +
+      esc(symbol) +
+      " (" +
+      esc(fullName) +
+      ").</figcaption></figure>"
+    )
   }
 
   function rawCandidatePortraitUrl(candidate, preferredSize) {
@@ -3460,11 +3489,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function buildGeneLeadCardMarkup(g) {
     var dims = portraitDimensions(g)
-    var portraitAlt = IconoCardShared.canonicalGenePortraitAlt(g.symbol)
-    var portraitCaption = IconoCardShared.canonicalGenePortraitCaption(
-      g.symbol,
-      g.full_name || g.name,
-    )
+    var portraitAlt =
+      normalizedSymbol(g.symbol) + " character artwork used inside the Iconoplasm gene blot"
+    var portraitCaption =
+      "Source character artwork for the " + normalizedSymbol(g.symbol) + " Iconoplasm gene blot."
     var portraitUrl = publishedPortraitUrl(g, "medium")
     var portraitFullUrl = publishedPortraitUrl(g, "full") || portraitUrl
     var portraitAssetSha = String(((g || {}).portrait || {}).asset_sha256 || "")
@@ -3502,7 +3530,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                   dims.width +
                   '" data-pswp-height="' +
                   dims.height +
-                  '" aria-label="Open full-size canonical gene character portrait for ' +
+                  '" aria-label="Open full-size source character artwork for ' +
                   esc(g.symbol) +
                   '">' +
                   '<img class="iconoplasm-tooltip-portrait-img" src="' +
@@ -3515,7 +3543,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                   dims.height +
                   '">' +
                   "</button>" +
-                  '<span class="icono-visually-hidden icono-canonical-portrait-caption">' +
+                  '<span class="icono-visually-hidden icono-portrait-artwork-caption">' +
                   esc(portraitCaption) +
                   "</span>"
               : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
@@ -3536,7 +3564,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             dims.width +
             '" data-pswp-height="' +
             dims.height +
-            '" aria-label="Open full-size canonical gene character portrait for ' +
+            '" aria-label="Open full-size source character artwork for ' +
             esc(g.symbol) +
             '">' +
             '<img class="iconoplasm-tooltip-portrait-img" src="' +
@@ -3552,7 +3580,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             esc(g.symbol) +
             "</span>" +
             "</button>" +
-            '<span class="icono-visually-hidden icono-canonical-portrait-caption">' +
+            '<span class="icono-visually-hidden icono-portrait-artwork-caption">' +
             esc(portraitCaption) +
             "</span>"
           : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
@@ -3672,7 +3700,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     portraitImg.setAttribute(
       "alt",
       isGeneLead
-        ? IconoCardShared.canonicalGenePortraitAlt(genePayload.symbol)
+        ? normalizedSymbol(genePayload.symbol) +
+            " character artwork used inside the Iconoplasm gene blot"
         : normalizedSymbol(genePayload.symbol) + " blot",
     )
     card.style.setProperty("--width", String(dims.width))
@@ -3751,13 +3780,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         var portraitUrl = publishedPortraitUrl(genePayload, "medium")
         var portraitFullUrl = publishedPortraitUrl(genePayload, "full") || portraitUrl
         var geneLeadPortraitAlt = isGeneLead
-          ? IconoCardShared.canonicalGenePortraitAlt(genePayload.symbol)
+          ? normalizedSymbol(genePayload.symbol) +
+            " character artwork used inside the Iconoplasm gene blot"
           : ""
         var geneLeadPortraitCaption = isGeneLead
-          ? IconoCardShared.canonicalGenePortraitCaption(
-              genePayload.symbol,
-              genePayload.full_name || genePayload.name,
-            )
+          ? "Source character artwork for the " +
+            normalizedSymbol(genePayload.symbol) +
+            " Iconoplasm gene blot."
           : ""
         var labelPortraitHtml = buildLabLabelPortraitMediaMarkup(
           genePayload.symbol,
@@ -3769,7 +3798,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             ? {
                 portraitAlt: geneLeadPortraitAlt,
                 buttonAriaLabel:
-                  "Open full-size canonical gene character portrait for " +
+                  "Open full-size source character artwork for " +
                   normalizedSymbol(genePayload.symbol),
                 captionText: geneLeadPortraitCaption,
               }
@@ -3895,64 +3924,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         }
       },
     })
-  }
-
-  function cancelVoteProjectionRefreshPoll(symbol) {
-    var key = normalizedSymbol(symbol)
-    if (!key) return
-    var poll = voteProjectionRefreshPolls[key]
-    if (poll && poll.timer) window.clearTimeout(poll.timer)
-    delete voteProjectionRefreshPolls[key]
-  }
-
-  function routeStillShowsGene(symbol) {
-    var route = getRoute()
-    return route.page === "gene" && normalizedSymbol(route.symbol) === normalizedSymbol(symbol)
-  }
-
-  function refreshGeneWhenCanonicalDetailMatchesVote(symbol, assetSha) {
-    var key = normalizedSymbol(symbol)
-    var expectedAssetSha = normalizedAssetSha(assetSha)
-    if (!key || !expectedAssetSha) return
-    cancelVoteProjectionRefreshPoll(key)
-    var poll = {
-      attempt: 0,
-      timer: null,
-    }
-    voteProjectionRefreshPolls[key] = poll
-
-    function scheduleNext() {
-      if (!routeStillShowsGene(key)) {
-        cancelVoteProjectionRefreshPoll(key)
-        return
-      }
-      if (poll.attempt >= VOTE_PROJECTION_REFRESH_DELAYS_MS.length) {
-        cancelVoteProjectionRefreshPoll(key)
-        return
-      }
-      var delay = VOTE_PROJECTION_REFRESH_DELAYS_MS[poll.attempt]
-      poll.attempt += 1
-      poll.timer = window.setTimeout(checkCanonicalDetail, delay)
-    }
-
-    function checkCanonicalDetail() {
-      if (!routeStillShowsGene(key)) {
-        cancelVoteProjectionRefreshPoll(key)
-        return
-      }
-      fetchGeneDetail(key, { forceFresh: true }).then(function (genePayload) {
-        if (voteProjectionRefreshPolls[key] !== poll) return
-        var currentAssetSha = printCopyCurrentAssetSha(genePayload)
-        if (currentAssetSha && currentAssetSha === expectedAssetSha) {
-          cancelVoteProjectionRefreshPoll(key)
-          rerenderCurrentGeneRoute({ forceFresh: true })
-          return
-        }
-        scheduleNext()
-      })
-    }
-
-    scheduleNext()
   }
 
   function wireBrickVoteBoxes(cards) {
@@ -5920,10 +5891,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         user_vote: 1,
       }
       localStorage.setItem("iconoplasm.vote.a:" + symbol + "|" + assetSha, JSON.stringify(snapshot))
-      // Vote-projection auto-promotion is already queued by publish. Poll the
-      // gene detail until this asset becomes canonical without requiring
-      // another manual upvote click.
-      refreshGeneWhenCanonicalDetailMatchesVote(symbol, assetSha)
+      // Vote projection is already queued by publish. The visible canonical
+      // portrait advances only when the next exact card artifact is released;
+      // do not hammer site detail while it correctly remains on that published
+      // version. The caller rerenders once so the new candidate and vote state
+      // are visible immediately.
     } catch (_error) {
       /* best-effort UI hydration */
     }
@@ -9090,7 +9062,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function renderGeneContent(container, g) {
-    var html = '<section class="icono-gene-lead">' + buildGeneLeadCardMarkup(g)
+    var html =
+      '<section class="icono-gene-lead">' + buildGeneLeadCardMarkup(g) + canonicalGeneBlotMarkup(g)
 
     html += "<div data-icono-canonical-toolbar-island>" + renderCanonicalToolbarMarkup(g) + "</div>"
     html += "</section>"

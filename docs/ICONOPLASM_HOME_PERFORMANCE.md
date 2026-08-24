@@ -26,7 +26,12 @@ The protected controller contract is `quartz/static/iconoplasm/collection-feed.t
 
 ## Gallery Card Freshness
 
-**ARCHITECTURE FENCE [IPD-011] — the signed-in image gallery has one portrait authority.**
+**ARCHITECTURE FENCE [IPD-011] — every public surface has one portrait authority.**
+
+D1 owns live authoring, vote projection, rich detail, and candidates. The exact
+versioned card artifact selected by `KV_GALLERY_VERSION` is the sole public
+portrait authority. A D1 leader may legitimately be newer while its dirty shard
+awaits publication; no public surface may reveal that SHA early.
 
 The account window combines two kinds of data with deliberately different
 jobs:
@@ -41,6 +46,13 @@ reads the account's bounded symbol window, resolves `KV_GALLERY_VERSION`, reads
 those symbols from `readPublishedCardCatalogArtifact(...)`, and then projects
 compact image cards from those published card VMs. The ordinary and image-only
 views therefore differ in response shape, not authority.
+
+The same rule covers anonymous galleries, site-gene detail, the server-rendered
+gene-page lead and metadata, public media, extension cards, archive ranges,
+image sitemaps, and print-copy inputs. Site-gene detail may overlay fresh D1
+facts and candidates around the card portrait, but it has no signed-in or
+gene-detail portrait fallback. Missing or incomplete exact-card state fails
+closed and uncached instead of selecting a D1 or catalog SHA.
 
 ### Why this fence exists: B-700 / ZNF25, 2026-08-02
 
@@ -75,15 +87,17 @@ Do not:
 - restore `publishedPortraitRefs(...)` as the image-only account source;
 - use `row.asset_sha256` from the discovery window for a displayed portrait;
 - treat an image-only response as permission to bypass the card artifact;
+- let site-gene detail, public media, metadata, a sitemap, or print-copy select
+  the D1 authoring leader;
 - add a cache whose key is not the live card artifact version; or
 - accept API/hash equality alone as proof when the bug report is visual.
 
 If the artifact lookup is too expensive, optimize shard indexing or compact
 projection inside the single artifact path. Do not create another portrait
 timeline. A proposed replacement is acceptable only if one publication event
-selects one canonical image for both account-gallery variants and a same-session
-Computer Use check confirms the homepage and gene page show the same character
-skin color.
+selects one canonical image for every public surface, adversarial tests prove a
+D1-only change cannot move it, and a same-session Computer Use check confirms
+the homepage and gene page show the same character skin color.
 
 Undesired optimization: do not let browser storage decide that a gallery card page is fresh enough to paint before the page has checked the current backend manifest.
 
@@ -102,3 +116,8 @@ The protected contract is `quartz/static/iconoplasm/home-performance-contract.te
 
 - `account gallery first window is discovery-fresh and does not use a stale ordered-window cache`
 - `mobile home collection refreshes card VMs from the manifest before painting`
+
+Global authority is additionally protected by the site-detail/public-media,
+range HTML, gene HTML, and sitemap concordance tests under `workers/`. Those
+tests must keep D1 portrait A and card portrait B intentionally different, then
+prove that only a `KV_GALLERY_VERSION` card-barrier flip can move public media.

@@ -487,8 +487,17 @@ function buildCatalogResolveKv() {
   })
 }
 
-function buildPublishedCardReadKv() {
-  const version = "test-card-v1"
+function buildPublishedCardReadKv({
+  version = "test-card-v1",
+  portraitSha = "4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212",
+} = {}) {
+  const shardKey = `iconoplasm:card-catalog-shard:${version}:0`
+  const blotFingerprint = createHash("sha256")
+    .update(`blot:${portraitSha}`)
+    .digest("hex")
+    .slice(0, 32)
+  const blotAssetSha = createHash("sha256").update(`blot-bytes:${portraitSha}`).digest("hex")
+  const blotObjectKey = `blots/v1/A/A1BG/${blotFingerprint}/A1BG-iconoplasm-gene-blot.webp`
   const payload = {
     api_version: "v1",
     schema_version: 1,
@@ -504,8 +513,31 @@ function buildPublishedCardReadKv() {
     },
     portrait: {
       status: "published",
-      medium_url:
-        "https://iconoplasm.brinedew.bio/portraits/v1/47/4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212/medium.webp",
+      hero_url: `https://iconoplasm.brinedew.bio/portraits/v1/${portraitSha.slice(0, 2)}/${portraitSha}/full.webp`,
+      medium_url: `https://iconoplasm.brinedew.bio/portraits/v1/${portraitSha.slice(0, 2)}/${portraitSha}/medium.webp`,
+      thumb_url: `https://iconoplasm.brinedew.bio/portraits/v1/${portraitSha.slice(0, 2)}/${portraitSha}/thumb.webp`,
+      asset_sha256: portraitSha,
+      width: 384,
+      height: 512,
+      candidate_image_id: 4155,
+      vision_id: "anima-v1-2397",
+      emulsion_id: "C9-2397",
+      sample_label: "A1BG-3",
+      sample_number: 3,
+      sample_text_hash: "f".repeat(64),
+    },
+    blot: {
+      status: "ready",
+      blot_fingerprint: blotFingerprint,
+      portrait_asset_sha256: portraitSha,
+      asset_sha256: blotAssetSha,
+      object_key: blotObjectKey,
+      image_url: `https://iconoplasmportraits.b-cdn.net/${blotObjectKey}`,
+      canonical_url: `https://iconoplasm.brinedew.bio/${blotObjectKey}`,
+      semantic_url: "https://iconoplasm.brinedew.bio/blots/A1BG.webp",
+      width: 768,
+      height: 1024,
+      filename: "A1BG-iconoplasm-gene-blot.webp",
     },
     snapshot_version: version,
   }
@@ -513,14 +545,30 @@ function buildPublishedCardReadKv() {
     "iconoplasm:gallery-version": JSON.stringify({
       current: version,
       previous: null,
+      published_at: "2026-08-23T00:00:00.000Z",
       status: "active",
     }),
     [`iconoplasm:card-catalog:${version}`]: JSON.stringify({
       schema: "iconoplasm.cardCatalog.v1",
+      storage: "kv_sharded",
       artifact_version: version,
       snapshot_version: version,
       catalog_gene_count: 1,
       card_count: 1,
+      shards: [
+        {
+          key: shardKey,
+          index: 0,
+          card_count: 1,
+          first_symbol: "A1BG",
+          last_symbol: "A1BG",
+        },
+      ],
+    }),
+    [shardKey]: JSON.stringify({
+      schema: "iconoplasm.cardCatalog.v1",
+      artifact_version: version,
+      shard_index: 0,
       cards: [
         {
           __complete: true,
@@ -688,6 +736,9 @@ test("site gene payload includes published portrait dimensions for first-party b
     response.headers.get("Cache-Control"),
     "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
   )
+  assert.equal(response.headers.get("X-Iconoplasm-Card-Version"), "test-card-v1")
+  assert.equal(response.headers.get("X-Iconoplasm-Portrait-Source"), "published-card-catalog")
+  assert.equal(payload?.card_snapshot_version, "test-card-v1")
   assert.equal(payload?.portrait?.status, "published")
   assert.equal(payload?.portrait?.width, 384)
   assert.equal(payload?.portrait?.height, 512)
@@ -695,6 +746,8 @@ test("site gene payload includes published portrait dimensions for first-party b
   assert.equal("public_emulsion_code" in payload.portrait, false)
   assert.equal(payload?.portrait?.sample_label, "A1BG-3")
   assert.equal(payload?.portrait?.sample_number, 3)
+  assert.equal(payload?.blot?.status, "ready")
+  assert.equal(payload?.blot?.semantic_url, "https://iconoplasm.brinedew.bio/blots/A1BG.webp")
   assert.equal(typeof payload?.essence, "object")
   assert.ok(Array.isArray(payload?.portrait_candidates))
   assert.equal("manifestation" in payload, false)
@@ -716,7 +769,7 @@ test("site gene detail is identical for guest, Loweren, and every other account"
             ...(cookie ? { Cookie: cookie } : {}),
           },
         }),
-        buildEnv({ GAME_SESSIONS: sessions }),
+        buildEnv({ GAME_SESSIONS: sessions, KV: buildPublishedCardReadKv() }),
         {},
       )
     assert.equal(response.status, 200)
@@ -743,7 +796,7 @@ test("site gene detail is identical for guest, Loweren, and every other account"
 })
 
 test("site gene detail keeps the public cache policy on conditional responses", async () => {
-  const env = buildEnv()
+  const env = buildEnv({ KV: buildPublishedCardReadKv() })
   const first =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
@@ -773,10 +826,11 @@ test("site gene detail keeps the public cache policy on conditional responses", 
     conditional.headers.get("Cache-Control"),
     "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
   )
+  assert.equal(conditional.headers.get("X-Iconoplasm-Card-Version"), "test-card-v1")
 })
 
-test("a newly projected canonical vote changes the gene detail ETag", async () => {
-  const env = buildEnv()
+test("unpublished D1 portrait changes cannot move the published gene portrait", async () => {
+  const env = buildEnv({ KV: buildPublishedCardReadKv() })
   const read = async () =>
     handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
@@ -802,9 +856,24 @@ test("a newly projected canonical vote changes the gene detail ETag", async () =
 
   assert.equal(before.status, 200)
   assert.equal(after.status, 200)
-  assert.notEqual(after.headers.get("ETag"), before.headers.get("ETag"))
-  assert.notEqual(afterPayload?.portrait?.asset_sha256, beforePayload?.portrait?.asset_sha256)
-  assert.equal(afterPayload?.portrait?.asset_sha256, votedAssetSha)
+  assert.equal(after.headers.get("ETag"), before.headers.get("ETag"))
+  assert.equal(afterPayload?.portrait?.asset_sha256, beforePayload?.portrait?.asset_sha256)
+  assert.notEqual(afterPayload?.portrait?.asset_sha256, votedAssetSha)
+
+  const nextPublishedKv = buildPublishedCardReadKv({
+    version: "test-card-v2",
+    portraitSha: votedAssetSha,
+  })
+  for (const [key, value] of nextPublishedKv.entries) env.KV.entries.set(key, value)
+  resetIconoplasmRuntimeCachesForTest()
+  const published = await read()
+  const publishedPayload = await published.clone().json()
+
+  assert.equal(published.status, 200)
+  assert.notEqual(published.headers.get("ETag"), before.headers.get("ETag"))
+  assert.equal(published.headers.get("X-Iconoplasm-Card-Version"), "test-card-v2")
+  assert.equal(publishedPayload?.card_snapshot_version, "test-card-v2")
+  assert.equal(publishedPayload?.portrait?.asset_sha256, votedAssetSha)
 })
 
 test("site gene detail canonicalizes alias requests before rendering the gene payload", async () => {
@@ -826,29 +895,113 @@ test("site gene detail canonicalizes alias requests before rendering the gene pa
   )
 })
 
-test("public media payload includes published portrait dimensions", async () => {
+test("public media exposes the canonical gene blot and nests its source artwork", async () => {
   const response =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
       buildEnv({
         ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+        KV: buildPublishedCardReadKv(),
       }),
       {},
     )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload?.media?.width, 384)
-  assert.equal(payload?.media?.height, 512)
+  assert.equal(payload?.media?.type, "gene_blot")
+  assert.equal(payload?.media?.width, 768)
+  assert.equal(payload?.media?.height, 1024)
+  assert.equal(payload?.media?.canonical_url, "https://iconoplasm.brinedew.bio/blots/A1BG.webp")
+  assert.equal(payload?.media?.info_url, "https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG")
+  assert.equal(payload?.media?.checksum_sha256?.length, 64)
+  assert.equal(payload?.media?.source_portrait_artwork?.type, "portrait")
   assert.match(
-    String(payload?.media?.canonical_url || ""),
+    payload?.media?.source_portrait_artwork?.asset?.renditions?.medium?.canonical_url || "",
     /^https:\/\/iconoplasm\.brinedew\.bio\/portraits\//,
   )
-  assert.equal(payload?.media?.info_url, "https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG")
-  assert.equal(payload?.media?.asset?.asset_sha256?.length, 64)
-  assert.match(
-    payload?.media?.asset?.renditions?.medium?.canonical_url || "",
-    /^https:\/\/iconoplasm\.brinedew\.bio\/portraits\//,
+})
+
+test("public media follows the published card barrier instead of D1 portrait changes", async () => {
+  const d1PortraitA = "a".repeat(64)
+  const publishedCardB = "b".repeat(64)
+  const publishedCardC = "c".repeat(64)
+  const env = buildEnv({
+    KV: buildPublishedCardReadKv({
+      version: "test-card-media-v1",
+      portraitSha: publishedCardB,
+    }),
+  })
+  env.gatewayDb.published.set("A1BG", {
+    ...env.gatewayDb.published.get("A1BG"),
+    asset_sha256: d1PortraitA,
+  })
+  const read = async () => {
+    const response =
+      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
+        env,
+        {},
+      )
+    return { response, payload: await response.clone().json() }
+  }
+
+  const before = await read()
+  assert.equal(before.response.status, 200)
+  assert.equal(before.response.headers.get("X-Iconoplasm-Card-Version"), "test-card-media-v1")
+  assert.equal(before.response.headers.get("X-Iconoplasm-Media-Source"), "published-card-gene-blot")
+  assert.equal(before.payload?.media?.source_portrait_artwork?.checksum_sha256, publishedCardB)
+  assert.equal(
+    before.payload?.media?.canonical_url,
+    "https://iconoplasm.brinedew.bio/blots/A1BG.webp",
+  )
+  assert.notEqual(before.payload?.media?.source_portrait_artwork?.checksum_sha256, d1PortraitA)
+
+  const unpublishedD1Portrait = "d".repeat(64)
+  env.gatewayDb.published.set("A1BG", {
+    ...env.gatewayDb.published.get("A1BG"),
+    asset_sha256: unpublishedD1Portrait,
+  })
+  resetIconoplasmRuntimeCachesForTest()
+  const afterD1Change = await read()
+
+  assert.equal(afterD1Change.response.status, 200)
+  assert.equal(afterD1Change.response.headers.get("ETag"), before.response.headers.get("ETag"))
+  assert.equal(afterD1Change.payload?.card_snapshot_version, "test-card-media-v1")
+  assert.deepEqual(afterD1Change.payload?.media, before.payload?.media)
+  assert.notEqual(
+    afterD1Change.payload?.media?.source_portrait_artwork?.checksum_sha256,
+    unpublishedD1Portrait,
+  )
+
+  const nextPublishedKv = buildPublishedCardReadKv({
+    version: "test-card-media-v2",
+    portraitSha: publishedCardC,
+  })
+  for (const [key, value] of nextPublishedKv.entries) env.KV.entries.set(key, value)
+  resetIconoplasmRuntimeCachesForTest()
+  const afterCardBarrierFlip = await read()
+
+  assert.equal(afterCardBarrierFlip.response.status, 200)
+  assert.notEqual(
+    afterCardBarrierFlip.response.headers.get("ETag"),
+    before.response.headers.get("ETag"),
+  )
+  assert.equal(
+    afterCardBarrierFlip.response.headers.get("X-Iconoplasm-Card-Version"),
+    "test-card-media-v2",
+  )
+  assert.equal(afterCardBarrierFlip.payload?.card_snapshot_version, "test-card-media-v2")
+  assert.equal(
+    afterCardBarrierFlip.payload?.media?.checksum_sha256,
+    createHash("sha256").update(`blot-bytes:${publishedCardC}`).digest("hex"),
+  )
+  assert.equal(
+    afterCardBarrierFlip.payload?.media?.source_portrait_artwork?.checksum_sha256,
+    publishedCardC,
+  )
+  assert.equal(
+    afterCardBarrierFlip.payload?.media?.canonical_url,
+    "https://iconoplasm.brinedew.bio/blots/A1BG.webp",
   )
 })
 

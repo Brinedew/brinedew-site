@@ -1234,7 +1234,7 @@ test("guest vote auth keeps its native dialog wired and cache-versioned", async 
   )
 
   const wireStart = app.indexOf("function wireVoteBox(box, symbolValue, assetShaValue, options)")
-  const wireEnd = app.indexOf("function cancelVoteProjectionRefreshPoll", wireStart)
+  const wireEnd = app.indexOf("function wireBrickVoteBoxes", wireStart)
   assert.notEqual(wireStart, -1, "missing website vote-box adapter")
   assert.notEqual(wireEnd, -1, "missing website vote-box adapter boundary")
   const wireBlock = app.slice(wireStart, wireEnd)
@@ -1572,7 +1572,7 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.match(internalWorker, /renderLabLabelCardHtml\(cardPayload/)
   assert.match(
     internalWorker,
-    /function iconoplasmGeneHtmlCacheKey\(url, path, snapshotVersion, record, env\)/,
+    /function iconoplasmGeneHtmlCacheKey\(url, path, snapshotVersion, env\)/,
   )
   assert.match(internalWorker, /const snapshot = String\(snapshotVersion \|\| ""\)\.trim\(\)/)
   assert.match(
@@ -1580,21 +1580,17 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
     /key\.searchParams\.set\("snapshot", snapshot\)/,
     "gene HTML cache entries must be keyed by the live canonical detail asset, not only by symbol",
   )
+  assert.doesNotMatch(
+    internalWorker,
+    /key\.searchParams\.set\("portrait"/,
+    "non-authoritative route portrait metadata must not split the card-detail cache identity",
+  )
+  assert.match(internalWorker, /response includes the exact published-card version and blot/)
   assert.match(
     internalWorker,
-    /normalizeIconoplasmPublishedGeneRecord\(record\)\.portraitAssetSha256/,
-    "gene HTML cache identity must include the exact published route portrait",
+    /function iconoplasmGeneDetailShellVersion\(cardPayload, response = null\)/,
   )
-  assert.match(
-    internalWorker,
-    /key\.searchParams\.set\("portrait", portraitAssetSha256\.toLowerCase\(\)\)/,
-    "a route/detail read that straddles publication must not hit an older gene document",
-  )
-  assert.match(
-    internalWorker,
-    /function iconoplasmGeneDetailShellVersion\(cardPayload, responseEtag = ""\)/,
-  )
-  assert.match(internalWorker, /detailResponse\.headers\.get\("ETag"\)/)
+  assert.match(internalWorker, /response\?\.headers\?\.get\("ETag"\)/)
   const geneHeaderStart = internalWorker.indexOf("function addIconoplasmGeneShellHeaders")
   const geneHeaderEnd = internalWorker.indexOf("\n}\n", geneHeaderStart)
   assert.notEqual(geneHeaderStart, -1, "missing gene header policy")

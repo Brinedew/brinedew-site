@@ -7,14 +7,13 @@ import {
   buildIconoplasmSitemapIndexXml,
   buildIconoplasmStaticPagesSitemapXml,
   iconoplasmGeneRangeBySlug,
-  iconoplasmPublishedGeneRecordIsIndexable,
+  iconoplasmPublishedGeneRecordIsDiscoveryCandidate,
   renderIconoplasmGeneIndexHtml,
   renderIconoplasmGeneRangeHtml,
 } from "./iconoplasm-gene-discovery.js"
 import {
   readIconoplasmPublishedGeneDiscoveryCatalog,
   readIconoplasmPublishedGeneDiscoveryProjections,
-  readIconoplasmPublishedGeneCardPrintCopies,
   resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
@@ -65,7 +64,7 @@ export async function iconoplasmGeneDiscoveryStateForPath(env, path) {
     kind: resolved.kind,
     canonicalSymbol: resolved.canonicalSymbol,
     record: resolved.record,
-    indexable: iconoplasmPublishedGeneRecordIsIndexable(resolved.record),
+    discoveryCandidate: iconoplasmPublishedGeneRecordIsDiscoveryCandidate(resolved.record),
   }
 }
 
@@ -141,22 +140,19 @@ function iconoplasmGeneSitemapUnavailableResponse(method) {
   })
 }
 
-function iconoplasmGeneSitemapProjectionIsCurrent(genes, projection) {
-  if (!projection?.version || !(projection.bySymbol instanceof Map)) return false
-  return genes.every((gene) => {
-    const projected = projection.bySymbol.get(gene.symbol)
-    return Boolean(
-      projected?.portraitAssetSha256 && projected.portraitAssetSha256 === gene.portraitAssetSha256,
-    )
-  })
-}
-
-function printCopiesFromGeneDiscoveryProjection(projection) {
-  const printCopies = new Map()
-  for (const [symbol, value] of projection.bySymbol) {
-    if (value.printCopy) printCopies.set(symbol, value.printCopy)
+function iconoplasmGeneDiscoveryProjectionIsUsable(genes, projection) {
+  if (
+    !projection?.version ||
+    !(projection.bySymbol instanceof Map) ||
+    !(projection.cardSymbols instanceof Set)
+  ) {
+    return false
   }
-  return printCopies
+  // Every catalog candidate must resolve to a structurally valid card in the
+  // selected immutable artifact. A resolved card without a published portrait
+  // is legitimately omitted; a missing requested card means the snapshot read
+  // is incomplete and the whole document must fail closed.
+  return genes.every((gene) => projection.cardSymbols.has(gene.symbol))
 }
 
 // ARCHITECTURE FENCE [IPD-003]
@@ -187,33 +183,46 @@ export async function handleIconoplasmGeneDiscoveryDocument(request, env, path) 
       return Response.redirect(`https://${ICONOPLASM_HOST}${canonicalPath}`, 301)
     }
     const genes = snapshot.ranges.get(range.slug) || []
-    const printCopies =
-      (await readIconoplasmPublishedGeneCardPrintCopies(
-        env,
-        genes.map((gene) => gene.symbol),
-      )) || new Map()
+    const projection = await readIconoplasmPublishedGeneDiscoveryProjections(
+      env,
+      genes.map((gene) => gene.symbol),
+    )
+    if (!iconoplasmGeneDiscoveryProjectionIsUsable(genes, projection)) {
+      return iconoplasmGeneUnavailableResponse(request.method)
+    }
     return discoveryDocumentResponse(
       request,
-      renderIconoplasmGeneRangeHtml(snapshot, range, printCopies),
+      renderIconoplasmGeneRangeHtml(snapshot, range, projection),
       "text/html; charset=utf-8",
       snapshot,
+      { cardVersion: projection.version },
     )
   }
 
   if (path === "/sitemap.xml") {
+    const projection = await readIconoplasmPublishedGeneDiscoveryProjections(env, [])
+    if (!iconoplasmGeneDiscoveryProjectionIsUsable([], projection)) {
+      return iconoplasmGeneSitemapUnavailableResponse(request.method)
+    }
     return discoveryDocumentResponse(
       request,
-      buildIconoplasmSitemapIndexXml(snapshot),
+      buildIconoplasmSitemapIndexXml(snapshot, projection),
       "application/xml; charset=utf-8",
       snapshot,
+      { cardVersion: projection.version },
     )
   }
   if (path === "/sitemaps/pages.xml") {
+    const projection = await readIconoplasmPublishedGeneDiscoveryProjections(env, [])
+    if (!iconoplasmGeneDiscoveryProjectionIsUsable([], projection)) {
+      return iconoplasmGeneSitemapUnavailableResponse(request.method)
+    }
     return discoveryDocumentResponse(
       request,
-      buildIconoplasmStaticPagesSitemapXml(snapshot),
+      buildIconoplasmStaticPagesSitemapXml(snapshot, projection),
       "application/xml; charset=utf-8",
       snapshot,
+      { cardVersion: projection.version },
     )
   }
   const sitemapRangeMatch = /^\/sitemaps\/genes\/([^/]+)\.xml$/.exec(path)
@@ -225,13 +234,12 @@ export async function handleIconoplasmGeneDiscoveryDocument(request, env, path) 
       env,
       genes.map((gene) => gene.symbol),
     )
-    if (!iconoplasmGeneSitemapProjectionIsCurrent(genes, projection)) {
+    if (!iconoplasmGeneDiscoveryProjectionIsUsable(genes, projection)) {
       return iconoplasmGeneSitemapUnavailableResponse(request.method)
     }
-    const printCopies = printCopiesFromGeneDiscoveryProjection(projection)
     return discoveryDocumentResponse(
       request,
-      buildIconoplasmGeneRangeSitemapXml(snapshot, range, printCopies),
+      buildIconoplasmGeneRangeSitemapXml(snapshot, range, projection),
       "application/xml; charset=utf-8",
       snapshot,
       { cardVersion: projection.version },

@@ -3,14 +3,13 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { iconoplasmGeneDiscoveryStateForPath } from "./iconoplasm-gene-discovery-worker.js"
-import { iconoplasmPublishedGeneRecordIsIndexable } from "./iconoplasm-gene-discovery.js"
+import { iconoplasmPublishedGeneRecordIsDiscoveryCandidate } from "./iconoplasm-gene-discovery.js"
 import { iconoplasmGeneHtmlCacheKeyForTest } from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 import {
   resetIconoplasmRuntimeCachesForTest,
   syncPublishedGeneRouteMembershipAfterPublicationForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
-const PORTRAIT_SHA = "a".repeat(64)
 const PROTECTED_ICONOPLASM_ENTRYPOINTS = Object.freeze([
   "the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
   "iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
@@ -23,6 +22,7 @@ function publishedCanonicalRouteFixture() {
       ICONOPLASM_DB: {
         prepare(sql) {
           assert.match(String(sql), /FROM icono_published_gene_routes/)
+          assert.doesNotMatch(String(sql), /icono_publish_state|current_asset_sha256/)
           return {
             bind(symbol) {
               assert.equal(symbol, "TP53")
@@ -31,7 +31,6 @@ function publishedCanonicalRouteFixture() {
                   return {
                     gene_symbol: "TP53",
                     full_name: "tumor protein p53",
-                    current_asset_sha256: PORTRAIT_SHA,
                   }
                 },
               }
@@ -58,8 +57,9 @@ test("canonical gene discovery uses the indexed publication route without KV rea
 
     assert.equal(state.kind, "canonical")
     assert.equal(state.canonicalSymbol, "TP53")
-    assert.equal(state.indexable, true)
-    assert.equal(iconoplasmPublishedGeneRecordIsIndexable(state.record), true)
+    assert.equal(state.discoveryCandidate, true)
+    assert.equal(iconoplasmPublishedGeneRecordIsDiscoveryCandidate(state.record), true)
+    assert.equal(state.record.p, undefined)
     assert.deepEqual(fixture.kvReads, [])
   } finally {
     resetIconoplasmRuntimeCachesForTest()
@@ -142,38 +142,23 @@ test("gene HTML cache lookup is structurally before payload parsing and shell re
   assert.equal(route.slice(0, cacheMatch).includes("iconoplasmGeneCardBootstrapInjection("), false)
 })
 
-test("gene HTML cache cannot hit across a route portrait publication race", () => {
+test("gene HTML cache follows the exact card-detail ETag, not route portrait metadata", () => {
   const url = new URL("https://iconoplasm.brinedew.bio/gene/TP53")
-  const snapshotVersion = 'W/"site-gene-detail:TP53:17"'
-  const firstPortraitSha = "a".repeat(64)
-  const nextPortraitSha = "b".repeat(64)
-  const firstKey = iconoplasmGeneHtmlCacheKeyForTest(
-    url,
-    url.pathname,
-    snapshotVersion,
-    { s: "TP53", n: "tumor protein p53", p: { asset_sha256: firstPortraitSha } },
-    {},
-  )
-  const nextKey = iconoplasmGeneHtmlCacheKeyForTest(
-    url,
-    url.pathname,
-    snapshotVersion,
-    { s: "TP53", n: "tumor protein p53", p: { asset_sha256: nextPortraitSha } },
-    {},
-  )
+  const firstSnapshotVersion = 'W/"site-gene-detail:TP53:17"'
+  const nextSnapshotVersion = 'W/"site-gene-detail:TP53:18"'
+  const firstKey = iconoplasmGeneHtmlCacheKeyForTest(url, url.pathname, firstSnapshotVersion, {})
+  const nextKey = iconoplasmGeneHtmlCacheKeyForTest(url, url.pathname, nextSnapshotVersion, {})
 
   assert.ok(firstKey)
   assert.ok(nextKey)
   assert.notEqual(firstKey.url, nextKey.url)
-  assert.equal(new URL(firstKey.url).searchParams.get("portrait"), firstPortraitSha)
-  assert.equal(new URL(nextKey.url).searchParams.get("portrait"), nextPortraitSha)
+  assert.equal(new URL(firstKey.url).searchParams.get("snapshot"), firstSnapshotVersion)
+  assert.equal(new URL(nextKey.url).searchParams.get("snapshot"), nextSnapshotVersion)
+  assert.equal(new URL(firstKey.url).searchParams.has("portrait"), false)
 
   const edgeCache = new Map([[firstKey.url, new Response("portrait A")]])
   assert.equal(edgeCache.get(nextKey.url), undefined)
-  assert.equal(
-    iconoplasmGeneHtmlCacheKeyForTest(url, url.pathname, snapshotVersion, null, {}),
-    null,
-  )
+  assert.equal(iconoplasmGeneHtmlCacheKeyForTest(url, url.pathname, "", {}), null)
 })
 
 test("the cold-path refactor preserves the loud single-owner filenames", () => {
