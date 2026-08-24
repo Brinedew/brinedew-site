@@ -98,6 +98,33 @@ In healthy non-Vietnam regions, the tab-scoped IPD-001 probe may select Bunny's
 byte-equivalent immutable URL for delivery. Vietnam and any failed Bunny probe
 use the first-party route. The first-party URL remains the discovery identity.
 
+## Agent image resolution
+
+Public assistants and other clients resolve images through the bounded
+`POST /api/public/v1/images/resolve` endpoint. A request accepts `symbols` or
+`identifiers`, contains at most 50 values, and is limited to 60 requests per
+minute. The existing public identifier resolver owns normalization, so a gene
+symbol, publication alias, or UniProt identifier reaches the same canonical
+symbol. The response preserves the ontology with distinct
+`images.gene_blot` and `images.source_portrait_artwork` fields. It never returns
+an ambiguous generic image.
+
+The stable `/blots/{SYMBOL}.webp` URL is the canonical gene image. The singular
+`/portrait/{SYMBOL}.webp` URL is only the medium source-artwork alias; full and
+thumbnail aliases are intentionally absent because the public product has four
+images per gene: full, medium, thumbnail, and blot. Both aliases resolve from
+the exact published card selected by `KV_GALLERY_VERSION`, so a vote changes
+public output only after the normal publication barrier advances. A published
+gene without a ready blot still resolves its source portrait and remains
+published, with `gene_blot: null`.
+
+The resolver is the free HTTP foundation for any future MCP transport. Do not
+create a separate MCP authority, require users to configure MCP for ordinary
+image retrieval, publish a 19,023-image manifest, or add source-portrait links
+to every archive row. Bunny may be returned as a byte-equivalent alternate for
+healthy non-Vietnam delivery, but the first-party URL remains the stable
+identity and works directly in Vietnam.
+
 Crawler GET and HEAD paths remain projections, not workflows. Sitemap and
 archive generation continue to read the shared versioned KV catalog and must
 add no D1 scan. A canonical gene document may retain its existing bounded exact

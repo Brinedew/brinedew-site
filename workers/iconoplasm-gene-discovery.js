@@ -842,6 +842,7 @@ Iconoplasm maps human-gene biology onto memorable visual character cards called 
 
 - [Metadata](${ICONOPLASM_ORIGIN}/api/public/v1/metadata)
 - [Schema](${ICONOPLASM_ORIGIN}/api/public/v1/schema)
+- Agent image resolver (POST, up to 50 identifiers): ${ICONOPLASM_ORIGIN}/api/public/v1/images/resolve
 - [Immutable JSONL catalog dump](${ICONOPLASM_ORIGIN}/api/public/v1/dumps/catalog.${hash}.jsonl)
 - [Privacy policy](${ICONOPLASM_ORIGIN}/privacy)
 `
