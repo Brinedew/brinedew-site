@@ -127,6 +127,14 @@ test("dirty-shard publication ignores caller work sizing and reports safe refusa
   const statusEnvs = []
   const refusal = Object.assign(new Error("write budget exhausted"), {
     code: "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED",
+    payload: {
+      day_key: "2026-08-24",
+      daily_limit: 900,
+      estimated_writes: 897,
+      requested_writes: 6,
+      projected_writes: 903,
+      estimated_writes_remaining: 3,
+    },
   })
   const handlers = createIconoplasmAdminGalleryHandlers(
     galleryServices({
@@ -155,5 +163,13 @@ test("dirty-shard publication ignores caller work sizing and reports safe refusa
   assert.equal(payload.ok, false)
   assert.equal(payload.skipped, true)
   assert.equal(payload.code, "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED")
+  assert.deepEqual(payload.budget, {
+    day_key: "2026-08-24",
+    daily_limit: 900,
+    estimated_writes: 897,
+    requested_writes: 6,
+    projected_writes: 903,
+    estimated_writes_remaining: 3,
+  })
   assert.equal(payload.publish_status.changes_since_publish, 4)
 })
