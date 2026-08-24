@@ -90,6 +90,14 @@ the underlying complete gene profile: every eligible gene remains linked from
 its frozen archive range and listed in its gene-sitemap shard, while a gene with
 no ready blot simply has no thumbnail or image-sitemap child. Those crawler
 reads must never enroll work, consult votes, scan D1, or launch Browser Rendering.
+Agent image lookup reads that same exact published-card authority. The bounded
+`POST /api/public/v1/images/resolve` contract accepts at most 50 identifiers and
+returns separately typed `gene_blot` and `source_portrait_artwork` fields; it
+must not invent one generic "image" field. `/blots/{SYMBOL}.webp` is the stable
+canonical gene-image identity. `/portrait/{SYMBOL}.webp` is only the stable
+medium source-artwork alias and must never be promoted to the canonical image.
+Do not publish a 19,023-image manifest or add source-portrait links to every
+archive row: agent retrieval stays exact and bounded.
 Model-training crawlers are not the search contract: GPTBot and ClaudeBot are
 blocked by a project-owned WAF rule before Worker execution, while OpenAI,
 Anthropic, and Perplexity search/user agents remain allowed. The WAF policy,

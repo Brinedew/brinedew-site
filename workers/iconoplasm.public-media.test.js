@@ -585,6 +585,13 @@ function buildPublishedCardReadKv({
   })
 }
 
+function buildAgentImageResolverKv(options = {}) {
+  const catalog = buildCatalogResolveKv()
+  const cards = buildPublishedCardReadKv(options)
+  for (const [key, value] of cards.entries) catalog.entries.set(key, value)
+  return catalog
+}
+
 function buildSessionBinding(sessions) {
   return {
     idFromName(name) {
@@ -919,6 +926,89 @@ test("public media exposes the canonical gene blot and nests its source artwork"
     payload?.media?.source_portrait_artwork?.asset?.renditions?.medium?.canonical_url || "",
     /^https:\/\/iconoplasm\.brinedew\.bio\/portraits\//,
   )
+})
+
+test("public image resolver separates gene blots from source portrait artwork", async () => {
+  resetIconoplasmRuntimeCachesForTest()
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/public/v1/images/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbols: ["A1BG", "USAG1", "NOT_A_GENE"] }),
+      }),
+      buildEnv({
+        ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+        KV: buildAgentImageResolverKv(),
+      }),
+      {},
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("X-Iconoplasm-Media-Source"), "published-card-image-resolver")
+  assert.equal(payload.max_symbols, 50)
+  assert.equal(payload.results[0]?.canonical_symbol, "A1BG")
+  assert.equal(payload.results[0]?.images?.gene_blot?.type, "gene_blot")
+  assert.equal(
+    payload.results[0]?.images?.gene_blot?.canonical_url,
+    "https://iconoplasm.brinedew.bio/blots/A1BG.webp",
+  )
+  assert.equal(payload.results[0]?.images?.source_portrait_artwork?.type, "portrait")
+  assert.equal(
+    payload.results[0]?.images?.source_portrait_artwork?.semantic_url,
+    "https://iconoplasm.brinedew.bio/portrait/A1BG.webp",
+  )
+  assert.equal(payload.results[1]?.canonical_symbol, "SOSTDC1")
+  assert.equal(payload.results[1]?.matched_by, "alias")
+  assert.equal(payload.results[1]?.images, null)
+  assert.equal(payload.results[2]?.found, false)
+  assert.equal(payload.results[2]?.images, null)
+})
+
+test("public image resolver keeps source portraits available before blot materialization", async () => {
+  resetIconoplasmRuntimeCachesForTest()
+  const kv = buildAgentImageResolverKv({ version: "test-card-without-blot" })
+  const shardKey = "iconoplasm:card-catalog-shard:test-card-without-blot:0"
+  const shard = JSON.parse(await kv.get(shardKey))
+  delete shard.cards[0].payload.blot
+  await kv.put(shardKey, JSON.stringify(shard))
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/public/v1/images/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifiers: ["A1BG"] }),
+      }),
+      buildEnv({ KV: kv }),
+      {},
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.results[0]?.images?.gene_blot, null)
+  assert.equal(payload.results[0]?.images?.source_portrait_artwork?.type, "portrait")
+})
+
+test("stable source portrait alias redirects to the exact card's medium rendition", async () => {
+  resetIconoplasmRuntimeCachesForTest()
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/portrait/A1BG.webp"),
+      buildEnv({
+        ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+        KV: buildPublishedCardReadKv(),
+      }),
+      {},
+    )
+
+  assert.equal(response.status, 302)
+  assert.match(response.headers.get("Location") || "", /\/portraits\/v1\/.+\/medium\.webp$/)
+  assert.match(response.headers.get("Link") || "", /^<https:\/\/iconoplasmportraits\.b-cdn\.net\//)
+  assert.equal(response.headers.get("X-Iconoplasm-Media-Type"), "source_portrait_artwork")
+  assert.equal(response.headers.get("X-Iconoplasm-Portrait-Rendition"), "medium")
+  assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*")
+  assert.equal(response.headers.get("Cross-Origin-Resource-Policy"), "cross-origin")
 })
 
 test("public media follows the published card barrier instead of D1 portrait changes", async () => {

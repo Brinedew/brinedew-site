@@ -1502,6 +1502,7 @@ function crossOriginResourcePolicyForRequest(request) {
     if (
       reqUrl.hostname === ICONOPLASM_HOST &&
       (reqUrl.pathname.startsWith("/portraits/") ||
+        reqUrl.pathname.startsWith("/portrait/") ||
         reqUrl.pathname.startsWith("/gene-cards/") ||
         reqUrl.pathname.startsWith("/blots/"))
     ) {

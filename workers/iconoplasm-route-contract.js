@@ -267,6 +267,16 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     rateLimit: rateLimit("resolve", 60),
   }),
   contract({
+    id: "public_image_resolve",
+    match: exact(iconoplasmPublicApiPath("/images/resolve")),
+    methods: POST,
+    auth: "public",
+    cache: "no-store",
+    budgetFamily: "public_image_resolve",
+    gatewayHandler: "public_image_resolve",
+    rateLimit: rateLimit("image_resolve", 60),
+  }),
+  contract({
     id: "public_changes",
     match: exact(iconoplasmPublicApiPath("/changes")),
     methods: GET,
@@ -295,6 +305,16 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "public_portrait",
     gatewayHandler: "portrait",
     rateLimit: null,
+  }),
+  contract({
+    id: "semantic_source_portrait",
+    match: pattern(/^\/portrait\/([^/]+)\.webp$/, ["symbol"]),
+    methods: GET,
+    auth: "public",
+    cache: "handler-defined",
+    budgetFamily: "public_source_portrait",
+    gatewayHandler: "semantic_source_portrait",
+    rateLimit: rateLimit("source_portrait", 120),
   }),
   contract({
     id: "gene_card_asset",
