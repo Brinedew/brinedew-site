@@ -252,7 +252,8 @@ whole bounded priority set is ready. It then scans at most 10 published genes
 for corpus backfill, releases those backfill events every 100 scanned genes,
 and stops after 5,000 scanned genes per UTC day. Priority work may run while the
 operator is active; bulk backfill still obeys the workstation quiet and resource
-gates. Failures wait five minutes rather than opening a hot retry loop.
+gates. Ordinary transient failures wait five minutes rather than opening a hot
+retry loop; a daily KV-budget refusal sleeps until the next UTC budget day.
 
 ## Requested high-resolution print copies
 

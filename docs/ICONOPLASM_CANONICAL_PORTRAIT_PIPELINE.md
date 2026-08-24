@@ -63,7 +63,8 @@ materializes those exact candidate cards locally, then invokes the normal
 dirty-shard publisher only when the bounded priority render queue is complete.
 It never changes D1 canonical state, publishes an unmatched image, or bypasses
 the KV reservation and exact-card barrier. Transient failure backs off for five
-minutes; the old artifact remains coherently live.
+minutes; daily KV exhaustion sleeps until the next UTC budget day. The old
+artifact remains coherently live.
 
 ## Automatic Canonical Tie-Breaker
 
