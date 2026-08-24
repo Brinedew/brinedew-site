@@ -26046,6 +26046,46 @@ export async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
   ).trim()
   const versionInfo = requestedVersion ? null : await currentMobileCardSnapshotVersion(env)
   const version = requestedVersion || String(versionInfo?.current || "").trim()
+  const requestedSymbols = normalizeRequestedSymbols(
+    Array.isArray(payload?.symbols) ? payload.symbols : [],
+    100,
+  )
+  if (requestedSymbols.length) {
+    const artifact = version
+      ? await readPublishedCardCatalogArtifact(env, version, requestedSymbols, {
+          allowWholeArtifact: false,
+        })
+      : null
+    if (!artifact) {
+      throw geneBlotServiceError(
+        503,
+        "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
+        "The exact published card artifact is unavailable.",
+      )
+    }
+    const records = requestedSymbols
+      .map((symbol) => artifact.bySymbol.get(symbol))
+      .filter(Boolean)
+      .map((card) => (card?.payload && typeof card.payload === "object" ? card.payload : card))
+    const symbols = records
+      .map((record) => normalizeSymbol(record?.symbol || record?.canonical_symbol || ""))
+      .filter(Boolean)
+    return {
+      ok: true,
+      scope,
+      automatic: false,
+      items: records
+        .map((record) => geneBlotBacklogItem(record, scope))
+        .filter(Boolean)
+        .slice(0, limit),
+      symbols,
+      snapshot_version: version,
+      scanned: symbols.length,
+      total_count: symbols.length,
+      done: true,
+      next_after: null,
+    }
+  }
   const page = version
     ? await pagePublishedCardCatalogArtifact(env, version, { after, limit })
     : null
