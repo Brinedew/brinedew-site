@@ -534,7 +534,8 @@ function buildPublishedCardReadKv({
       object_key: blotObjectKey,
       image_url: `https://iconoplasmportraits.b-cdn.net/${blotObjectKey}`,
       canonical_url: `https://iconoplasm.brinedew.bio/${blotObjectKey}`,
-      semantic_url: "https://iconoplasm.brinedew.bio/blot/A1BG.webp",
+      // Historical immutable cards can retain the old plural semantic URL.
+      semantic_url: "https://iconoplasm.brinedew.bio/blots/A1BG.webp",
       width: 768,
       height: 1024,
       filename: "A1BG-iconoplasm-gene-blot.webp",
