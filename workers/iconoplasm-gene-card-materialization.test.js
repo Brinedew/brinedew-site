@@ -201,6 +201,19 @@ test("the durable ledger is bounded and queue delivery is serialized", () => {
     /putBunnyObjectUntilVerified[\s\S]*putPortraitStorageObject[\s\S]*verifyPortraitStorageObjectAfterPut/,
     "an acknowledged but lost gene-card PUT must retry the same rendered bytes",
   )
+  const queueProcessor = runtimeSource.slice(
+    runtimeSource.indexOf("async function processIconoplasmGeneCardMaterializationMessage"),
+    runtimeSource.indexOf("async function handleIconoplasmGeneCardMaterializationQueue"),
+  )
+  assert.match(
+    queueProcessor,
+    /putPortraitStorageObject[\s\S]*verifyAfterPut: true/,
+    "the queue must delegate verified immutable storage to the shared adapter",
+  )
+  assert.doesNotMatch(
+    queueProcessor,
+    /putBunnyObjectUntilVerified|verifyPortraitStorageObjectAfterPut/,
+  )
   assert.match(
     wranglerSource,
     /queue = "iconoplasm-gene-card-materialization"[\s\S]*max_batch_size = 1/,
