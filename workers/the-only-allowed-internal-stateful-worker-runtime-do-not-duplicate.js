@@ -340,7 +340,7 @@ function iconoplasmPublishedGeneBlot(cardPayload) {
     blot?.status !== "ready" ||
     !String(blot.image_url || "").startsWith("https://iconoplasmportraits.b-cdn.net/blots/v1/") ||
     !String(blot.canonical_url || "").startsWith(`https://${ICONOPLASM_HOST}/blots/v1/`) ||
-    !String(blot.semantic_url || "").startsWith(`https://${ICONOPLASM_HOST}/blots/`)
+    !String(blot.semantic_url || "").startsWith(`https://${ICONOPLASM_HOST}/blot/`)
   )
     return null
   return blot
