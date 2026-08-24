@@ -3597,7 +3597,11 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 }
 
 .icono-canonical-gene-blot[hidden] {
-  display: none;
+  /* The Quartz article theme assigns display:flex to every figure with higher
+     selector specificity. Hidden is a behavioral state, so it must win over
+     any present or future figure layout rule until the print-copy action
+     removes the attribute. */
+  display: none !important;
 }
 
 .icono-canonical-gene-blot-image {
