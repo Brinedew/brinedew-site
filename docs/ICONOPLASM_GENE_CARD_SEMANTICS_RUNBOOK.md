@@ -123,10 +123,11 @@ The stable `/blot/{SYMBOL}.webp` URL is the canonical gene image. The singular
 `/portrait/{SYMBOL}.webp` URL is only the medium portrait alias; full and
 thumbnail aliases are intentionally absent because the public product has four
 images per gene: full, medium, thumbnail, and blot. Both aliases resolve from
-the exact published card selected by `KV_GALLERY_VERSION`, so a vote changes
-public output only after the normal publication barrier advances. A published
-gene without a ready blot still resolves its portrait and remains
-published, with `gene_blot: null`.
+the exact published card selected by `KV_GALLERY_VERSION`. The blot route
+derives the current renderer fingerprint and immutable object key from that
+card; it does not require blot metadata to be copied back into KV. A vote
+changes public output after the normal canonical-card publication, while the
+portrait remains available during blot generation.
 
 The portrait field and endpoint remain only while blot coverage is incomplete.
 Remove them from this agent workflow only after a live exact-card audit proves
@@ -233,13 +234,15 @@ fingerprint, selected portrait SHA, content type, byte ceiling, WebP dimensions,
 immutable-key consistency, and Storage replication before atomically recording
 the ready row and publication event.
 
-The ledger contains one bounded row per gene, while every published card artifact
-retains its immutable blot reference. A portrait or full-name change produces a
-new fingerprint; unrelated essence changes do not. Dirty-shard publication
-fails with `GENE_BLOT_NOT_READY` until the workstation has materialized that
-exact candidate. Corpus backfill renders the currently published identity first,
-then the candidate identity, and advances the card barrier only in bounded
-batches. GET and HEAD routes never render, enroll, repair, or enqueue work.
+The server ledger contains one bounded audit row per gene. Before upload, the
+workstation persists the exact WebP in a durable local content-addressed store
+with a SQLite manifest, so restarts retry the same bytes instead of rerendering.
+A portrait or full-name change produces a new fingerprint; unrelated essence
+changes do not. Dirty-shard publication does not wait for materialization: the
+newly published card immediately defines the expected immutable key, and the
+stable route begins serving it as soon as Bunny contains it. Corpus backfill
+therefore performs zero KV writes. GET and HEAD routes never render, enroll,
+repair, or enqueue work.
 
 The authenticated candidate backlog has two modes. An explicit symbol list is
 used by generation-session finalization. An empty list is the bounded automatic

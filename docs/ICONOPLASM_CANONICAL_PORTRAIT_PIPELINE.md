@@ -52,17 +52,25 @@ Normal public voting goes through this path:
 8. `refreshProjectedVoteReadModelsFromCoordinatorState(...)` rebuilds symbol/vision read models.
 9. The projection job is cleared after the D1 canonical/read-model work succeeds. It must not publish the full public card-catalog artifact per vote.
 
-The critical invariant is authority separation. Step 7 changes authoring state, but the published source portrait and its public blot advance only through explicit card-artifact publication after the workstation has materialized the exact new blot; publishing for every vote can burn the daily KV write budget. Gene detail may expose fresh candidate/vote state immediately while retaining the previously published source portrait and blot until the dirty-shard release flips `KV_GALLERY_VERSION`. Do not poll site detail waiting for an unpublished SHA, and do not run canonical promotion from request `waitUntil`.
+The critical invariant is authority separation. Step 7 changes authoring state,
+while the published source portrait advances through one explicit card-artifact
+publication. That exact card immediately determines the expected blot
+fingerprint and Bunny key; the later workstation upload does not republish KV.
+Publishing for every individual vote can still burn the daily KV budget, so the
+dirty-shard release remains the canonical barrier. Do not poll site detail
+waiting for an unpublished SHA, and do not run canonical promotion from request
+`waitUntil`.
 
 The workstation closes that deliberate gap through the Drain-owned priority
 lane. While no generation request is running, Drain asks the authenticated blot
 backlog for canonical-affecting symbols after the exact published watermark.
 That lookup excludes `gene_card_materialized` and `gene_blot_materialized`, is
 hard-capped at 100 symbols, and returns no more than 25 missing renders. Drain
-materializes those exact candidate cards locally, then invokes the normal
-dirty-shard publisher only when the bounded priority render queue is complete.
-It never changes D1 canonical state, publishes an unmatched image, or bypasses
-the KV reservation and exact-card barrier. Transient failure backs off for five
+persists and uploads those exact card-derived blots. The normal dirty-shard
+publisher is not gated by the render queue: it publishes the canonical card,
+and the stable blot route starts resolving the deterministic object when upload
+completes. Drain never changes D1 canonical state or publishes an unmatched
+image. Transient failure backs off for five
 minutes; daily KV exhaustion sleeps until the next UTC budget day. The old
 artifact remains coherently live.
 
