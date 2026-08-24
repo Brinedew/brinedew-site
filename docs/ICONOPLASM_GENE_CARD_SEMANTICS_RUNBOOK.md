@@ -241,6 +241,19 @@ exact candidate. Corpus backfill renders the currently published identity first,
 then the candidate identity, and advances the card barrier only in bounded
 batches. GET and HEAD routes never render, enroll, repair, or enqueue work.
 
+The authenticated candidate backlog has two modes. An explicit symbol list is
+used by generation-session finalization. An empty list is the bounded automatic
+priority lane: it returns only canonical-affecting symbols after the published
+event watermark, excludes materialization-only events, refuses more than 100
+pending symbols, and returns at most the requested render batch. The always-on
+Iconoplasm Drain checks this lane once per minute while its request queue is
+idle, renders at most 25 missing candidate blots, and publishes only after the
+whole bounded priority set is ready. It then scans at most 10 published genes
+for corpus backfill, releases those backfill events every 100 scanned genes,
+and stops after 5,000 scanned genes per UTC day. Priority work may run while the
+operator is active; bulk backfill still obeys the workstation quiet and resource
+gates. Failures wait five minutes rather than opening a hot retry loop.
+
 ## Requested high-resolution print copies
 
 The print-copy action is explicit enrollment, not a GET side effect. Its POST

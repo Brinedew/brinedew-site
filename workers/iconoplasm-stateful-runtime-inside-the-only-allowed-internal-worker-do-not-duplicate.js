@@ -967,6 +967,13 @@ const CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS = [
   "gene_card_materialized",
   "gene_blot_materialized",
 ]
+// Workstation priority excludes materialization-only events. Those events are
+// the resumable corpus backfill itself and are intentionally released in
+// budgeted batches. Every other canonical-affecting event represents a human
+// or publication decision that should receive its exact blot before bulk work.
+const CARD_CATALOG_BLOT_PRIORITY_ACTIONS = CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS.filter(
+  (action) => action !== "gene_card_materialized" && action !== "gene_blot_materialized",
+)
 const CARD_CATALOG_ARTIFACT_SCHEMA = "iconoplasm.cardCatalog.v1"
 // Changes whenever source records are mapped into public card fields differently.
 // D1 publication events only detect data changes; this revision makes a deployed
@@ -24646,15 +24653,24 @@ function isoToSqliteDatetimeFloor(value) {
 
 async function cardCatalogChangedSymbolsWithinPublicationWindow(
   env,
-  { afterEventAt = null, throughEventAt = null, afterEventId = 0, throughEventId = 0, limit },
+  {
+    afterEventAt = null,
+    throughEventAt = null,
+    afterEventId = 0,
+    throughEventId = 0,
+    limit,
+    actions = CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS,
+  },
 ) {
   // The genes whose owning gallery shards need publication: distinct symbols with a
   // canonical-affecting event after the watermark. `limit` is ceiling+1 so the
   // caller can detect "delta too large" without counting the whole history.
   if (!env?.ICONOPLASM_DB) return { symbols: [], truncated: false }
-  const placeholders = cardCatalogCanonicalActionPlaceholders()
+  const actionList = Array.from(new Set(Array.isArray(actions) ? actions : [])).filter(Boolean)
+  if (!actionList.length) return { symbols: [], truncated: false }
+  const placeholders = actionList.map(() => "?").join(",")
   const clauses = [`action IN (${placeholders})`]
-  const binds = [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS]
+  const binds = [...actionList]
   if (Number(afterEventId) > 0) {
     clauses.push("id > ?")
     binds.push(Number(afterEventId))
@@ -25787,6 +25803,40 @@ function geneBlotServiceError(status, code, message) {
   return error
 }
 
+async function priorityGeneBlotSymbols(env) {
+  const watermark = await readCardCatalogPublishWatermark(env)
+  const afterEventId = Math.max(0, Number(watermark?.watermark_event_id || 0) || 0)
+  const afterEventAt = watermark?.watermark_event_at || null
+  if (!afterEventId && !afterEventAt) {
+    throw geneBlotServiceError(
+      503,
+      "BLOT_PUBLICATION_WATERMARK_REQUIRED",
+      "Priority blot discovery requires the published card watermark.",
+    )
+  }
+  const highWater = await maxCardCatalogPublishEventPosition(env)
+  const changed = await cardCatalogChangedSymbolsWithinPublicationWindow(env, {
+    afterEventId,
+    afterEventAt,
+    throughEventId: highWater.id,
+    throughEventAt: highWater.created_at,
+    limit: 101,
+    actions: CARD_CATALOG_BLOT_PRIORITY_ACTIONS,
+  })
+  if (changed.truncated) {
+    throw geneBlotServiceError(
+      503,
+      "BLOT_PRIORITY_SET_SAFETY_LIMIT",
+      "More than 100 priority genes are pending; refusing an unbounded workstation batch.",
+    )
+  }
+  return {
+    symbols: changed.symbols,
+    through_event_id: Math.max(0, Number(highWater.id || 0) || 0),
+    through_event_at: highWater.created_at || null,
+  }
+}
+
 function geneBlotBacklogItem(card, scope) {
   const symbol = normalizeSymbol(card?.symbol || card?.canonical_symbol || "")
   const portrait = card?.portrait && typeof card.portrait === "object" ? card.portrait : null
@@ -25896,7 +25946,7 @@ export async function pagePublishedCardCatalogArtifact(
   }
 }
 
-async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
+export async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
   const url = new URL(request.url)
   const scope = String(payload?.scope || url.searchParams.get("scope") || "published")
     .trim()
@@ -25907,29 +25957,46 @@ async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
   )
   const limit = Math.max(1, Math.min(100, Number.isFinite(requestedLimit) ? requestedLimit : 25))
   if (scope === "candidate") {
-    const symbols = normalizeRequestedSymbols(
+    const requestedSymbols = normalizeRequestedSymbols(
       Array.isArray(payload?.symbols) ? payload.symbols : [],
       100,
     )
+    const priority = requestedSymbols.length ? null : await priorityGeneBlotSymbols(env)
+    const symbols = requestedSymbols.length ? requestedSymbols : priority.symbols
     if (!symbols.length) {
-      throw geneBlotServiceError(
-        400,
-        "BLOT_SYMBOLS_REQUIRED",
-        "Candidate blot discovery requires one or more symbols.",
-      )
+      return {
+        ok: true,
+        scope,
+        automatic: requestedSymbols.length === 0,
+        items: [],
+        symbols: [],
+        scanned: 0,
+        pending_item_count: 0,
+        render_queue_complete: true,
+        through_event_id: priority?.through_event_id || null,
+        through_event_at: priority?.through_event_at || null,
+        done: true,
+        next_after: null,
+      }
     }
     const records = await cardCatalogRecordsForArtifact(env, {
       requestUrl: request.url,
       symbols,
       snapshotVersion: "candidate",
     })
+    const pendingItems = records.map((record) => geneBlotBacklogItem(record, scope)).filter(Boolean)
     return {
       ok: true,
       scope,
-      items: records.map((record) => geneBlotBacklogItem(record, scope)).filter(Boolean),
+      automatic: requestedSymbols.length === 0,
+      items: pendingItems.slice(0, limit),
       symbols,
       scanned: records.length,
-      done: true,
+      pending_item_count: pendingItems.length,
+      render_queue_complete: pendingItems.length <= limit,
+      through_event_id: priority?.through_event_id || null,
+      through_event_at: priority?.through_event_at || null,
+      done: pendingItems.length <= limit,
       next_after: null,
     }
   }
