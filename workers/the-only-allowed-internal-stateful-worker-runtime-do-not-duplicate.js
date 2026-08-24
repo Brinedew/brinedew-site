@@ -92,7 +92,7 @@ const ICONOPLASM_GENE_FONT_PRELOAD_LINKS = [
   "</static/iconoplasm/fonts/Caveat-400.woff2>; rel=preload; as=font; type=font/woff2; crossorigin",
 ]
 const ICONOPLASM_HTML_SHELL_EDGE_CACHE_TTL_SECONDS = 300
-const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-08-24-canonical-gene-blot-v1"
+const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-08-24-on-demand-gene-blot-v2"
 const ICONOPLASM_PUBLIC_NO_VARY_SEARCH =
   'params=("utm_source" "utm_medium" "utm_campaign" "utm_content" "utm_term" "fbclid" "gclid" "mc_cid" "mc_eid" "codex_verify")'
 
@@ -354,7 +354,7 @@ function iconoplasmCanonicalGeneBlotFigureHtml(cardPayload) {
   const fullName = String(cardPayload?.full_name || cardPayload?.name || symbol).trim()
   const alt = `${symbol} Iconoplasm gene blot — ${fullName}`
   return (
-    '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot>' +
+    '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot hidden>' +
     '<img class="icono-canonical-gene-blot-image" src="' +
     escapeIconoplasmHtmlAttribute(blot.canonical_url) +
     '" data-iconoplasm-canonical-image-src="' +
@@ -363,13 +363,9 @@ function iconoplasmCanonicalGeneBlotFigureHtml(cardPayload) {
     escapeIconoplasmHtmlAttribute(String(blot.width || 768)) +
     '" height="' +
     escapeIconoplasmHtmlAttribute(String(blot.height || 1024)) +
-    '" loading="eager" decoding="async" fetchpriority="high" alt="' +
+    '" loading="lazy" decoding="async" fetchpriority="low" alt="' +
     escapeIconoplasmHtmlAttribute(alt) +
-    '"><figcaption>Canonical Iconoplasm gene blot for human ' +
-    escapeIconoplasmStaticShellText(symbol) +
-    " (" +
-    escapeIconoplasmStaticShellText(fullName) +
-    ").</figcaption></figure>"
+    '"></figure>'
   )
 }
 

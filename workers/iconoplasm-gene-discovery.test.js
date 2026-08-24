@@ -72,7 +72,7 @@ test("frozen ranges assign every eligible symbol exactly once", () => {
   const flattened = Array.from(snapshot.ranges.values()).flat()
 
   assert.equal(ICONOPLASM_GENE_RANGE_CONTRACT_VERSION, "2026-07-22-19023-v1")
-  assert.equal(ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION, "2026-08-23-v1")
+  assert.equal(ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION, "2026-08-24-v2")
   assert.equal(ICONOPLASM_GENE_RANGES.length, 58)
   assert.equal(snapshot.candidateCount, genes.length)
   assert.equal(flattened.length, genes.length)
@@ -171,7 +171,7 @@ test("sitemap index and shards use the same eligible range membership", () => {
   )
 
   assert.match(indexXml, /<sitemapindex/)
-  assert.match(indexXml, /<lastmod>2026-08-23<\/lastmod>/)
+  assert.match(indexXml, /<lastmod>2026-08-24<\/lastmod>/)
   assert.match(indexXml, /\/sitemaps\/pages\.xml/)
   assert.match(indexXml, /\/sitemaps\/genes\/TO-TR\.xml/)
   assert.match(pagesXml, /<loc>https:\/\/iconoplasm\.brinedew\.bio\/genes<\/loc>/)

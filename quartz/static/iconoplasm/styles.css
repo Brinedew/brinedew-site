@@ -3588,14 +3588,16 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 }
 
 .icono-canonical-gene-blot {
-  display: grid;
-  grid-template-columns: minmax(112px, 180px) minmax(0, 1fr);
-  align-items: center;
-  gap: 1rem;
+  display: block;
+  width: min(100%, 384px);
   margin: 0;
-  padding: 0.85rem;
+  padding: 0;
   border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
   background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+.icono-canonical-gene-blot[hidden] {
+  display: none;
 }
 
 .icono-canonical-gene-blot-image {
@@ -3605,19 +3607,6 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   aspect-ratio: 3 / 4;
   object-fit: contain;
   background: #111;
-}
-
-.icono-canonical-gene-blot figcaption {
-  color: var(--muted);
-  font-size: 0.82rem;
-  line-height: 1.45;
-}
-
-@media (max-width: 520px) {
-  .icono-canonical-gene-blot {
-    grid-template-columns: 96px minmax(0, 1fr);
-    gap: 0.75rem;
-  }
 }
 
 .icono-card--brick-static {
