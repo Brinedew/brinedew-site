@@ -811,6 +811,7 @@ Iconoplasm is the gene humanization database: it maps 19,023 human genes onto me
 
 - [Gene reference catalog](${ICONOPLASM_ORIGIN}/genes): Server-rendered, self-locating symbol ranges
 - Gene profile URL: ${ICONOPLASM_ORIGIN}/gene/{HGNC_SYMBOL}
+- Stable labelled blot URL: ${ICONOPLASM_ORIGIN}/blot/{HGNC_SYMBOL}.webp
 - Canonical gene blot: Every complete gene stays in the archive and gene sitemap. Once its exact labelled WebP is ready, the page also exposes it through a standard image, Open Graph and Twitter metadata, linked Gene/ImageObject/WebPage structured data, and an image-sitemap child. The unlabelled portrait is source material inside the blot, not the canonical public image.
 - [Sitemap index](${ICONOPLASM_ORIGIN}/sitemap.xml): Static pages and gene-profile shards
 

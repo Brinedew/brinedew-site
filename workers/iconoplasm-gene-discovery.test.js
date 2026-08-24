@@ -232,6 +232,7 @@ test("llms.txt documents discovery and every card mapping", () => {
   assert.match(text, /resolve all pathway gene symbols in one POST/)
 
   assert.match(text, /\/gene\/\{HGNC_SYMBOL\}/)
+  assert.match(text, /\/blot\/\{HGNC_SYMBOL\}\.webp/)
   assert.match(text, /Every complete gene stays in the archive and gene sitemap/)
   assert.match(text, /Gene\/ImageObject\/WebPage structured data/)
   assert.match(text, /\/genes/)
