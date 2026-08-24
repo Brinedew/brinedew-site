@@ -3,7 +3,7 @@ title: Defensive sabotage looks like friendly fire
 tags:
   - content/post
 date: 2026-03-20
-draft: false
+draft: true
 ---
 # Defensive sabotage looks like friendly fire
 
