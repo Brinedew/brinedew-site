@@ -265,7 +265,7 @@ test("routine publication refuses cold bootstrap instead of manufacturing a full
   )
 })
 
-test("missing workstation blot fails before KV reservation or writes", async () => {
+test("canonical publication does not wait for a workstation blot", async () => {
   const db = new FakeDb(["GENA"])
   const kvStore = new Map()
   seedBaseline(kvStore, ["GENA"])
@@ -289,13 +289,12 @@ test("missing workstation blot fails before KV reservation or writes", async () 
     },
   }
 
-  await assert.rejects(
-    () => publishIconoplasmGalleryDirtyShardsForTest(env),
-    (error) => error?.code === "GENE_BLOT_NOT_READY",
-  )
+  const result = await publishIconoplasmGalleryDirtyShardsForTest(env)
 
-  assert.equal(reservations, 0)
-  assert.deepEqual(putKeys, [])
+  assert.equal(result.card_catalog.dirty_shard_publication, true)
+  assert.equal(result.card_catalog.publication_more, false)
+  assert.equal(reservations, 1)
+  assert.ok(putKeys.length > 0)
 })
 
 test("one canonical change rewrites one shard and flips on the next publication tick", async () => {

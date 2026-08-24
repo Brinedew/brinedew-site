@@ -60,8 +60,11 @@ The canonical public machine image is the Iconoplasm gene blot, not its source
 portrait. A blot is the exact image-only shared card composition:
 published portrait cover crop, protection gradient, full gene name at bottom
 left, and gene symbol at bottom right. The workstation renders its immutable
-768x1024 WebP from the exact selected published card; Cloudflare never renders
-it. Every complete gene page projects the exact ready blot through a
+768x1024 WebP from the exact selected published card, persists it locally, then
+uploads it to Bunny; Cloudflare never renders it. That card deterministically
+defines the renderer fingerprint and Bunny object key, so materialization does
+not republish the card catalog or spend KV writes. Every complete gene page
+projects the exact ready blot through a
 server-rendered `<img>` with gene-specific alt text inside the initially hidden
 print-copy surface. The blot becomes visible only when the user activates the
 existing `request print copy` control; do not add a visible explanatory caption
@@ -93,7 +96,8 @@ no ready blot simply has no image-sitemap child. Those crawler
 reads must never enroll work, consult votes, scan D1, or launch Browser Rendering.
 Agent image lookup reads that same exact published-card authority. The bounded
 `POST /api/public/v1/images/resolve` contract accepts at most 50 identifiers and
-returns separately typed `gene_blot` and temporary `portrait` fields; it must
+returns a deterministically resolvable `gene_blot` and temporary `portrait`
+fields; it must
 not invent one generic "image" field. `/blot/{SYMBOL}.webp` is the stable
 canonical gene-image identity. `/portrait/{SYMBOL}.webp` is only the stable
 medium portrait alias and must never be promoted to the canonical image. Keep
@@ -259,13 +263,16 @@ before changing gallery publication, its cron route, KV accounting, or mapper
 revision behavior.
 
 **ARCHITECTURE FENCE [IPD-011]** — the exact versioned card artifact selected by
-`KV_GALLERY_VERSION` owns both the published source-portrait selection and the
-canonical public blot reference. Discovery/catalog/D1 rows may decide
+`KV_GALLERY_VERSION` owns the published source-portrait selection and every
+input used to derive the canonical public blot fingerprint and immutable Bunny
+key. Blot-only uploads never republish KV. Discovery/catalog/D1 rows may decide
 membership, ordering, rich detail, candidates, and authoring state; they do not
 decide either public image identity. Ordinary and image-only account cards may
 render their blot composition from the exact card VM, while gene-page metadata,
 structured data, archives, image sitemaps, and public media use the matching
-workstation-materialized blot WebP. Never restore `publishedPortraitRefs(...)`,
+workstation-materialized blot WebP. The stable route derives its object key from
+the exact card and may use only an exact-card legacy blot as migration fallback.
+Never restore `publishedPortraitRefs(...)`,
 discovery-row or raw `icono_publish_state` SHA, a browser-local portrait cache,
 or another parallel snapshot as a public image source. That split caused B-700.
 Read
