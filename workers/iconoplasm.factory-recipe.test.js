@@ -375,6 +375,32 @@ test("factory catalog exposes the Preview 3 sampler lines and recovered RAX2-era
   )
 })
 
+test("resolution-corrected factory lines preserve recipes at 1536x2048", () => {
+  const replacements = new Map([
+    ["H", "A"],
+    ["I", "B"],
+    ["J", "C"],
+    ["K", "D"],
+    ["L", "E"],
+    ["M", "F"],
+    ["N", "G"],
+  ])
+  for (const [correctedCode, originalCode] of replacements) {
+    const corrected = ICONOPLASM_FACTORY_CATALOG.pipelines.find(
+      ({ code }) => code === correctedCode,
+    )
+    const original = ICONOPLASM_FACTORY_CATALOG.pipelines.find(({ code }) => code === originalCode)
+    assert.ok(corrected)
+    assert.ok(original)
+    assert.equal(corrected.width, 1536)
+    assert.equal(corrected.height, 2048)
+    assert.equal(corrected.model, original.model)
+    assert.equal(corrected.steps, original.steps)
+    assert.equal(corrected.cfg, original.cfg)
+    assert.equal(corrected.sampler, original.sampler)
+  }
+})
+
 test("diagnostic matrix schema owns explicit recipes and removes reference-gene snapshots", () => {
   const db = new DatabaseSync(":memory:")
   try {
