@@ -105,7 +105,11 @@ const PRACTICE_RESOLVE_MAX_INPUTS = 10000
 const PRACTICE_RESOLVE_SQL_CHUNK = 100
 
 function addIconoplasmGeneShellHeaders(headers, path, { indexable = false } = {}) {
-  const next = appendIconoplasmServiceDiscoveryLinks(headers)
+  // Clone the upstream response before any mutation. Some cache paths receive
+  // immutable platform Headers objects, and the home-performance contract
+  // deliberately guards this boundary.
+  const next = new Headers(headers)
+  appendIconoplasmServiceDiscoveryLinks(next)
   if (!String(path || "").startsWith("/gene/")) return next
   // ARCHITECTURE FENCE [IPD-003]: response headers, HTML metadata, archive
   // membership, and sitemap membership must use the same published-catalog
