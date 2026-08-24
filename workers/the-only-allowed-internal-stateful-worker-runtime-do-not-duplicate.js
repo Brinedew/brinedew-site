@@ -92,7 +92,9 @@ const ICONOPLASM_GENE_FONT_PRELOAD_LINKS = [
   "</static/iconoplasm/fonts/Caveat-400.woff2>; rel=preload; as=font; type=font/woff2; crossorigin",
 ]
 const ICONOPLASM_HTML_SHELL_EDGE_CACHE_TTL_SECONDS = 300
-const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-08-24-on-demand-gene-blot-v2"
+const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-08-24-image-license-cc0-v1"
+const ICONOPLASM_IMAGE_LICENSE_URL = "https://creativecommons.org/publicdomain/zero/1.0/"
+const ICONOPLASM_IMAGE_USAGE_URL = `https://${ICONOPLASM_HOST}/license`
 const ICONOPLASM_PUBLIC_NO_VARY_SEARCH =
   'params=("utm_source" "utm_medium" "utm_campaign" "utm_content" "utm_term" "fbclid" "gclid" "mc_cid" "mc_eid" "codex_verify")'
 
@@ -378,6 +380,14 @@ function iconoplasmCanonicalGeneBlotFigureHtml(cardPayload) {
   )
 }
 
+function iconoplasmPublishedImageLicenseMarkup() {
+  return (
+    '<p class="icono-image-license">Published gene portrait and blot images: ' +
+    '<a rel="license" href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a>. ' +
+    '<a href="/license">Copy, embed, hotlink, modify, and reuse without permission or attribution.</a></p>'
+  )
+}
+
 function iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion) {
   const shared = globalThis.IconoplasmCardShared
   if (!shared || !cardPayload) return ""
@@ -404,6 +414,7 @@ function iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion) {
     '<section class="icono-gene-lead">' +
     iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) +
     iconoplasmCanonicalGeneBlotFigureHtml(cardPayload) +
+    iconoplasmPublishedImageLicenseMarkup() +
     '<div data-icono-canonical-toolbar-island><section class="icono-canonical-toolbar-shell"><div class="icono-gene-toolbar-rail" data-icono-canonical-rail><div class="icono-gene-edit-panel" aria-hidden="true"></div><section class="icono-gene-request-surface icono-gene-request-panel">' +
     canonicalMeta +
     '<div aria-hidden="true"></div></section></div></section></div>' +
@@ -1103,6 +1114,8 @@ function iconoplasmGeneStructuredData({ gene, geneUrl, title, description, blotU
       width: 768,
       height: 1024,
       representativeOfPage: true,
+      license: ICONOPLASM_IMAGE_LICENSE_URL,
+      usageInfo: ICONOPLASM_IMAGE_USAGE_URL,
     })
   }
   return {

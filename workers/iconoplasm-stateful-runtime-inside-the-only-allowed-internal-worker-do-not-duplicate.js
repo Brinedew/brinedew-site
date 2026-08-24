@@ -116,6 +116,36 @@ import "../shared/iconoplasm-card/shared-card-runtime.js"
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const ICONOPLASM_CANONICAL_ORIGIN = `https://${ICONOPLASM_HOST}`
+const ICONOPLASM_IMAGE_LICENSE_URL = "https://creativecommons.org/publicdomain/zero/1.0/"
+const ICONOPLASM_IMAGE_USAGE_URL = `${ICONOPLASM_CANONICAL_ORIGIN}/license`
+const ICONOPLASM_IMAGE_LICENSE_FIELDS = Object.freeze({
+  rights: "CC0 1.0 Universal",
+  license_url: ICONOPLASM_IMAGE_LICENSE_URL,
+  usage_url: ICONOPLASM_IMAGE_USAGE_URL,
+  embedding_permitted: true,
+  hotlinking_permitted: true,
+  modification_permitted: true,
+  commercial_use_permitted: true,
+  attribution_required: false,
+})
+
+function iconoplasmImageLicenseLinkHeader(alternateUrl = "") {
+  return [
+    alternateUrl ? `<${alternateUrl}>; rel="alternate"` : "",
+    `<${ICONOPLASM_IMAGE_LICENSE_URL}>; rel="license"`,
+    `<${ICONOPLASM_IMAGE_USAGE_URL}>; rel="describedby"`,
+  ]
+    .filter(Boolean)
+    .join(", ")
+}
+
+function iconoplasmImageLicenseResponseHeaders(alternateUrl = "") {
+  return {
+    Link: iconoplasmImageLicenseLinkHeader(alternateUrl),
+    "X-License": "CC0-1.0",
+    "X-Iconoplasm-Usage-Info": ICONOPLASM_IMAGE_USAGE_URL,
+  }
+}
 // One notification can spend three external subrequests (portrait, DM channel,
 // message). Keep a full invocation comfortably below the Free-plan ceiling of
 // 50; the workstation owns repeated slices until every exact request settles.
@@ -12545,8 +12575,7 @@ function publicMediaEnvelope(url, symbol, portrait) {
     ...(width != null ? { width } : {}),
     ...(height != null ? { height } : {}),
     asset,
-    rights: "CC BY-NC-ND 4.0",
-    license_url: "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+    ...ICONOPLASM_IMAGE_LICENSE_FIELDS,
     attribution: "Brinedew / Iconoplasm",
     source: "iconoplasm-portraits",
   }
@@ -12570,8 +12599,7 @@ function publicGeneBlotMediaEnvelope(url, symbol, cardPayload) {
     width: optionalInt(blot.width) || ICONOPLASM_GENE_BLOT_WIDTH,
     height: optionalInt(blot.height) || ICONOPLASM_GENE_BLOT_HEIGHT,
     filename: String(blot.filename || iconoplasmGeneBlotFilename(symbol)),
-    rights: "CC BY-NC-ND 4.0",
-    license_url: "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+    ...ICONOPLASM_IMAGE_LICENSE_FIELDS,
     attribution: "Brinedew / Iconoplasm",
     source: "iconoplasm-gene-blots",
   }
@@ -29275,6 +29303,7 @@ async function handlePublishedImageAssetRoute(
         "Cache-Control": "public, max-age=31536000, immutable",
         ETag: `"${obj.etag || key}"`,
         "Access-Control-Allow-Origin": "*",
+        ...iconoplasmImageLicenseResponseHeaders(),
       },
     })
   })
@@ -29316,6 +29345,7 @@ async function handleSemanticGeneBlot(request, env, symbolValue) {
       headers: {
         ETag: etag,
         "Cache-Control": "public, max-age=300, stale-while-revalidate=86400",
+        ...iconoplasmImageLicenseResponseHeaders(),
       },
     })
   }
@@ -29325,7 +29355,7 @@ async function handleSemanticGeneBlot(request, env, symbolValue) {
       "Cache-Control": "public, max-age=300, stale-while-revalidate=86400",
       ETag: etag,
       "Content-Location": `${ICONOPLASM_CANONICAL_ORIGIN}/${objectKey}`,
-      Link: `<${iconoplasmGeneBlotCdnUrl(env, objectKey)}>; rel="alternate"`,
+      ...iconoplasmImageLicenseResponseHeaders(iconoplasmGeneBlotCdnUrl(env, objectKey)),
       "Access-Control-Allow-Origin": "*",
       "X-Iconoplasm-Blot-Fingerprint": String(blot.blot_fingerprint || ""),
       "X-Iconoplasm-Card-Version": published.version,
@@ -29370,9 +29400,12 @@ async function handleSemanticSourcePortrait(request, env, symbolValue) {
     "X-Iconoplasm-Media-Type": "portrait",
     "X-Iconoplasm-Portrait-Rendition": "medium",
   }
-  if (acceleratorOrigin) {
-    headers.Link = `<${acceleratorOrigin}/${rendition.path}>; rel="alternate"`
-  }
+  Object.assign(
+    headers,
+    iconoplasmImageLicenseResponseHeaders(
+      acceleratorOrigin ? `${acceleratorOrigin}/${rendition.path}` : "",
+    ),
+  )
   return new Response(null, { status: 302, headers })
 }
 

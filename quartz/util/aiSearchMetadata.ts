@@ -20,6 +20,7 @@ type BuildAiSearchJsonLdArgs = {
 }
 
 const CONTENT_TAG_PREFIX = "content/"
+const EXPLICIT_SCHEMA_TYPES = new Set(["WebPage"])
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
@@ -61,7 +62,9 @@ export function getAiSearchPageType(
   const slug = typeof fileData.slug === "string" ? (fileData.slug as FullSlug) : undefined
   const fm = frontmatterRecord({ frontmatter: fileData.frontmatter })
   const tags = Array.isArray(fm.tags) ? fm.tags : []
+  const explicitType = asString(fm.schemaType)
 
+  if (explicitType && EXPLICIT_SCHEMA_TYPES.has(explicitType)) return explicitType
   if (fm.faqpage === true) return "FAQPage"
   if (slug === "index" || slug === "") return "WebSite"
   if (slug?.startsWith("apps/") || tags.includes("content/apps")) return "SoftwareApplication"
