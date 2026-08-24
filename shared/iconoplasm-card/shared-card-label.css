@@ -1389,6 +1389,7 @@
   border: 0;
   background: transparent;
   cursor: pointer;
+  font-weight: 700;
   text-align: left;
 }
 
