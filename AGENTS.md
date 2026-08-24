@@ -61,10 +61,14 @@ portrait artwork. A blot is the exact image-only shared card composition:
 published portrait cover crop, protection gradient, full gene name at bottom
 left, and gene symbol at bottom right. The workstation renders its immutable
 768x1024 WebP from the exact selected published card; Cloudflare never renders
-it. Every complete gene page projects the exact ready blot through a normal
-server-rendered `<img>`, alt and caption text, gene-specific Open Graph and
+it. Every complete gene page projects the exact ready blot through a
+server-rendered `<img>` with gene-specific alt text inside the initially hidden
+print-copy surface. The blot becomes visible only when the user activates the
+existing `request print copy` control; do not add a visible explanatory caption
+or a default-open duplicate image to the gene page. Search discovery remains
+independent of that presentation state through gene-specific Open Graph and
 Twitter metadata, one linked `WebPage`/`ImageObject`/`Gene` JSON-LD graph, and
-its gene-sitemap entry. The stable first-party `/blots/{SYMBOL}.webp` route may
+the gene-sitemap entry. The stable first-party `/blots/{SYMBOL}.webp` route may
 resolve only the immutable blot referenced by the current exact card artifact.
 These discovery reads must not add a D1 scan or any request-time write,
 enrollment, vote lookup, Queue send, repair, or Browser Rendering work. Before
