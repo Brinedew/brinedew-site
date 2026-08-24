@@ -290,7 +290,12 @@ function completeMobileCardVM(symbol, version = "test-vm-version") {
       symbol: normalized,
       full_name: `${normalized} full name`,
       color: "#423D37",
-      portrait: { status: "published" },
+      portrait: {
+        status: "published",
+        hero_url: `https://iconoplasmportraits.b-cdn.net/${normalized}.jpg`,
+        medium_url: `https://iconoplasmportraits.b-cdn.net/${normalized}.jpg`,
+        asset_sha256: "7b".repeat(32),
+      },
     },
   }
 }
@@ -657,6 +662,7 @@ test("image-only account gallery ignores stale discovery and legacy portrait-ref
   )
   for (const card of canonicalArtifact.cards) {
     card.portrait.asset_sha256 = publishedSha
+    card.payload.portrait.asset_sha256 = publishedSha
   }
   await env.KV.put(
     "iconoplasm:card-catalog:test-published-identity",

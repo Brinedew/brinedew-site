@@ -4,7 +4,11 @@ This is the cheat sheet for answering Iconoplasm data questions from the website
 
 If you are new to Iconoplasm, read `docs/ICONOPLASM_ONBOARDING.md` first. This file is for live-data operations, not for explaining the product split from scratch.
 
-The short version: if the question is about what the live site knows right now, query the remote D1 database from `d:\Coding\Website` and write the query against the runtime tables here. Do not guess from frontend state, and do not assume the sibling workstation repo has already pushed what you need.
+The short version: query remote D1 for live authoring, vote, candidate, discovery,
+and rich-detail state. For a public portrait, inspect the exact card artifact
+selected by `KV_GALLERY_VERSION`; D1 can legitimately lead that published
+version. Do not guess from frontend state, and do not assume the sibling
+workstation repo has already pushed what you need.
 
 For canonical portrait voting and public card artifact consistency, read `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md` before touching data. It contains the PRL split-brain incident, the safe repair path, and the forbidden shortcuts.
 
@@ -33,7 +37,7 @@ If you skip `--remote`, you are not looking at the live data.
 - `icono_gene_discoveries`
   - per-user discovery history
 - `icono_publish_state`
-  - which portrait is currently live for a gene
+  - the current D1 authoring/vote leader for a gene; not public portrait authority
 - `icono_portrait_assets`
   - portrait candidates and their asset metadata
 
@@ -131,43 +135,87 @@ There is no universal "next genes the user will see" order across these paths. D
 
 Missing rich card data must not make a catalog gene unreachable. Treat per-gene mobile-card VM data as enrichment, not as proof that the gene exists.
 
-## canonical portrait split-brain runbook
+## public portrait concordance runbook
 
-Use this when a logged-in/gene-detail surface shows one canonical portrait and the logged-out/home/public card endpoint shows another.
+Use this when public surfaces show different portraits, or when D1 names a newer
+leader and you need to distinguish an expected publication window from a stuck
+release.
 
-The source-of-truth relationship is:
+The authority relationship is:
 
-- D1 `icono_publish_state` decides the current portrait.
-- `/api/iconoplasm/cards/:symbol` serves the published full-catalog card artifact from KV, selected through `KV_GALLERY_VERSION`.
+- D1 `icono_publish_state` owns authoring and vote-projection state and may
+  legitimately advance first.
+- The exact card artifact selected through `KV_GALLERY_VERSION` is the sole
+  public portrait authority.
+- `/api/iconoplasm/cards/:symbol`, site-gene detail, the gene-page lead and
+  metadata, public media, signed-in and anonymous galleries, archive ranges,
+  image sitemaps, extension cards, and print-copy inputs must all project that
+  artifact portrait.
 - The shared public edge worker must not add a symbol-only Cache API entry in front of `/api/iconoplasm/cards/:symbol`. Iconoplasm's custom hostname now routes directly to the asset-first stateful worker; shared-host requests can still cross the proxy, which has no KV binding and cannot key by `KV_GALLERY_VERSION`. The stateful worker owns the version-aware card cache in both cases.
 
-The public card endpoint must not fall back to D1 composition. If it did, a popular card route could multiply D1 reads across isolates and colos.
+Site-gene detail still reads bounded D1 rich detail and candidates, but it
+overrides the portrait and candidate `is_current` state with the published-card
+SHA. There is no signed-in or gene-detail fallback. Missing or incomplete exact
+card state fails closed and uncached instead of selecting the D1 leader.
 
 ### diagnose one symbol
 
-Compare the public card endpoint and the site gene endpoint:
+Compare the public card, site-gene-detail, and public-media projections:
 
 ```powershell
 @'
 const symbol = "PRL";
-for (const url of [
-  `https://iconoplasm.brinedew.bio/api/iconoplasm/cards/${symbol}`,
-  `https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/${symbol}`
-]) {
-  const res = await fetch(url, { headers: { accept: "application/json" } });
+const endpoints = [
+  {
+    surface: "card",
+    url: `https://iconoplasm.brinedew.bio/api/iconoplasm/cards/${symbol}`,
+  },
+  {
+    surface: "site-detail",
+    url: `https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/${symbol}`,
+    headers: { referer: `https://iconoplasm.brinedew.bio/gene/${symbol}` },
+  },
+  {
+    surface: "public-media",
+    url: `https://iconoplasm.brinedew.bio/api/public/v1/media/${symbol}`,
+  },
+];
+for (const endpoint of endpoints) {
+  const res = await fetch(endpoint.url, {
+    headers: { accept: "application/json", ...(endpoint.headers || {}) },
+  });
   const payload = await res.json();
-  const portrait = payload?.card?.portrait || payload?.portrait || payload?.gene?.portrait || null;
+  const portrait = payload?.card?.portrait || payload?.portrait || payload?.media || null;
   console.log(JSON.stringify({
-    url,
+    surface: endpoint.surface,
+    url: endpoint.url,
     status: res.status,
     cfCacheStatus: res.headers.get("cf-cache-status"),
-    artifactVersion: payload?.diagnostics?.artifact_version || null,
-    portraitAsset: portrait?.asset_sha256 || null,
+    portraitSource: res.headers.get("x-iconoplasm-portrait-source"),
+    artifactVersion:
+      res.headers.get("x-iconoplasm-card-version") ||
+      payload?.card_snapshot_version ||
+      payload?.diagnostics?.artifact_version ||
+      null,
+    portraitAsset: portrait?.asset_sha256 || portrait?.checksum_sha256 || null,
     candidateImageId: portrait?.candidate_image_id || null
   }, null, 2));
 }
 '@ | node -
 ```
+
+All three public responses must name the same artifact version and portrait SHA.
+An uncached `503` with `X-Iconoplasm-Portrait-Source: artifact-unavailable` is a
+publication failure, not permission to query D1 for substitute public bytes.
+
+Query D1 separately when you need to see whether authoring state is ahead:
+
+```powershell
+pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "SELECT gene_symbol, current_asset_sha256, updated_at FROM icono_publish_state WHERE gene_symbol = 'PRL' LIMIT 1"
+```
+
+A different D1 SHA is expected while its dirty shard awaits publication, as
+long as every public surface remains coherent on the selected card artifact.
 
 Check whether a vote projection job is already queued:
 
@@ -175,9 +223,13 @@ Check whether a vote projection job is already queued:
 pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "SELECT gene_symbol, actor_id, reason, requested_at, last_attempt_at, next_attempt_at, attempts, substr(last_error,1,200) AS last_error FROM icono_vote_projection_refresh_jobs WHERE gene_symbol = 'PRL' LIMIT 1"
 ```
 
-### repair through the admin sync barrier
+### repair genuinely stuck publication through the admin sync barrier
 
 Do not hand-edit `icono_publish_state`, `KV_GALLERY_VERSION`, or card artifact KV keys.
+
+Do not run a repair merely because D1 leads. Repair only when the bounded
+publisher is stuck, the selected artifact is unavailable, or public surfaces do
+not agree on the selected version.
 
 Use the authenticated admin read-model sync for the affected symbol. It updates
 that symbol's read models and asks the normal budget-gated publisher to replace
@@ -244,7 +296,8 @@ Avoid these even if they look faster:
 
 - do not trust the frontend candidate count as the source of truth
 - do not build a symbol-scoped card artifact
-- do not add a D1 fallback to the public card endpoint
+- do not add a D1 fallback to the public card, site-gene-detail, public-media,
+  gene-page, gallery, sitemap, or print-copy path
 - do not purge the entire Cloudflare zone for one stale card URL
 - do not use remote `wrangler dev --test-scheduled` as a repair path for this worker; remote dev does not support the Queue/SQLite Durable Object combination here
 
@@ -254,7 +307,9 @@ Avoid these even if they look faster:
 - If an authenticated homepage shows `0 discovered`, treat that as a bug, not a harmless edge case.
 - If admin classic gallery mode is involved, confirm the page is using the classic gallery route before debugging the shelf API.
 - If names look stale or absent, compare `icono_gene_essence` and `icono_gene_catalog` instead of trusting one blindly.
-- If published portraits look wrong, that is usually `icono_publish_state` plus `icono_portrait_assets`, not `icono_gene_essence`.
+- If public portraits look wrong, inspect `KV_GALLERY_VERSION` and its exact card
+  artifact first. Compare D1 `icono_publish_state` only to determine whether
+  authoring is legitimately ahead or publication is stuck.
 
 ## website ops sync: durable objects telemetry guard
 

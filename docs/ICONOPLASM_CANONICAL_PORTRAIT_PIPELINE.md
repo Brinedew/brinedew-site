@@ -1,17 +1,25 @@
-# Iconoplasm canonical portrait pipeline
+# Iconoplasm published source-portrait pipeline
 
-This is the architecture and operations note for canonical portrait changes, vote auto-promotion, the public card artifact, and the repair path used during the PRL incident on 2026-05-20.
+This is the architecture and operations note for source-portrait selection, vote auto-promotion, the public card artifact, and the repair path used during the PRL incident on 2026-05-20. Historical code and incident notes call the selected source artwork the “canonical portrait”; that is an internal selection term, not the ontology of the finished public image.
 
 If you remember one rule, remember this:
 
-**D1 is the current per-gene canonical source. The public card-catalog artifact is a coarse browse snapshot and must not be treated as the freshness layer for individual gene pages or print-copy requests.**
+**D1 is the authoring and vote-projection source. The exact card artifact selected by `KV_GALLERY_VERSION` is the sole published source-portrait selection. The canonical public machine image is the workstation-rendered gene blot tied to that exact card.**
+
+## Image ontology
+
+- **Portrait artwork** is the generated character image selected by `asset_sha256`. It is source material.
+- **Gene blot** is the exact shared `image-only` card composition: portrait cover crop, protection gradient, full gene name at bottom left, and symbol at bottom right. Its verified 768x1024 WebP is the canonical public/search image.
+- **High-resolution print copy** is the separate requested 1536x2048 PNG workflow. It is not the canonical search image.
+
+Only the Iconoplasm workstation renders canonical blots. Cloudflare accepts authenticated verified WebP uploads, records the one-row-per-gene materialization ledger, publishes the reference in exact card artifacts, and serves bytes. Public GET/HEAD requests never render or enroll blots.
 
 ## Architecture
 
-Iconoplasm has two different live read surfaces that are easy to confuse:
+Iconoplasm has two coordinated read responsibilities that are easy to confuse:
 
-- Rich gene/detail surfaces read current runtime state from D1, especially `icono_publish_state`, `icono_portrait_assets`, and candidate/vote read models.
-- Logged-out/public card surfaces such as `/api/iconoplasm/cards/:symbol` read a versioned, full-catalog card artifact from KV, keyed by the shared gallery/card version barrier.
+- Rich detail and candidate state comes from D1, especially `icono_gene_essence`, `icono_portrait_assets`, and candidate/vote read models.
+- Every published source-portrait selection comes from the versioned card artifact selected by the shared gallery/card version barrier. Every public blot reference must match that same exact card.
 
 That split is intentional. Public card traffic must not rebuild cards from D1 per request, because cold Cloudflare isolates can multiply D1 reads globally. The public card path is:
 
@@ -20,15 +28,15 @@ That split is intentional. Public card traffic must not rebuild cards from D1 pe
 3. `/api/iconoplasm/cards/:symbol` selects the symbol from that artifact.
 4. The public edge proxy stays state-free and does not add a symbol-only Cache API entry in front of that endpoint. It has no KV binding, so it cannot key by `KV_GALLERY_VERSION`; the stateful worker owns the version-aware card cache.
 
-The public artifact is allowed to lag current D1 after vote-driven promotions, but surfaces that are explicitly about one gene must not use that lagging artifact as their final authority. Gene pages, rich candidate panels, and print-copy URLs that carry the displayed `portrait.asset_sha256` resolve against `/api/iconoplasm/site/genes/:symbol` / current D1 canonical state. Browse grids and extension card snapshots continue to use the KV artifact.
+The public artifact is allowed to lag authoring D1 after vote-driven promotions. That lag is an explicit publication boundary, not permission for public surfaces to expose the unpublished SHA. `/api/iconoplasm/site/genes/:symbol` combines live D1 detail/candidates with a portrait override from the exact card artifact; candidate `is_current` flags use that same published SHA. Before dirty-shard publication can advance a changed card, the workstation must upload the matching blot. A successful release moves the published source portrait and public blot together.
 
 Budget note: this is a multi-meter Cloudflare fence, not a D1-only fence. The admin cost cockpit at `/admin#costs` tracks D1, Workers, Durable Objects, KV, Queues, R2, Pages Functions, and Workers observability. The card-catalog publication preflight currently fails closed on `kv_reads`, `kv_writes`, `kv_lists`, `d1_rows_read`, `d1_rows_written`, `queue_operations`, `worker_requests`, `worker_cpu_ms`, `durable_object_requests`, `durable_object_rows_written`, `logs_events`, and `r2_available`. `kv_writes` must cover at least one full catalog artifact publish, not merely the final manifest or gallery-version pointer. Do not fix canonical staleness by bypassing KV, Queue, Worker, Durable Object, R2, or log headroom checks, and do not add a public D1 fallback.
 
 KV publication has a second hard control inside the same stateful-worker choke point: every new card-catalog artifact reserves its estimated KV write cost through the shared budget Durable Object before it writes any KV shards. The default daily reservation ceiling is 900 KV writes, leaving room under Cloudflare's 1000/day free-tier write wall for unrelated settings, manifests, and emergency cleanup. If a future edit adds another path that writes card-catalog KV keys without calling `publishCardCatalogArtifact(...)`, treat it as a production-safety bug.
 
-Frontend gallery caches have the same freshness constraint. Browser storage must not be allowed to skip the manifest/version check before painting gallery cards. IndexedDB can store returned card VMs under the current `snapshot_version`, but `/api/iconoplasm/mobile-card-manifest` must be contacted before the page renders so the browser learns the current `KV_GALLERY_VERSION`. A cache-first optimization here can make one browser keep showing old canonical portraits even after the gene page and backend artifact have moved on.
+Frontend gallery caches have the same freshness constraint. Browser storage must not be allowed to skip the manifest/version check before painting gallery cards. IndexedDB can store returned card VMs under the current `snapshot_version`, but `/api/iconoplasm/mobile-card-manifest` must be contacted before the page renders so the browser learns the current `KV_GALLERY_VERSION`. A cache-first optimization here can make one browser keep showing an old blot composition after the gene page and backend artifact have moved on.
 
-Gene page HTML shells have a separate freshness trap. `/gene/:symbol` must embed its first-paint lead card from the canonical detail endpoint, not from `/api/iconoplasm/cards/:symbol`. The per-symbol HTML shell cache key must include the current canonical detail asset, so a symbol-only 300-second HTML cache cannot freeze the old lead card while the hydrated candidate list has already moved. The client must also prefer rich `/api/iconoplasm/site/genes/:symbol` detail before falling back to the public card artifact, and print-copy generation must honor a displayed asset hash only if current gene detail confirms that hash is canonical.
+Gene page HTML shells have a separate freshness trap. `/gene/:symbol` embeds its first-paint lead card from `/api/iconoplasm/site/genes/:symbol`; that response is complete rich detail whose portrait is already overridden from the exact published card. Its ETag covers the card version and complete payload, so a symbol-only HTML cache cannot cross either a release or a rich-detail change. Print-copy generation must accept only the portrait from that same published card artifact. An `asset=` parameter is an assertion against that artifact, not an override: malformed values fail with `400`, and a valid SHA that differs from the artifact portrait fails with `409`. Never restore a `geneRecord(...)`, site-gene-detail, or other D1 fallback for print-copy enrollment, status, rendering, or download.
 
 ## Vote Auto-Promotion Flow
 
@@ -44,7 +52,7 @@ Normal public voting goes through this path:
 8. `refreshProjectedVoteReadModelsFromCoordinatorState(...)` rebuilds symbol/vision read models.
 9. The projection job is cleared after the D1 canonical/read-model work succeeds. It must not publish the full public card-catalog artifact per vote.
 
-The critical invariant is now authority separation. Step 7 changes the current per-gene canonical state, so one-gene surfaces must read D1-backed detail and converge immediately. The full public card artifact should move only through explicit publication/sync work, because publishing it for every vote can burn the daily KV write budget. Do not run canonical promotion from request `waitUntil`; that path can still be interrupted before read models settle.
+The critical invariant is authority separation. Step 7 changes authoring state, but the published source portrait and its public blot advance only through explicit card-artifact publication after the workstation has materialized the exact new blot; publishing for every vote can burn the daily KV write budget. Gene detail may expose fresh candidate/vote state immediately while retaining the previously published source portrait and blot until the dirty-shard release flips `KV_GALLERY_VERSION`. Do not poll site detail waiting for an unpublished SHA, and do not run canonical promotion from request `waitUntil`.
 
 ## Automatic Canonical Tie-Breaker
 
@@ -158,9 +166,9 @@ pnpm exec node scripts/cleanup-iconoplasm-stale-card-catalog-kv.mjs --max-delete
 
 Do not run repeated delete batches on the free plan without checking the current day's KV delete usage. Deletes share the same 1000/day free-tier bucket as writes and lists.
 
-## Safe Repair Procedure
+## Publication Diagnosis and Safe Repair
 
-Use this when one gene's D1 canonical and public card artifact disagree.
+Use this when one gene's D1 authoring SHA and public card artifact disagree longer than the expected publication window, or when the publication watermark claims the D1 event is already included. A short-lived difference before the next release is expected.
 
 ### 1. Confirm the split with narrow reads
 
@@ -308,13 +316,13 @@ Do not repair this class of bug by:
 
 ## Why The Old Candidate Looked Duplicated
 
-When D1 had new canonical B but the public lead card still came from old artifact A:
+The removed mixed-authority implementation could combine artifact A with D1 canonical B:
 
 - the page lead/public card showed A
-- the candidate list from rich D1 data correctly included A as a non-current candidate
-- B could be hidden from candidate thumbnails because it was current in D1
+- the candidate list marked B current from D1 and treated displayed A as non-current
+- B could disappear from candidate thumbnails while displayed A appeared duplicated
 
-That makes the user see "old canonical duplicated as a candidate" and "the candidate I voted on disappeared." The real failure is not candidate deletion. It is D1/artifact split-brain.
+The current site-detail projection passes artifact A as the canonical override when it builds candidates. A stays current until publication; D1-only B remains visible as a candidate. The real failure was mixed authority, not candidate deletion.
 
 ## 2026-08-02 B-700 Signed-In Account Gallery Split
 

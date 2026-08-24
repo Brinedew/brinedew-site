@@ -2,6 +2,10 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { readFileSync } from "node:fs"
 import { matchIconoplasmRouteContract } from "./iconoplasm-route-contract.js"
+import {
+  iconoplasmGeneBlotFingerprint,
+  iconoplasmGeneBlotObjectKey,
+} from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
@@ -95,6 +99,7 @@ class FakeStatement {
           const catalog = this.db.catalog.get(symbol) || {}
           const essence = this.db.essence.get(symbol) || {}
           const portrait = this.db.published.get(symbol) || {}
+          const blot = this.db.blots.get(symbol) || {}
           return {
             gene_symbol: symbol,
             catalog_full_name: catalog.full_name,
@@ -108,6 +113,12 @@ class FakeStatement {
             vision_id: portrait.vision_id,
             candidate_image_id: portrait.candidate_image_id,
             emulsion_id: portrait.emulsion_id,
+            gene_blot_fingerprint: blot.blot_fingerprint,
+            gene_blot_portrait_asset_sha256: blot.portrait_asset_sha256,
+            gene_blot_asset_sha256: blot.blot_asset_sha256,
+            gene_blot_object_key: blot.object_key,
+            gene_blot_width: blot.width,
+            gene_blot_height: blot.height,
           }
         }),
       }
@@ -305,6 +316,33 @@ class FakeIconoplasmDb {
         },
       ],
     ])
+    this.blots = new Map()
+    for (const symbol of this.catalog.keys()) this.materializeBlot(symbol)
+  }
+
+  materializeBlot(symbolValue) {
+    const symbol = String(symbolValue || "")
+      .trim()
+      .toUpperCase()
+    const catalog = this.catalog.get(symbol)
+    const portrait = this.published.get(symbol)
+    if (!catalog || !portrait?.asset_sha256) {
+      this.blots.delete(symbol)
+      return
+    }
+    const blotFingerprint = iconoplasmGeneBlotFingerprint({
+      symbol,
+      full_name: catalog.full_name,
+      portrait: { status: "published", asset_sha256: portrait.asset_sha256 },
+    })
+    this.blots.set(symbol, {
+      blot_fingerprint: blotFingerprint,
+      portrait_asset_sha256: portrait.asset_sha256,
+      blot_asset_sha256: "ef".repeat(32),
+      object_key: iconoplasmGeneBlotObjectKey(symbol, blotFingerprint),
+      width: 768,
+      height: 1024,
+    })
   }
 
   prepare(sql) {
@@ -568,6 +606,8 @@ function completeMobileCardVM(
 ) {
   const normalized = String(symbol || "ERBB2").toUpperCase()
   const fullName = normalized === "INS" ? "insulin" : "erb-b2 receptor tyrosine kinase 2"
+  const portraitUrl = `https://iconoplasmportraits.b-cdn.net/${normalized}.jpg`
+  const portraitAssetSha = normalized === "INS" ? "9c".repeat(32) : "7b".repeat(32)
   return {
     __complete: true,
     schema_version: "iconoplasm.mobileCard.v1",
@@ -578,12 +618,12 @@ function completeMobileCardVM(
     display_color: normalized === "INS" ? "#B0304A" : "#423D37",
     portrait: {
       status: "published",
-      url: `https://iconoplasmportraits.b-cdn.net/${normalized}.jpg`,
-      full_url: `https://iconoplasmportraits.b-cdn.net/${normalized}.jpg`,
-      thumb_url: `https://iconoplasmportraits.b-cdn.net/${normalized}.jpg`,
+      url: portraitUrl,
+      full_url: portraitUrl,
+      thumb_url: portraitUrl,
       width: 768,
       height: 1024,
-      asset_sha256: normalized === "INS" ? "9c".repeat(32) : "7b".repeat(32),
+      asset_sha256: portraitAssetSha,
       candidate_image_id: normalized === "INS" ? 4352 : 5423,
       vision_id: "artist-random-v1",
       emulsion_id: normalized === "INS" ? "A1-4352" : "A1-5423",
@@ -603,7 +643,15 @@ function completeMobileCardVM(
       symbol: normalized,
       full_name: fullName,
       color: normalized === "INS" ? "#B0304A" : "#423D37",
-      portrait: { status: "published" },
+      portrait: {
+        status: "published",
+        hero_url: portraitUrl,
+        medium_url: portraitUrl,
+        thumb_url: portraitUrl,
+        width: 768,
+        height: 1024,
+        asset_sha256: portraitAssetSha,
+      },
       molecular_weight_kda: normalized === "INS" ? 12 : 137.9,
       first_publication_year: normalized === "INS" ? 1959 : 1985,
       primary_tissue: normalized === "INS" ? "tissue-specific" : "ubiquitous",
@@ -654,6 +702,7 @@ test("dirty-shard publication reserves the shared KV write budget before publish
   const db = new FakeIconoplasmDb()
   db.changedSymbols = ["ERBB2"]
   db.published.set("ERBB2", { ...db.published.get("ERBB2"), asset_sha256: "ad".repeat(32) })
+  db.materializeBlot("ERBB2")
   const env = buildEnv({
     kvStore,
     db,
@@ -705,33 +754,65 @@ test("dirty-shard publication fails closed before KV puts when the shared write 
   assert.equal(putKeys.length, 0)
 })
 
-test("print-copy HEAD is read-only and cannot render an unrequested card", async () => {
+test("print-copy accepts only the exact published artifact portrait and never falls back to D1", async () => {
   const db = new FakeIconoplasmDb()
-  const currentAssetSha = "8d".repeat(32)
+  const d1OnlyAssetSha = "8d".repeat(32)
+  const artifactAssetSha = "7b".repeat(32)
   db.published.set("ERBB2", {
     ...db.published.get("ERBB2"),
-    asset_sha256: currentAssetSha,
+    asset_sha256: d1OnlyAssetSha,
   })
+  let d1PrepareCalls = 0
+  const prepare = db.prepare.bind(db)
+  db.prepare = (sql) => {
+    d1PrepareCalls += 1
+    return prepare(sql)
+  }
   const env = buildEnv({
     db,
     version: "old-card-artifact",
     cardArtifact: completeCardCatalogArtifact(["ERBB2"], "old-card-artifact"),
   })
 
-  const response =
+  const mismatchResponse =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
-        `https://iconoplasm.brinedew.bio/api/iconoplasm/print-copy/ERBB2.png?asset=${currentAssetSha}`,
-        {
-          method: "HEAD",
-        },
+        `https://iconoplasm.brinedew.bio/api/iconoplasm/print-copy/ERBB2.png?asset=${d1OnlyAssetSha}`,
       ),
       env,
     )
+  const mismatchPayload = await mismatchResponse.json()
 
-  assert.equal(response.status, 404)
-  assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(response.headers.get("X-Iconoplasm-Print-Copy-Renderer"), null)
+  assert.equal(mismatchResponse.status, 409)
+  assert.equal(mismatchResponse.headers.get("Cache-Control"), "no-store")
+  assert.equal(mismatchPayload.code, "PRINT_COPY_ASSET_MISMATCH")
+  assert.equal(mismatchPayload.requested_asset_sha256, d1OnlyAssetSha)
+  assert.equal(mismatchPayload.published_asset_sha256, artifactAssetSha)
+  assert.equal(mismatchPayload.snapshot_version, "old-card-artifact")
+  assert.equal(d1PrepareCalls, 0, "a mismatched asset must not trigger the removed D1 fallback")
+
+  const invalidResponse =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/print-copy/ERBB2.png?asset=not-a-sha",
+      ),
+      env,
+    )
+  assert.equal(invalidResponse.status, 400)
+  assert.equal((await invalidResponse.json()).code, "INVALID_PRINT_COPY_ASSET")
+  assert.equal(d1PrepareCalls, 0)
+
+  const exactArtifactResponse =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        `https://iconoplasm.brinedew.bio/api/iconoplasm/print-copy/ERBB2.png?asset=${artifactAssetSha}`,
+        { method: "HEAD" },
+      ),
+      env,
+    )
+  assert.equal(exactArtifactResponse.status, 404)
+  assert.equal(exactArtifactResponse.headers.get("Cache-Control"), "no-store")
+  assert.equal(exactArtifactResponse.headers.get("X-Iconoplasm-Print-Copy-Renderer"), null)
 })
 
 test("mobile card manifest returns complete VMs from the published card catalog artifact", async () => {
