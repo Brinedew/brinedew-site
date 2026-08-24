@@ -484,7 +484,7 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   assert.match(llmsText, /^# Iconoplasm/m)
   assert.match(llmsText, /https:\/\/iconoplasm\.brinedew\.bio\/privacy/)
   assert.match(llmsText, /\/gene\/\{HGNC_SYMBOL\}/)
-  assert.match(llmsText, /PFAM clan → character aesthetic/)
+  assert.match(llmsText, /PFAM clan → character fashion aesthetic/)
 })
 
 test("gene archive stays text-only while sitemap uses the exact card blot when portrait metadata drifts", async () => {
@@ -812,6 +812,7 @@ test("complete gene metadata is indexable while incomplete records retain noinde
   assert.equal(gene.image["@id"], image["@id"])
   assert.equal(gene.identifier.propertyID, "HGNC approved symbol")
   assert.equal(gene.identifier.value, "TP53")
+  assert.equal(gene.isPartOf["@id"], "https://iconoplasm.brinedew.bio/genes#dataset")
   assert.equal(image.contentUrl, blotUrl)
   assert.match(image.caption, /full gene name and symbol printed over the character portrait/)
   assert.equal(image.representativeOfPage, true)
@@ -886,9 +887,10 @@ test("complete gene metadata is indexable while incomplete records retain noinde
   )
   assert.ok(pendingStructuredDataMatch)
   const pendingGraph = JSON.parse(pendingStructuredDataMatch[1])["@graph"]
-  assert.equal(pendingGraph.length, 2)
-  assert.equal(pendingGraph[0]["@type"], "WebPage")
-  assert.equal(pendingGraph[1]["@type"], "Gene")
+  assert.deepEqual(
+    pendingGraph.map((entry) => entry["@type"]),
+    ["WebPage", "Gene"],
+  )
   assert.equal(
     iconoplasmGeneDocumentProjectionIsIndexable({
       record: publishedGene("TP53", "tumor protein p53"),

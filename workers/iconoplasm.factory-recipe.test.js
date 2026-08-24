@@ -375,6 +375,12 @@ test("factory catalog exposes the Preview 3 sampler lines and recovered RAX2-era
   )
 })
 
+test("every factory label exposes its output resolution", () => {
+  for (const pipeline of ICONOPLASM_FACTORY_CATALOG.pipelines) {
+    assert.match(pipeline.label, new RegExp(`${pipeline.width}×${pipeline.height}$`))
+  }
+})
+
 test("resolution-corrected factory lines preserve recipes at 1536x2048", () => {
   const replacements = new Map([
     ["H", "A"],

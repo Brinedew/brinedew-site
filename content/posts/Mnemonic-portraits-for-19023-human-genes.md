@@ -8,7 +8,7 @@ draft: false
 
 # Mnemonic portraits for 19,023 human genes
 
-I call this visual gene-humanization database **Iconoplasm**: “humanization” here means turning genes into mnemonic characters, not replacing animal genes with human orthologs. Its labelled character images are called **blots**.
+I call this visual mnemonic catalog **Iconoplasm**. Its labelled character images are called **blots**: cartoon gene characters and anthropomorphized gene symbols that can also be reused in pathway character diagrams.
 
 Back in 2013, Scott Alexander wrote in [Extreme mnemonics](https://slatestarcodex.com/2013/08/14/extreme-mnemonics/):
 

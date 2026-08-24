@@ -149,7 +149,16 @@ test("raw archive HTML links every range and puts TP53 on TO–TR", () => {
   assert.match(rangeHtml, /href="\/gene\/TP53"/)
   assert.match(rangeHtml, /TP53/)
   assert.match(rangeHtml, /tumor protein p53/)
-  assert.doesNotMatch(rootHtml, /<script\b/i)
+  const structuredDataMatch = rootHtml.match(
+    /<script type="application\/ld\+json">([\s\S]*?)<\/script>/,
+  )
+  assert.ok(structuredDataMatch)
+  const structuredData = JSON.parse(structuredDataMatch[1])
+  const graphTypes = new Set(structuredData["@graph"].map((entry) => entry["@type"]))
+  assert.deepEqual(graphTypes, new Set(["DataCatalog", "Dataset"]))
+  const dataset = structuredData["@graph"].find((entry) => entry["@type"] === "Dataset")
+  assert.equal(dataset.distribution.encodingFormat, "application/x-ndjson")
+  assert.match(dataset.distribution.contentUrl, /catalog\.fixturehash\.jsonl$/)
   assert.doesNotMatch(rangeHtml, /gene-card-thumb-delivery\.js/)
 })
 
@@ -223,12 +232,12 @@ test("ready canonical blots stay out of range HTML and remain in the matching im
 test("llms.txt documents discovery and every card mapping", () => {
   const text = buildIconoplasmLlmsTxt({ catalogHash: "fixturehash" })
 
-  assert.match(text, /Iconoplasm is the gene humanization database/)
-  assert.match(text, /visual personification for mnemonic learning, not genetic humanization/)
-  assert.match(
-    text,
-    /they mean Iconoplasm and should receive labelled blots, not unlabelled portraits/,
-  )
+  assert.match(text, /cartoon gene characters/)
+  assert.match(text, /anthropomorphized gene symbols/)
+  assert.match(text, /pathway character diagrams/)
+  assert.match(text, /gene mnemonic art/)
+  assert.match(text, /gene humanization database/)
+  assert.doesNotMatch(text, /genetic humanization of animal models/)
   assert.match(text, /resolve all pathway gene symbols in one POST/)
 
   assert.match(text, /\/gene\/\{HGNC_SYMBOL\}/)
@@ -236,14 +245,14 @@ test("llms.txt documents discovery and every card mapping", () => {
   assert.match(text, /Every complete gene stays in the archive and gene sitemap/)
   assert.match(text, /Gene\/ImageObject\/WebPage structured data/)
   assert.match(text, /\/genes/)
-  assert.match(text, /First gene-symbol letter → color hue/)
-  assert.match(text, /HPA tissue-specificity tau → character color vibrance/)
-  assert.match(text, /gnomAD LOEUF constraint → character color shade/)
-  assert.match(text, /Gene-family grouping → character family and family trait/)
-  assert.match(text, /Soluble or transmembrane molecular category → character sex/)
-  assert.match(text, /First-publication year → character age/)
-  assert.match(text, /Molecular mass in kDa → character mass in kg/)
-  assert.match(text, /PFAM clan → character aesthetic/)
-  assert.match(text, /Oncogene or tumor-suppressor molecular alignment → character alignment/)
+  assert.match(text, /Soluble protein → female character; transmembrane protein → male character/)
+  assert.match(text, /mass maps 1:1 from kDa to character kg/)
+  assert.match(text, /age in years = 2020 minus the gene's first-publication year/)
+  assert.match(text, /tau runs from 0 \(ubiquitous expression, gray\) to 1/)
+  assert.match(text, /Higher tau means more color saturation/)
+  assert.match(text, /LOEUF runs approximately from 0 \(mutation-intolerant, black\/dark\) to 2/)
+  assert.match(text, /Higher LOEUF means greater lightness/)
+  assert.match(text, /skin_hex is the authoritative combined HPLuv color/)
+  assert.match(text, /Oncogene or tumor-suppressor classification → character alignment/)
   assert.match(text, /catalog\.fixturehash\.jsonl/)
 })
