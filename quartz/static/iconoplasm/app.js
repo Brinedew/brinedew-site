@@ -646,6 +646,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var blot = publishedGeneBlot(genePayload)
     var symbol = normalizedSymbol(genePayload && genePayload.symbol)
     if (!blot || !symbol) return ""
+    // Always reveal the stable semantic route. Published cards are immutable,
+    // so their canonical_url may still name an older blot renderer even after
+    // the current renderer has been materialized for this exact card.
+    var blotUrl = String(blot.semantic_url || "").trim()
     var fullName = String(
       (genePayload && (genePayload.full_name || genePayload.name)) || symbol,
     ).trim()
@@ -653,9 +657,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return (
       '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot hidden>' +
       '<img class="icono-canonical-gene-blot-image" src="' +
-      esc(blot.canonical_url) +
+      esc(blotUrl) +
       '" data-iconoplasm-canonical-image-src="' +
-      esc(blot.canonical_url) +
+      esc(blotUrl) +
       '" width="' +
       esc(String(blot.width || 768)) +
       '" height="' +

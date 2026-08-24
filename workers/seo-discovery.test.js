@@ -641,7 +641,7 @@ test("gene document GET and HEAD use the same exact card blot as the sitemap", a
   assert.doesNotMatch(pageHtml, /<figcaption>/)
   assert.match(
     pageHtml,
-    /class="icono-canonical-gene-blot-image" src="https:\/\/iconoplasm\.brinedew\.bio\/blots\/v1\/T\/TP53\//,
+    /class="icono-canonical-gene-blot-image" src="https:\/\/iconoplasm\.brinedew\.bio\/blot\/TP53\.webp"/,
   )
   assert.doesNotMatch(
     pageHtml,
