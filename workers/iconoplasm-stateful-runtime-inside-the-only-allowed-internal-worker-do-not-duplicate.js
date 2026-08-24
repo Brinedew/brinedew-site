@@ -25900,7 +25900,7 @@ export async function pagePublishedCardCatalogArtifact(
 ) {
   const version = String(artifactVersion || "").trim()
   const cursor = normalizeSymbol(after)
-  const pageLimit = Math.max(1, Math.min(100, Number(limit) || 25))
+  const pageLimit = Math.max(1, Math.min(250, Number(limit) || 25))
   const manifest = await readPublishedCardCatalogManifest(env, version)
   if (!manifest) return null
   const totalCount = Array.isArray(manifest.shards)
@@ -25961,7 +25961,7 @@ export async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
     String(payload?.limit || url.searchParams.get("limit") || "25"),
     10,
   )
-  const limit = Math.max(1, Math.min(100, Number.isFinite(requestedLimit) ? requestedLimit : 25))
+  const limit = Math.max(1, Math.min(250, Number.isFinite(requestedLimit) ? requestedLimit : 25))
   if (scope === "candidate") {
     const requestedSymbols = normalizeRequestedSymbols(
       Array.isArray(payload?.symbols) ? payload.symbols : [],

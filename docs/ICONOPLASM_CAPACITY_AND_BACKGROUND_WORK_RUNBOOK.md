@@ -449,14 +449,18 @@ one release pointer, and one watermark; content-addressing avoids even the shard
 write when bytes are unchanged.
 
 The workstation blot owner does not turn this publisher into a poll-driven
-rebuild. Once per idle Drain minute it asks for at most 100 post-watermark
-priority symbols and renders at most 25 missing blots. The read is indexed by
-the existing event watermark and excludes blot/card materialization events, so
-the corpus backfill cannot repeatedly trigger the priority lane. Backfill scans
-ten published cards per quiet slice, checkpoints its exact artifact cursor and
-renderer revision, persists each WebP locally, and uploads it to the
-deterministically derived Bunny key. It performs zero KV writes and never
-republishes a card solely to record blot readiness. No reader request,
+rebuild. Each Drain slice asks for at most 100 post-watermark priority symbols
+and renders at most 25 missing blots. The read is indexed by the existing event
+watermark and excludes blot/card materialization events. An unchanged failed
+priority fingerprint receives a bounded local cooldown; a new canonical vote
+changes the fingerprint and bypasses that cooldown immediately. Backfill scans
+at most 250 published cards per slice, checkpoints its exact artifact cursor
+and renderer revision, persists each WebP locally, and uploads it to the
+deterministically derived Bunny key with four concurrent immutable uploads. A
+measured 100-card response was 216,437 bytes, so the 250-card ceiling is roughly
+541 KB while reducing backlog requests by 60 percent versus 100-card slices.
+The daily 5,000-gene ceiling remains unchanged. It performs zero KV writes and
+never republishes a card solely to record blot readiness. No reader request,
 full-catalog scan, or Cloudflare render participates.
 
 Only a real canonical card change consumes the bounded dirty-shard KV budget.
