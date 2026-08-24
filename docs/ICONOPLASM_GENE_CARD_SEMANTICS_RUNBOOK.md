@@ -184,6 +184,14 @@ cache validator advances with either publication surface. The static blot
 discovery contract version is also part of the validator, so a blot renderer
 release itself is truthfully visible even when catalog data did not change.
 
+Corpus uploads intentionally do not republish KV card shards. After the exact
+published cards are loaded, a sitemap range may therefore batch-read only the
+matching symbol rows from `icono_gene_blot_materializations` in D1. Each row is
+accepted only when its portrait SHA, renderer fingerprint, dimensions, and
+immutable object key all match the selected card. This is a bounded readiness
+projection, not a D1 scan or an image-selection authority; missing or stale rows
+simply omit that gene's optional image child.
+
 The crawl frontier exists for search indexing and user-directed retrieval, not
 for unbounded model-training ingestion. On 2026-07-24, GPTBot and ClaudeBot
 generated more than 81,000 requests before 08:00 UTC by walking the new

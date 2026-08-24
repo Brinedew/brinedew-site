@@ -234,6 +234,7 @@ export async function handleIconoplasmGeneDiscoveryDocument(request, env, path) 
     const projection = await readIconoplasmPublishedGeneDiscoveryProjections(
       env,
       genes.map((gene) => gene.symbol),
+      { includeBlotReadiness: true },
     )
     if (!iconoplasmGeneDiscoveryProjectionIsUsable(genes, projection)) {
       return iconoplasmGeneSitemapUnavailableResponse(request.method)

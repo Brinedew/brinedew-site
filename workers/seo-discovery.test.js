@@ -14,6 +14,10 @@ import {
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { iconoplasmPublicationAliasManifest } from "./iconoplasm-publication-aliases.js"
 import { iconoplasmRecognitionPairKvKey } from "./iconoplasm-recognition-policy-reconciliation.js"
+import {
+  iconoplasmGeneBlotFingerprint,
+  iconoplasmGeneBlotObjectKey,
+} from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 
 const originalFetch = globalThis.fetch
 const originalCaches = globalThis.caches
@@ -118,6 +122,9 @@ function buildGenePageD1(genes) {
           throw new Error(`Unexpected gene-page D1 first query: ${text}`)
         },
         async all() {
+          if (text.includes("FROM icono_gene_blot_materializations")) {
+            return { results: [] }
+          }
           if (text.includes("FROM icono_portrait_assets pa")) return { results: [] }
           throw new Error(`Unexpected gene-page D1 all query: ${text}`)
         },
@@ -135,6 +142,7 @@ async function buildPublishedCatalogEnv(
     cardBlotSemanticUrlBySymbol = {},
     omitCardSymbols = [],
     omitBlotSymbols = [],
+    materializedBlotRowsBySymbol = {},
     withGenePageD1 = false,
   } = {},
 ) {
@@ -294,7 +302,25 @@ async function buildPublishedCatalogEnv(
       ? buildGenePageD1(genes)
       : {
           prepare(sql) {
-            throw new Error(`Discovery documents must not query D1: ${sql}`)
+            const text = String(sql || "")
+            if (!text.includes("FROM icono_gene_blot_materializations")) {
+              throw new Error(`Discovery documents may query only exact blot rows: ${sql}`)
+            }
+            return {
+              args: [],
+              bind(...args) {
+                this.args = args
+                return this
+              },
+              async all() {
+                return {
+                  results: this.args.flatMap((symbol) => {
+                    const row = materializedBlotRowsBySymbol[String(symbol || "").toUpperCase()]
+                    return row ? [{ gene_symbol: symbol, ...row }] : []
+                  }),
+                }
+              },
+            }
           },
         },
     DB: null,
@@ -540,6 +566,72 @@ test("published genes remain discoverable when their exact card has no ready blo
   assert.doesNotMatch(rangeHtml, /<img class="gene-card-thumb"/)
   assert.doesNotMatch(sitemapXml, /<image:image>/)
   assert.doesNotMatch(sitemapXml, /\/portraits\/v1\/bb\//)
+})
+
+test("zero-KV exact blot rows enter the gene sitemap without republishing card shards", async () => {
+  const portraitSha = "b".repeat(64)
+  const cardPayload = {
+    symbol: "TP53",
+    full_name: "tumor protein p53",
+    portrait: { status: "published", asset_sha256: portraitSha },
+  }
+  const blotFingerprint = iconoplasmGeneBlotFingerprint(cardPayload)
+  const objectKey = iconoplasmGeneBlotObjectKey("TP53", blotFingerprint)
+  const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")], {
+    cardPortraitShaBySymbol: { TP53: portraitSha },
+    omitBlotSymbols: ["TP53"],
+    materializedBlotRowsBySymbol: {
+      TP53: {
+        gene_blot_fingerprint: blotFingerprint,
+        gene_blot_portrait_asset_sha256: portraitSha,
+        gene_blot_asset_sha256: "c".repeat(64),
+        gene_blot_object_key: objectKey,
+        gene_blot_width: 768,
+        gene_blot_height: 1024,
+      },
+    },
+  })
+
+  const sitemap = await worker.fetch(
+    new Request("https://iconoplasm.brinedew.bio/sitemaps/genes/TO-TR.xml"),
+    env,
+    {},
+  )
+  const sitemapXml = await sitemap.text()
+
+  assert.equal(sitemap.status, 200)
+  assert.match(
+    sitemapXml,
+    /<image:loc>https:\/\/iconoplasm\.brinedew\.bio\/blot\/TP53\.webp<\/image:loc>/,
+  )
+})
+
+test("a stale zero-KV blot row cannot enter the gene sitemap", async () => {
+  const portraitSha = "b".repeat(64)
+  const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")], {
+    cardPortraitShaBySymbol: { TP53: portraitSha },
+    omitBlotSymbols: ["TP53"],
+    materializedBlotRowsBySymbol: {
+      TP53: {
+        gene_blot_fingerprint: "0".repeat(32),
+        gene_blot_portrait_asset_sha256: portraitSha,
+        gene_blot_asset_sha256: "c".repeat(64),
+        gene_blot_object_key: iconoplasmGeneBlotObjectKey("TP53", "0".repeat(32)),
+        gene_blot_width: 768,
+        gene_blot_height: 1024,
+      },
+    },
+  })
+
+  const sitemap = await worker.fetch(
+    new Request("https://iconoplasm.brinedew.bio/sitemaps/genes/TO-TR.xml"),
+    env,
+    {},
+  )
+  const sitemapXml = await sitemap.text()
+
+  assert.equal(sitemap.status, 200)
+  assert.doesNotMatch(sitemapXml, /<image:image>/)
 })
 
 test("a missing requested card fails the whole range and sitemap shard closed", async () => {
