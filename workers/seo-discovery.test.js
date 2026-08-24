@@ -614,6 +614,14 @@ test("gene document GET and HEAD use the same exact card blot as the sitemap", a
   assert.match(pageHtml, new RegExp(`property="og:image" content="${blotUrl}"`))
   assert.match(pageHtml, new RegExp(`name="twitter:image" content="${blotUrl}"`))
   assert.match(pageHtml, /class="icono-canonical-gene-blot-image"/)
+  assert.match(
+    pageHtml,
+    /class="icono-canonical-gene-blot-image" src="https:\/\/iconoplasm\.brinedew\.bio\/blots\/v1\/T\/TP53\//,
+  )
+  assert.doesNotMatch(
+    pageHtml,
+    /class="icono-canonical-gene-blot-image" src="https:\/\/iconoplasmportraits\.b-cdn\.net\//,
+  )
   assert.match(pageHtml, /alt="TP53 Iconoplasm gene blot — tumor protein p53"/)
   assert.match(pageHtml, new RegExp(`"contentUrl":"${blotUrl}"`))
   assert.match(sitemapXml, new RegExp(`<image:loc>${blotUrl}</image:loc>`))
@@ -1087,5 +1095,8 @@ test("gene lead keeps portrait artwork subordinate and renders the canonical blo
   assert.match(source, /character artwork used inside the Iconoplasm gene blot/)
   assert.match(source, /function canonicalGeneBlotMarkup\(genePayload\)/)
   assert.match(source, /class=\"icono-canonical-gene-blot-image\"/)
+  assert.match(source, /blotImage\.setAttribute\("src", canonicalBlotUrl\)/)
+  assert.match(source, /portraitDelivery\.ensure\(canonicalBlotUrl\)/)
+  assert.match(source, /portraitDelivery\.bind\(blotImage, canonicalBlotUrl\)/)
   assert.match(source, /Iconoplasm gene blot —/)
 })
