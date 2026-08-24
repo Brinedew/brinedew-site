@@ -114,6 +114,7 @@ function buildGenePageD1(genes) {
           if (text.includes("FROM icono_gene_essence")) {
             return gene ? { full_name: gene.n, sex: "Female" } : null
           }
+          if (text.includes("FROM icono_gene_blot_materializations")) return null
           throw new Error(`Unexpected gene-page D1 first query: ${text}`)
         },
         async all() {

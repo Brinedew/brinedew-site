@@ -143,6 +143,14 @@ class FakeStatement {
       return row ? { ...row } : null
     }
 
+    if (this.sql.includes("FROM icono_gene_blot_materializations")) {
+      const symbol = String(this.args[0] || "")
+        .trim()
+        .toUpperCase()
+      const row = this.db.blots.get(symbol)
+      return row ? { ...row } : null
+    }
+
     return null
   }
 
@@ -238,6 +246,7 @@ class FakeIconoplasmDb {
         },
       ],
     ])
+    this.blots = new Map()
   }
 
   prepare(sql) {
@@ -764,6 +773,74 @@ test("site gene payload includes published portrait dimensions for first-party b
   assert.ok(Array.isArray(payload?.portrait_candidates))
   assert.equal("manifestation" in payload, false)
   assert.equal("description" in payload, false)
+})
+
+test("site gene detail exposes an exact ready blot without republishing the card artifact", async () => {
+  const kv = buildPublishedCardReadKv({ version: "test-card-zero-kv-blot" })
+  const shardKey = "iconoplasm:card-catalog-shard:test-card-zero-kv-blot:0"
+  const shard = JSON.parse(await kv.get(shardKey))
+  const cardPayload = shard.cards[0].payload
+  delete cardPayload.blot
+  await kv.put(shardKey, JSON.stringify(shard))
+  const fingerprint = iconoplasmGeneBlotFingerprint(cardPayload)
+  const objectKey = iconoplasmGeneBlotObjectKey("A1BG", fingerprint)
+  const env = buildEnv({ KV: kv })
+  env.gatewayDb.blots.set("A1BG", {
+    gene_blot_fingerprint: fingerprint,
+    gene_blot_portrait_asset_sha256: cardPayload.portrait.asset_sha256,
+    gene_blot_asset_sha256: "b".repeat(64),
+    gene_blot_object_key: objectKey,
+    gene_blot_width: 768,
+    gene_blot_height: 1024,
+  })
+
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+        headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
+      }),
+      env,
+      {},
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.card_snapshot_version, "test-card-zero-kv-blot")
+  assert.equal(payload?.blot?.status, "ready")
+  assert.equal(payload?.blot?.blot_fingerprint, fingerprint)
+  assert.equal(payload?.blot?.portrait_asset_sha256, cardPayload.portrait.asset_sha256)
+  assert.equal(payload?.blot?.object_key, objectKey)
+  assert.equal(payload?.blot?.semantic_url, "https://iconoplasm.brinedew.bio/blot/A1BG.webp")
+})
+
+test("site gene detail rejects a stale blot row as a public image authority", async () => {
+  const kv = buildPublishedCardReadKv({ version: "test-card-stale-d1-blot" })
+  const shardKey = "iconoplasm:card-catalog-shard:test-card-stale-d1-blot:0"
+  const shard = JSON.parse(await kv.get(shardKey))
+  delete shard.cards[0].payload.blot
+  await kv.put(shardKey, JSON.stringify(shard))
+  const env = buildEnv({ KV: kv })
+  env.gatewayDb.blots.set("A1BG", {
+    gene_blot_fingerprint: "0".repeat(32),
+    gene_blot_portrait_asset_sha256: shard.cards[0].payload.portrait.asset_sha256,
+    gene_blot_asset_sha256: "b".repeat(64),
+    gene_blot_object_key: iconoplasmGeneBlotObjectKey("A1BG", "0".repeat(32)),
+    gene_blot_width: 768,
+    gene_blot_height: 1024,
+  })
+
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+        headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
+      }),
+      env,
+      {},
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal("blot" in payload, false)
 })
 
 test("site gene detail is identical for guest, Loweren, and every other account", async () => {

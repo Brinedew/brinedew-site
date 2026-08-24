@@ -25670,7 +25670,16 @@ function cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }) {
     resolved_from: "published_card_catalog_bulk",
     snapshot_version: snapshotVersion,
   }
-  const blotFingerprint = iconoplasmGeneBlotFingerprint(record)
+  const readyBlot = exactReadyGeneBlotProjection(record, row)
+  if (readyBlot) record.blot = readyBlot
+  return record
+}
+
+function exactReadyGeneBlotProjection(cardPayload, row, { env = null, origin = "" } = {}) {
+  const symbol = normalizeSymbol(cardPayload?.symbol || cardPayload?.canonical_symbol || "")
+  const portraitAssetSha = normalizeSha256(cardPayload?.portrait?.asset_sha256 || "")
+  if (!symbol || cardPayload?.portrait?.status !== "published" || !portraitAssetSha) return null
+  const blotFingerprint = iconoplasmGeneBlotFingerprint(cardPayload)
   const readyBlotFingerprint = String(row?.gene_blot_fingerprint || "")
     .trim()
     .toLowerCase()
@@ -25678,28 +25687,46 @@ function cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }) {
   const readyBlotAssetSha = normalizeSha256(row?.gene_blot_asset_sha256 || "")
   const blotObjectKey = String(row?.gene_blot_object_key || "").trim()
   if (
-    readyBlotFingerprint === blotFingerprint &&
-    assetSha &&
-    readyPortraitAssetSha === assetSha &&
-    readyBlotAssetSha &&
-    blotObjectKey === iconoplasmGeneBlotObjectKey(symbol, blotFingerprint)
-  ) {
-    record.blot = {
-      status: "ready",
-      blot_fingerprint: readyBlotFingerprint,
-      portrait_asset_sha256: readyPortraitAssetSha,
-      asset_sha256: readyBlotAssetSha,
-      object_key: blotObjectKey,
-      image_url: iconoplasmGeneBlotCdnUrl(null, blotObjectKey),
-      canonical_url: `${ICONOPLASM_CANONICAL_ORIGIN}/${blotObjectKey}`,
-      semantic_url: `${ICONOPLASM_CANONICAL_ORIGIN}/blot/${encodeURIComponent(symbol)}.webp`,
-      width: optionalInt(row?.gene_blot_width) || ICONOPLASM_GENE_BLOT_WIDTH,
-      height: optionalInt(row?.gene_blot_height) || ICONOPLASM_GENE_BLOT_HEIGHT,
-      filename: iconoplasmGeneBlotFilename(symbol),
-      renderer_revision: ICONOPLASM_GENE_BLOT_RENDERER_REVISION,
-    }
+    readyBlotFingerprint !== blotFingerprint ||
+    readyPortraitAssetSha !== portraitAssetSha ||
+    !readyBlotAssetSha ||
+    blotObjectKey !== iconoplasmGeneBlotObjectKey(symbol, blotFingerprint)
+  )
+    return null
+  const canonicalOrigin = String(origin || ICONOPLASM_CANONICAL_ORIGIN).replace(/\/+$/, "")
+  return {
+    status: "ready",
+    blot_fingerprint: readyBlotFingerprint,
+    portrait_asset_sha256: readyPortraitAssetSha,
+    asset_sha256: readyBlotAssetSha,
+    object_key: blotObjectKey,
+    image_url: iconoplasmGeneBlotCdnUrl(env, blotObjectKey),
+    canonical_url: `${canonicalOrigin}/${blotObjectKey}`,
+    semantic_url: `${canonicalOrigin}/blot/${encodeURIComponent(symbol)}.webp`,
+    width: optionalInt(row?.gene_blot_width) || ICONOPLASM_GENE_BLOT_WIDTH,
+    height: optionalInt(row?.gene_blot_height) || ICONOPLASM_GENE_BLOT_HEIGHT,
+    filename: iconoplasmGeneBlotFilename(symbol),
+    renderer_revision: ICONOPLASM_GENE_BLOT_RENDERER_REVISION,
   }
-  return record
+}
+
+async function exactReadyGeneBlotForPublishedCard(env, symbolValue, cardPayload, origin) {
+  const symbol = normalizeSymbol(symbolValue)
+  if (!symbol || !env?.ICONOPLASM_DB) return null
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT blot_fingerprint AS gene_blot_fingerprint,
+            portrait_asset_sha256 AS gene_blot_portrait_asset_sha256,
+            blot_asset_sha256 AS gene_blot_asset_sha256,
+            object_key AS gene_blot_object_key,
+            width AS gene_blot_width,
+            height AS gene_blot_height
+       FROM icono_gene_blot_materializations
+      WHERE gene_symbol = ?
+      LIMIT 1`,
+  )
+    .bind(symbol)
+    .first()
+  return exactReadyGeneBlotProjection(cardPayload, row, { env, origin })
 }
 
 async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, snapshotVersion }) {
@@ -29066,7 +29093,21 @@ async function handleSiteGeneDetail(request, env, path) {
     }),
     url.searchParams.get("fields"),
   )
-  if (publishedCard.payload?.blot?.status === "ready") {
+  // ARCHITECTURE FENCE [IPD-003]: corpus blot uploads intentionally perform
+  // zero KV writes. The exact published card still chooses the fingerprint and
+  // object key; this one-row D1 read only proves that those exact bytes are
+  // ready. A stale or mismatched row cannot become a second image authority.
+  const readyBlot = await exactReadyGeneBlotForPublishedCard(
+    env,
+    resolved.symbol,
+    publishedCard.payload,
+    url.origin,
+  )
+  if (readyBlot) {
+    payload.blot = readyBlot
+  } else if (publishedCard.payload?.blot?.status === "ready") {
+    // Preserve the exact-card legacy migration fallback. The singular route
+    // performs the same object validation before serving bytes.
     payload.blot = {
       ...publishedCard.payload.blot,
       semantic_url: `${url.origin}/blot/${encodeURIComponent(resolved.symbol)}.webp`,
