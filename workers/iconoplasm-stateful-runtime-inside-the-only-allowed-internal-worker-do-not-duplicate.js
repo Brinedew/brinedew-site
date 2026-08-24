@@ -887,7 +887,7 @@ const KV_SCANNER_CATALOG_PREFIX = "iconoplasm:scanner-catalog:"
 // shared version barrier is the sole published source-portrait authority and
 // owns the matching workstation-rendered blot reference. Mobile manifests and
 // cards use that exact card VM; gene discovery/media project its blot, never the
-// raw portrait artwork, as the canonical public image.
+// raw portrait, as the canonical public image.
 //
 // The PRL incident in May 2026 happened because D1 canonical state advanced
 // before the public artifact visible to logged-out users advanced and different
@@ -12537,7 +12537,6 @@ function publicGeneBlotMediaEnvelope(url, symbol, cardPayload) {
   const assetSha = normalizeSha256(blot?.asset_sha256 || "")
   if (blot?.status !== "ready" || !assetSha || !blot.semantic_url || !blot.canonical_url)
     return null
-  const sourcePortrait = publicMediaEnvelope(url, symbol, cardPayload?.portrait || null)
   return {
     id: assetSha,
     type: "gene_blot",
@@ -12555,7 +12554,6 @@ function publicGeneBlotMediaEnvelope(url, symbol, cardPayload) {
     license_url: "https://creativecommons.org/licenses/by-nc-nd/4.0/",
     attribution: "Brinedew / Iconoplasm",
     source: "iconoplasm-gene-blots",
-    ...(sourcePortrait ? { source_portrait_artwork: sourcePortrait } : {}),
   }
 }
 
@@ -25601,7 +25599,7 @@ function cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }) {
       object_key: blotObjectKey,
       image_url: iconoplasmGeneBlotCdnUrl(null, blotObjectKey),
       canonical_url: `${ICONOPLASM_CANONICAL_ORIGIN}/${blotObjectKey}`,
-      semantic_url: `${ICONOPLASM_CANONICAL_ORIGIN}/blots/${encodeURIComponent(symbol)}.webp`,
+      semantic_url: `${ICONOPLASM_CANONICAL_ORIGIN}/blot/${encodeURIComponent(symbol)}.webp`,
       width: optionalInt(row?.gene_blot_width) || ICONOPLASM_GENE_BLOT_WIDTH,
       height: optionalInt(row?.gene_blot_height) || ICONOPLASM_GENE_BLOT_HEIGHT,
       filename: iconoplasmGeneBlotFilename(symbol),
@@ -25997,7 +25995,7 @@ async function uploadIconoplasmGeneBlot(env, { request, symbol: symbolValue }) {
     object_key: objectKey,
     image_url: iconoplasmGeneBlotCdnUrl(env, objectKey),
     canonical_url: `${ICONOPLASM_CANONICAL_ORIGIN}/${objectKey}`,
-    semantic_url: `${ICONOPLASM_CANONICAL_ORIGIN}/blots/${encodeURIComponent(symbol)}.webp`,
+    semantic_url: `${ICONOPLASM_CANONICAL_ORIGIN}/blot/${encodeURIComponent(symbol)}.webp`,
     width: ICONOPLASM_GENE_BLOT_WIDTH,
     height: ICONOPLASM_GENE_BLOT_HEIGHT,
   }
@@ -28649,18 +28647,20 @@ async function handlePublicImageResolve(request, env) {
         images: null,
       }
     }
-    const portrait = portraitStateFromPublishedCardPayload(payload, portraitBase(url, env))
-    const sourcePortrait = publicMediaEnvelope(url, identity.canonical_symbol, portrait)
     const geneBlot = publicGeneBlotMediaEnvelope(url, identity.canonical_symbol, {
       ...payload,
-      portrait,
+      portrait: portraitStateFromPublishedCardPayload(payload, portraitBase(url, env)),
     })
     return {
       ...identity,
       page_url: `${url.origin}/gene/${encodeURIComponent(identity.canonical_symbol)}`,
       images: {
         gene_blot: geneBlot,
-        source_portrait_artwork: sourcePortrait,
+        portrait: publicMediaEnvelope(
+          url,
+          identity.canonical_symbol,
+          portraitStateFromPublishedCardPayload(payload, portraitBase(url, env)),
+        ),
       },
     }
   })
@@ -29320,7 +29320,7 @@ async function handleSemanticSourcePortrait(request, env, symbolValue) {
     "Access-Control-Allow-Origin": "*",
     "Cross-Origin-Resource-Policy": "cross-origin",
     "X-Iconoplasm-Card-Version": published.version,
-    "X-Iconoplasm-Media-Type": "source_portrait_artwork",
+    "X-Iconoplasm-Media-Type": "portrait",
     "X-Iconoplasm-Portrait-Rendition": "medium",
   }
   if (acceleratorOrigin) {

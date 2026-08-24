@@ -3,7 +3,7 @@ import test from "node:test"
 
 import { installGeneCardThumbnailDelivery } from "./gene-card-thumb-delivery.js"
 
-test("archive thumbnails bind through the shared tab-scoped delivery policy", async () => {
+test("card thumbnails bind through the shared tab-scoped delivery policy", async () => {
   const canonical =
     "https://iconoplasm.brinedew.bio/gene-cards/v1/T/TP53/fingerprint/TP53-iconoplasm-gene-card.png"
   const image = {

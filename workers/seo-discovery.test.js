@@ -64,7 +64,7 @@ function readyBlot(symbol) {
     object_key: `blots/v1/${symbol[0]}/${symbol}/${fingerprint}/${symbol}-iconoplasm-gene-blot.webp`,
     image_url: `https://iconoplasmportraits.b-cdn.net/blots/v1/${symbol[0]}/${symbol}/${fingerprint}/${symbol}-iconoplasm-gene-blot.webp`,
     canonical_url: `https://iconoplasm.brinedew.bio/blots/v1/${symbol[0]}/${symbol}/${fingerprint}/${symbol}-iconoplasm-gene-blot.webp`,
-    semantic_url: `https://iconoplasm.brinedew.bio/blots/${symbol}.webp`,
+    semantic_url: `https://iconoplasm.brinedew.bio/blot/${symbol}.webp`,
     width: 768,
     height: 1024,
   }
@@ -184,7 +184,7 @@ async function buildPublishedCatalogEnv(
               object_key: `blots/v1/${gene.s[0]}/${gene.s}/${blotFingerprint}/${gene.s}-iconoplasm-gene-blot.webp`,
               image_url: `https://iconoplasmportraits.b-cdn.net/blots/v1/${gene.s[0]}/${gene.s}/${blotFingerprint}/${gene.s}-iconoplasm-gene-blot.webp`,
               canonical_url: `https://iconoplasm.brinedew.bio/blots/v1/${gene.s[0]}/${gene.s}/${blotFingerprint}/${gene.s}-iconoplasm-gene-blot.webp`,
-              semantic_url: `https://iconoplasm.brinedew.bio/blots/${gene.s}.webp`,
+              semantic_url: `https://iconoplasm.brinedew.bio/blot/${gene.s}.webp`,
               width: 768,
               height: 1024,
             }
@@ -453,7 +453,7 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   assert.equal(range.status, 200)
   assert.match(range.headers.get("etag") || "", /card-seofixture/)
   assert.match(range.headers.get("x-iconoplasm-card-version") || "", /^card-seofixture/)
-  assert.equal(range.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-24-v3")
+  assert.equal(range.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-24-v4")
   assert.match(rangeHtml, /href="\/gene\/TP53"/)
   assert.doesNotMatch(rangeHtml, /TRIM1/)
 
@@ -465,8 +465,8 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   const shardText = await shard.text()
   assert.equal(shard.status, 200)
   assert.match(shard.headers.get("x-iconoplasm-card-version") || "", /^card-seofixture/)
-  assert.equal(shard.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-24-v3")
-  assert.match(shard.headers.get("etag") || "", /2026-08-24-v3/)
+  assert.equal(shard.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-24-v4")
+  assert.match(shard.headers.get("etag") || "", /2026-08-24-v4/)
   assert.match(shard.headers.get("etag") || "", /TO-TR\.xml/)
   assert.match(shardText, /\/gene\/TP53/)
   assert.match(shardText, /\/blots\/TP53\.webp/)
@@ -609,7 +609,7 @@ test("gene document GET and HEAD use the same exact card blot as the sitemap", a
     head.text(),
     sitemap.text(),
   ])
-  const blotUrl = "https://iconoplasm.brinedew.bio/blots/TP53.webp"
+  const blotUrl = "https://iconoplasm.brinedew.bio/blot/TP53.webp"
 
   assert.equal(page.status, 200)
   assert.equal(head.status, 200)
@@ -777,7 +777,7 @@ test("complete gene metadata is indexable while incomplete records retain noinde
     completeHtml,
     /<link rel="canonical" href="https:\/\/iconoplasm\.brinedew\.bio\/gene\/TP53">/,
   )
-  const blotUrl = "https://iconoplasm.brinedew.bio/blots/TP53.webp"
+  const blotUrl = "https://iconoplasm.brinedew.bio/blot/TP53.webp"
   assert.match(completeHtml, new RegExp(`<meta property="og:image" content="${blotUrl}">`))
   assert.match(completeHtml, /<meta property="og:image:type" content="image\/webp">/)
   assert.match(completeHtml, /<meta property="og:image:width" content="768">/)
@@ -808,7 +808,7 @@ test("complete gene metadata is indexable while incomplete records retain noinde
   assert.equal(gene.identifier.propertyID, "HGNC approved symbol")
   assert.equal(gene.identifier.value, "TP53")
   assert.equal(image.contentUrl, blotUrl)
-  assert.match(image.caption, /full gene name and symbol printed over the character artwork/)
+  assert.match(image.caption, /full gene name and symbol printed over the character portrait/)
   assert.equal(image.representativeOfPage, true)
   assert.equal(image.width, 768)
   assert.equal(image.height, 1024)
@@ -1096,7 +1096,7 @@ test("gene hydration preserves and refreshes the canonical profile title", async
   assert.match(source, /!document\.title\.endsWith\(" \| Iconoplasm character profile"\)/)
 })
 
-test("gene lead keeps portrait artwork subordinate and renders the canonical blot", async () => {
+test("gene lead keeps the portrait subordinate and renders the canonical blot", async () => {
   const [source, styles] = await Promise.all([
     readFile(iconoplasmStaticAppSource, "utf8"),
     readFile(iconoplasmStaticStylesSource, "utf8"),
@@ -1104,7 +1104,7 @@ test("gene lead keeps portrait artwork subordinate and renders the canonical blo
 
   assert.match(source, /function buildGeneLeadCardMarkup\(g\)/)
   assert.match(source, /var portraitUrl = publishedPortraitUrl\(g, "medium"\)/)
-  assert.match(source, /character artwork used inside the Iconoplasm gene blot/)
+  assert.match(source, /character portrait used inside the Iconoplasm gene blot/)
   assert.match(source, /function canonicalGeneBlotMarkup\(genePayload\)/)
   assert.match(source, /class=\"icono-canonical-gene-blot-image\"/)
   assert.match(source, /data-icono-canonical-gene-blot hidden/)

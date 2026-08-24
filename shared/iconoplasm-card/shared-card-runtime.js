@@ -1147,20 +1147,20 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     }
   }
 
-  function genePortraitArtworkAlt(symbol) {
+  function genePortraitAlt(symbol) {
     var resolvedSymbol = normalizedSymbol(symbol)
     return resolvedSymbol
-      ? resolvedSymbol + " character artwork used inside the Iconoplasm gene blot"
-      : "Character artwork used inside an Iconoplasm gene blot"
+      ? resolvedSymbol + " character portrait used inside the Iconoplasm gene blot"
+      : "Character portrait used inside an Iconoplasm gene blot"
   }
 
-  function genePortraitArtworkCaption(symbol, fullName) {
+  function genePortraitCaption(symbol, fullName) {
     var resolvedSymbol = normalizedSymbol(symbol)
     var resolvedName = normalizeHandwrittenText(fullName)
     var identity = resolvedName
       ? resolvedSymbol + " (" + resolvedName + ")"
       : resolvedSymbol || "this human gene"
-    return "Source character artwork used inside the Iconoplasm gene blot for " + identity + "."
+    return "Source portrait used inside the Iconoplasm gene blot for " + identity + "."
   }
 
   function renderLabLabelPortraitMediaHtml(symbol, portraitUrl, portraitFullUrl, dims, options) {
@@ -1216,7 +1216,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '">' +
       "</button>" +
       (captionText
-        ? '<span class="icono-visually-hidden icono-portrait-artwork-caption">' +
+        ? '<span class="icono-visually-hidden icono-portrait-caption">' +
           escapeHtml(captionText) +
           "</span>"
         : "")
@@ -2502,8 +2502,8 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     labLabelEmulsionNumber: labLabelEmulsionNumber,
     labLabelDisplayName: labLabelDisplayName,
     portraitDimensions: portraitDimensions,
-    genePortraitArtworkAlt: genePortraitArtworkAlt,
-    genePortraitArtworkCaption: genePortraitArtworkCaption,
+    genePortraitAlt: genePortraitAlt,
+    genePortraitCaption: genePortraitCaption,
     resolveArchivalCardModel: resolveArchivalCardModel,
     buildLabLabelSemanticCharacterFacts: buildLabLabelSemanticCharacterFacts,
     buildTooltipTraitOriginRows: buildTooltipTraitOriginRows,

@@ -47,9 +47,9 @@ The source portrait is not Iconoplasm's canonical public/search image. That role
 belongs to the matching **gene blot**: the workstation-rendered 768x1024 WebP
 containing the portrait cover crop, protection gradient, full gene name, and
 symbol. Blots live under `blots/v1/<initial>/<SYMBOL>/<fingerprint>/...webp`;
-the stable first-party `/blots/<SYMBOL>.webp` route resolves only the immutable
+the stable first-party `/blot/<SYMBOL>.webp` route resolves only the immutable
 reference in the exact published card. Public media, page metadata, structured
-data, archives, and image sitemaps expose the blot, while raw portrait artwork
+data and image sitemaps expose the blot, while raw portraits
 is explicitly subordinate.
 
 For both portraits and blots, Bunny is the healthy-region accelerator for
@@ -62,10 +62,8 @@ Their fingerprint comes from the exact versioned published card payload and the
 renderer revision, including the selected portrait identity. They never choose
 or reconstruct a portrait independently. Public downloads go through the
 first-party print-copy route and set the same gene-specific filename in
-`Content-Disposition`; ready archive thumbnails use the accelerator on healthy
-tabs and the canonical `/gene-cards/` route after the same tab-scoped delivery
-probe used by portraits. Image sitemaps publish the canonical first-party URL,
-not a storage-provider hostname.
+`Content-Disposition`. Image sitemaps publish the canonical first-party URL,
+not a storage-provider hostname; massive gene-range pages remain text-only.
 The renderer verifies the PNG IHDR is exactly 1536×2048 before upload and the
 ledger publishes those dimensions only after that check; portrait-source
 dimensions must not silently redefine the print artifact size.
