@@ -651,7 +651,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     ).trim()
     var alt = symbol + " Iconoplasm gene blot — " + fullName
     return (
-      '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot>' +
+      '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot hidden>' +
       '<img class="icono-canonical-gene-blot-image" src="' +
       esc(blot.canonical_url) +
       '" data-iconoplasm-canonical-image-src="' +
@@ -660,13 +660,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       esc(String(blot.width || 768)) +
       '" height="' +
       esc(String(blot.height || 1024)) +
-      '" loading="eager" decoding="async" fetchpriority="high" alt="' +
+      '" loading="lazy" decoding="async" fetchpriority="low" alt="' +
       esc(alt) +
-      '"><figcaption>Canonical Iconoplasm gene blot for human ' +
-      esc(symbol) +
-      " (" +
-      esc(fullName) +
-      ").</figcaption></figure>"
+      '"></figure>'
     )
   }
 
@@ -1124,6 +1120,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       String(sourceCard.getAttribute("data-icono-symbol") || "").trim()
     var key = normalizedSymbol(symbol)
     if (!key || printCopyRequestState[key] === "queued") return
+    revealCanonicalGeneBlot(trigger, key)
     setPrintCopyTriggerState(key, "queued")
     void postPrintCopyRequest(key)
       .catch(function (error) {
@@ -1153,6 +1150,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         console.error("[Iconoplasm] print-copy request failed:", error)
         setPrintCopyTriggerState(key, "failed")
       })
+  }
+
+  function revealCanonicalGeneBlot(trigger, symbol) {
+    var key = normalizedSymbol(symbol)
+    if (!key) return
+    var geneContent = trigger && trigger.closest ? trigger.closest("#icono-gene-content") : null
+    var scope = geneContent || document
+    var blot = scope.querySelector("[data-icono-canonical-gene-blot]")
+    if (!blot) return
+    blot.removeAttribute("hidden")
   }
 
   function isCompleteGeneDetailPayload(payload, symbol) {
@@ -9803,6 +9810,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var printCopyTrigger =
       e.target && e.target.closest ? e.target.closest("[data-icono-print-copy]") : null
     if (printCopyTrigger) {
+      revealCanonicalGeneBlot(
+        printCopyTrigger,
+        printCopyTrigger.getAttribute("data-icono-print-copy-symbol"),
+      )
       if (printCopyTrigger.getAttribute("href")) {
         if (e.stopImmediatePropagation) e.stopImmediatePropagation()
         else e.stopPropagation()

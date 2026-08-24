@@ -55,7 +55,11 @@ the selected published portrait as a cover crop, the protection gradient, the
 full gene name at bottom left, and the gene symbol at bottom right. The portrait
 is an ingredient; the labelled blot is the finished public image.
 
-The workstation renders each exact published card to a verified 768x1024 WebP.
+The workstation renders each exact published card on the gallery's canonical
+384x512 CSS artboard and captures it at 2x device density as a verified
+768x1024 WebP. This preserves the gallery's responsive font sizes, inset, text
+wrapping, shadows, and protection-gradient geometry instead of recalculating
+its clamped CSS at a 768px layout width.
 Its visible-material fingerprint includes the renderer revision, normalized
 symbol, full gene name, and selected portrait SHA. The immutable object lives at
 `/blots/v1/<initial>/<SYMBOL>/<fingerprint>/<SYMBOL>-iconoplasm-gene-blot.webp`.
@@ -66,8 +70,10 @@ not a second selection timeline and never consults live D1 portrait state.
 For every complete, indexable gene page, that exact ready blot must be present
 in all of these projections:
 
-- a normal server-rendered `<img>` with gene-specific alt text and a nearby
-  `<figcaption>` that identifies the canonical Iconoplasm gene blot;
+- a server-rendered `<img>` with gene-specific alt text inside the initially
+  hidden print-copy surface; the existing `request print copy` action reveals
+  it, while the default gene-page layout contains neither a visible duplicate
+  blot nor explanatory caption copy;
 - gene-specific `og:image`, `og:image:url`, `og:image:alt`, `twitter:image`,
   and `twitter:image:alt` metadata, alongside gene-specific social title and
   description fields;
@@ -76,7 +82,7 @@ in all of these projections:
   first-party semantic blot URL; and
 - the gene's only image-sitemap entry.
 
-Use the same exact card payload for blot readiness, visible page, metadata, and
+Use the same exact card payload for blot readiness, interactive page, metadata, and
 structured data. JSON-LD must be escaped for an HTML script context and omitted
 for incomplete/noindex pages. Route/catalog records establish identity and
 membership only. If the requested card projection is unavailable or malformed,
@@ -218,6 +224,12 @@ For printed selector alternatives, the inverse rule applies: keep the rendered
 ink visually unchanged but `aria-hidden`, and put the resolved value on the
 noninteractive parent field. Never use selection-state ARIA intended for real
 controls on decorative label stock.
+
+The hidden interactive blot is not the sole crawler signal. Its ordinary
+server-rendered `src` remains in the initial HTML, while the same canonical URL
+is also exposed through Open Graph, Twitter metadata, linked `ImageObject`
+structured data, and the gene image sitemap. Removing redundant visible copy
+therefore does not remove the canonical image from the crawl graph.
 
 Indexability changes are atomic discovery migrations: revise this fence, the
 range contract, canonical blot sitemap

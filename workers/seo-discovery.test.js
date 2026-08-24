@@ -449,7 +449,7 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   assert.equal(range.status, 200)
   assert.match(range.headers.get("etag") || "", /card-seofixture/)
   assert.match(range.headers.get("x-iconoplasm-card-version") || "", /^card-seofixture/)
-  assert.equal(range.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-23-v1")
+  assert.equal(range.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-24-v2")
   assert.match(rangeHtml, /href="\/gene\/TP53"/)
   assert.doesNotMatch(rangeHtml, /TRIM1/)
 
@@ -461,8 +461,8 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   const shardText = await shard.text()
   assert.equal(shard.status, 200)
   assert.match(shard.headers.get("x-iconoplasm-card-version") || "", /^card-seofixture/)
-  assert.equal(shard.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-23-v1")
-  assert.match(shard.headers.get("etag") || "", /2026-08-23-v1/)
+  assert.equal(shard.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-24-v2")
+  assert.match(shard.headers.get("etag") || "", /2026-08-24-v2/)
   assert.match(shard.headers.get("etag") || "", /TO-TR\.xml/)
   assert.match(shardText, /\/gene\/TP53/)
   assert.match(shardText, /\/blots\/TP53\.webp/)
@@ -614,6 +614,9 @@ test("gene document GET and HEAD use the same exact card blot as the sitemap", a
   assert.match(pageHtml, new RegExp(`property="og:image" content="${blotUrl}"`))
   assert.match(pageHtml, new RegExp(`name="twitter:image" content="${blotUrl}"`))
   assert.match(pageHtml, /class="icono-canonical-gene-blot-image"/)
+  assert.match(pageHtml, /data-icono-canonical-gene-blot hidden/)
+  assert.match(pageHtml, /loading="lazy" decoding="async" fetchpriority="low"/)
+  assert.doesNotMatch(pageHtml, /<figcaption>/)
   assert.match(
     pageHtml,
     /class="icono-canonical-gene-blot-image" src="https:\/\/iconoplasm\.brinedew\.bio\/blots\/v1\/T\/TP53\//,
@@ -1095,6 +1098,10 @@ test("gene lead keeps portrait artwork subordinate and renders the canonical blo
   assert.match(source, /character artwork used inside the Iconoplasm gene blot/)
   assert.match(source, /function canonicalGeneBlotMarkup\(genePayload\)/)
   assert.match(source, /class=\"icono-canonical-gene-blot-image\"/)
+  assert.match(source, /data-icono-canonical-gene-blot hidden/)
+  assert.match(source, /function revealCanonicalGeneBlot\(trigger, symbol\)/)
+  assert.match(source, /blot\.removeAttribute\("hidden"\)/)
+  assert.doesNotMatch(source, /<figcaption>Canonical Iconoplasm gene blot/)
   assert.match(source, /blotImage\.setAttribute\("src", canonicalBlotUrl\)/)
   assert.match(source, /portraitDelivery\.ensure\(canonicalBlotUrl\)/)
   assert.match(source, /portraitDelivery\.bind\(blotImage, canonicalBlotUrl\)/)

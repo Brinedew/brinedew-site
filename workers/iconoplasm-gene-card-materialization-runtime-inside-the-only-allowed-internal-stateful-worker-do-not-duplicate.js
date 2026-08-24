@@ -12,7 +12,7 @@ export const ICONOPLASM_GENE_CARD_QUEUE_KIND = "materialize_requested_gene_card"
 export const ICONOPLASM_GENE_CARD_RENDERER_REVISION = "gene-card-v2-2026-08-03-print-resolution"
 export const ICONOPLASM_GENE_CARD_WIDTH = 1536
 export const ICONOPLASM_GENE_CARD_HEIGHT = 2048
-export const ICONOPLASM_GENE_BLOT_RENDERER_REVISION = "gene-blot-v1-2026-08-24-shared-image-only"
+export const ICONOPLASM_GENE_BLOT_RENDERER_REVISION = "gene-blot-v2-2026-08-24-gallery-artboard-2x"
 export const ICONOPLASM_GENE_BLOT_WIDTH = 768
 export const ICONOPLASM_GENE_BLOT_HEIGHT = 1024
 
