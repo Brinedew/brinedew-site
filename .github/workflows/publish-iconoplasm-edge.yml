@@ -102,7 +102,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Package Edge extension payload
-        run: node ./scripts/package-iconoplasm-extension.mjs --target=edge
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: node ./scripts/package-iconoplasm-extension.mjs --target=edge --release "--expected-version=$env:EXPECTED_VERSION"
 
       - name: Submit package to Edge Add-ons draft
         id: edge_upload

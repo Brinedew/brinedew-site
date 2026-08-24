@@ -82,10 +82,14 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Package extension payload
-        run: pnpm run package:iconoplasm-firefox
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: node ./scripts/package-iconoplasm-extension.mjs --target=firefox --release "--expected-version=$env:EXPECTED_VERSION"
 
       - name: Package reviewer source
-        run: pnpm run package:iconoplasm-firefox-source
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: node ./scripts/package-iconoplasm-firefox-source.mjs --release "--expected-version=$env:EXPECTED_VERSION"
 
       - name: Submit to Firefox Add-ons
         env:

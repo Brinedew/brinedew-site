@@ -389,7 +389,7 @@ test("DO NOT DELETE: Firefox release packaging is a first-class path", () => {
   assert.equal(
     packageJson.scripts["package:iconoplasm-firefox"],
     "node ./scripts/package-iconoplasm-extension.mjs --target=firefox",
-    "Firefox packaging should not depend on fragile npm argument forwarding",
+    "Firefox validation packaging should not depend on fragile npm argument forwarding",
   )
 
   const sourcePackageScript = readUtf8("./scripts/package-iconoplasm-firefox-source.mjs")
@@ -409,7 +409,13 @@ test("DO NOT DELETE: Chromium and Edge packages keep the MV3 service worker shap
 })
 
 test("DO NOT DELETE: Edge packaging has a first-class Chromium manifest target", () => {
+  const packageJson = JSON.parse(readUtf8("./package.json"))
   const packageScript = readUtf8("./scripts/package-iconoplasm-extension.mjs")
+  assert.equal(
+    packageJson.scripts["package:iconoplasm-edge"],
+    "node ./scripts/package-iconoplasm-extension.mjs --target=edge",
+    "Edge validation packaging should be deterministic and first-class",
+  )
   assert.match(
     packageScript,
     /if \(arg === "--edge"\) return "edge"/,
@@ -417,9 +423,11 @@ test("DO NOT DELETE: Edge packaging has a first-class Chromium manifest target",
   )
   assert.match(
     packageScript,
-    /stageDir:\s*"edge-package"[\s\S]*zipName:\s*`iconoplasm-edge-v\$\{packageVersion\}\.zip`/,
-    "Edge publishing should produce its own zip so store validation evidence points at the exact submitted package",
+    /releaseZipName:\s*`iconoplasm-edge-v\$\{packageVersion\}\.zip`[\s\S]*validationZipName:\s*"iconoplasm-edge-validation\.zip"/,
+    "Edge validation and human-authorized release artifacts must have distinct names",
   )
+  assert.match(packageScript, /Release packaging requires --expected-version=X\.Y\.Z/)
+  assert.match(packageScript, /Refusing to overwrite release artifact/)
   assert.match(
     packageScript,
     /browser:\s*"edge"/,
