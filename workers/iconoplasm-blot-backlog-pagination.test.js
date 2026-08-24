@@ -158,3 +158,50 @@ test("published blot pagination skips shards wholly before the resume cursor", a
   assert.equal(page.total_count, 2)
   assert.equal(kv.reads.includes(oldKey), false)
 })
+
+test("published blot pagination safely amortizes a 250-gene workstation slice", async () => {
+  const version = "ccv1-blot-250"
+  const shardKey = "iconoplasm:card-catalog-shard:large"
+  const cards = Array.from({ length: 300 }, (_value, index) =>
+    card(`GENE${String(index).padStart(3, "0")}`),
+  )
+  const kv = new FakeKv([
+    [
+      `iconoplasm:card-catalog:${version}`,
+      JSON.stringify({
+        schema: "iconoplasm.cardCatalog.v1",
+        artifact_version: version,
+        storage: "kv_card_catalog_content_addressed_shards",
+        shards: [
+          {
+            key: shardKey,
+            index: 0,
+            card_count: cards.length,
+            content_hash: "large",
+            first_symbol: cards[0].symbol,
+            last_symbol: cards.at(-1).symbol,
+          },
+        ],
+      }),
+    ],
+    [
+      shardKey,
+      JSON.stringify({
+        schema: "iconoplasm.cardCatalog.v1",
+        storage: "kv_card_catalog_content_addressed_shards",
+        content_hash: "large",
+        cards,
+      }),
+    ],
+  ])
+
+  const page = await pagePublishedCardCatalogArtifact({ KV: kv }, version, {
+    after: "",
+    limit: 1_000,
+  })
+
+  assert.equal(page.records.length, 250)
+  assert.equal(page.next_after, "GENE249")
+  assert.equal(page.done, false)
+  assert.equal(page.total_count, 300)
+})
