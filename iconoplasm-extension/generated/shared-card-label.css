@@ -1368,6 +1368,12 @@
   letter-spacing: 0.12em;
 }
 
+.icono-label-footer-line--caption a {
+  color: inherit;
+  text-decoration-color: currentColor;
+  text-underline-offset: 0.14em;
+}
+
 .icono-label-footer-line--typed {
   color: var(--icono-label-ink);
   font-family: "Special Elite";

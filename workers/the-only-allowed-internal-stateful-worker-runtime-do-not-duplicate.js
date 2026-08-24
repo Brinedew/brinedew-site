@@ -170,7 +170,7 @@ function iconoplasmStaticGeneShellHtml(safeSymbol, safeLetter) {
             <div class="icono-label-band-row"><div class="icono-label-row-label">field notes</div><div class="icono-label-band-grid"><div class="icono-label-band-cell icono-label-band-cell--category"><div class="icono-label-caption">category</div><div class="icono-label-band-primary"><div class="icono-label-category-grid" aria-hidden="true"><div class="icono-label-category-option icono-label-category-option--transmembrane"><span class="icono-label-option icono-label-option--transmembrane"><span class="icono-label-option-copy"></span></span></div><div class="icono-label-category-option icono-label-category-option--soluble"><span class="icono-label-option icono-label-option--soluble"><span class="icono-label-option-copy"></span></span></div></div></div></div><div class="icono-label-band-cell icono-label-band-cell--noted"><div class="icono-label-caption">first noted</div></div><div class="icono-label-band-cell icono-label-band-cell--mass"><div class="icono-label-caption">mass</div><div class="icono-label-band-primary"><div class="icono-label-mass-line"><span class="icono-label-mass-fill"></span><span class="icono-label-mass-unit-stack"><span class="icono-label-typed-value icono-label-typed-value--band icono-label-typed-value--crossed icono-label-typed-value--unit-kda">kDa</span><span class="icono-label-hand-note icono-label-hand-note--unit">kg</span></span></div></div></div></div></div>
             <div class="icono-label-style-row"><div class="icono-label-row-label">pfam clans</div><div class="icono-label-style-stack"></div></div>
             <div class="icono-label-alignment-row"><div class="icono-label-row-label">alignment</div><div class="icono-label-alignment-body"><div class="icono-label-selector-row icono-label-selector-row--alignment is-neither" aria-hidden="true"><span class="icono-label-option icono-label-option--oncogene"><span class="icono-label-option-copy"></span></span><span class="icono-label-option icono-label-option--tumor-suppressor"><span class="icono-label-option-copy"></span></span><span class="icono-label-alignment-strike" aria-hidden="true"></span></div></div></div>
-            <div class="icono-label-footer-row"><div class="icono-label-row-label">remarks</div><div class="icono-label-footer-copy"><div class="icono-label-footer-copy-main"><div class="icono-label-footer-line icono-label-footer-line--caption">labelled / inspected / filed</div><div class="icono-label-footer-line icono-label-footer-line--typed">archive room b / bench 3 / human gene cabinet</div><div class="icono-label-footer-line icono-label-footer-line--typed">stock tone filing / sheet filing / print run 07</div><div class="icono-label-footer-line icono-label-footer-line--typed">seal after review / do not expose to open air</div></div><div class="icono-label-footer-copy-side"><div class="icono-label-footer-line icono-label-footer-line--caption">brinedew institute / internal matter</div><div class="icono-label-footer-line icono-label-footer-line--caption">keep away from heat and moisture</div><div class="icono-label-footer-line icono-label-footer-line--caption">registry copy retained in cabinet 5A</div></div></div></div>
+            <div class="icono-label-footer-row"><div class="icono-label-row-label">remarks</div><div class="icono-label-footer-copy"><div class="icono-label-footer-copy-main"><div class="icono-label-footer-line icono-label-footer-line--caption">labelled / inspected / filed</div><div class="icono-label-footer-line icono-label-footer-line--typed">archive room b / bench 3 / human gene cabinet</div><div class="icono-label-footer-line icono-label-footer-line--typed">stock tone filing / sheet filing / print run 07</div><div class="icono-label-footer-line icono-label-footer-line--typed">seal after review / do not expose to open air</div></div><div class="icono-label-footer-copy-side"><div class="icono-label-footer-line icono-label-footer-line--caption">brinedew institute / internal matter</div><div class="icono-label-footer-line icono-label-footer-line--caption">images under <a rel="license" href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0 license</a></div><div class="icono-label-footer-line icono-label-footer-line--caption">reuse permitted without attribution</div></div></div></div>
           </div>
         </div>
       </article>
@@ -380,14 +380,6 @@ function iconoplasmCanonicalGeneBlotFigureHtml(cardPayload) {
   )
 }
 
-function iconoplasmPublishedImageLicenseMarkup() {
-  return (
-    '<p class="icono-image-license">Published gene portrait and blot images: ' +
-    '<a rel="license" href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a>. ' +
-    '<a href="/license">Copy, embed, hotlink, modify, and reuse without permission or attribution.</a></p>'
-  )
-}
-
 function iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion) {
   const shared = globalThis.IconoplasmCardShared
   if (!shared || !cardPayload) return ""
@@ -414,7 +406,6 @@ function iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion) {
     '<section class="icono-gene-lead">' +
     iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) +
     iconoplasmCanonicalGeneBlotFigureHtml(cardPayload) +
-    iconoplasmPublishedImageLicenseMarkup() +
     '<div data-icono-canonical-toolbar-island><section class="icono-canonical-toolbar-shell"><div class="icono-gene-toolbar-rail" data-icono-canonical-rail><div class="icono-gene-edit-panel" aria-hidden="true"></div><section class="icono-gene-request-surface icono-gene-request-panel">' +
     canonicalMeta +
     '<div aria-hidden="true"></div></section></div></section></div>' +
