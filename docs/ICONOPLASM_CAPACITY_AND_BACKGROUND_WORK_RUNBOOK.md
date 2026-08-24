@@ -459,6 +459,12 @@ dirty-shard path. Its 5,000-gene UTC ceiling yields at most 50 ordinary tranche
 publications per day. No reader request, full-catalog scan, or Cloudflare render
 participates.
 
+Exact blot readiness is checked before a dirty-shard step reserves KV writes.
+`GENE_BLOT_NOT_READY` is a deterministic workstation dependency and must consume
+zero KV reservation and perform zero KV writes. This ordering prevents the
+15-minute publication retry from exhausting the conservative internal ledger
+while the real Cloudflare write counter remains low.
+
 Cold bootstrap, legacy storage conversion, and a changed card-mapper revision are
 deployment migrations, not runtime recovery modes. The routine route fails with
 `CARD_CATALOG_BASELINE_REQUIRED`, `CARD_CATALOG_STORAGE_MIGRATION_REQUIRED`, or
