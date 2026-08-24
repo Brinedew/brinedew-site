@@ -4,7 +4,7 @@ const ICONOPLASM_PORTRAIT_RENDITIONS = new Set(["thumb", "medium", "full"])
 
 export const ICONOPLASM_GENE_RANGE_CONTRACT_VERSION = "2026-07-22-19023-v1"
 export const ICONOPLASM_SEMANTIC_PROFILE_CONTRACT_VERSION = 1
-export const ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION = "2026-08-24-v2"
+export const ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION = "2026-08-24-v3"
 const ICONOPLASM_PORTRAIT_DISCOVERY_RELEASE_LASTMOD = "2026-08-24"
 
 function frozenRange(initial, slug, label, prefixes) {
@@ -716,7 +716,7 @@ function iconoplasmProjectedGenesForRange(snapshot, range, projection) {
   const candidates = snapshot.ranges.get(range.slug) || []
   return candidates.flatMap((gene) => {
     const projected = projection.bySymbol.get(gene.symbol)
-    return projected?.blot?.status === "ready" ? [{ gene, projected }] : []
+    return projected ? [{ gene, projected }] : []
   })
 }
 
@@ -735,10 +735,10 @@ export function renderIconoplasmGeneRangeHtml(snapshot, range, projection) {
       return `<li class="gene-entry">${thumbnail}<a class="gene-link" href="${path}"><span class="gene-symbol">${escapeHtml(gene.symbol)}</span><span class="gene-name">${escapeHtml(gene.fullName)}</span></a></li>`
     })
     .join("")
-  const body = `<header class="archive-head"><p class="archive-kicker">Iconoplasm · ${escapeHtml(range.initial)} registry</p><h1>${escapeHtml(range.label)}</h1><p class="archive-deck">Canonical Iconoplasm gene blots in the frozen ${escapeHtml(range.label)} reference range. Each blot carries the full gene name and symbol over its character artwork.</p></header><main><div class="range-summary"><strong>${projectedGenes.length.toLocaleString("en-US")} published blots</strong><a href="/genes#letter-${range.initial}">All ${range.initial} ranges</a></div><ul class="gene-list">${links}</ul></main><footer class="archive-foot">Range contract <code>${ICONOPLASM_GENE_RANGE_CONTRACT_VERSION}</code> · Catalog <code>${escapeHtml(snapshot.catalogHash || snapshot.version)}</code></footer>`
+  const body = `<header class="archive-head"><p class="archive-kicker">Iconoplasm · ${escapeHtml(range.initial)} registry</p><h1>${escapeHtml(range.label)}</h1><p class="archive-deck">Published Iconoplasm gene profiles in the frozen ${escapeHtml(range.label)} reference range. Ready gene blots carry the full gene name and symbol over their character artwork.</p></header><main><div class="range-summary"><strong>${projectedGenes.length.toLocaleString("en-US")} published genes</strong><a href="/genes#letter-${range.initial}">All ${range.initial} ranges</a></div><ul class="gene-list">${links}</ul></main><footer class="archive-foot">Range contract <code>${ICONOPLASM_GENE_RANGE_CONTRACT_VERSION}</code> · Catalog <code>${escapeHtml(snapshot.catalogHash || snapshot.version)}</code></footer>`
   return archiveDocument({
     title: `${range.label} gene profiles | Iconoplasm`,
-    description: `Canonical Iconoplasm gene blots for ${projectedGenes.length.toLocaleString("en-US")} human genes in the frozen ${range.label} symbol range.`,
+    description: `Published Iconoplasm profiles for ${projectedGenes.length.toLocaleString("en-US")} human genes in the frozen ${range.label} symbol range.`,
     canonicalPath: `/genes/${range.slug}`,
     body,
     scripts: hasBlots
@@ -821,7 +821,7 @@ Iconoplasm maps human-gene biology onto memorable visual character cards called 
 
 - [Gene reference catalog](${ICONOPLASM_ORIGIN}/genes): Server-rendered, self-locating symbol ranges
 - Gene profile URL: ${ICONOPLASM_ORIGIN}/gene/{HGNC_SYMBOL}
-- Canonical gene blot: Every complete gene page exposes one labelled WebP with the full gene name and symbol through a standard image, Open Graph and Twitter metadata, linked Gene/ImageObject/WebPage structured data, and gene-sitemap entry. The portrait is source artwork inside the blot, not the canonical public image.
+- Canonical gene blot: Every complete gene stays in the archive and gene sitemap. Once its exact labelled WebP is ready, the page also exposes it through a standard image, Open Graph and Twitter metadata, linked Gene/ImageObject/WebPage structured data, and an image-sitemap child. The portrait is source artwork inside the blot, not the canonical public image.
 - [Sitemap index](${ICONOPLASM_ORIGIN}/sitemap.xml): Static pages and gene-profile shards
 
 ## Biological-to-character mappings

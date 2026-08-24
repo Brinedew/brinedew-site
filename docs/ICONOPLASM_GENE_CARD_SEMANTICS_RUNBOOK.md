@@ -67,8 +67,8 @@ The stable first-party `/blots/<SYMBOL>.webp` route resolves only the immutable
 object referenced by the card artifact selected by `KV_GALLERY_VERSION`; it is
 not a second selection timeline and never consults live D1 portrait state.
 
-For every complete, indexable gene page, that exact ready blot must be present
-in all of these projections:
+When a complete, indexable gene page has an exact ready blot, that blot must be
+present consistently in all of these projections:
 
 - a server-rendered `<img>` with gene-specific alt text inside the initially
   hidden print-copy surface; the existing `request print copy` action reveals
@@ -86,11 +86,13 @@ Use the same exact card payload for blot readiness, interactive page, metadata, 
 structured data. JSON-LD must be escaped for an HTML script context and omitted
 for incomplete/noindex pages. Route/catalog records establish identity and
 membership only. If the requested card projection is unavailable or malformed,
-the whole document fails closed as uncached `503`; if the valid card merely has
-no matching ready blot, the page remains noindex and discovery omits it. Raw
-portrait artwork may remain visible in the interactive dossier as subordinate
-source material, but it is never `primaryImageOfPage`, `Gene.image`, the social
-image, or an image-sitemap entry.
+the whole document fails closed as uncached `503`. A valid complete card with no
+matching ready blot stays indexable, linked from its frozen archive range, and
+listed in its gene-sitemap shard; only its blot thumbnail, image metadata,
+`ImageObject`, and image-sitemap child are absent. Raw portrait artwork may
+remain visible in the interactive dossier as subordinate source material, but
+it is never `primaryImageOfPage`, `Gene.image`, the social image, or an
+image-sitemap entry.
 
 In healthy non-Vietnam regions, the tab-scoped IPD-001 probe may select Bunny's
 byte-equivalent immutable URL for delivery. Vietnam and any failed Bunny probe
@@ -105,9 +107,10 @@ Rendering work.
 
 Before a gene-sitemap shard is emitted, one range-batched exact-shard read from
 the card artifact selected by `KV_GALLERY_VERSION` must resolve a structurally
-valid card for every catalog identity candidate. Cards whose exact payload has
-no matching ready blot are omitted from discovery; a missing requested card or
-failed artifact read returns uncached `503` for the whole shard. Catalog/D1
+valid card for every catalog identity candidate. Every complete card remains a
+gene URL entry; only cards with exact ready blots receive an image child. A
+missing requested card or failed artifact read returns uncached `503` for the
+whole shard. Catalog/D1
 portrait SHAs are never compared or substituted. The response exposes both
 catalog and card versions so a crawler
 cache validator advances with either publication surface. The static blot
