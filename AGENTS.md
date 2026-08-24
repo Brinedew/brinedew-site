@@ -84,9 +84,12 @@ image. In healthy non-Vietnam regions, IPD-001 selects Bunny's byte-equivalent
 accelerator URL; Vietnam and any failed Bunny probe stay on the first-party
 route. Delivery selection must not replace the first-party discovery identity.
 Requested labelled-card thumbnails are a projection of an already-published
-card artifact. Archive, sitemap, and image reads may expose only a ready object
-whose fingerprint still matches that exact card; those crawler reads must never
-enroll work, consult votes, scan D1, or launch Browser Rendering.
+card artifact. Blot thumbnails and image metadata may expose only a ready object
+whose fingerprint still matches that exact card. Blot readiness must never gate
+the underlying complete gene profile: every eligible gene remains linked from
+its frozen archive range and listed in its gene-sitemap shard, while a gene with
+no ready blot simply has no thumbnail or image-sitemap child. Those crawler
+reads must never enroll work, consult votes, scan D1, or launch Browser Rendering.
 Model-training crawlers are not the search contract: GPTBot and ClaudeBot are
 blocked by a project-owned WAF rule before Worker execution, while OpenAI,
 Anthropic, and Perplexity search/user agents remain allowed. The WAF policy,

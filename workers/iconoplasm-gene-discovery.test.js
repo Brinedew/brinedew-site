@@ -44,17 +44,18 @@ function publishedCardProjection(genes, { missingBlotSymbols = [] } = {}) {
   const bySymbol = new Map()
   const missing = new Set(missingBlotSymbols)
   for (const gene of genes) {
-    if (missing.has(gene.s)) continue
     bySymbol.set(gene.s, {
-      blot: {
-        status: "ready",
-        blot_fingerprint: "b".repeat(32),
-        image_url: `https://iconoplasmportraits.b-cdn.net/blots/v1/${gene.s[0]}/${gene.s}/${"b".repeat(32)}/${gene.s}-iconoplasm-gene-blot.webp`,
-        canonical_url: `https://iconoplasm.brinedew.bio/blots/v1/${gene.s[0]}/${gene.s}/${"b".repeat(32)}/${gene.s}-iconoplasm-gene-blot.webp`,
-        semantic_url: `https://iconoplasm.brinedew.bio/blots/${gene.s}.webp`,
-        width: 768,
-        height: 1024,
-      },
+      blot: missing.has(gene.s)
+        ? null
+        : {
+            status: "ready",
+            blot_fingerprint: "b".repeat(32),
+            image_url: `https://iconoplasmportraits.b-cdn.net/blots/v1/${gene.s[0]}/${gene.s}/${"b".repeat(32)}/${gene.s}-iconoplasm-gene-blot.webp`,
+            canonical_url: `https://iconoplasm.brinedew.bio/blots/v1/${gene.s[0]}/${gene.s}/${"b".repeat(32)}/${gene.s}-iconoplasm-gene-blot.webp`,
+            semantic_url: `https://iconoplasm.brinedew.bio/blots/${gene.s}.webp`,
+            width: 768,
+            height: 1024,
+          },
     })
   }
   return { version: "card-fixture-v1", bySymbol }
@@ -72,7 +73,7 @@ test("frozen ranges assign every eligible symbol exactly once", () => {
   const flattened = Array.from(snapshot.ranges.values()).flat()
 
   assert.equal(ICONOPLASM_GENE_RANGE_CONTRACT_VERSION, "2026-07-22-19023-v1")
-  assert.equal(ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION, "2026-08-24-v2")
+  assert.equal(ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION, "2026-08-24-v3")
   assert.equal(ICONOPLASM_GENE_RANGES.length, 58)
   assert.equal(snapshot.candidateCount, genes.length)
   assert.equal(flattened.length, genes.length)
@@ -217,15 +218,17 @@ test("ready canonical blots appear in raw range HTML and the matching image site
   const textOnlyHtml = renderIconoplasmGeneRangeHtml(snapshot, range, textOnlyProjection)
   const textOnlySitemap = buildIconoplasmGeneRangeSitemapXml(snapshot, range, textOnlyProjection)
   assert.doesNotMatch(textOnlyHtml, /<img class="gene-card-thumb"/)
+  assert.match(textOnlyHtml, /href="\/gene\/TP53"/)
+  assert.match(textOnlyHtml, /1 published genes/)
   assert.equal((textOnlySitemap.match(/<image:image>/g) || []).length, 0)
-  assert.doesNotMatch(textOnlySitemap, /\/gene\/TP53/)
+  assert.match(textOnlySitemap, /\/gene\/TP53/)
 })
 
 test("llms.txt documents discovery and every card mapping", () => {
   const text = buildIconoplasmLlmsTxt({ catalogHash: "fixturehash" })
 
   assert.match(text, /\/gene\/\{HGNC_SYMBOL\}/)
-  assert.match(text, /Every complete gene page exposes one labelled WebP/)
+  assert.match(text, /Every complete gene stays in the archive and gene sitemap/)
   assert.match(text, /Gene\/ImageObject\/WebPage structured data/)
   assert.match(text, /\/genes/)
   assert.match(text, /First gene-symbol letter → color hue/)
