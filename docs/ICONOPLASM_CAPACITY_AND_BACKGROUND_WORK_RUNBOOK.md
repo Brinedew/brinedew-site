@@ -448,6 +448,17 @@ single-gene canonical change writes at most one replacement shard, one manifest,
 one release pointer, and one watermark; content-addressing avoids even the shard
 write when bytes are unchanged.
 
+The workstation blot owner does not turn this publisher into a poll-driven
+rebuild. Once per idle Drain minute it asks for at most 100 post-watermark
+priority symbols and renders at most 25 missing blots. The read is indexed by
+the existing event watermark and excludes blot/card materialization events, so
+the corpus backfill cannot repeatedly trigger the priority lane. Backfill scans
+ten published cards per quiet slice, checkpoints its exact artifact cursor and
+renderer revision, and publishes each 100-gene tranche through this same
+dirty-shard path. Its 5,000-gene UTC ceiling yields at most 50 ordinary tranche
+publications per day. No reader request, full-catalog scan, or Cloudflare render
+participates.
+
 Cold bootstrap, legacy storage conversion, and a changed card-mapper revision are
 deployment migrations, not runtime recovery modes. The routine route fails with
 `CARD_CATALOG_BASELINE_REQUIRED`, `CARD_CATALOG_STORAGE_MIGRATION_REQUIRED`, or
