@@ -89,7 +89,11 @@ route. Delivery selection must not replace the first-party discovery identity.
 Massive `/genes/{range}` pages are text-only discovery indexes and must not
 render portrait or blot thumbnails that bypass the gallery collection mechanic.
 Image metadata may expose only a ready object whose fingerprint still matches
-that exact card. Blot readiness must never gate
+that exact card. Zero-KV corpus uploads become discoverable through bounded
+exact-symbol reads of the D1 materialization ledger; the selected published
+card still derives the fingerprint and immutable key, and these reads must
+never widen into a ledger scan or a second image-selection authority. Blot
+readiness must never gate
 the underlying complete gene profile: every eligible gene remains linked from
 its frozen archive range and listed in its gene-sitemap shard, while a gene with
 no ready blot simply has no image-sitemap child. Those crawler
