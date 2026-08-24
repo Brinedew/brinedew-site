@@ -651,7 +651,12 @@ test("gene document GET and HEAD use the same exact card blot as the sitemap", a
   assert.match(pageHtml, new RegExp(`"contentUrl":"${blotUrl}"`))
   assert.match(pageHtml, /"license":"https:\/\/creativecommons\.org\/publicdomain\/zero\/1\.0\/"/)
   assert.match(pageHtml, /"usageInfo":"https:\/\/iconoplasm\.brinedew\.bio\/license"/)
-  assert.match(pageHtml, /class="icono-image-license"/)
+  assert.doesNotMatch(pageHtml, /class="icono-image-license"/)
+  assert.match(
+    pageHtml,
+    /images under <a rel="license" href="https:\/\/creativecommons\.org\/publicdomain\/zero\/1\.0\/">CC0 1\.0 license<\/a>/,
+  )
+  assert.match(pageHtml, /reuse permitted without attribution/)
   assert.match(pageHtml, /rel="license"/)
   assert.match(sitemapXml, new RegExp(`<image:loc>${blotUrl}</image:loc>`))
   assert.doesNotMatch(pageHtml, new RegExp(`/portraits/v1/aa/${staleD1PortraitSha}/`))

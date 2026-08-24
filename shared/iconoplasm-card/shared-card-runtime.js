@@ -1259,8 +1259,8 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       "</div>" +
       '<div class="icono-label-footer-copy-side">' +
       '<div class="icono-label-footer-line icono-label-footer-line--caption">brinedew institute / internal matter</div>' +
-      '<div class="icono-label-footer-line icono-label-footer-line--caption">keep away from heat and moisture</div>' +
-      '<div class="icono-label-footer-line icono-label-footer-line--caption">registry copy retained in cabinet 5A</div>' +
+      '<div class="icono-label-footer-line icono-label-footer-line--caption">images under <a rel="license" href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0 license</a></div>' +
+      '<div class="icono-label-footer-line icono-label-footer-line--caption">reuse permitted without attribution</div>' +
       "</div>" +
       "</div>"
     )

@@ -98,6 +98,24 @@ test("typed footer copy follows the card ink token in light and dark themes", as
   )
 })
 
+test("card footer integrates the narrow image license into archival flavor copy", async () => {
+  const runtime = await sourceText(runtimePath)
+  const litCard = await sourceText(litCardPath)
+  const geneShellRuntime = await sourceText(geneShellRuntimePath)
+  const pageCss = await sourceText(pageCssPath)
+
+  for (const source of [runtime, litCard, geneShellRuntime]) {
+    assert.match(source, /CC0 1\.0 license/)
+    assert.match(source, /reuse permitted without attribution/)
+    assert.doesNotMatch(source, /keep away from heat and moisture/)
+    assert.doesNotMatch(source, /registry copy retained in cabinet 5A/)
+  }
+  assert.match(runtime, /rel="license"/)
+  assert.match(litCard, /rel="license"/)
+  assert.doesNotMatch(geneShellRuntime, /icono-image-license/)
+  assert.doesNotMatch(pageCss, /\.icono-image-license/)
+})
+
 test("first-paint fonts are embedded and revealed as one bounded transaction", async () => {
   const css = await sourceText(generatedCssPath)
   const head = await sourceText(headPath)
