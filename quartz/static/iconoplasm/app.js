@@ -8761,7 +8761,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       ".icono-canonical-gene-blot-image[data-iconoplasm-canonical-image-src]",
     )
     if (blot && blotImage) {
-      var canonicalBlotUrl = String(blot.canonical_url || "").trim()
+      // Hydration must preserve the same current-renderer route emitted by the
+      // server. Replacing it with the immutable card's historical URL would
+      // visibly roll the blot back after page load.
+      var canonicalBlotUrl = String(blot.semantic_url || "").trim()
       var currentBlotUrl = blotImage.currentSrc || blotImage.getAttribute("src") || ""
       if (blotImage.complete && blotImage.naturalWidth === 0 && currentBlotUrl) {
         portraitDelivery.reportFailure(currentBlotUrl)

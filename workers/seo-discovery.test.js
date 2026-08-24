@@ -1133,6 +1133,10 @@ test("gene lead keeps the portrait subordinate and renders the canonical blot", 
   assert.match(source, /var portraitUrl = publishedPortraitUrl\(g, "medium"\)/)
   assert.match(source, /character portrait used inside the Iconoplasm gene blot/)
   assert.match(source, /function canonicalGeneBlotMarkup\(genePayload\)/)
+  assert.match(
+    source,
+    /var canonicalBlotUrl = String\(blot\.semantic_url \|\| ""\)\.trim\(\)/,
+  )
   assert.match(source, /class=\"icono-canonical-gene-blot-image\"/)
   assert.match(source, /data-icono-canonical-gene-blot hidden/)
   assert.match(source, /function revealCanonicalGeneBlot\(trigger, symbol\)/)
