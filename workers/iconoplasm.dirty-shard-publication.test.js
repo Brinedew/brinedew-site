@@ -17,7 +17,7 @@ const WATERMARK_KEY = "iconoplasm:card-catalog-publish-watermark:v1"
 const PUBLICATION_KEY = "iconoplasm:card-catalog-dirty-shard-publication:v1"
 const SHARD_PREFIX = "iconoplasm:card-catalog-shard:"
 
-function geneRow(symbol, sha = "7b".repeat(32)) {
+function geneRow(symbol, sha = "7b".repeat(32), { blotReady = true } = {}) {
   const fullName = `full name ${symbol}`
   const blotFingerprint = iconoplasmGeneBlotFingerprint({
     symbol,
@@ -53,12 +53,12 @@ function geneRow(symbol, sha = "7b".repeat(32)) {
     vision_id: "artist-random-v1",
     candidate_image_id: 5423,
     emulsion_id: "A1-5423",
-    gene_blot_fingerprint: blotFingerprint,
-    gene_blot_portrait_asset_sha256: sha,
-    gene_blot_asset_sha256: "ef".repeat(32),
-    gene_blot_object_key: iconoplasmGeneBlotObjectKey(symbol, blotFingerprint),
-    gene_blot_width: 768,
-    gene_blot_height: 1024,
+    gene_blot_fingerprint: blotReady ? blotFingerprint : null,
+    gene_blot_portrait_asset_sha256: blotReady ? sha : null,
+    gene_blot_asset_sha256: blotReady ? "ef".repeat(32) : null,
+    gene_blot_object_key: blotReady ? iconoplasmGeneBlotObjectKey(symbol, blotFingerprint) : null,
+    gene_blot_width: blotReady ? 768 : null,
+    gene_blot_height: blotReady ? 1024 : null,
   }
 }
 
@@ -128,7 +128,13 @@ class FakeStatement {
     ) {
       const requested = new Set(this.args.map((value) => String(value || "").toUpperCase()))
       const symbols = this.db.symbols.filter((symbol) => !requested.size || requested.has(symbol))
-      return { results: symbols.map((symbol) => geneRow(symbol, this.db.shaBySymbol.get(symbol))) }
+      return {
+        results: symbols.map((symbol) =>
+          geneRow(symbol, this.db.shaBySymbol.get(symbol), {
+            blotReady: !this.db.missingBlotSymbols.has(symbol),
+          }),
+        ),
+      }
     }
     if (this.sql.includes("gene_symbol >= ?") && this.sql.includes("gene_symbol <= ?")) {
       const [first, last] = this.args
@@ -159,6 +165,7 @@ class FakeDb {
     this.changedSymbols = []
     this.maxEventAt = "2026-06-05 12:00:00"
     this.shaBySymbol = new Map()
+    this.missingBlotSymbols = new Set()
     this.auditBinds = []
   }
   prepare(sql) {
@@ -256,6 +263,39 @@ test("routine publication refuses cold bootstrap instead of manufacturing a full
     () => publishIconoplasmGalleryDirtyShardsForTest(env),
     (error) => error?.code === "CARD_CATALOG_BASELINE_REQUIRED",
   )
+})
+
+test("missing workstation blot fails before KV reservation or writes", async () => {
+  const db = new FakeDb(["GENA"])
+  const kvStore = new Map()
+  seedBaseline(kvStore, ["GENA"])
+  db.changedSymbols = ["GENA"]
+  db.missingBlotSymbols.add("GENA")
+  let reservations = 0
+  const putKeys = []
+  const env = buildEnv(db, kvStore, putKeys)
+  env.ICONOPLASM_CARD_CATALOG_KV_WRITE_BUDGET_REQUIRED_DO_NOT_SET_CASUALLY = "1"
+  env.ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE = {
+    idFromName(name) {
+      return name
+    },
+    get() {
+      return {
+        async fetch() {
+          reservations += 1
+          return Response.json({ ok: true })
+        },
+      }
+    },
+  }
+
+  await assert.rejects(
+    () => publishIconoplasmGalleryDirtyShardsForTest(env),
+    (error) => error?.code === "GENE_BLOT_NOT_READY",
+  )
+
+  assert.equal(reservations, 0)
+  assert.deepEqual(putKeys, [])
 })
 
 test("one canonical change rewrites one shard and flips on the next publication tick", async () => {

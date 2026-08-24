@@ -24995,6 +24995,19 @@ async function publishNextCardCatalogDirtyShardStep(
     if (symbol) recordBySymbol.set(symbol, record)
   }
 
+  // A missing exact blot is a deterministic workstation dependency, not a KV
+  // operation. Reject it before reserving writes so the 15-minute publication
+  // retry cannot consume the daily reservation ledger while writing nothing.
+  for (const symbol of stepSymbols) {
+    const record = recordBySymbol.get(symbol)
+    if (record?.portrait?.status === "published" && record?.blot?.status !== "ready") {
+      throw cardCatalogPublicationError(
+        "GENE_BLOT_NOT_READY",
+        `Dirty-shard publication is waiting for the workstation-rendered canonical blot for ${symbol}.`,
+      )
+    }
+  }
+
   const finalStep = nextGroup + stepGroups.length >= groups.length
   const estimatedKvWrites =
     stepGroups.length * 2 + (finalStep ? 3 + (reserveGalleryVersionWrite ? 1 : 0) : 1)
