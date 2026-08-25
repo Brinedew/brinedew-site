@@ -100,13 +100,12 @@ no ready blot simply has no image-sitemap child. Those crawler
 reads must never enroll work, consult votes, scan D1, or launch Browser Rendering.
 Agent image lookup reads that same exact published-card authority. The bounded
 `POST /api/public/v1/images/resolve` contract accepts at most 50 identifiers and
-returns a deterministically resolvable `gene_blot` and temporary `portrait`
-fields; it must
-not invent one generic "image" field. `/blot/{SYMBOL}.webp` is the stable
-canonical gene-image identity. `/portrait/{SYMBOL}.webp` is only the stable
-medium portrait alias and must never be promoted to the canonical image. Keep
-portrait coverage until all 19,023 published genes have ready blots; remove it
-from this resolver only after live complete-corpus proof.
+returns only a deterministically resolvable `gene_blot`; it must not expose a
+source portrait or invent one generic "image" field. `/blot/{SYMBOL}.webp` is
+the stable canonical gene-image identity. The temporary
+`/portrait/{SYMBOL}.webp` alias was retired after live 19,023-gene and regional
+delivery proof. Immutable `/portraits/v1/...` assets remain available to the
+gallery and portrait-native surfaces but never enter this agent workflow.
 Published gene portraits and published gene blots are the only two Iconoplasm
 asset classes under CC0 1.0 Universal. Keep the visible `/license` scope,
 resolver permission fields, ready-blot `ImageObject.license`/`usageInfo`, and

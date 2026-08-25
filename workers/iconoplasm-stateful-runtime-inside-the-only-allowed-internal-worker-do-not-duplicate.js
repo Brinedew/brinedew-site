@@ -12594,7 +12594,6 @@ function publicMediaEnvelope(url, symbol, portrait) {
     symbol,
     checksum_sha256: assetSha,
     canonical_url: portraitAssetUrl(asset, "full"),
-    semantic_url: `${url.origin}/portrait/${encodeURIComponent(symbol)}.webp`,
     info_url: publicUrl(url, `/media/${encodeURIComponent(symbol)}`),
     ...(width != null ? { width } : {}),
     ...(height != null ? { height } : {}),
@@ -28950,11 +28949,6 @@ async function handlePublicImageResolve(request, env) {
       page_url: `${url.origin}/gene/${encodeURIComponent(identity.canonical_symbol)}`,
       images: {
         gene_blot: geneBlot,
-        portrait: publicMediaEnvelope(
-          url,
-          identity.canonical_symbol,
-          portraitStateFromPublishedCardPayload(payload, portraitBase(url, env)),
-        ),
       },
     }
   })
@@ -29628,52 +29622,6 @@ async function handleSemanticGeneBlot(request, env, symbolValue) {
   })
 }
 
-async function handleSemanticSourcePortrait(request, env, symbolValue) {
-  const symbol = normalizeSymbol(decodeURIComponent(symbolValue || ""))
-  if (!symbol) return json({ error: "Invalid gene symbol" }, 400, { "Cache-Control": "no-store" })
-  const published = await readPublishedGeneCardPortraitProjection(env, symbol)
-  if (published.kind === "unavailable") {
-    return json(cardArtifactUnavailablePayload(published.version), 503, {
-      "Cache-Control": "no-store",
-    })
-  }
-  const portrait =
-    published.kind === "available"
-      ? portraitStateFromPublishedCardPayload(published.payload, ICONOPLASM_CANONICAL_ORIGIN)
-      : null
-  const assetSha = normalizeSha256(portrait?.asset_sha256 || "")
-  if (portrait?.status !== "published" || !assetSha) {
-    return json({ error: "Published source portrait not found" }, 404, {
-      "Cache-Control": "no-store",
-    })
-  }
-  const asset = portraitAssetRef(ICONOPLASM_CANONICAL_ORIGIN, assetSha)
-  const rendition = asset?.renditions?.medium
-  if (!rendition?.canonical_url || !rendition?.path) {
-    return json({ error: "Published source portrait not found" }, 404, {
-      "Cache-Control": "no-store",
-    })
-  }
-  const acceleratorOrigin = String(externalPortraitCdnBase(env) || "").replace(/\/+$/, "")
-  const headers = {
-    Location: rendition.canonical_url,
-    "Cache-Control": "public, max-age=300, stale-while-revalidate=86400",
-    ETag: `"${assetSha}"`,
-    "Access-Control-Allow-Origin": "*",
-    "Cross-Origin-Resource-Policy": "cross-origin",
-    "X-Iconoplasm-Card-Version": published.version,
-    "X-Iconoplasm-Media-Type": "portrait",
-    "X-Iconoplasm-Portrait-Rendition": "medium",
-  }
-  Object.assign(
-    headers,
-    iconoplasmImageLicenseResponseHeaders(
-      acceleratorOrigin ? `${acceleratorOrigin}/${rendition.path}` : "",
-    ),
-  )
-  return new Response(null, { status: 302, headers })
-}
-
 const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
   public_openapi: ({ request }) => asHead(request, handlePublicOpenApi()),
   public_metadata: ({ request, env }) => handlePublicMetadata(request, env),
@@ -29737,8 +29685,6 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     handlePublicMedia(request, env, match.params.symbol || ""),
   portrait: ({ request, env, ctx, path }) =>
     handlePublishedImageAssetRoute(request, env, ctx, path),
-  semantic_source_portrait: ({ match, request, env }) =>
-    handleSemanticSourcePortrait(request, env, match.params.symbol || ""),
   gene_card_asset: ({ request, env, ctx, path }) =>
     handlePublishedImageAssetRoute(request, env, ctx, path, {
       fallbackContentType: "image/png",

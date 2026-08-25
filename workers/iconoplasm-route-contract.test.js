@@ -28,7 +28,6 @@ const PATTERN_EXAMPLES = Object.freeze({
   print_copy_status: "/api/iconoplasm/print-copy-status/TP53",
   print_copy_render: "/api/iconoplasm/print-copy-render/TP53",
   semantic_gene_blot: "/blot/TP53.webp",
-  semantic_source_portrait: "/portrait/TP53.webp",
   admin_blots_upload: "/api/iconoplasm/admin/blots/TP53",
   public_gene_detail: "/api/public/v1/genes/TP53",
   gene_request_summary: "/api/iconoplasm/requests/gene/TP53/summary",
@@ -97,6 +96,10 @@ test("every declared gateway handler has exactly one executable registry entry",
   ).sort()
 
   assert.deepEqual(ICONOPLASM_DECLARED_GATEWAY_HANDLER_NAMES, declaredHandlerNames)
+})
+
+test("retired semantic source-portrait routes are not part of the public contract", () => {
+  assert.equal(matchIconoplasmRouteContract("/portrait/TP53.webp", "GET"), null)
 })
 
 test("every declared API handler has exactly one executable registry entry", () => {

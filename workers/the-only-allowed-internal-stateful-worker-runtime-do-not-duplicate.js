@@ -1526,7 +1526,6 @@ function crossOriginResourcePolicyForRequest(request) {
     if (
       reqUrl.hostname === ICONOPLASM_HOST &&
       (reqUrl.pathname.startsWith("/portraits/") ||
-        reqUrl.pathname.startsWith("/portrait/") ||
         reqUrl.pathname.startsWith("/gene-cards/") ||
         reqUrl.pathname.startsWith("/blot/") ||
         reqUrl.pathname.startsWith("/blots/"))
@@ -2091,15 +2090,24 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
     // owned directly by this one stateful Worker. Do not add a public proxy,
     // service-binding hop, or second state owner here.
     // Iconoplasm subdomain: proxy non-API requests through Pages (same pattern as geneguessr),
-    // delegate API/portrait/admin to the iconoplasm handler.
+    // delegate API/published-image/admin routes to the Iconoplasm handler.
     if (isIconoplasmRequest(url.hostname)) {
       if (url.pathname === "/admin/iconoplasm" || url.pathname === "/admin/iconoplasm/") {
         return Response.redirect("https://brinedew.bio/admin/iconoplasm#costs", 302)
       }
 
+      if (/^\/portrait\/[^/]+\.webp$/.test(url.pathname)) {
+        return new Response("Not Found", {
+          status: 404,
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "public, max-age=86400",
+          },
+        })
+      }
+
       const isApiOrWorker =
         url.pathname.startsWith("/api/") ||
-        url.pathname.startsWith("/portrait/") ||
         url.pathname.startsWith("/portraits/") ||
         url.pathname.startsWith("/gene-cards/") ||
         url.pathname.startsWith("/blot/") ||
