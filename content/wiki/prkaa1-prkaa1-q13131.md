@@ -47,10 +47,18 @@ transmembrane: false
 uniprot_id: Q13131
 ---
 
-# PRKAA1 (AMPKα1)
+# PRKAA1 (AMPK α1)
 
-What it is. Catalytic subunit of the energy sensor AMPK; activated when cellular energy is low to rebalance metabolism and resource use.
+AMPK α1, encoded by PRKAA1, is the catalytic subunit of AMP-activated protein kinase, the cellular energy sensor that switches the cell from growth mode to survival mode when ATP runs low.
 
-Why it matters here. Counters unfettered growth signals by restraining biosynthesis and enabling cleanup, reducing opportunities for damaged cells to gain competitive advantage.
+## Function
 
-Notes. Upstream: LKB1 (STK11); Downstream: inhibits mTORC1 via TSC/raptor and promotes autophagy.
+AMPK monitors the AMP:ATP ratio. Rising AMP (falling energy charge) binds the complex's gamma subunit and promotes phosphorylation of the alpha catalytic subunit at Thr172 by the upstream kinase LKB1 (STK11); calcium signals activate the same site through CaMKKβ. Activated AMPK then rebalances the cell's budget: it phosphorylates TSC2 and RAPTOR to shut down [mTORC1](mtor-mtor-p42345.md) and protein synthesis, inhibits ACC to switch from fatty-acid synthesis to oxidation, stimulates glucose uptake, and launches autophagy through ULK1 phosphorylation. The output is the inverse of [insulin](insulin.md)/[AKT](akt1-p31749.md) signaling — catabolic instead of anabolic.
+
+## In cancer and aging
+
+AMPK behaves as a metabolic tumor suppressor: LKB1 loss (common in lung adenocarcinoma and cervical cancer) disables AMPK activation, and AMPK's restraint of mTORC1 is one of the routes by which energy stress opposes tumor growth. Metformin activates AMPK indirectly through complex I inhibition, which is the pharmacological basis for its study as an anti-aging and adjunct anticancer drug. AMPK activation also promotes autophagic clearance of damaged mitochondria, tying the sensor to the mitochondrial theory of aging.
+
+## Notes
+
+- Human gene symbol: PRKAA1; UniProt Q13131; 559 amino acids; catalytic α1 subunit; α2 (PRKAA2) is the muscle-dominant isoform.
