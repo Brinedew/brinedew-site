@@ -164,15 +164,20 @@ test("rough ellipse uses the font line box instead of crossing tightened glyph i
   const geometry = core.computeDecorationGeometry(
     inkBounds,
     5,
-    { kind: "ellipse", inlineBleedCharsPerSide: 0.5, verticalBleedEm: 0.2 },
+    {
+      kind: "ellipse",
+      inlineBleedCharsPerSide: 0.5,
+      verticalBleedEm: 0.2,
+      crossToInlineTransferRatio: 0.2,
+    },
     { selectionBounds },
   )
 
   assert.deepEqual(geometry.bounds, {
-    left: 15,
-    top: 25.2,
-    right: 75,
-    bottom: 58.8,
+    left: 11.64,
+    top: 28.56,
+    right: 78.36,
+    bottom: 55.44,
   })
   assert.ok(geometry.bounds.top < inkBounds.top)
   assert.ok(geometry.bounds.bottom > inkBounds.bottom)
@@ -253,15 +258,26 @@ test("rotated underline follows the transformed baseline edge", () => {
 })
 
 test("rotated ellipse applies character bleed along the inline axis", () => {
+  const geometry = core.computeDecorationGeometry(
+    { left: 20, top: 30, right: 46, bottom: 130 },
+    5,
+    {
+      kind: "ellipse",
+      inlineBleedCharsPerSide: 0.2,
+      verticalBleedEm: 0.1,
+      crossToInlineTransferRatio: 0.2,
+    },
+    { crossAxis: "x", crossAxisDirection: -1 },
+  )
   assert.deepEqual(
-    core.computeDecorationGeometry(
-      { left: 20, top: 30, right: 46, bottom: 130 },
-      5,
-      { kind: "ellipse", inlineBleedCharsPerSide: 0.2, verticalBleedEm: 0.1 },
-      { crossAxis: "x", crossAxisDirection: -1 },
+    JSON.parse(
+      JSON.stringify(geometry, (_key, value) =>
+        typeof value === "number" ? Number(value.toFixed(6)) : value,
+      ),
     ),
     {
-      bounds: { left: 17.4, top: 26, right: 48.6, bottom: 134 },
+      bounds: { left: 20.52, top: 22.88, right: 45.48, bottom: 137.12 },
+      transferredSpan: 6.24,
     },
   )
 })
