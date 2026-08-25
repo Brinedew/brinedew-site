@@ -80,22 +80,23 @@ test("portrait binaries stay wired even when they arrive through a non-iconoplas
   assert.equal(response.headers.get("content-type"), "image/webp")
 })
 
-test("stable source portrait aliases reach the stateful image resolver instead of the static shell", async () => {
+test("retired source portrait aliases return a cacheable 404 instead of the static shell", async () => {
   const response = await worker.fetch(
     new Request("https://iconoplasm.brinedew.bio/portrait/ABI1.webp", { method: "GET" }),
     {
       PUBLIC_RATE_LIMIT_120: {
         async limit() {
-          return { success: true }
+          throw new Error("retired portrait aliases must not consume a rate-limit call")
         },
       },
     },
     { waitUntil() {} },
   )
 
-  assert.equal(response.status, 503)
-  assert.match(response.headers.get("content-type") || "", /application\/json/)
-  assert.equal((await response.json()).code, "CARD_ARTIFACT_UNAVAILABLE")
+  assert.equal(response.status, 404)
+  assert.match(response.headers.get("content-type") || "", /text\/plain/)
+  assert.equal(response.headers.get("cache-control"), "public, max-age=86400")
+  assert.equal(await response.text(), "Not Found")
 })
 
 test("labelled gene-card binaries have the same first-party storage fallback", async () => {

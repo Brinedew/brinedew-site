@@ -105,9 +105,8 @@ Public assistants and other clients resolve images through the bounded
 `identifiers`, contains at most 50 values, and is limited to 60 requests per
 minute. The existing public identifier resolver owns normalization, so a gene
 symbol, publication alias, or UniProt identifier reaches the same canonical
-symbol. The response preserves the ontology with distinct
-`images.gene_blot` and temporary `images.portrait` fields. It never returns
-an ambiguous generic image.
+symbol. The response exposes only the labelled `images.gene_blot` envelope; it
+never returns a source portrait or an ambiguous generic image.
 
 Published gene portraits and published gene blots are the only two Iconoplasm
 asset classes dedicated under CC0 1.0 Universal. Every returned image envelope
@@ -119,21 +118,19 @@ and blot responses expose standard HTTP `rel="license"` plus the usage page.
 Do not broaden that dedication to catalog data, metadata, prose, software,
 prompts, unpublished images, services, or any other Brinedew asset.
 
-The stable `/blot/{SYMBOL}.webp` URL is the canonical gene image. The singular
-`/portrait/{SYMBOL}.webp` URL is only the medium portrait alias; full and
-thumbnail aliases are intentionally absent because the public product has four
-images per gene: full, medium, thumbnail, and blot. Both aliases resolve from
-the exact published card selected by `KV_GALLERY_VERSION`. The blot route
-derives the current renderer fingerprint and immutable object key from that
-card; it does not require blot metadata to be copied back into KV. A vote
-changes public output after the normal canonical-card publication, while the
-portrait remains available during blot generation.
+The stable `/blot/{SYMBOL}.webp` URL is the canonical gene image. The temporary
+singular `/portrait/{SYMBOL}.webp` alias and resolver portrait field were
+retired only after the complete-corpus and regional-delivery gate below passed.
+Immutable `/portraits/v1/...` assets remain available to the gallery and other
+portrait-native product surfaces; retirement removes source portraits only
+from the agent gene-image workflow. The blot route derives the current renderer
+fingerprint and immutable object key from the exact published card selected by
+`KV_GALLERY_VERSION`; it does not require blot metadata to be copied back into
+KV. A vote changes public output after the normal canonical-card publication.
 
-The portrait field and endpoint remain only while blot coverage is incomplete.
-Remove them from this agent workflow only after a live exact-card audit proves
-ready blots for all 19,023 published genes. The massive `/genes/{range}` pages
-remain text-only so they support discovery without replacing the gallery
-collection experience; image-sitemap children continue to expose ready blots.
+The massive `/genes/{range}` pages remain text-only so they support discovery
+without replacing the gallery collection experience; image-sitemap children
+continue to expose ready blots.
 
 Run that audit from the website repository without downloading image bytes:
 
@@ -143,9 +140,10 @@ node scripts/audit-iconoplasm-live-blot-coverage.mjs --require-complete
 
 The command counts published gene URLs and singular `/blot/{SYMBOL}.webp`
 projections across every live gene-sitemap shard. Exit code `2` means coverage
-is incomplete and therefore forbids portrait removal. A successful zero exit
-with `complete: true` is necessary, but still requires spot-checking blot bytes
-from Vietnam and a healthy Bunny region before changing the delivery contract.
+is incomplete and therefore forbids portrait removal. Portrait retirement on
+2026-08-25 followed a successful zero exit with `complete: true`, plus decoded
+768x1024 first-party bytes in Vietnam and byte-identical Bunny responses from a
+healthy German probe.
 
 The resolver is the free HTTP foundation for any future MCP transport. Do not
 create a separate MCP authority, require users to configure MCP for ordinary

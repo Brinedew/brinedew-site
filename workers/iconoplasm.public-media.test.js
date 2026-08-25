@@ -1014,7 +1014,7 @@ test("public media exposes only the canonical gene blot", async () => {
   assert.equal("portrait" in payload.media, false)
 })
 
-test("public image resolver separates gene blots from temporary portrait coverage", async () => {
+test("public image resolver exposes labelled gene blots without source portraits", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const response =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
@@ -1040,13 +1040,7 @@ test("public image resolver separates gene blots from temporary portrait coverag
     payload.results[0]?.images?.gene_blot?.canonical_url,
     "https://iconoplasm.brinedew.bio/blot/A1BG.webp",
   )
-  assert.equal(payload.results[0]?.images?.portrait?.type, "portrait")
-  assert.equal(payload.results[0]?.images?.portrait?.rights, "CC0 1.0 Universal")
-  assert.equal(payload.results[0]?.images?.portrait?.attribution_required, false)
-  assert.equal(
-    payload.results[0]?.images?.portrait?.semantic_url,
-    "https://iconoplasm.brinedew.bio/portrait/A1BG.webp",
-  )
+  assert.equal("portrait" in payload.results[0].images, false)
   assert.equal(payload.results[1]?.canonical_symbol, "SOSTDC1")
   assert.equal(payload.results[1]?.matched_by, "alias")
   assert.equal(payload.results[1]?.images, null)
@@ -1079,36 +1073,7 @@ test("public image resolver derives the stable blot URL before catalog metadata 
     "https://iconoplasm.brinedew.bio/blot/A1BG.webp",
   )
   assert.equal(payload.results[0]?.images?.gene_blot?.availability, "resolve_at_canonical_url")
-  assert.equal(payload.results[0]?.images?.portrait?.type, "portrait")
-})
-
-test("stable source portrait alias redirects to the exact card's medium rendition", async () => {
-  resetIconoplasmRuntimeCachesForTest()
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/portrait/A1BG.webp"),
-      buildEnv({
-        ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
-        KV: buildPublishedCardReadKv(),
-      }),
-      {},
-    )
-
-  assert.equal(response.status, 302)
-  assert.match(response.headers.get("Location") || "", /\/portraits\/v1\/.+\/medium\.webp$/)
-  assert.match(response.headers.get("Link") || "", /^<https:\/\/iconoplasmportraits\.b-cdn\.net\//)
-  assert.equal(response.headers.get("X-Iconoplasm-Media-Type"), "portrait")
-  assert.equal(response.headers.get("X-Iconoplasm-Portrait-Rendition"), "medium")
-  assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*")
-  assert.equal(response.headers.get("Cross-Origin-Resource-Policy"), "cross-origin")
-  assert.equal(response.headers.get("X-License"), "CC0-1.0")
-  assert.equal(
-    response.headers.get("X-Iconoplasm-Usage-Info"),
-    "https://iconoplasm.brinedew.bio/license",
-  )
-  assert.match(response.headers.get("Link") || "", /rel="alternate"/)
-  assert.match(response.headers.get("Link") || "", /rel="license"/)
-  assert.match(response.headers.get("Link") || "", /rel="describedby"/)
+  assert.equal("portrait" in payload.results[0].images, false)
 })
 
 test("stable blot route derives the Bunny object from the published card without embedded blot metadata", async () => {
