@@ -48,8 +48,16 @@ uniprot_id: Q15116
 
 # PD-1 (PDCD1)
 
-**What it is.** Receptor on T cells that, when engaged by PD‑L1, reduces T‑cell activity.
+PD-1 (programmed cell death protein 1) is an immune checkpoint receptor that dampens T-cell activity in the periphery — the brake that tumors exploit to disable the cells attacking them.
 
-**Why it matters here.** Target of checkpoint blockade therapies to restore anti‑tumor immunity.
+## Function
 
-**Notes.** Ligand: PD‑L1; Therapy: anti‑PD‑1 antibodies.
+PD-1 is expressed on activated T cells, B cells, and myeloid cells. Its ligands — [PD-L1](pd-l1-cd274.md) on tumor and stromal cells, PD-L2 on macrophages — bind PD-1 and recruit phosphatases (SHP-2) that dephosphorylate the T-cell receptor's signaling intermediates. The effect is a graded throttle: antigen-stimulated T cells that receive a PD-1 signal reduce cytokine production, proliferation, and cytotoxicity. Physiologically the system limits collateral tissue damage during infection and maintains peripheral tolerance; chronically stimulated T cells in tumors settle into a PD-1-high "exhausted" state.
+
+## In cancer
+
+Tumors up-regulate PD-L1 as an active immune-evasion mechanism, one of the escape routes [immunoediting](immune-surveillance.md) selects for. PD-1-blocking antibodies (pembrolizumab, nivolumab) release the throttle and restore T-cell killing; they produce durable responses in melanoma, lung, kidney, and bladder cancers and earned the 2018 Nobel Prize for Tasuku Honjo and James Allison ([CTLA-4](ctla-4.md)). Response rates are highest in tumors with high PD-L1 expression, high mutation load, and pre-existing T-cell infiltration; resistance arrives through antigen loss, [TGF-β](tgfb1-tgfb1-p01137.md)-rich stroma, and [IL-8](il-8-cxcl8.md)-recruited suppressor cells.
+
+## Notes
+
+- Human gene symbol: PDCD1; UniProt Q15116; 288 amino acids; CD28 receptor family; two ITIM/ITSM motifs.

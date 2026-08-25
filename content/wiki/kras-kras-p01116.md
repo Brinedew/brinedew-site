@@ -44,10 +44,18 @@ transmembrane: false
 uniprot_id: P01116
 ---
 
-# KRAS (KRAS)
+# KRAS
 
-**What it is.** Molecular switch downstream of many growth factor receptors.
+KRAS is a small GTP-binding protein that acts as a relay between growth-factor receptors and the kinase cascades that drive proliferation — and as the most frequently activated oncogene in human cancer.
 
-**Why it matters here.** Locked‑on RAS drives mitogen‑independent growth and can trigger senescence tripwires.
+## Function
 
-**Notes.** Pathway: RAS–RAF–MEK–ERK.
+KRAS sits on the inner face of the plasma membrane. A growth-factor receptor such as [EGFR](egfr-erbb1-p00533.md) activates it by catalyzing GDP-to-GTP exchange; KRAS-GTP then recruits and activates RAF, launching the MAPK cascade toward [MEK](map2k1-map2k1-q02750.md) and ERK, alongside [PI3K](pik3ca-pik3ca-p42336.md) and other effectors. KRAS hydrolyzes its own GTP to switch off, and that built-in timer is what receptor signaling accelerates and GAP proteins enforce.
+
+## In cancer
+
+Point mutations at codons 12, 13, and 61 destroy the GTPase timer, and the protein then signals continuously. KRAS mutations occur in roughly 40% of colorectal cancers, 90% of pancreatic cancers, and a quarter of lung adenocarcinomas. A KRAS-mutant tumor signals downstream of the receptor no matter what the receptor does, which is why anti-EGFR antibodies help only KRAS-wild-type colorectal cancer — testing for KRAS before treatment is standard practice. KRAS was long considered undruggable because its nucleotide pocket binds GTP with picomolar affinity; the covalent inhibitors of KRAS^G12C (sotorasib, adagrasib), approved from 2021, cracked the most common lung-cancer mutant specifically.
+
+## Notes
+
+- Human gene symbol: KRAS; UniProt P01116; 189 amino acids; RAS superfamily GTPase.

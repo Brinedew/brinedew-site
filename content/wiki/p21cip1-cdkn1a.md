@@ -46,10 +46,18 @@ transmembrane: false
 uniprot_id: P38936
 ---
 
-# p21^CIP1 (CDKN1A)
+# p21 (CDKN1A)
 
-**What it is.** p53-induced inhibitor of multiple cyclin–CDK complexes.
+p21 (p21^Cip1), encoded by CDKN1A, is a cyclin-dependent kinase inhibitor that halts the cell cycle at p53's command, making it the principal conduit between DNA damage sensing and G1 arrest.
 
-**Why it matters here.** Implements p53-mediated cell-cycle arrest; contributes to senescence entry.
+## Function
 
-**Notes.** Type: CKI; Upstream: p53.
+p21 binds cyclin–CDK complexes — cyclin E–CDK2 and cyclin A–CDK2 in particular — and blocks their kinase activity, which keeps [RB](rb-rb1.md) hypophosphorylated and E2F repressed, so the cell stays in G1. It also inhibits PCNA directly, interfering with DNA replication itself. p21 was the first CDK inhibitor discovered and is the canonical transcriptional target of [p53](p53-tp53.md): the p53 response to DNA damage arrests the cell largely through p21. At lower levels and in the cytoplasm, p21 has reported pro-survival roles, binding and inhibiting apoptotic effectors — a dual behavior that keeps its interpretation context-dependent.
+
+## In cancer
+
+CDKN1A sits on chromosome 6p and is rarely mutated outright in cancer; tumors more commonly disable the pathway above it by losing [p53](p53-tp53.md), or below it by amplifying cyclins and CDKs. Epigenetic silencing of p21 occurs in several carcinomas. The gene's near-intactness across tumors is itself evidence of how the [tumor suppressor](types-of-tumor-suppressor-genes.md) network fails: attacking the hub (p53) is cheaper than attacking every spoke.
+
+## Notes
+
+- Human gene symbol: CDKN1A; UniProt P38936; 164 amino acids; Cip/Kip family CDK inhibitor.

@@ -45,10 +45,18 @@ transmembrane: false
 uniprot_id: P46937
 ---
 
-# YAP (YAP1)
+# YAP1 (YAP)
 
-**What it is.** Transcriptional co-activator controlled by the Hippo pathway and mechanical cues.
+YAP1 (Yes-associated protein 1) is the transcriptional coactivator of the Hippo pathway — the signal that tells a cell how crowded and stretched its tissue is, and whose loss of control drives overgrowth.
 
-**Why it matters here.** When active (nuclear), it promotes proliferation and survival; contact inhibition and soft matrices keep it off.
+## Function
 
-**Notes.** Type: co-activator; Partners: TEAD factors; Sibling: TAZ.
+The Hippo pathway is a density sensor: when a tissue is crowded, MST1/2 and LATS1/2 kinases are active, and LATS phosphorylates YAP, which is then retained in the cytoplasm and degraded. When a cell has room — or is stretched by a stiff matrix, or loses cell–cell contact — Hippo signaling quiets, YAP dephosphorylates and enters the nucleus, and partners with TEAD transcription factors to drive genes for proliferation, survival, and extracellular-matrix remodeling. YAP is thus the molecular link between tissue architecture and the growth program, and the pathway through which mechanical environment reaches the genome.
+
+## In cancer
+
+YAP1 amplification occurs in hepatocellular carcinoma, esophageal cancer, and others, and nuclear YAP is a marker of aggressive disease across tumor types. YAP drives the mechanotransduction that [Mina Bissell's](mina-bissell.md) tissue-architecture work predicted: stiff, remodeled matrix activates YAP, and YAP-activated cells remodel the matrix further. Its partner [TAZ](taz-wwtr1.md) shares the function and the dysregulation. No direct YAP inhibitor is approved; drug development targets TEAD palmitoylation and YAP–TEAD binding.
+
+## Notes
+
+- Human gene symbol: YAP1; UniProt P46937; 504 amino acids; TEAD-binding, PDZ-binding, WW domains.

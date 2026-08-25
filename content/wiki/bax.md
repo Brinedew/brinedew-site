@@ -50,8 +50,16 @@ uniprot_id: Q07812
 
 # BAX
 
-**What it is.** Pro-apoptotic effector that perforates the mitochondrial outer membrane.
+BAX (BCL-2-associated X protein) is a pore-forming protein whose oligomerization in the mitochondrial outer membrane commits a cell to apoptosis.
 
-**Why it matters here.** Required for the execution phase of apoptosis in many cells.
+## Function
 
-**Notes.** Type: BCL-2 family; Partner: BAK.
+BAX lives in the cytosol in an inactive, folded-shut state. Death signals activate BH3-only proteins, which expose BAX's membrane-targeting helix; BAX moves to the mitochondrial outer membrane and, together with [BAK](bak-bak1.md), forms oligomeric pores. The outer membrane permeabilizes, cytochrome c and other intermembrane proteins escape, [APAF1](apaf1.md) assembles the apoptosome, and caspases execute the cell. Anti-apoptotic family members ([BCL-2](bcl-2.md), [BCL-xL](bcl-xl-bcl2l1.md), [MCL-1](mcl-1.md)) restrain BAX at each step, so BAX sits at the center of the family's decision arithmetic.
+
+## In cancer
+
+BAX is a direct transcriptional target of [p53](p53-tp53.md), which places it on the execution path that p53 triggers in a cell with irreparable damage. Tumors that keep p53 intact can still evade apoptosis by raising anti-apoptotic BCL-2 family members, and loss-of-function mutations in BAX itself occur in colorectal and other cancers. Chemotherapy that damages DNA works partly by driving this p53–BAX route, which is why tumors with p53 loss respond poorly to it.
+
+## Notes
+
+- Human gene symbol: BAX; UniProt Q07812; 192 amino acids; BH1–BH3 domains and a C-terminal membrane anchor.

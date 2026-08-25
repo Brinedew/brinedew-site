@@ -47,8 +47,17 @@ uniprot_id: P10145
 
 # IL-8 (CXCL8)
 
-**What it is.** Chemokine that recruits neutrophils and remodels microenvironments.
+IL-8 (interleukin-8, CXCL8) is a chemokine that recruits neutrophils to sites of infection and tissue damage, and doubles as a pro-angiogenic and pro-metastatic signal in tumors.
 
-**Why it matters here.** Part of SASP; can aid tumor invasion and angiogenesis.
+## Function
 
-**Notes.** Family: CXC chemokines.
+IL-8 is secreted by macrophages and epithelial cells in response to inflammatory stimuli such as [TNF](tnf-tnf-p01375.md) and [IL-1](il-6.md). It binds the G-protein-coupled receptors CXCR1 and CXCR2 on neutrophils, directing their migration along a gradient to the inflamed site, and also activates them for degranulation and respiratory burst. Its CXC chemokine motif with a glutamate-leucine-arginine sequence is what gives it both receptor specificity and angiogenic activity through CXCR2 on endothelial cells.
+
+## In cancer
+
+Tumors produce IL-8 constitutively. The cytokine recruits neutrophils and myeloid-derived suppressor cells into the tumor, promotes angiogenesis, and acts directly on tumor cells through CXCR1/2 to drive epithelial–mesenchymal transition, stemness, and metastatic behavior. High IL-8 correlates with poor prognosis in melanoma, breast, and colorectal cancer, and with resistance to [PD-1](pd-1-pdcd1.md) blockade in some studies, which has made CXCR2 antagonists an active area of trial design.
+
+## Notes
+
+- Human gene symbol: CXCL8; UniProt P10145; 99 amino acids (precursor); CXC chemokine family.
+- The name "interleukin-8" predates the chemokine nomenclature; both names remain in use.

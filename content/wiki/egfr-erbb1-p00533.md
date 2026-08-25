@@ -50,8 +50,16 @@ uniprot_id: P00533
 
 # EGFR (ERBB1)
 
-**What it is.** Receptor tyrosine kinase that binds EGF-family ligands to drive proliferation and survival signaling.
+EGFR (epidermal growth factor receptor, ERBB1) is a receptor tyrosine kinase that converts extracellular growth signals into the RAS–MAPK and PI3K–AKT pathways inside the cell.
 
-**Why it matters here.** Oncogenic driver via amplification/mutation; central node for growth control and a classic drug target.
+## Function
 
-**Notes.** Ligand: EGF; Pathways: EGFR→RAS→MAPK; EGFR→PI3K→AKT.
+EGF or a related ligand binds EGFR's extracellular domain, the receptor dimerizes, and its intracellular kinase domains trans-phosphorylate each other on C-terminal tyrosines. Those phosphotyrosines dock the adapter proteins that launch two main cascades: the RAS–RAF–[MEK](map2k1-map2k1-q02750.md)–ERK kinase chain, which drives proliferation, and the [PI3K](pik3ca-pik3ca-p42336.md)–[AKT](akt1-p31749.md) route, which drives survival and growth. Ligand binding also triggers receptor internalization and lysosomal degradation, which limits how long the signal runs.
+
+## In cancer
+
+EGFR is a proto-oncogene by every available route: amplification (glioblastoma, where the constitutively active EGFRvIII deletion variant is common), activating mutations in the kinase domain (a large fraction of lung adenocarcinomas in never-smokers), and overexpression (colorectal, head and neck). Each route makes the receptor signal without ligand. The kinase-domain mutations made EGFR the first solid-tumor target of a genotype-matched drug: gefitinib and erlotinib in EGFR-mutant lung cancer, cetuximab in colorectal cancer. Resistance arises through a second kinase-domain mutation (T790M) or through downstream [KRAS](kras-kras-p01116.md) activation, which bypasses the receptor entirely.
+
+## Notes
+
+- Human gene symbol: EGFR; UniProt P00533; 1,210 amino acids; ERBB receptor family (with HER2, HER3, HER4).

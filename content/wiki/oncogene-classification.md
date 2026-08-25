@@ -168,7 +168,7 @@ WGD happens when normal cell cycle control breaks down. Usually, DNA replication
 
 WGD is typically a catastrophic failure that kills most cells attempting it. However, the rare cells that survive gain unexpected benefits: four-copy gene buffering masks recessive deleterious mutations while providing larger mutational targets for beneficial changes. This accidentally accelerates karyotype exploration - surviving cells can tolerate more chromosomal losses because essential genes exist in multiple copies, creating enhanced tolerance for genetic damage and more opportunities for evolutionary experimentation.
 
-**Synthetic lethal vulnerability:** This is a crucial concept in system robustness. Synthetic lethality occurs when disabling component A is survivable, disabling component B is survivable, but disabling both A and B simultaneously is catastrophic. 
+**Synthetic lethal vulnerability:** This concept is central to system robustness. Synthetic lethality occurs when disabling component A is survivable, disabling component B is survivable, but disabling both A and B simultaneously is catastrophic. 
 
 Why does this vulnerability exist? Biological systems use redundant backup mechanisms for critical functions. If DNA repair pathway A fails, pathway B can compensate. This redundancy protects normal cells against single-point failures.
 
@@ -706,7 +706,7 @@ The result: malignant cells gain access to cellular programs they should never b
 
 **Drug-tolerant persister (DTP) cells:** When cancer cells encounter lethal drug concentrations, most die - but a small fraction enters a reversible "hibernation-like" state that can outlast treatment. These survivor cells accomplish this through a coordinated chromatin and metabolic shutdown strategy.
 
-The chromatin shutdown works by massively upregulating KDM5A, an enzyme that strips "active" chemical marks (H3K4 methylation) from genes throughout the genome. Think of it as systematically removing "OPEN" signs from most cellular programs, forcing genes into silent states. This creates a locked-down chromatin landscape where only essential survival genes remain active.
+The chromatin shutdown works by massively upregulating KDM5A, an enzyme that strips "active" chemical marks (H3K4 methylation) from genes throughout the genome. Think of it as systematically removing "OPEN" signs from most cellular programs, forcing genes into silent states. This creates a locked-down chromatin state where only essential survival genes remain active.
 
 Simultaneously, these cells switch their metabolism from rapid glycolysis (the fast-growth mode) to oxidative phosphorylation - the same energy strategy used by resting, non-dividing cells. This metabolic switch generates fewer reactive oxygen species (ROS) as waste products, reducing cellular stress and damage during drug exposure.
 
@@ -719,7 +719,7 @@ Cancer populations maintain the ability to rapidly adapt to changing conditions 
 
 ## evolutionary strategy and path dependence
 
-Now that we've seen how cancer breaches each gate, a crucial pattern emerges: the order matters. Which gate cancer breaks first constrains which strategies become available later. This creates different evolutionary paths with different vulnerabilities.
+Now that we've seen how cancer breaches each gate, the order matters. Which gate cancer breaks first constrains which strategies become available later. This creates different evolutionary paths with different vulnerabilities.
 
 **Two major strategic paths:**
 

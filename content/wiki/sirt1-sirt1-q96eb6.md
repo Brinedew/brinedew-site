@@ -47,10 +47,18 @@ transmembrane: false
 uniprot_id: Q96EB6
 ---
 
-# SIRT1 (SIRT1)
+# SIRT1
 
-What it is. NAD-dependent deacetylase that modulates transcription factors and repair proteins, coupling cellular state to gene regulation and cleanup pathways.
+SIRT1 (sirtuin 1) is an NAD+-dependent protein deacetylase that links cellular energy state to the chromatin: when NAD+ is abundant — the fasting, stressed, low-energy state — SIRT1 removes acetyl groups from histones and transcription factors and shifts the cell toward a maintenance program.
 
-Why it matters here. Supports stress-responsive programs that keep damaged cells in check and preserves cooperative function; loss of these restraints can ease steps toward malignant autonomy.
+## Function
 
-Notes. Targets include FOXO, p53, PGC-1α; communicates with mTOR and AMPK through autophagy and metabolic control.
+SIRT1's dependence on NAD+ makes it a metabolic sensor: the NAD+/NADH ratio rises during calorie restriction and exercise, and SIRT1 activity follows. Its substrates include histones (H4K16ac in particular), [p53](p53-tp53.md) (deacetylation dampens p53-driven arrest and apoptosis), FOXO transcription factors (deacetylation tunes their stress-response output), PGC-1α (activating mitochondrial biogenesis), and NF-κB (deacetylation reduces inflammatory transcription). The combined output is the "calorie restriction mimetic" profile: reduced growth signaling, increased mitochondrial function, increased stress resistance, reduced inflammation.
+
+## In aging and cancer
+
+SIRT1 is the molecule behind the resveratrol hypothesis — resveratrol activates SIRT1 (directly or through AMPK), and sirtuin overexpression extends lifespan in yeast and worms, with murine results more mixed. In cancer SIRT1 is double-faced: it deacetylates and restrains [p53](p53-tp53.md), which favors tumor survival, yet it also suppresses inflammatory and metabolic programs tumors need. SIRT1 inhibitors and activators have both been developed, and the tissue- and stage-dependence of its effects has kept neither from broad success.
+
+## Notes
+
+- Human gene symbol: SIRT1; UniProt Q96EB6; 747 amino acids; sirtuin (class III) deacetylase family; seven human sirtuins.

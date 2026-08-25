@@ -47,8 +47,16 @@ uniprot_id: P04406
 
 # GAPDH
 
-**What it is.** Has both glyceraldehyde-3-phosphate dehydrogenase and nitrosylase activities, thereby playing a role in glycolysis and nuclear functions, respectively (PubMed:11724794, PubMed:3170585).
+GAPDH (glyceraldehyde-3-phosphate dehydrogenase) is the glycolytic enzyme that oxidizes and phosphorylates glyceraldehyde-3-phosphate, and the textbook example of a "housekeeping" protein with a second life in signaling.
 
-**Why it matters here.** Inflammatory signaling component that affects aging and age-related disease.
+## Function
 
-**Notes.** Type: receptor; Pathways: Gluconeogenesis, Carbohydrate degradation; glycolysis; pyruvate from D-glyceraldehyde 3-phosphate: step 1/5, Glycolysis.
+In glycolysis, GAPDH catalyzes the reaction that captures energy as NADH and 1,3-bisphosphoglycerate: it oxidizes its substrate, reduces NAD+ to NADH, and adds an inorganic phosphate. The reaction is the glycolytic step that links sugar oxidation to ATP production, and GAPDH's activity sets the pace of the pathway under many conditions. The protein is abundant (often 1–5% of cellular protein), stable, and uniformly expressed — which is why it served for decades as the standard loading control and reference gene in molecular biology.
+
+## In signaling, aging, and cancer
+
+GAPDH's abundance is a resource that other pathways recruit. The enzyme translocates to the nucleus under oxidative stress and during S-phase, where it participates in DNA repair, transcriptional coactivation, and — in neurons — a cell-death program in which S-nitrosylated GAPDH carries a nuclear partner to degrade the genome. It binds telomeric DNA, single-stranded DNA breaks, and [ATM](atm.md)-pathway components. In cancer, GAPDH is upregulated as part of the glycolytic shift (the Warburg effect) and is an HIF-1α coactivator; its housekeeping reputation is why its changing expression in tumors was noticed late.
+
+## Notes
+
+- Human gene symbol: GAPDH; UniProt P04406; 335 amino acids; tetramer; four catalytic cysteine-containing active sites.
