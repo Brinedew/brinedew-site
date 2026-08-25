@@ -32,6 +32,7 @@ test("the shared HTML and PDF runtime exposes all four canonical shape contracts
     kind: "ellipse",
     inlineBleedCharsPerSide: 0.5,
     verticalBleedEm: 0.35,
+    crossToInlineTransferRatio: 0.2,
     strokeWidthPx: 1.9,
     roughness: 1.28,
     bowing: 0.62,

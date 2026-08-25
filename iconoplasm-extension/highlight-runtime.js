@@ -9,6 +9,7 @@
   // Rough.js deliberately perturbs both strokes. A tighter loop can cut through
   // italic cap-height ink even when the nominal ellipse encloses the text box.
   const ELLIPSE_VERTICAL_BLEED_EM = 0.35
+  const ELLIPSE_CROSS_TO_INLINE_TRANSFER_RATIO = 0.2
   const ELLIPSE_STROKE_WIDTH = 1.9
   const ELLIPSE_ROUGHNESS = 1.28
   const ELLIPSE_BOWING = 0.62
@@ -42,6 +43,7 @@
       kind: "ellipse",
       inlineBleedCharsPerSide: ELLIPSE_INLINE_BLEED_CHARS_PER_SIDE,
       verticalBleedEm: ELLIPSE_VERTICAL_BLEED_EM,
+      crossToInlineTransferRatio: ELLIPSE_CROSS_TO_INLINE_TRANSFER_RATIO,
       strokeWidthPx: ELLIPSE_STROKE_WIDTH,
       roughness: ELLIPSE_ROUGHNESS,
       bowing: ELLIPSE_BOWING,
@@ -235,13 +237,16 @@
       )
       const bleedVerticalPx = Math.max(2, scene.fontSizePx * ELLIPSE_VERTICAL_BLEED_EM)
       for (const rect of scene.fragments) {
-        const width = rect.width + bleedInlinePx * 2
-        const height = rect.height + bleedVerticalPx * 2
+        const rawWidth = rect.width + bleedInlinePx * 2
+        const rawHeight = rect.height + bleedVerticalPx * 2
+        const transferredSpan = rawHeight * ELLIPSE_CROSS_TO_INLINE_TRANSFER_RATIO
+        const width = rawWidth + transferredSpan
+        const height = rawHeight - transferredSpan
         const fragment = document.createElement("span")
         fragment.className =
           "iconoplasm-gene-paint-fragment iconoplasm-gene-paint-fragment--ellipse"
-        fragment.style.left = rect.left - bleedInlinePx + "px"
-        fragment.style.top = rect.top - bleedVerticalPx + "px"
+        fragment.style.left = rect.left - bleedInlinePx - transferredSpan / 2 + "px"
+        fragment.style.top = rect.top - bleedVerticalPx + transferredSpan / 2 + "px"
         fragment.style.width = width + "px"
         fragment.style.height = height + "px"
         fragment.style.setProperty("--iconoplasm-gene-color", color || placeholderColor)
