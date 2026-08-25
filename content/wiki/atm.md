@@ -57,7 +57,7 @@ ATM exists in the nucleus as an inactive dimer. A double-strand break — from i
 
 ## In cancer
 
-The gene takes its name from ataxia telangiectasia, the recessive syndrome of cerebellar degeneration, immunodeficiency, radiation sensitivity, and early cancer incidence in homozygotes. Heterozygous carriers carry elevated breast cancer risk. Because ATM loss lets damaged cells continue dividing, ATM behaves as a [tumor suppressor](types-of-tumor-suppressor-genes.md), and its loss also sensitizes tumors to radiation and to drugs that create replication stress — a therapeutic window exploited in ATM-deficient tumors.
+The gene takes its name from ataxia telangiectasia, the recessive syndrome of cerebellar degeneration, immunodeficiency, radiation sensitivity, and early cancer incidence in homozygotes. Heterozygous carriers carry elevated breast cancer risk. Because ATM loss lets damaged cells continue dividing, ATM behaves as a [tumor suppressor](Types of tumor suppressor genes.md), and its loss also sensitizes tumors to radiation and to drugs that create replication stress — a therapeutic window exploited in ATM-deficient tumors.
 
 ## Notes
 

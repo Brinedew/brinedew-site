@@ -56,7 +56,7 @@ p21 binds cyclin–CDK complexes — cyclin E–CDK2 and cyclin A–CDK2 in part
 
 ## In cancer
 
-CDKN1A sits on chromosome 6p and is rarely mutated outright in cancer; tumors more commonly disable the pathway above it by losing [p53](p53-tp53.md), or below it by amplifying cyclins and CDKs. Epigenetic silencing of p21 occurs in several carcinomas. The gene's near-intactness across tumors is itself evidence of how the [tumor suppressor](types-of-tumor-suppressor-genes.md) network fails: attacking the hub (p53) is cheaper than attacking every spoke.
+CDKN1A sits on chromosome 6p and is rarely mutated outright in cancer; tumors more commonly disable the pathway above it by losing [p53](p53-tp53.md), or below it by amplifying cyclins and CDKs. Epigenetic silencing of p21 occurs in several carcinomas. The gene's near-intactness across tumors is itself evidence of how the [tumor suppressor](Types of tumor suppressor genes.md) network fails: attacking the hub (p53) is cheaper than attacking every spoke.
 
 ## Notes
 

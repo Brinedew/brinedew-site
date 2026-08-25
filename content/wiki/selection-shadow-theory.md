@@ -18,7 +18,7 @@ A mutation that kills you at 80 has little evolutionary impact if most of your s
 
 ## Mathematical formalization
 
-William Hamilton later formalized this insight mathematically, showing that the force of selection declines exponentially with age in populations with overlapping generations. The strength of selection on traits expressed at age x is proportional to the reproductive value at that age.
+[William Hamilton](wd-hamilton.md) later formalized this insight mathematically, showing that the force of selection declines exponentially with age in populations with overlapping generations. The strength of selection on traits expressed at age x is proportional to the reproductive value at that age.
 
 ## Mutation accumulation
 
