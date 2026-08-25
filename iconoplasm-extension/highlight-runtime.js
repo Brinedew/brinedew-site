@@ -6,7 +6,9 @@
   // Give the rough loop one full character of extra horizontal room overall.
   // Anything tighter starts to look like the outline got shrink-wrapped to the glyphs.
   const ELLIPSE_INLINE_BLEED_CHARS_PER_SIDE = 0.5
-  const ELLIPSE_VERTICAL_BLEED_EM = 0.2
+  // Rough.js deliberately perturbs both strokes. A tighter loop can cut through
+  // italic cap-height ink even when the nominal ellipse encloses the text box.
+  const ELLIPSE_VERTICAL_BLEED_EM = 0.35
   const ELLIPSE_STROKE_WIDTH = 1.9
   const ELLIPSE_ROUGHNESS = 1.28
   const ELLIPSE_BOWING = 0.62
