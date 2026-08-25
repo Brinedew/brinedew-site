@@ -108,7 +108,9 @@ test("Firefox publication also requires a certified ownership adapter", () => {
   assert.equal(certification.targets.chrome.store_release_ready, true)
   assert.equal(certification.targets.edge.store_release_ready, true)
   assert.equal(certification.targets.firefox.implementation_complete, true)
-  assert.equal(certification.targets.firefox.store_release_ready, false)
+  assert.equal(certification.targets.firefox.store_release_ready, true)
+  assert.equal(certification.renderer.pdfjs_distribution, "unmodified-pdfjs-dist")
+  assert.equal(certification.renderer.filled_pill_pdf_fallback, "pill-outline")
   assert.equal(certification.targets.safari.store_release_ready, false)
 })
 
