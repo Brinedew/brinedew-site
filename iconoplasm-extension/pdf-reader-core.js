@@ -56,13 +56,22 @@
     return { accepted, rejected }
   }
 
-  function boundsFromClientRect(rect, pageRect) {
+  function contentOriginFromBorderRect(rect, clientInsets = {}) {
+    const left = Number(rect?.left)
+    const top = Number(rect?.top)
+    const clientLeft = Number(clientInsets?.left)
+    const clientTop = Number(clientInsets?.top)
+    if (![left, top, clientLeft, clientTop].every(Number.isFinite)) return null
+    return { left: left + clientLeft, top: top + clientTop }
+  }
+
+  function boundsFromClientRect(rect, pageOrigin) {
     const left = Number(rect?.left)
     const top = Number(rect?.top)
     const right = Number(rect?.right)
     const bottom = Number(rect?.bottom)
-    const pageLeft = Number(pageRect?.left)
-    const pageTop = Number(pageRect?.top)
+    const pageLeft = Number(pageOrigin?.left)
+    const pageTop = Number(pageOrigin?.top)
     if (
       ![left, top, right, bottom, pageLeft, pageTop].every(Number.isFinite) ||
       right <= left ||
@@ -167,16 +176,20 @@
 
     if (kind === "pill-outline") {
       const spread = Math.max(1, crossExtent * Number(shape.outerSpreadEm || 0))
-      const radius = Math.max(1, crossExtent * Number(shape.radiusEm || 0) + spread)
+      const requestedInnerClearance = crossExtent * Number(shape.innerSpreadEm || 0)
+      const innerClearance = requestedInnerClearance > 0 ? Math.max(1, requestedInnerClearance) : 0
+      const totalBleed = spread + innerClearance
+      const radius = Math.max(1, crossExtent * Number(shape.radiusEm || 0) + totalBleed)
       return {
         bounds: {
-          left: bounds.left - spread,
-          top: bounds.top - spread,
-          right: bounds.right + spread,
-          bottom: bounds.bottom + spread,
+          left: bounds.left - totalBleed,
+          top: bounds.top - totalBleed,
+          right: bounds.right + totalBleed,
+          bottom: bounds.bottom + totalBleed,
         },
         borderRadius: radius,
         borderWidth: spread,
+        innerClearance,
       }
     }
 
@@ -209,6 +222,7 @@
 
   root.IconoplasmPdfReaderCore = Object.freeze({
     normalizeTextRunMatches,
+    contentOriginFromBorderRect,
     boundsFromClientRect,
     containsPointInBounds,
     tightenBoundsToTextMetrics,

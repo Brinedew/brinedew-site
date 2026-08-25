@@ -237,11 +237,18 @@ function createHitAnchor(state, match, boundsList, matchOrdinal) {
   return anchor
 }
 
+function getPageContentOrigin(pageElement) {
+  return core.contentOriginFromBorderRect(pageElement?.getBoundingClientRect(), {
+    left: pageElement?.clientLeft,
+    top: pageElement?.clientTop,
+  })
+}
+
 function anchorContainsClientPoint(anchor, clientX, clientY) {
-  const pageRect = anchor?._iconoplasmPageState?.pageElement?.getBoundingClientRect()
-  if (!pageRect) return false
-  const pageX = clientX - pageRect.left
-  const pageY = clientY - pageRect.top
+  const pageOrigin = getPageContentOrigin(anchor?._iconoplasmPageState?.pageElement)
+  if (!pageOrigin) return false
+  const pageX = clientX - pageOrigin.left
+  const pageY = clientY - pageOrigin.top
   return anchor._iconoplasmBounds?.some((bounds) =>
     core.containsPointInBounds(bounds, pageX, pageY),
   )
@@ -280,7 +287,8 @@ async function scanPage(pageNumber) {
   state.renderRevision += 1
   const revision = state.renderRevision
   removePageAnchors(pageNumber)
-  const pageRect = state.pageElement.getBoundingClientRect()
+  const pageOrigin = getPageContentOrigin(state.pageElement)
+  if (!pageOrigin) return
   const walker = document.createTreeWalker(textLayer, NodeFilter.SHOW_TEXT)
   let matchOrdinal = 0
   for (let textNode = walker.nextNode(); textNode; textNode = walker.nextNode()) {
@@ -295,7 +303,7 @@ async function scanPage(pageNumber) {
       range.setStart(textNode, match.start)
       range.setEnd(textNode, match.end)
       const boundsList = Array.from(range.getClientRects(), (rect) =>
-        core.boundsFromClientRect(rect, pageRect),
+        core.boundsFromClientRect(rect, pageOrigin),
       )
         .filter(Boolean)
         .map((bounds) => getTextLayerGeometry(textNode, match.label, bounds))
