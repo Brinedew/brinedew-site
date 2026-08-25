@@ -6,11 +6,13 @@
   function reportProgress(loaded, total, stage = "loading") {
     const detail = Object.freeze({ loaded, total, stage })
     globalThis.IconoplasmPdfStreamProgress = detail
-    globalThis.dispatchEvent(new CustomEvent("iconoplasm-pdf-stream-progress", { detail }))
+    if (typeof globalThis.CustomEvent === "function" && globalThis.dispatchEvent) {
+      globalThis.dispatchEvent(new CustomEvent("iconoplasm-pdf-stream-progress", { detail }))
+    }
   }
 
   async function readResponseBytes(response) {
-    const total = Number(response.headers.get("content-length")) || 0
+    const total = Number(response.headers?.get?.("content-length")) || 0
     if (!response.body?.getReader) {
       const buffer = await response.arrayBuffer()
       reportProgress(buffer.byteLength, total || buffer.byteLength)

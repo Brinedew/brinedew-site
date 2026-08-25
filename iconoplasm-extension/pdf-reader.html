@@ -13,6 +13,20 @@
   </head>
   <body>
     <header class="reader-toolbar" aria-label="PDF controls">
+      <button
+        class="reader-icon-button"
+        id="sidebar-toggle"
+        type="button"
+        aria-label="Show document sidebar"
+        aria-expanded="false"
+        aria-controls="reader-sidebar"
+        title="Show document sidebar"
+        disabled
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 4h18v16H3V4Zm2 2v12h4V6H5Zm6 0v12h8V6h-8Z" />
+        </svg>
+      </button>
       <label class="reader-icon-button" for="pdf-file" title="Open PDF" aria-label="Open PDF">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M19 20H5V4h7l2 2h5v14Zm-7-8H8v2h4v4h2v-4h4v-2h-4V8h-2v4Z" />
@@ -22,9 +36,30 @@
       <div class="reader-filename" id="reader-filename">PDF document</div>
 
       <div class="reader-toolbar-center">
-        <output id="page-number" aria-label="Current page">–</output>
+        <button
+          class="reader-icon-button"
+          id="previous-page"
+          type="button"
+          aria-label="Previous page"
+          title="Previous page"
+          disabled
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 14 5-5 5 5H7Z" /></svg>
+        </button>
+        <label class="sr-only" for="page-number">Page number</label>
+        <input id="page-number" type="number" min="1" value="1" inputmode="numeric" disabled />
         <span class="reader-page-separator" aria-hidden="true">/</span>
-        <output id="page-count" aria-label="Page count">–</output>
+        <output id="page-count" aria-label="Page count">-</output>
+        <button
+          class="reader-icon-button"
+          id="next-page"
+          type="button"
+          aria-label="Next page"
+          title="Next page"
+          disabled
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5H7Z" /></svg>
+        </button>
         <span class="reader-divider" aria-hidden="true"></span>
         <button
           class="reader-icon-button"
@@ -64,6 +99,20 @@
         </button>
         <button
           class="reader-icon-button"
+          id="fit-width"
+          type="button"
+          aria-label="Fit to width"
+          title="Fit to width"
+          disabled
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M3 5h18v14H3V5Zm2 2v10h14V7H5Zm1 4h3V9l3 3-3 3v-2H6v-2Zm12 0v2h-3v2l-3-3 3-3v2h3Z"
+            />
+          </svg>
+        </button>
+        <button
+          class="reader-icon-button"
           id="rotate"
           type="button"
           aria-label="Rotate clockwise"
@@ -80,6 +129,16 @@
         <form id="find-form" role="search" hidden>
           <label class="sr-only" for="find-query">Find in PDF</label>
           <input id="find-query" type="search" placeholder="Find in PDF" autocomplete="off" />
+          <output id="find-count" aria-live="polite"></output>
+          <button
+            id="find-previous"
+            type="button"
+            aria-label="Previous match"
+            title="Previous match"
+          >
+            ↑
+          </button>
+          <button id="find-next" type="button" aria-label="Next match" title="Next match">↓</button>
         </form>
         <button
           class="reader-icon-button"
@@ -93,6 +152,44 @@
             <path
               d="m15.5 14 5 5-1.5 1.5-5-5a7 7 0 1 1 1.5-1.5ZM5 10.5a5 5 0 1 0 10 0 5 5 0 0 0-10 0Z"
             />
+          </svg>
+        </button>
+        <button
+          class="reader-icon-button"
+          id="print"
+          type="button"
+          aria-label="Print"
+          title="Print"
+          disabled
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M7 3h10v4h2a3 3 0 0 1 3 3v6h-4v5H6v-5H2v-6a3 3 0 0 1 3-3h2V3Zm2 2v4h6V5H9Zm-1 9v5h8v-5H8Zm10-3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
+            />
+          </svg>
+        </button>
+        <button
+          class="reader-icon-button"
+          id="presentation-mode"
+          type="button"
+          aria-label="Presentation mode"
+          title="Presentation mode"
+          disabled
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 4h18v14h-7l3 3h-3.2L12 19.2 10.2 21H7l3-3H3V4Zm2 2v10h14V6H5Z" />
+          </svg>
+        </button>
+        <button
+          class="reader-icon-button"
+          id="document-properties"
+          type="button"
+          aria-label="Document properties"
+          title="Document properties"
+          disabled
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 3h10l4 4v14H5V3Zm2 2v14h10V8h-3V5H7Zm2 6h6v2H9v-2Zm0 4h6v2H9v-2Z" />
           </svg>
         </button>
         <button
@@ -125,6 +222,36 @@
         </button>
       </div>
     </header>
+    <aside id="reader-sidebar" class="reader-sidebar" aria-label="Document navigation" hidden>
+      <div class="reader-sidebar-tabs" role="tablist" aria-label="Sidebar views">
+        <button
+          id="thumbnail-tab"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          aria-controls="thumbnail-view"
+        >
+          Thumbnails
+        </button>
+        <button
+          id="outline-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="outline-view"
+        >
+          Outline
+        </button>
+      </div>
+      <div id="thumbnail-view" class="reader-sidebar-view" role="tabpanel"></div>
+      <nav
+        id="outline-view"
+        class="reader-sidebar-view"
+        aria-label="Document outline"
+        role="tabpanel"
+        hidden
+      ></nav>
+    </aside>
     <div
       id="reader-progress"
       class="reader-progress is-indeterminate"
@@ -152,6 +279,27 @@
     <div id="viewerContainer" role="main" tabindex="0" aria-busy="true">
       <div id="viewer" class="pdfViewer"></div>
     </div>
+
+    <dialog id="document-properties-dialog" class="reader-dialog">
+      <form method="dialog">
+        <header>
+          <h2>Document properties</h2>
+          <button value="close" aria-label="Close">×</button>
+        </header>
+        <dl id="document-properties-list"></dl>
+        <footer><button value="close">Close</button></footer>
+      </form>
+    </dialog>
+
+    <dialog id="print-dialog" class="reader-dialog reader-print-dialog">
+      <form method="dialog">
+        <h2>Preparing document for printing…</h2>
+        <progress id="print-progress" max="100" value="0"></progress>
+        <output id="print-progress-label">0%</output>
+        <footer><button id="print-cancel" value="cancel">Cancel</button></footer>
+      </form>
+    </dialog>
+    <div id="print-container" aria-hidden="true"></div>
 
     <script src="pdf-stream-bootstrap.js"></script>
     <script src="generated/rough.js"></script>

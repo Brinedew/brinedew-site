@@ -53,7 +53,7 @@ body {
 
 .reader-filename {
   min-width: 0;
-  padding-left: 44px;
+  padding-left: 88px;
   overflow: hidden;
   color: var(--viewer-ink);
   font-weight: 600;
@@ -61,9 +61,14 @@ body {
   white-space: nowrap;
 }
 
-.reader-toolbar > .reader-icon-button:first-of-type {
+.reader-toolbar #sidebar-toggle {
   position: absolute;
-  left: 16px;
+  left: 8px;
+}
+
+.reader-toolbar > label.reader-icon-button {
+  position: absolute;
+  left: 48px;
 }
 
 .reader-icon-button {
@@ -121,13 +126,22 @@ body {
 
 #page-number {
   min-width: 28px;
+  width: 44px;
   height: 28px;
   display: inline-grid;
   place-items: center;
+  box-sizing: border-box;
+  border: 0;
   padding: 0 4px;
   color: var(--viewer-ink);
   background: #202124;
+  font: inherit;
   font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+#page-number::-webkit-inner-spin-button {
+  appearance: none;
 }
 
 #page-count,
@@ -156,6 +170,10 @@ body {
 #find-form {
   height: 36px;
   align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: #202124;
 }
 
 #find-form:not([hidden]) {
@@ -172,6 +190,30 @@ body {
   color: #202124;
   background: #f8f9fa;
   font: inherit;
+}
+
+#find-count {
+  min-width: 48px;
+  padding: 0 6px;
+  color: var(--viewer-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+#find-previous,
+#find-next {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--viewer-ink);
+  background: transparent;
+  cursor: pointer;
+}
+
+#find-previous:hover,
+#find-next:hover {
+  background: var(--viewer-toolbar-hover);
 }
 
 #reader-status,
@@ -314,6 +356,214 @@ body {
   background: var(--viewer-canvas);
 }
 
+body[data-sidebar-open="true"] #viewerContainer {
+  left: 280px;
+}
+
+.reader-sidebar {
+  position: fixed;
+  z-index: 80;
+  top: var(--toolbar-height);
+  bottom: 0;
+  left: 0;
+  width: 280px;
+  box-sizing: border-box;
+  border-right: 1px solid #1f1f1f;
+  color: var(--viewer-ink);
+  background: #303134;
+  box-shadow: 2px 0 5px rgb(0 0 0 / 25%);
+}
+
+.reader-sidebar-tabs {
+  height: 44px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid #5f6368;
+}
+
+.reader-sidebar-tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--viewer-muted);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.reader-sidebar-tabs button[aria-selected="true"] {
+  border-bottom-color: #8ab4f8;
+  color: var(--viewer-ink);
+}
+
+.reader-sidebar-view {
+  height: calc(100% - 45px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 12px;
+}
+
+.reader-thumbnail {
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin: 0 0 14px;
+  border: 0;
+  border-radius: 3px;
+  padding: 8px;
+  color: var(--viewer-muted);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.reader-thumbnail:hover,
+.reader-thumbnail[aria-current="page"] {
+  color: var(--viewer-ink);
+  background: #45484b;
+}
+
+.reader-thumbnail canvas {
+  max-width: 100%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 55%);
+}
+
+.reader-outline-list,
+.reader-outline-list ol {
+  margin: 0;
+  padding-left: 18px;
+  list-style: none;
+}
+
+.reader-outline-list > li {
+  margin-bottom: 4px;
+}
+
+.reader-outline-list button {
+  width: 100%;
+  border: 0;
+  padding: 6px 4px;
+  overflow: hidden;
+  color: var(--viewer-ink);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.reader-outline-list button:hover {
+  background: #45484b;
+}
+
+.reader-sidebar-empty {
+  margin: 20px 8px;
+  color: var(--viewer-muted);
+  text-align: center;
+}
+
+#viewerContainer:fullscreen {
+  inset: 0;
+  background: var(--viewer-canvas);
+}
+
+.reader-dialog {
+  width: min(480px, calc(100vw - 40px));
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 4px;
+  padding: 0;
+  color: var(--viewer-ink);
+  background: #3c4043;
+  box-shadow: 0 8px 30px rgb(0 0 0 / 55%);
+}
+
+.reader-dialog::backdrop {
+  background: rgb(0 0 0 / 52%);
+}
+
+.reader-dialog form {
+  margin: 0;
+  padding: 20px;
+}
+
+.reader-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.reader-dialog h2 {
+  margin: 0 0 18px;
+  font-size: 1.05rem;
+}
+
+.reader-dialog header h2 {
+  margin: 0;
+}
+
+.reader-dialog header button {
+  border: 0;
+  color: var(--viewer-ink);
+  background: transparent;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.reader-dialog dl {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.7fr) minmax(0, 1.3fr);
+  gap: 8px 16px;
+  margin: 20px 0 0;
+  font-size: 0.875rem;
+}
+
+.reader-dialog dt {
+  color: var(--viewer-muted);
+}
+
+.reader-dialog dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.reader-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.reader-dialog footer button {
+  min-height: 34px;
+  border: 1px solid #8ab4f8;
+  border-radius: 3px;
+  padding: 0 14px;
+  color: #d2e3fc;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.reader-print-dialog progress {
+  width: calc(100% - 52px);
+  accent-color: #8ab4f8;
+}
+
+#print-progress-label {
+  width: 48px;
+  display: inline-block;
+  color: var(--viewer-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+#print-container {
+  display: none;
+}
+
 .pdfViewer {
   padding: 18px 0 48px;
 }
@@ -369,20 +619,34 @@ body {
     padding: 0 8px;
   }
 
-  .reader-toolbar > .reader-icon-button:first-of-type {
-    left: 8px;
-  }
-
   .reader-filename {
-    padding-left: 40px;
+    padding-left: 80px;
     font-weight: 400;
   }
 
   #fit-page,
+  #fit-width,
   #rotate,
+  #presentation-mode,
+  #document-properties,
   .reader-divider,
   #find-form {
     display: none !important;
+  }
+
+  body[data-sidebar-open="true"] #viewerContainer {
+    left: 0;
+  }
+
+  .reader-sidebar {
+    width: min(86vw, 320px);
+  }
+}
+
+@media (max-width: 1100px) {
+  #document-properties,
+  #presentation-mode {
+    display: none;
   }
 }
 
@@ -394,5 +658,28 @@ body {
 
   .reader-progress span {
     transition: none;
+  }
+}
+
+@media print {
+  body > :not(#print-container) {
+    display: none !important;
+  }
+
+  html,
+  body,
+  #print-container {
+    width: auto;
+    height: auto;
+    display: block !important;
+    overflow: visible;
+    background: #fff;
+  }
+
+  #print-container canvas {
+    width: 100%;
+    height: auto;
+    display: block;
+    break-after: page;
   }
 }
