@@ -16,4 +16,10 @@ The writing here falls into two categories:
 
 I'm a researcher, not a medical doctor. The content of this site is not medical advice, and I don't endorse any health interventions.
 
+## Elsewhere
+
+- [GitHub](https://github.com/Brinedew) — code and public projects
+- [LessWrong](https://www.lesswrong.com/users/brinedew) — essays and project write-ups
+- [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/user/19832112/) — browser extensions published by Brinedew
+
 ## Contact
