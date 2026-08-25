@@ -11,7 +11,7 @@ aliases:
 
 **De-Darwinization** is a concept in evolutionary biology and philosophy of science that describes the suppression of Darwinian processes (variation, heritability, and differential fitness) at a lower level of organization to enable the emergence of a new, higher-level evolutionary individual. In essence, for a collective (like a multicellular organism) to become a primary unit of selection, its components (the cells) must lose some of their capacity to evolve independently.
 
-The term was coined by philosopher Peter Godfrey-Smith. The process is considered a key component of major evolutionary transitions, particularly the evolution of multicellularity and eusociality.
+The term was coined by philosopher Peter Godfrey-Smith. The process is considered a key component of the major evolutionary transitions framework of [John Maynard Smith](john-maynard-smith.md) and [Eörs Szathmáry](eors-szathmary.md), particularly the evolution of multicellularity and eusociality.
 
 
 ## Origin of the Term
@@ -43,7 +43,7 @@ The concept of de-Darwinization has been applied to several major evolutionary p
 
 ### Multicellularity and Individuality
 
-The most common application is in the evolution of multicellular organisms. For an organism to function as a coherent whole, its individual cells must have their ability to compete and reproduce independently suppressed. Austin G. Booth used the term in case studies, noting for example that human somatic cells are "de-Darwinized to a far greater extent" than the nuclei within a fungal mycelium (Booth 2014).
+The most common application is in the evolution of multicellular organisms, where [Leo Buss](leo-buss.md) located the problem: for an organism to function as a coherent whole, its individual cells must have their ability to compete and reproduce independently suppressed. Austin G. Booth used the term in case studies, noting for example that human somatic cells are "de-Darwinized to a far greater extent" than the nuclei within a fungal mycelium (Booth 2014).
 
 
 ### Eusociality
