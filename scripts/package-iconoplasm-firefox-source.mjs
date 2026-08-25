@@ -60,6 +60,7 @@ const includeFiles = [
   "scripts/verify-iconoplasm-pdf-release-gate.mjs",
   "scripts/lib/iconoplasm-publisher-authority.mjs",
   "iconoplasm-extension/AMO-SOURCE-README.md",
+  "iconoplasm-extension/FIREFOX-AMO-PDF-ARCHITECTURE.md",
   "iconoplasm-extension/README.md",
   "iconoplasm-extension/manifest.json",
   "iconoplasm-extension/publisher-release.json",
@@ -102,9 +103,6 @@ const includeDirs = [
   "shared/iconoplasm-portrait",
   "iconoplasm-extension/icons",
   "iconoplasm-extension/store-assets",
-  "iconoplasm-extension/vendor/pdfjs-clean",
-  "iconoplasm-extension/vendor/pdfjs-patch",
-  "iconoplasm-extension/vendor/pdfjs-runtime",
 ]
 
 function ensureExists(path, kind) {
