@@ -17,7 +17,7 @@ The baseline IMR90 cells are transduced with a chimeric fusion oncogene construc
 
 There are 2 states in this model:
 1. **Inducer absent, oncogene inactive:** The ER:RAS protein is normally bound by heat shock proteins (HSPs) and kept inactive in the cytoplasm.
-2. **Inducer present, oncogene active:** Adding the inducer **4-hydroxy-tamoxifen (4-OHT)** to the culture medium triggers a conformational change in the estrogen receptor, displacing HSPs and activating robust RAS signaling.
+2. **Inducer present, oncogene active:** Adding the inducer **4-hydroxy-tamoxifen (4-OHT)** to the culture medium triggers a conformational change in the estrogen receptor, displacing HSPs and activating strong RAS signaling.
 
 ![[image-52.png|Left: control IMR90 cells. Right: IMR90 cells displaying oncogene induced senescence. From McHugh et al., 2023.]]
 
@@ -25,7 +25,7 @@ Once 4-OHT is added, the transduced IMR90 cells demonstrate classic senescence m
 - **Irreversible G1 Growth Arrest**: Mediated through the synchronous activation of the **p53-p21** and **p16INK4a-RB** tumor suppressor pathways.
 - **Morphological Changes**: Cells flatten, become enlarged, and exhibit a distinct, vacuolated cytoplasm.
 - **Metabolic Changes**: Increased lysosomal activity detectable via positive **Senescence-Associated β-Galactosidase (SA-β-gal)** staining at pH 6.0.
-- **SASP Activation**: Robust production of the **Senescence-Associated Secretory Phenotype**, including pro-inflammatory cytokines like IL-6 and IL-8.
+- **SASP Activation**: Strong production of the **Senescence-Associated Secretory Phenotype**, including pro-inflammatory cytokines like IL-6 and IL-8.
 - **Nuclear Changes**: Formation of **Senescence-Associated Heterochromatin Foci (SAHF)** and persistent DNA damage response (DDR) activation.
 ### Rationale
 Primary human fibroblasts do not undergo spontaneous transformation easily and have an intact tumor-suppressor barrier. The system provides: 

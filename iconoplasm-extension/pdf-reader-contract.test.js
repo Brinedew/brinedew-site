@@ -92,7 +92,7 @@ test("the AMO reviewer build pins the same direct build tools as the submission 
 
 test("the MIME stream is consumed before native fallback when highlighting is off", () => {
   const fetchIndex = streamBootstrapSource.indexOf("await fetch(streamInfo.streamUrl)")
-  const bytesIndex = streamBootstrapSource.indexOf("await response.arrayBuffer()")
+  const bytesIndex = streamBootstrapSource.indexOf("await readResponseBytes(response)")
   const preferenceFallbackIndex = readerSource.indexOf(
     'if (streamOutcome?.kind === "stream" && !highlightingEnabled)',
   )
@@ -109,4 +109,27 @@ test("the MIME bootstrap precedes heavyweight reader dependencies and fails nati
   assert.ok(readerIndex > bootstrapIndex)
   assert.match(streamBootstrapSource, /abortAndFallbackToNativeHandler/u)
   assert.match(packagerSource, /"pdf-stream-bootstrap\.js"/u)
+})
+
+test("the PDF reader exposes download, parse, and first-render progress without an empty-state flash", () => {
+  const html = readFileSync(new URL("./pdf-reader.html", import.meta.url), "utf8")
+  assert.match(html, /id="reader-progress"[\s\S]*role="progressbar"/u)
+  assert.match(html, /id="reader-status-message"[\s\S]*Loading PDF…/u)
+  assert.doesNotMatch(html, />Open or drop a PDF<\/div>/u)
+  assert.match(streamBootstrapSource, /response\.body\.getReader/u)
+  assert.match(streamBootstrapSource, /iconoplasm-pdf-stream-progress/u)
+  assert.match(readerSource, /loadingTask\.onProgress/u)
+  assert.match(readerSource, /Rendering first page…/u)
+  assert.match(readerSource, /eventBus\.on\("pagerendered"/u)
+})
+
+test("the PDF reader keeps controls inert until rendering and offers recovery on failure", () => {
+  const html = readFileSync(new URL("./pdf-reader.html", import.meta.url), "utf8")
+  assert.match(html, /id="zoom-out"[\s\S]*?disabled/u)
+  assert.match(html, /id="reader-retry"/u)
+  assert.match(html, /id="reader-native-fallback"/u)
+  assert.match(readerSource, /function setControlsEnabled/u)
+  assert.match(readerSource, /function setReaderError/u)
+  assert.match(readerSource, /activeLoadId/u)
+  assert.match(readerStyles, /prefers-reduced-motion/u)
 })

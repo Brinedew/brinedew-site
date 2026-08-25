@@ -19,9 +19,16 @@ const highlightRuntime = globalThis.IconoplasmHighlightRuntime.createHighlightRu
 const container = document.getElementById("viewerContainer")
 const viewerElement = document.getElementById("viewer")
 const statusElement = document.getElementById("reader-status")
+const statusMessageElement = document.getElementById("reader-status-message")
+const statusActionsElement = document.getElementById("reader-status-actions")
+const progressElement = document.getElementById("reader-progress")
+const progressBarElement = document.getElementById("reader-progress-bar")
+const retryButton = document.getElementById("reader-retry")
+const nativeFallbackButton = document.getElementById("reader-native-fallback")
 const fileInput = document.getElementById("pdf-file")
 const passwordForm = document.getElementById("password-form")
 const passwordInput = document.getElementById("pdf-password")
+const passwordMessageElement = document.getElementById("password-message")
 const downloadButton = document.getElementById("download")
 const nativeViewerButton = document.getElementById("native-viewer")
 const zoomValue = document.getElementById("zoom-value")
@@ -60,13 +67,88 @@ let activeOwnership = null
 let highlightingEnabled = true
 let activeAnchor = null
 let pendingPasswordUpdate = null
+let activeLoadId = 0
+let waitingForFirstPage = false
 const textMetricsContext = document.createElement("canvas").getContext("2d")
 
-function setStatus(message, kind = "info") {
-  statusElement.textContent = String(message || "")
+const documentControls = [
+  document.getElementById("zoom-out"),
+  document.getElementById("zoom-in"),
+  document.getElementById("fit-page"),
+  document.getElementById("rotate"),
+  document.getElementById("find-toggle"),
+]
+
+function setProgress(loaded = 0, total = 0) {
+  progressElement.hidden = false
+  const hasTotal = Number.isFinite(total) && total > 0
+  progressElement.classList.toggle("is-indeterminate", !hasTotal)
+  if (!hasTotal) {
+    progressElement.removeAttribute("aria-valuenow")
+    progressBarElement.style.width = ""
+    return
+  }
+  const percent = Math.max(0, Math.min(100, (loaded / total) * 100))
+  progressElement.setAttribute("aria-valuenow", String(Math.round(percent)))
+  progressBarElement.style.width = `${percent}%`
+}
+
+function setControlsEnabled(enabled) {
+  for (const control of documentControls) control.disabled = !enabled
+  downloadButton.disabled = !enabled || !sourceBytes
+}
+
+function setStatus(message, kind = "info", { actions = false } = {}) {
+  statusMessageElement.textContent = String(message || "")
   statusElement.dataset.kind = kind
   statusElement.hidden = !message
+  statusActionsElement.hidden = !actions
 }
+
+function setReaderLoading(message = "Loading PDF…", loaded = 0, total = 0) {
+  document.body.dataset.readerState = "loading"
+  container.setAttribute("aria-busy", "true")
+  setControlsEnabled(false)
+  setProgress(loaded, total)
+  setStatus(message, "loading")
+  passwordForm.hidden = true
+}
+
+function setReaderReady() {
+  document.body.dataset.readerState = "ready"
+  container.setAttribute("aria-busy", "false")
+  progressElement.hidden = true
+  setControlsEnabled(true)
+  setStatus("")
+}
+
+function setReaderEmpty() {
+  document.body.dataset.readerState = "empty"
+  container.setAttribute("aria-busy", "false")
+  progressElement.hidden = true
+  setControlsEnabled(false)
+  retryButton.hidden = true
+  nativeFallbackButton.hidden = true
+  setStatus("Open or drop a PDF", "empty", { actions: true })
+}
+
+function setReaderError(error) {
+  document.body.dataset.readerState = "error"
+  container.setAttribute("aria-busy", "false")
+  progressElement.hidden = true
+  setControlsEnabled(false)
+  retryButton.hidden = !sourceBytes
+  nativeFallbackButton.hidden = !ownedPdfSource
+  setStatus(`Could not open this PDF: ${error.message}`, "error", { actions: true })
+}
+
+globalThis.addEventListener("iconoplasm-pdf-stream-progress", ({ detail }) => {
+  if (document.body.dataset.readerState !== "loading") return
+  setReaderLoading("Loading PDF…", detail?.loaded, detail?.total)
+})
+
+const bootstrapProgress = globalThis.IconoplasmPdfStreamProgress
+setReaderLoading("Loading PDF…", bootstrapProgress?.loaded, bootstrapProgress?.total)
 
 function waitForBridge(timeoutMs = 10_000) {
   if (globalThis.IconoplasmReaderBridge) {
@@ -390,6 +472,7 @@ eventBus.on("pagesinit", () => {
   pdfViewer.currentScaleValue = "page-fit"
   observePages()
   refreshZoomOutput()
+  if (waitingForFirstPage) setReaderLoading("Rendering first page…")
 })
 
 eventBus.on("pagechanging", ({ pageNumber }) => {
@@ -402,6 +485,10 @@ eventBus.on("pagerendered", ({ pageNumber }) => {
   state.rendered = true
   state.visible = pageIsInWorkingSet(state.pageElement)
   if (state.visible) void scanPage(Number(pageNumber))
+  if (waitingForFirstPage && Number(pageNumber) === 1) {
+    waitingForFirstPage = false
+    setReaderReady()
+  }
 })
 
 eventBus.on("textlayerrendered", ({ pageNumber }) => {
@@ -446,8 +533,9 @@ async function loadPdf(bytes, name = "document.pdf") {
   sourceBytes = bytes
   sourceName = name || "document.pdf"
   filenameElement.textContent = sourceName
-  downloadButton.disabled = false
-  setStatus(`Opening ${sourceName}…`)
+  const loadId = ++activeLoadId
+  waitingForFirstPage = false
+  setReaderLoading(`Opening ${sourceName}…`)
   if (loadingTask) await loadingTask.destroy().catch(() => null)
   if (pdfDocument) await pdfDocument.destroy().catch(() => null)
   loadingTask = getDocument({
@@ -459,26 +547,33 @@ async function loadPdf(bytes, name = "document.pdf") {
     isEvalSupported: false,
   })
   loadingTask.onPassword = (updatePassword, reason) => {
+    if (loadId !== activeLoadId) return
     pendingPasswordUpdate = updatePassword
+    progressElement.hidden = true
     passwordForm.hidden = false
     passwordInput.value = ""
     passwordInput.focus()
-    setStatus(
+    passwordMessageElement.textContent =
       reason === PasswordResponses.INCORRECT_PASSWORD
         ? "That password was incorrect. Try again."
-        : "Enter the PDF password to continue.",
-      "warning",
-    )
+        : "Enter the PDF password to continue."
+    setStatus("")
+  }
+  loadingTask.onProgress = ({ loaded, total }) => {
+    if (loadId !== activeLoadId || passwordForm.hidden === false) return
+    setReaderLoading(`Opening ${sourceName}…`, loaded, total)
   }
   pdfDocument = await loadingTask.promise
+  if (loadId !== activeLoadId) return
   pageCountElement.textContent = String(pdfDocument.numPages)
   pageNumberElement.textContent = "1"
   passwordForm.hidden = true
   pendingPasswordUpdate = null
   document.title = `${sourceName} — Iconoplasm Reader`
+  waitingForFirstPage = true
+  setReaderLoading("Rendering first page…")
   pdfViewer.setDocument(pdfDocument)
   linkService.setDocument(pdfDocument, null)
-  setStatus("")
 }
 
 passwordForm.addEventListener("submit", (event) => {
@@ -493,9 +588,20 @@ fileInput.addEventListener("change", async () => {
   activeOwnership = null
   nativeViewerButton.hidden = true
   try {
-    await loadPdf(new Uint8Array(await file.arrayBuffer()), file.name)
+    setReaderLoading(`Loading ${file.name}…`, 0, file.size)
+    const bytes = new Uint8Array(file.size)
+    const reader = file.stream().getReader()
+    let offset = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      bytes.set(value, offset)
+      offset += value.byteLength
+      setReaderLoading(`Loading ${file.name}…`, offset, file.size)
+    }
+    await loadPdf(bytes, file.name)
   } catch (error) {
-    setStatus(`Could not open this PDF: ${error.message}`, "error")
+    setReaderError(error)
   }
 })
 
@@ -524,10 +630,22 @@ document.addEventListener("drop", async (event) => {
   activeOwnership = null
   nativeViewerButton.hidden = true
   try {
-    await loadPdf(new Uint8Array(await file.arrayBuffer()), file.name)
+    setReaderLoading(`Loading ${file.name}…`, 0, file.size)
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    setReaderLoading(`Loading ${file.name}…`, bytes.byteLength, file.size)
+    await loadPdf(bytes, file.name)
   } catch (error) {
-    setStatus(`Could not open this PDF: ${error.message}`, "error")
+    setReaderError(error)
   }
+})
+
+retryButton.addEventListener("click", () => {
+  if (!sourceBytes) return
+  void loadPdf(sourceBytes, sourceName).catch(setReaderError)
+})
+
+nativeFallbackButton.addEventListener("click", () => {
+  if (ownedPdfSource) void activeOwnership?.handBack?.()
 })
 
 document.getElementById("zoom-in").addEventListener("click", () => {
@@ -617,8 +735,14 @@ window.addEventListener("iconoplasm-reader-highlight-visibility-changed", () => 
 })
 
 async function openOwnedStream(outcome) {
-  if (!outcome || outcome.kind === "manual") return false
-  if (outcome.kind !== "stream") return true
+  if (!outcome || outcome.kind === "manual") {
+    setReaderEmpty()
+    return false
+  }
+  if (outcome.kind !== "stream") {
+    setReaderError(new Error("The browser did not provide PDF data"))
+    return true
+  }
   const { bytes, streamInfo } = outcome
   if (!highlightingEnabled) {
     await outcome.handBack?.()
@@ -633,16 +757,37 @@ async function openOwnedStream(outcome) {
     await loadPdf(bytes, decodeURIComponent(fallbackName))
   } catch (error) {
     console.error("Iconoplasm Reader could not open this PDF", error)
-    await outcome.handBack?.()
+    setReaderError(error)
   }
   return true
 }
 
-const streamOutcome = await globalThis.IconoplasmPdfStreamBootstrap?.outcome
+let streamOutcome
+try {
+  streamOutcome = await globalThis.IconoplasmPdfStreamBootstrap?.outcome
+} catch (error) {
+  console.error("Iconoplasm Reader could not acquire the PDF", error)
+  setReaderError(error)
+}
 await loadHighlightingPreference()
-if (streamOutcome?.kind === "stream" && !highlightingEnabled) {
+if (document.body.dataset.readerState === "error") {
+  // The acquisition error is already visible and recoverable.
+} else if (streamOutcome?.kind === "stream" && !highlightingEnabled) {
   await streamOutcome.handBack?.()
+} else if (!streamOutcome || streamOutcome.kind === "manual") {
+  setReaderEmpty()
+} else if (streamOutcome.kind !== "stream") {
+  setReaderError(new Error("The browser did not provide PDF data"))
 } else {
-  await waitForBridge()
-  await openOwnedStream(streamOutcome)
+  setReaderLoading("Preparing PDF reader…")
+  try {
+    await waitForBridge()
+    await openOwnedStream(streamOutcome)
+  } catch (error) {
+    console.error("Iconoplasm Reader could not initialize", error)
+    ownedPdfSource = true
+    activeOwnership = streamOutcome
+    sourceBytes = streamOutcome.bytes
+    setReaderError(error)
+  }
 }

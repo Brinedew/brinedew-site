@@ -24,14 +24,34 @@
   })
   document.documentElement.dataset.visualShim = "ready"
 
+  const fixture = new URL(location.href).searchParams.get("fixture")
+  const fixtureOutcome =
+    fixture === "empty"
+      ? Promise.resolve({ kind: "manual" })
+      : fixture === "error"
+        ? Promise.resolve({ kind: "aborted" })
+        : null
+
   globalThis.IconoplasmPdfStreamBootstrap = Object.freeze({
-    outcome: fetch("/paper.pdf")
-      .then((response) => response.arrayBuffer())
-      .then((buffer) => ({
-        kind: "stream",
-        bytes: new Uint8Array(buffer),
-        streamInfo: { originalUrl: "https://example.test/PLOS_BRCA1_BRCA2_TP53.pdf" },
-        async handBack() {},
-      })),
+    outcome:
+      fixtureOutcome ||
+      new Promise((resolve, reject) => {
+        const fixtureDelay = Number(new URL(location.href).searchParams.get("loadDelay") || 0)
+        fetch("/paper.pdf")
+          .then((response) => response.arrayBuffer())
+          .then((buffer) => {
+            const finish = () =>
+              resolve({
+                kind: "stream",
+                bytes: new Uint8Array(buffer),
+                streamInfo: {
+                  originalUrl: "https://example.test/PLOS_BRCA1_BRCA2_TP53.pdf",
+                },
+                async handBack() {},
+              })
+            if (fixtureDelay > 0) window.setTimeout(finish, fixtureDelay)
+            else finish()
+          }, reject)
+      }),
   })
 })()

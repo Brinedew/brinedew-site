@@ -18,7 +18,7 @@ Eutely is a developmental pattern seen in several small metazoans where the adul
 
 - Precision: Enables complete cell-lineage maps and highly deterministic development.
 - Tradeoffs: Limits post-embryonic remodeling and repair compared to hyperplastic (cell-adding) growth.
-- Contrast: Highlights how vertebrates rely more on post-embryonic proliferation for growth and repair.
+- Contrast: vertebrates rely more on post-embryonic proliferation for growth and repair.
 - Control: Offers a clean case of organism-level coordination when you can’t add more agents, only govern existing ones.
 
 ## Examples

@@ -41,11 +41,11 @@ p53 contributes to both establishing and maintaining quiescence through transcri
 
 Upon oncogenic or genotoxic stress, the DNA damage response (DDR) activates ATM/ATR-CHK1/CHK2 kinases, which stabilize and activate p53. p53 transcriptionally upregulates p21^CIP1, a universal CDK inhibitor that binds and inhibits cyclin D-CDK4/6, cyclin E-CDK2, and cyclin B-CDK1 complexes. This prevents pRb phosphorylation, maintaining it in its active, growth-suppressive hypophosphorylated form. p21 also directly inhibits CDK1 by blocking Thr161 phosphorylation, enforcing the G2/M checkpoint **\[**9**,**10**\]**.
 
-A key rare loop involves **p53-mediated transcriptional repression via DREAM**. Uxa et al. (2019) demonstrated that p53 activation leads not only to p21 induction but also to recruitment of DREAM and RB to the promoters of cell cycle genes, producing a cooperative gene repression program far broader than p21 alone could achieve. RB and DREAM cooperate to repress both G1/S and G2/M genes, ensuring comprehensive cell cycle shutdown **\[**11**\]**.
+A key rare loop involves **p53-mediated transcriptional repression via DREAM**. Uxa et al. (2019) demonstrated that p53 activation leads to p21 induction and to recruitment of DREAM and RB to the promoters of cell cycle genes, producing a cooperative gene repression program far broader than p21 alone could achieve. RB and DREAM cooperate to repress both G1/S and G2/M genes, ensuring comprehensive cell cycle shutdown **\[**11**\]**.
 
 ### 3.2 The p16^INK4a-RB Irreversibility Loop
 
-p16^INK4a is a CDK4/6-specific inhibitor that, once expressed at high levels, locks pRb in its active hypophosphorylated state. Takahashi et al. (2007) defined the critical distinction: in murine cells, senescence can be reversed by subsequent Rb inactivation, but in **human** cells, once p16^INK4a fully activates the Rb pathway, senescence becomes irreversible and is **not** revoked by subsequent Rb withdrawal **\[**3**\]**. This irreversibility involves the formation of senescence-associated heterochromatin foci (SAHF) that epigenetically silence proliferation-promoting genes (see below). This is a crucial "lock-in" mechanism consistent with your premise.
+p16^INK4a is a CDK4/6-specific inhibitor that, once expressed at high levels, locks pRb in its active hypophosphorylated state. Takahashi et al. (2007) defined the critical distinction: in murine cells, senescence can be reversed by subsequent Rb inactivation, but in **human** cells, once p16^INK4a fully activates the Rb pathway, senescence becomes irreversible and is **not** revoked by subsequent Rb withdrawal **\[**3**\]**. This irreversibility involves the formation of senescence-associated heterochromatin foci (SAHF) that epigenetically silence proliferation-promoting genes (see below); the heterochromatin is the "lock-in" mechanism.
 
 ### 3.3 The p21-ROS Positive Feedback Loop (DDR Amplification)
 
@@ -65,7 +65,7 @@ Rapamycin and other mTOR inhibitors preserve "re-proliferative potential" (RPP) 
 
 ### 4.1 E2F7: The Atypical Backup Checkpoint
 
-Aksoy et al. (2012) identified E2F7 as the only E2F family member potently upregulated during OIS. E2F7 is a direct p53 transcriptional target that, once induced, binds and represses canonical E2F target genes. Crucially, when RB is disrupted, E2F7 expression increases further, inducing a **second cell cycle checkpoint** that prevents unconstrained division despite aberrant DNA replication. This creates a "double-lock": if RB is lost, E2F7 compensates, providing a backup barrier **\[**16**\]**. This is a rare but critically important backstop mechanism.
+Aksoy et al. (2012) identified E2F7 as the only E2F family member potently upregulated during OIS. E2F7 is a direct p53 transcriptional target that, once induced, binds and represses canonical E2F target genes. When RB is disrupted, E2F7 expression increases further, inducing a **second cell cycle checkpoint** that prevents unconstrained division despite aberrant DNA replication. This creates a "double-lock": if RB is lost, E2F7 compensates, providing a backup barrier **\[**16**\]**. This is a rare but critically important backstop mechanism.
 
 ### 4.2 DEC1 (BHLHE40/Stra13): The p53-Independent Senescence Effector
 

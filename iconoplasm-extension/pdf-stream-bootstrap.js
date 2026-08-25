@@ -3,6 +3,39 @@
   const geckoSourceId = new URLSearchParams(location.search).get("geckoSource")
   const CHUNK_BYTES = 512 * 1024
 
+  function reportProgress(loaded, total, stage = "loading") {
+    const detail = Object.freeze({ loaded, total, stage })
+    globalThis.IconoplasmPdfStreamProgress = detail
+    globalThis.dispatchEvent(new CustomEvent("iconoplasm-pdf-stream-progress", { detail }))
+  }
+
+  async function readResponseBytes(response) {
+    const total = Number(response.headers.get("content-length")) || 0
+    if (!response.body?.getReader) {
+      const buffer = await response.arrayBuffer()
+      reportProgress(buffer.byteLength, total || buffer.byteLength)
+      return new Uint8Array(buffer)
+    }
+    const reader = response.body.getReader()
+    const chunks = []
+    let loaded = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      loaded += value.byteLength
+      reportProgress(loaded, total)
+    }
+    const bytes = new Uint8Array(loaded)
+    let offset = 0
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    reportProgress(loaded, total || loaded)
+    return bytes
+  }
+
   async function fallBackToNativeHandler(reason) {
     console.error("Iconoplasm could not acquire the PDF stream", reason)
     try {
@@ -34,6 +67,10 @@
             throw new Error("Captured PDF bytes are incomplete")
           }
           bytes.set(new Uint8Array(response.bytes), offset)
+          reportProgress(
+            Math.min(offset + response.bytes.byteLength, bytes.byteLength),
+            bytes.byteLength,
+          )
         }
         const released = await chrome.runtime.sendMessage({
           type: "PDF_RELEASE_OWNED_SOURCE",
@@ -83,7 +120,7 @@
           new Error(`Chrome PDF stream failed with HTTP ${response.status}`),
         )
       }
-      const bytes = new Uint8Array(await response.arrayBuffer())
+      const bytes = await readResponseBytes(response)
       return Object.freeze({
         kind: "stream",
         ownership: "chromium-mime-handler",
