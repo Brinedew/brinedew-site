@@ -143,6 +143,7 @@ const pdfReaderRuntimeFiles = [
   "pdf-reader.css",
   "pdf-stream-bootstrap.js",
   "pdf-reader.mjs",
+  "pdf-reader-controls.mjs",
   "pdf-reader-core.js",
 ]
 

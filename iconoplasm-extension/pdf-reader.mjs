@@ -10,6 +10,7 @@ import {
   PDFLinkService,
   PDFViewer,
 } from "./generated/pdfjs/pdf_viewer.mjs"
+import { createPdfReaderControls } from "./pdf-reader-controls.mjs"
 
 GlobalWorkerOptions.workerSrc = chrome.runtime.getURL("generated/pdfjs/pdf.worker.mjs")
 
@@ -37,6 +38,9 @@ const pageNumberElement = document.getElementById("page-number")
 const pageCountElement = document.getElementById("page-count")
 const findForm = document.getElementById("find-form")
 const findInput = document.getElementById("find-query")
+const findCount = document.getElementById("find-count")
+const findPreviousButton = document.getElementById("find-previous")
+const findNextButton = document.getElementById("find-next")
 
 const eventBus = new EventBus()
 const linkService = new PDFLinkService({ eventBus })
@@ -71,6 +75,15 @@ let activeLoadId = 0
 let waitingForFirstPage = false
 const textMetricsContext = document.createElement("canvas").getContext("2d")
 
+const readerControls = createPdfReaderControls({
+  container,
+  eventBus,
+  linkService,
+  pdfViewer,
+  getSourceBytes: () => sourceBytes,
+  getSourceName: () => sourceName,
+})
+
 const documentControls = [
   document.getElementById("zoom-out"),
   document.getElementById("zoom-in"),
@@ -96,6 +109,7 @@ function setProgress(loaded = 0, total = 0) {
 function setControlsEnabled(enabled) {
   for (const control of documentControls) control.disabled = !enabled
   downloadButton.disabled = !enabled || !sourceBytes
+  readerControls.setEnabled(enabled)
 }
 
 function setStatus(message, kind = "info", { actions = false } = {}) {
@@ -476,7 +490,7 @@ eventBus.on("pagesinit", () => {
 })
 
 eventBus.on("pagechanging", ({ pageNumber }) => {
-  pageNumberElement.textContent = String(pageNumber || "–")
+  pageNumberElement.value = String(pageNumber || 1)
 })
 
 eventBus.on("pagerendered", ({ pageNumber }) => {
@@ -535,6 +549,7 @@ async function loadPdf(bytes, name = "document.pdf") {
   filenameElement.textContent = sourceName
   const loadId = ++activeLoadId
   waitingForFirstPage = false
+  readerControls.setDocument(null)
   setReaderLoading(`Opening ${sourceName}…`)
   if (loadingTask) await loadingTask.destroy().catch(() => null)
   if (pdfDocument) await pdfDocument.destroy().catch(() => null)
@@ -566,7 +581,7 @@ async function loadPdf(bytes, name = "document.pdf") {
   pdfDocument = await loadingTask.promise
   if (loadId !== activeLoadId) return
   pageCountElement.textContent = String(pdfDocument.numPages)
-  pageNumberElement.textContent = "1"
+  pageNumberElement.value = "1"
   passwordForm.hidden = true
   pendingPasswordUpdate = null
   document.title = `${sourceName} — Iconoplasm Reader`
@@ -574,6 +589,7 @@ async function loadPdf(bytes, name = "document.pdf") {
   setReaderLoading("Rendering first page…")
   pdfViewer.setDocument(pdfDocument)
   linkService.setDocument(pdfDocument, null)
+  readerControls.setDocument(pdfDocument)
 }
 
 passwordForm.addEventListener("submit", (event) => {
@@ -660,10 +676,12 @@ document.getElementById("rotate").addEventListener("click", () => {
 document.getElementById("fit-page").addEventListener("click", () => {
   pdfViewer.currentScaleValue = "page-fit"
 })
-findForm.addEventListener("submit", (event) => {
-  event.preventDefault()
+function dispatchFind(findPrevious = false) {
   const query = findInput.value
-  if (!query) return
+  if (!query) {
+    findCount.value = ""
+    return
+  }
   eventBus.dispatch("find", {
     source: window,
     type: "",
@@ -672,8 +690,29 @@ findForm.addEventListener("submit", (event) => {
     caseSensitive: false,
     entireWord: false,
     highlightAll: true,
-    findPrevious: false,
+    findPrevious,
   })
+}
+
+findForm.addEventListener("submit", (event) => {
+  event.preventDefault()
+  dispatchFind(false)
+})
+findInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return
+  event.preventDefault()
+  dispatchFind(event.shiftKey)
+})
+findInput.addEventListener("input", () => dispatchFind(false))
+findPreviousButton.addEventListener("click", () => dispatchFind(true))
+findNextButton.addEventListener("click", () => dispatchFind(false))
+eventBus.on("updatefindmatchescount", ({ matchesCount }) => {
+  const { current = 0, total = 0 } = matchesCount || {}
+  findCount.value = total ? `${current} / ${total}` : "0 / 0"
+})
+eventBus.on("updatefindcontrolstate", ({ matchesCount }) => {
+  const { current = 0, total = 0 } = matchesCount || {}
+  findCount.value = total ? `${current} / ${total}` : "0 / 0"
 })
 
 function toggleFind(forceOpen) {
