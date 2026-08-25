@@ -85,3 +85,79 @@ test("client rectangles become stable page-local bounds", () => {
     false,
   )
 })
+
+test("font metrics remove selection-box leading without moving the baseline", () => {
+  const bounds = { left: 20, top: 30, right: 70, bottom: 54 }
+  const metrics = {
+    fontBoundingBoxAscent: 18,
+    fontBoundingBoxDescent: 6,
+    actualBoundingBoxAscent: 12,
+    actualBoundingBoxDescent: 3,
+  }
+  assert.deepEqual(core.tightenBoundsToTextMetrics(bounds, metrics), {
+    left: 20,
+    top: 36,
+    right: 70,
+    bottom: 51,
+  })
+})
+
+test("rotated text tightens the cross-axis and respects reversed direction", () => {
+  const bounds = { left: 20, top: 30, right: 44, bottom: 80 }
+  const metrics = {
+    fontBoundingBoxAscent: 18,
+    fontBoundingBoxDescent: 6,
+    actualBoundingBoxAscent: 12,
+    actualBoundingBoxDescent: 3,
+  }
+  assert.deepEqual(
+    core.tightenBoundsToTextMetrics(bounds, metrics, {
+      crossAxis: "x",
+      crossAxisDirection: -1,
+    }),
+    { left: 23, top: 30, right: 38, bottom: 80 },
+  )
+})
+
+test("rotated pill geometry uses glyph thickness rather than inline length", () => {
+  assert.deepEqual(
+    core.computeDecorationGeometry(
+      { left: 20, top: 30, right: 46, bottom: 130 },
+      5,
+      { kind: "pill-outline", outerSpreadEm: 0.11, radiusEm: 0.1 },
+      { crossAxis: "x", crossAxisDirection: -1 },
+    ),
+    {
+      bounds: { left: 17.14, top: 27.14, right: 48.86, bottom: 132.86 },
+      borderRadius: 5.46,
+      borderWidth: 2.86,
+    },
+  )
+})
+
+test("rotated underline follows the transformed baseline edge", () => {
+  const geometry = core.computeDecorationGeometry(
+    { left: 20, top: 30, right: 46, bottom: 130 },
+    5,
+    { kind: "underline", thicknessEm: 0.08, bottomInsetEm: 0.04 },
+    { crossAxis: "x", crossAxisDirection: -1 },
+  )
+  assert.deepEqual(
+    { ...geometry.bounds, right: Number(geometry.bounds.right.toFixed(2)) },
+    { left: 21.04, top: 30, right: 23.12, bottom: 130 },
+  )
+})
+
+test("rotated ellipse applies character bleed along the inline axis", () => {
+  assert.deepEqual(
+    core.computeDecorationGeometry(
+      { left: 20, top: 30, right: 46, bottom: 130 },
+      5,
+      { kind: "ellipse", inlineBleedCharsPerSide: 0.2, verticalBleedEm: 0.1 },
+      { crossAxis: "x", crossAxisDirection: -1 },
+    ),
+    {
+      bounds: { left: 17.4, top: 26, right: 48.6, bottom: 134 },
+    },
+  )
+})
