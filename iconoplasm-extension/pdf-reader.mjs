@@ -111,63 +111,14 @@ function removePageAnchors(pageNumber) {
   state.decorations = []
 }
 
-function copyCanvasPixels(target, source) {
-  const context = target.getContext("2d")
-  context.save()
-  context.setTransform(1, 0, 0, 1, 0, 0)
-  context.globalCompositeOperation = "copy"
-  context.drawImage(source, 0, 0)
-  context.restore()
-}
-
-function cloneCanvasPixels(source) {
-  const clone = document.createElement("canvas")
-  clone.width = source.width
-  clone.height = source.height
-  copyCanvasPixels(clone, source)
-  return clone
-}
-
-function copyCanvasRegion(target, source, bounds) {
-  if (!target || !source || !bounds) return
-  const left = Math.max(0, Math.floor(bounds.left))
-  const top = Math.max(0, Math.floor(bounds.top))
-  const right = Math.min(target.width, source.width, Math.ceil(bounds.right))
-  const bottom = Math.min(target.height, source.height, Math.ceil(bounds.bottom))
-  const width = right - left
-  const height = bottom - top
-  if (width <= 0 || height <= 0) return
-  const context = target.getContext("2d")
-  context.save()
-  context.setTransform(1, 0, 0, 1, 0, 0)
-  context.globalCompositeOperation = "source-over"
-  context.drawImage(source, left, top, width, height, left, top, width, height)
-  context.restore()
-}
-
 function getHighlightVisibility() {
   return settings.normalizeHighlightVisibility(bridge?.getHighlightVisibility?.())
 }
 
 function applyHighlightVisibilityToState(state) {
-  if (
-    !state?.exactPaintApplied ||
-    !state.sourceCanvas?.isConnected ||
-    !state.canonicalCanvas ||
-    !state.highlightedCanvas
-  ) {
-    return
-  }
+  if (!state) return
   const hoverOnly = getHighlightVisibility() === "hover"
   const hoveredAnchor = activeAnchor?._iconoplasmPageState === state ? activeAnchor : null
-  copyCanvasPixels(state.sourceCanvas, hoverOnly ? state.canonicalCanvas : state.highlightedCanvas)
-  if (hoverOnly && hoveredAnchor) {
-    copyCanvasRegion(
-      state.sourceCanvas,
-      state.highlightedCanvas,
-      hoveredAnchor._iconoplasmPaintBounds,
-    )
-  }
   for (const decoration of state.decorations || []) {
     decoration.hidden =
       hoverOnly && decoration._iconoplasmMatchOrdinal !== hoveredAnchor?._iconoplasmMatchOrdinal
@@ -178,158 +129,105 @@ function applyHighlightVisibilityToAllPages() {
   for (const state of pageState.values()) applyHighlightVisibilityToState(state)
 }
 
-async function renderOffscreen(pdfPage, viewport, sourceCanvas, textRenderAdapter = null) {
-  const canvas = document.createElement("canvas")
-  canvas.width = sourceCanvas.width
-  canvas.height = sourceCanvas.height
-  const canvasContext = canvas.getContext("2d")
-  const transform = [canvas.width / viewport.width, 0, 0, canvas.height / viewport.height, 0, 0]
-  await pdfPage.render({
-    canvasContext,
-    viewport,
-    transform,
-    annotationMode: AnnotationMode.ENABLE_FORMS,
-    textRenderAdapter,
-  }).promise
-  return canvas
-}
-
 function roughSeedForMatchOrdinal(matchOrdinal) {
   // Match the HTML renderer's deterministic document-order seed sequence.
   return 9001 + (Math.max(0, Number(matchOrdinal) || 0) + 1) * 97
 }
 
-function positionEllipseDecoration(state, layer) {
-  const sourceCanvas = state.sourceCanvas
-  const wrapper = sourceCanvas?.parentElement
-  const deviceBounds = layer?._iconoplasmDeviceBounds
-  if (!wrapper || !deviceBounds) return null
-  const sourceRect = sourceCanvas.getBoundingClientRect()
-  const wrapperRect = wrapper.getBoundingClientRect()
-  const scaleX = sourceCanvas.width > 0 ? sourceRect.width / sourceCanvas.width : 1
-  const scaleY = sourceCanvas.height > 0 ? sourceRect.height / sourceCanvas.height : 1
-  const rect = {
-    left: sourceRect.left - wrapperRect.left + deviceBounds.left * scaleX,
-    top: sourceRect.top - wrapperRect.top + deviceBounds.top * scaleY,
-    width: (deviceBounds.right - deviceBounds.left) * scaleX,
-    height: (deviceBounds.bottom - deviceBounds.top) * scaleY,
-  }
-  layer.style.left = `${rect.left}px`
-  layer.style.top = `${rect.top}px`
-  layer.style.width = `${rect.width}px`
-  layer.style.height = `${rect.height}px`
-  return rect
+function setLayerBounds(layer, bounds) {
+  layer.style.left = `${bounds.left}px`
+  layer.style.top = `${bounds.top}px`
+  layer.style.width = `${bounds.right - bounds.left}px`
+  layer.style.height = `${bounds.bottom - bounds.top}px`
 }
 
-function refreshEllipseDecorationGeometry(state) {
-  for (const layer of state.decorations || []) positionEllipseDecoration(state, layer)
-}
+function createDecoration(state, match, bounds, matchOrdinal) {
+  const shape = match.presentation.shape
+  const kind = shape.kind
+  const height = bounds.bottom - bounds.top
+  const width = bounds.right - bounds.left
+  if (width <= 0 || height <= 0) return null
+  const layer = document.createElement("span")
+  layer.className = `iconoplasm-pdf-decoration iconoplasm-pdf-decoration--${kind}`
+  layer._iconoplasmMatchOrdinal = matchOrdinal
+  layer.style.setProperty("--iconoplasm-gene-color", match.presentation.color)
 
-function createSharedRoughEllipseDecorations(state, matches) {
-  const sourceCanvas = state.sourceCanvas
-  const wrapper = sourceCanvas?.parentElement
-  if (!wrapper) return []
-  const rendered = []
-  for (const [matchOrdinal, match] of matches.entries()) {
-    const decoration = match?.decoration
-    const deviceBounds = decoration?.bounds
-    if (decoration?.kind !== "ellipse" || !deviceBounds) continue
-    const layer = document.createElement("span")
-    layer.className = "iconoplasm-pdf-ellipse-decoration iconoplasm-gene--ellipse"
-    layer._iconoplasmDeviceBounds = deviceBounds
-    layer._iconoplasmMatchOrdinal = matchOrdinal
-    const rect = positionEllipseDecoration(state, layer)
-    if (!rect || rect.width <= 2 || rect.height <= 2) continue
-    layer.style.setProperty("--iconoplasm-gene-color", decoration.color)
-    layer.appendChild(
-      highlightRuntime.createRoughEllipseNode(rect.width, rect.height, {
-        seed: roughSeedForMatchOrdinal(matchOrdinal),
-      }),
+  if (kind === "underline") {
+    const thickness = Math.max(1, height * Number(shape.thicknessEm || 0))
+    const inset = Math.max(0, height * Number(shape.bottomInsetEm || 0))
+    setLayerBounds(layer, {
+      left: bounds.left,
+      top: bounds.bottom - inset - thickness,
+      right: bounds.right,
+      bottom: bounds.bottom - inset,
+    })
+  } else if (kind === "pill-outline") {
+    const spread = Math.max(1, height * Number(shape.outerSpreadEm || 0))
+    const radius = Math.max(1, height * Number(shape.radiusEm || 0) + spread)
+    setLayerBounds(layer, {
+      left: bounds.left - spread,
+      top: bounds.top - spread,
+      right: bounds.right + spread,
+      bottom: bounds.bottom + spread,
+    })
+    layer.style.borderWidth = `${spread}px`
+    layer.style.borderRadius = `${radius}px`
+    layer.style.setProperty(
+      "--iconoplasm-pdf-inner-ring",
+      String(shape.innerColor || "rgba(255, 255, 255, 0.3)"),
     )
-    wrapper.appendChild(layer)
-    rendered.push(layer)
-  }
-  return rendered
-}
-
-async function restoreCanonicalPage(state, revision) {
-  if (!state?.exactPaintApplied || !state.sourceCanvas?.isConnected) return
-  const canonical =
-    state.canonicalCanvas ||
-    (await renderOffscreen(state.pdfPage, state.viewport, state.sourceCanvas))
-  if (state.renderRevision !== revision || !state.sourceCanvas?.isConnected) return
-  copyCanvasPixels(state.sourceCanvas, canonical)
-  state.exactPaintApplied = false
-  state.canonicalCanvas = null
-  state.highlightedCanvas = null
-}
-
-function deviceBoundsToPageRect(bounds, sourceCanvas, pageElement) {
-  if (!bounds) return null
-  const sourceRect = sourceCanvas.getBoundingClientRect()
-  const pageRect = pageElement.getBoundingClientRect()
-  if (!sourceRect.width || !sourceRect.height || !sourceCanvas.width || !sourceCanvas.height) {
+  } else if (kind === "ellipse") {
+    const averageCharWidth = width / Math.max(1, match.label.length)
+    const inlineBleed = Math.max(2, averageCharWidth * Number(shape.inlineBleedCharsPerSide || 0))
+    const verticalBleed = Math.max(2, height * Number(shape.verticalBleedEm || 0))
+    const ellipseBounds = {
+      left: bounds.left - inlineBleed,
+      top: bounds.top - verticalBleed,
+      right: bounds.right + inlineBleed,
+      bottom: bounds.bottom + verticalBleed,
+    }
+    setLayerBounds(layer, ellipseBounds)
+    layer.appendChild(
+      highlightRuntime.createRoughEllipseNode(
+        ellipseBounds.right - ellipseBounds.left,
+        ellipseBounds.bottom - ellipseBounds.top,
+        { seed: roughSeedForMatchOrdinal(matchOrdinal) },
+      ),
+    )
+  } else {
     return null
   }
-  const scaleX = sourceRect.width / sourceCanvas.width
-  const scaleY = sourceRect.height / sourceCanvas.height
-  return {
-    left: sourceRect.left - pageRect.left + bounds.left * scaleX,
-    top: sourceRect.top - pageRect.top + bounds.top * scaleY,
-    width: (bounds.right - bounds.left) * scaleX,
-    height: (bounds.bottom - bounds.top) * scaleY,
+  state.pageElement.appendChild(layer)
+  return layer
+}
+
+function createHitAnchor(state, match, boundsList, matchOrdinal) {
+  const union = {
+    left: Math.min(...boundsList.map((bounds) => bounds.left)),
+    top: Math.min(...boundsList.map((bounds) => bounds.top)),
+    right: Math.max(...boundsList.map((bounds) => bounds.right)),
+    bottom: Math.max(...boundsList.map((bounds) => bounds.bottom)),
   }
-}
-
-function positionHitAnchor(state, anchor) {
-  const rect = deviceBoundsToPageRect(
-    anchor._iconoplasmDeviceBounds,
-    state.sourceCanvas,
-    state.pageElement,
-  )
-  if (!rect || rect.width <= 0 || rect.height <= 0) return null
-  anchor.style.left = `${rect.left}px`
-  anchor.style.top = `${rect.top}px`
-  anchor.style.width = `${rect.width}px`
-  anchor.style.height = `${rect.height}px`
-  return rect
-}
-
-function refreshHitAnchorGeometry(state) {
-  for (const anchor of state.anchors) positionHitAnchor(state, anchor)
-}
-
-function createHitAnchors(state, matches) {
-  const anchors = []
-  for (const [matchOrdinal, match] of matches.entries()) {
-    const anchor = document.createElement("span")
-    anchor.className = "iconoplasm-pdf-hit-anchor"
-    anchor.dataset.gene = match.symbol
-    anchor.dataset.geneLabel = match.label
-    anchor.setAttribute("aria-hidden", "true")
-    anchor._iconoplasmDeviceBounds = match.bounds
-    anchor._iconoplasmDevicePolygons = match.polygons
-    anchor._iconoplasmSourceCanvas = state.sourceCanvas
-    anchor._iconoplasmPageState = state
-    anchor._iconoplasmMatchOrdinal = matchOrdinal
-    anchor._iconoplasmPaintBounds = core.paintBoundsForMatch(match)
-    const rect = positionHitAnchor(state, anchor)
-    if (!rect) continue
-    state.pageElement.appendChild(anchor)
-    anchors.push(anchor)
-  }
-  return anchors
+  const anchor = document.createElement("span")
+  anchor.className = "iconoplasm-pdf-hit-anchor"
+  anchor.dataset.gene = match.symbol
+  anchor.dataset.geneLabel = match.label
+  anchor.setAttribute("aria-hidden", "true")
+  anchor._iconoplasmBounds = boundsList
+  anchor._iconoplasmPageState = state
+  anchor._iconoplasmMatchOrdinal = matchOrdinal
+  setLayerBounds(anchor, union)
+  state.pageElement.appendChild(anchor)
+  return anchor
 }
 
 function anchorContainsClientPoint(anchor, clientX, clientY) {
-  const sourceCanvas = anchor?._iconoplasmSourceCanvas
-  if (!sourceCanvas?.isConnected) return false
-  const sourceRect = sourceCanvas.getBoundingClientRect()
-  if (!sourceRect.width || !sourceRect.height) return false
-  const deviceX = ((clientX - sourceRect.left) * sourceCanvas.width) / sourceRect.width
-  const deviceY = ((clientY - sourceRect.top) * sourceCanvas.height) / sourceRect.height
-  return anchor._iconoplasmDevicePolygons?.some((polygon) =>
-    core.containsPointInPolygon(polygon, deviceX, deviceY),
+  const pageRect = anchor?._iconoplasmPageState?.pageElement?.getBoundingClientRect()
+  if (!pageRect) return false
+  const pageX = clientX - pageRect.left
+  const pageY = clientY - pageRect.top
+  return anchor._iconoplasmBounds?.some((bounds) =>
+    core.containsPointInBounds(bounds, pageX, pageY),
   )
 }
 
@@ -360,81 +258,53 @@ function pageIsInWorkingSet(pageElement) {
 async function scanPage(pageNumber) {
   const state = pageState.get(pageNumber)
   if (!highlightingEnabled || !bridge || !state?.visible || !state.rendered) return
-  const pageView = pdfViewer.getPageView(pageNumber - 1)
-  const sourceCanvas = state.pageElement?.querySelector(".canvasWrapper canvas")
-  if (!pageView?.viewport || !sourceCanvas || !pdfDocument) return
+  const textLayer = state.pageElement?.querySelector(".textLayer")
+  if (!textLayer || !pdfDocument) return
 
   state.renderRevision += 1
   const revision = state.renderRevision
   removePageAnchors(pageNumber)
-  state.sourceCanvas = sourceCanvas
-  state.viewport = pageView.viewport
-  state.pdfPage ||= await pdfDocument.getPage(pageNumber)
-
-  try {
-    const canonical =
-      state.exactPaintApplied && state.canonicalCanvas
-        ? state.canonicalCanvas
-        : cloneCanvasPixels(sourceCanvas)
-    const surveyAdapter = { mode: "survey", records: [] }
-    await renderOffscreen(state.pdfPage, state.viewport, sourceCanvas, surveyAdapter)
-    if (state.renderRevision !== revision || !state.visible || !highlightingEnabled) return
-
-    const plan = core.buildExactPaintPlan(
-      surveyAdapter.records,
-      (text) => bridge.findMatches(text),
-      (symbol) => bridge.getHighlightPresentation?.(symbol),
-    )
-    if (!plan.accepted.length) {
-      await restoreCanonicalPage(state, revision)
-      return
-    }
-
-    const paintAdapter = {
-      mode: "paint",
-      records: [],
-      foregroundByGlyphOrdinal: plan.foregroundByGlyphOrdinal,
-      decorationsByOperationOrdinal: plan.decorationsByOperationOrdinal,
-    }
-    const candidate = await renderOffscreen(
-      state.pdfPage,
-      state.viewport,
-      sourceCanvas,
-      paintAdapter,
-    )
-    if (state.renderRevision !== revision || !state.visible || !highlightingEnabled) return
-    if (
-      core.renderFingerprint(surveyAdapter.records) !== core.renderFingerprint(paintAdapter.records)
-    ) {
-      throw new Error("PDF glyph survey and paint render diverged")
-    }
-    state.canonicalCanvas = canonical
-    state.highlightedCanvas = candidate
-    state.exactPaintApplied = true
-    state.decorations = createSharedRoughEllipseDecorations(state, plan.accepted)
-    state.anchors = createHitAnchors(state, plan.accepted)
-    bridge.replaceAnchorGroup?.(`pdf:${pageNumber}`, state.anchors)
-    applyHighlightVisibilityToState(state)
-  } catch (error) {
+  const pageRect = state.pageElement.getBoundingClientRect()
+  const walker = document.createTreeWalker(textLayer, NodeFilter.SHOW_TEXT)
+  let matchOrdinal = 0
+  for (let textNode = walker.nextNode(); textNode; textNode = walker.nextNode()) {
     if (state.renderRevision !== revision) return
-    removePageAnchors(pageNumber)
-    await restoreCanonicalPage(state, revision).catch(() => null)
-    console.error(`Iconoplasm declined exact PDF highlights on page ${pageNumber}`, error)
+    const plan = core.normalizeTextRunMatches(
+      textNode.nodeValue,
+      (text) => bridge.findMatches(text),
+      (symbol) => bridge.getPdfHighlightPresentation?.(symbol),
+    )
+    for (const match of plan.accepted) {
+      const range = document.createRange()
+      range.setStart(textNode, match.start)
+      range.setEnd(textNode, match.end)
+      const boundsList = Array.from(range.getClientRects(), (rect) =>
+        core.boundsFromClientRect(rect, pageRect),
+      ).filter(Boolean)
+      range.detach()
+      if (!boundsList.length) continue
+      for (const bounds of boundsList) {
+        const decoration = createDecoration(state, match, bounds, matchOrdinal)
+        if (decoration) state.decorations.push(decoration)
+      }
+      state.anchors.push(createHitAnchor(state, match, boundsList, matchOrdinal))
+      matchOrdinal += 1
+    }
   }
+  bridge.replaceAnchorGroup?.(`pdf:${pageNumber}`, state.anchors)
+  applyHighlightVisibilityToState(state)
 }
 
-async function clearPageHighlights(pageNumber, { restorePixels = true } = {}) {
+async function clearPageHighlights(pageNumber) {
   const state = pageState.get(pageNumber)
   if (!state) return
   state.renderRevision += 1
-  const revision = state.renderRevision
   removePageAnchors(pageNumber)
-  if (restorePixels) await restoreCanonicalPage(state, revision).catch(() => null)
 }
 
-function clearAllHighlights({ restorePixels = true } = {}) {
+function clearAllHighlights() {
   for (const pageNumber of pageState.keys()) {
-    void clearPageHighlights(pageNumber, { restorePixels })
+    void clearPageHighlights(pageNumber)
   }
   closeActiveCard()
 }
@@ -473,12 +343,6 @@ function observePages() {
       anchors: [],
       decorations: [],
       renderRevision: 0,
-      exactPaintApplied: false,
-      canonicalCanvas: null,
-      highlightedCanvas: null,
-      sourceCanvas: null,
-      viewport: null,
-      pdfPage: null,
     })
     pageObserver.observe(pageElement)
   }
@@ -498,20 +362,19 @@ eventBus.on("pagechanging", ({ pageNumber }) => {
   pageNumberElement.textContent = String(pageNumber || "–")
 })
 
-eventBus.on("pagerendered", ({ pageNumber, cssTransform }) => {
+eventBus.on("pagerendered", ({ pageNumber }) => {
   const state = pageState.get(Number(pageNumber))
   if (!state) return
   state.rendered = true
   state.visible = pageIsInWorkingSet(state.pageElement)
-  if (cssTransform && state.exactPaintApplied && state.sourceCanvas?.isConnected) {
-    state.viewport = pdfViewer.getPageView(Number(pageNumber) - 1)?.viewport || state.viewport
-    refreshHitAnchorGeometry(state)
-    refreshEllipseDecorationGeometry(state)
-    return
-  }
-  state.exactPaintApplied = false
-  state.canonicalCanvas = null
-  state.highlightedCanvas = null
+  if (state.visible) void scanPage(Number(pageNumber))
+})
+
+eventBus.on("textlayerrendered", ({ pageNumber }) => {
+  const state = pageState.get(Number(pageNumber))
+  if (!state) return
+  state.rendered = true
+  state.visible = pageIsInWorkingSet(state.pageElement)
   if (state.visible) void scanPage(Number(pageNumber))
 })
 
@@ -545,7 +408,7 @@ async function loadPdf(bytes, name = "document.pdf") {
   if (!(bytes instanceof Uint8Array) || !bytes.byteLength) {
     throw new Error("The PDF source was empty")
   }
-  clearAllHighlights({ restorePixels: false })
+  clearAllHighlights()
   sourceBytes = bytes
   sourceName = name || "document.pdf"
   filenameElement.textContent = sourceName

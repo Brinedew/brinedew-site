@@ -2,6 +2,11 @@
 
 This archive is the source submission for the Firefox/AMO review of Iconoplasm.
 
+> **PDF.js integrity:** the package copies the pinned, unmodified `pdfjs-dist`
+> API, worker, viewer, and assets. Iconoplasm highlights live in a separate
+> first-party decoration layer. The decision and approved-extension evidence are
+> recorded in `FIREFOX-AMO-PDF-ARCHITECTURE.md`.
+
 ## what this package contains
 
 - the extension runtime source in `iconoplasm-extension/`
@@ -17,8 +22,8 @@ Iconoplasm does both:
 
 - `scripts/sync-iconoplasm-shared.mjs` copies and bundles shared card assets into the extension
 - `roughjs` is copied into `iconoplasm-extension/generated/rough.js`
-- the pinned PDF.js 6.2.108 viewer is copied by `scripts/sync-iconoplasm-pdfjs.mjs`
-- the two-file PDF.js canvas patch, its pristine inputs, and the resulting runtime are included under `iconoplasm-extension/vendor/` for reviewer inspection
+- the pinned, unmodified PDF.js 6.2.108 API, worker, viewer, and assets are copied from `pdfjs-dist` by `scripts/sync-iconoplasm-pdfjs.mjs`
+- Iconoplasm-owned PDF decorations are implemented in `pdf-reader.mjs`, `pdf-reader-core.js`, and `pdf-reader.css`; they do not replace or recolor PDF glyphs
 
 ## reviewer build instructions
 
@@ -64,4 +69,4 @@ Notes about the build:
 - Generated files carry comments pointing back to their canonical source files.
 - The extension includes a site-only bridge on `iconoplasm.brinedew.bio` and `staging.brinedew.bio` so the homepage can detect whether the extension is installed without injecting the full page-highlighting runtime onto its own site.
 - Remote code execution is not used. The extension reads page text locally and requests gene metadata from the Iconoplasm API.
-- The PDF.js patch is not obfuscated. `iconoplasm-extension/vendor/pdfjs-patch/README.md` identifies the exact upstream version, changed files, and reproducible patch.
+- A filled-pill preference is resolved to the empty-pill outline only while a PDF is displayed. The stored preference is not changed, so ordinary webpages continue to use the filled pill.

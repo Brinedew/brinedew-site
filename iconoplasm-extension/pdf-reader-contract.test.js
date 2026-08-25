@@ -4,6 +4,15 @@ import test from "node:test"
 
 const readerSource = readFileSync(new URL("./pdf-reader.mjs", import.meta.url), "utf8")
 const readerStyles = readFileSync(new URL("./pdf-reader.css", import.meta.url), "utf8")
+const contentSource = readFileSync(new URL("./content.js", import.meta.url), "utf8")
+const syncSource = readFileSync(
+  new URL("../scripts/sync-iconoplasm-pdfjs.mjs", import.meta.url),
+  "utf8",
+)
+const sourcePackager = readFileSync(
+  new URL("../scripts/package-iconoplasm-firefox-source.mjs", import.meta.url),
+  "utf8",
+)
 const streamBootstrapSource = readFileSync(
   new URL("./pdf-stream-bootstrap.js", import.meta.url),
   "utf8",
@@ -12,100 +21,41 @@ const packagerSource = readFileSync(
   new URL("../scripts/package-iconoplasm-extension.mjs", import.meta.url),
   "utf8",
 )
-const maintainedPatch = readFileSync(
-  new URL("./vendor/pdfjs-patch/pdfjs-v6.2.108-iconoplasm.patch", import.meta.url),
-  "utf8",
-)
-const generatedRuntime = readFileSync(new URL("./generated/pdfjs/pdf.mjs", import.meta.url), "utf8")
 
-test("PDF.js exposes the maintained source-level text renderer adapter", () => {
-  assert.match(maintainedPatch, /src\/display\/api\.js/u)
-  assert.match(maintainedPatch, /src\/display\/canvas\.js/u)
-  assert.match(maintainedPatch, /textRenderAdapter/u)
-  assert.match(maintainedPatch, /fill-rounded-ring/u)
-  assert.match(maintainedPatch, /decorationsByOperationOrdinal/u)
-  assert.match(maintainedPatch, /ctx\.fillText\(character, scaledX, scaledY\)/u)
-  assert.match(generatedRuntime, /textRenderAdapter/u)
-  assert.match(generatedRuntime, /fill-rounded-ring/u)
-  assert.match(generatedRuntime, /decorationsByOperationOrdinal/u)
-})
-
-test("exact PDF highlighting uses survey and paint renders with an atomic candidate swap", () => {
-  assert.match(readerSource, /mode: "survey"/u)
-  assert.match(readerSource, /mode: "paint"/u)
-  assert.match(readerSource, /core\.renderFingerprint/u)
-  assert.match(readerSource, /globalCompositeOperation = "copy"/u)
-  assert.match(readerSource, /buildExactPaintPlan/u)
-  assert.match(readerSource, /decorationsByOperationOrdinal/u)
-  assert.match(readerSource, /createSharedRoughEllipseDecorations/u)
-  assert.match(readerSource, /state\.visible = pageIsInWorkingSet\(state\.pageElement\)/u)
-  assert.match(readerSource, /enableDetailCanvas: false/u)
-  assert.doesNotMatch(readerSource, /PDF_(?:ZOOM_TRACE|SCAN_)/u)
-})
-
-test("rejected approximate renderers cannot silently return", () => {
-  for (const rejected of [
-    /operationsFilter/u,
-    /getClientRects/u,
-    /dualBackgroundCoverage/u,
-    /nearestInkBounds/u,
-    /advanceWindowForMatch/u,
-    /Range\.getBoundingClientRect/u,
-    /dispatchEvent\(new MouseEvent/u,
-  ]) {
-    assert.doesNotMatch(readerSource, rejected)
-  }
-})
-
-test("PDF rough ellipses reuse HTML SVG in the canvas-wrapper coordinate system", () => {
-  assert.match(readerSource, /const wrapper = sourceCanvas\?\.parentElement/u)
+test("PDF highlight behavior is cross-browser and preserves the stored mode", () => {
   assert.match(
-    readerSource,
-    /sourceRect\.left - wrapperRect\.left \+ deviceBounds\.left \* scaleX/u,
+    contentSource,
+    /const pdfMode = highlightMode === "pill" \? "pill-outline" : highlightMode/u,
   )
-  assert.match(readerSource, /highlightRuntime\.createRoughEllipseNode\(rect\.width, rect\.height/u)
-  assert.match(readerSource, /refreshEllipseDecorationGeometry\(state\)/u)
-  assert.doesNotMatch(readerSource, /roughImpl\.canvas/u)
-  assert.doesNotMatch(readerSource, /new Path2D/u)
-  assert.doesNotMatch(readerSource, /createImageBitmap|new XMLSerializer/u)
+  assert.match(contentSource, /requestedMode: highlightMode/u)
+  assert.match(contentSource, /shape: highlightRuntime\.getCanvasShape\(pdfMode\)/u)
+  assert.doesNotMatch(contentSource, /highlightMode = pdfMode/u)
 })
 
-test("rough ellipses use the HTML document-order seed sequence", () => {
-  assert.match(readerSource, /function roughSeedForMatchOrdinal\(matchOrdinal\)/u)
-  assert.match(readerSource, /9001 \+ \(Math\.max\(0, Number\(matchOrdinal\)/u)
-  assert.match(readerSource, /for \(const \[matchOrdinal, match\] of matches\.entries\(\)\)/u)
-  assert.doesNotMatch(readerSource, /2166136261/u)
+test("the reader uses the official text layer and never mutates PDF glyph paint", () => {
+  assert.match(readerSource, /querySelector\("\.textLayer"\)/u)
+  assert.match(readerSource, /document\.createTreeWalker\(textLayer, NodeFilter\.SHOW_TEXT\)/u)
+  assert.match(readerSource, /document\.createRange\(\)/u)
+  assert.match(readerSource, /range\.getClientRects\(\)/u)
+  assert.match(readerSource, /getPdfHighlightPresentation/u)
+  assert.match(readerSource, /eventBus\.on\("textlayerrendered"/u)
+  assert.doesNotMatch(readerSource, /textRenderAdapter|fillText|strokeText|copyCanvasPixels/u)
 })
 
-test("PDF hover anchors remain glyph-owned rather than decoration-owned", () => {
-  assert.match(readerSource, /anchor\._iconoplasmDeviceBounds = match\.bounds/u)
-  assert.doesNotMatch(readerSource, /disableMultiStroke/u)
+test("PDF decorations are first-party non-text layers", () => {
+  assert.match(readerSource, /iconoplasm-pdf-decoration--\$\{kind\}/u)
+  assert.match(readerStyles, /\.iconoplasm-pdf-decoration--pill-outline/u)
+  assert.match(readerStyles, /\.iconoplasm-pdf-decoration--underline/u)
+  assert.match(readerStyles, /pointer-events:\s*none/u)
+  assert.doesNotMatch(readerSource, /textContent\s*=\s*match/u)
 })
 
-test("PDF hover is geometric and does not counterfeit HTML gene elements", () => {
-  assert.match(readerSource, /containsPointInPolygon/u)
-  assert.match(readerSource, /_iconoplasmDevicePolygons/u)
-  assert.match(readerSource, /if \(cssTransform && state\.exactPaintApplied/u)
-  assert.match(readerSource, /refreshHitAnchorGeometry\(state\)/u)
-  assert.doesNotMatch(readerSource, /className = "iconoplasm-gene"/u)
-})
-
-test("PDF highlight timing uses the shared policy and exact retained renders", () => {
-  const contentSource = readFileSync(new URL("./content.js", import.meta.url), "utf8")
-  assert.match(contentSource, /getHighlightVisibility\(\)/u)
-  assert.match(contentSource, /iconoplasm-reader-highlight-visibility-changed/u)
-  assert.match(readerSource, /settings\.normalizeHighlightVisibility/u)
-  assert.match(readerSource, /state\.canonicalCanvas = canonical/u)
-  assert.match(readerSource, /state\.highlightedCanvas = candidate/u)
-  assert.match(readerSource, /cloneCanvasPixels\(sourceCanvas\)/u)
-  assert.match(readerSource, /copyCanvasRegion\(/u)
-  assert.match(readerSource, /core\.paintBoundsForMatch\(match\)/u)
-  assert.match(readerSource, /decoration\.hidden =/u)
-  assert.match(
-    readerStyles,
-    /\.iconoplasm-pdf-ellipse-decoration\[hidden\]\s*\{\s*display:\s*none;/u,
-  )
-  assert.doesNotMatch(readerSource, /iconoplasm-highlight-on-hover/u)
+test("the packaged PDF.js runtime comes only from pinned pdfjs-dist", () => {
+  assert.match(syncSource, /legacy\/build\/pdf\.mjs/u)
+  assert.match(syncSource, /legacy\/build\/pdf\.worker\.mjs/u)
+  assert.doesNotMatch(syncSource, /patchedRuntimeRoot|vendor.*pdfjs-runtime/u)
+  assert.doesNotMatch(sourcePackager, /pdfjs-clean|pdfjs-patch|pdfjs-runtime/u)
+  assert.match(sourcePackager, /FIREFOX-AMO-PDF-ARCHITECTURE\.md/u)
 })
 
 test("the MIME stream is consumed before native fallback when highlighting is off", () => {

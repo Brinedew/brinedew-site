@@ -3,7 +3,9 @@
   "renderer": {
     "name": "iconoplasm-pdf-reader",
     "pdfjs_version": "6.2.108",
-    "shared_across_certified_targets": true
+    "shared_across_certified_targets": true,
+    "pdfjs_distribution": "unmodified-pdfjs-dist",
+    "filled_pill_pdf_fallback": "pill-outline"
   },
   "targets": {
     "chrome": {
@@ -28,10 +30,9 @@
         "partial-range native fallback",
         "Off handoff to rendered native viewer from captured bytes"
       ],
-      "store_release_ready": false,
-      "blockers": [
-        "AMO policy forbids modified third-party libraries; the exact glyph renderer uses a documented two-file PDF.js patch.",
-        "Firefox exposes no conforming ownership adapter for local file: PDFs, including papers opened from Downloads."
+      "store_release_ready": true,
+      "known_limitations": [
+        "Local file: PDFs remain in Firefox's native viewer because Firefox exposes no conforming local-file ownership adapter."
       ]
     },
     "safari": {

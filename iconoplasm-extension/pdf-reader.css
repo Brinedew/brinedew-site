@@ -249,14 +249,25 @@ body {
   background: transparent;
 }
 
-.pdfViewer .canvasWrapper .iconoplasm-pdf-ellipse-decoration {
+.pdfViewer .page .iconoplasm-pdf-decoration {
   position: absolute;
   z-index: 2;
   display: block;
+  box-sizing: border-box;
   pointer-events: none;
 }
 
-.pdfViewer .canvasWrapper .iconoplasm-pdf-ellipse-decoration[hidden] {
+.pdfViewer .page .iconoplasm-pdf-decoration--underline {
+  background: var(--iconoplasm-gene-color);
+}
+
+.pdfViewer .page .iconoplasm-pdf-decoration--pill-outline {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--iconoplasm-gene-color) 76%, transparent);
+  box-shadow: inset 0 0 0 1px var(--iconoplasm-pdf-inner-ring);
+}
+
+.pdfViewer .page .iconoplasm-pdf-decoration[hidden] {
   display: none;
 }
 
