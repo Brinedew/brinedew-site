@@ -10,6 +10,10 @@ draft: false
 
 ## Unreleased
 
+## 0.4.15 - 2026-08-25
+
+* New feature: gene names now highlight in PDFs. Turn on "PDF highlighting" slider in the extension settings - this swaps the browser's PDF reader to a pdf.js based viewer capable of highlighting.
+* Enabled predictive download of gene data on pages - now images will appear quicker on hover.
 ## 0.4.14 - 2026-08-12
 
 * Hover pop-up now loads faster
