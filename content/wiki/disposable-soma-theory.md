@@ -10,7 +10,7 @@ tags:
 
 The **disposable soma theory of aging** is an evolutionary model of aging proposed by Thomas Kirkwood in 1977. It models survival and reproduction as a resource allocation problem where an organism must divide a finite metabolic budget between reproduction and the maintenance of its non-reproductive tissues (soma). To maximize Darwinian fitness, the organism allocates just enough energy to somatic repair to keep itself functional through its expected natural lifespan, diverting the remaining resources to produce offspring.
 
-Kirkwood formulated this model to provide a physiological mechanism for earlier evolutionary theories of aging, specifically Peter Medawar's 1952 mutation accumulation concept and George C. Williams's 1957 antagonistic pleiotropy model. The theory explicitly distinguishes the soma from the germline. The germline must maintain near-perfect cellular fidelity to pass intact DNA to the next generation without compounding errors. The soma only needs to survive long enough to propagate that germline. Once the organism prioritizes reproduction, somatic cells invest less energy in fixing DNA mutations, clearing misfolded proteins, and neutralizing oxidative stress. This accumulation of unrepaired cellular damage manifests as gradual rise in age-related mortality.
+Kirkwood formulated this model to provide a physiological mechanism for earlier evolutionary theories of aging, specifically Peter Medawar's 1952 mutation accumulation concept and [George C. Williams](george-c-williams.md)'s 1957 [antagonistic pleiotropy](antagonistic-pleiotropy-theory.md) model. The theory explicitly distinguishes the soma from the germline. The germline must maintain near-perfect cellular fidelity to pass intact DNA to the next generation without compounding errors. The soma only needs to survive long enough to propagate that germline. Once the organism prioritizes reproduction, somatic cells invest less energy in fixing DNA mutations, clearing misfolded proteins, and neutralizing oxidative stress. This accumulation of unrepaired cellular damage manifests as gradual rise in age-related mortality.
 
 Biologists test the model by observing life-history trade-offs across species, looking for inverse correlations between fecundity and lifespan. Animals subjected to high extrinsic mortality evolve faster developmental times and shorter intrinsic lifespans, matching the prediction that they will invest less in maintenance. However, attempting to test the theory by measuring direct energy budgets—such as tracking exact ATP expenditure on DNA repair versus egg production—often fails to yield clean data. Biologists now focus on mapping the signaling networks that switch the organism between states of reproduction and stress resistance.
 
@@ -59,31 +59,9 @@ Understanding resource allocation helps explain:
 ## Relationship to other theories
 
 Disposable soma theory complements rather than contradicts other evolutionary theories of aging. It provides the mechanistic framework for how [[selection-shadow-theory|selection shadow]] and [[antagonistic-pleiotropy-theory|antagonistic pleiotropy]] effects are implemented through resource allocation.
----
-
-
-
-
-**Disposable soma theory** of aging, proposed by Tom Kirkwood in 1977, explains aging as an evolutionary trade-off between resource allocation to somatic maintenance and reproduction.[^1] The theory holds that organisms have limited metabolic energy and must allocate it between growth, reproduction, and somatic repair. Natural selection optimizes this allocation to maximize reproductive success rather than longevity, so organisms invest just enough in maintenance to survive their expected lifespan in the wild but not enough for indefinite survival.[^2]
-
-The theory predicts that species with lower extrinsic mortality should invest more in somatic maintenance and therefore age more slowly — a prediction confirmed by comparative studies showing that cells from long-lived species are more resistant to multiple forms of stress.[^3] Within species, calorie restriction extends lifespan by shifting allocation toward maintenance, an effect modeled as an evolutionary adaptation to fluctuating food availability.[^3]
-
-Disposable soma is one of the three major evolutionary theories of aging, alongside Medawar's mutation accumulation and Williams's antagonistic pleiotropy. Unlike those theories, which describe the evolutionary forces that allow aging to persist, disposable soma provides a mechanistic framework for how those forces are implemented through metabolic resource allocation.[^4]
-<!-- BWF-lead-start -->
-**Disposable soma theory** of aging, proposed by Tom Kirkwood in 1977, explains aging as an evolutionary trade-off between resource allocation to somatic maintenance and reproduction.[^1] The theory holds that organisms have limited metabolic energy and must allocate it between growth, reproduction, and somatic repair. Natural selection optimizes this allocation to maximize reproductive success rather than longevity, so organisms invest just enough in maintenance to survive their expected lifespan in the wild but not enough for indefinite survival.[^2]
-
-The theory predicts that species with lower extrinsic mortality should invest more in somatic maintenance and therefore age more slowly â€” a prediction confirmed by comparative studies showing that cells from long-lived species are more resistant to multiple forms of stress.[^3] Within species, calorie restriction extends lifespan by shifting allocation toward maintenance, an effect modeled as an evolutionary adaptation to fluctuating food availability.[^3]
-
-Disposable soma is one of the three major evolutionary theories of aging, alongside Medawar's mutation accumulation and Williams's antagonistic pleiotropy. Unlike those theories, which describe the evolutionary forces that allow aging to persist, disposable soma provides a mechanistic framework for how those forces are implemented through metabolic resource allocation.[^4]
-<!-- BWF-lead-end -->
 
 ---
 *The disposable soma theory reveals aging as an economic problem: organisms age because perfect maintenance is too expensive relative to reproductive success.*
-
-[^1]: Kirkwood TBL (1977). Evolution of ageing. *Nature* 270:301â€“304.
-[^2]: Kirkwood TBL & Holliday R (1979). The evolution of ageing and longevity. *Proc R Soc Lond B* 205:531â€“546.
-[^3]: Kirkwood TL, Kapahi P, Shanley DP (2000). Evolution, stress, and longevity. *J Anat* 197:587â€“590.
-[^4]: Kirkwood TBL (1992). Comparative life spans of species. *Am J Clin Nutr* 55:1191Sâ€“1195S.
 
 [^1]: Kirkwood TBL (1977). Evolution of ageing. *Nature* 270:301–304.
 [^2]: Kirkwood TBL & Holliday R (1979). The evolution of ageing and longevity. *Proc R Soc Lond B* 205:531–546.

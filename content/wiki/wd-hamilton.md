@@ -20,7 +20,7 @@ In his 1964 papers "The Genetical Evolution of Social Behaviour", Hamilton showe
 
 ## The force of selection and aging
 
-In 1966, Hamilton formalized the insight of Medawar and Williams into a precise model of the [force of selection](selection-shadow-theory.md), showing that it declines with age even in organisms with indeterminate growth, and that this decline follows from the timing of reproduction and mortality. His indicator functions for the force of selection remain the standard formalization of why late-acting harmful mutations are weakly opposed by selection, and underpin both the mutation accumulation and [antagonistic pleiotropy](antagonistic-pleiotropy-theory.md) theories of aging.
+In 1966, Hamilton formalized the insight of Medawar and [George Williams](george-c-williams.md) into a precise model of the [force of selection](selection-shadow-theory.md), showing that it declines with age even in organisms with indeterminate growth, and that this decline follows from the timing of reproduction and mortality. His indicator functions for the force of selection remain the standard formalization of why late-acting harmful mutations are weakly opposed by selection, and underpin both the mutation accumulation and [antagonistic pleiotropy](antagonistic-pleiotropy-theory.md) theories of aging.
 
 ## Other work
 
