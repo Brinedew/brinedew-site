@@ -86,6 +86,43 @@ test("client rectangles become stable page-local bounds", () => {
   )
 })
 
+test("page borders do not shift decorations or hit targets away from glyphs", () => {
+  const pageBorderRect = { left: 559, top: 75 }
+  const pageOrigin = core.contentOriginFromBorderRect(pageBorderRect, { left: 9, top: 9 })
+  const glyphRect = {
+    left: 941.71875,
+    top: 149.625,
+    right: 1012.890625,
+    bottom: 177.625,
+  }
+
+  assert.deepEqual(pageOrigin, { left: 568, top: 84 })
+  const localBounds = core.boundsFromClientRect(glyphRect, pageOrigin)
+  assert.deepEqual(localBounds, {
+    left: 373.71875,
+    top: 65.625,
+    right: 444.890625,
+    bottom: 93.625,
+  })
+  assert.deepEqual(
+    {
+      left: pageOrigin.left + localBounds.left,
+      top: pageOrigin.top + localBounds.top,
+      right: pageOrigin.left + localBounds.right,
+      bottom: pageOrigin.top + localBounds.bottom,
+    },
+    glyphRect,
+  )
+  assert.equal(
+    core.containsPointInBounds(
+      localBounds,
+      (glyphRect.left + glyphRect.right) / 2 - pageOrigin.left,
+      (glyphRect.top + glyphRect.bottom) / 2 - pageOrigin.top,
+    ),
+    true,
+  )
+})
+
 test("font metrics remove selection-box leading without moving the baseline", () => {
   const bounds = { left: 20, top: 30, right: 70, bottom: 54 }
   const metrics = {
@@ -120,19 +157,47 @@ test("rotated text tightens the cross-axis and respects reversed direction", () 
 })
 
 test("rotated pill geometry uses glyph thickness rather than inline length", () => {
+  const geometry = core.computeDecorationGeometry(
+    { left: 20, top: 30, right: 46, bottom: 130 },
+    5,
+    { kind: "pill-outline", outerSpreadEm: 0.11, innerSpreadEm: 0.08, radiusEm: 0.1 },
+    { crossAxis: "x", crossAxisDirection: -1 },
+  )
   assert.deepEqual(
-    core.computeDecorationGeometry(
-      { left: 20, top: 30, right: 46, bottom: 130 },
-      5,
-      { kind: "pill-outline", outerSpreadEm: 0.11, radiusEm: 0.1 },
-      { crossAxis: "x", crossAxisDirection: -1 },
+    JSON.parse(
+      JSON.stringify(geometry, (_key, value) =>
+        typeof value === "number" ? Number(value.toFixed(6)) : value,
+      ),
     ),
     {
-      bounds: { left: 17.14, top: 27.14, right: 48.86, bottom: 132.86 },
-      borderRadius: 5.46,
+      bounds: { left: 15.06, top: 25.06, right: 50.94, bottom: 134.94 },
+      borderRadius: 7.54,
       borderWidth: 2.86,
+      innerClearance: 2.08,
     },
   )
+})
+
+test("outline pills preserve visible clearance between the border and glyph ink", () => {
+  const inkBounds = { left: 373.71875, top: 71.625, right: 444.890625, bottom: 90.625 }
+  const geometry = core.computeDecorationGeometry(inkBounds, 5, {
+    kind: "pill-outline",
+    outerSpreadEm: 0.11,
+    innerSpreadEm: 0.08,
+    radiusEm: 0.18,
+  })
+  const borderInnerBounds = {
+    left: geometry.bounds.left + geometry.borderWidth,
+    top: geometry.bounds.top + geometry.borderWidth,
+    right: geometry.bounds.right - geometry.borderWidth,
+    bottom: geometry.bounds.bottom - geometry.borderWidth,
+  }
+
+  const epsilon = 1e-9
+  assert.ok(inkBounds.left - borderInnerBounds.left >= geometry.innerClearance - epsilon)
+  assert.ok(inkBounds.top - borderInnerBounds.top >= geometry.innerClearance - epsilon)
+  assert.ok(borderInnerBounds.right - inkBounds.right >= geometry.innerClearance - epsilon)
+  assert.ok(borderInnerBounds.bottom - inkBounds.bottom >= geometry.innerClearance - epsilon)
 })
 
 test("rotated underline follows the transformed baseline edge", () => {
