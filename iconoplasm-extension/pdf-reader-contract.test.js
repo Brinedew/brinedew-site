@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 const readerSource = readFileSync(new URL("./pdf-reader.mjs", import.meta.url), "utf8")
+const readerControlsSource = readFileSync(
+  new URL("./pdf-reader-controls.mjs", import.meta.url),
+  "utf8",
+)
 const readerStyles = readFileSync(new URL("./pdf-reader.css", import.meta.url), "utf8")
 const contentSource = readFileSync(new URL("./content.js", import.meta.url), "utf8")
 const syncSource = readFileSync(
@@ -132,4 +136,32 @@ test("the PDF reader keeps controls inert until rendering and offers recovery on
   assert.match(readerSource, /function setReaderError/u)
   assert.match(readerSource, /activeLoadId/u)
   assert.match(readerStyles, /prefers-reduced-motion/u)
+})
+
+test("the PDF reader provides the vanilla control surface shared by approved viewers", () => {
+  const html = readFileSync(new URL("./pdf-reader.html", import.meta.url), "utf8")
+  for (const id of [
+    "previous-page",
+    "next-page",
+    "page-number",
+    "fit-width",
+    "find-previous",
+    "find-next",
+    "print",
+    "sidebar-toggle",
+    "thumbnail-view",
+    "outline-view",
+    "presentation-mode",
+    "document-properties",
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"`, "u"), id)
+  }
+  assert.match(readerControlsSource, /IntersectionObserver/u)
+  assert.match(readerControlsSource, /getOutline\(\)/u)
+  assert.match(readerControlsSource, /intent: "print"/u)
+  assert.match(readerControlsSource, /requestFullscreen/u)
+  assert.match(readerControlsSource, /getMetadata\(\)/u)
+  assert.match(readerControlsSource, /history\.replaceState/u)
+  assert.match(packagerSource, /"pdf-reader-controls\.mjs"/u)
+  assert.match(sourcePackager, /pdf-reader-controls\.mjs/u)
 })

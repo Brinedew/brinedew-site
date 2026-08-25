@@ -123,6 +123,7 @@ const includeFiles = [
   "iconoplasm-extension/pdf-reader.html",
   "iconoplasm-extension/pdf-reader.css",
   "iconoplasm-extension/pdf-reader.mjs",
+  "iconoplasm-extension/pdf-reader-controls.mjs",
   "iconoplasm-extension/pdf-reader-core.js",
   "iconoplasm-extension/pdf-stream-bootstrap.js",
   "iconoplasm-extension/lit-archival-frame.html",
