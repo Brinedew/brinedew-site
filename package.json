@@ -16,7 +16,7 @@
     "quartz": "./quartz/bootstrap-cli.mjs",
     "sync:iconoplasm-shared": "node ./scripts/sync-iconoplasm-shared.mjs",
     "sync:iconoplasm-extension": "node ./scripts/sync-iconoplasm-shared.mjs --extension-only",
-    "build:iconoplasm-pdfjs": "pnpm --dir ./iconoplasm-extension/vendor/pdfjs-src exec gulp generic && node ./scripts/capture-iconoplasm-pdfjs-runtime.mjs",
+    "build:iconoplasm-pdfjs": "node ./scripts/sync-iconoplasm-pdfjs.mjs",
     "package:iconoplasm-extension": "node ./scripts/package-iconoplasm-extension.mjs",
     "package:iconoplasm-firefox": "node ./scripts/package-iconoplasm-extension.mjs --target=firefox",
     "package:iconoplasm-edge": "node ./scripts/package-iconoplasm-extension.mjs --target=edge",

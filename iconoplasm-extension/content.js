@@ -1413,6 +1413,22 @@
             shape: highlightRuntime.getCanvasShape(highlightMode),
           })
         },
+        getPdfHighlightPresentation(rawSymbol) {
+          const symbol = String(rawSymbol || "")
+            .trim()
+            .toUpperCase()
+          const gene = geneMap[symbol]
+          if (!gene) return null
+          const color = gene.c || PLACEHOLDER_COLOR
+          const pdfMode = highlightMode === "pill" ? "pill-outline" : highlightMode
+          return Object.freeze({
+            color,
+            foreground: textColors(color).primary,
+            mode: pdfMode,
+            requestedMode: highlightMode,
+            shape: highlightRuntime.getCanvasShape(pdfMode),
+          })
+        },
         decorateAnchor(anchor, rawSymbol) {
           const symbol = String(rawSymbol || "")
             .trim()
