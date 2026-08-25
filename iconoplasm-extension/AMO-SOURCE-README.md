@@ -33,7 +33,10 @@ Expected environment used by the project:
 - Node: 22+
 - pnpm: the version pinned in `package.json`
 
-AMO's default reviewer environment uses Ubuntu + Node 24, which should also work.
+AMO's default reviewer environment, checked on 2026-08-25, is Ubuntu 24.04.4 LTS
+on ARM64 with Node 24.14.0. The build uses the repository-pinned pnpm version
+through Corepack and includes the frozen lockfile. Its platform-specific build
+dependencies publish ARM64 packages; no Windows-only build step is used.
 
 From the repo root of this source package:
 
