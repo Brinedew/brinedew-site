@@ -740,13 +740,10 @@ This creates slower but more sophisticated evolution through regulatory control 
 Different tissues tend toward different strategies based on their baseline security architecture - the patterns we saw in hematopoietic vs epithelial tissues shape which evolutionary paths are most feasible.
 
 
-## related
+## Related
 
-
-## related
-
-- **[Tumor Suppressor Theory of Aging](../../../theories/tumor-suppressor-theory-of-aging.md)** - How anti-cancer mechanisms drive aging
-- **[p53 Guardian](../../../mechanisms/p53-guardian.md)** - Deep dive into the key damage surveillance system
-- **[Cellular Senescence](../../../mechanisms/cellular-senescence.md)** - How cells permanently exit the cell cycle
-- **[Antagonistic Pleiotropy Theory](../../../theories/antagonistic-pleiotropy-theory.md)** - Why the same mechanisms can be both protective and harmful
+- **[Tumor Suppressor Theory of Aging](tumor-suppressor-theory-of-aging.md)** - How anti-cancer mechanisms drive aging
+- **[p53](p53-tp53.md)** - The key damage surveillance system
+- **[Cellular Senescence](cellular-senescence.md)** - How cells permanently exit the cell cycle
+- **[Antagonistic Pleiotropy Theory](antagonistic-pleiotropy-theory.md)** - Why the same mechanisms can be both protective and harmful
 
