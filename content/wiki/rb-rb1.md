@@ -47,10 +47,19 @@ transmembrane: false
 uniprot_id: P06400
 ---
 
-# Rb (RB1)
+# RB1 (RB)
 
-**What it is.** Gatekeeper of the G1→S cell-cycle transition; binds E2F transcription factors to keep cells from copying DNA at the wrong time.
+RB1, the retinoblastoma gene, encodes RB, a transcriptional corepressor that restrains entry into the cell cycle by holding E2F transcription factors inactive until growth signals justify division.
 
-**Why it matters here.** When Rb is inactivated, E2F is unleashed and cells proliferate despite checkpoints.
+## Function
 
-**Notes.** Type: tumor suppressor; Pathways: Cyclin/CDK, p16^INK4a–Rb–E2F axis.
+RB binds E2F at promoters of S-phase genes and recruits chromatin modifiers that keep those promoters silent. Cyclin D–CDK4/6 and cyclin E–CDK2 phosphorylate RB as the cell commits to division; phosphorylation releases E2F, and the S-phase program runs. [p16](p16ink4a-cdkn2a.md) blocks the phosphorylation step, which makes the CDK4/6–RB–E2F axis the cell's main gate between G1 and S. In quiescent and [senescent](cellular-senescence.md) cells RB stays hypophosphorylated and the gate stays shut.
+
+## In cancer
+
+RB1 takes its name from retinoblastoma, the childhood eye tumor that develops in children inheriting one defective copy. Loss of RB1 removes the G1 gate, and the loss recurs across tumor types: HPV E7 protein binds RB and degrades it, which is the mechanism by which HPV drives cervical cancer. The pathway is so central that most human tumors disable it at one point or another — RB1 itself, the CDKs, p16, or CDK4/6 amplification.
+
+## Notes
+
+- Human gene symbol: RB1; UniProt P06400; 928 amino acids.
+- First cloned tumor suppressor (1986); the two-hit inheritance of retinoblastoma motivated Alfred Knudson's 1971 model.

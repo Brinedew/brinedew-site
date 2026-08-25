@@ -49,8 +49,16 @@ uniprot_id: Q13535
 
 # ATR
 
-**What it is.** DNA replication stress sensor kinase; responds to single-stranded DNA and stalled forks.
+ATR (ATM- and Rad3-related) is a serine/threonine kinase and the master transducer of replication stress — stalled and broken replication forks, the damage class that [ATM](atm.md) covers least well.
 
-**Why it matters here.** Cooperates with ATM to halt the cycle and stabilize the genome during stress.
+## Function
 
-**Notes.** Type: serine/threonine kinase; Pathway: ATR–CHK1–p53.
+ATR is recruited by its partner ATRIP to single-stranded DNA coated with RPA, the structure that appears whenever a replication fork stalls or a resected break is awaiting repair. Activated ATR phosphorylates CHK1, which then enforces the intra-S and G2/M checkpoints, stabilizes stalled forks, suppresses origin firing elsewhere in the genome, and coordinates repair. The ATR–CHK1 arm therefore protects cells through S and G2, the phases in which unreplicated or partially replicated DNA would otherwise be segregated into daughter cells. Topoisomerase poisons, hydroxyurea, UV damage, and oncogene-induced replication stress all signal through ATR.
+
+## In cancer
+
+ATR loss is lethal to most cells, but tumors with high baseline replication stress — those driven by oncogenes, or deficient in [p53](p53-tp53.md) — depend on ATR for survival more heavily than normal tissue does. ATR inhibitors exploit this dependency, and synthetic-lethal combinations pairing ATR inhibition with [ATM](atm.md) loss or chemotherapy are in clinical trials.
+
+## Notes
+
+- Human gene symbol: ATR; UniProt Q13535; 2,644 amino acids; PI3K-related kinase (PIKK) family.

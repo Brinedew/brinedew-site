@@ -44,10 +44,18 @@ transmembrane: false
 uniprot_id: P01375
 ---
 
-# TNF (TNF)
+# TNF
 
-**What it is.** Inflammatory cytokine that can promote survival or trigger death depending on context.
+TNF (tumor necrosis factor) is the master cytokine of acute inflammation: a signaling protein that coordinates the systemic response to infection and, depending on context, kills tumor cells directly or drives the inflammation that feeds them.
 
-**Why it matters here.** Part of extrinsic apoptosis pathways; also central to inflammation around tumors.
+## Function
 
-**Notes.** Type: cytokine; Receptors: TNFR1/TNFR2.
+TNF is produced mainly by activated macrophages as a membrane-bound protein cleaved to its soluble form. It signals through two receptors: TNFR1, present on nearly all cells, which recruits the TRADD complex and can launch either NF-κB survival transcription or caspase-8-mediated apoptosis (with necroptosis as a third outcome when caspases are blocked); and TNFR2, restricted to immune cells. Systemically, TNF induces fever, the acute-phase response, and endothelial activation — the physiology of sepsis is largely TNF physiology, which is why TNF blockade in sepsis trials failed.
+
+## In cancer
+
+The name records the original observation: TNF kills tumors, and the factor was identified by its ability to necrose sarcoma transplants. The killing is real but narrow — many tumors resist TNF-induced apoptosis through NF-κB activation, and chronic TNF production in the tumor microenvironment promotes inflammation-driven carcinogenesis and metastasis. Anti-TNF antibodies (infliximab, adalimumab) transformed autoimmune therapy; in oncology, TNF is used only in isolated-limb perfusion for sarcoma.
+
+## Notes
+
+- Human gene symbol: TNF (TNF-α); UniProt P01375; 233 amino acids (precursor); TNF cytokine family.

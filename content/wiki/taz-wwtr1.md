@@ -47,8 +47,16 @@ uniprot_id: Q9GZV5
 
 # TAZ (WWTR1)
 
-**What it is.** YAP’s paralog; co-activator modulated by Hippo signaling and tissue stiffness.
+TAZ (transcriptional coactivator with PDZ-binding motif), encoded by WWTR1, is the paralog and functional partner of [YAP1](yap-yap1.md) in the Hippo pathway — the second coactivator through which tissue mechanics reach the genome.
 
-**Why it matters here.** Drives growth and EMT-like programs when de-repressed.
+## Function
 
-**Notes.** Type: co-activator; Pathway: Hippo.
+TAZ responds to the same signals as YAP: Hippo-pathway kinase activity (LATS1/2) phosphorylates it and holds it out of the nucleus; cell density, stiff extracellular matrix, and cytoskeletal tension dephosphorylate it and send it in. In the nucleus TAZ partners with TEAD transcription factors to drive proliferation, matrix-remodeling, and stemness genes. The two coactivators have overlapping but distinguishable target preferences — TAZ is the more potent driver of the mesenchymal and matrix-remodeling program — and many tissues express both, with the ratio shifting during differentiation.
+
+## In cancer
+
+The WWTR1 locus participates in a defining translocation: WWTR1–CAMTA1, the signature fusion of epithelioid hemangioendothelioma, fuses TAZ's TEAD-binding region to a transcriptional repressor and creates a constitutive activator. TAZ amplification and nuclear accumulation recur in breast cancer, where TAZ drives metastasis and therapy resistance, and in lung adenocarcinoma. Like YAP, TAZ has no approved direct inhibitor; the therapeutic target is the TEAD interaction.
+
+## Notes
+
+- Human gene symbol: WWTR1; UniProt Q9GZV5; 420 amino acids; TEAD-binding and PDZ-binding domains; 14-3-3 binding site at Ser89.

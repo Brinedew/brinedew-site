@@ -49,8 +49,16 @@ uniprot_id: O14727
 
 # APAF1
 
-**What it is.** Scaffold that assembles the apoptosome to activate caspase‑9.
+APAF1 (apoptotic protease-activating factor 1) is the cytosolic scaffold that assembles the apoptosome, the heptameric complex that activates caspase-9 and launches the caspase cascade.
 
-**Why it matters here.** Loss blocks caspase activation and apoptosis.
+## Function
 
-**Notes.** Partners: cytochrome c, caspase‑9.
+When the mitochondrial outer membrane permeabilizes, cytochrome c escapes into the cytosol and binds APAF1. The binding, together with dATP, converts APAF1 from a folded-inactive monomer into an open form that oligomerizes into a seven-spoked wheel — the apoptosome. Each spoke presents a caspase recruitment domain that captures procaspase-9, dimerizes it, and thereby activates it; active caspase-9 then cleaves executioner caspases ([caspase-3](caspase-3-casp3-p42574.md)) and the cell dismantles itself. APAF1 is thus the point where the [BCL-2](bcl-2.md)-family decision, made at the mitochondrial membrane, becomes an enzymatic program.
+
+## In cancer
+
+APAF1 sits downstream of [p53](p53-tp53.md), which induces its transcription as part of the apoptotic response to DNA damage. Loss of APAF1 expression — through methylation of its promoter or through mutation — occurs in melanoma and other tumors and blunts the apoptotic response of a cell whose damage checkpoints are otherwise intact. A cell with intact checkpoints and a broken apoptosome arrests instead of dying, which changes the character of the tumor's evolution.
+
+## Notes
+
+- Human gene symbol: APAF1; UniProt O14727; 1,248 amino acids; CARD, NB-ARC (nucleotide-binding), and WD40 repeat domains.

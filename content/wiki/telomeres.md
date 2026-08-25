@@ -8,20 +8,17 @@ tags:
 
 # Telomeres
 
-Chromosomal aging timers that protect chromosome ends and shorten with each cell division.
+Telomeres are the repetitive DNA–protein caps at chromosome ends: structures that protect coding DNA from the shortening of replication and that signal "chromosome end" so the cell treats them as a cap instead of a break.
 
-## Overview
+## Function
 
-Telomeres are protective DNA-protein structures at the ends of chromosomes that shorten with each cell division.
+Human telomeres are several kilobases of TTAGGG repeats ending in a single-stranded overhang. The overhang folds back into the duplex, forming a t-loop that hides the chromosome end from the DNA damage machinery; the shelterin protein complex binds the repeats and represses the response that an exposed double-strand break would trigger ([ATM](atm.md), [ATR](atr.md)). DNA polymerase cannot copy a linear template to its very end, so each S phase removes tens to hundreds of telomeric bases — the end-replication problem. Telomere length therefore tracks a cell's replicative history, and critically short telomeres stop the cell through [p53](p53-tp53.md)-mediated [senescence](cellular-senescence.md).
 
-## Key Points
+## In aging and cancer
 
-- Telomeres are repetitive DNA–protein caps (TTAGGG in humans) that prevent chromosome end fusions and loss of essential DNA.
-- They shorten 50–200 bp per division due to the end‑replication problem and oxidative damage.
-- Critically short telomeres trigger senescence or apoptosis via p53/p21 and p16/RB pathways.
-- In large mammals, shorter telomeres limit tumor potential; constitutively long telomeres increase cancer risk.
+Telomere shortening is the counting mechanism behind replicative senescence, and it makes telomeres a somatic lifespan clock: long-lived species tend to have longer telomeres and better telomere maintenance, and telomere length in blood cells correlates weakly with human mortality risk. Cancer requires escaping this clock, which tumors do by reactivating [telomerase](telomerase-tert.md) or the ALT recombination route. Dyskeratosis congenita, caused by telomerase mutations, presents the converse: short telomeres, premature aging phenotypes, and bone-marrow failure.
 
-## Related
+## Notes
 
-- [Cellular senescence](cellular-senescence.md)
-- [Replicative credit](replicative-credit.md)
+- Shelterin components: TRF1, TRF2, POT1, TPP1, TIN2, RAP1.
+- Elizabeth Blackburn and Jack Szostak discovered telomere maintenance; the 2009 Nobel Prize recognized the work.

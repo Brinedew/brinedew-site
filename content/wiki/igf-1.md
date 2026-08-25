@@ -49,8 +49,16 @@ uniprot_id: P05019
 
 # IGF-1
 
-**What it is.** Hormone that promotes growth and survival downstream of nutrition and endocrine status.
+IGF-1 (insulin-like growth factor 1) is the hormone through which growth hormone drives body growth, and the signal whose reduction extends lifespan across species.
 
-**Why it matters here.** Raises the global "growth permission" background; intersects with PI3K–AKT signaling.
+## Function
 
-**Notes.** Receptor: IGF1R; System-level knob.
+IGF-1 is produced mainly by the liver in response to growth hormone from the pituitary and circulates bound to IGF-binding proteins. It signals through the IGF-1 receptor, a tyrosine kinase that activates the [PI3K](pik3ca-pik3ca-p42336.md)–[AKT](akt1-p31749.md) and [RAS](kras-kras-p01116.md)–MAPK pathways — the same routes growth-factor receptors use, but engaged systemically and continuously rather than locally and transiently. The result is growth: cell proliferation, skeletal growth, and anabolic metabolism. Its name records its structural kinship with [insulin](insulin.md) and its original discovery as a serum factor with insulin-like activity.
+
+## In aging and cancer
+
+Reduced IGF-1 signaling is the most reproducible genetic longevity intervention known: growth hormone receptor knockouts, IGF-1 receptor heterozygotes, and hypopituitary dwarf lines live longer in mice, and orthologous reductions (daf-2 in worms, chico in flies) extend lifespan in invertebrates. The mechanism connects to the [insulin/IGF aging axis](disposable-soma-theory.md): high IGF-1 drives growth and reproduction at a cost in maintenance. In cancer, IGF-1 is mitogenic and anti-apoptotic, serum IGF-1 levels correlate modestly with several cancer risks, and IGF-1R inhibitors have had limited clinical success.
+
+## Notes
+
+- Human gene symbol: IGF1; UniProt P05019; 195 amino acids (precursor); insulin peptide family.

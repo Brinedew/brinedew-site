@@ -48,8 +48,17 @@ uniprot_id: P01106
 
 # MYC
 
-**What it is.** Transcription factor that increases biosynthetic capacity and drives cell growth.
+MYC is a transcription factor that amplifies the expression of the cell's growth program — the transcription factor whose overactivity makes a cell grow and divide, and whose dysregulation appears in most human cancers.
 
-**Why it matters here.** Oncogene; excessive MYC triggers both proliferation and, paradoxically, senescence/apoptosis tripwires.
+## Function
 
-**Notes.** Type: transcription factor; Context: cell competition, OIS.
+MYC binds DNA as a heterodimer with MAX at E-box sequences and acts as an amplifier: it increases the expression of genes that are already switched on, with a bias toward the growth program — ribosomal RNA, translation factors, metabolic enzymes, cell-cycle machinery. MYC also activates rDNA transcription through its association with the nucleolus, tying the protein to ribosome biogenesis and cell size. Its expression is normally driven by mitogenic signals and turns over within minutes; sustained MYC in a quiescent cell triggers [p53](p53-tp53.md)-mediated arrest or death through [p14ARF](arf-p14arf.md), which is the cell's protection against unsolicited growth.
+
+## In cancer
+
+MYC is the prototype of a "class II" oncogene — one that needs a cooperating mutation, because uncontrolled MYC alone kills the cell through the ARF–p53 route. The gene is amplified or translocated in a large fraction of tumors: Burkitt lymphoma carries an MYC translocation into the immunoglobulin locus, and MYC amplification marks aggressive breast and colorectal cancers. Direct MYC inhibition has been pharmacologically elusive because the protein's DNA-binding interface is shallow and its normal function is load-bearing in every proliferating tissue.
+
+## Notes
+
+- Human gene symbol: MYC; UniProt P01106; 439 amino acids; basic helix-loop-helix leucine zipper.
+- Named from the avian myelocytomatosis retrovirus from which the gene was first identified.

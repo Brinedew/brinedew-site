@@ -46,10 +46,19 @@ transmembrane: false
 uniprot_id: P35222
 ---
 
-# beta-catenin (CTNNB1)
+# β-Catenin (CTNNB1)
 
-**What it is.** Signal relay for Wnt; also links cadherins to the cytoskeleton.
+β-Catenin, encoded by CTNNB1, is the dual-purpose protein at the center of the Wnt pathway: a transcriptional coactivator when stabilized, and a cell–cell adhesion linker at the membrane.
 
-**Why it matters here.** Stabilized beta-catenin drives proliferation and stemness; normally kept low by the destruction complex.
+## Function
 
-**Notes.** Type: transcriptional co-regulator; Pathway: Wnt/beta-catenin.
+β-Catenin has two jobs. At adherens junctions it links E-cadherin to the actin cytoskeleton. In the Wnt pathway, its cytoplasmic pool is normally destroyed: a destruction complex (APC, AXIN, GSK3β, CK1) phosphorylates β-catenin, marking it for ubiquitination and proteasomal degradation. Wnt ligand binding to Frizzled/LRP disables the destruction complex; β-catenin accumulates, enters the nucleus, and partners with TCF/LEF transcription factors to activate Wnt target genes — [MYC](myc.md), cyclin D1, and the stem-cell program. The destruction complex is the pathway's switch, and its components are the pathway's tumor suppressors.
+
+## In cancer
+
+CTNNB1 mutations that remove the phosphorylation sites stabilize β-catenin constitutively — common in hepatocellular carcinoma and endometrial cancer. More often the pathway is activated upstream: APC loss is the initiating event of most colorectal cancers, and its consequence is nuclear β-catenin in every cell of the adenoma. The Wnt–β-catenin axis is also the pathway that maintains intestinal stem cells, which is why its constitutive activation produces tumors rather than just overgrowth.
+
+## Notes
+
+- Human gene symbol: CTNNB1; UniProt P35222; 781 amino acids; armadillo-repeat protein.
+- Named for its position in the catenin adhesion complex before its signaling role was discovered.

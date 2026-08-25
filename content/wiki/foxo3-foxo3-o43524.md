@@ -46,10 +46,18 @@ transmembrane: false
 uniprot_id: O43524
 ---
 
-# FOXO3 (FOXO3)
+# FOXO3
 
-What it is. Forkhead transcription factor integrating stress signals to adjust repair, cell-cycle arrest, and metabolic programs.
+FOXO3 is a forkhead transcription factor that executes the anti-growth program: it converts signals about stress, starvation, and low insulin/IGF into genes for repair, cleanup, and survival rather than growth.
 
-Why it matters here. When freed from AKT-driven inhibition, FOXO3 reinforces cooperative safeguards—reducing the chance that stressed cells drift toward competitive, oncogenic behavior.
+## Function
 
-Notes. Regulated by AKT phosphorylation and nuclear localization; coordinates with SIRT1 and AMPK.
+[Insulin](insulin.md) and [IGF-1](igf-1.md) signaling activates [AKT](akt1-p31749.md), which phosphorylates FOXO3 and pins it outside the nucleus. When those signals fall — fasting, calorie restriction, stress — FOXO3 enters the nucleus and activates a transcriptional program of maintenance: antioxidant enzymes (SOD2, catalase), DNA-repair genes, autophagy genes, cell-cycle arrest through [p21](p21cip1-cdkn1a.md) and [p27](p21cip1-cdkn1a.md)-family inhibitors, and stress-resistance proteins. FOXO3 is therefore the transcriptional counterweight to growth signaling, and the mediator of the longevity phenotype that reduced insulin/IGF signaling produces across species: in *C. elegans*, the FOXO ortholog DAF-16 is the effector of daf-2 longevity.
+
+## In aging and cancer
+
+FOXO3 is one of the few genes with replicated association with human longevity across cohorts. Its tumor role is suppressive: FOXO3 induces arrest and apoptosis in cells with activated [PI3K](pik3ca-pik3ca-p42336.md)–AKT signaling, and its exclusion from the nucleus — the same event that keeps growth running — removes the anti-tumor program. Tumors with high AKT activity have inactive FOXO3 by construction.
+
+## Notes
+
+- Human gene symbol: FOXO3; UniProt O43524; 673 amino acids; forkhead box O family; three AKT phosphorylation sites.

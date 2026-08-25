@@ -50,10 +50,18 @@ transmembrane: true
 uniprot_id: Q07817
 ---
 
-# BCL‑XL (BCL2L1)
+# BCL-xL (BCL2L1)
 
-**What it is.** Anti‑apoptotic relative of BCL‑2.
+BCL-xL is an anti-apoptotic member of the BCL-2 family that restrains mitochondrial outer-membrane permeabilization by binding pro-apoptotic family members.
 
-**Why it matters here.** Tumor cells often depend on it; complicates therapy because many normal cells need it too.
+## Function
 
-**Notes.** Mitochondrial survival protein.
+BCL-xL sits in the mitochondrial outer membrane and sequesters the pore-formers [BAX](bax.md) and [BAK](bak-bak1.md) and the BH3-only activators that would rouse them. Its binding groove is the target of the BH3-only "sensitizer" proteins, so BCL-xL participates in the same family-wide titration that decides whether a stressed cell lives. The BCL2L1 gene is spliced into two main products: BCL-xL, the long anti-apoptotic form, and BCL-xS, a shorter pro-apoptotic form.
+
+## In cancer
+
+BCL-xL is overexpressed in many carcinomas and in platelets, where it keeps anucleate cells alive; this platelet dependence explains the thrombocytopenia that limits drugs targeting BCL-xL. Tumors use BCL-xL to survive chemotherapy, and its expression correlates with resistance to taxanes and other agents. Because [BCL-2](bcl-2.md), BCL-xL and [MCL-1](mcl-1.md) each protect against partially overlapping sets of death signals, tumors often shift dependence among the three as treatment selects for resistant clones.
+
+## Notes
+
+- Human gene symbol: BCL2L1; UniProt Q07817; 233 amino acids (long isoform); BH1–BH4 domains and a C-terminal membrane anchor.
