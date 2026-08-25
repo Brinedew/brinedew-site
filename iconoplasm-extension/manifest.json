@@ -36,7 +36,12 @@
     },
     {
       "matches": ["<all_urls>"],
-      "exclude_matches": ["https://iconoplasm.brinedew.bio/*", "https://staging.brinedew.bio/*"],
+      "exclude_matches": [
+        "https://iconoplasm.brinedew.bio/*",
+        "https://staging.brinedew.bio/*",
+        "http://127.0.0.1/*",
+        "http://localhost/*"
+      ],
       "js": [
         "generated/iconoplasm-font-runtime.js",
         "generated/rough.js",
