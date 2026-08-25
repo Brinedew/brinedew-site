@@ -43,7 +43,7 @@ The concept of de-Darwinization has been applied to several major evolutionary p
 
 ### Multicellularity and Individuality
 
-The most common application is in the evolution of multicellular organisms, where [Leo Buss](leo-buss.md) located the problem: for an organism to function as a coherent whole, its individual cells must have their ability to compete and reproduce independently suppressed. Austin G. Booth used the term in case studies, noting for example that human somatic cells are "de-Darwinized to a far greater extent" than the nuclei within a fungal mycelium (Booth 2014).
+The most common application is in the evolution of multicellular organisms. [Leo Buss](leo-buss.md) argued that for an organism to function as a coherent whole, its cells must lose the ability to compete and reproduce independently. [Richard Michod](richard-michod.md) developed this into a fitness-dynamical account: in a transition, fitness transfers from the parts to the collective while conflict among the parts is suppressed. Austin G. Booth used the term in case studies, noting for example that human somatic cells are "de-Darwinized to a far greater extent" than the nuclei within a fungal mycelium (Booth 2014).
 
 
 ### Eusociality
