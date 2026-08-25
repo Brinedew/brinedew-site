@@ -190,12 +190,104 @@ body {
   text-align: center;
 }
 
+#reader-status[data-kind="loading"] #reader-status-message::before {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  box-sizing: border-box;
+  margin: 0 10px -4px 0;
+  border: 2px solid rgb(189 193 198 / 35%);
+  border-top-color: var(--viewer-ink);
+  border-radius: 50%;
+  animation: reader-spin 800ms linear infinite;
+  content: "";
+}
+
 #reader-status[data-kind="error"],
-#reader-status[data-kind="warning"] {
+#reader-status[data-kind="warning"],
+#reader-status[data-kind="empty"] {
   padding: 12px 16px;
   border-radius: 2px;
   background: #3c4043;
   box-shadow: 0 2px 8px rgb(0 0 0 / 42%);
+}
+
+.reader-status-actions {
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.reader-status-actions:not([hidden]) {
+  display: flex;
+}
+
+.reader-status-actions button,
+.reader-status-actions label {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  border: 1px solid #80868b;
+  border-radius: 3px;
+  padding: 0 12px;
+  color: var(--viewer-ink);
+  background: #4b4e51;
+  font: inherit;
+  cursor: pointer;
+}
+
+.reader-status-actions [hidden] {
+  display: none !important;
+}
+
+.reader-status-actions button:hover,
+.reader-status-actions label:hover {
+  background: #5f6366;
+}
+
+.reader-progress {
+  position: fixed;
+  z-index: 110;
+  top: var(--toolbar-height);
+  right: 0;
+  left: 0;
+  height: 3px;
+  overflow: hidden;
+  background: rgb(138 180 248 / 20%);
+}
+
+.reader-progress span {
+  width: 0;
+  height: 100%;
+  display: block;
+  transform-origin: left center;
+  background: #8ab4f8;
+  transition: width 160ms ease-out;
+}
+
+.reader-progress.is-indeterminate span {
+  width: 38%;
+  animation: reader-progress-indeterminate 1.25s ease-in-out infinite;
+}
+
+.reader-progress[hidden] {
+  display: none;
+}
+
+@keyframes reader-progress-indeterminate {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(370%);
+  }
+}
+
+@keyframes reader-spin {
+  to {
+    transform: rotate(1turn);
+  }
 }
 
 .reader-password {
@@ -291,5 +383,16 @@ body {
   .reader-divider,
   #find-form {
     display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #reader-status[data-kind="loading"] #reader-status-message::before,
+  .reader-progress.is-indeterminate span {
+    animation: none;
+  }
+
+  .reader-progress span {
+    transition: none;
   }
 }
