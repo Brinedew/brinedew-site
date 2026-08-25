@@ -90,9 +90,128 @@
     )
   }
 
+  function tightenBoundsToTextMetrics(bounds, metrics, options = {}) {
+    const fontAscent = Number(metrics?.fontBoundingBoxAscent)
+    const fontDescent = Number(metrics?.fontBoundingBoxDescent)
+    const actualAscent = Number(metrics?.actualBoundingBoxAscent)
+    const actualDescent = Number(metrics?.actualBoundingBoxDescent)
+    const fontExtent = fontAscent + fontDescent
+    const actualExtent = actualAscent + actualDescent
+    if (
+      !bounds ||
+      ![fontAscent, fontDescent, actualAscent, actualDescent, fontExtent, actualExtent].every(
+        Number.isFinite,
+      ) ||
+      fontExtent <= 0 ||
+      actualExtent <= 0 ||
+      actualExtent > fontExtent * 1.1
+    ) {
+      return bounds
+    }
+
+    const verticalText = options.crossAxis === "x"
+    const minimum = verticalText ? bounds.left : bounds.top
+    const maximum = verticalText ? bounds.right : bounds.bottom
+    const extent = maximum - minimum
+    if (!Number.isFinite(extent) || extent <= 0) return bounds
+    const scale = extent / fontExtent
+    const positiveDirection = Number(options.crossAxisDirection || 1) >= 0
+    const baseline = positiveDirection ? minimum + fontAscent * scale : maximum - fontAscent * scale
+    const tightMinimum = positiveDirection
+      ? baseline - actualAscent * scale
+      : baseline - actualDescent * scale
+    const tightMaximum = positiveDirection
+      ? baseline + actualDescent * scale
+      : baseline + actualAscent * scale
+
+    return verticalText
+      ? { ...bounds, left: tightMinimum, right: tightMaximum }
+      : { ...bounds, top: tightMinimum, bottom: tightMaximum }
+  }
+
+  function computeDecorationGeometry(bounds, labelLength, shape, options = {}) {
+    const width = Number(bounds?.right) - Number(bounds?.left)
+    const height = Number(bounds?.bottom) - Number(bounds?.top)
+    if (!bounds || width <= 0 || height <= 0) return null
+
+    const verticalText = options.crossAxis === "x"
+    const crossExtent = verticalText ? width : height
+    const inlineExtent = verticalText ? height : width
+    const kind = shape?.kind
+
+    if (kind === "underline") {
+      const thickness = Math.max(1, crossExtent * Number(shape.thicknessEm || 0))
+      const inset = Math.max(0, crossExtent * Number(shape.bottomInsetEm || 0))
+      if (!verticalText) {
+        return {
+          bounds: {
+            left: bounds.left,
+            top: bounds.bottom - inset - thickness,
+            right: bounds.right,
+            bottom: bounds.bottom - inset,
+          },
+        }
+      }
+
+      const positiveDirection = Number(options.crossAxisDirection || 1) >= 0
+      const edge = positiveDirection ? bounds.right - inset : bounds.left + inset
+      return {
+        bounds: {
+          left: positiveDirection ? edge - thickness : edge,
+          top: bounds.top,
+          right: positiveDirection ? edge : edge + thickness,
+          bottom: bounds.bottom,
+        },
+      }
+    }
+
+    if (kind === "pill-outline") {
+      const spread = Math.max(1, crossExtent * Number(shape.outerSpreadEm || 0))
+      const radius = Math.max(1, crossExtent * Number(shape.radiusEm || 0) + spread)
+      return {
+        bounds: {
+          left: bounds.left - spread,
+          top: bounds.top - spread,
+          right: bounds.right + spread,
+          bottom: bounds.bottom + spread,
+        },
+        borderRadius: radius,
+        borderWidth: spread,
+      }
+    }
+
+    if (kind === "ellipse") {
+      const averageCharExtent = inlineExtent / Math.max(1, Number(labelLength) || 0)
+      const inlineBleed = Math.max(
+        2,
+        averageCharExtent * Number(shape.inlineBleedCharsPerSide || 0),
+      )
+      const crossBleed = Math.max(2, crossExtent * Number(shape.verticalBleedEm || 0))
+      return {
+        bounds: verticalText
+          ? {
+              left: bounds.left - crossBleed,
+              top: bounds.top - inlineBleed,
+              right: bounds.right + crossBleed,
+              bottom: bounds.bottom + inlineBleed,
+            }
+          : {
+              left: bounds.left - inlineBleed,
+              top: bounds.top - crossBleed,
+              right: bounds.right + inlineBleed,
+              bottom: bounds.bottom + crossBleed,
+            },
+      }
+    }
+
+    return null
+  }
+
   root.IconoplasmPdfReaderCore = Object.freeze({
     normalizeTextRunMatches,
     boundsFromClientRect,
     containsPointInBounds,
+    tightenBoundsToTextMetrics,
+    computeDecorationGeometry,
   })
 })(typeof globalThis !== "undefined" ? globalThis : this)
