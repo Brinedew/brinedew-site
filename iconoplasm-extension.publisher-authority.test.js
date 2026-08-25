@@ -22,6 +22,7 @@ test("human publisher authority owns every published extension version surface",
     expectedVersion: authority.version,
   })
   assert.equal(verified.version, authority.version)
+  assert.equal(verified.nextReleaseVersion, authority.next_release_version)
   assert.equal(verified.minimumSupportedVersion, authority.minimum_supported_version)
   assert.deepEqual(verified.compatibilityContracts, authority.compatibility_contracts)
   assert.equal(manifest.version, authority.version)
