@@ -215,6 +215,17 @@ test("DO NOT DELETE: extension content modules load before the content adapter",
   }
 })
 
+test("DO NOT DELETE: the extension never mutates the React workstation DOM", () => {
+  const manifest = JSON.parse(readUtf8("./iconoplasm-extension/manifest.json"))
+  const contentScript = manifest.content_scripts.find(
+    (entry) => Array.isArray(entry.js) && entry.js.includes("content.js"),
+  )
+  assert.ok(contentScript, "manifest should contain the main content script entry")
+  const excluded = new Set(contentScript.exclude_matches || [])
+  assert.equal(excluded.has("http://127.0.0.1/*"), true)
+  assert.equal(excluded.has("http://localhost/*"), true)
+})
+
 test("DO NOT DELETE: Firefox image-only hover cards stay on the rich frame renderer", () => {
   const source = readUtf8("./iconoplasm-extension/content.js")
   const packageSource = readUtf8("./scripts/package-iconoplasm-extension.mjs")
