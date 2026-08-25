@@ -19,6 +19,17 @@ function requireVersion(value, label) {
   return version
 }
 
+function compareVersions(left, right) {
+  const leftParts = left.split(".").map(Number)
+  const rightParts = right.split(".").map(Number)
+  for (let index = 0; index < 3; index += 1) {
+    if (leftParts[index] !== rightParts[index]) {
+      return leftParts[index] - rightParts[index]
+    }
+  }
+  return 0
+}
+
 export function readIconoplasmPublisherAuthority(repoRoot) {
   const authorityPath = resolve(repoRoot, "iconoplasm-extension", "publisher-release.json")
   const candidatePath = resolve(repoRoot, "iconoplasm-extension", "candidate-contract.json")
@@ -33,6 +44,14 @@ export function readIconoplasmPublisherAuthority(repoRoot) {
     throw new Error("Publisher authority was not declared by the human-gated Iconoplasm GUI")
   }
   const version = requireVersion(authority.version, "Publisher authority version")
+  const nextReleaseVersion = authority.next_release_version
+    ? requireVersion(authority.next_release_version, "Publisher authority next release version")
+    : null
+  if (nextReleaseVersion && compareVersions(nextReleaseVersion, version) <= 0) {
+    throw new Error(
+      `Publisher authority next release ${nextReleaseVersion} must be newer than ${version}`,
+    )
+  }
   const minimumSupportedVersion = requireVersion(
     authority.minimum_supported_version,
     "Publisher authority minimum supported version",
@@ -104,6 +123,7 @@ export function readIconoplasmPublisherAuthority(repoRoot) {
     candidate,
     candidatePath,
     version,
+    nextReleaseVersion,
     minimumSupportedVersion,
     contractSchemaVersion,
     contractRevision,

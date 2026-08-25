@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "version": "0.4.15",
+  "next_release_version": "0.5.0",
   "minimum_supported_version": "0.4.14",
   "declared_by": "iconoplasm-gui-human-release",
   "declared_at": "2026-08-25T16:06:12.209099Z",
