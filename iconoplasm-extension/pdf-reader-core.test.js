@@ -139,6 +139,45 @@ test("font metrics remove selection-box leading without moving the baseline", ()
   })
 })
 
+test("underline uses the font line box so it clears measured glyph ink", () => {
+  const inkBounds = { left: 20, top: 36, right: 70, bottom: 59 }
+  const selectionBounds = { left: 20, top: 30, right: 70, bottom: 66 }
+  const geometry = core.computeDecorationGeometry(
+    inkBounds,
+    5,
+    { kind: "underline", thicknessEm: 0.16, bottomInsetEm: 0.01 },
+    { selectionBounds },
+  )
+
+  assert.deepEqual(geometry.bounds, {
+    left: 20,
+    top: 59.88,
+    right: 70,
+    bottom: 65.64,
+  })
+  assert.ok(geometry.bounds.top > inkBounds.bottom)
+})
+
+test("rough ellipse uses the font line box instead of crossing tightened glyph ink", () => {
+  const inkBounds = { left: 20, top: 36, right: 70, bottom: 51 }
+  const selectionBounds = { left: 20, top: 30, right: 70, bottom: 54 }
+  const geometry = core.computeDecorationGeometry(
+    inkBounds,
+    5,
+    { kind: "ellipse", inlineBleedCharsPerSide: 0.5, verticalBleedEm: 0.2 },
+    { selectionBounds },
+  )
+
+  assert.deepEqual(geometry.bounds, {
+    left: 15,
+    top: 25.2,
+    right: 75,
+    bottom: 58.8,
+  })
+  assert.ok(geometry.bounds.top < inkBounds.top)
+  assert.ok(geometry.bounds.bottom > inkBounds.bottom)
+})
+
 test("rotated text tightens the cross-axis and respects reversed direction", () => {
   const bounds = { left: 20, top: 30, right: 44, bottom: 80 }
   const metrics = {

@@ -4,6 +4,10 @@
   const symbols = ["BRCA1", "BRCA2", "TP53"]
   const runtime = globalThis.IconoplasmHighlightRuntime.createHighlightRuntime()
   const colors = { BRCA1: "#f19a38", BRCA2: "#4f9bd9", TP53: "#d76378" }
+  const requestedMode = runtime.setMode(
+    new URL(globalThis.location.href).searchParams.get("mode") || "pill-outline",
+  )
+  const pdfMode = requestedMode === "pill" ? "pill-outline" : requestedMode
 
   function findMatches(text) {
     const matches = []
@@ -25,9 +29,9 @@
     getPdfHighlightPresentation(symbol) {
       return Object.freeze({
         color: colors[symbol] || "#6B6B78",
-        mode: "pill-outline",
-        requestedMode: "pill",
-        shape: runtime.getCanvasShape("pill-outline"),
+        mode: pdfMode,
+        requestedMode,
+        shape: runtime.getCanvasShape(pdfMode),
       })
     },
     replaceAnchorGroup() {},
