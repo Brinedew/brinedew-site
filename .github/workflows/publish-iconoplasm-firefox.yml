@@ -91,6 +91,9 @@ jobs:
           EXPECTED_VERSION: ${{ inputs.expected_version }}
         run: node ./scripts/package-iconoplasm-firefox-source.mjs --release "--expected-version=$env:EXPECTED_VERSION"
 
+      - name: Rebuild and compare reviewer source
+        run: node ./scripts/verify-iconoplasm-firefox-source-rebuild.mjs --release
+
       - name: Submit to Firefox Add-ons
         env:
           FIREFOX_CHANNEL: listed

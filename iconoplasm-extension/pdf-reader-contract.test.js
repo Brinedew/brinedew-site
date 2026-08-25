@@ -22,6 +22,12 @@ const packagerSource = readFileSync(
   "utf8",
 )
 const visualBridgeSource = readFileSync(new URL("./e2e/visual-bridge.js", import.meta.url), "utf8")
+const repositoryPackage = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+)
+const reviewerPackage = JSON.parse(
+  readFileSync(new URL("./amo-source/package.json", import.meta.url), "utf8"),
+)
 
 test("PDF highlight behavior is cross-browser and preserves the stored mode", () => {
   assert.match(
@@ -68,6 +74,20 @@ test("the packaged PDF.js runtime comes only from pinned pdfjs-dist", () => {
   assert.doesNotMatch(syncSource, /patchedRuntimeRoot|vendor.*pdfjs-runtime/u)
   assert.doesNotMatch(sourcePackager, /pdfjs-clean|pdfjs-patch|pdfjs-runtime/u)
   assert.match(sourcePackager, /FIREFOX-AMO-PDF-ARCHITECTURE\.md/u)
+})
+
+test("the AMO reviewer build pins the same direct build tools as the submission build", () => {
+  const repositoryVersions = {
+    ...repositoryPackage.dependencies,
+    ...repositoryPackage.devDependencies,
+  }
+  const reviewerVersions = {
+    ...reviewerPackage.dependencies,
+    ...reviewerPackage.devDependencies,
+  }
+  for (const dependency of ["esbuild", "pdfjs-dist", "roughjs", "typescript", "wxt"]) {
+    assert.equal(reviewerVersions[dependency], repositoryVersions[dependency], dependency)
+  }
 })
 
 test("the MIME stream is consumed before native fallback when highlighting is off", () => {
