@@ -60,6 +60,7 @@ let activeOwnership = null
 let highlightingEnabled = true
 let activeAnchor = null
 let pendingPasswordUpdate = null
+const textMetricsContext = document.createElement("canvas").getContext("2d")
 
 function setStatus(message, kind = "info") {
   statusElement.textContent = String(message || "")
@@ -141,51 +142,66 @@ function setLayerBounds(layer, bounds) {
   layer.style.height = `${bounds.bottom - bounds.top}px`
 }
 
-function createDecoration(state, match, bounds, matchOrdinal) {
+function getTextLayerGeometry(textNode, label, bounds) {
+  const textElement = textNode?.parentElement
+  if (!textElement || !textMetricsContext) {
+    return { bounds, crossAxis: "y", crossAxisDirection: 1 }
+  }
+  const style = getComputedStyle(textElement)
+  textMetricsContext.font =
+    style.font ||
+    `${style.fontStyle} ${style.fontVariant} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
+  const metrics = textMetricsContext.measureText(String(label || ""))
+  const textTransform = new DOMMatrixReadOnly(
+    style.transform === "none" ? undefined : style.transform,
+  )
+  const textLayer = textElement.closest(".textLayer")
+  const textLayerStyle = textLayer ? getComputedStyle(textLayer) : null
+  const layerTransform = new DOMMatrixReadOnly(
+    !textLayerStyle || textLayerStyle.transform === "none" ? undefined : textLayerStyle.transform,
+  )
+  const transform = layerTransform.multiply(textTransform)
+  const verticalText =
+    Math.abs(transform.b) + Math.abs(transform.c) > Math.abs(transform.a) + Math.abs(transform.d)
+  const crossAxis = verticalText ? "x" : "y"
+  const crossAxisDirection = verticalText ? transform.c || transform.b : transform.d || transform.a
+  return {
+    bounds: core.tightenBoundsToTextMetrics(bounds, metrics, {
+      crossAxis,
+      crossAxisDirection,
+    }),
+    crossAxis,
+    crossAxisDirection,
+  }
+}
+
+function createDecoration(state, match, geometry, matchOrdinal) {
   const shape = match.presentation.shape
   const kind = shape.kind
-  const height = bounds.bottom - bounds.top
-  const width = bounds.right - bounds.left
-  if (width <= 0 || height <= 0) return null
+  const decorationGeometry = core.computeDecorationGeometry(
+    geometry.bounds,
+    match.label.length,
+    shape,
+    geometry,
+  )
+  if (!decorationGeometry) return null
   const layer = document.createElement("span")
   layer.className = `iconoplasm-pdf-decoration iconoplasm-pdf-decoration--${kind}`
   layer._iconoplasmMatchOrdinal = matchOrdinal
   layer.style.setProperty("--iconoplasm-gene-color", match.presentation.color)
 
   if (kind === "underline") {
-    const thickness = Math.max(1, height * Number(shape.thicknessEm || 0))
-    const inset = Math.max(0, height * Number(shape.bottomInsetEm || 0))
-    setLayerBounds(layer, {
-      left: bounds.left,
-      top: bounds.bottom - inset - thickness,
-      right: bounds.right,
-      bottom: bounds.bottom - inset,
-    })
+    setLayerBounds(layer, decorationGeometry.bounds)
   } else if (kind === "pill-outline") {
-    const spread = Math.max(1, height * Number(shape.outerSpreadEm || 0))
-    const radius = Math.max(1, height * Number(shape.radiusEm || 0) + spread)
-    setLayerBounds(layer, {
-      left: bounds.left - spread,
-      top: bounds.top - spread,
-      right: bounds.right + spread,
-      bottom: bounds.bottom + spread,
-    })
-    layer.style.borderWidth = `${spread}px`
-    layer.style.borderRadius = `${radius}px`
+    setLayerBounds(layer, decorationGeometry.bounds)
+    layer.style.borderWidth = `${decorationGeometry.borderWidth}px`
+    layer.style.borderRadius = `${decorationGeometry.borderRadius}px`
     layer.style.setProperty(
       "--iconoplasm-pdf-inner-ring",
       String(shape.innerColor || "rgba(255, 255, 255, 0.3)"),
     )
   } else if (kind === "ellipse") {
-    const averageCharWidth = width / Math.max(1, match.label.length)
-    const inlineBleed = Math.max(2, averageCharWidth * Number(shape.inlineBleedCharsPerSide || 0))
-    const verticalBleed = Math.max(2, height * Number(shape.verticalBleedEm || 0))
-    const ellipseBounds = {
-      left: bounds.left - inlineBleed,
-      top: bounds.top - verticalBleed,
-      right: bounds.right + inlineBleed,
-      bottom: bounds.bottom + verticalBleed,
-    }
+    const ellipseBounds = decorationGeometry.bounds
     setLayerBounds(layer, ellipseBounds)
     layer.appendChild(
       highlightRuntime.createRoughEllipseNode(
@@ -280,14 +296,23 @@ async function scanPage(pageNumber) {
       range.setEnd(textNode, match.end)
       const boundsList = Array.from(range.getClientRects(), (rect) =>
         core.boundsFromClientRect(rect, pageRect),
-      ).filter(Boolean)
+      )
+        .filter(Boolean)
+        .map((bounds) => getTextLayerGeometry(textNode, match.label, bounds))
       range.detach()
       if (!boundsList.length) continue
-      for (const bounds of boundsList) {
-        const decoration = createDecoration(state, match, bounds, matchOrdinal)
+      for (const geometry of boundsList) {
+        const decoration = createDecoration(state, match, geometry, matchOrdinal)
         if (decoration) state.decorations.push(decoration)
       }
-      state.anchors.push(createHitAnchor(state, match, boundsList, matchOrdinal))
+      state.anchors.push(
+        createHitAnchor(
+          state,
+          match,
+          boundsList.map((geometry) => geometry.bounds),
+          matchOrdinal,
+        ),
+      )
       matchOrdinal += 1
     }
   }
