@@ -202,20 +202,43 @@
         averageCharExtent * Number(shape.inlineBleedCharsPerSide || 0),
       )
       const crossBleed = Math.max(2, crossExtent * Number(shape.verticalBleedEm || 0))
+      const transferRatio = Math.min(
+        0.8,
+        Math.max(0, Number(shape.crossToInlineTransferRatio || 0)),
+      )
+      const rawBounds = verticalText
+        ? {
+            left: sourceBounds.left - crossBleed,
+            top: sourceBounds.top - inlineBleed,
+            right: sourceBounds.right + crossBleed,
+            bottom: sourceBounds.bottom + inlineBleed,
+          }
+        : {
+            left: sourceBounds.left - inlineBleed,
+            top: sourceBounds.top - crossBleed,
+            right: sourceBounds.right + inlineBleed,
+            bottom: sourceBounds.bottom + crossBleed,
+          }
+      const rawCrossSpan = verticalText
+        ? rawBounds.right - rawBounds.left
+        : rawBounds.bottom - rawBounds.top
+      const transferredSpan = rawCrossSpan * transferRatio
+      const halfTransfer = transferredSpan / 2
       return {
         bounds: verticalText
           ? {
-              left: sourceBounds.left - crossBleed,
-              top: sourceBounds.top - inlineBleed,
-              right: sourceBounds.right + crossBleed,
-              bottom: sourceBounds.bottom + inlineBleed,
+              left: rawBounds.left + halfTransfer,
+              top: rawBounds.top - halfTransfer,
+              right: rawBounds.right - halfTransfer,
+              bottom: rawBounds.bottom + halfTransfer,
             }
           : {
-              left: sourceBounds.left - inlineBleed,
-              top: sourceBounds.top - crossBleed,
-              right: sourceBounds.right + inlineBleed,
-              bottom: sourceBounds.bottom + crossBleed,
+              left: rawBounds.left - halfTransfer,
+              top: rawBounds.top + halfTransfer,
+              right: rawBounds.right + halfTransfer,
+              bottom: rawBounds.bottom - halfTransfer,
             },
+        transferredSpan,
       }
     }
 
