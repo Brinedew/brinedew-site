@@ -57,7 +57,7 @@ If normal somatic tissues are the product of successful de-Darwinization, cancer
 
 > “If multicellularity evolved due to a mechanism of de-Darwinization, we might say that cancer cells are re-Darwinized.” — Marta Bertolaso, (2017)
 
-This framing highlights cancer as an evolutionary process occurring within the somatic environment.
+Cancer is an evolutionary process occurring within the somatic environment.
 
 
 ### Human–AI Symbiosis (Speculative)

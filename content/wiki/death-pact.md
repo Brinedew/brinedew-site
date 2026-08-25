@@ -7,7 +7,7 @@ title: Death Pact
 ---
 # Death Pact
 
-In game theory, a **death pact** is a strategic commitment mechanism where players agree to trigger a mutually destructive outcome if any participant deviates from a cooperative agreement. Unlike standard cooperation games where players retain the option to defect for a small gain, a death pact legally, physically, or financially binds all parties to a shared penalty. By ensuring that any individual defection triggers a catastrophic payoff for the entire group, the mechanism alters the strategic landscape of the interaction. This design converts a standard Prisoner’s Dilemma—where players are incentivized to betray one another—into a coordination game where mutual cooperation becomes the only rational, self-enforcing choice.
+In game theory, a **death pact** is a strategic commitment mechanism where players agree to trigger a mutually destructive outcome if any participant deviates from a cooperative agreement. Unlike standard cooperation games where players retain the option to defect for a small gain, a death pact legally, physically, or financially binds all parties to a shared penalty. By ensuring that any individual defection triggers a catastrophic payoff for the entire group, the mechanism alters the strategic structure of the interaction. This design converts a standard Prisoner’s Dilemma—where players are incentivized to betray one another—into a coordination game where mutual cooperation becomes the only rational, self-enforcing choice.
 
 Economist Thomas Schelling first described the strategic value of credible self-binding threats in 1960, and game theorists such as Robert Axelrod formally analyzed similar mutual-punishment dynamics in 1981. In a standard two-player payoff matrix, a player typically chooses between cooperation and defection based on which option yields the highest individual return. The death pact alters this matrix by introducing an automated penalty—which game theorists represent as a terminal low payoff or negative infinity—that applies to all players if anyone cheats. To make this threat credible, players must surrender their unilateral control over the penalty trigger before the game begins. This pre-commitment eliminates the subgame imperfect equilibria where a player might gamble on a successful defection, leaving a single subgame perfect equilibrium where all participants choose to cooperate.
 
@@ -66,7 +66,7 @@ In blockchain protocols like Ethereum, "correlated slashing" imposes super-linea
 
 ### 6. Criminal Organization Governance (Omertà)
 
-Criminal syndicates enforce codes of silence through the threat of collective reprisal. While not fully automated, the credible threat of violent retaliation against a transgressor's entire network serves as a powerful deterrent.
+Criminal syndicates enforce codes of silence through the threat of collective reprisal. While not fully automated, the credible threat of violent retaliation against a transgressor's entire network is a powerful deterrent.
 
 ## Design Principles and Risks
 

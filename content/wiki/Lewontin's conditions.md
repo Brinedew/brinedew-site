@@ -21,7 +21,7 @@ In his seminal 1970 paper "The Units of Selection," Lewontin articulated that ev
 
 ## Origins and Canonical Sources
 
-While the ideas are Darwin's, Lewontin's 1970 formulation provided a concise and rigorous summary that became standard. He emphasized its generality: "any entities in nature that have variation, reproduction, and heritability may evolve."In a 1978 _Scientific American_ article, he reiterated the triad and added a crucial clarification: the conditions predict **change**, but not necessarily **adaptation** (an improved fit to an environment). Selection can be stabilizing, or trade-offs can prevent a trait from reaching a local optimum.
+While the ideas are Darwin's, Lewontin's 1970 formulation provided a concise and rigorous summary that became standard. He emphasized its generality: "any entities in nature that have variation, reproduction, and heritability may evolve."In a 1978 _Scientific American_ article, he reiterated the triad and added a clarification: the conditions predict **change**, but not necessarily **adaptation** (an improved fit to an environment). Selection can be stabilizing, or trade-offs can prevent a trait from reaching a local optimum.
 
 ## Formal and Mathematical Equivalents
 

@@ -377,7 +377,7 @@ The result: cancer cells bypass the Hayflick limit. Cells with functional telome
 
 **p53 damage assessment**: p53 monitors internal damage and can trigger the intrinsic pathway when it detects severe problems.
 
-So p53 isn't a "central controller" - it's a specialized damage assessor that feeds into one of several death pathways. This explains why p53 mutations don't completely disable apoptosis: cells can still die through death receptors or direct mitochondrial damage. Cancer must therefore disable multiple apoptosis pathways, not just p53.
+So p53 isn't a "central controller" - it's a specialized damage assessor that feeds into one of several death pathways. This explains why p53 mutations don't completely disable apoptosis: cells can still die through death receptors or direct mitochondrial damage. Cancer must therefore disable multiple apoptosis pathways, with p53 as only one target.
 
 *Evasion mechanisms:*
 
@@ -399,7 +399,7 @@ So p53 isn't a "central controller" - it's a specialized damage assessor that fe
 
 Here's how the invasion mechanism works: The detached "loser" cell forms adherens junctions with a healthy "winner" cell. The loser cell then activates its RhoA-ROCK signaling pathway, which drives actomyosin contraction - essentially the cell's internal muscle system. This contractile force literally pushes the loser cell into the winner cell's cytoplasm, creating a cell-in-cell structure where the invading cell ends up surrounded by a membrane-bound vacuole inside the host cell.
 
-The digestion process is equally sophisticated. The host cell recruits autophagy machinery (LC3, ATG5/7 proteins) to the vacuole membrane, followed by lysosomes that release digestive enzymes like cathepsin B. The internalized cell is systematically broken down and recycled - it's not just random destruction, but organized molecular dismantling.
+The digestion process is equally sophisticated. The host cell recruits autophagy machinery (LC3, ATG5/7 proteins) to the vacuole membrane, followed by lysosomes that release digestive enzymes like cathepsin B. The internalized cell is systematically broken down and recycled through organized molecular dismantling.
 
 **The evolutionary design logic and why cancer wins:** The entosis system evolved as a quality control mechanism based on a reasonable assumption: damaged or stressed cells would become mechanically stiffer and less deformable than healthy cells. The system uses mechanical properties as a fitness proxy - softer, more deformable cells eliminate stiffer, less flexible ones. This made evolutionary sense because cellular damage typically increases stiffness through cytoskeletal disruption and loss of normal membrane flexibility.
 
@@ -407,7 +407,7 @@ Cancer breaks this assumption in a devastating way. Instead of becoming stiffer 
 
 **The metabolic rigging:** Cancer compounds this mechanical advantage with metabolic dominance. Cancer cells overexpress nutrient transporters and metabolic enzymes, allowing them to outcompete normal cells for glucose and other essential resources. During glucose starvation - which naturally triggers entosis - cancer cells maintain higher energy reserves while normal cells become metabolically stressed. The entosis system then eliminates the glucose-starved normal cells (now marked as "losers" by high AMPK stress signaling) in favor of the better-fed cancer cells.
 
-**Why this creates such effective cannibalism:** When cancer cells cannibalize neighbors through entosis, they're not just getting nutrients - they're exploiting a rigged competition where they have multiple unfair advantages:
+**Why this creates such effective cannibalism:** When cancer cells cannibalize neighbors through entosis, they gain nutrients while exploiting a rigged competition where they have multiple unfair advantages:
 1. **Mechanical superiority**: Cancer cells are softer and more deformable
 2. **Metabolic dominance**: Cancer cells hoard nutrients more effectively  
 3. **Stress resistance**: Cancer cells maintain fitness markers during harsh conditions
@@ -586,7 +586,7 @@ Additional motility sensors include PTEN (which detects chemotactic gradients an
 
 **Why hematopoietic cells bypass this surveillance:** Hematopoietic cells arise from endothelial precursors during embryonic development (endothelial-to-hematopoietic transition) but differentiate along pathways that never acquired motility-proliferation coupling because constant migration became their normal function. Instead, they rely on alternative safeguards: thymic selection eliminates self-reactive T-cells, activation-induced death kills over-stimulated immune cells, and most blood cells have short lifespans (neutrophils live ~8 hours). These controls target immune function rather than motility itself.
 
-**Why not just use a single master switch?** Because instantly switching between these resource allocation strategies would cause system collapse. Epithelial cells are integrated components of tissue-scale systems - they're actively maintaining barriers, coordinating with neighbors, and supporting organ function. A rapid switch to motile state would mean simultaneously shutting down proliferative machinery and building motility machinery, while disrupting tissue architecture. Most cells attempting this would die from the metabolic disruption.
+**Why does no single master switch exist?** Because instantly switching between these resource allocation strategies would cause system collapse. Epithelial cells are integrated components of tissue-scale systems - they're actively maintaining barriers, coordinating with neighbors, and supporting organ function. A rapid switch to motile state would mean simultaneously shutting down proliferative machinery and building motility machinery, while disrupting tissue architecture. Most cells attempting this would die from the metabolic disruption.
 
 Evolution solved this through graduated state transitions that avoid the reconfiguration problem. Instead of binary switching, cells transition through intermediate states that maintain viability while progressively acquiring new capabilities. This requires multiple molecular programs because each intermediate state must be stable enough to support cell survival while remaining plastic enough to continue progressing.
 

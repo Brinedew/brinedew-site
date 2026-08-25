@@ -35,9 +35,9 @@ The theory explains several puzzling aspects of aging:
 
 ## Evolutionary logic
 
-Unlike passive theories of aging, defensive degeneration suggests active selection for aging mechanisms. The theory proposes that organisms which failed to develop robust tumor suppression died of cancer before reproducing, even if they had superior longevity mechanisms.
+Unlike passive theories of aging, defensive degeneration suggests active selection for aging mechanisms. The theory proposes that organisms which failed to develop effective tumor suppression died of cancer before reproducing, even if they had superior longevity mechanisms.
 
-This creates a different dynamic from classical aging theories - aging isn't just tolerated by evolution, it's actively maintained because the alternative (cancer) is worse for reproductive success.
+This creates a different dynamic from classical aging theories: evolution actively maintains aging because the alternative (cancer) is worse for reproductive success.
 
 ## Implications for intervention
 

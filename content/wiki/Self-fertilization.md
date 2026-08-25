@@ -104,7 +104,7 @@ The concepts intuited by breeders were formalized in the early 20th century by p
 
 Sewall Wright developed the **inbreeding coefficient, F**, to quantify the effects of non-random mating. `F` is defined as the probability that the two alleles at any given locus in an individual are **identical by descent (IBD)**.
 
-This means the two alleles are not just the same state (e.g., both `A`), but are physical copies of the very same allele from a recent common ancestor. `F` ranges from 0 (for an individual whose parents are completely unrelated in a theoretically infinite population) to 1 (for a completely homozygous individual produced by a long line of selfing).
+This means the two alleles match in state (e.g., both `A`) and are physical copies of the very same allele from a recent common ancestor. `F` ranges from 0 (for an individual whose parents are completely unrelated in a theoretically infinite population) to 1 (for a completely homozygous individual produced by a long line of selfing).
 
 #### 2.2.2. Calculating F
 
@@ -171,7 +171,7 @@ Studies measuring lethal equivalents typically involve controlled inbreeding exp
 *   In humans, estimates suggest each individual carries, on average, 1 to 2 lethal equivalents. This is the genetic basis for the universal taboo against incest.
 *   In *Drosophila*, the number is often estimated to be between 1 and 2 per individual as well.
 
-This proxy can be biased. It often only measures mortality before reproductive age and may not capture effects on fertility. Furthermore, it assumes that the fitness effects of different deleterious alleles are independent, ignoring potential **epistasis** (interactions between genes) which could make the combined effect better or worse than the sum of its parts.
+This proxy can be biased. It often only measures mortality before reproductive age and may not capture effects on fertility. It also assumes that the fitness effects of different deleterious alleles are independent, ignoring potential **epistasis** (interactions between genes) which could make the combined effect better or worse than the sum of its parts.
 
 
 ## 4. Self-Incompatibility
@@ -242,7 +242,7 @@ What happens if a mutation breaks the SI system? A plant with a "self-compatible
 
 The breakdown of SI is a classic example of a conflict between selection at different levels.
 *   **Individual-level selection:** Favors the SC mutant for its short-term benefit of reproductive assurance. An individual plant that can guarantee seed production, even if inbred, outcompetes one that fails to reproduce at all.
-*   **Population-level viability:** Favors the maintenance of outcrossing via SI. Outcrossing maintains the genetic variation that is crucial for long-term adaptation to changing environments, like evolving parasites (**see the Red Queen Hypothesis**).
+*   **Population-level viability:** Favors the maintenance of outcrossing via SI. Outcrossing maintains the genetic variation needed for long-term adaptation to changing environments, like evolving parasites (**see the Red Queen Hypothesis**).
 
 The transition to self-compatibility is a short-term individual win that often leads to a long-term population-level loss. It is a failure of alignment between the interests of the individual and the long-term viability of the collective.
 
@@ -265,7 +265,7 @@ The efficiency of purging depends directly on the strength of selection against 
 
 #### 5.1.3. The Problem of Weakly Deleterious Alleles
 
-This leads to a crucial insight: purging is highly effective against the most severe mutations but much less so against weakly deleterious ones.
+This leads to an asymmetry in purging: purging is highly effective against the most severe mutations but much less so against weakly deleterious ones.
 *   **Strongly deleterious alleles** (lethals, steriles) are purged quickly. A selfing lineage can effectively rid itself of its worst genetic baggage.
 *   **Weakly deleterious alleles**, however, pose a major problem. Each one has only a tiny effect on fitness, making selection against it weak. Genetic drift can easily overpower such weak selection, especially in the smaller effective population sizes typical of selfing lineages.
 
@@ -304,7 +304,7 @@ The lack of effective recombination makes selfing lineages vulnerable to the sam
 
 #### 6.1.3. The Red Queen's Race
 
-Reduced genetic variation also makes selfers a sitting duck for co-evolving parasites. The **Red Queen hypothesis** posits that organisms are in a constant evolutionary arms race with their pathogens. Outcrossing and recombination are crucial weapons in this race, as they constantly generate novel combinations of resistance genes. Selfing lineages, with their low genetic diversity, produce genetically uniform offspring. Once a parasite evolves to overcome the defenses of one individual, it can potentially wipe out the entire population.
+Reduced genetic variation also makes selfers a sitting duck for co-evolving parasites. The **Red Queen hypothesis** posits that organisms are in a constant evolutionary arms race with their pathogens. Outcrossing and recombination drive this race, as they constantly generate novel combinations of resistance genes. Selfing lineages, with their low genetic diversity, produce genetically uniform offspring. Once a parasite evolves to overcome the defenses of one individual, it can potentially wipe out the entire population.
 
 ### 6.2. Evidence for the "Dead End"
 
