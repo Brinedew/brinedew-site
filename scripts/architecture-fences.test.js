@@ -154,13 +154,10 @@ test("IPD-003 keeps discovery eligibility on the exact published card", () => {
   )
   assert.match(fence.decision, /Only a workstation may render the 768x1024 WebP/)
   assert.match(fence.decision, /bounded POST resolver of at most 50 identifiers/)
+  assert.match(fence.decision, /returns only a deterministically resolvable gene_blot/)
   assert.match(
     fence.decision,
-    /deterministically resolvable gene_blot plus a temporary portrait field/,
-  )
-  assert.match(
-    fence.decision,
-    /\/portrait\/\{SYMBOL\}\.webp remains only until a live exact-card audit proves ready blots for all 19,023 published genes/,
+    /temporary \/portrait\/\{SYMBOL\}\.webp alias was retired after a live exact-card audit proved ready blots for all 19,023 published genes and regional delivery checks passed/,
   )
   assert.match(fence.change_control, /Do not promote a raw portrait as the canonical public image/)
   assert.match(fence.change_control, /publish a full-corpus image manifest/)

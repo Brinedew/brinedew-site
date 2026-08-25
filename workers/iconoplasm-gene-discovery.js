@@ -886,7 +886,7 @@ Search-language bridge: people may look for cartoon gene characters, anthropomor
 - [Schema](${ICONOPLASM_ORIGIN}/api/public/v1/schema)
 - [Complete ${"19,023"}-gene JSONL catalog](${ICONOPLASM_ORIGIN}/api/public/v1/dumps/catalog.${hash}.jsonl)
 - Agent image resolver (POST, up to 50 identifiers): ${ICONOPLASM_ORIGIN}/api/public/v1/images/resolve
-- Diagram workflow: resolve all pathway gene symbols in one POST, then embed each returned gene_blot canonical_url. Do not substitute the temporary portrait field when a blot is unavailable.
+- Diagram workflow: resolve all pathway gene symbols in one POST, then embed each returned gene_blot canonical_url. The resolver exposes labelled blots only; it does not expose source portraits.
 - [Privacy policy](${ICONOPLASM_ORIGIN}/privacy)
 - [Published portrait and blot image license](${ICONOPLASM_IMAGE_USAGE_URL}): CC0 1.0; copying, embedding, hotlinking, modification, redistribution, commercial use, and use in diagrams or AI-generated documents are permitted without attribution
 `

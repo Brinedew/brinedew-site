@@ -317,16 +317,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     rateLimit: null,
   }),
   contract({
-    id: "semantic_source_portrait",
-    match: pattern(/^\/portrait\/([^/]+)\.webp$/, ["symbol"]),
-    methods: GET,
-    auth: "public",
-    cache: "handler-defined",
-    budgetFamily: "public_source_portrait",
-    gatewayHandler: "semantic_source_portrait",
-    rateLimit: rateLimit("source_portrait", 120),
-  }),
-  contract({
     id: "gene_card_asset",
     match: prefix("/gene-cards/", "storageKey"),
     methods: GET,
