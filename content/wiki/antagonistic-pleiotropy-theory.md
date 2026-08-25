@@ -8,7 +8,7 @@ tags:
 
 # Antagonistic Pleiotropy Theory
 
-Antagonistic pleiotropy theory of aging explains late-life deterioration as a result of evolution selecting the genes that improve the organism's fitness in early life, but reduce fitness later in life. We observe the gradual onset of late-life detrimental traits as aging. It was proposed by George Williams in 1957.
+Antagonistic pleiotropy theory of aging explains late-life deterioration as a result of evolution selecting the genes that improve the organism's fitness in early life, but reduce fitness later in life. We observe the gradual onset of late-life detrimental traits as aging. It was proposed by [George Williams](george-c-williams.md) in 1957.
 
 ## Historical context
 As of 1957, one evolutionary explanation of aging is Peter Medawar's mutation accumulation theory of aging (which introduced the concept of [selection shadow](selection-shadow-theory.md)), published in 1952. Medawar's theory models aging as a result of passive accumulation of late-acting mutations.
@@ -40,7 +40,7 @@ Since natural selection weighs early effects more heavily than late effects, gen
 
 ## Hamilton's indicators
 
-In his 1966 paper, WD Hamilton formalized AP with indicators of the force of selection.
+In his 1966 paper, [WD Hamilton](wd-hamilton.md) formalized AP with indicators of the force of selection.
 
 
 ## Evidence and research
@@ -66,4 +66,3 @@ Understanding antagonistic pleiotropy helps predict which anti-aging interventio
 ## Relationship to cancer
 
 Cancer represents a particularly clear case where tumor suppressor mechanisms protect young organisms but contribute to aging through cellular senescence and tissue dysfunction.
-

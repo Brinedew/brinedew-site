@@ -9,7 +9,7 @@ title: Atavistic Theory of Cancer
 
 The **atavistic theory of cancer** is an evolutionary framework proposing that cancer occurs when multicellular cells revert to ancient, unicellular survival and proliferation programs. Atavistic theory states that cancer is not a collection of random broken biological processes, but rather a coordinated ancestral mode of existence that cells enter under environmental stress. According to this view, oncogenic triggers disrupt the regulatory networks that normally suppress primitive traits, leading the cell to reactivate genetic machinery inherited from unicellular or early colonial ancestors. Consequently, cancer cells exhibit behaviors characteristic of single-celled organisms, including rapid division, motility, and a preference for anaerobic metabolism.
 
-German biologist Theodor Boveri first introduced the premise of cancer as an evolutionary throwback in 1914. In 2011, physicists Paul Davies and Charles Lineweaver, along with oncologist Mark Vincent, formally expanded this concept into a quantitative model. Modern proponents support the theory using phylostratigraphy, a genomic mapping method that determines the evolutionary age of genes. Genomic research published in 2017 demonstrated that human tumors frequently overexpress genes originating from early unicellular organisms, while silencing genes that evolved later to support complex multicellular organs. This genetic profile helps explain why cancer exhibits highly predictable clinical progression across different tissue types despite the diverse and random mutations found within individual tumors.
+German biologist Theodor Boveri first introduced the premise of cancer as an evolutionary throwback in 1914. In 2011, physicists Paul Davies and Charles Lineweaver, along with oncologist Mark Vincent, formally expanded this concept into a quantitative model. Modern proponents support the theory using phylostratigraphy, a genomic mapping method that determines the evolutionary age of genes. Genomic research published in 2017 demonstrated that human tumors frequently overexpress genes originating from early unicellular organisms, while silencing genes that evolved later to support complex multicellular organs. This genetic profile helps explain why cancer exhibits highly predictable clinical progression across different tissue types despite the diverse and random mutations found within individual tumors.
 
 By viewing cancer as an evolutionary reversion, the model suggests therapeutic strategies that target the weaknesses of ancient biological systems rather than trying to suppress their survival strengths. For example, treatments might exploit a tumor's reliance on ancestral metabolic pathways, such as aerobic glycolysis, by introducing environmental stressors like hyperbaric oxygen that only recently evolved multicellular mechanisms can tolerate. However, the atavistic theory remains a minority view within oncology, where the somatic mutation theory remains the prevailing framework for cancer research. Critics argue that the model oversimplifies the complex, dynamic microenvironments of tumors and that random genetic instability, rather than a coordinated evolutionary program, explains the activation of ancient genes.
 
@@ -80,9 +80,9 @@ However, these observations don't necessarily support the specific atavistic mec
 
 ## Related concepts
 
-- [[tumor-suppressor-theory-of-aging.md.md.md.md.md.md.md.md.md.md.md]] - another evolutionary approach to cancer
-- [[p53-guardian]] - key protein that normally prevents cellular reversion
-- [[cellular-senescence.md.md.md.md.md.md.md.md.md.md.md]] - one way cells normally prevent cancerous behavior
+- [[tumor-suppressor-theory-of-aging]] - another evolutionary approach to cancer
+- [[p53-tp53|p53]] - key protein that normally prevents cellular reversion
+- [[cellular-senescence]] - one way cells normally prevent cancerous behavior
 
 ---
 

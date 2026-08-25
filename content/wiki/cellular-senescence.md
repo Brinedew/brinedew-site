@@ -29,7 +29,7 @@ These pathways work in sequence: p53/p21 acts as the emergency brake when damage
 
 ## Senescence-associated secretory phenotype (SASP)
 
-Senescent cells secrete bioactive molecules including:
+The secretory program was characterized and named the senescence-associated secretory phenotype by [Judith Campisi](judith-campisi.md) and colleagues. Senescent cells secrete bioactive molecules including:
 - Inflammatory cytokines (IL-1β, [[il-6.md|IL-6]], TNF-α)
 - Growth factors (PDGF, FGF)
 - Matrix metalloproteinases (MMP-1, MMP-3)
