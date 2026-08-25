@@ -139,14 +139,16 @@
   }
 
   function computeDecorationGeometry(bounds, labelLength, shape, options = {}) {
-    const width = Number(bounds?.right) - Number(bounds?.left)
-    const height = Number(bounds?.bottom) - Number(bounds?.top)
-    if (!bounds || width <= 0 || height <= 0) return null
+    const kind = shape?.kind
+    const lineBoxShape = kind === "underline" || kind === "ellipse"
+    const sourceBounds = lineBoxShape && options.selectionBounds ? options.selectionBounds : bounds
+    const width = Number(sourceBounds?.right) - Number(sourceBounds?.left)
+    const height = Number(sourceBounds?.bottom) - Number(sourceBounds?.top)
+    if (!sourceBounds || width <= 0 || height <= 0) return null
 
     const verticalText = options.crossAxis === "x"
     const crossExtent = verticalText ? width : height
     const inlineExtent = verticalText ? height : width
-    const kind = shape?.kind
 
     if (kind === "underline") {
       const thickness = Math.max(1, crossExtent * Number(shape.thicknessEm || 0))
@@ -154,22 +156,22 @@
       if (!verticalText) {
         return {
           bounds: {
-            left: bounds.left,
-            top: bounds.bottom - inset - thickness,
-            right: bounds.right,
-            bottom: bounds.bottom - inset,
+            left: sourceBounds.left,
+            top: sourceBounds.bottom - inset - thickness,
+            right: sourceBounds.right,
+            bottom: sourceBounds.bottom - inset,
           },
         }
       }
 
       const positiveDirection = Number(options.crossAxisDirection || 1) >= 0
-      const edge = positiveDirection ? bounds.right - inset : bounds.left + inset
+      const edge = positiveDirection ? sourceBounds.right - inset : sourceBounds.left + inset
       return {
         bounds: {
           left: positiveDirection ? edge - thickness : edge,
-          top: bounds.top,
+          top: sourceBounds.top,
           right: positiveDirection ? edge : edge + thickness,
-          bottom: bounds.bottom,
+          bottom: sourceBounds.bottom,
         },
       }
     }
@@ -203,16 +205,16 @@
       return {
         bounds: verticalText
           ? {
-              left: bounds.left - crossBleed,
-              top: bounds.top - inlineBleed,
-              right: bounds.right + crossBleed,
-              bottom: bounds.bottom + inlineBleed,
+              left: sourceBounds.left - crossBleed,
+              top: sourceBounds.top - inlineBleed,
+              right: sourceBounds.right + crossBleed,
+              bottom: sourceBounds.bottom + inlineBleed,
             }
           : {
-              left: bounds.left - inlineBleed,
-              top: bounds.top - crossBleed,
-              right: bounds.right + inlineBleed,
-              bottom: bounds.bottom + crossBleed,
+              left: sourceBounds.left - inlineBleed,
+              top: sourceBounds.top - crossBleed,
+              right: sourceBounds.right + inlineBleed,
+              bottom: sourceBounds.bottom + crossBleed,
             },
       }
     }

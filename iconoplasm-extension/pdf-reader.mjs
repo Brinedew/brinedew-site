@@ -170,6 +170,7 @@ function getTextLayerGeometry(textNode, label, bounds) {
       crossAxis,
       crossAxisDirection,
     }),
+    selectionBounds: bounds,
     crossAxis,
     crossAxisDirection,
   }

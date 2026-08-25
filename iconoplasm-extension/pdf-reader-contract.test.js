@@ -21,6 +21,7 @@ const packagerSource = readFileSync(
   new URL("../scripts/package-iconoplasm-extension.mjs", import.meta.url),
   "utf8",
 )
+const visualBridgeSource = readFileSync(new URL("./e2e/visual-bridge.js", import.meta.url), "utf8")
 
 test("PDF highlight behavior is cross-browser and preserves the stored mode", () => {
   assert.match(
@@ -53,6 +54,12 @@ test("PDF decorations are first-party non-text layers", () => {
   assert.match(readerStyles, /\.iconoplasm-pdf-decoration--underline/u)
   assert.match(readerStyles, /pointer-events:\s*none/u)
   assert.doesNotMatch(readerSource, /textContent\s*=\s*match/u)
+})
+
+test("the Chrome visual fixture renders one explicitly requested PDF mode", () => {
+  assert.match(visualBridgeSource, /searchParams\.get\("mode"\)/u)
+  assert.match(visualBridgeSource, /requestedMode === "pill" \? "pill-outline" : requestedMode/u)
+  assert.match(visualBridgeSource, /shape: runtime\.getCanvasShape\(pdfMode\)/u)
 })
 
 test("the packaged PDF.js runtime comes only from pinned pdfjs-dist", () => {
