@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process"
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs"
 import { join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { assertIconoplasmPublisherAuthority } from "./lib/iconoplasm-publisher-authority.mjs"
@@ -50,6 +50,43 @@ const rootTemplateFiles = [
   ["iconoplasm-extension/amo-source/.npmrc", ".npmrc"],
   ["iconoplasm-extension/amo-source/tsconfig.json", "tsconfig.json"],
 ]
+
+const reviewerBuildTools = ["esbuild", "pdfjs-dist", "roughjs", "typescript", "wxt"]
+
+function readJson(path, kind) {
+  ensureExists(path, kind)
+  return JSON.parse(readFileSync(path, "utf8"))
+}
+
+function validateReviewerBuildToolParity() {
+  const repositoryPackage = readJson(
+    resolve(repoRoot, "package.json"),
+    "repository package manifest",
+  )
+  const reviewerPackage = readJson(
+    resolve(extensionRoot, "amo-source", "package.json"),
+    "reviewer package manifest",
+  )
+  const repositoryVersions = {
+    ...(repositoryPackage.dependencies || {}),
+    ...(repositoryPackage.devDependencies || {}),
+  }
+  const reviewerVersions = {
+    ...(reviewerPackage.dependencies || {}),
+    ...(reviewerPackage.devDependencies || {}),
+  }
+  for (const dependency of reviewerBuildTools) {
+    if (!repositoryVersions[dependency]) {
+      fail(`Repository build is missing reviewer dependency ${dependency}.`)
+    }
+    if (reviewerVersions[dependency] !== repositoryVersions[dependency]) {
+      fail(
+        `Reviewer dependency ${dependency} must match the repository build exactly: ` +
+          `${reviewerVersions[dependency] || "<missing>"} != ${repositoryVersions[dependency]}.`,
+      )
+    }
+  }
+}
 
 const includeFiles = [
   "wxt.config.ts",
@@ -179,6 +216,7 @@ function zipPayload() {
   }
 }
 
+validateReviewerBuildToolParity()
 rmSync(stageRoot, { recursive: true, force: true })
 mkdirSync(stageRoot, { recursive: true })
 
