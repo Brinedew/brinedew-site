@@ -20,7 +20,44 @@ type BuildAiSearchJsonLdArgs = {
 }
 
 const CONTENT_TAG_PREFIX = "content/"
-const EXPLICIT_SCHEMA_TYPES = new Set(["WebPage"])
+const EXPLICIT_SCHEMA_TYPES = new Set(["ProfilePage", "WebPage"])
+const BRINEDEW_ORIGIN = "https://brinedew.bio"
+const BRINEDEW_PERSON_ID = `${BRINEDEW_ORIGIN}/#brinedew`
+const BRINEDEW_PROFILE_URL = `${BRINEDEW_ORIGIN}/about`
+const BRINEDEW_PERSON_SAME_AS = [
+  "https://github.com/Brinedew",
+  "https://www.lesswrong.com/users/brinedew",
+  "https://addons.mozilla.org/en-US/firefox/user/19832112/",
+]
+const ICONOPLASM_SAME_AS = [
+  "https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/",
+  "https://microsoftedge.microsoft.com/addons/detail/iconoplasm/ocfhohjhkflpmaiimgjfobdoogdfpmog",
+]
+const ICONOPLASM_SUBJECT_OF =
+  "https://www.lesswrong.com/posts/BJ7AqXeigNKXLqZyx/mnemonic-portraits-for-19-023-human-genes"
+const ICONOPLASM_APPLICATION_URL = "https://iconoplasm.brinedew.bio/"
+
+function brinedewPerson(includeSameAs = false): Record<string, unknown> {
+  const person: Record<string, unknown> = {
+    "@type": "Person",
+    "@id": BRINEDEW_PERSON_ID,
+    name: "Brinedew",
+    url: BRINEDEW_PROFILE_URL,
+    description: "Wet-lab biologist, researcher, and creator of Brinedew projects.",
+  }
+
+  if (includeSameAs) person.sameAs = BRINEDEW_PERSON_SAME_AS
+  return person
+}
+
+function structuredDataId(type: string, url: string): string {
+  if (type === "WebSite") return `${BRINEDEW_ORIGIN}/#website`
+  if (type === "ProfilePage") return `${url}#profile`
+  if (type === "SoftwareApplication") return `${url}#application`
+  if (type === "BlogPosting") return `${url}#article`
+  if (type === "FAQPage") return `${url}#faq`
+  return `${url}#webpage`
+}
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
@@ -65,6 +102,7 @@ export function getAiSearchPageType(
   const explicitType = asString(fm.schemaType)
 
   if (explicitType && EXPLICIT_SCHEMA_TYPES.has(explicitType)) return explicitType
+  if (slug?.toLowerCase() === "about") return "ProfilePage"
   if (fm.faqpage === true) return "FAQPage"
   if (slug === "index" || slug === "") return "WebSite"
   if (slug?.startsWith("apps/") || tags.includes("content/apps")) return "SoftwareApplication"
@@ -89,25 +127,20 @@ export function buildAiSearchJsonLd({
   // unstable, and Google's guidance emphasizes reliable, people-first metadata.
   const datePublished = dateIso(fm.published) ?? dateIso(fm.created) ?? dateIso(fm.date)
   const dateModified = dateIso(fm.modified) ?? dateIso(fm.updated)
+  const type = getAiSearchPageType({ slug: fileData.slug, frontmatter: fileData.frontmatter })
+  const person = brinedewPerson()
 
   const jsonLd: AiSearchJsonLd = {
     "@context": "https://schema.org",
-    "@type": getAiSearchPageType({ slug: fileData.slug, frontmatter: fileData.frontmatter }),
+    "@type": type,
+    "@id": structuredDataId(type, url),
     headline: title,
     name: title,
     url,
     mainEntityOfPage: url,
     inLanguage: locale,
-    author: {
-      "@type": "Person",
-      name: "Brinedew",
-      url: "https://brinedew.bio/",
-    },
-    publisher: {
-      "@type": "Organization",
-      name: pageTitle,
-      url: `https://${baseUrl}/`,
-    },
+    author: person,
+    publisher: person,
   }
 
   if (description) jsonLd.description = description
@@ -115,12 +148,24 @@ export function buildAiSearchJsonLd({
   if (datePublished) jsonLd.datePublished = datePublished
   if (dateModified) jsonLd.dateModified = dateModified
 
-  if (jsonLd["@type"] === "SoftwareApplication") {
+  if (type === "ProfilePage") jsonLd.mainEntity = brinedewPerson(true)
+
+  if (type === "SoftwareApplication") {
     jsonLd.applicationCategory = "EducationalApplication"
     jsonLd.operatingSystem = "Web"
+    jsonLd.creator = person
+
+    if (url === ICONOPLASM_APPLICATION_URL) {
+      jsonLd.sameAs = ICONOPLASM_SAME_AS
+      jsonLd.subjectOf = {
+        "@type": "Article",
+        url: ICONOPLASM_SUBJECT_OF,
+        name: "Mnemonic portraits for 19,023 human genes",
+      }
+    }
   }
 
-  if (jsonLd["@type"] === "FAQPage" && Array.isArray(fm.faq)) {
+  if (type === "FAQPage" && Array.isArray(fm.faq)) {
     jsonLd.mainEntity = (fm.faq as Array<Record<string, unknown>>)
       .filter(
         (entry): entry is Record<string, string> =>
