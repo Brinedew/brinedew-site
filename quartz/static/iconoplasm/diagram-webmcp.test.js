@@ -58,6 +58,7 @@ test("the app and Studio load the same versioned diagram module graph", () => {
 
   assert.ok(appVersion)
   assert.equal(documentVersion, appVersion)
+  assert.match(studioSource, /isCanvasSelection && performance\.now\(\) < suppressCanvasClickUntil/)
 })
 
 test("hidden connector ports cannot intercept canvas clicks", () => {
