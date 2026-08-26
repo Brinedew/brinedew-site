@@ -3,7 +3,8 @@
 
   // ARCHITECTURE FENCE [IPD-008]: hover is a selector, not a loader. A reading
   // session prepares immutable cards from the recognized document inventory and
-  // deterministic visible windows before pointer intent exists.
+  // deterministic visible windows before pointer intent exists, but only after
+  // the host page has loaded and yielded an idle turn.
 
   const PRIORITY = Object.freeze({ active: 0, visible: 1, document: 2 })
 
@@ -31,9 +32,9 @@
     if (constrained || (memory > 0 && memory <= 2)) {
       return Object.freeze({
         speculative: true,
-        concurrency: 3,
-        documentLimit: 16,
-        visibleLimit: 12,
+        concurrency: 1,
+        documentLimit: 10,
+        visibleLimit: 10,
       })
     }
     const generous =
@@ -45,12 +46,12 @@
     if (generous) {
       return Object.freeze({
         speculative: true,
-        concurrency: 8,
-        documentLimit: 128,
-        visibleLimit: 48,
+        concurrency: 2,
+        documentLimit: 10,
+        visibleLimit: 10,
       })
     }
-    return Object.freeze({ speculative: true, concurrency: 6, documentLimit: 64, visibleLimit: 32 })
+    return Object.freeze({ speculative: true, concurrency: 2, documentLimit: 10, visibleLimit: 10 })
   }
 
   function normalizeSymbol(value) {
@@ -76,6 +77,7 @@
     let queueSerial = 0
     let activeWorkers = 0
     let documentFlushScheduled = false
+    let speculationStarted = false
     let policy = workingSetPolicy(options.connection, options.deviceMemory)
 
     const observer =
@@ -100,7 +102,7 @@
         : null
 
     function queueSymbols(rawSymbols, tier = "document") {
-      if (tier !== "active" && !policy.speculative) return
+      if (tier !== "active" && (!policy.speculative || !speculationStarted)) return
       const priority = PRIORITY[tier] ?? PRIORITY.document
       for (const rawSymbol of Array.isArray(rawSymbols) ? rawSymbols : []) {
         const symbol = normalizeSymbol(rawSymbol)
@@ -154,7 +156,9 @@
 
     function prepareDocumentInventory() {
       documentFlushScheduled = false
-      if (!policy.speculative || documentRef?.visibilityState === "hidden") return
+      if (!speculationStarted || !policy.speculative || documentRef?.visibilityState === "hidden") {
+        return
+      }
       queueSymbols(Array.from(documentSymbols).slice(0, policy.documentLimit), "document")
     }
 
@@ -165,7 +169,9 @@
     }
 
     function prepareVisibleWindow() {
-      if (!policy.speculative || documentRef?.visibilityState === "hidden") return
+      if (!speculationStarted || !policy.speculative || documentRef?.visibilityState === "hidden") {
+        return
+      }
       const symbols = []
       const seen = new Set()
       for (const anchor of visibleAnchors) {
@@ -227,12 +233,19 @@
         queueSymbols([symbol], "active")
       },
       updateConnection,
+      startSpeculation() {
+        if (speculationStarted) return
+        speculationStarted = true
+        scheduleDocumentInventory()
+        prepareVisibleWindow()
+      },
       isReady(symbol) {
         return readySymbols.has(normalizeSymbol(symbol))
       },
       snapshot() {
         return Object.freeze({
           policy,
+          speculationStarted,
           documentSymbols: Array.from(documentSymbols),
           readySymbols: Array.from(readySymbols),
           queuedSymbols: Array.from(queuedBySymbol.keys()),

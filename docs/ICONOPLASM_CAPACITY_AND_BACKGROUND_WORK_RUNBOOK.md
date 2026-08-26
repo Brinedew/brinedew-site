@@ -263,12 +263,15 @@ Extension hover detail is immutable within a published card snapshot:
   coalesced idle writer reads, merges, stringifies, or writes the persistent
   cache; an old queued write cannot roll a newer snapshot backward;
 - HTML and PDF register recognized anchors with one tab-scoped reading session.
-  Ordinary documents prepare their unique-symbol inventory as immutable rich detail
-  plus independently deliverable portrait locators, bytes, decode, and frame acknowledgement before
-  hover. The adaptive ceilings are 16 symbols/3 workers on constrained connections,
-  64/6 ordinarily, and 128/8 only on measured fast connections;
+  Catalog initialization, including a cold scanner-artifact fetch, waits for host
+  `load`; initial and mutation-driven recognition then run in bounded idle slices. The session
+  inventories anchors immediately, but speculative immutable rich detail plus
+  independently deliverable portrait locators, bytes, decode, and frame acknowledgement
+  wait for host `load`, a one-second quiet delay, and a genuine idle callback. The
+  first ten symbols use one worker on constrained connections and two otherwise;
 - large documents use the same session and deterministic near-viewport working
-  windows instead of pointer trajectory, DOM-neighbor, or scroll-direction guesses.
+  windows capped at ten symbols instead of pointer trajectory, DOM-neighbor, or
+  scroll-direction guesses.
   Data Saver, `slow-2g`, and `2g` disable preparation;
 - hover is a selector over the ready-card set. Its foreground request exists only
   for immediate-startup interaction, a transient preparation failure, or suppressed

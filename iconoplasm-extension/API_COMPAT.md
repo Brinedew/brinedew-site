@@ -81,12 +81,15 @@ without requiring a reload. An unchanged scanner artifact is not downloaded.
 Foreground detail and locator reads have independent four-second deadlines and propagate cancellation
 from the current hover through the content bridge to the service-worker fetch.
 One tab-scoped reading session receives recognized anchors from both HTML and PDF.
-Ordinary documents prepare their unique-symbol cards through immutable detail,
-portrait resolution, decode, and persistent-frame acknowledgement before hover;
-large documents prepare deterministic near-viewport working windows. The ceiling
-contracts to 16 symbols/3 workers on constrained devices, is 64/6 ordinarily, and
-expands to 128/8 only with measured fast capacity. Data Saver and 2G disable
-preparation. A foreground hover reuses matching in-flight work and is otherwise a
+Catalog initialization, including a cold scanner-artifact fetch, begins only after
+the host `load` event. Recognition scans then replace text cooperatively in bounded idle slices. The session
+inventories anchors immediately, but speculative immutable detail, portrait
+resolution, decode, and persistent-frame acknowledgement wait for host `load`, a
+one-second quiet delay, and a genuine idle turn. Ordinary documents prepare the
+first ten unique symbols with one worker on constrained devices and two workers
+otherwise; large documents add deterministic ten-symbol near-viewport windows.
+Data Saver and 2G disable preparation. A foreground hover bypasses the host-page
+gate, reuses matching in-flight work, and is otherwise a
 recovery path, not the normal loading trigger. Portrait delivery may complete
 from the locator lane while rich detail remains stalled; if both projections
 arrive with different portrait SHAs, the portrait and vote controls fail closed.
