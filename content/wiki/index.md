@@ -34,10 +34,13 @@ Evolutionary frameworks for understanding aging:
 - **[[defensive-degeneration-theory]]** - Aging as cancer prevention
 - **[[tumor-suppressor-theory-of-aging]]** - Anti-cancer mechanisms driving senescence
 - **[[Atavistic-theory-of-cancer]]** - Cancer as reversion to unicellular state
+- **[[red-queen-hypothesis]]** - Why the arms race with parasites favors sex
 
 ## Cancer evolution
 
+- **[[clonal-evolution]]** - Nowell's model: tumors as evolving cell populations
 - **[[cancer-ecology]]** - Tumors as ecosystems of competing and cooperating clones
+- **[[immunoediting]]** - Elimination, equilibrium, and escape
 - **[[adaptive-oncogenesis]]** - Aging changes which mutations are selected
 - **[[adaptive-therapy]]** - Managing tumors instead of eradicating them
 - **[[petos-paradox]]** - Why large, long-lived animals do not get proportionally more cancer
@@ -48,6 +51,7 @@ Evolutionary frameworks for understanding aging:
 
 Key cellular and molecular processes:
 
+- **[[apoptosis]]** - Programmed cell death, intrinsic and extrinsic
 - **[[cellular-senescence]]** - Controlled cellular aging
 - **[[p53-tp53|p53]]** - The genome's primary tumor suppressor
 - **[[telomeres]]** - Chromosomal aging timers
