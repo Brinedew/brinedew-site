@@ -440,9 +440,11 @@ export async function createDiagramEditor({ container, document, onChange, onSel
     applyingDocument = true
     baseDocument = nextDocument
     history.disable()
+    graph.cleanSelection()
+    graph.clearTransformWidgets()
+    graph.clearCells({ silent: true })
     graph.fromJSON({ nodes: graphNodes(nextDocument), edges: graphEdges(nextDocument) })
     graph.drawBackground({ color: nextDocument.background })
-    graph.cleanSelection()
     history.enable()
     if (cleanHistory) history.clean()
     applyingDocument = false
