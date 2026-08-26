@@ -80,9 +80,9 @@ Authors using the term acknowledge several limitations:
 
 - Major evolutionary transition
 
-- Germline sequestration
+- [Germline sequestration](weismann-barrier.md)
 
-- Multilevel selection
+- [Multilevel selection](multilevel-selection.md)
 
 - Somatic evolution
 

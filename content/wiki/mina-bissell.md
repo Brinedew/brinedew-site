@@ -11,15 +11,15 @@ aliases:
 
 ![Mina Bissell](../Attachments/mina-bissell.jpg)
 
-Mina J. Bissell (born 1940) is an Iranian-American cell biologist, Distinguished Scientist at Lawrence Berkeley National Laboratory, known for demonstrating that tissue architecture and the extracellular matrix (ECM) exert dominant control over gene expression and the malignant phenotype.
+Mina J. Bissell (born 1940) is an Iranian-American cell biologist, Distinguished Scientist at Lawrence Berkeley National Laboratory, known for demonstrating that tissue architecture and the extracellular matrix (ECM) control gene expression and the malignant phenotype.
 
 ## Dynamic reciprocity and context
 
-Against the prevailing view that the malignant phenotype is a cell-autonomous property of the mutated genome, Bissell developed the principle of "dynamic reciprocity": the nucleus and the extracellular matrix communicate continuously, and tissue organization — the three-dimensional context in which a cell sits — is a first-order determinant of what its genes do. Her laboratory's three-dimensional culture models of mammary epithelium showed that normal architecture can suppress, and disrupted architecture can permit, malignant behavior.
+Against the prevailing view that the malignant phenotype is a cell-autonomous property of the mutated genome, Bissell developed the principle of "dynamic reciprocity": the nucleus and the extracellular matrix communicate continuously, and tissue organization - the three-dimensional context in which a cell sits - is a first-order determinant of what its genes do. Her laboratory's three-dimensional culture models of mammary epithelium showed that normal architecture can suppress, and disrupted architecture can permit, malignant behavior.
 
 ## Malignant reversion
 
-The strongest form of this argument came from experiments showing "malignant reversion": breast cancer cells with multiple oncogenic lesions could resume normal, organized behavior when placed in a corrective three-dimensional ECM context or when ECM-signaling pathways were restored — without repairing the underlying mutations. These results established that phenotype is an emergent property of genotype plus context, and they remain the standard counterexample to purely genetic determinism in oncogenesis.
+The strongest form of this argument came from experiments showing "malignant reversion": breast cancer cells with multiple oncogenic lesions could resume normal, organized behavior when placed in a corrective three-dimensional ECM context or when ECM-signaling pathways were restored - without repairing the underlying mutations. These results established that phenotype depends on genotype plus context, and they remain the standard counterexample to purely genetic determinism in oncogenesis. The mechanotransduction pathway [YAP1](yap-yap1.md)/[TAZ](taz-wwtr1.md), which transmits matrix stiffness to the nucleus, is one of the molecular routes through which this context dependence runs.
 
 ## Honors
 
@@ -27,4 +27,4 @@ Bissell's honors include election to the National Academy of Sciences, the Ameri
 
 ## Notes
 
-- Draft stub — maintenance agent to expand with the HMT-3522 model system and the 1981 "dynamic reciprocity" formulation.
+- Draft stub - maintenance agent to expand with the HMT-3522 model system and the 1981 "dynamic reciprocity" formulation.

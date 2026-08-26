@@ -135,3 +135,13 @@ CTVT appears to undergo strong **negative selection**. While CTVT has accumulate
 What mutation would make a CTVT cell over-proliferate in the late phase of infection, compared to its neighbors? From [(Siddle, Kaufman 2014)](https://onlinelibrary.wiley.com/doi/10.1111/imm.12377), IFN-γ signal from the host's immune system seems to be the driver of CTVT's late-phase immune-sensitivity. So it seems likely to me that knocking out IFN-γ receptors on CTVT cells would be a good start for defection.
 
 Unfortunately for any meta-defector cell, the immune-insensitive subclone would presumably overtake the rest of the tumor's cells, cripple the host, and fail to transmit to a new host. This way, any act of defection can only betray the local CTVT neighbors and die out, not affecting the global CTVT population.
+
+---
+
+## Related
+
+- [[dftd]] - the other natural transmissible cancer, in Tasmanian devils
+- [[hela]] - an immortal cancer lineage in culture
+- [[scandal-hypothesis]] - can a cancer lineage become a new species?
+- [[ctvt_cancer_line]] - the CTVT line as a laboratory metastasis model
+- [[immune-surveillance]] - how host immunity shapes transmissible tumors

@@ -11,6 +11,12 @@ aliases:
 
 ## A
 
+**[[adaptive-oncogenesis|Adaptive oncogenesis]]**
+Theory that aging changes which mutations selection favors: oncogenic mutations that lose in young, healthy tissue can win in old, damaged tissue.
+
+**[[adaptive-therapy|Adaptive therapy]]**
+Treatment strategy that adjusts drug dosing to keep a tumor controlled, maintaining drug-sensitive cells that suppress resistant ones instead of eradicating the tumor.
+
 **Agent-based model (ABM)**
 Simulation that includes multiple independent *agents* who follow a set of rules, and emergent system behavior can be studied as a product of interactions between agents.
 
@@ -62,11 +68,17 @@ Anti-apoptotic mitochondrial membrane protein that blocks cell death and can ena
 **[[beta-catenin-ctnnb1.md|Beta-catenin]]**
 Wnt pathway mediator that regulates gene expression and can drive proliferation when stabilized.
 
+**[[bioelectricity|Bioelectricity]]**
+Use of membrane voltage and ion-flux patterns as signals that coordinate cell behavior and carry information about large-scale anatomical pattern.
+
 
 ## C
 
+**[[cancer-ecology|Cancer ecology]]**
+Study of tumors as ecosystems of competing and cooperating cell phenotypes shaped by resources, stromal cells, and the immune system.
+
 **Cancer immunoediting**
-Idea that the immune system interacts with cancer in three stages: elimination (removes abnormal cells), equilibrium (holds tumors stable), and escape (selects for cells that evade detection).
+Idea that the immune system interacts with cancer in three stages: elimination (removes abnormal cells), equilibrium (holds tumors stable), and escape (selects for cells that evade detection). See [[immune-surveillance|immune surveillance]].
 
 **[[ctvt-line|Canine transmissible venereal tumor (CTVT)]]**
 Naturally transmissible cancer lineage that spreads between dogs by cell transfer.
@@ -83,7 +95,7 @@ Describes a biological effect that runs inside an affected cell using that cell'
 **Cell non-autonomous**
 Describes a biological effect that reaches the affected cell from neighboring cells or the tissue environment, such as the survival, growth, or invasion support a clone receives from a changed stroma.
 
-**Cell competition**
+**[[flower-drosophila|Cell competition]]**
 Process where fitter cells eliminate less-fit neighbors, preserving tissue quality under mutation pressure.
 
 **Cell cycle**
@@ -173,7 +185,7 @@ Changes to the extracellular matrix that alter tissue stiffness, signaling, and 
 **[[egfr-erbb1-p00533.md|EGFR signaling]]**
 Proliferation and survival pathway activated by EGF, often activated in cancer.
 
-**EMT (epithelial-mesenchymal transition)**
+**[[zeb1-p37275|EMT (epithelial-mesenchymal transition)]]**
 Cell identity shift from epithelial (sedentary) state to a mesenchymal (mobile) state, granting increased motility and invasiveness - happens both in normal development and in cancer.
 
 **Endocrine signalling**
@@ -187,6 +199,12 @@ Changes in gene activity that are heritable through cell divisions without alter
 
 **[[eutely.md|Eutely]]**
 Developmental pattern in some species where adults have a fixed number of somatic cells and growth occurs only by cell enlargement.
+
+**[[evolution-of-cooperation|Evolution of cooperation]]**
+Study of the mechanisms - kin selection, direct and indirect reciprocity, spatial structure, and group selection - by which natural selection favors costly cooperation.
+
+**[[evolutionary-transitions-in-individuality|Evolutionary transitions in individuality]]**
+Events in which groups of previously independent replicators become new evolutionary individuals, such as single cells forming multicellular organisms.
 
 **Evolutionarily stable strategy**
 Behavior pattern that, once common in a group, cannot be easily displaced by an alternative strategy.
@@ -292,7 +310,7 @@ Type of cell signaling where signals are transmitted via direct contact between 
 Complete set of a cell’s chromosomes, described by their number and appearance.
 
 **Kin selection**
-Idea that helping relatives can spread shared genes, so altruism and cooperation can evolve among related cells or organisms.
+Idea that helping relatives can spread shared genes, so altruism and cooperation can evolve among related cells or organisms. See [[wd-hamilton|W. D. Hamilton]].
 
 **Kinase signaling**
 Intracellular protein modification cascades (such as MAPK or PI3K-AKT) that transmit signals from cell membrane receptors to transcription factors.
@@ -414,7 +432,7 @@ Type of cell signaling where signals are transmitted short distances to nearby c
 **Passenger mutation**
 A genetic change that does not confer a selective advantage to the cell but co-occurs with beneficial driver mutations.
 
-**Peto’s paradox**
+**[[petos-paradox|Peto’s paradox]]**
 Observation that large animals have similar cancer rates to small animals, despite having orders of magnitude more cells, implying stronger cancer defenses scaling with organism size.
 
 **PI3K-AKT-mTOR pathway**
@@ -449,6 +467,9 @@ coordination mechanism in bacteria, based on collective action upon secretion of
 
 **Reaction-diffusion models**
 Computational models that combine local reactions and diffusion to produce spatial patterns, often used for morphogen dynamics.
+
+**[[de-darwinization|Re-Darwinization]]**
+Recovery of variation, heritability, and differential reproduction by somatic cells - the failure of de-Darwinization that is cancer.
 
 **Replicative senescence**
 Permanent cell division arrest triggered by telomere shortening after repeated divisions.
@@ -560,4 +581,3 @@ Mechanosensitive signaling pathway that regulates organ size, cell proliferation
 
 **Yamanaka factors**
 Transcription factors Oct-4, Sox2, Klf4 and Myc (aka OSKM) that, when simultaneously active in a cell line, reprogram it to an embryonic-like stem cell state (iPS cells)
-
