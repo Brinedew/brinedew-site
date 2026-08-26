@@ -6045,7 +6045,10 @@ body.icono-studio-route #iconoplasm-root {
   }
 
   .icono-studio-relationship-bar {
+    width: calc(100% - 0.7rem);
     max-width: calc(100% - 0.7rem);
+    justify-content: flex-start;
+    overflow-x: auto;
   }
 
   .icono-studio-relationship-bar > span {
@@ -6053,7 +6056,7 @@ body.icono-studio-route #iconoplasm-root {
   }
 
   .icono-studio-relationship-bar button {
-    flex: 1;
+    flex: 0 0 auto;
     padding-inline: 0.45rem;
   }
 
