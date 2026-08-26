@@ -11,6 +11,15 @@ function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"))
 }
 
+function compareReleaseVersions(left, right) {
+  const leftParts = left.split(".").map(Number)
+  const rightParts = right.split(".").map(Number)
+  for (let index = 0; index < 3; index += 1) {
+    if (leftParts[index] !== rightParts[index]) return leftParts[index] - rightParts[index]
+  }
+  return 0
+}
+
 test("human publisher authority owns every published extension version surface", () => {
   const authority = readJson("iconoplasm-extension/publisher-release.json")
   const manifest = readJson("iconoplasm-extension/manifest.json")
@@ -22,7 +31,7 @@ test("human publisher authority owns every published extension version surface",
     expectedVersion: authority.version,
   })
   assert.equal(verified.version, authority.version)
-  assert.equal(verified.nextReleaseVersion, authority.next_release_version)
+  assert.equal(verified.nextReleaseVersion, authority.next_release_version ?? null)
   assert.equal(verified.minimumSupportedVersion, authority.minimum_supported_version)
   assert.deepEqual(verified.compatibilityContracts, authority.compatibility_contracts)
   assert.equal(manifest.version, authority.version)
@@ -64,7 +73,18 @@ test("published and candidate extension contracts remain explicit", () => {
   assert.equal(candidate.extension_blocklist_contract_revision, 1)
   assert.ok(Object.keys(authority.compatibility_contracts).length <= 1)
   assert.match(patchNotes, /^## Unreleased$/m)
-  assert.doesNotMatch(patchNotes, /^## 0\.(5\.0|6\.0)\b/m)
+  const publishedHeadings = [...patchNotes.matchAll(/^## (\d+\.\d+\.\d+)\b/gm)].map(
+    (match) => match[1],
+  )
+  assert.ok(
+    publishedHeadings.includes(authority.version),
+    `Patch notes must contain the authoritative release ${authority.version}`,
+  )
+  assert.deepEqual(
+    publishedHeadings.filter((version) => compareReleaseVersions(version, authority.version) > 0),
+    [],
+    `Patch notes must not declare a release newer than publisher authority ${authority.version}`,
+  )
   assert.match(worker, /publisher-release\.json/)
   assert.match(worker, /candidate-contract\.json/)
   assert.doesNotMatch(worker, /ICONOPLASM_MIN_EXTENSION_VERSION/)
