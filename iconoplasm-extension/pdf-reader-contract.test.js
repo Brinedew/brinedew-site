@@ -115,6 +115,23 @@ test("the MIME bootstrap precedes heavyweight reader dependencies and fails nati
   assert.match(packagerSource, /"pdf-stream-bootstrap\.js"/u)
 })
 
+test("Firefox local PDFs route to the private File API reader instead of failing silently", () => {
+  const geckoOwnershipSource = readFileSync(
+    new URL("./pdf-gecko-ownership.js", import.meta.url),
+    "utf8",
+  )
+  const html = readFileSync(new URL("./pdf-reader.html", import.meta.url), "utf8")
+  assert.match(geckoOwnershipSource, /webNavigation\?\.onBeforeNavigate/u)
+  assert.match(geckoOwnershipSource, /geckoLocalFile/u)
+  assert.match(streamBootstrapSource, /ownership: "firefox-local-file-picker"/u)
+  assert.match(readerSource, /Choose \$\{requestedFileName\} once/u)
+  assert.match(readerSource, /privately in Iconoplasm/u)
+  assert.match(readerSource, /"iconoplasm-reader-bridge-ready"/u)
+  assert.match(readerSource, /bridge = globalThis\.IconoplasmReaderBridge \|\| null/u)
+  assert.match(readerSource, /refreshVisiblePages\(\)/u)
+  assert.match(html, /id="reader-open-file-action"/u)
+})
+
 test("the PDF reader exposes download, parse, and first-render progress without an empty-state flash", () => {
   const html = readFileSync(new URL("./pdf-reader.html", import.meta.url), "utf8")
   assert.match(html, /id="reader-progress"[\s\S]*role="progressbar"/u)

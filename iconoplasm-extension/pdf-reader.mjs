@@ -32,6 +32,7 @@ const passwordInput = document.getElementById("pdf-password")
 const passwordMessageElement = document.getElementById("password-message")
 const downloadButton = document.getElementById("download")
 const nativeViewerButton = document.getElementById("native-viewer")
+const openFileActionLabel = document.getElementById("reader-open-file-action")
 const zoomValue = document.getElementById("zoom-value")
 const filenameElement = document.getElementById("reader-filename")
 const pageNumberElement = document.getElementById("page-number")
@@ -74,6 +75,34 @@ let pendingPasswordUpdate = null
 let activeLoadId = 0
 let waitingForFirstPage = false
 const textMetricsContext = document.createElement("canvas").getContext("2d")
+
+function isFirefoxLocalFileOwnership(ownership = activeOwnership) {
+  return ownership?.ownership === "firefox-local-file-picker"
+}
+
+function localFileName(ownership = activeOwnership) {
+  if (!isFirefoxLocalFileOwnership(ownership)) return ""
+  try {
+    const pathname = new URL(ownership.streamInfo.originalUrl).pathname
+    return decodeURIComponent(pathname.split("/").pop() || "document.pdf")
+  } catch (_error) {
+    return "document.pdf"
+  }
+}
+
+function preserveLocalFileOwnership() {
+  const localOwnership = isFirefoxLocalFileOwnership()
+  ownedPdfSource = localOwnership
+  if (!localOwnership) activeOwnership = null
+  nativeViewerButton.hidden = true
+}
+
+function handLocalBytesToNativeViewer() {
+  if (!isFirefoxLocalFileOwnership() || !sourceBytes) return false
+  const blobUrl = URL.createObjectURL(new Blob([sourceBytes], { type: "application/pdf" }))
+  location.replace(blobUrl)
+  return true
+}
 
 const readerControls = createPdfReaderControls({
   container,
@@ -133,6 +162,7 @@ function setReaderReady() {
   container.setAttribute("aria-busy", "false")
   progressElement.hidden = true
   setControlsEnabled(true)
+  nativeViewerButton.hidden = !ownedPdfSource
   setStatus("")
 }
 
@@ -142,8 +172,21 @@ function setReaderEmpty() {
   progressElement.hidden = true
   setControlsEnabled(false)
   retryButton.hidden = true
+  const requestedFileName = localFileName()
   nativeFallbackButton.hidden = true
-  setStatus("Open or drop a PDF", "empty", { actions: true })
+  nativeViewerButton.hidden = true
+  if (requestedFileName) {
+    filenameElement.textContent = requestedFileName
+    openFileActionLabel.textContent = "Choose this PDF"
+    setStatus(
+      `Firefox protects local files. Choose ${requestedFileName} once to open it privately in Iconoplasm.`,
+      "empty",
+      { actions: true },
+    )
+  } else {
+    openFileActionLabel.textContent = "Open another PDF"
+    setStatus("Open or drop a PDF", "empty", { actions: true })
+  }
 }
 
 function setReaderError(error) {
@@ -152,7 +195,7 @@ function setReaderError(error) {
   progressElement.hidden = true
   setControlsEnabled(false)
   retryButton.hidden = !sourceBytes
-  nativeFallbackButton.hidden = !ownedPdfSource
+  nativeFallbackButton.hidden = !ownedPdfSource || !sourceBytes
   setStatus(`Could not open this PDF: ${error.message}`, "error", { actions: true })
 }
 
@@ -600,9 +643,7 @@ passwordForm.addEventListener("submit", (event) => {
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files?.[0]
   if (!file) return
-  ownedPdfSource = false
-  activeOwnership = null
-  nativeViewerButton.hidden = true
+  preserveLocalFileOwnership()
   try {
     setReaderLoading(`Loading ${file.name}…`, 0, file.size)
     const bytes = new Uint8Array(file.size)
@@ -642,9 +683,7 @@ document.addEventListener("drop", async (event) => {
     setStatus("Drop a PDF file to open it.", "warning")
     return
   }
-  ownedPdfSource = false
-  activeOwnership = null
-  nativeViewerButton.hidden = true
+  preserveLocalFileOwnership()
   try {
     setReaderLoading(`Loading ${file.name}…`, 0, file.size)
     const bytes = new Uint8Array(await file.arrayBuffer())
@@ -661,7 +700,7 @@ retryButton.addEventListener("click", () => {
 })
 
 nativeFallbackButton.addEventListener("click", () => {
-  if (ownedPdfSource) void activeOwnership?.handBack?.()
+  if (ownedPdfSource && !handLocalBytesToNativeViewer()) void activeOwnership?.handBack?.()
 })
 
 document.getElementById("zoom-in").addEventListener("click", () => {
@@ -744,7 +783,7 @@ downloadButton.addEventListener("click", () => {
 })
 
 nativeViewerButton.addEventListener("click", () => {
-  if (ownedPdfSource) void activeOwnership?.handBack?.()
+  if (ownedPdfSource && !handLocalBytesToNativeViewer()) void activeOwnership?.handBack?.()
 })
 
 async function loadHighlightingPreference() {
@@ -759,7 +798,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (!change) return
   highlightingEnabled = settings.normalizeBooleanSetting(change.newValue, false)
   if (!highlightingEnabled && ownedPdfSource) {
-    void activeOwnership?.handBack?.()
+    if (!handLocalBytesToNativeViewer()) void activeOwnership?.handBack?.()
     return
   }
   if (highlightingEnabled) refreshVisiblePages()
@@ -767,6 +806,14 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 })
 
 window.addEventListener("iconoplasm-reader-matcher-changed", refreshVisiblePages)
+window.addEventListener(
+  "iconoplasm-reader-bridge-ready",
+  () => {
+    bridge = globalThis.IconoplasmReaderBridge || null
+    refreshVisiblePages()
+  },
+  { once: true },
+)
 window.addEventListener("iconoplasm-reader-highlight-mode-changed", refreshVisiblePages)
 window.addEventListener("iconoplasm-reader-highlight-visibility-changed", () => {
   closeActiveCard()
@@ -814,6 +861,8 @@ if (document.body.dataset.readerState === "error") {
 } else if (streamOutcome?.kind === "stream" && !highlightingEnabled) {
   await streamOutcome.handBack?.()
 } else if (!streamOutcome || streamOutcome.kind === "manual") {
+  activeOwnership = streamOutcome || null
+  ownedPdfSource = isFirefoxLocalFileOwnership(streamOutcome)
   setReaderEmpty()
 } else if (streamOutcome.kind !== "stream") {
   setReaderError(new Error("The browser did not provide PDF data"))

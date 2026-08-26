@@ -1,6 +1,8 @@
 ;(() => {
   const mimeHandler = chrome.mimeHandler
-  const geckoSourceId = new URLSearchParams(location.search).get("geckoSource")
+  const searchParams = new URLSearchParams(location.search)
+  const geckoSourceId = searchParams.get("geckoSource")
+  const geckoLocalFile = searchParams.get("geckoLocalFile")
   const CHUNK_BYTES = 512 * 1024
 
   function reportProgress(loaded, total, stage = "loading") {
@@ -102,6 +104,22 @@
         console.error("Iconoplasm could not acquire the captured Firefox PDF", error)
         return Object.freeze({ kind: "aborted" })
       }
+    }
+    if (geckoLocalFile) {
+      let sourceUrl
+      try {
+        sourceUrl = new URL(geckoLocalFile)
+      } catch (_error) {
+        return Object.freeze({ kind: "aborted" })
+      }
+      if (sourceUrl.protocol !== "file:" || !/\.pdf$/i.test(sourceUrl.pathname)) {
+        return Object.freeze({ kind: "aborted" })
+      }
+      return Object.freeze({
+        kind: "manual",
+        ownership: "firefox-local-file-picker",
+        streamInfo: { originalUrl: sourceUrl.href },
+      })
     }
     if (!mimeHandler?.getStreamInfo) return Object.freeze({ kind: "manual" })
 

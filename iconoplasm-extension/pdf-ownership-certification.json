@@ -19,21 +19,21 @@
       "store_release_ready": true
     },
     "firefox": {
-      "driver": "firefox-response-filter",
+      "driver": "firefox-response-filter-and-local-file-picker",
       "implementation_complete": true,
       "http_e2e_certified": true,
-      "certified_browser": "Firefox 153.0.4",
+      "certified_browser": "Firefox 154.0.1",
       "certified_cases": [
         "GET PDF from real paper bytes",
         "single-use GET without origin replay",
         "POST PDF without request replay",
         "partial-range native fallback",
-        "Off handoff to rendered native viewer from captured bytes"
+        "Off handoff to rendered native viewer from captured bytes",
+        "local file route with explicit File API handoff, rendered gene highlights, decoded hover portrait, and native-viewer byte handoff"
       ],
-      "store_release_ready": true,
-      "known_limitations": [
-        "Local file: PDFs remain in Firefox's native viewer because Firefox exposes no conforming local-file ownership adapter."
-      ]
+      "local_file_e2e_certified": true,
+      "local_file_flow": "Top-level file PDF navigation opens the packaged reader, which obtains bytes through one explicit File API selection or drag/drop, never uploads them, and can hand those selected bytes to Firefox's native PDF viewer through a local blob URL.",
+      "store_release_ready": true
     },
     "safari": {
       "driver": "none",

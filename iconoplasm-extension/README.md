@@ -22,7 +22,7 @@ The extension includes one local PDF.js reader. It never uploads PDF bytes or ex
 - PDF.js `6.2.108` is pinned, copied locally by `scripts/sync-iconoplasm-pdfjs.mjs`, and shipped with its upstream license. No CDN or remote executable code is used.
 - The PDF canvas is never recolored or replaced. Iconoplasm uses the official selectable text layer for first-party decoration geometry. A filled-pill preference becomes an outline pill only inside PDFs; the stored preference and normal webpage treatment remain filled.
 - `pdf-ownership-certification.json` is the release truth for each browser adapter. Packaging can produce an engineering candidate; a store workflow may publish only a target whose adapter is certified there.
-- Firefox's HTTP(S) adapter is implemented, unit-tested, and certified in Firefox 153 against GET, one-shot GET, POST, partial-range fallback, and rendered native handoff using a real paper. Local `file:` PDFs remain native because Firefox exposes no conforming local-file ownership adapter. Safari remains gated because it has no response-body ownership primitive.
+- Firefox's HTTP(S) adapter is implemented, unit-tested, and certified against GET, one-shot GET, POST, partial-range fallback, and rendered native handoff using a real paper. Firefox local `file:` PDF navigations route into the same private reader; Firefox requires one explicit file-picker or drag/drop handoff because extensions cannot read an arbitrary local path. Safari remains gated because it has no response-body ownership primitive.
 - Only rendered pages within one viewport of the visible region are matched. Image-only PDFs report that no searchable text was found; OCR is not silently attempted.
 
 ## Packaging the extension safely
