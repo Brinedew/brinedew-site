@@ -59,3 +59,12 @@ test("the app and Studio load the same versioned diagram module graph", () => {
   assert.ok(appVersion)
   assert.equal(documentVersion, appVersion)
 })
+
+test("hidden connector ports cannot intercept canvas clicks", () => {
+  const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8")
+  assert.match(styles, /\[data-diagram-port\]\s*\{[^}]*pointer-events:\s*none;/s)
+  assert.match(
+    styles,
+    /is-connecting-source \[data-diagram-port\]\s*\{[^}]*pointer-events:\s*all;/s,
+  )
+})
