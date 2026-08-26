@@ -10,7 +10,7 @@ import {
   removeDiagramItem,
   renderDiagramSvg,
   updateDiagramItem,
-} from "./diagram-document.js?v=20260826-direct-connectors"
+} from "./diagram-document.js?v=20260826-direct-connectors-2"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
 // document, and both obtain characters through the bounded canonical resolver.
@@ -580,7 +580,9 @@ async function handleStudioClick(event) {
     "[data-studio-select], [data-diagram-node], [data-diagram-edge]",
   )
   if (selection) {
-    if (performance.now() < suppressCanvasClickUntil) return
+    const isCanvasSelection =
+      selection.hasAttribute("data-diagram-node") || selection.hasAttribute("data-diagram-edge")
+    if (isCanvasSelection && performance.now() < suppressCanvasClickUntil) return
     selectItem(
       selection.getAttribute("data-studio-select") ||
         selection.getAttribute("data-diagram-node") ||
