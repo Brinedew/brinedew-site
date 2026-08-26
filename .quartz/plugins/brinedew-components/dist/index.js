@@ -1,7 +1,7 @@
 // ../../../node_modules/.pnpm/github-slugger@2.0.0/node_modules/github-slugger/index.js
 var own = Object.hasOwnProperty;
 
-// ../../../node_modules/.pnpm/preact@10.29.7_preact-render-to-string@6.7.0/node_modules/preact/dist/preact.mjs
+// ../../../node_modules/.pnpm/preact@10.29.8_preact-render-to-string@6.7.0/node_modules/preact/dist/preact.mjs
 var n;
 var l;
 var u;
@@ -66,8 +66,8 @@ function H() {
   }
 }
 function L(n2, l3, u4, t3, i3, r3, o3, e3, f4, c3, a3) {
-  var s3, h3, p3, v3, y3, _2, g2, m3 = t3 && t3.__k || w, b2 = l3.length;
-  for (f4 = T(u4, l3, m3, f4, b2), s3 = 0; s3 < b2; s3++) null != (p3 = u4.__k[s3]) && (h3 = -1 != p3.__i && m3[p3.__i] || d, p3.__i = s3, _2 = q(n2, p3, h3, i3, r3, o3, e3, f4, c3, a3), v3 = p3.__e, p3.ref && h3.ref != p3.ref && (h3.ref && J(h3.ref, null, p3), a3.push(p3.ref, p3.__c || v3, p3)), null == y3 && null != v3 && (y3 = v3), (g2 = !!(4 & p3.__u)) || h3.__k === p3.__k ? (f4 = j(p3, f4, n2, g2), g2 && h3.__e && (h3.__e = null)) : "function" == typeof p3.type && void 0 !== _2 ? f4 = _2 : v3 && (f4 = v3.nextSibling), p3.__u &= -7);
+  var s3, h3, p3, v3, y3, _2, g2 = t3 && t3.__k || w, m3 = l3.length;
+  for (f4 = T(u4, l3, g2, f4, m3), s3 = 0; s3 < m3; s3++) null != (p3 = u4.__k[s3]) && (h3 = -1 != p3.__i && g2[p3.__i] || d, p3.__i = s3, _2 = q(n2, p3, h3, i3, r3, o3, e3, f4, c3, a3), v3 = p3.__e, p3.ref && h3.ref != p3.ref && (h3.ref && J(h3.ref, null, p3), a3.push(p3.ref, p3.__c || v3, p3)), null == y3 && null != v3 && (y3 = v3), 4 & p3.__u ? (f4 = j(p3, f4, n2), h3.__e && (h3.__e = null)) : "function" == typeof p3.type && void 0 !== _2 ? f4 = _2 : v3 && (f4 = v3.nextSibling), p3.__u &= -7);
   return u4.__e = y3, f4;
 }
 function T(n2, l3, u4, t3, i3) {
@@ -76,13 +76,13 @@ function T(n2, l3, u4, t3, i3) {
   if (s3) for (r3 = 0; r3 < a3; r3++) null != (e3 = u4[r3]) && 0 == (2 & e3.__u) && (e3.__e == t3 && (t3 = $(e3)), K(e3, e3));
   return t3;
 }
-function j(n2, l3, u4, t3) {
-  var i3, r3;
+function j(n2, l3, u4) {
+  var t3, i3;
   if ("function" == typeof n2.type) {
-    for (i3 = n2.__k, r3 = 0; i3 && r3 < i3.length; r3++) i3[r3] && (i3[r3].__ = n2, l3 = j(i3[r3], l3, u4, t3));
+    for (t3 = n2.__k, i3 = 0; t3 && i3 < t3.length; i3++) t3[i3] && (t3[i3].__ = n2, l3 = j(t3[i3], l3, u4));
     return l3;
   }
-  n2.__e != l3 && (t3 && (l3 && n2.type && !l3.parentNode && (l3 = $(n2)), u4.insertBefore(n2.__e, l3 || null)), l3 = n2.__e);
+  n2.__e != l3 && (l3 && n2.type && !l3.parentNode && (l3 = $(n2)), l3 = u4.insertBefore(n2.__e, l3 || null));
   do {
     l3 = l3 && l3.nextSibling;
   } while (null != l3 && 8 == l3.nodeType);
@@ -128,35 +128,35 @@ function V(n2) {
   };
 }
 function q(n2, u4, t3, i3, r3, o3, e3, f4, c3, a3) {
-  var s3, h3, p3, v3, y3, d3, _2, k3, x2, M, $2, I2, P2, A2, H2, T2, j3 = u4.type;
+  var s3, h3, p3, v3, y3, d3, _2, k3, x2, M, I2, P2, A2, H2, T2, j3, F = u4.type;
   if (void 0 !== u4.constructor) return null;
   128 & t3.__u && (c3 = !!(32 & t3.__u), o3 = [f4 = u4.__e = t3.__e]), (s3 = l.__b) && s3(u4);
-  n: if ("function" == typeof j3) {
+  n: if ("function" == typeof F) {
     h3 = e3.length;
     try {
-      if (x2 = u4.props, M = j3.prototype && j3.prototype.render, $2 = (s3 = j3.contextType) && i3[s3.__c], I2 = s3 ? $2 ? $2.props.value : s3.__ : i3, t3.__c ? k3 = (p3 = u4.__c = t3.__c).__ = p3.__E : (M ? u4.__c = p3 = new j3(x2, I2) : (u4.__c = p3 = new C(x2, I2), p3.constructor = j3, p3.render = Q), $2 && $2.sub(p3), p3.state || (p3.state = {}), p3.__n = i3, v3 = p3.__d = true, p3.__h = [], p3._sb = []), M && null == p3.__s && (p3.__s = p3.state), M && null != j3.getDerivedStateFromProps && (p3.__s == p3.state && (p3.__s = m({}, p3.__s)), m(p3.__s, j3.getDerivedStateFromProps(x2, p3.__s))), y3 = p3.props, d3 = p3.state, p3.__v = u4, v3) M && null == j3.getDerivedStateFromProps && null != p3.componentWillMount && p3.componentWillMount(), M && null != p3.componentDidMount && p3.__h.push(p3.componentDidMount);
+      if (x2 = u4.props, M = F.prototype && F.prototype.render, I2 = (s3 = F.contextType) && i3[s3.__c], P2 = s3 ? I2 ? I2.props.value : s3.__ : i3, t3.__c ? k3 = (p3 = u4.__c = t3.__c).__ = p3.__E : (M ? u4.__c = p3 = new F(x2, P2) : (u4.__c = p3 = new C(x2, P2), p3.constructor = F, p3.render = Q), I2 && I2.sub(p3), p3.state || (p3.state = {}), p3.__n = i3, v3 = p3.__d = true, p3.__h = [], p3._sb = []), M && null == p3.__s && (p3.__s = p3.state), M && null != F.getDerivedStateFromProps && (p3.__s == p3.state && (p3.__s = m({}, p3.__s)), m(p3.__s, F.getDerivedStateFromProps(x2, p3.__s))), y3 = p3.props, d3 = p3.state, p3.__v = u4, v3) M && null == F.getDerivedStateFromProps && null != p3.componentWillMount && p3.componentWillMount(), M && null != p3.componentDidMount && p3.__h.push(p3.componentDidMount);
       else {
-        if (M && null == j3.getDerivedStateFromProps && x2 !== y3 && null != p3.componentWillReceiveProps && p3.componentWillReceiveProps(x2, I2), u4.__v == t3.__v || !p3.__e && null != p3.shouldComponentUpdate && false === p3.shouldComponentUpdate(x2, p3.__s, I2)) {
+        if (M && null == F.getDerivedStateFromProps && x2 !== y3 && null != p3.componentWillReceiveProps && p3.componentWillReceiveProps(x2, P2), u4.__v == t3.__v || !p3.__e && null != p3.shouldComponentUpdate && false === p3.shouldComponentUpdate(x2, p3.__s, P2)) {
           u4.__v != t3.__v && (p3.props = x2, p3.state = p3.__s, p3.__d = false), u4.__e = t3.__e, u4.__k = t3.__k, u4.__k.some(function(n3) {
             n3 && (n3.__ = u4);
-          }), w.push.apply(p3.__h, p3._sb), p3._sb = [], p3.__h.length && e3.push(p3);
+          }), w.push.apply(p3.__h, p3._sb), p3._sb = [], p3.__h.length && e3.push(p3), f4 = $(t3);
           break n;
         }
-        null != p3.componentWillUpdate && p3.componentWillUpdate(x2, p3.__s, I2), M && null != p3.componentDidUpdate && p3.__h.push(function() {
+        null != p3.componentWillUpdate && p3.componentWillUpdate(x2, p3.__s, P2), M && null != p3.componentDidUpdate && p3.__h.push(function() {
           p3.componentDidUpdate(y3, d3, _2);
         });
       }
-      if (p3.context = I2, p3.props = x2, p3.__P = n2, p3.__e = false, P2 = l.__r, A2 = 0, M) p3.state = p3.__s, p3.__d = false, P2 && P2(u4), s3 = p3.render(p3.props, p3.state, p3.context), w.push.apply(p3.__h, p3._sb), p3._sb = [];
+      if (p3.context = P2, p3.props = x2, p3.__P = n2, p3.__e = false, A2 = l.__r, H2 = 0, M) p3.state = p3.__s, p3.__d = false, A2 && A2(u4), s3 = p3.render(p3.props, p3.state, p3.context), w.push.apply(p3.__h, p3._sb), p3._sb = [];
       else do {
-        p3.__d = false, P2 && P2(u4), s3 = p3.render(p3.props, p3.state, p3.context), p3.state = p3.__s;
-      } while (p3.__d && ++A2 < 25);
-      p3.state = p3.__s, null != p3.getChildContext && (i3 = m(m({}, i3), p3.getChildContext())), M && !v3 && null != p3.getSnapshotBeforeUpdate && (_2 = p3.getSnapshotBeforeUpdate(y3, d3)), H2 = null != s3 && s3.type === S && null == s3.key ? E(s3.props.children) : s3, f4 = L(n2, g(H2) ? H2 : [H2], u4, t3, i3, r3, o3, e3, f4, c3, a3), p3.base = u4.__e, u4.__u &= -161, p3.__h.length && e3.push(p3), k3 && (p3.__E = p3.__ = null);
+        p3.__d = false, A2 && A2(u4), s3 = p3.render(p3.props, p3.state, p3.context), p3.state = p3.__s;
+      } while (p3.__d && ++H2 < 25);
+      p3.state = p3.__s, null != p3.getChildContext && (i3 = m(m({}, i3), p3.getChildContext())), M && !v3 && null != p3.getSnapshotBeforeUpdate && (_2 = p3.getSnapshotBeforeUpdate(y3, d3)), T2 = null != s3 && s3.type === S && null == s3.key ? E(s3.props.children) : s3, f4 = L(n2, g(T2) ? T2 : [T2], u4, t3, i3, r3, o3, e3, f4, c3, a3), p3.base = u4.__e, u4.__u &= -161, p3.__h.length && e3.push(p3), k3 && (p3.__E = p3.__ = null);
     } catch (n3) {
       if (e3.length = h3, u4.__v = null, c3 || null != o3) {
         if (n3.then) {
           for (u4.__u |= c3 ? 160 : 128; f4 && 8 == f4.nodeType && f4.nextSibling; ) f4 = f4.nextSibling;
           null != o3 && (o3[o3.indexOf(f4)] = null), u4.__e = f4;
-        } else if (null != o3) for (T2 = o3.length; T2--; ) b(o3[T2]);
+        } else if (null != o3) for (j3 = o3.length; j3--; ) b(o3[j3]);
       } else u4.__e = t3.__e;
       null == u4.__k && (u4.__k = t3.__k || []), n3.then || B(u4), l.__e(n3, u4, t3);
     }
@@ -248,7 +248,7 @@ n = w.slice, l = { __e: function(n2, l3, u4, t3) {
   return n2.__v.__b - l3.__v.__b;
 }, H.__r = 0, f = Math.random().toString(8), c = "__d" + f, a = "__a" + f, s = /(PointerCapture)$|Capture$/i, h = 0, p = V(false), v = V(true), y = 0;
 
-// ../../../node_modules/.pnpm/preact@10.29.7_preact-render-to-string@6.7.0/node_modules/preact/jsx-runtime/dist/jsxRuntime.mjs
+// ../../../node_modules/.pnpm/preact@10.29.8_preact-render-to-string@6.7.0/node_modules/preact/jsx-runtime/dist/jsxRuntime.mjs
 var f2 = 0;
 function u2(e3, t3, n2, o3, i3, u4) {
   t3 || (t3 = {});
@@ -259,7 +259,7 @@ function u2(e3, t3, n2, o3, i3, u4) {
   return l.vnode && l.vnode(l3), l3;
 }
 
-// ../../../node_modules/.pnpm/@quartz-community+utils@htt_0cfbeb8e17e882336c3b6fb8d860c4b0/node_modules/@quartz-community/utils/dist/index.js
+// ../../../node_modules/.pnpm/@quartz-community+utils@0.1_236326e92195e1478e36b265a65fb1bd/node_modules/@quartz-community/utils/dist/index.js
 function simplifySlug(fp) {
   const res = stripSlashes(trimSuffix(fp, "index"), true);
   return res.length === 0 ? "/" : res;
@@ -597,7 +597,7 @@ var IconoplasmPageSwitcher = ({
   const slug2 = fileData.slug ?? "";
   const isIconoplasmPage = slug2.startsWith("apps/iconoplasm");
   if (!isIconoplasmPage) return null;
-  const activeTab = slug2 === "" || slug2 === "/" ? "archive" : slug2.startsWith("clans") ? "clans" : slug2.startsWith("wiki/Tutorial") ? "tutorial" : void 0;
+  const activeTab = slug2 === "" || slug2 === "/" ? "archive" : slug2.startsWith("clans") ? "clans" : slug2.startsWith("studio") ? "studio" : slug2.startsWith("wiki/Tutorial") ? "tutorial" : void 0;
   return /* @__PURE__ */ u2(
     "nav",
     {
@@ -625,6 +625,17 @@ var IconoplasmPageSwitcher = ({
             "data-icono-switch": "clans",
             "aria-current": activeTab === "clans" ? "page" : void 0,
             children: "Clans"
+          }
+        ),
+        /* @__PURE__ */ u2(
+          "a",
+          {
+            href: "/studio",
+            class: classNames("icono-page-tab", activeTab === "studio" && "is-active"),
+            "data-icono-nav": true,
+            "data-icono-switch": "studio",
+            "aria-current": activeTab === "studio" ? "page" : void 0,
+            children: "Studio"
           }
         ),
         /* @__PURE__ */ u2(
@@ -829,7 +840,7 @@ TagSections.css = `
 `;
 var TagSections_default = (() => TagSections);
 
-// ../../../node_modules/.pnpm/preact@10.29.7_preact-render-to-string@6.7.0/node_modules/preact/hooks/dist/hooks.mjs
+// ../../../node_modules/.pnpm/preact@10.29.8_preact-render-to-string@6.7.0/node_modules/preact/hooks/dist/hooks.mjs
 var t2;
 var r2;
 var u3;

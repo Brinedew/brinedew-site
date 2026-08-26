@@ -1186,7 +1186,7 @@ test("warm gene HTML cache preserves the card-aware noindex decision", async () 
 test("homepage discovery links the raw archive without adding immersive navigation chrome", async () => {
   globalThis.fetch = async () =>
     htmlResponse(
-      `<!doctype html><html><head><title>Iconoplasm</title></head><body><nav class="icono-page-switcher" data-icono-page-switcher="true"><a href="/">Archive</a><a href="/clans">Clans</a></nav><div id="iconoplasm-root"></div></body></html>`,
+      `<!doctype html><html><head><title>Iconoplasm</title></head><body><nav class="icono-page-switcher" data-icono-page-switcher="true"><a href="/">Archive</a><a href="/clans">Clans</a><a href="/studio">Studio</a></nav><div id="iconoplasm-root"></div></body></html>`,
     )
 
   const response = await worker.fetch(
