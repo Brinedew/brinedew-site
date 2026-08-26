@@ -168,8 +168,8 @@ includesOrFail(
 )
 includesOrFail(
   publicationAliasPolicyTests,
-  'test("3-POST 1102 value-before-list mutation and retries never read the scanner artifact"',
-  "The alias policy suite must keep the loud 3-POST 1102 scanner-cost regression.",
+  'test("pointer publication completes despite KV list lag and never reads the scanner artifact"',
+  "The alias policy suite must keep the no-list pointer-publication regression.",
 )
 includesOrFail(
   recognitionValidationIndex,
