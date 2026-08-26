@@ -20,9 +20,9 @@ A mutation that kills you at 80 has little evolutionary impact if most of your s
 
 [William Hamilton](wd-hamilton.md) later formalized this insight mathematically, showing that the force of selection declines exponentially with age in populations with overlapping generations. The strength of selection on traits expressed at age x is proportional to the reproductive value at that age.
 
-## Mutation accumulation
+## Accumulation of late-acting mutations
 
-This leads to mutation accumulation - deleterious mutations that affect late-life performance can drift to high frequencies because they face weak selection. Over evolutionary time, populations accumulate a burden of age-specific harmful mutations.
+The consequence is a growing burden of deleterious mutations that affect late-life performance: they drift to high frequencies because they face weak selection. Over evolutionary time, populations accumulate a load of age-specific harmful mutations.
 
 The theory predicts that aging should start around the age when most individuals would naturally die in the wild, which roughly matches observed patterns across species.
 

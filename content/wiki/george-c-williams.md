@@ -15,7 +15,7 @@ George Christopher Williams (1926–2010) was an American evolutionary biologist
 
 ## Antagonistic pleiotropy
 
-In his 1957 paper "Pleiotropy, Natural Selection, and the Evolution of Senescence", Williams proposed that genes with beneficial effects early in life and harmful effects late in life can be strongly favored by selection, because the [force of selection](selection-shadow-theory.md) declines with age. This theory made aging an evolved side effect of early-life adaptation rather than a program of wear, and it remains one of the two pillars of the evolutionary theory of aging alongside Medawar's mutation accumulation.
+In his 1957 paper "Pleiotropy, Natural Selection, and the Evolution of Senescence", Williams proposed that genes with beneficial effects early in life and harmful effects late in life can be strongly favored by selection, because the [force of selection](selection-shadow-theory.md) declines with age. This theory made aging an evolved side effect of early-life adaptation rather than a program of wear, and it remains one of the two pillars of the evolutionary theory of aging alongside Medawar's [selection shadow](selection-shadow-theory.md) theory.
 
 ## Adaptation and Natural Selection
 

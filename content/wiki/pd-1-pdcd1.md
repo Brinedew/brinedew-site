@@ -18,7 +18,7 @@ PD-1 is expressed on activated T cells, B cells, and myeloid cells. Its ligands 
 
 ## In cancer
 
-Tumors up-regulate PD-L1 as an immune-evasion mechanism, one of the escape routes [immunoediting](immune-surveillance.md) selects for. PD-1-blocking antibodies (pembrolizumab, nivolumab) block this interaction and restore T-cell killing; they produce durable responses in melanoma, lung, kidney, and bladder cancers. The 2018 Nobel Prize recognized this work (Tasuku Honjo, with James Allison for [CTLA-4](ctla-4.md)). Response rates are highest in tumors with high PD-L1 expression, high mutation load, and pre-existing T-cell infiltration; resistance arrives through antigen loss, [TGF-β](tgfb1-tgfb1-p01137.md)-rich stroma, and [IL-8](il-8-cxcl8.md)-recruited suppressor cells.
+Tumors up-regulate PD-L1 as an immune-evasion mechanism, one of the escape routes of [immunoediting](immunoediting.md). PD-1-blocking antibodies (pembrolizumab, nivolumab) block this interaction and restore T-cell killing; they produce durable responses in melanoma, lung, kidney, and bladder cancers. The 2018 Nobel Prize recognized this work (Tasuku Honjo, with James Allison for [CTLA-4](ctla-4.md)). Response rates are highest in tumors with high PD-L1 expression, high mutation load, and pre-existing T-cell infiltration; resistance arrives through antigen loss, [TGF-β](tgfb1-tgfb1-p01137.md)-rich stroma, and [IL-8](il-8-cxcl8.md)-recruited suppressor cells.
 
 ## Notes
 
