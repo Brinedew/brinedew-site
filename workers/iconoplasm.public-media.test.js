@@ -1659,7 +1659,8 @@ test("versioned public gene detail is immutable, extension-only, and published-a
       buildEnv({ KV: buildPublishedCardReadKv() }),
       {},
     )
-  assert.equal(retiredResponse.status, 404)
+  assert.equal(retiredResponse.status, 410)
+  assert.equal((await retiredResponse.clone().json()).code, "card_snapshot_retired")
   assert.equal(retiredResponse.headers.get("cache-control"), "no-store")
 })
 
@@ -1707,7 +1708,8 @@ test("versioned portrait locator is an immutable projection of the same publishe
       buildEnv({ KV: buildPublishedCardReadKv({ portraitSha }) }),
       {},
     )
-  assert.equal(retiredResponse.status, 404)
+  assert.equal(retiredResponse.status, 410)
+  assert.equal((await retiredResponse.clone().json()).code, "card_snapshot_retired")
   assert.equal(retiredResponse.headers.get("cache-control"), "no-store")
 })
 

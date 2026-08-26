@@ -512,7 +512,10 @@
   let tooltip = null
   let authToast = null
   let activeSymbol = null
+  let activeTooltipAnchor = null
   let activeDetailAbortController = null
+  let activeCardSnapshotRevision = ""
+  let cardSnapshotRefreshPromise = null
   let hideTimer = null
   const discoveryTimerBySymbol = new Map()
   const discoveryCooldownUntilBySymbol = new Map()
@@ -707,6 +710,7 @@
     onError: (err) => {
       console.error("[Iconoplasm] extension gene detail batch fetch error:", err)
     },
+    onRevisionUnavailable: ({ revision }) => refreshRetiredCardSnapshot(revision),
   })
   const geneDetailCache = geneDetailStore.cache // symbol -> gene payload or null
   const portraitLocatorStore = IconoContentDetailCache.createGeneDetailStore({
@@ -746,8 +750,41 @@
     onError: (err) => {
       console.error("[Iconoplasm] extension portrait locator fetch error:", err)
     },
+    onRevisionUnavailable: ({ revision }) => refreshRetiredCardSnapshot(revision),
   })
   const portraitLocatorCache = portraitLocatorStore.cache
+
+  function adoptCardSnapshotRevision(rawRevision, { retryVisible = false } = {}) {
+    const revision = String(rawRevision || "").trim()
+    if (!revision || revision === activeCardSnapshotRevision) return false
+    activeCardSnapshotRevision = revision
+    geneDetailStore.setRevision(revision)
+    portraitLocatorStore.setRevision(revision)
+    if (retryVisible && activeTooltipAnchor?.isConnected && activeSymbol) {
+      activateTooltipForAnchor(activeTooltipAnchor)
+    }
+    return true
+  }
+
+  function refreshRetiredCardSnapshot(rawRevision) {
+    const retiredRevision = String(rawRevision || "").trim()
+    if (!retiredRevision) return Promise.resolve(null)
+    if (cardSnapshotRefreshPromise) return cardSnapshotRefreshPromise
+    cardSnapshotRefreshPromise = chrome.runtime
+      .sendMessage({ type: "REFRESH_CARD_SNAPSHOT", retiredRevision })
+      .then((result) => {
+        adoptCardSnapshotRevision(result?.cardSnapshotVersion, { retryVisible: true })
+        return result
+      })
+      .catch((err) => {
+        console.error("[Iconoplasm] card snapshot refresh failed:", err)
+        return null
+      })
+      .finally(() => {
+        cardSnapshotRefreshPromise = null
+      })
+    return cardSnapshotRefreshPromise
+  }
 
   function buildGenePageUrl(symbol) {
     return "https://iconoplasm.brinedew.bio/gene/" + encodeURIComponent(symbol)
@@ -1463,8 +1500,7 @@
     // The worker returns the schema-5 catalog projection and contract state.
     if (payload && payload.genes && typeof payload.genes === "object") {
       geneMap = payload.genes
-      geneDetailStore.setRevision(payload.cardSnapshotVersion)
-      portraitLocatorStore.setRevision(payload.cardSnapshotVersion)
+      adoptCardSnapshotRevision(payload.cardSnapshotVersion)
     } else {
       geneMap = payload
     }
@@ -1645,6 +1681,11 @@
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return
+    if (changes.iconoplasm_card_snapshot_version?.newValue) {
+      adoptCardSnapshotRevision(changes.iconoplasm_card_snapshot_version.newValue, {
+        retryVisible: true,
+      })
+    }
     if (changes[HIGHLIGHT_MODE_KEY]) {
       highlightMode = highlightRuntime.setMode(changes[HIGHLIGHT_MODE_KEY].newValue)
       refreshHighlightStyles()
@@ -2044,6 +2085,7 @@
       clearPendingDiscovery(activeSymbol)
     }
     activeSymbol = symbol
+    activeTooltipAnchor = target
     readingSession.prioritize(symbol)
     if (activeDetailAbortController) activeDetailAbortController.abort()
     activeDetailAbortController =
@@ -2245,6 +2287,7 @@
     // tooltip closes. The next hover selectively promotes its symbol, then
     // cancels only the remaining obsolete detail requests.
     activeSymbol = null
+    activeTooltipAnchor = null
     activeGeneSummary = null
     tooltipNavigationArmedAt = 0
     portraitLoadToken += 1

@@ -32,7 +32,7 @@ const passwordInput = document.getElementById("pdf-password")
 const passwordMessageElement = document.getElementById("password-message")
 const downloadButton = document.getElementById("download")
 const nativeViewerButton = document.getElementById("native-viewer")
-const openFileActionLabel = document.getElementById("reader-open-file-action")
+const openFileActionButton = document.getElementById("reader-open-file-action")
 const zoomValue = document.getElementById("zoom-value")
 const filenameElement = document.getElementById("reader-filename")
 const pageNumberElement = document.getElementById("page-number")
@@ -88,6 +88,11 @@ function localFileName(ownership = activeOwnership) {
   } catch (_error) {
     return "document.pdf"
   }
+}
+
+function requestedLocalFilePath(ownership = activeOwnership) {
+  if (!isFirefoxLocalFileOwnership(ownership)) return ""
+  return core.localFileSystemPath(ownership.streamInfo.originalUrl, navigator.platform)
 }
 
 function preserveLocalFileOwnership() {
@@ -177,14 +182,14 @@ function setReaderEmpty() {
   nativeViewerButton.hidden = true
   if (requestedFileName) {
     filenameElement.textContent = requestedFileName
-    openFileActionLabel.textContent = "Choose this PDF"
+    openFileActionButton.textContent = "Choose this PDF"
     setStatus(
-      `Firefox protects local files. Choose ${requestedFileName} once to open it privately in Iconoplasm.`,
+      `Firefox protects local files. Choose ${requestedFileName} once. Its exact path will be copied; in the picker press Ctrl+V, then Open.`,
       "empty",
       { actions: true },
     )
   } else {
-    openFileActionLabel.textContent = "Open another PDF"
+    openFileActionButton.textContent = "Open another PDF"
     setStatus("Open or drop a PDF", "empty", { actions: true })
   }
 }
@@ -638,6 +643,27 @@ async function loadPdf(bytes, name = "document.pdf") {
 passwordForm.addEventListener("submit", (event) => {
   event.preventDefault()
   pendingPasswordUpdate?.(passwordInput.value)
+})
+
+openFileActionButton.addEventListener("click", () => {
+  const localPath = requestedLocalFilePath()
+  if (localPath) {
+    let copyAttempt
+    try {
+      copyAttempt = navigator.clipboard.writeText(localPath)
+    } catch (error) {
+      copyAttempt = Promise.reject(error)
+    }
+    setStatus("Exact path copied. In Firefox's picker, press Ctrl+V, then Open.", "empty", {
+      actions: true,
+    })
+    void copyAttempt.catch(() => {
+      setStatus(`Copy this path into Firefox's picker, then choose Open: ${localPath}`, "warning", {
+        actions: true,
+      })
+    })
+  }
+  fileInput.click()
 })
 
 fileInput.addEventListener("change", async () => {

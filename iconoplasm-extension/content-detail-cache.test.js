@@ -499,6 +499,47 @@ test("foreground immutable detail promotes and reuses matching speculative work"
   assert.equal(result.get("TP53")?.full_name, "promoted")
 })
 
+test("revision changes abort retired requests and prevent late responses from poisoning the cache", async () => {
+  const createGeneDetailStore = loadFactory()
+  const oldResponse = deferred()
+  const newResponse = deferred()
+  const calls = []
+  const store = createGeneDetailStore({
+    windowRef: globalThis,
+    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
+    fetchImpl: async (url, init) => {
+      calls.push({ url, signal: init.signal })
+      return url.includes("card-v1") ? oldResponse.promise : newResponse.promise
+    },
+  })
+  store.setRevision("card-v1")
+  const retiredRequest = store.fetchBatch(["RIPOR1"], { priority: "foreground" })
+  await new Promise((resolve) => setImmediate(resolve))
+
+  store.setRevision("card-v2")
+  assert.equal(calls[0].signal.aborted, true)
+  const currentRequest = store.fetchBatch(["RIPOR1"], { priority: "foreground" })
+  await new Promise((resolve) => setImmediate(resolve))
+  newResponse.resolve(
+    response({
+      snapshot_version: "card-v2",
+      gene: { symbol: "RIPOR1", full_name: "current card" },
+      missing: [],
+    }),
+  )
+  oldResponse.resolve(
+    response({
+      snapshot_version: "card-v1",
+      gene: { symbol: "RIPOR1", full_name: "retired card" },
+      missing: [],
+    }),
+  )
+
+  await Promise.all([retiredRequest, currentRequest])
+  assert.equal(calls.length, 2)
+  assert.equal(store.get("RIPOR1")?.full_name, "current card")
+})
+
 test("promoted immutable detail follows foreground cancellation", async () => {
   const createGeneDetailStore = loadFactory()
   const calls = []
@@ -579,7 +620,10 @@ test("foreground hover does not retry an immutable missing record", async () => 
     detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
     fetchImpl: async () => {
       calls += 1
-      return response({ snapshot_version: "card-v1", gene: null, missing: ["PRL"] }, 404)
+      return response(
+        { snapshot_version: "card-v1", gene: null, missing: ["PRL"] },
+        { ok: false, status: 404 },
+      )
     },
   })
   store.setRevision("card-v1")
@@ -588,6 +632,41 @@ test("foreground hover does not retry an immutable missing record", async () => 
 
   assert.equal(calls, 1)
   assert.equal(result.get("PRL"), null)
+})
+
+test("a retired immutable revision requests manifest recovery without negative-caching the gene", async () => {
+  const createGeneDetailStore = loadFactory()
+  const unavailable = []
+  let calls = 0
+  const store = createGeneDetailStore({
+    windowRef: globalThis,
+    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
+    onRevisionUnavailable: (event) => unavailable.push(event),
+    fetchImpl: async () => {
+      calls += 1
+      return response(
+        {
+          error: "Published card snapshot is retired",
+          code: "card_snapshot_retired",
+        },
+        { ok: false, status: 410 },
+      )
+    },
+  })
+  store.setRevision("card-v1")
+
+  const result = await store.fetchBatch(["RIPOR1"], { priority: "foreground" })
+
+  assert.equal(calls, 2, "foreground recovery may retry but must not cache a false absence")
+  assert.equal(result.get("RIPOR1"), null)
+  assert.equal(store.cache.has("RIPOR1"), false)
+  assert.deepEqual(
+    unavailable.map(({ revision, status }) => ({ revision, status })),
+    [
+      { revision: "card-v1", status: 410 },
+      { revision: "card-v1", status: 410 },
+    ],
+  )
 })
 
 test("the shared immutable store validates and persists portrait locator projections", async () => {

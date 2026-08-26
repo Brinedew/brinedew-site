@@ -70,6 +70,14 @@ previous publication barriers are addressable, matching the documented
 one-release compatibility window; retired or invented snapshot versions fail
 closed without becoming immutable negative cache entries.
 
+The scanner index remains stale-while-revalidate so highlights never wait on
+the network, and healthy tabs make no extra manifest request. A retired detail
+or locator URL returns `410` with `code: "card_snapshot_retired"`. That explicit
+signal starts one deduplicated, cache-busted read of the existing small manifest.
+The changed `card_snapshot_version` aborts retired detail/locator requests,
+clears both revision-keyed caches, and retries the currently visible hover
+without requiring a reload. An unchanged scanner artifact is not downloaded.
+
 Foreground detail and locator reads have independent four-second deadlines and propagate cancellation
 from the current hover through the content bridge to the service-worker fetch.
 One tab-scoped reading session receives recognized anchors from both HTML and PDF.
