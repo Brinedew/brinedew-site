@@ -31,6 +31,7 @@ import {
 } from "./iconoplasm-recognition-policy-validation.js"
 
 export const ICONOPLASM_RECOGNITION_PAIR_KV_PREFIX = "iconoplasm:recognition-policy-pair:v1:"
+export const ICONOPLASM_RECOGNITION_PAIR_CURRENT_KV_KEY = `${ICONOPLASM_RECOGNITION_PAIR_KV_PREFIX}current`
 export const ICONOPLASM_RECOGNITION_PAIR_KV_RETENTION = 100
 export const ICONOPLASM_RECOGNITION_PAIR_MAX_BYTES = 64 * 1024
 
@@ -227,7 +228,86 @@ async function parsePair(raw, revisions) {
   })
 }
 
+function pairPointerRaw(pair) {
+  return JSON.stringify({
+    schema_version: PAIR_SCHEMA_VERSION,
+    alias_revision: pair.alias_revision,
+    blocklist_revision: pair.blocklist_revision,
+    pair_key: iconoplasmRecognitionPairKvKey(pair.alias_revision, pair.blocklist_revision),
+  })
+}
+
+function parsePairPointer(raw) {
+  const value = typeof raw === "string" ? safeJsonParse(raw) : raw
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const aliasRevision = strictPositiveRevision(value.alias_revision)
+  const blocklistRevision = strictPositiveRevision(value.blocklist_revision)
+  if (
+    value.schema_version !== PAIR_SCHEMA_VERSION ||
+    !aliasRevision ||
+    !blocklistRevision ||
+    value.pair_key !== iconoplasmRecognitionPairKvKey(aliasRevision, blocklistRevision)
+  ) {
+    return null
+  }
+  return Object.freeze({
+    aliasRevision,
+    blocklistRevision,
+    pairKey: value.pair_key,
+  })
+}
+
+async function readPointedPair(kv) {
+  const rawPointer = await kv.get(ICONOPLASM_RECOGNITION_PAIR_CURRENT_KV_KEY)
+  if (rawPointer == null) return null
+  const pointer = parsePairPointer(rawPointer)
+  if (!pointer) {
+    throw policyError(
+      "recognition_pair_pointer_invalid",
+      "Current recognition pair pointer is malformed",
+      503,
+    )
+  }
+  const pair = await parsePair(await kv.get(pointer.pairKey), {
+    aliasRevision: pointer.aliasRevision,
+    blocklistRevision: pointer.blocklistRevision,
+  })
+  if (!pair) {
+    throw policyError(
+      "recognition_pair_pointer_target_unavailable",
+      "Current recognition pair pointer does not resolve to a valid visible projection",
+      503,
+    )
+  }
+  return pair
+}
+
+async function publishCurrentPairPointer(kv, pair) {
+  const current = parsePairPointer(await kv.get(ICONOPLASM_RECOGNITION_PAIR_CURRENT_KV_KEY))
+  if (
+    current &&
+    (current.aliasRevision > pair.alias_revision ||
+      current.blocklistRevision > pair.blocklist_revision)
+  ) {
+    return { changed: false, reason: "newer_pointer_visible" }
+  }
+  const raw = pairPointerRaw(pair)
+  if (
+    current?.aliasRevision === pair.alias_revision &&
+    current?.blocklistRevision === pair.blocklist_revision
+  ) {
+    return { changed: false, reason: "already_current" }
+  }
+  await kv.put(ICONOPLASM_RECOGNITION_PAIR_CURRENT_KV_KEY, raw)
+  return { changed: true, reason: "published" }
+}
+
 async function readNewestValidPair(kv) {
+  const pointed = await readPointedPair(kv)
+  if (pointed) return pointed
+  // One-time migration path for namespaces published before the current-pointer
+  // contract. Normal public reads must use two bounded get() operations and
+  // never spend the Free plan's 1,000-list/day allowance.
   const { entries: keys, sawAny } = await listPairKeys(kv)
   if (!sawAny) return null
   for (const entry of keys.slice(0, ICONOPLASM_RECOGNITION_PAIR_KV_RETENTION)) {
@@ -406,6 +486,7 @@ export async function publishIconoplasmRecognitionPolicyPair(
       503,
     )
   }
+  const pointer = await publishCurrentPairPointer(kv, visible)
   const cached = coherentPublicCache.get(kv)
   const cachedValue = monotonicPair(cached?.value || null, visible)
   coherentPublicCache.set(kv, {
@@ -416,6 +497,7 @@ export async function publishIconoplasmRecognitionPolicyPair(
     ok: true,
     changed: existing == null,
     pair: visible,
+    pointer,
     cleanup: cleanup ? await cleanupPairKeysBestEffort(kv, key) : { ok: true, skipped: true },
   }
 }
@@ -526,21 +608,14 @@ export async function reconcileIconoplasmRecognitionPolicies(
     )
   }
   if (exactPair) {
-    const cleanupResults = cleanup
-      ? await Promise.all([
-          cleanupIconoplasmPublicationAliasProjectionHistory(env.KV, {
-            protectedRevision: validatedAliases.revision,
-          }),
-          cleanupIconoplasmExtensionBlocklistProjectionHistory(env.KV, {
-            protectedRevision: validatedBlocklist.revision,
-          }),
-          cleanupPairKeysBestEffort(env.KV, exactPair.key),
-        ])
-      : [
-          { ok: true, skipped: true },
-          { ok: true, skipped: true },
-          { ok: true, skipped: true },
-        ]
+    const pointer = await publishCurrentPairPointer(env.KV, exactPair.pair)
+    // No immutable history was created in this pass, so repeating three KV
+    // list() cleanups on every scheduled reconciliation is pure quota burn.
+    const cleanupResults = [
+      { ok: true, skipped: true, reason: "no_new_publication" },
+      { ok: true, skipped: true, reason: "no_new_publication" },
+      { ok: true, skipped: true, reason: "no_new_publication" },
+    ]
     const value = { ok: true, changed: false, skipped: true, reason: "already_published" }
     return {
       extension_blocklist: {
@@ -553,7 +628,7 @@ export async function reconcileIconoplasmRecognitionPolicies(
       },
       pair: {
         status: "fulfilled",
-        value: { ...value, pair: exactPair.pair, cleanup: cleanupResults[2] },
+        value: { ...value, pair: exactPair.pair, pointer, cleanup: cleanupResults[2] },
       },
       passes: Object.freeze({
         blocklist_first: { status: "fulfilled", value },
