@@ -7,7 +7,9 @@ title: Tumor Suppressor Theory of Aging
 ---
 # Tumor Suppressor Theory of Aging
 
-The tumor suppressor theory of aging proposes that cellular mechanisms evolved to prevent cancer contribute directly to aging processes through tissue damage and stem cell depletion.
+The tumor suppression theory of aging, proposed by Alexander Wolf (2021), holds that most aging phenotypes are tumor-suppressive mechanisms: senescence, apoptosis, and differentiation-induced arrest evolved as defenses against malignant transformation, and their accumulation over a lifetime causes tissue dysfunction.
+
+Wolf's version centers somatic mutation as the proximal cause: the relevant consequence of mutation is oncogenic transformation and clonal expansion, and the defenses against that transformation - not mutation's functional impairment of cells - are what age the organism. On this account obesity and caloric restriction accelerate and decelerate aging through their effect on cell proliferation, the process during which most mutations arise, and the conservation of Peto's paradox across species reflects mutation as a hard limit on mammalian longevity.
 
 ## Mechanism
 
@@ -26,11 +28,19 @@ In young organisms, this system maintains tissue health and prevents cancer. Wit
 
 Recent research from 2025 shows that [p53 enhances DNA repair and suppresses inflammation in senescent cells](https://www.nature.com/articles/s41467-025-57229-3), suggesting the system is more nuanced than originally thought.
 
+## Relationship to antagonistic pleiotropy
+
+The trade-off is often described as a classic example of [antagonistic pleiotropy](antagonistic-pleiotropy-theory.md) - genes beneficial early but harmful later. That framing is contested. Antagonistic pleiotropy implies sign-flipping: a trait selected for early-life benefit whose late-life costs would disappear if the trait were deleted late. Deleting tumor-suppressing senescence programs in late life would be catastrophic, because the precancerous cell load by then is high - no matter how severe the suppression costs get, cancer protection is worth paying for, so the sign never flips.
+
+The better model: evolution selected an age-invariant policy - a hair-trigger tumor-suppressor lockdown, useful to the young, who face the same mutation pressure - and the policy's costs ramp over time because the input it acts on, the somatic cheater cell load, rises with age. Evolution programmed the lockdown for the young; the time dependence of aging is a consequence of running that time-independent policy on a rising input.
+
+## The two-attractor extension
+
+A further refinement developed on this site: the DNA damage response does not merely arrest moderately damaged cells - it deepens their damage. p21 activation drives mitochondrial ROS production, which damages DNA further, creating a feedback loop that pushes a stressed cell into one of two attractors: essentially undamaged, or too heavily damaged to support a competitive cancer. The intermediate zone - enough damage for genomic instability, enough function for selfish growth - is exactly where a dangerous tumor would come from, and the senescence program exists to eliminate it. On this reading senescence resembles an endogenous irradiated state: costly to the tissue, and designed so that escape by mitosis ends in mitotic catastrophe. See [[Why does DNA Damage Response damage DNA]] for the mechanism and evidence.
+
 ## Why evolution allows this
 
-This trade-off reflects evolutionary optimization for reproductive success rather than longevity. Tumor suppressor mechanisms that prevent cancer during reproductive years are strongly selected for, regardless of post-reproductive consequences.
-
-This is a classic example of [antagonistic pleiotropy](antagonistic-pleiotropy-theory.md) - genes that have beneficial effects early in life but harmful effects later.
+Tumor suppressor mechanisms that prevent cancer during reproductive years are strongly selected for, regardless of post-reproductive consequences. Organisms with weaker tumor suppression died of cancer before reproducing, even when their other maintenance systems were superior - which is the [defensive degeneration](defensive-degeneration-theory.md) claim: aging mechanisms are actively maintained because the alternative is worse for reproductive success.
 
 ## Evidence from recent research
 
@@ -63,7 +73,7 @@ This theory connects directly to several other aging mechanisms:
 - [[Clonal governance]] - the broader evolutionary framework for why multicellular bodies suppress defection
 - [[the-price-of-not-being-cancer-v3|The Price of Not Being Cancer]] - the long-form essay exploring this trade-off
 
-The tumor suppressor theory doesn't explain all of aging, but it provides a framework for understanding why organisms that are so good at preventing cancer still age and die.
+The tumor suppression theory doesn't explain all of aging, but it provides a framework for understanding why organisms that are so good at preventing cancer still age and die.
 
 ---
 
