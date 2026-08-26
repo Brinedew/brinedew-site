@@ -18,7 +18,7 @@ The organism's countermeasures are mechanisms that make defection unprofitable o
 
 1. **Sequestering the germline.** Heritable material passes only through a dedicated lineage, so somatic mutations die with the body and selection among somatic cell lineages has no long-term payoff ([Weismann barrier](weismann-barrier.md)).
 2. **Checkpoint control.** Cells need permission from multiple independent systems to divide, so a single mutation rarely suffices ([p53](p53-tp53.md), [RB](rb-rb1.md)).
-3. **The death pact.** Cells carry self-destruction programs ([apoptosis](apaf1.md)) that kill a lineage member whose behavior threatens the body.
+3. **The death pact.** Cells carry self-destruction programs ([apoptosis](apoptosis.md)) that kill a lineage member whose behavior threatens the body.
 4. **Limited replicative lifespan.** [Telomere](telomeres.md) shortening and [senescence](cellular-senescence.md) cap how long a rogue lineage can keep dividing.
 5. **[Immune surveillance](immune-surveillance.md).** Cytotoxic cells audit surface markers and destroy lineages that deviate.
 
