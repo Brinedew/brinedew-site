@@ -11,7 +11,7 @@ globalThis.IconoplasmCatalogContract = Object.freeze({
     revision: 1,
   }),
   extension: Object.freeze({
-    version: "0.4.15",
-    minimumSupportedVersion: "0.4.14",
+    version: "0.5.0",
+    minimumSupportedVersion: "0.4.15",
   }),
 })
