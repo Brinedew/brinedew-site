@@ -10,7 +10,7 @@ import {
   removeDiagramItem,
   renderDiagramSvg,
   updateDiagramItem,
-} from "./diagram-document.js?v=20260826-direct-connectors-2"
+} from "./diagram-document.js?v=20260826-direct-connectors-3"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
 // document, and both obtain characters through the bounded canonical resolver.
@@ -31,6 +31,7 @@ let openStudioRoute = null
 let dragContext = null
 let connectionContext = null
 let suppressCanvasClickUntil = 0
+let suppressCanvasClickPoint = null
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -469,6 +470,7 @@ function finishConnection(event) {
   const { sourceId, targetId } = connectionContext
   cancelConnection()
   suppressCanvasClickUntil = performance.now() + 450
+  suppressCanvasClickPoint = { x: event.clientX, y: event.clientY }
   if (!targetId) {
     renderWorkspace()
     setStatus("Drop the connector on another portrait.", "error")
@@ -488,6 +490,26 @@ function finishConnection(event) {
     renderWorkspace()
     setStatus(error.message, "error")
   }
+}
+
+function shouldSuppressCanvasClick(event, dropPoint, now, deadline) {
+  if (!dropPoint || now >= deadline) return false
+  const distance = Math.hypot(event.clientX - dropPoint.x, event.clientY - dropPoint.y)
+  return distance <= 12
+}
+
+function isSuppressedCanvasClick(event) {
+  if (
+    !shouldSuppressCanvasClick(
+      event,
+      suppressCanvasClickPoint,
+      performance.now(),
+      suppressCanvasClickUntil,
+    )
+  )
+    return false
+  suppressCanvasClickPoint = null
+  return true
 }
 
 function beginNodeDrag(event, nodeId) {
@@ -582,7 +604,7 @@ async function handleStudioClick(event) {
   if (selection) {
     const isCanvasSelection =
       selection.hasAttribute("data-diagram-node") || selection.hasAttribute("data-diagram-edge")
-    if (isCanvasSelection && performance.now() < suppressCanvasClickUntil) return
+    if (isCanvasSelection && isSuppressedCanvasClick(event)) return
     selectItem(
       selection.getAttribute("data-studio-select") ||
         selection.getAttribute("data-diagram-node") ||
@@ -1045,5 +1067,6 @@ export const __testing = {
   editFromTool,
   parseSymbols,
   resolvedAssetMap,
+  shouldSuppressCanvasClick,
   toolSchemas,
 }

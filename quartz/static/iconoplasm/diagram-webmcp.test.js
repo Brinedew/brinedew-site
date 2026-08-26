@@ -58,7 +58,23 @@ test("the app and Studio load the same versioned diagram module graph", () => {
 
   assert.ok(appVersion)
   assert.equal(documentVersion, appVersion)
-  assert.match(studioSource, /isCanvasSelection && performance\.now\(\) < suppressCanvasClickUntil/)
+  assert.match(studioSource, /isCanvasSelection && isSuppressedCanvasClick\(event\)/)
+})
+
+test("post-drag suppression applies only at the synthetic drop click", () => {
+  const dropPoint = { x: 100, y: 200 }
+  assert.equal(
+    __testing.shouldSuppressCanvasClick({ clientX: 100, clientY: 200 }, dropPoint, 10, 20),
+    true,
+  )
+  assert.equal(
+    __testing.shouldSuppressCanvasClick({ clientX: 140, clientY: 200 }, dropPoint, 10, 20),
+    false,
+  )
+  assert.equal(
+    __testing.shouldSuppressCanvasClick({ clientX: 100, clientY: 200 }, dropPoint, 20, 20),
+    false,
+  )
 })
 
 test("hidden connector ports cannot intercept canvas clicks", () => {
