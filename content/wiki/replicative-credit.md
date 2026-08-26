@@ -1,5 +1,5 @@
 ---
-title: "Replicative Credit"
+title: Replicative Credit
 date: 2025-08-10
 draft: true
 ---
@@ -16,7 +16,7 @@ Copying a genome is expensive to do accurately. A lineage that maintains proofre
 
 The investment logic is tied to the [force of selection](selection-shadow-theory.md). Early in life, an organism's descendants inherit the full value of high-fidelity replication, and mechanisms that keep the mutation supply low protect both the body and the germline. Late in life, the returns flow to lineages that are evolutionarily dead ends: a somatic lineage that stays accurate for forty years gains the organism little once reproduction is complete, and a lineage that defects gains at the body's expense. Maintenance systems that were investments early become costs late, and the theory of [antagonistic pleiotropy](antagonistic-pleiotropy-theory.md) predicts their early-life benefits and late-life costs will be balanced by selection.
 
-Cancer sits at the failure point. A cell that loses a fidelity system — a mismatch repair gene, a checkpoint — enters a regime where divisions generate diversity instead of copies, which is the raw material of tumor progression ([clonal evolution](peter-nowell.md)).
+Cancer enters when a cell loses a fidelity system — a mismatch repair gene, a checkpoint — and moves into a regime where divisions generate diversity instead of copies, which is the raw material of tumor progression ([clonal evolution](peter-nowell.md)).
 
 ## Related
 
