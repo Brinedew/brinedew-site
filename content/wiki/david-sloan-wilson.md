@@ -11,7 +11,7 @@ aliases:
 
 ![David Sloan Wilson](../Attachments/david-sloan-wilson.png)
 
-David Sloan Wilson (born 1949) is an American evolutionary biologist, professor emeritus at Binghamton University, known as the leading modern advocate of multilevel selection theory.
+David Sloan Wilson (born 1949) is an American evolutionary biologist, professor emeritus at Binghamton University, known as the leading modern advocate of [multilevel selection](multilevel-selection.md) theory.
 
 ## Multilevel selection
 

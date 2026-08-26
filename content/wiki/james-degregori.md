@@ -11,7 +11,7 @@ aliases:
 
 ![James DeGregori](../Attachments/james-degregori.jpg)
 
-James DeGregori is an American cancer biologist, professor of biochemistry and molecular genetics at the University of Colorado Anschutz Medical Campus, known for the theory of adaptive oncogenesis.
+James DeGregori is an American cancer biologist, professor of biochemistry and molecular genetics at the University of Colorado Anschutz Medical Campus, known for the theory of [adaptive oncogenesis](adaptive-oncogenesis.md).
 
 ## Adaptive oncogenesis
 

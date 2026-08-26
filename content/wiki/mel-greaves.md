@@ -11,7 +11,7 @@ aliases:
 
 ![Mel Greaves](../Attachments/mel-greaves.jpg)
 
-Melvyn Greaves (born 1941) is a British cancer biologist and professor at the Institute of Cancer Research, London, known for applying evolutionary and ecological theory to cancer, and in particular to childhood leukemia.
+Melvyn Greaves (born 1941) is a British cancer biologist and professor at the Institute of Cancer Research, London, known for applying [evolutionary and ecological theory](cancer-ecology.md) to cancer, and in particular to childhood leukemia.
 
 ## Cancer as an evolutionary process
 

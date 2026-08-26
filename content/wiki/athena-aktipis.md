@@ -11,7 +11,7 @@ aliases:
 
 ![Athena Aktipis](../Attachments/athena-aktipis.jpg)
 
-Athena Aktipis is an American evolutionary psychologist and cooperation researcher, professor of psychology at Arizona State University, known for framing cancer as a problem of cellular cheating within multicellular cooperation and for her work on human generosity.
+Athena Aktipis is an American evolutionary psychologist and cooperation researcher, professor of psychology at Arizona State University, known for framing cancer as a problem of cellular cheating within [multicellular cooperation](multicellular-cooperation.md) and for her work on human generosity.
 
 ## Cancer as cheating
 
