@@ -12,11 +12,11 @@ aliases:
 
 ![W. D. Hamilton](../Attachments/wd-hamilton.jpg)
 
-William Donald Hamilton (1936–2000) was a British evolutionary biologist, known for founding the theory of inclusive fitness (kin selection) and for formalizing the evolutionary theory of aging. He held positions at Imperial College London and later at the University of Oxford.
+William Donald Hamilton (1936–2000) was a British evolutionary biologist, known for developing the theory of inclusive fitness (kin selection) and for formalizing the evolutionary theory of aging. He held positions at Imperial College London and later at the University of Oxford.
 
 ## Inclusive fitness
 
-In his 1964 papers "The Genetical Evolution of Social Behaviour", Hamilton showed that a gene promoting a social behavior can spread if the benefit to recipients, weighted by their genetic relatedness to the actor, exceeds the cost to the actor. This inequality — Hamilton's rule — gave kin selection its mathematical foundation and became the central explanatory tool for altruism, eusociality and the evolution of cooperation.
+In his 1964 papers "The Genetical Evolution of Social Behaviour", Hamilton showed that a gene promoting a social behavior can spread if the benefit to recipients, weighted by their genetic relatedness to the actor, exceeds the cost to the actor. This inequality — Hamilton's rule — is the mathematical formulation of kin selection and the standard starting point for explaining altruism, eusociality and the evolution of cooperation.
 
 ## The force of selection and aging
 
