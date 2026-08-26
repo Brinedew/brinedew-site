@@ -866,14 +866,14 @@ test("an overlay contract retry does not turn into a scanner artifact download",
   }
 })
 
-test("a stale valid catalog returns immediately while one refresh runs in the background", async () => {
+test("a fresh valid scanner returns immediately without an unnecessary manifest request", async () => {
   const originalFetch = globalThis.fetch
   storageState.clear()
   storageState.set("iconoplasm_genes", { TP53: { n: "tumor protein p53" } })
   storageState.set("iconoplasm_hash", "catalog-stale")
   rememberScannerState("scanner-stale")
   storageState.set("iconoplasm_gene_count", 1)
-  storageState.set("iconoplasm_last_fetch", "2020-01-01T00:00:00.000Z")
+  storageState.set("iconoplasm_last_fetch", new Date().toISOString())
   storageState.set("iconoplasm_schema_version", 5)
   storageState.set("iconoplasm_contract_revision", 1)
   storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
@@ -881,12 +881,9 @@ test("a stale valid catalog returns immediately while one refresh runs in the ba
   storageState.set("iconoplasm_alias_overlay_applied", {})
 
   let manifestFetches = 0
-  let releaseManifest
   globalThis.fetch = () => {
     manifestFetches += 1
-    return new Promise((resolve) => {
-      releaseManifest = resolve
-    })
+    throw new Error("fresh cache must not fetch")
   }
 
   try {
@@ -898,10 +895,57 @@ test("a stale valid catalog returns immediately while one refresh runs in the ba
 
     assert.deepEqual(first.genes.TP53, { n: "tumor protein p53" })
     assert.deepEqual(second.genes.TP53, { n: "tumor protein p53" })
-    assert.equal(manifestFetches, 1, "concurrent tabs should share the same refresh")
+    assert.equal(manifestFetches, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+    storageState.clear()
+  }
+})
 
-    releaseManifest(new Response("unavailable", { status: 503 }))
-    await new Promise((resolve) => setTimeout(resolve, 0))
+test("a retired card snapshot cache-busts only the manifest and adopts the new revision", async () => {
+  const originalFetch = globalThis.fetch
+  storageState.clear()
+  storageState.set("iconoplasm_genes", { RIPOR1: { n: "RHO family interacting regulator 1" } })
+  storageState.set("iconoplasm_hash", "catalog-current")
+  rememberScannerState("scanner-current")
+  storageState.set("iconoplasm_gene_count", 1)
+  storageState.set("iconoplasm_last_fetch", new Date().toISOString())
+  storageState.set("iconoplasm_schema_version", 5)
+  storageState.set("iconoplasm_contract_revision", 1)
+  storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
+  storageState.set("iconoplasm_card_snapshot_version", "ccv1-retired")
+  storageState.set("iconoplasm_alias_overlay_version", "v1-test")
+  storageState.set("iconoplasm_alias_overlay_applied", {})
+
+  let manifestUrl = ""
+  let artifactFetches = 0
+  globalThis.fetch = async (input) => {
+    const url = String(input || "")
+    if (url.includes("/api/public/v1/catalog/manifest")) {
+      manifestUrl = url
+      return Response.json({
+        build_version: "catalog-current",
+        card_snapshot_version: "ccv1-current",
+        catalog_hash: "catalog-current",
+        artifact_url: "https://example.test/catalog.json",
+        portrait_delivery: portraitDeliveryPolicy,
+        scanner_artifact: scannerManifest("scanner-current"),
+        artifact_schema_version: 5,
+        artifact_contract_revision: 1,
+        min_extension_version: "1.0.0",
+        gene_count: 1,
+        publication_aliases: requestedOverlay,
+      })
+    }
+    artifactFetches += 1
+    throw new Error(`Retired-card recovery must not fetch the scanner artifact: ${url}`)
+  }
+
+  try {
+    await hooks.refreshGeneData({ manifestCacheBustRevision: "ccv1-retired" })
+    assert.equal(new URL(manifestUrl).searchParams.get("retired_snapshot"), "ccv1-retired")
+    assert.equal(storageState.get("iconoplasm_card_snapshot_version"), "ccv1-current")
+    assert.equal(artifactFetches, 0)
   } finally {
     globalThis.fetch = originalFetch
     storageState.clear()

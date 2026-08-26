@@ -245,8 +245,15 @@ Extension hover detail is immutable within a published card snapshot:
 - installed extensions keep a detail cache capped at both 512 entries and
   4 MiB plus a compact locator cache capped at 1,024 entries and 768 KiB; both
   are keyed by the same card snapshot version;
-- a version change invalidates the cache, and an older-started response from a
-  different snapshot cannot displace a newer-started response already adopted;
+- the cached scanner index paints immediately without a per-tab manifest request.
+  A retired immutable detail or locator URL returns `410` with the explicit
+  `card_snapshot_retired` code; only that signal starts one deduplicated,
+  cache-busted read of the existing small manifest. An unchanged scanner version
+  never downloads the scanner artifact again;
+- the recovered card-snapshot version aborts retired requests, invalidates both
+  caches, and retries any currently visible hover without requiring a reload or
+  re-hover. An older response from a different snapshot cannot populate or roll
+  back the newly adopted revision;
 - only an explicit `missing` result is negative-cached, and transient failures
   remain retryable;
 - foreground GETs do not wait for whole-cache hydration, carry independent

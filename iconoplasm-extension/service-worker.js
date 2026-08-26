@@ -225,6 +225,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     ensureFreshGeneData().then((data) => sendResponse(data))
     return true
   }
+  if (msg.type === "REFRESH_CARD_SNAPSHOT") {
+    const retiredRevision = String(msg.retiredRevision || "").trim()
+    if (!/^[A-Za-z0-9._:-]+$/.test(retiredRevision)) {
+      sendResponse({ ok: false, error: "invalid_retired_revision" })
+      return false
+    }
+    refreshGeneData({ manifestCacheBustRevision: retiredRevision }).then(async (result) => {
+      const stored = await getStoredGeneData()
+      sendResponse({
+        ok: Boolean(result),
+        cardSnapshotVersion: stored.cardSnapshotVersion || null,
+      })
+    })
+    return true
+  }
   if (msg.type === "ICONOPLASM_API_FETCH") {
     fetchIconoplasmApi(msg, sender).then((result) => sendResponse(result))
     return true
@@ -640,24 +655,34 @@ async function ensureFreshGeneData() {
   return getStoredGeneData()
 }
 
-async function refreshGeneData({ forceArtifactRefresh = false } = {}) {
+async function refreshGeneData({
+  forceArtifactRefresh = false,
+  manifestCacheBustRevision = "",
+} = {}) {
   const wantsForcedArtifact = Boolean(forceArtifactRefresh)
+  const cacheBustRevision = String(manifestCacheBustRevision || "").trim()
   if (geneDataRefreshState) {
     const activeRefresh = geneDataRefreshState
     const result = await activeRefresh.promise
-    if (!wantsForcedArtifact || activeRefresh.forceArtifactRefresh) return result
-    return refreshGeneData({ forceArtifactRefresh: true })
+    const stored = cacheBustRevision ? await getStoredGeneData() : null
+    const stillRetired = stored?.cardSnapshotVersion === cacheBustRevision
+    if ((!wantsForcedArtifact || activeRefresh.forceArtifactRefresh) && !stillRetired) return result
+    return refreshGeneData({
+      forceArtifactRefresh: wantsForcedArtifact && !activeRefresh.forceArtifactRefresh,
+      manifestCacheBustRevision: stillRetired ? cacheBustRevision : "",
+    })
   }
 
   const refreshState = {
     forceArtifactRefresh: wantsForcedArtifact,
     promise: null,
   }
-  refreshState.promise = fetchGeneData({ forceArtifactRefresh: wantsForcedArtifact }).finally(
-    () => {
-      if (geneDataRefreshState === refreshState) geneDataRefreshState = null
-    },
-  )
+  refreshState.promise = fetchGeneData({
+    forceArtifactRefresh: wantsForcedArtifact,
+    manifestCacheBustRevision: cacheBustRevision,
+  }).finally(() => {
+    if (geneDataRefreshState === refreshState) geneDataRefreshState = null
+  })
   geneDataRefreshState = refreshState
   return refreshState.promise
 }
@@ -931,9 +956,12 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
-async function fetchManifest() {
+async function fetchManifest(cacheBustRevision = "") {
+  const manifestUrl = new URL(API_CATALOG_MANIFEST)
+  const normalizedCacheBust = String(cacheBustRevision || "").trim()
+  if (normalizedCacheBust) manifestUrl.searchParams.set("retired_snapshot", normalizedCacheBust)
   const manifestResp = await fetchWithTimeout(
-    API_CATALOG_MANIFEST,
+    manifestUrl.toString(),
     {
       headers: {
         "X-Iconoplasm-Extension-Version": currentExtensionVersion(),
@@ -1073,9 +1101,12 @@ async function fetchPublishedScannerArtifact(manifest) {
   return { error: "", artifact: { ...artifact, genes } }
 }
 
-async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
+async function fetchGeneData({
+  forceArtifactRefresh = false,
+  manifestCacheBustRevision = "",
+} = {}) {
   try {
-    const manifest = await fetchManifest()
+    const manifest = await fetchManifest(manifestCacheBustRevision)
     if (!manifest) {
       console.error("[Iconoplasm] Manifest fetch failed")
       return null

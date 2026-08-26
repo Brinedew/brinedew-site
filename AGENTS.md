@@ -207,7 +207,13 @@ during initialization in both the host page and persistent card frame. Both rout
 project immutable published card artifacts and
 persist a bounded cache keyed by the card snapshot version; they must not
 compose public hover cards from D1 or turn transient
-failures into durable “missing gene” records. The admin-managed shared extension
+failures into durable "missing gene" records. The scanner cache remains
+stale-while-revalidate. A retired immutable card endpoint returns the explicit
+`card_snapshot_retired` protocol signal; only then may the extension make one
+deduplicated, cache-busted request to the existing small manifest. A changed
+snapshot atomically aborts retired requests, invalidates both projection caches,
+and retries the visible hover without a reload. This recovery must never download
+an unchanged scanner artifact or create a polling endpoint or timer. The admin-managed shared extension
 text blocklist and curated publication aliases are one recognition policy: D1
 owns each desired state, while individual immutable KV revisions are bounded
 publication inputs and history. Anonymous manifest, search, and resolver paths

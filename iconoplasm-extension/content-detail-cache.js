@@ -36,6 +36,8 @@
     const onResolvedBatch =
       typeof options.onResolvedBatch === "function" ? options.onResolvedBatch : () => {}
     const onError = typeof options.onError === "function" ? options.onError : () => {}
+    const onRevisionUnavailable =
+      typeof options.onRevisionUnavailable === "function" ? options.onRevisionUnavailable : () => {}
     const storageApi = options.storageApi || null
     const storageKey = String(options.storageKey || "iconoplasm_published_gene_detail_cache_v1")
     const persistentLimit = Math.max(1, Number(options.persistentLimit || 512))
@@ -62,11 +64,22 @@
     let persistencePromise = null
     let nextRequestSerial = 0
     let latestAdoptedResponseSerial = 0
+    let revisionGeneration = 0
 
     function setRevision(rawRevision) {
       const revision = normalizeRevision(rawRevision)
       if (!revision || revision === activeRevision) return activeRevision
+      revisionGeneration += 1
+      for (const state of requestStateBySymbol.values()) {
+        state.detachCallerAbort?.()
+        state.controller?.abort()
+      }
+      requestStateBySymbol.clear()
+      promiseCache.clear()
       cache.clear()
+      persistentHydrationPromise = null
+      persistenceDirty = false
+      persistenceRevisionHint = ""
       activeRevision = revision
       return activeRevision
     }
@@ -145,11 +158,13 @@
       persistentHydrationPromise = (async () => {
         const revision = await resolveRevision()
         if (!revision) return
+        const generation = revisionGeneration
         if (activeRevision && revision !== activeRevision) {
           cache.clear()
         }
         activeRevision = revision
         const stored = await storageApi.get([storageKey])
+        if (generation !== revisionGeneration || activeRevision !== revision) return
         const payload = stored && stored[storageKey]
         if (
           !payload ||
@@ -274,10 +289,19 @@
           method: "GET",
           ...(linked.controller ? { signal: linked.controller.signal } : {}),
         })
-        if (!resp.ok && Number(resp.status || 0) !== 404) {
-          throw new Error("HTTP " + String(resp.status || 0))
-        }
         const payload = (await resp.json()) || {}
+        const status = Number(resp.status || 0)
+        const revisionUnavailable =
+          status === 410 ||
+          (status === 404 &&
+            !payload.snapshot_version &&
+            /snapshot.+not active|snapshot.+retired/i.test(String(payload.error || "")))
+        if (revisionUnavailable) {
+          onRevisionUnavailable({ revision, status, payload })
+          return null
+        }
+        if (!resp.ok && status !== 404) throw new Error("HTTP " + String(status))
+        if (activeRevision !== revision) return null
         const responseRevision = normalizeRevision(payload.snapshot_version)
         if (responseRevision && responseRevision !== revision) {
           throw new Error("Published detail revision mismatch")
