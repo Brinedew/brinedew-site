@@ -46,6 +46,37 @@ test("diagram documents use a 3:2 page and retain canonical blot identity", () =
   assert.match(svg, /ICONOPLASM · CC0 GENE CHARACTERS/)
 })
 
+test("interactive diagrams expose four direct-manipulation ports per gene", () => {
+  let document = createDiagramDocument({ title: "connector ergonomics" })
+  document = addGeneNode(document, { symbol: "TP53", asset: asset("TP53") }).document
+  document = addGeneNode(document, { symbol: "MDM2", asset: asset("MDM2") }).document
+
+  const svg = renderDiagramSvg(document, { interactive: true })
+  assert.equal((svg.match(/data-diagram-port=/g) || []).length, 8)
+  assert.equal((svg.match(/data-diagram-connect-from=/g) || []).length, 8)
+  assert.match(svg, /data-diagram-port="north"/)
+  assert.match(svg, /data-diagram-port="east"/)
+  assert.match(svg, /data-diagram-port="south"/)
+  assert.match(svg, /data-diagram-port="west"/)
+})
+
+test("interactive relationships have a screen-stable selection target", () => {
+  let document = createDiagramDocument({ title: "selectable edge" })
+  document = addGeneNode(document, { symbol: "TP53", asset: asset("TP53") }).document
+  document = addGeneNode(document, { symbol: "MDM2", asset: asset("MDM2") }).document
+  document = connectGeneNodes(document, {
+    from: document.nodes[0].id,
+    to: document.nodes[1].id,
+    kind: "activation",
+  }).document
+
+  const interactiveSvg = renderDiagramSvg(document, { interactive: true })
+  const exportedSvg = renderDiagramSvg(document)
+  assert.match(interactiveSvg, /class="icono-diagram-edge-hit"/)
+  assert.match(interactiveSvg, /stroke-width="24" vector-effect="non-scaling-stroke"/)
+  assert.doesNotMatch(exportedSvg, /icono-diagram-edge-hit/)
+})
+
 test("duplicate gene symbols reuse the existing character", () => {
   const first = addGeneNode(createDiagramDocument(), { symbol: "EGFR", asset: asset("EGFR") })
   const second = addGeneNode(first.document, { symbol: "egfr", asset: asset("EGFR") })

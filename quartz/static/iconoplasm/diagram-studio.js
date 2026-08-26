@@ -29,6 +29,8 @@ let statusTone = ""
 let webMcpController = null
 let openStudioRoute = null
 let dragContext = null
+let connectionContext = null
+let suppressCanvasClickUntil = 0
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -252,13 +254,37 @@ function castListMarkup() {
 function inspectorMarkup() {
   const item = selectedItem()
   if (!item) {
-    return `<div class="icono-studio-inspector-summary"><label class="icono-studio-field">Diagram title<input type="text" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.titleLength}" value="${escapeHtml(currentDocument.title)}" data-studio-title /></label></div><div class="icono-studio-inspector-note"><strong>Select a character or connection.</strong><p>Drag characters on the figure. Select one to connect it to another gene.</p></div>`
+    return `<div class="icono-studio-inspector-summary"><label class="icono-studio-field">Diagram title<input type="text" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.titleLength}" value="${escapeHtml(currentDocument.title)}" data-studio-title /></label></div><div class="icono-studio-inspector-note"><strong>Draw directly on the figure.</strong><p>Move portraits by dragging them. Hover a portrait, then drag one of its four handles onto another portrait to connect them.</p></div>`
   }
   if (item.type === "gene") {
     const targets = currentDocument.nodes.filter((node) => node.id !== item.id)
-    return `<div class="icono-studio-inspector-summary"><div class="icono-studio-selection"><span>Selected gene</span><strong>${escapeHtml(item.symbol)}</strong></div><label class="icono-studio-field">Caption<input type="text" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.labelLength}" value="${escapeHtml(item.label)}" data-studio-node-label="${escapeHtml(item.id)}" /></label><button type="button" class="icono-studio-danger" data-studio-remove="${escapeHtml(item.id)}">Remove</button></div><div class="icono-studio-inspector-controls">${targets.length ? `<form data-studio-connect-form><input type="hidden" name="from" value="${escapeHtml(item.id)}"/><label class="icono-studio-field">Connect to<select name="to">${targets.map((node) => `<option value="${escapeHtml(node.id)}">${escapeHtml(node.symbol)}</option>`).join("")}</select></label><label class="icono-studio-field">Relationship<select name="kind"><option value="activation">Activates</option><option value="inhibition">Inhibits</option><option value="association">Associated with</option></select></label><label class="icono-studio-field">Label<input name="label" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.labelLength}" placeholder="optional"/></label><button type="submit" class="icono-studio-wide-action">Connect genes</button></form>` : '<p class="icono-studio-inspector-note">Add another gene to draw a relationship.</p>'}</div>`
+    return `<div class="icono-studio-inspector-summary"><div class="icono-studio-selection"><span>Selected gene</span><strong>${escapeHtml(item.symbol)}</strong></div><label class="icono-studio-field">Caption<input type="text" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.labelLength}" value="${escapeHtml(item.label)}" data-studio-node-label="${escapeHtml(item.id)}" /></label><button type="button" class="icono-studio-danger" data-studio-remove="${escapeHtml(item.id)}">Remove</button></div><div class="icono-studio-inspector-controls">${targets.length ? `<div class="icono-studio-inspector-note"><strong>Drag a handle to connect.</strong><p>The four red handles snap to another portrait. The new connection starts as activation; choose →, ⊣, or — on the canvas after drawing it.</p></div><details class="icono-studio-keyboard-connect"><summary>Keyboard connection controls</summary><form data-studio-connect-form><input type="hidden" name="from" value="${escapeHtml(item.id)}"/><label class="icono-studio-field">Connect to<select name="to">${targets.map((node) => `<option value="${escapeHtml(node.id)}">${escapeHtml(node.symbol)}</option>`).join("")}</select></label><label class="icono-studio-field">Relationship<select name="kind"><option value="activation">Activates</option><option value="inhibition">Inhibits</option><option value="association">Associated with</option></select></label><label class="icono-studio-field">Label<input name="label" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.labelLength}" placeholder="optional"/></label><button type="submit" class="icono-studio-wide-action">Connect genes</button></form></details>` : '<p class="icono-studio-inspector-note">Add another gene to draw a relationship.</p>'}</div>`
   }
-  return `<div class="icono-studio-inspector-summary"><div class="icono-studio-selection"><span>Selected relationship</span><strong>${escapeHtml(item.kind)}</strong></div><button type="button" class="icono-studio-danger" data-studio-remove="${escapeHtml(item.id)}">Remove</button></div><div class="icono-studio-inspector-controls"><label class="icono-studio-field">Label<input type="text" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.labelLength}" value="${escapeHtml(item.label)}" data-studio-edge-label="${escapeHtml(item.id)}" /></label><label class="icono-studio-field">Relationship<select data-studio-edge-kind="${escapeHtml(item.id)}"><option value="activation"${item.kind === "activation" ? " selected" : ""}>Activates</option><option value="inhibition"${item.kind === "inhibition" ? " selected" : ""}>Inhibits</option><option value="association"${item.kind === "association" ? " selected" : ""}>Associated with</option></select></label></div>`
+  return `<div class="icono-studio-inspector-summary"><div class="icono-studio-selection"><span>Selected relationship</span><strong>${escapeHtml(item.kind)}</strong></div><label class="icono-studio-field">Label<input type="text" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.labelLength}" value="${escapeHtml(item.label)}" data-studio-edge-label="${escapeHtml(item.id)}" /></label><button type="button" class="icono-studio-danger" data-studio-remove="${escapeHtml(item.id)}">Remove</button></div><div class="icono-studio-inspector-note"><strong>Relationship style is on the canvas.</strong><p>Use the nearby →, ⊣, and — controls so the visual result never leaves your attention.</p></div>`
+}
+
+function relationshipToolbarMarkup() {
+  const edge = currentDocument.edges.find((item) => item.id === selectedId)
+  if (!edge) return ""
+  const choices = [
+    ["activation", "→", "Activates"],
+    ["inhibition", "⊣", "Inhibits"],
+    ["association", "—", "Associates"],
+  ]
+  return `<div class="icono-studio-edge-toolbar" role="toolbar" aria-label="Relationship type"><span>Connection</span>${choices
+    .map(
+      ([kind, symbol, label]) =>
+        `<button type="button" class="${edge.kind === kind ? "is-selected" : ""}" data-studio-edge-kind-button="${kind}" aria-pressed="${edge.kind === kind}" title="${label}"><b aria-hidden="true">${symbol}</b>${label}</button>`,
+    )
+    .join("")}</div>`
+}
+
+function syncDiagramUiScale() {
+  const svg = mountedRoot && mountedRoot.querySelector("[data-studio-canvas-wrap] > svg")
+  if (!svg) return
+  const width = svg.getBoundingClientRect().width
+  if (width > 0)
+    svg.style.setProperty("--icono-diagram-ui-scale", String(currentDocument.width / width))
 }
 
 function renderWorkspace() {
@@ -269,7 +295,7 @@ function renderWorkspace() {
   const count = mountedRoot.querySelector("[data-studio-count]")
   if (canvas) {
     canvas.innerHTML = currentDocument.nodes.length
-      ? renderDiagramSvg(currentDocument, { interactive: true, selectedId })
+      ? `${renderDiagramSvg(currentDocument, { interactive: true, selectedId })}${relationshipToolbarMarkup()}`
       : `<div class="icono-studio-empty-canvas"><span aria-hidden="true">G → G</span><strong>Start with the cast.</strong><p>Add gene symbols on the left. Iconoplasm will place their canonical characters here.</p></div>`
   }
   if (list) list.innerHTML = castListMarkup()
@@ -280,6 +306,7 @@ function renderWorkspace() {
   const redoButton = mountedRoot.querySelector('[data-studio-action="redo"]')
   if (undoButton) undoButton.disabled = history.length === 0
   if (redoButton) redoButton.disabled = future.length === 0
+  syncDiagramUiScale()
   setStatus(statusText, statusTone)
 }
 
@@ -343,6 +370,124 @@ async function loadExample() {
     }).document
   }
   commitDocument(autoLayoutDiagram(example), { message: "Loaded an editable EGFR–MAPK example." })
+}
+
+function portPosition(node, side) {
+  if (side === "north") return { x: node.x + node.width / 2, y: node.y }
+  if (side === "south") return { x: node.x + node.width / 2, y: node.y + node.height }
+  if (side === "west") return { x: node.x, y: node.y + node.height / 2 }
+  return { x: node.x + node.width, y: node.y + node.height / 2 }
+}
+
+function diagramPoint(svg, clientX, clientY) {
+  const point = svg.createSVGPoint()
+  point.x = clientX
+  point.y = clientY
+  return point.matrixTransform(svg.getScreenCTM().inverse())
+}
+
+function clearConnectionListeners() {
+  window.removeEventListener("pointermove", updateConnection)
+  window.removeEventListener("pointerup", finishConnection)
+  window.removeEventListener("pointercancel", finishConnection)
+}
+
+function cancelConnection(message = "") {
+  clearConnectionListeners()
+  if (!connectionContext) return
+  connectionContext.preview.remove()
+  connectionContext.sourceElement.classList.remove("is-connecting-source")
+  if (connectionContext.targetElement)
+    connectionContext.targetElement.classList.remove("is-connection-target")
+  connectionContext = null
+  if (message && mountedRoot) {
+    renderWorkspace()
+    setStatus(message)
+  }
+}
+
+function beginConnection(event, port) {
+  if (event.button !== 0 || connectionContext) return
+  const sourceId = port.getAttribute("data-diagram-connect-from")
+  const side = port.getAttribute("data-diagram-port")
+  const source = currentDocument.nodes.find((node) => node.id === sourceId)
+  const sourceElement = port.closest("[data-diagram-node]")
+  const svg = port.closest("svg")
+  if (!source || !sourceElement || !svg) return
+
+  event.preventDefault()
+  event.stopPropagation()
+  selectedId = sourceId
+  const start = portPosition(source, side)
+  const end = diagramPoint(svg, event.clientX, event.clientY)
+  const preview = document.createElementNS("http://www.w3.org/2000/svg", "path")
+  preview.setAttribute("class", "icono-diagram-connection-preview")
+  preview.setAttribute("d", `M ${start.x} ${start.y} L ${end.x} ${end.y}`)
+  preview.setAttribute("marker-end", "url(#icono-arrow)")
+  svg.append(preview)
+  sourceElement.classList.add("is-connecting-source")
+  connectionContext = {
+    sourceId,
+    sourceElement,
+    targetElement: null,
+    targetId: "",
+    svg,
+    preview,
+    start,
+  }
+  window.addEventListener("pointermove", updateConnection)
+  window.addEventListener("pointerup", finishConnection)
+  window.addEventListener("pointercancel", finishConnection)
+  setStatus(`Connecting ${source.symbol}. Drop on another portrait; Esc cancels.`)
+}
+
+function updateConnection(event) {
+  if (!connectionContext) return
+  const hit = document.elementFromPoint(event.clientX, event.clientY)
+  const candidate = hit && hit.closest("[data-diagram-node]")
+  const target =
+    candidate && candidate.getAttribute("data-diagram-node") !== connectionContext.sourceId
+      ? candidate
+      : null
+  if (target !== connectionContext.targetElement) {
+    if (connectionContext.targetElement)
+      connectionContext.targetElement.classList.remove("is-connection-target")
+    if (target) target.classList.add("is-connection-target")
+    connectionContext.targetElement = target
+    connectionContext.targetId = target ? target.getAttribute("data-diagram-node") : ""
+  }
+  const end = diagramPoint(connectionContext.svg, event.clientX, event.clientY)
+  connectionContext.preview.setAttribute(
+    "d",
+    `M ${connectionContext.start.x} ${connectionContext.start.y} L ${end.x} ${end.y}`,
+  )
+}
+
+function finishConnection(event) {
+  if (!connectionContext) return
+  updateConnection(event)
+  const { sourceId, targetId } = connectionContext
+  cancelConnection()
+  suppressCanvasClickUntil = performance.now() + 450
+  if (!targetId) {
+    renderWorkspace()
+    setStatus("Drop the connector on another portrait.", "error")
+    return
+  }
+  try {
+    const outcome = connectGeneNodes(currentDocument, {
+      from: sourceId,
+      to: targetId,
+      kind: "activation",
+    })
+    selectedId = outcome.edge.id
+    commitDocument(outcome.document, {
+      message: "Connected the portraits. Choose →, ⊣, or — on the canvas.",
+    })
+  } catch (error) {
+    renderWorkspace()
+    setStatus(error.message, "error")
+  }
 }
 
 function beginNodeDrag(event, nodeId) {
@@ -409,6 +554,19 @@ function finishNodeDrag() {
 }
 
 async function handleStudioClick(event) {
+  const edgeKindButton = event.target.closest("[data-studio-edge-kind-button]")
+  if (edgeKindButton) {
+    const edge = currentDocument.edges.find((item) => item.id === selectedId)
+    if (edge) {
+      commitDocument(
+        updateDiagramItem(currentDocument, edge.id, {
+          kind: edgeKindButton.getAttribute("data-studio-edge-kind-button"),
+        }),
+        { message: "Updated the relationship." },
+      )
+    }
+    return
+  }
   const addSymbol = event.target.closest("[data-studio-add-symbol]")
   if (addSymbol) {
     try {
@@ -422,6 +580,7 @@ async function handleStudioClick(event) {
     "[data-studio-select], [data-diagram-node], [data-diagram-edge]",
   )
   if (selection) {
+    if (performance.now() < suppressCanvasClickUntil) return
     selectItem(
       selection.getAttribute("data-studio-select") ||
         selection.getAttribute("data-diagram-node") ||
@@ -517,11 +676,21 @@ function handleStudioChange(event) {
 }
 
 function handleStudioPointerDown(event) {
+  const port = event.target.closest("[data-diagram-port]")
+  if (port) {
+    beginConnection(event, port)
+    return
+  }
   const node = event.target.closest("[data-diagram-node]")
   if (node) beginNodeDrag(event, node.getAttribute("data-diagram-node"))
 }
 
 function handleStudioKeyDown(event) {
+  if (event.key === "Escape" && connectionContext) {
+    event.preventDefault()
+    cancelConnection("Connection cancelled.")
+    return
+  }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
     event.preventDefault()
     if (event.shiftKey) redo()
@@ -550,6 +719,7 @@ export function renderDiagramStudio(root) {
   mountedRoot.addEventListener("change", handleStudioChange)
   mountedRoot.addEventListener("pointerdown", handleStudioPointerDown)
   mountedRoot.addEventListener("keydown", handleStudioKeyDown)
+  window.addEventListener("resize", syncDiagramUiScale)
   renderWorkspace()
   setStatus("Diagram changes stay in this browser until you export them.")
 }
@@ -561,6 +731,9 @@ export function unmountDiagramStudio() {
   mountedRoot.removeEventListener("change", handleStudioChange)
   mountedRoot.removeEventListener("pointerdown", handleStudioPointerDown)
   mountedRoot.removeEventListener("keydown", handleStudioKeyDown)
+  window.removeEventListener("resize", syncDiagramUiScale)
+  cancelConnection()
+  finishNodeDrag()
   mountedRoot = null
 }
 
