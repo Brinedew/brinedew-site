@@ -57,7 +57,12 @@ while the published source portrait advances through one explicit card-artifact
 publication. That exact card immediately determines the expected blot
 fingerprint and Bunny key; the later workstation upload does not republish KV.
 Publishing for every individual vote can still burn the daily KV budget, so the
-dirty-shard release remains the canonical barrier. Do not poll site detail
+dirty-shard release remains the canonical barrier. A vote updates coordinator and
+D1 authoring state; only a leader change marks the owning shard dirty. The bounded
+publisher coalesces those changes behind its 15-minute window, rewrites at most six
+dirty shards, and flips one `KV_GALLERY_VERSION` barrier. The extension portrait
+locator is then projected on read from that same card payload. It does not create a
+new artifact, KV write, or per-vote republish. Do not poll site detail
 waiting for an unpublished SHA, and do not run canonical promotion from request
 `waitUntil`.
 

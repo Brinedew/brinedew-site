@@ -113,6 +113,7 @@
   const ICONOPLASM_API_BASE = IconoCardShared.resolveApiBase("https://iconoplasm.brinedew.bio")
   const ICONOPLASM_GENE_BATCH_URL = ICONOPLASM_API_BASE + "/api/public/v1/genes/batch"
   const ICONOPLASM_GENE_DETAIL_PREFIX = ICONOPLASM_API_BASE + "/api/public/v1/card-snapshots/"
+  const ICONOPLASM_PORTRAIT_LOCATOR_PREFIX = ICONOPLASM_API_BASE + "/api/public/v1/card-snapshots/"
   const ICONOPLASM_DISCOVERY_ENCOUNTER_URL =
     ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/encounter"
   const ICONOPLASM_DISCOVERY_STATE_URL = ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/me"
@@ -418,16 +419,14 @@
     }
   }
 
-  function renderSimpleTooltipBody(body, summaryGene, geneDetail, loading) {
+  function renderSimpleTooltipBody(body, summaryGene, geneDetail, loading, portraitLocator = null) {
     const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
     const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
     const symbol = String((detail && detail.symbol) || summary.symbol || activeSymbol || "")
       .trim()
       .toUpperCase()
     const fullName = String((detail && detail.full_name) || summary.n || symbol).trim()
-    const assetSha = String(((detail || {}).portrait || {}).asset_sha256 || "")
-      .trim()
-      .toLowerCase()
+    const assetSha = portraitAssetShaFromRecord(coherentPortraitRecord(detail, portraitLocator))
 
     body.replaceChildren()
 
@@ -558,6 +557,7 @@
   const inFlightLitArchivalPrewarmSources = new Set()
   const readyLitArchivalPrewarmSources = new Set()
   const warnedMissingTraitOrigins = new Set()
+  const warnedPortraitProjectionMismatches = new Set()
   // Fence: keep background detail batches small. Large batches made the hovered gene wait behind
   // bulk prewarm work, which is why "simple text loads seconds later" showed up in practice.
   const TOOLTIP_VIEWPORT_MARGIN_PX = 8
@@ -637,6 +637,40 @@
     ).trim()
   }
 
+  function portraitAssetShaFromRecord(record) {
+    return String(((record || {}).portrait || {}).asset_sha256 || "")
+      .trim()
+      .toLowerCase()
+  }
+
+  function coherentPortraitRecord(geneDetail, portraitLocator) {
+    const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
+    const locator = portraitLocator && typeof portraitLocator === "object" ? portraitLocator : null
+    const detailSha = portraitAssetShaFromRecord(detail)
+    const locatorSha = portraitAssetShaFromRecord(locator)
+    if (detailSha && locatorSha && detailSha !== locatorSha) {
+      const symbol = String(detail?.symbol || locator?.symbol || activeSymbol || "")
+        .trim()
+        .toUpperCase()
+      const mismatchKey = `${symbol}:${detailSha}:${locatorSha}`
+      if (!warnedPortraitProjectionMismatches.has(mismatchKey)) {
+        warnedPortraitProjectionMismatches.add(mismatchKey)
+        console.error(
+          "[Iconoplasm] published portrait locator/detail mismatch; portrait suppressed",
+          {
+            symbol,
+            detailAssetSha256: detailSha,
+            locatorAssetSha256: locatorSha,
+          },
+        )
+      }
+      return null
+    }
+    if (detailSha) return detail
+    if (locatorSha) return locator
+    return null
+  }
+
   const portraitCache = IconoContentPortraitCache.createPortraitCache({
     windowRef: window,
     chromeApi: chrome,
@@ -675,6 +709,45 @@
     },
   })
   const geneDetailCache = geneDetailStore.cache // symbol -> gene payload or null
+  const portraitLocatorStore = IconoContentDetailCache.createGeneDetailStore({
+    windowRef: window,
+    fetchImpl: extensionApiFetch,
+    detailUrlForSymbol: (symbol, revision) =>
+      `${ICONOPLASM_PORTRAIT_LOCATOR_PREFIX}${encodeURIComponent(revision)}/portraits/${encodeURIComponent(symbol)}`,
+    recordFromPayload: (payload) =>
+      payload?.portrait_locator && typeof payload.portrait_locator === "object"
+        ? payload.portrait_locator
+        : null,
+    validateRecord: (record, symbol, revision) =>
+      String(record?.symbol || "").toUpperCase() === symbol &&
+      String(record?.snapshot_version || "") === revision &&
+      /^[a-f0-9]{64}$/.test(portraitAssetShaFromRecord(record)) &&
+      Boolean(portraitUrlFromGeneDetail(record)),
+    warmBatchSize: 6,
+    visibleLimit: 64,
+    delayMs: 20,
+    deferTask: deferGeneDetailWarm,
+    deferPersistenceTask: deferGeneDetailPersistence,
+    // ARCHITECTURE FENCE [IPD-008] + [IPD-011]: this tiny cache is keyed by the
+    // exact card snapshot and stores only a projection of that card. It is not a
+    // browser-owned portrait pointer or an independently versioned canon.
+    storageApi: chrome.storage.local,
+    storageKey: "iconoplasm_published_portrait_locator_cache_v1",
+    persistentLimit: 1024,
+    persistentByteLimit: 768 * 1024,
+    requestTimeoutMs: 4000,
+    getRevision: async () => {
+      const stored = await chrome.storage.local.get([
+        "iconoplasm_card_snapshot_version",
+        "iconoplasm_hash",
+      ])
+      return stored.iconoplasm_card_snapshot_version || stored.iconoplasm_hash || ""
+    },
+    onError: (err) => {
+      console.error("[Iconoplasm] extension portrait locator fetch error:", err)
+    },
+  })
+  const portraitLocatorCache = portraitLocatorStore.cache
 
   function buildGenePageUrl(symbol) {
     return "https://iconoplasm.brinedew.bio/gene/" + encodeURIComponent(symbol)
@@ -1177,18 +1250,37 @@
     return geneDetailStore.fetchBatch(symbols, options)
   }
 
+  async function fetchPortraitLocatorsBatch(symbols, options = {}) {
+    return portraitLocatorStore.fetchBatch(symbols, options)
+  }
+
   async function prepareReadingSessionSymbol(symbol) {
-    const details = await fetchGeneDetailsBatch([symbol], {
+    const locatorPromise = fetchPortraitLocatorsBatch([symbol], {
       priority: "background",
       awaitPersistentCache: false,
+    }).then(async (locators) => {
+      const locator = locators.get(symbol) || null
+      const portraitUrl = portraitUrlFromGeneDetail(locator)
+      if (!portraitUrl) return { locator, portraitSrc: "" }
+      const portraitSrc = await getUsablePortraitSrc(portraitUrl)
+      if (portraitSrc) onPortraitWarmSource(portraitSrc)
+      return { locator, portraitSrc }
     })
-    const detail = details.get(symbol) || null
-    if (!detail) return null
-    const portraitUrl = portraitUrlFromGeneDetail(detail)
-    if (!portraitUrl) return { detail, portraitSrc: "" }
-    const portraitSrc = await getUsablePortraitSrc(portraitUrl)
+    const detailPromise = fetchGeneDetailsBatch([symbol], {
+      priority: "background",
+      awaitPersistentCache: false,
+    }).then((details) => details.get(symbol) || null)
+    const [locatorResult, detail] = await Promise.all([locatorPromise, detailPromise])
+    if (!detail && !locatorResult.locator) return null
+    if (!coherentPortraitRecord(detail, locatorResult.locator) && detail && locatorResult.locator) {
+      return { detail, locator: locatorResult.locator, portraitSrc: "" }
+    }
+    const portraitUrl = portraitUrlFromGeneDetail(detail || locatorResult.locator)
+    if (!portraitUrl) return { detail, locator: locatorResult.locator, portraitSrc: "" }
+    const portraitSrc =
+      locatorResult.portraitSrc || (await getUsablePortraitSrc(portraitUrl).catch(() => ""))
     if (portraitSrc) onPortraitWarmSource(portraitSrc)
-    return { detail, portraitSrc }
+    return { detail, locator: locatorResult.locator, portraitSrc }
   }
 
   const readingSession = IconoReadingSession.createReadingSession({
@@ -1281,18 +1373,24 @@
     }
   }
 
-  function loadSimpleTooltipPortrait({ symbol, summaryGene, geneDetail, portraitRefs }) {
+  function loadSimpleTooltipPortrait({
+    symbol,
+    summaryGene,
+    geneDetail,
+    portraitLocator,
+    portraitRefs,
+  }) {
     if (!portraitRefs || !portraitRefs.portraitImg) return Promise.resolve()
-    // The scanner index deliberately has no portrait metadata. Both tooltip renderers wait for
-    // the same bounded published-detail cache instead of copying cold portrait references into
-    // every tab.
+    // The scanner stays portrait-free. The locator is an independently fetched
+    // projection of the same exact card snapshot, so rich-detail stalls cannot
+    // suppress an otherwise available portrait.
     return loadTooltipPortrait({
       symbol,
       portrait: portraitRefs.portrait,
       portraitImg: portraitRefs.portraitImg,
       portraitFallback: portraitRefs.portraitFallback,
       portraitStatus: portraitRefs.portraitStatus,
-      portraitSrc: buildTooltipFramePortraitSrc(geneDetail),
+      portraitSrc: buildTooltipFramePortraitSrc(geneDetail, portraitLocator),
     })
   }
 
@@ -1366,6 +1464,7 @@
     if (payload && payload.genes && typeof payload.genes === "object") {
       geneMap = payload.genes
       geneDetailStore.setRevision(payload.cardSnapshotVersion)
+      portraitLocatorStore.setRevision(payload.cardSnapshotVersion)
     } else {
       geneMap = payload
     }
@@ -1378,6 +1477,7 @@
     // Foreground GETs do not await this multi-megabyte read; background warming
     // and persistence may reuse it when it arrives.
     void geneDetailStore.hydratePersistentCache()
+    void portraitLocatorStore.hydratePersistentCache()
 
     // Fence: candidate generation now lives in a dedicated matcher module. Keep content.js acting
     // as the page adapter that applies matches, not the place where lexical rules accrete forever.
@@ -1565,7 +1665,12 @@
       if (usesTooltipFrameRenderer()) ensureLitArchivalFrame()
       else parkLitArchivalFrame()
       if (activeSymbol) {
-        renderTooltipBody(activeGeneSummary, geneDetailCache.get(activeSymbol) || null, true)
+        renderTooltipBody(
+          activeGeneSummary,
+          geneDetailCache.get(activeSymbol) || null,
+          true,
+          portraitLocatorCache.get(activeSymbol) || null,
+        )
       }
     }
     if (
@@ -1579,27 +1684,35 @@
     }
   })
 
-  function archivalTooltipGeneModel(summaryGene, geneDetail) {
+  function archivalTooltipGeneModel(summaryGene, geneDetail, portraitLocator = null) {
     const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
     const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
-    return (
+    const geneModel = Object.assign(
+      {},
       detail || {
         symbol: summary.symbol || activeSymbol || "",
         full_name: summary.n || summary.symbol || activeSymbol || "",
         color: summary.c || PLACEHOLDER_COLOR,
         essence: {},
-      }
+      },
     )
+    const portraitRecord = coherentPortraitRecord(detail, portraitLocator)
+    if (portraitRecord?.portrait) geneModel.portrait = portraitRecord.portrait
+    else delete geneModel.portrait
+    return geneModel
   }
 
-  function buildLitTooltipCardModel(summaryGene, geneDetail, portraitSrcOverride) {
-    const geneModel = archivalTooltipGeneModel(summaryGene, geneDetail)
+  function buildLitTooltipCardModel(
+    summaryGene,
+    geneDetail,
+    portraitSrcOverride,
+    portraitLocator = null,
+  ) {
+    const geneModel = archivalTooltipGeneModel(summaryGene, geneDetail, portraitLocator)
     const symbol = String(geneModel.symbol || activeSymbol || "")
       .trim()
       .toUpperCase()
-    const assetSha = String(((geneDetail || {}).portrait || {}).asset_sha256 || "")
-      .trim()
-      .toLowerCase()
+    const assetSha = portraitAssetShaFromRecord(geneModel)
     // The raw canonical URL is an adapter input, never a renderer source. Passing it through
     // the model lets the frame start a second successful image pipeline while the adapter is
     // already fetching the same portrait.
@@ -1622,15 +1735,18 @@
     })
   }
 
-  function buildTooltipFramePortraitSrc(geneDetail) {
-    const detailPortrait = geneDetail && geneDetail.portrait ? geneDetail.portrait : null
-    return portraitUrlFromGeneDetail({ portrait: detailPortrait })
+  function buildTooltipFramePortraitSrc(geneDetail, portraitLocator = null) {
+    return portraitUrlFromGeneDetail(coherentPortraitRecord(geneDetail, portraitLocator))
   }
 
-  function buildTooltipFramePortraitDimensions(summaryGene, geneDetail) {
-    const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
-    if (detail && IconoCardShared && typeof IconoCardShared.portraitDimensions === "function") {
-      const dims = IconoCardShared.portraitDimensions(detail)
+  function buildTooltipFramePortraitDimensions(summaryGene, geneDetail, portraitLocator = null) {
+    const portraitRecord = coherentPortraitRecord(geneDetail, portraitLocator)
+    if (
+      portraitRecord &&
+      IconoCardShared &&
+      typeof IconoCardShared.portraitDimensions === "function"
+    ) {
+      const dims = IconoCardShared.portraitDimensions(portraitRecord)
       if (dims && Number(dims.width) > 1 && Number(dims.height) > 1) return dims
     }
     // Fence: image-only and Lit archival cards need a stable first-paint aspect ratio. Falling
@@ -1639,9 +1755,9 @@
     return DEFAULT_PORTRAIT_DIMENSIONS
   }
 
-  function buildLitArchivalTooltipVoteConfig(geneDetail) {
+  function buildLitArchivalTooltipVoteConfig(geneDetail, portraitLocator = null) {
     return IconoContentVoteBridge.buildTooltipVoteConfig({
-      geneDetail,
+      geneDetail: coherentPortraitRecord(geneDetail, portraitLocator) ? geneDetail : null,
       activeSymbol,
       apiBaseUrl: ICONOPLASM_API_BASE,
       imageOnly: isImageOnlyCardVariant(),
@@ -1730,7 +1846,7 @@
     flushLitArchivalPrewarmSources()
   }
 
-  function mountLitArchivalTooltipFrame(body, summaryGene, geneDetail) {
+  function mountLitArchivalTooltipFrame(body, summaryGene, geneDetail, portraitLocator = null) {
     const iframe = ensureLitArchivalFrame()
     if (!iframe) return
     const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
@@ -1738,7 +1854,7 @@
     const symbol = String((detail && detail.symbol) || summary.symbol || activeSymbol || "")
       .trim()
       .toUpperCase()
-    const directPortraitSrc = buildTooltipFramePortraitSrc(geneDetail)
+    const directPortraitSrc = buildTooltipFramePortraitSrc(geneDetail, portraitLocator)
     const warmedPortraitSrc = directPortraitSrc ? portraitCache.getCachedSrc(directPortraitSrc) : ""
     const portraitState = IconoContentTooltip.createAdapterOwnedPortraitState(
       directPortraitSrc,
@@ -1753,11 +1869,20 @@
       pageUrl: symbol ? buildGenePageUrl(symbol) : "",
       navigationArmedAt: tooltipNavigationArmedAt,
       loading: !detail,
-      gene: detail || archivalTooltipGeneModel(summaryGene, null),
+      gene: archivalTooltipGeneModel(summaryGene, detail, portraitLocator),
       portraitSrc: portraitState.frameSrc,
-      portraitDimensions: buildTooltipFramePortraitDimensions(summaryGene, geneDetail),
-      model: buildLitTooltipCardModel(summaryGene, geneDetail, portraitState.frameSrc),
-      vote: buildLitArchivalTooltipVoteConfig(geneDetail),
+      portraitDimensions: buildTooltipFramePortraitDimensions(
+        summaryGene,
+        geneDetail,
+        portraitLocator,
+      ),
+      model: buildLitTooltipCardModel(
+        summaryGene,
+        geneDetail,
+        portraitState.frameSrc,
+        portraitLocator,
+      ),
+      vote: buildLitArchivalTooltipVoteConfig(geneDetail, portraitLocator),
     }
     if (portraitState.frameSrc) {
       // Fence: neighboring hovers only feel instant if the rendering iframe has already decoded
@@ -1774,7 +1899,12 @@
         (usablePortraitSrc) => {
           const hydratedPayload = Object.assign({}, payload, {
             portraitSrc: usablePortraitSrc,
-            model: buildLitTooltipCardModel(summaryGene, geneDetail, usablePortraitSrc),
+            model: buildLitTooltipCardModel(
+              summaryGene,
+              geneDetail,
+              usablePortraitSrc,
+              portraitLocator,
+            ),
           })
           prewarmLitArchivalFramePortraitSrcs([usablePortraitSrc])
           return hydratedPayload
@@ -1783,7 +1913,7 @@
       .catch(() => null)
   }
 
-  function renderTooltipBody(summaryGene, geneDetail, loading) {
+  function renderTooltipBody(summaryGene, geneDetail, loading, portraitLocator = null) {
     if (!tooltip) return
     const body = tooltip.querySelector(".iconoplasm-tooltip-body")
     if (!body) return
@@ -1796,13 +1926,19 @@
         ).toUpperCase() + " hover card",
       )
       if (!iframe) return
-      mountLitArchivalTooltipFrame(body, summaryGene, geneDetail)
+      mountLitArchivalTooltipFrame(body, summaryGene, geneDetail, portraitLocator)
       return
     }
     parkLitArchivalFrame()
     const surfaces = ensureTooltipSurfaces()
     if (!surfaces) return
-    renderSimpleTooltipBody(surfaces.simpleSurface, summaryGene, geneDetail, loading)
+    renderSimpleTooltipBody(
+      surfaces.simpleSurface,
+      summaryGene,
+      geneDetail,
+      loading,
+      portraitLocator,
+    )
   }
 
   function wireRenderedTooltipVoteBox(geneDetail) {
@@ -1828,6 +1964,21 @@
     if (!normalizedSymbol) return null
     if (geneDetailCache.has(normalizedSymbol)) return geneDetailCache.get(normalizedSymbol)
     const responses = await fetchGeneDetailsBatch([normalizedSymbol], {
+      priority: "foreground",
+      signal,
+    })
+    return responses.get(normalizedSymbol) || null
+  }
+
+  async function fetchPortraitLocatorForTooltip(symbol, signal) {
+    const normalizedSymbol = String(symbol || "")
+      .trim()
+      .toUpperCase()
+    if (!normalizedSymbol) return null
+    if (portraitLocatorCache.has(normalizedSymbol)) {
+      return portraitLocatorCache.get(normalizedSymbol)
+    }
+    const responses = await fetchPortraitLocatorsBatch([normalizedSymbol], {
       priority: "foreground",
       signal,
     })
@@ -1905,8 +2056,11 @@
     const hoverGeneDetailPromise = geneDetailCache.has(symbol)
       ? Promise.resolve(geneDetailCache.get(symbol) || null)
       : fetchGeneDetailForTooltip(symbol, activeDetailAbortController?.signal)
-    void hoverGeneDetailPromise.then((detail) => {
-      const portraitSrc = portraitUrlFromGeneDetail(detail)
+    const hoverPortraitLocatorPromise = portraitLocatorCache.has(symbol)
+      ? Promise.resolve(portraitLocatorCache.get(symbol) || null)
+      : fetchPortraitLocatorForTooltip(symbol, activeDetailAbortController?.signal)
+    void hoverPortraitLocatorPromise.then((locator) => {
+      const portraitSrc = portraitUrlFromGeneDetail(locator)
       return portraitSrc ? getUsablePortraitSrc(portraitSrc).catch(() => "") : ""
     })
     const color = gene.c || PLACEHOLDER_COLOR
@@ -1915,6 +2069,9 @@
     // Fill tooltip content
     const portrait = tooltip.querySelector(".iconoplasm-tooltip-portrait")
     const portraitRefs = usesFrameRenderer ? null : resetSimpleTooltipPortrait(portrait)
+    const initialPortraitLocator = portraitLocatorCache.has(symbol)
+      ? portraitLocatorCache.get(symbol)
+      : null
     const fade = portraitRefs ? portraitRefs.fade : null
     const portraitSymbol = portraitRefs ? portraitRefs.portraitSymbol : null
     if (!usesFrameRenderer) {
@@ -1922,6 +2079,7 @@
         symbol,
         summaryGene: gene,
         geneDetail: geneDetailCache.has(symbol) ? geneDetailCache.get(symbol) : null,
+        portraitLocator: initialPortraitLocator,
         portraitRefs,
       })
       if (portraitSymbol) portraitSymbol.textContent = symbol
@@ -1936,28 +2094,50 @@
     const hoverSymbol = symbol
     if (geneDetailCache.has(symbol)) {
       const geneDetail = geneDetailCache.get(symbol)
-      renderTooltipBody(activeGeneSummary, geneDetail, false)
+      renderTooltipBody(activeGeneSummary, geneDetail, false, initialPortraitLocator)
       wireRenderedTooltipVoteBox(geneDetail)
     } else {
       // Reserve the metadata area immediately so the title block never jumps.
-      renderTooltipBody(activeGeneSummary, null, true)
+      renderTooltipBody(activeGeneSummary, null, true, initialPortraitLocator)
       hoverGeneDetailPromise.then((geneDetail) => {
         if (activeSymbol === hoverSymbol && geneDetail) {
+          const portraitLocator = portraitLocatorCache.get(hoverSymbol) || null
           if (portraitRefs) {
             void loadSimpleTooltipPortrait({
               symbol: hoverSymbol,
               summaryGene: activeGeneSummary,
               geneDetail,
+              portraitLocator,
               portraitRefs,
             })
           }
-          renderTooltipBody(activeGeneSummary, geneDetail, false)
+          renderTooltipBody(activeGeneSummary, geneDetail, false, portraitLocator)
           wireRenderedTooltipVoteBox(geneDetail)
         } else if (activeSymbol === hoverSymbol) {
-          renderTooltipBody(activeGeneSummary, null, false)
+          renderTooltipBody(
+            activeGeneSummary,
+            null,
+            false,
+            portraitLocatorCache.get(hoverSymbol) || null,
+          )
         }
       })
     }
+    hoverPortraitLocatorPromise.then((portraitLocator) => {
+      if (activeSymbol !== hoverSymbol || !portraitLocator) return
+      const geneDetail = geneDetailCache.get(hoverSymbol) || null
+      if (portraitRefs) {
+        void loadSimpleTooltipPortrait({
+          symbol: hoverSymbol,
+          summaryGene: activeGeneSummary,
+          geneDetail,
+          portraitLocator,
+          portraitRefs,
+        })
+      }
+      renderTooltipBody(activeGeneSummary, geneDetail, !geneDetail, portraitLocator)
+      if (geneDetail) wireRenderedTooltipVoteBox(geneDetail)
+    })
 
     // Position tooltip
     const rect = target.getBoundingClientRect()

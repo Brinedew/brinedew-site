@@ -177,7 +177,12 @@ The website and extension use the same state machine from
 `shared/iconoplasm-portrait/portrait-delivery-core.js`. Its states are
 `undecided`, `accelerator`, `canonical`, and `terminal_failure`.
 
-- The extension gives the first real portrait to the browser as an HTTPS URL.
+- The extension requests a compact immutable portrait locator in parallel with
+  rich detail. Both are projections of the same named card snapshot; the locator
+  owns no separate pointer or publication. The first valid locator may start
+  portrait delivery even if rich detail stalls or exhausts its retry. If detail
+  later disagrees on `asset_sha256`, the extension suppresses the portrait and
+  vote controls instead of guessing. It gives the first real portrait to the browser as an HTTPS URL.
   If Bunny is still unresolved after 350 ms, it starts the canonical URL in a
   second bounded lane. The first successfully decoded source selects the tab.
   The 2.5 s timeout remains a per-source ceiling, not a serial pre-fallback wait.
@@ -206,8 +211,8 @@ bindings. Neither adapter owns source-selection rules.
 - Published portrait snapshot schema: `v3`
 - Minimum extension version: the value in `iconoplasm-extension/publisher-release.json`
 - Full catalog portrait field: `p` (`PortraitAssetRefV1`)
-- Extension scanner portrait fields: none; version-addressed immutable gene
-  detail GETs provide portrait references. One HTML/PDF reading session prepares
+- Extension scanner portrait fields: none; parallel version-addressed immutable
+  detail and locator GETs project the same card artifact. One HTML/PDF reading session prepares
   the ordinary document's unique-symbol cards before hover and uses deterministic
   near-viewport working windows for large documents. A matching foreground hover
   reuses the same immutable detail and portrait work instead of restarting it

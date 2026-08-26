@@ -53,12 +53,16 @@ payloads in one manifest response.
 
 The manifest may also expose `card_snapshot_version`. It is an immutable
 publication boundary, not a new catalog schema: extensions that understand it
-invalidate their bounded persistent hover-detail cache when it changes, while
-older extensions safely ignore it. Current extensions read one gene through
-`GET /api/public/v1/card-snapshots/:snapshot/genes/:symbol`. That URL is
-content-addressed and immutable, so the browser and CDN can reuse it without
-re-running a body-keyed Worker POST. The endpoint reads only the named
-published snapshot and never falls back to mutable D1 state. The compatibility
+invalidate their bounded persistent hover-detail and portrait-locator caches
+when it changes, while older extensions safely ignore it. Current extensions
+read rich detail through
+`GET /api/public/v1/card-snapshots/:snapshot/genes/:symbol` and the compact
+portrait locator through
+`GET /api/public/v1/card-snapshots/:snapshot/portraits/:symbol`. Both URLs name
+the same card snapshot and are immutable, so the browser and CDN can reuse them
+without re-running a body-keyed Worker POST. The locator is projected directly
+from that card payload; it is not a second image index, publication, or
+authority. Neither endpoint falls back to mutable D1 state. The compatibility
 `POST /api/public/v1/genes/batch` projection remains available to the one
 supported predecessor and echoes `snapshot_version`; transient failures are
 never durable negative-cache entries. Only the current and immediately
@@ -66,7 +70,7 @@ previous publication barriers are addressable, matching the documented
 one-release compatibility window; retired or invented snapshot versions fail
 closed without becoming immutable negative cache entries.
 
-Foreground detail reads have a four-second deadline and propagate cancellation
+Foreground detail and locator reads have independent four-second deadlines and propagate cancellation
 from the current hover through the content bridge to the service-worker fetch.
 One tab-scoped reading session receives recognized anchors from both HTML and PDF.
 Ordinary documents prepare their unique-symbol cards through immutable detail,
@@ -75,13 +79,18 @@ large documents prepare deterministic near-viewport working windows. The ceiling
 contracts to 16 symbols/3 workers on constrained devices, is 64/6 ordinarily, and
 expands to 128/8 only with measured fast capacity. Data Saver and 2G disable
 preparation. A foreground hover reuses matching in-flight work and is otherwise a
-recovery path, not the normal loading trigger. Packaged card fonts begin loading
+recovery path, not the normal loading trigger. Portrait delivery may complete
+from the locator lane while rich detail remains stalled; if both projections
+arrive with different portrait SHAs, the portrait and vote controls fail closed.
+Packaged card fonts begin loading
 during initialization, including inside the persistent rich-card frame.
 Portraits normally load as native HTTPS image sources with a 350 ms canonical
 hedge behind Bunny; service-worker-
 buffered data URLs exist only for page-CSP compatibility.
 
-The persistent detail cache is capped at 512 records and 4 MiB. Extension
+The persistent detail cache is capped at 512 records and 4 MiB. The locator
+cache is separately capped at 1,024 records and 768 KiB, but uses the same card
+snapshot invalidation boundary. Extension
 updates compact legacy portrait-heavy scanner storage before returning data to
 a tab. Chromium therefore stays below its default 10 MiB `storage.local` quota
 without requesting `unlimitedStorage`.

@@ -187,6 +187,19 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     rateLimit: rateLimit("gene_detail", 120),
   }),
   contract({
+    id: "public_card_snapshot_portrait_locator",
+    match: pattern(/^\/api\/public\/v1\/card-snapshots\/([^/]+)\/portraits\/([^/]+)$/, [
+      "snapshot",
+      "symbol",
+    ]),
+    methods: GET,
+    auth: "trusted-client",
+    cache: "immutable",
+    budgetFamily: "public_gene_detail",
+    gatewayHandler: "public_card_snapshot_portrait_locator",
+    rateLimit: rateLimit("gene_detail", 120),
+  }),
+  contract({
     id: "public_gene_batch",
     match: exact(iconoplasmPublicApiPath("/genes/batch")),
     methods: POST,

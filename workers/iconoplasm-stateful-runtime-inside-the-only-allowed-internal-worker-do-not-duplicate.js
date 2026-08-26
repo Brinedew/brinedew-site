@@ -27450,6 +27450,101 @@ async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbo
   return response
 }
 
+function publishedPortraitLocatorFromCard(card, snapshotVersion) {
+  const record = card?.payload && typeof card.payload === "object" ? card.payload : null
+  const symbol = normalizeSymbol(record?.symbol || card?.symbol || "")
+  const portrait = record?.portrait && typeof record.portrait === "object" ? record.portrait : null
+  const assetSha = normalizeSha256(portrait?.asset_sha256 || "")
+  if (!symbol || portrait?.status !== "published" || !assetSha) return null
+  const mediumUrl = String(
+    portrait.medium_url || portrait.hero_url || portrait.thumb_url || "",
+  ).trim()
+  const fullUrl = String(portrait.hero_url || mediumUrl).trim()
+  const thumbUrl = String(portrait.thumb_url || mediumUrl).trim()
+  if (!mediumUrl || !fullUrl || !thumbUrl) return null
+  return {
+    schema_version: 1,
+    snapshot_version: snapshotVersion,
+    symbol,
+    portrait: {
+      status: "published",
+      asset_sha256: assetSha,
+      medium_url: mediumUrl,
+      hero_url: fullUrl,
+      thumb_url: thumbUrl,
+      width: optionalInt(portrait.width),
+      height: optionalInt(portrait.height),
+    },
+  }
+}
+
+async function handlePublicPortraitLocator(request, env, ctx, snapshotFromPath, symbolFromPath) {
+  const snapshotVersion = String(snapshotFromPath || "").trim()
+  const symbol = normalizeSymbol(symbolFromPath)
+  if (!snapshotVersion || !/^[A-Za-z0-9._:-]+$/.test(snapshotVersion) || !symbol) {
+    return json({ error: "Invalid published portrait locator path" }, 400, {
+      "Cache-Control": "no-store",
+    })
+  }
+
+  // ARCHITECTURE FENCE [IPD-008] + [IPD-011]: this is a compact projection of
+  // the exact named card artifact, not a separately published portrait index.
+  // The independent immutable URL lets hover start portrait delivery without
+  // waiting for rich detail while retaining one snapshot and one canon.
+  const barrier = await currentMobileCardSnapshotVersion(env)
+  const publishedVersions = new Set(
+    [barrier.current, barrier.previous].map((value) => String(value || "").trim()).filter(Boolean),
+  )
+  if (!publishedVersions.has(snapshotVersion)) {
+    return json({ error: "Published card snapshot is not active" }, 404, {
+      "Cache-Control": "no-store",
+    })
+  }
+
+  const cache = typeof caches !== "undefined" && caches?.default ? caches.default : null
+  const cacheUrl = new URL(request.url)
+  cacheUrl.search = ""
+  cacheUrl.hash = ""
+  const cacheKey = new Request(cacheUrl.toString(), { method: "GET" })
+  const cached = cache ? await cache.match(cacheKey) : null
+  if (cached) {
+    const headers = new Headers(cached.headers)
+    headers.set("X-Iconoplasm-Locator-Cache", "HIT")
+    return new Response(cached.body, {
+      status: cached.status,
+      statusText: cached.statusText,
+      headers,
+    })
+  }
+
+  const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, [symbol])
+  if (!artifact) {
+    return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+      "Cache-Control": "no-store",
+      "X-Iconoplasm-Data-Source": "artifact-unavailable",
+      "X-Iconoplasm-VM-Version": snapshotVersion,
+    })
+  }
+  const locator = publishedPortraitLocatorFromCard(artifact.bySymbol.get(symbol), snapshotVersion)
+  const payload = {
+    api_version: PUBLIC_API_VERSION,
+    schema_version: API_SCHEMA_VERSION,
+    snapshot_version: snapshotVersion,
+    canonical_key: "symbol",
+    portrait_locator: locator,
+    missing: locator ? [] : [symbol],
+  }
+  const response = json(payload, locator ? 200 : 404, {
+    "Cache-Control": "public, max-age=31536000, immutable",
+    ETag: `"card-portrait-locator-${snapshotVersion}-${symbol}"`,
+    "X-Iconoplasm-Data-Source": "published-card-catalog",
+    "X-Iconoplasm-Locator-Cache": "MISS",
+    "X-Iconoplasm-VM-Version": snapshotVersion,
+  })
+  if (cache) ctx?.waitUntil?.(cache.put(cacheKey, response.clone()))
+  return response
+}
+
 function mobileCardFieldStatusForGeneRecord(record) {
   const essence = record?.essence && typeof record.essence === "object" ? record.essence : {}
   const portrait = record?.portrait && typeof record.portrait === "object" ? record.portrait : null
@@ -29640,6 +29735,17 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     asHead(
       request,
       await handlePublicGeneDetail(
+        request,
+        env,
+        ctx,
+        decodeURIComponent(match.params.snapshot || ""),
+        decodeURIComponent(match.params.symbol || ""),
+      ),
+    ),
+  public_card_snapshot_portrait_locator: async ({ match, request, env, ctx }) =>
+    asHead(
+      request,
+      await handlePublicPortraitLocator(
         request,
         env,
         ctx,
