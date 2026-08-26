@@ -18,7 +18,7 @@ The flower gene produces multiple splice isoforms with opposite signaling meanin
 
 ## Cell competition
 
-Flower is the best-characterized molecular marker of cell competition, the phenomenon that links multicellular cooperation to cancer: the same comparison mechanism that removes defective cells from a tissue will, in a tumor, remove the fitter normal cells in favor of the fitter clone. Mammalian homologs (Frem1-family proteins, and the flower isoform system in mice) have been identified with comparable lose/win isoform structure, and Flower isoforms are expressed in human cancer, where the lose isoform correlates with apoptosis and the win isoform with tumor progression.
+Flower is the best-characterized molecular marker of cell competition, the phenomenon that connects [multicellular cooperation](multicellular-cooperation.md) to cancer: the same comparison mechanism that removes defective cells from a tissue will, in a tumor, remove the fitter normal cells in favor of the fitter clone. Cell competition is one of the somatic dynamics that tempers complete [de-Darwinization](de-darwinization.md) of tissues. Mammalian homologs (Frem1-family proteins, and the flower isoform system in mice) have been identified with comparable lose/win isoform structure, and Flower isoforms are expressed in human cancer, where the lose isoform correlates with apoptosis and the win isoform with tumor progression.
 
 ## Notes
 

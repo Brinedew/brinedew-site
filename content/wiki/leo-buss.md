@@ -15,10 +15,10 @@ Leo W. Buss (born 1952) is an American evolutionary biologist, known for his wor
 
 ## The Evolution of Individuality
 
-Buss's 1987 book *The Evolution of Individuality* framed the multicellular individual as an evolutionary problem rather than a given. Because cell lineages within a developing organism can carry heritable somatic variation, selection among cell lineages can oppose selection among organisms. Buss argued that the major features of development — early sequestration of the germ line, rigid patterns of embryonic cell division, and other mechanisms that limit heritable variation among somatic lineages — are best understood as evolved mechanisms that mediate this conflict and stabilize organism-level individuality.
+Buss's 1987 book *The Evolution of Individuality* framed the multicellular individual as an evolutionary problem rather than a given. Because cell lineages within a developing organism can carry heritable somatic variation, selection among cell lineages can oppose selection among organisms. Buss argued that the major features of development - early sequestration of the germ line, rigid patterns of embryonic cell division, and other mechanisms that limit heritable variation among somatic lineages - are best understood as evolved mechanisms that mediate this conflict and stabilize organism-level individuality.
 
-The book became a foundational reference for later work on evolutionary transitions in individuality and for evolutionary accounts of cancer as a failure of multicellular cooperation.
+The book became a foundational reference for later work on [evolutionary transitions in individuality](evolutionary-transitions-in-individuality.md) and for evolutionary accounts of cancer as a failure of multicellular cooperation. The [de-Darwinization](de-darwinization.md) framework describes the same conflict-mediation mechanisms - the developmental bottleneck and germline sequestration - in their general form.
 
 ## Notes
 
-- Draft stub — maintenance agent to expand with biographical details, later career, and reception of the book.
+- Draft stub - maintenance agent to expand with biographical details, later career, and reception of the book.
