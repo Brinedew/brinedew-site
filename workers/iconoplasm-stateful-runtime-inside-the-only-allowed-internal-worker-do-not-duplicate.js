@@ -27400,9 +27400,15 @@ async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbo
     [barrier.current, barrier.previous].map((value) => String(value || "").trim()).filter(Boolean),
   )
   if (!publishedVersions.has(snapshotVersion)) {
-    return json({ error: "Published card snapshot is not active" }, 404, {
-      "Cache-Control": "no-store",
-    })
+    return json(
+      {
+        error: "Published card snapshot is retired",
+        code: "card_snapshot_retired",
+        current_snapshot_version: String(barrier.current || "").trim() || null,
+      },
+      410,
+      { "Cache-Control": "no-store" },
+    )
   }
   const cache = typeof caches !== "undefined" && caches?.default ? caches.default : null
   const cacheUrl = new URL(request.url)
@@ -27496,9 +27502,15 @@ async function handlePublicPortraitLocator(request, env, ctx, snapshotFromPath, 
     [barrier.current, barrier.previous].map((value) => String(value || "").trim()).filter(Boolean),
   )
   if (!publishedVersions.has(snapshotVersion)) {
-    return json({ error: "Published card snapshot is not active" }, 404, {
-      "Cache-Control": "no-store",
-    })
+    return json(
+      {
+        error: "Published card snapshot is retired",
+        code: "card_snapshot_retired",
+        current_snapshot_version: String(barrier.current || "").trim() || null,
+      },
+      410,
+      { "Cache-Control": "no-store" },
+    )
   }
 
   const cache = typeof caches !== "undefined" && caches?.default ? caches.default : null

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from selenium.common.exceptions import JavascriptException, TimeoutException
@@ -19,7 +18,12 @@ def set_pdf_highlighting(driver, runtime_uuid: str, enabled: bool) -> None:
     try:
         driver.get(f"moz-extension://{runtime_uuid}/popup.html")
         value = "on" if enabled else "off"
-        radio = wait(driver, lambda current: current.find_element(By.CSS_SELECTOR, f'input[name="pdf-highlighting"][value="{value}"]'))
+        radio = wait(
+            driver,
+            lambda current: current.find_element(
+                By.CSS_SELECTOR, f'input[name="pdf-highlighting"][value="{value}"]'
+            ),
+        )
         # The native radio is intentionally visually hidden beneath its styled
         # label; Selenium's is_displayed() is therefore false even when the control
         # is available to a real click.
@@ -33,7 +37,9 @@ def set_pdf_highlighting(driver, runtime_uuid: str, enabled: bool) -> None:
               .then(done, error => done({ ok: false, error: String(error) }));
             """
         )
-        assert {key: capability[key] for key in ("ok", "supported", "driver", "enabled")} == {
+        assert {
+            key: capability[key] for key in ("ok", "supported", "driver", "enabled")
+        } == {
             "ok": True,
             "supported": True,
             "driver": "firefox-response-filter",
@@ -45,7 +51,9 @@ def set_pdf_highlighting(driver, runtime_uuid: str, enabled: bool) -> None:
             chrome.permissions.contains({ origins: ["<all_urls>"] }).then(done, () => done(false));
             """
         )
-        assert host_access is True, "Firefox installed the add-on without its declared host access"
+        assert host_access is True, (
+            "Firefox installed the add-on without its declared host access"
+        )
     finally:
         driver.close()
         driver.switch_to.window(caller)
@@ -90,6 +98,32 @@ def get_pdf_capability(driver, runtime_uuid: str) -> dict:
         driver.switch_to.window(caller)
 
 
+def seed_retired_card_snapshot(driver, runtime_uuid: str) -> tuple[str, str]:
+    caller = driver.current_window_handle
+    driver.switch_to.new_window("tab")
+    retired = "ccv1-retired-firefox-e2e"
+    try:
+        driver.get(f"moz-extension://{runtime_uuid}/popup.html")
+        current = driver.execute_async_script(
+            """
+            const done = arguments[arguments.length - 1];
+            chrome.runtime.sendMessage({ type: "GET_GENE_DATA" }).then(async payload => {
+              const current = String(payload?.cardSnapshotVersion || "");
+              await chrome.storage.local.set({
+                iconoplasm_card_snapshot_version: "ccv1-retired-firefox-e2e",
+                iconoplasm_last_fetch: new Date().toISOString(),
+              });
+              done(current);
+            }, error => done({ error: String(error) }));
+            """
+        )
+        assert isinstance(current, str) and current and current != retired
+        return retired, current
+    finally:
+        driver.close()
+        driver.switch_to.window(caller)
+
+
 def wait_for_reader(driver, runtime_uuid: str) -> None:
     try:
         wait(driver, reader_is_mounted)
@@ -118,6 +152,7 @@ def local_reader_diagnostics(driver) -> dict:
           chrome.storage.local.get([
             "iconoplasm_gene_count",
             "iconoplasm_hash",
+            "iconoplasm_card_snapshot_version",
             "iconoplasm_contract_error",
             "iconoplasm_highlight_mode",
             "iconoplasm_highlight_visibility",
@@ -180,6 +215,10 @@ def visible_tooltip_portrait(driver) -> dict | None:
           naturalHeight: portrait.naturalHeight,
           tooltipWidth: rect.width,
           tooltipHeight: rect.height,
+          text: [tooltip.innerText || '', frame?.contentDocument?.body?.innerText || '']
+            .join(' ')
+            .replace(/\\s+/g, ' ')
+            .trim(),
         };
         """
     )
@@ -192,12 +231,38 @@ def test_firefox_local_pdf_routes_to_private_reader_and_restores_hover(
     paper = Path(request.config.getoption("--paper")).resolve()
     driver.get("about:blank")
     set_pdf_highlighting(driver, runtime_uuid, True)
+    retired_snapshot, current_snapshot = seed_retired_card_snapshot(
+        driver, runtime_uuid
+    )
     driver.get(paper.as_uri())
     wait_for_reader(driver, runtime_uuid)
     assert "geckoLocalFile=" in driver.current_url
-    status = wait(driver, lambda current: current.find_element(By.ID, "reader-status-message"))
+    status = wait(
+        driver, lambda current: current.find_element(By.ID, "reader-status-message")
+    )
     assert f"Choose {paper.name} once" in status.text
-    assert "privately in Iconoplasm" in status.text
+    assert "exact path will be copied" in status.text
+    assert "press Ctrl+V, then Open" in status.text
+
+    picker_handoff = driver.execute_script(
+        """
+        const input = document.getElementById("pdf-file");
+        const action = document.getElementById("reader-open-file-action");
+        const originalInputClick = input.click;
+        const originalWriteText = navigator.clipboard.writeText;
+        const proof = { copiedPath: null, pickerOpened: false };
+        input.click = () => { proof.pickerOpened = true; };
+        navigator.clipboard.writeText = (value) => {
+          proof.copiedPath = value;
+          return Promise.resolve();
+        };
+        action.click();
+        input.click = originalInputClick;
+        navigator.clipboard.writeText = originalWriteText;
+        return proof;
+        """
+    )
+    assert picker_handoff == {"copiedPath": str(paper), "pickerOpened": True}
 
     file_input = driver.find_element(By.ID, "pdf-file")
     file_input.send_keys(str(paper))
@@ -212,7 +277,9 @@ def test_firefox_local_pdf_routes_to_private_reader_and_restores_hover(
     try:
         anchor = wait(
             driver,
-            lambda current: current.find_element(By.CSS_SELECTOR, ".iconoplasm-pdf-hit-anchor"),
+            lambda current: current.find_element(
+                By.CSS_SELECTOR, ".iconoplasm-pdf-hit-anchor"
+            ),
             timeout=60,
         )
     except TimeoutException as error:
@@ -233,6 +300,17 @@ def test_firefox_local_pdf_routes_to_private_reader_and_restores_hover(
     portrait = wait(driver, visible_tooltip_portrait, timeout=30)
     assert portrait["naturalWidth"] > 1
     assert portrait["naturalHeight"] > 1
+    assert "BRCA1 DNA repair associated" in portrait["text"]
+    assert "Portrait pending" not in portrait["text"]
+    adopted_snapshot = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        chrome.storage.local.get(["iconoplasm_card_snapshot_version"])
+          .then(value => done(value.iconoplasm_card_snapshot_version || ""));
+        """
+    )
+    assert adopted_snapshot == current_snapshot
+    assert adopted_snapshot != retired_snapshot
     capture(driver, artifacts / "firefox-local-file-highlight-hover.png")
 
     driver.find_element(By.ID, "native-viewer").click()

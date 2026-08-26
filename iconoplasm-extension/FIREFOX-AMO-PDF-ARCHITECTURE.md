@@ -57,8 +57,13 @@ Firefox local files use a separate browser-safe ownership adapter. A top-level
 `file:` PDF navigation is routed into the same packaged reader with
 `webNavigation`. Firefox deliberately prevents an extension page from reading
 an arbitrary local path, so the reader requests one explicit file-picker or
-drag/drop handoff through the DOM File API. The selected bytes stay local and
-use the same PDF.js renderer, matcher, decorations, and hover cards. Never
+drag/drop handoff through the DOM File API. Firefox also prevents extensions
+from prefilling that picker or choosing its initial directory. During the
+reader-button click, Iconoplasm copies the exact known path to the clipboard
+using transient user activation, so the bounded fallback is Ctrl+V and Open
+instead of manually hunting through folders. This requires no clipboard
+permission. The selected bytes stay local and use the same PDF.js renderer,
+matcher, decorations, and hover cards. Never
 silently leave an enabled local PDF in the native viewer, upload it, add a
 native companion, or imply that the browser can grant path access without a
 user gesture.

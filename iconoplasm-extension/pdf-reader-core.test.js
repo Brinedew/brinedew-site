@@ -13,6 +13,22 @@ const shapes = {
 
 const presentation = (mode) => () => ({ color: "#234567", shape: shapes[mode] })
 
+test("local PDF URLs become exact pasteable filesystem paths", () => {
+  assert.equal(
+    core.localFileSystemPath(
+      "file:///D:/Downloads/fb0e6b87-8fa3-43a7-913d-f52eb1ba1bb0_andreas_schedl.pdf",
+      "Win32",
+    ),
+    "D:\\Downloads\\fb0e6b87-8fa3-43a7-913d-f52eb1ba1bb0_andreas_schedl.pdf",
+  )
+  assert.equal(
+    core.localFileSystemPath("file://paperserver/reviews/BRCA1%20review.pdf", "Win32"),
+    "\\\\paperserver\\reviews\\BRCA1 review.pdf",
+  )
+  assert.equal(core.localFileSystemPath("https://example.test/paper.pdf", "Win32"), "")
+  assert.equal(core.localFileSystemPath("file:///D:/Papers/%E0%A4%A.pdf", "Win32"), "")
+})
+
 test("text-layer matches retain exact offsets without creating visible text", () => {
   const plan = core.normalizeTextRunMatches(
     "A HER2 result",

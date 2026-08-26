@@ -3,6 +3,31 @@
 
   const PDF_SHAPES = new Set(["underline", "pill-outline", "ellipse"])
 
+  function localFileSystemPath(value, platform = "") {
+    let url
+    try {
+      url = new URL(String(value || ""))
+    } catch (_error) {
+      return ""
+    }
+    if (url.protocol !== "file:") return ""
+
+    let pathname
+    try {
+      pathname = decodeURIComponent(url.pathname)
+    } catch (_error) {
+      return ""
+    }
+    const windowsPath = /^win/i.test(String(platform)) || /^\/[a-z]:\//i.test(pathname)
+    if (url.hostname) {
+      return `\\\\${url.hostname}${pathname.replaceAll("/", "\\")}`
+    }
+    if (windowsPath && /^\/[a-z]:\//i.test(pathname)) {
+      return pathname.slice(1).replaceAll("/", "\\")
+    }
+    return pathname
+  }
+
   function normalizeTextRunMatches(text, findMatches, getPresentation) {
     const source = String(text || "")
     const accepted = []
@@ -246,6 +271,7 @@
   }
 
   root.IconoplasmPdfReaderCore = Object.freeze({
+    localFileSystemPath,
     normalizeTextRunMatches,
     contentOriginFromBorderRect,
     boundsFromClientRect,

@@ -125,11 +125,13 @@ test("Firefox local PDFs route to the private File API reader instead of failing
   assert.match(geckoOwnershipSource, /geckoLocalFile/u)
   assert.match(streamBootstrapSource, /ownership: "firefox-local-file-picker"/u)
   assert.match(readerSource, /Choose \$\{requestedFileName\} once/u)
-  assert.match(readerSource, /privately in Iconoplasm/u)
+  assert.match(readerSource, /navigator\.clipboard\.writeText\(localPath\)/u)
+  assert.match(readerSource, /press Ctrl\+V, then Open/u)
+  assert.match(readerSource, /core\.localFileSystemPath/u)
   assert.match(readerSource, /"iconoplasm-reader-bridge-ready"/u)
   assert.match(readerSource, /bridge = globalThis\.IconoplasmReaderBridge \|\| null/u)
   assert.match(readerSource, /refreshVisiblePages\(\)/u)
-  assert.match(html, /id="reader-open-file-action"/u)
+  assert.match(html, /<button id="reader-open-file-action" type="button">/u)
 })
 
 test("the PDF reader exposes download, parse, and first-render progress without an empty-state flash", () => {
