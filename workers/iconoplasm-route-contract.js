@@ -197,7 +197,7 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     cache: "immutable",
     budgetFamily: "public_gene_detail",
     gatewayHandler: "public_card_snapshot_portrait_locator",
-    rateLimit: rateLimit("gene_detail", 120),
+    rateLimit: rateLimit("portrait_locator", 120),
   }),
   contract({
     id: "public_gene_batch",
