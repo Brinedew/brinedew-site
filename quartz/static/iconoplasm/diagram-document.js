@@ -377,14 +377,27 @@ export function renderDiagramSvg(document, options = {}) {
       const selected = edge.id === selectedId
       const labelX = (geometry.start.x + geometry.end.x) / 2
       const labelY = (geometry.start.y + geometry.end.y) / 2 - 9
-      return `<g data-diagram-edge="${escapeXml(edge.id)}"${interactive ? ' role="button" tabindex="0"' : ""} aria-label="${escapeXml(`${edge.kind} relationship${edge.label ? `: ${edge.label}` : ""}`)}"><path d="${geometry.path}" fill="none" stroke="${selected ? "#b94b34" : "#6d3729"}" stroke-width="${selected ? 5 : 3}" stroke-linecap="round"${dash}${marker ? ` marker-end="${marker}"` : ""}/>${edge.label ? `<text x="${labelX}" y="${labelY}" text-anchor="middle" fill="#4b3b30" font-family="IBM Plex Mono, monospace" font-size="15" paint-order="stroke" stroke="${normalized.background}" stroke-width="7" stroke-linejoin="round">${escapeXml(edge.label)}</text>` : ""}</g>`
+      return `<g data-diagram-edge="${escapeXml(edge.id)}"${interactive ? ' role="button" tabindex="0"' : ""} aria-label="${escapeXml(`${edge.kind} relationship${edge.label ? `: ${edge.label}` : ""}`)}">${interactive ? `<path class="icono-diagram-edge-hit" d="${geometry.path}" fill="none" stroke="transparent" stroke-width="24" vector-effect="non-scaling-stroke" pointer-events="stroke"/>` : ""}<path class="icono-diagram-edge-line" d="${geometry.path}" fill="none" stroke="${selected ? "#b94b34" : "#6d3729"}" stroke-width="${selected ? 5 : 3}" stroke-linecap="round" pointer-events="none"${dash}${marker ? ` marker-end="${marker}"` : ""}/>${edge.label ? `<text x="${labelX}" y="${labelY}" text-anchor="middle" fill="#4b3b30" font-family="IBM Plex Mono, monospace" font-size="15" paint-order="stroke" stroke="${normalized.background}" stroke-width="7" stroke-linejoin="round">${escapeXml(edge.label)}</text>` : ""}</g>`
     })
     .join("")
   const nodes = normalized.nodes
     .map((node) => {
       const imageUrl = node.asset.immutable_url || node.asset.canonical_url
       const selected = node.id === selectedId
-      return `<g data-diagram-node="${escapeXml(node.id)}" transform="translate(${node.x} ${node.y})"${interactive ? ' role="button" tabindex="0"' : ""} aria-label="${escapeXml(`${node.symbol} gene character`)}"><rect x="${selected ? -5 : 0}" y="${selected ? -5 : 0}" width="${node.width + (selected ? 10 : 0)}" height="${node.height + (selected ? 10 : 0)}" rx="8" fill="#eadfcd" stroke="${selected ? "#b94b34" : "#6d5140"}" stroke-width="${selected ? 4 : 1.5}" filter="url(#icono-card-shadow)"/>${imageUrl ? `<image href="${escapeXml(imageUrl)}" x="0" y="0" width="${node.width}" height="${node.height}" preserveAspectRatio="xMidYMid meet"/>` : `<rect x="0" y="0" width="${node.width}" height="${node.height}" rx="7" fill="#ded2bd"/><text x="${node.width / 2}" y="${node.height / 2}" text-anchor="middle" fill="#59483b" font-family="IBM Plex Mono, monospace" font-size="18">${escapeXml(node.symbol)}</text>`}</g>`
+      const ports = interactive
+        ? `<g class="icono-diagram-ports" aria-hidden="true">${[
+            ["north", node.width / 2, 0],
+            ["east", node.width, node.height / 2],
+            ["south", node.width / 2, node.height],
+            ["west", 0, node.height / 2],
+          ]
+            .map(
+              ([side, x, y]) =>
+                `<g data-diagram-port="${side}" data-diagram-connect-from="${escapeXml(node.id)}" transform="translate(${x} ${y})"><circle class="icono-diagram-port-hit" r="22"/><circle class="icono-diagram-port-dot" r="8"/></g>`,
+            )
+            .join("")}</g>`
+        : ""
+      return `<g data-diagram-node="${escapeXml(node.id)}" transform="translate(${node.x} ${node.y})"${interactive ? ' role="button" tabindex="0"' : ""} aria-label="${escapeXml(`${node.symbol} gene character`)}"><rect class="icono-diagram-node-frame" x="${selected ? -5 : 0}" y="${selected ? -5 : 0}" width="${node.width + (selected ? 10 : 0)}" height="${node.height + (selected ? 10 : 0)}" rx="8" fill="#eadfcd" stroke="${selected ? "#b94b34" : "#6d5140"}" stroke-width="${selected ? 4 : 1.5}" filter="url(#icono-card-shadow)"/>${imageUrl ? `<image href="${escapeXml(imageUrl)}" x="0" y="0" width="${node.width}" height="${node.height}" preserveAspectRatio="xMidYMid meet"/>` : `<rect x="0" y="0" width="${node.width}" height="${node.height}" rx="7" fill="#ded2bd"/><text x="${node.width / 2}" y="${node.height / 2}" text-anchor="middle" fill="#59483b" font-family="IBM Plex Mono, monospace" font-size="18">${escapeXml(node.symbol)}</text>`}${ports}</g>`
     })
     .join("")
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${normalized.width} ${normalized.height}" width="${normalized.width}" height="${normalized.height}" role="img" aria-labelledby="icono-diagram-title"><title id="icono-diagram-title">${escapeXml(normalized.title)}</title>${metadata}${defs}<rect width="100%" height="100%" fill="${escapeXml(normalized.background)}"/>${title}<g data-diagram-edges>${edges}</g><g data-diagram-nodes>${nodes}</g><text x="${normalized.width - 30}" y="${normalized.height - 24}" text-anchor="end" fill="#725e4e" font-family="IBM Plex Mono, monospace" font-size="12">ICONOPLASM · CC0 GENE CHARACTERS</text></svg>`

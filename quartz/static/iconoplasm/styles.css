@@ -5704,8 +5704,117 @@ body.icono-studio-route #iconoplasm-root {
   cursor: grab;
 }
 
+.icono-studio-canvas-wrap [data-diagram-edge] {
+  cursor: pointer;
+}
+
 .icono-studio-canvas-wrap [data-diagram-node]:active {
   cursor: grabbing;
+}
+
+.icono-studio-canvas-wrap .icono-diagram-ports {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.icono-studio-canvas-wrap [data-diagram-node]:hover .icono-diagram-ports,
+.icono-studio-canvas-wrap [data-diagram-node]:focus .icono-diagram-ports,
+.icono-studio-canvas-wrap
+  [data-diagram-node]:has(.icono-diagram-node-frame[stroke-width="4"])
+  .icono-diagram-ports,
+.icono-studio-canvas-wrap [data-diagram-node].is-connecting-source .icono-diagram-ports {
+  opacity: 1;
+}
+
+.icono-studio-canvas-wrap [data-diagram-port] {
+  cursor: crosshair;
+  pointer-events: all;
+}
+
+.icono-diagram-port-hit {
+  fill: transparent;
+  stroke: transparent;
+  transform: scale(var(--icono-diagram-ui-scale, 1));
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.icono-diagram-port-dot {
+  fill: var(--studio-paper-bright);
+  stroke: var(--studio-red);
+  stroke-width: 4;
+  transform: scale(var(--icono-diagram-ui-scale, 1));
+  transform-box: fill-box;
+  transform-origin: center;
+  vector-effect: non-scaling-stroke;
+  transition:
+    r 100ms ease,
+    fill 100ms ease;
+}
+
+.icono-studio-canvas-wrap [data-diagram-port]:hover .icono-diagram-port-dot {
+  r: 11px;
+  fill: var(--studio-red);
+}
+
+.icono-studio-canvas-wrap [data-diagram-node].is-connection-target .icono-diagram-node-frame {
+  stroke: #356b45;
+  stroke-width: 7;
+}
+
+.icono-diagram-connection-preview {
+  fill: none;
+  stroke: var(--studio-red);
+  stroke-width: 5;
+  stroke-dasharray: 13 9;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.icono-studio-edge-toolbar {
+  position: absolute;
+  z-index: 2;
+  top: 0.75rem;
+  left: 50%;
+  display: flex;
+  align-items: stretch;
+  max-width: calc(100% - 1.5rem);
+  border: 1px solid var(--studio-ink);
+  background: color-mix(in srgb, var(--studio-paper-bright) 96%, transparent);
+  box-shadow: 0 8px 20px rgba(52, 39, 28, 0.18);
+  transform: translateX(-50%);
+}
+
+.icono-studio-edge-toolbar > span {
+  display: flex;
+  align-items: center;
+  padding: 0.55rem 0.7rem;
+  color: var(--studio-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.icono-studio-edge-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 44px;
+  padding: 0.48rem 0.68rem;
+  border-width: 0 0 0 1px;
+}
+
+.icono-studio-edge-toolbar button b {
+  font-family: system-ui, sans-serif;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.icono-studio-edge-toolbar button.is-selected {
+  background: var(--studio-ink);
+  color: var(--studio-paper-bright);
 }
 
 .icono-studio-canvas-wrap [data-diagram-node]:focus-visible,
@@ -5820,6 +5929,22 @@ body.icono-studio-route #iconoplasm-root {
   margin: 0.35rem 0 0;
   font-size: 0.82rem;
   line-height: 1.45;
+}
+
+.icono-studio-keyboard-connect {
+  border-top: 1px dashed var(--studio-rule);
+  padding-top: 0.75rem;
+}
+
+.icono-studio-keyboard-connect summary {
+  color: var(--studio-muted);
+  cursor: pointer;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+}
+
+.icono-studio-keyboard-connect form {
+  margin-top: 0.8rem;
 }
 
 .icono-studio-wide-action,
@@ -5941,6 +6066,20 @@ body.icono-studio-route #iconoplasm-root {
     border-inline: 0;
   }
 
+  .icono-studio-edge-toolbar {
+    top: 0.35rem;
+    max-width: calc(100% - 0.7rem);
+  }
+
+  .icono-studio-edge-toolbar > span {
+    display: none;
+  }
+
+  .icono-studio-edge-toolbar button {
+    flex: 1;
+    padding-inline: 0.45rem;
+  }
+
   .icono-studio-inspector-summary,
   .icono-studio-inspector-controls form {
     grid-template-columns: 1fr;
@@ -5948,7 +6087,9 @@ body.icono-studio-route #iconoplasm-root {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .icono-studio button {
+  .icono-studio button,
+  .icono-studio-canvas-wrap .icono-diagram-ports,
+  .icono-diagram-port-dot {
     transition: none;
   }
 }
