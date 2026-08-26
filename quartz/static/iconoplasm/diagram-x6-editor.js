@@ -300,8 +300,8 @@ export async function createDiagramEditor({ container, document, onChange, onSel
 
   const graph = new Graph({
     container,
-    width: Math.max(320, container.clientWidth || 900),
-    height: Math.max(420, container.clientHeight || 620),
+    width: Math.max(1, container.clientWidth || document.width),
+    height: Math.max(1, container.clientHeight || document.height),
     background: { color: document.background },
     grid: {
       visible: true,
@@ -454,7 +454,7 @@ export async function createDiagramEditor({ container, document, onChange, onSel
   await setDocument(document, { fit: true, cleanHistory: true })
 
   const resizeObserver = new ResizeObserver(() => {
-    graph.resize(Math.max(320, container.clientWidth), Math.max(420, container.clientHeight))
+    graph.resize(Math.max(1, container.clientWidth), Math.max(1, container.clientHeight))
   })
   resizeObserver.observe(container)
 
