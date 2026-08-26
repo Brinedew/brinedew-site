@@ -5344,3 +5344,611 @@ a.icono-clan-ae:hover {
     transition: none;
   }
 }
+
+/* ───────── Diagram Studio ─────────
+   Atlas Spread: a character contact sheet beside a publication-like figure.
+   Controls stay subordinate to the characters and the finished composition. */
+body.icono-studio-route #quartz-body > .sidebar.right {
+  display: none !important;
+}
+
+@media (min-width: 1024px) {
+  body.icono-studio-route #quartz-body {
+    grid-template-columns: 210px minmax(0, 1fr) !important;
+    grid-template-areas:
+      "grid-sidebar-left grid-header"
+      "grid-sidebar-left grid-center"
+      "grid-sidebar-left grid-footer" !important;
+  }
+}
+
+body.icono-studio-route #iconoplasm-root {
+  max-width: 1480px;
+  padding-inline: clamp(0.75rem, 2vw, 1.75rem);
+}
+
+.icono-studio {
+  --studio-paper: #f4efe4;
+  --studio-paper-bright: #fffaf0;
+  --studio-ink: #30251e;
+  --studio-muted: #725f4e;
+  --studio-rule: #aa9982;
+  --studio-red: #a94732;
+  min-width: 0;
+  padding: 0.5rem 0 2rem;
+  color: var(--studio-ink);
+}
+
+.icono-studio button,
+.icono-studio input,
+.icono-studio select {
+  font: inherit;
+}
+
+.icono-studio button {
+  min-height: 42px;
+  border: 1px solid var(--studio-rule);
+  border-radius: 0;
+  background: transparent;
+  color: var(--studio-ink);
+  cursor: pointer;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.025em;
+  transition:
+    color 160ms var(--icono-ease-out),
+    background-color 160ms var(--icono-ease-out),
+    border-color 160ms var(--icono-ease-out),
+    transform 160ms var(--icono-ease-out);
+}
+
+.icono-studio button:hover:not(:disabled) {
+  border-color: var(--studio-ink);
+  background: color-mix(in srgb, var(--studio-rule) 15%, transparent);
+}
+
+.icono-studio button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.icono-studio button:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.icono-studio button.is-primary,
+.icono-studio-wide-action {
+  border-color: var(--studio-ink) !important;
+  background: var(--studio-ink) !important;
+  color: #fff8eb !important;
+}
+
+.icono-studio button.is-primary:hover,
+.icono-studio-wide-action:hover {
+  border-color: var(--studio-red) !important;
+  background: var(--studio-red) !important;
+}
+
+.icono-studio-masthead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: clamp(0.7rem, 2vw, 1.25rem) 0 1.1rem;
+  border-bottom: 1px solid var(--studio-rule);
+}
+
+.icono-studio-kicker {
+  margin: 0 0 0.2rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--studio-red);
+}
+
+.icono-studio-masthead h1 {
+  margin: 0;
+  font-family: "League Spartan", "Bahnschrift", sans-serif;
+  font-size: clamp(2.3rem, 5vw, 4.5rem);
+  font-weight: 800;
+  line-height: 0.88;
+  letter-spacing: -0.05em;
+  text-wrap: balance;
+  color: var(--studio-ink);
+}
+
+.icono-studio-history,
+.icono-studio-stage-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.icono-studio-history button,
+.icono-studio-stage-actions button {
+  padding: 0.62rem 0.78rem;
+}
+
+.icono-studio-shell {
+  display: grid;
+  grid-template-columns: 286px minmax(0, 1fr);
+  grid-template-areas:
+    "atlas figure"
+    "atlas notes";
+  align-items: start;
+  min-height: 760px;
+  border-bottom: 1px solid var(--studio-rule);
+}
+
+.icono-studio-assets,
+.icono-studio-inspector,
+.icono-studio-stage {
+  min-width: 0;
+}
+
+.icono-studio-assets,
+.icono-studio-inspector {
+  padding: 1.15rem;
+  background: color-mix(in srgb, var(--studio-paper) 89%, var(--light) 11%);
+}
+
+.icono-studio-assets {
+  grid-area: atlas;
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow-y: auto;
+  border-right: 1px solid var(--studio-rule);
+}
+
+.icono-studio-inspector {
+  grid-area: notes;
+  border-top: 1px solid var(--studio-rule);
+}
+
+.icono-studio-panel-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  padding-bottom: 0.9rem;
+}
+
+.icono-studio-panel-heading span,
+.icono-studio-stage-index {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.62rem;
+  color: var(--studio-red);
+}
+
+.icono-studio-panel-heading h2,
+.icono-studio-stagebar h2 {
+  margin: 0;
+  font-family: "League Spartan", "Bahnschrift", sans-serif;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--studio-ink);
+}
+
+.icono-studio-gene-form {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.icono-studio-gene-form > label,
+.icono-studio-field {
+  display: grid;
+  gap: 0.38rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--studio-muted);
+}
+
+.icono-studio-gene-entry {
+  display: flex;
+}
+
+.icono-studio-gene-entry input,
+.icono-studio-field input,
+.icono-studio-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  box-sizing: border-box;
+  border: 1px solid var(--studio-rule);
+  border-radius: 0;
+  background: var(--studio-paper-bright);
+  padding: 0.68rem 0.7rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  text-transform: none;
+  color: var(--studio-ink);
+}
+
+.icono-studio-gene-entry input {
+  border-right: 0;
+}
+
+.icono-studio-gene-entry button {
+  flex: 0 0 auto;
+  padding-inline: 0.75rem;
+  border-color: var(--studio-red);
+  background: var(--studio-red);
+  color: #fff8eb;
+}
+
+.icono-studio-gene-form p,
+.icono-studio-empty-list {
+  margin: 0;
+  color: var(--studio-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.icono-studio-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 1rem 0;
+}
+
+.icono-studio-starters button {
+  min-height: 30px;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.66rem;
+}
+
+.icono-studio-cast-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.icono-studio-cast-item {
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: start;
+  width: 100%;
+  gap: 0.35rem;
+  min-height: 0 !important;
+  padding: 0.28rem !important;
+  border-color: transparent !important;
+  text-align: left;
+}
+
+.icono-studio-cast-item.is-selected {
+  border-color: var(--studio-red) !important;
+  background: color-mix(in srgb, var(--studio-red) 10%, transparent) !important;
+}
+
+.icono-studio-cast-item img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  background: #ded2bd;
+}
+
+.icono-studio-cast-item span {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+.icono-studio-cast-item strong {
+  font-size: 0.78rem;
+  color: var(--studio-ink);
+}
+
+.icono-studio-cast-item small {
+  display: none;
+  overflow: hidden;
+  color: var(--studio-muted);
+  font-size: 0.65rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icono-studio-stage {
+  grid-area: figure;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: clamp(1rem, 2.5vw, 2.5rem);
+  background: color-mix(in srgb, var(--studio-paper) 76%, #8e806f 24%);
+}
+
+.icono-studio-stagebar,
+.icono-studio-stagebar > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+}
+
+.icono-studio-stagebar > div:first-child {
+  justify-content: flex-start;
+}
+
+.icono-studio-stagebar [data-studio-count] {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.62rem;
+  color: var(--studio-muted);
+}
+
+.icono-studio-canvas-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 1080px;
+  aspect-ratio: 3 / 2;
+  min-height: 0;
+  margin-inline: auto;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--studio-rule) 62%, transparent);
+  background-color: var(--studio-paper-bright);
+  box-shadow:
+    0 28px 60px rgba(52, 39, 28, 0.18),
+    0 2px 7px rgba(52, 39, 28, 0.12);
+}
+
+.icono-studio-canvas-wrap > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  user-select: none;
+}
+
+.icono-studio-canvas-wrap [data-diagram-node] {
+  cursor: grab;
+}
+
+.icono-studio-canvas-wrap [data-diagram-node]:active {
+  cursor: grabbing;
+}
+
+.icono-studio-canvas-wrap [data-diagram-node]:focus-visible,
+.icono-studio-canvas-wrap [data-diagram-edge]:focus-visible {
+  outline: none;
+}
+
+.icono-studio-empty-canvas {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 2rem;
+  text-align: center;
+  color: var(--studio-muted);
+}
+
+.icono-studio-empty-canvas > span {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: clamp(2rem, 7vw, 5rem);
+  letter-spacing: -0.08em;
+  color: color-mix(in srgb, var(--studio-red) 58%, var(--studio-rule));
+}
+
+.icono-studio-empty-canvas strong {
+  font-family: "League Spartan", sans-serif;
+  font-size: 1.35rem;
+  color: var(--studio-ink);
+}
+
+.icono-studio-empty-canvas p {
+  max-width: 35ch;
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.icono-studio-status {
+  min-height: 1.2rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.66rem;
+  color: var(--studio-muted);
+}
+
+.icono-studio-status[data-tone="success"] {
+  color: color-mix(in srgb, #356b45 80%, var(--studio-ink));
+}
+
+.icono-studio-status[data-tone="error"] {
+  color: var(--icono-reject);
+}
+
+.icono-studio-inspector [data-studio-inspector],
+.icono-studio-inspector-summary,
+.icono-studio-inspector-controls,
+.icono-studio-inspector form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.icono-studio-inspector [data-studio-inspector] {
+  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 2.2fr);
+  align-items: start;
+}
+
+.icono-studio-inspector-summary {
+  grid-template-columns: minmax(130px, 0.6fr) minmax(180px, 1fr) auto;
+  align-items: end;
+}
+
+.icono-studio-inspector-controls form {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+}
+
+.icono-studio-selection {
+  display: grid;
+  gap: 0.2rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--studio-rule);
+}
+
+.icono-studio-selection span {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  color: var(--studio-muted);
+}
+
+.icono-studio-selection strong {
+  overflow-wrap: anywhere;
+  font-family: "League Spartan", sans-serif;
+  font-size: 1.8rem;
+  color: var(--studio-ink);
+}
+
+.icono-studio-inspector-note {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--studio-rule);
+  color: var(--studio-muted);
+}
+
+.icono-studio-inspector-note strong {
+  color: var(--studio-ink);
+}
+
+.icono-studio-inspector-note p {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.icono-studio-wide-action,
+.icono-studio-danger {
+  width: auto;
+  padding: 0.65rem;
+}
+
+.icono-studio-danger {
+  margin-top: 0.55rem;
+  border-color: color-mix(in srgb, var(--icono-reject) 55%, var(--studio-rule)) !important;
+  color: var(--icono-reject) !important;
+}
+
+@media (max-width: 1080px) {
+  .icono-studio-shell {
+    grid-template-columns: 232px minmax(0, 1fr);
+  }
+
+  .icono-studio-cast-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .icono-studio-inspector-controls form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 800px) {
+  body.icono-studio-route #iconoplasm-root {
+    padding-inline: 0.7rem;
+  }
+
+  .icono-studio-masthead {
+    align-items: flex-start;
+  }
+
+  .icono-studio-masthead h1 {
+    max-width: 8ch;
+  }
+
+  .icono-studio-history {
+    position: sticky;
+    top: 0.5rem;
+    z-index: 2;
+  }
+
+  .icono-studio-shell {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .icono-studio-assets,
+  .icono-studio-inspector {
+    border: 0;
+  }
+
+  .icono-studio-assets {
+    position: static;
+    width: 100%;
+    max-height: none;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--studio-rule);
+  }
+
+  .icono-studio-cast-list {
+    display: flex;
+    max-height: none;
+    overflow-x: auto;
+  }
+
+  .icono-studio-cast-item {
+    flex: 0 0 88px;
+  }
+
+  .icono-studio-stagebar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .icono-studio-stage-actions {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .icono-studio-stage-actions button {
+    flex: 1 0 auto;
+  }
+
+  .icono-studio-inspector [data-studio-inspector] {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .icono-studio-masthead {
+    flex-direction: column;
+  }
+
+  .icono-studio-history {
+    width: 100%;
+  }
+
+  .icono-studio-history button {
+    flex: 1;
+  }
+
+  .icono-studio-stage {
+    padding-inline: 0;
+  }
+
+  .icono-studio-stagebar,
+  .icono-studio-status {
+    padding-inline: 0.25rem;
+  }
+
+  .icono-studio-canvas-wrap {
+    border-inline: 0;
+  }
+
+  .icono-studio-inspector-summary,
+  .icono-studio-inspector-controls form {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icono-studio button {
+    transition: none;
+  }
+}

@@ -13,9 +13,11 @@ const IconoplasmPageSwitcher: QuartzComponent = ({
       ? "archive"
       : slug.startsWith("clans")
         ? "clans"
-        : slug.startsWith("wiki/Tutorial")
-          ? "tutorial"
-          : undefined
+        : slug.startsWith("studio")
+          ? "studio"
+          : slug.startsWith("wiki/Tutorial")
+            ? "tutorial"
+            : undefined
 
   return (
     <nav
@@ -40,6 +42,15 @@ const IconoplasmPageSwitcher: QuartzComponent = ({
         aria-current={activeTab === "clans" ? "page" : undefined}
       >
         Clans
+      </a>
+      <a
+        href="/studio"
+        class={classNames("icono-page-tab", activeTab === "studio" && "is-active")}
+        data-icono-nav
+        data-icono-switch="studio"
+        aria-current={activeTab === "studio" ? "page" : undefined}
+      >
+        Studio
       </a>
       <a
         href="/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm"

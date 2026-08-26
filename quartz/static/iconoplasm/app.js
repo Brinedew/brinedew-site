@@ -39,6 +39,11 @@ import {
   showCandidateDeleteNotice,
 } from "./candidate-delete-dialog.js?v=20260821-nonblocking-delete"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=20260822-immediate-picker"
+import {
+  registerDiagramWebMcp,
+  renderDiagramStudio,
+  unmountDiagramStudio,
+} from "./diagram-studio.js?v=20260826-webmcp-studio"
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
 // appearance settings. Loading the cross-subdomain bridge during anonymous
@@ -7420,6 +7425,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       path === "/apps/iconoplasm/clans/"
     )
       return { page: "clans" }
+    if (
+      path === "/studio" ||
+      path === "/studio/" ||
+      path === "/apps/iconoplasm/studio" ||
+      path === "/apps/iconoplasm/studio/"
+    )
+      return { page: "studio" }
     var m = path.match(/^\/gene\/(.+)$/)
     if (m) return { page: "gene", symbol: decodeURIComponent(m[1]) }
     return { page: "404" }
@@ -9739,7 +9751,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   // ARCHITECTURE FENCE [IPD-003]: Desktop and mobile switchers are part of the
-  // immersive application, not the crawler frontier. Keep them Archive/Clans;
+  // immersive application, not the crawler frontier. Keep them Archive/Clans/Studio;
   // the existing non-visual homepage description owns the ordinary /genes link.
   function ensureMobilePageSwitcher() {
     var root = document.getElementById(ROOT_ID)
@@ -9751,12 +9763,18 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     bar.setAttribute("aria-label", "Iconoplasm sections")
     bar.innerHTML =
       '<a href="/" class="icono-page-tab" data-icono-nav data-icono-switch="archive">Archive</a>' +
-      '<a href="/clans" class="icono-page-tab" data-icono-nav data-icono-switch="clans">Clans</a>'
+      '<a href="/clans" class="icono-page-tab" data-icono-nav data-icono-switch="clans">Clans</a>' +
+      '<a href="/studio" class="icono-page-tab" data-icono-nav data-icono-switch="studio">Studio</a>'
     root.parentNode.insertBefore(bar, root)
   }
 
   function syncPageSwitcher(route) {
-    var active = route && route.page === "clans" ? "clans" : "archive"
+    var active =
+      route && route.page === "clans"
+        ? "clans"
+        : route && route.page === "studio"
+          ? "studio"
+          : "archive"
     var tabs = document.querySelectorAll("[data-icono-page-switcher] [data-icono-switch]")
     for (var i = 0; i < tabs.length; i++) {
       var tab = tabs[i]
@@ -9772,7 +9790,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (!root) return
     mobileLabelReviewMode = isMobileLabelReviewEnabled()
     var route = getRoute()
+    document.body.classList.toggle("icono-studio-route", route.page === "studio")
     var homeRestoreState = route.page === "home" ? readHomeRestoreState() : null
+    unmountDiagramStudio()
     clearActiveHomeRenderState()
     destroyHomeMasonry()
     lastRenderedPath = window.location.pathname + window.location.search
@@ -9788,6 +9808,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
     } else if (route.page === "clans") {
       document.title = "Clans - Iconoplasm"
+    } else if (route.page === "studio") {
+      document.title = "Diagram Studio - Iconoplasm"
     } else {
       document.title = "Not found - Iconoplasm"
     }
@@ -9801,6 +9823,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     } else if (route.page === "clans") {
       scrollWindowInstantly(0, 0)
       renderClans(root)
+    } else if (route.page === "studio") {
+      iconoSidebarState.page = "studio"
+      renderIconoplasmSidebar()
+      scrollWindowInstantly(0, 0)
+      renderDiagramStudio(root)
     } else {
       scrollWindowInstantly(0, 0)
       render404(root)
@@ -9944,6 +9971,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       currentUserIsIconoAdmin = false
     }
     render()
+    void registerDiagramWebMcp({
+      openStudio: function () {
+        if (getRoute().page !== "studio") navigateTo("/studio")
+      },
+    }).catch(function (error) {
+      console.warn("[Iconoplasm] WebMCP tool registration failed:", error)
+    })
   }
 
   // Quartz uses SPA navigation, so the root might already be in the DOM
