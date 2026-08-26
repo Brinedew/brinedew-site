@@ -3,24 +3,25 @@ import test from "node:test"
 
 import {
   addGeneNode,
-  autoLayoutDiagram,
+  addTextNode,
   connectGeneNodes,
   createDiagramDocument,
   diagramAssetManifest,
-  renderDiagramSvg,
+  updateDiagramItem,
 } from "./diagram-document.js"
 
 const asset = (symbol) => ({
-  canonical_url: `https://iconoplasm.brinedew.bio/blot/${symbol}.webp`,
-  immutable_url: `https://cdn.example/${symbol}.webp`,
+  canonical_url: "https://iconoplasm.brinedew.bio/blot/" + symbol + ".webp",
+  immutable_url: "https://cdn.example/" + symbol + ".webp",
   width: 768,
   height: 1024,
-  blot_fingerprint: `fingerprint-${symbol}`,
+  blot_fingerprint: "fingerprint-" + symbol,
 })
 
 // ARCHITECTURE FENCE [IPD-003]
-test("diagram documents use a 3:2 page and retain canonical blot identity", () => {
+test("diagram documents retain 3:2 geometry and canonical blot identity", () => {
   let document = createDiagramDocument({ title: "p53 response" })
+  assert.equal(document.schema_version, 2)
   assert.equal(document.width / document.height, 1.5)
 
   document = addGeneNode(document, { symbol: "TP53", asset: asset("TP53") }).document
@@ -31,7 +32,6 @@ test("diagram documents use a 3:2 page and retain canonical blot identity", () =
     kind: "inhibition",
     label: "restrains",
   }).document
-  document = autoLayoutDiagram(document)
 
   assert.deepEqual(
     diagramAssetManifest(document).map(({ symbol, canonical_url }) => ({ symbol, canonical_url })),
@@ -40,41 +40,47 @@ test("diagram documents use a 3:2 page and retain canonical blot identity", () =
       { symbol: "MDM2", canonical_url: "https://iconoplasm.brinedew.bio/blot/MDM2.webp" },
     ],
   )
-  const svg = renderDiagramSvg(document)
-  assert.match(svg, /viewBox="0 0 1200 800"/)
-  assert.match(svg, /https:\/\/cdn\.example\/TP53\.webp/)
-  assert.match(svg, /ICONOPLASM · CC0 GENE CHARACTERS/)
 })
 
-test("interactive diagrams expose four direct-manipulation ports per gene", () => {
-  let document = createDiagramDocument({ title: "connector ergonomics" })
-  document = addGeneNode(document, { symbol: "TP53", asset: asset("TP53") }).document
-  document = addGeneNode(document, { symbol: "MDM2", asset: asset("MDM2") }).document
+test("text boxes are first-class movable, resizable diagram items", () => {
+  const added = addTextNode(createDiagramDocument(), {
+    text: "DNA damage response",
+    x: 120,
+    y: 90,
+    width: 320,
+    height: 96,
+    font_size: 28,
+    align: "center",
+  })
+  const document = updateDiagramItem(added.document, added.node.id, {
+    text: "p53-dependent DNA damage response",
+    x: 180,
+    width: 420,
+  })
+  const text = document.nodes[0]
 
-  const svg = renderDiagramSvg(document, { interactive: true })
-  assert.equal((svg.match(/data-diagram-port=/g) || []).length, 8)
-  assert.equal((svg.match(/data-diagram-connect-from=/g) || []).length, 8)
-  assert.match(svg, /data-diagram-port="north"/)
-  assert.match(svg, /data-diagram-port="east"/)
-  assert.match(svg, /data-diagram-port="south"/)
-  assert.match(svg, /data-diagram-port="west"/)
+  assert.equal(text.type, "text")
+  assert.equal(text.text, "p53-dependent DNA damage response")
+  assert.equal(text.x, 180)
+  assert.equal(text.width, 420)
+  assert.equal(text.align, "center")
+  assert.deepEqual(diagramAssetManifest(document), [])
 })
 
-test("interactive relationships have a screen-stable selection target", () => {
-  let document = createDiagramDocument({ title: "selectable edge" })
+test("relationships connect genes, never annotation boxes", () => {
+  let document = createDiagramDocument()
   document = addGeneNode(document, { symbol: "TP53", asset: asset("TP53") }).document
-  document = addGeneNode(document, { symbol: "MDM2", asset: asset("MDM2") }).document
-  document = connectGeneNodes(document, {
-    from: document.nodes[0].id,
-    to: document.nodes[1].id,
-    kind: "activation",
-  }).document
+  document = addTextNode(document, { text: "note" }).document
 
-  const interactiveSvg = renderDiagramSvg(document, { interactive: true })
-  const exportedSvg = renderDiagramSvg(document)
-  assert.match(interactiveSvg, /class="icono-diagram-edge-hit"/)
-  assert.match(interactiveSvg, /stroke-width="24" vector-effect="non-scaling-stroke"/)
-  assert.doesNotMatch(exportedSvg, /icono-diagram-edge-hit/)
+  assert.throws(
+    () =>
+      connectGeneNodes(document, {
+        from: document.nodes[0].id,
+        to: document.nodes[1].id,
+        kind: "activation",
+      }),
+    /requires two different genes/,
+  )
 })
 
 test("duplicate gene symbols reuse the existing character", () => {

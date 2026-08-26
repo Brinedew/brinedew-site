@@ -1,37 +1,34 @@
 import {
   ICONOPLASM_DIAGRAM_LIMITS,
   addGeneNode,
-  autoLayoutDiagram,
+  addTextNode,
   cloneDiagramDocument,
   connectGeneNodes,
   createDiagramDocument,
   diagramAssetManifest,
   normalizeGeneSymbol,
   removeDiagramItem,
-  renderDiagramSvg,
   updateDiagramItem,
-} from "./diagram-document.js?v=20260826-direct-connectors-3"
+} from "./diagram-document.js?v=20260826-x6-318"
+import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=20260826-x6-318"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
 // document, and both obtain characters through the bounded canonical resolver.
 
-const STORAGE_KEY = "iconoplasm.diagramStudio.document.v1"
+const STORAGE_KEY = "iconoplasm.diagramStudio.document.v2"
+const LEGACY_STORAGE_KEY = "iconoplasm.diagramStudio.document.v1"
 const EXAMPLE_GENES = ["EGFR", "KRAS", "BRAF", "MAP2K1", "MAPK1"]
-const MAX_HISTORY = 60
 
 let currentDocument = readStoredDocument()
-let history = []
-let future = []
 let selectedId = ""
 let mountedRoot = null
+let editor = null
+let editorReady = null
 let statusText = ""
 let statusTone = ""
 let webMcpController = null
 let openStudioRoute = null
-let dragContext = null
-let connectionContext = null
-let suppressCanvasClickUntil = 0
-let suppressCanvasClickPoint = null
+let activeRelationshipKind = "activation"
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -44,7 +41,8 @@ function escapeHtml(value) {
 
 function readStoredDocument() {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
+    const raw =
+      window.localStorage.getItem(STORAGE_KEY) || window.localStorage.getItem(LEGACY_STORAGE_KEY)
     if (raw) return createDiagramDocument(JSON.parse(raw))
   } catch (_error) {
     // Storage is a convenience. The visible studio remains usable without it.
@@ -78,39 +76,29 @@ function selectedItem() {
   )
 }
 
-function commitDocument(nextDocument, options = {}) {
+async function commitDocument(nextDocument, options = {}) {
   const normalized = createDiagramDocument(nextDocument)
-  if (options.record !== false) {
-    history.push(cloneDiagramDocument(currentDocument))
-    if (history.length > MAX_HISTORY) history.shift()
-    future = []
-  }
   currentDocument = normalized
   if (selectedId && !selectedItem()) selectedId = ""
   storeDocument()
   renderWorkspace()
+  const instance = await editorReady
+  if (instance && options.sync !== false) {
+    await instance.setDocument(currentDocument, {
+      fit: options.fit === true,
+      cleanHistory: options.cleanHistory === true,
+    })
+  }
   if (options.message) setStatus(options.message, options.tone || "success")
   return cloneDiagramDocument(currentDocument)
 }
 
 function undo() {
-  if (!history.length) return
-  future.push(cloneDiagramDocument(currentDocument))
-  currentDocument = history.pop()
-  selectedId = ""
-  storeDocument()
-  renderWorkspace()
-  setStatus("Undid the last change.")
+  editor?.undo()
 }
 
 function redo() {
-  if (!future.length) return
-  history.push(cloneDiagramDocument(currentDocument))
-  currentDocument = future.pop()
-  selectedId = ""
-  storeDocument()
-  renderWorkspace()
-  setStatus("Restored the change.")
+  editor?.redo()
 }
 
 function parseSymbols(value) {
@@ -177,10 +165,12 @@ async function addResolvedGenes(symbols, options = {}) {
     if (outcome.added) added += 1
   }
   if (!added) throw new Error("None of those genes has a ready canonical character.")
-  if (options.layout !== false) next = autoLayoutDiagram(next, options.direction || "horizontal")
-  return commitDocument(next, {
+  await commitDocument(next, {
     message: `Added ${added} canonical gene character${added === 1 ? "" : "s"}.`,
   })
+  if (options.layout !== false)
+    await (await editorReady)?.arrange(options.direction || "horizontal")
+  return cloneDiagramDocument(currentDocument)
 }
 
 function studioMarkup() {
@@ -222,17 +212,27 @@ function studioMarkup() {
               <span data-studio-count></span>
             </div>
             <div class="icono-studio-stage-actions">
+              <button type="button" data-studio-action="text">Text</button>
               <button type="button" data-studio-action="layout">Arrange</button>
+              <button type="button" data-studio-action="fit">Fit</button>
+              <button type="button" data-studio-action="zoom-out" aria-label="Zoom out">−</button>
+              <button type="button" data-studio-action="zoom-in" aria-label="Zoom in">+</button>
               <button type="button" data-studio-action="example">Example</button>
               <button type="button" class="is-primary" data-studio-action="download">Download SVG</button>
             </div>
           </div>
-          <div class="icono-studio-canvas-wrap" data-studio-canvas-wrap></div>
+          <div class="icono-studio-relationship-bar" role="toolbar" aria-label="New relationship type">
+            <span>New connection</span>
+            <button type="button" data-studio-relationship-tool="activation" aria-pressed="true">Activation <b aria-hidden="true">→</b></button>
+            <button type="button" data-studio-relationship-tool="inhibition" aria-pressed="false">Inhibition <b aria-hidden="true">⊣</b></button>
+            <button type="button" data-studio-relationship-tool="association" aria-pressed="false">Association <b aria-hidden="true">—</b></button>
+          </div>
+          <div class="icono-studio-canvas-wrap is-x6" data-studio-canvas-wrap><div class="icono-studio-x6-canvas" data-studio-x6-canvas aria-label="Editable pathway diagram"></div></div>
           <div class="icono-studio-status" data-icono-studio-status role="status" aria-live="polite"></div>
         </section>
         <section class="icono-studio-inspector" aria-labelledby="icono-studio-inspector-title">
           <div class="icono-studio-panel-heading">
-            <span>03</span><h2 id="icono-studio-inspector-title">Figure notes</h2>
+            <span>03</span><h2 id="icono-studio-inspector-title">Inspector</h2>
           </div>
           <div data-studio-inspector></div>
         </section>
@@ -241,10 +241,11 @@ function studioMarkup() {
 }
 
 function castListMarkup() {
-  if (!currentDocument.nodes.length) {
+  const cast = currentDocument.nodes.filter((node) => node.type === "gene")
+  if (!cast.length) {
     return '<p class="icono-studio-empty-list">Characters you add will appear here.</p>'
   }
-  return currentDocument.nodes
+  return cast
     .map(
       (node) =>
         `<button type="button" class="icono-studio-cast-item${selectedId === node.id ? " is-selected" : ""}" data-studio-select="${escapeHtml(node.id)}"><img src="${escapeHtml(node.asset.canonical_url || node.asset.immutable_url)}" alt="" loading="lazy"/><span><strong>${escapeHtml(node.symbol)}</strong><small>${escapeHtml(node.label)}</small></span></button>`,
@@ -258,88 +259,69 @@ function inspectorMarkup() {
     return `<div class="icono-studio-inspector-summary"><label class="icono-studio-field">Diagram title<input type="text" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.titleLength}" value="${escapeHtml(currentDocument.title)}" data-studio-title /></label></div><div class="icono-studio-inspector-note"><strong>Draw directly on the figure.</strong><p>Move portraits by dragging them. Hover a portrait, then drag one of its four handles onto another portrait to connect them.</p></div>`
   }
   if (item.type === "gene") {
-    const targets = currentDocument.nodes.filter((node) => node.id !== item.id)
+    const targets = currentDocument.nodes.filter(
+      (node) => node.type === "gene" && node.id !== item.id,
+    )
     return `<div class="icono-studio-inspector-summary"><div class="icono-studio-selection"><span>Selected gene</span><strong>${escapeHtml(item.symbol)}</strong></div><label class="icono-studio-field">Caption<input type="text" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.labelLength}" value="${escapeHtml(item.label)}" data-studio-node-label="${escapeHtml(item.id)}" /></label><button type="button" class="icono-studio-danger" data-studio-remove="${escapeHtml(item.id)}">Remove</button></div><div class="icono-studio-inspector-controls">${targets.length ? `<div class="icono-studio-inspector-note"><strong>Drag a handle to connect.</strong><p>The four red handles snap to another portrait. The new connection starts as activation; choose →, ⊣, or — on the canvas after drawing it.</p></div><details class="icono-studio-keyboard-connect"><summary>Keyboard connection controls</summary><form data-studio-connect-form><input type="hidden" name="from" value="${escapeHtml(item.id)}"/><label class="icono-studio-field">Connect to<select name="to">${targets.map((node) => `<option value="${escapeHtml(node.id)}">${escapeHtml(node.symbol)}</option>`).join("")}</select></label><label class="icono-studio-field">Relationship<select name="kind"><option value="activation">Activates</option><option value="inhibition">Inhibits</option><option value="association">Associated with</option></select></label><label class="icono-studio-field">Label<input name="label" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.labelLength}" placeholder="optional"/></label><button type="submit" class="icono-studio-wide-action">Connect genes</button></form></details>` : '<p class="icono-studio-inspector-note">Add another gene to draw a relationship.</p>'}</div>`
+  }
+  if (item.type === "text") {
+    return `<div class="icono-studio-inspector-summary"><div class="icono-studio-selection"><span>Text box</span><strong>Annotation</strong></div><label class="icono-studio-field">Text<textarea rows="5" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.textLength}" data-studio-text-content="${escapeHtml(item.id)}">${escapeHtml(item.text)}</textarea></label><label class="icono-studio-field">Size<input type="number" min="12" max="56" step="1" value="${item.font_size}" data-studio-text-size="${escapeHtml(item.id)}" /></label><label class="icono-studio-field">Align<select data-studio-text-align="${escapeHtml(item.id)}"><option value="left"${item.align === "left" ? " selected" : ""}>Left</option><option value="center"${item.align === "center" ? " selected" : ""}>Center</option><option value="right"${item.align === "right" ? " selected" : ""}>Right</option></select></label><button type="button" class="icono-studio-danger" data-studio-remove="${escapeHtml(item.id)}">Remove</button></div><div class="icono-studio-inspector-note"><strong>Resize on the figure.</strong><p>Drag the X6 handles around the selected text box.</p></div>`
   }
   return `<div class="icono-studio-inspector-summary"><div class="icono-studio-selection"><span>Selected relationship</span><strong>${escapeHtml(item.kind)}</strong></div><label class="icono-studio-field">Label<input type="text" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.labelLength}" value="${escapeHtml(item.label)}" data-studio-edge-label="${escapeHtml(item.id)}" /></label><button type="button" class="icono-studio-danger" data-studio-remove="${escapeHtml(item.id)}">Remove</button></div><div class="icono-studio-inspector-note"><strong>Relationship style is on the canvas.</strong><p>Use the nearby →, ⊣, and — controls so the visual result never leaves your attention.</p></div>`
 }
 
-function relationshipToolbarMarkup() {
-  const edge = currentDocument.edges.find((item) => item.id === selectedId)
-  if (!edge) return ""
-  const choices = [
-    ["activation", "→", "Activates"],
-    ["inhibition", "⊣", "Inhibits"],
-    ["association", "—", "Associates"],
-  ]
-  return `<div class="icono-studio-edge-toolbar" role="toolbar" aria-label="Relationship type"><span>Connection</span>${choices
-    .map(
-      ([kind, symbol, label]) =>
-        `<button type="button" class="${edge.kind === kind ? "is-selected" : ""}" data-studio-edge-kind-button="${kind}" aria-pressed="${edge.kind === kind}" title="${label}"><b aria-hidden="true">${symbol}</b>${label}</button>`,
-    )
-    .join("")}</div>`
-}
-
-function syncDiagramUiScale() {
-  const svg = mountedRoot && mountedRoot.querySelector("[data-studio-canvas-wrap] > svg")
-  if (!svg) return
-  const width = svg.getBoundingClientRect().width
-  if (width > 0)
-    svg.style.setProperty("--icono-diagram-ui-scale", String(currentDocument.width / width))
-}
-
 function renderWorkspace() {
   if (!mountedRoot) return
-  const canvas = mountedRoot.querySelector("[data-studio-canvas-wrap]")
   const list = mountedRoot.querySelector("[data-studio-cast-list]")
   const inspector = mountedRoot.querySelector("[data-studio-inspector]")
   const count = mountedRoot.querySelector("[data-studio-count]")
-  if (canvas) {
-    canvas.innerHTML = currentDocument.nodes.length
-      ? `${renderDiagramSvg(currentDocument, { interactive: true, selectedId })}${relationshipToolbarMarkup()}`
-      : `<div class="icono-studio-empty-canvas"><span aria-hidden="true">G → G</span><strong>Start with the cast.</strong><p>Add gene symbols on the left. Iconoplasm will place their canonical characters here.</p></div>`
-  }
   if (list) list.innerHTML = castListMarkup()
   if (inspector) inspector.innerHTML = inspectorMarkup()
   if (count)
-    count.textContent = `${currentDocument.nodes.length} genes · ${currentDocument.edges.length} relationships`
+    count.textContent = `${currentDocument.nodes.filter((node) => node.type === "gene").length} genes · ${currentDocument.edges.length} relationships · ${currentDocument.nodes.filter((node) => node.type === "text").length} text boxes`
   const undoButton = mountedRoot.querySelector('[data-studio-action="undo"]')
   const redoButton = mountedRoot.querySelector('[data-studio-action="redo"]')
-  if (undoButton) undoButton.disabled = history.length === 0
-  if (redoButton) redoButton.disabled = future.length === 0
-  syncDiagramUiScale()
+  if (undoButton) undoButton.disabled = !editor?.canUndo()
+  if (redoButton) redoButton.disabled = !editor?.canRedo()
+  for (const button of mountedRoot.querySelectorAll("[data-studio-relationship-tool]")) {
+    const pressed = button.getAttribute("data-studio-relationship-tool") === activeRelationshipKind
+    button.setAttribute("aria-pressed", String(pressed))
+    button.classList.toggle("is-selected", pressed)
+  }
   setStatus(statusText, statusTone)
 }
 
-function selectItem(itemId) {
+async function selectItem(itemId, options = {}) {
   selectedId = String(itemId || "")
   renderWorkspace()
+  if (options.canvas !== false) (await editorReady)?.select(selectedId)
+  if (options.edit) {
+    requestAnimationFrame(() => {
+      const field = mountedRoot?.querySelector("[data-studio-text-content]")
+      field?.focus()
+      field?.select()
+    })
+  }
   const inspector = mountedRoot && mountedRoot.querySelector("[data-studio-inspector]")
   if (inspector && window.matchMedia("(max-width: 760px)").matches)
     inspector.scrollIntoView({ block: "nearest" })
 }
 
-function downloadSvg() {
+async function downloadSvg() {
   if (!currentDocument.nodes.length) {
     setStatus("Add at least one gene before exporting.", "error")
     return
   }
-  const svg = renderDiagramSvg(currentDocument)
-  const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement("a")
-  link.href = url
-  link.download = `${
+  const fileName = `${
     currentDocument.title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "") || "iconoplasm-diagram"
   }.svg`
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  window.setTimeout(() => URL.revokeObjectURL(url), 0)
-  setStatus("SVG downloaded with canonical character links.", "success")
+  const instance = await editorReady
+  if (!instance) throw new Error("The X6 diagram engine is not ready.")
+  await instance.downloadSvg(fileName)
+  setStatus("SVG downloaded from the X6 diagram.", "success")
 }
 
 async function loadExample() {
@@ -370,225 +352,30 @@ async function loadExample() {
       kind: "activation",
     }).document
   }
-  commitDocument(autoLayoutDiagram(example), { message: "Loaded an editable EGFR–MAPK example." })
-}
-
-function portPosition(node, side) {
-  if (side === "north") return { x: node.x + node.width / 2, y: node.y }
-  if (side === "south") return { x: node.x + node.width / 2, y: node.y + node.height }
-  if (side === "west") return { x: node.x, y: node.y + node.height / 2 }
-  return { x: node.x + node.width, y: node.y + node.height / 2 }
-}
-
-function diagramPoint(svg, clientX, clientY) {
-  const point = svg.createSVGPoint()
-  point.x = clientX
-  point.y = clientY
-  return point.matrixTransform(svg.getScreenCTM().inverse())
-}
-
-function clearConnectionListeners() {
-  window.removeEventListener("pointermove", updateConnection)
-  window.removeEventListener("pointerup", finishConnection)
-  window.removeEventListener("pointercancel", finishConnection)
-}
-
-function cancelConnection(message = "") {
-  clearConnectionListeners()
-  if (!connectionContext) return
-  connectionContext.preview.remove()
-  connectionContext.sourceElement.classList.remove("is-connecting-source")
-  if (connectionContext.targetElement)
-    connectionContext.targetElement.classList.remove("is-connection-target")
-  connectionContext = null
-  if (message && mountedRoot) {
-    renderWorkspace()
-    setStatus(message)
-  }
-}
-
-function beginConnection(event, port) {
-  if (event.button !== 0 || connectionContext) return
-  const sourceId = port.getAttribute("data-diagram-connect-from")
-  const side = port.getAttribute("data-diagram-port")
-  const source = currentDocument.nodes.find((node) => node.id === sourceId)
-  const sourceElement = port.closest("[data-diagram-node]")
-  const svg = port.closest("svg")
-  if (!source || !sourceElement || !svg) return
-
-  event.preventDefault()
-  event.stopPropagation()
-  selectedId = sourceId
-  const start = portPosition(source, side)
-  const end = diagramPoint(svg, event.clientX, event.clientY)
-  const preview = document.createElementNS("http://www.w3.org/2000/svg", "path")
-  preview.setAttribute("class", "icono-diagram-connection-preview")
-  preview.setAttribute("d", `M ${start.x} ${start.y} L ${end.x} ${end.y}`)
-  preview.setAttribute("marker-end", "url(#icono-arrow)")
-  svg.append(preview)
-  sourceElement.classList.add("is-connecting-source")
-  connectionContext = {
-    sourceId,
-    sourceElement,
-    targetElement: null,
-    targetId: "",
-    svg,
-    preview,
-    start,
-  }
-  window.addEventListener("pointermove", updateConnection)
-  window.addEventListener("pointerup", finishConnection)
-  window.addEventListener("pointercancel", finishConnection)
-  setStatus(`Connecting ${source.symbol}. Drop on another portrait; Esc cancels.`)
-}
-
-function updateConnection(event) {
-  if (!connectionContext) return
-  const hit = document.elementFromPoint(event.clientX, event.clientY)
-  const candidate = hit && hit.closest("[data-diagram-node]")
-  const target =
-    candidate && candidate.getAttribute("data-diagram-node") !== connectionContext.sourceId
-      ? candidate
-      : null
-  if (target !== connectionContext.targetElement) {
-    if (connectionContext.targetElement)
-      connectionContext.targetElement.classList.remove("is-connection-target")
-    if (target) target.classList.add("is-connection-target")
-    connectionContext.targetElement = target
-    connectionContext.targetId = target ? target.getAttribute("data-diagram-node") : ""
-  }
-  const end = diagramPoint(connectionContext.svg, event.clientX, event.clientY)
-  connectionContext.preview.setAttribute(
-    "d",
-    `M ${connectionContext.start.x} ${connectionContext.start.y} L ${end.x} ${end.y}`,
-  )
-}
-
-function finishConnection(event) {
-  if (!connectionContext) return
-  updateConnection(event)
-  const { sourceId, targetId } = connectionContext
-  cancelConnection()
-  suppressCanvasClickUntil = performance.now() + 450
-  suppressCanvasClickPoint = { x: event.clientX, y: event.clientY }
-  if (!targetId) {
-    renderWorkspace()
-    setStatus("Drop the connector on another portrait.", "error")
-    return
-  }
-  try {
-    const outcome = connectGeneNodes(currentDocument, {
-      from: sourceId,
-      to: targetId,
-      kind: "activation",
-    })
-    selectedId = outcome.edge.id
-    commitDocument(outcome.document, {
-      message: "Connected the portraits. Choose →, ⊣, or — on the canvas.",
-    })
-  } catch (error) {
-    renderWorkspace()
-    setStatus(error.message, "error")
-  }
-}
-
-function shouldSuppressCanvasClick(event, dropPoint, now, deadline) {
-  if (!dropPoint || now >= deadline) return false
-  const distance = Math.hypot(event.clientX - dropPoint.x, event.clientY - dropPoint.y)
-  return distance <= 12
-}
-
-function isSuppressedCanvasClick(event) {
-  if (
-    !shouldSuppressCanvasClick(
-      event,
-      suppressCanvasClickPoint,
-      performance.now(),
-      suppressCanvasClickUntil,
-    )
-  )
-    return false
-  suppressCanvasClickPoint = null
-  return true
-}
-
-function beginNodeDrag(event, nodeId) {
-  if (event.button !== 0) return
-  const svg = event.target.closest("svg")
-  const node = currentDocument.nodes.find((item) => item.id === nodeId)
-  if (!svg || !node) return
-  event.preventDefault()
-  selectItem(nodeId)
-  const rect = svg.getBoundingClientRect()
-  const scaleX = currentDocument.width / rect.width
-  const scaleY = currentDocument.height / rect.height
-  dragContext = {
-    nodeId,
-    original: cloneDiagramDocument(currentDocument),
-    startClientX: event.clientX,
-    startClientY: event.clientY,
-    startX: node.x,
-    startY: node.y,
-    scaleX,
-    scaleY,
-    moved: false,
-  }
-  window.addEventListener("pointermove", handleNodeDrag)
-  window.addEventListener("pointerup", finishNodeDrag, { once: true })
-}
-
-function handleNodeDrag(event) {
-  if (!dragContext || !mountedRoot) return
-  const node = currentDocument.nodes.find((item) => item.id === dragContext.nodeId)
-  if (!node) return
-  const x = Math.min(
-    currentDocument.width - node.width,
-    Math.max(
-      0,
-      dragContext.startX + (event.clientX - dragContext.startClientX) * dragContext.scaleX,
-    ),
-  )
-  const y = Math.min(
-    currentDocument.height - node.height,
-    Math.max(
-      0,
-      dragContext.startY + (event.clientY - dragContext.startClientY) * dragContext.scaleY,
-    ),
-  )
-  node.x = x
-  node.y = y
-  dragContext.moved = true
-  const element = mountedRoot.querySelector(`[data-diagram-node="${CSS.escape(node.id)}"]`)
-  if (element) element.setAttribute("transform", `translate(${x} ${y})`)
-}
-
-function finishNodeDrag() {
-  window.removeEventListener("pointermove", handleNodeDrag)
-  if (dragContext && dragContext.moved) {
-    history.push(dragContext.original)
-    if (history.length > MAX_HISTORY) history.shift()
-    future = []
-    storeDocument()
-    renderWorkspace()
-    setStatus("Moved the gene character.")
-  }
-  dragContext = null
+  await commitDocument(example, {
+    message: "Loaded an editable EGFR–MAPK example.",
+    cleanHistory: true,
+  })
+  await (await editorReady)?.arrange("horizontal")
 }
 
 async function handleStudioClick(event) {
-  const edgeKindButton = event.target.closest("[data-studio-edge-kind-button]")
-  if (edgeKindButton) {
+  const relationshipTool = event.target.closest("[data-studio-relationship-tool]")
+  if (relationshipTool) {
+    activeRelationshipKind = relationshipTool.getAttribute("data-studio-relationship-tool")
+    const instance = await editorReady
+    instance?.setRelationshipKind(activeRelationshipKind)
     const edge = currentDocument.edges.find((item) => item.id === selectedId)
     if (edge) {
-      commitDocument(
-        updateDiagramItem(currentDocument, edge.id, {
-          kind: edgeKindButton.getAttribute("data-studio-edge-kind-button"),
-        }),
-        { message: "Updated the relationship." },
-      )
+      instance?.updateEdge(edge.id, { kind: activeRelationshipKind })
+      setStatus("Updated the selected relationship.")
+    } else {
+      setStatus("New connections will use " + activeRelationshipKind + ".")
     }
+    renderWorkspace()
     return
   }
+
   const addSymbol = event.target.closest("[data-studio-add-symbol]")
   if (addSymbol) {
     try {
@@ -598,44 +385,50 @@ async function handleStudioClick(event) {
     }
     return
   }
-  const selection = event.target.closest(
-    "[data-studio-select], [data-diagram-node], [data-diagram-edge]",
-  )
+
+  const selection = event.target.closest("[data-studio-select]")
   if (selection) {
-    const isCanvasSelection =
-      selection.hasAttribute("data-diagram-node") || selection.hasAttribute("data-diagram-edge")
-    if (isCanvasSelection && isSuppressedCanvasClick(event)) return
-    selectItem(
-      selection.getAttribute("data-studio-select") ||
-        selection.getAttribute("data-diagram-node") ||
-        selection.getAttribute("data-diagram-edge"),
+    await selectItem(selection.getAttribute("data-studio-select"))
+    return
+  }
+
+  const remove = event.target.closest("[data-studio-remove]")
+  if (remove) {
+    selectedId = ""
+    await commitDocument(
+      removeDiagramItem(currentDocument, remove.getAttribute("data-studio-remove")),
+      {
+        message: "Removed from the diagram.",
+      },
     )
     return
   }
-  const remove = event.target.closest("[data-studio-remove]")
-  if (remove) {
-    const itemId = remove.getAttribute("data-studio-remove")
-    selectedId = ""
-    commitDocument(removeDiagramItem(currentDocument, itemId), {
-      message: "Removed from the diagram.",
-    })
-    return
-  }
+
   const action = event.target.closest("[data-studio-action]")
   if (!action) return
   const name = action.getAttribute("data-studio-action")
-  if (name === "undo") undo()
-  if (name === "redo") redo()
-  if (name === "layout")
-    commitDocument(autoLayoutDiagram(currentDocument), { message: "Arranged the pathway." })
-  if (name === "download") downloadSvg()
-  if (name === "example") {
-    setStatus("Loading the example…")
-    try {
-      await loadExample()
-    } catch (error) {
-      setStatus(error.message, "error")
+  try {
+    const instance = await editorReady
+    if (name === "undo") instance?.undo()
+    if (name === "redo") instance?.redo()
+    if (name === "layout") await instance?.arrange("horizontal")
+    if (name === "fit") instance?.zoomToFit()
+    if (name === "zoom-in") instance?.zoomIn()
+    if (name === "zoom-out") instance?.zoomOut()
+    if (name === "download") await downloadSvg()
+    if (name === "example") await loadExample()
+    if (name === "text") {
+      const outcome = addTextNode(currentDocument, {
+        text: "Double-click to edit",
+        x: currentDocument.width / 2 - 130,
+        y: currentDocument.height / 2 - 44,
+      })
+      selectedId = outcome.node.id
+      await commitDocument(outcome.document, { message: "Added a movable, resizable text box." })
+      await selectItem(outcome.node.id, { edit: true })
     }
+  } catch (error) {
+    setStatus(error.message, "error")
   }
 }
 
@@ -663,76 +456,68 @@ async function handleStudioSubmit(event) {
         label: form.get("label"),
       })
       selectedId = outcome.edge.id
-      commitDocument(outcome.document, { message: "Connected the gene characters." })
+      await commitDocument(outcome.document, { message: "Connected the gene characters." })
+      await selectItem(outcome.edge.id)
     } catch (error) {
       setStatus(error.message, "error")
     }
   }
 }
 
-function handleStudioChange(event) {
+async function handleStudioChange(event) {
   if (event.target.matches("[data-studio-title]")) {
     const next = cloneDiagramDocument(currentDocument)
     next.title = event.target.value
-    commitDocument(next, { message: "Updated the diagram title." })
+    await commitDocument(next, { message: "Updated the diagram title." })
     return
   }
+  const instance = await editorReady
   const nodeLabel = event.target.getAttribute("data-studio-node-label")
   if (nodeLabel) {
-    commitDocument(updateDiagramItem(currentDocument, nodeLabel, { label: event.target.value }), {
-      message: "Updated the caption.",
-    })
+    instance?.updateNode(nodeLabel, { label: event.target.value })
+    setStatus("Updated the caption.")
+    return
+  }
+  const textContent = event.target.getAttribute("data-studio-text-content")
+  if (textContent) {
+    instance?.updateNode(textContent, { text: event.target.value })
+    setStatus("Updated the text box.")
+    return
+  }
+  const textSize = event.target.getAttribute("data-studio-text-size")
+  if (textSize) {
+    await commitDocument(
+      updateDiagramItem(currentDocument, textSize, { font_size: event.target.value }),
+      { message: "Updated the text size." },
+    )
+    return
+  }
+  const textAlign = event.target.getAttribute("data-studio-text-align")
+  if (textAlign) {
+    await commitDocument(
+      updateDiagramItem(currentDocument, textAlign, { align: event.target.value }),
+      { message: "Updated the text alignment." },
+    )
     return
   }
   const edgeLabel = event.target.getAttribute("data-studio-edge-label")
   if (edgeLabel) {
-    commitDocument(updateDiagramItem(currentDocument, edgeLabel, { label: event.target.value }), {
-      message: "Updated the relationship label.",
-    })
+    instance?.updateEdge(edgeLabel, { label: event.target.value })
+    setStatus("Updated the relationship label.")
     return
   }
   const edgeKind = event.target.getAttribute("data-studio-edge-kind")
   if (edgeKind) {
-    commitDocument(updateDiagramItem(currentDocument, edgeKind, { kind: event.target.value }), {
-      message: "Updated the relationship.",
-    })
+    instance?.updateEdge(edgeKind, { kind: event.target.value })
+    setStatus("Updated the relationship.")
   }
 }
 
-function handleStudioPointerDown(event) {
-  const port = event.target.closest("[data-diagram-port]")
-  if (port) {
-    beginConnection(event, port)
-    return
-  }
-  const node = event.target.closest("[data-diagram-node]")
-  if (node) beginNodeDrag(event, node.getAttribute("data-diagram-node"))
-}
-
-function handleStudioKeyDown(event) {
-  if (event.key === "Escape" && connectionContext) {
-    event.preventDefault()
-    cancelConnection("Connection cancelled.")
-    return
-  }
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
-    event.preventDefault()
-    if (event.shiftKey) redo()
-    else undo()
-    return
-  }
-  if (
-    (event.key === "Delete" || event.key === "Backspace") &&
-    selectedId &&
-    !event.target.matches("input, textarea, select")
-  ) {
-    event.preventDefault()
-    const removedId = selectedId
-    selectedId = ""
-    commitDocument(removeDiagramItem(currentDocument, removedId), {
-      message: "Removed from the diagram.",
-    })
-  }
+function acceptEditorDocument(nextDocument) {
+  currentDocument = createDiagramDocument(nextDocument)
+  if (selectedId && !selectedItem()) selectedId = ""
+  storeDocument()
+  renderWorkspace()
 }
 
 export function renderDiagramStudio(root) {
@@ -741,11 +526,28 @@ export function renderDiagramStudio(root) {
   mountedRoot.addEventListener("click", handleStudioClick)
   mountedRoot.addEventListener("submit", handleStudioSubmit)
   mountedRoot.addEventListener("change", handleStudioChange)
-  mountedRoot.addEventListener("pointerdown", handleStudioPointerDown)
-  mountedRoot.addEventListener("keydown", handleStudioKeyDown)
-  window.addEventListener("resize", syncDiagramUiScale)
   renderWorkspace()
-  setStatus("Diagram changes stay in this browser until you export them.")
+
+  const container = mountedRoot.querySelector("[data-studio-x6-canvas]")
+  editorReady = createDiagramEditor({
+    container,
+    document: currentDocument,
+    onChange: acceptEditorDocument,
+    onSelect(itemId, options) {
+      selectItem(itemId, { canvas: false, edit: options?.edit })
+    },
+  })
+    .then((instance) => {
+      editor = instance
+      instance.setRelationshipKind(activeRelationshipKind)
+      renderWorkspace()
+      setStatus("X6 canvas ready. Drag portraits and connect their red ports.")
+      return instance
+    })
+    .catch((error) => {
+      setStatus("The diagram engine could not start: " + error.message, "error")
+      throw error
+    })
 }
 
 export function unmountDiagramStudio() {
@@ -753,11 +555,9 @@ export function unmountDiagramStudio() {
   mountedRoot.removeEventListener("click", handleStudioClick)
   mountedRoot.removeEventListener("submit", handleStudioSubmit)
   mountedRoot.removeEventListener("change", handleStudioChange)
-  mountedRoot.removeEventListener("pointerdown", handleStudioPointerDown)
-  mountedRoot.removeEventListener("keydown", handleStudioKeyDown)
-  window.removeEventListener("resize", syncDiagramUiScale)
-  cancelConnection()
-  finishNodeDrag()
+  editor?.dispose()
+  editor = null
+  editorReady = null
   mountedRoot = null
 }
 
@@ -796,13 +596,16 @@ async function composeFromTool(input) {
       asset,
     }).document
   }
+  for (const annotation of Array.isArray(input.annotations) ? input.annotations : []) {
+    next = addTextNode(next, annotation).document
+  }
   for (const relationship of Array.isArray(input.relationships)
     ? input.relationships.slice(0, ICONOPLASM_DIAGRAM_LIMITS.edges)
     : []) {
     const fromSymbol = normalizeGeneSymbol(relationship && relationship.from)
     const toSymbol = normalizeGeneSymbol(relationship && relationship.to)
-    const from = next.nodes.find((node) => node.symbol === fromSymbol)
-    const to = next.nodes.find((node) => node.symbol === toSymbol)
+    const from = next.nodes.find((node) => node.type === "gene" && node.symbol === fromSymbol)
+    const to = next.nodes.find((node) => node.type === "gene" && node.symbol === toSymbol)
     if (!from || !to || from.id === to.id) continue
     next = connectGeneNodes(next, {
       from: from.id,
@@ -811,12 +614,14 @@ async function composeFromTool(input) {
       kind: relationship.kind,
     }).document
   }
-  if (input.layout !== "manual")
-    next = autoLayoutDiagram(next, input.layout === "vertical" ? "vertical" : "horizontal")
   selectedId = ""
-  return commitDocument(next, {
+  await commitDocument(next, {
     message: `The agent created an editable diagram with ${next.nodes.length} gene characters.`,
   })
+  if (input.layout !== "manual") {
+    await (await editorReady)?.arrange(input.layout === "vertical" ? "vertical" : "horizontal")
+  }
+  return cloneDiagramDocument(currentDocument)
 }
 
 async function editFromTool(input) {
@@ -831,6 +636,7 @@ async function editFromTool(input) {
     ? resolvedAssetMap(await resolveGeneAssets(symbolsToResolve))
     : new Map()
   let next = cloneDiagramDocument(currentDocument)
+  let layoutDirection = ""
   for (const operation of operations) {
     if (!operation || typeof operation !== "object") continue
     if (operation.type === "set_title") {
@@ -843,22 +649,38 @@ async function editFromTool(input) {
           label: operation.label || symbol,
           asset: assets.get(symbol),
         }).document
+    } else if (operation.type === "add_text") {
+      next = addTextNode(next, operation).document
+    } else if (operation.type === "update_text") {
+      next = updateDiagramItem(next, operation.item_id, {
+        text: operation.text,
+        font_size: operation.font_size,
+        align: operation.align,
+      })
     } else if (operation.type === "remove_gene") {
       const node = next.nodes.find(
-        (item) => item.id === operation.gene || item.symbol === normalizeGeneSymbol(operation.gene),
+        (item) =>
+          item.type === "gene" &&
+          (item.id === operation.gene || item.symbol === normalizeGeneSymbol(operation.gene)),
       )
       if (node) next = removeDiagramItem(next, node.id)
-    } else if (operation.type === "move_gene") {
+    } else if (operation.type === "move_gene" || operation.type === "move_item") {
       const node = next.nodes.find(
-        (item) => item.id === operation.gene || item.symbol === normalizeGeneSymbol(operation.gene),
+        (item) =>
+          item.id === (operation.item_id || operation.gene) ||
+          (item.type === "gene" && item.symbol === normalizeGeneSymbol(operation.gene)),
       )
       if (node) next = updateDiagramItem(next, node.id, { x: operation.x, y: operation.y })
     } else if (operation.type === "connect") {
       const from = next.nodes.find(
-        (item) => item.id === operation.from || item.symbol === normalizeGeneSymbol(operation.from),
+        (item) =>
+          item.type === "gene" &&
+          (item.id === operation.from || item.symbol === normalizeGeneSymbol(operation.from)),
       )
       const to = next.nodes.find(
-        (item) => item.id === operation.to || item.symbol === normalizeGeneSymbol(operation.to),
+        (item) =>
+          item.type === "gene" &&
+          (item.id === operation.to || item.symbol === normalizeGeneSymbol(operation.to)),
       )
       if (from && to && from.id !== to.id)
         next = connectGeneNodes(next, {
@@ -870,13 +692,15 @@ async function editFromTool(input) {
     } else if (operation.type === "remove_item") {
       next = removeDiagramItem(next, operation.item_id)
     } else if (operation.type === "auto_layout") {
-      next = autoLayoutDiagram(next, operation.direction === "vertical" ? "vertical" : "horizontal")
+      layoutDirection = operation.direction === "vertical" ? "vertical" : "horizontal"
     }
   }
   selectedId = ""
-  return commitDocument(next, {
+  await commitDocument(next, {
     message: `The agent applied ${operations.length} edit${operations.length === 1 ? "" : "s"}.`,
   })
+  if (layoutDirection) await (await editorReady)?.arrange(layoutDirection)
+  return cloneDiagramDocument(currentDocument)
 }
 
 function toolSchemas() {
@@ -889,6 +713,19 @@ function toolSchemas() {
       y: { type: "number", description: "Optional manual y-coordinate in the 1200 by 800 canvas." },
     },
     required: ["symbol"],
+  }
+  const annotationSchema = {
+    type: "object",
+    properties: {
+      text: { type: "string", maxLength: ICONOPLASM_DIAGRAM_LIMITS.textLength },
+      x: { type: "number" },
+      y: { type: "number" },
+      width: { type: "number" },
+      height: { type: "number" },
+      font_size: { type: "number", minimum: 12, maximum: 56 },
+      align: { type: "string", enum: ["left", "center", "right"] },
+    },
+    required: ["text"],
   }
   const relationshipSchema = {
     type: "object",
@@ -929,7 +766,7 @@ function toolSchemas() {
     {
       name: "compose_gene_diagram",
       description:
-        "Create or replace the visible, human-editable Iconoplasm pathway diagram using canonical gene characters. The user sees the result in the Diagram Studio and can continue editing it.",
+        "Create or replace the visible, human-editable Iconoplasm pathway diagram using canonical gene characters, X6 connections, and optional text boxes.",
       inputSchema: {
         type: "object",
         properties: {
@@ -944,6 +781,11 @@ function toolSchemas() {
             type: "array",
             items: relationshipSchema,
             maxItems: ICONOPLASM_DIAGRAM_LIMITS.edges,
+          },
+          annotations: {
+            type: "array",
+            items: annotationSchema,
+            maxItems: ICONOPLASM_DIAGRAM_LIMITS.nodes,
           },
           layout: {
             type: "string",
@@ -980,8 +822,11 @@ function toolSchemas() {
                   enum: [
                     "set_title",
                     "add_gene",
+                    "add_text",
+                    "update_text",
                     "remove_gene",
                     "move_gene",
+                    "move_item",
                     "connect",
                     "remove_item",
                     "auto_layout",
@@ -989,6 +834,7 @@ function toolSchemas() {
                 },
                 title: { type: "string" },
                 symbol: { type: "string" },
+                text: { type: "string" },
                 label: { type: "string" },
                 gene: { type: "string" },
                 from: { type: "string" },
@@ -996,8 +842,12 @@ function toolSchemas() {
                 kind: { type: "string", enum: ["activation", "inhibition", "association"] },
                 item_id: { type: "string" },
                 direction: { type: "string", enum: ["horizontal", "vertical"] },
+                align: { type: "string", enum: ["left", "center", "right"] },
+                font_size: { type: "number" },
                 x: { type: "number" },
                 y: { type: "number" },
+                width: { type: "number" },
+                height: { type: "number" },
               },
               required: ["type"],
             },
@@ -1029,11 +879,11 @@ function toolSchemas() {
     {
       name: "export_gene_diagram",
       description:
-        "Return the current Iconoplasm diagram as SVG markup plus canonical bitmap provenance. The same SVG can be downloaded from the visible Studio.",
+        "Return the current X6-backed Iconoplasm diagram as SVG markup plus canonical bitmap provenance.",
       inputSchema: { type: "object", properties: {} },
-      execute() {
+      async execute() {
         const document = cloneDiagramDocument(currentDocument)
-        const svg = renderDiagramSvg(document)
+        const svg = editor ? await editor.exportSvg() : await exportDiagramWithX6(document)
         return toolResult(
           { svg, document, assets: diagramAssetManifest(document), media_type: "image/svg+xml" },
           `Exported the current Iconoplasm diagram as SVG.`,
@@ -1067,6 +917,5 @@ export const __testing = {
   editFromTool,
   parseSymbols,
   resolvedAssetMap,
-  shouldSuppressCanvasClick,
   toolSchemas,
 }
