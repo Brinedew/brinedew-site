@@ -63,22 +63,23 @@ export function scaleCost(item, multiplier) {
   return total
 }
 
-export function firstUserOverLimit(perUser, base = ZERO_COST, limits = FREE_DAILY_LIMITS) {
+export function firstPersonaOverLimit(perPersona, base = ZERO_COST, limits = FREE_DAILY_LIMITS) {
   return Object.entries(limits)
     .flatMap(([resource, limit]) => {
-      const increment = Number(perUser?.[resource] || 0)
+      const increment = Number(perPersona?.[resource] || 0)
       if (increment <= 0) return []
       const remaining = Number(limit) - Number(base?.[resource] || 0)
       return [
         {
           resource,
-          firstUserOver: remaining < 0 ? 0 : Math.floor(remaining / increment) + 1,
+          firstPersonaOver: remaining < 0 ? 0 : Math.floor(remaining / increment) + 1,
         },
       ]
     })
     .sort(
       (left, right) =>
-        left.firstUserOver - right.firstUserOver || left.resource.localeCompare(right.resource),
+        left.firstPersonaOver - right.firstPersonaOver ||
+        left.resource.localeCompare(right.resource),
     )
 }
 
@@ -236,6 +237,13 @@ export const SCENARIOS = Object.freeze({
   }),
   websiteGuestShelfMaximumMerge: websiteGuestDiscoveryMergeCost(),
   extensionDensePaper: extensionReaderCost(),
+  extensionColdTenGenePageWorst: extensionReaderCost({
+    activeMinutes: 5,
+    pageLoads: 1,
+    qualifiedHovers: 0,
+    uniquePreparedGenes: SHIPPED_SHAPE.readingSessionSymbolLimit,
+    portraitFallbacks: SHIPPED_SHAPE.readingSessionSymbolLimit,
+  }),
   extensionScatteredMaximum: extensionReaderCost({
     pageLoads: 512,
     qualifiedHovers: 512,
@@ -253,10 +261,12 @@ function formatNumber(value) {
     : value.toLocaleString("en-US", { maximumFractionDigits: 3 })
 }
 
-function printCapacity(label, perUser, base = ZERO_COST) {
-  const first = firstUserOverLimit(perUser, base)[0]
+function printCapacity(label, perPersona, base = ZERO_COST) {
+  const first = firstPersonaOverLimit(perPersona, base)[0]
   console.log(
-    `${label}: ${first.resource} first exceeds at user ${formatNumber(first.firstUserOver)}.`,
+    `${label}: ${first.resource} first exceeds at complete synthetic persona ${formatNumber(
+      first.firstPersonaOver,
+    )}.`,
   )
 }
 
@@ -267,6 +277,15 @@ export function printReport() {
   printCapacity("Curious website explorers", SCENARIOS.websiteExplorerAverage)
   printCapacity("Maximum website guest-shelf merges", SCENARIOS.websiteGuestShelfMaximumMerge)
   printCapacity("Dense-paper extension readers", SCENARIOS.extensionDensePaper)
+  printCapacity(
+    "Cold ten-gene page sessions with every portrait on first-party fallback",
+    SCENARIOS.extensionColdTenGenePageWorst,
+  )
+  printCapacity(
+    "Cold ten-gene page sessions after 10,000 homepage visitors",
+    SCENARIOS.extensionColdTenGenePageWorst,
+    SCENARIOS.tenThousandOneVisitLurkers,
+  )
   printCapacity(
     "Dense-paper extension readers after 10,000 homepage visitors",
     SCENARIOS.extensionDensePaper,

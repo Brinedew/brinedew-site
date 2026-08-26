@@ -270,6 +270,31 @@ test("IPD-008 keeps foreground hover on immutable cancellable reads and native p
   )
 })
 
+// ARCHITECTURE FENCE [IPD-008]
+test("IPD-008 forbids public KV discovery scans and preserves one bounded portrait lane", () => {
+  const fence = registry.fences.find((entry) => entry.id === "IPD-008")
+  assert.ok(fence, "IPD-008 must remain registered")
+  assert.match(fence.decision, /Normal public recognition reads perform zero KV list operations/)
+  assert.match(fence.decision, /GET one exact current pointer and its exact immutable pair/)
+  assert.match(fence.change_control, /missing-pointer legacy discovery is migration-only/)
+  assert.match(
+    fence.change_control,
+    /locator must remain a direct projection of the named card payload[\s\S]*must never become a separately stored or published pointer/,
+  )
+  assert.match(
+    fence.change_control,
+    /never run on Data Saver or 2G, exceed ten symbols or two workers/,
+  )
+
+  const policyTests = readRepositoryFile("workers/iconoplasm-publication-alias-policy.test.js")
+  assert.match(policyTests, /coherent public reader is O\(1\) at max history/)
+  assert.match(policyTests, /assert\.equal\(kv\.lists\.length, 0\)/)
+
+  const routeSource = readRepositoryFile("workers/iconoplasm-route-contract.js")
+  assert.match(routeSource, /rateLimit:\s*rateLimit\("gene_detail", 120\)/)
+  assert.match(routeSource, /rateLimit:\s*rateLimit\("portrait_locator", 120\)/)
+})
+
 // ARCHITECTURE FENCE [IPD-004]
 test("IPD-004 keeps ledger wakeups due-time aware", () => {
   const runtime = readRepositoryFile(
