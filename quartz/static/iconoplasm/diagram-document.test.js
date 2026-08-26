@@ -91,3 +91,15 @@ test("duplicate gene symbols reuse the existing character", () => {
   assert.equal(second.document.nodes.length, 1)
   assert.equal(second.node.id, first.node.id)
 })
+
+test("documents retain 100 pathway members without clipping the model", () => {
+  let document = createDiagramDocument()
+  for (let index = 1; index <= 100; index += 1) {
+    const symbol = `GENE${index}`
+    document = addGeneNode(document, { symbol, asset: asset(symbol) }).document
+  }
+
+  assert.equal(document.nodes.length, 100)
+  assert.equal(document.background, "#ffffff")
+  assert.ok(document.nodes.every((node) => node.type === "gene"))
+})

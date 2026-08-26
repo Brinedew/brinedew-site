@@ -9,11 +9,11 @@ import {
   normalizeGeneSymbol,
   removeDiagramItem,
   updateDiagramItem,
-} from "./diagram-document.js?v=20260826-x6-318-4"
+} from "./diagram-document.js?v=20260826-scientific-studio-1"
 import {
   createDiagramEditor,
   exportDiagramWithX6,
-} from "./diagram-x6-editor.js?v=20260826-x6-318-4"
+} from "./diagram-x6-editor.js?v=20260826-scientific-studio-1"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
 // document, and both obtain characters through the bounded canonical resolver.
@@ -21,6 +21,7 @@ import {
 const STORAGE_KEY = "iconoplasm.diagramStudio.document.v2"
 const LEGACY_STORAGE_KEY = "iconoplasm.diagramStudio.document.v1"
 const EXAMPLE_GENES = ["EGFR", "KRAS", "BRAF", "MAP2K1", "MAPK1"]
+const SEARCH_DEBOUNCE_MS = 180
 
 let currentDocument = readStoredDocument()
 let selectedId = ""
@@ -32,6 +33,10 @@ let statusTone = ""
 let webMcpController = null
 let openStudioRoute = null
 let activeRelationshipKind = "activation"
+let studioSearchTimer = 0
+let studioSearchRequest = 0
+let studioSearchResults = []
+let activeStudioSearchIndex = -1
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -40,6 +45,13 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;")
+}
+
+function publicApiOrigin() {
+  const host = String(window.location.hostname || "").toLowerCase()
+  return host === "iconoplasm.brinedew.bio" || host === "staging.brinedew.bio"
+    ? window.location.origin
+    : "https://iconoplasm.brinedew.bio"
 }
 
 function readStoredDocument() {
@@ -119,23 +131,31 @@ function parseSymbols(value) {
 async function resolveGeneAssets(symbols) {
   const identifiers = parseSymbols(Array.isArray(symbols) ? symbols.join(",") : symbols)
   if (!identifiers.length) throw new TypeError("Enter at least one valid gene symbol.")
-  const host = String(window.location.hostname || "").toLowerCase()
-  const apiOrigin =
-    host === "iconoplasm.brinedew.bio" || host === "staging.brinedew.bio"
-      ? window.location.origin
-      : "https://iconoplasm.brinedew.bio"
-  const response = await fetch(`${apiOrigin}/api/public/v1/images/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ identifiers }),
-  })
-  const payload = await response.json().catch(() => null)
-  if (!response.ok || !payload) {
-    throw new Error(
-      (payload && payload.error) || `Image resolver returned HTTP ${response.status}.`,
-    )
+  const apiOrigin = publicApiOrigin()
+  const batches = []
+  for (let index = 0; index < identifiers.length; index += 50)
+    batches.push(identifiers.slice(index, index + 50))
+  const payloads = await Promise.all(
+    batches.map(async (batch) => {
+      const response = await fetch(`${apiOrigin}/api/public/v1/images/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifiers: batch }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload) {
+        throw new Error(
+          (payload && payload.error) || `Image resolver returned HTTP ${response.status}.`,
+        )
+      }
+      return payload
+    }),
+  )
+  return {
+    ...(payloads[0] || {}),
+    requested: identifiers,
+    results: payloads.flatMap((payload) => payload.results || []),
   }
-  return payload
 }
 
 function resolvedAssetMap(payload) {
@@ -151,7 +171,7 @@ function resolvedAssetMap(payload) {
 async function addResolvedGenes(symbols, options = {}) {
   const requested = parseSymbols(Array.isArray(symbols) ? symbols.join(",") : symbols)
   if (!requested.length) throw new TypeError("Enter at least one valid gene symbol.")
-  setStatus(`Finding ${requested.length} canonical character${requested.length === 1 ? "" : "s"}…`)
+  setStatus(`Loading ${requested.length} gene${requested.length === 1 ? "" : "s"}…`)
   const payload = await resolveGeneAssets(requested)
   const assets = resolvedAssetMap(payload)
   let next = cloneDiagramDocument(currentDocument)
@@ -169,7 +189,7 @@ async function addResolvedGenes(symbols, options = {}) {
   }
   if (!added) throw new Error("None of those genes has a ready canonical character.")
   await commitDocument(next, {
-    message: `Added ${added} canonical gene character${added === 1 ? "" : "s"}.`,
+    message: `Added ${added}.`,
   })
   if (options.layout !== false)
     await (await editorReady)?.arrange(options.direction || "horizontal")
@@ -179,64 +199,43 @@ async function addResolvedGenes(symbols, options = {}) {
 function studioMarkup() {
   return `
     <main class="icono-studio" id="icono-main" aria-labelledby="icono-studio-title">
-      <header class="icono-studio-masthead">
-        <div>
-          <p class="icono-studio-kicker">Iconoplasm studio</p>
-          <h1 id="icono-studio-title">Give the pathway a cast.</h1>
-        </div>
-        <div class="icono-studio-history" aria-label="Document history">
-          <button type="button" data-studio-action="undo" title="Undo (Ctrl+Z)">Undo</button>
-          <button type="button" data-studio-action="redo" title="Redo (Ctrl+Shift+Z)">Redo</button>
-        </div>
-      </header>
+      <h1 class="icono-studio-sr-only" id="icono-studio-title">Pathway diagram editor</h1>
       <div class="icono-studio-shell">
         <aside class="icono-studio-assets" aria-labelledby="icono-studio-assets-title">
-          <div class="icono-studio-panel-heading">
-            <span>01</span><h2 id="icono-studio-assets-title">Character atlas</h2>
-          </div>
+          <h2 id="icono-studio-assets-title">Genes</h2>
           <form class="icono-studio-gene-form" data-studio-gene-form>
-            <label for="icono-studio-gene-input">Add gene characters</label>
-            <div class="icono-studio-gene-entry">
-              <input id="icono-studio-gene-input" name="symbols" autocomplete="off" spellcheck="false" placeholder="TP53, MDM2, CDKN1A" />
-              <button type="submit">Add</button>
+            <div class="icono-search-wrapper icono-studio-search">
+              <input class="icono-search-input" id="icono-studio-gene-input" name="symbols" type="search" autocomplete="off" spellcheck="false" placeholder="Search or paste genes" role="combobox" aria-label="Add genes" aria-autocomplete="list" aria-controls="icono-studio-gene-results" aria-expanded="false" />
+              <div class="icono-search-results" id="icono-studio-gene-results" role="listbox" aria-label="Gene search results" data-studio-gene-results></div>
             </div>
-            <p>Paste one symbol or a whole pathway.</p>
+            <button type="submit">Add</button>
           </form>
-          <div class="icono-studio-starters" aria-label="Example genes">
-            ${EXAMPLE_GENES.map((symbol) => `<button type="button" data-studio-add-symbol="${symbol}">${symbol}</button>`).join("")}
-          </div>
           <div class="icono-studio-cast-list" data-studio-cast-list></div>
         </aside>
         <section class="icono-studio-stage" aria-labelledby="icono-studio-canvas-title">
           <div class="icono-studio-stagebar">
-            <div>
-              <span class="icono-studio-stage-index">02</span>
-              <h2 id="icono-studio-canvas-title">Figure</h2>
-              <span data-studio-count></span>
-            </div>
+            <h2 class="icono-studio-sr-only" id="icono-studio-canvas-title">Figure</h2>
+            <label class="icono-studio-title"><span class="icono-studio-sr-only">Diagram title</span><input type="text" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.titleLength}" value="${escapeHtml(currentDocument.title)}" data-studio-title /></label>
             <div class="icono-studio-stage-actions">
+              <button type="button" data-studio-action="undo" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+              <button type="button" data-studio-action="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
               <button type="button" data-studio-action="text">Text</button>
               <button type="button" data-studio-action="layout">Arrange</button>
               <button type="button" data-studio-action="fit">Fit</button>
-              <button type="button" data-studio-action="zoom-out" aria-label="Zoom out">−</button>
-              <button type="button" data-studio-action="zoom-in" aria-label="Zoom in">+</button>
-              <button type="button" data-studio-action="example">Example</button>
-              <button type="button" class="is-primary" data-studio-action="download">Download SVG</button>
+              <button type="button" class="is-primary" data-studio-action="download">SVG</button>
             </div>
           </div>
-          <div class="icono-studio-relationship-bar" role="toolbar" aria-label="New relationship type">
-            <span>New connection</span>
-            <button type="button" data-studio-relationship-tool="activation" aria-pressed="true">Activation <b aria-hidden="true">→</b></button>
-            <button type="button" data-studio-relationship-tool="inhibition" aria-pressed="false">Inhibition <b aria-hidden="true">⊣</b></button>
-            <button type="button" data-studio-relationship-tool="association" aria-pressed="false">Association <b aria-hidden="true">—</b></button>
+          <div class="icono-studio-relationship-bar" role="toolbar" aria-label="Relationship type">
+            <button type="button" data-studio-relationship-tool="activation" aria-pressed="true"><span aria-hidden="true">→</span> Activation</button>
+            <button type="button" data-studio-relationship-tool="inhibition" aria-pressed="false"><span aria-hidden="true">⊣</span> Inhibition</button>
+            <button type="button" data-studio-relationship-tool="association" aria-pressed="false"><span aria-hidden="true">—</span> Association</button>
           </div>
           <div class="icono-studio-canvas-wrap is-x6" data-studio-canvas-wrap><div class="icono-studio-x6-canvas" data-studio-x6-canvas aria-label="Editable pathway diagram"></div></div>
+          <div class="icono-studio-count" data-studio-count></div>
           <div class="icono-studio-status" data-icono-studio-status role="status" aria-live="polite"></div>
         </section>
         <section class="icono-studio-inspector" aria-labelledby="icono-studio-inspector-title">
-          <div class="icono-studio-panel-heading">
-            <span>03</span><h2 id="icono-studio-inspector-title">Inspector</h2>
-          </div>
+          <h2 id="icono-studio-inspector-title">Selection</h2>
           <div data-studio-inspector></div>
         </section>
       </div>
@@ -246,12 +245,12 @@ function studioMarkup() {
 function castListMarkup() {
   const cast = currentDocument.nodes.filter((node) => node.type === "gene")
   if (!cast.length) {
-    return '<p class="icono-studio-empty-list">Characters you add will appear here.</p>'
+    return '<button type="button" class="icono-studio-example" data-studio-action="example">Load example</button>'
   }
   return cast
     .map(
       (node) =>
-        `<button type="button" class="icono-studio-cast-item${selectedId === node.id ? " is-selected" : ""}" data-studio-select="${escapeHtml(node.id)}"><img src="${escapeHtml(node.asset.canonical_url || node.asset.immutable_url)}" alt="" loading="lazy"/><span><strong>${escapeHtml(node.symbol)}</strong><small>${escapeHtml(node.label)}</small></span></button>`,
+        `<button type="button" class="icono-studio-cast-item${selectedId === node.id ? " is-selected" : ""}" data-studio-select="${escapeHtml(node.id)}" aria-label="Select ${escapeHtml(node.symbol)}" title="${escapeHtml(node.symbol)}"><img src="${escapeHtml(node.asset.canonical_url || node.asset.immutable_url)}" alt="" loading="lazy"/></button>`,
     )
     .join("")
 }
@@ -259,18 +258,15 @@ function castListMarkup() {
 function inspectorMarkup() {
   const item = selectedItem()
   if (!item) {
-    return `<div class="icono-studio-inspector-summary"><label class="icono-studio-field">Diagram title<input type="text" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.titleLength}" value="${escapeHtml(currentDocument.title)}" data-studio-title /></label></div><div class="icono-studio-inspector-note"><strong>Draw directly on the figure.</strong><p>Move portraits by dragging them. Hover a portrait, then drag one of its four handles onto another portrait to connect them.</p></div>`
+    return '<p class="icono-studio-empty-list">Nothing selected</p>'
   }
   if (item.type === "gene") {
-    const targets = currentDocument.nodes.filter(
-      (node) => node.type === "gene" && node.id !== item.id,
-    )
-    return `<div class="icono-studio-inspector-summary"><div class="icono-studio-selection"><span>Selected gene</span><strong>${escapeHtml(item.symbol)}</strong></div><label class="icono-studio-field">Caption<input type="text" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.labelLength}" value="${escapeHtml(item.label)}" data-studio-node-label="${escapeHtml(item.id)}" /></label><button type="button" class="icono-studio-danger" data-studio-remove="${escapeHtml(item.id)}">Remove</button></div><div class="icono-studio-inspector-controls">${targets.length ? `<div class="icono-studio-inspector-note"><strong>Drag a handle to connect.</strong><p>The four red handles snap to another portrait. The new connection starts as activation; choose →, ⊣, or — on the canvas after drawing it.</p></div><details class="icono-studio-keyboard-connect"><summary>Keyboard connection controls</summary><form data-studio-connect-form><input type="hidden" name="from" value="${escapeHtml(item.id)}"/><label class="icono-studio-field">Connect to<select name="to">${targets.map((node) => `<option value="${escapeHtml(node.id)}">${escapeHtml(node.symbol)}</option>`).join("")}</select></label><label class="icono-studio-field">Relationship<select name="kind"><option value="activation">Activates</option><option value="inhibition">Inhibits</option><option value="association">Associated with</option></select></label><label class="icono-studio-field">Label<input name="label" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.labelLength}" placeholder="optional"/></label><button type="submit" class="icono-studio-wide-action">Connect genes</button></form></details>` : '<p class="icono-studio-inspector-note">Add another gene to draw a relationship.</p>'}</div>`
+    return `<div class="icono-studio-selection"><strong>${escapeHtml(item.symbol)}</strong></div><button type="button" class="icono-studio-danger" data-studio-remove="${escapeHtml(item.id)}">Remove</button>`
   }
   if (item.type === "text") {
-    return `<div class="icono-studio-inspector-summary"><div class="icono-studio-selection"><span>Text box</span><strong>Annotation</strong></div><label class="icono-studio-field">Text<textarea rows="5" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.textLength}" data-studio-text-content="${escapeHtml(item.id)}">${escapeHtml(item.text)}</textarea></label><label class="icono-studio-field">Size<input type="number" min="12" max="56" step="1" value="${item.font_size}" data-studio-text-size="${escapeHtml(item.id)}" /></label><label class="icono-studio-field">Align<select data-studio-text-align="${escapeHtml(item.id)}"><option value="left"${item.align === "left" ? " selected" : ""}>Left</option><option value="center"${item.align === "center" ? " selected" : ""}>Center</option><option value="right"${item.align === "right" ? " selected" : ""}>Right</option></select></label><button type="button" class="icono-studio-danger" data-studio-remove="${escapeHtml(item.id)}">Remove</button></div><div class="icono-studio-inspector-note"><strong>Resize on the figure.</strong><p>Drag the X6 handles around the selected text box.</p></div>`
+    return `<label class="icono-studio-field">Text<textarea rows="3" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.textLength}" data-studio-text-content="${escapeHtml(item.id)}">${escapeHtml(item.text)}</textarea></label><div class="icono-studio-inline-fields"><label class="icono-studio-field">Size<input type="number" min="12" max="56" step="1" value="${item.font_size}" data-studio-text-size="${escapeHtml(item.id)}" /></label><label class="icono-studio-field">Align<select data-studio-text-align="${escapeHtml(item.id)}"><option value="left"${item.align === "left" ? " selected" : ""}>Left</option><option value="center"${item.align === "center" ? " selected" : ""}>Center</option><option value="right"${item.align === "right" ? " selected" : ""}>Right</option></select></label></div><button type="button" class="icono-studio-danger" data-studio-remove="${escapeHtml(item.id)}">Remove</button>`
   }
-  return `<div class="icono-studio-inspector-summary"><div class="icono-studio-selection"><span>Selected relationship</span><strong>${escapeHtml(item.kind)}</strong></div><label class="icono-studio-field">Label<input type="text" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.labelLength}" value="${escapeHtml(item.label)}" data-studio-edge-label="${escapeHtml(item.id)}" /></label><button type="button" class="icono-studio-danger" data-studio-remove="${escapeHtml(item.id)}">Remove</button></div><div class="icono-studio-inspector-note"><strong>Relationship style is on the canvas.</strong><p>Use the nearby →, ⊣, and — controls so the visual result never leaves your attention.</p></div>`
+  return `<div class="icono-studio-selection"><strong>${escapeHtml(item.kind)}</strong></div><label class="icono-studio-field">Label<input type="text" maxlength="${ICONOPLASM_DIAGRAM_LIMITS.labelLength}" value="${escapeHtml(item.label)}" data-studio-edge-label="${escapeHtml(item.id)}" /></label><button type="button" class="icono-studio-danger" data-studio-remove="${escapeHtml(item.id)}">Remove</button>`
 }
 
 function renderWorkspace() {
@@ -280,8 +276,10 @@ function renderWorkspace() {
   const count = mountedRoot.querySelector("[data-studio-count]")
   if (list) list.innerHTML = castListMarkup()
   if (inspector) inspector.innerHTML = inspectorMarkup()
-  if (count)
-    count.textContent = `${currentDocument.nodes.filter((node) => node.type === "gene").length} genes · ${currentDocument.edges.length} relationships · ${currentDocument.nodes.filter((node) => node.type === "text").length} text boxes`
+  if (count) {
+    const genes = currentDocument.nodes.filter((node) => node.type === "gene").length
+    count.textContent = `${genes} genes · ${currentDocument.edges.length} connections`
+  }
   const undoButton = mountedRoot.querySelector('[data-studio-action="undo"]')
   const redoButton = mountedRoot.querySelector('[data-studio-action="redo"]')
   if (undoButton) undoButton.disabled = !editor?.canUndo()
@@ -296,6 +294,11 @@ function renderWorkspace() {
 
 async function selectItem(itemId, options = {}) {
   selectedId = String(itemId || "")
+  const item = selectedItem()
+  if (item?.type === "relationship") {
+    activeRelationshipKind = item.kind
+    editor?.setRelationshipKind(item.kind)
+  }
   renderWorkspace()
   if (options.canvas !== false) (await editorReady)?.select(selectedId)
   if (options.edit) {
@@ -362,6 +365,97 @@ async function loadExample() {
   await (await editorReady)?.arrange("horizontal")
 }
 
+function closeStudioSearch() {
+  studioSearchResults = []
+  activeStudioSearchIndex = -1
+  const input = mountedRoot?.querySelector("#icono-studio-gene-input")
+  const results = mountedRoot?.querySelector("[data-studio-gene-results]")
+  if (input) {
+    input.setAttribute("aria-expanded", "false")
+    input.removeAttribute("aria-activedescendant")
+  }
+  if (results) results.innerHTML = ""
+}
+
+function highlightStudioSearch() {
+  const input = mountedRoot?.querySelector("#icono-studio-gene-input")
+  const items = [...(mountedRoot?.querySelectorAll("[data-studio-search-result]") || [])]
+  items.forEach((item, index) => {
+    const active = index === activeStudioSearchIndex
+    item.classList.toggle("active", active)
+    item.setAttribute("aria-selected", String(active))
+  })
+  if (input && activeStudioSearchIndex >= 0 && items[activeStudioSearchIndex])
+    input.setAttribute("aria-activedescendant", items[activeStudioSearchIndex].id)
+  else input?.removeAttribute("aria-activedescendant")
+}
+
+function renderStudioSearchResults(genes) {
+  const input = mountedRoot?.querySelector("#icono-studio-gene-input")
+  const results = mountedRoot?.querySelector("[data-studio-gene-results]")
+  if (!input || !results) return
+  studioSearchResults = genes
+  activeStudioSearchIndex = -1
+  input.setAttribute("aria-expanded", String(genes.length > 0))
+  input.removeAttribute("aria-activedescendant")
+  results.innerHTML = genes
+    .map(
+      (gene, index) =>
+        `<button type="button" class="icono-search-result" id="icono-studio-search-result-${index}" role="option" aria-selected="false" data-studio-search-result data-studio-add-symbol="${escapeHtml(gene.symbol)}"><span class="icono-search-result-media icono-search-result-media--portrait"><img class="icono-search-result-portrait icono-thumbnail-viewport-image" src="${escapeHtml(gene.pt || gene.ph || "")}" alt="" loading="eager" decoding="async"></span><span class="icono-search-result-copy"><span class="icono-search-result-symbol">${escapeHtml(gene.symbol)}</span><span class="icono-search-result-name">${escapeHtml(gene.full_name || "")}</span></span></button>`,
+    )
+    .join("")
+}
+
+async function refreshStudioSearch(query) {
+  const requestId = ++studioSearchRequest
+  if (!query || /[\s,;]/.test(query)) {
+    closeStudioSearch()
+    return
+  }
+  const response = await fetch(
+    `${publicApiOrigin()}/api/public/v1/genes/search?q=${encodeURIComponent(query)}&limit=8&scope=catalog`,
+  )
+  const payload = await response.json().catch(() => null)
+  if (requestId !== studioSearchRequest) return
+  if (!response.ok || !payload) {
+    closeStudioSearch()
+    return
+  }
+  renderStudioSearchResults(payload.genes || [])
+}
+
+function handleStudioInput(event) {
+  if (!event.target.matches("#icono-studio-gene-input")) return
+  window.clearTimeout(studioSearchTimer)
+  studioSearchTimer = window.setTimeout(
+    () => refreshStudioSearch(event.target.value.trim()),
+    SEARCH_DEBOUNCE_MS,
+  )
+}
+
+function handleStudioKeydown(event) {
+  if (!event.target.matches("#icono-studio-gene-input")) return
+  if (event.key === "ArrowDown" && studioSearchResults.length) {
+    event.preventDefault()
+    activeStudioSearchIndex = Math.min(activeStudioSearchIndex + 1, studioSearchResults.length - 1)
+    highlightStudioSearch()
+  } else if (event.key === "ArrowUp" && studioSearchResults.length) {
+    event.preventDefault()
+    activeStudioSearchIndex = Math.max(activeStudioSearchIndex - 1, 0)
+    highlightStudioSearch()
+  } else if (event.key === "Enter" && studioSearchResults.length) {
+    event.preventDefault()
+    const selected = studioSearchResults[Math.max(0, activeStudioSearchIndex)]
+    mountedRoot?.querySelector(`[data-studio-add-symbol="${CSS.escape(selected.symbol)}"]`)?.click()
+  } else if (event.key === "Escape") {
+    closeStudioSearch()
+  }
+}
+
+function handleStudioOutsideClick(event) {
+  if (!event.target.closest(".icono-studio-search")) closeStudioSearch()
+}
+
 async function handleStudioClick(event) {
   const relationshipTool = event.target.closest("[data-studio-relationship-tool]")
   if (relationshipTool) {
@@ -371,9 +465,9 @@ async function handleStudioClick(event) {
     const edge = currentDocument.edges.find((item) => item.id === selectedId)
     if (edge) {
       instance?.updateEdge(edge.id, { kind: activeRelationshipKind })
-      setStatus("Updated the selected relationship.")
+      setStatus("Updated.")
     } else {
-      setStatus("New connections will use " + activeRelationshipKind + ".")
+      setStatus("")
     }
     renderWorkspace()
     return
@@ -383,6 +477,9 @@ async function handleStudioClick(event) {
   if (addSymbol) {
     try {
       await addResolvedGenes(addSymbol.getAttribute("data-studio-add-symbol"))
+      closeStudioSearch()
+      const input = mountedRoot?.querySelector("#icono-studio-gene-input")
+      if (input) input.value = ""
     } catch (error) {
       setStatus(error.message, "error")
     }
@@ -401,7 +498,7 @@ async function handleStudioClick(event) {
     await commitDocument(
       removeDiagramItem(currentDocument, remove.getAttribute("data-studio-remove")),
       {
-        message: "Removed from the diagram.",
+        message: "Removed.",
       },
     )
     return
@@ -422,12 +519,12 @@ async function handleStudioClick(event) {
     if (name === "example") await loadExample()
     if (name === "text") {
       const outcome = addTextNode(currentDocument, {
-        text: "Double-click to edit",
+        text: "Text",
         x: currentDocument.width / 2 - 130,
         y: currentDocument.height / 2 - 44,
       })
       selectedId = outcome.node.id
-      await commitDocument(outcome.document, { message: "Added a movable, resizable text box." })
+      await commitDocument(outcome.document, { message: "Text added." })
       await selectItem(outcome.node.id, { edit: true })
     }
   } catch (error) {
@@ -478,13 +575,13 @@ async function handleStudioChange(event) {
   const nodeLabel = event.target.getAttribute("data-studio-node-label")
   if (nodeLabel) {
     instance?.updateNode(nodeLabel, { label: event.target.value })
-    setStatus("Updated the caption.")
+    setStatus("Updated.")
     return
   }
   const textContent = event.target.getAttribute("data-studio-text-content")
   if (textContent) {
     instance?.updateNode(textContent, { text: event.target.value })
-    setStatus("Updated the text box.")
+    setStatus("Updated.")
     return
   }
   const textSize = event.target.getAttribute("data-studio-text-size")
@@ -529,6 +626,9 @@ export function renderDiagramStudio(root) {
   mountedRoot.addEventListener("click", handleStudioClick)
   mountedRoot.addEventListener("submit", handleStudioSubmit)
   mountedRoot.addEventListener("change", handleStudioChange)
+  mountedRoot.addEventListener("input", handleStudioInput)
+  mountedRoot.addEventListener("keydown", handleStudioKeydown)
+  document.addEventListener("click", handleStudioOutsideClick)
   renderWorkspace()
 
   const container = mountedRoot.querySelector("[data-studio-x6-canvas]")
@@ -544,7 +644,7 @@ export function renderDiagramStudio(root) {
       editor = instance
       instance.setRelationshipKind(activeRelationshipKind)
       renderWorkspace()
-      setStatus("X6 canvas ready. Drag portraits and connect their red ports.")
+      setStatus("")
       return instance
     })
     .catch((error) => {
@@ -558,6 +658,10 @@ export function unmountDiagramStudio() {
   mountedRoot.removeEventListener("click", handleStudioClick)
   mountedRoot.removeEventListener("submit", handleStudioSubmit)
   mountedRoot.removeEventListener("change", handleStudioChange)
+  mountedRoot.removeEventListener("input", handleStudioInput)
+  mountedRoot.removeEventListener("keydown", handleStudioKeydown)
+  document.removeEventListener("click", handleStudioOutsideClick)
+  window.clearTimeout(studioSearchTimer)
   editor?.dispose()
   editor = null
   editorReady = null
@@ -628,7 +732,9 @@ async function composeFromTool(input) {
 }
 
 async function editFromTool(input) {
-  const operations = Array.isArray(input.operations) ? input.operations.slice(0, 50) : []
+  const operations = Array.isArray(input.operations)
+    ? input.operations.slice(0, ICONOPLASM_DIAGRAM_LIMITS.nodes)
+    : []
   if (!operations.length) throw new TypeError("operations must contain at least one edit.")
   ensureStudioOpen()
   const symbolsToResolve = operations
@@ -711,7 +817,6 @@ function toolSchemas() {
     type: "object",
     properties: {
       symbol: { type: "string", description: "Human gene symbol, for example TP53." },
-      label: { type: "string", description: "Optional caption for this gene character." },
       x: { type: "number", description: "Optional manual x-coordinate in the 1200 by 800 canvas." },
       y: { type: "number", description: "Optional manual y-coordinate in the 1200 by 800 canvas." },
     },
@@ -744,11 +849,16 @@ function toolSchemas() {
     {
       name: "resolve_gene_assets",
       description:
-        "Return canonical Iconoplasm gene-character bitmap URLs and provenance for up to 50 gene identifiers. Use this when you need to inspect the character images multimodally or reuse them outside the visible Iconoplasm diagram.",
+        "Return canonical Iconoplasm gene-character bitmap URLs and provenance for up to 150 gene identifiers. Use this when you need to inspect the character images multimodally or reuse them outside the visible Iconoplasm diagram.",
       inputSchema: {
         type: "object",
         properties: {
-          symbols: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 50 },
+          symbols: {
+            type: "array",
+            items: { type: "string" },
+            minItems: 1,
+            maxItems: ICONOPLASM_DIAGRAM_LIMITS.nodes,
+          },
           asset_types: {
             type: "array",
             items: { type: "string", enum: ["gene_blot"] },
@@ -816,7 +926,7 @@ function toolSchemas() {
           operations: {
             type: "array",
             minItems: 1,
-            maxItems: 50,
+            maxItems: ICONOPLASM_DIAGRAM_LIMITS.nodes,
             items: {
               type: "object",
               properties: {
