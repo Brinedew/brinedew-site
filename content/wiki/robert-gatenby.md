@@ -11,7 +11,7 @@ aliases:
 
 ![Robert Gatenby](../Attachments/robert-gatenby.jpg)
 
-Robert A. Gatenby is an American physician-scientist, radiologist and professor at the Moffitt Cancer Center in Tampa, Florida, known for founding the field of adaptive therapy and for treating cancer as a problem in the ecology and evolution of an evolving cell population.
+Robert A. Gatenby is an American physician-scientist, radiologist and professor at the Moffitt Cancer Center in Tampa, Florida, known for founding the field of [adaptive therapy](adaptive-therapy.md) and for treating cancer as a problem in the [ecology](cancer-ecology.md) and evolution of an evolving cell population.
 
 ## Cancer as an ecological system
 

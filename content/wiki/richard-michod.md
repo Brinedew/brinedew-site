@@ -11,7 +11,7 @@ aliases:
 
 ![Richard Michod](../Attachments/richard-michod.jpg)
 
-Richard E. Michod is an American evolutionary biologist and professor emeritus at the University of Arizona, known for his work on evolutionary transitions in individuality — the processes by which groups of previously independent replicators become new, higher-level individuals.
+Richard E. Michod is an American evolutionary biologist and professor emeritus at the University of Arizona, known for his work on [evolutionary transitions in individuality](evolutionary-transitions-in-individuality.md) — the processes by which groups of previously independent replicators become new, higher-level individuals.
 
 ## Evolutionary transitions and fitness
 
