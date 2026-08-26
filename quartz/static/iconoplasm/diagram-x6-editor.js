@@ -436,6 +436,11 @@ export async function createDiagramEditor({ container, document, onChange, onSel
     return false
   })
 
+  function fitDiagram() {
+    graph.zoomToFit({ padding: 56, maxScale: 1 })
+    graph.centerContent()
+  }
+
   async function setDocument(nextDocument, { fit = false, cleanHistory = false } = {}) {
     applyingDocument = true
     baseDocument = nextDocument
@@ -448,7 +453,7 @@ export async function createDiagramEditor({ container, document, onChange, onSel
     history.enable()
     if (cleanHistory) history.clean()
     applyingDocument = false
-    if (fit && nextDocument.nodes.length) graph.zoomToFit({ padding: 56, maxScale: 1 })
+    if (fit && nextDocument.nodes.length) fitDiagram()
   }
 
   await setDocument(document, { fit: true, cleanHistory: true })
@@ -524,7 +529,7 @@ export async function createDiagramEditor({ container, document, onChange, onSel
     redo: () => graph.redo(),
     zoomIn: () => graph.zoom(0.15, { maxScale: 2.5 }),
     zoomOut: () => graph.zoom(-0.15, { minScale: 0.35 }),
-    zoomToFit: () => graph.zoomToFit({ padding: 56, maxScale: 1 }),
+    zoomToFit: fitDiagram,
     async arrange(direction = "horizontal") {
       const { DagreLayout } = await loadRuntime()
       const genes = graph.getNodes().filter((node) => node.getData()?.itemType === "gene")
@@ -558,7 +563,7 @@ export async function createDiagramEditor({ container, document, onChange, onSel
       })
       graph.stopBatch("antv-dagre-layout")
       layout.destroy()
-      graph.zoomToFit({ padding: 56, maxScale: 1 })
+      fitDiagram()
       emitChange()
     },
     async exportSvg() {
