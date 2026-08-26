@@ -2,8 +2,8 @@
 // published gene blot. They never select or mint a parallel image identity.
 export const ICONOPLASM_DIAGRAM_SCHEMA_VERSION = 2
 export const ICONOPLASM_DIAGRAM_LIMITS = Object.freeze({
-  nodes: 50,
-  edges: 100,
+  nodes: 150,
+  edges: 300,
   titleLength: 160,
   labelLength: 120,
   textLength: 600,
@@ -120,8 +120,8 @@ function normalizeEdge(rawEdge, index, nodeIds) {
 }
 
 export function createDiagramDocument(rawDocument = {}) {
-  const width = Math.min(2400, Math.max(640, finiteNumber(rawDocument.width, DEFAULT_WIDTH)))
-  const height = Math.min(1600, Math.max(360, finiteNumber(rawDocument.height, DEFAULT_HEIGHT)))
+  const width = Math.min(12000, Math.max(640, finiteNumber(rawDocument.width, DEFAULT_WIDTH)))
+  const height = Math.min(12000, Math.max(360, finiteNumber(rawDocument.height, DEFAULT_HEIGHT)))
   const rawNodes = Array.isArray(rawDocument.nodes) ? rawDocument.nodes : []
   const nodes = []
   const nodeIds = new Set()
@@ -156,9 +156,7 @@ export function createDiagramDocument(rawDocument = {}) {
       boundedText(rawDocument.title, ICONOPLASM_DIAGRAM_LIMITS.titleLength) || "Untitled pathway",
     width,
     height,
-    background: /^#[0-9a-f]{6}$/i.test(String(rawDocument.background || ""))
-      ? String(rawDocument.background).toLowerCase()
-      : "#f4efe4",
+    background: "#ffffff",
     nodes,
     edges,
   }
