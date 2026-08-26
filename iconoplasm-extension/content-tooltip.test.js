@@ -207,6 +207,21 @@ test("raw file PDF wrappers do not initialize a second extension surface", async
   assert.match(content, /if \(isOuterRawFilePdfDocument\) return/)
 })
 
+test("hover portrait discovery is snapshot-keyed and independent of rich-detail success", async () => {
+  const content = await readFile(new URL("./content.js", import.meta.url), "utf8")
+
+  assert.match(
+    content,
+    /ICONOPLASM_PORTRAIT_LOCATOR_PREFIX\}\$\{encodeURIComponent\(revision\)\}\/portraits\//,
+  )
+  assert.match(content, /portraitLocatorStore\.setRevision\(payload\.cardSnapshotVersion\)/)
+  assert.match(content, /portraitLocatorStore\.hydratePersistentCache\(\)/)
+  assert.match(content, /const hoverGeneDetailPromise =/)
+  assert.match(content, /const hoverPortraitLocatorPromise =/)
+  assert.match(content, /hoverPortraitLocatorPromise\.then\(\(portraitLocator\) =>/)
+  assert.match(content, /published portrait locator\/detail mismatch; portrait suppressed/)
+})
+
 test("DO NOT DELETE: extension fonts resolve from the extension runtime on every host", async () => {
   const [css, runtimeSource, manifestSource, frameHtml, pdfReaderHtml] = await Promise.all([
     readFile(new URL("./generated/shared-card-label.css", import.meta.url), "utf8"),

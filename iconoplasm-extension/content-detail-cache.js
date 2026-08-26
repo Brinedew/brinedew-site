@@ -1,8 +1,9 @@
 ;(function (root) {
   "use strict"
 
-  // ARCHITECTURE FENCE [IPD-008]: detail remains a bounded, revision-keyed
-  // projection of the published card artifact; persistence never blocks paint.
+  // ARCHITECTURE FENCE [IPD-008]: detail and portrait locators remain bounded,
+  // revision-keyed projections of the same published card artifact; persistence
+  // never blocks paint and neither projection may elect portrait identity.
 
   function normalizeSymbol(rawSymbol) {
     return String(rawSymbol || "")
@@ -24,6 +25,12 @@
     const batchUrl = String(options.batchUrl || "")
     const detailUrlForSymbol =
       typeof options.detailUrlForSymbol === "function" ? options.detailUrlForSymbol : null
+    const recordFromPayload =
+      typeof options.recordFromPayload === "function"
+        ? options.recordFromPayload
+        : (payload) => (payload?.gene && typeof payload.gene === "object" ? payload.gene : null)
+    const validateRecord =
+      typeof options.validateRecord === "function" ? options.validateRecord : () => true
     const fields = Array.isArray(options.fields) ? options.fields : []
     const requestTimeoutMs = Math.max(250, Number(options.requestTimeoutMs || 4000))
     const onResolvedBatch =
@@ -277,10 +284,16 @@
         }
         if (requestSerial < latestAdoptedResponseSerial && activeRevision !== revision) return null
         latestAdoptedResponseSerial = Math.max(latestAdoptedResponseSerial, requestSerial)
-        const record = payload.gene && typeof payload.gene === "object" ? payload.gene : null
+        const candidate = recordFromPayload(payload)
+        const record =
+          candidate && typeof candidate === "object" && validateRecord(candidate, symbol, revision)
+            ? candidate
+            : null
         if (record) {
           rememberRecord(symbol, record)
           onResolvedBatch([record], options.priority || "foreground")
+        } else if (candidate) {
+          throw new Error("Published immutable record is invalid")
         } else if (Array.isArray(payload.missing) && payload.missing.includes(symbol)) {
           cache.set(symbol, null)
         }

@@ -589,3 +589,119 @@ test("foreground hover does not retry an immutable missing record", async () => 
   assert.equal(calls, 1)
   assert.equal(result.get("PRL"), null)
 })
+
+test("the shared immutable store validates and persists portrait locator projections", async () => {
+  const createGeneDetailStore = loadFactory()
+  const sha = "ab".repeat(32)
+  const storage = createStorage()
+  const store = createGeneDetailStore({
+    windowRef: globalThis,
+    storageApi: storage,
+    storageKey: "portrait_locator_test",
+    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/portraits/${symbol}`,
+    recordFromPayload: (payload) => payload.portrait_locator,
+    validateRecord: (record, symbol, revision) =>
+      record?.symbol === symbol &&
+      record?.snapshot_version === revision &&
+      record?.portrait?.asset_sha256 === sha,
+    fetchImpl: async () =>
+      response({
+        snapshot_version: "card-v1",
+        portrait_locator: {
+          snapshot_version: "card-v1",
+          symbol: "ATP2B4",
+          portrait: {
+            status: "published",
+            asset_sha256: sha,
+            medium_url: "https://iconoplasm.brinedew.bio/portrait.webp",
+          },
+        },
+        missing: [],
+      }),
+  })
+  store.setRevision("card-v1")
+
+  const result = await store.fetchBatch(["ATP2B4"], { priority: "foreground" })
+  await store.flushPersistence()
+
+  assert.equal(result.get("ATP2B4")?.portrait?.asset_sha256, sha)
+  assert.equal(storage.values.portrait_locator_test.revision, "card-v1")
+  assert.equal(storage.values.portrait_locator_test.entries[0][0], "ATP2B4")
+})
+
+test("an invalid portrait locator is not cached as an immutable absence", async () => {
+  const createGeneDetailStore = loadFactory()
+  let calls = 0
+  const store = createGeneDetailStore({
+    windowRef: globalThis,
+    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/portraits/${symbol}`,
+    recordFromPayload: (payload) => payload.portrait_locator,
+    validateRecord: (record, symbol, revision) =>
+      record?.symbol === symbol && record?.snapshot_version === revision,
+    fetchImpl: async () => {
+      calls += 1
+      return response({
+        snapshot_version: "card-v1",
+        portrait_locator: { snapshot_version: "wrong-card", symbol: "ATP2B4" },
+        missing: [],
+      })
+    },
+  })
+  store.setRevision("card-v1")
+
+  const first = await store.fetchBatch(["ATP2B4"], { priority: "foreground" })
+  const second = await store.fetchBatch(["ATP2B4"], { priority: "foreground" })
+
+  assert.equal(first.get("ATP2B4"), null)
+  assert.equal(second.get("ATP2B4"), null)
+  assert.equal(store.cache.has("ATP2B4"), false)
+  assert.equal(calls, 4)
+})
+
+test("portrait locator delivery survives complete rich-detail retry exhaustion", async () => {
+  const createGeneDetailStore = loadFactory()
+  let detailCalls = 0
+  let locatorCalls = 0
+  const detailStore = createGeneDetailStore({
+    windowRef: globalThis,
+    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
+    fetchImpl: async () => {
+      detailCalls += 1
+      throw new Error("synthetic rich-detail transport stall")
+    },
+  })
+  const locatorStore = createGeneDetailStore({
+    windowRef: globalThis,
+    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/portraits/${symbol}`,
+    recordFromPayload: (payload) => payload.portrait_locator,
+    validateRecord: (record, symbol, revision) =>
+      record?.symbol === symbol && record?.snapshot_version === revision,
+    fetchImpl: async () => {
+      locatorCalls += 1
+      return response({
+        snapshot_version: "card-v1",
+        portrait_locator: {
+          snapshot_version: "card-v1",
+          symbol: "ATP2B4",
+          portrait: {
+            asset_sha256: "cd".repeat(32),
+            medium_url: "https://iconoplasm.brinedew.bio/atp2b4.webp",
+          },
+        },
+        missing: [],
+      })
+    },
+  })
+  detailStore.setRevision("card-v1")
+  locatorStore.setRevision("card-v1")
+
+  const [details, locators] = await Promise.all([
+    detailStore.fetchBatch(["ATP2B4"], { priority: "foreground" }),
+    locatorStore.fetchBatch(["ATP2B4"], { priority: "foreground" }),
+  ])
+
+  assert.equal(details.get("ATP2B4"), null)
+  assert.equal(detailCalls, 2)
+  assert.equal(locatorCalls, 1)
+  assert.equal(locators.get("ATP2B4")?.portrait?.asset_sha256, "cd".repeat(32))
+})

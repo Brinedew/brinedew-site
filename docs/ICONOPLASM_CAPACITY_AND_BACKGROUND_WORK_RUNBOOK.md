@@ -231,9 +231,10 @@ Extension hover detail is immutable within a published card snapshot:
   and aliases, is capped at 3 MiB, and never contains portrait references;
 - extension upgrades atomically compact any legacy portrait-heavy scanner map
   before returning gene data to a tab;
-- foreground hover reads one version-addressed immutable per-symbol GET. The
-  compatibility batch route remains for older installations; both read the
-  corresponding published card artifact, not D1;
+- foreground hover starts two version-addressed immutable per-symbol GETs: rich
+  detail and a compact portrait locator. Both project the same named published
+  card artifact, not D1. The locator has no independent KV object, pointer, or
+  publication step. The compatibility batch route remains for older installations;
   active current/previous versions reuse the Cloudflare Worker Cache API before
   reading the manifest or shard, and the same immutable URL remains reusable in
   the browser HTTP cache;
@@ -242,20 +243,21 @@ Extension hover detail is immutable within a published card snapshot:
   KV read/parse per immutable key;
   missing or malformed values are never cached;
 - installed extensions keep a detail cache capped at both 512 entries and
-  4 MiB, keyed by that version;
+  4 MiB plus a compact locator cache capped at 1,024 entries and 768 KiB; both
+  are keyed by the same card snapshot version;
 - a version change invalidates the cache, and an older-started response from a
   different snapshot cannot displace a newer-started response already adopted;
 - only an explicit `missing` result is negative-cached, and transient failures
   remain retryable;
-- foreground GETs do not wait for whole-cache hydration, carry a four-second
-  deadline, and may promote the same reading-session request for that symbol
+- foreground GETs do not wait for whole-cache hydration, carry independent
+  four-second deadlines, and may promote the same reading-session request for that symbol
   through the content-to-service-worker bridge;
-- a successful detail response resolves the visible card from memory before a
+- a successful detail or locator response resolves its visible projection from memory before a
   coalesced idle writer reads, merges, stringifies, or writes the persistent
   cache; an old queued write cannot roll a newer snapshot backward;
 - HTML and PDF register recognized anchors with one tab-scoped reading session.
-  Ordinary documents prepare their unique-symbol inventory as complete immutable
-  cards—detail, delivery resolution, bytes, decode, and frame acknowledgement—before
+  Ordinary documents prepare their unique-symbol inventory as immutable rich detail
+  plus independently deliverable portrait locators, bytes, decode, and frame acknowledgement before
   hover. The adaptive ceilings are 16 symbols/3 workers on constrained connections,
   64/6 ordinarily, and 128/8 only on measured fast connections;
 - large documents use the same session and deterministic near-viewport working
@@ -263,7 +265,9 @@ Extension hover detail is immutable within a published card snapshot:
   Data Saver, `slow-2g`, and `2g` disable preparation;
 - hover is a selector over the ready-card set. Its foreground request exists only
   for immediate-startup interaction, a transient preparation failure, or suppressed
-  preparation, and reuses matching in-flight immutable detail/portrait work;
+  preparation, and reuses matching in-flight immutable detail/portrait work. A
+  locator success may paint the portrait while rich detail is stalled or exhausted;
+  if both projections arrive with different portrait SHAs, portrait and voting fail closed;
 - the rich variants boot one iframe inside its permanent tooltip-owned parent
   during initialization. That same browsing context decodes neighbors and
   renders every hover; it is never reparented or duplicated;

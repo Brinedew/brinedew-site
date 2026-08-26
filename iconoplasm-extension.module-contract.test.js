@@ -922,17 +922,17 @@ test("DO NOT DELETE: reading-session preparation replaces pointer prediction bef
   )
 })
 
-test("DO NOT DELETE: simple hover portraits hydrate from bounded detail, never scanner metadata", () => {
+test("DO NOT DELETE: simple hover portraits hydrate from the bounded card projection, never scanner metadata", () => {
   const source = readUtf8("./iconoplasm-extension/content.js")
   assert.match(
     source,
-    /function loadSimpleTooltipPortrait\(\{[\s\S]*portraitSrc:\s*buildTooltipFramePortraitSrc\(geneDetail\)/,
-    "simple cards must resolve portraits from hydrated detail",
+    /function loadSimpleTooltipPortrait\(\{[\s\S]*portraitSrc:\s*buildTooltipFramePortraitSrc\(geneDetail, portraitLocator\)/,
+    "simple cards must resolve portraits from coherent detail or locator projection",
   )
   assert.match(
     source,
-    /function buildTooltipFramePortraitSrc\(geneDetail\)[\s\S]*return portraitUrlFromGeneDetail\(\{ portrait: detailPortrait \}\)/,
-    "portrait resolution must use the bounded detail record",
+    /function buildTooltipFramePortraitSrc\(geneDetail, portraitLocator = null\)[\s\S]*coherentPortraitRecord\(geneDetail, portraitLocator\)/,
+    "portrait resolution must use a bounded projection from the named card snapshot",
   )
   assert.doesNotMatch(
     source,
@@ -941,13 +941,18 @@ test("DO NOT DELETE: simple hover portraits hydrate from bounded detail, never s
   )
   assert.match(
     source,
-    /loadSimpleTooltipPortrait\(\{[\s\S]*geneDetail:\s*geneDetailCache\.has\(symbol\)\s*\?\s*geneDetailCache\.get\(symbol\)\s*:\s*null[\s\S]*portraitRefs/,
-    "warm detail records should feed the simple portrait on the first hover render",
+    /loadSimpleTooltipPortrait\(\{[\s\S]*geneDetail:\s*geneDetailCache\.has\(symbol\)\s*\?\s*geneDetailCache\.get\(symbol\)\s*:\s*null[\s\S]*portraitLocator: initialPortraitLocator[\s\S]*portraitRefs/,
+    "warm detail and locator projections should feed the simple portrait on first hover",
   )
   assert.match(
     source,
     /hoverGeneDetailPromise\.then\(\(geneDetail\)\s*=>\s*\{[\s\S]*if\s*\(portraitRefs\)\s*\{[\s\S]*loadSimpleTooltipPortrait\(\{[\s\S]*geneDetail,[\s\S]*portraitRefs/,
     "a cold simple hover must rehydrate its portrait when authoritative detail arrives",
+  )
+  assert.match(
+    source,
+    /hoverPortraitLocatorPromise\.then\(\(portraitLocator\)\s*=>\s*\{[\s\S]*loadSimpleTooltipPortrait\(\{[\s\S]*portraitLocator,[\s\S]*portraitRefs/,
+    "a cold simple hover must hydrate its portrait when the locator arrives independently",
   )
 })
 
