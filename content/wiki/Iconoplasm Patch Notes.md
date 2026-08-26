@@ -10,6 +10,9 @@ draft: false
 
 ## Unreleased
 
+## 0.5.1 - 2026-08-26
+
+* Hotfix: PDF highlighting now works with local PDFs
 ## 0.5.0 - 2026-08-26
 
 * Decoupled portrait discovery from the larger rich-detail request for more robust gene portrait loading
