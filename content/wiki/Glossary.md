@@ -41,7 +41,7 @@ Idea that evolution selects genes which increase early-life fitness but decrease
 **Apical–basal polarity**
 Built-in “top–bottom” orientation of epithelial cells that lets tissues know which side faces the outside and which faces the inside.
 
-**Apoptosis**
+**[[apoptosis|Apoptosis]]**
 Controlled cell death process initiated by the cell itself (intrinsic apoptosis) or by other cells (extrinsic apoptosis) after intracellular stress or oncogene activation, as opposed to necrosis (uncontrolled cell death)
 
 **ATAC-seq**
@@ -77,8 +77,8 @@ Use of membrane voltage and ion-flux patterns as signals that coordinate cell be
 **[[cancer-ecology|Cancer ecology]]**
 Study of tumors as ecosystems of competing and cooperating cell phenotypes shaped by resources, stromal cells, and the immune system.
 
-**Cancer immunoediting**
-Idea that the immune system interacts with cancer in three stages: elimination (removes abnormal cells), equilibrium (holds tumors stable), and escape (selects for cells that evade detection). See [[immune-surveillance|immune surveillance]].
+**[[immunoediting|Cancer immunoediting]]**
+Idea that the immune system interacts with cancer in three stages: elimination (removes abnormal cells), equilibrium (holds tumors stable), and escape (selects for cells that evade detection).
 
 **[[ctvt-line|Canine transmissible venereal tumor (CTVT)]]**
 Naturally transmissible cancer lineage that spreads between dogs by cell transfer.
@@ -118,6 +118,9 @@ DNA wrapped around proteins and folded into higher-order structures, which helps
 
 **Chromothripsis**
 One-off cancer-associated event where chromosomes are shattered and haphazardly reassembled, creates many DNA changes at once.
+
+**[[peter-nowell|Clonal evolution]]**
+Model in which a tumor is a population of cells descended from a common ancestor, with heritable variation and selection driving progression.
 
 **Clonal cooperation**
 Interactions between distinct cell clones that collectively enhance growth, survival, or invasion beyond what single clones achieve.
@@ -470,6 +473,9 @@ Computational models that combine local reactions and diffusion to produce spati
 
 **[[de-darwinization|Re-Darwinization]]**
 Recovery of variation, heritability, and differential reproduction by somatic cells - the failure of de-Darwinization that is cancer.
+
+**[[red-queen-hypothesis|Red Queen hypothesis]]**
+Idea that species must constantly adapt to keep up with co-evolving parasites, and that this arms race favors sexual reproduction.
 
 **Replicative senescence**
 Permanent cell division arrest triggered by telomere shortening after repeated divisions.
