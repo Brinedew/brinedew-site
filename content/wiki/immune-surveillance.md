@@ -24,6 +24,10 @@ Work by Robert Schreiber and colleagues refined the hypothesis into the cancer i
 
 Equilibrium is the phase that makes surveillance a selective force: the immune system shapes which tumors eventually emerge. Tumors that escape do so through [PD-L1](pd-l1-cd274.md) expression, antigen loss, and recruitment of regulatory T cells, which is why [checkpoint inhibitors](pd-1-pdcd1.md) work by releasing the brake the tumor has placed on immune attack.
 
+## Open question: surveillance versus autoimmunity
+
+How surveillance changes with age is an open problem for the governance synthesis. The anti-defector reading of inflammaging holds that immune activation escalates with cheater cell load - a time-independent policing policy acting on a rising input. At the same time, aged tissue clears [senescent cells](cellular-senescence.md) poorly, and senescent cells themselves resist apoptosis. One candidate antagonism that could account for both patterns without invoking wear: surveillance stringency trades off against autoimmunity. A more aggressive policing policy removes more damaged cells and attacks more borderline-self tissue; the autoimmunity cost of that policy rises as the tissue accumulates mutated, stressed, and borderline cells. Deriving the observed age changes in immune behavior from this trade-off - rather than from decay - is unfinished work in this synthesis.
+
 ## Related
 
 - [Principal-agent problem](principal-agent-problem.md) — surveillance as the organism's audit of its cell lineages

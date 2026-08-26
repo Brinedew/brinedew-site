@@ -11,7 +11,7 @@ title: Cellular Senescence
 
 Cells enter senescence in response to various forms of stress and genetic damage. Senescence is often caused by the progressive shortening of telomeres—the protective caps at the ends of chromosomes—which occurs each time a cell divides. Other triggers include severe DNA damage, chemical stress from reactive oxygen species, and the abnormal activation of oncogenes. Inside the cell, these stresses activate specific molecular pathways, primarily governed by the tumor-suppressor proteins p53, p21, and p16. These proteins block the molecular machinery required for cell division, locking the cell in its non-dividing state.
 
-Senescence serves dual roles in health and disease, with both benefits and drawbacks. Senescence helps restrict the proliferation of damaged cells, preventing tumors and participating in tissue repair and embryonic development pathways. However, the immune system becomes less effective at clearing senescent cells over time. The accumulation of senescent cells in older tissues drives chronic inflammation and tissue degradation. Because of this link to lifespan, senolytics—drugs that selectively eliminate senescent cells—are studied as a potential treatment for age-related degeneration.
+Senescence serves dual roles in health and disease, with both benefits and drawbacks. Senescence helps restrict the proliferation of damaged cells, preventing tumors and participating in tissue repair and embryonic development pathways. Senescent cells also accumulate in older tissues, where they drive chronic inflammation and tissue degradation. Because of this link to lifespan, senolytics—drugs that selectively eliminate senescent cells—are studied as a potential treatment for age-related degeneration.
 
 ## Molecular pathways
 
@@ -47,9 +47,7 @@ Senescence functions as both tumor suppressor and promoter:
 
 ## Age-related accumulation
 
-Senescent cells accumulate with age because the same tumor-suppressor policies act on a rising input: the number of cells that have sustained unrepairable lesions, telomere shortening, oncogene activation, or mitochondrial dysfunction grows over a lifetime, and each such cell is locked in rather than repaired or replaced.
-
-This accumulation contributes to age-related tissue dysfunction and chronic inflammation (inflammaging).
+Senescent cells accumulate with age because the same tumor-suppressor policies act on a rising input: the number of cells that have sustained unrepairable lesions, telomere shortening, oncogene activation, or mitochondrial dysfunction grows over a lifetime, and each such cell is locked in rather than repaired or replaced. Their clearance is incomplete - senescent cells resist apoptosis themselves, and immune clearance of them trades off against inflammatory and autoimmune risk (see [[immune-surveillance]]). This accumulation contributes to age-related tissue dysfunction and chronic inflammation (inflammaging).
 
 ## Therapeutic targeting
 
