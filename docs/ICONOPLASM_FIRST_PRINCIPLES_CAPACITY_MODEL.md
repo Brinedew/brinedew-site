@@ -203,33 +203,46 @@ unbatched boundary so it does not depend on lucky coalescing.
 
 ## What breaks first
 
-All counts below are the **first user whose full daily behavior crosses a free
-allowance**, starting from zero unless the row names the 10,000-visitor base.
+All counts below are the **first complete repetition of the named synthetic
+persona whose full daily behavior crosses a free allowance**, starting from zero
+unless the row names the 10,000-visitor base. They are not a daily active-user
+limit. In particular, the dense-paper persona prepares 512 unique genes in one
+day—more than 51 full ten-gene reading-session windows—and deliberately treats
+every projection as a cold isolate and Worker Cache API miss.
 
-| Independent behavior                                  | First allowance to fail     | First user over |
-| ----------------------------------------------------- | --------------------------- | --------------: |
-| Homepage only                                         | KV reads                    |          20,001 |
-| Curious website explorer                              | KV reads                    |           3,126 |
-| Dense-paper extension reader, signed out              | KV reads                    |              32 |
-| Same, after 10,000 homepage visitors                  | KV reads                    |              16 |
-| Maximally scattered extension reader                  | KV reads                    |              30 |
-| Signed-in dense-paper reader with 512 new discoveries | D1 rows written             |              25 |
-| Contributor casting 100 votes/day                     | Queue operations            |              34 |
-| One visible tab with an open request for eight hours  | Worker requests             |             208 |
-| Completely cold, disjoint gene coordinator bootstraps | Durable Object rows written |     gene 12,633 |
+| Independent synthetic persona                         | First allowance to fail     | First persona over |
+| ----------------------------------------------------- | --------------------------- | -----------------: |
+| Homepage only                                         | KV reads                    |             20,001 |
+| Curious website explorer                              | KV reads                    |              3,126 |
+| One cold ten-gene page, all portraits on fallback     | KV reads                    |              1,588 |
+| Same cold page, after 10,000 homepage visitors        | KV reads                    |                794 |
+| Dense-paper extension reader, signed out              | KV reads                    |                 32 |
+| Same, after 10,000 homepage visitors                  | KV reads                    |                 16 |
+| Maximally scattered extension reader                  | KV reads                    |                 30 |
+| Signed-in dense-paper reader with 512 new discoveries | D1 rows written             |                 25 |
+| Contributor casting 100 votes/day                     | Queue operations            |                 34 |
+| One visible tab with an open request for eight hours  | Worker requests             |                208 |
+| Completely cold, disjoint gene coordinator bootstraps | Durable Object rows written |        gene 12,633 |
+
+Ten simultaneous cold ten-gene page sessions consume 310 Worker requests in the
+all-first-party-fallback envelope, 630 deliberately pessimistic cold-isolate KV
+reads, and zero KV list operations. That is a burst calculation, not a claim
+that only ten people may use the extension. Browser HTTP caching, Worker Cache
+API hits, and isolate-local barrier/artifact reuse make repeat and same-region
+traffic cheaper; the conservative table does not take credit for them.
 
 ### Scott Alexander shoutout shapes
 
 These are not forecasts. They are envelopes that make the hidden assumption
 visible:
 
-| Audience behavior                                     | Result                                           |
-| ----------------------------------------------------- | ------------------------------------------------ |
-| 10,000 people open the homepage once                  | 10,000 Worker requests and 50,000 KV reads; safe |
-| Those 10,000 also behave like curious explorers       | KV reads fail around explorer 3,126              |
-| 10,000 homepage visitors plus dense extension readers | reader 68 crosses the remaining KV allowance     |
-| 25 signed-in readers each discover 512 new genes      | the 25th crosses the D1 write allowance          |
-| 34 contributors each cast 100 votes                   | the 34th crosses the Queue allowance             |
+| Audience behavior                                     | Result                                                        |
+| ----------------------------------------------------- | ------------------------------------------------------------- |
+| 10,000 people open the homepage once                  | 10,000 Worker requests and 50,000 KV reads; safe              |
+| Those 10,000 also behave like curious explorers       | KV reads fail around explorer 3,126                           |
+| 10,000 homepage visitors plus dense extension readers | synthetic persona 16 crosses the pessimistic cold-KV envelope |
+| 25 signed-in readers each discover 512 new genes      | the 25th crosses the D1 write allowance                       |
+| 34 contributors each cast 100 votes                   | the 34th crosses the Queue allowance                          |
 
 The hot take is simple: anonymous shoutout traffic is not intrinsically scary.
 Deep extension use, signed-in discovery writes, and heavy voting are separate
@@ -258,7 +271,7 @@ cost is one-time per gene, not per crawler revisit.
 ### Other applications on the account
 
 The 100,000 Worker limit is account-wide. Other Workers and Pages Functions can
-be represented as an explicit base vector in `firstUserOverLimit`; they are not
+be represented as an explicit base vector in `firstPersonaOverLimit`; they are not
 silently inferred from yesterday's counter. This is the only honest use of
 current account data in a first-principles launch decision.
 

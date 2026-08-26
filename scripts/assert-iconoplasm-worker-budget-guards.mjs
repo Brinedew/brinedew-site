@@ -172,6 +172,11 @@ includesOrFail(
   "The alias policy suite must keep the no-list pointer-publication regression.",
 )
 includesOrFail(
+  publicationAliasPolicyTests,
+  'test("coherent public reader is O(1) at max history and never mixes or mutates pair state"',
+  "The alias policy suite must keep the exact-pointer public-reader zero-list regression.",
+)
+includesOrFail(
   recognitionValidationIndex,
   "ICONOPLASM_RECOGNITION_INDEX_SHARD_COUNT = 64",
   "Recognition validation must retain its bounded immutable shard count.",
