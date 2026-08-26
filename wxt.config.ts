@@ -35,6 +35,7 @@ export default defineConfig({
           "webRequest",
           "webRequestBlocking",
           "webRequestFilterResponse",
+          "webNavigation",
         ]),
       ]
       manifest.host_permissions = [...new Set([...(manifest.host_permissions || []), "<all_urls>"])]

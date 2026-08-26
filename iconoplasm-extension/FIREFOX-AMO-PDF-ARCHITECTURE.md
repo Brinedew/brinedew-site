@@ -1,6 +1,6 @@
 # Firefox AMO PDF architecture fence
 
-Last verified: 2026-08-25
+Last verified: 2026-08-27
 
 ## Product requirement
 
@@ -52,6 +52,22 @@ AMO permits the architecture Iconoplasm needs at the document level:
 Iconoplasm already has the harder Firefox ownership and captured-byte handoff
 working. Do not replace it with URL replay, a proxy, a remote viewer, or native
 viewer injection.
+
+Firefox local files use a separate browser-safe ownership adapter. A top-level
+`file:` PDF navigation is routed into the same packaged reader with
+`webNavigation`. Firefox deliberately prevents an extension page from reading
+an arbitrary local path, so the reader requests one explicit file-picker or
+drag/drop handoff through the DOM File API. The selected bytes stay local and
+use the same PDF.js renderer, matcher, decorations, and hover cards. Never
+silently leave an enabled local PDF in the native viewer, upload it, add a
+native companion, or imply that the browser can grant path access without a
+user gesture.
+
+If the user requests Firefox's native viewer after selecting the file, the
+reader hands the already selected bytes to the native PDF handler through a
+local blob URL. Firefox forbids extension pages and WebExtension tab APIs from
+navigating directly back to an arbitrary `file:` URL; replaying the selected
+bytes avoids that forbidden path and does not read, reopen, or upload the file.
 
 The approved examples establish the store-safe boundary used here: official
 PDF.js owns parsing, canvas rendering, and its selectable text layer; extension

@@ -7,12 +7,25 @@ const byteStoreSource = readFileSync(new URL("./pdf-byte-store.js", import.meta.
 const ownershipSource = readFileSync(new URL("./pdf-gecko-ownership.js", import.meta.url), "utf8")
 
 function makeRuntime({ enabled = true } = {}) {
-  const listeners = { before: null, headers: null, storage: null, tabUpdated: null }
+  const listeners = {
+    before: null,
+    headers: null,
+    message: null,
+    navigation: null,
+    storage: null,
+  }
   const filters = []
+  const tabUpdates = []
   const browser = {
     runtime: {
+      id: "firefox-local-pdf-probe@brinedew.bio",
       getURL(path) {
         return `moz-extension://test/${path}`
+      },
+      onMessage: {
+        addListener(listener) {
+          listeners.message = listener
+        },
       },
     },
     storage: {
@@ -20,6 +33,18 @@ function makeRuntime({ enabled = true } = {}) {
       onChanged: {
         addListener(listener) {
           listeners.storage = listener
+        },
+      },
+    },
+    tabs: {
+      async update(tabId, update) {
+        tabUpdates.push({ tabId, update })
+      },
+    },
+    webNavigation: {
+      onBeforeNavigate: {
+        addListener(listener) {
+          listeners.navigation = listener
         },
       },
     },
@@ -65,13 +90,60 @@ function makeRuntime({ enabled = true } = {}) {
     Date,
     Map,
     Set,
+    setTimeout() {},
     TextEncoder,
     Uint8Array,
+    URL,
   })
   vm.runInContext(byteStoreSource, context, { filename: "pdf-byte-store.js" })
   vm.runInContext(ownershipSource, context, { filename: "pdf-gecko-ownership.js" })
-  return { context, browser, listeners, filters }
+  return { context, browser, listeners, filters, tabUpdates }
 }
+
+test("Firefox routes enabled top-level local PDFs into the private manual reader", async () => {
+  const runtime = makeRuntime()
+  await Promise.resolve()
+  runtime.listeners.navigation({
+    frameId: 0,
+    tabId: 12,
+    url: "file:///D:/Papers/BRCA1%20review.PDF",
+  })
+  await Promise.resolve()
+  assert.deepEqual(JSON.parse(JSON.stringify(runtime.tabUpdates)), [
+    {
+      tabId: 12,
+      update: {
+        url: "moz-extension://test/pdf-reader.html?geckoLocalFile=file%3A%2F%2F%2FD%3A%2FPapers%2FBRCA1%2520review.PDF",
+      },
+    },
+  ])
+
+  runtime.listeners.navigation({ frameId: 1, tabId: 12, url: "file:///D:/Papers/TP53.pdf" })
+  runtime.listeners.navigation({ frameId: 0, tabId: 12, url: "file:///D:/Papers/notes.txt" })
+  assert.equal(runtime.tabUpdates.length, 1)
+})
+
+test("Firefox leaves local PDFs native when PDF highlighting is disabled", async () => {
+  const runtime = makeRuntime({ enabled: false })
+  await Promise.resolve()
+  runtime.listeners.navigation({ frameId: 0, tabId: 12, url: "file:///D:/Papers/TP53.pdf" })
+  await Promise.resolve()
+  assert.deepEqual(runtime.tabUpdates, [])
+})
+
+test("Firefox never opens a response filter for local file navigation", async () => {
+  const runtime = makeRuntime()
+  await Promise.resolve()
+  assert.equal(
+    runtime.listeners.before({
+      requestId: "local-file",
+      tabId: 12,
+      url: "file:///D:/Papers/TP53.pdf",
+    }),
+    undefined,
+  )
+  assert.equal(runtime.filters.length, 0)
+})
 
 test("Firefox driver captures one complete PDF and emits only the inert shell", async () => {
   const runtime = makeRuntime()
