@@ -38,6 +38,7 @@ import {
 import { iconoplasmRecognitionValidationTarget } from "./iconoplasm-recognition-policy-validation.js"
 import { buildIconoplasmRecognitionValidationIndex } from "./iconoplasm-recognition-validation-index.js"
 import {
+  ICONOPLASM_RECOGNITION_PAIR_CURRENT_KV_KEY,
   ICONOPLASM_RECOGNITION_PAIR_KV_RETENTION,
   ICONOPLASM_RECOGNITION_PAIR_KV_PREFIX,
   iconoplasmRecognitionPairKvKey,
@@ -544,6 +545,15 @@ function recognitionPairProjection({
   })
 }
 
+function recognitionPairPointerProjection({ aliasRevision = 1, blocklistRevision = 1 } = {}) {
+  return JSON.stringify({
+    schema_version: 1,
+    alias_revision: aliasRevision,
+    blocklist_revision: blocklistRevision,
+    pair_key: iconoplasmRecognitionPairKvKey(aliasRevision, blocklistRevision),
+  })
+}
+
 function candidateWithIl8() {
   return {
     ...ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
@@ -857,13 +867,19 @@ test("coherent public reader is O(1) at max history and never mixes or mutates p
       ]
     }),
   )
+  entries[ICONOPLASM_RECOGNITION_PAIR_CURRENT_KV_KEY] = recognitionPairPointerProjection({
+    aliasRevision: ICONOPLASM_RECOGNITION_PAIR_KV_RETENTION,
+  })
   const kv = new FakeKv(entries)
   const pair = await readCoherentPublishedIconoplasmRecognitionPolicies(kv, { fresh: true })
 
   assert.equal(pair.alias_revision, ICONOPLASM_RECOGNITION_PAIR_KV_RETENTION)
   assert.equal(pair.blocklist_revision, 1)
-  assert.equal(kv.lists.length, 1)
-  assert.equal(kv.gets.length, 1)
+  assert.equal(kv.lists.length, 0)
+  assert.deepEqual(kv.gets, [
+    ICONOPLASM_RECOGNITION_PAIR_CURRENT_KV_KEY,
+    iconoplasmRecognitionPairKvKey(ICONOPLASM_RECOGNITION_PAIR_KV_RETENTION, 1),
+  ])
   assert.throws(() => pair.extension_blocklist.terms.push("ARCH"), TypeError)
 })
 
@@ -880,7 +896,7 @@ test("coherent reader skips lagging or malformed newest bundles and fails closed
   })
   const retained = await readCoherentPublishedIconoplasmRecognitionPolicies(kv, { fresh: true })
   assert.equal(retained.alias_revision, 1)
-  assert.equal(kv.gets.length, 4)
+  assert.equal(kv.gets.length, 5)
 
   resetIconoplasmRecognitionPolicyPublicCacheForTests()
   const corrupt = new FakeKv({
@@ -960,7 +976,7 @@ test("first-deploy bootstrap preserves the newest dependency-free legacy blockli
     fresh: true,
   })
   assert.equal(healthyFallback.extension_blocklist.revision, 10)
-  assert.equal(healthy.gets.length, 1)
+  assert.equal(healthy.gets.length, 2)
 
   resetIconoplasmRecognitionPolicyPublicCacheForTests()
   const kv = new FakeKv({
@@ -1255,7 +1271,7 @@ test("GET visibility retries stage alias and pair values without reading the sca
   assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 0)
 })
 
-test("3-POST 1102 value-before-list mutation and retries never read the scanner artifact", async () => {
+test("pointer publication completes despite KV list lag and never reads the scanner artifact", async () => {
   resetIconoplasmPublicationAliasPublicCacheForTests()
   resetIconoplasmRecognitionPolicyPublicCacheForTests()
   const db = new FakeDb()
@@ -1292,29 +1308,16 @@ test("3-POST 1102 value-before-list mutation and retries never read the scanner 
   }
 
   const first = await post(1)
-  assert.equal(first.response.status, 503)
-  assert.equal(first.payload.code, "publication_alias_projection_not_visible")
+  assert.equal(first.response.status, 200)
+  assert.equal(first.payload.publication.in_sync, true)
+  assert.deepEqual(first.payload.policy.by_symbol.CXCL8, ["IL8"])
   assert.equal(kv.entries.has(aliasRevisionPrefix), false)
   assert.ok([...kv.entries.keys()].some((key) => key.startsWith(aliasRevisionPrefix)))
   assert.equal(kv.entries.has(pairKey), true)
-  assert.equal(db.aliasRow.revision, 2)
-  assert.equal(db.aliasHistory.length, 1)
-  assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 0)
-
-  kv.hiddenListPrefixes.delete(aliasRevisionPrefix)
-  const second = await post(2)
-  assert.equal(second.response.status, 503)
-  assert.equal(second.payload.code, "publication_alias_projection_not_visible")
-  assert.equal(kv.entries.has(pairKey), true)
-  assert.equal(db.aliasRow.revision, 2)
-  assert.equal(db.aliasHistory.length, 1)
-  assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 0)
-
-  kv.hiddenListPrefixes.delete(pairKey)
-  const third = await post(2)
-  assert.equal(third.response.status, 200)
-  assert.equal(third.payload.publication.in_sync, true)
-  assert.deepEqual(third.payload.policy.by_symbol.CXCL8, ["IL8"])
+  assert.equal(
+    kv.entries.get(ICONOPLASM_RECOGNITION_PAIR_CURRENT_KV_KEY),
+    recognitionPairPointerProjection({ aliasRevision: 2 }),
+  )
   assert.equal(db.aliasRow.revision, 2)
   assert.equal(db.aliasHistory.length, 1)
   assert.equal(kv.gets.filter((key) => key === scannerArtifactKey).length, 0)
@@ -1554,7 +1557,7 @@ test("exact pair and valid receipt bypass every history list even at retention b
   assert.equal(kv.gets.filter((key) => key.startsWith("iconoplasm:scanner-catalog:")).length, 0)
 })
 
-test("scheduled exact-pair reconciliation prunes all immutable histories without scanner work", async () => {
+test("scheduled exact-pair reconciliation repairs the pointer without list quota or scanner work", async () => {
   const revision = 101
   const db = new FakeDb({
     aliasRow: publicationAliasRow({ revision }),
@@ -1586,22 +1589,13 @@ test("scheduled exact-pair reconciliation prunes all immutable histories without
   const result = await reconcileIconoplasmRecognitionPolicies({ ICONOPLASM_DB: db, KV: kv })
   assert.equal(result.pair.status, "fulfilled")
   assert.equal(result.pair.value.reason, "already_published")
-  assert.equal(result.publication_aliases.value.cleanup.deleted, 1)
-  assert.equal(result.extension_blocklist.value.cleanup.deleted, 1)
-  assert.equal(result.pair.value.cleanup.deleted, 1)
-  assert.ok(
-    [...kv.entries.keys()].filter((key) =>
-      key.startsWith("iconoplasm:publication-alias-policy:v1:revision:"),
-    ).length <= 100,
-  )
-  assert.ok(
-    [...kv.entries.keys()].filter((key) =>
-      key.startsWith("iconoplasm:extension-blocklist-policy:v1:revision:"),
-    ).length <= 100,
-  )
-  assert.ok(
-    [...kv.entries.keys()].filter((key) => key.startsWith("iconoplasm:recognition-policy-pair:v1:"))
-      .length <= 100,
+  assert.equal(result.publication_aliases.value.cleanup.reason, "no_new_publication")
+  assert.equal(result.extension_blocklist.value.cleanup.reason, "no_new_publication")
+  assert.equal(result.pair.value.cleanup.reason, "no_new_publication")
+  assert.equal(kv.lists.length, 0)
+  assert.equal(
+    kv.entries.get(ICONOPLASM_RECOGNITION_PAIR_CURRENT_KV_KEY),
+    recognitionPairPointerProjection({ aliasRevision: revision, blocklistRevision: revision }),
   )
   assert.equal(kv.gets.filter((key) => key.startsWith("iconoplasm:scanner-catalog:")).length, 0)
 })
