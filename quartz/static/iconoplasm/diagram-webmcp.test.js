@@ -71,5 +71,6 @@ test("Studio delegates canvas primitives and export to AntV X6", () => {
   assert.match(editorSource, /new Export/)
   assert.match(editorSource, /router: \{ name: "orth"/)
   assert.match(editorSource, /new DagreLayout/)
+  assert.match(editorSource, /graph\.clearCells\(\{ silent: true \}\)/)
   assert.doesNotMatch(editorSource, /pointermove|elementFromPoint|createSVGPoint/)
 })
