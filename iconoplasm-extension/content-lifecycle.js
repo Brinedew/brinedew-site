@@ -1,6 +1,9 @@
 ;(function (root) {
   "use strict"
 
+  // ARCHITECTURE FENCE [IPD-008]: speculative extension work starts only
+  // after the host page has loaded, settled, and yielded a genuine idle turn.
+
   function requestGeneData(chromeApi, options = {}) {
     const timeoutMs = Number(options.timeoutMs) || 2000
     const setTimeoutFn = options.setTimeoutFn || root.setTimeout
@@ -43,6 +46,7 @@
       typeof options.onScanComplete === "function" ? options.onScanComplete : () => {}
     const dirtyRoots = new Set()
     let scanScheduled = false
+    let flushInProgress = false
     let observer = null
 
     function nodeContains(ancestor, descendant) {
@@ -61,14 +65,23 @@
       return true
     }
 
-    function flush() {
+    async function flush() {
+      if (flushInProgress) return
       scanScheduled = false
       if (!dirtyRoots.size) return
+      flushInProgress = true
       const roots = Array.from(dirtyRoots)
       dirtyRoots.clear()
       let wrappedCount = 0
-      for (const rootNode of roots) wrappedCount += Number(scanPage(rootNode)) || 0
-      if (wrappedCount > 0) onScanComplete(wrappedCount)
+      try {
+        for (const rootNode of roots) {
+          wrappedCount += Number(await scanPage(rootNode)) || 0
+        }
+        if (wrappedCount > 0) onScanComplete(wrappedCount)
+      } finally {
+        flushInProgress = false
+        if (dirtyRoots.size) schedule()
+      }
     }
 
     function schedule() {
@@ -104,6 +117,7 @@
       observer = null
       dirtyRoots.clear()
       scanScheduled = false
+      flushInProgress = false
     }
 
     return {
@@ -114,8 +128,71 @@
     }
   }
 
+  function scheduleHostFirstBackgroundWork(options = {}) {
+    const documentRef = options.documentRef || root.document
+    const windowRef = options.windowRef || root
+    const task = typeof options.task === "function" ? options.task : () => {}
+    const quietDelayMs = Math.max(0, Number(options.quietDelayMs ?? 1000))
+    let started = false
+    let quietTimer = 0
+    let idleId = 0
+
+    const run = () => {
+      if (started) return
+      started = true
+      task()
+    }
+    const queueWhenIdle = () => {
+      quietTimer = 0
+      if (typeof windowRef.requestIdleCallback === "function") {
+        // No timeout is intentional: speculative extension work must not take a
+        // turn away from a host page that is still busy. Foreground hover bypasses
+        // this gate through the reading session's active-priority path.
+        idleId = windowRef.requestIdleCallback(run)
+        return
+      }
+      quietTimer = windowRef.setTimeout(run, 16)
+    }
+    const afterLoad = () => {
+      if (started || quietTimer || idleId) return
+      quietTimer = windowRef.setTimeout(queueWhenIdle, quietDelayMs)
+    }
+
+    if (documentRef?.readyState === "complete") afterLoad()
+    else windowRef.addEventListener?.("load", afterLoad, { once: true })
+
+    return {
+      cancel() {
+        if (quietTimer) windowRef.clearTimeout(quietTimer)
+        if (idleId && typeof windowRef.cancelIdleCallback === "function") {
+          windowRef.cancelIdleCallback(idleId)
+        }
+        quietTimer = 0
+        idleId = 0
+      },
+      runNow: run,
+    }
+  }
+
+  function runAfterHostLoad(options = {}) {
+    const documentRef = options.documentRef || root.document
+    const windowRef = options.windowRef || root
+    const task = typeof options.task === "function" ? options.task : () => {}
+    let started = false
+    const run = () => {
+      if (started) return
+      started = true
+      task()
+    }
+    if (documentRef?.readyState === "complete") run()
+    else windowRef.addEventListener?.("load", run, { once: true })
+    return run
+  }
+
   root.IconoplasmContentLifecycle = {
     requestGeneData,
     createMutationScanController,
+    scheduleHostFirstBackgroundWork,
+    runAfterHostLoad,
   }
 })(typeof globalThis !== "undefined" ? globalThis : this)

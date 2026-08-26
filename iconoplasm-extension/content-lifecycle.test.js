@@ -44,7 +44,7 @@ function createRuntime(html, options = {}) {
     documentRef: document,
     windowRef: window,
     MutationObserverCtor: options.MutationObserverCtor || window.MutationObserver,
-    scanPage: scanner.scanPage,
+    scanPage: options.scanPage || scanner.scanPage,
     shouldIgnoreNode(node) {
       const element = node?.nodeType === 3 ? node.parentElement : node
       return !element || Boolean(element.closest?.(".iconoplasm-gene"))
@@ -129,4 +129,84 @@ test("gene-data messaging times out and ignores a late callback", async () => {
   callback({ genes: { TP53: {} } })
 
   assert.equal(result, null)
+})
+
+test("cooperative scanner yields between bounded text-node slices", async () => {
+  const { document, scanner } = createRuntime(
+    `<html><body>${Array.from({ length: 12 }, (_, index) => `<p>${index} TP53</p>`).join("")}</body></html>`,
+  )
+  const slices = []
+  const callbacks = []
+  const resultPromise = scanner.scanPageCooperatively(document.body, {
+    maxNodesPerSlice: 3,
+    requestIdleCallback(callback) {
+      callbacks.push(callback)
+    },
+  })
+  while (callbacks.length) {
+    const callback = callbacks.shift()
+    callback({ timeRemaining: () => 50 })
+    slices.push(document.querySelectorAll(".iconoplasm-gene").length)
+    await Promise.resolve()
+  }
+
+  assert.equal(await resultPromise, 12)
+  assert.deepEqual(slices, [3, 6, 9, 12])
+})
+
+test("host-first background work waits for load, quiet delay, and an idle turn", () => {
+  const listeners = new Map()
+  const timers = []
+  const idleCallbacks = []
+  const calls = []
+  const windowRef = {
+    addEventListener(type, callback) {
+      listeners.set(type, callback)
+    },
+    setTimeout(callback, delay) {
+      timers.push({ callback, delay })
+      return timers.length
+    },
+    clearTimeout() {},
+    requestIdleCallback(callback) {
+      idleCallbacks.push(callback)
+      return idleCallbacks.length
+    },
+    cancelIdleCallback() {},
+  }
+  globalThis.IconoplasmContentLifecycle.scheduleHostFirstBackgroundWork({
+    documentRef: { readyState: "interactive" },
+    windowRef,
+    quietDelayMs: 1000,
+    task: () => calls.push("started"),
+  })
+
+  assert.deepEqual(calls, [])
+  listeners.get("load")()
+  assert.equal(timers[0].delay, 1000)
+  timers.shift().callback()
+  assert.deepEqual(calls, [])
+  idleCallbacks.shift()()
+  assert.deepEqual(calls, ["started"])
+})
+
+test("content runtime initialization cannot start before host load", () => {
+  let loadListener
+  const calls = []
+  globalThis.IconoplasmContentLifecycle.runAfterHostLoad({
+    documentRef: { readyState: "interactive" },
+    windowRef: {
+      addEventListener(type, callback, options) {
+        assert.equal(type, "load")
+        assert.deepEqual(options, { once: true })
+        loadListener = callback
+      },
+    },
+    task: () => calls.push("started"),
+  })
+
+  assert.deepEqual(calls, [])
+  loadListener()
+  loadListener()
+  assert.deepEqual(calls, ["started"])
 })

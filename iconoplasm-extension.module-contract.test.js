@@ -906,6 +906,21 @@ test("DO NOT DELETE: reading-session preparation replaces pointer prediction bef
     "one tab-scoped reading session should own adaptive preparation budgets",
   )
   assert.match(
+    source,
+    /scheduleHostFirstBackgroundWork\(\{[\s\S]*quietDelayMs: 1000[\s\S]*readingSession\.startSpeculation\(\)/,
+    "speculative card preparation must wait for the host-page load and idle gate",
+  )
+  assert.match(
+    source,
+    /runAfterHostLoad\(\{[\s\S]*task: launchContentRuntime/,
+    "catalog initialization must not compete with host-page loading",
+  )
+  assert.match(
+    source,
+    /pageScanner\.scanPageCooperatively\(document\.body\)/,
+    "initial recognition must yield between bounded host-DOM slices",
+  )
+  assert.match(
     readingSessionSource,
     /const PRIORITY = Object\.freeze\(\{ active: 0, visible: 1, document: 2 \}\)[\s\S]*function workingSetPolicy\(connection = \{\}, deviceMemory = 0\)/,
     "preparation should prioritize active and visible symbols inside one bounded policy",
@@ -1041,7 +1056,7 @@ test("DO NOT DELETE: extension runtime typography uses Iconoplasm fonts, not leg
   )
   assert.match(
     contentSource,
-    /function injectFonts\(\)[\s\S]*document\.fonts\.load[\s\S]*void injectFonts\(\)[\s\S]*scanPage\(document\.body\)/,
+    /function injectFonts\(\)[\s\S]*document\.fonts\.load[\s\S]*void injectFonts\(\)[\s\S]*pageScanner\.scanPageCooperatively\(document\.body\)/,
     "the simple card should begin loading packaged fonts before page highlights can be hovered",
   )
 })

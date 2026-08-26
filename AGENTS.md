@@ -190,10 +190,14 @@ presence-only marker when an HttpOnly session cookie is already present; it must
 not perform an anonymous auth lookup. Extension rich detail and its compact
 portrait locator use separate version-addressed immutable per-symbol GETs over
 the same named card artifact; older clients retain the batch compatibility route.
-HTML and PDF feed one tab-scoped reading session. That session compiles the
-recognized unique-symbol inventory and prepares rich detail plus decoded portrait
-before pointer intent: up to 16/64/128 ordinary-document symbols with
-3/6/8 workers on constrained/ordinary/measured-fast connections, plus deterministic
+HTML and PDF feed one tab-scoped reading session. Initial and mutation-driven
+recognition scans must run in bounded idle slices; extension DOM work must not
+monopolize the host page's rendering turn. Catalog initialization, including a
+cold scanner-artifact fetch, must not begin before the host `load` event. The session inventories recognized
+symbols immediately but may not start speculative detail or portrait work until
+the host `load` event, a one-second quiet delay, and a genuine idle callback.
+It prepares the first ten ordinary-document symbols with at most one worker on
+constrained connections and two workers otherwise, plus deterministic ten-symbol
 near-viewport windows for larger documents. Data Saver and 2G disable preparation.
 Hover selects an already-ready card; its foreground GET is only a recovery path
 and may promote the same in-flight immutable request without waiting for whole-cache

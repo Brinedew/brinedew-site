@@ -1,8 +1,12 @@
 ;(function (root) {
   "use strict"
 
+  // ARCHITECTURE FENCE [IPD-008]: recognition mutates host DOM only in
+  // bounded cooperative slices so extension work cannot monopolize rendering.
+
   function createPageScanner(options = {}) {
     const documentRef = options.documentRef || root.document
+    const windowRef = options.windowRef || documentRef?.defaultView || root
     const nodeFilter = options.nodeFilter || root.NodeFilter
     const skipTags = options.skipTags || new Set()
     const placeholderColor = options.placeholderColor || "#6B6B78"
@@ -94,8 +98,67 @@
       return wrappedCount
     }
 
+    function scanPageCooperatively(rootNode, cooperativeOptions = {}) {
+      if (!rootNode || typeof rootNode.nodeType !== "number") return Promise.resolve(0)
+      if (rootNode.nodeType === 3) return Promise.resolve(scanPage(rootNode))
+
+      const maxNodesPerSlice = Math.max(1, Number(cooperativeOptions.maxNodesPerSlice || 64))
+      const minTimeRemainingMs = Math.max(0, Number(cooperativeOptions.minTimeRemainingMs ?? 2))
+      const idleTimeoutMs = Math.max(250, Number(cooperativeOptions.idleTimeoutMs || 2000))
+      const requestIdle =
+        cooperativeOptions.requestIdleCallback ||
+        (typeof windowRef?.requestIdleCallback === "function"
+          ? windowRef.requestIdleCallback.bind(windowRef)
+          : null)
+      const setTimeoutFn =
+        cooperativeOptions.setTimeoutFn || windowRef?.setTimeout?.bind(windowRef) || root.setTimeout
+      const walker = documentRef.createTreeWalker(rootNode, nodeFilter.SHOW_TEXT, {
+        acceptNode: acceptScanNode,
+      })
+      let nextNode = walker.nextNode()
+      let wrappedCount = 0
+
+      return new Promise((resolve) => {
+        const scheduleSlice = () => {
+          if (requestIdle) {
+            // The timeout guarantees eventual recognition on continuously busy
+            // pages. A timed-out callback reports no idle budget, so runSlice
+            // deliberately advances only one text node before yielding again.
+            requestIdle(runSlice, { timeout: idleTimeoutMs })
+            return
+          }
+          setTimeoutFn(() => runSlice(null), 16)
+        }
+        const runSlice = (deadline) => {
+          let processed = 0
+          while (
+            nextNode &&
+            processed < maxNodesPerSlice &&
+            (processed === 0 ||
+              !deadline ||
+              typeof deadline.timeRemaining !== "function" ||
+              deadline.timeRemaining() > minTimeRemainingMs)
+          ) {
+            const textNode = nextNode
+            // Advance before replacing the current text node so TreeWalker never
+            // has to resume from a node that the extension removed.
+            nextNode = walker.nextNode()
+            wrappedCount += processTextNode(textNode)
+            processed += 1
+          }
+          if (nextNode) {
+            scheduleSlice()
+            return
+          }
+          resolve(wrappedCount)
+        }
+        scheduleSlice()
+      })
+    }
+
     return {
       scanPage,
+      scanPageCooperatively,
       processTextNode,
     }
   }

@@ -53,7 +53,9 @@
   if (
     !IconoContentLifecycle ||
     typeof IconoContentLifecycle.requestGeneData !== "function" ||
-    typeof IconoContentLifecycle.createMutationScanController !== "function"
+    typeof IconoContentLifecycle.createMutationScanController !== "function" ||
+    typeof IconoContentLifecycle.scheduleHostFirstBackgroundWork !== "function" ||
+    typeof IconoContentLifecycle.runAfterHostLoad !== "function"
   ) {
     console.error("[Iconoplasm] content lifecycle missing: load content-lifecycle.js first")
     return
@@ -879,8 +881,7 @@
     }
     unwrapBlockedGeneHighlights(nextBlocklist)
     if (rescan) {
-      scanPage(document.body)
-      refreshHighlightStyles()
+      void scanPage(document.body).then(() => refreshHighlightStyles())
     }
   }
 
@@ -1330,6 +1331,12 @@
       console.error(`[Iconoplasm] failed to prepare ${symbol} for this reading session:`, error)
     },
   })
+  IconoContentLifecycle.scheduleHostFirstBackgroundWork({
+    documentRef: document,
+    windowRef: window,
+    quietDelayMs: 1000,
+    task: () => readingSession.startSpeculation(),
+  })
 
   function registerGeneAnchor(anchor) {
     readingSession.registerAnchor(anchor)
@@ -1608,8 +1615,8 @@
 
     console.log("[Iconoplasm] Loaded", Object.keys(geneMap).length, "genes. Scanning...")
     void injectFonts()
-    scanPage(document.body)
-    refreshHighlightStyles()
+    observeMutations()
+    void pageScanner.scanPageCooperatively(document.body).then(() => refreshHighlightStyles())
     scheduleDiscoveryBufferFlush()
     window.navigator?.connection?.addEventListener?.("change", () => {
       readingSession.updateConnection(window.navigator?.connection, window.navigator?.deviceMemory)
@@ -1625,13 +1632,12 @@
         scheduleDiscoveryBufferFlush()
       }
     })
-    observeMutations()
     initialized = true
   }
 
   // -- DOM scanning --------------------------------------------------
   function scanPage(root) {
-    return pageScanner ? pageScanner.scanPage(root) : 0
+    return pageScanner ? pageScanner.scanPageCooperatively(root) : 0
   }
 
   // -- Mutation observer ---------------------------------------------
@@ -2304,8 +2310,21 @@
     document.documentElement.dataset.iconoplasmGeckoPdfSource &&
     !document.documentElement.dataset.iconoplasmPdfReader
   ) {
-    window.addEventListener("iconoplasm-gecko-reader-mounted", launchContentRuntime, { once: true })
+    window.addEventListener(
+      "iconoplasm-gecko-reader-mounted",
+      () =>
+        IconoContentLifecycle.runAfterHostLoad({
+          documentRef: document,
+          windowRef: window,
+          task: launchContentRuntime,
+        }),
+      { once: true },
+    )
   } else {
-    launchContentRuntime()
+    IconoContentLifecycle.runAfterHostLoad({
+      documentRef: document,
+      windowRef: window,
+      task: launchContentRuntime,
+    })
   }
 })()
