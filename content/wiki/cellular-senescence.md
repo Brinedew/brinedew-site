@@ -47,11 +47,7 @@ Senescence functions as both tumor suppressor and promoter:
 
 ## Age-related accumulation
 
-Senescent cells accumulate with age due to:
-- Increased DNA damage from cellular wear and tear (oxidative stress)
-- Telomere shortening (cellular aging clocks)
-- Oncogene activation (cancer-promoting genes getting switched on inappropriately)
-- Mitochondrial dysfunction (cellular power plants breaking down)
+Senescent cells accumulate with age because the same tumor-suppressor policies act on a rising input: the number of cells that have sustained unrepairable lesions, telomere shortening, oncogene activation, or mitochondrial dysfunction grows over a lifetime, and each such cell is locked in rather than repaired or replaced.
 
 This accumulation contributes to age-related tissue dysfunction and chronic inflammation (inflammaging).
 
