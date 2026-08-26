@@ -217,7 +217,10 @@ search and assistant agents this discovery contract exists to serve.
 The homepage link frontier must not become visible application chrome. Its
 ordinary `/genes` anchor lives inside the homepage's existing `sr-only`
 description, where it is useful to accessibility-tree and crawler readers
-without adding a third destination to the immersive Archive/Clans switcher.
+without adding a discovery destination to the immersive Archive/Clans/Studio
+switcher. Studio may resolve bounded canonical blots into a visible editable
+diagram, but it is a creative surface rather than a second archive or image
+authority.
 Likewise, the feed's before/after links are keyboard affordances: keep them
 clipped at rest and reveal the full 44px control only while focused. Moving
 either surface into the default visual composition is an immersion regression.

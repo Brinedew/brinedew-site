@@ -52,8 +52,11 @@ name the resolved molecular value and mapped character value while hiding the
 unused printed alternatives. Render those alternative words as CSS ink, not DOM
 text, because browsing agents may flatten DOM content without honoring ARIA.
 Crawler discovery belongs in the
-existing non-visual homepage description, not as new chrome in the immersive
-Archive/Clans switcher; feed skip links stay clipped until keyboard focus. Read
+existing non-visual homepage description, not as new discovery chrome in the
+immersive Archive/Clans/Studio switcher. Studio is the ordinary human surface
+for the same diagram document and bounded canonical blot resolver exposed to
+agents through WebMCP; it must not become a second image authority or a
+crawlable gene index. Feed skip links stay clipped until keyboard focus. Read
 `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md` before changing the renderer,
 gene HTML, range map, robots metadata, archive, sitemap, or `llms.txt`.
 The canonical public machine image is the Iconoplasm gene blot, not its source
