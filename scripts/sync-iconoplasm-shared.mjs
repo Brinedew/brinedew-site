@@ -141,6 +141,12 @@ const binaryTargets = [
 
 const bundledTargets = [
   {
+    source: path.join(repoRoot, "shared", "iconoplasm-diagram", "x6-runtime.js"),
+    outputs: [path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "x6-runtime.js")],
+    format: "esm",
+    minify: true,
+  },
+  {
     source: path.join(repoRoot, "shared", "iconoplasm-portrait", "portrait-delivery-core.js"),
     outputs: [
       path.join(
@@ -218,7 +224,7 @@ async function syncBinaryTarget({ source, outputs }) {
 
 await Promise.all(binaryTargets.map(syncBinaryTarget))
 
-async function bundleTarget({ source, outputs, format = "esm", globalName }) {
+async function bundleTarget({ source, outputs, format = "esm", globalName, minify = false }) {
   const outputsToWrite = selectedOutputs(outputs)
   if (outputsToWrite.length === 0) return
   const result = await esbuild.build({
@@ -228,7 +234,7 @@ async function bundleTarget({ source, outputs, format = "esm", globalName }) {
     ...(globalName ? { globalName } : {}),
     platform: "browser",
     target: ["es2022"],
-    minify: false,
+    minify,
     write: false,
   })
   const outputFile = Array.isArray(result.outputFiles) ? result.outputFiles[0] : null
@@ -237,10 +243,13 @@ async function bundleTarget({ source, outputs, format = "esm", globalName }) {
     "/* GENERATED FILE. Edit " +
     path.relative(repoRoot, source).replaceAll("\\", "/") +
     " and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\n"
+  const generated = minify
+    ? (banner + outputFile.text).replace(/[ \t]+$/gm, "")
+    : banner + outputFile.text
 
   for (const output of outputsToWrite) {
     await mkdir(path.dirname(output), { recursive: true })
-    await writeFile(output, banner + outputFile.text, "utf8")
+    await writeFile(output, generated, "utf8")
   }
 }
 

@@ -58,30 +58,18 @@ test("the app and Studio load the same versioned diagram module graph", () => {
 
   assert.ok(appVersion)
   assert.equal(documentVersion, appVersion)
-  assert.match(studioSource, /isCanvasSelection && isSuppressedCanvasClick\(event\)/)
+  assert.match(studioSource, /createDiagramEditor/)
+  assert.match(studioSource, /addTextNode/)
 })
 
-test("post-drag suppression applies only at the synthetic drop click", () => {
-  const dropPoint = { x: 100, y: 200 }
-  assert.equal(
-    __testing.shouldSuppressCanvasClick({ clientX: 100, clientY: 200 }, dropPoint, 10, 20),
-    true,
-  )
-  assert.equal(
-    __testing.shouldSuppressCanvasClick({ clientX: 140, clientY: 200 }, dropPoint, 10, 20),
-    false,
-  )
-  assert.equal(
-    __testing.shouldSuppressCanvasClick({ clientX: 100, clientY: 200 }, dropPoint, 20, 20),
-    false,
-  )
-})
-
-test("hidden connector ports cannot intercept canvas clicks", () => {
-  const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8")
-  assert.match(styles, /\[data-diagram-port\]\s*\{[^}]*pointer-events:\s*none;/s)
-  assert.match(
-    styles,
-    /is-connecting-source \[data-diagram-port\]\s*\{[^}]*pointer-events:\s*all;/s,
-  )
+test("Studio delegates canvas primitives and export to AntV X6", () => {
+  const editorSource = readFileSync(new URL("./diagram-x6-editor.js", import.meta.url), "utf8")
+  assert.match(editorSource, /new Selection/)
+  assert.match(editorSource, /new Transform/)
+  assert.match(editorSource, /new Snapline/)
+  assert.match(editorSource, /new History/)
+  assert.match(editorSource, /new Export/)
+  assert.match(editorSource, /router: \{ name: "orth"/)
+  assert.match(editorSource, /new DagreLayout/)
+  assert.doesNotMatch(editorSource, /pointermove|elementFromPoint|createSVGPoint/)
 })
