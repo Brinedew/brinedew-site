@@ -138,12 +138,16 @@ Extension cost is a function of behavior, not elapsed wall-clock time:
 ```text
 manifest refreshes = min(page loads, five-minute windows)
 auth/discovery checks = min(qualified 900 ms hovers, five-minute windows)
-detail batches = ceil(unique gene details / actual batch fill)
+projection requests = 2 * unique prepared genes
 
 Worker requests =
-  manifest refreshes + auth checks + detail batches + signed-in encounters
+  manifest refreshes + auth checks + projection requests
+  + signed-in encounters + canonical portrait fallbacks
 
-KV reads = 3 * manifest refreshes + 10 * detail batches
+conservative cold-isolate KV reads =
+  3 * manifest refreshes + 3 * projection requests
+
+KV list operations = 0 on every public request path
 ```
 
 There is no five-minute idle timer. A long-open page with no new content-script
@@ -152,9 +156,9 @@ request does not manufacture 96 manifest requests.
 Two deliberately different eight-hour assumptions are retained:
 
 - **Dense-paper reader:** 32 content pages, 32 qualified hover windows, 512
-  unique genes, eight useful genes per detail batch.
+  unique prepared genes.
 - **Maximally scattered reader:** 512 one-gene page contexts, 512 qualified
-  hover windows, 512 unique genes, one useful gene per batch. This is a stress
+  hover windows, 512 unique prepared genes. This is a stress
   boundary, not a normal scientist.
 
 ### Signed-in discovery
@@ -206,9 +210,9 @@ allowance**, starting from zero unless the row names the 10,000-visitor base.
 | ----------------------------------------------------- | --------------------------- | --------------: |
 | Homepage only                                         | KV reads                    |          20,001 |
 | Curious website explorer                              | KV reads                    |           3,126 |
-| Dense-paper extension reader, signed out              | KV reads                    |             136 |
-| Same, after 10,000 homepage visitors                  | KV reads                    |              68 |
-| Maximally scattered extension reader                  | KV reads                    |              19 |
+| Dense-paper extension reader, signed out              | KV reads                    |              32 |
+| Same, after 10,000 homepage visitors                  | KV reads                    |              16 |
+| Maximally scattered extension reader                  | KV reads                    |              30 |
 | Signed-in dense-paper reader with 512 new discoveries | D1 rows written             |              25 |
 | Contributor casting 100 votes/day                     | Queue operations            |              34 |
 | One visible tab with an open request for eight hours  | Worker requests             |             208 |

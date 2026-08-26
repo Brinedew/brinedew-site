@@ -269,6 +269,18 @@ Extension hover detail is immutable within a published card snapshot:
   independently deliverable portrait locators, bytes, decode, and frame acknowledgement
   wait for host `load`, a one-second quiet delay, and a genuine idle callback. The
   first ten symbols use one worker on constrained connections and two otherwise;
+- the one/two workers above are browser-side preparation slots per tab, not
+  Cloudflare Worker instances. Each prepared symbol starts one rich-detail GET
+  and one portrait-locator GET. Ten cold tabs therefore start 100 requests in
+  each projection lane. The lanes have separate 120/minute per-IP rate-limit
+  buckets so ten users behind one NAT remain below both limits without raising
+  either route's abuse ceiling;
+- current and previous recognition-policy publication is selected through one
+  exact `current` pointer followed by exact immutable alias/blocklist reads.
+  Public request paths must never call KV `list()`: the free plan permits only
+  1,000 list operations per day, and cache hits inside a Worker still count as
+  Worker requests. A missing pointer may use the legacy list scan only as a
+  one-time migration fallback; publication must repair the pointer;
 - large documents use the same session and deterministic near-viewport working
   windows capped at ten symbols instead of pointer trajectory, DOM-neighbor, or
   scroll-direction guesses.

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url"
 const ZERO_COST = Object.freeze({
   workerRequests: 0,
   kvReads: 0,
+  kvLists: 0,
   kvWrites: 0,
   d1RowsRead: 0,
   d1RowsWritten: 0,
@@ -14,6 +15,7 @@ const ZERO_COST = Object.freeze({
 export const FREE_DAILY_LIMITS = Object.freeze({
   workerRequests: 100_000,
   kvReads: 100_000,
+  kvLists: 1_000,
   kvWrites: 1_000,
   d1RowsRead: 5_000_000,
   d1RowsWritten: 100_000,
@@ -25,6 +27,9 @@ export const FREE_DAILY_LIMITS = Object.freeze({
 export const SHIPPED_SHAPE = Object.freeze({
   publishedGenes: 19_023,
   cardBatchSize: 8,
+  readingSessionSymbolLimit: 10,
+  preparedGeneProjectionRequests: 2,
+  coldProjectionKvReads: 3,
   extensionDetailCacheEntries: 512,
   fiveMinuteWindowsInEightHours: 96,
   homepageStarterShards: 3,
@@ -158,21 +163,16 @@ export function extensionReaderCost({
   activeMinutes = 480,
   pageLoads = 32,
   qualifiedHovers = 32,
-  uniqueGeneDetails = 512,
-  detailBatchFill = SHIPPED_SHAPE.cardBatchSize,
+  uniquePreparedGenes = 512,
   signedIn = false,
-  newDiscoveries = signedIn ? uniqueGeneDetails : 0,
+  newDiscoveries = signedIn ? uniquePreparedGenes : 0,
   repeatedEncounters = 0,
   portraitFallbacks = 0,
 } = {}) {
-  const safeDetails = Math.max(0, Math.floor(Number(uniqueGeneDetails) || 0))
-  const safeFill = Math.max(
-    1,
-    Math.min(SHIPPED_SHAPE.cardBatchSize, Math.floor(Number(detailBatchFill) || 1)),
-  )
+  const safePreparedGenes = Math.max(0, Math.floor(Number(uniquePreparedGenes) || 0))
   const manifestRefreshes = boundedRefreshCount(pageLoads, activeMinutes)
   const authRefreshes = boundedRefreshCount(qualifiedHovers, activeMinutes)
-  const detailBatches = Math.ceil(safeDetails / safeFill)
+  const projectionRequests = safePreparedGenes * SHIPPED_SHAPE.preparedGeneProjectionRequests
   const safeNewDiscoveries = signedIn ? Math.max(0, Math.floor(Number(newDiscoveries) || 0)) : 0
   const safeRepeatedEncounters = signedIn
     ? Math.max(0, Math.floor(Number(repeatedEncounters) || 0))
@@ -183,12 +183,17 @@ export function extensionReaderCost({
     workerRequests:
       manifestRefreshes +
       authRefreshes +
-      detailBatches +
+      projectionRequests +
       encounters +
       Math.max(0, Math.floor(Number(portraitFallbacks) || 0)),
-    // Manifest reads include version/delivery metadata; a detail batch may read
-    // its manifest plus eight content-addressed card shards.
-    kvReads: manifestRefreshes * 3 + detailBatches * 10,
+    // Each prepared gene starts rich detail and portrait-locator projections.
+    // On a completely cold isolate and Worker Cache API miss, each projection
+    // can read the gallery barrier, card manifest, and one exact card shard.
+    // Isolate and Cache API reuse normally make this materially cheaper.
+    kvReads: manifestRefreshes * 3 + projectionRequests * SHIPPED_SHAPE.coldProjectionKvReads,
+    // Public request paths must use exact-key reads. KV list operations are a
+    // 1,000/day discovery budget, not a read primitive.
+    kvLists: 0,
     // Two indexed point reads: existence before mutation and the returned row.
     d1RowsRead: encounters * 2,
     // Conservative schema-derived write units. A new personal discovery touches
@@ -234,7 +239,6 @@ export const SCENARIOS = Object.freeze({
   extensionScatteredMaximum: extensionReaderCost({
     pageLoads: 512,
     qualifiedHovers: 512,
-    detailBatchFill: 1,
   }),
   signedInDensePaper: extensionReaderCost({ signedIn: true }),
   hundredVoteContributor: votingCost({ votes: 100 }),

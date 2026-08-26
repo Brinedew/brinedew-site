@@ -62,26 +62,45 @@ test("extension refreshes are caused by pages and qualified hovers, not an idle 
     activeMinutes: 480,
     pageLoads: 1,
     qualifiedHovers: 1,
-    uniqueGeneDetails: 8,
-    detailBatchFill: 8,
+    uniquePreparedGenes: 8,
   })
-  assert.equal(oneLongPage.workerRequests, 3)
-  assert.equal(oneLongPage.kvReads, 13)
+  assert.equal(oneLongPage.workerRequests, 18)
+  assert.equal(oneLongPage.kvReads, 51)
+  assert.equal(oneLongPage.kvLists, 0)
 })
 
-test("dense-paper and scattered extension behavior expose different ceilings", () => {
+test("current per-symbol projections expose conservative cold-isolate ceilings", () => {
   assert.deepEqual(first(SCENARIOS.extensionDensePaper), {
     resource: "kvReads",
-    firstUserOver: 136,
+    firstUserOver: 32,
   })
   assert.deepEqual(first(SCENARIOS.extensionScatteredMaximum), {
     resource: "kvReads",
-    firstUserOver: 19,
+    firstUserOver: 30,
   })
   assert.deepEqual(first(SCENARIOS.extensionDensePaper, SCENARIOS.tenThousandOneVisitLurkers), {
     resource: "kvReads",
-    firstUserOver: 68,
+    firstUserOver: 16,
   })
+})
+
+test("ten simultaneous cold tabs stay below both per-IP projection lanes", () => {
+  const users = 10
+  const symbolsPerTab = 10
+  const requestsPerLane = users * symbolsPerTab
+  assert.equal(requestsPerLane, 100)
+  assert.ok(requestsPerLane < 120)
+
+  const worstColdTab = extensionReaderCost({
+    activeMinutes: 5,
+    pageLoads: 1,
+    qualifiedHovers: 0,
+    uniquePreparedGenes: symbolsPerTab,
+    portraitFallbacks: symbolsPerTab,
+  })
+  assert.equal(worstColdTab.workerRequests, 31)
+  assert.equal(worstColdTab.kvReads, 63)
+  assert.equal(worstColdTab.kvLists, 0)
 })
 
 test("signed-in discovery strain is D1 write units, not Durable Object requests", () => {
