@@ -10,7 +10,7 @@ import {
   removeDiagramItem,
   renderDiagramSvg,
   updateDiagramItem,
-} from "./diagram-document.js?v=20260826-webmcp-studio"
+} from "./diagram-document.js?v=20260826-direct-connectors"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
 // document, and both obtain characters through the bounded canonical resolver.

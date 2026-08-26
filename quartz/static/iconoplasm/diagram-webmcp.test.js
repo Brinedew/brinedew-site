@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 const stored = new Map()
@@ -47,4 +48,14 @@ test("WebMCP keeps direct bitmap retrieval and visible diagram editing together"
     /visible, human-editable/,
   )
   assert.equal(getCurrentDiagramDocument().width / getCurrentDiagramDocument().height, 1.5)
+})
+
+test("the app and Studio load the same versioned diagram module graph", () => {
+  const appSource = readFileSync(new URL("./app.js", import.meta.url), "utf8")
+  const studioSource = readFileSync(new URL("./diagram-studio.js", import.meta.url), "utf8")
+  const appVersion = appSource.match(/diagram-studio\.js\?v=([^"']+)/)?.[1]
+  const documentVersion = studioSource.match(/diagram-document\.js\?v=([^"']+)/)?.[1]
+
+  assert.ok(appVersion)
+  assert.equal(documentVersion, appVersion)
 })
