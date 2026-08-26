@@ -1,4 +1,4 @@
-const X6_RUNTIME_URL = "./generated/x6-runtime.js?v=20260826-x6-318"
+const X6_RUNTIME_URL = "./generated/x6-runtime.js?v=20260826-scientific-studio-1"
 const GENE_SHAPE = "iconoplasm-gene"
 const TEXT_SHAPE = "iconoplasm-text"
 const PORT_IDS = ["top", "right", "bottom", "left"]
@@ -28,16 +28,11 @@ function registerShapes(Graph) {
       markup: [
         { tagName: "rect", selector: "body" },
         { tagName: "image", selector: "portrait" },
-        { tagName: "rect", selector: "captionPlate" },
-        { tagName: "text", selector: "caption" },
       ],
       attrs: {
         body: {
-          rx: 10,
-          ry: 10,
-          fill: "#eadfcd",
-          stroke: "#6d5140",
-          strokeWidth: 1.5,
+          fill: "#ffffff",
+          stroke: "none",
         },
         portrait: {
           x: 0,
@@ -45,27 +40,6 @@ function registerShapes(Graph) {
           refWidth: "100%",
           refHeight: "100%",
           preserveAspectRatio: "xMidYMid meet",
-        },
-        captionPlate: {
-          x: 0,
-          refY: "100%",
-          refY2: -30,
-          refWidth: "100%",
-          height: 30,
-          fill: "#eadfcd",
-          fillOpacity: 0.94,
-          stroke: "none",
-        },
-        caption: {
-          refX: "50%",
-          refY: "100%",
-          refY2: -10,
-          textAnchor: "middle",
-          fontFamily: "League Spartan, sans-serif",
-          fontWeight: 800,
-          fontSize: 15,
-          fill: "#2f241d",
-          pointerEvents: "none",
         },
       },
       ports: {
@@ -79,9 +53,9 @@ function registerShapes(Graph) {
                   class: "icono-x6-port-body",
                   r: 7,
                   magnet: true,
-                  stroke: "#f4efe4",
+                  stroke: "#ffffff",
                   strokeWidth: 3,
-                  fill: "#b94b34",
+                  fill: "#1b7269",
                 },
               },
             },
@@ -100,13 +74,8 @@ function registerShapes(Graph) {
       height: 88,
       attrs: {
         body: {
-          rx: 5,
-          ry: 5,
-          fill: "#fffaf0",
-          fillOpacity: 0.86,
-          stroke: "#9b7d65",
-          strokeWidth: 1.5,
-          strokeDasharray: "5 4",
+          fill: "transparent",
+          stroke: "transparent",
         },
         label: {
           fontFamily: "Newsreader, serif",
@@ -127,20 +96,30 @@ function registerShapes(Graph) {
 
 function markerFor(kind) {
   if (kind === "inhibition") {
-    return { tagName: "path", d: "M 10 -8 L 10 8", stroke: "#6d3729", strokeWidth: 3 }
+    return {
+      tagName: "path",
+      d: "M 0 -10 L 0 10",
+      refX: 0,
+      refY: 0,
+      fill: "none",
+      stroke: "#b23a2b",
+      strokeWidth: 3,
+      strokeLinecap: "butt",
+    }
   }
   if (kind === "association") return null
-  return { name: "block", width: 12, height: 9 }
+  return { name: "block", width: 12, height: 9, fill: "#1b7269", stroke: "#1b7269" }
 }
 
 function edgeAttrs(kind, selected = false) {
+  const stroke = kind === "activation" ? "#1b7269" : kind === "inhibition" ? "#b23a2b" : "#171717"
   return {
     line: {
-      stroke: selected ? "#b94b34" : "#6d3729",
+      stroke,
       strokeWidth: selected ? 4 : 3,
       strokeLinecap: "round",
       strokeLinejoin: "round",
-      strokeDasharray: kind === "association" ? "8 7" : "",
+      strokeDasharray: "",
       targetMarker: markerFor(kind),
     },
   }
@@ -153,7 +132,7 @@ function edgeLabels(label, background) {
       attrs: {
         label: {
           text: label,
-          fill: "#4b3b30",
+          fill: "#171717",
           fontFamily: "IBM Plex Mono, monospace",
           fontSize: 14,
           paintOrder: "stroke",
@@ -201,7 +180,6 @@ function graphNodes(document) {
       height: node.height,
       attrs: {
         portrait: { xlinkHref: imageUrl, href: imageUrl },
-        caption: { text: node.label || node.symbol },
       },
       data: { ...node, itemType: "gene" },
     }
@@ -214,8 +192,8 @@ function graphEdges(document) {
     shape: "edge",
     source: { cell: edge.from },
     target: { cell: edge.to },
-    router: { name: "orth", args: { padding: 24 } },
-    connector: { name: "rounded", args: { radius: 12 } },
+    router: { name: "normal" },
+    connector: { name: "smooth" },
     attrs: edgeAttrs(edge.kind),
     labels: edgeLabels(edge.label, document.background),
     data: { ...edge, itemType: "relationship" },
@@ -243,7 +221,7 @@ function documentFromGraph(graph, baseDocument) {
       ...data,
       id: cell.id,
       type: "gene",
-      label: String(cell.attr("caption/text") || data.label || data.symbol || ""),
+      label: String(data.label || data.symbol || ""),
       x: position.x,
       y: position.y,
       width: size.width,
@@ -282,7 +260,6 @@ function decorateSelection(graph, selectedCells) {
   if (selectedEdge) {
     selectedEdge.addTools([
       { name: "vertices", args: { snapRadius: 20 } },
-      { name: "segments" },
       { name: "source-arrowhead" },
       { name: "target-arrowhead" },
       { name: "button-remove", args: { distance: -28 } },
@@ -303,15 +280,7 @@ export async function createDiagramEditor({ container, document, onChange, onSel
     width: Math.max(1, container.clientWidth || document.width),
     height: Math.max(1, container.clientHeight || document.height),
     background: { color: document.background },
-    grid: {
-      visible: true,
-      size: 12,
-      type: "doubleMesh",
-      args: [
-        { color: "#d9ccba", thickness: 1 },
-        { color: "#baa58d", thickness: 1, factor: 5 },
-      ],
-    },
+    grid: false,
     panning: { enabled: true, eventTypes: ["rightMouseDown", "mouseWheelDown"] },
     mousewheel: { enabled: true, modifiers: ["ctrl", "meta"], minScale: 0.35, maxScale: 2.5 },
     connecting: {
@@ -324,8 +293,8 @@ export async function createDiagramEditor({ container, document, onChange, onSel
       snap: { radius: 48 },
       anchor: "center",
       connectionPoint: "boundary",
-      router: { name: "orth", args: { padding: 24 } },
-      connector: { name: "rounded", args: { radius: 12 } },
+      router: { name: "normal" },
+      connector: { name: "smooth" },
       validateConnection({ sourceCell, targetCell, sourcePort, targetPort }) {
         return Boolean(
           sourceCell &&
@@ -342,8 +311,8 @@ export async function createDiagramEditor({ container, document, onChange, onSel
         return graph.createEdge({
           id: edgeId(),
           shape: "edge",
-          router: { name: "orth", args: { padding: 24 } },
-          connector: { name: "rounded", args: { radius: 12 } },
+          router: { name: "normal" },
+          connector: { name: "smooth" },
           attrs: edgeAttrs(kind),
           data: { itemType: "relationship", kind, label: "" },
         })
@@ -352,7 +321,7 @@ export async function createDiagramEditor({ container, document, onChange, onSel
     highlighting: {
       magnetAdsorbed: {
         name: "stroke",
-        args: { attrs: { fill: "#f4efe4", stroke: "#b94b34", strokeWidth: 4 } },
+        args: { attrs: { fill: "#ffffff", stroke: "#1b7269", strokeWidth: 4 } },
       },
     },
   })
@@ -520,7 +489,6 @@ export async function createDiagramEditor({ container, document, onChange, onSel
       const data = { ...(node.getData() || {}), ...patch }
       node.setData(data)
       if (data.itemType === "text") node.attr("label/text", data.text || "")
-      else node.attr("caption/text", data.label || data.symbol || "")
       emitChange()
     },
     canUndo: () => graph.canUndo(),
@@ -531,21 +499,40 @@ export async function createDiagramEditor({ container, document, onChange, onSel
     zoomOut: () => graph.zoom(-0.15, { minScale: 0.35 }),
     zoomToFit: fitDiagram,
     async arrange(direction = "horizontal") {
-      const { DagreLayout } = await loadRuntime()
+      const { DagreLayout, GridLayout } = await loadRuntime()
       const genes = graph.getNodes().filter((node) => node.getData()?.itemType === "gene")
       if (!genes.length) return
-      const layout = new DagreLayout({
-        rankdir: direction === "vertical" ? "TB" : "LR",
-        nodesep: 54,
-        ranksep: 90,
-        marginx: 50,
-        marginy: 70,
-        nodeSize: (node) => {
-          const cell = graph.getCellById(String(node.id))
-          const size = cell?.getSize() || { width: 132, height: 176 }
-          return [size.width, size.height]
-        },
-      })
+      const useGrid = genes.length > 36
+      const columns = Math.ceil(Math.sqrt(genes.length * 1.5))
+      const gridIndex = new Map(genes.map((node, index) => [node.id, index]))
+      const layout = useGrid
+        ? new GridLayout({
+            begin: [60, 60],
+            cols: columns,
+            width: columns * 190,
+            height: Math.ceil(genes.length / columns) * 230,
+            nodeSize: [132, 176],
+            preventOverlap: true,
+            condense: true,
+            position: (node) => {
+              const index = gridIndex.get(String(node.id)) || 0
+              const row = Math.floor(index / columns)
+              const offset = index % columns
+              return { row, col: row % 2 === 0 ? offset : columns - 1 - offset }
+            },
+          })
+        : new DagreLayout({
+            rankdir: direction === "vertical" ? "TB" : "LR",
+            nodesep: 54,
+            ranksep: 90,
+            marginx: 50,
+            marginy: 70,
+            nodeSize: (node) => {
+              const cell = graph.getCellById(String(node.id))
+              const size = cell?.getSize() || { width: 132, height: 176 }
+              return [size.width, size.height]
+            },
+          })
       const data = {
         nodes: genes.map((node) => ({ id: node.id })),
         edges: graph.getEdges().map((edge) => ({
@@ -555,6 +542,7 @@ export async function createDiagramEditor({ container, document, onChange, onSel
         })),
       }
       await layout.execute(data)
+      applyingDocument = true
       graph.startBatch("antv-dagre-layout")
       layout.forEachNode((item) => {
         const node = graph.getCellById(String(item.id))
@@ -562,6 +550,13 @@ export async function createDiagramEditor({ container, document, onChange, onSel
         if (node && size) node.position(item.x - size.width / 2, item.y - size.height / 2)
       })
       graph.stopBatch("antv-dagre-layout")
+      const bounds = graph.getCellsBBox(genes)
+      baseDocument = {
+        ...baseDocument,
+        width: Math.max(1200, Math.ceil(bounds.x + bounds.width + 60)),
+        height: Math.max(800, Math.ceil(bounds.y + bounds.height + 60)),
+      }
+      applyingDocument = false
       layout.destroy()
       fitDiagram()
       emitChange()
