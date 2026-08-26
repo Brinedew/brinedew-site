@@ -5729,6 +5729,15 @@ body.icono-studio-route #iconoplasm-root {
 
 .icono-studio-canvas-wrap [data-diagram-port] {
   cursor: crosshair;
+  pointer-events: none;
+}
+
+.icono-studio-canvas-wrap [data-diagram-node]:hover [data-diagram-port],
+.icono-studio-canvas-wrap [data-diagram-node]:focus [data-diagram-port],
+.icono-studio-canvas-wrap
+  [data-diagram-node]:has(.icono-diagram-node-frame[stroke-width="4"])
+  [data-diagram-port],
+.icono-studio-canvas-wrap [data-diagram-node].is-connecting-source [data-diagram-port] {
   pointer-events: all;
 }
 
