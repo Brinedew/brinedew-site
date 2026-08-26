@@ -184,16 +184,21 @@ short-lived access token: the session owner refreshes provider tokens atomically
 retains the Brinedew identity through provider outages or revocation, and rolls
 the browser credential on authenticated activity. Dynamic HTML may restore the
 presence-only marker when an HttpOnly session cookie is already present; it must
-not perform an anonymous auth lookup. Extension detail uses a version-addressed
-immutable per-symbol GET; older clients retain the batch compatibility route.
+not perform an anonymous auth lookup. Extension rich detail and its compact
+portrait locator use separate version-addressed immutable per-symbol GETs over
+the same named card artifact; older clients retain the batch compatibility route.
 HTML and PDF feed one tab-scoped reading session. That session compiles the
-recognized unique-symbol inventory and prepares complete card detail plus decoded
-portrait before pointer intent: up to 16/64/128 ordinary-document symbols with
+recognized unique-symbol inventory and prepares rich detail plus decoded portrait
+before pointer intent: up to 16/64/128 ordinary-document symbols with
 3/6/8 workers on constrained/ordinary/measured-fast connections, plus deterministic
 near-viewport windows for larger documents. Data Saver and 2G disable preparation.
 Hover selects an already-ready card; its foreground GET is only a recovery path
 and may promote the same in-flight immutable request without waiting for whole-cache
-hydration. Do not restore pointer-trajectory, DOM-neighbor, scroll-direction, or
+hydration. Portrait paint must not wait for rich-detail success: the locator lane
+may resolve and paint while detail is stalled or exhausted. The locator is only a
+projection of the exact card payload, shares its snapshot version and portrait
+SHA, and must fail closed on disagreement; it is never a second canon or separately
+published index. Do not restore pointer-trajectory, DOM-neighbor, scroll-direction, or
 surface-specific prediction. Packaged card fonts begin loading
 during initialization in both the host page and persistent card frame. Both routes
 project immutable published card artifacts and
@@ -268,7 +273,9 @@ revision behavior.
 **ARCHITECTURE FENCE [IPD-011]** — the exact versioned card artifact selected by
 `KV_GALLERY_VERSION` owns the published source-portrait selection and every
 input used to derive the canonical public blot fingerprint and immutable Bunny
-key. Blot-only uploads never republish KV. Discovery/catalog/D1 rows may decide
+key. Blot-only uploads and portrait-locator reads never republish KV. The extension
+locator endpoint projects portrait fields directly from that named card payload;
+it has no independent pointer, version, or storage object. Discovery/catalog/D1 rows may decide
 membership, ordering, rich detail, candidates, and authoring state; they do not
 decide either public image identity. Ordinary and image-only account cards may
 render their blot composition from the exact card VM, while gene-page metadata,

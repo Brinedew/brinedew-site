@@ -22,6 +22,7 @@ const PATTERN_EXAMPLES = Object.freeze({
   public_scanner_artifact: "/api/public/v1/catalog/scanner.abc123.json",
   public_catalog_dump: "/api/public/v1/dumps/catalog.abc123.jsonl",
   public_card_snapshot_gene: "/api/public/v1/card-snapshots/card-v1/genes/TP53",
+  public_card_snapshot_portrait_locator: "/api/public/v1/card-snapshots/card-v1/portraits/TP53",
   mobile_card_symbol: "/api/iconoplasm/cards/TP53",
   print_copy_png: "/api/iconoplasm/print-copy/TP53.png",
   print_copy_enrollment: "/api/iconoplasm/print-copy-requests/TP53",

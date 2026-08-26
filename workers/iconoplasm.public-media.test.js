@@ -1663,6 +1663,54 @@ test("versioned public gene detail is immutable, extension-only, and published-a
   assert.equal(retiredResponse.headers.get("cache-control"), "no-store")
 })
 
+test("versioned portrait locator is an immutable projection of the same published card", async () => {
+  const portraitSha = "4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212"
+  const requestUrl =
+    "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/test-card-v1/portraits/A1BG"
+  const deniedResponse =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request(requestUrl),
+      buildEnv({ KV: buildPublishedCardReadKv({ portraitSha }) }),
+      {},
+    )
+  assert.equal(deniedResponse.status, 403)
+
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request(requestUrl, {
+        headers: { "X-Iconoplasm-Extension-Version": "0.4.15" },
+      }),
+      buildEnv({ KV: buildPublishedCardReadKv({ portraitSha }) }),
+      {},
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.snapshot_version, "test-card-v1")
+  assert.equal(payload?.portrait_locator?.snapshot_version, "test-card-v1")
+  assert.equal(payload?.portrait_locator?.symbol, "A1BG")
+  assert.equal(payload?.portrait_locator?.portrait?.asset_sha256, portraitSha)
+  assert.match(payload?.portrait_locator?.portrait?.medium_url || "", /\/medium\.webp$/)
+  assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable")
+  assert.equal(response.headers.get("x-iconoplasm-data-source"), "published-card-catalog")
+  assert.match(
+    String(response.headers.get("etag") || ""),
+    /card-portrait-locator-test-card-v1-A1BG/,
+  )
+
+  const retiredResponse =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/retired/portraits/A1BG",
+        { headers: { "X-Iconoplasm-Extension-Version": "0.4.15" } },
+      ),
+      buildEnv({ KV: buildPublishedCardReadKv({ portraitSha }) }),
+      {},
+    )
+  assert.equal(retiredResponse.status, 404)
+  assert.equal(retiredResponse.headers.get("cache-control"), "no-store")
+})
+
 test("versioned public gene detail reuses the Worker edge cache and serves HEAD", async () => {
   const previousCaches = globalThis.caches
   const entries = new Map()
