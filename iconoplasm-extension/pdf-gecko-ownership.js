@@ -7,6 +7,35 @@
   const requests = new Map()
   let enabled = false
 
+  function localPdfUrl(value) {
+    try {
+      const url = new URL(String(value || ""))
+      return url.protocol === "file:" && /\.pdf$/i.test(url.pathname) ? url.href : ""
+    } catch (_error) {
+      return ""
+    }
+  }
+
+  function localReaderUrl(sourceUrl) {
+    return `${api.runtime.getURL("pdf-reader.html")}?geckoLocalFile=${encodeURIComponent(sourceUrl)}`
+  }
+
+  function onBeforeNavigate(details) {
+    if (
+      !enabled ||
+      details.frameId !== 0 ||
+      !Number.isInteger(details.tabId) ||
+      details.tabId < 0
+    ) {
+      return
+    }
+    const sourceUrl = localPdfUrl(details.url)
+    if (!sourceUrl) return
+    void api.tabs.update(details.tabId, { url: localReaderUrl(sourceUrl) }).catch((error) => {
+      console.error("Iconoplasm could not open the local Firefox PDF reader", error)
+    })
+  }
+
   function headerValue(headers, name) {
     const header = (headers || []).find(
       (candidate) => String(candidate.name || "").toLowerCase() === name,
@@ -48,6 +77,7 @@
 
   function onBeforeRequest(details) {
     if (!enabled) return undefined
+    if (!/^https?:/i.test(String(details.url || ""))) return undefined
 
     // Firefox may redirect a PDF navigation into its built-in viewer as soon as
     // headers arrive. Creating the StreamFilter here is therefore essential;
@@ -134,6 +164,7 @@
     { urls: ["<all_urls>"], types: ["main_frame"] },
     ["blocking", "responseHeaders"],
   )
+  api.webNavigation?.onBeforeNavigate?.addListener(onBeforeNavigate)
   const ready = api.storage.local
     .get([PDF_SETTING])
     .then((stored) => setEnabled(stored[PDF_SETTING]))

@@ -359,7 +359,12 @@ function validatePackagedPdfSurface() {
       if (packagedManifest.mime_types_handler) {
         fail("Firefox package retained the Chromium-only PDF MIME handler")
       }
-      for (const permission of ["webRequest", "webRequestBlocking", "webRequestFilterResponse"]) {
+      for (const permission of [
+        "webRequest",
+        "webRequestBlocking",
+        "webRequestFilterResponse",
+        "webNavigation",
+      ]) {
         if (!packagedManifest.permissions?.includes(permission)) {
           fail(`Firefox package lost required ${permission} permission`)
         }

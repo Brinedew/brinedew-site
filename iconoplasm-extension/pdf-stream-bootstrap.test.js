@@ -5,14 +5,14 @@ import vm from "node:vm"
 
 const source = readFileSync(new URL("./pdf-stream-bootstrap.js", import.meta.url), "utf8")
 
-function runBootstrap({ mimeHandler, fetchImpl, runtime, search = "", replace = () => {} }) {
+function runBootstrap({ mimeHandler, fetchImpl, runtime, tabs, search = "", replace = () => {} }) {
   class TestURL extends URL {
     static createObjectURL() {
       return "blob:firefox-native-pdf"
     }
   }
   const context = {
-    chrome: { mimeHandler, runtime },
+    chrome: { mimeHandler, runtime, tabs },
     console: { error() {} },
     fetch: fetchImpl,
     location: { search, replace },
@@ -85,6 +85,34 @@ test("keeps the explicit manual reader available when the API is unavailable", a
   })
 
   assert.equal(outcome.kind, "manual")
+})
+
+test("keeps Firefox local files private for the reader's File API path", async () => {
+  const replacements = []
+  const outcome = await runBootstrap({
+    search: "?geckoLocalFile=file%3A%2F%2F%2FD%3A%2FPapers%2FBRCA1%2520review.pdf",
+    replace: (url) => replacements.push(url),
+    async fetchImpl() {
+      throw new Error("local file bytes require the user-selected File API path")
+    },
+  })
+
+  assert.equal(outcome.kind, "manual")
+  assert.equal(outcome.ownership, "firefox-local-file-picker")
+  assert.equal(outcome.streamInfo.originalUrl, "file:///D:/Papers/BRCA1%20review.pdf")
+  assert.equal(outcome.handBack, undefined)
+  assert.deepEqual(replacements, [])
+})
+
+test("rejects forged Firefox local-file reader parameters", async () => {
+  const outcome = await runBootstrap({
+    search: "?geckoLocalFile=https%3A%2F%2Fexample.test%2Fpaper.pdf",
+    async fetchImpl() {
+      throw new Error("fetch must not run")
+    },
+  })
+
+  assert.equal(outcome.kind, "aborted")
 })
 
 test("consumes Firefox-owned bytes once and hands the same bytes to the native viewer", async () => {

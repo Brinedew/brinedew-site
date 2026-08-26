@@ -63,7 +63,7 @@ Notes about the build:
 - `pnpm run package:iconoplasm-firefox` stages a Firefox-specific manifest with the Firefox response-filter ownership driver and the same PDF reader used by Chromium.
 - The Firefox driver uses `webRequest.filterResponseData` only for top-level HTTP(S) responses whose declared content type is `application/pdf`; attachments and partial responses remain native.
 - Turning PDF highlighting off removes interception for future documents. An already-open owned document gives the captured bytes to Firefox's native PDF viewer as a PDF blob; it does not replay the original GET or POST.
-- Local `file:` PDF ownership is not claimed by this driver. Store certification must keep that limitation explicit until a browser-supported local-file adapter is implemented.
+- Local `file:` PDF navigation uses `webNavigation` to open the same packaged reader. Firefox does not expose arbitrary local-path reads to extensions, so the reader asks the user to choose or drop that file once through the browser's File API. Bytes remain local, and turning PDF highlighting off returns to the original Firefox file URL.
 - The signed XPI is produced by AMO after upload; the local build reproduces the unsigned package submitted for review.
 
 ## reviewer notes
