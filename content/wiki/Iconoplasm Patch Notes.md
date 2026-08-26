@@ -10,6 +10,10 @@ draft: false
 
 ## Unreleased
 
+## 0.5.2 - 2026-08-26
+
+* Hotfix: Backend data management.
+* Hotfix: Opening a local PDF now copies the exact PDF path before opening Firefox’s picker, allowing the user to press Ctrl+V → Open.
 ## 0.5.1 - 2026-08-26
 
 * Hotfix: PDF highlighting now works with local PDFs
