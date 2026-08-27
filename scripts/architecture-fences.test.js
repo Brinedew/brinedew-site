@@ -106,7 +106,7 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
   const instructions = readRepositoryFile("AGENTS.md")
   assert.match(instructions, /canonical public machine image is the Iconoplasm gene blot/)
   assert.match(instructions, /source portrait remains available as subordinate/)
-  assert.match(instructions, /healthy non-Vietnam regions/)
+  assert.match(instructions, /On any healthy network/)
 
   const runtime = readRepositoryFile(
     "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
@@ -279,7 +279,7 @@ test("IPD-008 forbids public KV discovery scans and preserves one bounded portra
   assert.match(fence.change_control, /missing-pointer legacy discovery is migration-only/)
   assert.match(
     fence.change_control,
-    /locator must remain a direct projection of the named card payload[\s\S]*must never become a separately stored or published pointer/,
+    /locator must remain a direct projection of the named card payload[\s\S]*must never acquire an independent selection or publication pointer/,
   )
   assert.match(
     fence.change_control,
@@ -293,6 +293,36 @@ test("IPD-008 forbids public KV discovery scans and preserves one bounded portra
   const routeSource = readRepositoryFile("workers/iconoplasm-route-contract.js")
   assert.match(routeSource, /rateLimit:\s*rateLimit\("gene_detail", 120\)/)
   assert.match(routeSource, /rateLimit:\s*rateLimit\("portrait_locator", 120\)/)
+})
+
+// ARCHITECTURE FENCE [IPD-001] + [IPD-008] + [IPD-011]
+test("Bunny fences protect canonical authority without forbidding immutable CDN caches", () => {
+  const delivery = registry.fences.find((entry) => entry.id === "IPD-001")
+  const readPlane = registry.fences.find((entry) => entry.id === "IPD-008")
+  const canon = registry.fences.find((entry) => entry.id === "IPD-011")
+  assert.match(delivery.decision, /Country is not connectivity/)
+  assert.match(
+    delivery.decision,
+    /R2 enablement or a Cloudflare paid upgrade is not a prerequisite/,
+  )
+  assert.match(
+    delivery.change_control,
+    /private or mutable APIs must never enter that public cache/,
+  )
+  assert.match(delivery.change_control, /actual CDN HITs, cold-miss and fallback costs/)
+  assert.match(
+    readPlane.change_control,
+    /per-gene Worker transport is an implementation, not a fence/,
+  )
+  assert.match(
+    canon.decision,
+    /Byte-equivalent CDN caches and deterministic immutable projections are allowed/,
+  )
+  const instructions = readRepositoryFile("AGENTS.md")
+  assert.doesNotMatch(instructions, /healthy cold read is one\s+bounded prefix list/)
+  assert.doesNotMatch(instructions, /including the exact-pair\s+fast path; never disable cleanup/)
+  assert.match(instructions, /Write competing\s+hypotheses and disproof tests/)
+  assert.doesNotMatch(instructions, /project almost certainly did not change/)
 })
 
 // ARCHITECTURE FENCE [IPD-004]

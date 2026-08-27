@@ -4,6 +4,9 @@
 // why the one-probe canonical fallback exists; it is not a reason to disable
 // Bunny globally. See architecture-fences.json and the portrait runbook before
 // changing this default.
+// Country is not connectivity: a working Vietnamese ISP/VPN uses Bunny too.
+// This policy owns byte delivery, never canonical image selection. The owner's
+// paid Bunny service replaces unavailable R2; canonical URLs are not a CDN ban.
 export const DEFAULT_PORTRAIT_DELIVERY_POLICY = Object.freeze({
   version: 1,
   canonical_origin: "https://iconoplasm.brinedew.bio",

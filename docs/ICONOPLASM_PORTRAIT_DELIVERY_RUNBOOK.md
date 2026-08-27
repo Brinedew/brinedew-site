@@ -54,9 +54,10 @@ blot whose portrait SHA matches that same card. Public media, page metadata, str
 data and image sitemaps expose the blot, while raw portraits
 is explicitly subordinate.
 
-For both portraits and blots, Bunny is the healthy-region accelerator for
-non-Vietnam users. Vietnam and any failed Bunny probe use the canonical
-first-party route. That choice changes only byte delivery, never identity.
+For both portraits and blots, Bunny is the accelerator on any working network,
+including a Vietnamese ISP or VPN that can reach it. A failed probe selects the
+canonical first-party route for that tab. There is no country-based exclusion.
+That choice changes only byte delivery, never identity.
 
 Labelled gene-card PNGs are a separate derived asset class under
 `gene-cards/v1/<prefix>/<card-fingerprint>/<SYMBOL>-iconoplasm-gene-card.png`.
@@ -129,6 +130,50 @@ message outcomes remain terminal and must not be replayed automatically.
 ## Browser delivery policy
 
 ### Why Bunny is primary
+
+The owner pays for Bunny as the alternative to R2, whose billing is unavailable.
+Do not require R2 enablement or a paid Cloudflare upgrade to complete delivery.
+The canonical-URL rule prohibits provider-owned identity, not provider delivery.
+It also permits byte-equivalent CDN caching of public immutable hover metadata.
+Neither a cached response nor a deterministic projection is a second canon:
+only independent image selection or an independent publication pointer is.
+
+### Metadata acceleration: authorized, not yet deployed
+
+The current extension still reads two first-party immutable projections per
+prepared gene. Cloudflare Cache API hits still invoke the Worker; this is not
+the scalable healthy-path end state. B-711 owns the authorized Bunny cutover.
+Evaluate caching the existing exact snapshot URLs before adding publisher-owned
+copies, storage writes, manifests, or a second synchronization process.
+
+Acceptance is evidence, not another provider ban:
+
+- Cache only anonymous immutable detail/locator responses. Never proxy private,
+  auth, vote, admin, mutable manifest, or mutation routes through a public cache.
+- Preserve the exact snapshot, symbol, and portrait SHA. A vote that leaves the
+  winner unchanged creates no publication; a changed winner uses the existing
+  dirty-shard publisher and single barrier. Cached old URLs remain old snapshots,
+  not aliases for the current winner. Never require corpus purges on voting.
+- Prove actual CDN HITs and origin-request savings. Account separately for cold
+  misses, eviction, regional fallback, CDN traffic, and publication work. A warm
+  HIT is not a guarantee that every cold request costs zero Workers or KV reads.
+  In particular, the current per-symbol URL includes the whole snapshot version:
+  changing one winner changes those URLs for every gene. A simple CDN in front
+  of them can therefore lose all reuse on each publication. Prove bounded cost
+  under repeated snapshot changes or use content-addressed unchanged projections;
+  a warm, no-voting benchmark cannot satisfy this gate.
+- Preserve independent portrait/detail progress, bounded cancellation and tab
+  fallback. Prove failure on the affected network without disabling healthy tabs.
+- Confirm CDN rules do not cache `no-store` failures or personalized responses.
+  Bunny Smart Cache excludes JSON by default; changing a URL alone is not proof
+  of acceleration. Follow the current [Bunny caching contract](https://bunny.net/docs/cdn/smart-cache).
+
+The dashboard's startup JSON at `panel-production-libs.b-cdn.net` failed on the
+affected ISP on 2026-08-27. That blocks this session's CDN administration, not
+the architecture; it is not evidence for disabling Bunny globally. Do not call
+the metadata cutover shipped until configuration and end-to-end proof exist.
+
+### Protected image behavior
 
 **ARCHITECTURE FENCE [IPD-001]** — Bunny is not a disposable mirror. It is the
 healthy-path delivery layer chosen so browser portrait reads go directly to the

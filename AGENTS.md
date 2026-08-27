@@ -27,7 +27,12 @@ per tab and begins the canonical first-party hedge after 350 ms if Bunny is
 still unresolved; the first successful source becomes the tab decision. A
 regional DNS failure therefore selects canonical without putting the old 2.5 s
 worker-byte probe on the visible-hover path. Never turn
-one network's DNS result into a global accelerator disable. Read
+one network's DNS result into a global accelerator disable.
+Country is not a delivery decision: a working Vietnamese ISP or VPN uses Bunny
+too. Bunny is the owner's paid alternative to R2; do not make R2 enablement or
+a new paid Cloudflare plan a prerequisite. Canonical identity is first-party;
+that does not prohibit Bunny caching immutable public metadata. A cache has no
+authority to choose an image, advance a snapshot, or serve private APIs. Read
 `docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md` before changing portrait policy,
 storage, CDN configuration, preconnects, or fallback behavior. Requested
 labelled-card thumbnails share this same tab-scoped accelerator/fallback
@@ -86,9 +91,9 @@ valid card, while only cards with an exact ready blot enter the range or gene
 sitemap. An unavailable/incomplete artifact read returns uncached `503` instead
 of a partial sitemap. The source portrait remains available as subordinate
 source material; it must never be described as the canonical public gene
-image. In healthy non-Vietnam regions, IPD-001 selects Bunny's byte-equivalent
-accelerator URL; Vietnam and any failed Bunny probe stay on the first-party
-route. Delivery selection must not replace the first-party discovery identity.
+image. On any healthy network, IPD-001 selects Bunny's byte-equivalent
+accelerator URL; a failed Bunny probe selects first-party for that tab only.
+Delivery selection must not replace the first-party discovery identity.
 Massive `/genes/{range}` pages are text-only discovery indexes and must not
 render portrait or blot thumbnails that bypass the gallery collection mechanic.
 Image metadata may expose only a ready object whose fingerprint still matches
@@ -223,7 +228,8 @@ owns each desired state, while individual immutable KV revisions are bounded
 publication inputs and history. Anonymous manifest, search, and resolver paths
 split one newest valid immutable recognition-pair bundle, never select the two
 policies independently and never fall back to D1. A healthy cold read is one
-bounded prefix list plus one payload GET; a nonempty malformed or nonvisible
+exact current-pointer GET plus one exact immutable-pair GET, with zero lists.
+Missing-pointer discovery is migration-only, never a normal public read; a malformed or nonvisible
 pair namespace fails closed unless the isolate has last-known-good state.
 Bootstrap is allowed only while the pair namespace is truly empty and preserves
 the newest dependency-free legacy blocklist. Protocol-aware extensions retain
@@ -245,9 +251,8 @@ no-op skips recognition-index validation. Because v1 pair
 keys do not encode the scanner build, even an existing exact pair requires a
 valid receipt for the current manifest before it can be accepted.
 Foreground admin reconciliation disables history cleanup so propagation retries
-remain list-free. The default scheduled reconciler owns bounded best-effort
-cleanup of alias, blocklist, and pair KV histories, including the exact-pair
-fast path; never disable cleanup for the scheduled caller.
+remain list-free. The scheduled reconciler owns bounded best-effort cleanup
+after actual publication. An unchanged exact-pair fast path performs no history lists.
 Read
 `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` and Linear B-673
 before changing anonymous bootstrap, the session-presence hint, catalog/card
@@ -288,7 +293,10 @@ revision behavior.
 input used to derive the canonical public blot fingerprint and immutable Bunny
 key. Blot-only uploads and portrait-locator reads never republish KV. The extension
 locator endpoint projects portrait fields directly from that named card payload;
-it has no independent pointer, version, or storage object. Discovery/catalog/D1 rows may decide
+it has no independent pointer or version. Byte-equivalent CDN caches and
+deterministic immutable projections are allowed; independently selected image
+state is not. Caching must preserve the named snapshot and never promote
+private or mutable routes into public CDN content. Discovery/catalog/D1 rows may decide
 membership, ordering, rich detail, candidates, and authoring state; they do not
 decide either public image identity. Ordinary and image-only account cards may
 render their blot composition from the exact card VM, while gene-page metadata,
@@ -364,21 +372,22 @@ accepted by an older gate must never satisfy the new coverage audit.
 
 ## "Site is broken" runbook
 
-When a user reports "site broken" or "images not loading" or any visual regression, the first 30 minutes are dominated by the wrong kind of investigation (DNS-layer forensics, status-page checks, Git blame) when the actual answer is almost always on the user's network or in a project-owned fallback that already exists. The pattern that wastes hours is:
-
-- probing public resolvers / external CDNs to "prove they're not the cause" (they almost never are)
-- reading the architecture doc only after exhausting the codebase
-- assuming the user wants a code change when the user actually wants the right diagnosis
-- proposing a project-side "fix" that costs the project's budget when the bug is on a third party
+When a user reports "site broken", missing images, or a visual regression, do
+not preselect either the network or our code as the cause. Write competing
+hypotheses and disproof tests. Check the actual installed version and affected
+browser, the published payload and exact image identity, source delivery, and
+local rendering. A healthy alternate region cannot disprove the user's failure;
+a failed local resolver cannot prove a global provider outage. Separate observed
+facts from inferred causes, and read the relevant runbook before changing policy.
 
 Concrete rules:
 
 1. **If the project has a runbook for the bug, read it first.** `D:\Coding\Website\docs\` has `ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md` for "portraits broken on iconoplasm.brinedew.bio." Read it before touching the codebase. If a runbook does not exist, the user can tell you, and that is fine — but check for one before assuming there isn't.
-2. **If the user says "fine yesterday, broken today," the question is not "what changed in our project"** (the project almost certainly did not change). The question is "what changed in the user's network path to the third party." Public resolvers will almost always say "fine" because the breakage is on a subset of consumer resolvers. The right diagnostic is the _user's actual recursive resolver_, not 8.8.8.8.
-3. **If the user rejects a "fix" twice, the user is telling you the fix is the wrong shape.** Stop proposing that fix. Ask what the user wants, or say "I do not have a fix that does not cost the project budget, and I am not going to keep proposing ones."
-4. **When the architecture doc already names the durable fix and the durable fix is blocked by an account-level state (e.g. R2 disabled because billing/card path is broken), the right move is to surface the unblocker, not to invent a project-side workaround.** The unblocker is a user action on the third-party dashboard, not a code change.
+2. **"Fine yesterday, broken today" is not a cause.** Check deployed/installed changes, publication freshness, quotas, and the user's actual network. Use public resolvers only as contrasting evidence, not as a substitute for the affected path.
+3. **If the user rejects a fix twice, revisit its premises.** Show which hypotheses were disproved and which remain. Do not repeat a rejected architecture or disguise its costs with new names.
+4. **Verify the owner's actual provider choice before calling account state a blocker.** Iconoplasm uses already-paid Bunny because R2 billing is unavailable. R2 enablement is not this product's unblocker. Test Bunny's healthy path and the affected tab's first-party fallback separately; preserve both. If Bunny administration itself is inaccessible, report that exact access failure instead of silently changing providers.
 5. **The Playwright browser is already logged into brinedew.bio.** For "what is the live state of X" questions, navigate to `https://brinedew.bio/admin/iconoplasm#costs` (or the relevant admin page) and read the rendered tables. Do not probe external APIs with auth tokens you don't have when the browser session already has the access you need.
-6. **Do not propose a code change as a band-aid** that converts a third-party cost into a project cost. The user has rejected this pattern four times in a row when it was proposed in the 2026-06-26 incident. Read the room.
+6. **Cost both delivery paths.** First-party fallback is intentional for affected networks, not a reason to route every healthy reader through Cloudflare. Changes must preserve correctness and show request, storage, CPU, and publication costs, including failure paths.
 
 ## Local development overrides
 
