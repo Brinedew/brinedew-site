@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
+import { runInNewContext } from "node:vm"
 
 const readerSource = readFileSync(new URL("./pdf-reader.mjs", import.meta.url), "utf8")
 const readerControlsSource = readFileSync(
@@ -39,7 +40,32 @@ test("PDF pointer exits use the same transition as movement, including toolbar a
     /container\.addEventListener\("pointerleave", \(event\) => \{\s*transitionActiveAnchor\(null, event\.relatedTarget\)/u,
   )
   assert.match(readerSource, /core\.transitionReaderAnchor\(/u)
-  assert.match(readerSource, /window\.addEventListener\("blur", closeActiveCard\)/u)
+})
+
+test("PDF focus entering a card iframe does not close the card; leaving the document does", () => {
+  const registration = readerSource.match(
+    /window\.addEventListener\("blur", \(\) => \{[\s\S]*?\n\}\)/u,
+  )
+  assert.ok(registration, "reader must register its document focus guard")
+  let handler
+  let documentFocused = true
+  let closed = 0
+  runInNewContext(registration[0], {
+    window: {
+      addEventListener: (_event, listener) => {
+        handler = listener
+      },
+    },
+    document: { hasFocus: () => documentFocused },
+    closeActiveCard: () => {
+      closed += 1
+    },
+  })
+  handler()
+  assert.equal(closed, 0, "iframe focus retains the interactive card")
+  documentFocused = false
+  handler()
+  assert.equal(closed, 1, "actual window exit closes the card")
 })
 
 test("PDF highlight behavior is cross-browser and preserves the stored mode", () => {

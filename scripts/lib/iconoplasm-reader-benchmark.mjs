@@ -17,6 +17,12 @@ export function distribution(values) {
   return { n: sorted.length, p50: pick(0.5), p95: pick(0.95), max: sorted.at(-1) ?? null }
 }
 
+export function measuredResponseBodyBytes(value) {
+  // Chromium/Playwright can report negative encoded body sizes for cached
+  // responses. That is unavailable accounting, not negative or free traffic.
+  return Number.isFinite(value) && value >= 0 ? value : null
+}
+
 export function assessReaderSamples(samples, budgets = READER_BUDGETS) {
   const groups = {}
   for (const sample of samples) {
@@ -484,7 +490,7 @@ export async function runReaderJourney(
       .sizes()
       .then(
         (sizes) => {
-          entry.responseBodyBytes = sizes.responseBodySize
+          entry.responseBodyBytes = measuredResponseBodyBytes(sizes.responseBodySize)
         },
         () => {
           entry.responseBodyBytes = null
