@@ -166,7 +166,7 @@ function diagnosticDatabase(options) {
 const runId = "diag-11111111-2222-4333-8444-555555555555"
 const runOptions = {
   geneSymbol: "AFF2",
-  pipelineCodes: ["A", "B", "C", "D", "E"],
+  pipelineCodes: ["A", "B", "C", "D", "O"],
   emulsionSlots: [30593, 255, 343, 21329, 24210],
   visionRevision: 1,
   promptBodyMode: "taggerizer_prompt",
@@ -214,6 +214,29 @@ test("diagnostic matrix leaves no partial run or requests when the batch is inte
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM icono_diagnostic_matrix_runs").get().n, 0)
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM icono_generation_requests").get().n, 0)
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM icono_diagnostic_matrix_cells").get().n, 0)
+  } finally {
+    db.close()
+  }
+})
+
+test("mixed accepted and retired factory matrices reject all work without writes", async () => {
+  const { db, d1 } = diagnosticDatabase()
+  try {
+    for (const pipelineCodes of [["E"], ["L"], ["H", "E"], ["O", "L"]]) {
+      const result = await createDiagnosticMatrixRunForTest(
+        { ICONOPLASM_DB: d1 },
+        new URL("https://iconoplasm.brinedew.bio/admin"),
+        { ...runOptions, pipelineCodes },
+      )
+      assert.equal(result.ok, false)
+      assert.match(result.error, /accepted Pipeline/)
+      for (const table of [
+        "icono_diagnostic_matrix_runs",
+        "icono_generation_requests",
+        "icono_diagnostic_matrix_cells",
+      ])
+        assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, 0)
+    }
   } finally {
     db.close()
   }
