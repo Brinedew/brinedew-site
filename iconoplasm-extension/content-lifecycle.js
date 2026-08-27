@@ -20,15 +20,18 @@
       const timeoutId = setTimeoutFn(() => finish(null), timeoutMs)
 
       try {
-        chromeApi.runtime.sendMessage({ type: "GET_GENE_DATA" }, (payload) => {
-          // Reading lastError in the callback is required by Chromium and harmless
-          // in Firefox. A missing background page is a retryable empty response.
-          if (chromeApi.runtime.lastError) {
-            finish(null)
-            return
-          }
-          finish(payload)
-        })
+        chromeApi.runtime.sendMessage(
+          { type: "GET_GENE_DATA", cacheOnly: options.cacheOnly === true },
+          (payload) => {
+            // Reading lastError in the callback is required by Chromium and harmless
+            // in Firefox. A missing background page is a retryable empty response.
+            if (chromeApi.runtime.lastError) {
+              finish(null)
+              return
+            }
+            finish(payload)
+          },
+        )
       } catch (_error) {
         finish(null)
       }
@@ -193,10 +196,31 @@
     return run
   }
 
+  // ARCHITECTURE FENCE [IPD-008]: a cached scanner is local recognition, not
+  // speculative downloading. Let the host paint first, then use genuine idle
+  // time even if an unrelated image/analytics request keeps load outstanding.
+  // No timeout may force this pre-load task onto a busy rendering thread.
+  function runAfterHostPaint(options = {}) {
+    const documentRef = options.documentRef || root.document
+    const windowRef = options.windowRef || root
+    const task = options.task || (() => {})
+    if (!windowRef.requestAnimationFrame || !windowRef.requestIdleCallback) {
+      return runAfterHostLoad({ documentRef, windowRef, task })
+    }
+    const queue = () =>
+      windowRef.requestAnimationFrame(() =>
+        windowRef.requestAnimationFrame(() => windowRef.requestIdleCallback(task)),
+      )
+    if (documentRef.readyState === "loading")
+      documentRef.addEventListener("DOMContentLoaded", queue, { once: true })
+    else queue()
+  }
+
   root.IconoplasmContentLifecycle = {
     requestGeneData,
     createMutationScanController,
     scheduleHostFirstBackgroundWork,
     runAfterHostLoad,
+    runAfterHostPaint,
   }
 })(typeof globalThis !== "undefined" ? globalThis : this)

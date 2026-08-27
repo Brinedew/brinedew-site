@@ -2,6 +2,7 @@ import {
   AnnotationMode,
   GlobalWorkerOptions,
   PasswordResponses,
+  OPS,
   getDocument,
 } from "./generated/pdfjs/pdf.mjs"
 import {
@@ -11,6 +12,12 @@ import {
   PDFViewer,
 } from "./generated/pdfjs/pdf_viewer.mjs"
 import { createPdfReaderControls } from "./pdf-reader-controls.mjs"
+import {
+  buildTextVisibilityIndex,
+  clipTextMatch,
+  intersectConvexPolygons,
+  pointInConvexPolygon,
+} from "./pdf-text-visibility.mjs"
 
 GlobalWorkerOptions.workerSrc = chrome.runtime.getURL("generated/pdfjs/pdf.worker.mjs")
 
@@ -286,8 +293,7 @@ function setLayerBounds(layer, bounds) {
   layer.style.height = `${bounds.bottom - bounds.top}px`
 }
 
-function getTextLayerGeometry(textNode, label, bounds) {
-  const textElement = textNode?.parentElement
+function getTextLayerGeometry(textElement, label, bounds) {
   if (!textElement || !textMetricsContext) {
     return { bounds, crossAxis: "y", crossAxisDirection: 1 }
   }
@@ -358,6 +364,18 @@ function createDecoration(state, match, geometry, matchOrdinal) {
   } else {
     return null
   }
+  if (geometry.visibilityClips?.length) {
+    const b = decorationGeometry.bounds
+    let polygon = [
+      [b.left, b.top],
+      [b.right, b.top],
+      [b.right, b.bottom],
+      [b.left, b.bottom],
+    ]
+    for (const clip of geometry.visibilityClips) polygon = intersectConvexPolygons(polygon, clip)
+    if (polygon.length < 3) return null
+    layer.style.clipPath = `polygon(${polygon.map(([x, y]) => `${x - b.left}px ${y - b.top}px`).join(",")})`
+  }
   state.pageElement.appendChild(layer)
   return layer
 }
@@ -394,8 +412,10 @@ function anchorContainsClientPoint(anchor, clientX, clientY) {
   if (!pageOrigin) return false
   const pageX = clientX - pageOrigin.left
   const pageY = clientY - pageOrigin.top
-  return anchor._iconoplasmBounds?.some((bounds) =>
-    core.containsPointInBounds(bounds, pageX, pageY),
+  return anchor._iconoplasmBounds?.some(
+    (bounds) =>
+      core.containsPointInBounds(bounds, pageX, pageY) &&
+      (!bounds.polygon || pointInConvexPolygon(bounds.polygon, [pageX, pageY])),
   )
 }
 
@@ -423,6 +443,26 @@ function pageIsInWorkingSet(pageElement) {
   )
 }
 
+function rangeForTextOffsets(element, start, end) {
+  const range = document.createRange()
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+  let offset = 0,
+    started = false
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const next = offset + node.nodeValue.length
+    if (!started && start < next) {
+      range.setStart(node, start - offset)
+      started = true
+    }
+    if (started && end <= next) {
+      range.setEnd(node, end - offset)
+      return range
+    }
+    offset = next
+  }
+  return null
+}
+
 async function scanPage(pageNumber) {
   const state = pageState.get(pageNumber)
   if (!highlightingEnabled || !bridge || !state?.visible || !state.rendered) return
@@ -432,26 +472,81 @@ async function scanPage(pageNumber) {
   state.renderRevision += 1
   const revision = state.renderRevision
   removePageAnchors(pageNumber)
+  const pageView = pdfViewer.getPageView(pageNumber - 1)
+  const mapping = pageView?.textLayer?.highlighter
+  if (!mapping?.textDivs?.length) return
+  // Form clipping belongs to the PDF graphics state, not the transparent text
+  // layer. Never deduplicate nearby labels or move guessed outlines onto pixels.
+  state.visibilityIndexPromise ||= Promise.all([
+    pageView.pdfPage.getOperatorList(),
+    pageView.pdfPage.getTextContent({ includeMarkedContent: true, disableNormalization: true }),
+    pdfViewer.optionalContentConfigPromise,
+  ]).then(([operators, content, optional]) =>
+    buildTextVisibilityIndex(operators, content, OPS, optional),
+  )
+  let visibility
+  try {
+    visibility = await state.visibilityIndexPromise
+  } catch (error) {
+    state.pageElement.dataset.iconoplasmVisibility = "unavailable"
+    console.warn("[Iconoplasm] PDF text visibility unavailable:", error.message)
+    return
+  }
+  if (
+    pageState.get(pageNumber) !== state ||
+    state.renderRevision !== revision ||
+    !state.visible ||
+    !highlightingEnabled
+  )
+    return
+  if (
+    mapping.textDivs.length !== visibility.items.length ||
+    mapping.textContentItemsStr.some((text, i) => text !== visibility.items[i]?.text)
+  ) {
+    state.pageElement.dataset.iconoplasmVisibility = "text-mapping-mismatch"
+    return
+  }
+  state.pageElement.dataset.iconoplasmVisibility = visibility.unmatchedFonts.length
+    ? "partial"
+    : "verified"
   const pageOrigin = getPageContentOrigin(state.pageElement)
   if (!pageOrigin) return
-  const walker = document.createTreeWalker(textLayer, NodeFilter.SHOW_TEXT)
   let matchOrdinal = 0
-  for (let textNode = walker.nextNode(); textNode; textNode = walker.nextNode()) {
+  for (let itemIndex = 0; itemIndex < mapping.textDivs.length; itemIndex++) {
+    const textElement = mapping.textDivs[itemIndex]
+    const item = visibility.items[itemIndex]
+    if (!textElement.isConnected || textElement.textContent !== item.text) continue
     if (state.renderRevision !== revision) return
     const plan = core.normalizeTextRunMatches(
-      textNode.nodeValue,
+      item.text,
       (text) => bridge.findMatches(text),
       (symbol) => bridge.getPdfHighlightPresentation?.(symbol),
     )
     for (const match of plan.accepted) {
-      const range = document.createRange()
-      range.setStart(textNode, match.start)
-      range.setEnd(textNode, match.end)
+      const range = rangeForTextOffsets(textElement, match.start, match.end)
+      if (!range) continue
       const boundsList = Array.from(range.getClientRects(), (rect) =>
         core.boundsFromClientRect(rect, pageOrigin),
       )
         .filter(Boolean)
-        .map((bounds) => getTextLayerGeometry(textNode, match.label, bounds))
+        .map((bounds) => getTextLayerGeometry(textElement, match.label, bounds))
+        .map((geometry) => {
+          const clipped = clipTextMatch(
+            item,
+            match.start,
+            match.end,
+            geometry.bounds,
+            pageView.viewport.transform,
+          )
+          return clipped
+            ? {
+                ...geometry,
+                bounds: { ...clipped.bounds, polygon: clipped.polygon },
+                visibilityClips: clipped.clips,
+              }
+            : null
+        })
+        .filter(Boolean)
       range.detach()
       if (!boundsList.length) continue
       for (const geometry of boundsList) {
@@ -477,6 +572,9 @@ async function clearPageHighlights(pageNumber) {
   const state = pageState.get(pageNumber)
   if (!state) return
   state.renderRevision += 1
+  // Only the viewport working set retains per-character visibility rules.
+  // Scrolling through a long PDF must not grow an all-document second text cache.
+  state.visibilityIndexPromise = null
   removePageAnchors(pageNumber)
 }
 
@@ -565,6 +663,16 @@ eventBus.on("scalechanging", () => {
   closeActiveCard()
   for (const state of pageState.values()) state.renderRevision += 1
   window.requestAnimationFrame(refreshZoomOutput)
+})
+
+eventBus.on("optionalcontentconfigchanged", () => {
+  closeActiveCard()
+  for (const [pageNumber, state] of pageState) {
+    state.renderRevision += 1
+    state.visibilityIndexPromise = null
+    removePageAnchors(pageNumber)
+  }
+  // The ensuing official text-layer/render events rebuild against the new config.
 })
 
 eventBus.on("rotationchanging", () => {

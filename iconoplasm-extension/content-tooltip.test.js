@@ -214,7 +214,17 @@ test("hover portrait discovery is snapshot-keyed and independent of rich-detail 
     content,
     /ICONOPLASM_PORTRAIT_LOCATOR_PREFIX\}\$\{encodeURIComponent\(revision\)\}\/portraits\//,
   )
-  assert.match(content, /adoptCardSnapshotRevision\(payload\.cardSnapshotVersion\)/)
+  // Recognition may precede the fresh card head, but both lanes must await its
+  // article-scoped selection before hydration (not adopt the cached scanner epoch).
+  assert.match(content, /adoptCardSnapshotRevision\(revision\)/)
+  assert.match(
+    content,
+    /const revision = selection\?\.cardSnapshotVersion \|\| articleScannerPayload.cardSnapshotVersion/,
+  )
+  assert.match(
+    content,
+    /async function fetchPortraitLocatorsBatch[^]*?await ensureArticleCards\(\)/,
+  )
   assert.doesNotMatch(content, /changes\.iconoplasm_card_snapshot_version\?\.newValue/)
   assert.match(content, /REFRESH_CARD_SNAPSHOT/)
   assert.match(content, /retryVisible && activeTooltipAnchor\?\.isConnected/)

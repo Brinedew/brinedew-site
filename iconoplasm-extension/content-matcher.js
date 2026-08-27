@@ -75,7 +75,19 @@
     return !isLetterOrNumber(text, index)
   }
 
+  function finishSteps(steps) {
+    let step
+    do {
+      step = steps.next()
+    } while (!step.done)
+    return step.value
+  }
+
   function buildTrie(symbols, normalizeToken) {
+    return finishSteps(buildTrieSteps(symbols, normalizeToken))
+  }
+
+  function* buildTrieSteps(symbols, normalizeToken) {
     const rootNode = { children: Object.create(null), terminal: "" }
     const normalizer = typeof normalizeToken === "function" ? normalizeToken : normalizeSymbol
     for (const rawSymbol of Array.isArray(symbols) ? symbols : []) {
@@ -90,11 +102,16 @@
         node = node.children[ch]
       }
       node.terminal = symbol
+      yield
     }
     return rootNode
   }
 
   function buildAliasLookup(geneMap) {
+    return finishSteps(buildAliasLookupSteps(geneMap))
+  }
+
+  function* buildAliasLookupSteps(geneMap) {
     const lookup = Object.create(null)
     const duplicates = new Set()
     const safeGeneMap = geneMap && typeof geneMap === "object" ? geneMap : {}
@@ -113,6 +130,7 @@
         }
         lookup[aliasKey] = symbol
       }
+      yield
     }
     return lookup
   }
@@ -409,16 +427,59 @@
   }
 
   function createGeneMatcher(geneMap, options) {
+    return finishSteps(createGeneMatcherSteps(geneMap, options))
+  }
+
+  // One lexical implementation, two schedulers. Cached recognition must not
+  // turn building the 19k-gene tries into a long host-rendering task.
+  function createGeneMatcherCooperatively(geneMap, options, windowRef = root) {
+    const steps = createGeneMatcherSteps(geneMap, options)
+    return new Promise((resolve, reject) => {
+      const schedule = () => {
+        if (windowRef.requestIdleCallback) windowRef.requestIdleCallback(run)
+        else windowRef.setTimeout(() => run(null), 16)
+      }
+      const run = (deadline) => {
+        try {
+          const now = () => windowRef.performance?.now?.() ?? Date.now()
+          const start = now()
+          let count = 0
+          // Stay below half a 60-Hz frame and stop earlier if idle time runs out.
+          // Smaller quanta pay Chrome's idle rescheduling gap for every chunk.
+          while (now() - start < 8 && (!deadline || deadline.timeRemaining() > 2)) {
+            // Checking the clock for each trie character/token costs more than
+            // inserting it. Amortize checks over a bounded 32-token chunk.
+            do {
+              const step = steps.next()
+              if (step.done) {
+                resolve(step.value)
+                return
+              }
+              count++
+            } while (count % 32 !== 0)
+          }
+          schedule()
+        } catch (error) {
+          reject(error)
+        }
+      }
+      schedule()
+    })
+  }
+
+  function* createGeneMatcherSteps(geneMap, options) {
     const safeGeneMap = geneMap && typeof geneMap === "object" ? geneMap : {}
-    const exactTrie = buildTrie(Object.keys(safeGeneMap))
-    const aliasLookup = buildAliasLookup(safeGeneMap)
+    const exactTrie = yield* buildTrieSteps(Object.keys(safeGeneMap))
+    const aliasLookup = yield* buildAliasLookupSteps(safeGeneMap)
     // Fence: alias hover matching must stay case-sensitive. The extension's job is
     // to instrument symbol-like tokens, not to reinterpret ordinary English prose
     // after case-folding it into an all-caps gene namespace. Upstream publication
     // should emit the exact alias spellings we want to recognize on-page.
-    const aliasTrie = buildTrie(Object.keys(aliasLookup), normalizeAliasKey)
+    const aliasTrie = yield* buildTrieSteps(Object.keys(aliasLookup), normalizeAliasKey)
     const blocklist = normalizeBlocklist(options && options.blocklist)
-    const blocklistTrie = blocklist.size ? buildTrie([...blocklist], normalizeBlocklistTerm) : null
+    const blocklistTrie = blocklist.size
+      ? yield* buildTrieSteps([...blocklist], normalizeBlocklistTerm)
+      : null
     const matcherOptions = Object.assign({}, options || {}, {
       geneMap: safeGeneMap,
       blocklist,
@@ -463,6 +524,7 @@
     collectAliasCandidates,
     filterCandidates,
     createGeneMatcher,
+    createGeneMatcherCooperatively,
   }
 
   root.IconoplasmContentMatcher = api
