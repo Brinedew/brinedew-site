@@ -28,8 +28,26 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           objects: createPublishedCardObjectStore(env),
           source: sourceForEnv(env),
         })
-        if (this.repo.get("job") || this.repo.get("requested") || this.repo.get("effects"))
-          await this.arm(1000)
+        if (this.repo.get("job") || this.repo.get("requested") || this.repo.get("effects")) {
+          const retryAt = Number(this.repo.get("failure")?.retry_at || 0)
+          try {
+            await this.arm(1000, {
+              control: retryAt > 0,
+              at: retryAt > Date.now() ? retryAt : null,
+            })
+          } catch (error) {
+            // A crash after a phase used its last work allocation must not make
+            // blockConcurrencyWhile fail and take the old readable head offline.
+            try {
+              await this.scheduleRetry(error)
+            } catch (recoveryError) {
+              // Even account-wide storage-write exhaustion must not prevent
+              // read-only head access. Durable job state remains; the existing
+              // scheduled publication wake retries once writes are available.
+              this.recoveryDeferred = String(recoveryError.message || recoveryError).slice(0, 500)
+            }
+          }
+        }
       })
     }
     exclusive(callback) {
@@ -37,28 +55,48 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
       this.serial = next.catch(() => {})
       return next
     }
-    async arm(delay) {
-      const due = Date.now() + delay
+    async arm(delay, { control = false, at = null } = {}) {
+      const due = Math.max(
+        at ?? Date.now() + delay,
+        Number(this.repo.get("failure")?.retry_at || 0),
+      )
       const existing = await this.state.storage.getAlarm()
-      if (!existing || existing > due) await this.state.storage.setAlarm(due)
+      if (!existing || existing > due) {
+        // setAlarm is a billed SQLite row write, not free scheduling. Reserve
+        // that row and the reservation itself; merely checking an existing
+        // earlier alarm does not write. Keep quota-day recovery durable.
+        this.repo.reserveWrites(2, { control })
+        await this.state.storage.setAlarm(due)
+      }
+    }
+    async scheduleRetry(error) {
+      const attempts = Number(this.repo.get("failure")?.attempts || 0) + 1
+      const retryAt =
+        Number(error.retryAt) ||
+        Date.now() + Math.min(900000, 30000 * 2 ** Math.min(attempts - 1, 5))
+      this.repo.reserveWrites(2, { control: true })
+      this.repo.put("failure", {
+        attempts,
+        message: String(error.message || error).slice(0, 500),
+        at: new Date().toISOString(),
+        retry_at: retryAt,
+      })
+      await this.arm(0, { control: true, at: retryAt })
     }
     async alarm() {
       return this.exclusive(async () => {
         try {
           const result = await this.publisher.step()
-          if (this.repo.get("failure")) this.repo.remove("failure")
+          if (this.repo.get("failure")) {
+            this.repo.reserveWrites(2)
+            this.repo.remove("failure")
+          }
           if (result.more) await this.arm(1000)
         } catch (error) {
-          const attempts = Number(this.repo.get("failure")?.attempts || 0) + 1
-          this.repo.put("failure", {
-            attempts,
-            message: String(error.message || error).slice(0, 500),
-            at: new Date().toISOString(),
-          })
           // At-least-once alarms must not exhaust platform retries and abandon
           // durable work. Retry only an existing job, with bounded backoff.
           // A quiet publication has no recurring alarm and does no row writes.
-          await this.arm(Math.min(900000, 30000 * 2 ** Math.min(attempts - 1, 5)))
+          await this.scheduleRetry(error)
         }
       })
     }
@@ -104,6 +142,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           effects: effects ? { offset: effects.offset, total: effects.symbols.length } : null,
           write_allocation: this.repo.get("write_allocation"),
           failure: this.repo.get("failure"),
+          recovery_deferred: this.recoveryDeferred || null,
         })
       }
       if (request.method !== "POST") return reply({ error: "Not found" }, 404)
