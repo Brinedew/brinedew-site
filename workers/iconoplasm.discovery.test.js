@@ -59,6 +59,14 @@ class FakeDiscoveryStatement {
 
   async all() {
     this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
+    if (this.sql.includes("json_each(?)")) {
+      const [userId, rawSymbols] = this.args
+      return {
+        results: JSON.parse(rawSymbols)
+          .filter((symbol) => this.db.getDiscovery(userId, symbol))
+          .map((gene_symbol) => ({ gene_symbol })),
+      }
+    }
     if (this.sql.includes("FROM icono_shared_gene_discoveries")) {
       return {
         results: this.db.listSharedDiscoveries(),
@@ -442,6 +450,49 @@ test("discovery encounter quietly skips writes for signed-out visitors", async (
   assert.equal(payload?.authenticated, false)
   assert.equal(payload?.recorded, false)
   assert.equal(env.gatewayDb.rows.size, 0)
+})
+
+test("private membership uses requested keys only, no full gallery or starter writes", async () => {
+  const env = buildEnv({ sessions: { "session:abc": { user_id: "reader", username: "reader" } } })
+  env.gatewayDb.insertDiscovery([
+    "reader",
+    "TP53",
+    "extension_hover",
+    "extension_hover",
+    "hover_dwell",
+    "hover_dwell",
+    900,
+    900,
+  ])
+  env.gatewayDb.insertDiscovery([
+    "other",
+    "BRCA1",
+    "extension_hover",
+    "extension_hover",
+    "hover_dwell",
+    "hover_dwell",
+    900,
+    900,
+  ])
+  const url =
+    "https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/membership?symbols=" +
+    encodeURIComponent(JSON.stringify(["TP53", "BRCA1"]))
+  for (const cookie of ["", "session=abc"]) {
+    env.gatewayDb.calls.length = 0
+    const response =
+      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        new Request(url, { headers: { Cookie: cookie } }),
+        env,
+        {},
+      )
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get("Cache-Control"), "no-store")
+    const payload = await response.json()
+    assert.deepEqual(payload.checked_symbols, ["TP53", "BRCA1"])
+    assert.deepEqual(payload.discovered_symbols, cookie ? ["TP53"] : [])
+    assert.equal(env.gatewayDb.calls.filter((call) => call.method === "run").length, 0)
+    assert.equal(env.gatewayDb.calls.length, cookie ? 1 : 0)
+  }
 })
 
 test("votes me quietly reports signed-out visitors without a discovery scope", async () => {
