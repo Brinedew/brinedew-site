@@ -14,6 +14,7 @@ function loadApi() {
     }
     observe() {}
     unobserve() {}
+    disconnect() {}
   }
   const sandbox = {
     document: { visibilityState: "visible" },
@@ -31,6 +32,34 @@ function loadApi() {
 function anchor(symbol) {
   return { dataset: { gene: symbol } }
 }
+
+test("disposal stops queued work and late completions cannot restart it", async () => {
+  const { api, intersect } = loadApi()
+  const starts = []
+  let release
+  const session = api.createReadingSession({
+    connection: { effectiveType: "3g" },
+    prepareSymbol: (symbol) =>
+      new Promise((resolve) => {
+        starts.push(symbol)
+        release = resolve
+      }),
+  })
+  const anchors = ["EZH2", "DNMT3A", "TP53"].map(anchor)
+  anchors.forEach(session.registerAnchor)
+  session.startSpeculation()
+  await Promise.resolve()
+  assert.deepEqual(starts, ["EZH2"])
+  session.dispose()
+  release({ symbol: "EZH2" })
+  session.prioritize("DNMT3A")
+  session.updateConnection({ effectiveType: "4g" }, 8)
+  intersect([{ target: anchors[2], isIntersecting: true }])
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(starts, ["EZH2"])
+  assert.equal(session.registerAnchor(anchor("BRCA1")), false)
+  assert.deepEqual(Array.from(session.snapshot().queuedSymbols), [])
+})
 
 test("ordinary documents do not prepare speculative cards before the host-page gate opens", async () => {
   const { api } = loadApi()

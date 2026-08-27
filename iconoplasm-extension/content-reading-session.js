@@ -78,12 +78,14 @@
     let activeWorkers = 0
     let documentFlushScheduled = false
     let speculationStarted = false
+    let disposed = false
     let policy = workingSetPolicy(options.connection, options.deviceMemory)
 
     const observer =
       typeof windowRef.IntersectionObserver === "function"
         ? new windowRef.IntersectionObserver(
             (entries) => {
+              if (disposed) return
               let changed = false
               for (const entry of entries || []) {
                 const anchor = entry?.target
@@ -102,6 +104,7 @@
         : null
 
     function queueSymbols(rawSymbols, tier = "document") {
+      if (disposed) return
       if (tier !== "active" && (!policy.speculative || !speculationStarted)) return
       const priority = PRIORITY[tier] ?? PRIORITY.document
       for (const rawSymbol of Array.isArray(rawSymbols) ? rawSymbols : []) {
@@ -136,14 +139,14 @@
     }
 
     function drain() {
-      while (activeWorkers < policy.concurrency && queuedBySymbol.size) {
+      while (!disposed && activeWorkers < policy.concurrency && queuedBySymbol.size) {
         const queued = nextQueued()
         if (!queued) return
         activeWorkers += 1
         inFlightSymbols.add(queued.symbol)
         Promise.resolve(prepareSymbol(queued.symbol, { tier: queued.tier }))
           .then((result) => {
-            if (result) readySymbols.add(queued.symbol)
+            if (!disposed && result) readySymbols.add(queued.symbol)
           })
           .catch((error) => onError(error, queued.symbol))
           .finally(() => {
@@ -185,6 +188,7 @@
     }
 
     function registerAnchor(anchor) {
+      if (disposed) return false
       const symbol = normalizeSymbol(anchor?.dataset?.gene)
       if (!anchor || !symbol) return false
       if (anchorSymbols.has(anchor)) return true
@@ -213,6 +217,7 @@
     }
 
     function updateConnection(connection, deviceMemory) {
+      if (disposed) return
       policy = workingSetPolicy(connection, deviceMemory)
       if (!policy.speculative) {
         for (const [symbol, queued] of queuedBySymbol) {
@@ -226,6 +231,15 @@
     }
 
     return Object.freeze({
+      dispose() {
+        disposed = true
+        observer?.disconnect()
+        queuedBySymbol.clear()
+        visibleAnchors.clear()
+        documentSymbols.clear()
+        anchorGroups.clear()
+        readySymbols.clear()
+      },
       registerAnchor,
       unregisterAnchor,
       replaceAnchorGroup,
@@ -234,7 +248,7 @@
       },
       updateConnection,
       startSpeculation() {
-        if (speculationStarted) return
+        if (disposed || speculationStarted) return
         speculationStarted = true
         scheduleDocumentInventory()
         prepareVisibleWindow()
