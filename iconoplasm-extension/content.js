@@ -118,7 +118,8 @@
   const ICONOPLASM_PORTRAIT_LOCATOR_PREFIX = ICONOPLASM_API_BASE + "/api/public/v1/card-snapshots/"
   const ICONOPLASM_DISCOVERY_ENCOUNTER_URL =
     ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/encounter"
-  const ICONOPLASM_DISCOVERY_STATE_URL = ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/me"
+  const ICONOPLASM_DISCOVERY_STATE_URL =
+    ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/membership"
   const ICONOPLASM_DISCOVERY_MERGE_URL = ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/merge"
   const LIT_ARCHIVAL_FRAME_URL = chrome.runtime.getURL("lit-archival-frame.html")
   const LIT_ARCHIVAL_FRAME_ORIGIN = new URL(LIT_ARCHIVAL_FRAME_URL).origin
@@ -1034,6 +1035,9 @@
         : [],
     }
     if (authenticated) {
+      for (const symbol of normalizeDiscoverySymbolList(payload?.checked_symbols)) {
+        discoveryCheckedSymbols.add(symbol)
+      }
       for (const symbol of discoveryAuthState.discoveredSymbols) {
         discoveredPageSymbols.add(symbol)
       }
@@ -1049,6 +1053,7 @@
   }
 
   function resetDiscoveryAuthState() {
+    discoveryCheckedSymbols.clear()
     discoveryAuthState = {
       checkedAt: 0,
       authenticated: null,
@@ -1056,9 +1061,22 @@
     }
   }
 
-  async function fetchDiscoveryState() {
+  const discoveryCheckedSymbols = new Set()
+  let discoveryMembershipPromise = null
+
+  async function fetchDiscoveryState(symbol = "") {
     try {
-      const response = await extensionApiFetch(ICONOPLASM_DISCOVERY_STATE_URL, {
+      // Ask about this article, active symbol first, never the entire saved shelf.
+      // Unchecked symbols outside this window get their own lookup on later intent.
+      const symbols = normalizeDiscoverySymbolList([
+        symbol,
+        ...readingSession.snapshot().documentSymbols,
+      ])
+        .filter((candidate) => !discoveryCheckedSymbols.has(candidate))
+        .slice(0, 128)
+      const requestUrl =
+        ICONOPLASM_DISCOVERY_STATE_URL + "?symbols=" + encodeURIComponent(JSON.stringify(symbols))
+      const response = await extensionApiFetch(requestUrl, {
         method: "GET",
         credentials: "include",
       })
@@ -1067,10 +1085,20 @@
         return null
       }
       const payload = await response.json().catch(() => null)
-      if (payload && typeof payload === "object") {
+      const checked = normalizeDiscoverySymbolList(payload?.checked_symbols)
+      const known = normalizeDiscoverySymbolList(payload?.discovered_symbols)
+      if (
+        typeof payload?.authenticated === "boolean" &&
+        Array.isArray(payload.checked_symbols) &&
+        Array.isArray(payload.discovered_symbols) &&
+        checked.length === symbols.length &&
+        checked.every((candidate) => symbols.includes(candidate)) &&
+        known.every((candidate) => checked.includes(candidate))
+      ) {
         rememberDiscoveryAuthState(payload)
       } else {
         resetDiscoveryAuthState()
+        return null
       }
       return payload
     } catch (err) {
@@ -1081,14 +1109,27 @@
     }
   }
 
-  async function ensureDiscoveryStateFresh() {
-    if (hasFreshDiscoveryAuthState()) {
+  async function ensureDiscoveryStateFresh(symbol = "") {
+    if (
+      hasFreshDiscoveryAuthState() &&
+      (!discoveryAuthState.authenticated || !symbol || discoveryCheckedSymbols.has(symbol))
+    ) {
       return {
         authenticated: Boolean(discoveryAuthState.authenticated),
         discovered_symbols: discoveryAuthState.discoveredSymbols.slice(),
       }
     }
-    return fetchDiscoveryState()
+    if (discoveryMembershipPromise) {
+      await discoveryMembershipPromise
+      return ensureDiscoveryStateFresh(symbol)
+    }
+    if (!hasFreshDiscoveryAuthState()) discoveryCheckedSymbols.clear()
+    discoveryMembershipPromise = fetchDiscoveryState(symbol)
+    try {
+      return await discoveryMembershipPromise
+    } finally {
+      discoveryMembershipPromise = null
+    }
   }
 
   async function mergeGuestDiscoveriesIfSignedIn() {
@@ -1189,7 +1230,7 @@
     discoveryInFlightSymbols.add(normalizedSymbol)
     markDiscoveryCooldown(normalizedSymbol)
     try {
-      const authState = await ensureDiscoveryStateFresh()
+      const authState = await ensureDiscoveryStateFresh(normalizedSymbol)
       // The awaited membership load can discover that this gene was already
       // saved. Recheck after it completes: the pre-await check alone records
       // one redundant encounter per article and amplifies database writes.

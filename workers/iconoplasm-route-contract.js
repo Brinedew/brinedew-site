@@ -459,6 +459,16 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     rateLimit: null,
   }),
   contract({
+    id: "discoveries_membership",
+    match: exact("/api/iconoplasm/discoveries/membership"),
+    methods: GET,
+    auth: "optional-user-session",
+    cache: "no-store",
+    budgetFamily: "discoveries_membership",
+    gatewayHandler: "iconoplasm_api",
+    rateLimit: null,
+  }),
+  contract({
     id: "account_gallery_window",
     match: exact("/api/iconoplasm/account-gallery-window"),
     methods: GET,

@@ -331,7 +331,7 @@ async function checkAccountStatus() {
   if (!accountStatusText) return
   renderAccountState("checking")
   try {
-    const resp = await sendIconoplasmApiMessage({ url: "/api/iconoplasm/discoveries/me" })
+    const resp = await sendIconoplasmApiMessage({ url: "/api/iconoplasm/discoveries/membership" })
     if (resp && resp.ok) {
       const data = JSON.parse(resp.text || "{}")
       if (data.authenticated) {
