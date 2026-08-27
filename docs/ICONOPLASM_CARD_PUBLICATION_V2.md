@@ -25,6 +25,13 @@ origin misses; neither caching nor shielding is a hard request cap.
 Seven cards per preparation invocation means at most 42 storage transfers
 (three objects, PUT plus verified GET). Sealing one 750-card packed shard and
 its 128-gene directories is a separate bounded phase, including shard splits.
+Only two cards (six object pipelines) start concurrently. Cloudflare's April
+2026 rule limits requests waiting for response headers to six; starting all
+21 uploads together can spend their timeout in the platform queue. Reducing
+the seven-card durable batch would instead increase SQLite checkpoint writes.
+All started uploads settle before a failed phase returns or retries. Regression
+tests enforce both limits; neither longer timeouts nor optimistic PUT success
+is a substitute for bounded work and verified bytes.
 Public single-card reads use small exact objects, not the packed shard.
 No-op jobs stop; no continuously running publisher or per-reader write exists.
 The publisher reserves at most 55,000 SQLite row writes per UTC day before
@@ -49,6 +56,16 @@ Disk-cache hydration must use that explicitly selected article epoch, never
 replace it with the browser-global saved version. A delayed storage lookup
 cannot undo a newer explicit selection. A differently versioned cache belongs
 to another article and is ignored, not deleted or adopted.
+
+Extension updates invalidate an existing article's isolated runtime. Chrome
+can leave its old highlights behind; those do not prove a working connection.
+Metadata, portraits and snapshot recovery share one runtime client. Permanent
+invalidation rejects pending requests, disposes speculative work and presents
+one user-controlled reload notice. Cached hovers also check runtime identity.
+Do not silently reload the host article, ask for broader permissions to reinject,
+or retry a permanently invalid context. A temporarily sleeping/missing background
+receiver is a different, retryable failure. Validate an actual update cycle,
+then leave the inspected article refreshed and working.
 
 The scanner's ordinary five-minute manifest refresh also uses the existing
 Bunny/first-party race. It requests the shared latest public contract without
