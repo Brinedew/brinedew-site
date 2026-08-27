@@ -8938,7 +8938,7 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
   return written
 }
 
-async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, visionIds = []) {
+export async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, visionIds = []) {
   if (!env.ICONOPLASM_DB) return 0
   const cleanedVisionIds = Array.from(
     new Set(
@@ -9002,6 +9002,9 @@ async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, visionIds 
   if (!affectedCodes.length) return 0
 
   const affectedCodesJson = JSON.stringify(affectedCodes)
+  // ARCHITECTURE FENCE [IPD-005]: the NOCASE source join below requires the
+  // matching factory_emulsion_nocase index (0081). A BINARY index is not a
+  // substitute: the production mismatch spent >13M reads per factory update.
   await env.ICONOPLASM_DB.prepare(
     `DELETE FROM icono_generation_request_factory_option_rollup
      WHERE public_emulsion_code IN (SELECT value FROM json_each(?))`,
@@ -24470,12 +24473,11 @@ function normalizeGalleryVersionBarrierValue(value) {
 async function currentGalleryVersionBarrier(env) {
   const now = Date.now()
   // This is a speed cache, not the source of truth. The source of truth is the
-  // shared KV version barrier, and every publish/bump path updates this memory
-  // copy immediately. The five-second isolate TTL is still worth keeping:
+  // durable publication head (KV only before explicit storage migration).
+  // The five-second isolate TTL is still worth keeping:
   // mobile-card and home traffic can call the barrier repeatedly inside one
-  // isolate, and reading KV on every call burns the same daily KV budget that
-  // previously hit 90%. Do not replace this with a memory-only cache; isolates
-  // are independent, so only KV is the cross-isolate read barrier.
+  // isolate, and reading storage on every nested call spends shared budgets.
+  // Do not replace this with a memory-only cache: isolates are independent.
   if (
     galleryVersionCache.loadedAt > 0 &&
     now - galleryVersionCache.loadedAt < GALLERY_VERSION_CACHE_TTL_MS &&
