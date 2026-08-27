@@ -1295,6 +1295,7 @@ import {
   isIconoplasmRequest,
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   IconoplasmVoteCoordinator,
+  IconoplasmCardPublicationCoordinator,
   IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
   IconoplasmSyncGovernor,
   handleIconoplasmQueue,
@@ -1310,6 +1311,7 @@ import { archiveColdIconoplasmPublishEvents } from "./iconoplasm-publish-event-a
 import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate } from "./benchmark/the-only-allowed-benchmark-stateful-runtime-do-not-duplicate.js"
 
 export { IconoplasmVoteCoordinator }
+export { IconoplasmCardPublicationCoordinator }
 export { IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate }
 export { IconoplasmSyncGovernor }
 // Import Discord bot handlers

@@ -215,7 +215,7 @@ test("hover portrait discovery is snapshot-keyed and independent of rich-detail 
     /ICONOPLASM_PORTRAIT_LOCATOR_PREFIX\}\$\{encodeURIComponent\(revision\)\}\/portraits\//,
   )
   assert.match(content, /adoptCardSnapshotRevision\(payload\.cardSnapshotVersion\)/)
-  assert.match(content, /changes\.iconoplasm_card_snapshot_version\?\.newValue/)
+  assert.doesNotMatch(content, /changes\.iconoplasm_card_snapshot_version\?\.newValue/)
   assert.match(content, /REFRESH_CARD_SNAPSHOT/)
   assert.match(content, /retryVisible && activeTooltipAnchor\?\.isConnected/)
   assert.match(content, /portraitLocatorStore\.hydratePersistentCache\(\)/)

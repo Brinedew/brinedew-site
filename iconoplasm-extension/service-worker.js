@@ -84,6 +84,7 @@ const portraitSourceByTab = new Map()
 const portraitDeliverySessionByTab = new Map()
 const portraitDeliverySessionPromiseByTab = new Map()
 const apiFetchAbortControllers = new Map()
+const cardFreshnessByTab = new Map()
 let portraitSourceStateLoaded = false
 let portraitDeliveryPolicy = IconoPortraitDelivery.normalizePortraitDeliveryPolicy()
 let geneDataRefreshState = null
@@ -159,6 +160,7 @@ chrome.runtime.onStartup.addListener(() => {
 if (chrome.tabs?.onRemoved?.addListener) {
   chrome.tabs.onRemoved.addListener(async (tabId) => {
     metadataDelivery.forgetTab(tabId)
+    cardFreshnessByTab.delete(tabId)
     await loadPortraitSourceState()
     portraitSourceByTab.delete(portraitTabKey(tabId))
     portraitDeliverySessionByTab.delete(portraitTabKey(tabId))
@@ -229,7 +231,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false
   }
   if (msg.type === "GET_GENE_DATA") {
-    ensureFreshGeneData().then((data) => sendResponse(data))
+    // ARCHITECTURE FENCE [IPD-008]: each new article/reload checks only the
+    // tiny shared current head, independently of the scanner's five-minute
+    // refresh policy. Never poll an already-open article or replace its epoch
+    // because another tab reloaded. A failed check retains its coherent cache.
+    Promise.all([
+      ensureFreshGeneData(),
+      metadataDelivery.current(sender?.tab?.id ?? "extension"),
+    ]).then(([data, head]) => {
+      const tab = sender?.tab?.id ?? "extension"
+      const cardFreshness = {
+        checkedAt: new Date().toISOString(),
+        verified: Boolean(head),
+        version: head?.current || data?.cardSnapshotVersion || null,
+      }
+      cardFreshnessByTab.delete(tab)
+      cardFreshnessByTab.set(tab, cardFreshness)
+      while (cardFreshnessByTab.size > 128)
+        cardFreshnessByTab.delete(cardFreshnessByTab.keys().next().value)
+      sendResponse({ ...data, cardSnapshotVersion: cardFreshness.version, cardFreshness })
+    })
     return true
   }
   if (msg.type === "REFRESH_CARD_SNAPSHOT") {
@@ -278,7 +299,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true
   }
   if (msg.type === "GET_STATUS") {
-    getStatus().then((status) => sendResponse(status))
+    getStatus(sender?.tab?.id ?? msg.tabId).then((status) => sendResponse(status))
     return true
   }
   if (msg.type === "GET_PORTRAIT_DATA_URL") {
@@ -326,7 +347,7 @@ function compareSemver(left, right) {
   return 0
 }
 
-async function getStatus() {
+async function getStatus(tabId) {
   const result = await chrome.storage.local.get([
     "iconoplasm_hash",
     "iconoplasm_gene_count",
@@ -359,6 +380,7 @@ async function getStatus() {
         ?.revision || null,
     contractError: result.iconoplasm_contract_error || null,
     minExtensionVersion: result.iconoplasm_min_extension_version || null,
+    cardFreshness: cardFreshnessByTab.get(tabId ?? "extension") || null,
   }
 }
 

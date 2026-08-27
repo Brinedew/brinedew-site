@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url"
 import toml from "toml"
 
 import { fetchCloudflareJson } from "./lib/cloudflare-json.mjs"
+import { d1DailyAllowance, FREE_D1_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
 
 const GRAPHQL_ENDPOINT = "https://api.cloudflare.com/client/v4/graphql"
 const LOOKBACK_DAYS = 14
@@ -338,15 +339,6 @@ function currentBillingCycle(nowInput, billingDayOfMonth) {
       Math.ceil((nextCycleStart.getTime() - now.getTime()) / 86400000),
     ),
   }
-}
-
-function smartDailyLimit(monthlyRemainingAtStartOfDay, daysRemainingInCycle, burstMultiplier) {
-  const remaining = Math.max(0, Number(monthlyRemainingAtStartOfDay || 0) || 0)
-  const daysRemaining = Math.max(1, Number(daysRemainingInCycle || 1) || 1)
-  const burst = Math.max(1, Number(burstMultiplier || 1) || 1)
-  if (remaining <= 0) return 0
-  const baseAllowance = Math.ceil(remaining / daysRemaining)
-  return Math.min(remaining, Math.max(baseAllowance, Math.ceil(baseAllowance * burst)))
 }
 
 async function loadWranglerConfig(rootDir, envName) {
@@ -971,22 +963,20 @@ async function fetchD1Snapshot({ apiToken, accountId, config }) {
       Number.isFinite(dayStartMs) && Number.isFinite(nextCycleStartMs)
         ? Math.max(1, Math.ceil((nextCycleStartMs - dayStartMs) / 86400000))
         : 1
-    const rowsReadDailySmartLimit =
-      config.rowsReadHardMonthlyBudget > 0
-        ? smartDailyLimit(
-            config.rowsReadHardMonthlyBudget - cycleRowsReadBeforeDay,
-            daysRemainingInCycle,
-            config.dailyBurstMultiplier,
-          )
-        : null
-    const rowsWrittenDailySmartLimit =
-      config.rowsWrittenHardMonthlyBudget > 0
-        ? smartDailyLimit(
-            config.rowsWrittenHardMonthlyBudget - cycleRowsWrittenBeforeDay,
-            daysRemainingInCycle,
-            config.dailyBurstMultiplier,
-          )
-        : null
+    const rowsReadDailySmartLimit = d1DailyAllowance({
+      resource: "reads",
+      monthlyLimit: config.rowsReadHardMonthlyBudget,
+      usedBeforeDay: cycleRowsReadBeforeDay,
+      daysRemaining: daysRemainingInCycle,
+      burstMultiplier: config.dailyBurstMultiplier,
+    })
+    const rowsWrittenDailySmartLimit = d1DailyAllowance({
+      resource: "writes",
+      monthlyLimit: config.rowsWrittenHardMonthlyBudget,
+      usedBeforeDay: cycleRowsWrittenBeforeDay,
+      daysRemaining: daysRemainingInCycle,
+      burstMultiplier: config.dailyBurstMultiplier,
+    })
     cycleRowsReadBeforeDay += row.rowsRead
     cycleRowsWrittenBeforeDay += row.rowsWritten
     return {
@@ -1054,22 +1044,20 @@ async function fetchD1Snapshot({ apiToken, accountId, config }) {
     0,
     cycleTotalsBase.rowsWritten - currentDayRowsWritten,
   )
-  const currentDayRowsReadDailySmartLimit =
-    config.rowsReadHardMonthlyBudget > 0
-      ? smartDailyLimit(
-          config.rowsReadHardMonthlyBudget - cycleRowsReadBeforeToday,
-          cycle.daysRemainingInCycle,
-          config.dailyBurstMultiplier,
-        )
-      : null
-  const currentDayRowsWrittenDailySmartLimit =
-    config.rowsWrittenHardMonthlyBudget > 0
-      ? smartDailyLimit(
-          config.rowsWrittenHardMonthlyBudget - cycleRowsWrittenBeforeToday,
-          cycle.daysRemainingInCycle,
-          config.dailyBurstMultiplier,
-        )
-      : null
+  const currentDayRowsReadDailySmartLimit = d1DailyAllowance({
+    resource: "reads",
+    monthlyLimit: config.rowsReadHardMonthlyBudget,
+    usedBeforeDay: cycleRowsReadBeforeToday,
+    daysRemaining: cycle.daysRemainingInCycle,
+    burstMultiplier: config.dailyBurstMultiplier,
+  })
+  const currentDayRowsWrittenDailySmartLimit = d1DailyAllowance({
+    resource: "writes",
+    monthlyLimit: config.rowsWrittenHardMonthlyBudget,
+    usedBeforeDay: cycleRowsWrittenBeforeToday,
+    daysRemaining: cycle.daysRemainingInCycle,
+    burstMultiplier: config.dailyBurstMultiplier,
+  })
   const storageRow = Array.isArray(storageAccount.d1StorageAdaptiveGroups)
     ? storageAccount.d1StorageAdaptiveGroups[0] || null
     : null
@@ -1096,6 +1084,10 @@ async function fetchD1Snapshot({ apiToken, accountId, config }) {
     cycleEndDate: cycle.cycleEndDate,
     nextCycleStartDate: cycle.nextCycleStartDate,
     daysRemainingInCycle: cycle.daysRemainingInCycle,
+    currentPlan: "free",
+    providerDailyLimits: FREE_D1_DAILY_LIMITS,
+    allowanceBasis:
+      "Current Free daily ceiling; historical monthly product budgets can only lower it",
     rollingWindowDays: LOOKBACK_DAYS,
     expectedWindowDays,
     lastDailyBucket: daily.length ? daily[daily.length - 1] : null,
