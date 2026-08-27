@@ -28,6 +28,8 @@ a recipe or queues generation.
 ## Bounded reads, stable inspection
 
 `GET /api/iconoplasm/admin/factory-belts` is authenticated, private and no-store.
+It must be registered in `iconoplasm-route-contract.js` as well as implemented in
+the runtime: an unregistered handler is unreachable through the real gateway.
 It runs in the existing stateful worker and uses existing immutable portrait URLs.
 There is no new publisher, storage service, KV write or public request path.
 
