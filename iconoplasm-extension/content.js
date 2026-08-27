@@ -34,7 +34,7 @@
     )
     return
   }
-  if (!IconoContentApi || typeof IconoContentApi.createExtensionApiFetch !== "function") {
+  if (!IconoContentApi || typeof IconoContentApi.createExtensionRuntimeClient !== "function") {
     console.error("[Iconoplasm] content API bridge missing: load content-api.js first")
     return
   }
@@ -154,7 +154,11 @@
     "portrait",
   ])
   const escapeHtml = IconoCardShared.escapeHtml
-  const extensionApiFetch = IconoContentApi.createExtensionApiFetch(chrome)
+  let runtimeDisconnected = false
+  const extensionRuntime = IconoContentApi.createExtensionRuntimeClient(chrome, {
+    onContextInvalidated: disconnectContentRuntime,
+  })
+  const extensionApiFetch = extensionRuntime.fetch
 
   const DARK_TEXT_RGB = Object.freeze([24, 22, 20])
   const LIGHT_TEXT_RGB = Object.freeze([249, 247, 242])
@@ -678,7 +682,7 @@
 
   const portraitCache = IconoContentPortraitCache.createPortraitCache({
     windowRef: window,
-    chromeApi: chrome,
+    sendMessage: extensionRuntime.sendMessage,
     batchSize: 6,
     delayMs: 20,
     onWarmSource: onPortraitWarmSource,
@@ -710,6 +714,7 @@
       return stored.iconoplasm_card_snapshot_version || stored.iconoplasm_hash || ""
     },
     onError: (err) => {
+      if (runtimeDisconnected) return
       console.error("[Iconoplasm] extension gene detail batch fetch error:", err)
     },
     onRevisionUnavailable: ({ revision }) => refreshRetiredCardSnapshot(revision),
@@ -750,6 +755,7 @@
       return stored.iconoplasm_card_snapshot_version || stored.iconoplasm_hash || ""
     },
     onError: (err) => {
+      if (runtimeDisconnected) return
       console.error("[Iconoplasm] extension portrait locator fetch error:", err)
     },
     onRevisionUnavailable: ({ revision }) => refreshRetiredCardSnapshot(revision),
@@ -769,16 +775,18 @@
   }
 
   function refreshRetiredCardSnapshot(rawRevision) {
+    if (runtimeDisconnected) return Promise.resolve(null)
     const retiredRevision = String(rawRevision || "").trim()
     if (!retiredRevision) return Promise.resolve(null)
     if (cardSnapshotRefreshPromise) return cardSnapshotRefreshPromise
-    cardSnapshotRefreshPromise = chrome.runtime
+    cardSnapshotRefreshPromise = extensionRuntime
       .sendMessage({ type: "REFRESH_CARD_SNAPSHOT", retiredRevision })
       .then((result) => {
         adoptCardSnapshotRevision(result?.cardSnapshotVersion, { retryVisible: true })
         return result
       })
       .catch((err) => {
+        if (runtimeDisconnected) return null
         console.error("[Iconoplasm] card snapshot refresh failed:", err)
         return null
       })
@@ -886,6 +894,7 @@
   }
 
   function showVoteLoginPopup() {
+    if (runtimeDisconnected) return
     if (!authToast) return
     authToast.textContent = "Log in on Iconoplasm to vote on portraits."
     authToast.classList.add("iconoplasm-auth-toast-visible")
@@ -895,6 +904,38 @@
       authToast.dataset.hideTimer = ""
     }, 2600)
     authToast.dataset.hideTimer = String(hideTimerId)
+  }
+
+  function disconnectContentRuntime() {
+    if (runtimeDisconnected) return
+    runtimeDisconnected = true
+    // ARCHITECTURE FENCE [IPD-008]: Chrome leaves old highlights in the page
+    // when an extension update invalidates its isolated world. That world
+    // cannot reconnect. Stop work and offer a user-controlled page reload;
+    // never silently reload an article/form or request broader permissions
+    // merely to reinject code after an extension update.
+    readingSession.dispose()
+    portraitCache.dispose()
+    mutationScanController?.stop()
+    hostBackgroundWork.cancel()
+    window.clearTimeout(initializationRetryTimer)
+    for (const timer of discoveryTimerBySymbol.values()) window.clearTimeout(timer)
+    discoveryTimerBySymbol.clear()
+    if (tooltip) hideTooltip()
+    if (!authToast) {
+      authToast = document.createElement("div")
+      document.body.appendChild(authToast)
+    }
+    window.clearTimeout(Number(authToast.dataset.hideTimer || 0))
+    authToast.className =
+      "iconoplasm-auth-toast iconoplasm-auth-toast-visible iconoplasm-reload-notice"
+    authToast.setAttribute("role", "status")
+    authToast.textContent = "Iconoplasm disconnected. "
+    const reload = document.createElement("button")
+    reload.type = "button"
+    reload.textContent = "Reload page"
+    reload.addEventListener("click", () => window.location.reload())
+    authToast.appendChild(reload)
   }
 
   function cancelHideTimer() {
@@ -1034,6 +1075,7 @@
       return payload
     } catch (err) {
       resetDiscoveryAuthState()
+      if (runtimeDisconnected) return null
       console.error("[Iconoplasm] discovery state fetch error:", err)
       return null
     }
@@ -1050,6 +1092,7 @@
   }
 
   async function mergeGuestDiscoveriesIfSignedIn() {
+    if (runtimeDisconnected) return null
     if (guestDiscoveryMergePromise) return guestDiscoveryMergePromise
     const pendingSymbols = Array.from(guestDiscoverySymbols)
     if (!pendingSymbols.length) return null
@@ -1083,6 +1126,7 @@
       return payload
     })()
       .catch((err) => {
+        if (runtimeDisconnected) return null
         console.error("[Iconoplasm] guest discovery merge error:", err)
         return null
       })
@@ -1093,6 +1137,7 @@
   }
 
   function scheduleDiscoveryBufferFlush() {
+    if (runtimeDisconnected) return
     if (discoveryBufferFlushScheduled) return
     discoveryBufferFlushScheduled = true
     window.setTimeout(() => {
@@ -1132,6 +1177,7 @@
   }
 
   async function postDiscoveryEncounter(symbol) {
+    if (runtimeDisconnected) return
     const normalizedSymbol = String(symbol || "")
       .trim()
       .toUpperCase()
@@ -1185,6 +1231,7 @@
         await rememberGuestDiscovery(normalizedSymbol)
       }
     } catch (err) {
+      if (runtimeDisconnected) return
       console.error("[Iconoplasm] discovery encounter write error:", err)
       await rememberGuestDiscovery(normalizedSymbol)
     } finally {
@@ -1332,10 +1379,11 @@
     rootMarginPx: 960,
     prepareSymbol: prepareReadingSessionSymbol,
     onError: (error, symbol) => {
+      if (runtimeDisconnected) return
       console.error(`[Iconoplasm] failed to prepare ${symbol} for this reading session:`, error)
     },
   })
-  IconoContentLifecycle.scheduleHostFirstBackgroundWork({
+  const hostBackgroundWork = IconoContentLifecycle.scheduleHostFirstBackgroundWork({
     documentRef: document,
     windowRef: window,
     quietDelayMs: 1000,
@@ -1347,6 +1395,7 @@
   }
 
   async function getUsablePortraitSrc(portraitSrc) {
+    if (runtimeDisconnected) return ""
     return portraitCache.getUsableSrc(portraitSrc)
   }
 
@@ -1461,7 +1510,7 @@
 
   // -- Init ----------------------------------------------------------
   function scheduleInitializationRetry() {
-    if (initialized || initializationRetryTimer) return
+    if (runtimeDisconnected || initialized || initializationRetryTimer) return
     initializationRetryTimer = window.setTimeout(() => {
       initializationRetryTimer = 0
       void init()
@@ -1469,6 +1518,7 @@
   }
 
   function init() {
+    if (runtimeDisconnected) return Promise.resolve()
     // Don't run on the Iconoplasm site itself -- it already shows gene
     // colors natively, and the extension just adds redundant underlines.
     if (window.location.hostname === "iconoplasm.brinedew.bio" || initialized) {
@@ -2079,6 +2129,7 @@
   }
 
   function activateTooltipForAnchor(target, relatedTarget = null) {
+    if (!extensionRuntime.checkConnected()) return
     const relatedGene =
       relatedTarget && typeof relatedTarget.closest === "function"
         ? relatedTarget.closest(".iconoplasm-gene")

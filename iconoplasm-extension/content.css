@@ -553,6 +553,25 @@ body.iconoplasm-highlight-on-hover
   transform: translateY(0);
 }
 
+.iconoplasm-reload-notice {
+  pointer-events: auto;
+}
+
+.iconoplasm-reload-notice button {
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  border: 0;
+  padding: 2px 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.iconoplasm-reload-notice button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
 .iconoplasm-tooltip-meta-row {
   display: grid;
   grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);

@@ -210,3 +210,25 @@ test("content runtime initialization cannot start before host load", () => {
   loadListener()
   assert.deepEqual(calls, ["started"])
 })
+
+test("canceled background work cannot restart from a late load or idle callback", () => {
+  let onLoad
+  let calls = 0
+  const task = globalThis.IconoplasmContentLifecycle.scheduleHostFirstBackgroundWork({
+    documentRef: { readyState: "interactive" },
+    windowRef: {
+      addEventListener(_type, callback) {
+        onLoad = callback
+      },
+      removeEventListener() {},
+      setTimeout() {
+        throw new Error("canceled work scheduled a timer")
+      },
+    },
+    task: () => calls++,
+  })
+  task.cancel()
+  onLoad()
+  task.runNow()
+  assert.equal(calls, 0)
+})
