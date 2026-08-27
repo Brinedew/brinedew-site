@@ -37,6 +37,45 @@ The executable cases are `metadata-delivery.test.js`, `iconoplasm.public-media.t
 and `iconoplasm-first-principles-capacity.test.mjs`, with the delivery suite in
 the production deployment gate.
 
+### Live Bunny configuration and release check
+
+Pull zone `iconoplasmportraits` (5695279) retains Storage Zone
+`iconoplasm-portraits` as its default origin. Three narrow edge rules were saved
+and read back in the owner's Edge/VPN dashboard on 2026-08-27:
+
+1. Namespace `https://iconoplasmportraits.b-cdn.net/api/public/v1/card-content/v1/*`
+   AND status 200: Override Cache Time 31,536,000 seconds.
+2. That namespace only: Override Origin URL
+   `https://iconoplasm.brinedew.bio{{path}}`; Enable Request Coalescing.
+3. That namespace AND status NOT 200: Set Response Header `Cache-Control: no-store`.
+
+The third rule is necessary: the initial live probe observed Bunny rewriting
+origin `no-store` to `no-cache`. After configuration propagation, repeated 410s
+were MISS with `no-store` and different origin request IDs. Do not weaken the
+probe to accept the provider's default rewrite. No private routes are proxied.
+
+Run `node scripts/verify-iconoplasm-hover-delivery-live.mjs` after deployment.
+It checks TP53/RIPOR1 index bindings, both lanes, all scientific properties,
+CDN/first-party equivalence, repeated HITs and uncached errors. It writes bounded
+public evidence under the project artifact archive. If local DNS fails, an
+explicit `--cdn-ip=<verified public resolver address>` is a diagnostic contrast,
+not proof the affected network works and never a persistent DNS change.
+
+Release evidence: source 487e6078 deployed successfully in workflow 33047786825.
+The live index was 2,325 bytes; detail/locator were 2,576/739 bytes for TP53 and
+1,697/743 for RIPOR1. All four objects became HIT; cached responses retained
+the original origin request ID while CDN request IDs changed. Local DNS still
+returned NXDOMAIN; the actual candidate delivery module recovered through
+first-party for both symbols with identical portrait SHAs. Cache HIT latency
+varied (roughly 0.26-1.31 seconds in the diagnostic curl run), so this is a proven
+request-scaling improvement, not a claim that every CDN fetch is faster.
+
+Fresh browser loads of both gene pages showed visible decoded 398x512 portraits
+and populated molecular/character properties. These are site checks, not proof
+of a newly installed extension. The actual Edge popup reported 0.4.15; Firefox
+was not open at this check. Candidate code still requires the human publisher
+release; never mark installed clients updated based on deployment success.
+
 This runbook records the capacity decisions exposed by the 2026-07-22
 finalization incident and the 2026-07-23 shoutout review. They are separate
 invariants and must not be collapsed into “the Queue was noisy” or “traffic was
