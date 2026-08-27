@@ -73,7 +73,7 @@ test("retired factories preserve identity but cannot admit new work", async () =
   const runtime = factoryPolicy
   const catalog = await runtime.factoryPipelineCatalog({})
   assert.ok(catalog.every((pipeline) => pipeline.status === "accepted"))
-  for (const code of ["E", "J", "L", "M"]) {
+  for (const code of ["E", "J", "L", "M", "N"]) {
     assert.equal(runtime.normalizeFactoryPipelineCode(code.toLowerCase()), code)
     assert.equal(runtime.isAcceptedFactoryPipeline(code), false)
     assert.ok(!catalog.some((pipeline) => pipeline.code === code))
