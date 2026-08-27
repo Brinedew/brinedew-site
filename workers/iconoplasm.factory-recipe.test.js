@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
+import * as factoryPolicy from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { ICONOPLASM_FACTORY_CATALOG } from "./generated/iconoplasm-factory-catalog.js"
 
 const factoryMigration = readFileSync(
@@ -67,6 +68,52 @@ const factoryCatalogSource = readFileSync(
   new URL("./generated/iconoplasm-factory-catalog.js", import.meta.url),
   "utf8",
 )
+
+test("retired Turbo factories preserve identity but cannot admit new work", async () => {
+  const runtime = factoryPolicy
+  const catalog = await runtime.factoryPipelineCatalog({})
+  assert.ok(catalog.every((pipeline) => pipeline.status === "accepted"))
+  for (const code of ["E", "L"]) {
+    assert.equal(runtime.normalizeFactoryPipelineCode(code.toLowerCase()), code)
+    assert.equal(runtime.isAcceptedFactoryPipeline(code), false)
+    assert.ok(!catalog.some((pipeline) => pipeline.code === code))
+    for (const save of [
+      runtime.saveActiveFactoryRecipe,
+      runtime.saveFactoryPipelineVisionRecommendation,
+    ]) {
+      const result = await save({}, { pipeline: code, vision: 9 })
+      assert.equal(result.ok, false)
+      assert.match(result.error, /accepted factory Pipeline/)
+    }
+    const env = {
+      ICONOPLASM_DB: {
+        prepare: () => ({ first: async () => ({ pipeline_code: code, vision_revision: 9 }) }),
+      },
+    }
+    await assert.rejects(runtime.activeFactoryRecipe(env), /active factory Pipeline is unavailable/)
+  }
+  for (const code of ["O", "P"]) assert.equal(runtime.isAcceptedFactoryPipeline(code), true)
+})
+
+test("Turbo 1.1 gets new letters without rewriting Turbo 1.0 provenance", () => {
+  for (const [current, previous, width, height] of [
+    ["O", "E", 896, 1152],
+    ["P", "L", 1536, 2048],
+  ]) {
+    const next = ICONOPLASM_FACTORY_CATALOG.pipelines.find((pipeline) => pipeline.code === current)
+    const old = ICONOPLASM_FACTORY_CATALOG.pipelines.find((pipeline) => pipeline.code === previous)
+    assert.equal(old.status, "retired")
+    assert.equal(old.model, "anima-turbo-v1.0.safetensors")
+    assert.equal(next.status, "accepted")
+    assert.equal(next.model, "anima-turbo-v1.1.safetensors")
+    assert.equal(next.width, width)
+    assert.equal(next.height, height)
+    assert.equal(next.steps, 10)
+    assert.equal(next.cfg, 1)
+    assert.equal(next.sampler, "euler")
+    assert.equal(next.recommended_vision, 9)
+  }
+})
 
 test("factory migration adds immutable recipe snapshots and a future-only active pointer", () => {
   const db = new DatabaseSync(":memory:")
