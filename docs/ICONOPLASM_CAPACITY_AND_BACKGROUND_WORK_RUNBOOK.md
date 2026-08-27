@@ -521,7 +521,9 @@ The canonical product/freshness contract is
 `docs/ICONOPLASM_PRODUCT_OPERATING_MODEL.md`. The capacity model owns resource
 envelopes. The 2026-08-27 owner clarification permits stale portraits on an
 unreloaded article, but requires current-version revalidation on new page loads
-and ordinary reloads. Keep the 60-second healthy publication/propagation target;
+and ordinary reloads. Aim for one-minute propagation; two minutes is acceptable,
+not a strict guarantee. Scale and smooth reading outrank the timer. Assess the
+working 10,000-daily-reader workload including votes and saved discoveries;
 the historical 15-minute window is an implementation gap, not product authority.
 Model freshness traffic from loads/reloads, not one heartbeat per open tab.
 Unchanged content-addressed image bytes remain reusable. This specification

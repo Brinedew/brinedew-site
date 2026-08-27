@@ -66,13 +66,61 @@ factions.
 - Personal discovery feedback may be immediate. Shared discovery popularity is
   an hourly published overlay and must never be repaired by a reader request.
 
+## Priority order and growth contract
+
+Owner clarification (2026-08-27): **scale and smooth reading take priority over
+shaving the last minute off image synchronization.** Today's small readership is
+not evidence that a per-reader polling or per-vote publishing design is safe.
+
+| Category               | Requirement                                                                                                                    | Decision rule                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Non-negotiable         | Correct images, durable accepted votes/discoveries, usable host article, zero paid Cloudflare requirement, existing paid Bunny | Never spend past a quota, lose accepted user state, invent freshness, or block reading to meet a timer       |
+| Growth acceptance gate | Model and test complete reader journeys at growing daily readership, including ordinary voting and signed-in use               | A warm-image benchmark or ten successful readers cannot certify the product                                  |
+| Freshness target       | Aim for one minute; two minutes is acceptable for winner changes to reach new loads/reloads under healthy operation            | This is a target, not a strict worldwide deadline; preserve availability and correctness during overload     |
+| Reading stability      | An unreloaded article may keep its images indefinitely                                                                         | No continuous open-tab freshness polling is required                                                         |
+| Engineering choices    | Storage location, version pointers, caching and publication scheduling                                                         | Preserve current guards until a tested replacement exists; mechanisms are not immutable product requirements |
+
+The working engineering benchmark is **10,000 daily active readers**, not 10,000
+simultaneous users or a claim of current capacity. This round-number target and
+the following usage mix are explicit modeling assumptions, not owner-provided
+traffic estimates:
+
+- Five articles per reader/day, thirty distinct genes encountered across them.
+- 20% sign in; each signed-in reader saves ten newly encountered genes/day.
+- 5% vote; each voter casts two votes/day. Assume 20% of votes change the winner.
+- 2% require first-party delivery because Bunny is unreachable; also test 10%
+  and a regional outage, plus higher account/voter participation.
+- Test cold/warm caches, concentrated/scattered gene interest, steady activity
+  and bursts, and spread across regions. Budget other site/workstation activity
+  and retries; do not quietly assume they are zero.
+
+At 10,000 readers this means 50,000 article loads, 1,000 votes, 200 winning-image
+changes, and 20,000 newly saved discoveries per day. A winning-image update
+distributes the identity of an existing selected image; it does not generate
+a new image. Publication frequency depends on when those changes occur, not
+the number of readers alone.
+
+The current partial model already rejects a 10,000-reader readiness claim:
+discoveries plus votes conservatively require 172,000 D1 write units against
+100,000/day. Smaller scenarios fitting these components are not certified
+capacity. See `ICONOPLASM_FIRST_PRINCIPLES_CAPACITY_MODEL.md` and the executable
+`readerGrowthAssessment`; current implementation and target remain distinct.
+
+Capacity reports must lead with **readers/day, reader actions, supported/failed/
+unverified verdict, and keep/change recommendation**. Infrastructure operation
+counts are supporting evidence, never a substitute for that answer. Identify
+assumptions, measured versus modeled results, freshness percentiles and misses,
+regional fallback, and remaining budget headroom. No universal users/day claim
+may be inferred from an isolated component ceiling.
+
 ## Change and freshness contract
 
 ### Owner clarification — 2026-08-27
 
 **Stable while reading; fresh on reload.** This supersedes the former
-15-minute convergence allowance. It is a product requirement, not a claim that
-the installed extension already meets it.
+15-minute convergence allowance and the earlier strict reading of sixty seconds.
+Aim for one minute; two minutes is acceptable, subordinate to the growth and
+correctness priorities above. This is not a claim of installed runtime compliance.
 
 | Change                       | Current viewer                                     | Other open viewers                                             | New page loads and reloads                                                                                               |
 | ---------------------------- | -------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -87,13 +135,13 @@ the installed extension already meets it.
    revalidation. An old extension-local timestamp must not skip that check.
    Switching tabs, scrolling, and hovering again on the same unreloaded article
    do not require canon refresh or continuous polling.
-2. **Keep the one-minute publication target.** For a successfully accepted vote
-   that changes the winner, the changed canonical selection must become
-   available to fresh site cards and extension page loads within 60 seconds
-   end-to-end under healthy operation. This includes publication and cache
-   propagation, not a fresh 60-second allowance at each layer. A reload before
-   that publication may still see the previous complete snapshot; a reload
-   after the deadline must converge. A vote that does not change the winner
+2. **Aim for one minute; accept two.** For a successfully accepted vote that
+   changes the winner, target availability on fresh site cards and extension
+   page loads within one to two minutes end-to-end under healthy operation.
+   This includes publication and cache propagation, not a separate allowance
+   at each layer. A reload before publication may see the previous complete
+   snapshot. Measure and report missed targets; do not cross a quota or harm
+   reading to pretend the target is an absolute guarantee. An unchanged winner
    requires no new image publication.
 3. **Revalidate identity, reuse bytes.** Check small version metadata, not every
    image or the entire catalog. If unchanged, reuse cached metadata/images.
@@ -110,16 +158,18 @@ the installed extension already meets it.
    rebuild per vote, or image-byte re-download per reload. Preserve one
    publisher, one version barrier, direct Bunny acceleration and bounded
    first-party fallback. Capacity limits remain real implementation
-   constraints; report a missed deadline instead of silently relaxing the
-   product requirement.
+   constraints; report freshness degradation and recover durably instead of
+   exhausting shared capacity. Repeated normal-operation misses require an
+   engineering fix, not a silent redefinition to fifteen minutes.
 
 ### Acceptance and implementation status
 
 - Leave article A open, change the winning EZH2 candidate elsewhere, and return
   to A without reloading: its old image is permitted, including later hovers.
-- Ordinarily reload A (or open article B) after the 60-second publication
-  deadline: hover and a freshly loaded gene card use the same winning portrait.
-  The check cannot be skipped because another tab checked minutes earlier.
+- Ordinarily reload A (or open article B): target convergence with a freshly
+  loaded gene card within one to two minutes after the winner changes. Measure
+  latency distribution and misses at the declared growth workloads, not claim
+  a strict worldwide deadline. A minutes-old local check cannot bypass refresh.
 - Reload without any canon change: unchanged images stay cached. During a
   failed check: the article remains usable and cached status is truthful.
 - Verify installed HTML/PDF paths, multiple tabs, unchanged votes, rapid winner

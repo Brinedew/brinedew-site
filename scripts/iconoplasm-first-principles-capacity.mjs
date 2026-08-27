@@ -249,6 +249,95 @@ export function votingCost({ votes = 1 } = {}) {
   })
 }
 
+// Working growth assumptions, NOT observed usage or an owner-approved traffic forecast.
+// A favorable partial model must never become a capacity certification. In particular,
+// warm Bunny delivery cannot erase signed-in discovery writes or ordinary voting.
+export const READER_GROWTH_ASSUMPTIONS = Object.freeze({
+  articlesPerReader: 5,
+  distinctGenesPerReader: 30,
+  signedInFraction: 0.2,
+  discoveriesPerSignedInReader: 10,
+  voterFraction: 0.05,
+  votesPerVoter: 2,
+  winnerChangeFraction: 0.2,
+  bunnyBlockedFraction: 0.02,
+})
+
+export function readerGrowthAssessment(dailyReaders, overrides = {}) {
+  for (const name of Object.keys(overrides)) {
+    if (!Object.hasOwn(READER_GROWTH_ASSUMPTIONS, name)) {
+      throw new TypeError(`Unknown reader-growth assumption: ${name}`)
+    }
+  }
+  const assumptions = { ...READER_GROWTH_ASSUMPTIONS, ...overrides }
+  if (!Number.isSafeInteger(dailyReaders) || dailyReaders < 0) {
+    throw new TypeError("dailyReaders must be a nonnegative safe integer")
+  }
+  for (const [name, value] of Object.entries(assumptions)) {
+    if (!Number.isFinite(value) || value < 0 || (name.endsWith("Fraction") && value > 1)) {
+      throw new TypeError(`Invalid reader-growth assumption: ${name}`)
+    }
+  }
+  if (assumptions.voterFraction > assumptions.signedInFraction) {
+    throw new TypeError("Voting readers must be included in the signed-in cohort")
+  }
+  const articleLoads = dailyReaders * assumptions.articlesPerReader
+  const signedInReaders = dailyReaders * assumptions.signedInFraction
+  const voters = dailyReaders * assumptions.voterFraction
+  const votes = voters * assumptions.votesPerVoter
+  const savedDiscoveries = signedInReaders * assumptions.discoveriesPerSignedInReader
+  const fallbackGenes =
+    dailyReaders * assumptions.bunnyBlockedFraction * assumptions.distinctGenesPerReader
+  // Expected cohort counts may be fractional. Scale one action's existing cost rather
+  // than rounding each user into a voter or pretending every gene encounter is new.
+  const discoveries = scaleCost(
+    extensionReaderCost({
+      pageLoads: 0,
+      qualifiedHovers: 0,
+      uniquePreparedGenes: 0,
+      signedIn: true,
+      newDiscoveries: 1,
+    }),
+    savedDiscoveries,
+  )
+  const voting = scaleCost(votingCost(), votes)
+  const fallback = scaleCost(
+    addCosts(hoverMetadataDeliveryCost({ canonicalRequests: 2 }), cost({ workerRequests: 1 })),
+    fallbackGenes,
+  )
+  // Explicit candidate policy: one direct current-version request per article load.
+  // This is not how today's five-minute client cache behaves and not a proposed fix.
+  const directReloadChecks = cost({ workerRequests: articleLoads })
+  const modeledWork = addCosts(discoveries, voting, fallback, directReloadChecks)
+  const exceeded = Object.entries(FREE_DAILY_LIMITS)
+    .filter(([resource, limit]) => modeledWork[resource] > limit)
+    .map(([resource, limit]) => ({ resource, used: modeledWork[resource], limit }))
+  return {
+    dailyReaders,
+    assumptions,
+    activity: {
+      articleLoads,
+      signedInReaders,
+      savedDiscoveries,
+      voters,
+      votes,
+      winningImageChanges: votes * assumptions.winnerChangeFraction,
+      fallbackGenes,
+    },
+    components: { discoveries, voting, fallback, directReloadChecks },
+    modeledWork,
+    exceeded,
+    verdict: exceeded.length ? "redesign_required_by_model" : "not_certified",
+    unmodeled: [
+      "publication timing, changed shards, and KV write reservations",
+      "healthy CDN cold fills, cache churn, and delivery indexes",
+      "freshness-check KV reads, authentication, and repeated discoveries",
+      "gene pages, comments, requests, authoring, and other account workloads",
+      "CPU, burst concurrency, retries, hedge duplication, and measured regional latency",
+    ],
+  }
+}
+
 export const SCENARIOS = Object.freeze({
   tenThousandOneVisitLurkers: scaleCost(ATOMIC_COSTS.anonymousHomepageCold, 10_000),
   websiteExplorerAverage: websiteExplorerCost(),
@@ -290,9 +379,29 @@ function printCapacity(label, perPersona, base = ZERO_COST) {
   )
 }
 
-export function printReport() {
+export function printReport({ includeComponents = false } = {}) {
   console.log("Iconoplasm action-derived capacity model")
   console.log("No historical traffic counters are inputs.\n")
+  console.log("Working growth target: 10,000 daily readers, NOT certified capacity.")
+  console.log("Per reader: 5 articles/day; 20% sign in and save 10 new genes; 5% cast 2 votes.")
+  console.log("Assumed: 20% of votes change the winner; 2% of readers need Bunny fallback.")
+  for (const readers of [10, 1_000, 10_000]) {
+    const result = readerGrowthAssessment(readers)
+    console.log(
+      `${formatNumber(readers)} daily readers: ${formatNumber(result.activity.votes)} votes, ` +
+        `${formatNumber(result.activity.savedDiscoveries)} saved discoveries; ` +
+        `${formatNumber(result.modeledWork.d1RowsWritten)} / 100,000 modeled database writes. ` +
+        (result.exceeded.length
+          ? "REDESIGN REQUIRED: modeled components already exceed free allowance."
+          : "Checked components fit; full product capacity is NOT VERIFIED."),
+    )
+  }
+  console.log("Includes a direct reload-check policy, not a forecast of today's client TTL.")
+  if (!includeComponents) {
+    console.log("Engineering component stress cases: rerun with --components.")
+    return
+  }
+  console.log("Below: component stress cases, NOT alternative product user limits.\n")
   printCapacity("One-visit homepage visitors", ATOMIC_COSTS.anonymousHomepageCold)
   printCapacity("Curious website explorers", SCENARIOS.websiteExplorerAverage)
   printCapacity("Maximum website guest-shelf merges", SCENARIOS.websiteGuestShelfMaximumMerge)
@@ -318,5 +427,5 @@ export function printReport() {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  printReport()
+  printReport({ includeComponents: process.argv.includes("--components") })
 }
