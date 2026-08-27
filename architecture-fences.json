@@ -717,11 +717,12 @@
     {
       "id": "IPD-011",
       "title": "Every public canonical blot uses one published card artifact",
-      "decision": "The exact versioned card artifact selected by KV_GALLERY_VERSION owns the selected source portrait and every input used to derive its canonical workstation-materialized blot fingerprint and immutable Bunny key. Discovery, catalog, D1, and account rows may establish identity, membership, ordering, rich detail, candidates, audit status, and authoring or vote state, but their portrait references are never public image authority. Signed-in and anonymous card views render the blot composition from the exact card VM; the stable public blot route derives its expected object directly from that VM and does not require a blot-only KV publication. The extension portrait locator is a read-time projection of the same named card payload with no independent selection, pointer, version, or publication timeline. Byte-equivalent CDN caches and deterministic immutable projections are allowed under that same authority. Gene-page standard images and metadata, structured data, image-sitemap children, public media, and search-image retrieval use the matching immutable blot WebP. Massive gene-range pages remain text-only. Every derived cache and ETag includes the selected card version. Missing exact-card state fails closed. A complete card without uploaded current bytes remains an indexable gene profile and sitemap/archive member; the temporary source portrait remains separately typed until all 19,023 current blot objects are proven accessible.",
+      "decision": "The exact versioned card artifact selected by IconoplasmCardPublicationCoordinator owns the selected source portrait and every input used to derive its canonical workstation-materialized blot fingerprint and immutable Bunny key. KV_GALLERY_VERSION is frozen migration evidence, not a second live head. The SQLite head and D1 event watermark commit atomically only after authenticated Bunny GET/hash verification. Discovery, catalog, D1, and account rows may establish identity, membership, ordering, rich detail, candidates, audit status, and authoring or vote state, but their portrait references are never public image authority. Signed-in and anonymous card views render the blot composition from the exact card VM; the stable public blot route derives its expected object directly from that VM and does not require a blot-only KV publication. Independent immutable detail and locator projections share the named card authority, not independent selection or publication timelines. Byte-equivalent CDN caches are allowed; a mutable Bunny current-pointer PUT is not. Gene-page standard images and metadata, structured data, image-sitemap children, public media, and search-image retrieval use the matching immutable blot WebP. Massive gene-range pages remain text-only. Every derived cache and ETag includes the selected card version. Missing exact-card state fails closed. A complete card without uploaded current bytes remains an indexable gene profile and sitemap/archive member; the temporary source portrait remains separately typed until all 19,023 current blot objects are proven accessible.",
       "reason": "The former account image-only path used the separately versioned publishedPortraitRefs snapshot and caused B-700. The same split recurs if a gene page, sitemap, or public media response reads a raw D1 portrait or if search metadata treats a source portrait as the finished blot. One exact card barrier plus a deterministic visible-material fingerprint keeps every projection in the same portrait-selection epoch while eliminating roughly 19,000 unnecessary KV backfill writes.",
       "change_control": "Published source-portrait selection, blot fingerprint and object derivation, workstation renderer, gallery composition, site detail, page cache keys and ETags, metadata, structured data, text-only archives, sitemaps, public media, extension detail and locator reads, print-copy validation, behavioral tests, instructions, and portrait, home, and gene runbooks must change together. Never restore publishedPortraitRefs, discovery-row portrait identity, raw icono_publish_state as a public image source, browser-local authority, a separately published locator index, Worker-side blot rendering, range-page thumbnails, or a fallback that exposes a raw portrait as the canonical image when the exact blot is unavailable. A replacement must prove D1 or catalog drift cannot change the published source or blot, detail and locator agree on snapshot and portrait SHA, page, sitemap, and public media agree with the selected card version and blot SHA, and the signed-in homepage and gene page visually match in one browser session.",
       "runbook": "docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md",
       "linear_issue": "B-700",
+      "publication_migration_issue": "B-716",
       "additional_required_marker_categories": [],
       "markers": [
         {
@@ -737,6 +738,21 @@
         {
           "category": "runbook",
           "file": "docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md",
+          "token": "ARCHITECTURE FENCE [IPD-011]"
+        },
+        {
+          "category": "runbook",
+          "file": "docs/ICONOPLASM_CARD_PUBLICATION_V2.md",
+          "token": "ARCHITECTURE FENCE [IPD-011]"
+        },
+        {
+          "category": "source",
+          "file": "workers/lib/iconoplasm-card-publication.js",
+          "token": "ARCHITECTURE FENCE [IPD-011]"
+        },
+        {
+          "category": "test",
+          "file": "workers/iconoplasm-card-publication.test.js",
           "token": "ARCHITECTURE FENCE [IPD-011]"
         },
         {

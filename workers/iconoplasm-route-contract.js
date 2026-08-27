@@ -184,6 +184,29 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     rateLimit: rateLimit("gene_detail", 120),
   }),
   contract({
+    id: "public_card_current",
+    match: exact("/api/public/v1/card-current"),
+    methods: GET,
+    auth: "public",
+    cache: "handler-defined",
+    budgetFamily: "public_catalog",
+    gatewayHandler: "public_card_current",
+    rateLimit: rateLimit("card_current", 120),
+  }),
+  contract({
+    id: "public_card_object",
+    match: pattern(
+      /^\/published-cards\/v2\/immutable\/(cards|genes|portraits|indexes|manifests)\/([a-f0-9]{64})\.json$/,
+      ["kind", "hash"],
+    ),
+    methods: GET,
+    auth: "public",
+    cache: "immutable",
+    budgetFamily: "public_gene_detail",
+    gatewayHandler: "public_card_object",
+    rateLimit: rateLimit("card_object", 120),
+  }),
+  contract({
     id: "public_card_content_gene",
     match: pattern(
       /^\/api\/public\/v1\/card-content\/v1\/([a-f0-9]{64})\/(genes)\/([A-Z0-9][A-Z0-9._-]{0,63})$/,
@@ -922,6 +945,13 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     POST,
     "admin_gallery_dirty_shard_publication",
     "admin_gallery.publish_dirty_shards",
+  ),
+  adminApiContract(
+    "admin_gallery_storage_migration",
+    "/gallery/migrate-card-storage",
+    POST,
+    "admin_gallery_dirty_shard_publication",
+    "admin_gallery.migrate_card_storage",
   ),
   adminApiContract("admin_gallery", "/gallery", GET, "admin_gallery", "admin_gallery.list"),
   adminApiContract(

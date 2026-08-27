@@ -1,4 +1,18 @@
 import puppeteer from "@cloudflare/puppeteer"
+import { d1DailyAllowance } from "../shared/iconoplasm-d1-budget-policy.js"
+import {
+  CARD_PUBLICATION_STORAGE,
+  cardPublicationManifestKey,
+} from "./lib/iconoplasm-card-publication.js"
+import {
+  createPublishedCardObjectStore,
+  publishedCardObjectKey,
+} from "./lib/iconoplasm-published-card-objects.js"
+import {
+  callCardPublication,
+  createCardPublicationCoordinatorClass,
+} from "./lib/iconoplasm-card-publication-coordinator.js"
+import { createPublishedCardDeliveryHandlers } from "./lib/iconoplasm-card-delivery.js"
 import { createHoverDeliveryHandlers } from "./iconoplasm-hover-delivery-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
@@ -1314,11 +1328,11 @@ function iconoplasmBudgetPolicyFromEnv(env, now = new Date()) {
     mutationLimiter: {
       active: true,
       budgetBasis: "d1_rows_written_daily_smart_limit",
-      budgetBasisLabel: "D1 rows_written daily smart limit",
+      budgetBasisLabel: "D1 daily allocation, capped by the Free plan",
       targetDailyPercent,
       explainsDoCap: false,
       explanation:
-        "This worker now derives its mutation-write ceiling from one shared Iconoplasm budget policy built on the D1 rows_written daily smart limit, not the Cloudflare Durable Objects rows_written daily cap. The Durable Objects cap is tracked separately in Cloudflare observability instead of being copied into a second hot-path limiter.",
+        "The D1 mutation allocation cannot exceed the current Free plan's 100,000 rows written per UTC day. Historical monthly budgets may lower this allowance, never raise it. This is not the Cloudflare Durable Objects rows_written daily cap, which is tracked separately. This policy does not add per-reader accounting writes or reserve capacity for all account consumers.",
     },
   }
 }
@@ -1333,7 +1347,7 @@ function iconoplasmMutationLimiterPolicyFromEnv(env, now = new Date()) {
     policy?.mutationLimiter || {
       active: false,
       budgetBasis: "d1_rows_written_daily_smart_limit",
-      budgetBasisLabel: "D1 rows_written daily smart limit",
+      budgetBasisLabel: "D1 daily allocation, capped by the Free plan",
       targetDailyPercent: 90,
       explainsDoCap: false,
       explanation:
@@ -16693,15 +16707,6 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     )
   }
 
-  smartDailyLimit(monthlyRemainingAtStartOfDay, daysRemainingInCycle, burstMultiplier) {
-    const remaining = Math.max(0, Number(monthlyRemainingAtStartOfDay || 0) || 0)
-    const daysRemaining = Math.max(1, Number(daysRemainingInCycle || 1) || 1)
-    const burst = Math.max(1, Number(burstMultiplier || 1) || 1)
-    if (remaining <= 0) return 0
-    const baseAllowance = Math.ceil(remaining / daysRemaining)
-    return Math.min(remaining, Math.max(baseAllowance, Math.ceil(baseAllowance * burst)))
-  }
-
   attributionRows(dayKey, cycleKey, mode = "daily") {
     const sql =
       mode === "cycle"
@@ -16789,22 +16794,20 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
           : 1
       const rowsRead = Math.max(0, Number(row?.rows_read || 0) || 0)
       const rowsWritten = Math.max(0, Number(row?.rows_written || 0) || 0)
-      const rowsReadDailySmartLimit =
-        rowsReadMonthlyLimit > 0
-          ? this.smartDailyLimit(
-              rowsReadMonthlyLimit - cycleRowsReadBeforeDay,
-              daysRemainingInCycle,
-              burstMultiplier,
-            )
-          : null
-      const rowsWrittenDailySmartLimit =
-        rowsWrittenMonthlyLimit > 0
-          ? this.smartDailyLimit(
-              rowsWrittenMonthlyLimit - cycleRowsWrittenBeforeDay,
-              daysRemainingInCycle,
-              burstMultiplier,
-            )
-          : null
+      const rowsReadDailySmartLimit = d1DailyAllowance({
+        resource: "reads",
+        monthlyLimit: rowsReadMonthlyLimit,
+        usedBeforeDay: cycleRowsReadBeforeDay,
+        daysRemaining: daysRemainingInCycle,
+        burstMultiplier,
+      })
+      const rowsWrittenDailySmartLimit = d1DailyAllowance({
+        resource: "writes",
+        monthlyLimit: rowsWrittenMonthlyLimit,
+        usedBeforeDay: cycleRowsWrittenBeforeDay,
+        daysRemaining: daysRemainingInCycle,
+        burstMultiplier,
+      })
       const out = {
         ...row,
         days_remaining_in_cycle: daysRemainingInCycle,
@@ -16936,22 +16939,20 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       rowsReadMonthlyLimit > 0 ? Math.max(0, rowsReadMonthlyLimit - cycleRowsRead) : null
     const rowsWrittenMonthlyRemaining =
       rowsWrittenMonthlyLimit > 0 ? Math.max(0, rowsWrittenMonthlyLimit - cycleRowsWritten) : null
-    const rowsReadDailySmartLimit =
-      rowsReadMonthlyLimit > 0
-        ? this.smartDailyLimit(
-            rowsReadMonthlyLimit - cycleRowsReadBeforeToday,
-            daysRemainingInCycle,
-            burstMultiplier,
-          )
-        : null
-    const rowsWrittenDailySmartLimit =
-      rowsWrittenMonthlyLimit > 0
-        ? this.smartDailyLimit(
-            rowsWrittenMonthlyLimit - cycleRowsWrittenBeforeToday,
-            daysRemainingInCycle,
-            burstMultiplier,
-          )
-        : null
+    const rowsReadDailySmartLimit = d1DailyAllowance({
+      resource: "reads",
+      monthlyLimit: rowsReadMonthlyLimit,
+      usedBeforeDay: cycleRowsReadBeforeToday,
+      daysRemaining: daysRemainingInCycle,
+      burstMultiplier,
+    })
+    const rowsWrittenDailySmartLimit = d1DailyAllowance({
+      resource: "writes",
+      monthlyLimit: rowsWrittenMonthlyLimit,
+      usedBeforeDay: cycleRowsWrittenBeforeToday,
+      daysRemaining: daysRemainingInCycle,
+      burstMultiplier,
+    })
     const rowsReadDailyExceeded =
       rowsReadDailySmartLimit !== null && rowsRead >= rowsReadDailySmartLimit
     const rowsWrittenDailyExceeded =
@@ -20130,6 +20131,15 @@ async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
     }
   }
 
+  if (env.ICONOPLASM_CARD_PUBLICATION && applied.length) {
+    try {
+      await callCardPublication(env, "/wake", { method: "POST" })
+    } catch (error) {
+      // The committed vote/event must not be rolled back because a wakeup
+      // failed. The durable event log and scheduled recovery retain the work.
+      console.error("Card publication wakeup failed", String(error?.message || error))
+    }
+  }
   return jobs.map(
     (job) => resultBySymbol.get(job.symbol) || voteProjectionRefreshFailureResult(job),
   )
@@ -24366,6 +24376,83 @@ async function currentGalleryVersion(env) {
   return barrier.current
 }
 
+export const IconoplasmCardPublicationCoordinator = createCardPublicationCoordinatorClass(
+  (env) => ({
+    buildRevision: CARD_CATALOG_BUILD_REVISION,
+    async legacyBaseline() {
+      const raw = await env.KV.get(KV_GALLERY_VERSION)
+      const barrier = normalizeGalleryVersionBarrierValue(JSON.parse(raw))
+      const manifest = await readCardCatalogArtifactManifest(env, barrier.current)
+      if (
+        manifest?.storage !== CARD_CATALOG_CONTENT_ADDRESSED_STORAGE ||
+        Number(manifest.build_revision) !== CARD_CATALOG_BUILD_REVISION
+      ) {
+        throw new Error("Card storage migration requires the current complete mapping revision")
+      }
+      const watermark = JSON.parse(await env.KV.get(KV_CARD_CATALOG_PUBLISH_WATERMARK))
+      if (!watermark) throw new Error("Card storage migration requires the legacy event watermark")
+      return {
+        manifest,
+        watermark: {
+          id: Number(watermark.watermark_event_id || 0),
+          created_at: watermark.watermark_event_at || null,
+        },
+      }
+    },
+    async legacyCards(ref) {
+      const parsed = await readPublishedCardCatalogShard(env, "legacy-migration", ref, true)
+      if (!parsed?.cards?.every(assertCompleteMobileCardVM))
+        throw new Error("Invalid legacy migration shard")
+      return parsed.cards
+    },
+    async highWater() {
+      // Unlike a diagnostic best-effort query, a publisher must fail closed on
+      // a database error; treating failure as zero would incorrectly go idle.
+      const row = await env.ICONOPLASM_DB.prepare(
+        `SELECT id, created_at FROM icono_publish_events WHERE action IN (${cardCatalogCanonicalActionPlaceholders()}) ORDER BY id DESC LIMIT 1`,
+      )
+        .bind(...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS)
+        .first()
+      return { id: Number(row?.id || 0), created_at: row?.created_at || null }
+    },
+    changed: (after, through) =>
+      cardCatalogChangedSymbolsWithinPublicationWindow(env, {
+        afterEventId: after.id,
+        afterEventAt: after.created_at,
+        throughEventId: through.id,
+        throughEventAt: through.created_at,
+        limit: CARD_CATALOG_DIRTY_SYMBOL_SAFETY_LIMIT + 1,
+      }),
+    async materialize(symbols) {
+      const records = await cardCatalogRecordsForArtifact(env, {
+        requestUrl: "https://iconoplasm.brinedew.bio/",
+        symbols,
+        snapshotVersion: "content-addressed",
+      })
+      return records.map((record) =>
+        buildMobileCardVMFromGeneRecord(record, {
+          snapshotVersion: "content-addressed",
+          source: "published_card_catalog",
+        }),
+      )
+    },
+    complete: assertCompleteMobileCardVM,
+    stable: stableCardCatalogMaterialValue,
+    project: (payload) => stableCardCatalogMaterialValue(projectGeneRecord(payload, null)),
+    locator: (card) => publishedPortraitLocatorFromCard(card, ""),
+    async afterCommit({ version, after, through, symbols, offset }) {
+      if (offset === 0)
+        await syncPublishedGeneRouteMembershipAfterPublication(env, {
+          afterEventAt: after.created_at,
+          throughEventAt: through.created_at,
+          afterEventId: after.id,
+          throughEventId: through.id,
+        })
+      await advanceEnrolledIconoplasmGeneCardsAfterPublication(env, version, symbols)
+    },
+  }),
+)
+
 function normalizeGalleryVersionBarrierValue(value) {
   if (value && typeof value === "object") {
     const current = String(value.current || "").trim() || "0"
@@ -24396,6 +24483,17 @@ async function currentGalleryVersionBarrier(env) {
     galleryVersionCache.value !== undefined
   ) {
     return normalizeGalleryVersionBarrierValue(galleryVersionCache.value || "0")
+  }
+  if (env.ICONOPLASM_CARD_PUBLICATION) {
+    const head = await callCardPublication(env, "/head")
+    if (head.current) {
+      galleryVersionCache.value = head
+      galleryVersionCache.loadedAt = now
+      return normalizeGalleryVersionBarrierValue(head)
+    }
+    // Explicit migration only: before the first complete Bunny catalog commits,
+    // the frozen legacy KV head remains readable. After activation there is no
+    // KV fallback, including coordinator failures, and no second live pointer.
   }
   if (!env.KV) {
     galleryVersionCache.loadedAt = now
@@ -24437,6 +24535,8 @@ function nextGalleryVersionBarrier(previousBarrier, artifactVersion = "") {
 }
 
 async function publishGalleryVersionBarrier(env, barrier) {
+  if (env.ICONOPLASM_CARD_PUBLICATION)
+    throw new Error("Legacy KV head writes are retired; use the durable card publication migration")
   // The barrier is the public release pointer and portrait epoch, not just a
   // cache token. Only call this after the exact card-catalog artifact for
   // `barrier.current` has been fully written and validated. Flipping
@@ -24444,11 +24544,11 @@ async function publishGalleryVersionBarrier(env, barrier) {
   // invalid artifact and fail 503. Until the flip, D1 authoring may be ahead,
   // but every public surface must remain on the previous exact card instead of
   // falling back to a D1, route, or discovery/catalog portrait.
-  galleryVersionCache.value = barrier
-  galleryVersionCache.loadedAt = Date.now()
   if (env.KV) {
     await env.KV.put(KV_GALLERY_VERSION, JSON.stringify(barrier))
   }
+  galleryVersionCache.value = barrier
+  galleryVersionCache.loadedAt = Date.now()
   return String(barrier?.current || "")
 }
 
@@ -24488,6 +24588,14 @@ async function maxCardCatalogPublishEventPosition(env) {
 }
 
 async function readCardCatalogPublishWatermark(env) {
+  if (env.ICONOPLASM_CARD_PUBLICATION) {
+    const status = await callCardPublication(env, "/status")
+    if (status.current) return {
+      artifact_version: status.current, content_hash: status.current,
+      watermark_event_id: status.watermark.id, watermark_event_at: status.watermark.created_at,
+      card_count: status.card_count, catalog_gene_count: status.card_count, published_at: status.published_at,
+    }
+  }
   if (!env?.KV?.get) return null
   try {
     const raw = await env.KV.get(KV_CARD_CATALOG_PUBLISH_WATERMARK)
@@ -24657,6 +24765,29 @@ async function cardCatalogChangesSinceWatermark(env, watermarkEventAt, watermark
 }
 
 async function cardCatalogPublishStatus(env) {
+  if (env.ICONOPLASM_CARD_PUBLICATION) {
+    const status = await callCardPublication(env, "/status")
+    const barrier = await currentGalleryVersionBarrier(env)
+    const changes = await cardCatalogChangesSinceWatermark(
+      env,
+      status.watermark?.created_at,
+      status.watermark?.id || 0,
+    )
+    return {
+      ok: true,
+      live_gallery_version: barrier.current,
+      published_artifact_version: status.current,
+      has_watermark: Boolean(status.watermark),
+      live_matches_published: status.current === barrier.current,
+      changes_since_publish: changes.changed_symbol_count,
+      change_events_since_publish: changes.event_count,
+      is_stale: !status.current || changes.changed_symbol_count > 0,
+      dirty_shard_publication_in_progress: Boolean(status.job),
+      dirty_shards_total: status.job?.groups || 0,
+      dirty_shards_prepared: status.job?.group || 0,
+      publication: status,
+    }
+  }
   const barrier = await currentGalleryVersionBarrier(env)
   const liveVersion = String(barrier?.current || "")
   const watermark = await readCardCatalogPublishWatermark(env)
@@ -25359,6 +25490,15 @@ async function publishCardCatalogArtifactSmart(
 }
 
 async function publishIconoplasmGalleryDirtyShards(env, { triggerReason = "unspecified" } = {}) {
+  if (env.ICONOPLASM_CARD_PUBLICATION) {
+    const queued = await callCardPublication(env, "/wake", { method: "POST" })
+    const barrier = await currentGalleryVersionBarrier(env)
+    return {
+      version: barrier.current,
+      publication_queued: queued.accepted,
+      migration_pending: queued.migration_pending || false,
+    }
+  }
   // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
   // Strict order matters:
   // 1. Capture the canonical-event high-water while the old manifest stays live.
@@ -26029,7 +26169,9 @@ export async function pagePublishedCardCatalogArtifact(
   }
 
   if (Array.isArray(manifest.shards)) {
-    const contentAddressed = manifest.storage === CARD_CATALOG_CONTENT_ADDRESSED_STORAGE
+    const contentAddressed =
+      manifest.storage === CARD_CATALOG_CONTENT_ADDRESSED_STORAGE ||
+      manifest.storage === CARD_PUBLICATION_STORAGE
     const shards = manifest.shards.slice().sort((a, b) => Number(a?.index) - Number(b?.index))
     for (const shard of shards) {
       const last = normalizeSymbol(shard?.last_symbol || "")
@@ -27408,6 +27550,9 @@ async function handlePublicGeneBatch(request, env) {
   )
 }
 
+const publishedCardDeliveryHandlers = createPublishedCardDeliveryHandlers({
+  barrier: currentGalleryVersionBarrier,
+})
 const hoverDeliveryHandlers = createHoverDeliveryHandlers({
   barrier: currentMobileCardSnapshotVersion,
   manifest: readPublishedCardCatalogManifest,
@@ -27813,7 +27958,12 @@ async function readParsedCardCatalogJson(
     shouldCache = () => true,
   },
 ) {
-  if (!env?.KV?.get || !storageKey || !cacheKey) return null
+  if (
+    !storageKey ||
+    !cacheKey ||
+    (!env?.KV?.get && !storageKey.startsWith("published-cards/v2/immutable/"))
+  )
+    return null
   const cached = readCardCatalogLru(cache, cacheKey)
   if (cached) return cached
 
@@ -27821,7 +27971,11 @@ async function readParsedCardCatalogJson(
   if (pending) return pending
 
   const readPromise = (async () => {
-    const raw = await env.KV.get(storageKey)
+    const raw = storageKey.startsWith("published-cards/v2/immutable/")
+      ? await createPublishedCardObjectStore(env)
+          .read(storageKey)
+          .then((object) => (object ? new TextDecoder().decode(object.bytes) : null))
+      : await env.KV.get(storageKey)
     if (!raw) return null
     const serialized = typeof raw === "string" ? raw : String(raw)
     const rawUtf8Bytes = new TextEncoder().encode(serialized).byteLength
@@ -27851,23 +28005,34 @@ async function readParsedCardCatalogJson(
 async function readPublishedCardCatalogManifest(env, artifactVersion) {
   const version = String(artifactVersion || "").trim()
   if (!version) return null
-  return readParsedCardCatalogJson(env, cardCatalogArtifactStoreKey(version), {
-    cache: cardCatalogParsedManifestCache,
-    readPromises: cardCatalogParsedManifestReadPromises,
-    cacheKey: version,
-    cacheEntryLimit: CARD_CATALOG_PARSED_MANIFEST_CACHE_LIMIT,
-    validate: (parsed) =>
-      parsed?.schema === CARD_CATALOG_ARTIFACT_SCHEMA &&
-      String(parsed.artifact_version || parsed.snapshot_version || "") === version,
-    // Whole legacy artifacts already enter cardCatalogArtifactCache after
-    // normalization. This LRU is for sharded manifests, not a second multi-
-    // version whole-catalog retention layer.
-    shouldCache: (parsed) => Array.isArray(parsed?.shards),
-  })
+  const bunnyKey = cardPublicationManifestKey(version)
+  const result = await readParsedCardCatalogJson(
+    env,
+    bunnyKey || cardCatalogArtifactStoreKey(version),
+    {
+      cache: cardCatalogParsedManifestCache,
+      readPromises: cardCatalogParsedManifestReadPromises,
+      cacheKey: version,
+      cacheEntryLimit: CARD_CATALOG_PARSED_MANIFEST_CACHE_LIMIT,
+      validate: (parsed) =>
+        parsed?.schema === CARD_CATALOG_ARTIFACT_SCHEMA &&
+        (bunnyKey
+          ? parsed.storage === CARD_PUBLICATION_STORAGE
+          : String(parsed.artifact_version || parsed.snapshot_version || "") === version),
+      // Whole legacy artifacts already enter cardCatalogArtifactCache after
+      // normalization. This LRU is for sharded manifests, not a second multi-
+      // version whole-catalog retention layer.
+      shouldCache: (parsed) => Array.isArray(parsed?.shards),
+    },
+  )
+  return result && bunnyKey
+    ? { ...result, artifact_version: version, snapshot_version: version, content_hash: version }
+    : result
 }
 
 async function readCardCatalogArtifactManifest(env, artifactVersion) {
-  if (!env?.KV?.get || !artifactVersion) return null
+  if (!artifactVersion || (!env?.KV?.get && !cardPublicationManifestKey(artifactVersion)))
+    return null
   try {
     return await readPublishedCardCatalogManifest(env, artifactVersion)
   } catch {
@@ -27950,6 +28115,13 @@ function cardCatalogParsedShardCacheKey(artifactVersion, shard, contentAddressed
 }
 
 function parsedCardCatalogShardMatchesManifest(parsed, shard, artifactVersion, contentAddressed) {
+  if (cardPublicationManifestKey(artifactVersion)) {
+    return (
+      parsed?.schema_version === 2 &&
+      Array.isArray(parsed.cards) &&
+      parsed.cards.length === Number(shard?.card_count || 0)
+    )
+  }
   if (parsed?.schema !== CARD_CATALOG_ARTIFACT_SCHEMA) return false
   if (!Array.isArray(parsed.cards)) return false
   if (parsed.cards.length !== Number(shard?.card_count || 0)) return false
@@ -27973,6 +28145,51 @@ async function readPublishedCardCatalogShard(env, artifactVersion, shard, conten
     validate: (parsed) =>
       parsedCardCatalogShardMatchesManifest(parsed, shard, artifactVersion, contentAddressed),
   })
+}
+
+async function readPublishedBunnyCardObject(env, key, validate) {
+  return readParsedCardCatalogJson(env, key, {
+    cache: cardCatalogParsedShardCache,
+    readPromises: cardCatalogParsedShardReadPromises,
+    cacheKey: key,
+    cacheEntryLimit: CARD_CATALOG_PARSED_SHARD_CACHE_ENTRY_LIMIT,
+    cacheEstimatedByteLimit: CARD_CATALOG_PARSED_SHARD_CACHE_ESTIMATED_BYTE_LIMIT,
+    cacheParsedHeapMultiplier: CARD_CATALOG_PARSED_SHARD_HEAP_MULTIPLIER,
+    validate,
+  })
+}
+
+async function readPublishedBunnyCards(env, manifest, symbols) {
+  const cards = await Promise.all(
+    symbols.map(async (symbol) => {
+      const shard = manifest.shards.find((ref) => cardCatalogShardMayContainSymbol(ref, symbol))
+      const ref = shard?.delivery_indexes?.find((index) =>
+        cardCatalogShardMayContainSymbol(index, symbol),
+      )
+      if (!ref) return null
+      const index = await readPublishedBunnyCardObject(
+        env,
+        ref.key,
+        (value) =>
+          value.schema_version === 2 && Array.isArray(value.entries) && value.entries.length <= 128,
+      )
+      if (!index) throw new Error("Published card directory unavailable")
+      const entry = index.entries.find((entry) => entry[0] === symbol)
+      if (!entry) return null
+      const card = await readPublishedBunnyCardObject(
+        env,
+        publishedCardObjectKey("cards", entry[1]),
+        (value) => value.symbol === symbol && assertCompleteMobileCardVM(value),
+      )
+      if (!card) throw new Error("Published card object unavailable")
+      return {
+        ...card,
+        snapshot_version: manifest.artifact_version,
+        data_source: "published_card_catalog",
+      }
+    }),
+  )
+  return normalizePartialCardCatalogArtifact(manifest, cards.filter(Boolean))
 }
 
 function cardCatalogContentAddressedShardKey(contentHash) {
@@ -28079,7 +28296,8 @@ async function readPublishedCardCatalogArtifact(
   // Cloudflare cold isolates, and recreate the exact PRL split-brain symptom
   // where private views and logged-out card routes disagree.
   const artifactVersion = String(version || "").trim()
-  if (!artifactVersion || !env?.KV?.get) return null
+  if (!artifactVersion || (!env?.KV?.get && !cardPublicationManifestKey(artifactVersion)))
+    return null
   const requestedSymbols = Array.isArray(symbols)
     ? normalizeRequestedSymbols(symbols, MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT)
     : null
@@ -28099,7 +28317,15 @@ async function readPublishedCardCatalogArtifact(
     return cardCatalogArtifactCache.value
   }
   let parsed = await readPublishedCardCatalogManifest(env, artifactVersion)
-  const contentAddressed = parsed?.storage === CARD_CATALOG_CONTENT_ADDRESSED_STORAGE
+  // A one-gene hover or site card must not parse a 750-card packed shard on a
+  // cold Free Worker. Bulk pages keep packed reads; <=10 cards use small exact
+  // objects, bounded even when every directory and storage fallback is cold.
+  if (parsed?.storage === CARD_PUBLICATION_STORAGE && requestedSymbols?.length <= 10) {
+    return readPublishedBunnyCards(env, parsed, requestedSymbols)
+  }
+  const contentAddressed =
+    parsed?.storage === CARD_CATALOG_CONTENT_ADDRESSED_STORAGE ||
+    parsed?.storage === CARD_PUBLICATION_STORAGE
   if (
     parsed?.schema === CARD_CATALOG_ARTIFACT_SCHEMA &&
     (parsed.storage === "kv_sharded" || contentAddressed) &&
@@ -29769,6 +29995,10 @@ async function handleSemanticGeneBlot(request, env, symbolValue) {
 }
 
 const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
+  public_card_current: async (args) =>
+    asHead(args.request, await publishedCardDeliveryHandlers.current(args)),
+  public_card_object: async (args) =>
+    asHead(args.request, await publishedCardDeliveryHandlers.object(args)),
   public_openapi: ({ request }) => asHead(request, handlePublicOpenApi()),
   public_metadata: ({ request, env }) => handlePublicMetadata(request, env),
   public_stats: ({ request, env }) => handlePublicStats(request, env),
@@ -30398,6 +30628,15 @@ async function publishCatalogArtifact(env) {
 }
 
 const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
+  "admin_gallery.migrate_card_storage": async ({ request, env, done }) => {
+    if (!(await isIconoplasmAdmin(request, env)))
+      return done("admin_gallery_storage_migration_403", json({ error: "Unauthorized" }, 403))
+    const result = await callCardPublication(env, "/bootstrap", { method: "POST" })
+    return done(
+      "admin_gallery_storage_migration",
+      json(result, 202, { "Cache-Control": "no-store" }),
+    )
+  },
   ...createIconoplasmAdminAssetHandlers({
     adminPortraitUrl,
     buildSummaryScope: buildAdminAssetSummaryScope,

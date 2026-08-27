@@ -4,7 +4,20 @@ This is the architecture and operations note for source-portrait selection, vote
 
 If you remember one rule, remember this:
 
-**D1 is the authoring and vote-projection source. The exact card artifact selected by `KV_GALLERY_VERSION` is the sole published source-portrait selection. The canonical public machine image is the workstation-rendered gene blot tied to that exact card.**
+**D1 is the authoring and vote-projection source. The exact card artifact selected by the durable publication head is the sole published source-portrait selection. The canonical public machine image is the workstation-rendered gene blot tied to that exact card.**
+
+## Current publication contract (B-716)
+
+The storage/reload implementation and explicit migration procedure are in
+[`ICONOPLASM_CARD_PUBLICATION_V2.md`](ICONOPLASM_CARD_PUBLICATION_V2.md).
+It supersedes the historical KV transport and fifteen-minute publisher below.
+The coordinator commits head plus event watermark atomically after authenticated
+Bunny GET/hash verification. Current-version HTTP metadata is shared-cached for
+30 seconds; card bytes use independent immutable per-gene identities. Reloads
+check the head; existing articles keep their coherent epoch. No reader writes,
+R2 dependency, paid Workers upgrade or second canonical selection is permitted.
+The migration retains the frozen legacy head until the complete new catalog is
+ready. B-716 remains the deployment, installed-browser and capacity proof owner.
 
 ## Image ontology
 
@@ -14,7 +27,7 @@ If you remember one rule, remember this:
 
 Only the Iconoplasm workstation renders canonical blots. Cloudflare accepts authenticated verified WebP uploads, records the one-row-per-gene materialization ledger, publishes the reference in exact card artifacts, and serves bytes. Public GET/HEAD requests never render or enroll blots.
 
-## Architecture
+## Historical KV architecture (migration source, not the new design)
 
 Iconoplasm has two coordinated read responsibilities that are easy to confuse:
 
@@ -38,7 +51,7 @@ Frontend gallery caches have the same freshness constraint. Browser storage must
 
 Gene page HTML shells have a separate freshness trap. `/gene/:symbol` embeds its first-paint lead card from `/api/iconoplasm/site/genes/:symbol`; that response is complete rich detail whose portrait is already overridden from the exact published card. Its ETag covers the card version and complete payload, so a symbol-only HTML cache cannot cross either a release or a rich-detail change. Print-copy generation must accept only the portrait from that same published card artifact. An `asset=` parameter is an assertion against that artifact, not an override: malformed values fail with `400`, and a valid SHA that differs from the artifact portrait fails with `409`. Never restore a `geneRecord(...)`, site-gene-detail, or other D1 fallback for print-copy enrollment, status, rendering, or download.
 
-## Vote Auto-Promotion Flow
+## Vote Auto-Promotion Flow and historical KV publication
 
 Normal public voting goes through this path:
 

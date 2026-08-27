@@ -1687,11 +1687,9 @@
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return
-    if (changes.iconoplasm_card_snapshot_version?.newValue) {
-      adoptCardSnapshotRevision(changes.iconoplasm_card_snapshot_version.newValue, {
-        retryVisible: true,
-      })
-    }
+    // ARCHITECTURE FENCE [IPD-008]: another tab's scanner refresh must not
+    // switch this article's card epoch or refetch a visible hover. This page
+    // adopts its head at initialization/reload, or explicit retired recovery.
     if (changes[HIGHLIGHT_MODE_KEY]) {
       highlightMode = highlightRuntime.setMode(changes[HIGHLIGHT_MODE_KEY].newValue)
       refreshHighlightStyles()

@@ -30,6 +30,14 @@ as a monthly pool. No billing or subscription changes are part of this audit.
 
 ## Immutable hover metadata transport (B-711, 2026-08-27)
 
+The B-716 replacement is specified in
+[`ICONOPLASM_CARD_PUBLICATION_V2.md`](ICONOPLASM_CARD_PUBLICATION_V2.md).
+It moves immutable metadata to Bunny Storage and the ordered head/cursor to
+SQLite Durable Objects. The B-711 KV-backed origin-fill arithmetic below is
+historical baseline evidence, not the replacement's reader cost. The D1 budget
+policy now caps historical monthly allocations at Free daily limits; this is
+not an account-wide reservation or a whole-product capacity certificate.
+
 **ARCHITECTURE FENCE [IPD-008] + [IPD-011]**: the existing publication barrier
 and card-shard SHA256 remain the only authority. The snapshot-specific
 `/api/public/v1/card-snapshots/:snapshot/delivery-index` is an on-demand,

@@ -311,7 +311,7 @@ before changing gallery publication, its cron route, KV accounting, or mapper
 revision behavior.
 
 **ARCHITECTURE FENCE [IPD-011]** — the exact versioned card artifact selected by
-`KV_GALLERY_VERSION` owns the published source-portrait selection and every
+the durable card-publication head owns the published source-portrait selection and every
 input used to derive the canonical public blot fingerprint and immutable Bunny
 key. Blot-only uploads and portrait-locator reads never republish KV. The extension
 locator endpoint projects portrait fields directly from that named card payload;
@@ -413,8 +413,9 @@ Concrete rules:
 6. **Cost both delivery paths.** First-party fallback is intentional for affected networks, not a reason to route every healthy reader through Cloudflare. Changes must preserve correctness and show request, storage, CPU, and publication costs, including failure paths.
 7. **Use the requested desktop session.** If the owner has Edge/Firefox and a VPN/provider dashboard open, read the installed Computer Use skill and inspect that actual window before declaring browser access blocked. A missing Chrome bridge add-on says nothing about desktop Computer Use availability. Refresh window identity after tab detachment and refresh observed state after user input. Never install an unrequested bridge or change providers to bypass this check.
 
-**ARCHITECTURE FENCE [IPD-008] metadata transport:** the on-demand delivery index
-maps the existing named snapshot to existing shard hashes. Immutable per-symbol
+**ARCHITECTURE FENCE [IPD-008] metadata transport:** read
+`docs/ICONOPLASM_CARD_PUBLICATION_V2.md` before changing publication or reloads.
+The on-demand hash directories map a named snapshot to per-gene content hashes. Immutable per-symbol
 detail and portrait projections may use Bunny; they are not another publisher.
 Unchanged hashes retain their URLs across votes; changed hashes get new URLs.
 No whole-card shards enter the extension, no reader writes occur, no D1 fallback

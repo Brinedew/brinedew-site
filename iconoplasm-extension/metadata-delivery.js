@@ -17,6 +17,8 @@
     const indexes = new Map()
     const pendingIndexes = new Map()
     const failedIndexes = new Map()
+    const objects = new Map()
+    const pendingObjects = new Map()
     const tabs = new Map()
     const boundedSet = (map, key, value, limit) => {
       map.delete(key)
@@ -37,7 +39,7 @@
         promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort))
       })
     }
-    async function readJson(url, init, limit) {
+    async function readJson(url, init, limit, expectedHash = "") {
       const response = await fetchImpl(url, init)
       if (!response.ok) throw new Error(`Metadata HTTP ${response.status}`)
       const reader = response.body?.getReader?.()
@@ -62,6 +64,13 @@
         text = await response.text()
         if (new TextEncoder().encode(text).byteLength > limit)
           throw new Error("Metadata body exceeds limit")
+      }
+      if (expectedHash) {
+        const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))
+        const actual = [...new Uint8Array(digest)]
+          .map((value) => value.toString(16).padStart(2, "0"))
+          .join("")
+        if (actual !== expectedHash) throw new Error("Metadata content hash mismatch")
       }
       return JSON.parse(text)
     }
@@ -118,7 +127,14 @@
       if (!result) boundedSet(failedIndexes, version, Date.now() + 30000, 2)
       return result
     }
-    function fromEitherSource(path, headers, signal, tab, validate) {
+    function fromEitherSource(
+      path,
+      headers,
+      signal,
+      tab,
+      validate,
+      { limit = 65536, hash = "" } = {},
+    ) {
       return new Promise((resolve, reject) => {
         let settled = false
         // Another lane may update the tab while this race is running. Its result
@@ -150,7 +166,8 @@
               readJson(
                 origin + path,
                 { headers, credentials: "omit", signal: controller.signal },
-                65536,
+                limit,
+                hash,
               ),
               controller.signal,
             )
@@ -177,7 +194,110 @@
         }
       })
     }
+    async function immutableObject(kind, hash, signal, tab) {
+      if (!HASH.test(hash)) throw new Error("Invalid metadata object hash")
+      const key = `${kind}/${hash}`
+      if (objects.has(key)) return objects.get(key)
+      let pending = pendingObjects.get(key)
+      if (!pending) {
+        if (pendingObjects.size >= 32) throw new Error("Metadata concurrency limit")
+        const controller = new AbortController()
+        pending = { controller, users: 0, promise: null }
+        pending.promise = fromEitherSource(
+          `/published-cards/v2/immutable/${key}.json`,
+          {},
+          controller.signal,
+          tab,
+          (value) => Boolean(value && typeof value === "object"),
+          { hash },
+        )
+          .then((value) => {
+            if (kind === "manifests" || kind === "indexes") boundedSet(objects, key, value, 16)
+            return value
+          })
+          .finally(() => {
+            if (pendingObjects.get(key) === pending) pendingObjects.delete(key)
+          })
+        pendingObjects.set(key, pending)
+      }
+      pending.users++
+      try {
+        return await abortable(pending.promise, signal)
+      } finally {
+        pending.users--
+        if (pending.users === 0) pending.controller.abort()
+      }
+    }
+    const objectHash = (key, kind) => {
+      const match = String(key || "").match(
+        new RegExp(`^published-cards/v2/immutable/${kind}/([a-f0-9]{64})\\.json$`),
+      )
+      if (!match) throw new Error("Invalid metadata object key")
+      return match[1]
+    }
+    async function v2Record(version, lane, symbol, signal, tab) {
+      const root = await immutableObject("manifests", version.slice(5), signal, tab)
+      if (
+        root.storage !== "bunny_card_catalog_v2" ||
+        !Array.isArray(root.shards) ||
+        root.shards.length > 64
+      )
+        throw new Error("Invalid card manifest")
+      const shard = root.shards.find(
+        (ref) => symbol >= ref.first_symbol && symbol <= ref.last_symbol,
+      )
+      const index = shard?.delivery_indexes?.find(
+        (ref) => symbol >= ref.first_symbol && symbol <= ref.last_symbol,
+      )
+      if (!index) return null
+      const directory = await immutableObject(
+        "indexes",
+        objectHash(index.key, "indexes"),
+        signal,
+        tab,
+      )
+      if (
+        directory.schema_version !== 2 ||
+        !Array.isArray(directory.entries) ||
+        directory.entries.length > 128
+      )
+        throw new Error("Invalid card directory")
+      const entry = directory.entries.find((entry) => entry[0] === symbol)
+      if (!entry || entry.length !== 4) return null
+      const value = await immutableObject(lane, entry[lane === "genes" ? 2 : 3], signal, tab)
+      if (value.symbol !== symbol) throw new Error("Card symbol mismatch")
+      return value
+    }
+    const envelope = (version, lane, record) =>
+      new Response(
+        JSON.stringify({
+          snapshot_version: version,
+          canonical_key: "symbol",
+          [lane === "genes" ? "gene" : "portrait_locator"]:
+            lane === "portraits" ? { ...record, snapshot_version: version } : record,
+          missing: [],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
     return {
+      async current(tab, signal) {
+        // Connectivity is reconsidered on a new article/reload (including a
+        // newly enabled VPN), but never retried on every hover in that article.
+        tabs.delete(tab)
+        try {
+          return await fromEitherSource(
+            "/api/public/v1/card-current",
+            {},
+            signal,
+            tab,
+            (value) =>
+              value?.schema_version === 2 && /^[A-Za-z0-9._:-]{1,100}$/.test(value.current),
+            { limit: 1024 },
+          )
+        } catch {
+          return null
+        }
+      },
       forgetTab(tab) {
         tabs.delete(tab)
       },
@@ -197,6 +317,15 @@
         )
           return null
         const [, version, lane, symbol] = match
+        if (/^ccv2-[a-f0-9]{64}$/.test(version)) {
+          try {
+            const record = await v2Record(version, lane, symbol, init.signal, tab)
+            return record ? envelope(version, lane, record) : null
+          } catch (error) {
+            if (init.signal?.aborted) throw abortError()
+            return null
+          }
+        }
         const headers = {
           "X-Iconoplasm-Extension-Version":
             new Headers(init.headers).get("X-Iconoplasm-Extension-Version") || "",

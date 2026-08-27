@@ -203,6 +203,7 @@ correctness priorities above. This is not a claim of installed runtime complianc
   publisher work and reload-driven origin traffic before declaring compliance.
 
 Implementation and measured verification are tracked in
+[`ICONOPLASM_CARD_PUBLICATION_V2.md`](ICONOPLASM_CARD_PUBLICATION_V2.md) and
 [B-716](https://linear.app/brinedew/issue/B-716/revalidate-canonical-portraits-on-page-reload-while-keeping-open).
 Completed publication/delivery foundations remain complete; this is the owner
 for the newly clarified freshness requirement.
