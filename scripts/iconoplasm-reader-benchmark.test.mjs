@@ -5,8 +5,17 @@ import {
   assessReaderSamples,
   distribution,
   locateReaderPointerTarget,
+  measuredResponseBodyBytes,
   runReaderJourney,
 } from "./lib/iconoplasm-reader-benchmark.mjs"
+
+test("invalid cached response byte measurements stay unknown, not negative or free traffic", () => {
+  for (const value of [-2074, undefined, null, NaN, Infinity]) {
+    assert.equal(measuredResponseBodyBytes(value), null)
+  }
+  assert.equal(measuredResponseBodyBytes(0), 0)
+  assert.equal(measuredResponseBodyBytes(1769), 1769)
+})
 
 // ARCHITECTURE FENCE [IPD-008]: do not average away first-hover failures or
 // erase timeouts. A fixed-deadline readiness miss is distinct from slow paint.
