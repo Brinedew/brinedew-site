@@ -1043,6 +1043,50 @@ test("admin POST saves IL8 to CXCL8 against desired blocklist state and publishe
   assert.equal(payload.publication.in_sync, true)
 })
 
+test("admin preflight and publication preserve multiple casings of one canonical symbol", async () => {
+  resetIconoplasmPublicationAliasPublicCacheForTests()
+  const db = new FakeDb()
+  const kv = new FakeKv(publicEntries())
+  const handler = createIconoplasmAdminPublicationAliasHandlers({
+    actor: async () => "vladimir",
+    isAdmin: async () => true,
+    json,
+  })["admin_publication_aliases.policy"]
+  const aliases = ["Cdk1", "cdK1", "cdk1"]
+  const candidate = {
+    expected_revision: 1,
+    by_symbol: { ...ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol, CDK1: aliases },
+    remove_by_symbol: ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.remove_by_symbol,
+  }
+  const submit = (validateOnly) =>
+    handler({
+      request: new Request(
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/publication-aliases",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...candidate, validate_only: validateOnly }),
+        },
+      ),
+      env: { ICONOPLASM_DB: db, KV: kv },
+      done: async (_route, result) => result,
+    })
+  const preflight = await submit(true)
+  assert.equal(preflight.status, 200)
+  assert.equal((await preflight.json()).valid, true)
+  assert.equal(db.aliasRow.revision, 1)
+  assert.deepEqual(kv.puts, [])
+
+  const saved = await submit(false)
+  assert.equal(saved.status, 200)
+  const payload = await saved.json()
+  assert.equal(payload.policy.revision, 2)
+  assert.deepEqual(new Set(payload.policy.by_symbol.CDK1), new Set(aliases))
+  assert.equal(payload.publication.in_sync, true)
+  const published = await readCoherentPublishedIconoplasmRecognitionPolicies(kv, { fresh: true })
+  assert.deepEqual(new Set(published.publication_aliases.by_symbol.CDK1), new Set(aliases))
+})
+
 test("alias validation preflight rejects exact P130 to RBL2 without changing desired or public state", async () => {
   resetIconoplasmPublicationAliasPublicCacheForTests()
   const db = new FakeDb()
