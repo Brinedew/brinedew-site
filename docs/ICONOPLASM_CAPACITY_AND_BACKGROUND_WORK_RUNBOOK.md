@@ -233,8 +233,9 @@ Extension hover detail is immutable within a published card snapshot:
   before returning gene data to a tab;
 - foreground hover starts two version-addressed immutable per-symbol GETs: rich
   detail and a compact portrait locator. Both project the same named published
-  card artifact, not D1. The locator has no independent KV object, pointer, or
-  publication step. The compatibility batch route remains for older installations;
+  card artifact, not D1. The locator has no independent selection, pointer, or
+  publication timeline. A byte-equivalent CDN cache is allowed, not a second
+  canon. The compatibility batch route remains for older installations;
   active current/previous versions reuse the Cloudflare Worker Cache API before
   reading the manifest or shard, and the same immutable URL remains reusable in
   the browser HTTP cache;
@@ -328,8 +329,9 @@ After both individual inputs are visible and mutually valid, the reconciler
 writes one immutable bundle under `iconoplasm:recognition-policy-pair:v1:`. The
 bundle atomically nests the exact outward `extension_blocklist` and
 `publication_aliases` shapes plus private dependency metadata. Manifest,
-search, and resolver readers list that prefix and normally GET only the newest
-valid value, so public work is O(1) in retained history and eventual cross-key
+search, and resolver readers GET the exact current pointer and its exact immutable
+pair, with zero normal KV lists. Legacy missing-pointer discovery is migration-only.
+Public work is O(1) in retained history and eventual cross-key
 propagation cannot expose a mixed policy pair. Their versions participate in
 the manifest ETag. Public reads never repair or fall back to D1, a policy-only
 revision never rebuilds or downloads the scanner artifact, and the extension
