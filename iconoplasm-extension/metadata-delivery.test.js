@@ -14,6 +14,27 @@ const url = (version = "snapshot1", lane = "genes") =>
 const init = { headers: { "X-Iconoplasm-Extension-Version": "0.5.2" }, credentials: "same-origin" }
 const json = (data) => new Response(JSON.stringify(data))
 
+test("scanner refresh uses one shared public CDN key and validates fallback", async () => {
+  const calls = []
+  let corrupt = false
+  const delivery = createMetadataDelivery({
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options })
+      return json({ contract: corrupt && !url.startsWith(origin) ? "bad" : "valid" })
+    },
+  })
+  const valid = (value) => value.contract === "valid"
+  assert.equal((await delivery.scannerManifest(valid)).contract, "valid")
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, "https://iconoplasmportraits.b-cdn.net/api/public/v1/catalog/manifest")
+  assert.equal(calls[0].options.credentials, "omit")
+  assert.equal([...new Headers(calls[0].options.headers)].length, 0)
+  corrupt = true
+  assert.equal((await delivery.scannerManifest(valid)).contract, "valid")
+  assert.equal(calls.length, 3)
+  assert.equal(calls[2].url, origin + "/api/public/v1/catalog/manifest")
+})
+
 async function v2Fixture() {
   const bodies = new Map()
   async function object(kind, value) {

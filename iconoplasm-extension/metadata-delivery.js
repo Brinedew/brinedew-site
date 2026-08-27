@@ -280,6 +280,26 @@
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     return {
+      async scannerManifest(validate, signal) {
+        // ARCHITECTURE FENCE [IPD-008]: scanner freshness is a public, shared
+        // latest-contract read. Healthy readers must not each wake a Worker
+        // every five minutes. No cookies, client-version header, or query
+        // nonce may fragment the CDN cache. The installed client validates the
+        // complete contract before accepting either source.
+        tabs.delete("scanner")
+        try {
+          return await fromEitherSource(
+            "/api/public/v1/catalog/manifest",
+            {},
+            signal,
+            "scanner",
+            (value) => Boolean(validate(value)),
+            { limit: 262144 },
+          )
+        } catch {
+          return null
+        }
+      },
       async current(tab, signal) {
         // Connectivity is reconsidered on a new article/reload (including a
         // newly enabled VPN), but never retried on every hover in that article.

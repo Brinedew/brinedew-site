@@ -115,6 +115,7 @@ jobs:
             workers/iconoplasm-published-card-objects.test.js \
             iconoplasm-extension/service-worker.test.js \
             iconoplasm-extension/metadata-delivery.test.js \
+            iconoplasm-extension/content-discovery.test.js \
             scripts/verify-iconoplasm-publication-aliases.test.js \
             workers/iconoplasm.d1-cost-barrier.test.js \
             workers/iconoplasm.d1-hot-query-guard.test.js \

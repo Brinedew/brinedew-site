@@ -991,6 +991,13 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 async function fetchManifest(cacheBustRevision = "") {
   const manifestUrl = new URL(API_CATALOG_MANIFEST)
   const normalizedCacheBust = String(cacheBustRevision || "").trim()
+  if (!normalizedCacheBust) {
+    return normalizePublishedManifest(
+      await metadataDelivery.scannerManifest(normalizePublishedManifest),
+    )
+  }
+  // Explicit retired-snapshot recovery bypasses the shared probe once; ordinary
+  // refreshes must not become per-reader origin requests or CDN cache busters.
   if (normalizedCacheBust) manifestUrl.searchParams.set("retired_snapshot", normalizedCacheBust)
   const manifestResp = await fetchWithTimeout(
     manifestUrl.toString(),

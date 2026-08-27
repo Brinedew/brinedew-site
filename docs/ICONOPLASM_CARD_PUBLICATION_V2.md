@@ -46,6 +46,20 @@ skip this request. The returned epoch belongs to that article; another tab's
 storage update cannot replace it or refetch its visible hover. No timer polls
 an idle article. A failed check retains the coherent cached epoch.
 
+The scanner's ordinary five-minute manifest refresh also uses the existing
+Bunny/first-party race. It requests the shared latest public contract without
+credentials, version headers or cache-busting parameters, and validates the
+complete contract before accepting either source. Only explicit retired-card
+recovery bypasses that shared cache. An invalid CDN response cannot suppress
+the bounded first-party fallback. Connectivity is reconsidered per refresh.
+The scanner artifact itself remains separately versioned and is downloaded
+only on an actual scanner change; its cold-download cost is not zero.
+
+Discovery recording rechecks membership after its asynchronous state load.
+Otherwise a gene already on the shelf can be written again once per article.
+That suppression does not remove explicit repeat-encounter semantics at the
+API, and failed/guest encounters remain in the local pending buffer.
+
 Healthy readers fetch immutable objects directly from paid Bunny Storage/CDN.
 Blocked or corrupt responses use the exact first-party object path, with
 bounded hedging, cancellation and byte/hash validation. Private routes and
@@ -67,8 +81,11 @@ Changing one gene does not change its neighbors' card/image URLs.
 3. Bootstrap copies exact existing card content. Routine jobs materialize only
    event-named genes. A mapper revision mismatch fails closed and requires an
    explicit mapping migration; never hide a full rebuild in a reader or vote.
-4. Configure only the tiny current route as a Bunny first-party origin proxy
-   with a 30-second successful-response TTL. The immutable namespace uses the
+4. Configure the tiny current route and public catalog manifest as Bunny
+   first-party origin proxies with a 30-second successful-response TTL and
+   zero browser TTL. Only these exact public URLs match; no private endpoints,
+   cookies or authorization headers belong in this shared-cache contract.
+   The immutable namespace uses the
    existing Storage origin and year-long successful-response caching. Errors
    are not immutable successes. Origin Shield was enabled and freshly read
    back on the existing zone (Paris) on 2026-08-27; concurrency limits are off.
