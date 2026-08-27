@@ -130,6 +130,66 @@ test("a new card snapshot invalidates persisted details before reuse", async () 
   assert.equal(storage.values.iconoplasm_published_gene_detail_cache_v1.revision, "card-v2")
 })
 
+test("disk hydration cannot replace an article epoch with another tab's saved epoch", async () => {
+  const createGeneDetailStore = loadFactory()
+  for (const [article, saved] of [
+    ["card-v2", "card-v1"],
+    ["card-v1", "card-v2"],
+  ]) {
+    const storage = createStorage({
+      iconoplasm_published_gene_detail_cache_v1: {
+        schema_version: 1,
+        revision: saved,
+        entries: [["EZH2", { symbol: "EZH2", full_name: "other article" }]],
+      },
+    })
+    const calls = []
+    const store = createGeneDetailStore({
+      windowRef: globalThis,
+      storageApi: storage,
+      getRevision: async () => saved,
+      detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
+      fetchImpl: async (url) => {
+        calls.push(url)
+        return response({ snapshot_version: article, gene: { symbol: "EZH2", full_name: article } })
+      },
+    })
+    store.setRevision(article)
+    await store.hydratePersistentCache()
+    assert.equal(store.get("EZH2"), null, "must not import another article's record")
+    assert.equal(
+      storage.values.iconoplasm_published_gene_detail_cache_v1.revision,
+      saved,
+      "a cache mismatch is not permission to delete another article's cache",
+    )
+    const result = await store.fetchBatch(["EZH2"], { priority: "foreground" })
+    assert.equal(result.get("EZH2")?.full_name, article)
+    assert.deepEqual(calls, [`/card-snapshots/${article}/genes/EZH2`])
+    await store.flushPersistence()
+  }
+})
+
+test("an article selected while initial revision lookup is pending wins over late disk state", async () => {
+  const lookup = deferred()
+  const storage = createStorage()
+  const store = loadFactory()({
+    windowRef: globalThis,
+    storageApi: storage,
+    getRevision: () => lookup.promise,
+    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
+    fetchImpl: async () => response({ snapshot_version: "card-new", gene: { symbol: "EZH2" } }),
+  })
+  const hydration = store.hydratePersistentCache()
+  store.setRevision("card-new")
+  lookup.resolve("card-old")
+  await hydration
+  assert.equal(
+    (await store.fetchBatch(["EZH2"], { priority: "foreground" })).get("EZH2")?.symbol,
+    "EZH2",
+  )
+  await store.flushPersistence()
+})
+
 test("persistent detail storage obeys a byte budget as well as an entry count", async () => {
   const createGeneDetailStore = loadFactory()
   const storage = createStorage()

@@ -45,6 +45,10 @@ the scanner's five-minute refresh. A minutes-old installation check cannot
 skip this request. The returned epoch belongs to that article; another tab's
 storage update cannot replace it or refetch its visible hover. No timer polls
 an idle article. A failed check retains the coherent cached epoch.
+Disk-cache hydration must use that explicitly selected article epoch, never
+replace it with the browser-global saved version. A delayed storage lookup
+cannot undo a newer explicit selection. A differently versioned cache belongs
+to another article and is ignored, not deleted or adopted.
 
 The scanner's ordinary five-minute manifest refresh also uses the existing
 Bunny/first-party race. It requests the shared latest public contract without

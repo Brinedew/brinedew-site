@@ -156,13 +156,14 @@
       if (!storageApi?.get) return
       if (persistentHydrationPromise) return persistentHydrationPromise
       persistentHydrationPromise = (async () => {
-        const revision = await resolveRevision()
-        if (!revision) return
         const generation = revisionGeneration
-        if (activeRevision && revision !== activeRevision) {
-          cache.clear()
-        }
-        activeRevision = revision
+        // ARCHITECTURE FENCE [IPD-008]: an article's explicit epoch wins over
+        // browser-global storage. New reloads and already-open articles may
+        // legitimately use different epochs. Hydration is a cache lookup, not
+        // a second authority that can undo setRevision after the current check.
+        const revision = activeRevision || (await resolveRevision())
+        if (!revision || generation !== revisionGeneration) return
+        if (!activeRevision) activeRevision = revision
         const stored = await storageApi.get([storageKey])
         if (generation !== revisionGeneration || activeRevision !== revision) return
         const payload = stored && stored[storageKey]
@@ -172,7 +173,8 @@
           String(payload.revision || "") !== revision ||
           !Array.isArray(payload.entries)
         ) {
-          if (payload && storageApi.remove) await storageApi.remove([storageKey])
+          // Another article may own these bytes. Ignore a mismatch; do not
+          // delete its cache or adopt its revision to make the payload fit.
           return
         }
         const boundedEntries = boundedPersistentEntries(payload.entries, revision)
