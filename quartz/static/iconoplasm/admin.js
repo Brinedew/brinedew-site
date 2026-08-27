@@ -1,5 +1,6 @@
 ;(function () {
   var API_BASE = "/api/iconoplasm/admin"
+  var factoryBelts = null
   var ADMIN_READ_TIMEOUT_MS = 12000
   var ADMIN_WRITE_TIMEOUT_MS = 30000
   var EXTENSION_BLOCKLIST_MAX_TERMS = 500
@@ -351,6 +352,7 @@
       state.visionDetailRequestId += 1
     }
     if (tab === "extension") cancelPublicationAliasSearch()
+    if (tab === "factory" && factoryBelts) factoryBelts.unmount()
     if (tab === "factory" && state.diagnosticPollTimer) {
       window.clearTimeout(state.diagnosticPollTimer)
       state.diagnosticPollTimer = null
@@ -370,12 +372,13 @@
       return
     }
     if (tab === "factory") {
+      if (factoryBelts) factoryBelts.mount()
       if (state.factoryLoaded) {
         renderFactoryRecipe()
         renderDiagnosticBuilder()
         renderDiagnosticMatrix()
       } else refreshFactoryRecipe()
-      refreshDiagnosticMatrix({ quiet: true })
+      if (!factoryBelts) refreshDiagnosticMatrix({ quiet: true })
       return
     }
     if (tab === "requests") {
@@ -1376,6 +1379,9 @@
       pipeline && Number(pipeline.recommended_vision || 0) === Number(selected.vision || 0),
     )
     if (els.factoryActiveCode) els.factoryActiveCode.textContent = code
+    var current = document.getElementById("factory-current")
+    var active = state.factoryRecipe.active_recipe || {}
+    if (current) current.textContent = "Active: " + active.pipeline + active.vision
     if (els.factoryRecipeDetail) {
       els.factoryRecipeDetail.innerHTML =
         pipeline && vision
@@ -1452,6 +1458,7 @@
         body: JSON.stringify(selected),
       })
       state.factoryLoaded = true
+      if (factoryBelts) factoryBelts.invalidate()
       renderFactoryRecipe()
       setFactoryStatus(
         "Future jobs now use " +
@@ -1777,6 +1784,7 @@
     state.diagnosticPollTimer = null
     if (
       state.activeTab !== "factory" ||
+      (factoryBelts && factoryBelts.view() !== "diagnostics") ||
       !state.diagnosticRun ||
       state.diagnosticRun.status === "completed"
     )
@@ -10580,6 +10588,18 @@
   }
 
   function init() {
+    factoryBelts = window.IconoplasmFactoryBelts.create({
+      document: document,
+      escapeHtml: esc,
+      fetchPayload: function () {
+        return apiJson("/factory-belts", { method: "GET" })
+      },
+      onViewChange: function (view) {
+        if (state.diagnosticPollTimer) window.clearTimeout(state.diagnosticPollTimer)
+        state.diagnosticPollTimer = null
+        if (view === "diagnostics") refreshDiagnosticMatrix({ quiet: true })
+      },
+    })
     restoreDiagnosticDefaults()
     var initialTab = String(window.location.hash || "")
       .replace(/^#/, "")
