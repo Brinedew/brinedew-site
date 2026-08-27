@@ -64,10 +64,10 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
 
   for (const protectedTerm of [
     "canonical workstation-materialized blot",
-      "KV_GALLERY_VERSION",
-      "IconoplasmCardPublicationCoordinator",
-      "authenticated Bunny GET/hash verification",
-      "frozen migration evidence",
+    "KV_GALLERY_VERSION",
+    "IconoplasmCardPublicationCoordinator",
+    "authenticated Bunny GET/hash verification",
+    "frozen migration evidence",
     "gene-page standard images and metadata",
     "structured data",
     "Massive gene-range pages remain text-only",
@@ -261,6 +261,16 @@ test("IPD-008 keeps foreground hover on immutable cancellable reads and native p
   assert.match(contentSource, /\/api\/public\/v1\/card-snapshots\//)
   assert.match(contentSource, /priority:\s*"foreground"/)
   assert.match(apiSource, /CANCEL_ICONOPLASM_API_FETCH/)
+  assert.match(apiSource, /ICONOPLASM_CONTEXT_INVALIDATED/)
+  assert.match(contentSource, /sendMessage: extensionRuntime\.sendMessage/)
+  assert.match(contentSource, /extensionRuntime\.checkConnected\(\)/)
+  assert.match(contentSource, /readingSession\.dispose\(\)/)
+  assert.match(contentSource, /portraitCache\.dispose\(\)/)
+  assert.doesNotMatch(
+    portraitSource,
+    /runtime\.sendMessage/,
+    "Portrait requests must share terminal update-disconnection handling with metadata",
+  )
   assert.match(portraitSource, /GET_PORTRAIT_SOURCE_PLAN/)
   assert.match(portraitSource, /new ImageCtor\(\)/)
   assert.match(portraitSource, /Promise\.any\(\[primaryPromise, fallbackPromise\]\)/)
@@ -317,11 +327,11 @@ test("Bunny fences protect canonical authority without forbidding immutable CDN 
     readPlane.change_control,
     /per-gene Worker transport is an implementation, not a fence/,
   )
+  assert.match(canon.decision, /Byte-equivalent CDN caches are allowed/)
   assert.match(
     canon.decision,
-    /Byte-equivalent CDN caches are allowed/,
+    /Independent immutable detail and locator projections share the named card authority/,
   )
-  assert.match(canon.decision, /Independent immutable detail and locator projections share the named card authority/)
   const instructions = readRepositoryFile("AGENTS.md")
   assert.doesNotMatch(instructions, /healthy cold read is one\s+bounded prefix list/)
   assert.doesNotMatch(instructions, /including the exact-pair\s+fast path; never disable cleanup/)

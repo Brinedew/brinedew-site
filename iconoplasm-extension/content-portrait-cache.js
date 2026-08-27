@@ -6,8 +6,9 @@
 
   function createPortraitCache(options = {}) {
     const windowRef = options.windowRef || root
-    const chromeApi = options.chromeApi || root.chrome
-    const runtime = chromeApi && chromeApi.runtime
+    const runtimeMessage = options.sendMessage
+    if (typeof runtimeMessage !== "function")
+      throw new Error("Portrait cache requires a runtime client")
     const batchSize = Math.max(1, Number(options.batchSize || 6))
     const delayMs = Math.max(0, Number(options.delayMs || 20))
     const onWarmSource =
@@ -19,6 +20,7 @@
     const warmQueue = []
     const queuedUrls = new Set()
     let draining = false
+    let disposed = false
 
     function delay(ms) {
       return new Promise((resolve) => windowRef.setTimeout(resolve, ms))
@@ -40,18 +42,6 @@
       const dataUrl = dataUrlCache.get(url)
       rememberDataUrl(url, dataUrl)
       return dataUrl
-    }
-
-    function runtimeMessage(message) {
-      return new Promise((resolve) => {
-        runtime.sendMessage(message, (result) => {
-          if (runtime.lastError) {
-            resolve(null)
-            return
-          }
-          resolve(result)
-        })
-      })
     }
 
     function loadBrowserImage(url, timeoutMs, signal) {
@@ -147,6 +137,7 @@
     }
 
     async function getUsableSrc(portraitSrc) {
+      if (disposed) return ""
       const url = String(portraitSrc || "").trim()
       if (!url) return ""
       const cachedSrc = getCachedSrc(url)
@@ -155,8 +146,8 @@
 
       const request = (async () => {
         try {
-          if (!runtime || typeof runtime.sendMessage !== "function") return url
           const plan = await runtimeMessage({ type: "GET_PORTRAIT_SOURCE_PLAN", url })
+          if (disposed) return ""
           if (plan?.ok && plan.primaryUrl) {
             try {
               const sourceUrl = await loadPlannedSource(plan)
@@ -167,7 +158,8 @@
               })
               rememberDataUrl(url, sourceUrl)
               return sourceUrl
-            } catch (_sourceError) {
+            } catch (sourceError) {
+              if (disposed || sourceError?.code === "ICONOPLASM_CONTEXT_INVALIDATED") return ""
               // A host-page CSP failure is indistinguishable from a network
               // failure here. Let the privileged worker fallback perform the
               // authoritative source transition instead of poisoning tab state.
@@ -183,7 +175,8 @@
           }
           const sourceUrl = response?.ok && response.sourceUrl ? response.sourceUrl : ""
           if (sourceUrl) return sourceUrl
-        } catch (_) {
+        } catch (error) {
+          if (disposed || error?.code === "ICONOPLASM_CONTEXT_INVALIDATED") return ""
           // Fall back to the direct site URL below.
         } finally {
           promiseCache.delete(url)
@@ -199,7 +192,7 @@
       if (draining) return
       draining = true
       try {
-        while (warmQueue.length) {
+        while (!disposed && warmQueue.length) {
           const batch = warmQueue.splice(0, batchSize)
           for (const url of batch) queuedUrls.delete(url)
           const usableSources = await Promise.all(
@@ -208,11 +201,11 @@
               // Decode each neighbor as soon as its bytes arrive. Waiting for
               // the slowest member of a six-image batch made every faster
               // portrait inherit that tail latency.
-              if (source) onWarmSource(source, url)
+              if (!disposed && source) onWarmSource(source, url)
               return source
             }),
           )
-          onWarmBatch(usableSources)
+          if (!disposed) onWarmBatch(usableSources)
           if (warmQueue.length) await delay(delayMs)
         }
       } finally {
@@ -221,6 +214,7 @@
     }
 
     function warmUrls(urls) {
+      if (disposed) return
       const seen = new Set()
       let added = false
       for (const rawUrl of Array.isArray(urls) ? urls : []) {
@@ -246,6 +240,12 @@
     }
 
     return {
+      dispose() {
+        disposed = true
+        warmQueue.length = 0
+        queuedUrls.clear()
+        dataUrlCache.clear()
+      },
       dataUrlCache,
       getCachedSrc,
       getUsableSrc,

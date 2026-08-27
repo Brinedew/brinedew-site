@@ -7,13 +7,53 @@ import vm from "node:vm"
 // each successful portrait becomes paint-ready without waiting for its batch.
 
 const source = await readFile(new URL("./content-portrait-cache.js", import.meta.url), "utf8")
+const runtimeSource = await readFile(new URL("./content-api.js", import.meta.url), "utf8")
 
 function loadFactory() {
   const sandbox = { AbortController, console, setTimeout, clearTimeout }
   sandbox.globalThis = sandbox
+  vm.runInNewContext(runtimeSource, sandbox)
   vm.runInNewContext(source, sandbox)
-  return sandbox.IconoplasmContentPortraitCache.createPortraitCache
+  return (options) =>
+    sandbox.IconoplasmContentPortraitCache.createPortraitCache({
+      ...options,
+      sendMessage: sandbox.IconoplasmContentApi.createExtensionRuntimeClient(
+        options.chromeApi,
+        options,
+      ).sendMessage,
+    })
 }
+
+test("invalidation stops portrait warm queues without substituting unverified direct images", async () => {
+  let calls = 0
+  let notices = 0
+  const warmed = []
+  const cache = loadFactory()({
+    windowRef: globalThis,
+    batchSize: 1,
+    chromeApi: {
+      runtime: {
+        sendMessage() {
+          calls++
+          throw new Error("Extension context invalidated.")
+        },
+      },
+    },
+    onContextInvalidated() {
+      notices++
+      cache.dispose()
+    },
+    onWarmSource(source) {
+      warmed.push(source)
+    },
+  })
+  cache.warmUrls(["https://example.test/a", "https://example.test/b"])
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(await cache.getUsableSrc("https://example.test/c"), "")
+  assert.equal(calls, 1)
+  assert.equal(notices, 1)
+  assert.deepEqual(warmed, [])
+})
 
 test("a fast neighbor starts decoding before the slowest portrait in its batch", async () => {
   const createPortraitCache = loadFactory()

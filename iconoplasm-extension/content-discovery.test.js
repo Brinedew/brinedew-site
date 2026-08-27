@@ -17,6 +17,7 @@ for (const scenario of ["already saved", "new signed-in", "guest", "offline"]) {
     let posts = 0
     const guests = []
     const context = {
+      runtimeDisconnected: false,
       discoveredPageSymbols: new Set(),
       discoveryInFlightSymbols: new Set(),
       guestDiscoverySymbols: new Set(),

@@ -136,13 +136,15 @@
     let started = false
     let quietTimer = 0
     let idleId = 0
+    let canceled = false
 
     const run = () => {
-      if (started) return
+      if (started || canceled) return
       started = true
       task()
     }
     const queueWhenIdle = () => {
+      if (canceled) return
       quietTimer = 0
       if (typeof windowRef.requestIdleCallback === "function") {
         // No timeout is intentional: speculative extension work must not take a
@@ -154,7 +156,7 @@
       quietTimer = windowRef.setTimeout(run, 16)
     }
     const afterLoad = () => {
-      if (started || quietTimer || idleId) return
+      if (started || canceled || quietTimer || idleId) return
       quietTimer = windowRef.setTimeout(queueWhenIdle, quietDelayMs)
     }
 
@@ -163,6 +165,8 @@
 
     return {
       cancel() {
+        canceled = true
+        windowRef.removeEventListener?.("load", afterLoad)
         if (quietTimer) windowRef.clearTimeout(quietTimer)
         if (idleId && typeof windowRef.cancelIdleCallback === "function") {
           windowRef.cancelIdleCallback(idleId)
