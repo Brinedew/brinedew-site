@@ -6,6 +6,8 @@ import test from "node:test"
 import { parseHTML } from "linkedom"
 import { FACTORY_BELT_OUTPUTS_SQL, readFactoryBelts } from "./iconoplasm-factory-belts.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
+import { matchIconoplasmRouteContract } from "./iconoplasm-route-contract.js"
+import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const migration = readFileSync(
   new URL("../migrations-iconoplasm/0080_factory_output_belts.sql", import.meta.url),
@@ -56,6 +58,7 @@ function database() {
     prepare: (sql) => ({
       bind: (...args) => ({ all: async () => ({ results: db.prepare(sql).all(...args) }) }),
       all: async () => ({ results: db.prepare(sql).all() }),
+      first: async () => db.prepare(sql).get(),
     }),
   }
   return { db, d1 }
@@ -108,6 +111,55 @@ test("factory recipe capacity fails explicitly before reading", async () => {
     }),
     /pagination/,
   )
+})
+
+test("DO NOT DELETE: factory belts are registered in the real gateway as private read-only", async () => {
+  const path = "/api/iconoplasm/admin/factory-belts"
+  const match = matchIconoplasmRouteContract(path, "GET")
+  assert.ok(match, "A handler without route registration returns 404 in production")
+  assert.equal(match.route.auth, "administrator")
+  assert.equal(match.route.budgetFamily, "admin_factory_recipe")
+  const dispatch = (method) =>
+    handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio" + path, { method }),
+      {},
+      { waitUntil() {} },
+    )
+  assert.equal((await dispatch("GET")).status, 403)
+  assert.equal((await dispatch("POST")).status, 405)
+})
+
+test("authorized factory belt requests execute through the gateway and real SQLite", async () => {
+  const { db, d1 } = database()
+  db.exec(`CREATE TABLE icono_factory_pipeline_vision_recommendations (pipeline_code TEXT, vision_revision INTEGER);
+    CREATE TABLE icono_factory_active_recipe (singleton_id INTEGER, pipeline_code TEXT, vision_revision INTEGER, updated_by TEXT, updated_at TEXT);
+    INSERT INTO icono_factory_active_recipe VALUES (1, 'A', 9, 'test', '2026-08-27');
+    CREATE TABLE icono_factory_vision_definitions (revision INTEGER, source_id TEXT, label TEXT, source_sha256 TEXT,
+      positive_prefix TEXT, negative_prompt TEXT, prompt_content_mode TEXT, prompt_order_mode TEXT,
+      prompt_replace_underscores INTEGER, emulsion_base_id TEXT, status TEXT);
+    INSERT INTO icono_factory_vision_definitions (revision, status) VALUES (9, 'accepted');`)
+  try {
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/factory-belts", {
+          headers: {
+            "x-iconoplasm-admin-token": "test-only-secret",
+            "x-iconoplasm-only-allowed-stateful-worker-internal": "1",
+          },
+        }),
+        { ICONOPLASM_ADMIN_TOKEN: "test-only-secret", ICONOPLASM_DB: d1 },
+        { waitUntil() {} },
+      )
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get("Cache-Control"), "no-store")
+    const result = await response.json()
+    const a9 = result.belts.find((belt) => belt.code === "A9")
+    assert.equal(a9.active, true)
+    assert.equal(a9.outputs.length, 6)
+    assert.match(a9.outputs[0].full_url, /\/full\.webp$/)
+  } finally {
+    db.close()
+  }
 })
 
 function browserFixture() {
