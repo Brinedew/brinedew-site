@@ -1,22 +1,13 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import vm from "node:vm"
-import { createRequire } from "node:module"
 import { fileURLToPath } from "node:url"
 
-const require = createRequire(import.meta.url)
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const extensionDir = path.join(repoRoot, "iconoplasm-extension")
 const matcherFile = path.join(extensionDir, "content-matcher.js")
 const blocklistFile = path.join(extensionDir, "blocklist-defaults.js")
 const host = process.env.ICONO_HOST || "https://iconoplasm.brinedew.bio"
-const testPageUrl = process.env.ICONO_TEST_URL || "http://127.0.0.1:41731/test-page"
-const playwrightCorePath =
-  process.env.PLAYWRIGHT_CORE_PATH ||
-  path.join(repoRoot, "tmp", "pw-runner", "node_modules", "playwright-core")
-const chromiumExecutable =
-  process.env.PLAYWRIGHT_EXECUTABLE ||
-  "C:/Users/Admin/AppData/Local/ms-playwright/chromium-1208/chrome-win64/chrome.exe"
 
 function loadMatcherApi(source) {
   const context = {
@@ -41,14 +32,16 @@ async function loadBlocklist() {
 }
 
 async function fetchCatalogGeneMap() {
-  const manifestResp = await fetch(`${host}/api/public/v1/catalog/manifest`)
+  const manifestResp = await fetch(`${host}/api/public/v1/catalog/manifest`, {
+    signal: AbortSignal.timeout(15000),
+  })
   if (!manifestResp.ok) {
     throw new Error(`Catalog manifest fetch failed: HTTP ${manifestResp.status}`)
   }
   const manifest = await manifestResp.json()
   const artifactUrl = String(manifest.scanner_artifact?.artifact_url || "")
   if (!artifactUrl) throw new Error("Catalog manifest is missing the compact scanner artifact")
-  const artifactResp = await fetch(artifactUrl)
+  const artifactResp = await fetch(artifactUrl, { signal: AbortSignal.timeout(15000) })
   if (!artifactResp.ok) {
     throw new Error(`Catalog artifact fetch failed: HTTP ${artifactResp.status}`)
   }
@@ -154,66 +147,21 @@ async function runLexicalBenchmark() {
   }
 }
 
-async function runBrowserBenchmark() {
-  try {
-    const playwright = require(playwrightCorePath)
-    const { chromium } = playwright
-    await fs.access(chromiumExecutable)
-    const userDataDir = path.join(repoRoot, "tmp", "playwright-iconoplasm-benchmark")
-    const context = await chromium.launchPersistentContext(userDataDir, {
-      headless: true,
-      executablePath: chromiumExecutable,
-      viewport: { width: 1440, height: 1100 },
-      args: [`--disable-extensions-except=${extensionDir}`, `--load-extension=${extensionDir}`],
-    })
-    try {
-      let [serviceWorker] = context.serviceWorkers()
-      if (!serviceWorker) {
-        serviceWorker = await context.waitForEvent("serviceworker", { timeout: 30000 })
-      }
-      await serviceWorker.evaluate(() =>
-        chrome.storage.local.set({
-          iconoplasm_card_variant: "simple",
-          iconoplasm_tooltip_theme: "light",
-        }),
-      )
-      const page = context.pages()[0] || (await context.newPage())
-      await page.goto(testPageUrl, { waitUntil: "domcontentloaded" })
-      await page.waitForSelector(".iconoplasm-gene", { timeout: 30000 })
-      const target = page.locator(".iconoplasm-gene").first()
-      const hoverStart = performance.now()
-      await target.hover()
-      await page.waitForSelector(".iconoplasm-tooltip.iconoplasm-tooltip-visible", {
-        timeout: 15000,
-      })
-      await page.waitForSelector(".iconoplasm-tooltip-symbol", { timeout: 15000 })
-      await page.waitForSelector(".iconoplasm-tooltip-meta-row, .iconoplasm-tooltip-meta-pairs", {
-        timeout: 15000,
-      })
-      return {
-        executed: true,
-        hoverToMetaMs: Number((performance.now() - hoverStart).toFixed(3)),
-        page: testPageUrl,
-      }
-    } finally {
-      await context.close()
-    }
-  } catch (error) {
-    return {
-      executed: false,
-      skippedReason: String(error && error.message ? error.message : error),
-    }
-  }
-}
-
 async function main() {
+  // A lexical microbenchmark cannot certify interaction performance. Real
+  // browser journeys must use the installed package in Playwright MCP, not a
+  // hard-coded headless browser that silently skips when its path is obsolete.
+  if (!process.argv.includes("--lexical-only")) {
+    throw new Error(
+      "Browser benchmark requires Playwright MCP: run scripts/lib/iconoplasm-reader-benchmark.mjs with its existing Page using the source adapter in docs/ICONOPLASM_READER_PERFORMANCE_BENCHMARK.md. Use --lexical-only only for the explicitly separate matcher microbenchmark.",
+    )
+  }
   const lexical = await runLexicalBenchmark()
-  const browser = await runBrowserBenchmark()
   console.log(
     JSON.stringify(
       {
         lexical,
-        browser,
+        scope: "lexical-only; no browser performance claim",
       },
       null,
       2,
