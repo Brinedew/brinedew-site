@@ -108,6 +108,7 @@ jobs:
             scripts/architecture-fences.test.js \
             scripts/iconoplasm-static-first-config.test.mjs \
             workers/iconoplasm-d1-budget-policy.test.js \
+            workers/iconoplasm-factory-rollup-cost.test.js \
             workers/iconoplasm-card-publication.test.js \
             workers/iconoplasm-card-publication-runtime.test.js \
             workers/iconoplasm-card-delivery.test.js \

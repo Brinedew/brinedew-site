@@ -40,6 +40,16 @@ small seeks. A hard 512-recipe limit fails explicitly before querying; implement
 pagination before raising it. Open counts use the existing request-status index.
 Catalog expansion must preserve the query-plan test and its bounded access path.
 
+The request-picker factory summary is a different query, not this belt index.
+Its case-insensitive emulsion lookup requires migration 0081's NOCASE index.
+Migration 0077 removed the duplicate emulsion column and its old NOCASE index,
+but the replacement join kept that collation. SQLite could scan the BINARY
+index but could not seek it: live query insights measured 434.32 million reads
+in 33 summary updates on 2026-08-27. Do not remove the replacement as a
+"duplicate" of the BINARY user-emulsion index. The two predicates differ.
+`iconoplasm-factory-rollup-cost.test.js` checks unchanged output, mixed-case
+identity, the real query plan and measured workerd rows read.
+
 The client reads on entry/return, and every 30 seconds only while Outputs is
 visible and there is open work. It stops when hidden, unmounted, or an update is
 waiting. New results appear behind **Show updates**, so inspection does not

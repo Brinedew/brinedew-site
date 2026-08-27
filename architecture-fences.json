@@ -264,6 +264,16 @@
           "token": "ARCHITECTURE FENCE [IPD-005]"
         },
         {
+          "category": "migration",
+          "file": "migrations-iconoplasm/0081_factory_option_source_collation_index.sql",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        },
+        {
+          "category": "test",
+          "file": "workers/iconoplasm-factory-rollup-cost.test.js",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        },
+        {
           "category": "config",
           "file": "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
           "token": "ARCHITECTURE FENCE [IPD-005]"
