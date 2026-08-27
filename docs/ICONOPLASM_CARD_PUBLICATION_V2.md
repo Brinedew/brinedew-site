@@ -38,10 +38,21 @@ The publisher reserves at most 55,000 SQLite row writes per UTC day before
 performing work; failed attempts are not refunded. This is a local allocation,
 not a global account reservation. It leaves 45,000 of the Free account's
 100,000 writes for votes, other coordinators and recovery. Exhaustion retains
-the old readable head and durable work for the next day. Bootstrap reserves
-about 44,000 writes for the current 19,023-card catalog; inspect actual account
-usage before authorizing it. Failure-status bookkeeping is separately bounded
-by backoff and must be included in capacity accounting.
+the old readable head and durable work for the next day. Within that allocation,
+1,000 writes are reserved for failure bookkeeping and a durable next-day alarm;
+ordinary publication stops at 54,000. Every actual `setAlarm` costs one SQLite
+row write, and recording its reservation costs another. Failure inserts/deletes
+are also reserved. Existing earlier alarms are not rewritten. Quota exhaustion
+retries at the UTC boundary, not every thirty seconds; actor reconstruction and
+new wakeups cannot shorten this deadline.
+
+The earlier roughly 44,000-write bootstrap estimate omitted control writes.
+Including alarms and their reservations puts the 19,023-card bootstrap nearer
+50,000 writes before retries; this remains an estimate, not a measured bill.
+Inspect actual account usage. Ledger version 2 marks a carried-over version-1
+day as `legacy_control_writes_unmetered` until UTC reset rather than pretending
+the historical partial count is complete. No local ledger reserves capacity
+against independent classes or proves the account-wide quota is available.
 Nearby write-side wakeups coalesce for ten seconds. Alarms resume durable work
 with bounded backoff; scheduled recovery catches a lost notification.
 

@@ -32,6 +32,23 @@ test(
         }));
         export class TestPublication extends Base {
           async fetch(request) {
+            if(new URL(request.url).pathname === '/alarm-budget-test') {
+              await this.state.storage.deleteAlarm();
+              this.repo.remove('failure');
+              const day = new Date().toISOString().slice(0,10);
+              this.repo.put('write_allocation',{day,reserved:0,accounting_version:2});
+              await this.arm(60000);
+              const first=this.repo.get('write_allocation');
+              await this.arm(120000);
+              const unchanged=this.repo.get('write_allocation');
+              await this.state.storage.deleteAlarm();
+              this.repo.put('write_allocation',{day,reserved:54000,accounting_version:2});
+              this.repo.put('requested',true);
+              await this.alarm();
+              const retryAlarm=await this.state.storage.getAlarm();
+              await this.arm(1000);
+              return Response.json({first,unchanged,retryAlarm,retainedAlarm:await this.state.storage.getAlarm(),failure:this.repo.get('failure'),allocation:this.repo.get('write_allocation')});
+            }
             if(new URL(request.url).pathname === '/quota-test') {
               const day = new Date().toISOString().slice(0,10);
               this.repo.put('write_allocation',{day,reserved:55000,limit:55000});
@@ -107,6 +124,31 @@ test(
       const head = await (await runtime.dispatchFetch("https://test/head")).json()
       assert.equal(head.current, status.current)
       assert.equal(head.storage, "bunny_card_catalog_v2")
+      const alarmBudgetResponse = await runtime.dispatchFetch("https://test/alarm-budget-test")
+      const alarmBudgetText = await alarmBudgetResponse.text()
+      assert.equal(alarmBudgetResponse.status, 200, alarmBudgetText)
+      const alarmBudget = JSON.parse(alarmBudgetText)
+      assert.equal(
+        alarmBudget.first.reserved,
+        2,
+        "alarm and its reservation are both billed writes",
+      )
+      assert.deepEqual(alarmBudget.unchanged, alarmBudget.first, "an already earlier alarm is free")
+      assert.equal(
+        alarmBudget.allocation.reserved,
+        54004,
+        "failure record and recovery alarm use protected control headroom",
+      )
+      const nextUtcDay = Date.parse(new Date().toISOString().slice(0, 10) + "T00:00:00Z") + 86400000
+      assert.equal(alarmBudget.failure.retry_at, nextUtcDay)
+      assert.equal(alarmBudget.retryAlarm, nextUtcDay)
+      assert.equal(
+        alarmBudget.retainedAlarm,
+        nextUtcDay,
+        "a wake must not shorten quota-day backoff",
+      )
+      const retainedHead = await (await runtime.dispatchFetch("https://test/head")).json()
+      assert.equal(retainedHead.current, head.current, "quota recovery must leave readers online")
       const quota = await (await runtime.dispatchFetch("https://test/quota-test")).json()
       assert.equal(quota.rejected, true)
       assert.equal(quota.retained.reserved, 55000)

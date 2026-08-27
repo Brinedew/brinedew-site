@@ -16,6 +16,7 @@ export const CARD_DELIVERY_INDEX_SIZE = 128
 // Free plan's 100k SQLite DO writes for votes, other coordinators and recovery.
 // Bootstrap ~19k cards reserves ~44k; ordinary winner changes are much smaller.
 export const CARD_PUBLICATION_DAILY_WRITE_ALLOCATION = 55000
+export const CARD_PUBLICATION_CONTROL_WRITE_RESERVE = 1000
 
 export class CardPublicationRepository {
   constructor(storage) {
@@ -65,22 +66,35 @@ export class CardPublicationRepository {
   transaction(callback) {
     return this.storage.transactionSync(callback)
   }
-  reserveWrites(writes) {
+  reserveWrites(writes, { control = false } = {}) {
     const day = new Date().toISOString().slice(0, 10)
     this.transaction(() => {
       const previous = this.get("write_allocation")
       const used = previous?.day === day ? previous.reserved : 0
       const reserved = used + writes
-      if (reserved > CARD_PUBLICATION_DAILY_WRITE_ALLOCATION)
-        throw new Error(
+      const limit =
+        CARD_PUBLICATION_DAILY_WRITE_ALLOCATION -
+        (control ? 0 : CARD_PUBLICATION_CONTROL_WRITE_RESERVE)
+      if (reserved > limit) {
+        const error = new Error(
           "Card publisher daily SQLite write allocation exhausted; durable work retained",
         )
+        error.code = "CARD_PUBLICATION_DAILY_ALLOCATION_EXHAUSTED"
+        error.retryAt = Date.parse(day + "T00:00:00Z") + 86400000
+        throw error
+      }
       // The reservation includes its own one-row write, and commits BEFORE
       // uploads/phase transactions. Failed attempts are not refunded.
       this.put("write_allocation", {
         day,
         reserved,
         limit: CARD_PUBLICATION_DAILY_WRITE_ALLOCATION,
+        accounting_version: 2,
+        // v1 did not reserve alarm/failure bookkeeping. Do not relabel that
+        // historical partial counter as complete; the marker clears at UTC reset.
+        legacy_control_writes_unmetered:
+          previous?.day === day &&
+          (previous.accounting_version !== 2 || Boolean(previous.legacy_control_writes_unmetered)),
       })
     })
   }
