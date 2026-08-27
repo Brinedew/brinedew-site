@@ -1,6 +1,10 @@
 import puppeteer from "@cloudflare/puppeteer"
 import { d1DailyAllowance } from "../shared/iconoplasm-d1-budget-policy.js"
 import {
+  parseDiscoveryMembershipSymbols,
+  readDiscoveryMembership,
+} from "./iconoplasm-discovery-membership.js"
+import {
   CARD_PUBLICATION_STORAGE,
   cardPublicationManifestKey,
 } from "./lib/iconoplasm-card-publication.js"
@@ -30935,6 +30939,45 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             created: Boolean(result.created),
             symbol,
             discovery: result.discovery,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/discoveries/membership" && request.method === "GET") {
+      let symbols
+      try {
+        symbols = parseDiscoveryMembershipSymbols(url.searchParams.get("symbols") || "[]")
+      } catch (error) {
+        return done(
+          "discoveries_membership_400",
+          json({ error: error.message }, 400, { "Cache-Control": "no-store" }),
+        )
+      }
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      const authenticated = Boolean(sessionUser?.user_id)
+      if (authenticated && !env.ICONOPLASM_DB)
+        return done(
+          "discoveries_membership_503",
+          json({ error: "Discovery storage unavailable" }, 503, { "Cache-Control": "no-store" }),
+        )
+      const discovered = authenticated
+        ? await readDiscoveryMembership(
+            env.ICONOPLASM_DB,
+            normalizeUserId(sessionUser.user_id),
+            symbols,
+          )
+        : []
+      return done(
+        "discoveries_membership",
+        json(
+          {
+            ok: true,
+            authenticated,
+            checked_symbols: symbols,
+            discovered_symbols: discovered,
           },
           200,
           { "Cache-Control": "no-store" },

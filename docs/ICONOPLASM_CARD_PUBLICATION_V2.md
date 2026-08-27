@@ -80,6 +80,13 @@ Discovery recording rechecks membership after its asynchronous state load.
 Otherwise a gene already on the shelf can be written again once per article.
 That suppression does not remove explicit repeat-encounter semantics at the
 API, and failed/guest encounters remain in the local pending buffer.
+Hover membership uses the private `/discoveries/membership` endpoint, limited
+to 128 explicit symbols and composite-primary-key probes. It must not seed
+starter genes or fetch the rich account gallery. The active symbol goes first;
+later intent outside the checked window gets another bounded lookup. Concurrent
+lookups share work. A 20,000-row local collection test reads eight rows for
+three requested symbols (two hits), with zero writes. Empty-symbol checks serve
+popup authentication without reading or creating discovery rows.
 
 Healthy readers fetch immutable objects directly from paid Bunny Storage/CDN.
 Blocked or corrupt responses use the exact first-party object path, with

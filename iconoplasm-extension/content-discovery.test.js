@@ -54,3 +54,53 @@ for (const scenario of ["already saved", "new signed-in", "guest", "offline"]) {
     )
   })
 }
+
+test("membership windows include active intent, deduplicate concurrent calls and never fetch a full shelf", async () => {
+  const calls = []
+  const context = {
+    discoveryAuthState: { checkedAt: 0, authenticated: null, discoveredSymbols: [] },
+    discoveredPageSymbols: new Set(),
+    DISCOVERY_AUTH_CACHE_TTL_MS: 300000,
+    ICONOPLASM_DISCOVERY_STATE_URL: "https://example.test/discoveries/membership",
+    normalizeDiscoverySymbolList: (values) => [...new Set((values || []).filter(Boolean))],
+    readingSession: {
+      snapshot: () => ({ documentSymbols: Array.from({ length: 300 }, (_, i) => "G" + i) }),
+    },
+    runtimeDisconnected: false,
+    console,
+    async extensionApiFetch(url) {
+      const symbols = JSON.parse(new URL(url).searchParams.get("symbols"))
+      calls.push(symbols)
+      await Promise.resolve()
+      return {
+        ok: true,
+        json: async () => ({
+          authenticated: true,
+          checked_symbols: symbols,
+          discovered_symbols: symbols.filter((s) => s === "G299"),
+        }),
+      }
+    },
+  }
+  vm.createContext(context)
+  vm.runInContext(
+    content.slice(
+      content.indexOf("  function rememberDiscoveryAuthState("),
+      content.indexOf("  async function mergeGuestDiscoveriesIfSignedIn("),
+    ),
+    context,
+  )
+  await Promise.all([
+    context.ensureDiscoveryStateFresh("G299"),
+    context.ensureDiscoveryStateFresh("G1"),
+  ])
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0][0], "G299")
+  assert.equal(calls[0].length, 128)
+  assert.ok(context.discoveredPageSymbols.has("G299"))
+  await context.ensureDiscoveryStateFresh("G298")
+  assert.equal(calls.length, 2)
+  assert.equal(calls[1][0], "G298")
+  assert.equal(calls[1].length, 128)
+  assert.ok(!calls[1].includes("G299"))
+})
