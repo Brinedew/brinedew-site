@@ -1144,6 +1144,10 @@
     markDiscoveryCooldown(normalizedSymbol)
     try {
       const authState = await ensureDiscoveryStateFresh()
+      // The awaited membership load can discover that this gene was already
+      // saved. Recheck after it completes: the pre-await check alone records
+      // one redundant encounter per article and amplifies database writes.
+      if (discoveredPageSymbols.has(normalizedSymbol)) return
       if (authState && authState.authenticated === false) {
         await rememberGuestDiscovery(normalizedSymbol)
         return
