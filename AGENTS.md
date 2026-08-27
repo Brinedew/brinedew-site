@@ -165,6 +165,9 @@ essence, keep the admin rollup copy empty, and archive publish events older than
 `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` before adding large
 columns, materialized payloads, append-only ledgers, retention jobs, D1 bindings,
 capacity charts, or bulk reconciliation paths.
+Factory request-summary joins need the collation-matched emulsion index in
+migration 0081. A BINARY index cannot seek a NOCASE predicate; that mismatch
+spent 434M reads in 33 updates. Preserve its real query-plan/row-cost test.
 Labelled PNG bytes and render history do not belong in D1. Keep at most one
 compact materialization row per canonical gene and seven daily budget rows;
 store content-addressed image bytes in Bunny. Administrator recognition policy

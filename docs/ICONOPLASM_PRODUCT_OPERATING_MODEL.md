@@ -220,7 +220,7 @@ certify runtime behavior.
    Manifestation, Vision, generation, candidate assets, and operator workflow.
 2. **Publish plane:** one canonical selection engine owns eligibility,
    vote/tie-break behavior, manual overrides, audit history, and the D1
-   authoring pointer. The exact card artifact selected by `KV_GALLERY_VERSION`
+   authoring pointer. The exact card artifact selected by the durable publication head
    alone owns the public portrait.
 3. **Distribution plane:** the Website repo owns public cards, APIs, immutable
    assets, releases, change feeds, extension packaging, and reader interaction.
