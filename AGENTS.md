@@ -14,6 +14,14 @@ regional fallback), not today's traffic, to evaluate changes. Report reader-leve
 verdicts, not isolated operation counts. Historical 15-minute timing is not a
 product exception. Spec/model updates are not runtime proof.
 
+Cloudflare account history matters: Free → paid R2 used → R2 disabled
+with unpaid debt → currently Free (owner confirmed 2026-08-27). Paid R2 does
+not establish a past paid Workers subscription. Historical paid
+allowances and the old monthly D1 budget variables are not usable capacity.
+Read the account-history section of the operating model before interpreting
+conflicting billing telemetry. No upgrade, debt payment or R2 reactivation is
+authorized by a performance task; paid Bunny is the intended alternative.
+
 Before changing a non-obvious cost, ownership, fallback, or release decision,
 read `architecture-fences.json` and `docs/ARCHITECTURE_FENCES.md`. Registered
 fences are deliberately enforced in instructions, runbooks, source,
@@ -182,7 +190,11 @@ attachment limits, or delivery reconciliation.
 dynamic Worker invocation. Matching files on `iconoplasm.brinedew.bio` must be
 served by Workers Static Assets before Worker execution; dynamic misses route
 directly to the existing stateful Worker, never through the shared public
-proxy. Rate limits live on that route owner. Read
+proxy. Workers Cache is a separate, metered product: its HITs and previously free
+assets consume the request allowance when enabled. Do not enable it in the
+production/staging config or a named entrypoint as a Free-quota workaround.
+The parsed-config deploy guard enforces this distinction. Rate limits live on
+that route owner. Read
 `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` (including the
 canonical gene cold-path contract) and Linear B-670 before changing Iconoplasm
 route ownership, asset bindings, bundle generation, rate-limit placement, or
