@@ -59,8 +59,14 @@ fingerprint and Bunny key; the later workstation upload does not republish KV.
 Publishing for every individual vote can still burn the daily KV budget, so the
 dirty-shard release remains the canonical barrier. A vote updates coordinator and
 D1 authoring state; only a leader change marks the owning shard dirty. The bounded
-publisher coalesces those changes behind its 15-minute window, rewrites at most six
-dirty shards, and flips one `KV_GALLERY_VERSION` barrier. The extension portrait
+publisher has historically coalesced those changes behind a 15-minute window.
+That describes existing implementation, not the current product target: the
+2026-08-27 owner clarification in `ICONOPLASM_PRODUCT_OPERATING_MODEL.md` retains
+60-second availability for fresh loads/reloads while allowing unreloaded
+articles to keep their images. Bringing the publisher/reload path into compliance
+still requires implementation and measured verification; do not bypass budget
+guards or introduce a second publisher. Each bounded step rewrites at most six
+dirty shards and publishes through one `KV_GALLERY_VERSION` barrier. The extension portrait
 locator is then projected on read from that same card payload. It does not create a
 new artifact, KV write, or per-vote republish. Do not poll site detail
 waiting for an unpublished SHA, and do not run canonical promotion from request
