@@ -1,5 +1,54 @@
 # Iconoplasm product and first-principles capacity model
 
+## Founder-level growth gate (2026-08-27)
+
+**Keep Bunny and reusable images. Change the design wherever ordinary growing
+usage exhausts the free Cloudflare allowance. Do not trade growth capacity for
+a strict freshness timer.** Aim for one minute; two minutes is acceptable.
+An unreloaded article may keep its images. The current runtime is not certified
+for either the target freshness or 10,000 daily active readers.
+
+The working growth benchmark is 10,000 daily readers. It is an explicit working
+assumption, not a traffic forecast or an owner promise of supported capacity.
+Per day, assume five articles and thirty distinct genes per reader; 20% sign in
+and save ten new discoveries each; 5% cast two votes each; 20% of votes change
+the winning image; 2% of readers cannot reach Bunny. Also test 10% fallback,
+higher signed-in/voter participation, multiple regions, cold caches, scattered
+genes, bursts and ordinary background/site work. These are scenarios to test,
+not claims about what real readers already do.
+
+| Daily readers | Votes/day | Newly saved discoveries/day | Modeled discovery + vote D1 writes/day | Current verdict                                                 |
+| ------------: | --------: | --------------------------: | -------------------------------------: | --------------------------------------------------------------- |
+|            10 |         1 |                          20 |                                    172 | These components fit; whole product unverified                  |
+|         1,000 |       100 |                       2,000 |                                 17,200 | These components fit; whole product unverified                  |
+|        10,000 |     1,000 |                      20,000 |                                172,000 | Redesign required by the model: exceeds 100,000 free writes/day |
+
+This uses the existing conservative per-action model: eight D1 write units per
+new saved discovery and twelve per vote, including index/projection work. It
+does not assert an exact measured breakpoint. Even perfect Bunny cache hits
+cannot remove these writes. At 10,000 readers, 20% voting instead of 5% produces
+4,000 votes/day; the existing three-Queue-operation model alone exceeds the
+10,000/day Queue allowance. A two-minute image target does not fix either path.
+
+The executable `readerGrowthAssessment` also exposes a deliberately naive
+direct-reload-check policy and first-party metadata/image fallback costs. This
+is a **partial conservative model**, not a whole-app load test, current client
+TTL trace, or proposal to ship that policy. It excludes publishing, healthy CDN
+cold fills, indexes, authentication, repeated discoveries, other page traffic,
+CPU and retries. Passing partial arithmetic always returns `not_certified`;
+exceeding a modeled resource returns `redesign_required_by_model`.
+
+One thousand votes in this scenario yield an assumed 200 winning-image changes.
+That means distributing which existing image won, not generating images or
+releasing the browser extension. Costs depend on the timing and distribution
+of those changes. Test a steady stream and concentrated bursts; do not equate
+votes, winning-image changes, publication operations, or readers.
+
+Every capacity report must translate infrastructure counts into reader actions,
+a supported/failed/unverified verdict, and a keep/change recommendation. Report
+target freshness percentiles/misses and remaining headroom under the whole
+declared workload. Today's small population cannot justify a non-scaling path.
+
 ## B-711 immutable metadata delivery delta (2026-08-27)
 
 `hoverMetadataDeliveryCost` models metadata only, separately from the existing
@@ -69,13 +118,13 @@ The important surfaces are not interchangeable:
 
 ## When a viewer should see something change
 
-| Event                    | Person who caused it                   | Other open gene pages                           | Archive / extension / new visits                         |
-| ------------------------ | -------------------------------------- | ----------------------------------------------- | -------------------------------------------------------- |
-| Vote button pressed      | Optimistic score immediately           | Dossier projection converges in seconds         | Next published snapshot, at most about 15 minutes        |
-| Candidate wins canon     | Dossier follows the projected winner   | Fresh dossier reads see the winner              | Archive and extension move together at the next snapshot |
-| New personal discovery   | Personal shelf can update immediately  | Not applicable                                  | Persists for the signed-in person                        |
-| New shared discovery     | No need to interrupt the reader        | No need to mutate an open page                  | Shared overlay updates at the next hourly publication    |
-| Catalog/card publication | Current reading context stays coherent | Existing page is not rewritten under the viewer | New page contexts use the new immutable version          |
+| Event                    | Person who caused it                    | Other open gene pages                           | Archive / extension / new visits                           |
+| ------------------------ | --------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------- |
+| Vote button pressed      | Immediate feedback, then durable result | Open page may retain its coherent snapshot      | Winner changes target 1-2 minutes, not a strict deadline   |
+| Candidate wins canon     | Voting result may lead published image  | Open page may retain its coherent snapshot      | Fresh site cards and extension loads share published canon |
+| New personal discovery   | Personal shelf can update immediately   | Not applicable                                  | Persists for the signed-in person                          |
+| New shared discovery     | No need to interrupt the reader         | No need to mutate an open page                  | Shared overlay updates at the next hourly publication      |
+| Catalog/card publication | Current reading context stays coherent  | Existing page is not rewritten under the viewer | New page contexts use the new immutable version            |
 
 This separation is intentional. Immediate feedback is for a person's own action.
 Passive pages should not swap portraits under somebody who is trying to memorize
