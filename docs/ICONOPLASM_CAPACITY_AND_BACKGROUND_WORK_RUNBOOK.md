@@ -519,7 +519,14 @@ inputs after a material architecture change.
 
 The canonical product/freshness contract is
 `docs/ICONOPLASM_PRODUCT_OPERATING_MODEL.md`. The capacity model owns resource
-envelopes. Any read path that mutates state, whole-catalog recomputation
+envelopes. The 2026-08-27 owner clarification permits stale portraits on an
+unreloaded article, but requires current-version revalidation on new page loads
+and ordinary reloads. Keep the 60-second healthy publication/propagation target;
+the historical 15-minute window is an implementation gap, not product authority.
+Model freshness traffic from loads/reloads, not one heartbeat per open tab.
+Unchanged content-addressed image bytes remain reusable. This specification
+change does not certify the current runtime or authorize bypassing cost guards.
+Any read path that mutates state, whole-catalog recomputation
 triggered by public reads, unbounded polling, or homegrown distributed cache
 behavior must be recorded with its exact resource ceiling and permanent
 correction.

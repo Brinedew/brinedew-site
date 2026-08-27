@@ -4,6 +4,12 @@ This `AGENTS.md` is loaded automatically when work happens inside `D:\Coding\Web
 
 ## Architecture fence registry
 
+Before changing reader freshness, read `docs/ICONOPLASM_PRODUCT_OPERATING_MODEL.md`.
+The owner permits stale images while an article stays open. New page loads and
+ordinary reloads must check current published canon; preserve the one-minute
+healthy publication target without adding continuous per-tab polling. Historical
+15-minute timing is not a product exception. Spec updates are not runtime proof.
+
 Before changing a non-obvious cost, ownership, fallback, or release decision,
 read `architecture-fences.json` and `docs/ARCHITECTURE_FENCES.md`. Registered
 fences are deliberately enforced in instructions, runbooks, source,

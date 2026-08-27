@@ -68,17 +68,74 @@ factions.
 
 ## Change and freshness contract
 
-| Change                       | Current viewer                                           | Other open viewers                           | Later sessions/clients                                                                                   |
-| ---------------------------- | -------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Personal discovery           | Immediate shelf feedback                                 | No effect                                    | Persists for that person after local or signed-in storage succeeds                                       |
-| Vote                         | Immediate optimistic feedback, then authoritative result | Existing page remains coherent               | Rich vote/candidate state may update immediately; public portrait waits for publication                  |
-| D1 portrait selection        | Do not replace a portrait underneath active reading      | Existing card remains on its loaded snapshot | Every public surface advances together at the next card-artifact publication, normally within 15 minutes |
-| Shared discovery count       | No interrupt                                             | No mutation                                  | Next hourly publication                                                                                  |
-| New candidate/request result | Relevant account UI may refresh                          | Unrelated readers do not poll                | Account inbox polls only while a request is open                                                         |
+### Owner clarification — 2026-08-27
 
-The invariant is identity coherence: a gene must not become a different character
-mid-hover or mid-read. Freshness is useful only at a boundary a person can
-understand.
+**Stable while reading; fresh on reload.** This supersedes the former
+15-minute convergence allowance. It is a product requirement, not a claim that
+the installed extension already meets it.
+
+| Change                       | Current viewer                                     | Other open viewers                                             | New page loads and reloads                                                                                               |
+| ---------------------------- | -------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Personal discovery           | Immediate shelf feedback                           | No effect                                                      | Persists after local or signed-in storage succeeds                                                                       |
+| Vote                         | Immediate feedback, then authoritative result      | Existing page may keep its snapshot                            | A winning-portrait change follows the publication deadline below                                                         |
+| Canonical portrait selection | Do not replace an open hover underneath the reader | An unchanged article may retain its loaded images indefinitely | Check current published version and use its exact portrait; no browser restart, hard refresh, or cache clearing required |
+| Shared discovery count       | No interrupt                                       | No mutation                                                    | Next hourly publication                                                                                                  |
+| New candidate/request result | Relevant account UI may refresh                    | Unrelated readers do not poll                                  | Account inbox polls only while a request is open                                                                         |
+
+1. **The page load is the freshness boundary.** Opening a new article/document
+   or ordinarily reloading it must perform a bounded current-version
+   revalidation. An old extension-local timestamp must not skip that check.
+   Switching tabs, scrolling, and hovering again on the same unreloaded article
+   do not require canon refresh or continuous polling.
+2. **Keep the one-minute publication target.** For a successfully accepted vote
+   that changes the winner, the changed canonical selection must become
+   available to fresh site cards and extension page loads within 60 seconds
+   end-to-end under healthy operation. This includes publication and cache
+   propagation, not a fresh 60-second allowance at each layer. A reload before
+   that publication may still see the previous complete snapshot; a reload
+   after the deadline must converge. A vote that does not change the winner
+   requires no new image publication.
+3. **Revalidate identity, reuse bytes.** Check small version metadata, not every
+   image or the entire catalog. If unchanged, reuse cached metadata/images.
+   If changed, adopt the exact new published snapshot for the newly loaded
+   page and reuse unchanged content-addressed objects. Portrait and rich-detail
+   lanes must agree. Do not reinterpret immutable old URLs as current canon.
+4. **Reading remains usable during failure.** Default offline/error behavior:
+   use the last coherent cached snapshot, do not block the host article, and
+   expose an unobtrusive freshness failure in extension status. Never present
+   an unsuccessful check as verified-current or mix snapshots to hide failure.
+   A later page load/reload retries within bounded deadlines.
+5. **Cost follows loads and changes, not time spent reading.** No freshness
+   heartbeat per open tab, per-hover origin/database query, whole-catalog
+   rebuild per vote, or image-byte re-download per reload. Preserve one
+   publisher, one version barrier, direct Bunny acceleration and bounded
+   first-party fallback. Capacity limits remain real implementation
+   constraints; report a missed deadline instead of silently relaxing the
+   product requirement.
+
+### Acceptance and implementation status
+
+- Leave article A open, change the winning EZH2 candidate elsewhere, and return
+  to A without reloading: its old image is permitted, including later hovers.
+- Ordinarily reload A (or open article B) after the 60-second publication
+  deadline: hover and a freshly loaded gene card use the same winning portrait.
+  The check cannot be skipped because another tab checked minutes earlier.
+- Reload without any canon change: unchanged images stay cached. During a
+  failed check: the article remains usable and cached status is truthful.
+- Verify installed HTML/PDF paths, multiple tabs, unchanged votes, rapid winner
+  changes, warm caches, regional fallback and failure recovery. Measure
+  publisher work and reload-driven origin traffic before declaring compliance.
+
+Implementation and measured verification are tracked in
+[B-716](https://linear.app/brinedew/issue/B-716/revalidate-canonical-portraits-on-page-reload-while-keeping-open).
+Completed publication/delivery foundations remain complete; this is the owner
+for the newly clarified freshness requirement.
+
+**Not yet certified:** the existing implementation was documented around a
+15-minute publisher window, and the extension source has a five-minute
+`DATA_REFRESH_TTL_MS`. Those are implementation gaps to evaluate against this
+contract, not approved exceptions. Documentation changes alone do not fix or
+certify runtime behavior.
 
 ## Authority and data flow
 
