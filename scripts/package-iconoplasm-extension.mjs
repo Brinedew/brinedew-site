@@ -113,6 +113,7 @@ const wxtBuildRoot = resolve(wxtOutRoot, `${targetConfig.browser}-mv3`)
 const wxtZipPath = resolve(wxtOutRoot, "wxt-build.zip")
 
 const commonRuntimeFiles = [
+  "metadata-delivery.js",
   "manifest.json",
   "blocklist-defaults.js",
   "content-api.js",
@@ -333,6 +334,7 @@ function validatePackagedBackground() {
       "generated/portrait-delivery-core.js",
       "publication-alias-overlay.js",
       "content-settings.js",
+      "metadata-delivery.js",
       "service-worker.js",
     ]
     const actualScripts = packagedManifest.background?.scripts

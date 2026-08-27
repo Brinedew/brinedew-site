@@ -6,6 +6,7 @@ import {
   SCENARIOS,
   coldGeneCoordinatorCost,
   extensionReaderCost,
+  hoverMetadataDeliveryCost,
   firstPersonaOverLimit,
   notificationInboxCost,
   votingCost,
@@ -16,6 +17,23 @@ import {
 function first(perUser, base) {
   return firstPersonaOverLimit(perUser, base)[0]
 }
+
+test("metadata CDN model counts installations, cold fills, blocked networks and recovery separately", () => {
+  const warm = hoverMetadataDeliveryCost({ indexRequests: 100 })
+  const cold = hoverMetadataDeliveryCost({ indexRequests: 100, cdnOriginMisses: 20 })
+  const blocked = hoverMetadataDeliveryCost({ indexRequests: 100, canonicalRequests: 2000 })
+  assert.equal(warm.workerRequests, 100)
+  assert.equal(cold.workerRequests, 120)
+  assert.equal(cold.kvReads, 280)
+  assert.equal(blocked.workerRequests, 2100)
+  assert.equal(blocked.kvWrites, 0)
+  assert.equal(blocked.d1RowsRead, 0)
+  assert.equal(
+    hoverMetadataDeliveryCost({ indexRequests: 1, canonicalRequests: 2, legacyFallbackRequests: 2 })
+      .workerRequests,
+    5,
+  )
+})
 
 test("anonymous homepage cost is derived from the published starter-card path", () => {
   assert.equal(ATOMIC_COSTS.anonymousHomepageCold.workerRequests, 1)

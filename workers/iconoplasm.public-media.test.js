@@ -1621,6 +1621,63 @@ test("public gene batch is limited to first-party clients and extension traffic"
   assert.equal(extensionResponse.headers.get("x-iconoplasm-data-source"), "published-card-catalog")
 })
 
+test("content-addressed hover delivery reuses unchanged shards across publication without writes", async () => {
+  const version = "test-card-v1"
+  const kv = buildPublishedCardReadKv({ version })
+  const manifestKey = `iconoplasm:card-catalog:${version}`
+  const manifest = JSON.parse(kv.entries.get(manifestKey))
+  const oldShard = JSON.parse(kv.entries.get(manifest.shards[0].key))
+  const hash = "a".repeat(64)
+  const key = `iconoplasm:card-catalog-shard:${hash}`
+  manifest.storage = "kv_card_catalog_content_addressed_shards"
+  manifest.shards[0] = { ...manifest.shards[0], key, content_hash: hash }
+  kv.entries.set(key, JSON.stringify({ ...oldShard, content_hash: hash }))
+  kv.entries.set(manifestKey, JSON.stringify(manifest))
+  kv.put = async () => {
+    throw new Error("reader write forbidden")
+  }
+  kv.list = async () => {
+    throw new Error("reader list forbidden")
+  }
+  const env = buildEnv({ KV: kv, ICONOPLASM_DB: null })
+  const read = (path, headers = { "X-Iconoplasm-Extension-Version": "0.5.2" }) =>
+    handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request(`https://iconoplasm.brinedew.bio/api/public/v1/${path}`, { headers }),
+      env,
+      {},
+    )
+  const index = await read(`card-snapshots/${version}/delivery-index`)
+  assert.equal(index.status, 200)
+  assert.deepEqual((await index.json()).ranges, [["A1BG", "A1BG", hash]])
+  const detailPath = `card-content/v1/${hash}/genes/A1BG`
+  const before = await read(detailPath)
+  assert.equal(before.status, 200)
+  const beforeText = await before.text()
+  assert.equal(beforeText.includes("snapshot_version"), false)
+  const detail = JSON.parse(beforeText)
+  const portrait = await (await read(`card-content/v1/${hash}/portraits/A1BG`)).json()
+  assert.equal(portrait.record.portrait.asset_sha256, detail.record.portrait.asset_sha256)
+  assert.equal((await read(detailPath, {})).status, 403)
+  assert.equal((await read(`card-content/v1/${"b".repeat(64)}/genes/A1BG`)).status, 410)
+  kv.entries.set(
+    "iconoplasm:gallery-version",
+    JSON.stringify({ current: "next", previous: version }),
+  )
+  kv.entries.set(
+    "iconoplasm:card-catalog:next",
+    JSON.stringify({ ...manifest, artifact_version: "next", snapshot_version: "next" }),
+  )
+  resetIconoplasmRuntimeCachesForTest()
+  const nextIndex = await (await read("card-snapshots/next/delivery-index")).json()
+  assert.equal(nextIndex.ranges[0][2], hash)
+  assert.equal(await (await read(detailPath)).text(), beforeText)
+  kv.entries.set(key, JSON.stringify({ ...oldShard, content_hash: "wrong" }))
+  resetIconoplasmRuntimeCachesForTest()
+  const malformed = await read(detailPath)
+  assert.equal(malformed.status, 503)
+  assert.equal(malformed.headers.get("cache-control"), "no-store")
+})
+
 test("versioned public gene detail is immutable, extension-only, and published-artifact backed", async () => {
   const requestUrl =
     "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/test-card-v1/genes/A1BG"

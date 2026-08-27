@@ -204,6 +204,26 @@ export function extensionReaderCost({
   })
 }
 
+// Metadata transport only. Do not replace whole-reader costs with this: auth,
+// scanner refresh, image fallback, votes and CDN bandwidth remain separate.
+export function hoverMetadataDeliveryCost({
+  indexRequests = 0,
+  cdnOriginMisses = 0,
+  canonicalRequests = 0,
+  legacyFallbackRequests = 0,
+} = {}) {
+  const count = (value) => Math.max(0, Math.floor(Number(value) || 0))
+  const indexes = count(indexRequests)
+  const content = count(cdnOriginMisses) + count(canonicalRequests)
+  const legacy = count(legacyFallbackRequests)
+  return cost({
+    workerRequests: indexes + content + legacy,
+    // Cold worst case: barrier + current manifest + previous manifest + shard.
+    // Normal current-shard miss is three reads; cache HIT is zero, still one invocation.
+    kvReads: indexes * 2 + content * 4 + legacy * 3,
+  })
+}
+
 export function notificationInboxCost({ openMinutes = 0, focusReturns = 0 } = {}) {
   const safeOpenMinutes = Math.max(0, Math.floor(Number(openMinutes) || 0))
   const safeFocusReturns = Math.max(0, Math.floor(Number(focusReturns) || 0))

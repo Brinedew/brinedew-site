@@ -18,6 +18,9 @@ import {
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const PATTERN_EXAMPLES = Object.freeze({
+  public_card_delivery_index: "/api/public/v1/card-snapshots/card-v1/delivery-index",
+  public_card_content_gene: `/api/public/v1/card-content/v1/${"a".repeat(64)}/genes/TP53`,
+  public_card_content_portrait: `/api/public/v1/card-content/v1/${"a".repeat(64)}/portraits/TP53`,
   public_catalog_artifact: "/api/public/v1/catalog/catalog.abc123.json",
   public_scanner_artifact: "/api/public/v1/catalog/scanner.abc123.json",
   public_catalog_dump: "/api/public/v1/dumps/catalog.abc123.jsonl",
