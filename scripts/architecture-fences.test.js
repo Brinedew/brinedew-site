@@ -64,7 +64,10 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
 
   for (const protectedTerm of [
     "canonical workstation-materialized blot",
-    "KV_GALLERY_VERSION",
+      "KV_GALLERY_VERSION",
+      "IconoplasmCardPublicationCoordinator",
+      "authenticated Bunny GET/hash verification",
+      "frozen migration evidence",
     "gene-page standard images and metadata",
     "structured data",
     "Massive gene-range pages remain text-only",
@@ -316,8 +319,9 @@ test("Bunny fences protect canonical authority without forbidding immutable CDN 
   )
   assert.match(
     canon.decision,
-    /Byte-equivalent CDN caches and deterministic immutable projections are allowed/,
+    /Byte-equivalent CDN caches are allowed/,
   )
+  assert.match(canon.decision, /Independent immutable detail and locator projections share the named card authority/)
   const instructions = readRepositoryFile("AGENTS.md")
   assert.doesNotMatch(instructions, /healthy cold read is one\s+bounded prefix list/)
   assert.doesNotMatch(instructions, /including the exact-pair\s+fast path; never disable cleanup/)

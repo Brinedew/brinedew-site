@@ -1,6 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import "./metadata-delivery.js"
+import {
+  publishedObjectHash,
+  canonicalPublishedJson,
+} from "../workers/lib/iconoplasm-published-card-objects.js"
 const { createMetadataDelivery } = globalThis.IconoplasmMetadataDelivery
 const origin = "https://iconoplasm.brinedew.bio"
 const hash = "a".repeat(64)
@@ -9,6 +13,101 @@ const url = (version = "snapshot1", lane = "genes") =>
   `${origin}/api/public/v1/card-snapshots/${version}/${lane}/TP53`
 const init = { headers: { "X-Iconoplasm-Extension-Version": "0.5.2" }, credentials: "same-origin" }
 const json = (data) => new Response(JSON.stringify(data))
+
+async function v2Fixture() {
+  const bodies = new Map()
+  async function object(kind, value) {
+    const text = canonicalPublishedJson(value)
+    const hash = await publishedObjectHash(new TextEncoder().encode(text))
+    const key = `published-cards/v2/immutable/${kind}/${hash}.json`
+    bodies.set(`/${key}`, text)
+    return { hash, key }
+  }
+  const gene = await object("genes", { symbol: "TP53", full_name: "tumor protein p53" })
+  const portrait = await object("portraits", {
+    symbol: "TP53",
+    portrait: { asset_sha256: portraitSha },
+  })
+  const index = await object("indexes", {
+    schema_version: 2,
+    entries: [["TP53", gene.hash, gene.hash, portrait.hash]],
+  })
+  const manifest = await object("manifests", {
+    storage: "bunny_card_catalog_v2",
+    shards: [
+      {
+        first_symbol: "TP53",
+        last_symbol: "TP53",
+        delivery_indexes: [{ key: index.key, first_symbol: "TP53", last_symbol: "TP53" }],
+      },
+    ],
+  })
+  return { bodies, version: `ccv2-${manifest.hash}`, gene, portrait, object }
+}
+
+test("v2 healthy lanes share only small hash directories and never call Cloudflare", async () => {
+  const fixture = await v2Fixture()
+  const calls = []
+  const delivery = createMetadataDelivery({
+    fetchImpl: async (rawUrl, options) => {
+      calls.push({ url: rawUrl, options })
+      return new Response(fixture.bodies.get(new URL(rawUrl).pathname), {
+        status: fixture.bodies.has(new URL(rawUrl).pathname) ? 200 : 404,
+      })
+    },
+  })
+  const [gene, portrait] = await Promise.all([
+    delivery.fetch(url(fixture.version), init, 1),
+    delivery.fetch(url(fixture.version, "portraits"), init, 1),
+  ])
+  assert.equal((await gene.json()).gene.symbol, "TP53")
+  assert.equal((await portrait.json()).portrait_locator.snapshot_version, fixture.version)
+  assert.equal(calls.length, 4)
+  assert.ok(calls.every((call) => new URL(call.url).hostname === "iconoplasmportraits.b-cdn.net"))
+  assert.ok(
+    calls.every((call) => !new Headers(call.options.headers).has("X-Iconoplasm-Extension-Version")),
+    "no custom-header CORS preflight on static objects",
+  )
+  assert.ok(calls.every((call) => !call.url.includes("/shards/")))
+})
+
+test("v2 corrupt CDN bytes are rejected before rendering and recover from the exact first-party hash", async () => {
+  const fixture = await v2Fixture()
+  const calls = []
+  const delivery = createMetadataDelivery({
+    fetchImpl: async (rawUrl) => {
+      calls.push(rawUrl)
+      const parsed = new URL(rawUrl)
+      if (parsed.hostname.endsWith("b-cdn.net") && parsed.pathname.includes("/genes/"))
+        return json({ symbol: "TP53", full_name: "wrong bytes" })
+      return new Response(fixture.bodies.get(parsed.pathname))
+    },
+  })
+  const response = await delivery.fetch(url(fixture.version), init, 1)
+  assert.equal((await response.json()).gene.full_name, "tumor protein p53")
+  assert.equal(calls.filter((call) => call.startsWith(origin)).length, 1)
+})
+
+test("each article head check revalidates without reader cache-busting or background polling", async () => {
+  let current = "snapshot1"
+  const calls = []
+  const delivery = createMetadataDelivery({
+    fetchImpl: async (rawUrl, options) => {
+      calls.push({ url: rawUrl, options })
+      return json({ schema_version: 2, current })
+    },
+  })
+  assert.equal((await delivery.current(1)).current, "snapshot1")
+  current = "snapshot2"
+  assert.equal((await delivery.current(1)).current, "snapshot2")
+  assert.equal(calls.length, 2)
+  assert.ok(
+    calls.every(
+      (call) =>
+        !new URL(call.url).search && !call.options.cache && call.options.credentials === "omit",
+    ),
+  )
+})
 function payload(rawUrl) {
   const path = new URL(rawUrl).pathname
   if (path.endsWith("delivery-index"))

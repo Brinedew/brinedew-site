@@ -7,6 +7,7 @@ import test from "node:test"
 const storageState = new Map()
 const sessionState = new Map()
 const mimeHandlerOptions = []
+let messageListener
 const requestedOverlay = {
   schema_version: 1,
   version: "v1-test",
@@ -117,7 +118,9 @@ globalThis.chrome = {
       addListener() {},
     },
     onMessage: {
-      addListener() {},
+      addListener(listener) {
+        messageListener = listener
+      },
     },
   },
   storage: {
@@ -940,6 +943,60 @@ test("a fresh valid scanner returns immediately without an unnecessary manifest 
     assert.deepEqual(first.genes.TP53, { n: "tumor protein p53" })
     assert.deepEqual(second.genes.TP53, { n: "tumor protein p53" })
     assert.equal(manifestFetches, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+    storageState.clear()
+  }
+})
+
+test("every article checks canon, other tabs retain their epoch, and failed checks are visible locally", async () => {
+  const originalFetch = globalThis.fetch
+  storageState.clear()
+  storageState.set("iconoplasm_genes", { TP53: { n: "tumor protein p53" } })
+  storageState.set("iconoplasm_hash", "catalog-current")
+  rememberScannerState("scanner-current")
+  storageState.set("iconoplasm_gene_count", 1)
+  storageState.set("iconoplasm_last_fetch", new Date().toISOString())
+  storageState.set("iconoplasm_schema_version", 5)
+  storageState.set("iconoplasm_contract_revision", 1)
+  storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
+  storageState.set("iconoplasm_alias_overlay_version", "v1-test")
+  storageState.set("iconoplasm_alias_overlay_applied", {})
+  storageState.set("iconoplasm_card_snapshot_version", "ccv1-cached")
+  const send = (type, tab) =>
+    new Promise((resolve) => messageListener({ type }, { tab: { id: tab } }, resolve))
+  const calls = []
+  let current = "ccv2-" + "a".repeat(64)
+  let offline = false
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    calls.push(url)
+    assert.ok(url.endsWith("/api/public/v1/card-current"), "fresh scanner must not be redownloaded")
+    if (offline) throw new Error("offline")
+    return Response.json({ schema_version: 2, current })
+  }
+  try {
+    const first = await send("GET_GENE_DATA", 701)
+    assert.equal(first.cardSnapshotVersion, current)
+    current = "ccv2-" + "b".repeat(64)
+    const second = await send("GET_GENE_DATA", 702)
+    assert.equal(second.cardSnapshotVersion, current)
+    const beforeStatus = calls.length
+    assert.equal((await send("GET_STATUS", 701)).cardFreshness.version, first.cardSnapshotVersion)
+    assert.equal(calls.length, beforeStatus, "popup status must remain local")
+    assert.equal(
+      storageState.get("iconoplasm_card_snapshot_version"),
+      "ccv1-cached",
+      "new tabs must not broadcast epoch changes",
+    )
+    const reloaded = await send("GET_GENE_DATA", 701)
+    assert.equal(reloaded.cardSnapshotVersion, current)
+    offline = true
+    const failed = await send("GET_GENE_DATA", 703)
+    assert.equal(failed.cardSnapshotVersion, "ccv1-cached")
+    assert.equal(failed.cardFreshness.verified, false)
+    assert.equal((await send("GET_STATUS", 703)).cardFreshness.verified, false)
+    assert.equal(calls.length, 5, "three successful checks plus one bounded two-source failure")
   } finally {
     globalThis.fetch = originalFetch
     storageState.clear()

@@ -358,3 +358,19 @@ accountSignOutBtn?.addEventListener("click", async () => {
 })
 
 checkAccountStatus()
+
+// Read local status only; opening the popup must not start another origin check.
+;(async () => {
+  const element = document.getElementById("card-freshness")
+  if (!element) return
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+    const status = await chrome.runtime.sendMessage({ type: "GET_STATUS", tabId: tab?.id })
+    const freshness = status?.cardFreshness
+    if (!freshness) return
+    element.hidden = false
+    element.textContent = freshness.verified
+      ? `Images checked ${new Date(freshness.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+      : "Image check failed; using saved images."
+  } catch (_) {}
+})()
