@@ -406,6 +406,10 @@ Before changing factory catalog status, model versions, or recipe admission,
 read `docs/ICONOPLASM_FACTORY_RETIREMENT.md`. Retired letters remain valid for
 historical identity but cannot admit new generation, activation, or diagnostics.
 
+Before changing Factory output belts, read `docs/ICONOPLASM_FACTORY_BELTS.md`.
+Keep exact qualified lineage, bounded indexed newest-six reads, stable inspection,
+and the existing shared PhotoSwipe viewer. Belt pins never select canonical images.
+
 - **Local API override:** `?gg_api=http://127.0.0.1:8787` for local dev only. Persists in localStorage; clear with `?gg_api=clear`.
 - **Staging on Cloudflare:** `brinedew-bio-staging` Pages project and three workers (`the-only-allowed-public-edge-worker-that-must-not-touch-state-staging`, `geneguessr-api-staging`, `geneguessr-benchmark-staging`) are live on the dashboard. `staging.brinedew.bio` resolves. **Production deploys do not update staging.** Staging serves whatever was last manually dispatched to it. Trust `brinedew.bio` for "is the live site correct"; do not trust `staging.brinedew.bio` as a preview of production.
 

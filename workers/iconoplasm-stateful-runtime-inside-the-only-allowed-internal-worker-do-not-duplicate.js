@@ -3,6 +3,7 @@ import { createHoverDeliveryHandlers } from "./iconoplasm-hover-delivery-runtime
 import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
+import { readFactoryBelts } from "./iconoplasm-factory-belts.js"
 import {
   canReadExternalPortraitStorage,
   canWriteExternalPortraitStorage,
@@ -31123,6 +31124,34 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         "admin_factory_recipe",
         json(await factoryRecipePayload(env), 200, { "Cache-Control": "no-store" }),
       )
+    }
+
+    if (path === "/api/iconoplasm/admin/factory-belts" && request.method === "GET") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_factory_belts_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_factory_belts_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+      const [accepted, visionRows, active] = await Promise.all([
+        factoryPipelineCatalog(env),
+        env.ICONOPLASM_DB.prepare(
+          "SELECT revision FROM icono_factory_vision_definitions ORDER BY revision",
+        ).all(),
+        activeFactoryRecipe(env),
+      ])
+      const overrides = new Map(accepted.map((pipeline) => [pipeline.code, pipeline]))
+      const payload = await readFactoryBelts({
+        db: env.ICONOPLASM_DB,
+        pipelines: ICONOPLASM_FACTORY_PIPELINES.map(
+          (pipeline) => overrides.get(pipeline.code) || pipeline,
+        ),
+        visions: visionRows.results.length ? visionRows.results : ICONOPLASM_FACTORY_VISIONS,
+        active,
+        portraitUrl: (sha, rendition) => adminPortraitUrl(portraitBase(url, env), sha, rendition),
+      })
+      return done("admin_factory_belts", json(payload, 200, { "Cache-Control": "no-store" }))
     }
 
     if (path === "/api/iconoplasm/admin/factory-recipe" && request.method === "POST") {
