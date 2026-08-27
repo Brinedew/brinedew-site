@@ -57,9 +57,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <section class="factory-console" aria-labelledby="factory-heading">
         <div class="section-head factory-console__head">
           <div>
-            <p class="factory-kicker">Future jobs</p>
-            <h2 id="factory-heading">Choose the active factory recipe</h2>
-            <p class="small">Letters are immutable Pipelines. Numbers are immutable Visions. Changing this pointer never rewrites queued jobs or existing candidates.</p>
+            <h2 id="factory-heading">Factory</h2>
+            <p id="factory-current" class="small"></p>
           </div>
           <output id="factory-active-code" class="factory-code" aria-live="polite">A1</output>
         </div>
@@ -71,12 +70,29 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             <select id="factory-vision"></select>
           </label>
         </div>
-        <div id="factory-recipe-detail" class="factory-recipe-detail"></div>
         <div class="controls factory-actions">
           <button type="button" id="factory-save">Activate for future jobs</button>
           <button type="button" id="factory-refresh">Reload</button>
           <span id="factory-status" class="small" role="status"></span>
         </div>
+      </section>
+      <nav id="factory-views" class="factory-views" aria-label="Factory views">
+        <button type="button" data-factory-view="outputs" aria-pressed="true">Outputs</button>
+        <button type="button" data-factory-view="diagnostics" aria-pressed="false">Compare</button>
+        <button type="button" data-factory-view="settings" aria-pressed="false">Settings</button>
+      </nav>
+      <section data-factory-section="outputs" aria-label="Factory outputs">
+        <div class="factory-belt-toolbar">
+          <label>Show<select id="factory-belts-filter"><option value="recent" selected>Recent</option><option value="all">All factories</option><option value="retired">Retired</option></select></label>
+          <input id="factory-belts-search" type="search" aria-label="Find a factory" placeholder="Find a factory">
+          <button type="button" id="factory-belts-refresh" class="secondary">Refresh</button>
+          <button type="button" id="factory-belts-updates" hidden>Show updates</button>
+          <span id="factory-belts-status" class="small" role="status"></span>
+        </div>
+        <div id="factory-belts"></div>
+      </section>
+      <section data-factory-section="settings" aria-label="Factory settings" hidden>
+        <div id="factory-recipe-detail" class="factory-recipe-detail"></div>
         <section class="factory-wiring" aria-labelledby="factory-wiring-heading">
           <h3 id="factory-wiring-heading">Recommended visions</h3>
           <div class="factory-wiring-table-wrap">
@@ -95,12 +111,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <output id="factory-wiring-status" class="small" aria-live="polite"></output>
         </section>
       </section>
-      <section class="diagnostic-console" aria-labelledby="diagnostic-heading">
+      <section class="diagnostic-console" data-factory-section="diagnostics" aria-labelledby="diagnostic-heading" hidden>
         <div class="section-head diagnostic-console__head">
           <div>
-            <p class="factory-kicker">Controlled comparison</p>
             <h2 id="diagnostic-heading">Diagnostic Matrix</h2>
-            <p class="small">Hold one gene constant, cross selected factory lines with selected emulsions, and inspect every result here. The run snapshots all choices before it enters the workstation queue.</p>
           </div>
           <output id="diagnostic-cell-count" class="diagnostic-cell-count" aria-live="polite">25 cells</output>
         </div>
@@ -748,6 +762,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
   </div>
 
   <script type="module" src="/static/iconoplasm/lightbox-bootstrap.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__"></script>
+  <script src="/static/iconoplasm/factory-belts.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
   <script src="/static/iconoplasm/admin.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
 </body>
 </html>

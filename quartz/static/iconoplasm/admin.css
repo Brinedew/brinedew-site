@@ -19,15 +19,22 @@
 }
 
 .factory-console {
-  max-width: 980px;
-  padding: clamp(22px, 4vw, 48px);
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 16px;
+  max-width: none;
+  padding: 16px 20px;
   background: #efe9dd;
   color: #29241d;
   box-shadow: inset 0 0 0 1px #d8cdbb;
 }
-.factory-console__head {
+.factory-console .factory-console__head {
+  display: flex;
+  flex-direction: column;
   align-items: start;
-  gap: 28px;
+  gap: 12px;
+  margin: 0;
 }
 .factory-kicker {
   margin-bottom: 7px;
@@ -41,7 +48,7 @@
   min-width: 3.2ch;
   color: #7b3924;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(56px, 10vw, 112px);
+  font-size: 36px;
   font-weight: 700;
   line-height: 0.8;
   letter-spacing: -0.08em;
@@ -51,8 +58,7 @@
 .factory-selector-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(180px, 0.6fr);
-  gap: 18px;
-  margin-top: 38px;
+  gap: 12px;
 }
 .factory-selector-grid label {
   display: grid;
@@ -65,13 +71,13 @@
 }
 .factory-selector-grid select {
   width: 100%;
-  min-height: 52px;
+  min-height: 40px;
   border: 0;
   border-bottom: 2px solid #9b8c79;
   border-radius: 0;
   background: transparent;
   color: #29241d;
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 700;
 }
 .factory-recipe-detail {
@@ -99,8 +105,181 @@
   overflow-wrap: anywhere;
   font-size: 13px;
 }
-.factory-actions {
-  margin-top: 24px;
+.factory-console .factory-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+.factory-actions > button {
+  min-height: 36px;
+}
+.factory-actions > :empty {
+  display: none;
+}
+#panel-factory.active {
+  gap: 12px;
+}
+.factory-views {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+}
+.factory-views button {
+  min-height: 40px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.factory-views button[aria-pressed="true"] {
+  background: var(--text);
+  color: var(--bg);
+}
+[data-factory-section][hidden],
+#factory-belts-updates[hidden] {
+  display: none;
+}
+.factory-belt-toolbar {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.factory-belt-toolbar label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.factory-belt-toolbar input {
+  width: 190px;
+}
+.factory-belt-toolbar select,
+.factory-belt-toolbar input,
+.factory-belt-toolbar button {
+  min-height: 40px;
+}
+.factory-belt {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 20px;
+  padding: 18px 0;
+  border-top: 1px solid var(--border-strong);
+}
+.factory-belt-label > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.factory-belt-label h3 {
+  font:
+    700 28px/1 Georgia,
+    serif;
+  color: var(--accent);
+}
+.factory-belt-label p {
+  margin: 8px 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.factory-belt-state {
+  font-size: 12px;
+  color: var(--muted);
+}
+.factory-pin {
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.factory-pin[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.factory-belt-images {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  min-width: 0;
+  padding: 2px 2px 8px;
+  scrollbar-width: thin;
+}
+.factory-output {
+  flex: 0 0 112px;
+  min-width: 0;
+  margin: 0;
+}
+.factory-output > button {
+  display: block;
+  width: 112px;
+  height: 146px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: #eee9e1;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+.factory-output img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.factory-output figcaption {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px;
+  padding-top: 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.factory-output figcaption strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+  font-size: 12px;
+}
+.factory-output figcaption span {
+  grid-column: 1 / -1;
+}
+.factory-belt-empty {
+  align-self: center;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+@media (max-width: 850px) {
+  .factory-console {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .factory-console .factory-console__head,
+  .factory-console .factory-actions {
+    flex-direction: row;
+    align-items: center;
+  }
+  .factory-console .factory-console__head {
+    justify-content: space-between;
+  }
+}
+@media (max-width: 700px) {
+  .factory-console {
+    padding: 14px;
+  }
+  .factory-belt {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .factory-belt-label {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    align-items: center;
+  }
+  .factory-belt-label p {
+    margin: 0;
+  }
 }
 .factory-wiring {
   display: grid;
