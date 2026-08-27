@@ -66,6 +66,13 @@
     const prepareSymbol =
       typeof options.prepareSymbol === "function" ? options.prepareSymbol : async () => null
     const onError = typeof options.onError === "function" ? options.onError : () => {}
+    const isPrepared = typeof options.isPrepared === "function" ? options.isPrepared : () => true
+    const viewportHeight =
+      typeof options.viewportHeight === "function"
+        ? options.viewportHeight
+        : () => finiteNumber(windowRef.innerHeight)
+    const now = typeof options.now === "function" ? options.now : () => Date.now()
+    const retryAfter = new Map()
     const rootMarginPx = Math.max(0, finiteNumber(options.rootMarginPx, 960))
     const documentSymbols = new Set()
     const visibleAnchors = new Set()
@@ -79,6 +86,7 @@
     let documentFlushScheduled = false
     let speculationStarted = false
     let disposed = false
+    let viewportFrame = 0
     let policy = workingSetPolicy(options.connection, options.deviceMemory)
 
     const observer =
@@ -95,6 +103,7 @@
                   changed = true
                 } else {
                   visibleAnchors.delete(anchor)
+                  changed = true
                 }
               }
               if (changed) prepareVisibleWindow()
@@ -109,13 +118,21 @@
       const priority = PRIORITY[tier] ?? PRIORITY.document
       for (const rawSymbol of Array.isArray(rawSymbols) ? rawSymbols : []) {
         const symbol = normalizeSymbol(rawSymbol)
-        if (!symbol || readySymbols.has(symbol) || inFlightSymbols.has(symbol)) continue
+        if (!symbol || inFlightSymbols.has(symbol)) continue
+        if (tier !== "active" && (retryAfter.get(symbol)?.at || 0) > now()) continue
+        // A completed attempt is not permanent readiness. The bounded portrait
+        // LRU can evict it, and a partial/failed image load is not a warm card.
+        // Recheck only on real inventory/viewport/active events: never retry in
+        // a timer loop or expand the working set to hide a benchmark failure.
+        if (readySymbols.has(symbol) && isPrepared(symbol)) continue
+        readySymbols.delete(symbol)
         const queued = queuedBySymbol.get(symbol)
         if (queued) {
           if (priority < queued.priority) {
             queued.priority = priority
             queued.tier = tier
           }
+          if (tier === "visible" && queued.tier === "visible") queued.serial = queueSerial++
           continue
         }
         queuedBySymbol.set(symbol, { symbol, priority, tier, serial: queueSerial++ })
@@ -146,15 +163,29 @@
         inFlightSymbols.add(queued.symbol)
         Promise.resolve(prepareSymbol(queued.symbol, { tier: queued.tier }))
           .then((result) => {
-            if (!disposed && result) readySymbols.add(queued.symbol)
+            if (disposed) return
+            if (result && isPrepared(queued.symbol)) {
+              readySymbols.add(queued.symbol)
+              retryAfter.delete(queued.symbol)
+            } else recordPreparationFailure(queued.symbol)
           })
-          .catch((error) => onError(error, queued.symbol))
+          .catch((error) => {
+            if (!disposed) recordPreparationFailure(queued.symbol)
+            onError(error, queued.symbol)
+          })
           .finally(() => {
             activeWorkers -= 1
             inFlightSymbols.delete(queued.symbol)
             drain()
           })
       }
+    }
+
+    function recordPreparationFailure(symbol) {
+      const failures = Math.min(5, (retryAfter.get(symbol)?.failures || 0) + 1)
+      // Scroll events are frequent. A failed source may retry on a later real
+      // event, never every animation frame and never on a polling timer.
+      retryAfter.set(symbol, { failures, at: now() + Math.min(60000, 5000 * 2 ** (failures - 1)) })
     }
 
     function prepareDocumentInventory() {
@@ -175,17 +206,64 @@
       if (!speculationStarted || !policy.speculative || documentRef?.visibilityState === "hidden") {
         return
       }
-      const symbols = []
-      const seen = new Set()
+      const candidates = new Map()
+      const height = viewportHeight()
       for (const anchor of visibleAnchors) {
         const symbol = anchorSymbols.get(anchor)
-        if (!symbol || seen.has(symbol)) continue
-        seen.add(symbol)
-        symbols.push(symbol)
-        if (symbols.length >= policy.visibleLimit) break
+        // Ready sticky headers/sidebar aliases used to occupy all ten slots
+        // forever, starving actual article text with an entirely empty queue.
+        if (!symbol || (readySymbols.has(symbol) && isPrepared(symbol))) continue
+        if ((retryAfter.get(symbol)?.at || 0) > now()) continue
+        const rect = anchor.getBoundingClientRect?.()
+        if (rect && (!rect.width || !rect.height)) continue
+        const distance = rect && height ? Math.max(0, -rect.bottom, rect.top - height) : 0
+        const centerDistance = rect && height ? Math.abs((rect.top + rect.bottom - height) / 2) : 0
+        const rank = { symbol, distance, centerDistance }
+        const previous = candidates.get(symbol)
+        if (
+          !previous ||
+          distance < previous.distance ||
+          (distance === previous.distance && centerDistance < previous.centerDistance)
+        )
+          candidates.set(symbol, rank)
+      }
+      const symbols = [...candidates.values()]
+        .sort((a, b) => a.distance - b.distance || a.centerDistance - b.centerDistance)
+        .slice(0, policy.visibleLimit)
+        .map((candidate) => candidate.symbol)
+      const selected = new Set(symbols)
+      for (const [symbol, queued] of queuedBySymbol) {
+        if (queued.tier === "visible" && !selected.has(symbol)) queuedBySymbol.delete(symbol)
       }
       queueSymbols(symbols, "visible")
     }
+
+    function scheduleVisibleWindow() {
+      if (disposed || viewportFrame || !speculationStarted || !policy.speculative) return
+      if (typeof windowRef.requestAnimationFrame !== "function") {
+        prepareVisibleWindow()
+        return
+      }
+      // IO observes a wide prefetch margin; scrolling within it may cross no IO
+      // threshold. Re-rank once per scroll frame, never by pointer trajectory or
+      // scroll direction. Geometry reads are batched before starting any work.
+      viewportFrame = windowRef.requestAnimationFrame(() => {
+        viewportFrame = 0
+        if (!disposed) prepareVisibleWindow()
+      })
+    }
+
+    function onVisibilityChange() {
+      if (documentRef?.visibilityState !== "visible" || disposed) return
+      scheduleDocumentInventory()
+      scheduleVisibleWindow()
+    }
+
+    documentRef?.addEventListener?.("scroll", scheduleVisibleWindow, {
+      capture: true,
+      passive: true,
+    })
+    documentRef?.addEventListener?.("visibilitychange", onVisibilityChange)
 
     function registerAnchor(anchor) {
       if (disposed) return false
@@ -233,12 +311,16 @@
     return Object.freeze({
       dispose() {
         disposed = true
+        documentRef?.removeEventListener?.("scroll", scheduleVisibleWindow, { capture: true })
+        documentRef?.removeEventListener?.("visibilitychange", onVisibilityChange)
+        if (viewportFrame) windowRef.cancelAnimationFrame?.(viewportFrame)
         observer?.disconnect()
         queuedBySymbol.clear()
         visibleAnchors.clear()
         documentSymbols.clear()
         anchorGroups.clear()
         readySymbols.clear()
+        retryAfter.clear()
       },
       registerAnchor,
       unregisterAnchor,
@@ -254,14 +336,31 @@
         prepareVisibleWindow()
       },
       isReady(symbol) {
-        return readySymbols.has(normalizeSymbol(symbol))
+        const normalized = normalizeSymbol(symbol)
+        return readySymbols.has(normalized) && isPrepared(normalized)
+      },
+      inspectSymbol(rawSymbol) {
+        // Read-only diagnostics: do not call queueSymbols, touch cache recency,
+        // or wake preparation merely because a benchmark is observing it.
+        const symbol = normalizeSymbol(rawSymbol)
+        return Object.freeze({
+          speculationStarted,
+          policy,
+          inventoried: documentSymbols.has(symbol),
+          queued: queuedBySymbol.has(symbol),
+          inFlight: inFlightSymbols.has(symbol),
+          prepared: readySymbols.has(symbol) && isPrepared(symbol),
+          queueSize: queuedBySymbol.size,
+          activeWorkers,
+          retryAfterMs: Math.max(0, (retryAfter.get(symbol)?.at || 0) - now()),
+        })
       },
       snapshot() {
         return Object.freeze({
           policy,
           speculationStarted,
           documentSymbols: Array.from(documentSymbols),
-          readySymbols: Array.from(readySymbols),
+          readySymbols: Array.from(readySymbols).filter(isPrepared),
           queuedSymbols: Array.from(queuedBySymbol.keys()),
           inFlightSymbols: Array.from(inFlightSymbols),
         })

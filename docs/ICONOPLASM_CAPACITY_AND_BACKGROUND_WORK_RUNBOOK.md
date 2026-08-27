@@ -428,6 +428,31 @@ Extension hover detail is immutable within a published card snapshot:
   the frame retains 48 decoded sources, and the simple renderer retains 96;
   same-source work is deduplicated.
 
+Preparation completion is not a permanent readiness bit: a partial failure or
+the bounded source LRU evicting a portrait must make that symbol eligible again
+when its real inventory/viewport/active event requests it. Do not add retry
+polling or increase the cache without evidence. The visible window selects at
+most ten **unprepared** symbols; already-ready sticky headers/sidebars do not
+consume those slots. Actual-viewport candidates outrank the 960 px prefetch
+margin, with distance to viewport center breaking ties. Scroll events coalesce
+to one geometry-read frame because movement inside the IO margin need not cross
+an observer threshold. Obsolete visible queue entries are removed; active work
+is preserved. Partial failures get event-driven 5–60 second retry backoff, never
+a polling timer or per-scroll-frame network retry. This is deterministic viewport
+selection, not pointer-trajectory or scroll-direction prediction.
+The PDF scroll container must
+release its active target on pointer exit (including the toolbar), forwarding
+the destination to the shared interactive-tooltip grace policy; otherwise the
+old card can physically cover a correctly prepared next gene.
+
+Reader latency acceptance lives in
+[`ICONOPLASM_READER_PERFORMANCE_BENCHMARK.md`](ICONOPLASM_READER_PERFORMANCE_BENCHMARK.md).
+One eventual hover is only a smoke test. Preserve first-hover/repeat populations,
+fixed prediction lead times, actual pre-pointer cache readiness, highlighting
+delay, failure counts and host responsiveness. Do not average away recurring
+first-hover latency, wait for readiness before timing, or silently skip browser
+failures.
+
 This follows the current small-queue discipline used by modern router
 prefetchers: explicit intent outranks viewport speculation, matching predicted
 immutable work is promoted rather than restarted, newer intent

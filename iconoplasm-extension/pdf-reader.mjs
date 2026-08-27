@@ -572,20 +572,35 @@ eventBus.on("rotationchanging", () => {
   for (const state of pageState.values()) state.renderRevision += 1
 })
 
+function transitionActiveAnchor(next, relatedTarget = null) {
+  const previous = activeAnchor
+  // Visibility reads activeAnchor, so publish the new selection before refresh.
+  activeAnchor = next
+  core.transitionReaderAnchor({
+    previous,
+    next,
+    bridge,
+    relatedTarget,
+    refresh: applyHighlightVisibilityToState,
+  })
+}
+
 container.addEventListener("pointermove", (event) => {
   if (!highlightingEnabled || !bridge) return
   if (event.target?.closest?.(".iconoplasm-tooltip")) return
   const anchor = findAnchorAtPoint(event.clientX, event.clientY)
   if (anchor === activeAnchor) return
-  const previousAnchor = activeAnchor
-  if (previousAnchor) bridge.leaveAnchor?.(previousAnchor, event.target)
-  activeAnchor = anchor
-  const previousState = previousAnchor?._iconoplasmPageState
-  const activeState = activeAnchor?._iconoplasmPageState
-  if (previousState) applyHighlightVisibilityToState(previousState)
-  if (activeState && activeState !== previousState) applyHighlightVisibilityToState(activeState)
-  if (activeAnchor) bridge.activateAnchor?.(activeAnchor)
+  transitionActiveAnchor(anchor, event.target)
 })
+
+// The selectable PDF text owns pointer hit testing. Leaving its scroll container
+// produces no further pointermove here; without this transition the old card
+// stays open over the next gene even when that gene's image is already prepared.
+// Forward the destination so entering the interactive card retains shared grace.
+container.addEventListener("pointerleave", (event) => {
+  transitionActiveAnchor(null, event.relatedTarget)
+})
+window.addEventListener("blur", closeActiveCard)
 
 async function loadPdf(bytes, name = "document.pdf") {
   if (!(bytes instanceof Uint8Array) || !bytes.byteLength) {

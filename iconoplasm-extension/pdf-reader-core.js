@@ -270,7 +270,19 @@
     return null
   }
 
+  function transitionReaderAnchor({ previous, next, bridge, relatedTarget = null, refresh }) {
+    if (previous === next) return next
+    if (previous) bridge?.leaveAnchor?.(previous, relatedTarget)
+    const previousState = previous?._iconoplasmPageState
+    const nextState = next?._iconoplasmPageState
+    if (previousState) refresh(previousState)
+    if (nextState && nextState !== previousState) refresh(nextState)
+    if (next) bridge?.activateAnchor?.(next)
+    return next
+  }
+
   root.IconoplasmPdfReaderCore = Object.freeze({
+    transitionReaderAnchor,
     localFileSystemPath,
     normalizeTextRunMatches,
     contentOriginFromBorderRect,

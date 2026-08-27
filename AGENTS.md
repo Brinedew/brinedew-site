@@ -220,7 +220,13 @@ presence-only marker when an HttpOnly session cookie is already present; it must
 not perform an anonymous auth lookup. Extension rich detail and its compact
 portrait locator use separate version-addressed immutable per-symbol GETs over
 the same named card artifact; older clients retain the batch compatibility route.
-HTML and PDF feed one tab-scoped reading session. Initial and mutation-driven
+HTML and PDF feed one tab-scoped reading session. Performance acceptance uses
+`docs/ICONOPLASM_READER_PERFORMANCE_BENCHMARK.md`: time highlighting from page
+load, keep each article's first hover separate from repeats, and inspect actual
+cache readiness before fixed-deadline hovers. A completed preparation attempt
+must not remain "ready" after image eviction or partial failure. No wait-until-warm
+timing, silently skipped browser failures, or hidden replacement browser.
+Initial and mutation-driven
 recognition scans must run in bounded idle slices; extension DOM work must not
 monopolize the host page's rendering turn. Catalog initialization, including a
 cold scanner-artifact fetch, must not begin before the host `load` event. The session inventories recognized

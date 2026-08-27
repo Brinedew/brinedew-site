@@ -1419,6 +1419,15 @@
     deviceMemory: window.navigator?.deviceMemory,
     rootMarginPx: 960,
     prepareSymbol: prepareReadingSessionSymbol,
+    isPrepared(symbol) {
+      const detail = geneDetailCache.get(symbol)
+      const locator = portraitLocatorCache.get(symbol)
+      if (!detail || !locator) return false
+      if (portraitAssetShaFromRecord(detail) !== portraitAssetShaFromRecord(locator)) return false
+      const portraitUrl = portraitUrlFromGeneDetail(detail)
+      // A canonically absent portrait is valid; a failed/evicted image is not.
+      return !portraitUrl || portraitCache.dataUrlCache.has(portraitUrl)
+    },
     onError: (error, symbol) => {
       if (runtimeDisconnected) return
       console.error(`[Iconoplasm] failed to prepare ${symbol} for this reading session:`, error)
@@ -1429,6 +1438,46 @@
     windowRef: window,
     quietDelayMs: 1000,
     task: () => readingSession.startSpeculation(),
+  })
+
+  // ARCHITECTURE FENCE [IPD-008]: observe readiness BEFORE pointer entry. Waiting
+  // for a warm cache before timing a hover hides the recurring first-hover bug.
+  // This read-only hook lives in the extension's isolated world (or its own PDF
+  // page), not the host page. No timers, storage, telemetry, or preparation are
+  // started by inspection. Expose booleans/public epoch only, never private data.
+  globalThis.IconoplasmReaderDiagnostics = Object.freeze({
+    matchesPortraitSource(rawSymbol, source, revision) {
+      if (revision !== activeCardSnapshotRevision) return false
+      const symbol = String(rawSymbol || "")
+        .trim()
+        .toUpperCase()
+      const record = geneDetailCache.get(symbol) || portraitLocatorCache.get(symbol)
+      const portraitUrl = portraitUrlFromGeneDetail(record)
+      return Boolean(
+        portraitUrl && source && portraitCache.dataUrlCache.get(portraitUrl) === source,
+      )
+    },
+    inspect(rawSymbol) {
+      const symbol = String(rawSymbol || "")
+        .trim()
+        .toUpperCase()
+      const detail = geneDetailCache.get(symbol)
+      const locator = portraitLocatorCache.get(symbol)
+      const portraitUrl = portraitUrlFromGeneDetail(detail || locator)
+      return Object.freeze({
+        at: performance.timeOrigin + performance.now(),
+        initialized,
+        disconnected: runtimeDisconnected,
+        revision: activeCardSnapshotRevision,
+        variant: cardVariant,
+        detailReady: Boolean(detail),
+        locatorReady: Boolean(locator),
+        portraitExpected: Boolean(portraitUrl),
+        portraitSha: portraitAssetShaFromRecord(detail || locator),
+        portraitReady: Boolean(portraitUrl && portraitCache.dataUrlCache.has(portraitUrl)),
+        session: readingSession.inspectSymbol(symbol),
+      })
+    },
   })
 
   function registerGeneAnchor(anchor) {
