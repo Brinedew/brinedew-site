@@ -75,6 +75,13 @@ function doesNotMatchOrFail(haystack, pattern, message) {
 // If one of these strings changes because the implementation legitimately moved,
 // replace this guard with an equally loud behavioral check in the same commit.
 // Do not remove it just because a refactor made the string assertion annoying.
+// ARCHITECTURE FENCE [IPD-001]: regional failure must stay tab-scoped; run the
+// actual extension adapter regression before deploying any shared policy change.
+includesOrFail(
+  workflow,
+  "iconoplasm-extension/service-worker.test.js",
+  "Deploy must run the extension's cross-tab Bunny isolation regression.",
+)
 includesOrFail(
   worker,
   "ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE",

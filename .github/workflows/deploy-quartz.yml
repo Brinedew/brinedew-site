@@ -104,6 +104,7 @@ jobs:
           # its live verifier are production-release invariants, not CI-only checks.
           node scripts/run-tests.mjs \
             scripts/architecture-fences.test.js \
+            iconoplasm-extension/service-worker.test.js \
             scripts/verify-iconoplasm-publication-aliases.test.js \
             workers/iconoplasm.d1-cost-barrier.test.js \
             workers/iconoplasm.d1-hot-query-guard.test.js \

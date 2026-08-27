@@ -27497,6 +27497,9 @@ async function handlePublicPortraitLocator(request, env, ctx, snapshotFromPath, 
   // the exact named card artifact, not a separately published portrait index.
   // The independent immutable URL lets hover start portrait delivery without
   // waiting for rich detail while retaining one snapshot and one canon.
+  // A byte-equivalent Bunny cache of this response is permitted. "One canon"
+  // forbids independent selection/pointers, not caching. Worker Cache API hits
+  // still consume a Worker invocation; do not mistake them for direct CDN hits.
   const barrier = await currentMobileCardSnapshotVersion(env)
   const publishedVersions = new Set(
     [barrier.current, barrier.previous].map((value) => String(value || "").trim()).filter(Boolean),

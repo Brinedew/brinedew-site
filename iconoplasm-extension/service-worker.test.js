@@ -385,6 +385,49 @@ test("native portrait source planning is fetch-free and persists the winning reg
   }
 })
 
+// ARCHITECTURE FENCE [IPD-001]: an ISP failure belongs to one tab, not a country
+// or the shared extension worker. Exercise the native image planning boundary.
+test("a blocked tab cannot disable Bunny for healthy tabs or new VPN sessions", async () => {
+  const originalFetch = globalThis.fetch
+  let workerFetches = 0
+  globalThis.fetch = async () => {
+    workerFetches += 1
+    throw new Error("native source planning must not buffer image bytes")
+  }
+  await hooks.clearPortraitSourceStates()
+  try {
+    const canonical = "https://iconoplasm.brinedew.bio/portraits/v1/aa/asset/medium.webp"
+    const blocked = await hooks.portraitSourcePlan(canonical, 301)
+    await hooks.reportPortraitSourceResult(blocked.primaryUrl, false, 301)
+    await hooks.reportPortraitSourceResult(blocked.fallbackUrl, true, 301)
+
+    const healthy = await hooks.portraitSourcePlan(canonical, 302)
+    assert.equal(healthy.primarySource, "accelerator")
+    await hooks.reportPortraitSourceResult(healthy.primaryUrl, true, 302)
+
+    const plans = await Promise.all(
+      Array.from({ length: 100 }, async (_, index) => {
+        const url = `https://iconoplasm.brinedew.bio/portraits/v1/aa/asset-${index}/medium.webp`
+        return Promise.all([hooks.portraitSourcePlan(url, 301), hooks.portraitSourcePlan(url, 302)])
+      }),
+    )
+    for (const [fallback, direct] of plans) {
+      assert.equal(fallback.primarySource, "canonical")
+      assert.equal(direct.primarySource, "accelerator")
+      assert.equal(new URL(direct.primaryUrl).origin, portraitDeliveryPolicy.accelerator.origin)
+      assert.equal(new URL(fallback.primaryUrl).pathname, new URL(direct.primaryUrl).pathname)
+    }
+    // A new tab on a working VPN gets its own probe; it must not inherit 301.
+    const fresh = await hooks.portraitSourcePlan(canonical, 303)
+    assert.equal(fresh.primarySource, "accelerator")
+    assert.equal(fresh.hedgeDelayMs, 350)
+    assert.equal(workerFetches, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+    await hooks.clearPortraitSourceStates()
+  }
+})
+
 test("portrait fetch failures back off briefly but recover after the error TTL", async () => {
   const originalDateNow = Date.now
   const originalFetch = globalThis.fetch
