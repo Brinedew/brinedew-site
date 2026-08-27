@@ -10,6 +10,7 @@ import {
 // complete after a newer PUT. HTTP caching of the ordered head has no such race.
 export const CARD_PUBLICATION_STORAGE = "bunny_card_catalog_v2"
 export const CARD_PUBLICATION_BATCH = 7
+const CARD_PUBLICATION_CONCURRENCY = 2
 export const CARD_DELIVERY_INDEX_SIZE = 128
 // This publisher's allocation, NOT an account entitlement. Leave 45k of the
 // Free plan's 100k SQLite DO writes for votes, other coordinators and recovery.
@@ -97,6 +98,13 @@ function groupChanges(refs, symbols) {
     groups.get(index).push(symbol)
   }
   return [...groups].map(([index, symbols]) => ({ index, symbols }))
+}
+
+async function settlePublicationWrites(promises) {
+  const settled = await Promise.allSettled(promises)
+  const failure = settled.find((result) => result.status === "rejected")
+  if (failure) throw failure.reason
+  return settled.map((result) => result.value)
 }
 
 // The algorithm is independent of DO transport and SQL. Its repository must
@@ -207,20 +215,32 @@ export function createCardPublication({
     // 7 cards * 3 independent objects * (PUT + verified GET) = 42 fetches.
     // Index/packed-shard/root publication is a separate invocation, never an
     // accidental 50-subrequest overflow on Cloudflare Free.
-    const prepared = await Promise.all(
-      slice.map(async (symbol) => {
-        const card = bySymbol.get(symbol)
-        if (!card) return { symbol, card: null, entry: null }
-        if (!source.complete(card)) throw new Error(`Invalid canonical card: ${symbol}`)
-        const stable = source.stable(card)
-        const [full, gene, portrait] = await Promise.all([
-          objects.write("cards", stable),
-          objects.write("genes", source.project(stable.payload)),
-          objects.write("portraits", source.stable(source.locator(stable))),
-        ])
-        return { symbol, card, entry: [symbol, full.hash, gene.hash, portrait.hash] }
-      }),
-    )
+    // Cloudflare's April 2026 limit is six requests WAITING FOR HEADERS,
+    // not six full response bodies. Starting 21 PUTs at once can consume the
+    // 8-second request deadline while most waited in the platform queue.
+    // Two cards x three independent PUT/GET pipelines stay within six.
+    // Keep seven cards per durable phase: reducing that batch instead would
+    // increase SQLite checkpoint writes. Settle even failed groups completely
+    // before retrying so an earlier phase cannot retain invisible in-flight work.
+    // https://developers.cloudflare.com/changelog/post/2026-04-09-relaxed-connection-limiting/
+    const prepared = []
+    for (let offset = 0; offset < slice.length; offset += CARD_PUBLICATION_CONCURRENCY) {
+      const group = await settlePublicationWrites(
+        slice.slice(offset, offset + CARD_PUBLICATION_CONCURRENCY).map(async (symbol) => {
+          const card = bySymbol.get(symbol)
+          if (!card) return { symbol, card: null, entry: null }
+          if (!source.complete(card)) throw new Error(`Invalid canonical card: ${symbol}`)
+          const stable = source.stable(card)
+          const [full, gene, portrait] = await settlePublicationWrites([
+            objects.write("cards", stable),
+            objects.write("genes", source.project(stable.payload)),
+            objects.write("portraits", source.stable(source.locator(stable))),
+          ])
+          return { symbol, card, entry: [symbol, full.hash, gene.hash, portrait.hash] }
+        }),
+      )
+      prepared.push(...group)
+    }
     repo.transaction(() => {
       for (const item of prepared) repo.prepare(item.symbol, item)
       repo.put("job", { ...job, offset: job.offset + slice.length })
