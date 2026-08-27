@@ -1,5 +1,33 @@
 # Iconoplasm capacity and background-work runbook
 
+## Current account state versus historical allowances
+
+**Owner clarification, 2026-08-27:** Free initially → paid R2 used → R2 disabled
+with unpaid debt → currently Free until the debt is settled. R2 billing and the
+Workers subscription are separate; do not infer a past paid Workers subscription
+from paid R2. Transition
+dates are unknown; do not invent them. Even a $5 upgrade would require paying
+the existing balance (previously described as roughly $70). R2 and paid Workers
+capacity are unavailable to this design. Bunny is the intentionally paid
+replacement, not a prohibited provider. The canonical spending boundary is in
+`ICONOPLASM_PRODUCT_OPERATING_MODEL.md`.
+
+The signed-in Cloudflare **Workers plans** page was checked on 2026-08-27 and
+explicitly showed **Free — Current plan**: 100,000 Worker requests/day, 10 ms
+CPU/request, 5 million D1 rows read/day and 100,000 D1 rows written/day. This is
+fresh plan evidence; the debt/history above remains owner-reported. The local production Wrangler configuration
+still contains historical D1 monthly budgets of 24 billion reads and 40 million
+writes, with a threefold daily burst allowance. The cost cockpit derives its
+"smart daily" allowances from that configuration. **Those values do not establish
+Free-plan capacity or raise a provider quota.** Do not use the historical cycle
+budget, or paid-period observed usage, to certify today's workload.
+
+B-716 must reconcile budget enforcement and UI with the current Free boundary
+as part of the growth migration. Until verified, the old smart-budget display
+is not proof of protection against Free daily limits. Record provider hard
+limits separately from product allocations, and never reinterpret daily quotas
+as a monthly pool. No billing or subscription changes are part of this audit.
+
 ## Immutable hover metadata transport (B-711, 2026-08-27)
 
 **ARCHITECTURE FENCE [IPD-008] + [IPD-011]**: the existing publication barrier
@@ -168,6 +196,18 @@ internal invocation, so the proxy doubled the metered request count. A normal
 Iconoplasm page also requested more than one hundred static dependencies. Cache
 API hits inside a Worker do not solve that cost; matching assets must bypass the
 Worker.
+
+The July 2026 **Workers Cache** product is different from Workers Static Assets.
+Its cache HITs still count as Worker requests; enabling it also meters otherwise
+free static assets and service-binding requests. Its default key excludes the
+hostname, which is independently unsafe for this multi-host service without a
+cache-identity redesign. Do not enable it as a Free-quota escape. The topology
+validator parses TOML and rejects enabled caches at top level, in any environment,
+or in named exports; mutation tests run in the deployment gate. A future CPU
+optimization using it requires a fully costed, explicitly reviewed replacement
+of this fence, not just a faster HIT in one benchmark. Sources checked
+2026-08-27: [pricing](https://developers.cloudflare.com/workers/platform/pricing/)
+and [cache semantics](https://developers.cloudflare.com/workers/cache/).
 
 Service-binding requests to the stateful Worker also pass through its
 asset-first dispatcher. Consequently, the shared Brinedew/GeneGuessr edge must
