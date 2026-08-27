@@ -101,6 +101,52 @@ async function drain(publisher) {
   throw new Error("publication failed to drain")
 }
 
+test("publication starts at most six storage pipelines and preserves the seven-card write budget", async () => {
+  const f = fixture()
+  const write = f.objects.write
+  let active = 0
+  let peak = 0
+  f.objects.write = async (...args) => {
+    active++
+    peak = Math.max(peak, active)
+    try {
+      await new Promise((resolve) => setImmediate(resolve))
+      return await write(...args)
+    } finally {
+      active--
+    }
+  }
+  const p = f.create()
+  await p.bootstrap()
+  await p.step()
+  assert.equal(peak, 6)
+  assert.equal(active, 0)
+  assert.equal(f.writes.length, CARD_PUBLICATION_BATCH * 3)
+  assert.equal(f.repository.prepared().length, CARD_PUBLICATION_BATCH)
+})
+
+test("failed publication waits for started uploads to settle before retrying", async () => {
+  const f = fixture()
+  const write = f.objects.write
+  let active = 0
+  f.objects.write = async (kind, value) => {
+    active++
+    try {
+      if (kind === "genes") throw new Error("injected upload failure")
+      await new Promise((resolve) => setImmediate(resolve))
+      return await write(kind, value)
+    } finally {
+      active--
+    }
+  }
+  const p = f.create()
+  await p.bootstrap()
+  await assert.rejects(p.step(), /injected upload failure/)
+  assert.equal(active, 0, "no upload may outlive its failed publication phase")
+  assert.equal(f.repository.prepared().length, 0)
+  assert.equal(p.status().job.offset, 0)
+})
+
 test("bootstrap keeps legacy public until every object is prepared and atomically commits", async () => {
   const f = fixture()
   const p = f.create()
