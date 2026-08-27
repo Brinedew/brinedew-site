@@ -10,6 +10,9 @@ draft: false
 
 ## Unreleased
 
+## 0.5.3 - 2026-08-27
+
+* Optimized portrait retrieval from host, with regional fallback
 ## 0.5.2 - 2026-08-26
 
 * Hotfix: Backend data management.
