@@ -450,6 +450,21 @@
         },
         {
           "category": "source",
+          "file": "scripts/lib/iconoplasm-reader-benchmark.mjs",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "test",
+          "file": "scripts/iconoplasm-reader-benchmark.test.mjs",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "runbook",
+          "file": "docs/ICONOPLASM_READER_PERFORMANCE_BENCHMARK.md",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "source",
           "file": "iconoplasm-extension/metadata-delivery.js",
           "token": "ARCHITECTURE FENCE [IPD-008]"
         },

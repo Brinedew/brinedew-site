@@ -33,6 +33,15 @@ const reviewerPackage = JSON.parse(
   readFileSync(new URL("./amo-source/package.json", import.meta.url), "utf8"),
 )
 
+test("PDF pointer exits use the same transition as movement, including toolbar and window exit", () => {
+  assert.match(
+    readerSource,
+    /container\.addEventListener\("pointerleave", \(event\) => \{\s*transitionActiveAnchor\(null, event\.relatedTarget\)/u,
+  )
+  assert.match(readerSource, /core\.transitionReaderAnchor\(/u)
+  assert.match(readerSource, /window\.addEventListener\("blur", closeActiveCard\)/u)
+})
+
 test("PDF highlight behavior is cross-browser and preserves the stored mode", () => {
   assert.match(
     contentSource,

@@ -13,6 +13,57 @@ const shapes = {
 
 const presentation = (mode) => () => ({ color: "#234567", shape: shapes[mode] })
 
+test("leaving the PDF clears its active anchor and forwards the real destination", () => {
+  const calls = []
+  const previous = { _iconoplasmPageState: { page: 1 } }
+  const toolbar = { name: "toolbar" }
+  const bridge = {
+    leaveAnchor: (anchor, target) => calls.push(["leave", anchor, target]),
+    activateAnchor: (anchor) => calls.push(["activate", anchor]),
+  }
+  const result = core.transitionReaderAnchor({
+    previous,
+    next: null,
+    bridge,
+    relatedTarget: toolbar,
+    refresh: (state) => calls.push(["refresh", state]),
+  })
+  assert.equal(result, null)
+  assert.deepEqual(calls, [
+    ["leave", previous, toolbar],
+    ["refresh", previous._iconoplasmPageState],
+  ])
+})
+
+test("PDF-to-card transition preserves shared tooltip grace while reentry can reactivate", () => {
+  const calls = []
+  const anchor = { _iconoplasmPageState: {} }
+  const tooltip = { name: "tooltip" }
+  const bridge = {
+    leaveAnchor: (previous, destination) => calls.push(["leave", destination]),
+    activateAnchor: (next) => calls.push(["activate", next]),
+    closeCard: () => assert.fail("pointer transitions must not force-close an interactive card"),
+  }
+  let active = core.transitionReaderAnchor({
+    previous: anchor,
+    next: null,
+    relatedTarget: tooltip,
+    bridge,
+    refresh: () => {},
+  })
+  active = core.transitionReaderAnchor({
+    previous: active,
+    next: anchor,
+    bridge,
+    refresh: () => {},
+  })
+  assert.equal(active, anchor)
+  assert.deepEqual(calls, [
+    ["leave", tooltip],
+    ["activate", anchor],
+  ])
+})
+
 test("local PDF URLs become exact pasteable filesystem paths", () => {
   assert.equal(
     core.localFileSystemPath(
