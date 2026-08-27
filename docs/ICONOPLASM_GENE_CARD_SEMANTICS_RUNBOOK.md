@@ -94,9 +94,9 @@ remain visible in the interactive dossier as subordinate source material, but
 it is never `primaryImageOfPage`, `Gene.image`, the social image, or an
 image-sitemap entry.
 
-In healthy non-Vietnam regions, the tab-scoped IPD-001 probe may select Bunny's
-byte-equivalent immutable URL for delivery. Vietnam and any failed Bunny probe
-use the first-party route. The first-party URL remains the discovery identity.
+On any healthy network, the tab-scoped IPD-001 probe may select Bunny's
+byte-equivalent immutable URL for delivery. A failed probe selects first-party
+for that tab; country is not a routing rule. The first-party URL remains the discovery identity.
 
 ## Agent image resolution
 
@@ -149,8 +149,8 @@ The resolver is the free HTTP foundation for any future MCP transport. Do not
 create a separate MCP authority, require users to configure MCP for ordinary
 image retrieval, publish a 19,023-image manifest, or add source-portrait links
 to every archive row. Bunny may be returned as a byte-equivalent alternate for
-healthy non-Vietnam delivery, but the first-party URL remains the stable
-identity and works directly in Vietnam.
+any healthy network, including working Vietnamese providers and VPNs, but the
+first-party URL remains the stable identity and regional fallback.
 
 Standards-aware clients discover that existing resolver from the RFC 8631
 `Link` relations on public HTML, crawler documents, and JSON responses.

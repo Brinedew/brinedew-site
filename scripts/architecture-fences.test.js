@@ -323,6 +323,9 @@ test("Bunny fences protect canonical authority without forbidding immutable CDN 
   assert.doesNotMatch(instructions, /including the exact-pair\s+fast path; never disable cleanup/)
   assert.match(instructions, /Write competing\s+hypotheses and disproof tests/)
   assert.doesNotMatch(instructions, /project almost certainly did not change/)
+  for (const fence of registry.fences) {
+    assert.doesNotMatch(fence.decision, /non-Vietnam/, "A country is not a connectivity test")
+  }
 })
 
 // ARCHITECTURE FENCE [IPD-004]
