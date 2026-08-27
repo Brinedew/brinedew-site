@@ -58,8 +58,13 @@ with bounded backoff; scheduled recovery catches a lost notification.
 
 ## ARCHITECTURE FENCE [IPD-008]: article lifetime is the freshness boundary
 
-Each `GET_GENE_DATA` load checks `/api/public/v1/card-current` independently of
-the scanner's five-minute refresh. A minutes-old installation check cannot
+Each article checks `/api/public/v1/card-current` independently of
+the scanner's five-minute refresh. A cache-only `GET_GENE_DATA` first permits
+local recognition after the initial paint boundary, without network or portrait
+hydration. `GET_CARD_FRESHNESS` runs once after host load or on explicit early
+hover; a cold `GET_GENE_DATA` already performs the same check and is not repeated.
+Both card lanes and disk hydration wait for this selection, not the scanner.
+A minutes-old installation check cannot
 skip this request. The returned epoch belongs to that article; another tab's
 storage update cannot replace it or refetch its visible hover. No timer polls
 an idle article. A failed check retains the coherent cached epoch.

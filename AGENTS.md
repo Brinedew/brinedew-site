@@ -228,8 +228,17 @@ must not remain "ready" after image eviction or partial failure. No wait-until-w
 timing, silently skipped browser failures, or hidden replacement browser.
 Initial and mutation-driven
 recognition scans must run in bounded idle slices; extension DOM work must not
-monopolize the host page's rendering turn. Catalog initialization, including a
-cold scanner-artifact fetch, must not begin before the host `load` event. The session inventories recognized
+monopolize the host page's rendering turn. The content entrypoint uses `document_end`,
+then yields through a paint boundary and genuine idle time. Only a validated local
+scanner may initialize before host `load`; cache-only means no network, refresh,
+legacy migration, renderer boot, or persistent portrait hydration. Cold scanner
+downloads still wait for `load`. Recognition slices have a 4 ms wall-time budget
+between nodes and no forced idle timeout before load. Matcher construction uses
+genuine idle slices targeting 8 ms, with clock checks every 32 tokens. Semantic
+article/main roots precede navigation without changing matching. Each article selects its
+card epoch once after load (or explicit early hover), before either card lane or
+disk cache is used. Do not re-couple cached recognition to card freshness or to
+unrelated slow images/analytics. The session inventories recognized
 symbols immediately but may not start speculative detail or portrait work until
 the host `load` event, a one-second quiet delay, and a genuine idle callback.
 It prepares the first ten ordinary-document symbols with at most one worker on
@@ -243,7 +252,7 @@ projection of the exact card payload, shares its snapshot version and portrait
 SHA, and must fail closed on disagreement; it never selects canon or advances
 an independent publication. Byte-equivalent caches are permitted. Do not restore pointer-trajectory, DOM-neighbor, scroll-direction, or
 surface-specific prediction. Packaged card fonts begin loading
-during initialization in both the host page and persistent card frame. Both routes
+during card initialization after load (or explicit hover) in both the host page and persistent card frame. Both routes
 project immutable published card artifacts and
 persist a bounded cache keyed by the card snapshot version; they must not
 compose public hover cards from D1 or turn transient

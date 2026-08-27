@@ -5,6 +5,8 @@
 ;(function () {
   "use strict"
 
+  const startupTiming = { runtime: performance.now() }
+
   const isPdfReaderDocument = document.documentElement?.dataset?.iconoplasmPdfReader === "true"
   const isOuterRawFilePdfDocument =
     !isPdfReaderDocument &&
@@ -55,7 +57,8 @@
     typeof IconoContentLifecycle.requestGeneData !== "function" ||
     typeof IconoContentLifecycle.createMutationScanController !== "function" ||
     typeof IconoContentLifecycle.scheduleHostFirstBackgroundWork !== "function" ||
-    typeof IconoContentLifecycle.runAfterHostLoad !== "function"
+    typeof IconoContentLifecycle.runAfterHostLoad !== "function" ||
+    typeof IconoContentLifecycle.runAfterHostPaint !== "function"
   ) {
     console.error("[Iconoplasm] content lifecycle missing: load content-lifecycle.js first")
     return
@@ -542,6 +545,8 @@
   let initializationPromise = null
   let initializationRetryTimer = 0
   let initialized = false
+  let articleCardsPromise = null
+  let articleScannerPayload = null
   let effectiveBlocklist = new Set()
   let highlightMode = highlightRuntime.setMode("pill")
   let highlightVisibility = "always"
@@ -1181,10 +1186,12 @@
     if (runtimeDisconnected) return
     if (discoveryBufferFlushScheduled) return
     discoveryBufferFlushScheduled = true
-    window.setTimeout(() => {
-      discoveryBufferFlushScheduled = false
-      mergeGuestDiscoveriesIfSignedIn().catch(() => null)
-    }, 0)
+    IconoContentLifecycle.runAfterHostLoad({
+      task: () => {
+        discoveryBufferFlushScheduled = false
+        mergeGuestDiscoveriesIfSignedIn().catch(() => null)
+      },
+    })
   }
 
   function clearPendingDiscovery(symbol = activeSymbol) {
@@ -1377,10 +1384,12 @@
   }
 
   async function fetchGeneDetailsBatch(symbols, options = {}) {
+    await ensureArticleCards()
     return geneDetailStore.fetchBatch(symbols, options)
   }
 
   async function fetchPortraitLocatorsBatch(symbols, options = {}) {
+    await ensureArticleCards()
     return portraitLocatorStore.fetchBatch(symbols, options)
   }
 
@@ -1467,6 +1476,7 @@
       return Object.freeze({
         at: performance.timeOrigin + performance.now(),
         initialized,
+        startup: { ...startupTiming },
         disconnected: runtimeDisconnected,
         revision: activeCardSnapshotRevision,
         variant: cardVariant,
@@ -1481,6 +1491,7 @@
   })
 
   function registerGeneAnchor(anchor) {
+    startupTiming.firstAnchor ??= performance.now()
     readingSession.registerAnchor(anchor)
   }
 
@@ -1622,6 +1633,7 @@
   }
 
   async function initialize() {
+    startupTiming.initialize = performance.now()
     await Promise.all([
       loadHighlightMode(),
       loadHighlightVisibility(),
@@ -1629,46 +1641,54 @@
       loadGuestDiscoverySymbols(),
     ])
 
-    // The rich renderer is a persistent process-local surface. Boot it in its final
-    // tooltip-owned parent while the scanner payload is loading. Moving an iframe
-    // after it has loaded reloads its browsing context and discards decoded portraits.
+    // Create only the lightweight shell here. The persistent renderer boots in
+    // this final parent after load or explicit hover, never during cache-only
+    // recognition. Moving a loaded iframe would discard decoded portraits.
     if (!tooltip) createTooltip()
     if (!authToast) createAuthToast()
-    if (usesTooltipFrameRenderer()) ensureLitArchivalFrame()
 
     // Effective blocklist = (chosen shared defaults - user-removed) + user extras.
     // The packaged defaults are used only until a valid shared projection exists.
     effectiveBlocklist = await loadEffectiveBlocklist()
+    startupTiming.settings = performance.now()
 
-    const payload = await IconoContentLifecycle.requestGeneData(chrome, {
+    const requestOptions = {
       timeoutMs: GENE_DATA_REQUEST_TIMEOUT_MS,
       setTimeoutFn: window.setTimeout.bind(window),
       clearTimeoutFn: window.clearTimeout.bind(window),
-    })
-
-    // Backward compatibility:
-    // - old worker returned raw map
-    // The worker returns the schema-5 catalog projection and contract state.
-    if (payload && payload.genes && typeof payload.genes === "object") {
-      geneMap = payload.genes
-      adoptCardSnapshotRevision(payload.cardSnapshotVersion)
-    } else {
-      geneMap = payload
     }
+    let payload = await IconoContentLifecycle.requestGeneData(chrome, {
+      ...requestOptions,
+      cacheOnly: true,
+    })
+    if (!payload?.genes) {
+      await new Promise((resolve) => IconoContentLifecycle.runAfterHostLoad({ task: resolve }))
+      payload = await IconoContentLifecycle.requestGeneData(chrome, requestOptions)
+    }
+    startupTiming.scannerPayload = performance.now()
+
+    // Only the worker's validated scanner projection is eligible for recognition.
+    geneMap = payload?.genes && typeof payload.genes === "object" ? payload.genes : null
     if (!geneMap || Object.keys(geneMap).length === 0) {
       console.log("[Iconoplasm] Gene data unavailable. Retrying shortly.")
       scheduleInitializationRetry()
       return
     }
-    // Hydration starts only after the worker returns the exact snapshot version.
-    // Foreground GETs do not await this multi-megabyte read; background warming
-    // and persistence may reuse it when it arrives.
-    void geneDetailStore.hydratePersistentCache()
-    void portraitLocatorStore.hydratePersistentCache()
+    articleScannerPayload = payload
+    IconoContentLifecycle.runAfterHostLoad({
+      task: () => {
+        void ensureArticleCards().catch(() => null)
+      },
+    })
 
     // Fence: candidate generation now lives in a dedicated matcher module. Keep content.js acting
     // as the page adapter that applies matches, not the place where lexical rules accrete forever.
-    rebuildGeneMatcher(effectiveBlocklist)
+    geneMatcher = await IconoContentMatcher.createGeneMatcherCooperatively(
+      geneMap,
+      { blocklist: effectiveBlocklist },
+      window,
+    )
+    startupTiming.matcher = performance.now()
     if (isPdfReaderDocument) {
       globalThis.IconoplasmReaderBridge = Object.freeze({
         findMatches(text) {
@@ -1741,7 +1761,6 @@
           hideTooltip()
         },
       })
-      void injectFonts()
       initialized = true
       window.dispatchEvent(new CustomEvent("iconoplasm-reader-bridge-ready"))
       return
@@ -1758,9 +1777,8 @@
     })
 
     console.log("[Iconoplasm] Loaded", Object.keys(geneMap).length, "genes. Scanning...")
-    void injectFonts()
     observeMutations()
-    void pageScanner.scanPageCooperatively(document.body).then(() => refreshHighlightStyles())
+    void pageScanner.scanDocumentCooperatively().then(() => refreshHighlightStyles())
     scheduleDiscoveryBufferFlush()
     window.navigator?.connection?.addEventListener?.("change", () => {
       readingSession.updateConnection(window.navigator?.connection, window.navigator?.deviceMemory)
@@ -1777,6 +1795,31 @@
       }
     })
     initialized = true
+  }
+
+  function ensureArticleCards() {
+    if (articleCardsPromise) return articleCardsPromise
+    // ARCHITECTURE FENCE [IPD-008]: recognition may precede load, but it must
+    // not hydrate an old portrait and later replace it. Select this article's
+    // epoch exactly once, before either lane or persistent cache can be used.
+    // Only explicit foreground hover may bring this network step before load.
+    articleCardsPromise = (async () => {
+      if (!articleScannerPayload) throw new Error("Article scanner not initialized")
+      if (usesTooltipFrameRenderer()) ensureLitArchivalFrame()
+      void injectFonts()
+      const selection = articleScannerPayload.cardFreshness
+        ? articleScannerPayload
+        : await extensionRuntime.sendMessage({ type: "GET_CARD_FRESHNESS" })
+      const revision = selection?.cardSnapshotVersion || articleScannerPayload.cardSnapshotVersion
+      if (!revision) throw new Error("Article card snapshot unavailable")
+      adoptCardSnapshotRevision(revision)
+      void geneDetailStore.hydratePersistentCache()
+      void portraitLocatorStore.hydratePersistentCache()
+    })().catch((error) => {
+      articleCardsPromise = null
+      throw error
+    })
+    return articleCardsPromise
   }
 
   // -- DOM scanning --------------------------------------------------
@@ -2456,7 +2499,7 @@
     window.addEventListener(
       "iconoplasm-gecko-reader-mounted",
       () =>
-        IconoContentLifecycle.runAfterHostLoad({
+        IconoContentLifecycle.runAfterHostPaint({
           documentRef: document,
           windowRef: window,
           task: launchContentRuntime,
@@ -2464,7 +2507,7 @@
       { once: true },
     )
   } else {
-    IconoContentLifecycle.runAfterHostLoad({
+    IconoContentLifecycle.runAfterHostPaint({
       documentRef: document,
       windowRef: window,
       task: launchContentRuntime,

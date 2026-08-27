@@ -4,6 +4,14 @@ import test from "node:test"
 import { runInNewContext } from "node:vm"
 
 const readerSource = readFileSync(new URL("./pdf-reader.mjs", import.meta.url), "utf8")
+
+test("PDF visibility rules are released outside the viewport working set", () => {
+  assert.match(
+    readerSource,
+    /async function clearPageHighlights[^]*?state\.visibilityIndexPromise = null/,
+  )
+  assert.match(readerSource, /pageState\.get\(pageNumber\) !== state/)
+})
 const readerControlsSource = readFileSync(
   new URL("./pdf-reader-controls.mjs", import.meta.url),
   "utf8",
@@ -80,7 +88,9 @@ test("PDF highlight behavior is cross-browser and preserves the stored mode", ()
 
 test("the reader uses the official text layer and never mutates PDF glyph paint", () => {
   assert.match(readerSource, /querySelector\("\.textLayer"\)/u)
-  assert.match(readerSource, /document\.createTreeWalker\(textLayer, NodeFilter\.SHOW_TEXT\)/u)
+  assert.match(readerSource, /document\.createTreeWalker\(element, NodeFilter\.SHOW_TEXT\)/u)
+  assert.match(readerSource, /buildTextVisibilityIndex/u)
+  assert.match(readerSource, /clipTextMatch/u)
   assert.match(readerSource, /document\.createRange\(\)/u)
   assert.match(readerSource, /range\.getClientRects\(\)/u)
   assert.match(readerSource, /measureText\(String\(label/u)

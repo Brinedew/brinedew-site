@@ -232,3 +232,66 @@ test("canceled background work cannot restart from a late load or idle callback"
   task.runNow()
   assert.equal(calls, 0)
 })
+
+test("cached recognition waits for DOM, a paint boundary, then genuine idle, not window load", () => {
+  let domReady
+  const frames = [],
+    idle = [],
+    calls = []
+  globalThis.IconoplasmContentLifecycle.runAfterHostPaint({
+    documentRef: {
+      readyState: "loading",
+      addEventListener(type, cb) {
+        assert.equal(type, "DOMContentLoaded")
+        domReady = cb
+      },
+    },
+    windowRef: {
+      requestAnimationFrame(cb) {
+        frames.push(cb)
+      },
+      requestIdleCallback(cb, options) {
+        assert.equal(options, undefined)
+        idle.push(cb)
+      },
+      addEventListener() {
+        throw new Error("cached recognition must not wait for unrelated resource load")
+      },
+    },
+    task: () => calls.push("recognize"),
+  })
+  assert.equal(frames.length, 0)
+  domReady()
+  frames.shift()()
+  assert.equal(idle.length, 0)
+  frames.shift()()
+  assert.deepEqual(calls, [])
+  idle.shift()()
+  assert.deepEqual(calls, ["recognize"])
+})
+
+test("pre-load text-node mutations also wait for idle and cannot force a timeout slice", async () => {
+  const { document, scanner } = createRuntime("<html><body><p>TP53</p></body></html>")
+  const callbacks = []
+  const pending = scanner.scanPageCooperatively(document.querySelector("p").firstChild, {
+    requestIdleCallback(cb, options) {
+      assert.equal(options, undefined)
+      callbacks.push(cb)
+    },
+  })
+  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 0)
+  callbacks.shift()({ timeRemaining: () => 0 })
+  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 0)
+  callbacks.shift()({ timeRemaining: () => 20 })
+  assert.equal(await pending, 1)
+})
+
+test("article-first scanning still covers navigation, and rescanning never nests highlights", async () => {
+  const { document, scanner } = createRuntime(
+    "<html><body><nav>TP53</nav><article><main>BRCA1</main></article><footer>EGFR</footer></body></html>",
+  )
+  assert.equal(await scanner.scanDocumentCooperatively(), 3)
+  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 3)
+  assert.equal(await scanner.scanDocumentCooperatively(), 0)
+  assert.equal(document.querySelectorAll(".iconoplasm-gene .iconoplasm-gene").length, 0)
+})

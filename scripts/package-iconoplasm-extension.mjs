@@ -146,6 +146,7 @@ const pdfReaderRuntimeFiles = [
   "pdf-reader.mjs",
   "pdf-reader-controls.mjs",
   "pdf-reader-core.js",
+  "pdf-text-visibility.mjs",
 ]
 
 const geckoPdfOwnershipFiles = [

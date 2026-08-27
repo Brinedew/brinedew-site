@@ -231,6 +231,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false
   }
   if (msg.type === "GET_GENE_DATA") {
+    if (msg.cacheOnly === true) {
+      // Pre-load recognition MUST remain local: no refresh, legacy migration,
+      // current-head check, or cold artifact download in this branch.
+      ensureFreshGeneData({ cacheOnly: true }).then(sendResponse)
+      return true
+    }
     // ARCHITECTURE FENCE [IPD-008]: each new article/reload checks only the
     // tiny shared current head, independently of the scanner's five-minute
     // refresh policy. Never poll an already-open article or replace its epoch
@@ -239,17 +245,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       ensureFreshGeneData(),
       metadataDelivery.current(sender?.tab?.id ?? "extension"),
     ]).then(([data, head]) => {
-      const tab = sender?.tab?.id ?? "extension"
-      const cardFreshness = {
-        checkedAt: new Date().toISOString(),
-        verified: Boolean(head),
-        version: head?.current || data?.cardSnapshotVersion || null,
-      }
-      cardFreshnessByTab.delete(tab)
-      cardFreshnessByTab.set(tab, cardFreshness)
-      while (cardFreshnessByTab.size > 128)
-        cardFreshnessByTab.delete(cardFreshnessByTab.keys().next().value)
+      const cardFreshness = rememberArticleFreshness(
+        sender?.tab?.id,
+        head,
+        data?.cardSnapshotVersion,
+      )
       sendResponse({ ...data, cardSnapshotVersion: cardFreshness.version, cardFreshness })
+    })
+    return true
+  }
+  if (msg.type === "GET_CARD_FRESHNESS") {
+    Promise.all([
+      ensureFreshGeneData(),
+      metadataDelivery.current(sender?.tab?.id ?? "extension"),
+    ]).then(([data, head]) => {
+      const cardFreshness = rememberArticleFreshness(
+        sender?.tab?.id,
+        head,
+        data?.cardSnapshotVersion,
+      )
+      sendResponse({ cardSnapshotVersion: cardFreshness.version, cardFreshness })
     })
     return true
   }
@@ -643,8 +658,23 @@ async function invalidateStoredPublishedSnapshot({ code, message, minExtensionVe
   await rememberContractError({ code, message, minExtensionVersion })
 }
 
-async function ensureFreshGeneData() {
-  const stored = await migrateLegacyStoredScannerIndex(await getStoredGeneSnapshot())
+function rememberArticleFreshness(tabId, head, cachedVersion) {
+  const tab = tabId ?? "extension"
+  const cardFreshness = {
+    checkedAt: new Date().toISOString(),
+    verified: Boolean(head),
+    version: head?.current || cachedVersion || null,
+  }
+  cardFreshnessByTab.delete(tab)
+  cardFreshnessByTab.set(tab, cardFreshness)
+  while (cardFreshnessByTab.size > 128)
+    cardFreshnessByTab.delete(cardFreshnessByTab.keys().next().value)
+  return cardFreshness
+}
+
+async function ensureFreshGeneData({ cacheOnly = false } = {}) {
+  const snapshot = await getStoredGeneSnapshot()
+  const stored = cacheOnly ? snapshot : await migrateLegacyStoredScannerIndex(snapshot)
   const geneCount = getStoredGeneCount(stored.iconoplasm_genes)
   const hasPublishedCatalogSchema =
     Number(stored.iconoplasm_schema_version || 0) === REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION &&
@@ -668,7 +698,7 @@ async function ensureFreshGeneData() {
   if (hasUsableCache) {
     // Stale-while-revalidate is the page-start contract. A valid local catalog is
     // immediately useful; network freshness must never hold every tab hostage.
-    if (needsRefresh) void refreshGeneData()
+    if (needsRefresh && !cacheOnly) void refreshGeneData()
     return {
       genes: stored.iconoplasm_genes,
       cardSnapshotVersion: stored.iconoplasm_card_snapshot_version || null,
@@ -676,6 +706,8 @@ async function ensureFreshGeneData() {
       minExtensionVersion: stored.iconoplasm_min_extension_version || null,
     }
   }
+
+  if (cacheOnly) return null
 
   if (needsRefresh) {
     // A manifest-overlay contract error is retried against the manifest only.

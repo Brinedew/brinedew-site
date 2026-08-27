@@ -29,7 +29,7 @@
       if (!parent) return nodeFilter.FILTER_REJECT
       if (isEditableTextSurface(parent)) return nodeFilter.FILTER_REJECT
       if (parent.closest && parent.closest(".iconoplasm-tooltip")) return nodeFilter.FILTER_REJECT
-      if (parent.classList && parent.classList.contains("iconoplasm-gene")) {
+      if (parent.closest?.(".iconoplasm-gene")) {
         return nodeFilter.FILTER_REJECT
       }
       if (skipTags.has(parent.tagName)) return nodeFilter.FILTER_REJECT
@@ -38,6 +38,8 @@
     }
 
     function processTextNode(textNode) {
+      // A queued node can move into an extension/editable surface between slices.
+      if (acceptScanNode(textNode) !== nodeFilter.FILTER_ACCEPT) return 0
       const text = String((textNode && textNode.textContent) || "")
       const matcher = getMatcher()
       if (!text || !matcher || typeof matcher.findMatches !== "function") return 0
@@ -100,7 +102,6 @@
 
     function scanPageCooperatively(rootNode, cooperativeOptions = {}) {
       if (!rootNode || typeof rootNode.nodeType !== "number") return Promise.resolve(0)
-      if (rootNode.nodeType === 3) return Promise.resolve(scanPage(rootNode))
 
       const maxNodesPerSlice = Math.max(1, Number(cooperativeOptions.maxNodesPerSlice || 64))
       const minTimeRemainingMs = Math.max(0, Number(cooperativeOptions.minTimeRemainingMs ?? 2))
@@ -112,10 +113,18 @@
           : null)
       const setTimeoutFn =
         cooperativeOptions.setTimeoutFn || windowRef?.setTimeout?.bind(windowRef) || root.setTimeout
-      const walker = documentRef.createTreeWalker(rootNode, nodeFilter.SHOW_TEXT, {
-        acceptNode: acceptScanNode,
-      })
-      let nextNode = walker.nextNode()
+      const walker =
+        rootNode.nodeType === 3
+          ? { nextNode: () => null }
+          : documentRef.createTreeWalker(rootNode, nodeFilter.SHOW_TEXT, {
+              acceptNode: acceptScanNode,
+            })
+      let nextNode =
+        rootNode.nodeType === 3
+          ? acceptScanNode(rootNode) === nodeFilter.FILTER_ACCEPT
+            ? rootNode
+            : null
+          : walker.nextNode()
       let wrappedCount = 0
 
       return new Promise((resolve) => {
@@ -124,16 +133,30 @@
             // The timeout guarantees eventual recognition on continuously busy
             // pages. A timed-out callback reports no idle budget, so runSlice
             // deliberately advances only one text node before yielding again.
-            requestIdle(runSlice, { timeout: idleTimeoutMs })
+            // Before host load there is no forced progress: genuine idle only.
+            requestIdle(
+              runSlice,
+              documentRef.readyState === "complete" ? { timeout: idleTimeoutMs } : undefined,
+            )
             return
           }
           setTimeoutFn(() => runSlice(null), 16)
         }
         const runSlice = (deadline) => {
           let processed = 0
+          const now = () => windowRef.performance?.now?.() ?? Date.now()
+          const startedAt = now()
+          if (
+            documentRef.readyState !== "complete" &&
+            deadline?.timeRemaining?.() <= minTimeRemainingMs
+          ) {
+            scheduleSlice()
+            return
+          }
           while (
             nextNode &&
             processed < maxNodesPerSlice &&
+            now() - startedAt < 4 &&
             (processed === 0 ||
               !deadline ||
               typeof deadline.timeRemaining !== "function" ||
@@ -156,9 +179,22 @@
       })
     }
 
+    async function scanDocumentCooperatively() {
+      // The article comes before navigation/footer chrome in reading priority.
+      // This changes traversal order only: the same matcher and whole-body pass
+      // still cover every eligible node, without another prediction mechanism.
+      const roots = Array.from(documentRef.querySelectorAll("main, article, [role='main']"))
+        .filter((element) => !element.parentElement?.closest("main, article, [role='main']"))
+        .slice(0, 4)
+      let count = 0
+      for (const element of roots) count += await scanPageCooperatively(element)
+      return count + (await scanPageCooperatively(documentRef.body))
+    }
+
     return {
       scanPage,
       scanPageCooperatively,
+      scanDocumentCooperatively,
       processTextNode,
     }
   }
