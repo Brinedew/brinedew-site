@@ -26,6 +26,7 @@ export default defineConfig({
           "generated/portrait-delivery-core.js",
           "publication-alias-overlay.js",
           "content-settings.js",
+          "metadata-delivery.js",
           "service-worker.js",
         ],
       }

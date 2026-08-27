@@ -1,4 +1,5 @@
 import puppeteer from "@cloudflare/puppeteer"
+import { createHoverDeliveryHandlers } from "./iconoplasm-hover-delivery-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
@@ -27383,6 +27384,17 @@ async function handlePublicGeneBatch(request, env) {
   )
 }
 
+const hoverDeliveryHandlers = createHoverDeliveryHandlers({
+  barrier: currentMobileCardSnapshotVersion,
+  manifest: readPublishedCardCatalogManifest,
+  shard: readPublishedCardCatalogShard,
+  complete: assertCompleteMobileCardVM,
+  stable: stableCardCatalogMaterialValue,
+  project: projectGeneRecord,
+  locator: publishedPortraitLocatorFromCard,
+  json,
+})
+
 async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbolFromPath) {
   const snapshotVersion = String(snapshotFromPath || "").trim()
   const symbol = normalizeSymbol(symbolFromPath)
@@ -29746,6 +29758,10 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     asHead(request, await handlePublicCatalogJsonlDump(env, path)),
   public_gallery: ({ request, env, ctx }) => handlePublicGallery(request, env, ctx),
   public_gene_search: ({ request, env }) => handlePublicGeneSearch(request, env),
+  public_card_delivery_index: async (args) =>
+    asHead(args.request, await hoverDeliveryHandlers.index(args)),
+  public_card_content: async (args) =>
+    asHead(args.request, await hoverDeliveryHandlers.content(args)),
   public_card_snapshot_gene: async ({ match, request, env, ctx }) =>
     asHead(
       request,

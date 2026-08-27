@@ -430,6 +430,16 @@
         },
         {
           "category": "source",
+          "file": "iconoplasm-extension/metadata-delivery.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm-hover-delivery-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "source",
           "file": "iconoplasm-extension/content-detail-cache.js",
           "token": "ARCHITECTURE FENCE [IPD-008]"
         },

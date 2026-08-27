@@ -134,6 +134,7 @@ globalThis.IconoplasmPortraitDelivery =
 await import("./generated/catalog-contract.js")
 await import("./publication-alias-overlay.js")
 await import("./content-settings.js")
+await import("./metadata-delivery.js")
 await import("./service-worker.js")
 
 const hooks = globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__

@@ -174,6 +174,42 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     rateLimit: rateLimit("gene_search", 120),
   }),
   contract({
+    id: "public_card_delivery_index",
+    match: pattern(/^\/api\/public\/v1\/card-snapshots\/([^/]+)\/delivery-index$/, ["snapshot"]),
+    methods: GET,
+    auth: "trusted-client",
+    cache: "immutable",
+    budgetFamily: "public_gene_detail",
+    gatewayHandler: "public_card_delivery_index",
+    rateLimit: rateLimit("gene_detail", 120),
+  }),
+  contract({
+    id: "public_card_content_gene",
+    match: pattern(
+      /^\/api\/public\/v1\/card-content\/v1\/([a-f0-9]{64})\/(genes)\/([A-Z0-9][A-Z0-9._-]{0,63})$/,
+      ["hash", "lane", "symbol"],
+    ),
+    methods: GET,
+    auth: "trusted-client",
+    cache: "immutable",
+    budgetFamily: "public_gene_detail",
+    gatewayHandler: "public_card_content",
+    rateLimit: rateLimit("card_content_gene", 120),
+  }),
+  contract({
+    id: "public_card_content_portrait",
+    match: pattern(
+      /^\/api\/public\/v1\/card-content\/v1\/([a-f0-9]{64})\/(portraits)\/([A-Z0-9][A-Z0-9._-]{0,63})$/,
+      ["hash", "lane", "symbol"],
+    ),
+    methods: GET,
+    auth: "trusted-client",
+    cache: "immutable",
+    budgetFamily: "public_gene_detail",
+    gatewayHandler: "public_card_content",
+    rateLimit: rateLimit("card_content_portrait", 120),
+  }),
+  contract({
     id: "public_card_snapshot_gene",
     match: pattern(/^\/api\/public\/v1\/card-snapshots\/([^/]+)\/genes\/([^/]+)$/, [
       "snapshot",

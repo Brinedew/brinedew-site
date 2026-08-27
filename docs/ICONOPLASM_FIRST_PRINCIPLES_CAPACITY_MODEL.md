@@ -1,5 +1,38 @@
 # Iconoplasm product and first-principles capacity model
 
+## B-711 immutable metadata delivery delta (2026-08-27)
+
+`hoverMetadataDeliveryCost` models metadata only, separately from the existing
+whole-reader scenarios below. Example: 100 separate fresh installations prepare
+the same ten genes (two projections each) in one CDN cache location:
+
+| Condition                       | Cloudflare metadata requests | Assumptions                                        |
+| ------------------------------- | ---------------------------: | -------------------------------------------------- |
+| Existing per-symbol transport   |                        2,000 | No client cache                                    |
+| Warm Bunny content              |                          100 | One delivery index per installation                |
+| Cold Bunny content              |                          120 | 100 indexes plus 20 shared successful origin fills |
+| Every reader cannot reach Bunny |                        2,100 | 100 indexes plus 2,000 direct projections          |
+
+The 94-95% healthy-path reduction is a scenario, not measured daily capacity.
+Different POPs, eviction, scattered genes, changed shards, failed origin requests
+and losing hedges add billed requests. Cache API HIT still counts as a Worker
+invocation. Count both attempted origins when both reach Cloudflare. Full
+recovery can add a legacy projection after the hashed request fails. An index
+costs up to two KV reads; a cold current projection three, previous-only four;
+cached projections zero reads. There are no additional KV/D1 writes or publisher
+uploads. Existing scheduled publisher, voting, auth, images and other users
+still share the free Cloudflare budgets; there is no universal users/day promise.
+
+CDN bandwidth is paid from the existing Bunny account, not free: the live TP53
+baseline was 2,616 detail bytes plus 807 locator bytes, before the small delivery
+envelope. At that example size, 100 readers times ten genes is about 3.4 MB of
+metadata, excluding compression, indexes, images and retries. Actual records
+vary. Existing 750-card shards bound vote-induced cache-key churn to affected
+shards, not every gene; unchanged shards retain URLs. The client downloads only
+per-symbol projections, never those full shards. CPU is existing bounded shard
+verification/projection on cold fills, not additional rendering or full-catalog
+work. Production HIT proof and cold latency must accompany release evidence.
+
 This is the launch model for Iconoplasm. It deliberately does **not** extrapolate
 historical Cloudflare counters: the routing, publication, extension cache, and
 discovery-write architecture changed too much for old traffic to be a useful
