@@ -4533,7 +4533,9 @@ async function createGenerationRequest(
     origin === "diagnostic_matrix" ? normalizeFactoryVisionRevision(factoryVisionRevision) : 0
   if (
     origin === "diagnostic_matrix" &&
-    (!pipelineOverride || !visionOverride || !(await isAcceptedFactoryVision(env, visionOverride)))
+    (!isAcceptedFactoryPipeline(pipelineOverride) ||
+      !visionOverride ||
+      !(await isAcceptedFactoryVision(env, visionOverride)))
   ) {
     return { ok: false, error: "Choose an accepted factory recipe." }
   }
@@ -5508,8 +5510,11 @@ async function imageEditPromptTemplatesPayload(env) {
 const ICONOPLASM_FACTORY_PIPELINES = ICONOPLASM_FACTORY_CATALOG.pipelines
 const ICONOPLASM_FACTORY_VISIONS = ICONOPLASM_FACTORY_CATALOG.visions
 
-async function factoryPipelineCatalog(env, visions = ICONOPLASM_FACTORY_VISIONS) {
-  if (!env?.ICONOPLASM_DB) return ICONOPLASM_FACTORY_PIPELINES
+export async function factoryPipelineCatalog(env, visions = ICONOPLASM_FACTORY_VISIONS) {
+  const acceptedPipelines = ICONOPLASM_FACTORY_PIPELINES.filter(
+    (item) => item.status === "accepted",
+  )
+  if (!env?.ICONOPLASM_DB) return acceptedPipelines
   const result = await env.ICONOPLASM_DB.prepare(
     `SELECT pipeline_code, vision_revision
        FROM icono_factory_pipeline_vision_recommendations`,
@@ -5529,7 +5534,7 @@ async function factoryPipelineCatalog(env, visions = ICONOPLASM_FACTORY_VISIONS)
       ])
       .filter(([pipeline, vision]) => pipeline && acceptedVisions.has(vision)),
   )
-  return ICONOPLASM_FACTORY_PIPELINES.map((pipeline) => ({
+  return acceptedPipelines.map((pipeline) => ({
     ...pipeline,
     recommended_vision:
       recommendations.get(pipeline.code) ||
@@ -5538,11 +5543,19 @@ async function factoryPipelineCatalog(env, visions = ICONOPLASM_FACTORY_VISIONS)
   }))
 }
 
-function normalizeFactoryPipelineCode(raw) {
+export function normalizeFactoryPipelineCode(raw) {
   const code = String(raw || "")
     .trim()
     .toUpperCase()
   return ICONOPLASM_FACTORY_PIPELINES.some((item) => item.code === code) ? code : ""
+}
+
+// B-714: normalization preserves retired identities for historical receipts.
+// New selection and execution must separately require an accepted definition.
+export function isAcceptedFactoryPipeline(code) {
+  return ICONOPLASM_FACTORY_PIPELINES.some(
+    (item) => item.code === code && item.status === "accepted",
+  )
 }
 
 function normalizeFactoryVisionRevision(raw) {
@@ -5591,7 +5604,7 @@ async function isAcceptedFactoryVision(env, revision) {
   return visions.some((item) => Number(item.revision) === normalized)
 }
 
-async function activeFactoryRecipe(env) {
+export async function activeFactoryRecipe(env) {
   const row = await env.ICONOPLASM_DB.prepare(
     `SELECT pipeline_code, vision_revision, updated_by, updated_at
        FROM icono_factory_active_recipe
@@ -5599,8 +5612,11 @@ async function activeFactoryRecipe(env) {
       LIMIT 1`,
   ).first()
   const storedVision = normalizeFactoryVisionRevision(row?.vision_revision || 1) || 1
+  const pipeline = normalizeFactoryPipelineCode(row?.pipeline_code || "A")
+  if (!isAcceptedFactoryPipeline(pipeline))
+    throw new Error("The active factory Pipeline is unavailable. Select an accepted Pipeline.")
   return {
-    pipeline: normalizeFactoryPipelineCode(row?.pipeline_code || "A") || "A",
+    pipeline,
     vision: (await isAcceptedFactoryVision(env, storedVision)) ? storedVision : 1,
     updated_by: sanitizeText(row?.updated_by || "migration", 255) || "migration",
     updated_at: sanitizeText(row?.updated_at || "", 64) || "",
@@ -5617,10 +5633,14 @@ async function factoryRecipePayload(env) {
   }
 }
 
-async function saveFactoryPipelineVisionRecommendation(env, { pipeline, vision, updatedBy }) {
+export async function saveFactoryPipelineVisionRecommendation(
+  env,
+  { pipeline, vision, updatedBy },
+) {
   const pipelineCode = normalizeFactoryPipelineCode(pipeline)
   const visionRevision = normalizeFactoryVisionRevision(vision)
-  if (!pipelineCode) return { ok: false, error: "Choose an accepted factory Pipeline." }
+  if (!isAcceptedFactoryPipeline(pipelineCode))
+    return { ok: false, error: "Choose an accepted factory Pipeline." }
   if (!visionRevision || !(await isAcceptedFactoryVision(env, visionRevision)))
     return { ok: false, error: "Choose an accepted Vision revision." }
   const actor = sanitizeText(updatedBy || "admin", 255) || "admin"
@@ -5638,10 +5658,11 @@ async function saveFactoryPipelineVisionRecommendation(env, { pipeline, vision, 
   return factoryRecipePayload(env)
 }
 
-async function saveActiveFactoryRecipe(env, { pipeline, vision, updatedBy }) {
+export async function saveActiveFactoryRecipe(env, { pipeline, vision, updatedBy }) {
   const pipelineCode = normalizeFactoryPipelineCode(pipeline)
   const visionRevision = normalizeFactoryVisionRevision(vision)
-  if (!pipelineCode) return { ok: false, error: "Choose an accepted factory Pipeline." }
+  if (!isAcceptedFactoryPipeline(pipelineCode))
+    return { ok: false, error: "Choose an accepted factory Pipeline." }
   if (!visionRevision || !(await isAcceptedFactoryVision(env, visionRevision)))
     return { ok: false, error: "Choose an accepted Vision revision." }
   const actor = sanitizeText(updatedBy || "admin", 255) || "admin"
@@ -5873,6 +5894,8 @@ async function createDiagnosticMatrixRun(
   if (!catalogRow?.gene_symbol) return { ok: false, error: "That gene is not in the catalog." }
   const pipelines = normalizeDiagnosticPipelineCodes(pipelineCodes)
   if (!pipelines.length) return { ok: false, error: "Choose at least one factory line." }
+  if (pipelines.some((code) => !isAcceptedFactoryPipeline(code)))
+    return { ok: false, error: "Every factory line must be an accepted Pipeline." }
   const emulsions = normalizeDiagnosticEmulsionSlots(emulsionSlots)
   if (
     !emulsions.length ||
