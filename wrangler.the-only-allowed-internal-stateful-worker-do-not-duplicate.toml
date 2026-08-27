@@ -24,6 +24,9 @@ preview_urls = false
 # Cloudflare's asset layer without invoking this Worker; only dynamic misses
 # enter the stateful runtime. Direct ownership also removes the previous second
 # public-proxy invocation from every dynamic request.
+# Do not enable Workers Cache here or in env/exports: its cache HITs are metered,
+# including otherwise free static assets (July 2026 pricing). The deployment
+# topology validator rejects it. This is not the same as Workers Static Assets.
 routes = [{ pattern = "iconoplasm.brinedew.bio/*", zone_name = "brinedew.bio" }]
 
 [assets]

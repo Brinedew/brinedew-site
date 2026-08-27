@@ -66,6 +66,32 @@ factions.
 - Personal discovery feedback may be immediate. Shared discovery popularity is
   an hourly published overlay and must never be repaired by a reader request.
 
+## Cloudflare account history and current spending boundary
+
+Owner-confirmed on **2026-08-27**: the account was on Free, paid R2 was used,
+and then R2 was disabled with an unpaid balance. The owner reports that the
+account is now on Free until that debt is repaid. R2 billing and the Workers
+subscription are separate: this history does not establish that Workers itself
+previously had a paid subscription. Exact transition dates are not established.
+An upgrade would require settling the
+existing debt (previously described as roughly $70), so even a nominal $5 plan
+is not an available engineering option.
+
+Design, test and enforce against **current Free-plan limits**. Old paid-period
+usage, billing-cycle allowances, deployment variables or dashboard budgets are
+historical evidence, not current entitlements. A working authenticated dashboard
+does not restore paid capacity. Conflicting telemetry must be dated and labeled;
+never resolve the conflict by silently assuming the larger allowance.
+
+Paid Bunny was deliberately purchased as the alternative to R2. Preserve it on
+working networks, including VPNs, with bounded first-party fallback where Bunny
+is unreachable. No debt payment, billing upgrade or R2 reactivation is authorized
+by a freshness, performance or capacity task. Revisit this boundary only after
+an explicit owner decision and a fresh account check.
+
+See `ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` for the configuration
+audit; B-716 owns the current Free-plan growth/freshness implementation.
+
 ## Priority order and growth contract
 
 Owner clarification (2026-08-27): **scale and smooth reading take priority over

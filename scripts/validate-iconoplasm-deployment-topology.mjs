@@ -1,6 +1,8 @@
 import { readFileSync, statSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import toml from "toml"
+import { assertIconoplasmStaticFirstCacheConfig } from "./lib/iconoplasm-static-first-config.mjs"
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const topologyPath = path.join(repositoryRoot, "cloudflare", "deployment-topology.json")
@@ -33,6 +35,7 @@ for (const entry of topology.protectedEntrypoints) {
 }
 
 const config = read(topology.wranglerConfig)
+assertIconoplasmStaticFirstCacheConfig(toml.parse(config))
 if (!config.match(/^name\s*=\s*"geneguessr-api"$/m)) {
   fail("Wrangler config changed the single state-owner script name")
 }
