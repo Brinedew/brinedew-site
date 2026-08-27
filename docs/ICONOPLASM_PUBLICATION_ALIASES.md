@@ -46,8 +46,10 @@ bundle under `iconoplasm:recognition-policy-pair:v1:`. Each bundle contains an
 exact six-field alias payload and exact five-field blocklist payload plus
 private dependency revisions. One KV value is therefore the cross-region
 consistency boundary: a colo can observe the old bundle or the new bundle, but
-never a mixed alias/blocklist pair. The normal cold read is one bounded key
-list and one value GET, then a five-second isolate cache. It never queries D1.
+never a mixed alias/blocklist pair. The normal cold read is one current-pointer
+GET and one immutable bundle GET, then a five-second isolate cache. It never
+queries D1 or lists history. A missing pointer uses the bounded legacy discovery
+path; a malformed pointer or unavailable target fails closed.
 
 The source alias seed is used only while the pair namespace is genuinely
 empty. During the first deployment, it is combined with the newest retained
@@ -121,10 +123,10 @@ preventing every cron tick from retrying an impossible tuple.
 Cleanup mode is explicit. Foreground admin saves call reconciliation with
 cleanup disabled, so an unchanged propagation retry never lists retained
 history. The default scheduled reconciler owns bounded best-effort cleanup for
-all three immutable namespaces. It cleans alias, blocklist, and pair histories
-even when the exact desired pair already exists, and it enables pair cleanup
-when staging a new bundle. Cleanup never grants scanner-validation authority and
-never reads the scanner artifact.
+all three immutable namespaces when staging a new publication. When the exact
+desired pair already exists, reconciliation can repair its pointer but skips
+history cleanup: unchanged scheduled passes must not burn list quota. Cleanup
+never grants scanner-validation authority and never reads the scanner artifact.
 
 The v1 recognition-pair key and public value deliberately do not encode scanner
 version, so an existing exact pair alone is not proof after scanner evolution.
@@ -144,6 +146,18 @@ reconciler retries the dependency-ordered projection. The admin response marks
 the saved-but-pending state explicitly.
 
 ## Validation
+
+**Case-ownership fence (B-713):** `Cdk1`, `cdk1`, and `cdK1` are distinct
+recognition labels and can all map to `CDK1`. Canonical index key construction
+uppercases its argument; that is a storage lookup rule, not an alias ownership
+rule. Incremental validation must only infer canonical ownership for an already
+uppercase label. Never infer that `cdk1` is a competing owner because `s:CDK1`
+exists, or make all aliases case-insensitive to hide the mismatch. The regression
+matrix in `iconoplasm-recognition-validation-index.test.js` compares full and
+incremental validation, then runs accepted policies through the actual extension
+overlay and matcher. It also preserves genuine exact-case collision rejection.
+This correction does not change projection schemas, require a scanner rebuild,
+or require an extension release.
 
 The server enforces all of the following before the D1 CAS:
 
@@ -214,8 +228,8 @@ An alias-only revision preserves these properties:
 - immutable KV history and D1 audit history are each bounded to 100 revisions;
 - scheduled reconciliation is the eventual cleanup owner for the three KV
   histories, while foreground saved-state retries remain list-free;
-- a normal public refresh costs one pair-key list plus one value GET, independent
-  of the 100-record individual histories;
+- a normal public refresh costs one current-pointer GET plus one bundle GET,
+  with no history lists, independent of the 100-record individual histories;
 - transient KV failure serves last-known-good state; bootstrap is allowed only
   before any pair key exists, while admin and authoritative reads fail loud;
 - historical compatibility alias lookup is one content-addressed GET within the

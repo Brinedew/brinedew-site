@@ -10,6 +10,7 @@ import {
   MAX_PUBLICATION_ALIAS_COUNT,
   MAX_PUBLICATION_ALIAS_LENGTH,
   normalizePublicationAlias,
+  normalizePublicationAliasSymbol,
   PUBLICATION_ALIAS_SCHEMA_VERSION,
   publicationAliasCollisionKey,
   publishedAliasTermKey,
@@ -910,9 +911,14 @@ export async function validateIconoplasmPublicationAliasesIncrementallyAgainstPu
     for (const [symbol, aliases] of owners) {
       if (collisionOwnedBy(baselineAdditions, collisionKey, symbol)) continue
       const alias = [...aliases][0]
-      const canonicalOwner = records.get(iconoplasmRecognitionIndexCanonicalKey(collisionKey))
-        ? collisionKey
-        : null
+      // ARCHITECTURE FENCE [IPD-008]: canonical index keys uppercase symbols,
+      // but alias ownership is exact-case, as in full validation and matching.
+      // Looking up cdk1 as s:CDK1 must not invent a competing owner named cdk1.
+      const canonicalOwner =
+        collisionKey === normalizePublicationAliasSymbol(collisionKey) &&
+        records.get(iconoplasmRecognitionIndexCanonicalKey(collisionKey))
+          ? collisionKey
+          : null
       const collision = records.get(iconoplasmRecognitionIndexCollisionKey(collisionKey))
       const conflictingOwners = [
         ...new Set([...(collision?.o || []), canonicalOwner].filter(Boolean)),
