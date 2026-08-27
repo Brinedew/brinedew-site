@@ -388,8 +388,18 @@ Extension hover detail is immutable within a published card snapshot:
   coalesced idle writer reads, merges, stringifies, or writes the persistent
   cache; an old queued write cannot roll a newer snapshot backward;
 - HTML and PDF register recognized anchors with one tab-scoped reading session.
-  Catalog initialization, including a cold scanner-artifact fetch, waits for host
-  `load`; initial and mutation-driven recognition then run in bounded idle slices. The session
+  The `document_end` entrypoint yields through a paint boundary and genuine idle
+  time before using a validated local scanner. This cache-only path performs no
+  network, refresh, legacy migration, renderer boot, or persistent portrait hydration.
+  A missing/incompatible scanner still waits for host `load` before downloading.
+  Initial and mutation-driven recognition run in bounded idle slices, with a
+  4 ms wall-time budget between nodes and no forced idle timeout before load.
+  Matcher construction also yields in genuine idle time, targeting 8 ms
+  per turn with clock checks every 32 tokens. Article/main roots precede navigation;
+  a full-body pass still covers the remainder without nesting existing highlights.
+  Current-card selection is separate: once after load, or on explicit early hover,
+  before either card lane or disk cache is used. Slow unrelated page resources
+  must not delay cached recognition. The session
   inventories anchors immediately, but speculative immutable rich detail plus
   independently deliverable portrait locators, bytes, decode, and frame acknowledgement
   wait for host `load`, a one-second quiet delay, and a genuine idle callback. The
@@ -416,7 +426,7 @@ Extension hover detail is immutable within a published card snapshot:
   locator success may paint the portrait while rich detail is stalled or exhausted;
   if both projections arrive with different portrait SHAs, portrait and voting fail closed;
 - the rich variants boot one iframe inside its permanent tooltip-owned parent
-  during initialization. That same browsing context decodes neighbors and
+  during card initialization after load or explicit hover. That same browsing context decodes neighbors and
   renders every hover; it is never reparented or duplicated;
 - the cold rich card paints identity over its stable reverse face. Only the
   shared portrait adapter may assign resolved HTTPS sources: Bunny begins first,

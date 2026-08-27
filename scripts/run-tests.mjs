@@ -1,10 +1,18 @@
 import { execFileSync, spawnSync } from "node:child_process"
-import { readdirSync } from "node:fs"
+import { existsSync, readdirSync } from "node:fs"
 import path from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
 
 const explicitTestArgs = process.argv.slice(2)
+
+// tsx can silently omit a nonexistent explicit path while running other files.
+// A green partial run is not evidence that the requested regression suite ran.
+const missingExplicitPaths = explicitTestArgs.filter((file) => !existsSync(file))
+if (missingExplicitPaths.length) {
+  console.error(`Test paths do not exist: ${missingExplicitPaths.join(", ")}`)
+  process.exit(1)
+}
 
 function trackedFiles() {
   try {

@@ -912,12 +912,12 @@ test("DO NOT DELETE: reading-session preparation replaces pointer prediction bef
   )
   assert.match(
     source,
-    /runAfterHostLoad\(\{[\s\S]*task: launchContentRuntime/,
-    "catalog initialization must not compete with host-page loading",
+    /runAfterHostPaint\(\{\s*documentRef: document,\s*windowRef: window,\s*task: launchContentRuntime/,
+    "cached recognition must yield to host paint and genuine idle, independently of network load",
   )
   assert.match(
     source,
-    /pageScanner\.scanPageCooperatively\(document\.body\)/,
+    /pageScanner\.scanDocumentCooperatively\(\)/,
     "initial recognition must yield between bounded host-DOM slices",
   )
   assert.match(
@@ -1056,8 +1056,8 @@ test("DO NOT DELETE: extension runtime typography uses Iconoplasm fonts, not leg
   )
   assert.match(
     contentSource,
-    /function injectFonts\(\)[\s\S]*document\.fonts\.load[\s\S]*void injectFonts\(\)[\s\S]*pageScanner\.scanPageCooperatively\(document\.body\)/,
-    "the simple card should begin loading packaged fonts before page highlights can be hovered",
+    /function injectFonts\(\)[\s\S]*document\.fonts\.load[\s\S]*function ensureArticleCards\(\)[\s\S]*void injectFonts\(\)[\s\S]*GET_CARD_FRESHNESS/,
+    "card initialization starts packaged fonts before metadata, while cache-only recognition remains renderer-free",
   )
 })
 

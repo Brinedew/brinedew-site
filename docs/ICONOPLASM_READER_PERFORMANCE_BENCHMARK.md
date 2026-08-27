@@ -15,6 +15,22 @@ does not certify reader performance.
 
 ## Measurements
 
+`scripts/lib/iconoplasm-startup-benchmark.mjs` supplies a separate adversarial
+pending-image fixture through the same existing Playwright page. Hold `load` for
+20 seconds: a valid warm scanner must highlight without waiting, and no card
+network should start until load or explicit hover. Do not call this synthetic
+case a real-site latency result. Capture navigation-to-highlight and
+FCP/DOMContentLoaded-to-highlight too; after-load timing alone conceals a
+20-second resource stall. The diagnostics include bounded startup timestamps
+for runtime injection, idle initialization, settings, scanner payload, matcher
+completion and first anchor. These are observation-only, not a second scheduler.
+
+PDF acceptance must include Form-XObject-clipped duplicate text, ordinary text,
+zoom/rotation, and search splitting text spans. Anchor-to-text-layer alignment
+alone cannot pass: invisible extracted text can be perfectly aligned yet wrong.
+Visually compare the affected passage and the undecorated PDF; count rejected
+clipped copies separately from valid visible matches.
+
 Start observation before navigation, not after highlights appear. Preserve every
 sample, timeout and missing diagnostic. Record host load/FCP, highlight arrival,
 readiness immediately before pointer entry, pointer-to-image and pointer-to-detail

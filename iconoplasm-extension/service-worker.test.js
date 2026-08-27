@@ -976,7 +976,14 @@ test("every article checks canon, other tabs retain their epoch, and failed chec
     return Response.json({ schema_version: 2, current })
   }
   try {
-    const first = await send("GET_GENE_DATA", 701)
+    const cached = await new Promise((resolve) =>
+      messageListener({ type: "GET_GENE_DATA", cacheOnly: true }, { tab: { id: 701 } }, resolve),
+    )
+    assert.equal(cached.cardSnapshotVersion, "ccv1-cached")
+    assert.equal(cached.cardFreshness, undefined)
+    assert.equal(calls.length, 0, "cached recognition must make zero network requests")
+    const first = await send("GET_CARD_FRESHNESS", 701)
+    assert.equal(first.genes, undefined, "card selection must not clone the scanner again")
     assert.equal(first.cardSnapshotVersion, current)
     current = "ccv2-" + "b".repeat(64)
     const second = await send("GET_GENE_DATA", 702)
@@ -997,6 +1004,33 @@ test("every article checks canon, other tabs retain their epoch, and failed chec
     assert.equal(failed.cardFreshness.verified, false)
     assert.equal((await send("GET_STATUS", 703)).cardFreshness.verified, false)
     assert.equal(calls.length, 5, "three successful checks plus one bounded two-source failure")
+  } finally {
+    globalThis.fetch = originalFetch
+    storageState.clear()
+  }
+})
+
+test("pre-load cache-only request never refreshes a stale index or downloads a missing one", async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = () => {
+    throw new Error("cache-only path reached network")
+  }
+  storageState.clear()
+  const send = () =>
+    new Promise((resolve) =>
+      messageListener({ type: "GET_GENE_DATA", cacheOnly: true }, { tab: { id: 801 } }, resolve),
+    )
+  try {
+    assert.equal(await send(), null)
+    storageState.set("iconoplasm_genes", { TP53: { n: "p53" } })
+    rememberScannerState("valid")
+    storageState.set("iconoplasm_schema_version", 5)
+    storageState.set("iconoplasm_contract_revision", 1)
+    storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
+    storageState.set("iconoplasm_last_fetch", "2000-01-01T00:00:00Z")
+    assert.ok((await send()).genes.TP53)
+    storageState.set("iconoplasm_contract_error", { code: "invalid" })
+    assert.equal(await send(), null)
   } finally {
     globalThis.fetch = originalFetch
     storageState.clear()
