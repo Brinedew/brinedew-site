@@ -24592,11 +24592,16 @@ async function maxCardCatalogPublishEventPosition(env) {
 async function readCardCatalogPublishWatermark(env) {
   if (env.ICONOPLASM_CARD_PUBLICATION) {
     const status = await callCardPublication(env, "/status")
-    if (status.current) return {
-      artifact_version: status.current, content_hash: status.current,
-      watermark_event_id: status.watermark.id, watermark_event_at: status.watermark.created_at,
-      card_count: status.card_count, catalog_gene_count: status.card_count, published_at: status.published_at,
-    }
+    if (status.current)
+      return {
+        artifact_version: status.current,
+        content_hash: status.current,
+        watermark_event_id: status.watermark.id,
+        watermark_event_at: status.watermark.created_at,
+        card_count: status.card_count,
+        catalog_gene_count: status.card_count,
+        published_at: status.published_at,
+      }
   }
   if (!env?.KV?.get) return null
   try {
