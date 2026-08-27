@@ -388,6 +388,16 @@ Concrete rules:
 4. **Verify the owner's actual provider choice before calling account state a blocker.** Iconoplasm uses already-paid Bunny because R2 billing is unavailable. R2 enablement is not this product's unblocker. Test Bunny's healthy path and the affected tab's first-party fallback separately; preserve both. If Bunny administration itself is inaccessible, report that exact access failure instead of silently changing providers.
 5. **The Playwright browser is already logged into brinedew.bio.** For "what is the live state of X" questions, navigate to `https://brinedew.bio/admin/iconoplasm#costs` (or the relevant admin page) and read the rendered tables. Do not probe external APIs with auth tokens you don't have when the browser session already has the access you need.
 6. **Cost both delivery paths.** First-party fallback is intentional for affected networks, not a reason to route every healthy reader through Cloudflare. Changes must preserve correctness and show request, storage, CPU, and publication costs, including failure paths.
+7. **Use the requested desktop session.** If the owner has Edge/Firefox and a VPN/provider dashboard open, read the installed Computer Use skill and inspect that actual window before declaring browser access blocked. A missing Chrome bridge add-on says nothing about desktop Computer Use availability. Refresh window identity after tab detachment and refresh observed state after user input. Never install an unrequested bridge or change providers to bypass this check.
+
+**ARCHITECTURE FENCE [IPD-008] metadata transport:** the on-demand delivery index
+maps the existing named snapshot to existing shard hashes. Immutable per-symbol
+detail and portrait projections may use Bunny; they are not another publisher.
+Unchanged hashes retain their URLs across votes; changed hashes get new URLs.
+No whole-card shards enter the extension, no reader writes occur, no D1 fallback
+elects canon, and private/mutation traffic never enters the CDN. Keep separate
+hover lanes, deadlines, bounded caches and per-tab network decisions. Test cold
+CDN fills, blocked networks, concurrent lanes and publication changes together.
 
 ## Local development overrides
 

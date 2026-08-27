@@ -1,5 +1,42 @@
 # Iconoplasm capacity and background-work runbook
 
+## Immutable hover metadata transport (B-711, 2026-08-27)
+
+**ARCHITECTURE FENCE [IPD-008] + [IPD-011]**: the existing publication barrier
+and card-shard SHA256 remain the only authority. The snapshot-specific
+`/api/public/v1/card-snapshots/:snapshot/delivery-index` is an on-demand,
+at-most-16-KiB range index, not part of the scanner bootstrap. It carries no card
+payloads. Each tuple selects the existing shard hash for a symbol.
+
+`/api/public/v1/card-content/v1/:hash/{genes|portraits}/:symbol` is a deterministic
+projection with publication-epoch fields removed. The extension validates hash,
+symbol and lane, then restores the named snapshot envelope. A vote changes the
+affected shard hash only; unchanged shards retain cache keys. Publication adds
+no KV writes, no Bunny uploads, no second pointer and no full-catalog rebuild.
+On a cold origin miss, only current/previous published manifests admit a hash;
+already-cached immutable historical bytes remain valid. Missing/corrupt content
+fails closed with non-cacheable errors, never mutable D1 selection.
+
+The extension has two cached indexes, two index requests in flight, a bounded
+30-second failed-index backoff and 128 tab decisions. It uses an 800-ms index
+deadline, 350-ms CDN hedge and 2.5-second source deadlines inside the existing
+4-second request deadline. Each response is capped at 64 KiB. Both hover lanes
+remain independent; another lane cannot alter an in-flight race's failure count.
+All new transport uses omitted credentials. Failure returns to the existing
+exact-snapshot API; aborts remain aborts. Host-load gating is unchanged.
+
+Bunny routing must match ONLY the new immutable content namespace. The default
+Storage Zone origin for portraits is unchanged. Smart Cache excludes JSON, so
+verify the scoped cache rule with real repeated requests: successful responses
+must become HIT, errors must not. Do not substitute a year-long error cache or
+an all-API origin override. Browser extension release remains the human-owned
+publisher workflow; deploying the origin does not update installed clients.
+
+Capacity evidence and limits are in `ICONOPLASM_FIRST_PRINCIPLES_CAPACITY_MODEL.md`.
+The executable cases are `metadata-delivery.test.js`, `iconoplasm.public-media.test.js`
+and `iconoplasm-first-principles-capacity.test.mjs`, with the delivery suite in
+the production deployment gate.
+
 This runbook records the capacity decisions exposed by the 2026-07-22
 finalization incident and the 2026-07-23 shoutout review. They are separate
 invariants and must not be collapsed into “the Queue was noisy” or “traffic was

@@ -80,6 +80,7 @@ function doesNotMatchOrFail(haystack, pattern, message) {
 includesOrFail(
   workflow,
   "iconoplasm-extension/service-worker.test.js",
+  "iconoplasm-extension/metadata-delivery.test.js",
   "Deploy must run the extension's cross-tab Bunny isolation regression.",
 )
 includesOrFail(

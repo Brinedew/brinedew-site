@@ -6,6 +6,9 @@
 // sync or a multi-megabyte catalog refetch.
 
 if (typeof importScripts === "function") {
+  if (!globalThis.IconoplasmMetadataDelivery) {
+    importScripts("metadata-delivery.js")
+  }
   if (!globalThis.IconoplasmCatalogContract) {
     importScripts("generated/catalog-contract.js")
   }
@@ -37,6 +40,9 @@ if (!IconoContentSettings) {
 }
 
 const HOST = "https://iconoplasm.brinedew.bio"
+const metadataDelivery = globalThis.IconoplasmMetadataDelivery.createMetadataDelivery({
+  fetchImpl: (...args) => fetch(...args),
+})
 const API_PUBLIC = `${HOST}/api/public/v1`
 const API_CATALOG_MANIFEST = `${API_PUBLIC}/catalog/manifest`
 const DATA_REFRESH_TTL_MS = 5 * 60 * 1000
@@ -152,6 +158,7 @@ chrome.runtime.onStartup.addListener(() => {
 
 if (chrome.tabs?.onRemoved?.addListener) {
   chrome.tabs.onRemoved.addListener(async (tabId) => {
+    metadataDelivery.forgetTab(tabId)
     await loadPortraitSourceState()
     portraitSourceByTab.delete(portraitTabKey(tabId))
     portraitDeliverySessionByTab.delete(portraitTabKey(tabId))
@@ -391,7 +398,7 @@ async function fetchIconoplasmApi(msg, sender = {}) {
   const controller = typeof AbortController === "function" ? new AbortController() : null
   if (requestKey && controller) apiFetchAbortControllers.set(requestKey, controller)
   try {
-    const resp = await fetch(`${HOST}${path}`, {
+    const init = {
       method: String(msg.method || "GET").toUpperCase(),
       headers: {
         ...(msg.headers && typeof msg.headers === "object" ? msg.headers : {}),
@@ -400,7 +407,10 @@ async function fetchIconoplasmApi(msg, sender = {}) {
       body: typeof msg.body === "string" ? msg.body : undefined,
       credentials: msg.credentials === "include" ? "include" : "same-origin",
       ...(controller ? { signal: controller.signal } : {}),
-    })
+    }
+    const resp =
+      (await metadataDelivery.fetch(`${HOST}${path}`, init, sender?.tab?.id ?? "extension")) ||
+      (await fetch(`${HOST}${path}`, init))
     return {
       ok: resp.ok,
       status: resp.status,

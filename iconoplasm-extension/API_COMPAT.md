@@ -1,5 +1,26 @@
 # Iconoplasm extension contract
 
+## Candidate immutable metadata delivery
+
+The candidate service worker may optimize exact-snapshot gene and portrait GETs
+using `card-snapshots/:snapshot/delivery-index` (schema 1). Ordered tuples
+`[first_symbol,last_symbol,shard_sha256]` reference the existing published card
+shards. The index is bounded to 64 ranges and 16 KiB, cached by snapshot, fetched
+on demand only, and never replaces the portrait-free scanner.
+
+`card-content/v1/:shard_sha256/{genes|portraits}/:symbol` returns schema 1,
+`content_hash`, `symbol`, `lane`, and `record`. It excludes publication epoch
+fields so unchanged shard hashes can be reused across snapshots. The extension
+validates identity and restores the named snapshot envelope before existing
+consumers see it. Changed winning cards change the shard hash. This is transport
+under the same gallery barrier, not a new canonical portrait authority.
+
+These credential-free public projections may be cached at the existing Bunny
+hostname; private APIs and mutations are never intercepted. The two lanes keep
+independent deadlines. Missing index, CDN failure or unavailable content returns
+to the existing exact-snapshot route. Installed packages retain that route until
+the next human-authorized release. No release version is advanced by this change.
+
 `publisher-release.json` is the complete, inspectable authority for browser
 releases. `version` and `catalog_contract` identify the newest human-authorized
 package. `minimum_supported_version` and `compatibility_contracts` define the
