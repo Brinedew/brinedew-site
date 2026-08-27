@@ -600,7 +600,11 @@ container.addEventListener("pointermove", (event) => {
 container.addEventListener("pointerleave", (event) => {
   transitionActiveAnchor(null, event.relatedTarget)
 })
-window.addEventListener("blur", closeActiveCard)
+window.addEventListener("blur", () => {
+  // Focusing the card's child iframe also blurs this window, but the document
+  // still has focus. Closing then would swallow the reader's card interaction.
+  if (!document.hasFocus()) closeActiveCard()
+})
 
 async function loadPdf(bytes, name = "document.pdf") {
   if (!(bytes instanceof Uint8Array) || !bytes.byteLength) {
