@@ -475,7 +475,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
                   <span class="sr-only" id="publication-alias-gene-status" role="status" aria-live="polite"></span>
                 </div>
               </div>
-              <p class="small" id="publication-alias-input-help">Enter the page label as readers see it. Case is preserved; repeated whitespace and dash variants are normalized. Adding only changes this draft.</p>
+              <p class="small" id="publication-alias-input-help">Matching is case-sensitive. Add each spelling you want recognized, such as Cdk1 and cdk1; both can map to CDK1. Repeated whitespace and dash variants are normalized. Adding only changes this draft.</p>
               <div class="publication-alias-target-preview" id="publication-alias-target-preview" role="status" aria-live="polite" hidden></div>
               <div class="publication-alias-conflict" id="publication-alias-conflict" role="alert" hidden></div>
               <div class="publication-alias-composer-actions">
