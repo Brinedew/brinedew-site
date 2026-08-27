@@ -6,9 +6,13 @@ This `AGENTS.md` is loaded automatically when work happens inside `D:\Coding\Web
 
 Before changing reader freshness, read `docs/ICONOPLASM_PRODUCT_OPERATING_MODEL.md`.
 The owner permits stale images while an article stays open. New page loads and
-ordinary reloads must check current published canon; preserve the one-minute
-healthy publication target without adding continuous per-tab polling. Historical
-15-minute timing is not a product exception. Spec updates are not runtime proof.
+ordinary reloads must check current published canon. Scale and smooth reading
+outrank shaving a minute off synchronization: aim for one minute; two is acceptable,
+not a strict worldwide guarantee. No continuous per-tab polling. Use the explicit
+10,000-daily-reader working scenario (including voting, saved discoveries and
+regional fallback), not today's traffic, to evaluate changes. Report reader-level
+verdicts, not isolated operation counts. Historical 15-minute timing is not a
+product exception. Spec/model updates are not runtime proof.
 
 Before changing a non-obvious cost, ownership, fallback, or release decision,
 read `architecture-fences.json` and `docs/ARCHITECTURE_FENCES.md`. Registered
