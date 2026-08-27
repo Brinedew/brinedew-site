@@ -209,8 +209,8 @@ and may promote the same in-flight immutable request without waiting for whole-c
 hydration. Portrait paint must not wait for rich-detail success: the locator lane
 may resolve and paint while detail is stalled or exhausted. The locator is only a
 projection of the exact card payload, shares its snapshot version and portrait
-SHA, and must fail closed on disagreement; it is never a second canon or separately
-published index. Do not restore pointer-trajectory, DOM-neighbor, scroll-direction, or
+SHA, and must fail closed on disagreement; it never selects canon or advances
+an independent publication. Byte-equivalent caches are permitted. Do not restore pointer-trajectory, DOM-neighbor, scroll-direction, or
 surface-specific prediction. Packaged card fonts begin loading
 during initialization in both the host page and persistent card frame. Both routes
 project immutable published card artifacts and
