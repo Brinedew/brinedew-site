@@ -689,6 +689,10 @@
   const portraitCache = IconoContentPortraitCache.createPortraitCache({
     windowRef: window,
     sendMessage: extensionRuntime.sendMessage,
+    loadImage: (url, timeoutMs, signal) =>
+      usesTooltipFrameRenderer()
+        ? litArchivalFrameController.loadImage(url, timeoutMs, signal)
+        : IconoContentPortraitCache.loadBrowserImage(url, timeoutMs, signal),
     batchSize: 6,
     delayMs: 20,
     onWarmSource: onPortraitWarmSource,
@@ -922,6 +926,7 @@
     // merely to reinject code after an extension update.
     readingSession.dispose()
     portraitCache.dispose()
+    litArchivalFrameController.cancelImages()
     mutationScanController?.stop()
     hostBackgroundWork.cancel()
     window.clearTimeout(initializationRetryTimer)
@@ -2424,6 +2429,7 @@
     if (!data || data.source !== LIT_ARCHIVAL_FRAME_SOURCE) return
     const iframe = litArchivalFrameController.getFrame()
     if (!iframe || event.source !== iframe.contentWindow) return
+    if (litArchivalFrameController.acceptImageResult(event.source, data)) return
     if (data.type === LIT_ARCHIVAL_READY_MESSAGE) {
       litArchivalFrameController.markReady(event.source)
       flushLitArchivalPrewarmSources()

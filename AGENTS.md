@@ -445,6 +445,10 @@ content envelope working. A validation package can retain the released version
 number while containing newer code: compare package/runtime hashes, not only the
 displayed version. V2 compatibility reads one directory plus the exact lane
 object; never load its packed shard or make portraits wait on rich-card bytes.
+Prepare native portrait bytes in the context that paints them: the persistent
+card frame for framed layouts, host for simple cards. The adapter retains source
+selection and hedging. A host-page image cache hit is not frame readiness;
+verify transfer counts with browser routing/cache interception disabled.
 
 ## Local development overrides
 

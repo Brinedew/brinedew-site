@@ -138,6 +138,26 @@ fallback still costs first-party requests. Regression tests exercise the real
 route with the released client header, independent lane failures, unchanged
 range reuse, invalid identities and zero packed-shard/full-card reads.
 
+### Portrait preparation belongs to the displaying context
+
+The 2026-08-28 released-client trace on Wikipedia RAD51 transferred the same
+29,984-byte portrait twice: first in the host page, then in the extension frame.
+The second transfer followed completion of the first, adding a serial network
+wait. HTTP caches are partitioned by browsing context; preparing a host-page
+`Image` does not certify that the embedded card can paint it.
+
+The adapter still owns the tab's source plan, 350 ms hedge and losing-source
+cancellation. Its native image loader now runs in the existing persistent card
+frame for framed layouts, or in the host for the simple layout. A bounded image
+request protocol waits for frame readiness and acknowledges only the exact URL
+after load/decode. It propagates cancellation, rejects mismatched replies and
+has a deadline even if a frame never responds. No new image authority, provider
+policy, worker-byte hot path, global cache or permission is introduced. Verify
+actual packaged requests on an ordinary page with routing/cache interception
+off; a routed synthetic fixture disables HTTP caching and cannot alone prove
+cross-context duplicate transfers. This client change requires a new authorized
+store release; it is not shipped to users by a backend deployment.
+
 ## Explicit migration and verification
 
 1. Deploy the coordinator binding, routes and consumers together. The binding

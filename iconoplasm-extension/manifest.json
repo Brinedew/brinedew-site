@@ -69,6 +69,7 @@
       "resources": [
         "lit-archival-frame.html",
         "lit-archival-frame.js",
+        "content-portrait-cache.js",
         "generated/rough.js",
         "generated/iconoplasm-font-runtime.js",
         "generated/shared-card-runtime.js",
