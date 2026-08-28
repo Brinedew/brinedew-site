@@ -334,9 +334,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true
   }
   if (msg.type === "REPORT_PORTRAIT_SOURCE_RESULT") {
-    reportPortraitSourceResult(msg.url, Boolean(msg.succeeded), sender?.tab?.id).then((result) =>
-      sendResponse({ ok: true, ...(result || {}) }),
-    )
+    reportPortraitSourceResult(
+      msg.url,
+      Boolean(msg.succeeded),
+      sender?.tab?.id,
+      msg.decisionId ?? null,
+    ).then((result) => sendResponse({ ok: true, ...(result || {}) }))
     return true
   }
 })
@@ -951,12 +954,12 @@ async function portraitSourcePlan(url, tabId) {
   return session.plan(normalizedUrl)
 }
 
-async function reportPortraitSourceResult(url, succeeded, tabId) {
+async function reportPortraitSourceResult(url, succeeded, tabId, decisionId = null) {
   const normalizedUrl = String(url || "").trim()
   if (!normalizedUrl) return null
   const session = await portraitDeliverySession(tabId)
   const result = succeeded
-    ? session.reportSuccess(normalizedUrl)
+    ? session.reportSuccess(normalizedUrl, decisionId)
     : session.reportFailure(normalizedUrl)
   return { state: result.state, plan: session.plan(normalizedUrl) }
 }

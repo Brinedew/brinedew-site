@@ -49,9 +49,13 @@ startup, scheduling, model routing, credential handling, or result anchoring.
 
 **ARCHITECTURE FENCE [IPD-001]** — Bunny is Iconoplasm's healthy-path portrait
 accelerator because direct delivery avoids charging each image to the
-Cloudflare Worker budget. The extension starts one real browser-native image
-per tab and begins the canonical first-party hedge after 350 ms if Bunny is
-still unresolved; the first successful source becomes the tab decision. A
+Cloudflare Worker budget. The extension starts real browser-native images
+and begins the canonical first-party hedge after 350 ms if Bunny is
+still unresolved; successful Bunny requests retain that head start. Once
+canonical works, subsequent images use canonical alone unless it actually
+fails. Never retry a blocked CDN merely because time passed, and never change
+the hedge to zero after selecting a source. Late results cannot replace a newer
+decision. The first successful source becomes the tab decision. A
 regional DNS failure therefore selects canonical without putting the old 2.5 s
 worker-byte probe on the visible-hover path. Never turn
 one network's DNS result into a global accelerator disable.

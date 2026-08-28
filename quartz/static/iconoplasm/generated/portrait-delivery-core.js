@@ -118,6 +118,8 @@ function transitionPortraitDelivery(rawState, event, policy = DEFAULT_PORTRAIT_D
 function createPortraitDeliverySession(options = {}) {
   let policy = normalizePortraitDeliveryPolicy(options.policy);
   let state = normalizePortraitDeliveryState(options.initialState, policy);
+  const sessionId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+  let decisionRevision = 0;
   let decisionPromise = null;
   const probe = typeof options.probe === "function" ? options.probe : null;
   const persist = typeof options.persist === "function" ? options.persist : null;
@@ -125,6 +127,7 @@ function createPortraitDeliverySession(options = {}) {
     const normalized = normalizePortraitDeliveryState(nextState, policy);
     const changed = normalized.state !== state.state || normalized.failed.join("|") !== state.failed.join("|");
     state = normalized;
+    if (changed) decisionRevision += 1;
     if (changed && persist)
       Promise.resolve(persist({ ...state, failed: [...state.failed] })).catch(() => null);
     return changed;
@@ -163,8 +166,12 @@ function createPortraitDeliverySession(options = {}) {
       primaryUrl: portraitUrlForSource(path, primarySource, policy),
       fallbackSource: canFallback ? fallbackSource : "",
       fallbackUrl: canFallback ? portraitUrlForSource(path, fallbackSource, policy) : "",
-      hedgeDelayMs: state.state === "undecided" ? policy.fallback_hedge_delay_ms : 0,
+      // A healthy CDN retains its head start. Once canonical works, do not
+      // re-test a blocked CDN on every image: the alternate starts only if
+      // canonical itself fails. No cooldown, polling or elapsed-time reset.
+      hedgeDelayMs: primarySource === "accelerator" ? policy.fallback_hedge_delay_ms : null,
       timeoutMs: policy.probe_timeout_ms,
+      decisionId: `${sessionId}:${decisionRevision}`,
       state: snapshot()
     };
   }
@@ -220,9 +227,12 @@ function createPortraitDeliverySession(options = {}) {
     );
     return { changed, state: snapshot(), replacementUrl: resolve(rawUrl), failedSource: source };
   }
-  function reportSuccess(rawUrl) {
+  function reportSuccess(rawUrl, decisionId = null) {
     const source = portraitSourceFromUrl(rawUrl, policy);
     if (!source) return { changed: false, state: snapshot() };
+    if (decisionId !== null && decisionId !== `${sessionId}:${decisionRevision}`) {
+      return { changed: false, state: snapshot(), ignored: "superseded_decision" };
+    }
     const changed = commit(
       transitionPortraitDelivery(state, { type: "source_succeeded", source }, policy)
     );

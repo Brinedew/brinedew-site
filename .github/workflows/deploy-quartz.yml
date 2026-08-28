@@ -100,6 +100,7 @@ jobs:
         run: |
           # ARCHITECTURE FENCE [IPD-001]: production must not deploy a global
           # Bunny disable based on one network's resolver failure. This focused
+          # guard also rejects zero-delay duplicate image races and timed CDN retries.
           # test runs in the deploy job itself; parallel CI is not the release gate.
           # This block must stay before deploy. The Iconoplasm sync fix is not
           # just Worker code; it is the guarantee that the canonical GitHub path
