@@ -51,6 +51,9 @@ What it does:
 - excludes `store-assets/`, docs, and other non-runtime files
 - scans the staged payload for obvious secret patterns before zipping
 - writes replaceable validation output under `iconoplasm-extension/dist/validation/`
+- labels the installed package `Iconoplasm DEV <fingerprint>`; its numeric base
+  version is not proof that it matches a released ZIP
+- accepts `--out-dir=<directory>` for isolated tests and build outputs
 
 Validation output:
 
@@ -71,9 +74,10 @@ Only the human-confirmed GUI release and its GitHub workflows may pass
 versioned store ZIP to `iconoplasm-extension/dist/`. The explicit expected
 version must match both `manifest.json` and `publisher-release.json`.
 
-For AMO, use the exact Firefox package and reviewer-source ZIP retained by the
-human-authorized `iconoplasm-firefox-submission` workflow artifact. Do not
-rebuild a store upload from ordinary source.
+For AMO, use the exact Firefox package and reviewer-source ZIP in the immutable
+`iconoplasm-v<version>` GitHub release. Its manifest binds all packages to one
+source commit and verifies their hashes. Do not rebuild a store upload from
+ordinary source. See [release integrity](../docs/ICONOPLASM_RELEASE_INTEGRITY.md).
 
 ## Store publishing
 
@@ -94,9 +98,10 @@ What the GUI-confirmed Firefox + Edge release does:
 - rebuilds the public Chrome developer package and updates its release metadata
 - commits the manifest, patch notes, release metadata, and public package
 - pushes the release commit to `main`
-- dispatches the Firefox workflow against that committed version
-- dispatches the Edge workflow against that committed version
-- builds release-mode Firefox and Edge payloads for the exact authorized version
+- pins a release tag and dispatches both store workflows from that exact commit
+- waits for exact-commit CI, including public-package source parity
+- prepares and seals one immutable release containing the exact tested bundles
+- downloads and hash-verifies those bundles in both store jobs without rebuilding
 - submits Firefox to AMO for signing/review
 - submits Edge to Microsoft Edge Add-ons for package validation and review
 - uploads store package artifacts back to the workflow runs

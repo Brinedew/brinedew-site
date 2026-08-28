@@ -6,7 +6,11 @@ import { fileURLToPath } from "node:url"
 
 const repoRoot = resolve(fileURLToPath(import.meta.url), "..", "..")
 const release = process.argv.slice(2).includes("--release")
-const distRoot = resolve(repoRoot, "iconoplasm-extension", "dist")
+const outputArgs = process.argv.slice(2).filter((arg) => arg.startsWith("--out-dir="))
+if (outputArgs.length > 1) throw new Error("Pass --out-dir only once")
+const distRoot = resolve(
+  outputArgs[0]?.slice("--out-dir=".length) || resolve(repoRoot, "iconoplasm-extension", "dist"),
+)
 const candidateRoot = release
   ? resolve(distRoot, "release-work", "firefox", "package")
   : resolve(distRoot, "validation", "firefox", "package")
@@ -17,7 +21,7 @@ const reviewerBuildRoot = resolve(
   reviewerRoot,
   "iconoplasm-extension",
   "dist",
-  "validation",
+  release ? "release-work" : "validation",
   "firefox",
   "package",
 )
@@ -70,7 +74,12 @@ ensureDirectory(candidateRoot, "Firefox submission package")
 ensureDirectory(reviewerRoot, "AMO reviewer source package")
 runPnpm(["install", "--frozen-lockfile"])
 runPnpm(["run", "sync:iconoplasm-extension"])
-runPnpm(["run", "package:iconoplasm-firefox"])
+const version = JSON.parse(readFileSync(resolve(candidateRoot, "manifest.json"), "utf8")).version
+runPnpm([
+  "run",
+  "package:iconoplasm-firefox",
+  ...(release ? ["--release", `--expected-version=${version}`] : []),
+])
 ensureDirectory(reviewerBuildRoot, "reviewer-rebuilt Firefox package")
 
 const candidate = fileMap(candidateRoot)

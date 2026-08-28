@@ -1,0 +1,75 @@
+name: Prepare immutable Iconoplasm release
+
+# Called only by the human-gated store workflows. Both stores share one archive.
+on:
+  workflow_call:
+    inputs:
+      expected_version:
+        required: true
+        type: string
+      expected_commit:
+        required: true
+        type: string
+      human_confirmation:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: iconoplasm-immutable-${{ inputs.expected_version }}
+      cancel-in-progress: false
+    env:
+      EXPECTED_VERSION: ${{ inputs.expected_version }}
+      EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+      HUMAN_CONFIRMATION: ${{ inputs.human_confirmation }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Verify human release gate and pinned dispatch
+        shell: bash
+        run: |
+          test "$HUMAN_CONFIRMATION" = 'YES, I AM A HUMAN, PUBLISH ICONOPLASM'
+          test "$GITHUB_SHA" = "$EXPECTED_COMMIT"
+          test "$GITHUB_REF" = "refs/tags/iconoplasm-v$EXPECTED_VERSION"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.expected_commit }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: corepack enable
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Require successful tests for the exact release commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/wait-for-iconoplasm-release-ci.mjs
+      - name: Inspect immutable archive
+        id: archive
+        run: node scripts/iconoplasm-release-bundle.mjs inspect
+      - name: Require certified browser ownership
+        if: steps.archive.outputs.sealed != 'true'
+        run: |
+          node scripts/verify-iconoplasm-pdf-release-gate.mjs --target=firefox
+          node scripts/verify-iconoplasm-pdf-release-gate.mjs --target=edge
+      - name: Build the release bundles once
+        if: steps.archive.outputs.sealed != 'true'
+        run: |
+          pnpm run sync:iconoplasm-extension
+          node scripts/package-iconoplasm-extension.mjs --target=generic --release "--expected-version=$EXPECTED_VERSION"
+          node scripts/package-iconoplasm-extension.mjs --target=firefox --release "--expected-version=$EXPECTED_VERSION"
+          node scripts/package-iconoplasm-extension.mjs --target=edge --release "--expected-version=$EXPECTED_VERSION"
+          node scripts/package-iconoplasm-firefox-source.mjs --release "--expected-version=$EXPECTED_VERSION"
+      - name: Reproduce Firefox from the reviewer source
+        if: steps.archive.outputs.sealed != 'true'
+        run: node scripts/verify-iconoplasm-firefox-source-rebuild.mjs --release
+      - name: Verify uploaded bytes and seal the release
+        if: steps.archive.outputs.sealed != 'true'
+        run: node scripts/iconoplasm-release-bundle.mjs seal

@@ -36,6 +36,11 @@ jobs:
           corepack prepare pnpm@11.0.9 --activate
           pnpm config set minimumReleaseAge 1440
 
+      - name: Protect previously published extension downloads
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/verify-iconoplasm-release-history.mjs
+
       - name: Get pnpm store directory
         shell: bash
         run: |
@@ -60,6 +65,11 @@ jobs:
 
       - name: Sync shared Iconoplasm assets
         run: pnpm run sync:iconoplasm-shared
+
+      - name: Reproduce a newly added public extension package from this commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/verify-iconoplasm-release-history.mjs --verify-new-package
 
       - name: Check types and style
         run: pnpm run check
