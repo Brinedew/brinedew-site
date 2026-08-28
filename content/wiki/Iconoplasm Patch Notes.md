@@ -10,6 +10,9 @@ draft: false
 
 ## Unreleased
 
+## 0.5.4 - 2026-08-28
+
+* Fixed duplicated and inefficient image loading
 ## 0.5.3 - 2026-08-27
 
 * Optimized portrait retrieval from host, with regional fallback
