@@ -10,6 +10,9 @@ draft: false
 
 ## Unreleased
 
+## 0.5.5 - 2026-08-28
+
+* Optimized data loading times across browser tabs
 ## 0.5.4 - 2026-08-28
 
 * Fixed duplicated and inefficient image loading
