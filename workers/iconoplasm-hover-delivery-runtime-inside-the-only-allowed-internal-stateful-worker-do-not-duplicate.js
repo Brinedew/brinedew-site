@@ -1,3 +1,5 @@
+import { publishedCardObjectKey } from "./lib/iconoplasm-published-card-objects.js"
+
 // ARCHITECTURE FENCE [IPD-008] + [IPD-011]: transport projections, not a
 // publisher. The existing gallery barrier admits hashes; unchanged hashes
 // survive votes. Never add D1 selection, a second pointer, or reader writes.
@@ -9,6 +11,7 @@ export function createHoverDeliveryHandlers({
   barrier,
   manifest,
   shard,
+  object,
   complete,
   stable,
   project,
@@ -21,7 +24,12 @@ export function createHoverDeliveryHandlers({
     return [...new Set([value.current, value.previous].filter(Boolean))]
   }
   function ranges(value) {
-    if (value?.storage !== "kv_card_catalog_content_addressed_shards") return null
+    if (
+      !["kv_card_catalog_content_addressed_shards", "bunny_card_catalog_v2"].includes(
+        value?.storage,
+      )
+    )
+      return null
     const refs = value.shards
     if (!Array.isArray(refs) || !refs.length || refs.length > 64) return null
     let previous = ""
@@ -37,6 +45,30 @@ export function createHoverDeliveryHandlers({
       previous = ref.last_symbol
     }
     return refs
+  }
+
+  async function bunnyRecord(env, ref, lane, symbol) {
+    // Released 0.5.3 speaks the v1 envelope even when the publisher uses v2.
+    // The admitted shard hash is a range identity, NOT a request for its bytes.
+    // Read one small directory and the exact lane object; a slow rich card must
+    // not become a prerequisite for the independently stored portrait locator.
+    const directoryRef = ref.delivery_indexes?.find(
+      (index) => symbol >= index.first_symbol && symbol <= index.last_symbol,
+    )
+    if (
+      !/^published-cards\/v2\/immutable\/indexes\/[a-f0-9]{64}\.json$/.test(directoryRef?.key || "")
+    )
+      return null
+    const directory = await object(
+      env,
+      directoryRef.key,
+      (value) =>
+        value?.schema_version === 2 && Array.isArray(value.entries) && value.entries.length <= 128,
+    )
+    const entry = directory?.entries?.find((entry) => Array.isArray(entry) && entry[0] === symbol)
+    const hash = entry?.[lane === "genes" ? 2 : 3]
+    if (entry?.length !== 4 || !HASH.test(hash || "")) return null
+    return object(env, publishedCardObjectKey(lane, hash), (value) => value?.symbol === symbol)
   }
   return {
     async index({ env, match }) {
@@ -71,8 +103,10 @@ export function createHoverDeliveryHandlers({
       // remains valid as historical content, just like the browser HTTP cache.
       let selected = null
       let selectedVersion = null
+      let selectedStorage = null
       for (const version of await versions(env)) {
-        const refs = ranges(await manifest(env, version))
+        const catalog = await manifest(env, version)
+        const refs = ranges(catalog)
         const ref = refs?.find(
           (ref) =>
             ref.content_hash === hash && symbol >= ref.first_symbol && symbol <= ref.last_symbol,
@@ -80,17 +114,22 @@ export function createHoverDeliveryHandlers({
         if (ref) {
           selected = ref
           selectedVersion = version
+          selectedStorage = catalog.storage
           break
         }
       }
       if (!selected) return failure("card_snapshot_retired", 410)
-      const raw = await shard(env, selectedVersion, selected, true)
-      const card = raw?.cards?.find((card) => card.symbol === symbol)
-      if (!card || !complete(card)) return failure("card_content_unavailable")
-      // The shard hash deliberately excludes these fields. Exclude them from
-      // transport too, so a reused hash cannot carry an old publication epoch.
-      const value = stable(card)
-      const record = lane === "genes" ? project(value.payload, null) : stable(locator(value, ""))
+      let record
+      if (selectedStorage === "bunny_card_catalog_v2") {
+        record = await bunnyRecord(env, selected, lane, symbol)
+      } else {
+        const raw = await shard(env, selectedVersion, selected, true)
+        const card = raw?.cards?.find((card) => card.symbol === symbol)
+        if (!card || !complete(card)) return failure("card_content_unavailable")
+        // The shard hash excludes publication epochs; so must its projection.
+        const value = stable(card)
+        record = lane === "genes" ? project(value.payload, null) : stable(locator(value, ""))
+      }
       if (!record) return failure("card_content_unavailable")
       const response = json({ schema_version: 1, content_hash: hash, symbol, lane, record }, 200, {
         "Cache-Control": IMMUTABLE,
