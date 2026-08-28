@@ -1,5 +1,14 @@
 # Website project rules
 
+## Extension release integrity
+
+Read `docs/ICONOPLASM_RELEASE_INTEGRITY.md` before changing extension packaging,
+release identity, store workflows or published download files. Validation builds
+must visibly say DEV and carry their content fingerprint. Tests use disposable
+output roots and never replace real release artifacts. Store submission consumes
+the verified immutable bundle for one exact tagged commit; it must not rebuild
+current `main` under an already approved version. Preserve the human GUI gate.
+
 This `AGENTS.md` is loaded automatically when work happens inside `D:\Coding\Website\`. Root `D:\Coding\AGENTS.md` rules still apply — these are project-specific additions.
 
 ## Architecture fence registry

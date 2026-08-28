@@ -14,13 +14,32 @@ on:
         description: Version declared by the human publisher authority
         required: true
         type: string
+      expected_commit:
+        description: Exact source commit approved by the Iconoplasm GUI
+        required: true
+        type: string
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
+concurrency:
+  group: iconoplasm-firefox-${{ inputs.expected_version }}
+  cancel-in-progress: false
+
 jobs:
+  prepare-release:
+    uses: ./.github/workflows/prepare-iconoplasm-release.yml
+    with:
+      expected_version: ${{ inputs.expected_version }}
+      expected_commit: ${{ inputs.expected_commit }}
+      human_confirmation: ${{ inputs.human_confirmation }}
   publish-firefox:
+    needs: prepare-release
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
     # Re-platformed from windows-latest to ubuntu-latest. PowerShell 7 is
     # preinstalled on GitHub-hosted Linux runners, and the locked store publisher
     # runs via pnpm and Node. See
@@ -35,6 +54,8 @@ jobs:
       # (2026 current majors).
       - name: Check out repo
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.expected_commit }}
 
       - name: Confirm human publish intent
         env:
@@ -81,18 +102,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Package extension payload
+      - name: Download and verify the sealed release bundles
         env:
           EXPECTED_VERSION: ${{ inputs.expected_version }}
-        run: node ./scripts/package-iconoplasm-extension.mjs --target=firefox --release "--expected-version=$env:EXPECTED_VERSION"
-
-      - name: Package reviewer source
-        env:
-          EXPECTED_VERSION: ${{ inputs.expected_version }}
-        run: node ./scripts/package-iconoplasm-firefox-source.mjs --release "--expected-version=$env:EXPECTED_VERSION"
-
-      - name: Rebuild and compare reviewer source
-        run: node ./scripts/verify-iconoplasm-firefox-source-rebuild.mjs --release
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          GH_TOKEN: ${{ github.token }}
+        run: node ./scripts/iconoplasm-release-bundle.mjs download
 
       - name: Submit to Firefox Add-ons
         env:
