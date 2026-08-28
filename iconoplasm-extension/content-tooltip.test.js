@@ -51,6 +51,74 @@ test("background callbacks use browser background priority and can be superseded
   assert.equal(typeof runTask, "function")
 })
 
+test("frame image requests wait for readiness and settle only on matching results, cancellation or deadlines", async () => {
+  const api = await loadTooltipModule()
+  const posted = []
+  const timers = new Set()
+  const controller = api.createPersistentFrameController({
+    windowRef: {
+      setTimeout(fn) {
+        timers.add(fn)
+        return fn
+      },
+      clearTimeout(fn) {
+        timers.delete(fn)
+      },
+    },
+    documentRef: {
+      createElement() {
+        return {
+          dataset: {},
+          setAttribute() {},
+          contentWindow: {
+            postMessage(data) {
+              posted.push(data)
+            },
+          },
+        }
+      },
+    },
+    getHost: () => ({
+      appendChild(frame) {
+        frame.isConnected = true
+      },
+    }),
+    frameUrl: "chrome-extension://test/frame.html",
+    frameOrigin: "chrome-extension://test",
+  })
+  const url = "https://cdn.example/portrait.webp"
+  const first = controller.loadImage(url, 2500)
+  assert.equal(posted.length, 0)
+  const frame = controller.getFrame()
+  controller.markReady(frame.contentWindow)
+  assert.equal(posted.length, 1)
+  const result = {
+    type: "ICONOPLASM_FRAME_IMAGE_RESULT",
+    requestId: posted[0].requestId,
+    url,
+    ok: true,
+  }
+  assert.equal(controller.acceptImageResult({}, result), false)
+  assert.equal(
+    controller.acceptImageResult(frame.contentWindow, { ...result, url: "wrong" }),
+    false,
+  )
+  assert.equal(controller.acceptImageResult(frame.contentWindow, result), true)
+  assert.equal(await first, url)
+  assert.equal(timers.size, 0)
+
+  const signal = new AbortController()
+  const second = controller.loadImage(url, 2500, signal.signal)
+  signal.abort()
+  await assert.rejects(second, { name: "AbortError" })
+  assert.equal(posted.at(-1).type, "ICONOPLASM_FRAME_CANCEL_IMAGE")
+  const third = controller.loadImage(url, 2500)
+  timers.values().next().value()
+  await assert.rejects(third, /timed out/)
+  assert.equal(posted.at(-1).type, "ICONOPLASM_FRAME_CANCEL_IMAGE")
+  assert.equal(timers.size, 0)
+})
+
 test("one persistent renderer survives retries and rejects stale or raw portrait payloads", async () => {
   const tooltipModule = await loadTooltipModule()
   const posted = []
@@ -417,6 +485,7 @@ test("frame prewarm acknowledges decoded paint readiness and defers rough decora
   }
   const sandbox = {
     console,
+    AbortController,
     document: documentRef,
     Image: FakeImage,
     Element: FakeElement,
@@ -434,6 +503,14 @@ test("frame prewarm acknowledges decoded paint readiness and defers rough decora
       },
       hydrateRoughLoops() {
         roughHydrationCount += 1
+      },
+    },
+    IconoplasmContentPortraitCache: {
+      loadBrowserImage(_url, _timeout, signal) {
+        return new Promise((resolve, reject) => {
+          releaseDecode = resolve
+          signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true })
+        })
       },
     },
   }
@@ -485,4 +562,28 @@ test("frame prewarm acknowledges decoded paint readiness and defers rough decora
   assert.equal(roughHydrationCount, 0)
   rafQueue.shift()?.(0)
   assert.equal(roughHydrationCount, 1)
+
+  const url = `https://iconoplasm.brinedew.bio/portraits/v1/aa/${"a".repeat(64)}/medium.webp`
+  const load = { type: "ICONOPLASM_FRAME_LOAD_IMAGE", requestId: "image-1", url, timeoutMs: 2500 }
+  listeners.get("message")({ source: {}, data: load })
+  assert.equal(
+    posted.some((message) => message.type === "ICONOPLASM_FRAME_IMAGE_RESULT"),
+    false,
+  )
+  listeners.get("message")({ source: parent, data: load })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(
+    posted.some((message) => message.type === "ICONOPLASM_FRAME_IMAGE_RESULT"),
+    false,
+  )
+  releaseDecode()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(posted.find((message) => message.requestId === "image-1")?.ok, true)
+  listeners.get("message")({ source: parent, data: { ...load, requestId: "image-2" } })
+  listeners.get("message")({
+    source: parent,
+    data: { type: "ICONOPLASM_FRAME_CANCEL_IMAGE", requestId: "image-2" },
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(posted.find((message) => message.requestId === "image-2")?.ok, false)
 })
