@@ -233,9 +233,23 @@ The website and extension use the same state machine from
   The 2.5 s timeout remains a per-source ceiling, not a serial pre-fallback wait.
 - Requested labelled-card thumbnails bind to this same decision. A Bunny DNS
   failure must never leave broken alt text in the crawlable archive.
-- Simultaneous portraits share that one decision.
+- Simultaneous portraits share the tab's source decision. Requests already
+  started before a decision settles can each have a bounded hedge; this is not
+  a promise of exactly one DNS attempt across concurrent initial images.
 - Any later portrait, including a newly generated edit result, is resolved
   through the current tab decision before it is assigned.
+- Healthy Bunny requests retain the 350 ms head start; selecting Bunny never
+  changes that delay to zero. The canonical hedge starts only if Bunny stalls
+  or fails. Once canonical succeeds, later images use it alone; their alternate
+  can start only if canonical itself fails. `hedgeDelayMs: null` means no timer,
+  not a zero-delay race.
+- A month-long regional DNS block is not a brief outage. There is no timed CDN
+  recovery policy, 30-second probe, or per-image CDN retry while canonical works.
+  The existing tab decision survives ordinary reloads. A new tab has a new
+  decision; a browser's DNS/VPN change is not reliably detectable and must not
+  be inferred from elapsed time or fluctuating connection-speed estimates.
+- Native completion carries its decision identity. A late result from a former
+  decision (or a former worker instance) cannot overwrite a newer route choice.
 - A selected source failure switches once to the other source.
 - A late URL from a source already known to have failed is rebound to the
   selected source without changing global state.

@@ -201,6 +201,11 @@ test("IPD-001 keeps Bunny primary on healthy tabs and canonical as the one-probe
     "https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/asset/medium.webp",
   )
   assert.equal(healthyProbeCount, 1)
+  assert.equal(
+    healthy.plan(canonicalUrl).hedgeDelayMs,
+    350,
+    "A successful CDN never triggers zero-delay duplicate loads",
+  )
 
   let blockedProbeCount = 0
   const blocked = createPortraitDeliverySession({
@@ -212,6 +217,11 @@ test("IPD-001 keeps Bunny primary on healthy tabs and canonical as the one-probe
   assert.equal(await blocked.ensure(canonicalUrl), canonicalUrl)
   assert.equal(blockedProbeCount, 1)
   assert.deepEqual(blocked.state(), { state: "canonical", failed: ["accelerator"] })
+  assert.equal(
+    blocked.plan(canonicalUrl).hedgeDelayMs,
+    null,
+    "Known blocked delivery has no periodic probe or automatic race",
+  )
 
   const disabledPolicy = {
     ...DEFAULT_PORTRAIT_DELIVERY_POLICY,
@@ -246,6 +256,24 @@ test("IPD-001 keeps Bunny primary on healthy tabs and canonical as the one-probe
     readRepositoryFile("quartz/components/Head.tsx"),
     /<link rel="preconnect" href="https:\/\/iconoplasmportraits\.b-cdn\.net" \/>/,
   )
+})
+
+// ARCHITECTURE FENCE [IPD-008]
+test("IPD-001 late image results cannot undo a newer source decision", () => {
+  const session = createPortraitDeliverySession()
+  const canonical = "https://iconoplasm.brinedew.bio/portraits/v1/a.webp"
+  const first = session.plan(canonical)
+  const concurrent = session.plan(canonical)
+  session.reportSuccess(first.fallbackUrl, first.decisionId)
+  assert.equal(
+    session.reportSuccess(concurrent.primaryUrl, concurrent.decisionId).ignored,
+    "superseded_decision",
+  )
+  assert.equal(session.state().state, "canonical")
+  const later = session.plan(canonical)
+  assert.equal(later.hedgeDelayMs, null)
+  session.reportSuccess(later.fallbackUrl, later.decisionId)
+  assert.equal(session.state().state, "accelerator")
 })
 
 // ARCHITECTURE FENCE [IPD-008]
