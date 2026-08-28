@@ -325,3 +325,48 @@ test("an unresolved Bunny load starts the canonical hedge before the old 2.5 sec
   assert.equal(source, canonical)
   assert.deepEqual(started.filter(Boolean), [bunny, canonical])
 })
+
+test("the rendering context owns native loading while the adapter retains hedging and cancellation", async () => {
+  const starts = []
+  const cancelled = []
+  const primaryUrl = "https://cdn.example/portrait.webp"
+  const fallbackUrl = "https://origin.example/portrait.webp"
+  const cache = loadFactory()({
+    windowRef: globalThis,
+    ImageCtor: class {
+      constructor() {
+        assert.fail("host must not download a framed portrait")
+      }
+    },
+    chromeApi: {
+      runtime: {
+        sendMessage(message, callback) {
+          callback(
+            message.type === "GET_PORTRAIT_SOURCE_PLAN"
+              ? { ok: true, primaryUrl, fallbackUrl, hedgeDelayMs: 5, timeoutMs: 2500 }
+              : { ok: true },
+          )
+        },
+      },
+    },
+    loadImage(url, timeoutMs, signal) {
+      starts.push(url)
+      assert.equal(timeoutMs, 2500)
+      if (url === fallbackUrl) return Promise.resolve(url)
+      return new Promise((_resolve, reject) =>
+        signal.addEventListener(
+          "abort",
+          () => {
+            cancelled.push(url)
+            reject(Object.assign(new Error("cancelled"), { name: "AbortError" }))
+          },
+          { once: true },
+        ),
+      )
+    },
+  })
+  assert.equal(await cache.getUsableSrc(fallbackUrl), fallbackUrl)
+  assert.deepEqual(starts, [primaryUrl, fallbackUrl])
+  assert.deepEqual(cancelled, [primaryUrl])
+  assert.equal(cache.getCachedSrc(fallbackUrl), fallbackUrl)
+})

@@ -121,6 +121,7 @@
   // context. Pending renders, exact request ownership, and adapter-only hydration live
   // together so initialization retries and A -> B -> A movement cannot revive stale work.
   function createPersistentFrameController(options = {}) {
+    const windowRef = options.windowRef || root
     const documentRef = options.documentRef || root.document
     const getHost = typeof options.getHost === "function" ? options.getHost : () => null
     const frameUrl = String(options.frameUrl || "")
@@ -128,9 +129,86 @@
     const prewarmClass = String(options.prewarmClass || "iconoplasm-tooltip-lit-frame--prewarm")
     const onPostError = typeof options.onPostError === "function" ? options.onPostError : () => {}
     let frame = null
+    let imageSerial = 0
+    const imageRequests = new Map()
+
+    function sendImageRequest(entry) {
+      if (entry.sent || entry.frame !== frame || frame?.dataset.iconoFrameReady !== "true") return
+      entry.sent = true
+      try {
+        frame.contentWindow.postMessage(
+          {
+            type: "ICONOPLASM_FRAME_LOAD_IMAGE",
+            requestId: entry.id,
+            url: entry.url,
+            timeoutMs: entry.timeoutMs,
+          },
+          frameOrigin,
+        )
+      } catch (error) {
+        entry.finish(error)
+      }
+    }
+
+    // Image preparation must happen in the displaying frame's cache partition.
+    // The parent still owns source policy/hedging; this RPC only loads/decodes
+    // that exact URL, with source identity, deadline and cancellation ownership.
+    function loadImage(url, timeoutMs, signal) {
+      const activeFrame = ensure()
+      if (!activeFrame || imageRequests.size >= 8)
+        return Promise.reject(new Error("Card image loader unavailable"))
+      return new Promise((resolve, reject) => {
+        const id = `image-${++imageSerial}`
+        const entry = { id, url, timeoutMs, frame: activeFrame, sent: false, finish }
+        const abort = () => {
+          const error = new Error("Card image load aborted")
+          error.name = "AbortError"
+          finish(error)
+        }
+        const timer = windowRef.setTimeout(
+          () => finish(new Error("Card image load timed out")),
+          Math.max(250, Number(timeoutMs) || 2500) + 500,
+        )
+        function finish(error) {
+          if (!imageRequests.delete(id)) return
+          windowRef.clearTimeout(timer)
+          signal?.removeEventListener?.("abort", abort)
+          if (error && entry.sent) {
+            try {
+              entry.frame.contentWindow?.postMessage(
+                { type: "ICONOPLASM_FRAME_CANCEL_IMAGE", requestId: id },
+                frameOrigin,
+              )
+            } catch (postError) {
+              onPostError(postError)
+            }
+          }
+          if (error) reject(error)
+          else resolve(url)
+        }
+        imageRequests.set(id, entry)
+        if (signal?.aborted) return abort()
+        signal?.addEventListener?.("abort", abort, { once: true })
+        sendImageRequest(entry)
+      })
+    }
+
+    function acceptImageResult(source, data) {
+      if (data?.type !== "ICONOPLASM_FRAME_IMAGE_RESULT") return false
+      const entry = imageRequests.get(data.requestId)
+      if (!entry || source !== entry.frame.contentWindow || data.url !== entry.url) return false
+      entry.finish(data.ok === true ? null : new Error("Card image source failed"))
+      return true
+    }
+
+    function cancelImages() {
+      for (const entry of imageRequests.values())
+        entry.finish(new Error("Card image loader disposed"))
+    }
 
     function ensure() {
       if (frame && frame.isConnected) return frame
+      cancelImages()
       const host = getHost()
       if (!host || typeof host.appendChild !== "function") return null
       const nextFrame = documentRef.createElement("iframe")
@@ -196,6 +274,7 @@
       const pendingPayload = frame.__iconoPendingPayload
       frame.__iconoPendingPayload = null
       if (pendingPayload) post(pendingPayload)
+      for (const entry of imageRequests.values()) sendImageRequest(entry)
       return true
     }
 
@@ -225,6 +304,9 @@
       markReady,
       isCurrent,
       postHydrated,
+      loadImage,
+      acceptImageResult,
+      cancelImages,
       getFrame: () => frame,
     })
   }

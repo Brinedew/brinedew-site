@@ -20,6 +20,7 @@
   const portraitDecodePromiseCache = new Map()
   const portraitDecodedSourceCache = new Set()
   const PORTRAIT_DECODE_CACHE_LIMIT = 48
+  const imageLoads = new Map()
 
   function rememberDecodedPortraitSource(src) {
     portraitDecodedSourceCache.delete(src)
@@ -487,6 +488,48 @@
   window.addEventListener("message", (event) => {
     const data = event && event.data && typeof event.data === "object" ? event.data : null
     if (!data) return
+    if (data.type === "ICONOPLASM_FRAME_CANCEL_IMAGE") {
+      if (event.source !== window.parent) return
+      imageLoads.get(data.requestId)?.abort()
+      return
+    }
+    if (data.type === "ICONOPLASM_FRAME_LOAD_IMAGE") {
+      if (event.source !== window.parent) return
+      const url = String(data.url || "")
+      const requestId = String(data.requestId || "")
+      // Native public portrait URLs only; no arbitrary authenticated fetch API.
+      // Host selection belongs to the adapter's shared source plan, not here.
+      const allowed =
+        /^https:\/\/[^/?#]+\/portraits\/v1\/[a-f0-9]{2}\/[a-f0-9]{64}\/(medium|thumb|full)\.webp$/.test(
+          url,
+        )
+      if (
+        !allowed ||
+        !/^image-\d+$/.test(requestId) ||
+        imageLoads.size >= 8 ||
+        imageLoads.has(requestId)
+      ) {
+        postToParent("ICONOPLASM_FRAME_IMAGE_RESULT", { requestId, url, ok: false })
+        return
+      }
+      const controller = new AbortController()
+      imageLoads.set(requestId, controller)
+      const timeoutMs = Math.min(5000, Math.max(250, Number(data.timeoutMs) || 2500))
+      void globalThis.IconoplasmContentPortraitCache.loadBrowserImage(
+        url,
+        timeoutMs,
+        controller.signal,
+      )
+        .then(
+          () => {
+            rememberDecodedPortraitSource(url)
+            postToParent("ICONOPLASM_FRAME_IMAGE_RESULT", { requestId, url, ok: true })
+          },
+          () => postToParent("ICONOPLASM_FRAME_IMAGE_RESULT", { requestId, url, ok: false }),
+        )
+        .finally(() => imageLoads.delete(requestId))
+      return
+    }
     if (data.type === FRAME_PREWARM_TYPE) {
       const sources = Array.from(
         new Set(
