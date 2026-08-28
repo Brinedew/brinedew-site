@@ -268,26 +268,22 @@ await writeFile(
   "utf8",
 )
 
-async function syncSidebarShellImportVersions() {
-  const sidebarShellPath = path.join(repoRoot, "quartz", "static", "shared", "sidebar-shell.js")
-  const sidebarShell = await readFile(sidebarShellPath)
-  const version = createHash("sha256").update(sidebarShell).digest("hex").slice(0, 16)
-  const consumers = [
-    path.join(repoRoot, "quartz", "static", "shared", "auth-sidebar.mjs"),
-    path.join(repoRoot, "quartz", "static", "iconoplasm", "app.js"),
-    path.join(repoRoot, "quartz", "static", "geneguessr", "app.js"),
-    path.join(repoRoot, "quartz", "static", "site-settings", "app.js"),
-  ]
-
-  for (const consumer of consumers) {
+async function syncStaticImportVersions(modulePath, consumerPaths) {
+  const staticRoot = path.join(repoRoot, "quartz", "static")
+  const moduleFile = path.join(staticRoot, modulePath)
+  const bytes = await readFile(moduleFile)
+  const version = createHash("sha256").update(bytes).digest("hex").slice(0, 16)
+  for (const consumerPath of consumerPaths) {
+    const consumer = path.join(staticRoot, consumerPath)
+    let specifier = path.relative(path.dirname(consumer), moduleFile).replaceAll("\\", "/")
+    if (!specifier.startsWith(".")) specifier = `./${specifier}`
+    const escaped = specifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const importPattern = new RegExp(`(["'])${escaped}(?:\\?v=[^"']+)?\\1`, "g")
     const source = await readFile(consumer, "utf8")
-    const next = source.replace(
-      /(["'])(\.\.\/shared\/|\.\/)sidebar-shell\.js(?:\?v=[a-f0-9]+)?\1/g,
-      `$1$2sidebar-shell.js?v=${version}$1`,
-    )
-    if (next === source && !source.includes(`sidebar-shell.js?v=${version}`)) {
+    const next = source.replace(importPattern, `$1${specifier}?v=${version}$1`)
+    if (next === source && !source.includes(`${specifier}?v=${version}`)) {
       throw new Error(
-        `Unable to synchronize sidebar-shell import in ${path.relative(repoRoot, consumer)}`,
+        `Unable to synchronize ${modulePath} import in ${path.relative(repoRoot, consumer)}`,
       )
     }
     await writeFile(consumer, next, "utf8")
@@ -295,5 +291,20 @@ async function syncSidebarShellImportVersions() {
 }
 
 if (!extensionOnly) {
-  await syncSidebarShellImportVersions()
+  await syncStaticImportVersions("shared/sidebar-shell.js", [
+    "shared/auth-sidebar.mjs",
+    "iconoplasm/app.js",
+    "geneguessr/app.js",
+    "site-settings/app.js",
+  ])
+  // Version from leaves to entrypoints: a core edit must change the adapter's
+  // URL as well. Updating only the leaf leaves returning browsers on the old
+  // year-cached adapter and its old import. The HTML versions app.js per build.
+  await syncStaticImportVersions("iconoplasm/generated/portrait-delivery-core.js", [
+    "iconoplasm/portrait-delivery.js",
+  ])
+  await syncStaticImportVersions("iconoplasm/portrait-delivery.js", [
+    "iconoplasm/app.js",
+    "iconoplasm/gene-card-thumb-delivery.js",
+  ])
 }

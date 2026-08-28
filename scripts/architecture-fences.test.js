@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
@@ -17,6 +18,24 @@ function readRepositoryFile(relativePath) {
 }
 
 const registry = JSON.parse(readRepositoryFile("architecture-fences.json"))
+
+test("IPD-001 portrait module URLs follow actual bytes through the immutable import chain", () => {
+  for (const [module, consumers] of [
+    ["generated/portrait-delivery-core.js", ["portrait-delivery.js"]],
+    ["portrait-delivery.js", ["app.js", "gene-card-thumb-delivery.js"]],
+  ]) {
+    const bytes = readFileSync(path.join(REPOSITORY_ROOT, "quartz/static/iconoplasm", module))
+    const digest = createHash("sha256").update(bytes).digest("hex").slice(0, 16)
+    for (const consumer of consumers) {
+      assert.ok(
+        readRepositoryFile(`quartz/static/iconoplasm/${consumer}`).includes(
+          `./${module}?v=${digest}`,
+        ),
+        `${consumer} must load the current ${module}, not a permanently cached dated import`,
+      )
+    }
+  }
+})
 
 test("architecture fence registry distributes every decision across independent guard categories", () => {
   assert.equal(registry.schema_version, 1)

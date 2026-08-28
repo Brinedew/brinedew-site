@@ -222,6 +222,12 @@ The website and extension use the same state machine from
 `shared/iconoplasm-portrait/portrait-delivery-core.js`. Its states are
 `undecided`, `accelerator`, `canonical`, and `terminal_failure`.
 
+The website caches module URLs immutably. `sync:iconoplasm-shared` hashes the
+generated core, updates the adapter import, then hashes that adapter and updates
+its consumers. The HTML's per-build entrypoint URL completes this chain. Never
+freeze a dated import URL while changing the module bytes behind it; a returning
+browser would otherwise keep the old routing code despite a successful deploy.
+
 - The extension requests a compact immutable portrait locator in parallel with
   rich detail. Both are projections of the same named card snapshot; the locator
   owns no separate pointer or publication. The first valid locator may start
