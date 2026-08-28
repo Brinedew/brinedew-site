@@ -126,13 +126,13 @@ as failed prediction readiness, not a canonically absent portrait.
 DEV runtime fingerprint `f4ed0831338aa0e363392fbc64594ce1971b7c1caf4cf5d6c5b82a5118f17826`,
 normal HTTP caching, no route interception, the reader's chosen `simple` layout:
 
-| Population | Samples | Measured result |
-| --- | ---: | --- |
-| Saved BRCA1, alternating Wikipedia and PMC395646 | 20 first hovers | p50 15.4 ms, p95 19.6 ms, maximum 23.4 ms |
-| Same-page BRCA1 repeats, kept separate | 20 | p50 3.4 ms, p95 5.9 ms, maximum 7 ms |
-| After an actual extension-runtime restart | 2 first hovers | 21 / 14 ms, no BRCA1 image or metadata requests |
-| Exactly ten seconds after host load: interleukin-1 family, matrix metalloproteinase, integrin, cadherin, nuclear receptor | 25 hovers, 22 previously unsaved genes | all decoded before pointer entry; 8–18.9 ms |
-| Freshly loaded, previously unseen connexin article | 2 successive genes | first 1,000.3 ms, next 8.4 ms; cold startup remains a separate population |
+| Population                                                                                                                |                                Samples | Measured result                                                           |
+| ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------: | ------------------------------------------------------------------------- |
+| Saved BRCA1, alternating Wikipedia and PMC395646                                                                          |                        20 first hovers | p50 15.4 ms, p95 19.6 ms, maximum 23.4 ms                                 |
+| Same-page BRCA1 repeats, kept separate                                                                                    |                                     20 | p50 3.4 ms, p95 5.9 ms, maximum 7 ms                                      |
+| After an actual extension-runtime restart                                                                                 |                         2 first hovers | 21 / 14 ms, no BRCA1 image or metadata requests                           |
+| Exactly ten seconds after host load: interleukin-1 family, matrix metalloproteinase, integrin, cadherin, nuclear receptor | 25 hovers, 22 previously unsaved genes | all decoded before pointer entry; 8–18.9 ms                               |
+| Freshly loaded, previously unseen connexin article                                                                        |                     2 successive genes | first 1,000.3 ms, next 8.4 ms; cold startup remains a separate population |
 
 Across the twenty saved first hovers and twenty repeats there were zero BRCA1
 portrait or card-metadata requests. A native Chrome IndexedDB test retained the
