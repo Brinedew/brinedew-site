@@ -1,13 +1,25 @@
-import { spawnSync } from "node:child_process"
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs"
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { assertIconoplasmPublisherAuthority } from "./lib/iconoplasm-publisher-authority.mjs"
+import JSZip from "jszip"
 
 const __filename = fileURLToPath(import.meta.url)
 const repoRoot = resolve(__filename, "..", "..")
 const extensionRoot = resolve(repoRoot, "iconoplasm-extension")
-const distRoot = resolve(extensionRoot, "dist")
+const outputArgs = process.argv.slice(2).filter((arg) => arg.startsWith("--out-dir="))
+if (outputArgs.length > 1) throw new Error("Pass --out-dir only once")
+const distRoot = resolve(
+  outputArgs[0]?.slice("--out-dir=".length) || resolve(extensionRoot, "dist"),
+)
 
 function fail(message) {
   console.error(`[package-iconoplasm-firefox-source] ${message}`)
@@ -96,6 +108,8 @@ const includeFiles = [
   "scripts/verify-iconoplasm-publisher-authority.mjs",
   "scripts/verify-iconoplasm-pdf-release-gate.mjs",
   "scripts/lib/iconoplasm-publisher-authority.mjs",
+  "scripts/lib/iconoplasm-build-identity.mjs",
+  "scripts/lib/iconoplasm-build-identity.d.mts",
   "iconoplasm-extension/AMO-SOURCE-README.md",
   "iconoplasm-extension/FIREFOX-AMO-PDF-ARCHITECTURE.md",
   "iconoplasm-extension/README.md",
@@ -192,31 +206,17 @@ function listRelativeFiles(rootDir) {
   return files.sort((a, b) => a.localeCompare(b))
 }
 
-function zipPayload() {
+async function zipPayload() {
   if (buildPurpose.release && existsSync(zipPath)) {
     fail(`Refusing to overwrite release artifact ${relative(repoRoot, zipPath)}`)
   }
-  const command = [
-    "$ErrorActionPreference = 'Stop'",
-    `$zipPath = ${JSON.stringify(zipPath)}`,
-    `$stagePath = ${JSON.stringify(stageRoot)}`,
-    buildPurpose.release
-      ? 'if (Test-Path -LiteralPath $zipPath) { throw "Refusing to overwrite release artifact: $zipPath" }'
-      : "if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }",
-    `Compress-Archive -Path (Join-Path $stagePath '*') -DestinationPath $zipPath${buildPurpose.release ? "" : " -Force"}`,
-  ].join("; ")
-
-  const powerShell =
-    process.platform === "win32" ? "C:\\Program Files\\PowerShell\\7\\pwsh.exe" : "pwsh"
-  const result = spawnSync(powerShell, ["-NoLogo", "-NoProfile", "-Command", command], {
-    cwd: repoRoot,
-    encoding: "utf8",
-    timeout: 120_000,
-  })
-
-  if (result.status !== 0) {
-    fail(`Zip creation failed. ${result.stderr || result.stdout || "No output"}`)
-  }
+  const archive = new JSZip()
+  for (const name of listRelativeFiles(stageRoot))
+    archive.file(name.replaceAll("\\", "/"), readFileSync(resolve(stageRoot, name)))
+  const bytes = await archive.generateAsync({ type: "nodebuffer", compression: "DEFLATE" })
+  // Includes dotfiles on every platform and uses atomic exclusive creation for
+  // versioned artifacts. No shell interpolation or platform ZIP implementation.
+  writeFileSync(zipPath, bytes, { flag: buildPurpose.release ? "wx" : "w" })
 }
 
 validateReviewerBuildToolParity()
@@ -232,7 +232,7 @@ removeIfExists("iconoplasm-extension/store-assets/package-lock.json")
 removeIfExists("iconoplasm-extension/dist")
 
 const stagedFiles = listRelativeFiles(stageRoot)
-zipPayload()
+await zipPayload()
 
 console.log(`[package-iconoplasm-firefox-source] Created ${relative(repoRoot, zipPath)}`)
 console.log(

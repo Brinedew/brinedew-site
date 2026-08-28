@@ -1,18 +1,22 @@
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { defineConfig } from "wxt"
+import { applyBuildIdentity } from "./scripts/lib/iconoplasm-build-identity.mjs"
 
 function readIconoplasmManifest() {
   return JSON.parse(readFileSync(resolve("iconoplasm-extension", "manifest.json"), "utf8"))
 }
 
 export default defineConfig({
-  srcDir: `iconoplasm-extension/.wxt-${process.env.ICONOPLASM_WXT_BROWSER || "chrome"}/src`,
-  publicDir: `iconoplasm-extension/.wxt-${process.env.ICONOPLASM_WXT_BROWSER || "chrome"}/public`,
+  srcDir: process.env.ICONOPLASM_WXT_SRC_DIR,
+  publicDir: process.env.ICONOPLASM_WXT_PUBLIC_DIR,
   outDir: process.env.ICONOPLASM_WXT_OUT_DIR || "iconoplasm-extension/dist/validation/wxt",
   outDirTemplate: "{{browser}}-mv{{manifestVersion}}",
   manifest: ({ browser }) => {
-    const manifest = readIconoplasmManifest()
+    const identity = JSON.parse(
+      readFileSync(resolve(process.env.ICONOPLASM_WXT_PUBLIC_DIR || "", "build-info.json"), "utf8"),
+    )
+    const manifest = applyBuildIdentity(readIconoplasmManifest(), identity)
     if (browser === "firefox") {
       // Firefox implements MV3 background execution as a background page, where
       // importScripts is unavailable. Declare every top-level service-worker

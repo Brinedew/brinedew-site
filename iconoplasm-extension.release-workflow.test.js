@@ -11,6 +11,10 @@ import JSZip from "jszip"
 
 const workflowText = readFileSync(".github/workflows/publish-iconoplasm-firefox.yml", "utf8")
 const edgeWorkflowText = readFileSync(".github/workflows/publish-iconoplasm-edge.yml", "utf8")
+const preparationWorkflowText = readFileSync(
+  ".github/workflows/prepare-iconoplasm-release.yml",
+  "utf8",
+)
 const readmeText = readFileSync("iconoplasm-extension/README.md", "utf8")
 const firefoxSourcePackageText = readFileSync(
   "scripts/package-iconoplasm-firefox-source.mjs",
@@ -87,14 +91,15 @@ test("Firefox store publish workflow stays behind the human GUI gate", () => {
   assert.match(workflowText, /Iconoplasm GUI/)
   assert.match(workflowText, /verify-iconoplasm-publisher-authority\.mjs/)
   assert.match(workflowText, /wait-for-iconoplasm-release-ci\.mjs/)
+  assert.match(workflowText, /needs: prepare-release/)
+  assert.match(workflowText, /ref: \$\{\{ inputs.expected_commit \}\}/)
+  assert.match(workflowText, /iconoplasm-release-bundle\.mjs download/)
+  assert.doesNotMatch(workflowText, /package-iconoplasm.*\.mjs/)
   assert.match(
-    workflowText,
-    /package-iconoplasm-extension\.mjs --target=firefox --release "--expected-version=\$env:EXPECTED_VERSION"/,
+    preparationWorkflowText,
+    /package-iconoplasm-extension\.mjs --target=firefox --release/,
   )
-  assert.match(
-    workflowText,
-    /package-iconoplasm-firefox-source\.mjs --release "--expected-version=\$env:EXPECTED_VERSION"/,
-  )
+  assert.match(preparationWorkflowText, /verify-iconoplasm-firefox-source-rebuild\.mjs --release/)
   assert.match(workflowText, /actions:\s*read/)
   assert.doesNotMatch(workflowText, /^on:\s*\n\s*push:/m)
 })
@@ -131,10 +136,11 @@ test("Edge store publish workflow stays behind the human GUI gate", () => {
   assert.match(edgeWorkflowText, /EDGE_ADDONS_API_KEY/)
   assert.match(edgeWorkflowText, /b8547df3-4156-4b56-b7dc-3752347b6794/)
   assert.match(edgeWorkflowText, /background\.service_worker/)
-  assert.match(
-    edgeWorkflowText,
-    /package-iconoplasm-extension\.mjs --target=edge --release "--expected-version=\$env:EXPECTED_VERSION"/,
-  )
+  assert.match(edgeWorkflowText, /needs: prepare-release/)
+  assert.match(edgeWorkflowText, /ref: \$\{\{ inputs.expected_commit \}\}/)
+  assert.match(edgeWorkflowText, /iconoplasm-release-bundle\.mjs download/)
+  assert.doesNotMatch(edgeWorkflowText, /package-iconoplasm.*\.mjs/)
+  assert.match(preparationWorkflowText, /package-iconoplasm-extension\.mjs --target=edge --release/)
   assert.match(edgeWorkflowText, /iconoplasm-edge-v\$env:EXPECTED_VERSION\.zip/)
   assert.doesNotMatch(edgeWorkflowText, /^on:\s*\n\s*push:/m)
 })
@@ -331,52 +337,32 @@ test(
   async (t) => {
     const repoRoot = process.cwd()
     const version = JSON.parse(readFileSync("iconoplasm-extension/manifest.json", "utf8")).version
+    const buildRoot = await mkdtemp(path.join(tmpdir(), "iconoplasm-release-test-"))
+    t.after(() => rm(buildRoot, { recursive: true, force: true }))
     const sourceZip = path.join(
-      repoRoot,
-      "iconoplasm-extension",
-      "dist",
+      buildRoot,
       "validation",
       "firefox-source",
       "iconoplasm-firefox-source-validation.zip",
     )
     const validationZip = path.join(
-      repoRoot,
-      "iconoplasm-extension",
-      "dist",
+      buildRoot,
       "validation",
       "firefox",
       "iconoplasm-firefox-validation.zip",
     )
-    const releaseZip = path.join(
-      repoRoot,
-      "iconoplasm-extension",
-      "dist",
-      `iconoplasm-firefox-v${version}.zip`,
-    )
-    const releaseSourceZip = path.join(
-      repoRoot,
-      "iconoplasm-extension",
-      "dist",
-      `iconoplasm-firefox-source-v${version}.zip`,
-    )
+    const releaseZip = path.join(buildRoot, `iconoplasm-firefox-v${version}.zip`)
+    const releaseSourceZip = path.join(buildRoot, `iconoplasm-firefox-source-v${version}.zip`)
     const releaseSentinel = Buffer.from("release artifact sentinel\n")
-    const originalReleaseZip = await readFile(releaseZip).catch(() => null)
-    const originalReleaseSourceZip = await readFile(releaseSourceZip).catch(() => null)
     const extractedRoot = await mkdtemp(path.join(tmpdir(), "iconoplasm-amo-source-"))
     t.after(() => rm(extractedRoot, { recursive: true, force: true }))
-    t.after(async () => {
-      if (originalReleaseZip) await writeFile(releaseZip, originalReleaseZip)
-      else await rm(releaseZip, { force: true })
-      if (originalReleaseSourceZip) await writeFile(releaseSourceZip, originalReleaseSourceZip)
-      else await rm(releaseSourceZip, { force: true })
-    })
     await mkdir(path.dirname(releaseZip), { recursive: true })
     await writeFile(releaseZip, releaseSentinel)
     await writeFile(releaseSourceZip, releaseSentinel)
 
     runPnpm(["run", "sync:iconoplasm-extension"], repoRoot)
-    runPnpm(["run", "package:iconoplasm-firefox"], repoRoot)
-    runPnpm(["run", "package:iconoplasm-firefox-source"], repoRoot)
+    runPnpm(["run", "package:iconoplasm-firefox", `--out-dir=${buildRoot}`], repoRoot)
+    runPnpm(["run", "package:iconoplasm-firefox-source", `--out-dir=${buildRoot}`], repoRoot)
     assert.deepEqual(await readFile(releaseZip), releaseSentinel)
     assert.deepEqual(await readFile(releaseSourceZip), releaseSentinel)
     await extractZip(sourceZip, extractedRoot)
@@ -439,7 +425,7 @@ test("Firefox submission uses the locked audited publisher and sends reviewer so
 
   assert.equal(packageJson.devDependencies?.["publish-browser-extension"], "5.1.0")
   assert.equal(packageJson.devDependencies?.["web-ext"], undefined)
-  assert.match(workflowText, /package-iconoplasm-firefox-source\.mjs --release/)
+  assert.match(preparationWorkflowText, /package-iconoplasm-firefox-source\.mjs --release/)
   assert.match(workflowText, /FIREFOX_SOURCES_ZIP:/)
   assert.match(workflowText, /FIREFOX_EXTENSION_ID: iconoplasm@brinedew\.bio/)
   assert.match(workflowText, /FIREFOX_CHANNEL: listed/)

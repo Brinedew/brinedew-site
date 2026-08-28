@@ -28,6 +28,7 @@ export async function waitForSuccessfulPushCi({
 
   while (Date.now() < deadline) {
     const response = await fetchImpl(endpoint, {
+      signal: AbortSignal.timeout(Math.min(30_000, Math.max(1, deadline - Date.now()))),
       headers: {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${cleanToken}`,

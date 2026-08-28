@@ -5,6 +5,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -14,17 +15,21 @@ import {
 import { join, resolve, relative } from "node:path"
 import { fileURLToPath } from "node:url"
 import { assertIconoplasmPublisherAuthority } from "./lib/iconoplasm-publisher-authority.mjs"
+import { createBuildIdentity } from "./lib/iconoplasm-build-identity.mjs"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = resolve(__filename, "..", "..")
 const repoRoot = __dirname
 const extensionRoot = resolve(repoRoot, "iconoplasm-extension")
-const distRoot = resolve(extensionRoot, "dist")
+const outputArgs = process.argv.slice(2).filter((arg) => arg.startsWith("--out-dir="))
+if (outputArgs.length > 1) throw new Error("Pass --out-dir only once")
+const distRoot = resolve(
+  outputArgs[0]?.slice("--out-dir=".length) || resolve(extensionRoot, "dist"),
+)
 const manifestPath = resolve(extensionRoot, "manifest.json")
 
 function fail(message) {
-  console.error(`[package-iconoplasm-extension] ${message}`)
-  process.exit(1)
+  throw new Error(`[package-iconoplasm-extension] ${message}`)
 }
 
 function resolveTarget(argv) {
@@ -104,7 +109,9 @@ const stageRoot = resolve(workRoot, "package")
 const zipPath = buildPurpose.release
   ? resolve(distRoot, targetConfig.releaseZipName)
   : resolve(validationRoot, targetConfig.validationZipName)
-const wxtWorkRoot = resolve(extensionRoot, `.wxt-${targetConfig.browser}`)
+// Vite resolves bare imports from the entrypoint's ancestors. Keep disposable
+// inputs in this project so they use its locked dependencies, even for external output roots.
+const wxtWorkRoot = mkdtempSync(resolve(extensionRoot, ".wxt-build-"))
 const wxtPublicRoot = resolve(wxtWorkRoot, "public")
 const wxtSrcRoot = resolve(wxtWorkRoot, "src")
 const wxtEntrypointsRoot = resolve(wxtSrcRoot, "entrypoints")
@@ -263,6 +270,33 @@ function copyRuntimePayload() {
   if (!supportsPdfReader) {
     rmSync(resolve(wxtPublicRoot, "generated", "pdfjs"), { recursive: true, force: true })
   }
+  // Git may check out text as CRLF on Windows. Package the same UTF-8/LF payload
+  // on the workstation, Linux CI and AMO's standalone reviewer environment.
+  for (const path of listRelativeFiles(wxtPublicRoot)) {
+    if (/\.(?:[cm]?js|json|html|css|svg|txt)$/i.test(path)) {
+      const text = readFileSync(path, "utf8")
+      if (text.includes("\r\n")) writeFileSync(path, text.replaceAll("\r\n", "\n"))
+    }
+  }
+  writeFileSync(
+    resolve(wxtPublicRoot, "build-info.json"),
+    JSON.stringify(
+      createBuildIdentity(wxtPublicRoot, manifest, buildPurpose.release, {
+        browser: targetConfig.browser,
+        wxtConfig: readFileSync(resolve(repoRoot, "wxt.config.ts"), "utf8").replaceAll(
+          "\r\n",
+          "\n",
+        ),
+        packager: readFileSync(__filename, "utf8").replaceAll("\r\n", "\n"),
+        identityCode: readFileSync(
+          resolve(repoRoot, "scripts/lib/iconoplasm-build-identity.mjs"),
+          "utf8",
+        ).replaceAll("\r\n", "\n"),
+      }),
+      null,
+      2,
+    ) + "\n",
+  )
 }
 
 function scanPayload(rootDir) {
@@ -303,6 +337,8 @@ function runWxtZip() {
     env: {
       ...process.env,
       ICONOPLASM_WXT_BROWSER: targetConfig.browser,
+      ICONOPLASM_WXT_SRC_DIR: wxtSrcRoot,
+      ICONOPLASM_WXT_PUBLIC_DIR: wxtPublicRoot,
       ICONOPLASM_WXT_OUT_DIR: wxtOutRoot,
       ICONOPLASM_WXT_ARTIFACT_TEMPLATE: "wxt-build.zip",
     },
@@ -427,4 +463,8 @@ async function main() {
   )
 }
 
-await main()
+try {
+  await main()
+} finally {
+  rmSync(wxtWorkRoot, { recursive: true, force: true })
+}
