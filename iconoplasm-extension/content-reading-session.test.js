@@ -89,18 +89,19 @@ test("disposal stops queued work and late completions cannot restart it", async 
         release = resolve
       }),
   })
-  const anchors = ["EZH2", "DNMT3A", "TP53"].map(anchor)
+  const symbols = ["EZH2", "DNMT3A", "TP53", "BRCA2", "BRCA1", "A", "B", "C", "D", "E", "F"]
+  const anchors = symbols.map(anchor)
   anchors.forEach(session.registerAnchor)
   session.startSpeculation()
   await Promise.resolve()
-  assert.deepEqual(starts, ["EZH2"])
+  assert.deepEqual(starts, symbols.slice(0, 10))
   session.dispose()
   release({ symbol: "EZH2" })
   session.prioritize("DNMT3A")
   session.updateConnection({ effectiveType: "4g" }, 8)
   intersect([{ target: anchors[2], isIntersecting: true }])
   await new Promise((resolve) => setTimeout(resolve, 0))
-  assert.deepEqual(starts, ["EZH2"])
+  assert.deepEqual(starts, symbols.slice(0, 10))
   assert.equal(session.registerAnchor(anchor("BRCA1")), false)
   assert.deepEqual(Array.from(session.snapshot().queuedSymbols), [])
 })
@@ -199,6 +200,42 @@ test("already-ready sticky/sidebar symbols do not consume the next visible prepa
   assert.ok(prepared.includes("GENE10"))
 })
 
+test("completion refills visible cold genes without scrolling or looping over evicted images", async () => {
+  const harness = loadApi()
+  const starts = []
+  const decoded = new Set()
+  const session = harness.api.createReadingSession({
+    isPrepared: (symbol) => decoded.has(symbol),
+    prepareSymbol: async (symbol) => {
+      starts.push(symbol)
+      if (symbol === "GENE5") return null
+      decoded.add(symbol)
+      // Deliberately smaller than the visible inventory: automatic refills
+      // must finish, not rotate evicted images through memory forever.
+      while (decoded.size > 4) decoded.delete(decoded.values().next().value)
+      return { symbol }
+    },
+  })
+  const anchors = Array.from({ length: 30 }, (_, index) => anchor(`GENE${index}`))
+  anchors.forEach(session.registerAnchor)
+  harness.intersect(anchors.slice(0, 20).map((target) => ({ target, isIntersecting: true })))
+  session.startSpeculation()
+  for (let frame = 0; frame < 12; frame++) {
+    await new Promise((resolve) => setImmediate(resolve))
+    harness.flushFrames()
+  }
+  assert.equal(starts.length, 20, "one attempt per visible gene, including the failed image")
+  assert.equal(new Set(starts).size, 20)
+  assert.ok(starts.includes("GENE19"), "work continues beyond the first ten without a scroll")
+  assert.ok(!starts.includes("GENE20"), "completion does not crawl the offscreen document")
+  assert.equal(harness.pendingFrames(), 0, "no polling or cache-eviction loop remains")
+  harness.emit("scroll")
+  harness.flushFrames()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.ok(starts.length > 20, "a real viewport event may restore evicted images")
+  session.dispose()
+})
+
 test("actual viewport work outranks old anchors in the wide prefetch margin", async () => {
   const { api, intersect } = loadApi()
   let release
@@ -219,7 +256,7 @@ test("actual viewport work outranks old anchors in the wide prefetch margin", as
   const near = Object.assign(anchor("NEAR"), {
     getBoundingClientRect: () => ({ top: 450, bottom: 470, width: 30, height: 20 }),
   })
-  actual.registerAnchor(anchor("ACTIVE"))
+  for (let index = 0; index < 10; index++) actual.registerAnchor(anchor(`ACTIVE${index}`))
   actual.registerAnchor(far)
   actual.registerAnchor(near)
   actual.startSpeculation()
@@ -230,7 +267,7 @@ test("actual viewport work outranks old anchors in the wide prefetch margin", as
   ])
   release({ symbol: "ACTIVE" })
   await new Promise((resolve) => setImmediate(resolve))
-  assert.equal(starts[1], "NEAR")
+  assert.equal(starts[10], "NEAR")
   actual.dispose()
 })
 
@@ -256,7 +293,9 @@ test("scroll inside the IO margin reranks once per frame and disposal cancels it
   const near = Object.assign(anchor("NEAR"), {
     getBoundingClientRect: () => ({ top: nearTop, bottom: nearTop + 20, width: 20, height: 20 }),
   })
-  ;[active, far, near].forEach(session.registerAnchor)
+  ;[active, ...Array.from({ length: 9 }, (_, i) => anchor(`BUSY${i}`)), far, near].forEach(
+    session.registerAnchor,
+  )
   session.startSpeculation()
   await Promise.resolve()
   harness.intersect([
@@ -269,7 +308,7 @@ test("scroll inside the IO margin reranks once per frame and disposal cancels it
   harness.flushFrames()
   release({ symbol: "ACTIVE" })
   await new Promise((resolve) => setImmediate(resolve))
-  assert.equal(starts[1], "NEAR")
+  assert.equal(starts[10], "NEAR")
   harness.emit("scroll")
   session.dispose()
   assert.equal(harness.pendingFrames(), 0)
@@ -309,15 +348,16 @@ test("visible symbols outrank the remaining document queue", async () => {
         releases.set(symbol, resolve)
       }),
   })
-  const anchors = ["A", "B", "C", "D", "E"].map(anchor)
+  const symbols = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"]
+  const anchors = symbols.map(anchor)
   anchors.forEach(session.registerAnchor)
   session.startSpeculation()
   await Promise.resolve()
-  assert.deepEqual(starts, ["A"])
-  intersect([{ target: anchors[4], isIntersecting: true }])
+  assert.deepEqual(starts, symbols.slice(0, 10))
+  intersect([{ target: anchors[10], isIntersecting: true }])
   releases.get("A")({ symbol: "A" })
   await new Promise((resolve) => setTimeout(resolve, 0))
-  assert.equal(starts[1], "E")
+  assert.equal(starts[10], "K")
 })
 
 test("Data Saver disables preparation while active intent still works", async () => {
@@ -364,7 +404,7 @@ test("PDF page replacement removes old anchors from the visible working set", as
   assert.equal(session.snapshot().queuedSymbols.includes("OLD"), false)
 })
 
-test("ordinary preparation is capped at the first ten symbols and two workers", async () => {
+test("ordinary preparation starts the first ten independently without expanding the document", async () => {
   const { api } = loadApi()
   const starts = []
   const session = api.createReadingSession({
@@ -377,6 +417,48 @@ test("ordinary preparation is capped at the first ten symbols and two workers", 
   session.startSpeculation()
   await Promise.resolve()
 
-  assert.deepEqual(starts, ["GENE0", "GENE1"])
-  assert.equal(session.snapshot().queuedSymbols.length, 8)
+  assert.deepEqual(
+    starts,
+    Array.from({ length: 10 }, (_, i) => `GENE${i}`),
+  )
+  assert.equal(session.snapshot().queuedSymbols.length, 0)
+})
+
+test("high latency overlaps bounded preparation instead of serializing every next gene", async () => {
+  const { api } = loadApi()
+  assert.equal(
+    api.workingSetPolicy({ effectiveType: "3g", rtt: 450, downlink: 0.4 }, 8).concurrency,
+    10,
+  )
+  assert.equal(api.workingSetPolicy({ effectiveType: "4g" }, 2).concurrency, 2)
+  for (const connection of [{ saveData: true }, { effectiveType: "2g" }]) {
+    assert.equal(api.workingSetPolicy(connection, 8).speculative, false)
+  }
+  const ready = new Set()
+  const releases = new Map()
+  const session = api.createReadingSession({
+    connection: { effectiveType: "3g", rtt: 450 },
+    isPrepared: (symbol) => ready.has(symbol),
+    prepareSymbol: (symbol) =>
+      new Promise((resolve) =>
+        releases.set(symbol, () => {
+          ready.add(symbol)
+          resolve({ symbol })
+        }),
+      ),
+  })
+  const symbols = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"]
+  symbols.map(anchor).forEach(session.registerAnchor)
+  session.startSpeculation()
+  await Promise.resolve()
+  assert.deepEqual([...releases.keys()], symbols.slice(0, 10))
+  session.prioritize("K")
+  releases.get("B")()
+  releases.get("C")()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(session.isReady("B"), true)
+  assert.equal(session.isReady("C"), true)
+  assert.equal(session.isReady("A"), false, "a slow first card cannot hold all later cards")
+  assert.equal(releases.has("K"), true)
+  session.dispose()
 })

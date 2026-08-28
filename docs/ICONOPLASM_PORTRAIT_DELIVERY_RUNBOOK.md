@@ -233,9 +233,11 @@ browser would otherwise keep the old routing code despite a successful deploy.
   owns no separate pointer or publication. The first valid locator may start
   portrait delivery even if rich detail stalls or exhausts its retry. If detail
   later disagrees on `asset_sha256`, the extension suppresses the portrait and
-  vote controls instead of guessing. It gives the first real portrait to the browser as an HTTPS URL.
-  If Bunny is still unresolved after 350 ms, it starts the canonical URL in a
-  second bounded lane. The first successfully decoded source selects the tab.
+  vote controls instead of guessing. The background runtime first looks up
+  immutable bytes in extension-origin IndexedDB, independent of the host
+  website. Only a miss fetches a portrait. If Bunny is unresolved after 350 ms,
+  it starts the canonical URL in a second bounded lane. The first successful
+  byte source selects the tab; the renderer decodes those supplied bytes locally.
   The 2.5 s timeout remains a per-source ceiling, not a serial pre-fallback wait.
 - Requested labelled-card thumbnails bind to this same decision. A Bunny DNS
   failure must never leave broken alt text in the crawlable archive.
@@ -261,11 +263,56 @@ browser would otherwise keep the old routing code despite a successful deploy.
   selected source without changing global state.
 - After both sources fail, the state is terminal and does not oscillate.
 
-The website adapter owns explicit DOM image bindings. The extension adapter
-owns tab-scoped persistence, the one bounded delayed hedge, native HTTPS image
-loading, and decoded-source reuse. A worker-fetched data URL exists only as a
-compatibility fallback for host-page CSPs that reject both extension-owned HTTPS
-bindings. Neither adapter owns source-selection rules.
+The website adapter owns explicit DOM image bindings. The extension background
+owns tab-scoped source persistence, the bounded hedge and cross-site byte reuse.
+The renderer receives a data URL and decodes it without another HTTPS request.
+Neither adapter owns source-selection rules.
+
+### Cross-site reuse migration, 2026-08-28
+
+A retained extension installation on Wikipedia BRCA1 followed by the linked
+PMC395646 paper took 3.7 seconds to paint the same BRCA1 portrait. The foreground
+path bypassed content-store hydration and fetched metadata again. The frame's
+HTTP cache also transferred the same portrait again under the new top-level site.
+Native frame loading fixed a duplicate within one page but did not establish
+reuse across websites. That assumption is superseded by background-owned storage.
+
+The extension stores public exact-snapshot/lane responses within 32 MiB (64 KiB
+per record) and immutable portrait responses within 64 MiB (512 KiB per image).
+IndexedDB atomically tracks payload bytes and least-recently-used metadata;
+8,192 image and 32,768 metadata entry ceilings bound tiny-record overhead, not
+the normal working set. Reading a saved image updates only its recency record,
+not the blob. Disk and RAM reuse both protect recency, including the data-URL
+fast path. Oversized responses still render but are not persisted; quota failure
+keeps the bounded memory copy and cannot partially evict committed data. No
+unlimited-storage permission is added. A cache hit performs no provider probe
+and does not invent a connectivity decision for a different tab. Concurrent
+requests for the same portrait share one transfer. The key includes the immutable
+asset path, not a gene-name guess; a changed snapshot cannot reuse an old metadata
+envelope. Mutable heads, private APIs, failures and mutations never enter these
+caches. Cache writes do not block display. Old Cache Storage bytes migrate by
+exact-key lookup, deleting the old copy only after the IndexedDB commit. The
+legacy 4 MiB detail and 768 KiB locator projections migrate once at extension
+upgrade/startup; pages no longer hydrate or rewrite those entire collections.
+Migration failures preserve the old bounded copy for a later startup. During
+migration, both old and new copies may coexist; the limits above describe the
+new stores, not a claim that total browser storage never exceeds 96 MiB.
+New articles pin the last-known published epoch locally; a background
+head check updates the saved selection for future articles without blocking
+cached cards. A first installation without an epoch waits for the head. Open
+articles retain their selected epoch, except explicit retirement recovery.
+
+A retained-install restart trace exposed a second gate: BRCA1 took 830 ms with
+zero portrait requests because selection awaited the online head. The local
+selection migration removes that gate, deliberately trading immediate adoption
+of a new publication on the first article for immediate reuse of its saved
+coherent card. Tests cover delayed heads, later-article adoption, out-of-order
+checks, offline reuse and retirement. Do not describe this as always-latest.
+
+This is an explicit IPD-001/IPD-008 client transport migration. Provider choice,
+server-side Storage/CDN ordering, canonical identity and production/staging
+provider configuration are unchanged. Both deployment and package tests cover
+the cross-site cache. Source deployment is not an extension-store release.
 
 ## Release contract
 

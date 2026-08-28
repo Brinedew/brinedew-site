@@ -11,6 +11,7 @@ import {
   iconoplasmGeneNotFoundResponse,
 } from "./iconoplasm-gene-discovery-worker.js"
 import { appendIconoplasmServiceDiscoveryLinks } from "./iconoplasm-service-discovery.js"
+import { matchIconoplasmRouteContract } from "./iconoplasm-route-contract.js"
 import {
   enforceIconoplasmRateLimit,
   withIconoplasmRateLimitHeaders,
@@ -2109,6 +2110,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       }
 
       const isApiOrWorker =
+        Boolean(matchIconoplasmRouteContract(url.pathname, request.method)) ||
         url.pathname.startsWith("/api/") ||
         url.pathname.startsWith("/portraits/") ||
         url.pathname.startsWith("/gene-cards/") ||

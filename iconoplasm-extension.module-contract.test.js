@@ -907,7 +907,7 @@ test("DO NOT DELETE: reading-session preparation replaces pointer prediction bef
   )
   assert.match(
     source,
-    /scheduleHostFirstBackgroundWork\(\{[\s\S]*quietDelayMs: 1000[\s\S]*readingSession\.startSpeculation\(\)/,
+    /scheduleHostFirstBackgroundWork\(\{[\s\S]*quietDelayMs: 0[\s\S]*readingSession\.startSpeculation\(\)/,
     "speculative card preparation must wait for the host-page load and idle gate",
   )
   assert.match(

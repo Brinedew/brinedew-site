@@ -79,6 +79,7 @@ function rememberScannerState(buildVersion) {
 function storageArea(state) {
   return {
     async get(keys) {
+      if (typeof keys === "string") return { [keys]: state.get(keys) }
       if (Array.isArray(keys)) {
         return Object.fromEntries(keys.map((key) => [key, state.get(key)]))
       }
@@ -138,6 +139,8 @@ await import("./generated/catalog-contract.js")
 await import("./publication-alias-overlay.js")
 await import("./content-settings.js")
 await import("./metadata-delivery.js")
+await import("./immutable-response-cache.js")
+await import("./content-portrait-cache.js")
 await import("./service-worker.js")
 
 const hooks = globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__
@@ -432,14 +435,11 @@ test("a blocked tab cannot disable Bunny for healthy tabs or new VPN sessions", 
   }
 })
 
-test("portrait fetch failures back off briefly but recover after the error TTL", async () => {
-  const originalDateNow = Date.now
+test("failed portrait bytes never poison reuse or suppress a later successful request", async () => {
   const originalFetch = globalThis.fetch
-  let now = 1_710_000_000_000
   let fetchCalls = 0
   let shouldFail = true
 
-  Date.now = () => now
   hooks.clearPortraitDataUrlCaches()
   globalThis.fetch = async () => {
     fetchCalls += 1
@@ -460,10 +460,7 @@ test("portrait fetch failures back off briefly but recover after the error TTL",
 
     assert.equal(first.dataUrl, "")
     assert.equal(second.dataUrl, "")
-    assert.equal(fetchCalls, 1)
-    assert.equal(hooks.hasFreshPortraitDataUrlError(url), true)
-
-    now += hooks.portraitErrorTtlMs + 1
+    assert.equal(fetchCalls, 2)
     shouldFail = false
 
     const third = await hooks.fetchPortraitDataUrl(url)
@@ -471,10 +468,8 @@ test("portrait fetch failures back off briefly but recover after the error TTL",
 
     assert.match(third.dataUrl, /^data:image\/png;base64,/)
     assert.equal(fourth.dataUrl, third.dataUrl)
-    assert.equal(fetchCalls, 2)
-    assert.equal(hooks.hasFreshPortraitDataUrlError(url), false)
+    assert.equal(fetchCalls, 3)
   } finally {
-    Date.now = originalDateNow
     globalThis.fetch = originalFetch
     hooks.clearPortraitDataUrlCaches()
   }
@@ -515,7 +510,99 @@ test("concurrent requests for the same successful portrait share one byte transf
   }
 })
 
-test("100 extension portraits share one failed primary decision per tab", async () => {
+test("another website reuses the exact portrait without a source probe or network fetch", async (t) => {
+  const originalFetch = globalThis.fetch
+  await hooks.clearPortraitSourceStates()
+  hooks.clearPortraitDataUrlCaches()
+  const calls = []
+  const url = `https://iconoplasm.brinedew.bio/portraits/v1/ab/${"ab".repeat(32)}/medium.webp`
+  globalThis.fetch = async (input) => {
+    calls.push(String(input))
+    return new Response(Uint8Array.from([1, 2, 3]), { headers: { "Content-Type": "image/webp" } })
+  }
+  try {
+    const wikipedia = await hooks.fetchPortraitDataUrl(url, 1101)
+    const touched = t.mock.method(hooks.portraitByteCache, "touch", async () => {})
+    const paper = await hooks.fetchPortraitDataUrl(url, 1102)
+    assert.ok(wikipedia.dataUrl)
+    assert.equal(paper.dataUrl, wikipedia.dataUrl)
+    assert.equal(calls.length, 1)
+    assert.deepEqual(
+      touched.mock.calls.map((call) => call.arguments),
+      [[url]],
+      "the data-URL fast path must also protect the disk record from eviction",
+    )
+    assert.match(calls[0], /b-cdn.net/)
+    assert.equal(
+      (await hooks.portraitSourceState(1102)).state,
+      "undecided",
+      "cache hits do not invent connectivity decisions",
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+    hooks.clearPortraitDataUrlCaches()
+    await hooks.clearPortraitSourceStates()
+  }
+})
+
+test("exact public card responses cross websites without refetching metadata or mixing snapshots", async () => {
+  const originalFetch = globalThis.fetch
+  const version = `ccv2-${"d".repeat(64)}`
+  const url = `https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/${version}/genes/BRCA1`
+  const calls = []
+  globalThis.fetch = async (input) => {
+    calls.push(String(input))
+    if (String(input).includes("/published-cards/")) throw new Error("CDN unavailable")
+    return Response.json({ snapshot_version: version, gene: { symbol: "BRCA1" }, missing: [] })
+  }
+  try {
+    const wikipedia = await hooks.fetchIconoplasmApi({ url }, { tab: { id: 1201 } })
+    assert.equal(wikipedia.ok, true)
+    const previous = calls.length
+    const paper = await hooks.fetchIconoplasmApi({ url }, { tab: { id: 1202 } })
+    assert.equal(paper.text, wikipedia.text)
+    assert.equal(calls.length, previous)
+    await hooks.fetchIconoplasmApi(
+      { url: url.replace(version, `ccv2-${"e".repeat(64)}`) },
+      { tab: { id: 1202 } },
+    )
+    assert.ok(calls.length > previous, "a new snapshot cannot use another epoch's response")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("upgrade migrates exact legacy card projections and removes them only after durable writes", async (t) => {
+  const version = `ccv2-${"9".repeat(64)}`
+  const key = "iconoplasm_published_gene_detail_cache_v1"
+  const record = { symbol: "BRCA1", name: "saved identity" }
+  storageState.set(key, { schema_version: 1, revision: version, entries: [["BRCA1", record]] })
+  let committed = false
+  const writes = t.mock.method(hooks.cardResponseCache, "put", async () => committed)
+  try {
+    await hooks.migrateLegacyCardCaches()
+    assert.ok(storageState.has(key), "a failed disk commit cannot discard the old cache")
+    committed = true
+    await hooks.migrateLegacyCardCaches()
+    assert.equal(storageState.has(key), false)
+    const [url, bytes, contentType] = writes.mock.calls.at(-1).arguments
+    assert.equal(
+      url,
+      `https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/${version}/genes/BRCA1`,
+    )
+    assert.equal(contentType, "application/json")
+    assert.deepEqual(JSON.parse(new TextDecoder().decode(bytes)), {
+      snapshot_version: version,
+      canonical_key: "symbol",
+      gene: record,
+      missing: [],
+    })
+  } finally {
+    storageState.clear()
+  }
+})
+
+test("100 successive extension portraits reuse the tab's working fallback without CDN retries", async () => {
   const originalFetch = globalThis.fetch
   let primaryFetches = 0
   let fallbackFetches = 0
@@ -544,16 +631,22 @@ test("100 extension portraits share one failed primary decision per tab", async 
   }
 
   try {
-    const requests = Array.from({ length: 100 }, (_, index) =>
-      hooks.fetchPortraitDataUrl(
-        `https://iconoplasmportraits.b-cdn.net/portraits/v1/${index}.webp`,
-        42,
-      ),
+    const first = hooks.fetchPortraitDataUrl(
+      `https://iconoplasmportraits.b-cdn.net/portraits/v1/0.webp`,
+      42,
     )
     await new Promise((resolve) => setTimeout(resolve, 0))
     assert.equal(primaryFetches, 1)
     releasePrimary()
-    const results = await Promise.all(requests)
+    const results = [await first]
+    for (let index = 1; index < 100; index++) {
+      results.push(
+        await hooks.fetchPortraitDataUrl(
+          `https://iconoplasmportraits.b-cdn.net/portraits/v1/${index}.webp`,
+          42,
+        ),
+      )
+    }
 
     assert.equal(primaryFetches, 1)
     assert.equal(fallbackFetches, 100)
@@ -564,10 +657,7 @@ test("100 extension portraits share one failed primary decision per tab", async 
           result.sourceUrl.startsWith("https://iconoplasm.brinedew.bio/portraits/"),
       ),
     )
-    assert.deepEqual(await hooks.portraitSourceState(42), {
-      state: "canonical",
-      failed: ["accelerator"],
-    })
+    assert.equal((await hooks.portraitSourceState(42)).state, "canonical")
   } finally {
     globalThis.fetch = originalFetch
     hooks.clearPortraitDataUrlCaches()
@@ -949,7 +1039,7 @@ test("a fresh valid scanner returns immediately without an unnecessary manifest 
   }
 })
 
-test("every article checks canon, other tabs retain their epoch, and failed checks are visible locally", async () => {
+test("saved cards do not await head revalidation; later articles adopt it without changing open epochs", async (t) => {
   const originalFetch = globalThis.fetch
   storageState.clear()
   storageState.set("iconoplasm_genes", { TP53: { n: "tumor protein p53" } })
@@ -965,14 +1055,25 @@ test("every article checks canon, other tabs retain their epoch, and failed chec
   storageState.set("iconoplasm_card_snapshot_version", "ccv1-cached")
   const send = (type, tab) =>
     new Promise((resolve) => messageListener({ type }, { tab: { id: tab } }, resolve))
+  const storageReads = []
+  const getStored = chrome.storage.local.get
+  t.mock.method(chrome.storage.local, "get", (keys) => {
+    storageReads.push(keys)
+    return getStored(keys)
+  })
   const calls = []
   let current = "ccv2-" + "a".repeat(64)
   let offline = false
+  let releaseFirstHead
   globalThis.fetch = async (input) => {
     const url = String(input)
     calls.push(url)
     assert.ok(url.endsWith("/api/public/v1/card-current"), "fresh scanner must not be redownloaded")
     if (offline) throw new Error("offline")
+    if (!releaseFirstHead)
+      return new Promise((resolve) => {
+        releaseFirstHead = () => resolve(Response.json({ schema_version: 2, current }))
+      })
     return Response.json({ schema_version: 2, current })
   }
   try {
@@ -982,12 +1083,28 @@ test("every article checks canon, other tabs retain their epoch, and failed chec
     assert.equal(cached.cardSnapshotVersion, "ccv1-cached")
     assert.equal(cached.cardFreshness, undefined)
     assert.equal(calls.length, 0, "cached recognition must make zero network requests")
-    const first = await send("GET_CARD_FRESHNESS", 701)
+    storageReads.length = 0
+    const first = await Promise.race([
+      send("GET_CARD_FRESHNESS", 701),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("saved card waited for network")), 50),
+      ),
+    ])
     assert.equal(first.genes, undefined, "card selection must not clone the scanner again")
-    assert.equal(first.cardSnapshotVersion, current)
+    assert.deepEqual(
+      storageReads,
+      [["iconoplasm_last_card_head", "iconoplasm_card_snapshot_version"]],
+      "selecting a saved card reads only its tiny epoch, never the whole scanner or cache",
+    )
+    assert.equal(first.cardSnapshotVersion, "ccv1-cached")
+    const firstHead = current
+    releaseFirstHead()
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(storageState.get("iconoplasm_last_card_head"), firstHead)
     current = "ccv2-" + "b".repeat(64)
     const second = await send("GET_GENE_DATA", 702)
-    assert.equal(second.cardSnapshotVersion, current)
+    assert.equal(second.cardSnapshotVersion, firstHead)
+    await new Promise((resolve) => setImmediate(resolve))
     const beforeStatus = calls.length
     assert.equal((await send("GET_STATUS", 701)).cardFreshness.version, first.cardSnapshotVersion)
     assert.equal(calls.length, beforeStatus, "popup status must remain local")
@@ -1000,10 +1117,23 @@ test("every article checks canon, other tabs retain their epoch, and failed chec
     assert.equal(reloaded.cardSnapshotVersion, current)
     offline = true
     const failed = await send("GET_GENE_DATA", 703)
-    assert.equal(failed.cardSnapshotVersion, "ccv1-cached")
+    assert.equal(failed.cardSnapshotVersion, current)
+    await new Promise((resolve) => setImmediate(resolve))
     assert.equal(failed.cardFreshness.verified, false)
     assert.equal((await send("GET_STATUS", 703)).cardFreshness.verified, false)
     assert.equal(calls.length, 5, "three successful checks plus one bounded two-source failure")
+    const pendingHeads = []
+    globalThis.fetch = () => new Promise((resolve) => pendingHeads.push(resolve))
+    const olderArticle = await send("GET_CARD_FRESHNESS", 704)
+    const newerArticle = await send("GET_CARD_FRESHNESS", 705)
+    const newerHead = "ccv2-" + "d".repeat(64)
+    pendingHeads[1](Response.json({ schema_version: 2, current: newerHead }))
+    await new Promise((resolve) => setImmediate(resolve))
+    pendingHeads[0](Response.json({ schema_version: 2, current: "ccv2-" + "c".repeat(64) }))
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(storageState.get("iconoplasm_last_card_head"), newerHead)
+    assert.equal(olderArticle.cardSnapshotVersion, current)
+    assert.equal(newerArticle.cardSnapshotVersion, current, "late checks do not replace open cards")
   } finally {
     globalThis.fetch = originalFetch
     storageState.clear()
@@ -1049,6 +1179,7 @@ test("a retired card snapshot cache-busts only the manifest and adopts the new r
   storageState.set("iconoplasm_contract_revision", 1)
   storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
   storageState.set("iconoplasm_card_snapshot_version", "ccv1-retired")
+  storageState.set("iconoplasm_last_card_head", "ccv1-retired")
   storageState.set("iconoplasm_alias_overlay_version", "v1-test")
   storageState.set("iconoplasm_alias_overlay_applied", {})
 
@@ -1077,9 +1208,17 @@ test("a retired card snapshot cache-busts only the manifest and adopts the new r
   }
 
   try {
-    await hooks.refreshGeneData({ manifestCacheBustRevision: "ccv1-retired" })
+    const response = await new Promise((resolve) =>
+      messageListener(
+        { type: "REFRESH_CARD_SNAPSHOT", retiredRevision: "ccv1-retired" },
+        { tab: { id: 706 } },
+        resolve,
+      ),
+    )
     assert.equal(new URL(manifestUrl).searchParams.get("retired_snapshot"), "ccv1-retired")
     assert.equal(storageState.get("iconoplasm_card_snapshot_version"), "ccv1-current")
+    assert.equal(storageState.get("iconoplasm_last_card_head"), "ccv1-current")
+    assert.equal(response.cardSnapshotVersion, "ccv1-current")
     assert.equal(artifactFetches, 0)
   } finally {
     globalThis.fetch = originalFetch

@@ -31,6 +31,8 @@ export default defineConfig({
           "publication-alias-overlay.js",
           "content-settings.js",
           "metadata-delivery.js",
+          "immutable-response-cache.js",
+          "content-portrait-cache.js",
           "service-worker.js",
         ],
       }

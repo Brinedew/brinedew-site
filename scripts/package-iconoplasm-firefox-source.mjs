@@ -149,6 +149,7 @@ const includeFiles = [
   "iconoplasm-extension/publication-alias-overlay.js",
   "iconoplasm-extension/service-worker.js",
   "iconoplasm-extension/metadata-delivery.js",
+  "iconoplasm-extension/immutable-response-cache.js",
   "iconoplasm-extension/site-bridge.js",
 ]
 

@@ -285,6 +285,8 @@ test("Firefox background-page scripts boot in dependency order without importScr
     "iconoplasm-extension/publication-alias-overlay.js",
     "iconoplasm-extension/content-settings.js",
     "iconoplasm-extension/metadata-delivery.js",
+    "iconoplasm-extension/immutable-response-cache.js",
+    "iconoplasm-extension/content-portrait-cache.js",
     "iconoplasm-extension/service-worker.js",
   ]
 

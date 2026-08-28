@@ -25,65 +25,31 @@ function loadFactory() {
     })
 }
 
+function deliveryRuntime() {
+  const sandbox = { AbortController, console, setTimeout, clearTimeout }
+  sandbox.globalThis = sandbox
+  vm.runInNewContext(source, sandbox)
+  return sandbox.IconoplasmContentPortraitCache
+}
+
 for (const blocked of [false, true]) {
-  test(`native loading remembers the working source without duplicate races (blocked=${blocked})`, async () => {
+  test(`source-plan loading remembers the working route without duplicate races (blocked=${blocked})`, async () => {
     const session = createPortraitDeliverySession()
     const starts = []
-    let cdnBlocked = blocked
-    let canonicalBlocked = false
-    class Image {
-      set src(url) {
-        if (!url) return
-        starts.push(url)
-        this.timer = setTimeout(() => {
-          const failed = url.includes("b-cdn.net") ? cdnBlocked : canonicalBlocked
-          if (failed) this.onerror?.()
-          else this.onload?.()
-        }, 8)
-      }
-      removeAttribute() {
-        clearTimeout(this.timer)
-      }
-      decode() {
-        return Promise.resolve()
-      }
+    const { loadPlannedSource } = deliveryRuntime()
+    const load = async (url) => {
+      starts.push(url)
+      if (blocked && url.includes("b-cdn.net")) throw new Error("DNS unavailable")
+      return url
     }
-    const cache = loadFactory()({
-      windowRef: globalThis,
-      ImageCtor: Image,
-      chromeApi: {
-        runtime: {
-          sendMessage(message, callback) {
-            callback(
-              message.type === "GET_PORTRAIT_SOURCE_PLAN"
-                ? { ok: true, ...session.plan(message.url) }
-                : { ok: true, ...session.reportSuccess(message.url, message.decisionId) },
-            )
-          },
-        },
-      },
-    })
-    const url = (index) => `https://iconoplasm.brinedew.bio/portraits/v1/${index}/medium.webp`
-    for (let index = 0; index < 10; index++) assert.ok(await cache.getUsableSrc(url(index)))
+    for (let index = 0; index < 10; index++) {
+      const url = `https://iconoplasm.brinedew.bio/portraits/v1/${index}/medium.webp`
+      const plan = session.plan(url)
+      const winner = await loadPlannedSource(plan, load)
+      session.reportSuccess(winner, plan.decisionId)
+    }
     assert.equal(starts.filter((url) => url.includes("b-cdn.net")).length, blocked ? 1 : 10)
     assert.equal(starts.filter((url) => url.includes("brinedew.bio")).length, blocked ? 10 : 0)
-    if (blocked) {
-      cdnBlocked = false
-      assert.equal(
-        await cache.getUsableSrc(url(10)),
-        url(10),
-        "Elapsed time/new images do not reset the known working route",
-      )
-      assert.equal(starts.filter((url) => url.includes("b-cdn.net")).length, 1)
-      canonicalBlocked = true
-      assert.match(
-        await cache.getUsableSrc(url(11)),
-        /b-cdn\.net/,
-        "Actual failure of the working route permits fallback",
-      )
-      assert.equal(session.state().state, "accelerator")
-    }
-    cache.dispose()
   })
 }
 
@@ -290,146 +256,59 @@ test("new hover intent drops queued stale neighbors while active work starts imm
   releases.get(currentNeighbor)()
 })
 
-test("regional DNS failure falls through to a native canonical image without base64 transport", async () => {
-  const createPortraitCache = loadFactory()
-  const messages = []
-  const bunny = "https://iconoplasmportraits.b-cdn.net/portraits/v1/a/medium.webp"
-  const canonical = "https://iconoplasm.brinedew.bio/portraits/v1/a/medium.webp"
-  class FakeImage {
-    decode() {
-      return Promise.resolve()
-    }
-    set src(value) {
-      this._src = value
-      queueMicrotask(() => {
-        if (value === bunny) this.onerror?.(new Error("dns"))
-        else this.onload?.()
-      })
-    }
-    get src() {
-      return this._src
-    }
-  }
-  const runtime = {
-    lastError: null,
-    sendMessage(message, callback) {
-      messages.push(message)
-      if (message.type === "GET_PORTRAIT_SOURCE_PLAN") {
-        callback({
-          ok: true,
-          primaryUrl: bunny,
-          fallbackUrl: canonical,
-          hedgeDelayMs: 350,
-          timeoutMs: 2500,
-        })
-        return
-      }
-      if (message.type === "REPORT_PORTRAIT_SOURCE_RESULT") {
-        callback({ ok: true })
-        return
-      }
-      callback({ ok: false })
-    },
-  }
-  const cache = createPortraitCache({
-    windowRef: globalThis,
-    chromeApi: { runtime },
-    ImageCtor: FakeImage,
-  })
-
-  const source = await cache.getUsableSrc(canonical)
-
-  assert.equal(source, canonical)
-  assert.deepEqual(
-    messages.map((message) => message.type),
-    ["GET_PORTRAIT_SOURCE_PLAN", "REPORT_PORTRAIT_SOURCE_RESULT"],
-  )
-  assert.equal(messages[1].url, canonical)
-  assert.equal(messages[1].succeeded, true)
-})
-
-test("an unresolved Bunny load starts the canonical hedge before the old 2.5 second timeout", async () => {
-  const createPortraitCache = loadFactory()
-  const bunny = "https://iconoplasmportraits.b-cdn.net/portraits/v1/b/medium.webp"
-  const canonical = "https://iconoplasm.brinedew.bio/portraits/v1/b/medium.webp"
-  const started = []
-  class FakeImage {
-    decode() {
-      return Promise.resolve()
-    }
-    set src(value) {
-      started.push(value)
-      if (value === canonical) queueMicrotask(() => this.onload?.())
-    }
-  }
-  const runtime = {
-    lastError: null,
-    sendMessage(message, callback) {
-      if (message.type === "GET_PORTRAIT_SOURCE_PLAN") {
-        callback({
-          ok: true,
-          primaryUrl: bunny,
-          fallbackUrl: canonical,
-          hedgeDelayMs: 5,
-          timeoutMs: 2500,
-        })
-        return
-      }
-      callback({ ok: true })
-    },
-  }
-  const cache = createPortraitCache({
-    windowRef: globalThis,
-    chromeApi: { runtime },
-    ImageCtor: FakeImage,
-  })
-
-  const source = await cache.getUsableSrc(canonical)
-  assert.equal(source, canonical)
-  assert.deepEqual(started.filter(Boolean), [bunny, canonical])
-})
-
-test("the rendering context owns native loading while the adapter retains hedging and cancellation", async () => {
+test("unresolved primary is hedged on deadline and its losing transfer is canceled", async () => {
   const starts = []
   const cancelled = []
-  const primaryUrl = "https://cdn.example/portrait.webp"
-  const fallbackUrl = "https://origin.example/portrait.webp"
-  const cache = loadFactory()({
-    windowRef: globalThis,
-    ImageCtor: class {
-      constructor() {
-        assert.fail("host must not download a framed portrait")
-      }
+  const { loadPlannedSource } = deliveryRuntime()
+  const result = await loadPlannedSource(
+    {
+      primaryUrl: "https://cdn.example/image",
+      fallbackUrl: "https://origin.example/image",
+      hedgeDelayMs: 5,
+      timeoutMs: 2500,
     },
-    chromeApi: {
-      runtime: {
-        sendMessage(message, callback) {
-          callback(
-            message.type === "GET_PORTRAIT_SOURCE_PLAN"
-              ? { ok: true, primaryUrl, fallbackUrl, hedgeDelayMs: 5, timeoutMs: 2500 }
-              : { ok: true },
-          )
-        },
-      },
-    },
-    loadImage(url, timeoutMs, signal) {
+    (url, timeoutMs, signal) => {
       starts.push(url)
       assert.equal(timeoutMs, 2500)
-      if (url === fallbackUrl) return Promise.resolve(url)
+      if (url.includes("origin.example")) return Promise.resolve(url)
       return new Promise((_resolve, reject) =>
         signal.addEventListener(
           "abort",
           () => {
             cancelled.push(url)
-            reject(Object.assign(new Error("cancelled"), { name: "AbortError" }))
+            reject(new Error("aborted"))
           },
           { once: true },
         ),
       )
     },
+  )
+  assert.equal(result, "https://origin.example/image")
+  assert.deepEqual(starts, ["https://cdn.example/image", "https://origin.example/image"])
+  assert.deepEqual(cancelled, ["https://cdn.example/image"])
+})
+
+test("content decodes shared bytes in its renderer without downloading an HTTPS image", async () => {
+  const messages = []
+  const decoded = []
+  const cache = loadFactory()({
+    windowRef: globalThis,
+    chromeApi: {
+      runtime: {
+        sendMessage(message, callback) {
+          messages.push(message.type)
+          callback({ ok: true, dataUrl: "data:image/webp;base64,aW1hZ2U=" })
+        },
+      },
+    },
+    loadImage: async (url) => {
+      decoded.push(url)
+      return url
+    },
   })
-  assert.equal(await cache.getUsableSrc(fallbackUrl), fallbackUrl)
-  assert.deepEqual(starts, [primaryUrl, fallbackUrl])
-  assert.deepEqual(cancelled, [primaryUrl])
-  assert.equal(cache.getCachedSrc(fallbackUrl), fallbackUrl)
+  const url = "https://iconoplasm.brinedew.bio/portraits/v1/test/medium.webp"
+  assert.equal(await cache.getUsableSrc(url), "data:image/webp;base64,aW1hZ2U=")
+  await cache.getUsableSrc(url)
+  assert.deepEqual(messages, ["GET_PORTRAIT_DATA_URL"])
+  assert.deepEqual(decoded, ["data:image/webp;base64,aW1hZ2U="])
 })

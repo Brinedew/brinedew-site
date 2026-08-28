@@ -109,6 +109,27 @@ test("v2 corrupt CDN bytes are rejected before rendering and recover from the ex
   assert.equal(calls.filter((call) => call.startsWith(origin)).length, 1)
 })
 
+test("v2 known first-party tabs go directly to the caller's exact lane URL without directory round trips", async () => {
+  const fixture = await v2Fixture()
+  const calls = []
+  const delivery = createMetadataDelivery({
+    fetchImpl: async (rawUrl) => {
+      calls.push(rawUrl)
+      if (!rawUrl.startsWith(origin)) throw new Error("DNS unavailable")
+      assert.equal(new URL(rawUrl).pathname, "/api/public/v1/card-current")
+      return json({ schema_version: 2, current: fixture.version })
+    },
+  })
+  assert.equal((await delivery.current(1)).current, fixture.version)
+  const headCalls = calls.length
+  for (let i = 0; i < 10; i++) {
+    for (const lane of ["genes", "portraits"]) {
+      assert.equal(await delivery.fetch(url(fixture.version, lane), init, 1), null)
+    }
+  }
+  assert.equal(calls.length, headCalls, "No CDN retry or first-party manifest/index detour")
+})
+
 test("each article head check revalidates without reader cache-busting or background polling", async () => {
   let current = "snapshot1"
   const calls = []

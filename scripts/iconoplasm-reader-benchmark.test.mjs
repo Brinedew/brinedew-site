@@ -1,11 +1,14 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { readFile } from "node:fs/promises"
+import vm from "node:vm"
 import {
   assessReaderSamples,
   distribution,
   locateReaderPointerTarget,
   measuredResponseBodyBytes,
+  measureHover,
+  installReaderProbe,
   runReaderJourney,
 } from "./lib/iconoplasm-reader-benchmark.mjs"
 
@@ -15,6 +18,64 @@ test("invalid cached response byte measurements stay unknown, not negative or fr
   }
   assert.equal(measuredResponseBodyBytes(0), 0)
   assert.equal(measuredResponseBodyBytes(1769), 1769)
+})
+
+test("a lingering same-gene card is measured only after the new pointer entry", () => {
+  let clock = 100
+  let frame
+  const listeners = new Map()
+  const image = {
+    alt: "BRCA1",
+    src: "data:image/webp;base64,bytes",
+    complete: true,
+    naturalWidth: 384,
+    naturalHeight: 512,
+    getClientRects: () => [{}],
+  }
+  const shell = {
+    getClientRects: () => [{}],
+    querySelectorAll: (selector) => (selector === "img" ? [image] : [{ textContent: "BRCA1" }]),
+    querySelector: () => ({}),
+  }
+  class Observer {
+    observe() {}
+    disconnect() {}
+  }
+  const sandbox = {
+    MutationObserver: Observer,
+    PerformanceObserver: Observer,
+    performance: {
+      timeOrigin: 1000,
+      now: () => clock,
+      getEntriesByType: () => [],
+      getEntriesByName: () => [],
+    },
+    requestAnimationFrame: (callback) => {
+      frame = callback
+      return 1
+    },
+    cancelAnimationFrame() {},
+    document: {
+      visibilityState: "visible",
+      documentElement: null,
+      querySelector: () => shell,
+      addEventListener: (name, listener) => listeners.set(name, listener),
+      removeEventListener: (name) => listeners.delete(name),
+    },
+  }
+  vm.runInNewContext(`(${installReaderProbe.toString()})()`, sandbox)
+  const probe = sandbox.__iconoplasmReaderProbe
+  probe.arm({ symbol: "BRCA1", deadline: 2000 })
+  frame(clock)
+  assert.equal(probe.snapshot().result.imageAt, null)
+  clock = 120
+  listeners.get("pointerover")()
+  clock = 130
+  frame(clock)
+  const measured = probe.snapshot()
+  assert.equal(measured.pointerAt, 1120)
+  assert.equal(measured.result.imageAt, 1130)
+  probe.stop()
 })
 
 // ARCHITECTURE FENCE [IPD-008]: do not average away first-hover failures or
@@ -56,6 +117,12 @@ test("recurring first-hover delays cannot hide behind many fast repeats", () => 
   assert.equal(report["html/warm/repeat"].verdict, "pass")
   assert.equal(report["html/warm/first-immediate"].verdict, "fail")
   assert.equal(report["html/warm/first-immediate"].preparedSlow, 5)
+})
+
+test("a saved-image hover at 200 ms is a failure, not an instantaneous pass", () => {
+  const report = assessReaderSamples([sample({ imageMs: 200 })])
+  assert.equal(report["html/warm/repeat"].preparedSlow, 1)
+  assert.equal(report["html/warm/repeat"].verdict, "fail")
 })
 
 test("a recurring cold first-hover delay fails even when no image was prepared", () => {
@@ -152,4 +219,63 @@ test("failed navigation removes future-page probes and all network observers", a
   assert.ok(commands.includes("Page.enable"))
   assert.ok(commands.includes("Page.removeScriptToEvaluateOnNewDocument"))
   assert.equal(commands.at(-1), "detach")
+})
+
+test("cold hover observes a newly created frame and validates the newly selected snapshot", async () => {
+  const pointerAt = Date.now()
+  let entered = false
+  const arms = []
+  const before = { revision: "", portraitReady: false, at: pointerAt, session: { policy: {} } }
+  const snapshot = {
+    pointerAt,
+    result: { shellAt: pointerAt + 5 },
+    highlights: {},
+  }
+  const frame = (url, result) => ({
+    url: () => url,
+    evaluate: async (_fn, argument) => {
+      if (argument?.symbol) arms.push({ url, ...argument })
+      return result
+    },
+  })
+  const main = frame("https://example.test/article", snapshot)
+  const child = frame("chrome-extension://test/lit-archival-frame.html", {
+    result: {
+      imageAt: pointerAt + 25,
+      image: { src: "data:image/webp;base64,test", width: 384, height: 512 },
+    },
+  })
+  const target = {
+    waitFor: async () => {},
+    scrollIntoViewIfNeeded: async () => {},
+    evaluate: async () => ({ x: 100, y: 100 }),
+  }
+  const page = {
+    locator: () => ({ nth: () => target }),
+    waitForTimeout: async () => {},
+    evaluate: async () => snapshot,
+    mainFrame: () => main,
+    frames: () => (entered ? [main, child] : [main]),
+    mouse: {
+      move: async (x) => {
+        if (x === 100) entered = true
+      },
+    },
+  }
+  const validations = []
+  const diagnostics = {
+    inspect: async () => (entered ? { ...before, revision: "selected-epoch" } : before),
+    matchesPortraitSource: async (symbol, source, revision) => {
+      validations.push({ symbol, source, revision })
+      return revision === "selected-epoch"
+    },
+  }
+  const result = await measureHover(page, diagnostics, { symbol: "RAD51", leadMs: 0 })
+  assert.equal(result.error, undefined)
+  assert.equal(result.imageMs, 25)
+  assert.equal(result.before.revision, "")
+  assert.equal(result.selectedRevision, "selected-epoch")
+  assert.equal(arms.length, 2)
+  assert.equal(arms[0].deadline, arms[1].deadline)
+  assert.equal(validations[0].revision, "selected-epoch")
 })

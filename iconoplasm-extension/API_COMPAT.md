@@ -74,7 +74,7 @@ payloads in one manifest response.
 
 The manifest may also expose `card_snapshot_version`. It is an immutable
 publication boundary, not a new catalog schema: extensions that understand it
-invalidate their bounded persistent hover-detail and portrait-locator caches
+select separate exact-snapshot hover-detail and portrait-locator records
 when it changes, while older extensions safely ignore it. Current extensions
 read rich detail through
 `GET /api/public/v1/card-snapshots/:snapshot/genes/:symbol` and the compact
@@ -106,9 +106,15 @@ Catalog initialization, including a cold scanner-artifact fetch, begins only aft
 the host `load` event. Recognition scans then replace text cooperatively in bounded idle slices. The session
 inventories anchors immediately, but speculative immutable detail, portrait
 resolution, decode, and persistent-frame acknowledgement wait for host `load`, a
-one-second quiet delay, and a genuine idle turn. Ordinary documents prepare the
-first ten unique symbols with one worker on constrained devices and two workers
-otherwise; large documents add deterministic ten-symbol near-viewport windows.
+genuine idle turn, without an extra one-second delay. Ordinary documents prepare the
+first ten unique symbols with ten independent tasks (two on low-memory devices).
+Responses are per gene, never a combined binary batch. A slow card cannot hold
+the other nine behind its complete metadata/image pipeline.
+Near-viewport work advances in deterministic ten-symbol selections. Completion
+refills the selection without requiring another scroll. These selections do not
+evict previously prepared images. Automatic refills attempt each visible symbol
+once; only a real viewport/inventory event may restore an evicted image or retry
+a failed preparation after backoff. This prevents cache churn and timer polling.
 Data Saver and 2G disable preparation. A foreground hover bypasses the host-page
 gate, reuses matching in-flight work, and is otherwise a
 recovery path, not the normal loading trigger. Portrait delivery may complete
@@ -116,16 +122,21 @@ from the locator lane while rich detail remains stalled; if both projections
 arrive with different portrait SHAs, the portrait and vote controls fail closed.
 Packaged card fonts begin loading
 during initialization, including inside the persistent rich-card frame.
-Portraits normally load as native HTTPS image sources with a 350 ms canonical
-hedge behind Bunny; service-worker-
-buffered data URLs exist only for page-CSP compatibility.
+The background runtime retains exact immutable portrait bytes across websites.
+Only a cache miss invokes the shared Bunny-first source plan and its 350 ms
+canonical hedge. The displaying frame (or simple host layout) decodes the
+returned data URL; it never downloads the same HTTPS image a second time.
 
-The persistent detail cache is capped at 512 records and 4 MiB. The locator
-cache is separately capped at 1,024 records and 768 KiB, but uses the same card
-snapshot invalidation boundary. Extension
-updates compact legacy portrait-heavy scanner storage before returning data to
-a tab. Chromium therefore stays below its default 10 MiB `storage.local` quota
-without requesting `unlimitedStorage`.
+The background owns one IndexedDB store for both exact-snapshot metadata lanes
+(32 MiB total, 64 KiB per record, 32,768-entry safety ceiling) and one for immutable
+portraits (64 MiB total, 512 KiB per image, 8,192-entry safety ceiling). Both use
+transactional byte accounting and LRU eviction; reads update small recency records
+without rewriting image bytes. Pages never clone or rewrite the full saved cache.
+Old detail/locator collections migrate at extension upgrade/startup, with deletion
+only after durable writes. Legacy Cache Storage bytes migrate lazily by exact key.
+Extension updates also compact legacy portrait-heavy scanner storage. No
+`unlimitedStorage` permission is required; the scanner/settings remain within
+`storage.local`, while the bounded image and metadata stores use IndexedDB.
 
 For portrait architecture and operations, read
 `../docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md`.
