@@ -100,7 +100,8 @@
       const primaryUrl = String(plan?.primaryUrl || "").trim()
       const fallbackUrl = String(plan?.fallbackUrl || "").trim()
       const timeoutMs = Number(plan?.timeoutMs || 2500)
-      const hedgeDelayMs = Math.max(0, Number(plan?.hedgeDelayMs || 0))
+      const hedgeDelayMs =
+        plan?.hedgeDelayMs == null ? null : Math.max(0, Number(plan.hedgeDelayMs))
       if (!fallbackUrl || fallbackUrl === primaryUrl) return loadImage(primaryUrl, timeoutMs)
 
       const primaryController = typeof AbortController === "function" ? new AbortController() : null
@@ -118,7 +119,7 @@
             reject,
           )
         }
-        hedgeTimer = windowRef.setTimeout(startFallback, hedgeDelayMs)
+        if (hedgeDelayMs !== null) hedgeTimer = windowRef.setTimeout(startFallback, hedgeDelayMs)
       })
       const primaryPromise = loadImage(primaryUrl, timeoutMs, primaryController?.signal)
         .then((url) => ({ url, lane: "primary" }))
@@ -155,6 +156,7 @@
                 type: "REPORT_PORTRAIT_SOURCE_RESULT",
                 url: sourceUrl,
                 succeeded: true,
+                decisionId: plan.decisionId,
               })
               rememberDataUrl(url, sourceUrl)
               return sourceUrl

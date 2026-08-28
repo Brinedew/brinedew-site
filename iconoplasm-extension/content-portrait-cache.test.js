@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import test from "node:test"
 import vm from "node:vm"
+import { createPortraitDeliverySession } from "../shared/iconoplasm-portrait/portrait-delivery-core.js"
 
 // ARCHITECTURE FENCE [IPD-008]: bounded reading-session preparation is useful only when
 // each successful portrait becomes paint-ready without waiting for its batch.
@@ -22,6 +23,68 @@ function loadFactory() {
         options,
       ).sendMessage,
     })
+}
+
+for (const blocked of [false, true]) {
+  test(`native loading remembers the working source without duplicate races (blocked=${blocked})`, async () => {
+    const session = createPortraitDeliverySession()
+    const starts = []
+    let cdnBlocked = blocked
+    let canonicalBlocked = false
+    class Image {
+      set src(url) {
+        if (!url) return
+        starts.push(url)
+        this.timer = setTimeout(() => {
+          const failed = url.includes("b-cdn.net") ? cdnBlocked : canonicalBlocked
+          if (failed) this.onerror?.()
+          else this.onload?.()
+        }, 8)
+      }
+      removeAttribute() {
+        clearTimeout(this.timer)
+      }
+      decode() {
+        return Promise.resolve()
+      }
+    }
+    const cache = loadFactory()({
+      windowRef: globalThis,
+      ImageCtor: Image,
+      chromeApi: {
+        runtime: {
+          sendMessage(message, callback) {
+            callback(
+              message.type === "GET_PORTRAIT_SOURCE_PLAN"
+                ? { ok: true, ...session.plan(message.url) }
+                : { ok: true, ...session.reportSuccess(message.url, message.decisionId) },
+            )
+          },
+        },
+      },
+    })
+    const url = (index) => `https://iconoplasm.brinedew.bio/portraits/v1/${index}/medium.webp`
+    for (let index = 0; index < 10; index++) assert.ok(await cache.getUsableSrc(url(index)))
+    assert.equal(starts.filter((url) => url.includes("b-cdn.net")).length, blocked ? 1 : 10)
+    assert.equal(starts.filter((url) => url.includes("brinedew.bio")).length, blocked ? 10 : 0)
+    if (blocked) {
+      cdnBlocked = false
+      assert.equal(
+        await cache.getUsableSrc(url(10)),
+        url(10),
+        "Elapsed time/new images do not reset the known working route",
+      )
+      assert.equal(starts.filter((url) => url.includes("b-cdn.net")).length, 1)
+      canonicalBlocked = true
+      assert.match(
+        await cache.getUsableSrc(url(11)),
+        /b-cdn\.net/,
+        "Actual failure of the working route permits fallback",
+      )
+      assert.equal(session.state().state, "accelerator")
+    }
+    cache.dispose()
+  })
 }
 
 test("invalidation stops portrait warm queues without substituting unverified direct images", async () => {
