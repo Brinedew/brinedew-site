@@ -497,12 +497,11 @@
       if (event.source !== window.parent) return
       const url = String(data.url || "")
       const requestId = String(data.requestId || "")
-      // Native public portrait URLs only; no arbitrary authenticated fetch API.
-      // Host selection belongs to the adapter's shared source plan, not here.
+      // The background runtime owns network delivery and shared immutable bytes.
+      // This renderer only decodes the supplied image, never refetches a URL.
       const allowed =
-        /^https:\/\/[^/?#]+\/portraits\/v1\/[a-f0-9]{2}\/[a-f0-9]{64}\/(medium|thumb|full)\.webp$/.test(
-          url,
-        )
+        url.length <= 6 * 1024 * 1024 &&
+        /^data:image\/(webp|png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(url)
       if (
         !allowed ||
         !/^image-\d+$/.test(requestId) ||

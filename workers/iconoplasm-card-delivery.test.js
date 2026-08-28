@@ -5,6 +5,7 @@ import {
   publishedObjectHash,
 } from "./lib/iconoplasm-published-card-objects.js"
 import { createPublishedCardDeliveryHandlers } from "./lib/iconoplasm-card-delivery.js"
+import worker from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 import { createHoverDeliveryHandlers } from "./iconoplasm-hover-delivery-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import {
   readIconoplasmPublishedCardCatalogArtifactForTest,
@@ -67,6 +68,7 @@ test("public card and released hover readers use exact Bunny objects without KV 
     ],
   })
   const env = {
+    PUBLIC_RATE_LIMIT_120: { limit: async () => ({ success: true }) },
     KV: {
       get(key) {
         assert.equal(key, "iconoplasm:gallery-version")
@@ -102,11 +104,13 @@ test("public card and released hover readers use exact Bunny objects without KV 
     assert.equal(artifact.bySymbol.get("EZH2").full_name, card.full_name)
     assert.equal(calls.length, 3)
     assert.ok(calls.every((call) => call.method === "GET"))
-    const response =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(`https://iconoplasm.brinedew.bio/${full.key}`),
-        env,
-      )
+    // Exercise the deployed composition, not only its nested API handler:
+    // otherwise a declared object route can still fall through to Pages 404.
+    const response = await worker.fetch(
+      new Request(`https://iconoplasm.brinedew.bio/${full.key}`),
+      env,
+      { waitUntil() {} },
+    )
     assert.equal(response.status, 200)
     assert.deepEqual(await response.json(), card)
     assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable")

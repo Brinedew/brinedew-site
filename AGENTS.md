@@ -15,7 +15,9 @@ This `AGENTS.md` is loaded automatically when work happens inside `D:\Coding\Web
 
 Before changing reader freshness, read `docs/ICONOPLASM_PRODUCT_OPERATING_MODEL.md`.
 The owner permits stale images while an article stays open. New page loads and
-ordinary reloads must check current published canon. Scale and smooth reading
+ordinary reloads check current published canon in the background; the extension
+pins its last-known coherent epoch immediately and saves the check for the next
+article. A missing epoch still requires network selection. Scale and smooth reading
 outrank shaving a minute off synchronization: aim for one minute; two is acceptable,
 not a strict worldwide guarantee. No continuous per-tab polling. Use the explicit
 10,000-daily-reader working scenario (including voting, saved discoveries and
@@ -49,8 +51,9 @@ startup, scheduling, model routing, credential handling, or result anchoring.
 
 **ARCHITECTURE FENCE [IPD-001]** — Bunny is Iconoplasm's healthy-path portrait
 accelerator because direct delivery avoids charging each image to the
-Cloudflare Worker budget. The extension starts real browser-native images
-and begins the canonical first-party hedge after 350 ms if Bunny is
+Cloudflare Worker budget. The extension background runtime reuses immutable
+portrait bytes across websites and fetches only on a cache miss. It begins
+the canonical first-party hedge after 350 ms if Bunny is
 still unresolved; successful Bunny requests retain that head start. Once
 canonical works, subsequent images use canonical alone unless it actually
 fails. Never retry a blocked CDN merely because time passed, and never change
@@ -249,14 +252,23 @@ downloads still wait for `load`. Recognition slices have a 4 ms wall-time budget
 between nodes and no forced idle timeout before load. Matcher construction uses
 genuine idle slices targeting 8 ms, with clock checks every 32 tokens. Semantic
 article/main roots precede navigation without changing matching. Each article selects its
-card epoch once after load (or explicit early hover), before either card lane or
-disk cache is used. Do not re-couple cached recognition to card freshness or to
+last-known published card epoch locally once after load (or explicit early
+hover), before either card lane or disk cache is used. Revalidate the tiny head
+in the background for future articles; never block a saved card on that check.
+Only a missing local epoch waits for network selection. Open articles keep their
+coherent epoch until explicit retirement; stale concurrent checks cannot replace
+newer saved head results. Do not re-couple cached recognition to card freshness or to
 unrelated slow images/analytics. The session inventories recognized
 symbols immediately but may not start speculative detail or portrait work until
-the host `load` event, a one-second quiet delay, and a genuine idle callback.
-It prepares the first ten ordinary-document symbols with at most one worker on
-constrained connections and two workers otherwise, plus deterministic ten-symbol
-near-viewport windows for larger documents. Data Saver and 2G disable preparation.
+the host `load` event and a genuine idle callback, with no fixed one-second delay.
+It prepares the first ten ordinary-document symbols with ten independent tasks
+(two on devices reporting at most 2 GiB RAM), plus deterministic ten-symbol
+near-viewport selections for larger documents. Completion refills a selection
+without waiting for another scroll. Automatic refills skip previously attempted
+symbols, including evicted images and failures; a real viewport/inventory event
+may restore evicted images or retry failures after backoff. Thus the ten-symbol
+selection does not cap retention or create an automatic cache-churn loop.
+Data Saver and 2G disable preparation.
 Hover selects an already-ready card; its foreground GET is only a recovery path
 and may promote the same in-flight immutable request without waiting for whole-cache
 hydration. Portrait paint must not wait for rich-detail success: the locator lane
@@ -458,10 +470,14 @@ content envelope working. A validation package can retain the released version
 number while containing newer code: compare package/runtime hashes, not only the
 displayed version. V2 compatibility reads one directory plus the exact lane
 object; never load its packed shard or make portraits wait on rich-card bytes.
-Prepare native portrait bytes in the context that paints them: the persistent
-card frame for framed layouts, host for simple cards. The adapter retains source
-selection and hedging. A host-page image cache hit is not frame readiness;
-verify transfer counts with browser routing/cache interception disabled.
+Persist exact card responses and immutable portrait bytes in extension-origin
+background IndexedDB with byte-bounded LRU retention. Foreground requests look up one exact record, never
+wait for a multi-megabyte content-store hydration or bypass local reuse. The
+background applies the shared source plan only on a byte-cache miss; it keeps
+Bunny primary with the same bounded hedge. Decode the returned data URL in the
+persistent card frame or simple host renderer. No second HTTPS image transfer.
+Verify Wikipedia-to-paper navigation and background restart without reinstalling
+the extension, clearing storage, or disabling browser caching.
 
 ## Local development overrides
 

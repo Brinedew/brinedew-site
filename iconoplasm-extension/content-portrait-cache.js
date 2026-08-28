@@ -52,6 +52,45 @@
     })
   }
 
+  async function loadPlannedSource(plan, loadImage, windowRef = root) {
+    const primaryUrl = String(plan?.primaryUrl || "").trim()
+    const fallbackUrl = String(plan?.fallbackUrl || "").trim()
+    const timeoutMs = Number(plan?.timeoutMs || 2500)
+    const hedgeDelayMs = plan?.hedgeDelayMs == null ? null : Math.max(0, Number(plan.hedgeDelayMs))
+    if (!fallbackUrl || fallbackUrl === primaryUrl) return loadImage(primaryUrl, timeoutMs)
+
+    const primaryController = typeof AbortController === "function" ? new AbortController() : null
+    const fallbackController = typeof AbortController === "function" ? new AbortController() : null
+    let startFallback
+    let fallbackStarted = false
+    let hedgeTimer = null
+    const fallbackPromise = new Promise((resolve, reject) => {
+      startFallback = () => {
+        if (fallbackStarted) return
+        fallbackStarted = true
+        loadImage(fallbackUrl, timeoutMs, fallbackController?.signal).then(
+          (url) => resolve({ url, lane: "fallback" }),
+          reject,
+        )
+      }
+      if (hedgeDelayMs !== null) hedgeTimer = windowRef.setTimeout(startFallback, hedgeDelayMs)
+    })
+    const primaryPromise = loadImage(primaryUrl, timeoutMs, primaryController?.signal)
+      .then((url) => ({ url, lane: "primary" }))
+      .catch((error) => {
+        startFallback()
+        throw error
+      })
+    try {
+      const winner = await Promise.any([primaryPromise, fallbackPromise])
+      if (winner.lane === "primary") fallbackController?.abort()
+      else primaryController?.abort()
+      return winner.url
+    } finally {
+      if (hedgeTimer) windowRef.clearTimeout(hedgeTimer)
+    }
+  }
+
   function createPortraitCache(options = {}) {
     const windowRef = options.windowRef || root
     const runtimeMessage = options.sendMessage
@@ -96,47 +135,6 @@
       return dataUrl
     }
 
-    async function loadPlannedSource(plan) {
-      const primaryUrl = String(plan?.primaryUrl || "").trim()
-      const fallbackUrl = String(plan?.fallbackUrl || "").trim()
-      const timeoutMs = Number(plan?.timeoutMs || 2500)
-      const hedgeDelayMs =
-        plan?.hedgeDelayMs == null ? null : Math.max(0, Number(plan.hedgeDelayMs))
-      if (!fallbackUrl || fallbackUrl === primaryUrl) return loadImage(primaryUrl, timeoutMs)
-
-      const primaryController = typeof AbortController === "function" ? new AbortController() : null
-      const fallbackController =
-        typeof AbortController === "function" ? new AbortController() : null
-      let startFallback
-      let fallbackStarted = false
-      let hedgeTimer = null
-      const fallbackPromise = new Promise((resolve, reject) => {
-        startFallback = () => {
-          if (fallbackStarted) return
-          fallbackStarted = true
-          loadImage(fallbackUrl, timeoutMs, fallbackController?.signal).then(
-            (url) => resolve({ url, lane: "fallback" }),
-            reject,
-          )
-        }
-        if (hedgeDelayMs !== null) hedgeTimer = windowRef.setTimeout(startFallback, hedgeDelayMs)
-      })
-      const primaryPromise = loadImage(primaryUrl, timeoutMs, primaryController?.signal)
-        .then((url) => ({ url, lane: "primary" }))
-        .catch((error) => {
-          startFallback()
-          throw error
-        })
-      try {
-        const winner = await Promise.any([primaryPromise, fallbackPromise])
-        if (winner.lane === "primary") fallbackController?.abort()
-        else primaryController?.abort()
-        return winner.url
-      } finally {
-        if (hedgeTimer) windowRef.clearTimeout(hedgeTimer)
-      }
-    }
-
     async function getUsableSrc(portraitSrc) {
       if (disposed) return ""
       const url = String(portraitSrc || "").trim()
@@ -147,43 +145,22 @@
 
       const request = (async () => {
         try {
-          const plan = await runtimeMessage({ type: "GET_PORTRAIT_SOURCE_PLAN", url })
-          if (disposed) return ""
-          if (plan?.ok && plan.primaryUrl) {
-            try {
-              const sourceUrl = await loadPlannedSource(plan)
-              await runtimeMessage({
-                type: "REPORT_PORTRAIT_SOURCE_RESULT",
-                url: sourceUrl,
-                succeeded: true,
-                decisionId: plan.decisionId,
-              })
-              rememberDataUrl(url, sourceUrl)
-              return sourceUrl
-            } catch (sourceError) {
-              if (disposed || sourceError?.code === "ICONOPLASM_CONTEXT_INVALIDATED") return ""
-              // A host-page CSP failure is indistinguishable from a network
-              // failure here. Let the privileged worker fallback perform the
-              // authoritative source transition instead of poisoning tab state.
-            }
-          }
-          // Compatibility/correctness fallback for host pages whose CSP blocks
-          // extension-owned HTTPS images. It is no longer the normal hot path.
           const response = await runtimeMessage({ type: "GET_PORTRAIT_DATA_URL", url })
           const dataUrl = response?.ok && response.dataUrl ? response.dataUrl : ""
-          if (dataUrl) {
-            rememberDataUrl(url, dataUrl)
-            return dataUrl
-          }
-          const sourceUrl = response?.ok && response.sourceUrl ? response.sourceUrl : ""
-          if (sourceUrl) return sourceUrl
+          if (!dataUrl || disposed) return ""
+          // Bytes are shared across websites by the extension background cache.
+          // Decode locally in the actual renderer; never start another HTTPS load.
+          await loadImage(dataUrl, 2500)
+          if (disposed) return ""
+          rememberDataUrl(url, dataUrl)
+          return dataUrl
         } catch (error) {
           if (disposed || error?.code === "ICONOPLASM_CONTEXT_INVALIDATED") return ""
-          // Fall back to the direct site URL below.
+          // An unavailable image is not a successful cache entry.
         } finally {
           promiseCache.delete(url)
         }
-        return url
+        return ""
       })()
 
       promiseCache.set(url, request)
@@ -259,6 +236,7 @@
 
   root.IconoplasmContentPortraitCache = {
     createPortraitCache,
+    loadPlannedSource,
     loadBrowserImage,
   }
 })(typeof globalThis !== "undefined" ? globalThis : this)

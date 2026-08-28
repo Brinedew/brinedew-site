@@ -8,6 +8,8 @@ import {
 // request retry, and server-side read-source selection. Keep browser source
 // selection in the shared delivery core, but do not recreate Storage-vs-CDN
 // fallback logic in routes, notification senders, or maintenance jobs.
+// Extension cross-site byte persistence is client-side only; it does not change
+// this server-side source order or introduce another storage authority.
 
 function joinUrl(base, key) {
   const normalizedBase = String(base || "").replace(/\/+$/, "")

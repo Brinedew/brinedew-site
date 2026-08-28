@@ -296,7 +296,7 @@ test("IPD-001 late image results cannot undo a newer source decision", () => {
 })
 
 // ARCHITECTURE FENCE [IPD-008]
-test("IPD-008 keeps foreground hover on immutable cancellable reads and native portrait loading", () => {
+test("IPD-008 keeps foreground hover on immutable cancellable reads and cross-site portrait reuse", () => {
   const contentSource = readRepositoryFile("iconoplasm-extension/content.js")
   const apiSource = readRepositoryFile("iconoplasm-extension/content-api.js")
   const portraitSource = readRepositoryFile("iconoplasm-extension/content-portrait-cache.js")
@@ -318,7 +318,17 @@ test("IPD-008 keeps foreground hover on immutable cancellable reads and native p
     /runtime\.sendMessage/,
     "Portrait requests must share terminal update-disconnection handling with metadata",
   )
-  assert.match(portraitSource, /GET_PORTRAIT_SOURCE_PLAN/)
+  assert.match(portraitSource, /GET_PORTRAIT_DATA_URL/)
+  assert.doesNotMatch(portraitSource, /GET_PORTRAIT_SOURCE_PLAN/)
+  const background = readRepositoryFile("iconoplasm-extension/service-worker.js")
+  assert.match(background, /portraitByteCache\.get/)
+  assert.match(background, /cardResponseCache\.get/)
+  assert.doesNotMatch(
+    contentSource,
+    /storageApi: chrome\.storage\.local|\.hydratePersistentCache\(/,
+    "pages must not clone the whole saved detail or locator collection",
+  )
+  assert.match(background, /loadPlannedSource/)
   assert.match(portraitSource, /new ImageCtor\(\)/)
   assert.match(portraitSource, /Promise\.any\(\[primaryPromise, fallbackPromise\]\)/)
   assert.match(routeSource, /public_card_snapshot_gene/)
@@ -343,7 +353,7 @@ test("IPD-008 forbids public KV discovery scans and preserves one bounded portra
   )
   assert.match(
     fence.change_control,
-    /never run on Data Saver or 2G, exceed ten symbols or two workers/,
+    /never run on Data Saver or 2G, exceed ten symbols per selection or ten concurrent preparation tasks/,
   )
 
   const policyTests = readRepositoryFile("workers/iconoplasm-publication-alias-policy.test.js")

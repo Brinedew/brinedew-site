@@ -9,6 +9,13 @@ content-addressed full cards, independent gene/portrait projections, small
 hash directories, packed bulk-read shards and the root manifest. It never
 selects a winner. R2 and paid Cloudflare upgrades are not prerequisites.
 
+The deployed Worker composition dispatches declared routes from the shared
+route contract, including `/published-cards/v2/immutable/*`; a nested handler
+test alone cannot prove that first-party fallback avoids a static-site 404.
+For an extension tab already using first-party metadata, use its exact
+snapshot/lane endpoint directly. Do not resolve the manifest, directory and
+object through three serial first-party requests just to reach that same record.
+
 The coordinator changes its head and watermark in one synchronous transaction
 only after every referenced object has passed an authenticated GET/hash check.
 An accepted PUT or a successful HEAD is not sufficient evidence of readable
@@ -62,12 +69,17 @@ Each article checks `/api/public/v1/card-current` independently of
 the scanner's five-minute refresh. A cache-only `GET_GENE_DATA` first permits
 local recognition after the initial paint boundary, without network or portrait
 hydration. `GET_CARD_FRESHNESS` runs once after host load or on explicit early
-hover; a cold `GET_GENE_DATA` already performs the same check and is not repeated.
-Both card lanes and disk hydration wait for this selection, not the scanner.
-A minutes-old installation check cannot
-skip this request. The returned epoch belongs to that article; another tab's
-storage update cannot replace it or refetch its visible hover. No timer polls
-an idle article. A failed check retains the coherent cached epoch.
+hover; a cold `GET_GENE_DATA` performs the same selection. If a last-known
+published epoch exists, selection returns it immediately from local storage.
+The head check runs in the background and saves its validated result for future
+articles. Only an installation without a saved epoch waits for the network.
+Both card lanes and disk hydration use the selected epoch. This deliberately
+allows a coherent older card on the first article after a publication, instead
+of blanking a saved card until the network responds. The next article adopts
+the refreshed head. Another tab's storage update cannot replace an open
+article's epoch or refetch its visible hover. Older concurrent checks cannot
+overwrite a newer check's saved result. No timer polls an idle article. Failed
+checks retain the saved epoch; explicit retirement still forces recovery.
 Disk-cache hydration must use that explicitly selected article epoch, never
 replace it with the browser-global saved version. A delayed storage lookup
 cannot undo a newer explicit selection. A differently versioned cache belongs
@@ -146,17 +158,24 @@ The second transfer followed completion of the first, adding a serial network
 wait. HTTP caches are partitioned by browsing context; preparing a host-page
 `Image` does not certify that the embedded card can paint it.
 
-The adapter still owns the tab's source plan, 350 ms hedge and losing-source
-cancellation. Its native image loader now runs in the existing persistent card
-frame for framed layouts, or in the host for the simple layout. A bounded image
-request protocol waits for frame readiness and acknowledges only the exact URL
-after load/decode. It propagates cancellation, rejects mismatched replies and
-has a deadline even if a frame never responds. No new image authority, provider
-policy, worker-byte hot path, global cache or permission is introduced. Verify
-actual packaged requests on an ordinary page with routing/cache interception
-off; a routed synthetic fixture disables HTTP caching and cannot alone prove
-cross-context duplicate transfers. This client change requires a new authorized
-store release; it is not shipped to users by a backend deployment.
+Moving the HTTPS loader into the displaying frame removed that within-page
+duplicate, but did not solve reuse across websites. A retained installation
+then downloaded the same BRCA1 bytes again when moving from Wikipedia to PMC;
+the first paper hover took 3.7 seconds with browser cache interception disabled.
+
+The background now owns bounded extension-origin IndexedDB for exact public
+card responses and immutable portrait bytes. A miss uses the existing tab source
+plan, 350 ms hedge and losing-source cancellation. The displaying frame (or
+simple host layout) decodes the returned data URL, without a second HTTPS read.
+The bounded frame protocol acknowledges only the matching request after decode
+and retains cancellation and deadlines. Provider and publication authority do
+not change; no new permission is required. Cache limits and migration evidence
+are in `ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md`.
+
+Verify packaged requests on ordinary pages with routing/cache interception off;
+a routed synthetic fixture disables HTTP caching and cannot alone prove
+cross-site reuse. This client change requires a new authorized store release;
+it is not shipped to users by a backend deployment.
 
 ## Explicit migration and verification
 
