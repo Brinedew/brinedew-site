@@ -121,6 +121,7 @@ const wxtZipPath = resolve(wxtOutRoot, "wxt-build.zip")
 
 const commonRuntimeFiles = [
   "metadata-delivery.js",
+  "immutable-response-cache.js",
   "manifest.json",
   "blocklist-defaults.js",
   "content-api.js",
@@ -372,6 +373,8 @@ function validatePackagedBackground() {
       "publication-alias-overlay.js",
       "content-settings.js",
       "metadata-delivery.js",
+      "immutable-response-cache.js",
+      "content-portrait-cache.js",
       "service-worker.js",
     ]
     const actualScripts = packagedManifest.background?.scripts

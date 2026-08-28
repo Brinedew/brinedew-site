@@ -139,7 +139,6 @@
   const DISCOVERY_SYMBOL_COOLDOWN_MS = 30 * 1000
   const DISCOVERY_AUTH_CACHE_TTL_MS = 5 * 60 * 1000
   const GUEST_DISCOVERY_SYMBOL_MAX = 2000
-  const GENE_DETAIL_PERSISTENT_MAX_BYTES = 4 * 1024 * 1024
   const GENE_DATA_REQUEST_TIMEOUT_MS = 5000
   const GENE_DATA_RETRY_DELAY_MS = 750
   // Fence: the hover card needs identity, accent color, synced essence, and the
@@ -708,21 +707,10 @@
     visibleLimit: 64,
     delayMs: 20,
     deferTask: deferGeneDetailWarm,
-    deferPersistenceTask: deferGeneDetailPersistence,
-    // ARCHITECTURE FENCE [IPD-008]: public detail is immutable inside the
-    // published card snapshot. Reuse it across pages instead of paying the
-    // Worker and KV read plane again for the same gene.
-    storageApi: chrome.storage.local,
-    persistentLimit: 512,
-    persistentByteLimit: GENE_DETAIL_PERSISTENT_MAX_BYTES,
+    // Persistence is owned by the background's exact-record store. Each page
+    // must not hydrate or rewrite a second multi-megabyte copy of that cache.
     requestTimeoutMs: 4000,
-    getRevision: async () => {
-      const stored = await chrome.storage.local.get([
-        "iconoplasm_card_snapshot_version",
-        "iconoplasm_hash",
-      ])
-      return stored.iconoplasm_card_snapshot_version || stored.iconoplasm_hash || ""
-    },
+    getRevision: async () => activeCardSnapshotRevision,
     onError: (err) => {
       if (runtimeDisconnected) return
       console.error("[Iconoplasm] extension gene detail batch fetch error:", err)
@@ -748,22 +736,8 @@
     visibleLimit: 64,
     delayMs: 20,
     deferTask: deferGeneDetailWarm,
-    deferPersistenceTask: deferGeneDetailPersistence,
-    // ARCHITECTURE FENCE [IPD-008] + [IPD-011]: this tiny cache is keyed by the
-    // exact card snapshot and stores only a projection of that card. It is not a
-    // browser-owned portrait pointer or an independently versioned canon.
-    storageApi: chrome.storage.local,
-    storageKey: "iconoplasm_published_portrait_locator_cache_v1",
-    persistentLimit: 1024,
-    persistentByteLimit: 768 * 1024,
     requestTimeoutMs: 4000,
-    getRevision: async () => {
-      const stored = await chrome.storage.local.get([
-        "iconoplasm_card_snapshot_version",
-        "iconoplasm_hash",
-      ])
-      return stored.iconoplasm_card_snapshot_version || stored.iconoplasm_hash || ""
-    },
+    getRevision: async () => activeCardSnapshotRevision,
     onError: (err) => {
       if (runtimeDisconnected) return
       console.error("[Iconoplasm] extension portrait locator fetch error:", err)
@@ -1325,14 +1299,6 @@
     )
   }
 
-  function deferGeneDetailPersistence(task) {
-    return IconoContentTooltip.postBackgroundTask(task, {
-      windowRef: window,
-      delay: 50,
-      timeout: 500,
-    })
-  }
-
   function shouldIgnoreMutationNode(node) {
     if (!node) return true
     const el =
@@ -1450,7 +1416,7 @@
   const hostBackgroundWork = IconoContentLifecycle.scheduleHostFirstBackgroundWork({
     documentRef: document,
     windowRef: window,
-    quietDelayMs: 1000,
+    quietDelayMs: 0,
     task: () => readingSession.startSpeculation(),
   })
 
@@ -1806,8 +1772,9 @@
     if (articleCardsPromise) return articleCardsPromise
     // ARCHITECTURE FENCE [IPD-008]: recognition may precede load, but it must
     // not hydrate an old portrait and later replace it. Select this article's
-    // epoch exactly once, before either lane or persistent cache can be used.
-    // Only explicit foreground hover may bring this network step before load.
+    // last-known epoch exactly once, before either lane or persistent cache.
+    // The background checks freshness for future articles without holding a
+    // saved card hostage or replacing this article's epoch mid-read.
     articleCardsPromise = (async () => {
       if (!articleScannerPayload) throw new Error("Article scanner not initialized")
       if (usesTooltipFrameRenderer()) ensureLitArchivalFrame()
@@ -1818,8 +1785,6 @@
       const revision = selection?.cardSnapshotVersion || articleScannerPayload.cardSnapshotVersion
       if (!revision) throw new Error("Article card snapshot unavailable")
       adoptCardSnapshotRevision(revision)
-      void geneDetailStore.hydratePersistentCache()
-      void portraitLocatorStore.hydratePersistentCache()
     })().catch((error) => {
       articleCardsPromise = null
       throw error

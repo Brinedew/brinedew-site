@@ -2,7 +2,7 @@
 // Supply these exported functions to Playwright MCP with its existing Page. Never launch a second
 // browser/profile or silently convert a failed browser journey into a skip.
 export const READER_BUDGETS = Object.freeze({
-  preparedPaintMs: 200,
+  preparedPaintMs: 50,
   foregroundPaintMs: 1000,
   highlightAfterLoadMs: 1500,
   predictionLeadMs: 2000,
@@ -127,6 +127,7 @@ export function installReaderProbe() {
     if (armed && !armed.pointerAt) armed.pointerAt = epoch()
   }
   document.addEventListener("pointermove", pointer, true)
+  document.addEventListener("pointerover", pointer, true)
   function frame(now) {
     if (!active) return
     if (lastFrame && document.visibilityState === "visible")
@@ -137,7 +138,11 @@ export function installReaderProbe() {
       // Child-frame visibility is gated by the parent shell in the aggregator.
       const root =
         shell || (location.protocol.endsWith("extension:") && document.querySelector(".icono-card"))
-      if (root && visible(root)) {
+      // A same-gene card can remain visible during its close grace period.
+      // Never timestamp that previous hover before the new pointer arrives.
+      // Frames may observe predecoded pixels early; the parent shell clock
+      // gates the aggregate and must always start after pointer entry.
+      if (root && visible(root) && (!shell || armed.pointerAt)) {
         if (shell) result.shellAt ??= epoch()
         const image = [...root.querySelectorAll("img")].find(
           (img) =>
@@ -216,6 +221,7 @@ export function installReaderProbe() {
       mutations.disconnect()
       tasks?.disconnect()
       document.removeEventListener("pointermove", pointer, true)
+      document.removeEventListener("pointerover", pointer, true)
       delete globalThis.__iconoplasmReaderProbe
     },
   }
@@ -353,22 +359,34 @@ export async function measureHover(page, diagnostics, sample) {
       ) &&
       record.visibleLeadMs >= READER_BUDGETS.predictionLeadMs
     const deadline = Date.now() + timeoutMs
-    const frames = page
-      .frames()
-      .filter((frame) => frame === page.mainFrame() || /lit-archival-frame\.html/.test(frame.url()))
-    for (const frame of frames) {
-      await frame.evaluate(installReaderProbe)
-      await frame.evaluate((value) => globalThis.__iconoplasmReaderProbe.arm(value), {
-        symbol: sample.symbol,
-        sha: record.before.portraitSha || "",
-        deadline,
-      })
+    const armedFrames = new Set()
+    const observeFrames = async () => {
+      const frames = page
+        .frames()
+        .filter(
+          (frame) => frame === page.mainFrame() || /lit-archival-frame\.html/.test(frame.url()),
+        )
+      for (const frame of frames) {
+        if (armedFrames.has(frame)) continue
+        await frame.evaluate(installReaderProbe)
+        await frame.evaluate((value) => globalThis.__iconoplasmReaderProbe.arm(value), {
+          symbol: sample.symbol,
+          sha: record.before.portraitSha || "",
+          deadline,
+        })
+        armedFrames.add(frame)
+      }
+      return frames
     }
+    await observeFrames()
     // PDF hit anchors intentionally sit under selectable text. Real pointer
     // coordinates exercise the PDF hit tester; force-hover/dispatchEvent do not.
     await page.mouse.move(point.x, point.y)
     let measurements
     while (Date.now() < deadline) {
+      // A cold hover can create its renderer after pointer entry. Observe that
+      // frame too, without restarting the parent's clock or the deadline.
+      const frames = await observeFrames()
       measurements = await Promise.all(
         frames.map((frame) =>
           frame.evaluate(() =>
@@ -379,15 +397,21 @@ export async function measureHover(page, diagnostics, sample) {
       const parent = measurements[0]
       const painted = measurements.find((m) => m.result?.imageAt)
       const detail = measurements.find((m) => m.result?.detailsAt)
+      // Before the first hover there may be no selected snapshot yet. Validate
+      // against the epoch actually selected by that hover, never the empty
+      // pre-hover value; preserve that original cold readiness measurement.
+      const selectedRevision =
+        record.before.revision || (painted && (await diagnostics.inspect(sample.symbol))?.revision)
       const sourceVerified =
         painted &&
         (!painted.result.image.src.startsWith("data:") ||
           (await diagnostics.matchesPortraitSource(
             sample.symbol,
             painted.result.image.src,
-            record.before.revision,
+            selectedRevision,
           )))
       if (parent.pointerAt && parent.result?.shellAt && painted && sourceVerified) {
+        record.selectedRevision = selectedRevision
         record.imageMs = Math.max(parent.result.shellAt, painted.result.imageAt) - parent.pointerAt
         record.image = {
           ...painted.result.image,
@@ -450,19 +474,22 @@ export async function runReaderJourney(
       },
       { symbol, kind: "repeat", leadMs: 0 },
     ])
-  if (
-    !Array.isArray(path) ||
-    !path.length ||
-    path.length * rounds > 160 ||
-    path.some(
-      (step) =>
-        !/^[A-Z0-9-]{1,64}$/.test(step.symbol) ||
-        !Number.isFinite(step.leadMs) ||
-        step.leadMs < 0 ||
-        step.leadMs > 10000,
+  function validatePath(selected) {
+    if (
+      !Array.isArray(selected) ||
+      !selected.length ||
+      selected.length * rounds > 160 ||
+      selected.some(
+        (step) =>
+          !/^[A-Z0-9-]{1,64}$/.test(step.symbol) ||
+          !Number.isFinite(step.leadMs) ||
+          step.leadMs < 0 ||
+          step.leadMs > 10000,
+      )
     )
-  )
-    throw new Error("Invalid or unbounded reader path")
+      throw new Error("Invalid or unbounded reader path")
+  }
+  if (typeof path !== "function") validatePath(path)
   const diagnostics = await openDiagnostics(page)
   const samples = []
   const pages = []
@@ -520,7 +547,12 @@ export async function runReaderJourney(
       if (navigate) await navigate(page, round)
       else if (round === 0) await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 })
       else await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 })
-      for (const step of path) {
+      // A caller may select the actual visible anchors after recognition,
+      // without consulting readiness. Navigation/highlight time remains in
+      // the trace; dynamic paths have the same bounded validation as fixed ones.
+      const selectedPath = typeof path === "function" ? await path(page, round) : path
+      validatePath(selectedPath)
+      for (const step of selectedPath) {
         samples.push(
           await measureHover(page, diagnostics, {
             surface,

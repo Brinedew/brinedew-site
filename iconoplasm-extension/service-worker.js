@@ -6,6 +6,8 @@
 // sync or a multi-megabyte catalog refetch.
 
 if (typeof importScripts === "function") {
+  if (!globalThis.IconoplasmImmutableResponseCache) importScripts("immutable-response-cache.js")
+  if (!globalThis.IconoplasmContentPortraitCache) importScripts("content-portrait-cache.js")
   if (!globalThis.IconoplasmMetadataDelivery) {
     importScripts("metadata-delivery.js")
   }
@@ -40,6 +42,19 @@ if (!IconoContentSettings) {
 }
 
 const HOST = "https://iconoplasm.brinedew.bio"
+const portraitByteCache = globalThis.IconoplasmImmutableResponseCache.createImmutableResponseCache({
+  name: "iconoplasm-portrait-bytes-v1",
+  maxEntries: 8192,
+  maxBytes: 64 * 1024 * 1024,
+  maxEntryBytes: 512 * 1024,
+})
+const cardResponseCache = globalThis.IconoplasmImmutableResponseCache.createImmutableResponseCache({
+  name: "iconoplasm-card-responses-v1",
+  maxEntries: 32768,
+  maxBytes: 32 * 1024 * 1024,
+  maxEntryBytes: 64 * 1024,
+})
+const portraitRequests = new Map()
 const metadataDelivery = globalThis.IconoplasmMetadataDelivery.createMetadataDelivery({
   fetchImpl: (...args) => fetch(...args),
 })
@@ -49,8 +64,6 @@ const DATA_REFRESH_TTL_MS = 5 * 60 * 1000
 const MANIFEST_FETCH_TIMEOUT_MS = 5 * 1000
 const ARTIFACT_FETCH_TIMEOUT_MS = 30 * 1000
 const PORTRAIT_DATA_URL_CACHE_LIMIT = 48
-const PORTRAIT_DATA_URL_ERROR_CACHE_LIMIT = 96
-const PORTRAIT_DATA_URL_ERROR_TTL_MS = 30 * 1000
 const PORTRAIT_SOURCE_SESSION_KEY = "iconoplasm_portrait_source_by_tab"
 const REQUIRED_PUBLISHED_CATALOG_SCHEMA_VERSION = Number(
   IconoCatalogContract.catalog?.schemaVersion,
@@ -79,12 +92,12 @@ const CONTRACT_ERROR_INCOMPATIBLE_ARTIFACT = "incompatible_artifact"
 const CONTRACT_ERROR_INCOMPATIBLE_EXTENSION = "incompatible_extension"
 const portraitDataUrlCache = new Map()
 const portraitDataUrlPromiseCache = new Map()
-const portraitDataUrlErrorCache = new Map()
 const portraitSourceByTab = new Map()
 const portraitDeliverySessionByTab = new Map()
 const portraitDeliverySessionPromiseByTab = new Map()
 const apiFetchAbortControllers = new Map()
 const cardFreshnessByTab = new Map()
+let cardHeadRequestSerial = 0
 let portraitSourceStateLoaded = false
 let portraitDeliveryPolicy = IconoPortraitDelivery.normalizePortraitDeliveryPolicy()
 let geneDataRefreshState = null
@@ -147,14 +160,66 @@ function ownedPdfRecordForSender(sourceId, sender) {
   return record
 }
 
+// Upgrade once in the background, never from a page or hover. Retain the old
+// projection until every valid exact record is safely committed to IndexedDB.
+async function migrateLegacyCardCaches() {
+  const lanes = [
+    ["iconoplasm_published_gene_detail_cache_v1", "genes", "gene", 512],
+    ["iconoplasm_published_portrait_locator_cache_v1", "portraits", "portrait_locator", 1024],
+  ]
+  for (const [key, lane, field, limit] of lanes) {
+    try {
+      const stored = (await chrome.storage.local.get(key))[key]
+      if (!stored) continue
+      let complete = true
+      if (
+        stored.schema_version === 1 &&
+        /^ccv2-[a-f0-9]{64}$/.test(stored.revision) &&
+        Array.isArray(stored.entries)
+      ) {
+        for (const [symbol, record] of stored.entries.slice(-limit)) {
+          if (
+            !/^[A-Z0-9][A-Z0-9._-]{0,63}$/.test(symbol) ||
+            record?.symbol !== symbol ||
+            (lane === "portraits" && record.snapshot_version !== stored.revision)
+          )
+            continue
+          const url = `${API_PUBLIC}/card-snapshots/${stored.revision}/${lane}/${symbol}`
+          const payload = {
+            snapshot_version: stored.revision,
+            canonical_key: "symbol",
+            [field]: record,
+            missing: [],
+          }
+          if (
+            !(await cardResponseCache.put(
+              url,
+              new TextEncoder().encode(JSON.stringify(payload)),
+              "application/json",
+            ))
+          ) {
+            complete = false
+            break
+          }
+        }
+      }
+      if (complete) await chrome.storage.local.remove(key)
+    } catch {
+      // Storage failures preserve the old bounded copy for the next startup.
+    }
+  }
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   void initializePdfPreferences()
   void refreshGeneData()
+  void migrateLegacyCardCaches()
 })
 
 chrome.runtime.onStartup.addListener(() => {
   void initializePdfPreferences()
   void refreshGeneData()
+  void migrateLegacyCardCaches()
 })
 
 if (chrome.tabs?.onRemoved?.addListener) {
@@ -237,33 +302,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       ensureFreshGeneData({ cacheOnly: true }).then(sendResponse)
       return true
     }
-    // ARCHITECTURE FENCE [IPD-008]: each new article/reload checks only the
-    // tiny shared current head, independently of the scanner's five-minute
-    // refresh policy. Never poll an already-open article or replace its epoch
-    // because another tab reloaded. A failed check retains its coherent cache.
-    Promise.all([
-      ensureFreshGeneData(),
-      metadataDelivery.current(sender?.tab?.id ?? "extension"),
-    ]).then(([data, head]) => {
-      const cardFreshness = rememberArticleFreshness(
-        sender?.tab?.id,
-        head,
-        data?.cardSnapshotVersion,
-      )
+    ensureFreshGeneData().then(async (data) => {
+      const cardFreshness = await selectArticleCards(sender?.tab?.id, data?.cardSnapshotVersion)
       sendResponse({ ...data, cardSnapshotVersion: cardFreshness.version, cardFreshness })
     })
     return true
   }
   if (msg.type === "GET_CARD_FRESHNESS") {
-    Promise.all([
-      ensureFreshGeneData(),
-      metadataDelivery.current(sender?.tab?.id ?? "extension"),
-    ]).then(([data, head]) => {
-      const cardFreshness = rememberArticleFreshness(
-        sender?.tab?.id,
-        head,
-        data?.cardSnapshotVersion,
-      )
+    selectArticleCards(sender?.tab?.id).then((cardFreshness) => {
       sendResponse({ cardSnapshotVersion: cardFreshness.version, cardFreshness })
     })
     return true
@@ -276,6 +322,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     refreshGeneData({ manifestCacheBustRevision: retiredRevision }).then(async (result) => {
       const stored = await getStoredGeneData()
+      // Explicit retirement supersedes any cached head and any older pending
+      // background check. Never offer the retired epoch to the next article.
+      cardHeadRequestSerial++
+      if (stored.cardSnapshotVersion && stored.cardSnapshotVersion !== retiredRevision) {
+        await chrome.storage.local.set({ iconoplasm_last_card_head: stored.cardSnapshotVersion })
+      } else {
+        await chrome.storage.local.remove("iconoplasm_last_card_head")
+      }
       sendResponse({
         ok: Boolean(result),
         cardSnapshotVersion: stored.cardSnapshotVersion || null,
@@ -448,13 +502,29 @@ async function fetchIconoplasmApi(msg, sender = {}) {
       credentials: msg.credentials === "include" ? "include" : "same-origin",
       ...(controller ? { signal: controller.signal } : {}),
     }
+    const immutable =
+      init.method === "GET" &&
+      path.match(
+        /^\/api\/public\/v1\/card-snapshots\/(ccv2-[a-f0-9]{64})\/(genes|portraits)\/([A-Z0-9][A-Z0-9._-]{0,63})$/,
+      )
+    const cacheKey = `${HOST}${path}`
+    const saved = immutable && (await cardResponseCache.get(cacheKey))
+    if (saved) return { ok: true, status: 200, text: await saved.text() }
     const resp =
       (await metadataDelivery.fetch(`${HOST}${path}`, init, sender?.tab?.id ?? "extension")) ||
       (await fetch(`${HOST}${path}`, init))
+    const text = await resp.text()
+    if (immutable && resp.ok) {
+      const payload = JSON.parse(text)
+      const record = immutable[2] === "genes" ? payload.gene : payload.portrait_locator
+      if (payload.snapshot_version === immutable[1] && record?.symbol === immutable[3]) {
+        void cardResponseCache.put(cacheKey, new TextEncoder().encode(text), "application/json")
+      }
+    }
     return {
       ok: resp.ok,
       status: resp.status,
-      text: await resp.text(),
+      text,
     }
   } catch (err) {
     return {
@@ -664,7 +734,7 @@ async function invalidateStoredPublishedSnapshot({ code, message, minExtensionVe
 function rememberArticleFreshness(tabId, head, cachedVersion) {
   const tab = tabId ?? "extension"
   const cardFreshness = {
-    checkedAt: new Date().toISOString(),
+    checkedAt: head ? new Date().toISOString() : null,
     verified: Boolean(head),
     version: head?.current || cachedVersion || null,
   }
@@ -673,6 +743,41 @@ function rememberArticleFreshness(tabId, head, cachedVersion) {
   while (cardFreshnessByTab.size > 128)
     cardFreshnessByTab.delete(cardFreshnessByTab.keys().next().value)
   return cardFreshness
+}
+
+async function selectArticleCards(tabId, scannerVersion) {
+  // ARCHITECTURE FENCE [IPD-008]: pin a coherent last-known snapshot locally.
+  // Revalidate the tiny head for FUTURE articles; an online freshness check
+  // must not block a saved image or replace an open article's epoch mid-read.
+  const tab = tabId ?? "extension"
+  const stored = await chrome.storage.local.get([
+    "iconoplasm_last_card_head",
+    "iconoplasm_card_snapshot_version",
+  ])
+  const saved = stored.iconoplasm_last_card_head
+  const cachedVersion = /^ccv[12]-[A-Za-z0-9._:-]+$/.test(String(saved || ""))
+    ? saved
+    : scannerVersion || stored.iconoplasm_card_snapshot_version
+  const serial = ++cardHeadRequestSerial
+  const check = metadataDelivery.current(tab).then(async (head) => {
+    if (head?.current && serial === cardHeadRequestSerial) {
+      await chrome.storage.local.set({ iconoplasm_last_card_head: head.current }).catch(() => {})
+    }
+    return head
+  })
+  if (!cachedVersion) return rememberArticleFreshness(tabId, await check, null)
+  const selected = rememberArticleFreshness(tabId, null, cachedVersion)
+  void check
+    .then((head) => {
+      // Keep diagnostic status tied to the selected epoch, not another tab's
+      // newer result. Only the next article adopts the newly observed version.
+      if (cardFreshnessByTab.get(tab) !== selected) return
+      selected.checkedAt = new Date().toISOString()
+      selected.verified = head?.current === selected.version
+      selected.observedVersion = head?.current || null
+    })
+    .catch(() => {})
+  return selected
 }
 
 async function ensureFreshGeneData({ cacheOnly = false } = {}) {
@@ -767,7 +872,6 @@ function arrayBufferToBase64(buffer) {
 
 function rememberPortraitDataUrl(url, dataUrl) {
   if (!url || !dataUrl) return
-  portraitDataUrlErrorCache.delete(url)
   portraitDataUrlCache.delete(url)
   portraitDataUrlCache.set(url, dataUrl)
   while (portraitDataUrlCache.size > PORTRAIT_DATA_URL_CACHE_LIMIT) {
@@ -776,35 +880,10 @@ function rememberPortraitDataUrl(url, dataUrl) {
   }
 }
 
-function rememberPortraitDataUrlError(url, reason = "") {
-  if (!url) return
-  portraitDataUrlCache.delete(url)
-  portraitDataUrlErrorCache.delete(url)
-  portraitDataUrlErrorCache.set(url, {
-    until: Date.now() + PORTRAIT_DATA_URL_ERROR_TTL_MS,
-    reason: String(reason || "").trim(),
-  })
-  while (portraitDataUrlErrorCache.size > PORTRAIT_DATA_URL_ERROR_CACHE_LIMIT) {
-    const oldestKey = portraitDataUrlErrorCache.keys().next().value
-    portraitDataUrlErrorCache.delete(oldestKey)
-  }
-}
-
-function hasFreshPortraitDataUrlError(url) {
-  if (!url || !portraitDataUrlErrorCache.has(url)) return false
-  const cached = portraitDataUrlErrorCache.get(url)
-  const until = Number(cached && cached.until ? cached.until : 0)
-  if (!Number.isFinite(until) || until <= Date.now()) {
-    portraitDataUrlErrorCache.delete(url)
-    return false
-  }
-  return true
-}
-
 function clearPortraitDataUrlCaches() {
   portraitDataUrlCache.clear()
-  portraitDataUrlErrorCache.clear()
   portraitDataUrlPromiseCache.clear()
+  portraitByteCache.clearMemory()
 }
 
 async function clearPortraitSourceStates() {
@@ -867,19 +946,21 @@ function configurePortraitDeliveryPolicy(rawPolicy) {
   return portraitDeliveryPolicy
 }
 
-async function fetchPortraitBytes(resolvedUrl, cacheKey) {
-  if (portraitDataUrlCache.has(cacheKey)) {
+async function fetchPortraitBytes(resolvedUrl, cacheKey, signal) {
+  if (!signal && portraitDataUrlCache.has(cacheKey)) {
     const dataUrl = portraitDataUrlCache.get(cacheKey)
     rememberPortraitDataUrl(cacheKey, dataUrl)
     return dataUrl
   }
-  if (hasFreshPortraitDataUrlError(resolvedUrl)) return ""
   const promiseKey = String(cacheKey || "") + "\n" + String(resolvedUrl || "")
   if (portraitDataUrlPromiseCache.has(promiseKey)) {
     return portraitDataUrlPromiseCache.get(promiseKey)
   }
   const request = (async () => {
     const controller = typeof AbortController === "function" ? new AbortController() : null
+    const abort = () => controller?.abort()
+    signal?.addEventListener("abort", abort, { once: true })
+    if (signal?.aborted) abort()
     const timer = setTimeout(() => controller?.abort(), portraitDeliveryPolicy.probe_timeout_ms)
     try {
       const resp = await fetch(resolvedUrl, {
@@ -890,27 +971,37 @@ async function fetchPortraitBytes(resolvedUrl, cacheKey) {
       })
       if (!resp.ok) {
         console.error("[Iconoplasm] Portrait fetch failed:", resp.status, resolvedUrl)
-        rememberPortraitDataUrlError(resolvedUrl, `http_${resp.status}`)
         return ""
       }
-      const contentType = resp.headers.get("Content-Type") || "image/webp"
+      const contentType = (resp.headers.get("Content-Type") || "image/webp")
+        .split(";")[0]
+        .trim()
+        .toLowerCase()
       const buffer = await resp.arrayBuffer()
+      if (
+        !/^image\/(webp|png|jpeg)(;|$)/i.test(contentType) ||
+        !buffer.byteLength ||
+        buffer.byteLength > 4 * 1024 * 1024
+      )
+        return ""
       const dataUrl = `data:${contentType};base64,${arrayBufferToBase64(buffer)}`
       // Chesterton's fence: only successful portrait bytes enter the cache.
       // Earlier blank-image behavior became hard to reason about because a caller
       // could treat an empty string like a valid warmed result. Keep failures
       // uncached so the next request can recover as soon as the CDN/object is healthy.
       rememberPortraitDataUrl(cacheKey, dataUrl)
+      if (
+        /^\/portraits\/v1\/[a-f0-9]{2}\/[a-f0-9]{64}\/(medium|thumb|full)\.webp$/.test(cacheKey)
+      ) {
+        void portraitByteCache.put(`${HOST}${cacheKey}`, buffer, contentType)
+      }
       return dataUrl
     } catch (err) {
-      console.error("[Iconoplasm] Portrait fetch error:", err)
-      rememberPortraitDataUrlError(
-        resolvedUrl,
-        err && err.message ? err.message : String(err || "fetch_error"),
-      )
+      if (!signal?.aborted) console.error("[Iconoplasm] Portrait fetch error:", err)
       return ""
     } finally {
       clearTimeout(timer)
+      signal?.removeEventListener("abort", abort)
     }
   })().finally(() => {
     if (portraitDataUrlPromiseCache.get(promiseKey) === request) {
@@ -973,22 +1064,41 @@ async function fetchPortraitDataUrl(url, tabId) {
     return { dataUrl, sourceUrl: normalizedUrl }
   }
 
-  const session = await portraitDeliverySession(tabId)
-  const resolvedUrl = await session.ensure(normalizedUrl)
-  let dataUrl = portraitDataUrlCache.get(path) || ""
-  if (!dataUrl) dataUrl = await fetchPortraitBytes(resolvedUrl, path)
-  if (dataUrl) return { dataUrl, sourceUrl: resolvedUrl }
-
-  const failure = session.reportFailure(resolvedUrl)
-  if (!failure.changed || failure.state.state === "terminal_failure") {
-    return { dataUrl: "", sourceUrl: resolvedUrl }
+  const sourceUrl = `${HOST}${path}`
+  const memory = portraitDataUrlCache.get(path)
+  if (memory) {
+    rememberPortraitDataUrl(path, memory)
+    void portraitByteCache.touch(sourceUrl)
+    return { dataUrl: memory, sourceUrl }
   }
-  const alternateUrl = failure.replacementUrl
-  dataUrl = await fetchPortraitBytes(alternateUrl, path)
-  if (!dataUrl) {
-    session.reportFailure(alternateUrl)
-  }
-  return { dataUrl, sourceUrl: alternateUrl }
+  if (portraitRequests.has(path)) return portraitRequests.get(path)
+  const request = (async () => {
+    const saved = await portraitByteCache.get(sourceUrl)
+    if (saved) {
+      const bytes = await saved.arrayBuffer()
+      const dataUrl = `data:${saved.headers.get("Content-Type")};base64,${arrayBufferToBase64(bytes)}`
+      rememberPortraitDataUrl(path, dataUrl)
+      return { dataUrl, sourceUrl }
+    }
+    // ARCHITECTURE FENCE [IPD-001]: cross-site cache misses retain the same
+    // bounded Bunny head start. No serial worker probe before the actual image.
+    const session = await portraitDeliverySession(tabId)
+    const plan = session.plan(normalizedUrl)
+    const winner = await globalThis.IconoplasmContentPortraitCache.loadPlannedSource(
+      plan,
+      async (candidate, _timeoutMs, signal) => {
+        const bytes = await fetchPortraitBytes(candidate, path, signal)
+        if (!bytes) throw new Error("Portrait source unavailable")
+        return candidate
+      },
+    )
+    session.reportSuccess(winner, plan.decisionId)
+    return { dataUrl: portraitDataUrlCache.get(path) || "", sourceUrl: winner }
+  })()
+    .catch(() => ({ dataUrl: "", sourceUrl: "" }))
+    .finally(() => portraitRequests.delete(path))
+  portraitRequests.set(path, request)
+  return request
 }
 
 async function warmPortraitDataUrls(urls, tabId) {
@@ -1363,14 +1473,15 @@ if (globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__) {
     getPdfOwnershipCapability,
     setPdfOwnershipEnabled,
     fetchPortraitDataUrl,
+    portraitByteCache,
+    cardResponseCache,
+    migrateLegacyCardCaches,
     portraitSourcePlan,
     reportPortraitSourceResult,
     warmPortraitDataUrls,
     clearPortraitDataUrlCaches,
     clearPortraitSourceStates,
-    hasFreshPortraitDataUrlError,
     portraitSourceState,
-    portraitErrorTtlMs: PORTRAIT_DATA_URL_ERROR_TTL_MS,
     normalizePublishedManifest,
     acceptPublishedExtensionBlocklist,
     normalizeScannerIndex,

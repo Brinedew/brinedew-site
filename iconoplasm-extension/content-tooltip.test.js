@@ -296,7 +296,11 @@ test("hover portrait discovery is snapshot-keyed and independent of rich-detail 
   assert.doesNotMatch(content, /changes\.iconoplasm_card_snapshot_version\?\.newValue/)
   assert.match(content, /REFRESH_CARD_SNAPSHOT/)
   assert.match(content, /retryVisible && activeTooltipAnchor\?\.isConnected/)
-  assert.match(content, /portraitLocatorStore\.hydratePersistentCache\(\)/)
+  assert.doesNotMatch(
+    content,
+    /portraitLocatorStore\.hydratePersistentCache\(\)/,
+    "locator persistence belongs to the background exact-record cache",
+  )
   assert.match(content, /const hoverGeneDetailPromise =/)
   assert.match(content, /const hoverPortraitLocatorPromise =/)
   assert.match(content, /hoverPortraitLocatorPromise\.then\(\(portraitLocator\) =>/)
@@ -563,7 +567,7 @@ test("frame prewarm acknowledges decoded paint readiness and defers rough decora
   rafQueue.shift()?.(0)
   assert.equal(roughHydrationCount, 1)
 
-  const url = `https://iconoplasm.brinedew.bio/portraits/v1/aa/${"a".repeat(64)}/medium.webp`
+  const url = "data:image/webp;base64,aW1hZ2U="
   const load = { type: "ICONOPLASM_FRAME_LOAD_IMAGE", requestId: "image-1", url, timeoutMs: 2500 }
   listeners.get("message")({ source: {}, data: load })
   assert.equal(
@@ -586,4 +590,9 @@ test("frame prewarm acknowledges decoded paint readiness and defers rough decora
   })
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(posted.find((message) => message.requestId === "image-2")?.ok, false)
+  listeners.get("message")({
+    source: parent,
+    data: { ...load, requestId: "image-3", url: "https://example.test/image.webp" },
+  })
+  assert.equal(posted.find((message) => message.requestId === "image-3")?.ok, false)
 })

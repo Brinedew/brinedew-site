@@ -338,6 +338,11 @@
           return null
         const [, version, lane, symbol] = match
         if (/^ccv2-[a-f0-9]{64}$/.test(version)) {
+          // The caller already has the exact snapshot/lane URL. Once this
+          // tab uses first-party delivery, let that endpoint resolve the
+          // record in one request instead of serially fetching its manifest,
+          // directory and object through three metered Worker requests.
+          if (tabs.get(tab) === ORIGIN) return null
           try {
             const record = await v2Record(version, lane, symbol, init.signal, tab)
             return record ? envelope(version, lane, record) : null

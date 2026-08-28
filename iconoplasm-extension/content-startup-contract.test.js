@@ -21,9 +21,11 @@ test("article startup separates recognition from portrait freshness without a se
     content.indexOf("function ensureArticleCards()"),
     content.indexOf("// -- DOM scanning"),
   )
-  assert.ok(
-    cards.indexOf("adoptCardSnapshotRevision(revision)") <
-      cards.indexOf("hydratePersistentCache()"),
+  assert.match(cards, /adoptCardSnapshotRevision\(revision\)/)
+  assert.doesNotMatch(
+    cards,
+    /hydratePersistentCache/,
+    "article startup must not clone the full saved cache",
   )
   assert.match(cards, /articleScannerPayload.cardFreshness/)
   assert.match(cards, /GET_CARD_FRESHNESS/)

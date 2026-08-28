@@ -40,13 +40,21 @@ a title, placeholder or previous gene's image is not success. Frame measurements
 must be gated by the visible parent tooltip. Timing measures browser paint
 opportunities, not physical display scanout.
 
+A cold foreground hover may create the renderer iframe and select the article's
+snapshot only after pointer entry. The observer follows newly created renderer
+frames without restarting the pointer clock or deadline. Image-source validation
+uses that selected snapshot while preserving the empty pre-hover revision in the
+readiness record. Otherwise the observer can incorrectly report a loaded card as
+an eight-second timeout.
+
 Read-only `IconoplasmReaderDiagnostics.inspect(symbol)` is available in the
 extension's isolated world and its own PDF page. It exposes public epoch and
 readiness booleans only; it must never fetch, promote requests, update LRU order,
 read private storage or start background work. `prepared` is scheduler state,
 **not** proof of a decoded portrait; inspect `portraitReady` independently.
 
-Initial engineering budgets, not owner promises: prepared-image paint <=200 ms;
+Prepared-image paint must be <=50 ms; 200 ms is not an acceptable saved-image
+success threshold (owner correction, 2026-08-28). Other engineering budgets:
 foreground recovery <=1,000 ms (cold first-hover delays remain failures);
 highlight arrival <=1,500 ms after host load; examine prediction readiness after
 a fixed 2,000 ms near-viewport lead. Do not wait for readiness and then start the
@@ -59,6 +67,21 @@ samples. Five reloads and many repeats must never be pooled to hide five slow
 first hovers.
 
 ## Required journeys
+
+Unfamiliar-gene acceptance must include successive distinct genes on an ordinary
+article, not many repeats of one prepared gene. Record the queued/in-flight state
+before every pointer entry. A timeout on the first gene gives later genes extra
+preparation time; those later successes cannot certify normal reading cadence.
+Cross-site reuse is a separate journey with the same installation and storage
+retained. Reinstalling between pages invalidates that reuse test.
+
+Run unfamiliar-gene pages twice as distinct populations: hover immediately after
+recognition, and hover after exactly 10 seconds from the host `load` event. Record
+which exact metadata/image keys existed before navigation. Do not wait for cache
+readiness, select genes because they are ready, or pool cold first-page startup
+with a settled page. A cold network delay at immediate first use and an unprepared
+gene after ten idle seconds are different failures. Sequential next-gene and repeat
+timings must remain separate from both.
 
 1. First use/cold catalog, ordinary reload with persistent cache, new article,
    background-worker restart, and an extension-update/reload cycle. Explicitly
@@ -97,6 +120,32 @@ two-second deadline for loading the entire host article. Missing metadata counts
 as failed prediction readiness, not a canonically absent portrait.
 
 ## Diagnostic interpretation
+
+### Retained-install cache verification - 2026-08-28
+
+DEV runtime fingerprint `f4ed0831338aa0e363392fbc64594ce1971b7c1caf4cf5d6c5b82a5118f17826`,
+normal HTTP caching, no route interception, the reader's chosen `simple` layout:
+
+| Population | Samples | Measured result |
+| --- | ---: | --- |
+| Saved BRCA1, alternating Wikipedia and PMC395646 | 20 first hovers | p50 15.4 ms, p95 19.6 ms, maximum 23.4 ms |
+| Same-page BRCA1 repeats, kept separate | 20 | p50 3.4 ms, p95 5.9 ms, maximum 7 ms |
+| After an actual extension-runtime restart | 2 first hovers | 21 / 14 ms, no BRCA1 image or metadata requests |
+| Exactly ten seconds after host load: interleukin-1 family, matrix metalloproteinase, integrin, cadherin, nuclear receptor | 25 hovers, 22 previously unsaved genes | all decoded before pointer entry; 8–18.9 ms |
+| Freshly loaded, previously unseen connexin article | 2 successive genes | first 1,000.3 ms, next 8.4 ms; cold startup remains a separate population |
+
+Across the twenty saved first hovers and twenty repeats there were zero BRCA1
+portrait or card-metadata requests. A native Chrome IndexedDB test retained the
+first of 160 forty-KiB records across a new cache instance; this is a storage
+test, not a claim that 160 real cards were visually inspected. The actual reader
+store held 97 portraits (4.55 MB) and 623 metadata records (0.82 MB), including
+BRCA1. Upgrade removed the old whole-cache metadata keys only after migration.
+The 50 ms prepared-image criterion passed; the earlier 200 ms criterion is retired.
+
+Raw observations, including earlier failed iterations, remain in
+`artifacts/hover-recovery-audit-20260828/`. This verifies the reported HTML hover
+regression in this browser/network; it does not certify Vietnam ISP reachability,
+the full PDF/low-bandwidth matrix, store propagation, or 10,000-reader capacity.
 
 - No highlight: separate host-load gate, scanner response, matching and scan work.
 - Highlighted but not ready after lead: inspect speculation policy/gate, queue,

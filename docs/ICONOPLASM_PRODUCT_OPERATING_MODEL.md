@@ -141,6 +141,21 @@ may be inferred from an isolated component ceiling.
 
 ## Change and freshness contract
 
+### Extension cache selection migration - 2026-08-28
+
+To remove network waits from saved-card display, the extension now pins the
+last-known published epoch at article startup and checks the current head in the
+background. That check updates the next article's selection, not the already
+open article. With no saved epoch, selection still waits for the head. Explicit
+retirement recovers immediately through the existing manifest contract.
+
+This is a deliberate exception to the earlier requirement below to always adopt
+the newest head on the first reload: one new article may use a coherent older
+snapshot. It preserves the owner's higher priority of scale and smooth reading;
+do not describe it as always-latest or as evidence of a worldwide freshness SLA.
+See `ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md` for the retained-cache and delayed-head
+tests. Website and publishing freshness behavior are unchanged.
+
 ### Owner clarification — 2026-08-27
 
 **Stable while reading; fresh on reload.** This supersedes the former

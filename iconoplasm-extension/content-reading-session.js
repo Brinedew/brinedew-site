@@ -16,8 +16,6 @@
   function workingSetPolicy(connection = {}, deviceMemory = 0) {
     const effectiveType = String(connection?.effectiveType || "").toLowerCase()
     const saveData = Boolean(connection?.saveData)
-    const rtt = Math.max(0, finiteNumber(connection?.rtt))
-    const downlink = Math.max(0, finiteNumber(connection?.downlink))
     const memory = Math.max(0, finiteNumber(deviceMemory))
     if (saveData || effectiveType === "slow-2g" || effectiveType === "2g") {
       return Object.freeze({
@@ -27,23 +25,11 @@
         visibleLimit: 0,
       })
     }
-    const constrained =
-      effectiveType === "3g" || (rtt >= 300 && rtt > 0) || (downlink > 0 && downlink < 1.5)
-    if (constrained || (memory > 0 && memory <= 2)) {
-      return Object.freeze({
-        speculative: true,
-        concurrency: 1,
-        documentLimit: 10,
-        visibleLimit: 10,
-      })
-    }
-    const generous =
-      effectiveType === "4g" &&
-      rtt > 0 &&
-      rtt <= 100 &&
-      downlink >= 8 &&
-      (memory === 0 || memory >= 4)
-    if (generous) {
+    // RTT and Chrome's broad effective-type estimate are not a byte budget.
+    // Serializing an entire locator -> image -> detail pipeline on a high-RTT
+    // connection made every next gene cold. Overlap a bounded working window;
+    // explicit Data Saver/2G still disables speculation above.
+    if (memory > 0 && memory <= 2) {
       return Object.freeze({
         speculative: true,
         concurrency: 2,
@@ -51,7 +37,12 @@
         visibleLimit: 10,
       })
     }
-    return Object.freeze({ speculative: true, concurrency: 2, documentLimit: 10, visibleLimit: 10 })
+    return Object.freeze({
+      speculative: true,
+      concurrency: 10,
+      documentLimit: 10,
+      visibleLimit: 10,
+    })
   }
 
   function normalizeSymbol(value) {
@@ -87,6 +78,7 @@
     let speculationStarted = false
     let disposed = false
     let viewportFrame = 0
+    let viewportRefreshEvicted = false
     let policy = workingSetPolicy(options.connection, options.deviceMemory)
 
     const observer =
@@ -177,6 +169,10 @@
             activeWorkers -= 1
             inFlightSymbols.delete(queued.symbol)
             drain()
+            // Completing a window must expose the next visible cold symbols,
+            // even when the reader has not scrolled. This is progress-driven,
+            // not a timer: automatic refills never retry an attempted symbol.
+            scheduleVisibleWindow(false)
           })
       }
     }
@@ -202,7 +198,7 @@
       Promise.resolve().then(prepareDocumentInventory)
     }
 
-    function prepareVisibleWindow() {
+    function prepareVisibleWindow(refreshEvicted = true) {
       if (!speculationStarted || !policy.speculative || documentRef?.visibilityState === "hidden") {
         return
       }
@@ -212,7 +208,9 @@
         const symbol = anchorSymbols.get(anchor)
         // Ready sticky headers/sidebar aliases used to occupy all ten slots
         // forever, starving actual article text with an entirely empty queue.
-        if (!symbol || (readySymbols.has(symbol) && isPrepared(symbol))) continue
+        if (!symbol || (readySymbols.has(symbol) && (!refreshEvicted || isPrepared(symbol))))
+          continue
+        if (!refreshEvicted && retryAfter.has(symbol)) continue
         if ((retryAfter.get(symbol)?.at || 0) > now()) continue
         const rect = anchor.getBoundingClientRect?.()
         if (rect && (!rect.width || !rect.height)) continue
@@ -238,10 +236,16 @@
       queueSymbols(symbols, "visible")
     }
 
-    function scheduleVisibleWindow() {
-      if (disposed || viewportFrame || !speculationStarted || !policy.speculative) return
+    function scheduleVisibleWindow(refreshEvicted = true) {
+      if (disposed || !speculationStarted || !policy.speculative) return
+      // DOM events pass an Event object; only an explicit false denotes a
+      // completion refill. A real viewport event wins when callbacks coalesce.
+      viewportRefreshEvicted ||= refreshEvicted !== false
+      if (viewportFrame) return
       if (typeof windowRef.requestAnimationFrame !== "function") {
-        prepareVisibleWindow()
+        const refresh = viewportRefreshEvicted
+        viewportRefreshEvicted = false
+        prepareVisibleWindow(refresh)
         return
       }
       // IO observes a wide prefetch margin; scrolling within it may cross no IO
@@ -249,7 +253,9 @@
       // scroll direction. Geometry reads are batched before starting any work.
       viewportFrame = windowRef.requestAnimationFrame(() => {
         viewportFrame = 0
-        if (!disposed) prepareVisibleWindow()
+        const refresh = viewportRefreshEvicted
+        viewportRefreshEvicted = false
+        if (!disposed) prepareVisibleWindow(refresh)
       })
     }
 
