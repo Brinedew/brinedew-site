@@ -1,7 +1,7 @@
 import {
   createPortraitDeliverySession,
   normalizePortraitDeliveryPolicy,
-} from "./generated/portrait-delivery-core.js?v=20260803-gene-card-fallback"
+} from "./generated/portrait-delivery-core.js?v=41e0512bcdf1ba3a"
 
 const SESSION_KEY = "iconoplasm.portrait-delivery.v2"
 
