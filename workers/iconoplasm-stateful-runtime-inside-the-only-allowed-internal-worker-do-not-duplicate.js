@@ -27568,6 +27568,7 @@ const hoverDeliveryHandlers = createHoverDeliveryHandlers({
   barrier: currentMobileCardSnapshotVersion,
   manifest: readPublishedCardCatalogManifest,
   shard: readPublishedCardCatalogShard,
+  object: readPublishedBunnyCardObject,
   complete: assertCompleteMobileCardVM,
   stable: stableCardCatalogMaterialValue,
   project: projectGeneRecord,
