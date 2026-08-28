@@ -111,6 +111,33 @@ credentials never enter these CDN paths. Both lanes share only bounded hash
 directories; a stalled rich card must not block its independent portrait.
 Changing one gene does not change its neighbors' card/image URLs.
 
+### Released-client transport acceptance
+
+The public/store 0.5.3 package predates the native v2 client. It still requests
+`card-snapshots/:version/delivery-index` and
+`card-content/v1/:rangeHash/:lane/:symbol`. The v2 migration originally returned
+`card_delivery_index_unavailable` (503) to that client, silently disabling its
+Bunny metadata accelerator. Checking only a later validation build also labeled
+0.5.3 missed this regression. Verify runtime file hashes as well as the version.
+
+The existing v1 transport now admits both published storage formats. For v2 it
+returns the same bounded range/hash envelope, then resolves a range hash through
+one at-most-128-gene directory and the exact independent `genes` or `portraits`
+object. It never reads the packed shard or full card to supply a locator, elects
+canon, writes storage, or publishes a second artifact. Missing/corrupt objects
+fail uncached; unknown/unpublished hashes remain 410. Existing Bunny rules cover
+these URLs, so the repair applies to installed 0.5.3 without changing its package.
+
+Legacy clients retain range-level invalidation: a changed neighbor in the same
+range changes that client's metadata URL. Only the native v2 client has per-gene
+metadata reuse across such changes. Do not claim the legacy adapter provides
+native-v2 capacity or universal instantaneous hover. A cold legacy fill needs a
+published manifest, one directory and one lane object; both lanes share parsed
+manifest/directory reads. Warm Bunny hits avoid Worker execution, while regional
+fallback still costs first-party requests. Regression tests exercise the real
+route with the released client header, independent lane failures, unchanged
+range reuse, invalid identities and zero packed-shard/full-card reads.
+
 ## Explicit migration and verification
 
 1. Deploy the coordinator binding, routes and consumers together. The binding

@@ -440,6 +440,11 @@ No whole-card shards enter the extension, no reader writes occur, no D1 fallback
 elects canon, and private/mutation traffic never enters the CDN. Keep separate
 hover lanes, deadlines, bounded caches and per-tab network decisions. Test cold
 CDN fills, blocked networks, concurrent lanes and publication changes together.
+Storage migrations must also keep the released client's delivery-index and v1
+content envelope working. A validation package can retain the released version
+number while containing newer code: compare package/runtime hashes, not only the
+displayed version. V2 compatibility reads one directory plus the exact lane
+object; never load its packed shard or make portraits wait on rich-card bytes.
 
 ## Local development overrides
 
