@@ -30,6 +30,14 @@ class FakeRequestStatement {
       return String(this.args[0] || "") === "A1-93-19" ? { vision_id: "anima-v1-3001" } : null
     }
     if (
+      this.sql.includes("FROM icono_portrait_assets") &&
+      this.sql.includes("emulsion_id = ? COLLATE NOCASE")
+    ) {
+      return this.db.favoriteAssetEmulsionIds.has(String(this.args[0] || "").toUpperCase())
+        ? { gene_symbol: "SEPSECS" }
+        : null
+    }
+    if (
       this.sql.includes("COUNT(*) AS count") &&
       this.sql.includes("FROM icono_generation_requests gr")
     ) {
@@ -384,6 +392,11 @@ class FakeRequestDb {
     this.favoriteVisionRows = Array.isArray(options.favoriteVisionRows)
       ? options.favoriteVisionRows
       : []
+    this.favoriteAssetEmulsionIds = new Set(
+      (Array.isArray(options.favoriteAssetEmulsionIds) ? options.favoriteAssetEmulsionIds : []).map(
+        (value) => String(value || "").toUpperCase(),
+      ),
+    )
     this.factoryOptionRows = Array.isArray(options.factoryOptionRows)
       ? options.factoryOptionRows
       : []
@@ -813,6 +826,37 @@ test("authenticated emulsion favorites are private and idempotent", async () => 
   listResponse = await request("/api/iconoplasm/emulsion-favorites")
   listPayload = await listResponse.json()
   assert.equal(listPayload.count, 0)
+})
+
+test("published emulsion assets remain favoriteable after leaving the request-option rollup", async () => {
+  const env = buildEnv({ dbOptions: { favoriteAssetEmulsionIds: ["A9-55908"] } })
+  env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
+  env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
+    fetch(request) {
+      return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        request,
+        {
+          DB: env.gatewayDb,
+          ICONOPLASM_DB: env.gatewayDb,
+          GAME_SESSIONS: env.GAME_SESSIONS,
+        },
+        { waitUntil() {} },
+      )
+    },
+  }
+  const request = (path, method = "GET") =>
+    handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request(`https://iconoplasm.brinedew.bio${path}`, {
+        method,
+        headers: { Cookie: "session=abc123" },
+      }),
+      env,
+      {},
+    )
+
+  assert.equal((await request("/api/iconoplasm/emulsion-favorites/A9-55908", "PUT")).status, 200)
+  const listResponse = await request("/api/iconoplasm/emulsion-favorites")
+  assert.deepEqual((await listResponse.json()).favorite_emulsion_ids, ["A9-55908"])
 })
 
 test("emulsion favorites reject anonymous reads and unknown additions", async () => {
