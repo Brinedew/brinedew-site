@@ -3962,12 +3962,8 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   white-space: nowrap;
 }
 
-.icono-candidate-toolbar-pair .icono-emulsion-favorite-button {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
-  width: 2.75rem;
-  min-width: 2.75rem;
+.icono-candidate-toolbar-meta > .icono-emulsion-favorite-button--toolbar {
+  flex: 0 0 2.75rem;
 }
 
 .icono-candidate-secondary-actions {
