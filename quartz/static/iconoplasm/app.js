@@ -13,7 +13,7 @@ import { portraitDelivery } from "./portrait-delivery.js?v=0d14e5a87d1914bf"
 import {
   createEmulsionFavoriteStore,
   normalizeEmulsionFamilyId,
-} from "./emulsion-favorites.js?v=20260730-module-cache"
+} from "./emulsion-favorites.js?v=20260829-factory-family"
 import { createCollectionFeedController } from "./collection-feed.js?v=20260730-module-cache"
 import { buildIconoplasmCollectionVisibleUrl } from "./iconoplasm-collection-route-state.js?v=20260801-clean-visible-url"
 import {

@@ -29,6 +29,15 @@ class FakeRequestStatement {
     ) {
       return String(this.args[0] || "") === "A1-93-19" ? { vision_id: "anima-v1-3001" } : null
     }
+    if (this.sql.includes("FROM icono_portrait_assets") && this.sql.includes("vision_id = ?")) {
+      const visionId = String(this.args[0] || "").toLowerCase()
+      const slot = /^anima-v1-([1-9][0-9]*)$/.exec(visionId)?.[1] || ""
+      return Array.from(this.db.favoriteAssetEmulsionIds).some((value) =>
+        value.endsWith(`-${slot}`),
+      )
+        ? { gene_symbol: "SEPSECS" }
+        : null
+    }
     if (
       this.sql.includes("FROM icono_portrait_assets") &&
       this.sql.includes("emulsion_id = ? COLLATE NOCASE")
@@ -126,6 +135,13 @@ class FakeRequestStatement {
     if (this.sql.includes("FROM icono_generation_request_factory_option_rollup")) {
       this.db.factoryOptionRollupReads += 1
       const rows = this.db.factoryOptionRows
+      if (this.sql.includes("JOIN json_each(?) favorite")) {
+        const favoriteIds = JSON.parse(String(this.args[0] || "[]"))
+        const slots = new Set(
+          favoriteIds.map((value) => Number.parseInt(String(value || "").replace(/^0-/, ""), 10)),
+        )
+        return { results: rows.filter((row) => slots.has(Number(row.emulsion_slot || 0))) }
+      }
       if (this.sql.includes("public_emulsion_code = ?")) {
         const publicId = String(this.args[0] || "").toUpperCase()
         return {
@@ -787,6 +803,74 @@ test("request options include a favorite outside the normal ranked window and pl
   assert.equal(payload.request_options[0]?.is_favorite, true)
 })
 
+test("qualified factory favorites hydrate the neutral family and stay filled in direct search", async () => {
+  const env = buildEnv({
+    dbOptions: {
+      factoryOptionRows: [
+        {
+          public_emulsion_code: "A9-55908",
+          emulsion_slot: 55908,
+          image_count: 1,
+          live_count: 1,
+          score: 0,
+          vote_h_index: 0,
+          preview_assets_json: JSON.stringify([
+            {
+              gene_symbol: "SEPSECS",
+              asset_sha256: "f".repeat(64),
+              is_current: true,
+              preview_rank: 1,
+            },
+          ]),
+        },
+      ],
+    },
+  })
+  env.gatewayDb.favoriteRows.set("user-1:A9-55908", {
+    user_id: "user-1",
+    emulsion_family_id: "A9-55908",
+    created_at: "2026-08-29T12:43:49Z",
+  })
+  env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
+  env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
+    fetch(request) {
+      return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        request,
+        {
+          DB: env.gatewayDb,
+          ICONOPLASM_DB: env.gatewayDb,
+          GAME_SESSIONS: env.GAME_SESSIONS,
+        },
+        { waitUntil() {} },
+      )
+    },
+  }
+  const load = async (query = "") => {
+    const suffix = query ? `?query=${encodeURIComponent(query)}` : ""
+    const response =
+      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        new Request(`https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options${suffix}`, {
+          headers: { Cookie: "session=abc123" },
+        }),
+        env,
+        {},
+      )
+    assert.equal(response.status, 200)
+    return response.json()
+  }
+
+  const favoritesList = await load()
+  assert.equal(favoritesList.favorite_count, 1)
+  assert.equal(favoritesList.request_options[0]?.emulsion_family_id, "0-55908")
+  assert.equal(favoritesList.request_options[0]?.is_favorite, true)
+  assert.equal(favoritesList.request_options[0]?.preview_assets[0]?.gene_symbol, "SEPSECS")
+
+  const directSearch = await load("A9-55908")
+  assert.equal(directSearch.request_options.length, 1)
+  assert.equal(directSearch.request_options[0]?.emulsion_family_id, "0-55908")
+  assert.equal(directSearch.request_options[0]?.is_favorite, true)
+})
+
 test("authenticated emulsion favorites are private and idempotent", async () => {
   const env = buildEnv()
   env.GAME_SESSIONS = buildSessionBinding({ user_id: "user-1", username: "tester" })
@@ -856,7 +940,7 @@ test("published emulsion assets remain favoriteable after leaving the request-op
 
   assert.equal((await request("/api/iconoplasm/emulsion-favorites/A9-55908", "PUT")).status, 200)
   const listResponse = await request("/api/iconoplasm/emulsion-favorites")
-  assert.deepEqual((await listResponse.json()).favorite_emulsion_ids, ["A9-55908"])
+  assert.deepEqual((await listResponse.json()).favorite_emulsion_ids, ["0-55908"])
 })
 
 test("emulsion favorites reject anonymous reads and unknown additions", async () => {

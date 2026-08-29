@@ -9735,6 +9735,82 @@ function mapGenerationRequestFactoryOptionRows(env, url, rows) {
     .filter(Boolean)
 }
 
+function collapseGenerationRequestFactorySlotOptions(slot, sources) {
+  const option = iconoplasmPreallocatedAnimaEmulsionOption(`anima-v1-${slot}`)
+  if (!option) return null
+  const previewAssets = []
+  const seenAssets = new Set()
+  for (const source of Array.isArray(sources) ? sources : []) {
+    for (const preview of Array.isArray(source?.preview_assets) ? source.preview_assets : []) {
+      const assetSha = normalizeSha256(preview?.asset_sha256 || "") || ""
+      if (!assetSha || seenAssets.has(assetSha)) continue
+      seenAssets.add(assetSha)
+      previewAssets.push(preview)
+      if (previewAssets.length >= 4) break
+    }
+    if (previewAssets.length >= 4) break
+  }
+  const collapsed = {
+    ...option,
+    image_count: (Array.isArray(sources) ? sources : []).reduce(
+      (sum, source) => sum + Math.max(0, Number(source?.image_count) || 0),
+      0,
+    ),
+    live_count: (Array.isArray(sources) ? sources : []).reduce(
+      (sum, source) => sum + Math.max(0, Number(source?.live_count) || 0),
+      0,
+    ),
+    score: (Array.isArray(sources) ? sources : []).reduce(
+      (best, source) => Math.max(best, Number(source?.score) || 0),
+      0,
+    ),
+    vote_h_index: (Array.isArray(sources) ? sources : []).reduce(
+      (best, source) => Math.max(best, Number(source?.vote_h_index) || 0),
+      0,
+    ),
+    preview_assets: previewAssets,
+  }
+  if (previewAssets.length) {
+    collapsed.secondary_label = ""
+    delete collapsed.is_preallocated_without_preview
+  }
+  return collapsed
+}
+
+async function listFavoriteGenerationRequestFactoryOptions(env, url, favoriteEmulsionIds) {
+  if (!env.ICONOPLASM_DB) return []
+  const favoriteIds = Array.from(
+    new Set(
+      (Array.isArray(favoriteEmulsionIds) ? favoriteEmulsionIds : [])
+        .map(normalizeFavoriteEmulsionFamilyId)
+        .filter((value) => /^0-[1-9][0-9]*$/.test(value)),
+    ),
+  )
+  if (!favoriteIds.length) return []
+  const response = await env.ICONOPLASM_DB.prepare(
+    `SELECT rollup.public_emulsion_code, rollup.emulsion_slot, rollup.image_count,
+            rollup.live_count, rollup.score, rollup.vote_h_index, rollup.preview_assets_json
+     FROM icono_generation_request_factory_option_rollup rollup
+     JOIN json_each(?) favorite
+       ON rollup.emulsion_slot = CAST(substr(favorite.value, 3) AS INTEGER)
+     WHERE favorite.value GLOB '0-[1-9][0-9]*'
+     ORDER BY favorite.key ASC, rollup.live_count DESC, rollup.image_count DESC,
+              rollup.score DESC, rollup.public_emulsion_code ASC`,
+  )
+    .bind(JSON.stringify(favoriteIds))
+    .all()
+  const sources = mapGenerationRequestFactoryOptionRows(env, url, response?.results || [])
+  return favoriteIds
+    .map((favoriteId) => {
+      const slot = Number.parseInt(favoriteId.slice(2), 10)
+      return collapseGenerationRequestFactorySlotOptions(
+        slot,
+        sources.filter((source) => source.emulsion_family_id === favoriteId),
+      )
+    })
+    .filter((option) => option && option.image_count > 0)
+}
+
 async function listGenerationRequestFactorySlotOptions(env, url, searchIntent) {
   const slot = Math.max(0, Number(searchIntent?.slot || 0) || 0)
   if (!env.ICONOPLASM_DB || !slot) return []
@@ -9774,43 +9850,9 @@ async function listGenerationRequestFactorySlotOptions(env, url, searchIntent) {
     is_unqualified_legacy: true,
   }))
 
-  const option = iconoplasmPreallocatedAnimaEmulsionOption(`anima-v1-${slot}`)
-  if (!option) return []
   const sources = [...legacyOptions, ...exactOptions]
-  const previewAssets = []
-  const seenAssets = new Set()
-  for (const source of sources) {
-    for (const preview of Array.isArray(source?.preview_assets) ? source.preview_assets : []) {
-      const assetSha = normalizeSha256(preview?.asset_sha256 || "") || ""
-      if (!assetSha || seenAssets.has(assetSha)) continue
-      seenAssets.add(assetSha)
-      previewAssets.push(preview)
-      if (previewAssets.length >= 4) break
-    }
-    if (previewAssets.length >= 4) break
-  }
-  const collapsed = {
-    ...option,
-    image_count: sources.reduce(
-      (sum, source) => sum + Math.max(0, Number(source?.image_count) || 0),
-      0,
-    ),
-    live_count: sources.reduce(
-      (sum, source) => sum + Math.max(0, Number(source?.live_count) || 0),
-      0,
-    ),
-    score: sources.reduce((best, source) => Math.max(best, Number(source?.score) || 0), 0),
-    vote_h_index: sources.reduce(
-      (best, source) => Math.max(best, Number(source?.vote_h_index) || 0),
-      0,
-    ),
-    preview_assets: previewAssets,
-  }
-  if (previewAssets.length) {
-    collapsed.secondary_label = ""
-    delete collapsed.is_preallocated_without_preview
-  }
-  return [collapsed]
+  const collapsed = collapseGenerationRequestFactorySlotOptions(slot, sources)
+  return collapsed ? [collapsed] : []
 }
 
 async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds = []) {
@@ -9921,8 +9963,9 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
     )
   }
   const sharedUserOptionsPromise = listSharedUserEmulsionOptions(env, url, favoriteEmulsionIds)
-  const [favoriteRows, resp] = await Promise.all([
+  const [favoriteRows, favoriteFactoryOptions, resp] = await Promise.all([
     listFavoriteGenerationRequestVisionRows(env, favoriteEmulsionIds),
+    listFavoriteGenerationRequestFactoryOptions(env, url, favoriteEmulsionIds),
     env.ICONOPLASM_DB.prepare(
       `SELECT
        vision_id,
@@ -9951,8 +9994,17 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
       ...(Array.isArray(resp?.results) ? resp.results : []),
     ]),
   )
+  const factoryFavoriteFamilies = new Set(
+    favoriteFactoryOptions.map((option) => option.emulsion_family_id),
+  )
   return annotateFavoriteGenerationRequestOptions(
-    [...groupedVisionOptions, ...(await sharedUserOptionsPromise)],
+    [
+      ...favoriteFactoryOptions,
+      ...groupedVisionOptions.filter(
+        (option) => !factoryFavoriteFamilies.has(option.emulsion_family_id),
+      ),
+      ...(await sharedUserOptionsPromise),
+    ],
     favoriteEmulsionIds,
   )
 }
@@ -9996,6 +10048,19 @@ async function emulsionFamilyExistsForFavorite(env, emulsionFamilyId) {
       .bind(normalized)
       .first()
     if (row?.vision_id) return true
+
+    const factoryFamily = /^0-([1-9][0-9]*)$/.exec(normalized)
+    if (factoryFamily) {
+      const asset = await env.ICONOPLASM_DB.prepare(
+        `SELECT gene_symbol
+         FROM icono_portrait_assets
+         WHERE vision_id = ?
+         LIMIT 1`,
+      )
+        .bind(`anima-v1-${factoryFamily[1]}`)
+        .first()
+      if (asset?.gene_symbol) return true
+    }
 
     // The request-option rollup is a picker projection, not the durable
     // authority for whether an emulsion exists. Published and older visible
