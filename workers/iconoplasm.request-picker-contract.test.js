@@ -79,6 +79,21 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   assert.match(app, /data-icono-emulsion-favorite=/)
   assert.match(
     app,
+    /<span>Emulsion<\/span><strong>[\s\S]*<\/strong><\/div>[\s\S]*renderEmulsionFavoriteButtonMarkup/,
+    "the 44px favorite action must be a sibling of the compact Emulsion text grid",
+  )
+  assert.match(
+    css,
+    /\.icono-candidate-toolbar-meta > \.icono-emulsion-favorite-button--toolbar\s*\{[\s\S]*flex:\s*0 0 2\.75rem;/,
+    "toolbar favorites should center as standalone actions without stretching metadata rows",
+  )
+  assert.doesNotMatch(
+    css,
+    /\.icono-candidate-toolbar-pair \.icono-emulsion-favorite-button/,
+    "metadata pairs must not own touch-target sizing",
+  )
+  assert.match(
+    app,
     /function wireEmulsionFavoriteButtons\(container\)[\s\S]*wireEmulsionFavoriteButtons\(document\)[\s\S]*emulsionFavorites\.subscribe/,
     "favorite controls should install one persistent delegated listener before route initialization",
   )

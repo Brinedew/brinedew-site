@@ -743,12 +743,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-candidate-toolbar-pair icono-canonical-toolbar-pair">' +
       "<span>Published</span><strong>" +
       esc(emulsionInfo.primary) +
-      "</strong>" +
+      "</strong></div>" +
       renderEmulsionFavoriteButtonMarkup(
         emulsionInfo.emulsionId,
         "icono-emulsion-favorite-button--toolbar",
       ) +
-      "</div></div>"
+      "</div>"
     )
   }
 
@@ -8362,12 +8362,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var emulsionToolbarMarkup = emulsionInfo.primary
         ? '<div class="icono-candidate-toolbar-pair"><span>Emulsion</span><strong>' +
           esc(emulsionInfo.primary) +
-          "</strong>" +
+          "</strong></div>" +
           renderEmulsionFavoriteButtonMarkup(
             emulsionInfo.emulsionId,
             "icono-emulsion-favorite-button--toolbar",
-          ) +
-          "</div>"
+          )
         : ""
       var voteAttrs = 'data-icono-candidate-vote-box="' + esc(assetSha) + '"'
       if (Number.isFinite(candidateImageId) && candidateImageId > 0) {
