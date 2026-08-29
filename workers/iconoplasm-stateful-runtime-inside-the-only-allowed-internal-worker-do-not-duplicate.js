@@ -9996,6 +9996,21 @@ async function emulsionFamilyExistsForFavorite(env, emulsionFamilyId) {
       .bind(normalized)
       .first()
     if (row?.vision_id) return true
+
+    // The request-option rollup is a picker projection, not the durable
+    // authority for whether an emulsion exists. Published and older visible
+    // candidates can legitimately leave that rollup while their source asset
+    // remains addressable on gene pages. Accept those exact persisted assets
+    // through the existing NOCASE emulsion index.
+    const asset = await env.ICONOPLASM_DB.prepare(
+      `SELECT gene_symbol
+       FROM icono_portrait_assets
+       WHERE emulsion_id = ? COLLATE NOCASE
+       LIMIT 1`,
+    )
+      .bind(normalized)
+      .first()
+    if (asset?.gene_symbol) return true
   }
   if (env.DB) {
     const row = await env.DB.prepare(
