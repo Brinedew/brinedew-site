@@ -729,6 +729,8 @@ test("gene document GET and HEAD use the same exact card blot as the sitemap", a
   assert.match(pageHtml, new RegExp(`property="og:image" content="${blotUrl}"`))
   assert.match(pageHtml, new RegExp(`name="twitter:image" content="${blotUrl}"`))
   assert.match(pageHtml, /class="icono-canonical-gene-blot-image"/)
+  assert.match(pageHtml, /data-iconoplasm-role="canonical-blot" data-gene-symbol="TP53"/)
+  assert.match(pageHtml, /data-iconoplasm-role="source-portrait" data-gene-symbol="TP53"/)
   assert.match(pageHtml, /data-icono-canonical-gene-blot hidden/)
   assert.match(pageHtml, /loading="lazy" decoding="async" fetchpriority="low"/)
   assert.doesNotMatch(pageHtml, /<figcaption>/)
@@ -1205,6 +1207,15 @@ test("homepage discovery links the raw archive without adding immersive navigati
     contentSource,
     /class="sr-only"[\s\S]*href="https:\/\/iconoplasm\.brinedew\.bio\/genes" tabindex="-1">published human gene cards<\/a>/,
   )
+  const directBlotIndex = contentSource.indexOf(
+    "https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp",
+  )
+  const resolverIndex = contentSource.indexOf("The public image resolver is the advanced interface")
+  assert.notEqual(directBlotIndex, -1)
+  assert.ok(
+    resolverIndex > directBlotIndex,
+    "homepage must teach the direct blot URL before the resolver",
+  )
 })
 
 test("gene hydration preserves and refreshes the canonical profile title", async () => {
@@ -1228,6 +1239,9 @@ test("gene lead keeps the portrait subordinate and renders the canonical blot", 
   assert.match(source, /function canonicalGeneBlotMarkup\(genePayload\)/)
   assert.match(source, /var canonicalBlotUrl = String\(blot\.semantic_url \|\| ""\)\.trim\(\)/)
   assert.match(source, /class=\"icono-canonical-gene-blot-image\"/)
+  assert.match(source, /data-iconoplasm-role=\"canonical-blot\" data-gene-symbol=\"/)
+  assert.match(source, /data-iconoplasm-role=\"source-portrait\" data-gene-symbol=\"/)
+  assert.match(source, /data-iconoplasm-role=\"candidate-blot\" data-gene-symbol=\"/)
   assert.match(source, /data-icono-canonical-gene-blot hidden/)
   assert.match(source, /function revealCanonicalGeneBlot\(trigger, symbol\)/)
   assert.match(source, /blot\.removeAttribute\("hidden"\)/)
