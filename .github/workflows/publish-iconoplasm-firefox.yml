@@ -24,7 +24,9 @@ permissions:
   actions: read
 
 concurrency:
-  group: iconoplasm-firefox-${{ inputs.expected_version }}
+  # Firefox and Edge consume one immutable archive. Keep the whole publish
+  # transaction serial so both callers cannot create the same draft together.
+  group: iconoplasm-store-release-${{ inputs.expected_version }}
   cancel-in-progress: false
 
 jobs:

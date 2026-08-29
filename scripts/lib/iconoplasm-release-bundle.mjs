@@ -116,6 +116,16 @@ export class ReleaseArchive {
     const text = this.gh(args, body ? JSON.stringify(body) : undefined)
     return text.trim() ? JSON.parse(text) : null
   }
+  drafts() {
+    const matches = []
+    for (let page = 1; ; page += 1) {
+      const releases = this.api(`releases?per_page=100&page=${page}`)
+      matches.push(
+        ...releases.filter((release) => release.draft && release.tag_name === this.identity.tag),
+      )
+      if (releases.length < 100) return matches
+    }
+  }
   inspect() {
     const commit = this.api(`commits/${this.identity.tag}`)
     if (commit.sha !== this.identity.commit)
@@ -124,8 +134,14 @@ export class ReleaseArchive {
     try {
       release = this.api(`releases/tags/${this.identity.tag}`)
     } catch (error) {
-      if (String(error.stderr).includes("HTTP 404")) return null
-      throw error
+      if (!String(error.stderr).includes("HTTP 404")) throw error
+      const drafts = this.drafts()
+      if (drafts.length > 1)
+        throw new Error(
+          `Multiple draft releases exist for ${this.identity.tag}: ${drafts.map((draft) => draft.id).join(", ")}`,
+        )
+      release = drafts[0] || null
+      if (!release) return null
     }
     if (
       release.tag_name !== this.identity.tag ||
