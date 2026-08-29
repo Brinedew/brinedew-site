@@ -4,6 +4,8 @@ export function normalizeEmulsionFamilyId(raw) {
     .toUpperCase()
     .slice(0, 64)
   while (value.endsWith("-E")) value = value.slice(0, -2)
+  var factoryEmulsion = /^[A-Z][1-9][0-9]*-([1-9][0-9]*)$/.exec(value)
+  if (factoryEmulsion) value = "0-" + factoryEmulsion[1]
   return /^[A-Z0-9][A-Z0-9._-]{0,63}$/.test(value) ? value : ""
 }
 

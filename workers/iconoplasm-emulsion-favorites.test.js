@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
+import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import {
@@ -51,8 +52,11 @@ class FavoriteDb {
   }
 }
 
-test("server favorite normalization uses the visible family ID", () => {
-  assert.equal(normalizeFavoriteEmulsionFamilyId("A1-255-e-e"), "A1-255")
+test("server favorite normalization uses the reusable emulsion family ID", () => {
+  assert.equal(normalizeFavoriteEmulsionFamilyId("A1-255-e-e"), "0-255")
+  assert.equal(normalizeFavoriteEmulsionFamilyId("A9-55908"), "0-55908")
+  assert.equal(normalizeFavoriteEmulsionFamilyId("LOWEREN-2"), "LOWEREN-2")
+  assert.equal(normalizeFavoriteEmulsionFamilyId("A1-93-19"), "A1-93-19")
   assert.equal(normalizeFavoriteEmulsionFamilyId("invalid/id"), "")
 })
 
@@ -62,7 +66,7 @@ test("favorite persistence is isolated by user and idempotent", async () => {
   await addFavoriteEmulsion(db, { userId: "user-1", emulsionFamilyId: "A1-255" })
   await addFavoriteEmulsion(db, { userId: "user-2", emulsionFamilyId: "A1-306" })
   assert.deepEqual(await listFavoriteEmulsionRows(db, "user-1"), [
-    { emulsion_family_id: "A1-255", created_at: "2026-07-20T10:00:00Z" },
+    { emulsion_family_id: "0-255", created_at: "2026-07-20T10:00:00Z" },
   ])
   await removeFavoriteEmulsion(db, { userId: "user-1", emulsionFamilyId: "A1-255" })
   await removeFavoriteEmulsion(db, { userId: "user-1", emulsionFamilyId: "A1-255" })
@@ -79,4 +83,42 @@ test("favorite migration adds account storage and an indexed family projection",
   assert.match(migration, /ADD COLUMN emulsion_family_id/)
   assert.match(migration, /WITH RECURSIVE normalized/)
   assert.match(migration, /idx_icono_generation_request_options_family/)
+})
+
+test("factory favorite repair migration converges qualified aliases on one family", () => {
+  var migration = readFileSync(
+    new URL(
+      "../migrations-iconoplasm/0082_canonicalize_factory_favorite_families.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  )
+  var db = new DatabaseSync(":memory:")
+  try {
+    db.exec(`
+      CREATE TABLE icono_user_emulsion_favorites (
+        user_id TEXT NOT NULL,
+        emulsion_family_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, emulsion_family_id)
+      );
+      INSERT INTO icono_user_emulsion_favorites VALUES
+        ('user-1', 'A9-55908', '2026-08-29T12:43:49Z'),
+        ('user-1', 'C9-55908', '2026-08-29T12:44:49Z'),
+        ('user-1', 'A1-93-19', '2026-08-29T12:45:49Z'),
+        ('user-1', 'LOWEREN-2', '2026-08-29T12:46:49Z');
+    `)
+    db.exec(migration)
+    assert.deepEqual(
+      db
+        .prepare(
+          "SELECT emulsion_family_id FROM icono_user_emulsion_favorites ORDER BY emulsion_family_id",
+        )
+        .all()
+        .map((row) => row.emulsion_family_id),
+      ["0-55908", "A1-93-19", "LOWEREN-2"],
+    )
+  } finally {
+    db.close()
+  }
 })

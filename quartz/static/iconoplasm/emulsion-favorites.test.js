@@ -3,8 +3,11 @@ import test from "node:test"
 
 import { createEmulsionFavoriteStore, normalizeEmulsionFamilyId } from "./emulsion-favorites.js"
 
-test("favorite IDs normalize edited emulsion variants to their visible family", () => {
-  assert.equal(normalizeEmulsionFamilyId(" a1-255-e-e "), "A1-255")
+test("favorite IDs normalize edited and qualified IDs to their reusable family", () => {
+  assert.equal(normalizeEmulsionFamilyId(" a1-255-e-e "), "0-255")
+  assert.equal(normalizeEmulsionFamilyId("A9-55908"), "0-55908")
+  assert.equal(normalizeEmulsionFamilyId("LOWEREN-2"), "LOWEREN-2")
+  assert.equal(normalizeEmulsionFamilyId("A1-93-19"), "A1-93-19")
   assert.equal(normalizeEmulsionFamilyId("../../bad"), "")
 })
 
@@ -24,7 +27,7 @@ test("favorite store updates optimistically and persists the final state", async
   assert.equal(store.has("A1-306"), true)
   assert.equal(store.isPending("A1-306"), true)
   await promise
-  assert.deepEqual(writes, [["A1-306", true]])
+  assert.deepEqual(writes, [["0-306", true]])
   assert.equal(store.isPending("A1-306"), false)
 })
 

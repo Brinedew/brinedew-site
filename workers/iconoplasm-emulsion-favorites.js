@@ -10,6 +10,8 @@ export function normalizeFavoriteEmulsionFamilyId(raw) {
     .toUpperCase()
     .slice(0, 64)
   while (value.endsWith("-E")) value = value.slice(0, -2)
+  var factoryEmulsion = /^[A-Z][1-9][0-9]*-([1-9][0-9]*)$/.exec(value)
+  if (factoryEmulsion) value = "0-" + factoryEmulsion[1]
   return /^[A-Z0-9][A-Z0-9._-]{0,63}$/.test(value) ? value : ""
 }
 
@@ -25,7 +27,7 @@ export async function listFavoriteEmulsionRows(db, userId) {
     )
     .bind(normalizedUserId)
     .all()
-  return (Array.isArray(response?.results) ? response.results : [])
+  var normalizedRows = (Array.isArray(response?.results) ? response.results : [])
     .map(function (row) {
       var emulsionFamilyId = normalizeFavoriteEmulsionFamilyId(row?.emulsion_family_id || "")
       return emulsionFamilyId
@@ -36,6 +38,12 @@ export async function listFavoriteEmulsionRows(db, userId) {
         : null
     })
     .filter(Boolean)
+  var seen = new Set()
+  return normalizedRows.filter(function (row) {
+    if (seen.has(row.emulsion_family_id)) return false
+    seen.add(row.emulsion_family_id)
+    return true
+  })
 }
 
 export async function addFavoriteEmulsion(db, { userId, emulsionFamilyId }) {
