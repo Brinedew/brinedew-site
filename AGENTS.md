@@ -148,6 +148,12 @@ the stable canonical gene-image identity. The temporary
 `/portrait/{SYMBOL}.webp` alias was retired after live 19,023-gene and regional
 delivery proof. Immutable `/portraits/v1/...` assets remain available to the
 gallery and portrait-native surfaces but never enter this agent workflow.
+Teach `/blot/{SYMBOL}.webp` first for ordinary exact-symbol retrieval. The
+bounded resolver is the advanced interface for identifier normalization and
+batches, not the first abstraction presented to someone who already knows the
+HGNC symbol. Canonical, source-portrait, and candidate-blot `<img>` elements
+carry explicit `data-iconoplasm-role` and normalized `data-gene-symbol`
+attributes without changing their visual presentation.
 Published gene portraits and published gene blots are the only two Iconoplasm
 asset classes under CC0 1.0 Universal. Keep the visible `/license` scope,
 resolver permission fields, ready-blot `ImageObject.license`/`usageInfo`, and
