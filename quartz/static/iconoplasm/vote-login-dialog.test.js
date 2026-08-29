@@ -105,6 +105,22 @@ test("guest voting opens one native modal and deliberately focuses the Discord a
   assert.equal(harness.createdDialogs.length, 1, "repeated auth failures must not stack modals")
 })
 
+test("the shared login modal explains a favorite action without changing its safe login flow", () => {
+  const harness = createDialogHarness()
+  const dialog = openVoteLoginDialog({
+    document: harness.document,
+    loginUrl: "/api/auth/discord?return_to=%2Fgene%2FINS",
+    returnFocus: harness.source,
+    title: "Log in with Discord to save favorites",
+  })
+
+  assert.equal(dialog.querySelector("h2")?.textContent, "Log in with Discord to save favorites")
+  assert.equal(
+    dialog.querySelector("[data-icono-vote-login-link]")?.getAttribute("href"),
+    "/api/auth/discord?return_to=%2Fgene%2FINS",
+  )
+})
+
 test("native close and cancel lifecycles remove the modal and restore its vote control", () => {
   const harness = createDialogHarness()
   const dialog = openVoteLoginDialog({
