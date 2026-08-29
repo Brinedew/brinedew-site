@@ -436,7 +436,7 @@ test("image-edit publish keeps a real publisher upvote and hydrates the vote UI"
   assert.match(wire, /handle\.setSnapshot\(snapshot/)
 })
 
-test("server candidate action islands wire edit buttons without replacing public cards", () => {
+test("server candidate islands hydrate actions and favorite controls without replacing public cards", () => {
   const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
   const hydrateStart = app.indexOf("function hydrateServerCandidateActionIslands")
   const hydrateEnd = app.indexOf("function syncServerGenePortraitUrls", hydrateStart)
@@ -456,6 +456,9 @@ test("server candidate action islands wire edit buttons without replacing public
   assert.match(hydrateCandidateActions, /sourcesByAsset = new Map\(\)/)
   assert.match(hydrateCandidateActions, /sourcesByAsset\.get\(targetAsset\)/)
   assert.match(hydrateCandidateActions, /targets\[j\]\.innerHTML = source/)
+  assert.match(hydrateCandidateActions, /closest\("\.icono-candidate-card"\)/)
+  assert.match(hydrateCandidateActions, /querySelector\("\.icono-candidate-toolbar-meta"\)/)
+  assert.match(hydrateCandidateActions, /targetToolbar\.innerHTML = sourceToolbar\.innerHTML/)
   assert.doesNotMatch(hydrateCandidateActions, /outerHTML/)
   assert.match(wireGeneContent, /wireGeneEditImagePanel\(container,\s*genePayload\)/)
 })

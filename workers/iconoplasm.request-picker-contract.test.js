@@ -82,6 +82,21 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     /function wireEmulsionFavoriteButtons\(container\)[\s\S]*wireEmulsionFavoriteButtons\(document\)[\s\S]*emulsionFavorites\.subscribe/,
     "favorite controls should install one persistent delegated listener before route initialization",
   )
+  const favoriteHandlerStart = app.indexOf("function wireEmulsionFavoriteButtons")
+  const favoriteHandlerEnd = app.indexOf(
+    "wireEmulsionFavoriteButtons(document)",
+    favoriteHandlerStart,
+  )
+  const favoriteHandler = app.slice(favoriteHandlerStart, favoriteHandlerEnd)
+  assert.match(
+    favoriteHandler,
+    /if \(!currentUser\)[\s\S]*openVoteLoginDialog\(\{[\s\S]*returnFocus: button/,
+  )
+  assert.doesNotMatch(
+    favoriteHandler,
+    /window\.location\.href\s*=\s*voteLoginUrl\(\)/,
+    "guest favorite clicks should explain Discord registration in-place instead of navigating away",
+  )
   assert.equal(
     Array.from(app.matchAll(/wireEmulsionFavoriteButtons\(container\)/g)).length,
     1,
