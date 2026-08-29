@@ -98,6 +98,8 @@ async function fixture(t) {
     if (args[0] === "api") {
       const path = args[1]
       if (path.includes("/commits/")) return JSON.stringify({ sha: state.commit })
+      if (path.includes("/releases?"))
+        return JSON.stringify(state.release?.draft ? [state.release] : [])
       if (args.includes("--input")) {
         const body = JSON.parse(input)
         if (args.includes("PATCH"))
@@ -124,6 +126,32 @@ async function fixture(t) {
   }
   return { directory, files, manifest, state, archive: new ReleaseArchive(identity, gh) }
 }
+
+test("draft releases remain discoverable before publication", async (t) => {
+  const f = await fixture(t)
+  f.state.release = {
+    id: 123,
+    tag_name: identity.tag,
+    target_commitish: identity.commit,
+    draft: true,
+    assets: [],
+  }
+  assert.equal(f.archive.inspect().id, 123)
+})
+
+test("duplicate drafts are rejected instead of uploading ambiguously", async (t) => {
+  const f = await fixture(t)
+  const original = f.archive.api.bind(f.archive)
+  f.archive.api = (path, body, method) => {
+    if (path.includes("releases?"))
+      return [
+        { id: 123, tag_name: identity.tag, target_commitish: identity.commit, draft: true },
+        { id: 456, tag_name: identity.tag, target_commitish: identity.commit, draft: true },
+      ]
+    return original(path, body, method)
+  }
+  assert.throws(() => f.archive.inspect(), /Multiple draft releases.*123, 456/)
+})
 
 test("development identity is visible, content-derived and reproducible outside Git", (t) => {
   const root = mkdtempSync(join(tmpdir(), "iconoplasm-build-id-"))
