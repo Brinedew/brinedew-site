@@ -1203,6 +1203,8 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '">' +
       '<img class="iconoplasm-tooltip-portrait-img" src="' +
       escapeHtml(portraitUrl) +
+      '" data-iconoplasm-role="source-portrait" data-gene-symbol="' +
+      escapeHtml(resolvedSymbol) +
       '" alt="' +
       escapeHtml(portraitAlt) +
       '" loading="' +
@@ -2065,6 +2067,8 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
         '">' +
         '<span class="icono-candidate-media"><img src="' +
         escapeHtml(mediumUrl) +
+        '" data-iconoplasm-role="candidate-blot" data-gene-symbol="' +
+        escapeHtml(symbol) +
         '" alt="' +
         escapeHtml(symbol) +
         ' candidate blot" loading="lazy" decoding="async" fetchpriority="low" width="' +

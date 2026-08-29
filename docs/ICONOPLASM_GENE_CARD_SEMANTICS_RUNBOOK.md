@@ -63,7 +63,7 @@ its clamped CSS at a 768px layout width.
 Its visible-material fingerprint includes the renderer revision, normalized
 symbol, full gene name, and selected portrait SHA. The immutable object lives at
 `/blots/v1/<initial>/<SYMBOL>/<fingerprint>/<SYMBOL>-iconoplasm-gene-blot.webp`.
-The stable first-party `/blots/<SYMBOL>.webp` route resolves only the immutable
+The stable first-party `/blot/{SYMBOL}.webp` route resolves only the immutable
 object referenced by the card artifact selected by `KV_GALLERY_VERSION`; it is
 not a second selection timeline and never consults live D1 portrait state.
 
@@ -73,7 +73,9 @@ present consistently in all of these projections:
 - a server-rendered `<img>` with gene-specific alt text inside the initially
   hidden print-copy surface; the existing `request print copy` action reveals
   it, while the default gene-page layout contains neither a visible duplicate
-  blot nor explanatory caption copy;
+  blot nor explanatory caption copy. Its actual `src` is the stable first-party
+  `/blot/{SYMBOL}.webp` URL, with `data-iconoplasm-role="canonical-blot"` and
+  `data-gene-symbol` identifying it unambiguously in the DOM;
 - gene-specific `og:image`, `og:image:url`, `og:image:alt`, `twitter:image`,
   and `twitter:image:alt` metadata, alongside gene-specific social title and
   description fields;
@@ -92,7 +94,10 @@ listed in its gene-sitemap shard; only its blot image metadata, `ImageObject`,
 and image-sitemap child are absent. The raw portrait may
 remain visible in the interactive dossier as subordinate source material, but
 it is never `primaryImageOfPage`, `Gene.image`, the social image, or an
-image-sitemap entry.
+image-sitemap entry. Visible source-portrait and candidate-blot `<img>` elements
+carry `data-iconoplasm-role="source-portrait"` or `"candidate-blot"` plus the
+same normalized `data-gene-symbol`, so machine readers do not have to infer the
+page's image hierarchy from layout or alt text alone.
 
 On any healthy network, the tab-scoped IPD-001 probe may select Bunny's
 byte-equivalent immutable URL for delivery. A failed probe selects first-party
@@ -127,6 +132,11 @@ from the agent gene-image workflow. The blot route derives the current renderer
 fingerprint and immutable object key from the exact published card selected by
 `KV_GALLERY_VERSION`; it does not require blot metadata to be copied back into
 KV. A vote changes public output after the normal canonical-card publication.
+
+For ordinary exact-symbol retrieval, teach the stable `/blot/{SYMBOL}.webp`
+route before the resolver. The resolver remains the advanced interface for
+identifier normalization and batches of up to 50 values; it is not the first
+abstraction for someone who already knows the HGNC symbol.
 
 The massive `/genes/{range}` pages remain text-only so they support discovery
 without replacing the gallery collection experience; image-sitemap children

@@ -433,6 +433,10 @@ test("gene lead portrait is labelled as source material, not the canonical blot"
 
   assert.equal(portraitAlt, "TP53 character portrait used inside the Iconoplasm gene blot")
   assert.match(html, /aria-label="Open full-size source portrait for TP53"/)
+  assert.match(
+    html,
+    /data-iconoplasm-role="source-portrait" data-gene-symbol="TP53"/,
+  )
   assert.match(html, /alt="TP53 character portrait used inside the Iconoplasm gene blot"/)
   assert.match(
     html,

@@ -667,6 +667,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot hidden>' +
       '<img class="icono-canonical-gene-blot-image" src="' +
       esc(blotUrl) +
+      '" data-iconoplasm-role="canonical-blot" data-gene-symbol="' +
+      esc(symbol) +
       '" data-iconoplasm-canonical-image-src="' +
       esc(blotUrl) +
       '" width="' +
@@ -3557,6 +3559,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                   '">' +
                   '<img class="iconoplasm-tooltip-portrait-img" src="' +
                   esc(portraitUrl) +
+                  '" data-iconoplasm-role="source-portrait" data-gene-symbol="' +
+                  esc(g.symbol) +
                   '" alt="' +
                   esc(portraitAlt) +
                   '" loading="eager" decoding="async" width="' +
@@ -3591,6 +3595,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             '">' +
             '<img class="iconoplasm-tooltip-portrait-img" src="' +
             esc(portraitUrl) +
+            '" data-iconoplasm-role="source-portrait" data-gene-symbol="' +
+            esc(g.symbol) +
             '" alt="' +
             esc(portraitAlt) +
             '" loading="eager" decoding="async" width="' +
@@ -8446,6 +8452,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '<span class="icono-candidate-media">' +
         '<img src="' +
         esc(mediumUrl) +
+        '" data-iconoplasm-role="candidate-blot" data-gene-symbol="' +
+        esc(genePayload.symbol) +
         '" alt="' +
         esc(genePayload.symbol) +
         ' candidate blot" loading="lazy" decoding="async" fetchpriority="low' +

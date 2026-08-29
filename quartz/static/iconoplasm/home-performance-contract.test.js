@@ -1837,6 +1837,7 @@ test("shared candidate renderer emits a complete, escaped public snapshot", asyn
   assert.match(html, /data-icono-candidate-image-id="18"/)
   assert.match(html, /data-icono-vision-id="vision-a"/)
   assert.match(html, /data-icono-candidate-actions-island="candidate-a"/)
+  assert.match(html, /data-iconoplasm-role="candidate-blot" data-gene-symbol="CD4"/)
   assert.match(html, /loading="lazy" decoding="async" fetchpriority="low"/)
   assert.match(html, /&lt;unsafe&gt;/)
   assert.doesNotMatch(html, /current\.webp|missing-media/)
