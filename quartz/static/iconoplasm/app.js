@@ -341,7 +341,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       )
       if (!emulsionId) return
       if (!currentUser) {
-        window.location.href = voteLoginUrl()
+        openVoteLoginDialog({
+          loginUrl: voteLoginUrl(),
+          returnFocus: button,
+          title: "Log in with Discord to save favorites",
+        })
         return
       }
       emulsionFavorites
@@ -8707,6 +8711,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var source = sourcesByAsset.get(targetAsset)
       targets[j].innerHTML = source ? source.innerHTML : ""
       targets[j].setAttribute("data-icono-candidate-actions-signature", signature)
+      var sourceCard = source && source.closest(".icono-candidate-card")
+      var targetCard = targets[j].closest(".icono-candidate-card")
+      var sourceToolbar = sourceCard && sourceCard.querySelector(".icono-candidate-toolbar-meta")
+      var targetToolbar = targetCard && targetCard.querySelector(".icono-candidate-toolbar-meta")
+      if (sourceToolbar && targetToolbar) targetToolbar.innerHTML = sourceToolbar.innerHTML
     }
   }
 

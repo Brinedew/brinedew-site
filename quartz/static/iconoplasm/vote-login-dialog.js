@@ -24,9 +24,12 @@ export function openVoteLoginDialog(options = {}) {
   if (!loginUrl) {
     throw new Error("A Discord login URL is required to open the vote login dialog")
   }
+  const title = String(options.title || "Log in with Discord to vote").trim()
 
   const existing = ownerDocument.querySelector(VOTE_LOGIN_DIALOG_SELECTOR)
   if (existing) {
+    existing.querySelector(".icono-vote-login-title").textContent = title
+    existing.querySelector("[data-icono-vote-login-link]").href = loginUrl
     focusWithoutScrolling(existing.querySelector("[data-icono-vote-login-link]"))
     return existing
   }
@@ -38,7 +41,9 @@ export function openVoteLoginDialog(options = {}) {
   dialog.innerHTML = VOTE_LOGIN_DIALOG_CONTENT
 
   const closeButton = dialog.querySelector(".icono-vote-login-close")
+  const titleElement = dialog.querySelector(".icono-vote-login-title")
   const loginLink = dialog.querySelector("[data-icono-vote-login-link]")
+  titleElement.textContent = title
   loginLink.href = loginUrl
 
   closeButton.addEventListener("click", function () {
