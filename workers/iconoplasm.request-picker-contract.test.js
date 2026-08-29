@@ -92,6 +92,11 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     favoriteHandler,
     /if \(!currentUser\)[\s\S]*openVoteLoginDialog\(\{[\s\S]*returnFocus: button/,
   )
+  assert.match(
+    app,
+    /vote-login-dialog\.js\?v=20260829-favorite-action/,
+    "the immutable modal module URL must advance when its guest-action contract changes",
+  )
   assert.doesNotMatch(
     favoriteHandler,
     /window\.location\.href\s*=\s*voteLoginUrl\(\)/,

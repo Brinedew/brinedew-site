@@ -31,7 +31,7 @@ import {
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=d8bcfb8f19d3a065"
 import "./vendor/img-comparison-slider.js?v=20260516b517"
-import { openVoteLoginDialog } from "./vote-login-dialog.js?v=20260730-native-dialog"
+import { openVoteLoginDialog } from "./vote-login-dialog.js?v=20260829-favorite-action"
 import { installIconoplasmLightbox } from "./lightbox.js?v=20260820-admin-matrix"
 import {
   openCandidateDeleteDialog,
