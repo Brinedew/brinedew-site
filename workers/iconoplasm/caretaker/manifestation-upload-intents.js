@@ -249,11 +249,12 @@ export async function requireAdoptedManifestationUpload(db, entityKindInput, ent
     db,
     `SELECT upload_intent_id, status, resolved_at
        FROM icono_manifestation_upload_intents
-      WHERE entity_kind = ? AND entity_id = ?`,
+      WHERE entity_kind = ? AND entity_id = ? AND status = 'adopted'
+      ORDER BY resolved_at DESC, upload_intent_id DESC LIMIT 1`,
     kind,
     entityId,
   )
-  if (!row || row.status !== "adopted") {
+  if (!row) {
     throw authorityError("UPLOAD_NOT_ADOPTED", "Verified upload was not atomically adopted", 500)
   }
   return row
