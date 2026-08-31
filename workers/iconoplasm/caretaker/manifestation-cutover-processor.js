@@ -276,6 +276,16 @@ async function verifyAndMarkItem(context, item, now) {
 }
 
 async function recordItemFailure(authoringDb, item, error, now) {
+  console.error("[ICONOPLASM_CUTOVER_ITEM_FAILURE]", {
+    cutover_run_id: String(item.cutover_run_id || "").slice(0, 96),
+    gene_id: String(item.gene_id || "").slice(0, 96),
+    item_status: String(item.status || "").slice(0, 40),
+    error_name: String(error?.name || "Error").slice(0, 80),
+    error_code: String(error?.code || "CUTOVER_ITEM_TRANSIENT_FAILURE").slice(0, 96),
+    // Cutover errors never interpolate source prose. Keep the message bounded
+    // so operational diagnosis cannot turn into a payload logging path.
+    error_message: String(error?.message || "Cutover item failed").slice(0, 320),
+  })
   const permanent = /^CUTOVER_(?:SOURCE|INVALID|FIELDS|TAGS)/.test(String(error?.code || ""))
   const nextAttempt = new Date(Date.parse(now) + 2 * 60 * 1000).toISOString()
   const nextStatus = permanent || item.status !== "uploading" ? "failed" : "uploading"
