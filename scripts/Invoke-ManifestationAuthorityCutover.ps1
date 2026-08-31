@@ -322,7 +322,10 @@ function Write-BoundedProgress {
         retirement      = $retirementStatus
         retired_rows    = $retiredRows
     }
-    Write-Output ($progress | ConvertTo-Json -Compress)
+    # Progress must not enter the success-output pipeline: callers assign the
+    # returned status object, and pipeline text would turn that assignment into
+    # a heterogeneous array after the first long-running page loop.
+    Write-Information ($progress | ConvertTo-Json -Compress) -InformationAction Continue
 }
 
 function Invoke-ProgressLoop {
