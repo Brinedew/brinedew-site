@@ -720,11 +720,15 @@ test("bounded operator resumes through encrypted materialization, shadow project
     sha("2"),
     "2026-08-30",
   )
+  let storageVisibilityWaits = 0
   const base = {
     primaryDb: primary,
     authoringDb: authority,
     env,
     projectShadowEvent: projectCanonicalManifestationCutoverEvent,
+    waitForStorageVisibility: async () => {
+      storageVisibilityWaits += 1
+    },
     actor: { actorKind: "administrator", actorAccountId: "account_cutover_operator" },
   }
   let status = await advanceManifestationAuthorityCutover({
@@ -804,20 +808,6 @@ test("bounded operator resumes through encrypted materialization, shadow project
     ...base,
     input: { action: "materialize", cutoverRunId: "cutover_run_operator", limit: 1, now },
   })
-  assert.equal(status.status, "importing")
-  assert.equal(status.counts.uploading, 1)
-  for (const resumeDelayMs of [6_000, 12_000]) {
-    const resumedAt = new Date(Date.parse(now) + resumeDelayMs).toISOString()
-    status = await advanceManifestationAuthorityCutover({
-      ...base,
-      input: {
-        action: "materialize",
-        cutoverRunId: "cutover_run_operator",
-        limit: 1,
-        now: resumedAt,
-      },
-    })
-  }
   assert.equal(
     status.status,
     "seeded",
@@ -831,6 +821,7 @@ test("bounded operator resumes through encrypted materialization, shadow project
     }),
   )
   assert.equal(status.counts.verified, 2)
+  assert.equal(storageVisibilityWaits, 2)
   assert.ok(objects.size >= 2)
   const derivative = authority.raw
     .prepare(

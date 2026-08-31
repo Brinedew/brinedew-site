@@ -376,6 +376,26 @@ async function processOneItem(context, rawItem, now) {
   }
 }
 
+async function processOneItemWithStorageVisibility(context, rawItem, now) {
+  let item = rawItem
+  const waitForStorageVisibility =
+    context.waitForStorageVisibility ||
+    ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)))
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await processOneItem(context, item, now)
+      return
+    } catch (error) {
+      if (error?.code !== "CUTOVER_STORAGE_PENDING" || attempt === 2) throw error
+      await waitForStorageVisibility(5_000)
+      item = await itemStatus(context.authoringDb, item.cutover_run_id, item.gene_id)
+      if (!item) {
+        throw cutoverError("CUTOVER_ITEM_MISSING", "Cutover item disappeared during storage proof")
+      }
+    }
+  }
+}
+
 async function materializePage(context, run, input, now) {
   if (!new Set(["importing", "seeded"]).has(run.status)) {
     throw cutoverError("CUTOVER_NOT_IMPORTING", "Cutover is not in materialization state")
@@ -416,7 +436,7 @@ async function materializePage(context, run, input, now) {
   const outcomes = await Promise.all(
     items.map(async (rawItem) => {
       try {
-        await processOneItem(context, rawItem, now)
+        await processOneItemWithStorageVisibility(context, rawItem, now)
         return true
       } catch (error) {
         await recordItemFailure(
@@ -487,6 +507,7 @@ export async function advanceManifestationAuthorityCutover({
   authoringDb,
   env,
   projectShadowEvent,
+  waitForStorageVisibility,
   input = {},
   actor = {},
 } = {}) {
@@ -525,7 +546,12 @@ export async function advanceManifestationAuthorityCutover({
     } else if (action === "freeze") {
       await freezeCutover(primaryDb, authoringDb, run, actor.actorAccountId, now)
     } else if (action === "materialize") {
-      await materializePage({ primaryDb, authoringDb, env, projectShadowEvent }, run, input, now)
+      await materializePage(
+        { primaryDb, authoringDb, env, projectShadowEvent, waitForStorageVisibility },
+        run,
+        input,
+        now,
+      )
     } else if (action === "verify") {
       await verifyCutover(authoringDb, primaryDb, env, run, now)
     } else if (action === "activate") {
