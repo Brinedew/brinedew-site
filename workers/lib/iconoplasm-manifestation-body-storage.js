@@ -154,13 +154,20 @@ export async function putEncryptedManifestationBody(
 }
 
 export async function deleteEncryptedManifestationBody(env, objectKey) {
-  const response = await storageFetch(env, objectKey, { method: "DELETE" }, { maxAttempts: 4 })
-  if (!response.ok && response.status !== 404) {
-    throw new Error(`Private manifestation storage DELETE failed (${response.status})`)
+  let initiallyMissing = false
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const response = await storageFetch(env, objectKey, { method: "DELETE" }, { maxAttempts: 4 })
+    if (!response.ok && response.status !== 404) {
+      throw new Error(`Private manifestation storage DELETE failed (${response.status})`)
+    }
+    if (attempt === 0) initiallyMissing = response.status === 404
+    for (const delayMs of BUNNY_READ_AFTER_WRITE_DELAYS_MS) {
+      if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
+      const remaining = await readEncryptedManifestationBody(env, objectKey)
+      if (!remaining) return { ok: true, already_missing: initiallyMissing }
+    }
   }
-  const remaining = await readEncryptedManifestationBody(env, objectKey)
-  if (remaining) throw new Error("Private manifestation object remained readable after DELETE")
-  return { ok: true, already_missing: response.status === 404 }
+  throw new Error("Private manifestation object remained readable after idempotent DELETE retries")
 }
 
 // ARCHITECTURE FENCE [IPD-012]
