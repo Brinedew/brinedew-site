@@ -254,7 +254,9 @@ test("upload intents reserve before PUT, survive termination, and atomically ado
   const pendingStorage = storage(82)
   const pending = await createManifestationUploadIntent(context.db, {
     entityKind: "revision",
-    entityId: "revision_abandoned_7002",
+    // A failed transfer for the same immutable entity must not mask a later
+    // adopted retry when the adoption proof is read back.
+    entityId: "revision_adopted_7002",
     assignmentId: context.assignmentId,
     objectKey: pendingStorage.object_key,
     ciphertextSha256: pendingStorage.ciphertext_sha256,
