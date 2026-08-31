@@ -129,6 +129,11 @@ async function uploadEncryptedBody(
     actorKind: "migration",
     uploadIntentId: `upload_intent_${intentDigest.slice(0, 48)}`,
     leaseToken: `upload_lease_${intentDigest.slice(16, 64)}`,
+    // The shared Bunny verification contract can legitimately span several
+    // delayed authenticated reads and identical PUTs. Keep the cutover lease
+    // alive for that entire bounded window so the sweeper cannot delete an
+    // object while this invocation is still proving it.
+    leaseMs: 10 * 60 * 1000,
     now,
   })
   const uploaded = await putEncryptedManifestationBody(env, objectKey, encrypted.ciphertext, {
