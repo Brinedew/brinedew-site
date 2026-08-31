@@ -3,10 +3,7 @@ import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
 const scriptUrl = new URL("./Invoke-ManifestationAuthorityCutover.ps1", import.meta.url)
-const shardScriptUrl = new URL(
-  "./Invoke-ManifestationAuthorityCutoverShards.ps1",
-  import.meta.url,
-)
+const shardScriptUrl = new URL("./Invoke-ManifestationAuthorityCutoverShards.ps1", import.meta.url)
 
 async function source() {
   return readFile(scriptUrl, "utf8")
@@ -63,4 +60,7 @@ test("sharded operator accepts omitted and singleton shard selections without sc
   assert.match(text, /\$resolvedShardIndexes = @\(/)
   assert.match(text, /0\.\.\(\$ShardCount - 1\)/)
   assert.match(text, /\$ShardIndexes \| Sort-Object -Unique/)
+  assert.match(text, /\[ValidateRange\(1, 25\)\]/)
+  assert.match(text, /\[int\] \$PageLimit = 25/)
+  assert.match(text, /X-Iconoplasm-Cutover-Shard/)
 })
