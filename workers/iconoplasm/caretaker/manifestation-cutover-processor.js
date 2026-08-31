@@ -425,7 +425,7 @@ async function materializePage(context, run, input, now) {
   const shardCount = Math.trunc(Number(input.shardCount)) || 1
   const shardIndex = Math.trunc(Number(input.shardIndex)) || 0
   if (
-    ![1, 2, 4, 8, 16, 32, 64, 128].includes(shardCount) ||
+    ![1, 2, 4, 8, 16, 32, 64, 128, 256].includes(shardCount) ||
     shardIndex < 0 ||
     shardIndex >= shardCount
   ) {
