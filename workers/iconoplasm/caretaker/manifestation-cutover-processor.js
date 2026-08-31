@@ -75,7 +75,7 @@ export async function readManifestationCutoverStatus(authoringDb, primaryDb, cut
   requireDatabase(authoringDb)
   requireDatabase(primaryDb)
   const run = await readRun(authoringDb, cutoverRunId)
-  const [counts, primary, authority, retirement, backup] = await Promise.all([
+  const [counts, primary, authority, retirement, backup, backupProgress] = await Promise.all([
     first(
       authoringDb,
       `SELECT count(*) AS total,
@@ -98,6 +98,26 @@ export async function readManifestationCutoverStatus(authoringDb, primaryDb, cut
     first(
       authoringDb,
       "SELECT * FROM icono_manifestation_cutover_backup_artifacts WHERE cutover_run_id = ?",
+      cutoverRunId,
+    ),
+    first(
+      authoringDb,
+      `SELECT
+         (SELECT count(*) FROM icono_manifestation_cutover_backup_entries entry
+           JOIN icono_manifestation_cutover_backup_artifacts artifact
+             ON artifact.backup_artifact_id = entry.backup_artifact_id
+          WHERE artifact.cutover_run_id = ? AND entry.status = 'verified') AS verified_entries,
+         (SELECT coalesce(sum(entry.package_bytes), 0)
+            FROM icono_manifestation_cutover_backup_entries entry
+            JOIN icono_manifestation_cutover_backup_artifacts artifact
+              ON artifact.backup_artifact_id = entry.backup_artifact_id
+           WHERE artifact.cutover_run_id = ? AND entry.status = 'verified') AS package_bytes,
+         (SELECT count(*) FROM icono_manifestation_cutover_backup_parts part
+            JOIN icono_manifestation_cutover_backup_artifacts artifact
+              ON artifact.backup_artifact_id = part.backup_artifact_id
+           WHERE artifact.cutover_run_id = ? AND part.status = 'verified') AS part_count`,
+      cutoverRunId,
+      cutoverRunId,
       cutoverRunId,
     ),
   ])
@@ -149,6 +169,18 @@ export async function readManifestationCutoverStatus(authoringDb, primaryDb, cut
     backup: backup
       ? Object.freeze({
           ...safeArtifact(backup),
+          verified_entries:
+            backup.status === "building"
+              ? Number(backupProgress?.verified_entries || 0)
+              : Number(backup.verified_entries || 0),
+          package_bytes:
+            backup.status === "building"
+              ? Number(backupProgress?.package_bytes || 0)
+              : Number(backup.package_bytes || 0),
+          part_count:
+            backup.status === "building"
+              ? Number(backupProgress?.part_count || 0)
+              : Number(backup.part_count || 0),
           retention_expires_at: backup.retention_expires_at || null,
           deletion_status: backup.status,
           deleted_object_count:
@@ -605,6 +637,8 @@ export async function advanceManifestationAuthorityCutover({
       await advanceManifestationCutoverBackupArtifact(authoringDb, env, {
         cutoverRunId: runId,
         limit: input.limit,
+        shardCount: input.shardCount,
+        shardIndex: input.shardIndex,
         now,
       })
     } else if (action === "begin_retirement") {

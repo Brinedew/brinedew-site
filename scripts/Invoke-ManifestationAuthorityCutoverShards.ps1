@@ -1,18 +1,22 @@
 <#
 .SYNOPSIS
-Advances disjoint manifestation-cutover shards concurrently.
+Advances disjoint manifestation-cutover materialization or backup shards concurrently.
 
 .DESCRIPTION
-Each shard owns a deterministic subset of stable gene IDs, so requests cannot
-select the same cutover item. One bounded page runs per shard through the
-ordinary Worker request plane; each item retains its own CAS and final
-public-material proof without consuming Durable Object duration.
+Each shard owns a deterministic subset of stable gene or backup-entity IDs, so
+requests cannot select the same work item. One bounded page runs per shard
+through the ordinary Worker request plane without consuming Durable Object
+duration. Backup shards upload packages only; one unsharded operator owns part
+numbering and the final root.
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
     [ValidatePattern('^https://')]
     [string] $BaseUri,
+
+    [ValidateSet('materialize', 'backup')]
+    [string] $Action = 'materialize',
 
     [ValidateSet(2, 4, 8, 16, 32, 64, 128, 256)]
     [int] $ShardCount = 4,
@@ -116,18 +120,19 @@ function Invoke-ShardRound {
     $tasks = [Collections.Generic.List[Threading.Tasks.Task[Net.Http.HttpResponseMessage]]]::new()
     try {
         foreach ($shardIndex in $resolvedShardIndexes) {
-            $payload = [ordered]@{
-                action       = 'materialize'
-                limit        = $PageLimit
-                retry_failed = $true
-                shard_count  = $ShardCount
-                shard_index  = $shardIndex
-            } | ConvertTo-Json -Compress
+            $body = [ordered]@{
+                action      = $Action
+                limit       = $PageLimit
+                shard_count = $ShardCount
+                shard_index = $shardIndex
+            }
+            if ($Action -eq 'materialize') { $body.retry_failed = $true }
+            $payload = $body | ConvertTo-Json -Compress
             $request = [Net.Http.HttpRequestMessage]::new(
                 [Net.Http.HttpMethod]::Post,
                 "$base$runPath/actions"
             )
-            $request.Headers.Add('X-Iconoplasm-Cutover-Action', 'materialize')
+            $request.Headers.Add('X-Iconoplasm-Cutover-Action', $Action)
             $request.Content = [Net.Http.StringContent]::new(
                 $payload,
                 [Text.Encoding]::UTF8,
@@ -162,6 +167,28 @@ function Invoke-ShardRound {
     }
 }
 
+function Test-ActionComplete {
+    param([Parameter(Mandatory)] $Status)
+    if ($Action -eq 'backup') {
+        return (
+            $null -ne $Status.backup -and
+            (
+                [string] $Status.backup.status -ne 'building' -or
+                [int64] $Status.backup.verified_entries -ge [int64] $Status.backup.expected_entries
+            )
+        )
+    }
+    return [string] $Status.status -ne 'importing'
+}
+
+function Get-ActionFingerprint {
+    param([Parameter(Mandatory)] $Status)
+    if ($Action -eq 'backup') {
+        return "$($Status.backup.status)|$($Status.backup.verified_entries)|$($Status.backup.part_count)"
+    }
+    return "$($Status.status)|$($Status.counts.verified)|$($Status.counts.uploading)|$($Status.counts.adopted)|$($Status.counts.projected)|$($Status.counts.failed)"
+}
+
 try {
     $previous = $null
     $lastProgressAt = [DateTimeOffset]::UtcNow
@@ -169,7 +196,7 @@ try {
     $round = 0
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
         $status = Get-CutoverStatus
-        if ([string] $status.status -ne 'importing') {
+        if (Test-ActionComplete -Status $status) {
             $status | ConvertTo-Json -Depth 20 -Compress
             return
         }
@@ -178,7 +205,7 @@ try {
         $failures = @(Invoke-ShardRound)
         $status = Get-CutoverStatus
         $round += 1
-        $fingerprint = "$($status.status)|$($status.counts.verified)|$($status.counts.uploading)|$($status.counts.adopted)|$($status.counts.projected)|$($status.counts.failed)"
+        $fingerprint = Get-ActionFingerprint -Status $status
         if ($fingerprint -eq $previous) {
             if ($failures.Count -gt 0) {
                 $failedWithoutProgress += 1
@@ -197,14 +224,23 @@ try {
         }
         $previous = $fingerprint
         if ($round -eq 1 -or $round % 10 -eq 0 -or $failures.Count -gt 0) {
-            [ordered]@{
+            $progress = [ordered]@{
+                action         = $Action
                 status         = $status.status
-                verified       = [int] $status.counts.verified
-                uploading      = [int] $status.counts.uploading
-                failed         = [int] $status.counts.failed
                 shard_failures = $failures.Count
                 failure_kinds  = @($failures | Sort-Object -Unique)
-            } | ConvertTo-Json -Compress | Write-Output
+            }
+            if ($Action -eq 'backup') {
+                $progress.verified = [int] $status.backup.verified_entries
+                $progress.expected = [int] $status.backup.expected_entries
+                $progress.parts = [int] $status.backup.part_count
+            }
+            else {
+                $progress.verified = [int] $status.counts.verified
+                $progress.uploading = [int] $status.counts.uploading
+                $progress.failed = [int] $status.counts.failed
+            }
+            $progress | ConvertTo-Json -Compress | Write-Output
         }
         if (
             $fingerprint -eq $previous -and
@@ -223,11 +259,11 @@ try {
     }
     $status = Get-CutoverStatus
     [ordered]@{
+        action           = $Action
         status           = $status.status
         deadline_reached = $true
-        verified         = [int] $status.counts.verified
-        uploading        = [int] $status.counts.uploading
-        failed           = [int] $status.counts.failed
+        verified         = if ($Action -eq 'backup') { [int] $status.backup.verified_entries } else { [int] $status.counts.verified }
+        expected         = if ($Action -eq 'backup') { [int] $status.backup.expected_entries } else { [int] $status.counts.total }
     } | ConvertTo-Json -Compress | Write-Output
     return
 }

@@ -958,6 +958,34 @@ test("bounded operator resumes through encrypted materialization, shadow project
     },
   })
   assert.equal(status.backup.status, "building")
+  const backupEntityIds = authority.raw
+    .prepare(
+      `SELECT seed_revision_id AS entity_id FROM icono_manifestation_cutover_items
+        WHERE cutover_run_id = 'cutover_run_operator' AND seed_revision_id IS NOT NULL
+       UNION ALL
+       SELECT seed_tags_derivative_id AS entity_id FROM icono_manifestation_cutover_items
+        WHERE cutover_run_id = 'cutover_run_operator' AND seed_tags_derivative_id IS NOT NULL`,
+    )
+    .all()
+    .map((value) => value.entity_id)
+  const backupShards = [
+    ...new Set(backupEntityIds.map((value) => Number.parseInt(value.slice(-2), 16))),
+  ]
+  for (const shardIndex of backupShards) {
+    status = await advanceManifestationAuthorityCutover({
+      ...base,
+      input: {
+        action: "backup",
+        cutoverRunId: "cutover_run_operator",
+        limit: 5,
+        shardCount: 256,
+        shardIndex,
+        now,
+      },
+    })
+  }
+  assert.equal(status.backup.status, "building")
+  assert.equal(status.backup.verified_entries, 2)
   status = await advanceManifestationAuthorityCutover({
     ...base,
     input: { action: "backup", cutoverRunId: "cutover_run_operator", limit: 5, now },
