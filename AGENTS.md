@@ -181,9 +181,11 @@ Rendering within the daily budget.
 
 **ARCHITECTURE FENCE [IPD-005]** — the primary Iconoplasm D1 is bounded
 operational state. Its Free-plan wall is 500,000,000 bytes per database, not the
-5 GB account allowance. Keep manifestation prose authoritative only in gene
-essence, keep the admin rollup copy empty, and archive publish events older than
-30 days to the cold audit D1 only after ID verification. Read
+5 GB account allowance. Do not add manifestation history or encrypted body
+metadata to this database. The legacy gene-essence manifestation column is a
+cutover source only, not the caretaker authority. Keep the admin rollup copy
+empty, and archive publish events older than 30 days to the cold audit D1 only
+after ID verification. Read
 `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` before adding large
 columns, materialized payloads, append-only ledgers, retention jobs, D1 bindings,
 capacity charts, or bulk reconciliation paths.
@@ -197,6 +199,21 @@ history is bounded operational state too: publication aliases and the shared
 extension blocklist retain only their newest 100 D1 revisions and 100 immutable
 KV projections. Recognition validation uses one singleton receipt row; never
 turn validation attempts, leases, or scanner builds into an append-only ledger.
+
+**ARCHITECTURE FENCE [IPD-012]** — the Website is the sole command authority
+for caretaker assignments, immutable manifestation revisions, canonical
+selection, withdrawal, and exact generation provenance for every gene. Use the
+separate `ICONOPLASM_AUTHORING_DB` for bounded transactional metadata. Store
+prose and derived bodies only as per-object AES-256-GCM ciphertext in Bunny,
+with wrapped data keys and integrity metadata in authoring D1; never read these
+objects through the public CDN. The workstation is a replica, offline draft
+surface, enrichment executor, and exact-version generator—not another writer.
+Every accepted command is idempotent and emits one ordered, no-prose snapshot
+event. Do not restore gene-symbol dirty bits, latest-by-gene generation, or the
+legacy manifestation upsert after the authority epoch changes. Read
+`docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` before changing the
+binding, body crypto/storage ordering, schemas, retention, migration, projection,
+replication, or legacy-writer gate.
 
 **ARCHITECTURE FENCE [IPD-006]** — one completed workstation publication is the
 Discord delivery and Request inbox receipt unit, partitioned by recipient and
