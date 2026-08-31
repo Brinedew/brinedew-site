@@ -289,14 +289,19 @@ async function recordItemFailure(authoringDb, item, error, now) {
   const permanent = /^CUTOVER_(?:SOURCE|INVALID|FIELDS|TAGS)/.test(String(error?.code || ""))
   const nextAttempt = new Date(Date.parse(now) + 2 * 60 * 1000).toISOString()
   const nextStatus = permanent || item.status !== "uploading" ? "failed" : "uploading"
+  const boundedFailureMessage = `${String(error?.name || "Error").slice(0, 80)}: ${String(
+    error?.message || "Cutover item failed",
+  ).slice(0, 320)}`
   await prepared(
     authoringDb,
     `UPDATE icono_manifestation_cutover_items
         SET status = ?, attempts = attempts + 1, failure_code = ?,
-            failure_message = NULL, next_attempt_at = ?, updated_at = ?
+            failure_message = COALESCE(failure_message, ?),
+            next_attempt_at = ?, updated_at = ?
       WHERE cutover_run_id = ? AND gene_id = ?`,
     nextStatus,
     String(error?.code || "CUTOVER_ITEM_TRANSIENT_FAILURE").slice(0, 96),
+    boundedFailureMessage,
     permanent ? null : nextAttempt,
     now,
     item.cutover_run_id,
