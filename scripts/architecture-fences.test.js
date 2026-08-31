@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
@@ -433,6 +433,86 @@ test("IPD-005 uses the per-database wall and a verified cold archive", () => {
   assert.match(archive, /DELETE FROM icono_publish_events/)
 })
 
+// ARCHITECTURE FENCE [IPD-012]
+test("IPD-012 keeps one encrypted manifestation command authority", () => {
+  const fence = registry.fences.find((entry) => entry.id === "IPD-012")
+  assert.ok(fence, "IPD-012 must remain registered")
+  assert.match(fence.decision, /Website is the sole command authority/)
+  assert.match(fence.decision, /ICONOPLASM_AUTHORING_DB/)
+  assert.match(fence.decision, /AES-256-GCM/)
+  assert.match(fence.decision, /authenticated Bunny Storage GET/)
+  assert.match(fence.decision, /legacy_unbound/)
+
+  const config = readRepositoryFile(
+    "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+  )
+  const deploy = readRepositoryFile(".github/workflows/deploy-quartz.yml")
+  const product = readRepositoryFile("docs/ICONOPLASM_PRODUCT_OPERATING_MODEL.md")
+  const storage = readRepositoryFile("workers/lib/iconoplasm-manifestation-body-storage.js")
+  assert.match(config, /binding = "ICONOPLASM_AUTHORING_DB"/)
+  assert.match(config, /database_name = "iconoplasm-authoring"/)
+  assert.match(config, /ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring"/)
+  assert.match(config, /ICONOPLASM_AUTHORING_BACKUP_STORAGE_ZONE = "iconoplasm-authoring-backup"/)
+  assert.match(config, /ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring-staging"/)
+  assert.match(
+    config,
+    /ICONOPLASM_AUTHORING_BACKUP_STORAGE_ZONE = "iconoplasm-authoring-backup-staging"/,
+  )
+  const authoringZones = [
+    ...config.matchAll(/^ICONOPLASM_AUTHORING_STORAGE_ZONE = "([^"]+)"$/gm),
+  ].map((match) => match[1])
+  const backupZones = [
+    ...config.matchAll(/^ICONOPLASM_AUTHORING_BACKUP_STORAGE_ZONE = "([^"]+)"$/gm),
+  ].map((match) => match[1])
+  assert.deepEqual(
+    new Set(authoringZones).size,
+    2,
+    "production and staging authoring zones must differ",
+  )
+  assert.deepEqual(new Set(backupZones).size, 2, "production and staging backup zones must differ")
+  assert.match(fence.decision, /server-built and independently re-read multipart root/)
+  assert.match(
+    fence.decision,
+    /Production and staging use four different authoring and backup zones/,
+  )
+  assert.match(fence.decision, /verifiably deleted 30 days after plaintext retirement/)
+  assert.match(deploy, /d1 migrations apply iconoplasm-authoring --remote/)
+  assert.match(product, /Website authoring authority owns/)
+  assert.match(product, /workstation is a replica/)
+  assert.match(storage, /AccessKey/)
+  assert.doesNotMatch(storage, /b-cdn\.net|EXTERNAL_PORTRAIT/)
+})
+
+test("IPD-012 caretaker migrations remain compatible with the remote D1 trigger splitter", () => {
+  const migrationGroups = [
+    ["migrations-iconoplasm-authoring", /^000[1-4]_.*\.sql$/],
+    ["migrations-iconoplasm", /^008[4-8]_.*\.sql$/],
+  ]
+
+  for (const [directory, filenamePattern] of migrationGroups) {
+    const filenames = readdirSync(path.join(REPOSITORY_ROOT, directory))
+      .filter((filename) => filenamePattern.test(filename))
+      .sort()
+    assert.ok(filenames.length > 0, `${directory} must contain caretaker authority migrations`)
+
+    for (const filename of filenames) {
+      const sql = readRepositoryFile(`${directory}/${filename}`)
+      const topLevelCreate = /^CREATE (?:TABLE|(?:UNIQUE )?INDEX|TRIGGER)\b/gm
+      const starts = [...sql.matchAll(topLevelCreate)].map((match) => match.index)
+      starts.push(sql.length)
+      for (let index = 0; index < starts.length - 1; index += 1) {
+        const statement = sql.slice(starts[index], starts[index + 1])
+        if (!statement.startsWith("CREATE TRIGGER")) continue
+        assert.doesNotMatch(
+          statement,
+          /\b(?:CASE|END)\b/,
+          `${directory}/${filename} uses uppercase CASE/END inside a trigger; remote D1 mis-splits the inner END and returns SQLITE 7500 incomplete input`,
+        )
+      }
+    }
+  }
+})
+
 // ARCHITECTURE FENCE [IPD-009]
 test("IPD-009 keeps the cold path and deployment topology explicit", () => {
   const fence = registry.fences.find((entry) => entry.id === "IPD-009")
@@ -512,7 +592,7 @@ test("IPD-006 preserves durable publication groups and bounded Discord receipts"
   assert.match(delivery, /fulfillment_publication_id/)
   assert.match(delivery, /fulfillment_group_size/)
   assert.match(delivery, /full\.webp/)
-  assert.match(runtime, /publicationId: p\?\.publication_id/)
+  assert.match(runtime, /fulfillmentPublicationId: p\?\.fulfillment_publication_id/)
   assert.match(runtime, /fulfillment_publication_id = \?/)
   assert.match(runtime, /fulfillment_group_size = \?/)
   assert.match(migration, /legacy-request:/)

@@ -8,7 +8,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=20260730-module-cache"
-import { createRequestInbox } from "./request-inbox.js?v=20260812-persistent-sidebar"
+import { createRequestInbox } from "./request-inbox.js?v=20260830-caretaker-inbox-v1"
 import { portraitDelivery } from "./portrait-delivery.js?v=0d14e5a87d1914bf"
 import {
   createEmulsionFavoriteStore,
@@ -158,6 +158,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var websiteGuestDiscoveryMergeRemaining = WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE
   var currentUser = null
   var currentUserIsIconoAdmin = false
+  var caretakerPanelPromise = null
   var masonryLibsPromise = null
   var hasResolvedAuthState = false
   var websiteGuestDiscoveries = createWebsiteGuestDiscoveryStore({
@@ -233,6 +234,92 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       credentials: "include",
     })
     return fetchJSON(path, requestInit)
+  }
+
+  function loadCaretakerPanel() {
+    if (caretakerPanelPromise) return caretakerPanelPromise
+    var stylesheets = [
+      {
+        id: "icono-caretaker-manifestations-styles",
+        href: "/static/iconoplasm/caretaker-manifestations.css?v=20260830-authority-v1",
+      },
+      {
+        id: "icono-caretaker-supervote-styles",
+        href: "/static/iconoplasm/caretaker-supervote.css?v=20260830-supervote-v1",
+      },
+    ]
+    for (var i = 0; i < stylesheets.length; i += 1) {
+      if (document.getElementById(stylesheets[i].id)) continue
+      var stylesheet = document.createElement("link")
+      stylesheet.id = stylesheets[i].id
+      stylesheet.rel = "stylesheet"
+      stylesheet.href = stylesheets[i].href
+      document.head.appendChild(stylesheet)
+    }
+    caretakerPanelPromise = Promise.all([
+      import("./caretaker-manifestations.js?v=20260830-authority-v1"),
+      import("./caretaker-supervote.js?v=20260830-supervote-v1"),
+    ]).then(function (modules) {
+      var supervoteControls = modules[1].createCaretakerSupervoteControls({
+        fetchJSON: fetchAuthedJSON,
+        escapeHtml: esc,
+      })
+      var manifestationPanel = modules[0].createCaretakerManifestationPanel({
+        fetchJSON: fetchAuthedJSON,
+        escapeHtml: esc,
+        onCanonicalChanged: function () {
+          rerenderCurrentGeneRoute({ forceFresh: true })
+        },
+        onDossierChanged: function (detail) {
+          var geneContent = detail.host && detail.host.closest("#icono-gene-content")
+          if (!geneContent) return
+          return supervoteControls.mount(geneContent, {
+            symbol: detail.symbol,
+            dossier: detail.dossier,
+          })
+        },
+      })
+      return Object.freeze({
+        mount: manifestationPanel.mount,
+        unmountSupervote: supervoteControls.unmount,
+      })
+    })
+    return caretakerPanelPromise
+  }
+
+  function hydrateCaretakerManifestationIsland(container, genePayload) {
+    var host = container && container.querySelector("[data-icono-caretaker-island]")
+    if (!host) return
+    if (!hasResolvedAuthState || !currentUser) {
+      host.hidden = true
+      host.replaceChildren()
+      host.removeAttribute("data-icono-caretaker-signature")
+      if (caretakerPanelPromise) {
+        void caretakerPanelPromise.then(function (panel) {
+          panel.unmountSupervote(container)
+        })
+      }
+      return
+    }
+    var symbol = normalizedSymbol(genePayload && genePayload.symbol)
+    var accountId = String(currentUser.account_id || currentUser.id || currentUser.user_id || "")
+    var signature = accountId + ":" + symbol
+    if (host.getAttribute("data-icono-caretaker-signature") === signature) return
+    host.setAttribute("data-icono-caretaker-signature", signature)
+    void loadCaretakerPanel()
+      .then(function (panel) {
+        return panel.mount(host, {
+          symbol: symbol,
+          currentUser: currentUser,
+          authResolved: hasResolvedAuthState,
+        })
+      })
+      .catch(function () {
+        host.removeAttribute("data-icono-caretaker-signature")
+        host.hidden = false
+        host.innerHTML =
+          '<section class="icono-caretaker-panel"><p class="icono-caretaker-status" data-tone="error">Caretaker record could not be loaded.</p></section>'
+      })
   }
 
   var emulsionFavorites = createEmulsionFavoriteStore({
@@ -8778,6 +8865,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       discordHost.innerHTML = buildDiscordActionCardMarkup()
       discordHost.setAttribute("data-icono-island-signature", authSignature)
     }
+    hydrateCaretakerManifestationIsland(container, genePayload)
     hydrateServerCandidateActionIslands(container, genePayload)
   }
 
@@ -9127,6 +9215,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
     html += "<div data-icono-canonical-toolbar-island>" + renderCanonicalToolbarMarkup(g) + "</div>"
     html += "</section>"
+
+    html += '<div class="icono-caretaker-island" data-icono-caretaker-island hidden></div>'
 
     // Resampling suggestions sit above the candidate blots.
     html += "<div data-icono-suggest-island>" + buildSuggestSectionMarkup(g.symbol) + "</div>"

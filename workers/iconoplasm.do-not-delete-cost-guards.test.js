@@ -169,8 +169,8 @@ test("DO NOT DELETE: Website/wrangler.toml must not quietly regain direct state 
 
   assert.doesNotMatch(
     publicWrangler,
-    /binding = "ICONOPLASM_DB"/,
-    "the public edge worker must not bind ICONOPLASM_DB again",
+    /binding = "ICONOPLASM_DB"|binding = "ICONOPLASM_AUTHORING_DB"/,
+    "the public edge worker must not bind either Iconoplasm D1 authority",
   )
   assert.doesNotMatch(
     publicWrangler,
@@ -237,7 +237,7 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
   )
   assert.doesNotMatch(
     publicEdge,
-    /ICONOPLASM_DB|env\.DB|GAME_SESSIONS|STRUCTURES_BUCKET|ICONOPLASM_PORTRAITS/,
+    /ICONOPLASM_DB|ICONOPLASM_AUTHORING_DB|env\.DB|GAME_SESSIONS|STRUCTURES_BUCKET|ICONOPLASM_PORTRAITS/,
     "public edge worker should stay free of direct state bindings in runtime code",
   )
   assert.match(
@@ -259,6 +259,11 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
     internalWrangler,
     /name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"[\s\S]*class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"/,
     "internal stateful worker should bind the hard daily budget durable object because alerts are not a kill switch",
+  )
+  assert.match(
+    internalWrangler,
+    /binding = "ICONOPLASM_AUTHORING_DB"[\s\S]*database_name = "iconoplasm-authoring"/,
+    "the one internal state owner should bind the isolated manifestation authority",
   )
   assert.match(
     internalWrangler,
@@ -419,9 +424,23 @@ test("DO NOT DELETE: cost attribution should name request-picker and admin dashb
       `${routeId} should stay an explicit declarative dashboard cost bucket`,
     )
   }
-  for (const routeId of ["admin_requests_open", "admin_requests_fulfill"]) {
+  for (const routeId of ["admin_requests_open"]) {
     const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === routeId)
     assert.equal(route?.budgetFamily, routeId, `${routeId} should not disappear into admin_other`)
+  }
+  for (const routeId of [
+    "authority_generation_lease_claim",
+    "authority_generation_lease_renew",
+    "authority_generation_lease_fail",
+    "authority_generation_lease_complete",
+  ]) {
+    const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === routeId)
+    assert.equal(
+      route?.budgetFamily,
+      "authority_generation_executor",
+      `${routeId} must stay in the workstation executor cost bucket`,
+    )
+    assert.equal(route?.auth, "authority-generation-bearer")
   }
   assert.match(
     runtime,

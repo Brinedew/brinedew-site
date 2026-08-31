@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 // ARCHITECTURE FENCE [IPD-011]: failed bytes and late votes cannot advance canon.
 import { createCardPublication, CARD_PUBLICATION_BATCH } from "./lib/iconoplasm-card-publication.js"
+import { PUBLIC_CANONICAL_MATERIALIZATION_BATCH_LIMIT } from "./iconoplasm-public-canonical-runtime.js"
 import {
   canonicalPublishedJson,
   publishedCardObjectKey,
@@ -159,6 +160,34 @@ test("bootstrap keeps legacy public until every object is prepared and atomicall
   assert.equal(p.status().head.watermark.id, 1)
   assert.equal(p.status().job, null)
   assert.equal(p.status().requested, null)
+})
+
+test("a 750-card post-cutover repair resumes through bounded materialization pages", async () => {
+  const f = fixture(750)
+  const materialize = f.source.materialize
+  let calls = 0
+  let largestPage = 0
+  f.source.materialize = async (symbols) => {
+    calls += 1
+    largestPage = Math.max(largestPage, symbols.length)
+    return materialize(symbols)
+  }
+  const p = f.create()
+
+  await p.bootstrap()
+  await drain(p)
+  calls = 0
+  largestPage = 0
+  for (const card of f.cards) card.payload.portrait = "post-cutover"
+  f.change(f.cards.map((card) => card.symbol))
+  p.wake()
+  await drain(p)
+
+  assert.equal(CARD_PUBLICATION_BATCH, PUBLIC_CANONICAL_MATERIALIZATION_BATCH_LIMIT)
+  assert.equal(p.status().head.current.manifest.card_count, 750)
+  assert.equal(largestPage, CARD_PUBLICATION_BATCH)
+  assert.equal(calls, Math.ceil(750 / CARD_PUBLICATION_BATCH))
+  assert.equal(p.status().job, null)
 })
 
 test("storage bootstrap cannot silently acknowledge a mapping migration", async () => {

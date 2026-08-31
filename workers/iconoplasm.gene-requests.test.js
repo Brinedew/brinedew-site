@@ -9,6 +9,66 @@ import {
   iconoplasmAnimaEmulsionSlotIsPreallocated,
   iconoplasmPreallocatedAnimaEmulsionOption,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { iconoplasmGenerationFingerprint } from "./lib/iconoplasm-generation-provenance.js"
+
+const DRAIN_SOURCE = {
+  generation_provenance_status: "bound",
+  source_gene_id: "gene_dnmt3b_0001",
+  source_manifestation_id: "manifestation_dnmt3b_0001",
+  source_manifestation_revision_id: "revision_dnmt3b_0001",
+  source_manifestation_body_sha256: "a".repeat(64),
+  source_manifestation_derivative_id: "",
+  source_manifestation_derivative_sha256: "",
+  source_manifestation_derivative_recipe_id: "",
+  source_manifestation_derivative_recipe_version: "",
+  source_manifestation_derivative_provider_id: "",
+  source_manifestation_derivative_model_id: "",
+  source_manifestation_derivative_tagger_config_sha256: "",
+  source_canonical_selection_id: "selection_dnmt3b_0001",
+  source_canonical_head_version: 1,
+  source_gene_revision: 1,
+  source_sample_label: "DNMT3B-1",
+  source_sample_number: 1,
+  source_sample_text_sha256: "c".repeat(64),
+  prompt_body_mode: "prose_prompt",
+}
+DRAIN_SOURCE.source_snapshot_sha256 = await iconoplasmGenerationFingerprint(
+  "iconoplasm.generation-source.v1",
+  DRAIN_SOURCE,
+)
+
+const DRAIN_AUTHORING_DB = Object.freeze({
+  prepare() {
+    return {
+      bind() {
+        return this
+      },
+      async first() {
+        return {
+          gene_id: DRAIN_SOURCE.source_gene_id,
+          gene_status: "active",
+          manifestation_id: DRAIN_SOURCE.source_manifestation_id,
+          manifestation_status: "active",
+          manifestation_revision_id: DRAIN_SOURCE.source_manifestation_revision_id,
+          body_sha256: DRAIN_SOURCE.source_manifestation_body_sha256,
+          body_bytes: 32,
+          sample_label: DRAIN_SOURCE.source_sample_label,
+          sample_number: DRAIN_SOURCE.source_sample_number,
+          sample_text_sha256: DRAIN_SOURCE.source_sample_text_sha256,
+          revision_status: "active",
+          revision_object_key:
+            "private/manifestations/v1/aa/mbody_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bin",
+          revision_verified_at: "2026-08-30 00:00:00",
+          canonical_selection_id: DRAIN_SOURCE.source_canonical_selection_id,
+          selected_manifestation_id: DRAIN_SOURCE.source_manifestation_id,
+          selected_revision_id: DRAIN_SOURCE.source_manifestation_revision_id,
+          selection_head_version: DRAIN_SOURCE.source_canonical_head_version,
+          selection_gene_revision: DRAIN_SOURCE.source_gene_revision,
+        }
+      },
+    }
+  },
+})
 
 class FakeRequestStatement {
   constructor(db, sql) {
@@ -592,33 +652,8 @@ test("admin request history keeps fulfilled rows and attaches their result image
   assert.match(fulfilled.fulfilled_asset.medium_url, new RegExp(fulfilledSha + "/medium\\.webp$"))
 })
 
-test("admin drain plan selects only the requester who can receive a DM during the live test", async () => {
-  const brinedewId = "1289482311557058641"
-  const rows = [
-    {
-      id: 20,
-      gene_symbol: "DNMT3B",
-      requester_user_id: "another-user",
-      requester_username: "l_chart",
-      request_mode: "specific",
-      requested_vision_id: "anima-v1-1370",
-      status: "open",
-      created_at: "2026-07-17T01:00:00Z",
-    },
-    {
-      id: 37,
-      gene_symbol: "DNMT3B",
-      requester_user_id: brinedewId,
-      requester_username: "brinedew",
-      request_mode: "specific",
-      requested_vision_id: "anima-v1-1370",
-      requested_emulsion_slot: 30593,
-      request_origin: "user",
-      status: "open",
-      created_at: "2026-07-17T02:00:00Z",
-    },
-  ]
-  const env = buildEnv({ bindGateway: false, dbOptions: { requestRows: rows } })
+test("legacy drain-plan fails loudly and points executors at the atomic claim route", async () => {
+  const env = buildEnv({ bindGateway: false })
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/requests/drain-plan", {
@@ -632,16 +667,10 @@ test("admin drain plan selects only the requester who can receive a DM during th
     )
   const payload = await response.json()
 
-  assert.equal(response.status, 200)
-  assert.equal(payload.delivery_mode, "brinedew_test")
-  assert.equal(payload.total_open_count, 2)
-  assert.equal(payload.eligible_count, 1)
-  assert.deepEqual(
-    payload.rows.map((row) => row.id),
-    [37],
-  )
-  assert.equal(payload.rows[0]?.requested_emulsion_slot, 30593)
-  assert.equal(payload.rows[0]?.request_origin, "user")
+  assert.equal(response.status, 409)
+  assert.equal(payload.ok, false)
+  assert.equal(payload.error.code, "EXACT_GENERATION_LEASE_REQUIRED")
+  assert.equal(payload.claim_endpoint, "/api/iconoplasm/authority/generation-leases/claim")
 })
 
 test("generation requests purge unrelated-gene reference snapshots", () => {

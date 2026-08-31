@@ -2,6 +2,10 @@
  * Discord OAuth with PKCE implementation
  */
 import { buildAvatarProxyPath, sanitizeDiscordAvatarUrl } from "./lib/avatar-proxy.js"
+import {
+  BrinedewAccountIdentityError,
+  resolveBrinedewAccountIdentity,
+} from "./lib/brinedew-account-identity.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 
 const DISCORD_API = "https://discord.com/api/v10"
@@ -33,6 +37,18 @@ export function persistentSessionCookie({ sessionId, cookieDomain = "" } = {}) {
   const domain = String(cookieDomain || "").trim()
   const domainAttr = domain ? `; Domain=${domain}` : ""
   return `session=${id}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${PERSISTENT_SESSION_MAX_AGE_SECONDS}${domainAttr}`
+}
+
+function expiredPersistentSessionHeaders(url) {
+  const cookieDomain = getSharedCookieDomain(url.hostname)
+  const domainAttr = cookieDomain ? `; Domain=${cookieDomain}` : ""
+  const headers = new Headers()
+  headers.append(
+    "Set-Cookie",
+    `session=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0${domainAttr}`,
+  )
+  headers.append("Set-Cookie", sharedSessionPresenceCookie({ present: false, cookieDomain }))
+  return headers
 }
 
 function readEnvString(value) {
@@ -516,26 +532,80 @@ export async function handleCallback(request, env) {
   const supporterRoleId = readEnvString(env.DISCORD_SUPPORTER_ROLE_ID)
   const tier = supporterRoleId && guildRoles.includes(supporterRoleId) ? "supporter" : "registered"
 
-  // Create or update user in D1
+  // Resolve the provider subject to a permanent Brinedew account before
+  // updating the mutable Discord profile projection. Username/avatar/role
+  // changes must never create a new owner identity.
   const avatarUrlRaw = user.avatar
     ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
     : null
   const avatarUrl = sanitizeDiscordAvatarUrl(avatarUrlRaw)
 
   const now = Date.now()
+  let accountIdentity
+  try {
+    accountIdentity = await resolveBrinedewAccountIdentity(env.DB, {
+      provider: "discord",
+      providerSubject: user.id,
+      now,
+    })
+  } catch (error) {
+    if (!(error instanceof BrinedewAccountIdentityError)) throw error
+    const headers = new Headers({
+      "Set-Cookie": `${oauthCookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0${cookieDomainAttr}`,
+    })
+    return Response.json(
+      {
+        error: "This provider identity cannot currently sign in.",
+        code: error.code,
+      },
+      { status: error.status, headers },
+    )
+  }
+  if (accountIdentity.status !== "active") {
+    const headers = new Headers({
+      "Set-Cookie": `${oauthCookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0${cookieDomainAttr}`,
+    })
+    return Response.json(
+      {
+        error: "This Brinedew account is not active.",
+        code: "ACCOUNT_NOT_ACTIVE",
+        account_status: accountIdentity.status,
+      },
+      { status: 403, headers },
+    )
+  }
   await env.DB.prepare(
     `
-    INSERT INTO users (discord_id, username, avatar_url, tier, leaderboard_opt_in, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO users (
+      discord_id,
+      username,
+      avatar_url,
+      tier,
+      leaderboard_opt_in,
+      created_at,
+      updated_at,
+      account_id
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(discord_id) DO UPDATE SET
       username = excluded.username,
       avatar_url = excluded.avatar_url,
       tier = excluded.tier,
       leaderboard_opt_in = excluded.leaderboard_opt_in,
-      updated_at = excluded.updated_at
+      updated_at = excluded.updated_at,
+      account_id = excluded.account_id
   `,
   )
-    .bind(user.id, user.username, avatarUrl, tier, leaderboardOptIn, now, now)
+    .bind(
+      user.id,
+      user.username,
+      avatarUrl,
+      tier,
+      leaderboardOptIn,
+      now,
+      now,
+      accountIdentity.account_id,
+    )
     .run()
 
   // Create persistent session
@@ -557,6 +627,8 @@ export async function handleCallback(request, env) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             user_id: user.id,
+            account_id: accountIdentity.account_id,
+            account_status: accountIdentity.status,
             username: user.username,
             avatar_url: toClientAvatarUrl(avatarUrl),
             tier: tier,
@@ -617,10 +689,24 @@ export async function handleMe(request, env) {
   if (discordAuthorizationOutcome && discordAuthorizationOutcome !== "fresh") {
     console.info("Discord OAuth session lifecycle", { outcome: discordAuthorizationOutcome })
   }
+  if (!resp.ok) {
+    const accountStatus = String(resp.headers.get("X-Brinedew-Account-Status") || "").trim()
+    return Response.json(
+      {
+        authenticated: false,
+        code: accountStatus ? "ACCOUNT_NOT_ACTIVE" : "SESSION_INVALID",
+        ...(accountStatus ? { account_status: accountStatus } : {}),
+      },
+      { status: 401, headers: expiredPersistentSessionHeaders(new URL(request.url)) },
+    )
+  }
   const session = await resp.json()
 
   if (!session || !session.user_id) {
-    return Response.json({ authenticated: false }, { status: 401 })
+    return Response.json(
+      { authenticated: false },
+      { status: 401, headers: expiredPersistentSessionHeaders(new URL(request.url)) },
+    )
   }
 
   // Re-check Discord roles to detect both upgrades (registered → supporter)
@@ -699,6 +785,8 @@ export async function handleMe(request, env) {
       authenticated: true,
       user: {
         id: session.user_id,
+        account_id: session.account_id || null,
+        account_status: session.account_status || "active",
         username: session.username,
         avatar_url: toClientAvatarUrl(session.avatar_url) || session.avatar_url || null,
         tier,
