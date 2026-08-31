@@ -5,6 +5,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Iconoplasm Admin</title>
   <link rel="stylesheet" href="/static/iconoplasm/admin.css?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" />
+  <link rel="stylesheet" href="/static/iconoplasm/caretaker-admin.css?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" />
 </head>
 <body>
   <div class="page">
@@ -18,6 +19,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <button class="tab-btn" id="admin-tab-factory" role="tab" aria-selected="false" aria-controls="panel-factory" tabindex="-1" data-tab="factory">Factory</button>
       <button class="tab-btn" id="admin-tab-costs" role="tab" aria-selected="false" aria-controls="panel-costs" tabindex="-1" data-tab="costs">Observability</button>
       <button class="tab-btn" id="admin-tab-requests" role="tab" aria-selected="false" aria-controls="panel-requests" tabindex="-1" data-tab="requests">Requests</button>
+      <button class="tab-btn" id="admin-tab-caretakers" role="tab" aria-selected="false" aria-controls="panel-caretakers" tabindex="-1" data-tab="caretakers">Caretakers</button>
       <button class="tab-btn" id="admin-tab-prompts" role="tab" aria-selected="false" aria-controls="panel-prompts" tabindex="-1" data-tab="prompts">Prompts</button>
       <button class="tab-btn" id="admin-tab-extension" role="tab" aria-selected="false" aria-controls="panel-extension" tabindex="-1" data-tab="extension">Recognition</button>
       <button class="tab-btn" id="admin-tab-archive" role="tab" aria-selected="false" aria-controls="panel-archive" tabindex="-1" data-tab="archive">Gallery</button>
@@ -49,6 +51,85 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             <p class="small">Recent publish and rollback activity.</p>
           </div>
           <div class="list" id="overview-events"></div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Caretaker assignment and manifestation authority -->
+    <div class="panel" id="panel-caretakers" role="tabpanel" aria-labelledby="admin-tab-caretakers" hidden>
+      <div class="caretaker-admin" data-caretaker-admin>
+        <header class="caretaker-admin__header">
+          <div>
+            <p class="caretaker-admin__eyebrow">Manifestation authority</p>
+            <h2>Gene caretakers</h2>
+            <p class="small">Offer one accountable gene role, inspect every open or ended tenure, and make lifecycle changes without editing a caretaker's prose.</p>
+          </div>
+          <button type="button" class="secondary" data-caretaker-refresh>Reload registry</button>
+        </header>
+        <p class="caretaker-admin__status" data-caretaker-status role="status"></p>
+
+        <section class="caretaker-admin__offer" aria-labelledby="caretaker-offer-heading">
+          <div class="section-head">
+            <div>
+              <h3 id="caretaker-offer-heading">Offer a caretaker role</h3>
+              <p class="small">Both the gene and account must be active and free of another open caretaker assignment. The invitation pins the server's current entitlement policy; the caretaker accepts an exact terms version separately.</p>
+            </div>
+            <div class="caretaker-admin__policy" data-caretaker-policy>Loading policy.</div>
+          </div>
+          <div class="caretaker-admin__offer-grid">
+            <div class="caretaker-admin__search">
+              <label for="caretaker-gene-query">Gene</label>
+              <input id="caretaker-gene-query" type="search" autocomplete="off" spellcheck="false" placeholder="Symbol, for example TP53" data-caretaker-gene-query />
+              <div class="caretaker-admin__results" data-caretaker-gene-results aria-live="polite"></div>
+              <div class="caretaker-admin__selection" data-caretaker-gene-selection>No gene selected.</div>
+            </div>
+            <div class="caretaker-admin__search">
+              <label for="caretaker-account-query">Account</label>
+              <input id="caretaker-account-query" type="search" autocomplete="off" spellcheck="false" placeholder="Public credit label" data-caretaker-account-query />
+              <div class="caretaker-admin__results" data-caretaker-account-results aria-live="polite"></div>
+              <div class="caretaker-admin__selection" data-caretaker-account-selection>No account selected.</div>
+            </div>
+          </div>
+          <div class="caretaker-admin__offer-actions">
+            <button type="button" data-caretaker-offer disabled>Send caretaker invitation</button>
+            <span class="small">The user receives an inbox link to the exact gene and must accept the displayed terms.</span>
+          </div>
+        </section>
+
+        <section class="caretaker-admin__registry" aria-labelledby="caretaker-registry-heading">
+          <div class="section-head">
+            <div>
+              <h3 id="caretaker-registry-heading">Assignment registry</h3>
+              <p class="small">The registry includes pending, active, suspended, and ended tenures. Select a row to use state-specific controls.</p>
+            </div>
+            <div class="caretaker-admin__filters">
+              <label>Find <input type="search" placeholder="Gene or credit label" data-caretaker-registry-query /></label>
+              <label>Status
+                <select data-caretaker-registry-status>
+                  <option value="">All</option>
+                  <option value="pending_acceptance">Pending</option>
+                  <option value="active">Active</option>
+                  <option value="suspended">Suspended</option>
+                  <option value="ended">Ended</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div class="caretaker-admin__workspace">
+            <div>
+              <div class="table-wrap">
+                <table class="caretaker-admin__table">
+                  <thead><tr><th>Gene</th><th>Caretaker</th><th>Status</th><th>Policy</th><th>Started</th><th></th></tr></thead>
+                  <tbody data-caretaker-registry-body><tr><td colspan="6">Open this tab to load the registry.</td></tr></tbody>
+                </table>
+              </div>
+              <button type="button" class="secondary caretaker-admin__more" data-caretaker-registry-more hidden>Load more</button>
+            </div>
+            <aside class="caretaker-admin__detail" data-caretaker-detail aria-live="polite">
+              <h3>Select an assignment</h3>
+              <p class="small">Lifecycle controls appear here with their exact consequence and current compare-and-swap version.</p>
+            </aside>
+          </div>
         </section>
       </div>
     </div>
@@ -763,6 +844,11 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
   <script type="module" src="/static/iconoplasm/lightbox-bootstrap.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__"></script>
   <script src="/static/iconoplasm/factory-belts.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
+  <script src="/static/iconoplasm/caretaker-admin-shared.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
+  <script src="/static/iconoplasm/caretaker-admin-registry.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
+  <script src="/static/iconoplasm/caretaker-admin-detail.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
+  <script src="/static/iconoplasm/caretaker-admin-offer.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
+  <script src="/static/iconoplasm/caretaker-admin.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
   <script src="/static/iconoplasm/admin.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
 </body>
 </html>

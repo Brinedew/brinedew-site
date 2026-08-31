@@ -117,6 +117,7 @@
     tabs: document.getElementById("admin-tabs"),
     panels: {
       overview: document.getElementById("panel-overview"),
+      caretakers: document.getElementById("panel-caretakers"),
       factory: document.getElementById("panel-factory"),
       costs: document.getElementById("panel-costs"),
       requests: document.getElementById("panel-requests"),
@@ -347,6 +348,9 @@
 
   function unmountAdminTab(tab) {
     if (!tab) return
+    if (tab === "caretakers" && window.IconoplasmCaretakerAdmin) {
+      window.IconoplasmCaretakerAdmin.unmount()
+    }
     if (tab === "styles") {
       state.visionPreviewRequestId += 1
       state.visionDetailRequestId += 1
@@ -364,6 +368,12 @@
     if (tab === "overview") {
       renderOverview()
       if (!state.overviewSummary || !state.overviewCoverage) refreshDerivedAdminViews()
+      return
+    }
+    if (tab === "caretakers") {
+      if (window.IconoplasmCaretakerAdmin) {
+        window.IconoplasmCaretakerAdmin.mount()
+      }
       return
     }
     if (tab === "costs") {

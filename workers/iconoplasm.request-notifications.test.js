@@ -12,9 +12,68 @@ import {
   reconcileDeliveredRequestFulfillments,
   resolveIconoplasmFulfillmentDeliveryPolicy,
 } from "./iconoplasm-request-notifications.js"
+import { iconoplasmGenerationFingerprint } from "./lib/iconoplasm-generation-provenance.js"
 import { createRequestInbox } from "../quartz/static/iconoplasm/request-inbox.js"
 
 const BRINEDEW_USER_ID = "1289482311557058641"
+const FULFILLMENT_CONFIG_SHA256 = "f".repeat(64)
+const FULFILLMENT_PROMPT_SHA256 = "e".repeat(64)
+const FULFILLMENT_REQUEST_CONTRACT_SHA256 = "9".repeat(64)
+const FULFILLMENT_LEASE_OWNER_ID = "workstation_fulfillment_owner_0001"
+const fulfillmentRequestId = (requestId) =>
+  `generation_request_fulfillment_${String(requestId).padStart(8, "0")}`
+const fulfillmentAttemptId = (requestId) =>
+  `generation_attempt_fulfillment_${String(requestId).padStart(8, "0")}`
+const fulfillmentLeaseToken = (requestId) =>
+  `generation_lease_fulfillment_${String(requestId).padStart(8, "0")}`
+const FULFILLMENT_SOURCE = {
+  generation_provenance_status: "bound",
+  source_gene_id: "gene_ins_0001",
+  source_manifestation_id: "manifestation_ins_0001",
+  source_manifestation_revision_id: "revision_ins_0001",
+  source_manifestation_body_sha256: "b".repeat(64),
+  source_manifestation_derivative_id: "",
+  source_manifestation_derivative_sha256: "",
+  source_manifestation_derivative_tags_sha256: "",
+  source_manifestation_derivative_tags_bytes: 0,
+  source_manifestation_derivative_fields_sha256: "",
+  source_manifestation_derivative_fields_bytes: 0,
+  source_manifestation_derivative_recipe_id: "",
+  source_manifestation_derivative_recipe_version: "",
+  source_manifestation_derivative_provider_id: "",
+  source_manifestation_derivative_model_id: "",
+  source_manifestation_derivative_tagger_config_sha256: "",
+  source_canonical_selection_id: "selection_ins_0001",
+  source_canonical_head_version: 1,
+  source_gene_revision: 1,
+  source_sample_label: "INS-1",
+  source_sample_number: 1,
+  source_sample_text_sha256: "c".repeat(64),
+  prompt_body_mode: "prose_prompt",
+}
+FULFILLMENT_SOURCE.source_snapshot_sha256 = await iconoplasmGenerationFingerprint(
+  "iconoplasm.generation-source.v1",
+  FULFILLMENT_SOURCE,
+)
+
+function fulfillmentItem(overrides = {}) {
+  const requestId = Number(overrides?.request_ids?.[0] || 40)
+  return {
+    ...FULFILLMENT_SOURCE,
+    generation_request_id: fulfillmentRequestId(requestId),
+    source_snapshot_sha256: FULFILLMENT_SOURCE.source_snapshot_sha256,
+    generation_attempt_id: fulfillmentAttemptId(requestId),
+    generation_lease_token: fulfillmentLeaseToken(requestId),
+    generation_lease_owner_id: FULFILLMENT_LEASE_OWNER_ID,
+    generation_lease_version: 1,
+    generation_request_contract_sha256: FULFILLMENT_REQUEST_CONTRACT_SHA256,
+    provider_id: "workstation",
+    model_id: "exact-model-v1",
+    prompt_sha256: FULFILLMENT_PROMPT_SHA256,
+    generation_config_sha256: FULFILLMENT_CONFIG_SHA256,
+    ...overrides,
+  }
+}
 
 test("DM delivery policy defaults to Brinedew-only and expands only with the exact rollout flag", () => {
   assert.deepEqual(resolveIconoplasmFulfillmentDeliveryPolicy({}), {
@@ -326,6 +385,14 @@ class FulfillmentStatement {
   }
 
   async first() {
+    if (this.sql.includes("FROM icono_portrait_generation_provenance")) {
+      const receipt = this.db.generationReceipts.get(String(this.args[0] || ""))
+      return receipt ? { ...receipt } : null
+    }
+    if (this.sql.includes("FROM icono_generation_execution_leases")) {
+      const lease = this.db.leases.get(String(this.args[0] || ""))
+      return lease ? { ...lease } : null
+    }
     if (!this.sql.includes("FROM icono_generation_requests")) {
       throw new Error(`Unexpected fulfillment read SQL: ${this.sql}`)
     }
@@ -334,6 +401,64 @@ class FulfillmentStatement {
   }
 
   async run() {
+    if (this.sql.includes("UPDATE icono_generation_execution_leases")) {
+      const [completedAt, , generationRequestId, attemptId, token, ownerId, version, checkedAt] =
+        this.args
+      const lease = this.db.leases.get(String(generationRequestId || ""))
+      const matches =
+        lease?.status === "active" &&
+        lease.generation_attempt_id === attemptId &&
+        lease.lease_token === token &&
+        lease.lease_owner_id === ownerId &&
+        Number(lease.lease_version) === Number(version) &&
+        Date.parse(lease.expires_at) > Date.parse(checkedAt)
+      if (matches) {
+        lease.status = "completed"
+        lease.completed_at = completedAt
+        lease.updated_at = completedAt
+      }
+      return { meta: { changes: matches ? 1 : 0 } }
+    }
+    if (this.sql.includes("INSERT INTO icono_portrait_generation_provenance")) {
+      const fields = [
+        "generation_request_id",
+        "generation_attempt_id",
+        "gene_symbol",
+        "asset_sha256",
+        "source_gene_id",
+        "source_manifestation_id",
+        "source_manifestation_revision_id",
+        "source_manifestation_body_sha256",
+        "source_manifestation_derivative_id",
+        "source_manifestation_derivative_sha256",
+        "source_manifestation_derivative_tags_sha256",
+        "source_manifestation_derivative_tags_bytes",
+        "source_manifestation_derivative_fields_sha256",
+        "source_manifestation_derivative_fields_bytes",
+        "source_manifestation_derivative_recipe_id",
+        "source_manifestation_derivative_recipe_version",
+        "source_manifestation_derivative_provider_id",
+        "source_manifestation_derivative_model_id",
+        "source_manifestation_derivative_tagger_config_sha256",
+        "source_canonical_selection_id",
+        "source_canonical_head_version",
+        "source_gene_revision",
+        "source_snapshot_sha256",
+        "provider_id",
+        "model_id",
+        "prompt_sha256",
+        "generation_config_sha256",
+        "sample_label",
+        "sample_number",
+        "sample_text_sha256",
+      ]
+      const receipt = Object.fromEntries(fields.map((field, index) => [field, this.args[index]]))
+      if (this.db.generationReceipts.has(receipt.generation_request_id)) {
+        return { meta: { changes: 0 } }
+      }
+      this.db.generationReceipts.set(receipt.generation_request_id, receipt)
+      return { meta: { changes: 1 } }
+    }
     if (this.sql.includes("UPDATE icono_request_notifications")) {
       const [publicationId, groupSize, requestId] = this.args
       let changes = 0
@@ -359,15 +484,19 @@ class FulfillmentStatement {
       return { meta: { changes } }
     }
     if (this.sql.includes("SET status = 'delivery_pending'")) {
-      const requestId = Number(this.args[6])
+      const requestId = Number(this.args[10])
       const request = this.db.requests.find((row) => Number(row.id) === requestId)
       if (!request || request.status !== "open") return { meta: { changes: 0 } }
       request.status = "delivery_pending"
       request.fulfilled_asset_sha256 = String(this.args[1] || "")
       request.fulfilled_vision_id = String(this.args[2] || "")
-      request.fulfillment_note = String(this.args[3] || "")
-      request.fulfillment_publication_id = String(this.args[4] || "")
-      request.fulfillment_group_size = Number(this.args[5] || 1)
+      request.fulfilled_generation_attempt_id = String(this.args[3] || "")
+      request.fulfilled_provider_id = String(this.args[4] || "")
+      request.fulfilled_model_id = String(this.args[5] || "")
+      request.fulfilled_prompt_sha256 = String(this.args[6] || "")
+      request.fulfillment_note = String(this.args[7] || "")
+      request.fulfillment_publication_id = String(this.args[8] || "")
+      request.fulfillment_group_size = Number(this.args[9] || 1)
       return { meta: { changes: 1 } }
     }
     if (this.sql.includes("SET updated_at = CURRENT_TIMESTAMP")) {
@@ -389,18 +518,102 @@ class FulfillmentStatement {
 
 class FulfillmentDb {
   constructor(requests, notifications = []) {
-    this.requests = requests.map((request) => ({
-      requester_user_id: BRINEDEW_USER_ID,
-      gene_symbol: "INS",
-      fulfillment_publication_id: "",
-      fulfillment_group_size: 1,
-      ...request,
-    }))
+    this.requests = requests.map((request) => {
+      const alreadyBound = ["delivery_pending", "fulfilled"].includes(String(request.status || ""))
+      const stableRequestId =
+        request.generation_request_id || fulfillmentRequestId(Number(request.id || 0))
+      return {
+        requester_user_id: BRINEDEW_USER_ID,
+        gene_symbol: "INS",
+        request_origin: "user",
+        fulfillment_publication_id: "",
+        fulfillment_group_size: 1,
+        generation_request_id: stableRequestId,
+        generation_request_contract_sha256: FULFILLMENT_REQUEST_CONTRACT_SHA256,
+        fulfilled_generation_attempt_id: alreadyBound
+          ? fulfillmentAttemptId(Number(request.id || 0))
+          : "",
+        fulfilled_provider_id: alreadyBound ? "workstation" : "",
+        fulfilled_model_id: alreadyBound ? "exact-model-v1" : "",
+        fulfilled_prompt_sha256: alreadyBound ? FULFILLMENT_PROMPT_SHA256 : "",
+        generation_config_sha256: FULFILLMENT_CONFIG_SHA256,
+        ...FULFILLMENT_SOURCE,
+        ...request,
+      }
+    })
     this.notifications = notifications
+    this.generationReceipts = new Map()
+    this.leases = new Map(
+      this.requests.map((request) => [
+        request.generation_request_id,
+        {
+          generation_request_id: request.generation_request_id,
+          request_row_id: request.id,
+          generation_attempt_id: fulfillmentAttemptId(Number(request.id || 0)),
+          lease_token: fulfillmentLeaseToken(Number(request.id || 0)),
+          lease_owner_id: FULFILLMENT_LEASE_OWNER_ID,
+          lease_version: 1,
+          status: ["delivery_pending", "fulfilled"].includes(String(request.status || ""))
+            ? "completed"
+            : "active",
+          claimed_at: "2026-08-30T00:00:00.000Z",
+          expires_at: "2099-08-30T00:15:00.000Z",
+          completed_at: ["delivery_pending", "fulfilled"].includes(String(request.status || ""))
+            ? "2026-08-30T00:01:00.000Z"
+            : null,
+          failed_at: null,
+          failure_code: null,
+          updated_at: "2026-08-30T00:00:00.000Z",
+        },
+      ]),
+    )
   }
 
   prepare(sql) {
     return new FulfillmentStatement(this, sql)
+  }
+}
+
+class FulfillmentAuthoringStatement {
+  bind() {
+    return this
+  }
+
+  async first() {
+    return {
+      gene_id: FULFILLMENT_SOURCE.source_gene_id,
+      gene_status: "active",
+      manifestation_id: FULFILLMENT_SOURCE.source_manifestation_id,
+      manifestation_status: "active",
+      manifestation_revision_id: FULFILLMENT_SOURCE.source_manifestation_revision_id,
+      body_sha256: FULFILLMENT_SOURCE.source_manifestation_body_sha256,
+      body_bytes: 32,
+      sample_label: FULFILLMENT_SOURCE.source_sample_label,
+      sample_number: FULFILLMENT_SOURCE.source_sample_number,
+      sample_text_sha256: FULFILLMENT_SOURCE.source_sample_text_sha256,
+      revision_status: "active",
+      revision_object_key:
+        "private/manifestations/v1/aa/mbody_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bin",
+      revision_verified_at: "2026-08-30 00:00:00",
+      canonical_selection_id: FULFILLMENT_SOURCE.source_canonical_selection_id,
+      selected_manifestation_id: FULFILLMENT_SOURCE.source_manifestation_id,
+      selected_revision_id: FULFILLMENT_SOURCE.source_manifestation_revision_id,
+      selection_head_version: FULFILLMENT_SOURCE.source_canonical_head_version,
+      selection_gene_revision: FULFILLMENT_SOURCE.source_gene_revision,
+    }
+  }
+}
+
+const FULFILLMENT_AUTHORING_DB = Object.freeze({
+  prepare() {
+    return new FulfillmentAuthoringStatement()
+  },
+})
+
+function fulfillmentEnv(db) {
+  return {
+    ICONOPLASM_DB: db,
+    ICONOPLASM_AUTHORING_DB: FULFILLMENT_AUTHORING_DB,
   }
 }
 
@@ -496,35 +709,38 @@ test("fulfillment replay settles only the exact asset already bound to the reque
       fulfilled_vision_id: "",
     },
   ])
-  const item = {
+  const item = fulfillmentItem({
     request_ids: [40],
     fulfilled_asset_sha256: assetSha,
     fulfilled_vision_id: "anima-v1-1398",
-  }
+  })
 
-  const started = await fulfillGenerationRequests(
-    { ICONOPLASM_DB: db },
-    { items: [item], resolvedBy: "pytest", publicationId: "pub-replay" },
-  )
+  const started = await fulfillGenerationRequests(fulfillmentEnv(db), {
+    items: [item],
+    resolvedBy: "pytest",
+    publicationId: "pub-replay",
+  })
   assert.equal(started.ok, true)
   assert.deepEqual(started.request_ids, [40])
   assert.deepEqual(started.settled_request_ids, [])
   assert.equal(db.requests[0].status, "delivery_pending")
   assert.equal(db.requests[0].fulfilled_asset_sha256, assetSha)
 
-  const pendingReplay = await fulfillGenerationRequests(
-    { ICONOPLASM_DB: db },
-    { items: [item], resolvedBy: "pytest", publicationId: "pub-replay" },
-  )
+  const pendingReplay = await fulfillGenerationRequests(fulfillmentEnv(db), {
+    items: [item],
+    resolvedBy: "pytest",
+    publicationId: "pub-replay",
+  })
   assert.equal(pendingReplay.ok, true)
   assert.deepEqual(pendingReplay.request_ids, [40])
   assert.deepEqual(pendingReplay.settled_request_ids, [])
 
   db.requests[0].status = "fulfilled"
-  const replayed = await fulfillGenerationRequests(
-    { ICONOPLASM_DB: db },
-    { items: [item], resolvedBy: "pytest", publicationId: "pub-replay" },
-  )
+  const replayed = await fulfillGenerationRequests(fulfillmentEnv(db), {
+    items: [item],
+    resolvedBy: "pytest",
+    publicationId: "pub-replay",
+  })
   assert.equal(replayed.ok, true)
   assert.deepEqual(replayed.request_ids, [])
   assert.deepEqual(replayed.settled_request_ids, [40])
@@ -542,20 +758,17 @@ test("fulfillment replay rejects a later candidate for an already settled reques
     },
   ])
 
-  const result = await fulfillGenerationRequests(
-    { ICONOPLASM_DB: db },
-    {
-      items: [
-        {
-          request_ids: [40],
-          fulfilled_asset_sha256: laterAsset,
-          fulfilled_vision_id: "anima-v1-4534",
-        },
-      ],
-      resolvedBy: "pytest",
-      publicationId: "pub-conflict",
-    },
-  )
+  const result = await fulfillGenerationRequests(fulfillmentEnv(db), {
+    items: [
+      fulfillmentItem({
+        request_ids: [40],
+        fulfilled_asset_sha256: laterAsset,
+        fulfilled_vision_id: "anima-v1-4534",
+      }),
+    ],
+    resolvedBy: "pytest",
+    publicationId: "pub-conflict",
+  })
 
   assert.equal(result.ok, false)
   assert.deepEqual(result.request_ids, [])
@@ -588,20 +801,17 @@ test("fulfillment replay requeues a failed pre-Discord notification", async () =
     [notification],
   )
 
-  const result = await fulfillGenerationRequests(
-    { ICONOPLASM_DB: db },
-    {
-      items: [
-        {
-          request_ids: [40],
-          fulfilled_asset_sha256: assetSha,
-          fulfilled_vision_id: "anima-v1-1398",
-        },
-      ],
-      resolvedBy: "pytest",
-      publicationId: "pub-replay",
-    },
-  )
+  const result = await fulfillGenerationRequests(fulfillmentEnv(db), {
+    items: [
+      fulfillmentItem({
+        request_ids: [40],
+        fulfilled_asset_sha256: assetSha,
+        fulfilled_vision_id: "anima-v1-1398",
+      }),
+    ],
+    resolvedBy: "pytest",
+    publicationId: "pub-replay",
+  })
 
   assert.equal(result.ok, true)
   assert.deepEqual(result.request_ids, [40])
@@ -627,25 +837,22 @@ test("fulfillment batch preflight prevents partial rebinding", async () => {
     },
   ])
 
-  const result = await fulfillGenerationRequests(
-    { ICONOPLASM_DB: db },
-    {
-      items: [
-        {
-          request_ids: [40],
-          fulfilled_asset_sha256: "b".repeat(64),
-          fulfilled_vision_id: "anima-v1-new",
-        },
-        {
-          request_ids: [41],
-          fulfilled_asset_sha256: "c".repeat(64),
-          fulfilled_vision_id: "anima-v1-wrong",
-        },
-      ],
-      resolvedBy: "pytest",
-      publicationId: "pub-atomic-conflict",
-    },
-  )
+  const result = await fulfillGenerationRequests(fulfillmentEnv(db), {
+    items: [
+      fulfillmentItem({
+        request_ids: [40],
+        fulfilled_asset_sha256: "b".repeat(64),
+        fulfilled_vision_id: "anima-v1-new",
+      }),
+      fulfillmentItem({
+        request_ids: [41],
+        fulfilled_asset_sha256: "c".repeat(64),
+        fulfilled_vision_id: "anima-v1-wrong",
+      }),
+    ],
+    resolvedBy: "pytest",
+    publicationId: "pub-atomic-conflict",
+  })
 
   assert.equal(result.ok, false)
   assert.equal(db.requests[0].status, "open")
@@ -661,18 +868,17 @@ test("fulfillment binds separate random requests to one completed publication gr
     request_batch_size: 1,
   }))
   const db = new FulfillmentDb(requests)
-  const result = await fulfillGenerationRequests(
-    { ICONOPLASM_DB: db },
-    {
-      publicationId: "pub-kncn-six",
-      resolvedBy: "pytest",
-      items: requests.map((request, index) => ({
+  const result = await fulfillGenerationRequests(fulfillmentEnv(db), {
+    publicationId: "pub-kncn-six",
+    resolvedBy: "pytest",
+    items: requests.map((request, index) =>
+      fulfillmentItem({
         request_ids: [request.id],
         fulfilled_asset_sha256: (index + 30).toString(16).padStart(64, "0"),
         fulfilled_vision_id: `anima-v1-${index + 1}`,
-      })),
-    },
-  )
+      }),
+    ),
+  })
 
   assert.equal(result.ok, true)
   assert.deepEqual(
@@ -1504,12 +1710,15 @@ test("request inbox UI uses server read state and bounded live refresh", () => {
   assert.match(app, /import \{ createRequestInbox \} from "\.\/request-inbox\.js\?v=[^"]+"/)
   assert.match(inbox, /\/api\/iconoplasm\/notifications\?limit=50/)
   assert.match(inbox, /\/api\/iconoplasm\/notifications\/read/)
+  assert.match(inbox, /\/api\/iconoplasm\/caretaker\/invitations\?limit=20/)
+  assert.match(inbox, /\/api\/iconoplasm\/caretaker\/invitations\/read/)
   assert.match(inbox, /refreshTimer = window\.setTimeout/)
   assert.match(inbox, /state\.open_count <= 0/)
   assert.match(inbox, /document\.visibilityState !== "visible"/)
   assert.match(inbox, /data-icono-request-notification-id/)
   assert.doesNotMatch(inbox, /icono_last_seen_fulfilled/)
   assert.match(css, /\.icono-request-inbox__item--unread/)
+  assert.match(css, /\.icono-request-inbox__item--caretaker/)
   assert.match(css, /\.icono-request-inbox__item\s*\{[^}]*flex:\s*0 0 auto/)
   assert.match(css, /prefers-reduced-motion: reduce/)
   assert.match(css, /\.sidebar\.right > \.brd-sidebar-stack[\s\S]*max-height: none/)
@@ -1564,7 +1773,7 @@ test("request inbox uses one-open Shoelace groups and an accessible unread dot",
   await inbox.refresh()
 
   const initialMarkup = inbox.panelMarkup()
-  assert.equal((initialMarkup.match(/<sl-details/g) || []).length, 2)
+  assert.equal((initialMarkup.match(/<sl-details/g) || []).length, 3)
   assert.match(initialMarkup, /data-icono-request-group="ready" open/)
   assert.doesNotMatch(initialMarkup, /data-icono-request-group="waiting" open/)
   assert.match(initialMarkup, /data-icono-request-id="42"/)
@@ -1745,6 +1954,310 @@ test("request inbox receipt click acknowledges the durable group instead of one 
   })
 })
 
+test("signed-in caretaker invitation is identity-free and marks read from link or explicit control", async () => {
+  const calls = []
+  const navigations = []
+  const requestPayload = {
+    ok: true,
+    authenticated: true,
+    unread_count: 0,
+    ready_count: 0,
+    unread_group_count: 0,
+    ready_group_count: 0,
+    open_count: 0,
+    cancelled_count: 0,
+    ready_requests: [],
+    open_requests: [],
+  }
+  const invitationPayload = {
+    ok: true,
+    pending_count: 1,
+    unread_count: 1,
+    invitations: [
+      {
+        caretaker_assignment_id: "assignment_ui_0001",
+        gene_id: "gene_ui_0001",
+        canonical_symbol: "TP53",
+        href: "/gene/TP53",
+        assignment_status: "pending_acceptance",
+        assignment_version: 1,
+        notification_state: "pending",
+        read_at: null,
+        provider_subject: "must-never-render",
+        discord_username: "must-never-render-either",
+      },
+    ],
+  }
+  const inbox = createRequestInbox({
+    fetchJSON: async (url, options) => {
+      calls.push({ url, options })
+      if (url.startsWith("/api/iconoplasm/caretaker/invitations/read")) return { ok: true }
+      if (url.startsWith("/api/iconoplasm/caretaker/invitations?")) return invitationPayload
+      return requestPayload
+    },
+    getCurrentUser: () => ({ account_id: "account_ui_0001" }),
+    renderSidebar() {},
+    escapeHtml: (value) => String(value ?? ""),
+    navigate: (href) => navigations.push(href),
+  })
+  await inbox.refresh()
+  const markup = inbox.panelMarkup()
+  assert.match(markup, /data-icono-request-group="caretaking" open/)
+  assert.match(markup, /<strong>1 pending<\/strong><span>1 unread<\/span>/)
+  assert.match(markup, /href="\/gene\/TP53"/)
+  assert.match(markup, /data-icono-caretaker-assignment-id="assignment_ui_0001"/)
+  assert.match(markup, /data-icono-caretaker-gene-id="gene_ui_0001"/)
+  assert.match(markup, /Invitation awaiting your response/)
+  assert.doesNotMatch(markup, /must-never-render|discord|provider_subject/i)
+
+  function fakeInteractive(attributes) {
+    return {
+      attributes,
+      handlers: {},
+      disabled: false,
+      getAttribute(name) {
+        return this.attributes[name] || ""
+      },
+      addEventListener(name, handler) {
+        this.handlers[name] = handler
+      },
+    }
+  }
+  const link = fakeInteractive({
+    "data-icono-caretaker-assignment-id": "assignment_ui_0001",
+    href: "/gene/TP53",
+  })
+  const button = fakeInteractive({
+    "data-icono-caretaker-mark-read": "assignment_ui_0001",
+  })
+  inbox.wire({
+    querySelector() {
+      return null
+    },
+    querySelectorAll(selector) {
+      if (selector === "[data-icono-caretaker-invitation]") return [link]
+      if (selector === "[data-icono-caretaker-mark-read]") return [button]
+      return []
+    },
+  })
+  var prevented = false
+  link.handlers.click({
+    preventDefault() {
+      prevented = true
+    },
+  })
+  button.handlers.click()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(prevented, true)
+  assert.deepEqual(navigations, ["/gene/TP53"])
+  const readCalls = calls.filter((call) =>
+    call.url.startsWith("/api/iconoplasm/caretaker/invitations/read"),
+  )
+  assert.equal(readCalls.length, 2)
+  assert.ok(
+    readCalls.every(
+      (call) => JSON.parse(call.options.body).caretaker_assignment_id === "assignment_ui_0001",
+    ),
+  )
+})
+
+test("signed-out inbox performs zero caretaker or generation requests", async () => {
+  var fetches = 0
+  const inbox = createRequestInbox({
+    fetchJSON: async () => {
+      fetches += 1
+      return { ok: true }
+    },
+    getCurrentUser: () => null,
+    renderSidebar() {},
+    escapeHtml: (value) => String(value ?? ""),
+  })
+  await inbox.refresh()
+  assert.equal(fetches, 0)
+  assert.equal(inbox.panelMarkup(), "")
+})
+
+test("caretaker and generation feeds fail independently without erasing the surviving feed", async () => {
+  const readyPayload = {
+    ok: true,
+    authenticated: true,
+    unread_count: 1,
+    ready_count: 1,
+    unread_group_count: 1,
+    ready_group_count: 1,
+    open_count: 0,
+    cancelled_count: 0,
+    ready_requests: [
+      {
+        request_id: 91,
+        notification_id: 91,
+        unread: true,
+        fulfillment_publication_id: "publication_survives",
+        fulfillment_group_size: 1,
+        gene_symbol: "INS",
+        gene_url: "/gene/INS",
+      },
+    ],
+    open_requests: [],
+  }
+  const invitationsPayload = {
+    ok: true,
+    pending_count: 1,
+    unread_count: 1,
+    invitations: [
+      {
+        caretaker_assignment_id: "assignment_survives",
+        gene_id: "gene_survives",
+        canonical_symbol: "BRCA1",
+        href: "/gene/BRCA1",
+        assignment_status: "pending_acceptance",
+        assignment_version: 1,
+        notification_state: "pending",
+        read_at: null,
+      },
+    ],
+  }
+  const invitationFailure = createRequestInbox({
+    fetchJSON: async (url) => {
+      if (url.startsWith("/api/iconoplasm/caretaker/invitations?")) {
+        throw new Error("invitation feed failed")
+      }
+      return readyPayload
+    },
+    getCurrentUser: () => ({ account_id: "account_failure_0001" }),
+    renderSidebar() {},
+    escapeHtml: (value) => String(value ?? ""),
+  })
+  await invitationFailure.refresh()
+  assert.match(invitationFailure.panelMarkup(), /publication_survives/)
+  assert.match(invitationFailure.panelMarkup(), /Invitations unavailable/)
+
+  const requestFailure = createRequestInbox({
+    fetchJSON: async (url) => {
+      if (url.startsWith("/api/iconoplasm/notifications?")) {
+        throw new Error("generation feed failed")
+      }
+      return invitationsPayload
+    },
+    getCurrentUser: () => ({ account_id: "account_failure_0002" }),
+    renderSidebar() {},
+    escapeHtml: (value) => String(value ?? ""),
+  })
+  await requestFailure.refresh()
+  assert.match(requestFailure.panelMarkup(), /assignment_survives/)
+  assert.match(requestFailure.panelMarkup(), /Requests unavailable/)
+})
+
+test("account switch and remount discard stale responses from both inbox feeds", async () => {
+  function deferred() {
+    var resolve
+    var promise = new Promise((done) => {
+      resolve = done
+    })
+    return { promise, resolve }
+  }
+  function requestPayload(symbol) {
+    return {
+      ok: true,
+      authenticated: true,
+      unread_count: 1,
+      ready_count: 1,
+      unread_group_count: 1,
+      ready_group_count: 1,
+      open_count: 0,
+      cancelled_count: 0,
+      ready_requests: [
+        {
+          request_id: symbol === "OLD" ? 1 : 2,
+          notification_id: symbol === "OLD" ? 1 : 2,
+          unread: true,
+          fulfillment_publication_id: `publication_${symbol}`,
+          fulfillment_group_size: 1,
+          gene_symbol: symbol,
+          gene_url: `/gene/${symbol}`,
+        },
+      ],
+      open_requests: [],
+    }
+  }
+  function invitationPayload(symbol) {
+    return {
+      ok: true,
+      pending_count: 1,
+      unread_count: 1,
+      invitations: [
+        {
+          caretaker_assignment_id: `assignment_${symbol}`,
+          gene_id: `gene_${symbol}`,
+          canonical_symbol: symbol,
+          href: `/gene/${symbol}`,
+          assignment_status: "pending_acceptance",
+          assignment_version: 1,
+          notification_state: "pending",
+          read_at: null,
+        },
+      ],
+    }
+  }
+  var user = { account_id: "account_stale_A" }
+  const pending = []
+  const inbox = createRequestInbox({
+    fetchJSON: (url) => {
+      const item = { url, account: user.account_id, deferred: deferred() }
+      pending.push(item)
+      return item.deferred.promise
+    },
+    getCurrentUser: () => user,
+    renderSidebar() {},
+    escapeHtml: (value) => String(value ?? ""),
+  })
+
+  const first = inbox.refresh()
+  user = { account_id: "account_stale_B" }
+  const second = inbox.refresh()
+  const secondCalls = pending.filter((item) => item.account === "account_stale_B")
+  secondCalls.forEach((item) =>
+    item.deferred.resolve(
+      item.url.includes("caretaker/invitations") ? invitationPayload("NEW") : requestPayload("NEW"),
+    ),
+  )
+  await second
+  const firstCalls = pending.filter((item) => item.account === "account_stale_A")
+  firstCalls.forEach((item) =>
+    item.deferred.resolve(
+      item.url.includes("caretaker/invitations") ? invitationPayload("OLD") : requestPayload("OLD"),
+    ),
+  )
+  await first
+  assert.match(inbox.panelMarkup(), /publication_NEW/)
+  assert.match(inbox.panelMarkup(), /assignment_NEW/)
+  assert.doesNotMatch(inbox.panelMarkup(), /publication_OLD|assignment_OLD/)
+
+  const remountFirst = inbox.refresh()
+  const remountOldCalls = pending.slice(-2)
+  inbox.stop()
+  const remountSecond = inbox.refresh()
+  const remountNewCalls = pending.slice(-2)
+  remountNewCalls.forEach((item) =>
+    item.deferred.resolve(
+      item.url.includes("caretaker/invitations")
+        ? invitationPayload("REMOUNT_NEW")
+        : requestPayload("REMOUNT_NEW"),
+    ),
+  )
+  await remountSecond
+  remountOldCalls.forEach((item) =>
+    item.deferred.resolve(
+      item.url.includes("caretaker/invitations")
+        ? invitationPayload("REMOUNT_OLD")
+        : requestPayload("REMOUNT_OLD"),
+    ),
+  )
+  await remountFirst
+  assert.match(inbox.panelMarkup(), /REMOUNT_NEW/)
+  assert.doesNotMatch(inbox.panelMarkup(), /REMOUNT_OLD/)
+})
+
 test("every Shoelace component used by the request inbox has a deployable public entry", () => {
   for (const component of ["details", "badge"]) {
     const entry = new URL(
@@ -1781,30 +2294,21 @@ test("notification routes stay explicitly classified by the fail-loud cost fence
 })
 
 test("workstation fulfillment fails loudly until every requester DM is sent", () => {
-  const worker = readFileSync(
-    new URL(
-      "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-      import.meta.url,
-    ),
+  const executor = readFileSync(
+    new URL("./iconoplasm-generation-executor-routes.js", import.meta.url),
     "utf8",
   )
-  const routeStart = worker.indexOf('path === "/api/iconoplasm/admin/requests/fulfill"')
-  const routeEnd = worker.indexOf('\n    if (path === "/api/iconoplasm/user-emulsion")', routeStart)
-  const route = worker.slice(routeStart, routeEnd)
 
-  assert.notEqual(routeStart, -1)
-  assert.notEqual(routeEnd, -1)
-  assert.match(route, /const delivery = await deliverPendingRequestFulfillmentNotifications/)
-  assert.match(route, /ICONOPLASM_FULFILLMENT_DM_INLINE_LIMIT/)
-  assert.match(route, /code: "DISCORD_DELIVERY_PENDING"/)
-  assert.match(route, /const settlement = await reconcileDeliveredRequestFulfillments/)
-  assert.match(route, /const deliveryComplete =/)
-  assert.match(route, /notification_delivery: delivery/)
-  assert.match(route, /notification_settlement: settlement/)
-  assert.match(route, /has not received the required Discord DM yet/)
-  assert.match(route, /admin_requests_fulfill_conflict/)
-  assert.match(route, /json\(result, 409/)
-  assert.doesNotMatch(route, /ctx\?\.waitUntil\(delivery\)/)
+  assert.match(executor, /const delivery = await deliverPendingNotifications/)
+  assert.match(executor, /inlineDeliveryLimit/)
+  assert.match(executor, /code: "DISCORD_DELIVERY_PENDING"/)
+  assert.match(executor, /const settlement = await reconcileDeliveredFulfillments/)
+  assert.match(executor, /const deliveryComplete =/)
+  assert.match(executor, /notification_delivery: delivery/)
+  assert.match(executor, /notification_settlement: settlement/)
+  assert.match(executor, /has not received the required Discord DM yet/)
+  assert.match(executor, /if \(!result\.ok\) return json\(result, 409\)/)
+  assert.doesNotMatch(executor, /waitUntil\(delivery\)/)
 })
 
 test("delivery completion is an explicit state transition, not an optimistic status label", () => {

@@ -199,6 +199,11 @@ jobs:
       - name: Apply Iconoplasm D1 migrations (production)
         run: pnpm exec wrangler d1 migrations apply iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 
+      # ARCHITECTURE FENCE [IPD-012]: authoring authority migrations must land
+      # before the Worker version that can accept caretaker commands.
+      - name: Apply Iconoplasm authoring D1 migrations (production)
+        run: pnpm exec wrangler d1 migrations apply iconoplasm-authoring --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+
       # ARCHITECTURE FENCE [IPD-009]: validate the machine-readable topology
       # before uploading any Worker or reconciling a route. A CSS-only release
       # still has to deploy a cold-safe version of the one state owner.

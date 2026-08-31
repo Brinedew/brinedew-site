@@ -76,6 +76,16 @@ database_name = "iconoplasm"
 database_id = "e7b2e2ca-8fa4-4a0a-bae1-9917912aa7ff"
 migrations_dir = "migrations-iconoplasm"
 
+# ARCHITECTURE FENCE [IPD-012]: caretaker assignments, immutable manifestation
+# lineage, canonical selection, command receipts, and replication events share
+# one private transactional authority. Large encrypted bodies live in Bunny;
+# neither history nor competing mutable prose belongs in the primary D1.
+[[d1_databases]]
+binding = "ICONOPLASM_AUTHORING_DB"
+database_name = "iconoplasm-authoring"
+database_id = "1ac27eba-5a08-4d8a-b5b2-99ed4254abd0"
+migrations_dir = "migrations-iconoplasm-authoring"
+
 # ARCHITECTURE FENCE [IPD-005]: immutable audit history is copied here before
 # bounded retention deletes it from the operational Iconoplasm database.
 [[d1_databases]]
@@ -218,6 +228,24 @@ ICONOPLASM_CARD_CATALOG_DAILY_KV_WRITE_BUDGET_DO_NOT_SET_CASUALLY = "900"
 ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https://iconoplasmportraits.b-cdn.net"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST = "storage.bunnycdn.com"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE = "iconoplasm-portraits"
+# ARCHITECTURE FENCE [IPD-012]: authoring reads use authenticated Storage only.
+# The dedicated private zone has no Pull Zone and contains only ciphertext under
+# opaque private locators; portrait credentials are never an authoring fallback.
+ICONOPLASM_AUTHORING_STORAGE_HOST = "storage.bunnycdn.com"
+ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring"
+# Manifestation authority bearer secrets are deliberately separate Worker
+# secrets. Never reuse one value across audiences and never restore the retired
+# generic service token:
+#   ICONOPLASM_AUTHORITY_REPLICA_TOKEN      events, snapshots, exact material, Tags
+#   ICONOPLASM_AUTHORITY_GENERATION_TOKEN   generation claim/renew/fail/complete
+#   ICONOPLASM_AUTHORITY_MAINTENANCE_TOKEN  externally invoked bounded maintenance
+#   ICONOPLASM_AUTHORITY_BACKUP_TOKEN       backup capability/export/restore/verify
+#   ICONOPLASM_AUTHORITY_CUTOVER_TOKEN      one-time cutover lifecycle only
+# Separate private, no-Pull-Zone cutover recovery storage. Its password is the
+# ICONOPLASM_AUTHORING_BACKUP_STORAGE_PASSWORD Worker secret; never fall back.
+ICONOPLASM_AUTHORING_BACKUP_STORAGE_HOST = "storage.bunnycdn.com"
+ICONOPLASM_AUTHORING_BACKUP_STORAGE_ZONE = "iconoplasm-authoring-backup"
+ICONOPLASM_AUTHORING_BODY_KEY_VERSION = "1"
 DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 
 # Temporary no-R2 hotfix: Cloudflare is currently rejecting worker version
@@ -247,6 +275,10 @@ crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "*/15 * * * *"]
 name = "geneguessr-api-staging"
 workers_dev = false
 preview_urls = false
+# Wrangler inherits top-level routes unless an environment replaces them.
+# Staging owns queue consumers and test data only; it must never contend for
+# the production Iconoplasm hostname.
+routes = []
 
 [env.staging.browser]
 binding = "ICONOPLASM_PRINT_COPY_BROWSER"
@@ -258,9 +290,17 @@ database_id = "c213abba-394b-42e0-ba15-a1b179cbe7db"
 
 [[env.staging.d1_databases]]
 binding = "ICONOPLASM_DB"
-database_name = "iconoplasm-staging"
-database_id = "3d1c101a-f1e7-47bc-a1c6-c60c147191ec"
+database_name = "iconoplasm-staging-v2"
+database_id = "c83fce97-3add-4d9b-9896-91d1659e27fa"
 migrations_dir = "migrations-iconoplasm"
+
+# ARCHITECTURE FENCE [IPD-012]: staging exercises the same isolated authority
+# and encrypted-body contract without sharing production metadata.
+[[env.staging.d1_databases]]
+binding = "ICONOPLASM_AUTHORING_DB"
+database_name = "iconoplasm-authoring-staging"
+database_id = "7f0ea4fe-be3c-409a-b87a-76c13be55fbb"
+migrations_dir = "migrations-iconoplasm-authoring"
 
 [[env.staging.d1_databases]]
 binding = "ICONOPLASM_AUDIT_DB"
@@ -394,6 +434,11 @@ ICONOPLASM_CARD_CATALOG_DAILY_KV_WRITE_BUDGET_DO_NOT_SET_CASUALLY = "900"
 ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https://iconoplasmportraits.b-cdn.net"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST = "storage.bunnycdn.com"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE = "iconoplasm-portraits"
+ICONOPLASM_AUTHORING_STORAGE_HOST = "storage.bunnycdn.com"
+ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring-staging"
+ICONOPLASM_AUTHORING_BACKUP_STORAGE_HOST = "storage.bunnycdn.com"
+ICONOPLASM_AUTHORING_BACKUP_STORAGE_ZONE = "iconoplasm-authoring-backup-staging"
+ICONOPLASM_AUTHORING_BODY_KEY_VERSION = "1"
 # Staging has no recap cron and must never post into the production feed.
 DISCORD_FEED_CHANNEL_ID = ""
 

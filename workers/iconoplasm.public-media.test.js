@@ -524,6 +524,38 @@ function buildPublishedCardReadKv({
       sex: "Female",
       sex_origin: ["Soluble"],
     },
+    canonical_manifestation: {
+      schema_version: 1,
+      gene_id: "gene_a1bg",
+      manifestation_id: "manifestation_a1bg",
+      manifestation_revision_id: "revision_a1bg_0001",
+      canonical_selection_id: "selection_a1bg_0001",
+      head_version: 1,
+      gene_revision: 2,
+      authority_event_id: "event_a1bg_0002",
+      authority_event_sequence: 2,
+      body_sha256: "a".repeat(64),
+      body_bytes: 39,
+      prose: "The exact public A1BG manifestation.",
+      accepted_tags_derivative: {
+        manifestation_derivative_id: "derivative_a1bg_0001",
+        derivative_head_version: 1,
+        body_sha256: "b".repeat(64),
+        body_bytes: 26,
+        tags_sha256: "c".repeat(64),
+        tags_bytes: 12,
+        fields_sha256: "d".repeat(64),
+        fields_bytes: 13,
+        recipe_id: "tagger",
+        recipe_version: "1",
+        provider_id: "provider",
+        model_id: "model",
+        tagger_config_sha256: "e".repeat(64),
+        provenance_status: "generated",
+        tags_text: "measured, exact",
+        fields_json: { posture: "measured" },
+      },
+    },
     portrait: {
       status: "published",
       hero_url: `https://iconoplasm.brinedew.bio/portraits/v1/${portraitSha.slice(0, 2)}/${portraitSha}/full.webp`,
@@ -771,6 +803,11 @@ test("site gene payload includes published portrait dimensions for first-party b
   assert.equal(payload?.blot?.semantic_url, "https://iconoplasm.brinedew.bio/blot/A1BG.webp")
   assert.equal(typeof payload?.essence, "object")
   assert.ok(Array.isArray(payload?.portrait_candidates))
+  assert.equal(payload?.canonical_manifestation?.prose, "The exact public A1BG manifestation.")
+  assert.equal(
+    payload?.canonical_manifestation?.accepted_tags_derivative?.tags_text,
+    "measured, exact",
+  )
   assert.equal("manifestation" in payload, false)
   assert.equal("description" in payload, false)
 })
@@ -1703,6 +1740,10 @@ test("versioned public gene detail is immutable, extension-only, and published-a
   assert.equal(payload?.snapshot_version, "test-card-v1")
   assert.equal(payload?.gene?.symbol, "A1BG")
   assert.equal(payload?.gene?.full_name, "alpha-1-B glycoprotein")
+  assert.equal(
+    payload?.gene?.canonical_manifestation?.prose,
+    "The exact public A1BG manifestation.",
+  )
   assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable")
   assert.equal(response.headers.get("x-iconoplasm-data-source"), "published-card-catalog")
   assert.match(String(response.headers.get("etag") || ""), /card-detail-test-card-v1-A1BG/)
@@ -1818,6 +1859,14 @@ test("versioned public gene detail reuses the Worker edge cache and serves HEAD"
     assert.equal(first.headers.get("x-iconoplasm-detail-cache"), "MISS")
     assert.equal(second.headers.get("x-iconoplasm-detail-cache"), "HIT")
     assert.equal(head.headers.get("x-iconoplasm-detail-cache"), "HIT")
+    assert.equal(
+      (await first.clone().json())?.gene?.canonical_manifestation?.manifestation_revision_id,
+      "revision_a1bg_0001",
+    )
+    assert.equal(
+      (await second.clone().json())?.gene?.canonical_manifestation?.body_sha256,
+      "a".repeat(64),
+    )
     assert.equal(puts, 1)
     assert.equal(matches, 3)
   } finally {

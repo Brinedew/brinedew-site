@@ -16,6 +16,7 @@ export function createRequestInbox({
   var state = {
     loaded: false,
     loading: false,
+    request_error: false,
     unread_count: 0,
     ready_count: 0,
     unread_group_count: 0,
@@ -24,11 +25,51 @@ export function createRequestInbox({
     cancelled_count: 0,
     ready_requests: [],
     open_requests: [],
+    invitations_loaded: false,
+    invitations_loading: false,
+    invitations_error: false,
+    invitation_pending_count: 0,
+    invitation_unread_count: 0,
+    invitations: [],
     last_seen_notification_id: 0,
-    active_group: "ready",
+    active_group: "",
+    active_group_touched: false,
+    active_account_key: "",
   }
   var refreshTimer = 0
   var lifecycleWired = false
+  var requestRefreshVersion = 0
+  var invitationRefreshVersion = 0
+
+  function currentAccountKey() {
+    var user = getCurrentUser()
+    if (!user) return ""
+    return String(user.account_id || user.id || user.user_id || "").trim()
+  }
+
+  function invalidateInflight() {
+    requestRefreshVersion += 1
+    invitationRefreshVersion += 1
+    state.loading = false
+    state.invitations_loading = false
+  }
+
+  function ensureAccountContext() {
+    var key = currentAccountKey()
+    if (!key) return ""
+    if (state.active_account_key && state.active_account_key !== key) reset()
+    state.active_account_key = key
+    return key
+  }
+
+  function chooseActiveGroup() {
+    if (state.active_group_touched && state.active_group) return
+    if (state.ready_requests.length) state.active_group = "ready"
+    else if (state.invitation_pending_count > 0) state.active_group = "caretaking"
+    else if (state.open_requests.length) state.active_group = "waiting"
+    else if (state.invitations.length) state.active_group = "caretaking"
+    else state.active_group = "ready"
+  }
 
   function ageLabel(createdAt) {
     if (!createdAt) return "recently"
@@ -74,8 +115,10 @@ export function createRequestInbox({
   }
 
   function reset() {
+    invalidateInflight()
     state.loaded = false
     state.loading = false
+    state.request_error = false
     state.unread_count = 0
     state.ready_count = 0
     state.unread_group_count = 0
@@ -84,20 +127,30 @@ export function createRequestInbox({
     state.cancelled_count = 0
     state.ready_requests = []
     state.open_requests = []
+    state.invitations_loaded = false
+    state.invitations_loading = false
+    state.invitations_error = false
+    state.invitation_pending_count = 0
+    state.invitation_unread_count = 0
+    state.invitations = []
     state.last_seen_notification_id = 0
-    state.active_group = "ready"
+    state.active_group = ""
+    state.active_group_touched = false
+    state.active_account_key = ""
   }
 
-  function refresh(options) {
+  function refreshRequests(options, accountKey) {
     var opts = options || {}
-    if (!getCurrentUser() || state.loading) return Promise.resolve(null)
+    if (!accountKey || state.loading) return Promise.resolve(null)
     state.loading = true
-    if (!state.loaded) renderSidebar()
+    state.request_error = false
+    var version = ++requestRefreshVersion
     return fetchJSON("/api/iconoplasm/notifications?limit=50&fresh=" + Date.now(), {
       credentials: "include",
       cache: "no-store",
     })
       .then(async function (payload) {
+        if (version !== requestRefreshVersion || currentAccountKey() !== accountKey) return null
         if (!payload || !payload.ok || !payload.authenticated) return null
         var readyRequests = Array.isArray(payload.ready_requests) ? payload.ready_requests : []
         var firstImage = readyRequests.find(function (item) {
@@ -106,7 +159,7 @@ export function createRequestInbox({
         if (firstImage && typeof ensurePortraitSource === "function") {
           await ensurePortraitSource(firstImage.image_url)
         }
-        var firstLoad = !state.loaded
+        if (version !== requestRefreshVersion || currentAccountKey() !== accountKey) return null
         var previousHighWater = state.last_seen_notification_id
         var newestUnread = readyRequests.find(function (item) {
           return item && item.unread && Number(item.notification_id || 0) > previousHighWater
@@ -130,13 +183,7 @@ export function createRequestInbox({
         state.cancelled_count = Math.max(0, Number(payload.cancelled_count || 0) || 0)
         state.ready_requests = readyRequests
         state.open_requests = Array.isArray(payload.open_requests) ? payload.open_requests : []
-        if (firstLoad) {
-          state.active_group = readyRequests.length
-            ? "ready"
-            : state.open_requests.length
-              ? "waiting"
-              : "ready"
-        }
+        chooseActiveGroup()
         state.last_seen_notification_id = readyRequests.reduce(function (highest, item) {
           return Math.max(highest, Number((item && item.notification_id) || 0) || 0)
         }, previousHighWater)
@@ -147,11 +194,68 @@ export function createRequestInbox({
         return payload
       })
       .catch(function () {
+        if (version === requestRefreshVersion && currentAccountKey() === accountKey) {
+          state.loaded = true
+          state.request_error = true
+          renderSidebar()
+        }
         return null
       })
       .finally(function () {
-        state.loading = false
+        if (version === requestRefreshVersion && currentAccountKey() === accountKey) {
+          state.loading = false
+        }
       })
+  }
+
+  function refreshInvitations(accountKey) {
+    if (!accountKey || state.invitations_loading) return Promise.resolve(null)
+    state.invitations_loading = true
+    state.invitations_error = false
+    var version = ++invitationRefreshVersion
+    return fetchJSON("/api/iconoplasm/caretaker/invitations?limit=20&fresh=" + Date.now(), {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(function (payload) {
+        if (version !== invitationRefreshVersion || currentAccountKey() !== accountKey) return null
+        if (!payload || !payload.ok) return null
+        state.invitations_loaded = true
+        state.invitation_pending_count = Math.max(0, Number(payload.pending_count || 0) || 0)
+        state.invitation_unread_count = Math.max(0, Number(payload.unread_count || 0) || 0)
+        state.invitations = Array.isArray(payload.invitations) ? payload.invitations : []
+        chooseActiveGroup()
+        renderSidebar()
+        return payload
+      })
+      .catch(function () {
+        if (version === invitationRefreshVersion && currentAccountKey() === accountKey) {
+          state.invitations_loaded = true
+          state.invitations_error = true
+          renderSidebar()
+        }
+        return null
+      })
+      .finally(function () {
+        if (version === invitationRefreshVersion && currentAccountKey() === accountKey) {
+          state.invitations_loading = false
+        }
+      })
+  }
+
+  function refresh(options) {
+    var accountKey = ensureAccountContext()
+    if (!accountKey) return Promise.resolve(null)
+    if (
+      (!state.loaded && !state.loading) ||
+      (!state.invitations_loaded && !state.invitations_loading)
+    ) {
+      renderSidebar()
+    }
+    return Promise.allSettled([
+      refreshRequests(options, accountKey),
+      refreshInvitations(accountKey),
+    ])
   }
 
   function markRead(notificationIds, markAll, receipt) {
@@ -172,16 +276,29 @@ export function createRequestInbox({
     })
   }
 
+  function markCaretakerRead(assignmentId) {
+    return fetchJSON("/api/iconoplasm/caretaker/invitations/read", {
+      method: "POST",
+      credentials: "include",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ caretaker_assignment_id: assignmentId }),
+    }).then(function () {
+      return refresh()
+    })
+  }
+
   function stop() {
     if (refreshTimer) window.clearTimeout(refreshTimer)
     refreshTimer = 0
+    invalidateInflight()
   }
 
   function scheduleOpenRequestRefresh() {
     stop()
     if (
       !getCurrentUser() ||
-      state.open_count <= 0 ||
+      (state.open_count <= 0 && state.invitation_pending_count <= 0) ||
       typeof document === "undefined" ||
       document.visibilityState !== "visible"
     ) {
@@ -200,7 +317,7 @@ export function createRequestInbox({
 
   function start() {
     stop()
-    if (!getCurrentUser()) return
+    if (!ensureAccountContext()) return
     void refreshForLifecycle()
     if (lifecycleWired) return
     lifecycleWired = true
@@ -216,8 +333,9 @@ export function createRequestInbox({
     })
   }
 
-  function requestGroupSummaryMarkup(label, count, unread) {
+  function requestGroupSummaryMarkup(label, count, unread, groupName) {
     var safeCount = Math.max(0, Number(count || 0) || 0)
+    var unreadNoun = groupName === "caretaking" ? " invitation" : " generation"
     return (
       '<span slot="summary" class="icono-request-inbox__group-summary">' +
       '<span class="icono-request-inbox__group-label">' +
@@ -228,7 +346,7 @@ export function createRequestInbox({
         ? '<sl-badge class="icono-request-inbox__unread-dot" variant="danger" pill aria-hidden="true"></sl-badge>' +
           '<span class="sr-only">' +
           escapeHtml(String(unread)) +
-          (unread === 1 ? " unread generation" : " unread generations") +
+          (unread === 1 ? " unread" + unreadNoun : " unread" + unreadNoun + "s") +
           "</span>"
         : "") +
       '<span class="icono-request-inbox__group-count">' +
@@ -244,7 +362,7 @@ export function createRequestInbox({
       '"' +
       (state.active_group === name ? " open" : "") +
       ">" +
-      requestGroupSummaryMarkup(label, count, unread) +
+      requestGroupSummaryMarkup(label, count, unread, name) +
       '<div class="icono-request-inbox__group-body">' +
       content +
       "</div></sl-details>"
@@ -374,12 +492,52 @@ export function createRequestInbox({
     )
   }
 
+  function caretakerInvitationStatus(item) {
+    if (item.notification_state === "pending") return "Invitation awaiting your response"
+    if (item.assignment_status === "active") return "Caretaking active"
+    if (item.assignment_status === "suspended") return "Caretaking suspended"
+    return "Invitation resolved"
+  }
+
+  function caretakerInvitationMarkup(item) {
+    var assignmentId = String(item.caretaker_assignment_id || "")
+    var symbol = String(item.canonical_symbol || "Gene")
+    var href = String(item.href || "/gene/" + encodeURIComponent(symbol))
+    var unread = !item.read_at
+    return (
+      '<div class="icono-request-inbox__caretaker-item' +
+      (unread ? " icono-request-inbox__item--unread" : "") +
+      '"><a class="icono-request-inbox__item icono-request-inbox__item--caretaker" href="' +
+      escapeHtml(href) +
+      '" data-icono-caretaker-invitation data-icono-caretaker-assignment-id="' +
+      escapeHtml(assignmentId) +
+      '" data-icono-caretaker-gene-id="' +
+      escapeHtml(String(item.gene_id || "")) +
+      '"><span class="icono-request-inbox__caretaker-mark" aria-hidden="true">C</span>' +
+      '<span class="icono-request-inbox__copy"><strong>' +
+      escapeHtml(symbol) +
+      "</strong><small>" +
+      escapeHtml(caretakerInvitationStatus(item)) +
+      "</small></span></a>" +
+      (unread
+        ? '<button type="button" class="icono-request-inbox__caretaker-read" data-icono-caretaker-mark-read="' +
+          escapeHtml(assignmentId) +
+          '">Mark read</button>'
+        : "") +
+      "</div>"
+    )
+  }
+
   function panelMarkup() {
     if (!getCurrentUser()) return ""
-    if (state.loading && !state.loaded) {
+    if (
+      !state.loaded &&
+      !state.invitations_loaded &&
+      (state.loading || state.invitations_loading)
+    ) {
       return (
         '<div class="icono-request-inbox" aria-busy="true">' +
-        '<div class="icono-request-inbox__head"><span>Request inbox</span>' +
+        '<div class="icono-request-inbox__head"><span>Inbox</span>' +
         '<span class="icono-request-inbox__loading">Checking…</span></div></div>'
       )
     }
@@ -391,9 +549,12 @@ export function createRequestInbox({
     var readyGroupCount = Math.max(readyGroups.length, Number(state.ready_group_count || 0) || 0)
     var openCount = Math.max(0, Number(state.open_count || 0) || 0)
     var cancelledCount = Math.max(0, Number(state.cancelled_count || 0) || 0)
+    var invitations = Array.isArray(state.invitations) ? state.invitations : []
+    var invitationPendingCount = Math.max(0, Number(state.invitation_pending_count || 0) || 0)
+    var invitationUnreadCount = Math.max(0, Number(state.invitation_unread_count || 0) || 0)
     var html =
       '<div class="icono-request-inbox">' +
-      '<div class="icono-request-inbox__head"><span>Request inbox</span></div>' +
+      '<div class="icono-request-inbox__head"><span>Inbox</span></div>' +
       '<div class="icono-request-inbox__groups">'
 
     var readyContent = unread
@@ -402,7 +563,13 @@ export function createRequestInbox({
     for (var i = 0; i < readyGroups.length; i++) {
       readyContent += fulfilledReceiptMarkup(readyGroups[i] || {})
     }
-    if (!readyRequests.length) {
+    if (state.request_error && !readyRequests.length) {
+      readyContent +=
+        '<div class="icono-request-inbox__empty"><strong>Requests unavailable.</strong>' +
+        "Caretaker invitations are still checked separately.</div>"
+    } else if (state.loading && !state.loaded) {
+      readyContent += '<div class="icono-request-inbox__empty">Checking requests.</div>'
+    } else if (!readyRequests.length) {
       readyContent +=
         '<div class="icono-request-inbox__empty"><strong>Nothing ready yet.</strong>' +
         "Finished requests will stay here.</div>"
@@ -419,7 +586,13 @@ export function createRequestInbox({
     for (var j = 0; j < openRequests.length; j++) {
       waitingContent += waitingRequestMarkup(openRequests[j] || {})
     }
-    if (!openRequests.length) {
+    if (state.request_error && !openRequests.length) {
+      waitingContent +=
+        '<div class="icono-request-inbox__empty"><strong>Requests unavailable.</strong>' +
+        "Try again when this panel refreshes.</div>"
+    } else if (state.loading && !state.loaded) {
+      waitingContent += '<div class="icono-request-inbox__empty">Checking requests.</div>'
+    } else if (!openRequests.length) {
       waitingContent +=
         '<div class="icono-request-inbox__empty"><strong>Nothing waiting.</strong>' +
         "New requests appear here until they are ready.</div>"
@@ -431,7 +604,35 @@ export function createRequestInbox({
         escapeHtml(String(openCount)) +
         " shown.</div>"
     }
+    var caretakerContent =
+      '<div class="icono-request-inbox__caretaker-summary"><strong>' +
+      escapeHtml(String(invitationPendingCount)) +
+      " pending</strong><span>" +
+      escapeHtml(String(invitationUnreadCount)) +
+      " unread</span></div>"
+    for (var k = 0; k < invitations.length; k++) {
+      caretakerContent += caretakerInvitationMarkup(invitations[k] || {})
+    }
+    if (state.invitations_error && !invitations.length) {
+      caretakerContent +=
+        '<div class="icono-request-inbox__empty"><strong>Invitations unavailable.</strong>' +
+        "Generation requests are still available.</div>"
+    } else if (state.invitations_loading && !state.invitations_loaded) {
+      caretakerContent += '<div class="icono-request-inbox__empty">Checking invitations.</div>'
+    } else if (!invitations.length) {
+      caretakerContent +=
+        '<div class="icono-request-inbox__empty"><strong>No caretaker invitations.</strong>' +
+        "New offers will appear here.</div>"
+    }
+
     html += requestGroupMarkup("ready", "Ready", readyGroupCount, unreadGroupCount, readyContent)
+    html += requestGroupMarkup(
+      "caretaking",
+      "Caretaking",
+      invitationPendingCount,
+      invitationUnreadCount,
+      caretakerContent,
+    )
     html += requestGroupMarkup("waiting", "Waiting", openCount, 0, waitingContent)
     html += "</div>"
     if (cancelledCount) {
@@ -463,6 +664,7 @@ export function createRequestInbox({
         var groupName = group.getAttribute("data-icono-request-group") || ""
         group.addEventListener("sl-show", function () {
           state.active_group = groupName
+          state.active_group_touched = true
           for (var otherIndex = 0; otherIndex < groups.length; otherIndex++) {
             var other = groups[otherIndex]
             if (other === group) continue
@@ -506,6 +708,37 @@ export function createRequestInbox({
           }).catch(function () {})
         })
       })(links[i])
+    }
+    var caretakerLinks = stack.querySelectorAll("[data-icono-caretaker-invitation]")
+    for (var caretakerIndex = 0; caretakerIndex < caretakerLinks.length; caretakerIndex++) {
+      ;(function (link) {
+        if (link._iconoCaretakerInvitationWired) return
+        link._iconoCaretakerInvitationWired = true
+        link.addEventListener("click", function (event) {
+          var assignmentId = link.getAttribute("data-icono-caretaker-assignment-id") || ""
+          if (!assignmentId) return
+          event.preventDefault()
+          var href = link.getAttribute("href") || "/"
+          if (typeof navigate === "function") navigate(href, link)
+          else window.location.assign(href)
+          void markCaretakerRead(assignmentId).catch(function () {})
+        })
+      })(caretakerLinks[caretakerIndex])
+    }
+    var caretakerReadButtons = stack.querySelectorAll("[data-icono-caretaker-mark-read]")
+    for (var readIndex = 0; readIndex < caretakerReadButtons.length; readIndex++) {
+      ;(function (button) {
+        if (button._iconoCaretakerReadWired) return
+        button._iconoCaretakerReadWired = true
+        button.addEventListener("click", function () {
+          var assignmentId = button.getAttribute("data-icono-caretaker-mark-read") || ""
+          if (!assignmentId) return
+          button.disabled = true
+          void markCaretakerRead(assignmentId).finally(function () {
+            button.disabled = false
+          })
+        })
+      })(caretakerReadButtons[readIndex])
     }
   }
 

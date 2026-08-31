@@ -31,6 +31,34 @@ import {
   putPortraitStorageObject,
   readPortraitStorageObject,
 } from "./lib/iconoplasm-portrait-storage.js"
+import {
+  IconoplasmGenerationSourceError,
+  generationConfigSha256,
+  exactGenerationProvenanceValidationKey,
+  generationPromptSha256,
+  generationRequestContractSha256,
+  readExactGenerationSource,
+  requireExactGenerationProvenance,
+  resolveCanonicalGenerationSource,
+  validateExactGenerationSource,
+} from "./lib/iconoplasm-generation-provenance.js"
+import {
+  IconoplasmGenerationLeaseError,
+  assertExactGenerationLeaseExecution,
+  completeExactGenerationLease,
+} from "./iconoplasm-generation-lease.js"
+import { authorizeIconoplasmAuthorityGenerationBearer } from "./iconoplasm-authority-service-auth.js"
+import { createIconoplasmGenerationExecutorHandler } from "./iconoplasm-generation-executor-routes.js"
+import { claimValidatedGenerationRequests } from "./iconoplasm-generation-claim.js"
+import { hydratePublicCanonicalGeneRecords } from "./iconoplasm-public-canonical-runtime.js"
+import { drainManifestationPublicCardPublicationWakes } from "./iconoplasm-manifestation-publication-wake.js"
+import {
+  CaretakerSupervoteError,
+  CaretakerSupervoteLedger,
+  caretakerSupervoteRequestSha256,
+  caretakerWeightedScore,
+  compareCaretakerWeightedCandidates,
+} from "./iconoplasm/caretaker/caretaker-supervote.js"
 export { putPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
@@ -41,6 +69,22 @@ import { createIconoplasmAdminPublicationAliasHandlers } from "./iconoplasm-admi
 import { createIconoplasmAdminGalleryHandlers } from "./iconoplasm-admin-gallery-routes.js"
 import { createIconoplasmAdminPublicationHandlers } from "./iconoplasm-admin-publication-routes.js"
 import { createIconoplasmAdminReadModelHandlers } from "./iconoplasm-admin-read-model-routes.js"
+import { createIconoplasmCaretakerAdminHandlers } from "./iconoplasm-caretaker-admin-routes.js"
+import {
+  createIconoplasmCaretakerNotificationHandlers,
+  projectCaretakerAssignmentNotification,
+} from "./iconoplasm-caretaker-notifications.js"
+import { createIconoplasmManifestationAuthorityRuntimeHandler } from "./iconoplasm-manifestation-authority-runtime.js"
+import { authorityError } from "./iconoplasm/caretaker/manifestation-authority-contract.js"
+import { readBrinedewAccount } from "./lib/brinedew-account-identity.js"
+import {
+  drainBrinedewAuthorityAccountProjectionOutbox,
+  synchronizeActiveBrinedewAccountToManifestationAuthority,
+} from "./lib/brinedew-authority-account-projection.js"
+import {
+  drainManifestationAuthorityProjectionOutbox,
+  requireManifestationAuthorityWriteMode,
+} from "./lib/iconoplasm-manifestation-authority-projection.js"
 import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
 import { iconoplasmCacheControl } from "./iconoplasm-cache-policy.js"
 import { iconoplasmObservabilitySnapshotForAdmin } from "./iconoplasm-observability-freshness.js"
@@ -989,6 +1033,7 @@ const CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS = [
   "unpublish",
   "purge_legacy",
   "gene_card_materialized",
+  "manifestation_canonical_changed",
 ]
 // Workstation priority excludes materialization-only events. Those events are
 // the resumable corpus backfill itself and are intentionally released in
@@ -1592,6 +1637,20 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (family === "user_emulsion") return "first_party_write"
   if (family.startsWith("candidate_generation_")) return "first_party_write"
   if (family === "candidate_copy") return "first_party_write"
+  if (family === "caretaker_supervote") return "first_party_write"
+  if (family === "caretaker_manifestations_read") return "first_party_read"
+  if (family === "caretaker_manifestations_write") return "first_party_write"
+  if (family === "caretaker_invitations_read") return "first_party_read"
+  if (family === "caretaker_invitations_write") return "first_party_write"
+  if (family === "authority_workstation_sync" || family === "authority_workstation_material")
+    return "workstation_sync_read"
+  if (
+    family === "authority_workstation_write" ||
+    family === "authority_generation_executor" ||
+    family === "authority_cutover" ||
+    family === "authority_maintenance"
+  )
+    return "workstation_sync_write"
   if (family.startsWith("votes_"))
     return family === "votes_me" ? "first_party_read" : "first_party_write"
   if (family === "artist_styles_search") return "public_read"
@@ -1635,13 +1694,14 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_assets_summary" ||
     family === "admin_assets_state" ||
     family === "admin_gene_detail" ||
+    family === "admin_caretaker_registry" ||
+    family === "admin_caretaker_mutation" ||
     family === "admin_canon_audit" ||
     family === "admin_public_stats_audit" ||
     family === "admin_finalization_pending" ||
     family === "admin_requests_history" ||
     family === "admin_requests_open" ||
     family === "admin_requests_drain_plan" ||
-    family === "admin_requests_fulfill" ||
     family === "admin_image_edit_prompts" ||
     family === "admin_factory_recipe" ||
     family === "admin_diagnostic_matrix" ||
@@ -1674,6 +1734,13 @@ function iconoplasmBudgetClassFromHistoricalRouteFamilyForReport(routeFamily) {
 
 function iconoplasmBudgetSourceClassFromRequest(request, path, routeFamily) {
   if (routeFamily.startsWith("internal_")) return "internal_maintenance"
+  if (
+    routeFamily.startsWith("authority_workstation_") ||
+    routeFamily === "authority_generation_executor" ||
+    routeFamily === "authority_cutover" ||
+    routeFamily === "authority_maintenance"
+  )
+    return "workstation_sync"
   if (path.startsWith("/api/iconoplasm/admin/")) {
     if (
       routeFamily === "admin_ingest" ||
@@ -1695,6 +1762,7 @@ function iconoplasmBudgetSourceClassFromRequest(request, path, routeFamily) {
 }
 
 function iconoplasmBudgetActorClassFromRequest(request, path) {
+  if (path.startsWith("/api/iconoplasm/authority/")) return "service_bearer"
   if (path.startsWith("/api/iconoplasm/admin/")) {
     return hasAdminTokenCredentialPresent(request) ? "admin_token" : "admin_session"
   }
@@ -1739,6 +1807,8 @@ function isIconoplasmHighRiskAdminMutationRouteFamily(routeFamily) {
     "admin_finalization_enqueue",
     "admin_finalization_process",
     "admin_blots_upload",
+    "admin_caretaker_mutation",
+    "authority_workstation_write",
   ]).has(String(routeFamily || "").trim())
 }
 
@@ -2722,6 +2792,12 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request) {
   return {
     ...env,
     ICONOPLASM_DB: wrapIconoplasmD1DatabaseWithDailyBudgetKillSwitch(env.ICONOPLASM_DB, state),
+    // ARCHITECTURE FENCE [IPD-012]: D1 read/write allowances are account-wide.
+    // The isolated authoring database shares the existing one-owner meter.
+    ICONOPLASM_AUTHORING_DB: wrapIconoplasmD1DatabaseWithDailyBudgetKillSwitch(
+      env.ICONOPLASM_AUTHORING_DB,
+      state,
+    ),
     [ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH]: state,
   }
 }
@@ -4030,6 +4106,66 @@ function mapGenerationRequestRow(row, { portraitBaseUrl = "" } = {}) {
     factory_pipeline_code: factoryPipeline,
     factory_vision_revision: factoryVision,
     factory_code: `${factoryPipeline}${factoryVision}`,
+    prompt_body_mode: normalizeCandidatePromptBodyMode(row?.prompt_body_mode),
+    seed_mode: "random",
+    generation_provenance_status:
+      String(row?.generation_provenance_status || "").trim() === "bound"
+        ? "bound"
+        : "legacy_unbound",
+    generation_request_id: sanitizeText(row?.generation_request_id || "", 180) || "",
+    generation_attempt_id: sanitizeText(row?.generation_attempt_id || "", 128) || "",
+    source_gene_id: sanitizeText(row?.source_gene_id || "", 128) || "",
+    source_manifestation_id: sanitizeText(row?.source_manifestation_id || "", 128) || "",
+    source_manifestation_revision_id:
+      sanitizeText(row?.source_manifestation_revision_id || "", 128) || "",
+    source_manifestation_body_sha256:
+      normalizeSha256(row?.source_manifestation_body_sha256 || "") || "",
+    source_manifestation_derivative_id:
+      sanitizeText(row?.source_manifestation_derivative_id || "", 128) || "",
+    source_manifestation_derivative_sha256:
+      normalizeSha256(row?.source_manifestation_derivative_sha256 || "") || "",
+    source_manifestation_derivative_tags_sha256:
+      normalizeSha256(row?.source_manifestation_derivative_tags_sha256 || "") || "",
+    source_manifestation_derivative_tags_bytes: Math.max(
+      0,
+      optionalInt(row?.source_manifestation_derivative_tags_bytes) || 0,
+    ),
+    source_manifestation_derivative_fields_sha256:
+      normalizeSha256(row?.source_manifestation_derivative_fields_sha256 || "") || "",
+    source_manifestation_derivative_fields_bytes: Math.max(
+      0,
+      optionalInt(row?.source_manifestation_derivative_fields_bytes) || 0,
+    ),
+    source_manifestation_derivative_recipe_id:
+      sanitizeText(row?.source_manifestation_derivative_recipe_id || "", 128) || "",
+    source_manifestation_derivative_recipe_version:
+      sanitizeText(row?.source_manifestation_derivative_recipe_version || "", 128) || "",
+    source_manifestation_derivative_provider_id:
+      sanitizeText(row?.source_manifestation_derivative_provider_id || "", 128) || "",
+    source_manifestation_derivative_model_id:
+      sanitizeText(row?.source_manifestation_derivative_model_id || "", 255) || "",
+    source_manifestation_derivative_tagger_config_sha256:
+      normalizeSha256(row?.source_manifestation_derivative_tagger_config_sha256 || "") || "",
+    source_canonical_selection_id:
+      sanitizeText(row?.source_canonical_selection_id || "", 128) || "",
+    source_canonical_head_version: Math.max(
+      0,
+      optionalInt(row?.source_canonical_head_version) || 0,
+    ),
+    source_gene_revision: Math.max(0, optionalInt(row?.source_gene_revision) || 0),
+    source_sample_label: sanitizeText(row?.source_sample_label || "", 64) || "",
+    source_sample_number:
+      row?.source_sample_number == null ? null : optionalInt(row.source_sample_number),
+    source_sample_text_sha256: normalizeSha256(row?.source_sample_text_sha256 || "") || "",
+    source_snapshot_sha256: normalizeSha256(row?.source_snapshot_sha256 || "") || "",
+    generation_request_contract_sha256:
+      normalizeSha256(row?.generation_request_contract_sha256 || "") || "",
+    generation_config_sha256: normalizeSha256(row?.generation_config_sha256 || "") || "",
+    fulfilled_generation_attempt_id:
+      sanitizeText(row?.fulfilled_generation_attempt_id || "", 128) || "",
+    fulfilled_provider_id: sanitizeText(row?.fulfilled_provider_id || "", 64) || "",
+    fulfilled_model_id: sanitizeText(row?.fulfilled_model_id || "", 255) || "",
+    fulfilled_prompt_sha256: normalizeSha256(row?.fulfilled_prompt_sha256 || "") || "",
     request_origin:
       String(row?.request_origin || "").trim() === "diagnostic_matrix"
         ? "diagnostic_matrix"
@@ -4463,7 +4599,12 @@ async function countOpenGenerationRequests(env, filters = {}) {
   return Math.max(0, Number.parseInt(String(row?.count || "0"), 10) || 0)
 }
 
-async function generationRequestDrainPlan(env, { limit = 500 } = {}) {
+export async function generationRequestLeaseClaim(
+  env,
+  { limit = 10, leaseOwnerId, leaseSeconds = 900 } = {},
+) {
+  const claimLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 10)))
+  const scanLimit = Math.min(200, Math.max(20, claimLimit * 4))
   const policy = resolveIconoplasmFulfillmentDeliveryPolicy(env)
   // The temporary Discord gate is a work-selection policy, not a later
   // suppression.  Selecting an ineligible row would spend GPU time and publish
@@ -4479,14 +4620,56 @@ async function generationRequestDrainPlan(env, { limit = 500 } = {}) {
   const [totalOpenCount, eligibleCount, eligibleRows] = await Promise.all([
     countOpenGenerationRequests(env, openFilters),
     countOpenGenerationRequests(env, eligibleFilters),
-    listOpenGenerationRequests(env, { limit, diagnosticsFirst: true, ...eligibleFilters }),
+    listOpenGenerationRequests(env, {
+      limit: scanLimit,
+      diagnosticsFirst: true,
+      ...eligibleFilters,
+    }),
   ])
+  const { validated, quarantine, claimed } = await claimValidatedGenerationRequests({
+    env,
+    db: env.ICONOPLASM_DB,
+    rows: eligibleRows,
+    leaseOwnerId,
+    limit: claimLimit,
+    leaseSeconds,
+  })
   return {
+    schema_version: 1,
     delivery_mode: policy.mode,
     total_open_count: totalOpenCount,
     eligible_count: eligibleCount,
-    rows: eligibleRows,
+    runnable_count: claimed.leases.length,
+    blocked_count: validated.blockedRows.length,
+    quarantined_count: quarantine.quarantined_count,
+    blocked_rows: validated.blockedRows,
+    lease_owner_id: claimed.lease_owner_id,
+    lease_seconds: claimed.lease_seconds,
+    has_more: eligibleRows.length >= scanLimit || claimed.leases.length < eligibleCount,
+    leases: claimed.leases,
   }
+}
+
+async function generationRequestRowById(env, requestId) {
+  return env.ICONOPLASM_DB.prepare(
+    `SELECT gr.*, COALESCE(gc.full_name, '') AS full_name
+     , COALESCE(avr.emulsion_id, '') AS requested_emulsion_id
+     , COALESCE(avr.artist_tag, '') AS requested_artist_tag
+     , COALESCE(avr.artist_name, '') AS requested_artist_name
+     , COALESCE(avr.workflow_id, '') AS requested_workflow_id
+     , COALESCE(avr.workflow_label, '') AS requested_workflow_label
+     , COALESCE(avr.prompt_version, '') AS requested_prompt_version
+     , COALESCE(avr.variant_slot, '') AS requested_variant_slot
+     FROM icono_generation_requests gr
+     LEFT JOIN icono_gene_catalog gc
+       ON gc.gene_symbol = gr.gene_symbol
+     LEFT JOIN icono_admin_vision_rollup avr
+       ON avr.vision_id = gr.requested_vision_id
+     WHERE gr.id = ?
+     LIMIT 1`,
+  )
+    .bind(requestId)
+    .first()
 }
 
 async function createGenerationRequest(
@@ -4510,6 +4693,7 @@ async function createGenerationRequest(
     requestedEmulsionSlot = 0,
     requestOrigin = "user",
     diagnosticRunId = "",
+    sourceSnapshot = null,
   } = {},
 ) {
   if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
@@ -4567,6 +4751,57 @@ async function createGenerationRequest(
   if (origin === "diagnostic_matrix" && !diagnosticId) {
     return { ok: false, error: "Diagnostic requests require a run identity." }
   }
+  const requestContractHash = await generationRequestContractSha256({
+    gene_symbol: symbolNorm,
+    request_kind: kind,
+    request_prompt: prompt,
+    source_gene_symbol: sourceSymbolNorm,
+    source_asset_sha256: sourceAssetNorm,
+    request_mode: mode,
+    requested_vision_id: visionNorm,
+    requested_emulsion_slot: Math.max(0, optionalInt(requestedEmulsionSlot) || 0),
+    client_request_id: clientRequestNorm,
+    request_batch_id: batchIdNorm,
+    request_batch_size: batchSizeNorm,
+    prompt_body_mode: promptBodyModeNorm,
+    seed_mode: "random",
+    requested_factory_pipeline_code: pipelineOverride,
+    requested_factory_vision_revision: visionOverride,
+    request_origin: origin,
+    diagnostic_run_id: diagnosticId,
+  })
+  if (clientRequestNorm) {
+    const existing = await env.ICONOPLASM_DB.prepare(
+      `SELECT id, COALESCE(generation_request_contract_sha256, '') AS generation_request_contract_sha256
+       FROM icono_generation_requests
+       WHERE requester_user_id = ?
+         AND client_request_id = ?
+       LIMIT 1`,
+    )
+      .bind(requesterNorm, clientRequestNorm)
+      .first()
+    if (existing?.id) {
+      if (
+        normalizeSha256(existing.generation_request_contract_sha256 || "") !== requestContractHash
+      ) {
+        return {
+          ok: false,
+          status: 409,
+          code: "GENERATION_REQUEST_IDEMPOTENCY_CONFLICT",
+          error: "That generation request identity is already bound to different inputs.",
+        }
+      }
+      const existingRow = await generationRequestRowById(env, Number(existing.id))
+      return {
+        ok: true,
+        request:
+          (await enrichGenerationRequestRows(env, existingRow ? [existingRow] : []))[0] || null,
+        source_snapshot: requireExactGenerationProvenance(existingRow, {
+          promptBodyMode: promptBodyModeNorm,
+        }),
+      }
+    }
+  }
   let resolvedVisionId = requestedRecipe ? `anima-v1-${requestedRecipe.slot}` : visionNorm
   let emulsionSlot = Math.max(0, optionalInt(requestedEmulsionSlot) || 0)
   if (mode === "specific") {
@@ -4617,6 +4852,39 @@ async function createGenerationRequest(
     }
     emulsionSlot = emulsionSlot || animaSlot || 0
   }
+  let exactSource
+  try {
+    exactSource = sourceSnapshot
+      ? requireExactGenerationProvenance(sourceSnapshot, { promptBodyMode: promptBodyModeNorm })
+      : await resolveCanonicalGenerationSource(env, {
+          geneSymbol: symbolNorm,
+          promptBodyMode: promptBodyModeNorm,
+        })
+  } catch (error) {
+    if (error instanceof IconoplasmGenerationSourceError) {
+      return { ok: false, status: error.status, code: error.code, error: error.message }
+    }
+    throw error
+  }
+  const generationConfigHash = await generationConfigSha256({
+    source_snapshot_sha256: exactSource.source_snapshot_sha256,
+    request_mode: mode,
+    requested_vision_id: resolvedVisionId,
+    requested_emulsion_slot: emulsionSlot,
+    prompt_body_mode: promptBodyModeNorm,
+    seed_mode: "random",
+    factory_pipeline_code: factoryRecipe.pipeline,
+    factory_vision_revision: factoryRecipe.vision,
+  })
+  if (typeof crypto?.randomUUID !== "function") {
+    return {
+      ok: false,
+      status: 503,
+      code: "CRYPTOGRAPHIC_IDENTITY_UNAVAILABLE",
+      error: "A cryptographic generation identity could not be created.",
+    }
+  }
+  const generationRequestId = `generation_request_${crypto.randomUUID()}`
   const insertResp = await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_generation_requests (
        gene_symbol,
@@ -4638,9 +4906,36 @@ async function createGenerationRequest(
        factory_vision_revision,
        request_origin,
        diagnostic_run_id,
+       generation_provenance_status,
+       generation_request_id,
+       source_gene_id,
+       source_manifestation_id,
+       source_manifestation_revision_id,
+       source_manifestation_body_sha256,
+       source_manifestation_derivative_id,
+       source_manifestation_derivative_sha256,
+       source_manifestation_derivative_tags_sha256,
+       source_manifestation_derivative_tags_bytes,
+       source_manifestation_derivative_fields_sha256,
+       source_manifestation_derivative_fields_bytes,
+       source_manifestation_derivative_recipe_id,
+       source_manifestation_derivative_recipe_version,
+       source_manifestation_derivative_provider_id,
+       source_manifestation_derivative_model_id,
+       source_manifestation_derivative_tagger_config_sha256,
+       source_canonical_selection_id,
+       source_canonical_head_version,
+       source_gene_revision,
+       source_sample_label,
+       source_sample_number,
+       source_sample_text_sha256,
+       source_snapshot_sha256,
+       generation_request_contract_sha256,
+       generation_config_sha256,
        status,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'random', ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'random', ?, ?, ?, ?,
+               'bound', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)
      ON CONFLICT(requester_user_id, client_request_id) WHERE client_request_id <> ''
      DO NOTHING`,
   )
@@ -4663,13 +4958,38 @@ async function createGenerationRequest(
       factoryRecipe.vision,
       origin,
       diagnosticId,
+      generationRequestId,
+      exactSource.source_gene_id,
+      exactSource.source_manifestation_id,
+      exactSource.source_manifestation_revision_id,
+      exactSource.source_manifestation_body_sha256,
+      exactSource.source_manifestation_derivative_id,
+      exactSource.source_manifestation_derivative_sha256,
+      exactSource.source_manifestation_derivative_tags_sha256,
+      exactSource.source_manifestation_derivative_tags_bytes,
+      exactSource.source_manifestation_derivative_fields_sha256,
+      exactSource.source_manifestation_derivative_fields_bytes,
+      exactSource.source_manifestation_derivative_recipe_id,
+      exactSource.source_manifestation_derivative_recipe_version,
+      exactSource.source_manifestation_derivative_provider_id,
+      exactSource.source_manifestation_derivative_model_id,
+      exactSource.source_manifestation_derivative_tagger_config_sha256,
+      exactSource.source_canonical_selection_id,
+      exactSource.source_canonical_head_version,
+      exactSource.source_gene_revision,
+      exactSource.source_sample_label,
+      exactSource.source_sample_number,
+      exactSource.source_sample_text_sha256,
+      exactSource.source_snapshot_sha256,
+      requestContractHash,
+      generationConfigHash,
     )
     .run()
   let requestId =
     Number(insertResp?.meta?.changes || 0) > 0 ? Number(insertResp?.meta?.last_row_id || 0) : 0
   if (!requestId && clientRequestNorm) {
     const existing = await env.ICONOPLASM_DB.prepare(
-      `SELECT id
+      `SELECT id, COALESCE(generation_request_contract_sha256, '') AS generation_request_contract_sha256
        FROM icono_generation_requests
        WHERE requester_user_id = ?
          AND client_request_id = ?
@@ -4677,33 +4997,25 @@ async function createGenerationRequest(
     )
       .bind(requesterNorm, clientRequestNorm)
       .first()
+    if (
+      existing?.id &&
+      normalizeSha256(existing.generation_request_contract_sha256 || "") !== requestContractHash
+    ) {
+      return {
+        ok: false,
+        status: 409,
+        code: "GENERATION_REQUEST_IDEMPOTENCY_CONFLICT",
+        error: "That generation request identity is already bound to different inputs.",
+      }
+    }
     requestId = Number(existing?.id || 0)
   }
-  const created = requestId
-    ? await env.ICONOPLASM_DB.prepare(
-        `SELECT gr.*, COALESCE(gc.full_name, '') AS full_name
-         , COALESCE(avr.emulsion_id, '') AS requested_emulsion_id
-         , COALESCE(avr.artist_tag, '') AS requested_artist_tag
-         , COALESCE(avr.artist_name, '') AS requested_artist_name
-         , COALESCE(avr.workflow_id, '') AS requested_workflow_id
-         , COALESCE(avr.workflow_label, '') AS requested_workflow_label
-         , COALESCE(avr.prompt_version, '') AS requested_prompt_version
-         , COALESCE(avr.variant_slot, '') AS requested_variant_slot
-         FROM icono_generation_requests gr
-         LEFT JOIN icono_gene_catalog gc
-           ON gc.gene_symbol = gr.gene_symbol
-         LEFT JOIN icono_admin_vision_rollup avr
-           ON avr.vision_id = gr.requested_vision_id
-         WHERE gr.id = ?
-         LIMIT 1`,
-      )
-        .bind(requestId)
-        .first()
-    : null
+  const created = requestId ? await generationRequestRowById(env, requestId) : null
   const mapped = (await enrichGenerationRequestRows(env, created ? [created] : []))[0] || null
   return {
     ok: true,
     request: mapped,
+    source_snapshot: exactSource,
   }
 }
 
@@ -4744,6 +5056,7 @@ async function createGenerationRequestBatch(
 
   const requests = []
   const failures = []
+  let sourceSnapshot = null
   for (let index = 0; index < uniqueVisionIds.length; index += 1) {
     const visionId = uniqueVisionIds[index]
     const result = await createGenerationRequest(env, {
@@ -4758,9 +5071,12 @@ async function createGenerationRequestBatch(
       requestBatchId: batchId,
       requestBatchSize: uniqueVisionIds.length,
       promptBodyMode,
+      sourceSnapshot,
     })
-    if (result.ok) requests.push(result.request || null)
-    else failures.push({ requested_vision_id: visionId, error: String(result.error || "Failed") })
+    if (result.ok) {
+      requests.push(result.request || null)
+      sourceSnapshot = sourceSnapshot || result.source_snapshot || null
+    } else failures.push({ requested_vision_id: visionId, error: String(result.error || "Failed") })
   }
   if (requests.length && requests.length !== uniqueVisionIds.length) {
     const requestIds = requests.map((request) => Number(request?.id || 0)).filter(Boolean)
@@ -5958,6 +6274,19 @@ async function createDiagnosticMatrixRun(
     return diagnosticMatrixRunPayload(env, url, runId)
   }
 
+  let exactSource
+  try {
+    exactSource = await resolveCanonicalGenerationSource(env, {
+      geneSymbol: gene,
+      promptBodyMode: promptMode,
+    })
+  } catch (error) {
+    if (error instanceof IconoplasmGenerationSourceError) {
+      return { ok: false, status: error.status, code: error.code, error: error.message }
+    }
+    throw error
+  }
+
   const username = sanitizeText(createdUsername || "", 255) || "admin"
   const statements = [
     env.ICONOPLASM_DB.prepare(
@@ -5970,6 +6299,37 @@ async function createDiagnosticMatrixRun(
   let cellIndex = 0
   for (const pipeline of pipelines) {
     for (const slot of emulsions) {
+      const clientRequestId = `${runId}:${cellIndex}`
+      const generationRequestId = `generation_request_${crypto.randomUUID()}`
+      const requestContractHash = await generationRequestContractSha256({
+        gene_symbol: gene,
+        request_kind: "new_candidate",
+        request_prompt: "",
+        source_gene_symbol: gene,
+        source_asset_sha256: "",
+        request_mode: "specific",
+        requested_vision_id: `anima-v1-${slot}`,
+        requested_emulsion_slot: slot,
+        client_request_id: clientRequestId,
+        request_batch_id: runId,
+        request_batch_size: cellCount,
+        prompt_body_mode: promptMode,
+        seed_mode: "random",
+        requested_factory_pipeline_code: pipeline,
+        requested_factory_vision_revision: vision,
+        request_origin: "diagnostic_matrix",
+        diagnostic_run_id: runId,
+      })
+      const generationConfigHash = await generationConfigSha256({
+        source_snapshot_sha256: exactSource.source_snapshot_sha256,
+        request_mode: "specific",
+        requested_vision_id: `anima-v1-${slot}`,
+        requested_emulsion_slot: slot,
+        prompt_body_mode: promptMode,
+        seed_mode: "random",
+        factory_pipeline_code: pipeline,
+        factory_vision_revision: vision,
+      })
       statements.push(
         env.ICONOPLASM_DB.prepare(
           `INSERT INTO icono_generation_requests (
@@ -5978,9 +6338,28 @@ async function createDiagnosticMatrixRun(
              requested_vision_id, requested_emulsion_slot, client_request_id,
              request_batch_id, request_batch_size, prompt_body_mode, seed_mode,
              factory_pipeline_code, factory_vision_revision, request_origin,
-             diagnostic_run_id, status, updated_at
+             diagnostic_run_id, generation_provenance_status,
+             generation_request_id, source_gene_id,
+             source_manifestation_id, source_manifestation_revision_id,
+             source_manifestation_body_sha256, source_manifestation_derivative_id,
+             source_manifestation_derivative_sha256,
+             source_manifestation_derivative_tags_sha256,
+             source_manifestation_derivative_tags_bytes,
+             source_manifestation_derivative_fields_sha256,
+             source_manifestation_derivative_fields_bytes,
+             source_manifestation_derivative_recipe_id,
+             source_manifestation_derivative_recipe_version,
+             source_manifestation_derivative_provider_id,
+             source_manifestation_derivative_model_id,
+             source_manifestation_derivative_tagger_config_sha256,
+             source_canonical_selection_id,
+             source_canonical_head_version, source_gene_revision, source_sample_label,
+             source_sample_number, source_sample_text_sha256, source_snapshot_sha256,
+             generation_request_contract_sha256, generation_config_sha256,
+             status, updated_at
            ) VALUES (?, ?, ?, 'new_candidate', '', ?, '', 'specific', ?, ?, ?, ?, ?, ?,
-                     'random', ?, ?, 'diagnostic_matrix', ?, 'open', CURRENT_TIMESTAMP)`,
+                     'random', ?, ?, 'diagnostic_matrix', ?, 'bound', ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)`,
         ).bind(
           gene,
           actor,
@@ -5988,13 +6367,38 @@ async function createDiagnosticMatrixRun(
           gene,
           `anima-v1-${slot}`,
           slot,
-          `${runId}:${cellIndex}`,
+          clientRequestId,
           runId,
           cellCount,
           promptMode,
           pipeline,
           vision,
           runId,
+          generationRequestId,
+          exactSource.source_gene_id,
+          exactSource.source_manifestation_id,
+          exactSource.source_manifestation_revision_id,
+          exactSource.source_manifestation_body_sha256,
+          exactSource.source_manifestation_derivative_id,
+          exactSource.source_manifestation_derivative_sha256,
+          exactSource.source_manifestation_derivative_tags_sha256,
+          exactSource.source_manifestation_derivative_tags_bytes,
+          exactSource.source_manifestation_derivative_fields_sha256,
+          exactSource.source_manifestation_derivative_fields_bytes,
+          exactSource.source_manifestation_derivative_recipe_id,
+          exactSource.source_manifestation_derivative_recipe_version,
+          exactSource.source_manifestation_derivative_provider_id,
+          exactSource.source_manifestation_derivative_model_id,
+          exactSource.source_manifestation_derivative_tagger_config_sha256,
+          exactSource.source_canonical_selection_id,
+          exactSource.source_canonical_head_version,
+          exactSource.source_gene_revision,
+          exactSource.source_sample_label,
+          exactSource.source_sample_number,
+          exactSource.source_sample_text_sha256,
+          exactSource.source_snapshot_sha256,
+          requestContractHash,
+          generationConfigHash,
         ),
       )
       cellIndex += 1
@@ -8090,8 +8494,6 @@ async function candidateGenerationGeneContext(env, symbol) {
     `SELECT
        gc.gene_symbol,
        COALESCE(gc.full_name, ge.full_name, '') AS full_name,
-       COALESCE(ge.manifestation, '') AS manifestation,
-       COALESCE(ge.manifestation_tags, '') AS manifestation_tags,
        COALESCE(ge.weight_kg, 0) AS weight_kg,
        COALESCE(ge.sex, '') AS sex,
        COALESCE(ge.age, '') AS age,
@@ -8100,10 +8502,7 @@ async function candidateGenerationGeneContext(env, symbol) {
        COALESCE(ge.skin_hex, '') AS skin_hex,
        COALESCE(ge.skin_name, '') AS skin_name,
        COALESCE(ge.family_feature, '') AS family_feature,
-       COALESCE(ge.aesthetics_json, '[]') AS aesthetics_json,
-       COALESCE(ge.sample_label, '') AS sample_label,
-       COALESCE(ge.sample_number, 0) AS sample_number,
-       COALESCE(ge.sample_text_hash, '') AS sample_text_hash
+       COALESCE(ge.aesthetics_json, '[]') AS aesthetics_json
      FROM icono_gene_catalog gc
      LEFT JOIN icono_gene_essence ge
        ON ge.gene_symbol = gc.gene_symbol
@@ -8333,6 +8732,61 @@ function mapCandidateGenerationJobRow(row, baseUrl = "") {
     prompt_body_mode: normalizeCandidatePromptBodyMode(
       row?.prompt_body_mode || "taggerizer_prompt",
     ),
+    generation_provenance_status:
+      String(row?.generation_provenance_status || "").trim() === "bound"
+        ? "bound"
+        : "legacy_unbound",
+    generation_request_id: sanitizeText(row?.generation_request_id || "", 128) || "",
+    generation_attempt_id: sanitizeText(row?.generation_attempt_id || "", 128) || "",
+    source_gene_id: sanitizeText(row?.source_gene_id || "", 128) || "",
+    source_manifestation_id: sanitizeText(row?.source_manifestation_id || "", 128) || "",
+    source_manifestation_revision_id:
+      sanitizeText(row?.source_manifestation_revision_id || "", 128) || "",
+    source_manifestation_body_sha256:
+      normalizeSha256(row?.source_manifestation_body_sha256 || "") || "",
+    source_manifestation_derivative_id:
+      sanitizeText(row?.source_manifestation_derivative_id || "", 128) || "",
+    source_manifestation_derivative_sha256:
+      normalizeSha256(row?.source_manifestation_derivative_sha256 || "") || "",
+    source_manifestation_derivative_tags_sha256:
+      normalizeSha256(row?.source_manifestation_derivative_tags_sha256 || "") || "",
+    source_manifestation_derivative_tags_bytes: Math.max(
+      0,
+      optionalInt(row?.source_manifestation_derivative_tags_bytes) || 0,
+    ),
+    source_manifestation_derivative_fields_sha256:
+      normalizeSha256(row?.source_manifestation_derivative_fields_sha256 || "") || "",
+    source_manifestation_derivative_fields_bytes: Math.max(
+      0,
+      optionalInt(row?.source_manifestation_derivative_fields_bytes) || 0,
+    ),
+    source_manifestation_derivative_recipe_id:
+      sanitizeText(row?.source_manifestation_derivative_recipe_id || "", 128) || "",
+    source_manifestation_derivative_recipe_version:
+      sanitizeText(row?.source_manifestation_derivative_recipe_version || "", 128) || "",
+    source_manifestation_derivative_provider_id:
+      sanitizeText(row?.source_manifestation_derivative_provider_id || "", 128) || "",
+    source_manifestation_derivative_model_id:
+      sanitizeText(row?.source_manifestation_derivative_model_id || "", 255) || "",
+    source_manifestation_derivative_tagger_config_sha256:
+      normalizeSha256(row?.source_manifestation_derivative_tagger_config_sha256 || "") || "",
+    source_canonical_selection_id:
+      sanitizeText(row?.source_canonical_selection_id || "", 128) || "",
+    source_canonical_head_version: Math.max(
+      0,
+      optionalInt(row?.source_canonical_head_version) || 0,
+    ),
+    source_gene_revision: Math.max(0, optionalInt(row?.source_gene_revision) || 0),
+    source_sample_label: sanitizeText(row?.source_sample_label || "", 64) || "",
+    source_sample_number:
+      row?.source_sample_number == null ? null : optionalInt(row.source_sample_number),
+    source_sample_text_sha256: normalizeSha256(row?.source_sample_text_sha256 || "") || "",
+    source_snapshot_sha256: normalizeSha256(row?.source_snapshot_sha256 || "") || "",
+    generation_request_contract_sha256:
+      normalizeSha256(row?.generation_request_contract_sha256 || "") || "",
+    provider_model_id: sanitizeText(row?.provider_model_id || "", 255) || "",
+    prompt_sha256: normalizeSha256(row?.prompt_sha256 || "") || "",
+    generation_config_sha256: normalizeSha256(row?.generation_config_sha256 || "") || "",
     community_comments_snapshot: sanitizeText(row?.community_comments_snapshot || "", 3000) || "",
     sample_label: sanitizeText(row?.sample_label || "", 64) || "",
     sample_number: optionalInt(row?.sample_number),
@@ -8351,8 +8805,14 @@ function mapCandidateGenerationJobRow(row, baseUrl = "") {
 }
 
 async function insertCandidateGenerationJob(env, row) {
-  const factoryRecipe = await activeFactoryRecipe(env)
-  await env.ICONOPLASM_DB.prepare(
+  const factoryRecipe =
+    row.factory_pipeline_code && row.factory_vision_revision
+      ? {
+          pipeline: normalizeFactoryPipelineCode(row.factory_pipeline_code),
+          vision: normalizeFactoryVisionRevision(row.factory_vision_revision),
+        }
+      : await activeFactoryRecipe(env)
+  return env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_candidate_generation_jobs (
        id,
        user_id,
@@ -8374,10 +8834,43 @@ async function insertCandidateGenerationJob(env, row) {
        prompt,
        factory_pipeline_code,
        factory_vision_revision,
+       generation_provenance_status,
+       generation_request_id,
+       generation_attempt_id,
+       source_gene_id,
+       source_manifestation_id,
+       source_manifestation_revision_id,
+       source_manifestation_body_sha256,
+       source_manifestation_derivative_id,
+       source_manifestation_derivative_sha256,
+       source_manifestation_derivative_tags_sha256,
+       source_manifestation_derivative_tags_bytes,
+       source_manifestation_derivative_fields_sha256,
+       source_manifestation_derivative_fields_bytes,
+       source_manifestation_derivative_recipe_id,
+       source_manifestation_derivative_recipe_version,
+       source_manifestation_derivative_provider_id,
+       source_manifestation_derivative_model_id,
+       source_manifestation_derivative_tagger_config_sha256,
+       source_canonical_selection_id,
+       source_canonical_head_version,
+       source_gene_revision,
+       source_sample_label,
+       source_sample_number,
+       source_sample_text_sha256,
+       source_snapshot_sha256,
+       generation_request_contract_sha256,
+       provider_model_id,
+       prompt_sha256,
+       generation_config_sha256,
        status,
        created_at,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               'bound', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT(user_id, generation_request_id) WHERE generation_request_id <> ''
+     DO NOTHING`,
   )
     .bind(
       row.id,
@@ -8400,6 +8893,34 @@ async function insertCandidateGenerationJob(env, row) {
       row.prompt,
       factoryRecipe.pipeline,
       factoryRecipe.vision,
+      row.generation_request_id,
+      row.generation_attempt_id,
+      row.source_gene_id,
+      row.source_manifestation_id,
+      row.source_manifestation_revision_id,
+      row.source_manifestation_body_sha256,
+      row.source_manifestation_derivative_id,
+      row.source_manifestation_derivative_sha256,
+      row.source_manifestation_derivative_tags_sha256,
+      row.source_manifestation_derivative_tags_bytes,
+      row.source_manifestation_derivative_fields_sha256,
+      row.source_manifestation_derivative_fields_bytes,
+      row.source_manifestation_derivative_recipe_id,
+      row.source_manifestation_derivative_recipe_version,
+      row.source_manifestation_derivative_provider_id,
+      row.source_manifestation_derivative_model_id,
+      row.source_manifestation_derivative_tagger_config_sha256,
+      row.source_canonical_selection_id,
+      row.source_canonical_head_version,
+      row.source_gene_revision,
+      row.source_sample_label,
+      row.source_sample_number,
+      row.source_sample_text_sha256,
+      row.source_snapshot_sha256,
+      row.generation_request_contract_sha256,
+      row.provider_model_id,
+      row.prompt_sha256,
+      row.generation_config_sha256,
       row.status,
     )
     .run()
@@ -8462,11 +8983,172 @@ async function getCandidateGenerationJobForUser(env, { id, userId }) {
     .first()
 }
 
+async function getCandidateGenerationJobForRequest(env, { generationRequestId, userId }) {
+  const requestId = sanitizeText(generationRequestId || "", 128) || ""
+  if (!requestId) return null
+  return env.ICONOPLASM_DB.prepare(
+    `SELECT *
+     FROM icono_candidate_generation_jobs
+     WHERE user_id = ?
+       AND generation_request_id = ?
+     LIMIT 1`,
+  )
+    .bind(normalizeUserId(userId), requestId)
+    .first()
+}
+
+function exactPortraitGenerationReceipt(job, { symbol, assetSha }) {
+  const source = requireExactGenerationProvenance(job)
+  const generationRequestId = sanitizeText(job?.generation_request_id || "", 128) || ""
+  const generationAttemptId = sanitizeText(job?.generation_attempt_id || "", 128) || ""
+  const providerId = normalizeImageEditProviderId(job?.provider_id || "")
+  const modelId = sanitizeText(job?.provider_model_id || "", 255) || ""
+  const promptSha256 = normalizeSha256(job?.prompt_sha256 || "") || ""
+  const configSha256 = normalizeSha256(job?.generation_config_sha256 || "") || ""
+  if (
+    !generationRequestId ||
+    !generationAttemptId ||
+    !providerId ||
+    !modelId ||
+    !promptSha256 ||
+    !configSha256
+  ) {
+    throw new IconoplasmGenerationSourceError(
+      "GENERATION_RECEIPT_INCOMPLETE",
+      "The generation result is missing exact request, provider, model, prompt, or config identity.",
+    )
+  }
+  return {
+    ...source,
+    generation_request_id: generationRequestId,
+    generation_attempt_id: generationAttemptId,
+    gene_symbol: symbol,
+    asset_sha256: assetSha,
+    provider_id: providerId,
+    model_id: modelId,
+    prompt_sha256: promptSha256,
+    generation_config_sha256: configSha256,
+    sample_label: source.source_sample_label,
+    sample_number: source.source_sample_number,
+    sample_text_sha256: source.source_sample_text_sha256,
+  }
+}
+
+async function persistPortraitGenerationReceipt(env, receipt) {
+  const result = await env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_portrait_generation_provenance (
+       generation_request_id, generation_attempt_id, gene_symbol, asset_sha256,
+       source_gene_id, source_manifestation_id, source_manifestation_revision_id,
+       source_manifestation_body_sha256, source_manifestation_derivative_id,
+       source_manifestation_derivative_sha256,
+       source_manifestation_derivative_tags_sha256, source_manifestation_derivative_tags_bytes,
+       source_manifestation_derivative_fields_sha256, source_manifestation_derivative_fields_bytes,
+       source_manifestation_derivative_recipe_id,
+       source_manifestation_derivative_recipe_version, source_manifestation_derivative_provider_id,
+       source_manifestation_derivative_model_id, source_manifestation_derivative_tagger_config_sha256,
+       source_canonical_selection_id, source_canonical_head_version, source_gene_revision,
+       source_snapshot_sha256, provider_id, model_id, prompt_sha256,
+       generation_config_sha256, sample_label, sample_number, sample_text_sha256, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(generation_request_id) DO NOTHING`,
+  )
+    .bind(
+      receipt.generation_request_id,
+      receipt.generation_attempt_id,
+      receipt.gene_symbol,
+      receipt.asset_sha256,
+      receipt.source_gene_id,
+      receipt.source_manifestation_id,
+      receipt.source_manifestation_revision_id,
+      receipt.source_manifestation_body_sha256,
+      receipt.source_manifestation_derivative_id,
+      receipt.source_manifestation_derivative_sha256,
+      receipt.source_manifestation_derivative_tags_sha256,
+      receipt.source_manifestation_derivative_tags_bytes,
+      receipt.source_manifestation_derivative_fields_sha256,
+      receipt.source_manifestation_derivative_fields_bytes,
+      receipt.source_manifestation_derivative_recipe_id,
+      receipt.source_manifestation_derivative_recipe_version,
+      receipt.source_manifestation_derivative_provider_id,
+      receipt.source_manifestation_derivative_model_id,
+      receipt.source_manifestation_derivative_tagger_config_sha256,
+      receipt.source_canonical_selection_id,
+      receipt.source_canonical_head_version,
+      receipt.source_gene_revision,
+      receipt.source_snapshot_sha256,
+      receipt.provider_id,
+      receipt.model_id,
+      receipt.prompt_sha256,
+      receipt.generation_config_sha256,
+      receipt.sample_label,
+      receipt.sample_number,
+      receipt.sample_text_sha256,
+    )
+    .run()
+  if (Number(result?.meta?.changes || 0) > 0) return
+  const existing = await env.ICONOPLASM_DB.prepare(
+    `SELECT * FROM icono_portrait_generation_provenance
+     WHERE generation_request_id = ?
+     LIMIT 1`,
+  )
+    .bind(receipt.generation_request_id)
+    .first()
+  const fields = [
+    "generation_attempt_id",
+    "gene_symbol",
+    "asset_sha256",
+    "source_gene_id",
+    "source_manifestation_id",
+    "source_manifestation_revision_id",
+    "source_manifestation_body_sha256",
+    "source_manifestation_derivative_id",
+    "source_manifestation_derivative_sha256",
+    "source_manifestation_derivative_tags_sha256",
+    "source_manifestation_derivative_tags_bytes",
+    "source_manifestation_derivative_fields_sha256",
+    "source_manifestation_derivative_fields_bytes",
+    "source_manifestation_derivative_recipe_id",
+    "source_manifestation_derivative_recipe_version",
+    "source_manifestation_derivative_provider_id",
+    "source_manifestation_derivative_model_id",
+    "source_manifestation_derivative_tagger_config_sha256",
+    "source_canonical_selection_id",
+    "source_canonical_head_version",
+    "source_gene_revision",
+    "source_snapshot_sha256",
+    "provider_id",
+    "model_id",
+    "prompt_sha256",
+    "generation_config_sha256",
+    "sample_label",
+    "sample_number",
+    "sample_text_sha256",
+  ]
+  if (
+    !existing ||
+    fields.some((field) => String(existing[field] ?? "") !== String(receipt[field] ?? ""))
+  ) {
+    throw new IconoplasmGenerationSourceError(
+      "GENERATION_RECEIPT_IDEMPOTENCY_CONFLICT",
+      "That generation request is already bound to a different persisted result.",
+    )
+  }
+}
+
 async function publishCandidateGenerationAsset(env, job, userId) {
   const symbol = normalizeSymbol(job?.gene_symbol || "")
   const assetSha = normalizeSha256(job?.result_asset_sha256 || "")
   if (!symbol || !assetSha)
     return { ok: false, error: "Candidate generation job has no publishable result" }
+  let receipt
+  try {
+    receipt = exactPortraitGenerationReceipt(job, { symbol, assetSha })
+  } catch (error) {
+    if (error instanceof IconoplasmGenerationSourceError) {
+      return { ok: false, code: error.code, error: error.message }
+    }
+    throw error
+  }
   const generatedVisionId = sanitizeVoteVisionId(`image-gen:${job.id}`)
   const requestedSlot = optionalInt(job.requested_emulsion_slot)
   const generatedEmulsionId =
@@ -8502,8 +9184,38 @@ async function publishCandidateGenerationAsset(env, job, userId) {
        artist_tag,
        artist_name,
        created_by,
+       generation_provenance_status,
+       generation_request_id,
+       generation_attempt_id,
+       generation_provider_id,
+       generation_model_id,
+       generation_prompt_sha256,
+       generation_config_sha256,
+       source_gene_id,
+       source_manifestation_id,
+       source_manifestation_revision_id,
+       source_manifestation_body_sha256,
+       source_manifestation_derivative_id,
+       source_manifestation_derivative_sha256,
+       source_manifestation_derivative_tags_sha256,
+       source_manifestation_derivative_tags_bytes,
+       source_manifestation_derivative_fields_sha256,
+       source_manifestation_derivative_fields_bytes,
+       source_manifestation_derivative_recipe_id,
+       source_manifestation_derivative_recipe_version,
+       source_manifestation_derivative_provider_id,
+       source_manifestation_derivative_model_id,
+       source_manifestation_derivative_tagger_config_sha256,
+       source_canonical_selection_id,
+       source_canonical_head_version,
+       source_gene_revision,
+       source_sample_label,
+       source_sample_number,
+       source_sample_text_sha256,
+       source_snapshot_sha256,
        created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 1, 0, 0, ?, ?, 'image-gen', 'Image generation', NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, ?, CURRENT_TIMESTAMP)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 1, 0, 0, ?, ?, 'image-gen', 'Image generation', NULL, NULL, NULL, NULL, ?, ?, ?, NULL, NULL, ?,
+                'bound', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
        status='approved',
        autopick_eligible=1,
@@ -8541,8 +9253,37 @@ async function publishCandidateGenerationAsset(env, job, userId) {
       optionalInt(job.sample_number),
       normalizeSha256(job.sample_text_hash || "") || null,
       normalizeUserId(userId),
+      receipt.generation_request_id,
+      receipt.generation_attempt_id,
+      receipt.provider_id,
+      receipt.model_id,
+      receipt.prompt_sha256,
+      receipt.generation_config_sha256,
+      receipt.source_gene_id,
+      receipt.source_manifestation_id,
+      receipt.source_manifestation_revision_id,
+      receipt.source_manifestation_body_sha256,
+      receipt.source_manifestation_derivative_id,
+      receipt.source_manifestation_derivative_sha256,
+      receipt.source_manifestation_derivative_tags_sha256,
+      receipt.source_manifestation_derivative_tags_bytes,
+      receipt.source_manifestation_derivative_fields_sha256,
+      receipt.source_manifestation_derivative_fields_bytes,
+      receipt.source_manifestation_derivative_recipe_id,
+      receipt.source_manifestation_derivative_recipe_version,
+      receipt.source_manifestation_derivative_provider_id,
+      receipt.source_manifestation_derivative_model_id,
+      receipt.source_manifestation_derivative_tagger_config_sha256,
+      receipt.source_canonical_selection_id,
+      receipt.source_canonical_head_version,
+      receipt.source_gene_revision,
+      receipt.source_sample_label,
+      receipt.source_sample_number,
+      receipt.source_sample_text_sha256,
+      receipt.source_snapshot_sha256,
     )
     .run()
+  await persistPortraitGenerationReceipt(env, receipt)
   const publishedEmulsionId = sanitizeText(job.requested_emulsion_id || "", 64) || ""
   if (publishedEmulsionId) {
     // Keep user-emulsion picker examples correct for site-originated generation.
@@ -10226,6 +10967,18 @@ export async function fulfillGenerationRequests(
     )
     const fulfilledAssetSha =
       normalizeSha256(rawItem.fulfilled_asset_sha256 || rawItem.asset_sha256 || "") || ""
+    const sourceSnapshotSha = normalizeSha256(rawItem.source_snapshot_sha256 || "") || ""
+    const generationRequestId = sanitizeText(rawItem.generation_request_id || "", 180) || ""
+    const generationAttemptId = sanitizeText(rawItem.generation_attempt_id || "", 128) || ""
+    const generationLeaseToken = sanitizeText(rawItem.generation_lease_token || "", 180) || ""
+    const generationLeaseOwnerId = sanitizeText(rawItem.generation_lease_owner_id || "", 180) || ""
+    const generationLeaseVersion = Math.max(0, optionalInt(rawItem.generation_lease_version) || 0)
+    const generationRequestContractSha =
+      normalizeSha256(rawItem.generation_request_contract_sha256 || "") || ""
+    const providerId = sanitizeText(rawItem.provider_id || "", 64) || ""
+    const modelId = sanitizeText(rawItem.model_id || "", 255) || ""
+    const promptSha = normalizeSha256(rawItem.prompt_sha256 || "") || ""
+    const generationConfigSha = normalizeSha256(rawItem.generation_config_sha256 || "") || ""
     const note = sanitizeText(rawItem.note || rawItem.fulfillment_note || "", 2000) || ""
     // A fulfillment is always for the exact durable request IDs carried by the
     // generation session. Inferring a wider set from gene/style fields caused
@@ -10234,10 +10987,45 @@ export async function fulfillGenerationRequests(
       skipped += 1
       continue
     }
-    if (!fulfilledAssetSha || !fulfilledVisionId) {
+    if (
+      !fulfilledAssetSha ||
+      !fulfilledVisionId ||
+      !sourceSnapshotSha ||
+      !generationRequestId ||
+      !generationAttemptId ||
+      !generationLeaseToken ||
+      !generationLeaseOwnerId ||
+      !generationLeaseVersion ||
+      !generationRequestContractSha ||
+      !providerId ||
+      !modelId ||
+      !promptSha ||
+      !generationConfigSha
+    ) {
       conflicts.push({
         request_ids: requestIds,
-        reason: "invalid_fulfillment_identity",
+        reason: "invalid_fulfillment_provenance",
+      })
+      continue
+    }
+    let echoedSource
+    try {
+      echoedSource = requireExactGenerationProvenance(rawItem, {
+        promptBodyMode: rawItem.prompt_body_mode,
+      })
+      if (echoedSource.source_snapshot_sha256 !== sourceSnapshotSha) {
+        throw new IconoplasmGenerationSourceError(
+          "GENERATION_SOURCE_SNAPSHOT_MISMATCH",
+          "The fulfillment source echo does not match its snapshot identity.",
+        )
+      }
+    } catch (error) {
+      conflicts.push({
+        request_ids: requestIds,
+        reason:
+          error instanceof IconoplasmGenerationSourceError
+            ? error.code.toLowerCase()
+            : "invalid_fulfillment_source_echo",
       })
       continue
     }
@@ -10246,13 +11034,38 @@ export async function fulfillGenerationRequests(
         requestId,
         fulfilledAssetSha,
         fulfilledVisionId,
+        sourceSnapshotSha,
+        generationRequestId,
+        generationAttemptId,
+        generationLeaseToken,
+        generationLeaseOwnerId,
+        generationLeaseVersion,
+        generationRequestContractSha,
+        echoedSource,
+        providerId,
+        modelId,
+        promptSha,
+        generationConfigSha,
         note,
       }
       const previous = intentsByRequestId.get(requestId)
       if (
         previous &&
         (previous.fulfilledAssetSha !== fulfilledAssetSha ||
-          previous.fulfilledVisionId !== fulfilledVisionId)
+          previous.fulfilledVisionId !== fulfilledVisionId ||
+          previous.sourceSnapshotSha !== sourceSnapshotSha ||
+          previous.generationRequestId !== generationRequestId ||
+          previous.generationAttemptId !== generationAttemptId ||
+          previous.generationLeaseToken !== generationLeaseToken ||
+          previous.generationLeaseOwnerId !== generationLeaseOwnerId ||
+          previous.generationLeaseVersion !== generationLeaseVersion ||
+          previous.generationRequestContractSha !== generationRequestContractSha ||
+          exactGenerationProvenanceValidationKey(previous.echoedSource) !==
+            exactGenerationProvenanceValidationKey(echoedSource) ||
+          previous.providerId !== providerId ||
+          previous.modelId !== modelId ||
+          previous.promptSha !== promptSha ||
+          previous.generationConfigSha !== generationConfigSha)
       ) {
         conflicts.push({
           request_id: requestId,
@@ -10277,6 +11090,37 @@ export async function fulfillGenerationRequests(
               COALESCE(request_origin, 'user') AS request_origin,
               COALESCE(fulfilled_asset_sha256, '') AS fulfilled_asset_sha256,
               COALESCE(fulfilled_vision_id, '') AS fulfilled_vision_id,
+              COALESCE(fulfilled_generation_attempt_id, '') AS fulfilled_generation_attempt_id,
+              COALESCE(fulfilled_provider_id, '') AS fulfilled_provider_id,
+              COALESCE(fulfilled_model_id, '') AS fulfilled_model_id,
+              COALESCE(fulfilled_prompt_sha256, '') AS fulfilled_prompt_sha256,
+              COALESCE(generation_provenance_status, 'legacy_unbound') AS generation_provenance_status,
+              COALESCE(generation_request_id, '') AS generation_request_id,
+              COALESCE(source_gene_id, '') AS source_gene_id,
+              COALESCE(source_manifestation_id, '') AS source_manifestation_id,
+              COALESCE(source_manifestation_revision_id, '') AS source_manifestation_revision_id,
+              COALESCE(source_manifestation_body_sha256, '') AS source_manifestation_body_sha256,
+              COALESCE(source_manifestation_derivative_id, '') AS source_manifestation_derivative_id,
+              COALESCE(source_manifestation_derivative_sha256, '') AS source_manifestation_derivative_sha256,
+              COALESCE(source_manifestation_derivative_tags_sha256, '') AS source_manifestation_derivative_tags_sha256,
+              COALESCE(source_manifestation_derivative_tags_bytes, 0) AS source_manifestation_derivative_tags_bytes,
+              COALESCE(source_manifestation_derivative_fields_sha256, '') AS source_manifestation_derivative_fields_sha256,
+              COALESCE(source_manifestation_derivative_fields_bytes, 0) AS source_manifestation_derivative_fields_bytes,
+              COALESCE(source_manifestation_derivative_recipe_id, '') AS source_manifestation_derivative_recipe_id,
+              COALESCE(source_manifestation_derivative_recipe_version, '') AS source_manifestation_derivative_recipe_version,
+              COALESCE(source_manifestation_derivative_provider_id, '') AS source_manifestation_derivative_provider_id,
+              COALESCE(source_manifestation_derivative_model_id, '') AS source_manifestation_derivative_model_id,
+              COALESCE(source_manifestation_derivative_tagger_config_sha256, '') AS source_manifestation_derivative_tagger_config_sha256,
+              COALESCE(source_canonical_selection_id, '') AS source_canonical_selection_id,
+              COALESCE(source_canonical_head_version, 0) AS source_canonical_head_version,
+              COALESCE(source_gene_revision, 0) AS source_gene_revision,
+              COALESCE(source_sample_label, '') AS source_sample_label,
+              source_sample_number,
+              COALESCE(source_sample_text_sha256, '') AS source_sample_text_sha256,
+              COALESCE(source_snapshot_sha256, '') AS source_snapshot_sha256,
+              COALESCE(generation_request_contract_sha256, '') AS generation_request_contract_sha256,
+              COALESCE(generation_config_sha256, '') AS generation_config_sha256,
+              COALESCE(prompt_body_mode, 'taggerizer_prompt') AS prompt_body_mode,
               COALESCE(fulfillment_publication_id, '') AS fulfillment_publication_id,
               COALESCE(fulfillment_group_size, 1) AS fulfillment_group_size
        FROM icono_generation_requests
@@ -10289,8 +11133,16 @@ export async function fulfillGenerationRequests(
 
   function matchesIntent(row, intent) {
     return (
+      sanitizeText(row?.generation_request_id || "", 180) === intent.generationRequestId &&
       normalizeSha256(row?.fulfilled_asset_sha256 || "") === intent.fulfilledAssetSha &&
-      sanitizeVoteVisionId(row?.fulfilled_vision_id || "") === intent.fulfilledVisionId
+      sanitizeVoteVisionId(row?.fulfilled_vision_id || "") === intent.fulfilledVisionId &&
+      sanitizeText(row?.fulfilled_generation_attempt_id || "", 128) ===
+        intent.generationAttemptId &&
+      sanitizeText(row?.fulfilled_provider_id || "", 64) === intent.providerId &&
+      sanitizeText(row?.fulfilled_model_id || "", 255) === intent.modelId &&
+      normalizeSha256(row?.fulfilled_prompt_sha256 || "") === intent.promptSha &&
+      normalizeSha256(row?.source_snapshot_sha256 || "") === intent.sourceSnapshotSha &&
+      normalizeSha256(row?.generation_config_sha256 || "") === intent.generationConfigSha
     )
   }
 
@@ -10323,26 +11175,77 @@ export async function fulfillGenerationRequests(
       .toLowerCase()
     if (!row) {
       conflicts.push({ request_id: intent.requestId, reason: "request_not_found" })
-    } else if (status === "open") {
-      continue
-    } else if (["delivery_pending", "fulfilled"].includes(status)) {
-      if (!matchesIntent(row, intent)) {
+    } else {
+      try {
+        await assertExactGenerationLeaseExecution({
+          db: env.ICONOPLASM_DB,
+          generationRequestId: intent.generationRequestId,
+          generationAttemptId: intent.generationAttemptId,
+          leaseToken: intent.generationLeaseToken,
+          leaseOwnerId: intent.generationLeaseOwnerId,
+          expectedLeaseVersion: intent.generationLeaseVersion,
+        })
+        const exactSource = await validateExactGenerationSource(env, row)
+        if (
+          sanitizeText(row.generation_request_id || "", 180) !== intent.generationRequestId ||
+          normalizeSha256(row.generation_request_contract_sha256 || "") !==
+            intent.generationRequestContractSha ||
+          exactGenerationProvenanceValidationKey(exactSource) !==
+            exactGenerationProvenanceValidationKey(intent.echoedSource) ||
+          exactSource.source_snapshot_sha256 !== intent.sourceSnapshotSha ||
+          normalizeSha256(row.generation_config_sha256 || "") !== intent.generationConfigSha
+        ) {
+          conflicts.push({
+            request_id: intent.requestId,
+            reason: "generation_source_or_config_mismatch",
+            expected_generation_request_id:
+              sanitizeText(row.generation_request_id || "", 180) || "",
+            attempted_generation_request_id: intent.generationRequestId,
+            attempted_generation_attempt_id: intent.generationAttemptId,
+            expected_generation_request_contract_sha256:
+              normalizeSha256(row.generation_request_contract_sha256 || "") || "",
+            attempted_generation_request_contract_sha256: intent.generationRequestContractSha,
+            expected_source_snapshot_sha256: exactSource.source_snapshot_sha256,
+            attempted_source_snapshot_sha256: intent.sourceSnapshotSha,
+            expected_generation_config_sha256:
+              normalizeSha256(row.generation_config_sha256 || "") || "",
+            attempted_generation_config_sha256: intent.generationConfigSha,
+          })
+          continue
+        }
+      } catch (error) {
         conflicts.push({
           request_id: intent.requestId,
-          reason: "request_already_bound_to_different_result",
+          reason:
+            error instanceof IconoplasmGenerationSourceError ||
+            error instanceof IconoplasmGenerationLeaseError
+              ? error.code.toLowerCase()
+              : "generation_source_validation_failed",
+        })
+        continue
+      }
+      if (status === "open") {
+        continue
+      }
+      if (["delivery_pending", "fulfilled"].includes(status)) {
+        if (!matchesIntent(row, intent)) {
+          conflicts.push({
+            request_id: intent.requestId,
+            reason: "request_already_bound_to_different_result",
+            status,
+            existing_asset_sha256: normalizeSha256(row.fulfilled_asset_sha256 || "") || "",
+            attempted_asset_sha256: intent.fulfilledAssetSha,
+            existing_vision_id: sanitizeVoteVisionId(row.fulfilled_vision_id || "") || "",
+            attempted_vision_id: intent.fulfilledVisionId,
+          })
+        }
+      } else {
+        conflicts.push({
+          request_id: intent.requestId,
+          reason: "request_not_fulfillable",
           status,
-          existing_asset_sha256: normalizeSha256(row.fulfilled_asset_sha256 || "") || "",
-          attempted_asset_sha256: intent.fulfilledAssetSha,
-          existing_vision_id: sanitizeVoteVisionId(row.fulfilled_vision_id || "") || "",
-          attempted_vision_id: intent.fulfilledVisionId,
         })
       }
-    } else {
-      conflicts.push({
-        request_id: intent.requestId,
-        reason: "request_not_fulfillable",
-        status,
-      })
     }
   }
 
@@ -10377,6 +11280,54 @@ export async function fulfillGenerationRequests(
     const preflightStatus = String(preflightRow?.status || "")
       .trim()
       .toLowerCase()
+    try {
+      await completeExactGenerationLease({
+        db: env.ICONOPLASM_DB,
+        generationRequestId: intent.generationRequestId,
+        generationAttemptId: intent.generationAttemptId,
+        leaseToken: intent.generationLeaseToken,
+        leaseOwnerId: intent.generationLeaseOwnerId,
+        expectedLeaseVersion: intent.generationLeaseVersion,
+      })
+    } catch (error) {
+      conflicts.push({
+        request_id: intent.requestId,
+        reason:
+          error instanceof IconoplasmGenerationLeaseError
+            ? error.code.toLowerCase()
+            : "generation_lease_completion_failed",
+      })
+      continue
+    }
+    try {
+      const source = requireExactGenerationProvenance(preflightRow)
+      await persistPortraitGenerationReceipt(env, {
+        ...source,
+        generation_request_id: intent.generationRequestId,
+        generation_attempt_id: intent.generationAttemptId,
+        gene_symbol: normalizeSymbol(preflightRow?.gene_symbol || "") || "",
+        asset_sha256: intent.fulfilledAssetSha,
+        provider_id: intent.providerId,
+        model_id: intent.modelId,
+        prompt_sha256: intent.promptSha,
+        generation_config_sha256: intent.generationConfigSha,
+        sample_label: sanitizeText(preflightRow?.source_sample_label || "", 64) || "",
+        sample_number:
+          preflightRow?.source_sample_number == null
+            ? null
+            : optionalInt(preflightRow.source_sample_number),
+        sample_text_sha256: normalizeSha256(preflightRow?.source_sample_text_sha256 || "") || "",
+      })
+    } catch (error) {
+      conflicts.push({
+        request_id: intent.requestId,
+        reason:
+          error instanceof IconoplasmGenerationSourceError
+            ? error.code.toLowerCase()
+            : "generation_receipt_persistence_failed",
+      })
+      continue
+    }
     if (preflightStatus === "fulfilled") {
       settledRequestIds.add(intent.requestId)
       continue
@@ -10391,20 +11342,30 @@ export async function fulfillGenerationRequests(
                fulfilled_by = ?,
                fulfilled_asset_sha256 = ?,
                fulfilled_vision_id = ?,
+               fulfilled_generation_attempt_id = ?,
+               fulfilled_provider_id = ?,
+               fulfilled_model_id = ?,
+               fulfilled_prompt_sha256 = ?,
                fulfillment_note = ?,
                fulfillment_publication_id = ?,
                fulfillment_group_size = 1
            WHERE id = ?
              AND status = 'open'
+             AND generation_request_id = ?
              AND request_origin = 'diagnostic_matrix'`,
         )
           .bind(
             actorNorm,
             intent.fulfilledAssetSha,
             intent.fulfilledVisionId,
+            intent.generationAttemptId,
+            intent.providerId,
+            intent.modelId,
+            intent.promptSha,
             intent.note,
             publicationIdNorm,
             intent.requestId,
+            intent.generationRequestId,
           )
           .run()
         if (Number(completedResp?.meta?.changes || 0) > 0) {
@@ -10421,20 +11382,30 @@ export async function fulfillGenerationRequests(
              fulfilled_by = ?,
              fulfilled_asset_sha256 = ?,
              fulfilled_vision_id = ?,
+             fulfilled_generation_attempt_id = ?,
+             fulfilled_provider_id = ?,
+             fulfilled_model_id = ?,
+             fulfilled_prompt_sha256 = ?,
              fulfillment_note = ?,
              fulfillment_publication_id = ?,
              fulfillment_group_size = ?
          WHERE id = ?
-           AND status = 'open'`,
+           AND status = 'open'
+           AND generation_request_id = ?`,
       )
         .bind(
           actorNorm,
           intent.fulfilledAssetSha,
           intent.fulfilledVisionId,
+          intent.generationAttemptId,
+          intent.providerId,
+          intent.modelId,
+          intent.promptSha,
           intent.note,
           publicationIdNorm,
           fulfillmentGroupSize,
           intent.requestId,
+          intent.generationRequestId,
         )
         .run()
       if (Number(beginResp?.meta?.changes || 0) > 0) {
@@ -12661,6 +13632,7 @@ function publicSchemaDoc() {
         "primary_tissue",
         "popularity_score",
         "essence",
+        "canonical_manifestation",
         "portrait",
         "portrait_candidates",
         "media",
@@ -15201,8 +16173,7 @@ async function essenceState(env, symbol) {
            family_surname,
            family_members,
            family_feature,
-           manifestation,
-           sample_label,
+            sample_label,
            sample_number,
            sample_text_hash,
            updated_at
@@ -15272,7 +16243,6 @@ async function essenceState(env, symbol) {
       exists: true,
       essence,
       full_name: row?.full_name ? String(row.full_name) : null,
-      manifestation: row?.manifestation ? String(row.manifestation) : null,
       latest_sample: {
         sample_label: sanitizeText(row?.sample_label || "", 64) || null,
         sample_number: optionalInt(row?.sample_number),
@@ -15558,6 +16528,7 @@ async function iconoplasmSessionUser(request, env) {
     if (!userId) return null
     return {
       user_id: userId,
+      account_id: String(session?.account_id || "").trim() || null,
       username: String(session?.username || "").trim() || null,
       // Proxied Discord avatar URL (set at login); surfaced so gene comments can
       // store + show a real avatar instead of only the initial-letter fallback.
@@ -15600,7 +16571,13 @@ async function iconoplasmVoteCoordinatorJson(stub, path, payload) {
     data = null
   }
   if (!response.ok) {
-    throw new Error(String(data?.error || `Vote coordinator request failed (${response.status})`))
+    const error = new Error(
+      String(data?.error || `Vote coordinator request failed (${response.status})`),
+    )
+    error.status = response.status
+    error.code = sanitizeText(data?.code || "", 100) || "VOTE_COORDINATOR_REQUEST_FAILED"
+    error.payload = data
+    throw error
   }
   return data
 }
@@ -15697,6 +16674,228 @@ async function iconoplasmVoteCoordinatorState(env, { symbol } = {}) {
   })
 }
 
+async function iconoplasmCaretakerSupervoteSnapshot(env, { symbol, accountId } = {}) {
+  const safeSymbol = normalizeSymbol(symbol)
+  const safeAccountId = sanitizeText(accountId || "", 192) || ""
+  if (!safeSymbol || !safeAccountId) return null
+  const stub = iconoplasmVoteCoordinatorStub(env, safeSymbol)
+  if (!stub) return null
+  return iconoplasmVoteCoordinatorJson(stub, "/caretaker-supervote/snapshot", {
+    symbol: safeSymbol,
+    account_id: safeAccountId,
+  })
+}
+
+async function iconoplasmCaretakerSupervoteSet(
+  env,
+  {
+    symbol,
+    accountId,
+    assetSha256 = null,
+    commandId,
+    requestSha256,
+    expectedAssignmentVersion,
+    expectedSupervoteVersion,
+  } = {},
+) {
+  const safeSymbol = normalizeSymbol(symbol)
+  if (!safeSymbol) return null
+  const stub = iconoplasmVoteCoordinatorStub(env, safeSymbol)
+  if (!stub) return null
+  return iconoplasmVoteCoordinatorJson(stub, "/caretaker-supervote/set", {
+    symbol: safeSymbol,
+    account_id: sanitizeText(accountId || "", 192) || "",
+    asset_sha256: normalizeSha256(assetSha256 || "") || null,
+    command_id: sanitizeText(commandId || "", 192) || "",
+    request_sha256: normalizeSha256(requestSha256 || "") || "",
+    expected_assignment_version: Number(expectedAssignmentVersion),
+    expected_supervote_version: Number(expectedSupervoteVersion),
+  })
+}
+
+async function iconoplasmCaretakerCandidateEligibilityProjection(
+  env,
+  { symbol, assetSha256 } = {},
+) {
+  const safeSymbol = normalizeSymbol(symbol)
+  const safeAssetSha = normalizeSha256(assetSha256 || "")
+  if (!env?.ICONOPLASM_DB || !safeSymbol || !safeAssetSha) return null
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT gene_symbol, asset_sha256, eligibility_version, eligible,
+            source_status, source_event_sequence
+       FROM icono_caretaker_candidate_eligibility_projection
+      WHERE gene_symbol = ? AND asset_sha256 = ?
+      LIMIT 1`,
+  )
+    .bind(safeSymbol, safeAssetSha)
+    .first()
+  if (!row) return null
+  return {
+    event_id: `candidate-eligibility:${Number(row.source_event_sequence)}`,
+    source_event_sequence: Number(row.source_event_sequence),
+    gene_symbol: safeSymbol,
+    asset_sha256: safeAssetSha,
+    eligibility_version: Number(row.eligibility_version),
+    eligible: Number(row.eligible),
+    source_status: sanitizeText(row.source_status || "", 64) || "unknown",
+  }
+}
+
+async function iconoplasmCaretakerSupervoteInvalidate(
+  env,
+  { symbol, assetSha256, invalidationId, reason } = {},
+) {
+  const safeSymbol = normalizeSymbol(symbol)
+  const safeAssetSha = normalizeSha256(assetSha256 || "")
+  if (!safeSymbol || !safeAssetSha) return null
+  const stub = iconoplasmVoteCoordinatorStub(env, safeSymbol)
+  if (!stub) return null
+  const projection = await iconoplasmCaretakerCandidateEligibilityProjection(env, {
+    symbol: safeSymbol,
+    assetSha256: safeAssetSha,
+  })
+  if (!projection || projection.eligible !== 0) {
+    throw new CaretakerSupervoteError(
+      "CANDIDATE_INELIGIBILITY_PROJECTION_MISSING",
+      "Candidate mutation did not produce an exact ineligible projection",
+      503,
+    )
+  }
+  return iconoplasmVoteCoordinatorJson(stub, "/caretaker-supervote/eligibility/project", {
+    symbol: safeSymbol,
+    projection: {
+      ...projection,
+      reason:
+        sanitizeText(reason || "", 2000) ||
+        sanitizeText(invalidationId || "", 192) ||
+        "Candidate is no longer eligible",
+    },
+  })
+}
+
+async function iconoplasmCaretakerSupervoteRestoreEligibility(
+  env,
+  { symbol, assetSha256, restorationId } = {},
+) {
+  const safeSymbol = normalizeSymbol(symbol)
+  const safeAssetSha = normalizeSha256(assetSha256 || "")
+  if (!safeSymbol || !safeAssetSha) return null
+  const stub = iconoplasmVoteCoordinatorStub(env, safeSymbol)
+  if (!stub) return null
+  const projection = await iconoplasmCaretakerCandidateEligibilityProjection(env, {
+    symbol: safeSymbol,
+    assetSha256: safeAssetSha,
+  })
+  if (!projection || projection.eligible !== 1) {
+    throw new CaretakerSupervoteError(
+      "CANDIDATE_ELIGIBILITY_PROJECTION_MISSING",
+      "Candidate mutation did not produce an exact eligible projection",
+      503,
+    )
+  }
+  return iconoplasmVoteCoordinatorJson(stub, "/caretaker-supervote/eligibility/project", {
+    symbol: safeSymbol,
+    projection: {
+      ...projection,
+      reason: sanitizeText(restorationId || "", 192) || "Candidate eligibility restored",
+    },
+  })
+}
+
+async function iconoplasmCaretakerSupervoteRestoreEligibilityBatch(
+  env,
+  rows,
+  { restorationPrefix = "candidate-restored" } = {},
+) {
+  const groups = new Map()
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const symbol = normalizeSymbol(row?.gene_symbol || row?.symbol || "")
+    const assetSha256 = normalizeSha256(row?.asset_sha256 || "")
+    if (!symbol || !assetSha256) continue
+    const group = groups.get(symbol) || new Set()
+    group.add(assetSha256)
+    groups.set(symbol, group)
+  }
+  const results = []
+  for (const [symbol, requestedAssets] of groups) {
+    const stub = iconoplasmVoteCoordinatorStub(env, symbol)
+    if (!stub) continue
+    const response = await env.ICONOPLASM_DB.prepare(
+      `SELECT gene_symbol, asset_sha256, eligibility_version, eligible,
+              source_status, source_event_sequence
+         FROM icono_caretaker_candidate_eligibility_projection
+        WHERE gene_symbol = ?
+        ORDER BY asset_sha256`,
+    )
+      .bind(symbol)
+      .all()
+    const projections = (Array.isArray(response?.results) ? response.results : [])
+      .filter((row) => requestedAssets.has(normalizeSha256(row?.asset_sha256 || "")))
+      .map((row) => ({
+        event_id: `candidate-eligibility:${Number(row.source_event_sequence)}`,
+        source_event_sequence: Number(row.source_event_sequence),
+        gene_symbol: symbol,
+        asset_sha256: normalizeSha256(row.asset_sha256),
+        eligibility_version: Number(row.eligibility_version),
+        eligible: Number(row.eligible),
+        source_status: sanitizeText(row.source_status || "", 64) || "unknown",
+        reason: `${restorationPrefix}:candidate eligibility restored`,
+      }))
+    if (
+      projections.length !== requestedAssets.size ||
+      projections.some((row) => row.eligible !== 1)
+    ) {
+      throw new CaretakerSupervoteError(
+        "CANDIDATE_ELIGIBILITY_PROJECTION_MISSING",
+        "Candidate restore did not produce complete eligible projections",
+        503,
+      )
+    }
+    for (let index = 0; index < projections.length; index += 5000) {
+      results.push(
+        await iconoplasmVoteCoordinatorJson(
+          stub,
+          "/caretaker-supervote/eligibility/project-batch",
+          {
+            symbol,
+            projections: projections.slice(index, index + 5000),
+          },
+        ),
+      )
+    }
+  }
+  return results
+}
+
+export async function projectCaretakerAssignmentEventToVoteCoordinator(env, event) {
+  const symbol = normalizeSymbol(
+    event?.gene?.canonical_symbol ||
+      event?.gene?.symbol ||
+      event?.canonical_symbol ||
+      event?.gene_symbol ||
+      "",
+  )
+  if (!symbol) {
+    throw new CaretakerSupervoteError(
+      "INVALID_ASSIGNMENT_PROJECTION",
+      "Assignment event is missing a canonical gene symbol",
+      400,
+    )
+  }
+  const stub = iconoplasmVoteCoordinatorStub(env, symbol)
+  if (!stub) {
+    throw new CaretakerSupervoteError(
+      "VOTE_COORDINATOR_REQUIRED",
+      "Caretaker assignment projection requires the per-gene vote coordinator",
+      503,
+    )
+  }
+  return iconoplasmVoteCoordinatorJson(stub, "/caretaker-assignment/project", {
+    symbol,
+    event,
+  })
+}
+
 function mapCoordinatorAssetSummaryRow(row) {
   const assetSha = normalizeSha256(row?.asset_sha256 || "") || ""
   return {
@@ -15711,10 +16910,168 @@ function mapCoordinatorAssetSummaryRow(row) {
   }
 }
 
+async function projectCaretakerSupervoteOutboxToD1(env, rawPayload) {
+  if (!env?.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
+  const payload = rawPayload && typeof rawPayload === "object" ? rawPayload : {}
+  const assignment =
+    payload.assignment && typeof payload.assignment === "object" ? payload.assignment : null
+  const supervote =
+    payload.supervote && typeof payload.supervote === "object" ? payload.supervote : null
+  const symbol = normalizeSymbol(assignment?.gene_symbol || "")
+  const geneId = sanitizeText(assignment?.gene_id || "", 192) || ""
+  const assignmentId = sanitizeText(assignment?.caretaker_assignment_id || "", 192) || ""
+  const accountId = sanitizeText(assignment?.caretaker_account_id || "", 192) || ""
+  const assignmentStatus = sanitizeText(assignment?.status || "", 32) || ""
+  const assignmentVersion = Number(assignment?.assignment_version || 0)
+  const authorityEventId = sanitizeText(assignment?.authority_event_id || "", 192) || ""
+  const authorityEventSequence = Number(assignment?.authority_event_sequence || 0)
+  const mutationId = sanitizeText(payload?.mutation_id || "", 384) || ""
+  const eventType = sanitizeText(payload?.event_type || "", 64) || ""
+  const commandId = sanitizeText(payload?.command_id || "", 192) || null
+  const requestSha256 = normalizeSha256(payload?.request_sha256 || "") || null
+  const selectedAssetSha = normalizeSha256(supervote?.asset_sha256 || "") || null
+  const active = Boolean(supervote?.active && selectedAssetSha)
+  const supervoteVersion = Number(supervote?.supervote_version || 0)
+  const fromAssetSha = normalizeSha256(payload?.from_asset_sha256 || "") || null
+  const toAssetSha = normalizeSha256(payload?.to_asset_sha256 || "") || null
+  if (
+    !symbol ||
+    !geneId ||
+    !assignmentId ||
+    !accountId ||
+    !["pending_acceptance", "active", "suspended", "ended"].includes(assignmentStatus) ||
+    !Number.isSafeInteger(assignmentVersion) ||
+    assignmentVersion < 1 ||
+    !authorityEventId ||
+    !Number.isSafeInteger(authorityEventSequence) ||
+    authorityEventSequence < 1 ||
+    !mutationId ||
+    !eventType ||
+    !Number.isSafeInteger(supervoteVersion) ||
+    supervoteVersion < 0
+  ) {
+    throw new Error("Invalid caretaker supervote projection payload")
+  }
+
+  const statements = [
+    env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_caretaker_vote_assignment_projection (
+         gene_symbol, gene_id, caretaker_assignment_id, caretaker_account_id,
+         status, assignment_version, authority_event_id,
+         authority_event_sequence, projected_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(gene_symbol) DO UPDATE SET
+         gene_id = excluded.gene_id,
+         caretaker_assignment_id = excluded.caretaker_assignment_id,
+         caretaker_account_id = excluded.caretaker_account_id,
+         status = excluded.status,
+         assignment_version = excluded.assignment_version,
+         authority_event_id = excluded.authority_event_id,
+         authority_event_sequence = excluded.authority_event_sequence,
+         projected_at = CURRENT_TIMESTAMP
+       WHERE excluded.authority_event_sequence >=
+             icono_caretaker_vote_assignment_projection.authority_event_sequence`,
+    ).bind(
+      symbol,
+      geneId,
+      assignmentId,
+      accountId,
+      assignmentStatus,
+      assignmentVersion,
+      authorityEventId,
+      authorityEventSequence,
+    ),
+    env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_caretaker_supervote_projection (
+         gene_symbol, gene_id, caretaker_assignment_id, caretaker_account_id,
+         asset_sha256, active, weight, supervote_version,
+         last_mutation_id, updated_at, deactivated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, 10, ?, ?, CURRENT_TIMESTAMP,
+                 CASE WHEN ? = 1 THEN NULL ELSE CURRENT_TIMESTAMP END)
+       ON CONFLICT(gene_symbol) DO UPDATE SET
+         gene_id = excluded.gene_id,
+         caretaker_assignment_id = excluded.caretaker_assignment_id,
+         caretaker_account_id = excluded.caretaker_account_id,
+         asset_sha256 = excluded.asset_sha256,
+         active = excluded.active,
+         weight = 10,
+         supervote_version = excluded.supervote_version,
+         last_mutation_id = excluded.last_mutation_id,
+         updated_at = CURRENT_TIMESTAMP,
+         deactivated_at = CASE WHEN excluded.active = 1 THEN NULL ELSE CURRENT_TIMESTAMP END
+       WHERE excluded.supervote_version >= icono_caretaker_supervote_projection.supervote_version`,
+    ).bind(
+      symbol,
+      geneId,
+      assignmentId,
+      accountId,
+      active ? selectedAssetSha : null,
+      active ? 1 : 0,
+      supervoteVersion,
+      mutationId,
+      active ? 1 : 0,
+    ),
+    env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_caretaker_supervote_events (
+         mutation_id, event_type, command_id, request_sha256,
+         gene_id, gene_symbol, caretaker_assignment_id, caretaker_account_id,
+         assignment_status, assignment_version, from_asset_sha256,
+         to_asset_sha256, supervote_version, authority_event_id,
+         authority_event_sequence, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(mutation_id) DO NOTHING`,
+    ).bind(
+      mutationId,
+      eventType,
+      commandId,
+      requestSha256,
+      geneId,
+      symbol,
+      assignmentId,
+      accountId,
+      assignmentStatus,
+      assignmentVersion,
+      fromAssetSha,
+      toAssetSha,
+      supervoteVersion,
+      authorityEventId,
+      authorityEventSequence,
+    ),
+  ]
+  if (commandId && requestSha256 && payload.response) {
+    statements.push(
+      env.ICONOPLASM_DB.prepare(
+        `INSERT INTO icono_caretaker_supervote_command_receipts (
+           command_id, request_sha256, mutation_id, response_json,
+           accepted_event_sequence, created_at
+         ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(command_id) DO UPDATE SET
+           request_sha256 = excluded.request_sha256,
+           mutation_id = excluded.mutation_id,
+           response_json = excluded.response_json,
+           accepted_event_sequence = excluded.accepted_event_sequence`,
+      ).bind(
+        commandId,
+        requestSha256,
+        mutationId,
+        JSON.stringify(payload.response),
+        authorityEventSequence,
+      ),
+    )
+  }
+  await env.ICONOPLASM_DB.batch(statements)
+  return { ok: true, mutation_id: mutationId, symbol }
+}
+
 export class IconoplasmVoteCoordinator {
   constructor(state, env) {
     this.state = state
     this.env = env
+    this.caretakerSupervotes = new CaretakerSupervoteLedger({
+      storage: this.state.storage,
+      getSymbol: () => this.getMeta("symbol"),
+      armAlarm: (delayMs) => this.armOutboxAlarm(delayMs),
+    })
     // The coordinator is the live vote authority. The old design treated D1's
     // compatibility ledger as the live source of truth and re-counted historical
     // rows in request paths. That was an expensive design mistake because each
@@ -15776,10 +17133,12 @@ export class IconoplasmVoteCoordinator {
         CREATE INDEX IF NOT EXISTS idx_vote_outbox_pending
           ON vote_outbox (delivered_at, id);
       `)
+      this.caretakerSupervotes.install()
       const pendingOutbox = this.state.storage.sql
         .exec(`SELECT 1 AS pending FROM vote_outbox WHERE delivered_at IS NULL LIMIT 1`)
         .toArray()[0]
-      if (pendingOutbox) await this.armOutboxAlarm(1)
+      const pendingCaretakerSupervoteOutbox = this.caretakerSupervotes.pendingOutboxRows(1)[0]
+      if (pendingOutbox || pendingCaretakerSupervoteOutbox) await this.armOutboxAlarm(1)
     })
   }
 
@@ -15874,6 +17233,21 @@ export class IconoplasmVoteCoordinator {
     )
   }
 
+  async deliverCaretakerSupervoteOutbox(payload) {
+    const projection = await projectCaretakerSupervoteOutboxToD1(this.env, payload)
+    if (payload?.recompute_required) {
+      const refresh = await scheduleVoteProjectionRefresh(this.env, null, {
+        symbol: projection.symbol,
+        actorId: payload?.assignment?.caretaker_account_id || "caretaker_supervote",
+        reason: `caretaker_${sanitizeText(payload?.event_type || "supervote", 64)}`,
+      })
+      if (!refresh?.durable) {
+        throw new Error("Caretaker supervote projection refresh was not durably enqueued")
+      }
+    }
+    return projection
+  }
+
   async drainVoteOutbox() {
     const rows = this.pendingOutboxRows(50)
     for (const row of rows) {
@@ -15902,7 +17276,11 @@ export class IconoplasmVoteCoordinator {
   }
 
   async alarm() {
-    await this.drainVoteOutbox()
+    const voteResult = await this.drainVoteOutbox()
+    const caretakerResult = await this.caretakerSupervotes.drainOutbox((payload) =>
+      this.deliverCaretakerSupervoteOutbox(payload),
+    )
+    return { vote: voteResult, caretaker_supervote: caretakerResult }
   }
 
   async lookupAssetMetadata(symbol, assetSha256) {
@@ -15921,6 +17299,31 @@ export class IconoplasmVoteCoordinator {
         .bind(safeSymbol, safeAssetSha)
         .first()) || null
     )
+  }
+
+  async requireEligibleCaretakerSupervoteTarget(symbol, assetSha256) {
+    if (!this.env.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
+    const safeSymbol = normalizeSymbol(symbol)
+    const safeAssetSha = normalizeSha256(assetSha256)
+    if (!safeSymbol || !safeAssetSha) {
+      throw new CaretakerSupervoteError(
+        "INVALID_SUPERVOTE_TARGET",
+        "Caretaker supervote target is invalid",
+        400,
+      )
+    }
+    const projection = await iconoplasmCaretakerCandidateEligibilityProjection(this.env, {
+      symbol: safeSymbol,
+      assetSha256: safeAssetSha,
+    })
+    if (!projection || projection.eligible !== 1) {
+      throw new CaretakerSupervoteError(
+        "SUPERVOTE_TARGET_INELIGIBLE",
+        "Caretaker supervotes require an eligible, current candidate blot",
+        409,
+      )
+    }
+    return projection
   }
 
   ensureVisionSummaryRow(visionId) {
@@ -16283,8 +17686,18 @@ export class IconoplasmVoteCoordinator {
       )
         .bind(safeSymbol)
         .all()
+      const eligibilityResp = await this.env.ICONOPLASM_DB.prepare(
+        `SELECT gene_symbol, asset_sha256, eligibility_version, eligible,
+                source_status, source_event_sequence
+           FROM icono_caretaker_candidate_eligibility_projection
+          WHERE gene_symbol = ?
+          ORDER BY asset_sha256`,
+      )
+        .bind(safeSymbol)
+        .all()
       const assetRows = Array.isArray(assetResp?.results) ? assetResp.results : []
       const voteRows = Array.isArray(voteResp?.results) ? voteResp.results : []
+      const eligibilityRows = Array.isArray(eligibilityResp?.results) ? eligibilityResp.results : []
 
       const assetMap = new Map()
       const visionMap = new Map()
@@ -16402,6 +17815,19 @@ export class IconoplasmVoteCoordinator {
           vote.updated_at || new Date().toISOString(),
         )
       }
+      if (eligibilityRows.length) {
+        this.caretakerSupervotes.projectAssetEligibilityBatch({
+          projections: eligibilityRows.map((row) => ({
+            event_id: `candidate-eligibility:${Number(row.source_event_sequence)}`,
+            source_event_sequence: Number(row.source_event_sequence),
+            gene_symbol: safeSymbol,
+            asset_sha256: normalizeSha256(row.asset_sha256),
+            eligibility_version: Number(row.eligibility_version),
+            eligible: Number(row.eligible),
+            source_status: sanitizeText(row.source_status || "", 64) || "unknown",
+          })),
+        })
+      }
     })
     return safeSymbol
   }
@@ -16409,6 +17835,118 @@ export class IconoplasmVoteCoordinator {
   async fetch(request) {
     const url = new URL(request.url)
     const path = url.pathname
+    if (path === "/caretaker-assignment/project" && request.method === "POST") {
+      const payload = await request.json()
+      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
+      if (!requestedSymbol) {
+        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
+      }
+      await this.ensureBootstrapped(requestedSymbol)
+      try {
+        return Response.json(await this.caretakerSupervotes.projectAssignment(payload?.event))
+      } catch (error) {
+        if (error instanceof CaretakerSupervoteError) {
+          return Response.json(
+            { ok: false, code: error.code, error: error.message },
+            { status: error.status },
+          )
+        }
+        throw error
+      }
+    }
+
+    if (path === "/caretaker-supervote/snapshot" && request.method === "POST") {
+      const payload = await request.json()
+      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
+      if (!requestedSymbol) {
+        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
+      }
+      const symbol = await this.ensureBootstrapped(requestedSymbol)
+      return Response.json({
+        ok: true,
+        symbol,
+        supervote: this.caretakerSupervotes.snapshot(payload?.account_id || ""),
+      })
+    }
+
+    if (path === "/caretaker-supervote/set" && request.method === "POST") {
+      const payload = await request.json()
+      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
+      if (!requestedSymbol) {
+        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
+      }
+      const symbol = await this.ensureBootstrapped(requestedSymbol)
+      try {
+        const targetAsset = normalizeSha256(payload?.asset_sha256 || "") || null
+        if (targetAsset) {
+          const eligibility = await this.requireEligibleCaretakerSupervoteTarget(
+            symbol,
+            targetAsset,
+          )
+          this.caretakerSupervotes.projectAssetEligibility(eligibility)
+        }
+        const result = await this.caretakerSupervotes.setSelection({
+          accountId: payload?.account_id,
+          assetSha256: targetAsset,
+          commandId: payload?.command_id,
+          requestSha256: payload?.request_sha256,
+          expectedAssignmentVersion: payload?.expected_assignment_version,
+          expectedSupervoteVersion: payload?.expected_supervote_version,
+        })
+        return Response.json({ ...result, symbol })
+      } catch (error) {
+        if (error instanceof CaretakerSupervoteError) {
+          return Response.json(
+            { ok: false, code: error.code, error: error.message },
+            { status: error.status },
+          )
+        }
+        throw error
+      }
+    }
+
+    if (path === "/caretaker-supervote/eligibility/project" && request.method === "POST") {
+      const payload = await request.json()
+      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
+      if (!requestedSymbol)
+        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
+      await this.ensureBootstrapped(requestedSymbol)
+      try {
+        return Response.json(this.caretakerSupervotes.projectAssetEligibility(payload?.projection))
+      } catch (error) {
+        if (error instanceof CaretakerSupervoteError) {
+          return Response.json(
+            { ok: false, code: error.code, error: error.message },
+            { status: error.status },
+          )
+        }
+        throw error
+      }
+    }
+
+    if (path === "/caretaker-supervote/eligibility/project-batch" && request.method === "POST") {
+      const payload = await request.json()
+      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
+      if (!requestedSymbol)
+        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
+      await this.ensureBootstrapped(requestedSymbol)
+      try {
+        return Response.json(
+          this.caretakerSupervotes.projectAssetEligibilityBatch({
+            projections: payload?.projections,
+          }),
+        )
+      } catch (error) {
+        if (error instanceof CaretakerSupervoteError) {
+          return Response.json(
+            { ok: false, code: error.code, error: error.message },
+            { status: error.status },
+          )
+        }
+        throw error
+      }
+    }
+
     if (path === "/vote/set" && request.method === "POST") {
       const payload = await request.json()
       const requestedSymbol = normalizeSymbol(payload?.symbol || "")
@@ -16446,7 +17984,10 @@ export class IconoplasmVoteCoordinator {
         symbol,
         asset_sha256: assetSha,
         ...result,
-        asset_summaries: this.exportAssetSummaries(),
+        snapshot: this.caretakerSupervotes.decorateSnapshot(result.snapshot),
+        asset_summaries: this.caretakerSupervotes.decorateAssetSummaries(
+          this.exportAssetSummaries(),
+        ),
       })
     }
 
@@ -16513,7 +18054,9 @@ export class IconoplasmVoteCoordinator {
         deleted,
         invalid,
         results,
-        asset_summaries: this.exportAssetSummaries(),
+        asset_summaries: this.caretakerSupervotes.decorateAssetSummaries(
+          this.exportAssetSummaries(),
+        ),
       })
     }
 
@@ -16533,7 +18076,9 @@ export class IconoplasmVoteCoordinator {
         ok: true,
         symbol,
         asset_sha256: assetSha,
-        snapshot: this.snapshotForAsset(assetSha, userId, payload?.vision_id || ""),
+        snapshot: this.caretakerSupervotes.decorateSnapshot(
+          this.snapshotForAsset(assetSha, userId, payload?.vision_id || ""),
+        ),
       })
     }
 
@@ -16546,7 +18091,9 @@ export class IconoplasmVoteCoordinator {
         const symbol = await this.ensureBootstrapped(rawItem?.symbol || "")
         const assetSha = normalizeSha256(rawItem?.asset_sha256 || "")
         if (!assetSha) continue
-        const snapshot = this.snapshotForAsset(assetSha, userId, rawItem?.vision_id || "")
+        const snapshot = this.caretakerSupervotes.decorateSnapshot(
+          this.snapshotForAsset(assetSha, userId, rawItem?.vision_id || ""),
+        )
         out.push({
           candidate_ref: snapshot.candidate_ref,
           symbol,
@@ -16568,7 +18115,10 @@ export class IconoplasmVoteCoordinator {
       return Response.json({
         ok: true,
         symbol,
-        asset_summaries: this.exportAssetSummaries(),
+        caretaker_supervote: this.caretakerSupervotes.snapshot(),
+        asset_summaries: this.caretakerSupervotes.decorateAssetSummaries(
+          this.exportAssetSummaries(),
+        ),
       })
     }
 
@@ -17491,6 +19041,16 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
        COALESCE(vs.upvotes, 0) AS image_upvotes,
        COALESCE(vs.downvotes, 0) AS image_downvotes,
        COALESCE(vs.score, 0) AS image_score,
+       CASE
+         WHEN COALESCE(caretaker.active, 0) = 1
+          AND caretaker.asset_sha256 = pa.asset_sha256 THEN 1
+         ELSE 0
+       END AS caretaker_supervote,
+       COALESCE(vs.score, 0) + CASE
+         WHEN COALESCE(caretaker.active, 0) = 1
+          AND caretaker.asset_sha256 = pa.asset_sha256 THEN 10
+         ELSE 0
+       END AS weighted_score,
        pa.created_at,
        CASE
          WHEN pa.asset_sha256 = ? THEN 1
@@ -17500,12 +19060,16 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
      LEFT JOIN icono_vote_asset_summary vs
        ON vs.gene_symbol = pa.gene_symbol
       AND vs.asset_sha256 = pa.asset_sha256
+     LEFT JOIN icono_caretaker_supervote_projection caretaker
+       ON caretaker.gene_symbol = pa.gene_symbol
      WHERE pa.gene_symbol = ?
        AND COALESCE(pa.autopick_eligible, 1) = 1
        AND COALESCE(pa.status, '') <> 'rejected'
        AND COALESCE(pa.is_stale, 0) = 0
        AND COALESCE(pa.asset_sha256, '') <> ''
      ORDER BY
+       weighted_score DESC,
+       caretaker_supervote DESC,
        COALESCE(vs.score, 0) DESC,
        CASE
          WHEN COALESCE(pa.is_legacy, 0) = 0 THEN 1
@@ -17527,6 +19091,7 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
   const topUpvotes = Number(topRow?.image_upvotes || 0)
   const topDownvotes = Number(topRow?.image_downvotes || 0)
   const topScore = Number(topRow?.image_score || 0)
+  const topWeightedScore = Number(topRow?.weighted_score || topScore)
   if (!topAssetSha) return { ok: true, changed: false, code: "NO_CANDIDATE" }
   if (currentAssetSha && topAssetSha === currentAssetSha) {
     return { ok: true, changed: false, code: "UNCHANGED", current_asset_sha256: currentAssetSha }
@@ -17577,6 +19142,8 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
     from_asset_sha256: currentAssetSha || null,
     to_asset_sha256: topAssetSha,
     image_score: topScore,
+    weighted_score: topWeightedScore,
+    caretaker_supervote: Number(topRow?.caretaker_supervote || 0) > 0,
     image_upvotes: topUpvotes,
     image_downvotes: topDownvotes,
   }
@@ -17817,7 +19384,7 @@ function validAdminRollupVisionId(raw) {
 }
 
 function compareAdminLeaderRows(left, right, currentAssetSha = null) {
-  return (
+  const existingTieBreak = () =>
     Number(right?.score || 0) - Number(left?.score || 0) ||
     Number(left?.is_legacy || 0) - Number(right?.is_legacy || 0) ||
     Number(right?.upvotes || 0) - Number(left?.upvotes || 0) ||
@@ -17827,7 +19394,7 @@ function compareAdminLeaderRows(left, right, currentAssetSha = null) {
         normalizeSha256(left?.asset_sha256 || "") === normalizeSha256(currentAssetSha || ""),
       ) ||
     compareNullableTextAsc(left?.asset_sha256 || "", right?.asset_sha256 || "")
-  )
+  return compareCaretakerWeightedCandidates(left, right, existingTieBreak)
 }
 
 async function listAdminReadModelSymbols(env) {
@@ -18103,13 +19670,25 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
          COALESCE(pa.created_at, '') AS created_at,
          COALESCE(vs.upvotes, 0) AS upvotes,
          COALESCE(vs.downvotes, 0) AS downvotes,
-         COALESCE(vs.score, 0) AS score
+         COALESCE(vs.score, 0) AS score,
+         CASE
+           WHEN COALESCE(caretaker.active, 0) = 1
+            AND caretaker.asset_sha256 = pa.asset_sha256 THEN 1
+           ELSE 0
+         END AS caretaker_supervote,
+         COALESCE(vs.score, 0) + CASE
+           WHEN COALESCE(caretaker.active, 0) = 1
+            AND caretaker.asset_sha256 = pa.asset_sha256 THEN 10
+           ELSE 0
+         END AS weighted_score
        FROM icono_portrait_assets pa
        JOIN incoming i
          ON pa.gene_symbol = i.gene_symbol
        LEFT JOIN icono_vote_asset_summary vs
          ON vs.gene_symbol = pa.gene_symbol
         AND vs.asset_sha256 = pa.asset_sha256
+       LEFT JOIN icono_caretaker_supervote_projection caretaker
+         ON caretaker.gene_symbol = pa.gene_symbol
      ),
      asset_counts AS (
        SELECT
@@ -18167,6 +19746,8 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
          ROW_NUMBER() OVER (
            PARTITION BY ab.gene_symbol
            ORDER BY
+             COALESCE(ab.weighted_score, ab.score, 0) DESC,
+             COALESCE(ab.caretaker_supervote, 0) DESC,
              COALESCE(ab.score, 0) DESC,
              CASE WHEN COALESCE(ab.is_legacy, 0) = 0 THEN 1 ELSE 0 END DESC,
              COALESCE(ab.upvotes, 0) DESC,
@@ -18534,11 +20115,18 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
        pa.created_at,
        COALESCE(vs.upvotes, 0) AS upvotes,
        COALESCE(vs.downvotes, 0) AS downvotes,
-       COALESCE(vs.score, 0) AS score
+       COALESCE(vs.score, 0) AS score,
+       CASE
+         WHEN COALESCE(caretaker.active, 0) = 1
+          AND caretaker.asset_sha256 = pa.asset_sha256 THEN 1
+         ELSE 0
+       END AS caretaker_supervote
      FROM icono_portrait_assets pa
      LEFT JOIN icono_vote_asset_summary vs
        ON vs.gene_symbol = pa.gene_symbol
       AND vs.asset_sha256 = pa.asset_sha256
+     LEFT JOIN icono_caretaker_supervote_projection caretaker
+       ON caretaker.gene_symbol = pa.gene_symbol
      WHERE pa.gene_symbol = ?`,
   )
     .bind(symbol)
@@ -18558,6 +20146,7 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
     upvotes: Number(row?.upvotes || 0),
     downvotes: Number(row?.downvotes || 0),
     score: Number(row?.score || 0),
+    caretaker_supervote: Number(row?.caretaker_supervote || 0) > 0,
   }))
 
   const currentAssetSha = normalizeSha256(info?.current_asset_sha256 || "") || null
@@ -19170,11 +20759,23 @@ async function bulkRebuildAdminReadModels(env) {
          COALESCE(pa.created_at, '') AS created_at,
          COALESCE(vs.upvotes, 0) AS upvotes,
          COALESCE(vs.downvotes, 0) AS downvotes,
-         COALESCE(vs.score, 0) AS score
+         COALESCE(vs.score, 0) AS score,
+         CASE
+           WHEN COALESCE(caretaker.active, 0) = 1
+            AND caretaker.asset_sha256 = pa.asset_sha256 THEN 1
+           ELSE 0
+         END AS caretaker_supervote,
+         COALESCE(vs.score, 0) + CASE
+           WHEN COALESCE(caretaker.active, 0) = 1
+            AND caretaker.asset_sha256 = pa.asset_sha256 THEN 10
+           ELSE 0
+         END AS weighted_score
        FROM icono_portrait_assets pa
        LEFT JOIN icono_vote_asset_summary vs
          ON vs.gene_symbol = pa.gene_symbol
         AND vs.asset_sha256 = pa.asset_sha256
+       LEFT JOIN icono_caretaker_supervote_projection caretaker
+         ON caretaker.gene_symbol = pa.gene_symbol
      ),
      asset_counts AS (
        SELECT
@@ -19232,6 +20833,8 @@ async function bulkRebuildAdminReadModels(env) {
          ROW_NUMBER() OVER (
            PARTITION BY ab.gene_symbol
            ORDER BY
+             COALESCE(ab.weighted_score, ab.score, 0) DESC,
+             COALESCE(ab.caretaker_supervote, 0) DESC,
              COALESCE(ab.score, 0) DESC,
              CASE WHEN COALESCE(ab.is_legacy, 0) = 0 THEN 1 ELSE 0 END DESC,
              COALESCE(ab.upvotes, 0) DESC,
@@ -22330,6 +23933,7 @@ async function listAutopromoteCandidateAssetsForSymbol(env, rawSymbol) {
     upvotes: 0,
     downvotes: 0,
     score: 0,
+    caretaker_supervote: false,
   }))
 }
 
@@ -22376,6 +23980,7 @@ async function autoPromoteTopVotedPortraitFromCoordinatorState(
       upvotes: Math.max(0, Number(rawRow?.upvotes || 0) || 0),
       downvotes: Math.max(0, Number(rawRow?.downvotes || 0) || 0),
       score: Number(rawRow?.score || 0) || 0,
+      caretaker_supervote: Boolean(rawRow?.caretaker_supervote),
       vision_id: sanitizeVoteVisionId(rawRow?.vision_id || "") || "",
       candidate_image_id: optionalInt(rawRow?.candidate_image_id),
     })
@@ -22392,6 +23997,7 @@ async function autoPromoteTopVotedPortraitFromCoordinatorState(
         upvotes: Number(vote?.upvotes || 0),
         downvotes: Number(vote?.downvotes || 0),
         score: Number(vote?.score || 0),
+        caretaker_supervote: Boolean(vote?.caretaker_supervote),
       }
     })
     .filter((row) => row.asset_sha256)
@@ -22446,6 +24052,8 @@ async function autoPromoteTopVotedPortraitFromCoordinatorState(
     to_asset_sha256: topAsset.asset_sha256,
     to_asset_previous_status: sanitizeText(topAsset.status || "", 32) || "draft",
     image_score: Number(topAsset.score || 0),
+    weighted_score: caretakerWeightedScore(topAsset),
+    caretaker_supervote: Boolean(topAsset.caretaker_supervote),
     image_upvotes: Number(topAsset.upvotes || 0),
     image_downvotes: Number(topAsset.downvotes || 0),
   }
@@ -23869,6 +25477,12 @@ async function removePortraitAssetAndQueueLocalRemoval(
     .bind(symbolNorm, assetShaNorm)
     .first()
   if (!existing) {
+    await iconoplasmCaretakerSupervoteInvalidate(env, {
+      symbol: symbolNorm,
+      assetSha256: assetShaNorm,
+      invalidationId: `candidate-missing:${crypto.randomUUID()}`,
+      reason: "Candidate removal confirmed that the target no longer exists",
+    })
     return { ok: false, changed: false, code: "NOT_FOUND" }
   }
 
@@ -23913,6 +25527,12 @@ async function removePortraitAssetAndQueueLocalRemoval(
   )
     .bind(symbolNorm, assetShaNorm)
     .run()
+  await iconoplasmCaretakerSupervoteInvalidate(env, {
+    symbol: symbolNorm,
+    assetSha256: assetShaNorm,
+    invalidationId: `candidate-removed:${crypto.randomUUID()}`,
+    reason: reasonNorm,
+  })
   await env.ICONOPLASM_DB.prepare(
     "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'remove_candidate', ?, ?, CURRENT_TIMESTAMP)",
   )
@@ -25163,22 +26783,7 @@ async function recordCardCatalogDirtyShardPublicationAudit(
   )
 }
 
-async function cardCatalogSymbolsInsideShardRange(env, shard) {
-  if (!env?.ICONOPLASM_DB || !shard?.first_symbol || !shard?.last_symbol) return []
-  const result = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol
-       FROM icono_gene_catalog
-      WHERE gene_symbol >= ? AND gene_symbol <= ?
-      ORDER BY gene_symbol ASC`,
-  )
-    .bind(shard.first_symbol, shard.last_symbol)
-    .all()
-  return (Array.isArray(result?.results) ? result.results : [])
-    .map((row) => normalizeSymbol(row?.gene_symbol || ""))
-    .filter(Boolean)
-}
-
-async function readCardCatalogShardCardsForPublication(env, shard, requestUrl) {
+async function readCardCatalogShardCardsForPublication(env, shard) {
   let parsed = null
   try {
     const raw = await env.KV.get(String(shard?.key || ""))
@@ -25187,30 +26792,10 @@ async function readCardCatalogShardCardsForPublication(env, shard, requestUrl) {
     parsed = null
   }
   if (parsed && Array.isArray(parsed.cards)) return parsed.cards
-
-  // A missing immutable blob is repaired from only its recorded symbol range.
-  // Public reads remain fail-closed; this writer-side repair never scans the
-  // complete catalog and never changes unrelated shard boundaries.
-  const symbols = await cardCatalogSymbolsInsideShardRange(env, shard)
-  const records = await cardCatalogRecordsForArtifact(env, {
-    requestUrl,
-    symbols,
-    snapshotVersion: "content-addressed",
-  })
-  const cards = records.map((record) => {
-    const vm = buildMobileCardVMFromGeneRecord(record, {
-      snapshotVersion: "content-addressed",
-      source: "published_card_catalog",
-    })
-    if (!assertCompleteMobileCardVM(vm)) {
-      throw cardCatalogPublicationError(
-        "CARD_CATALOG_LOCAL_SHARD_REPAIR_INVALID",
-        `Local shard repair produced an invalid card for ${normalizeSymbol(record?.symbol || "")}.`,
-      )
-    }
-    return { ...vm, data_source: "published_card_catalog" }
-  })
-  return cards.sort((left, right) => String(left.symbol).localeCompare(String(right.symbol)))
+  throw cardCatalogPublicationError(
+    "CARD_CATALOG_BASELINE_SHARD_MISSING",
+    "A baseline shard is missing. Repair it through the resumable card publication coordinator; an in-request D1 rebuild is forbidden.",
+  )
 }
 
 function cardCatalogRefsAfterDirtyReplacements(baselineShards, replacementRefsByIndex) {
@@ -25299,7 +26884,7 @@ async function publishNextCardCatalogDirtyShardStep(
         `Dirty-shard publication referenced missing baseline shard ${index}.`,
       )
     }
-    const existingCards = await readCardCatalogShardCardsForPublication(env, shard, requestUrl)
+    const existingCards = await readCardCatalogShardCardsForPublication(env, shard)
     cost.shards_read += 1
     const cardBySymbol = new Map()
     for (const card of existingCards) {
@@ -26071,7 +27656,6 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
        ge.family_surname,
        ge.family_members,
        ge.family_feature,
-       ge.manifestation,
        ps.current_asset_sha256 AS asset_sha256,
        pa.width,
        pa.height,
@@ -26128,9 +27712,10 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
       if (Array.isArray(result?.results)) rows.push(...result.results)
     }
   }
-  return rows
+  const records = rows
     .map((row) => cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }))
     .filter(Boolean)
+  return hydratePublicCanonicalGeneRecords(env, records)
 }
 
 function geneBlotServiceError(status, code, message) {
@@ -27218,11 +28803,23 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
        pa.sample_text_hash,
        COALESCE(vs.upvotes, 0) AS image_upvotes,
        COALESCE(vs.downvotes, 0) AS image_downvotes,
-       COALESCE(vs.score, 0) AS image_score
+       COALESCE(vs.score, 0) AS image_score,
+       CASE
+         WHEN COALESCE(caretaker.active, 0) = 1
+          AND caretaker.asset_sha256 = pa.asset_sha256 THEN 1
+         ELSE 0
+       END AS caretaker_supervote,
+       COALESCE(vs.score, 0) + CASE
+         WHEN COALESCE(caretaker.active, 0) = 1
+          AND caretaker.asset_sha256 = pa.asset_sha256 THEN 10
+         ELSE 0
+       END AS weighted_score
      FROM icono_portrait_assets pa
      LEFT JOIN icono_vote_asset_summary vs
        ON vs.gene_symbol = pa.gene_symbol
       AND vs.asset_sha256 = pa.asset_sha256
+     LEFT JOIN icono_caretaker_supervote_projection caretaker
+       ON caretaker.gene_symbol = pa.gene_symbol
      WHERE pa.gene_symbol = ?
        AND COALESCE(pa.status, '') <> 'rejected'
          AND COALESCE(pa.asset_sha256, '') <> ''
@@ -27253,6 +28850,9 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
       image_upvotes: Number(row?.image_upvotes || 0),
       image_downvotes: Number(row?.image_downvotes || 0),
       image_score: Number(row?.image_score || 0),
+      caretaker_supervote: Number(row?.caretaker_supervote || 0) > 0,
+      caretaker_supervote_weight: Number(row?.caretaker_supervote || 0) > 0 ? 10 : 0,
+      weighted_score: Number(row?.weighted_score || row?.image_score || 0),
       created_at: row?.created_at ? String(row.created_at) : null,
       full_url: adminPortraitUrl(base, assetSha, "full"),
       medium_url: adminPortraitUrl(base, assetSha, "medium"),
@@ -27265,6 +28865,8 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
   items.sort((left, right) => {
     return (
       Number(right.is_current) - Number(left.is_current) ||
+      Number(right.weighted_score || 0) - Number(left.weighted_score || 0) ||
+      Number(right.caretaker_supervote) - Number(left.caretaker_supervote) ||
       Number(right.image_score || 0) - Number(left.image_score || 0) ||
       Number(right.image_upvotes || 0) - Number(left.image_upvotes || 0) ||
       compareNullableTextDesc(left.created_at, right.created_at) ||
@@ -29660,6 +31262,10 @@ async function handleSiteGeneDetail(request, env, path) {
     }),
     url.searchParams.get("fields"),
   )
+  // Manifestation prose and Tags are served only from the exact immutable card
+  // artifact selected by the public barrier. The live primary essence row is
+  // never a fallback after plaintext retirement.
+  payload.canonical_manifestation = publishedCard.payload.canonical_manifestation ?? null
   // ARCHITECTURE FENCE [IPD-003]: corpus blot uploads intentionally perform
   // zero KV writes. The exact published card still chooses the fingerprint and
   // object key; this one-row D1 read only proves that those exact bytes are
@@ -30719,7 +32325,116 @@ async function publishCatalogArtifact(env) {
   }
 }
 
+async function drainIconoplasmManifestationAuthorityProjection(env, limit = 10) {
+  if (!env?.ICONOPLASM_DB || !env?.ICONOPLASM_AUTHORING_DB) {
+    throw new Error("Manifestation authority projection bindings are missing")
+  }
+  const drained = await drainManifestationAuthorityProjectionOutbox({
+    primaryDb: env.ICONOPLASM_DB,
+    authoringDb: env.ICONOPLASM_AUTHORING_DB,
+    limit,
+    projectAssignmentEvent: async (event) => {
+      await projectCaretakerAssignmentNotification(env.ICONOPLASM_DB, event)
+      return projectCaretakerAssignmentEventToVoteCoordinator(env, event)
+    },
+    projectPublicMaterialEvent: (event) =>
+      drainManifestationPublicCardPublicationWakes(env.ICONOPLASM_DB, {
+        authorityEventId: event.event_id,
+        limit: 10,
+      }),
+    onIntegrityFailure: async (failure) => {
+      console.error("[ICONOPLASM_AUTHORITY_PROJECTION_INTEGRITY]", failure)
+    },
+  })
+  return Object.freeze({ ...drained, ok: drained.ok && !drained.has_more })
+}
+
+export async function drainIconoplasmAuthorityProjectionOutboxes(env, { limit = 10 } = {}) {
+  if (!env?.DB || !env?.ICONOPLASM_DB || !env?.ICONOPLASM_AUTHORING_DB) {
+    throw new Error("Manifestation authority projection bindings are missing")
+  }
+  const boundedLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 10)))
+  const manifestationWake = () => drainIconoplasmManifestationAuthorityProjection(env, boundedLimit)
+  const accounts = await drainBrinedewAuthorityAccountProjectionOutbox({
+    primaryDb: env.DB,
+    authoringDb: env.ICONOPLASM_AUTHORING_DB,
+    limit: boundedLimit,
+    wakeManifestationProjection: manifestationWake,
+  })
+  const manifestations = await manifestationWake()
+  return Object.freeze({
+    ok: accounts.ok && !accounts.has_more && manifestations.ok,
+    accounts,
+    manifestations,
+  })
+}
+
+async function resolveActiveCaretakerAccountSession(request, env) {
+  const session = await iconoplasmSessionUser(request, env)
+  const accountId = String(session?.account_id || "").trim()
+  if (!accountId || !env?.DB || !env?.ICONOPLASM_DB || !env?.ICONOPLASM_AUTHORING_DB) {
+    throw authorityError("AUTHENTICATION_REQUIRED", "Active Brinedew account session required", 401)
+  }
+  const account = await readBrinedewAccount(env.DB, accountId)
+  if (!account || account.status !== "active") {
+    throw authorityError("ACCOUNT_NOT_ACTIVE", "This Brinedew account is not active", 403)
+  }
+  await requireManifestationAuthorityWriteMode(env.ICONOPLASM_DB)
+  await synchronizeActiveBrinedewAccountToManifestationAuthority({
+    primaryDb: env.DB,
+    authoringDb: env.ICONOPLASM_AUTHORING_DB,
+    accountId,
+    wakeManifestationProjection: () => drainIconoplasmManifestationAuthorityProjection(env, 10),
+  })
+  return Object.freeze({ account_id: accountId })
+}
+
+function scheduleIconoplasmAuthorityProjectionRecovery(ctx, env) {
+  if (typeof ctx?.waitUntil !== "function") return
+  ctx.waitUntil(
+    drainIconoplasmAuthorityProjectionOutboxes(env, { limit: 10 }).catch((error) => {
+      console.error("[ICONOPLASM_AUTHORITY_PROJECTION_RETRY]", error)
+    }),
+  )
+}
+
+const handleIconoplasmGenerationExecutorRoute = createIconoplasmGenerationExecutorHandler({
+  authorizeGenerationBearer: authorizeIconoplasmAuthorityGenerationBearer,
+  claimGenerationLeases: generationRequestLeaseClaim,
+  fulfillGenerationRequests,
+  deliverPendingNotifications: deliverPendingRequestFulfillmentNotifications,
+  reconcileDeliveredFulfillments: reconcileDeliveredRequestFulfillments,
+  inlineDeliveryLimit: ICONOPLASM_FULFILLMENT_DM_INLINE_LIMIT,
+})
+
+async function handleDeclaredManifestationAuthorityRoute({ request, env, ctx, done }) {
+  scheduleIconoplasmAuthorityProjectionRecovery(ctx, env)
+  const handler = createIconoplasmManifestationAuthorityRuntimeHandler({
+    env,
+    resolveSession: resolveActiveCaretakerAccountSession,
+    onAuthorityEvent: async () => {
+      const result = await drainIconoplasmManifestationAuthorityProjection(env, 50)
+      if (!result.ok) throw new Error("Manifestation authority projection remains pending")
+    },
+    onIntegrityFailure: async (failure) => {
+      console.error("[ICONOPLASM_AUTHORITY_BODY_INTEGRITY]", failure)
+    },
+    scheduleBackground: (promise) => ctx?.waitUntil?.(promise),
+  })
+  const response = await handler(request)
+  if (!response) throw new Error("Declared manifestation authority route was not handled")
+  return done("manifestation_authority", response)
+}
+
 const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
+  caretaker_manifestations: handleDeclaredManifestationAuthorityRoute,
+  manifestation_authority_sync: handleDeclaredManifestationAuthorityRoute,
+  manifestation_authority_service: handleDeclaredManifestationAuthorityRoute,
+  manifestation_generation_executor: async ({ match, request, env, ctx, done }) => {
+    scheduleIconoplasmAuthorityProjectionRecovery(ctx, env)
+    const response = await handleIconoplasmGenerationExecutorRoute({ match, request, env, ctx })
+    return done("manifestation_generation_executor", response)
+  },
   "admin_gallery.migrate_card_storage": async ({ request, env, done }) => {
     if (!(await isIconoplasmAdmin(request, env)))
       return done("admin_gallery_storage_migration_403", json({ error: "Unauthorized" }, 403))
@@ -30818,6 +32533,16 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     validVisionId: validAdminRollupVisionId,
     visionRequestMax: ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX,
     writeBootstrapState: writeAdminReadModelBootstrapState,
+  }),
+  ...createIconoplasmCaretakerAdminHandlers({
+    isAdmin: isIconoplasmAdmin,
+    json,
+    resolveActiveAccount: resolveActiveCaretakerAccountSession,
+    wakeAuthorityProjection: (env) => drainIconoplasmManifestationAuthorityProjection(env, 50),
+  }),
+  ...createIconoplasmCaretakerNotificationHandlers({
+    json,
+    resolveActiveAccount: resolveActiveCaretakerAccountSession,
   }),
 })
 
@@ -31956,14 +33681,21 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         sourceGeneSymbol:
           p?.source_gene_symbol || p?.source_symbol || p?.symbol || p?.gene_symbol || "",
         sourceAssetSha256: p?.source_asset_sha256 || p?.asset_sha256 || "",
+        clientRequestId: p?.client_request_id || p?.generation_request_id || "",
         promptBodyMode: p?.prompt_body_mode || "taggerizer_prompt",
       })
       if (!result.ok) {
         return done(
-          "create_generation_request_400",
-          json({ ok: false, error: String(result.error || "Could not create request") }, 400, {
-            "Cache-Control": "no-store",
-          }),
+          `create_generation_request_${result.status || 400}`,
+          json(
+            {
+              ok: false,
+              ...(result.code ? { code: result.code } : {}),
+              error: String(result.error || "Could not create request"),
+            },
+            result.status || 400,
+            { "Cache-Control": "no-store" },
+          ),
         )
       }
       return done(
@@ -32088,122 +33820,22 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     if (path === "/api/iconoplasm/admin/requests/drain-plan" && request.method === "GET") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_requests_drain_plan_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_requests_drain_plan_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-      const limit = Math.max(
-        1,
-        Math.min(2000, Number.parseInt(url.searchParams.get("limit") || "500", 10) || 500),
-      )
-      const plan = await generationRequestDrainPlan(env, { limit })
       return done(
-        "admin_requests_drain_plan",
-        json({ ok: true, ...plan }, 200, { "Cache-Control": "no-store" }),
-      )
-    }
-
-    if (path === "/api/iconoplasm/admin/requests/fulfill" && request.method === "POST") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_requests_fulfill_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_requests_fulfill_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-      let p = {}
-      try {
-        p = await request.json()
-      } catch {
-        return done("admin_requests_fulfill_400", json({ error: "Invalid JSON" }, 400))
-      }
-      const result = await fulfillGenerationRequests(env, {
-        items: Array.isArray(p?.items) ? p.items : [],
-        resolvedBy: await actor(request, env),
-        publicationId: p?.publication_id || "",
-      })
-      if (!result.ok) {
-        return done(
-          "admin_requests_fulfill_conflict",
-          json(result, 409, { "Cache-Control": "no-store" }),
-        )
-      }
-      if (result.request_ids?.length) {
-        // A request is not a completed tray outcome until its owner has the
-        // delivery that tells them the image is ready. Await this exact batch
-        // here rather than hiding a failed DM behind waitUntil(). The durable
-        // cron outbox still retries transient failures, but the workstation
-        // must fail loudly instead of declaring a silent fulfillment success.
-        const delivery = await deliverPendingRequestFulfillmentNotifications(env, {
-          requestIds: result.request_ids,
-          limit: Math.min(result.request_ids.length, ICONOPLASM_FULFILLMENT_DM_INLINE_LIMIT),
-        }).catch((error) => {
-          console.error(
-            "Iconoplasm fulfillment notification delivery failed:",
-            sanitizeText(error?.message || error || "unknown error", 500),
-          )
-          return {
+        "admin_requests_drain_plan_retired",
+        json(
+          {
             ok: false,
-            considered: 0,
-            delivered: 0,
-            suppressed: 0,
-            failed: result.request_ids.length,
-            unknown: 0,
-            error: sanitizeText(error?.message || error || "unknown error", 500),
-          }
-        })
-        const settlement = await reconcileDeliveredRequestFulfillments(env, {
-          requestIds: result.request_ids,
-        }).catch((error) => ({
-          ok: false,
-          finalized: 0,
-          pending_request_ids: result.request_ids,
-          error: sanitizeText(error?.message || error || "unknown error", 500),
-        }))
-        const deliveryComplete =
-          delivery?.ok === true &&
-          settlement?.ok === true &&
-          Array.isArray(settlement?.pending_request_ids) &&
-          settlement.pending_request_ids.length === 0 &&
-          Number(delivery?.failed || 0) === 0 &&
-          Number(delivery?.unknown || 0) === 0 &&
-          Number(delivery?.suppressed || 0) === 0
-        if (!deliveryComplete) {
-          return done(
-            "admin_requests_fulfill_delivery_pending",
-            json(
-              {
-                ...result,
-                ok: false,
-                code: "DISCORD_DELIVERY_PENDING",
-                error:
-                  "Image publication succeeded, but at least one requester has not received the required Discord DM yet.",
-                notification_delivery: delivery,
-                notification_settlement: settlement,
-              },
-              200,
-              { "Cache-Control": "no-store" },
-            ),
-          )
-        }
-        return done(
-          "admin_requests_fulfill",
-          json(
-            {
-              ...result,
-              fulfilled: Number(settlement?.finalized || 0),
-              notification_delivery: delivery,
-              notification_settlement: settlement,
+            error: {
+              code: "EXACT_GENERATION_LEASE_REQUIRED",
+              message:
+                "The mutable drain plan is retired. Claim one exact generation lease before execution.",
             },
-            200,
-            {
-              "Cache-Control": "no-store",
-            },
-          ),
-        )
-      }
-      return done("admin_requests_fulfill", json(result, 200, { "Cache-Control": "no-store" }))
+            claim_endpoint: "/api/iconoplasm/authority/generation-leases/claim",
+          },
+          409,
+          { "Cache-Control": "private, no-store" },
+        ),
+      )
     }
 
     if (path === "/api/iconoplasm/user-emulsion") {
@@ -33248,34 +34880,107 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const promptBodyMode = normalizeCandidatePromptBodyMode(
         p?.prompt_body_mode || p?.sample_mode || p?.body_mode || "taggerizer_prompt",
       )
-      const geneContext = (await candidateGenerationGeneContext(env, symbol)) || {
+      const requestedGenerationRequestId = sanitizeText(
+        p?.generation_request_id || p?.client_request_id || "",
+        128,
+      )
+      if (
+        requestedGenerationRequestId &&
+        !/^[a-z0-9][a-z0-9._:-]*$/i.test(requestedGenerationRequestId)
+      ) {
+        return done(
+          "candidate_generation_jobs_400",
+          json({ ok: false, error: "Invalid generation request identity." }, 400),
+        )
+      }
+      const selectedUserEmulsionId = sanitizeText(
+        p?.user_emulsion_id || p?.selected_user_emulsion_id || "",
+        64,
+      )
+      const generationRequestContractHash = await generationRequestContractSha256({
+        provider_id: providerId,
+        requested_model: sanitizeText(p?.model || "", 128) || "",
+        gene_symbol: symbol,
+        request_mode: requestMode,
+        prompt_body_mode: promptBodyMode,
+        selected_user_emulsion_id: selectedUserEmulsionId || "",
+      })
+      if (requestedGenerationRequestId) {
+        const existingJob = await getCandidateGenerationJobForRequest(env, {
+          generationRequestId: requestedGenerationRequestId,
+          userId,
+        })
+        if (existingJob) {
+          if (
+            normalizeSha256(existingJob.generation_request_contract_sha256 || "") !==
+            generationRequestContractHash
+          ) {
+            return done(
+              "candidate_generation_jobs_409",
+              json(
+                {
+                  ok: false,
+                  code: "GENERATION_REQUEST_IDEMPOTENCY_CONFLICT",
+                  error: "That generation request identity is already bound to different inputs.",
+                },
+                409,
+                { "Cache-Control": "no-store" },
+              ),
+            )
+          }
+          return done(
+            "candidate_generation_jobs",
+            json(
+              {
+                ok: String(existingJob.status || "") === "succeeded",
+                idempotent_replay: true,
+                job: mapCandidateGenerationJobRow(existingJob, portraitBase(url, env)),
+              },
+              200,
+              { "Cache-Control": "no-store" },
+            ),
+          )
+        }
+      }
+      const mutableGeneContext = (await candidateGenerationGeneContext(env, symbol)) || {
         gene_symbol: symbol,
         full_name: "",
-        manifestation: "",
-        manifestation_tags: "",
-        sample_label: "",
-        sample_number: 0,
-        sample_text_hash: "",
       }
-      if (
-        promptBodyMode === "taggerizer_prompt" &&
-        !normalizeTaggerizerPrompt(geneContext.manifestation_tags)
-      ) {
+      let exactSource
+      try {
+        const sourceProvenance = await resolveCanonicalGenerationSource(env, {
+          geneSymbol: symbol,
+          promptBodyMode,
+        })
+        exactSource = await readExactGenerationSource(env, sourceProvenance)
+      } catch (error) {
+        if (error instanceof IconoplasmGenerationSourceError) {
+          return done(
+            `candidate_generation_jobs_${error.status}`,
+            json({ ok: false, code: error.code, error: error.message }, error.status, {
+              "Cache-Control": "no-store",
+            }),
+          )
+        }
+        throw error
+      }
+      const geneContext = {
+        ...mutableGeneContext,
+        manifestation: exactSource.prose,
+        manifestation_tags: exactSource.tags,
+        sample_label: exactSource.source_sample_label,
+        sample_number: exactSource.source_sample_number,
+        sample_text_hash: exactSource.source_sample_text_sha256,
+      }
+      if (promptBodyMode === "taggerizer_prompt" && !normalizeTaggerizerPrompt(exactSource.tags)) {
         return done(
           "candidate_generation_jobs_409",
           json({ ok: false, error: `Taggerizer has not compiled a prompt for ${symbol}.` }, 409),
         )
       }
-      const manifestation = sanitizeText(geneContext.manifestation || "", 4000) || ""
       const currentSampleLabel = sanitizeText(geneContext.sample_label || "", 64) || ""
       const sampleLabel = currentSampleLabel || `${symbol}-0`
-      const sampleTextHash =
-        normalizeSha256(geneContext.sample_text_hash || "") ||
-        (manifestation ? await sha256Hex(manifestation) : "")
-      const selectedUserEmulsionId = sanitizeText(
-        p?.user_emulsion_id || p?.selected_user_emulsion_id || "",
-        64,
-      )
+      const sampleTextHash = exactSource.source_sample_text_sha256
       const userEmulsion = selectedUserEmulsionId
         ? await getUserEmulsionByPublicIdForSession(env, sessionUser, selectedUserEmulsionId)
         : await getUserEmulsionForSession(env, sessionUser)
@@ -33296,8 +35001,25 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         userEmulsion,
         communityCommentsSnapshot,
       })
+      const factoryRecipe = await activeFactoryRecipe(env)
+      const providerModelId = sanitizeText(providerRow?.model || "", 255) || ""
+      const promptHash = await generationPromptSha256(prompt)
+      const generationConfigHash = await generationConfigSha256({
+        source_snapshot_sha256: exactSource.source_snapshot_sha256,
+        provider_id: providerId,
+        model_id: providerModelId,
+        prompt_sha256: promptHash,
+        prompt_body_mode: promptBodyMode,
+        request_mode: requestMode,
+        requested_emulsion_id: sanitizeText(userEmulsion?.id || "", 64) || "",
+        requested_emulsion_slot: Math.max(0, optionalInt(userEmulsion?.slot) || 0),
+        factory_pipeline_code: factoryRecipe.pipeline,
+        factory_vision_revision: factoryRecipe.vision,
+      })
       const jobId = crypto.randomUUID()
-      await insertCandidateGenerationJob(env, {
+      const generationRequestId = requestedGenerationRequestId || `direct-${crypto.randomUUID()}`
+      const generationAttemptId = `attempt-${crypto.randomUUID()}`
+      const insertResult = await insertCandidateGenerationJob(env, {
         id: jobId,
         user_id: userId,
         provider_id: providerId,
@@ -33307,17 +35029,62 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         requested_emulsion_id: userEmulsion.id,
         requested_emulsion_label: userEmulsion.label,
         requested_emulsion_slot: userEmulsion.slot,
+        factory_pipeline_code: factoryRecipe.pipeline,
+        factory_vision_revision: factoryRecipe.vision,
         gene_full_name: sanitizeText(geneContext.full_name || "", 255) || "",
-        manifestation,
+        manifestation: "",
         sample_label: sampleLabel,
-        sample_number: currentSampleLabel ? optionalInt(geneContext.sample_number) : 0,
+        sample_number: exactSource.source_sample_number,
         sample_text_hash: normalizeSha256(sampleTextHash || "") || "",
         reference_assets_json: "[]",
         prompt_body_mode: promptBodyMode,
         community_comments_snapshot: communityCommentsSnapshot,
-        prompt,
+        prompt: "",
+        generation_request_id: generationRequestId,
+        generation_attempt_id: generationAttemptId,
+        ...exactSource,
+        generation_request_contract_sha256: generationRequestContractHash,
+        provider_model_id: providerModelId,
+        prompt_sha256: promptHash,
+        generation_config_sha256: generationConfigHash,
         status: "running",
       })
+      if (Number(insertResult?.meta?.changes || 0) === 0) {
+        const existingJob = await getCandidateGenerationJobForRequest(env, {
+          generationRequestId,
+          userId,
+        })
+        if (
+          !existingJob ||
+          normalizeSha256(existingJob.generation_request_contract_sha256 || "") !==
+            generationRequestContractHash
+        ) {
+          return done(
+            "candidate_generation_jobs_409",
+            json(
+              {
+                ok: false,
+                code: "GENERATION_REQUEST_IDEMPOTENCY_CONFLICT",
+                error: "That generation request identity is already bound to different inputs.",
+              },
+              409,
+              { "Cache-Control": "no-store" },
+            ),
+          )
+        }
+        return done(
+          "candidate_generation_jobs",
+          json(
+            {
+              ok: String(existingJob.status || "") === "succeeded",
+              idempotent_replay: true,
+              job: mapCandidateGenerationJobRow(existingJob, portraitBase(url, env)),
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
       try {
         const apiKey = await decryptImageEditApiKey(env, providerRow)
 
@@ -33593,6 +35360,157 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           { "Cache-Control": "no-store" },
         ),
       )
+    }
+
+    const caretakerSupervoteRouteMatch =
+      /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/supervote$/.exec(path)
+    if (caretakerSupervoteRouteMatch) {
+      if (!iconoplasmVoteCoordinatorBinding(env)) {
+        return done(
+          "caretaker_supervote_500",
+          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
+        )
+      }
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      const accountId = sanitizeText(sessionUser?.account_id || "", 192) || ""
+      if (!sessionUser?.user_id || !accountId) {
+        return done(
+          "caretaker_supervote_401",
+          json(
+            {
+              ok: false,
+              code: "STABLE_ACCOUNT_REQUIRED",
+              error: "Please log in with an active Brinedew account.",
+            },
+            401,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
+      let symbol = ""
+      try {
+        symbol = normalizeSymbol(decodeURIComponent(caretakerSupervoteRouteMatch[1] || "")) || ""
+      } catch {
+        symbol = ""
+      }
+      if (!symbol) {
+        return done(
+          "caretaker_supervote_400",
+          json({ ok: false, code: "INVALID_GENE", error: "Gene symbol is invalid." }, 400),
+        )
+      }
+
+      try {
+        if (request.method === "GET" || request.method === "HEAD") {
+          const snapshot = await iconoplasmCaretakerSupervoteSnapshot(env, {
+            symbol,
+            accountId,
+          })
+          return done(
+            "caretaker_supervote",
+            json(
+              {
+                ok: true,
+                symbol,
+                account_id: accountId,
+                supervote: snapshot?.supervote || null,
+              },
+              200,
+              { "Cache-Control": "no-store" },
+            ),
+          )
+        }
+
+        let payload
+        try {
+          payload = await request.json()
+        } catch {
+          return done(
+            "caretaker_supervote_400",
+            json({ ok: false, code: "INVALID_JSON", error: "Invalid JSON" }, 400),
+          )
+        }
+        const assetSha =
+          request.method === "DELETE" ? null : normalizeSha256(payload?.asset_sha256 || "")
+        const commandId = sanitizeText(payload?.command_id || "", 192) || ""
+        const expectedAssignmentVersion = Number(payload?.expected_assignment_version)
+        const expectedSupervoteVersion = Number(payload?.expected_supervote_version)
+        if (request.method === "PUT" && !assetSha) {
+          return done(
+            "caretaker_supervote_400",
+            json(
+              {
+                ok: false,
+                code: "INVALID_SUPERVOTE_TARGET",
+                error: "asset_sha256 is required.",
+              },
+              400,
+            ),
+          )
+        }
+        if (
+          !commandId ||
+          !Number.isSafeInteger(expectedAssignmentVersion) ||
+          expectedAssignmentVersion < 1 ||
+          !Number.isSafeInteger(expectedSupervoteVersion) ||
+          expectedSupervoteVersion < 0
+        ) {
+          return done(
+            "caretaker_supervote_400",
+            json(
+              {
+                ok: false,
+                code: "INVALID_SUPERVOTE_COMMAND",
+                error: "command_id and current assignment/supervote versions are required.",
+              },
+              400,
+            ),
+          )
+        }
+        const requestSha256 = await caretakerSupervoteRequestSha256({
+          command_id: commandId,
+          gene_symbol: symbol,
+          caretaker_account_id: accountId,
+          asset_sha256: assetSha,
+          expected_assignment_version: expectedAssignmentVersion,
+          expected_supervote_version: expectedSupervoteVersion,
+        })
+        const result = await iconoplasmCaretakerSupervoteSet(env, {
+          symbol,
+          accountId,
+          assetSha256: assetSha,
+          commandId,
+          requestSha256,
+          expectedAssignmentVersion,
+          expectedSupervoteVersion,
+        })
+        return done(
+          "caretaker_supervote",
+          json(
+            {
+              ...result,
+              symbol,
+              account_id: accountId,
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      } catch (error) {
+        const status = Math.max(400, Math.min(599, Number(error?.status || 500) || 500))
+        return done(
+          `caretaker_supervote_${status}`,
+          json(
+            {
+              ok: false,
+              code: sanitizeText(error?.code || "", 100) || "CARETAKER_SUPERVOTE_FAILED",
+              error: String(error?.message || "Caretaker supervote could not be saved."),
+            },
+            status,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
     }
 
     if (path === "/api/iconoplasm/candidates/copy" && request.method === "POST") {
@@ -35281,6 +37199,31 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           ),
         )
       }
+      const restoreRows = []
+      let afterSymbol = ""
+      let afterAssetSha256 = ""
+      while (restoreRows.length < matched) {
+        const page = await env.ICONOPLASM_DB.prepare(
+          `SELECT pa.gene_symbol, pa.asset_sha256
+             FROM icono_portrait_assets pa
+            WHERE ${whereSql}
+              AND (
+                pa.gene_symbol > ?
+                OR (pa.gene_symbol = ? AND pa.asset_sha256 > ?)
+              )
+            ORDER BY pa.gene_symbol ASC, pa.asset_sha256 ASC
+            LIMIT 1000`,
+        )
+          .bind(...scopeBinds, afterSymbol, afterSymbol, afterAssetSha256)
+          .all()
+        const rows = Array.isArray(page?.results) ? page.results : []
+        if (!rows.length) break
+        restoreRows.push(...rows)
+        const last = rows[rows.length - 1]
+        afterSymbol = normalizeSymbol(last?.gene_symbol || "") || ""
+        afterAssetSha256 = normalizeSha256(last?.asset_sha256 || "") || ""
+        if (rows.length < 1000) break
+      }
       await env.ICONOPLASM_DB.batch([
         env.ICONOPLASM_DB.prepare(
           `INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at)
@@ -35294,6 +37237,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
            WHERE ${whereSqlBare}`,
         ).bind(...scopeBinds),
       ])
+      await iconoplasmCaretakerSupervoteRestoreEligibilityBatch(env, restoreRows, {
+        restorationPrefix: "mass-candidate-restore",
+      })
       const remainingRow = await env.ICONOPLASM_DB.prepare(
         `SELECT COUNT(*) AS n FROM icono_portrait_assets pa WHERE ${whereSql}`,
       )
@@ -36361,6 +38307,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           )
             .bind(symbol, assetSha)
             .run()
+          await iconoplasmCaretakerSupervoteRestoreEligibility(env, {
+            symbol,
+            assetSha256: assetSha,
+            restorationId: `candidate-restored:${crypto.randomUUID()}`,
+          })
           await env.ICONOPLASM_DB.prepare(
             "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'restore_keep', ?, ?, CURRENT_TIMESTAMP)",
           )
@@ -36385,6 +38336,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           )
             .bind(symbol, assetSha)
             .run()
+          await iconoplasmCaretakerSupervoteInvalidate(env, {
+            symbol,
+            assetSha256: assetSha,
+            invalidationId: `candidate-marked-legacy:${crypto.randomUUID()}`,
+            reason,
+          })
           await env.ICONOPLASM_DB.prepare(
             "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'legacy_mark', ?, ?, CURRENT_TIMESTAMP)",
           )
@@ -36535,6 +38492,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
           .bind(...symbols)
           .run()
+        await iconoplasmCaretakerSupervoteRestoreEligibilityBatch(env, staleRows, {
+          restorationPrefix: "candidate-unstale-batch",
+        })
 
         await env.ICONOPLASM_DB.batch(
           staleRows.map((row) => {
@@ -36689,6 +38649,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
           .bind(symbol, asset)
           .run()
+        await iconoplasmCaretakerSupervoteInvalidate(env, {
+          symbol,
+          assetSha256: asset,
+          invalidationId: `candidate-rejected:${crypto.randomUUID()}`,
+          reason: String(p?.reason || "").slice(0, 2000) || "Candidate was rejected",
+        })
         if (currentAssetSha && currentAssetSha === normalizeSha256(asset)) {
           await env.ICONOPLASM_DB.prepare(
             "UPDATE icono_publish_state SET current_asset_sha256=NULL, admin_override=0, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE gene_symbol=?",
@@ -36776,6 +38742,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
           .bind(symbol, asset)
           .run()
+        await iconoplasmCaretakerSupervoteRestoreEligibility(env, {
+          symbol,
+          assetSha256: asset,
+          restorationId: `candidate-unstaled:${crypto.randomUUID()}`,
+        })
         await env.ICONOPLASM_DB.prepare(
           "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'unstale', ?, ?, CURRENT_TIMESTAMP)",
         )
@@ -36852,6 +38823,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
           .bind(symbol, asset)
           .run()
+        await iconoplasmCaretakerSupervoteInvalidate(env, {
+          symbol,
+          assetSha256: asset,
+          invalidationId: `legacy-candidate-purged:${crypto.randomUUID()}`,
+          reason: String(p?.reason || "").slice(0, 2000) || "Legacy candidate was purged",
+        })
         await env.ICONOPLASM_DB.prepare(
           "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'purge_legacy', ?, ?, CURRENT_TIMESTAMP)",
         )

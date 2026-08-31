@@ -4,6 +4,64 @@ import { DatabaseSync } from "node:sqlite"
 
 import { createDiagnosticMatrixRunForTest } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
+class StaticAuthoringStatement {
+  bind() {
+    return this
+  }
+
+  async first() {
+    return {
+      gene_id: "gene_aff2_0001",
+      gene_status: "active",
+      manifestation_id: "manifestation_aff2_0001",
+      manifestation_status: "active",
+      manifestation_revision_id: "revision_aff2_0001",
+      body_sha256: "a".repeat(64),
+      body_bytes: 32,
+      sample_label: "AFF2-1",
+      sample_number: 1,
+      sample_text_sha256: "c".repeat(64),
+      revision_status: "active",
+      revision_object_key:
+        "private/manifestations/v1/aa/mbody_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bin",
+      revision_verified_at: "2026-08-30 00:00:00",
+      canonical_selection_id: "selection_aff2_0001",
+      selected_manifestation_id: "manifestation_aff2_0001",
+      selected_revision_id: "revision_aff2_0001",
+      selection_head_version: 1,
+      selection_gene_revision: 1,
+      manifestation_derivative_id: "derivative_aff2_0001",
+      derivative_status: "complete",
+      derivative_source_body_sha256: "a".repeat(64),
+      derivative_body_sha256: "b".repeat(64),
+      derivative_body_bytes: 48,
+      derivative_tags_sha256: "1".repeat(64),
+      derivative_tags_bytes: 20,
+      derivative_fields_sha256: "2".repeat(64),
+      derivative_fields_bytes: 27,
+      derivative_recipe_id: "taggerizer",
+      derivative_recipe_version: "1",
+      derivative_provider_id: "test-provider",
+      derivative_model_id: "test-tagger",
+      derivative_tagger_config_sha256: "d".repeat(64),
+      derivative_provenance_status: "generated",
+      derivative_object_key:
+        "private/manifestations/v1/bb/mbody_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.bin",
+      derivative_verified_at: "2026-08-30 00:00:00",
+    }
+  }
+}
+
+const STATIC_AUTHORING_DB = Object.freeze({
+  prepare() {
+    return new StaticAuthoringStatement()
+  },
+})
+
+function diagnosticEnv(d1) {
+  return { ICONOPLASM_DB: d1, ICONOPLASM_AUTHORING_DB: STATIC_AUTHORING_DB }
+}
+
 class SQLiteD1Statement {
   constructor(owner, sql) {
     this.owner = owner
@@ -129,6 +187,32 @@ function diagnosticDatabase(options) {
       factory_vision_revision INTEGER NOT NULL,
       request_origin TEXT NOT NULL,
       diagnostic_run_id TEXT NOT NULL,
+      generation_provenance_status TEXT NOT NULL DEFAULT 'legacy_unbound',
+      generation_request_id TEXT NOT NULL DEFAULT '',
+      source_gene_id TEXT NOT NULL DEFAULT '',
+      source_manifestation_id TEXT NOT NULL DEFAULT '',
+      source_manifestation_revision_id TEXT NOT NULL DEFAULT '',
+      source_manifestation_body_sha256 TEXT NOT NULL DEFAULT '',
+      source_manifestation_derivative_id TEXT NOT NULL DEFAULT '',
+      source_manifestation_derivative_sha256 TEXT NOT NULL DEFAULT '',
+      source_manifestation_derivative_tags_sha256 TEXT NOT NULL DEFAULT '',
+      source_manifestation_derivative_tags_bytes INTEGER NOT NULL DEFAULT 0,
+      source_manifestation_derivative_fields_sha256 TEXT NOT NULL DEFAULT '',
+      source_manifestation_derivative_fields_bytes INTEGER NOT NULL DEFAULT 0,
+      source_manifestation_derivative_recipe_id TEXT NOT NULL DEFAULT '',
+      source_manifestation_derivative_recipe_version TEXT NOT NULL DEFAULT '',
+      source_manifestation_derivative_provider_id TEXT NOT NULL DEFAULT '',
+      source_manifestation_derivative_model_id TEXT NOT NULL DEFAULT '',
+      source_manifestation_derivative_tagger_config_sha256 TEXT NOT NULL DEFAULT '',
+      source_canonical_selection_id TEXT NOT NULL DEFAULT '',
+      source_canonical_head_version INTEGER NOT NULL DEFAULT 0,
+      source_gene_revision INTEGER NOT NULL DEFAULT 0,
+      source_sample_label TEXT NOT NULL DEFAULT '',
+      source_sample_number INTEGER,
+      source_sample_text_sha256 TEXT NOT NULL DEFAULT '',
+      source_snapshot_sha256 TEXT NOT NULL DEFAULT '',
+      generation_request_contract_sha256 TEXT NOT NULL DEFAULT '',
+      generation_config_sha256 TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       fulfilled_asset_sha256 TEXT NOT NULL DEFAULT '',
@@ -178,7 +262,7 @@ const runOptions = {
 test("diagnostic matrix commits all 25 cells atomically and retrying is idempotent", async () => {
   const { db, d1 } = diagnosticDatabase()
   try {
-    const env = { ICONOPLASM_DB: d1 }
+    const env = diagnosticEnv(d1)
     const url = new URL("https://iconoplasm.brinedew.bio/admin")
     const created = await createDiagnosticMatrixRunForTest(env, url, runOptions)
     assert.equal(created.ok, true)
@@ -205,7 +289,7 @@ test("diagnostic matrix leaves no partial run or requests when the batch is inte
   const { db, d1 } = diagnosticDatabase({ failBatchAt: 12 })
   try {
     const result = await createDiagnosticMatrixRunForTest(
-      { ICONOPLASM_DB: d1 },
+      diagnosticEnv(d1),
       new URL("https://iconoplasm.brinedew.bio/admin"),
       runOptions,
     )

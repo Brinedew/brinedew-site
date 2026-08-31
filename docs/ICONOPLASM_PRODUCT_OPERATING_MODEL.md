@@ -231,14 +231,24 @@ certify runtime behavior.
 
 ## Authority and data flow
 
-1. **Authoring plane:** the local Iconoplasm repo and dataset own Essence,
-   Manifestation, Vision, generation, candidate assets, and operator workflow.
-2. **Publish plane:** one canonical selection engine owns eligibility,
+1. **Manifestation command plane:** the Website authoring authority owns stable
+   caretaker assignments, immutable Manifestation revisions, derived Tags
+   identity, withdrawal, canonical selection, and exact generation snapshots for
+   every gene. The local workstation is a replica, offline draft surface,
+   enrichment executor, and version-bound generator. It cannot overwrite or
+   silently merge Website state.
+2. **Scientific/operator authoring plane:** the local Iconoplasm repo and dataset
+   continue to own Essence, Vision, candidate assets, and operator workflow.
+   Accepted Manifestation changes cross the Website command contract and return
+   through ordered replication; local drafts are not canonical or publishable.
+3. **Publish plane:** one canonical selection engine owns eligibility,
    vote/tie-break behavior, manual overrides, audit history, and the D1
    authoring pointer. The exact card artifact selected by the durable publication head
    alone owns the public portrait.
-3. **Distribution plane:** the Website repo owns public cards, APIs, immutable
+4. **Distribution plane:** the Website repo owns public cards, APIs, immutable
    assets, releases, change feeds, extension packaging, and reader interaction.
+
+<!-- ARCHITECTURE FENCE [IPD-012] -->
 
 Readers consume publisher-owned immutable card/portrait metadata. D1 may
 legitimately lead while a dirty shard awaits publication, but signed-in cards,
