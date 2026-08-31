@@ -219,6 +219,23 @@ async function itemStatus(authoringDb, runId, geneId) {
   )
 }
 
+async function latestProjectionEvent(authoringDb, geneId) {
+  const latest = await first(
+    authoringDb,
+    `SELECT event_uuid, event_sequence, payload_json
+       FROM icono_manifestation_events WHERE gene_id = ?
+      ORDER BY event_sequence DESC LIMIT 1`,
+    geneId,
+  )
+  if (!latest) throw new Error("cutover_seed_event_missing")
+  return Object.freeze({
+    event_id: latest.event_uuid,
+    event_sequence: Number(latest.event_sequence),
+    gene_id: geneId,
+    payload: JSON.parse(latest.payload_json),
+  })
+}
+
 async function markItem(authoringDb, item, fromStatuses, status, now) {
   const slots = fromStatuses.map(() => "?").join(", ")
   await prepared(
@@ -337,10 +354,10 @@ async function processOneItem(context, rawItem, now) {
   if (item.status === "failed")
     item = await markItem(context.authoringDb, item, ["failed"], "planned", now)
   if (item.source_kind === "no_manifestation") {
-    let result = null
     if (item.status === "planned") {
-      result = await materializeManifestationCutoverItem({ ...context, item, now })
-      item = await markItem(context.authoringDb, item, ["planned"], "registered_unseeded", now)
+      await materializeManifestationCutoverItem({ ...context, item, now })
+      await markItem(context.authoringDb, item, ["planned"], "registered_unseeded", now)
+      return
     }
     if (item.status === "registered_unseeded") {
       if (typeof context.projectShadowEvent !== "function") {
@@ -350,29 +367,29 @@ async function processOneItem(context, rawItem, now) {
           500,
         )
       }
-      if (!result?.event)
-        result = await materializeManifestationCutoverItem({ ...context, item, now })
       await context.projectShadowEvent({
         primaryDb: context.primaryDb,
         authoringDb: context.authoringDb,
         cutoverRunId: item.cutover_run_id,
-        event: result.event,
+        event: await latestProjectionEvent(context.authoringDb, item.gene_id),
       })
-      item = await markItem(context.authoringDb, item, ["registered_unseeded"], "projected", now)
+      await markItem(context.authoringDb, item, ["registered_unseeded"], "projected", now)
+      return
     }
     if (item.status === "projected") {
       await verifyAndMarkItem(context, item, now)
     }
     return
   }
-  if (item.status === "planned")
-    item = await markItem(context.authoringDb, item, ["planned"], "uploading", now)
-  let result = null
-  if (new Set(["uploading", "adopted"]).has(item.status)) {
-    result = await materializeManifestationCutoverItem({ ...context, item, now })
-    if (item.status === "uploading") {
-      item = await markItem(context.authoringDb, item, ["uploading"], "adopted", now)
-    }
+  if (item.status === "planned") {
+    await markItem(context.authoringDb, item, ["planned"], "uploading", now)
+    return
+  }
+  if (item.status === "uploading") {
+    const result = await materializeManifestationCutoverItem({ ...context, item, now })
+    if (result.complete !== true) return
+    await markItem(context.authoringDb, item, ["uploading"], "adopted", now)
+    return
   }
   if (item.status === "adopted") {
     if (typeof context.projectShadowEvent !== "function") {
@@ -382,39 +399,17 @@ async function processOneItem(context, rawItem, now) {
         500,
       )
     }
-    if (!result?.event) {
-      result = await materializeManifestationCutoverItem({ ...context, item, now })
-    }
     await context.projectShadowEvent({
       primaryDb: context.primaryDb,
       authoringDb: context.authoringDb,
       cutoverRunId: item.cutover_run_id,
-      event: result.event,
+      event: await latestProjectionEvent(context.authoringDb, item.gene_id),
     })
-    item = await markItem(context.authoringDb, item, ["adopted"], "projected", now)
+    await markItem(context.authoringDb, item, ["adopted"], "projected", now)
+    return
   }
   if (item.status === "projected") {
     await verifyAndMarkItem(context, item, now)
-  }
-}
-
-async function processOneItemWithStorageVisibility(context, rawItem, now) {
-  let item = rawItem
-  const waitForStorageVisibility =
-    context.waitForStorageVisibility ||
-    ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)))
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    try {
-      await processOneItem(context, item, now)
-      return
-    } catch (error) {
-      if (!isStoragePropagationPending(error) || attempt === 4) throw error
-      await waitForStorageVisibility(5_000)
-      item = await itemStatus(context.authoringDb, item.cutover_run_id, item.gene_id)
-      if (!item) {
-        throw cutoverError("CUTOVER_ITEM_MISSING", "Cutover item disappeared during storage proof")
-      }
-    }
   }
 }
 
@@ -422,7 +417,10 @@ async function materializePage(context, run, input, now) {
   if (!new Set(["importing", "seeded"]).has(run.status)) {
     throw cutoverError("CUTOVER_NOT_IMPORTING", "Cutover is not in materialization state")
   }
-  const limit = pageLimit(input.limit)
+  // HTTP invocations on the current Workers plan have a 10 ms CPU ceiling.
+  // Shards provide cross-request concurrency; an individual invocation must
+  // never multiply crypto/projection work by accepting a larger page.
+  const limit = pageLimit(input.limit, 1)
   const shardCount = Math.trunc(Number(input.shardCount)) || 1
   const shardIndex = Math.trunc(Number(input.shardIndex)) || 0
   if (![1, 2, 4, 8, 16].includes(shardCount) || shardIndex < 0 || shardIndex >= shardCount) {
@@ -450,30 +448,28 @@ async function materializePage(context, run, input, now) {
       ORDER BY canonical_symbol COLLATE NOCASE ASC LIMIT ?`,
     ...queryParams,
   )
-  // The page query is the single deterministic claim point. Every row is a
-  // different gene, so its immutable lineage, storage object, and projection
-  // are independent; overlap the bounded page instead of serializing remote
-  // storage propagation ten times. One operator request still owns the page,
-  // and status CAS guards reject any accidental duplicate processing.
-  const outcomes = await Promise.all(
-    items.map(async (rawItem) => {
-      try {
-        await processOneItemWithStorageVisibility(context, rawItem, now)
-        return true
-      } catch (error) {
-        await recordItemFailure(
-          context.authoringDb,
-          (await itemStatus(context.authoringDb, rawItem.cutover_run_id, rawItem.gene_id)) ||
-            rawItem,
-          error,
-          now,
-        )
-        return false
-      }
-    }),
-  )
-  const processed = outcomes.filter(Boolean).length
-  const failed = outcomes.length - processed
+  // The page query is the single deterministic claim point. Concurrency lives
+  // between disjoint shard requests, while each request owns one gene phase.
+  let processed = 0
+  let failed = 0
+  for (const rawItem of items) {
+    try {
+      // One request advances one durable phase per gene. This is both the
+      // crash-resume boundary and the CPU boundary required by Workers Free;
+      // storage propagation is retried by the next operator request after
+      // next_attempt_at instead of sleeping and accumulating work in-place.
+      await processOneItem(context, rawItem, now)
+      processed += 1
+    } catch (error) {
+      await recordItemFailure(
+        context.authoringDb,
+        (await itemStatus(context.authoringDb, rawItem.cutover_run_id, rawItem.gene_id)) || rawItem,
+        error,
+        now,
+      )
+      failed += 1
+    }
+  }
   await reconcileRunCounts(context.authoringDb, run.cutover_run_id, now)
   const remaining = await first(
     context.authoringDb,
@@ -529,7 +525,6 @@ export async function advanceManifestationAuthorityCutover({
   authoringDb,
   env,
   projectShadowEvent,
-  waitForStorageVisibility,
   input = {},
   actor = {},
 } = {}) {
@@ -568,12 +563,7 @@ export async function advanceManifestationAuthorityCutover({
     } else if (action === "freeze") {
       await freezeCutover(primaryDb, authoringDb, run, actor.actorAccountId, now)
     } else if (action === "materialize") {
-      await materializePage(
-        { primaryDb, authoringDb, env, projectShadowEvent, waitForStorageVisibility },
-        run,
-        input,
-        now,
-      )
+      await materializePage({ primaryDb, authoringDb, env, projectShadowEvent }, run, input, now)
     } else if (action === "verify") {
       await verifyCutover(authoringDb, primaryDb, env, run, now)
     } else if (action === "activate") {

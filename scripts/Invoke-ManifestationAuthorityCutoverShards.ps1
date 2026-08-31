@@ -56,12 +56,14 @@ $client.DefaultRequestHeaders.Authorization = [Net.Http.Headers.AuthenticationHe
 $client.DefaultRequestHeaders.Accept.ParseAdd('application/json')
 
 $requestedShardIndexes = @($ShardIndexes)
-$resolvedShardIndexes = if ($requestedShardIndexes.Count -eq 0) {
-    @(0..($ShardCount - 1))
-}
-else {
-    @($ShardIndexes | Sort-Object -Unique)
-}
+$resolvedShardIndexes = @(
+    if ($requestedShardIndexes.Count -eq 0) {
+        0..($ShardCount - 1)
+    }
+    else {
+        $ShardIndexes | Sort-Object -Unique
+    }
+)
 if (
     $resolvedShardIndexes.Count -eq 0 -or
     ($requestedShardIndexes.Count -gt 0 -and $resolvedShardIndexes.Count -ne $requestedShardIndexes.Count) -or

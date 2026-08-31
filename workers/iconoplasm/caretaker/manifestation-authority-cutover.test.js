@@ -726,15 +726,11 @@ test("bounded operator resumes through encrypted materialization, shadow project
     sha("2"),
     "2026-08-30",
   )
-  let storageVisibilityWaits = 0
   const base = {
     primaryDb: primary,
     authoringDb: authority,
     env,
     projectShadowEvent: projectCanonicalManifestationCutoverEvent,
-    waitForStorageVisibility: async () => {
-      storageVisibilityWaits += 1
-    },
     actor: { actorKind: "administrator", actorAccountId: "account_cutover_operator" },
   }
   let status = await advanceManifestationAuthorityCutover({
@@ -786,17 +782,28 @@ test("bounded operator resumes through encrypted materialization, shadow project
     },
   })
   assert.equal(status.counts.verified, 0)
-  status = await advanceManifestationAuthorityCutover({
-    ...base,
-    input: {
-      action: "materialize",
-      cutoverRunId: "cutover_run_operator",
-      limit: 1,
-      shardCount: 16,
-      shardIndex: brcaShard,
-      now,
-    },
-  })
+  const brcaPhases = []
+  for (let phase = 0; phase < 12 && status.counts.verified === 0; phase += 1) {
+    const phaseNow = new Date(Date.parse(now) + phase * 6_000).toISOString()
+    status = await advanceManifestationAuthorityCutover({
+      ...base,
+      input: {
+        action: "materialize",
+        cutoverRunId: "cutover_run_operator",
+        limit: 1,
+        shardCount: 16,
+        shardIndex: brcaShard,
+        now: phaseNow,
+      },
+    })
+    brcaPhases.push(
+      authority.raw
+        .prepare(
+          "SELECT status FROM icono_manifestation_cutover_items WHERE canonical_symbol = 'BRCA1'",
+        )
+        .get().status,
+    )
+  }
   assert.equal(
     status.counts.verified,
     1,
@@ -809,11 +816,20 @@ test("bounded operator resumes through encrypted materialization, shadow project
         .all(),
     }),
   )
+  assert.deepEqual(brcaPhases, ["registered_unseeded", "projected", "verified"])
   assert.equal(status.status, "importing")
-  status = await advanceManifestationAuthorityCutover({
-    ...base,
-    input: { action: "materialize", cutoverRunId: "cutover_run_operator", limit: 1, now },
-  })
+  for (let phase = 0; phase < 20 && status.status !== "seeded"; phase += 1) {
+    const phaseNow = new Date(Date.parse(now) + (phase + 20) * 6_000).toISOString()
+    status = await advanceManifestationAuthorityCutover({
+      ...base,
+      input: {
+        action: "materialize",
+        cutoverRunId: "cutover_run_operator",
+        limit: 1,
+        now: phaseNow,
+      },
+    })
+  }
   assert.equal(
     status.status,
     "seeded",
@@ -827,7 +843,6 @@ test("bounded operator resumes through encrypted materialization, shadow project
     }),
   )
   assert.equal(status.counts.verified, 2)
-  assert.equal(storageVisibilityWaits, 4)
   assert.ok(objects.size >= 2)
   const derivative = authority.raw
     .prepare(
