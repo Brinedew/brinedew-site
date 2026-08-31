@@ -6,6 +6,9 @@ import { spawnSync } from "node:child_process"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 
+const powershellExecutable =
+  process.platform === "win32" ? "C:\\Program Files\\PowerShell\\7\\pwsh.exe" : "pwsh"
+
 const scriptUrl = new URL("./Invoke-ManifestationAuthorityCutover.ps1", import.meta.url)
 const shardScriptUrl = new URL("./Invoke-ManifestationAuthorityCutoverShards.ps1", import.meta.url)
 const requestBudgetUrl = new URL("./lib/CloudflareWorkerRequestBudget.ps1", import.meta.url)
@@ -148,7 +151,7 @@ test("request ledger blocks before overflow and resets only on a new UTC day", a
 
   try {
     const result = spawnSync(
-      "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      powershellExecutable,
       ["-NoProfile", "-NonInteractive", "-Command", command],
       { encoding: "utf8", timeout: 15_000 },
     )
@@ -160,7 +163,7 @@ test("request ledger blocks before overflow and resets only on a new UTC day", a
     previousDay.utc_day = "2000-01-01"
     await writeFile(ledgerPath, JSON.stringify(previousDay), "utf8")
     const rollover = spawnSync(
-      "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      powershellExecutable,
       [
         "-NoProfile",
         "-NonInteractive",
@@ -190,7 +193,7 @@ test("request ledger serializes concurrent reservations without losing counts", 
 
   try {
     const result = spawnSync(
-      "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      powershellExecutable,
       ["-NoProfile", "-NonInteractive", "-Command", command],
       { encoding: "utf8", timeout: 20_000 },
     )
