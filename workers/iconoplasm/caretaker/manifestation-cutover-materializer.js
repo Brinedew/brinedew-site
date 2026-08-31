@@ -147,6 +147,22 @@ async function uploadEncryptedBody(
   await putEncryptedManifestationBodyOnce(env, objectKey, encrypted.ciphertext, {
     expectedSha256: encrypted.ciphertext_sha256,
   })
+  if (env?.ICONOPLASM_CUTOVER_EXECUTION_PLANE === "durable_object") {
+    // The Durable Object has a 30-second CPU envelope and unlimited connected
+    // HTTP wall time. Attempt the existing exact ciphertext/plaintext proof
+    // immediately so a visible Bunny write can be adopted in this invocation.
+    // A not-yet-visible object still throws the normal resumable pending error.
+    return verifyResumableUpload(
+      env,
+      {
+        ...pendingDescriptor,
+        object_key: objectKey,
+        planned_body_bytes: encrypted.body_bytes,
+      },
+      now,
+      verifyPlaintext,
+    )
+  }
   // Bunny may acknowledge a durable PUT before an authenticated GET can see
   // it. Do not serialize the whole migration behind that propagation window:
   // the envelope above is the crash-safe resume contract, and a later bounded
