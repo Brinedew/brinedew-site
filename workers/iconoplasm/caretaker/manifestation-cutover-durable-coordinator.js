@@ -1,6 +1,11 @@
 import { createIconoplasmManifestationAuthorityRuntimeHandler } from "../../iconoplasm-manifestation-authority-runtime.js"
 
 const CUTOVER_ACTION_ROUTE = /^\/api\/iconoplasm\/authority\/cutover\/runs\/([^/]+)\/actions$/
+const CUTOVER_RUN_ROUTE = /^\/api\/iconoplasm\/authority\/cutover\/runs\//
+
+export function isManifestationCutoverRouteRequest(request) {
+  return CUTOVER_RUN_ROUTE.test(new URL(request.url).pathname)
+}
 
 function cutoverRunId(pathname) {
   const match = String(pathname || "").match(CUTOVER_ACTION_ROUTE)
