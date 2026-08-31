@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   createManifestationUploadIntent,
+  createManifestationAuthorityRouteHandler,
   createManifestationAuthorityServiceHandler,
   createCaretakerManifestationHttpHandler,
   computeManifestationSnapshotChainHash,
@@ -79,6 +80,31 @@ function installMemoryBodyStorage(t) {
   }
   return objects
 }
+
+test("replica sync refuses cursor and snapshot churn before authority activation", async (t) => {
+  const context = await bootstrap(t, "7010")
+  let authorizations = 0
+  const handler = createManifestationAuthorityRouteHandler({
+    db: context.db,
+    env: serviceEnvironment(),
+    authorizeReplicaBearer: async () => {
+      authorizations += 1
+      return { authorized: true, actor_kind: "service" }
+    },
+  })
+  const events = await handler(serviceRequest("/api/iconoplasm/authority/events"))
+  assert.equal(events.status, 503)
+  assert.equal((await events.json()).error.code, "AUTHORITY_NOT_ACTIVE")
+  const snapshot = await handler(
+    serviceRequest("/api/iconoplasm/authority/snapshots", {
+      consumer_id: "consumer_shadow_sync_0001",
+      ttl_seconds: 300,
+    }),
+  )
+  assert.equal(snapshot.status, 503)
+  assert.equal((await snapshot.json()).error.code, "AUTHORITY_NOT_ACTIVE")
+  assert.equal(authorizations, 2)
+})
 
 function ids() {
   let sequence = 0

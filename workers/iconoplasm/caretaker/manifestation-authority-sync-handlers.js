@@ -3,6 +3,7 @@ import {
   jsonResponse,
   readBoundedJson,
   requireAuthorityBearer,
+  requireAuthoritativeMode,
   safeErrorResponse,
 } from "./manifestation-authority-http-security.js"
 import {
@@ -77,6 +78,7 @@ export function createManifestationAuthoritySyncHandler({
       if (!(snapshotRoot || snapshotStatus || snapshotParts || snapshotComplete || events || ack))
         return null
       await requireAuthorityBearer(request, env, authorizeReplicaBearer)
+      await requireAuthoritativeMode(db)
 
       if (request.method === "GET" && events) {
         return jsonResponse(
