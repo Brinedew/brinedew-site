@@ -411,7 +411,8 @@ async function materializePage(context, run, input, now) {
       } catch (error) {
         await recordItemFailure(
           context.authoringDb,
-          (await itemStatus(context.authoringDb, rawItem.cutover_run_id, rawItem.gene_id)) || rawItem,
+          (await itemStatus(context.authoringDb, rawItem.cutover_run_id, rawItem.gene_id)) ||
+            rawItem,
           error,
           now,
         )
