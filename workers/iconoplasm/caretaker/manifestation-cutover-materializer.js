@@ -13,7 +13,8 @@ import {
 } from "../../lib/iconoplasm-manifestation-tags-crypto.js"
 import {
   createManifestationBodyObjectKey,
-  putEncryptedManifestationBody,
+  putEncryptedManifestationBodyOnce,
+  readEncryptedManifestationBody,
 } from "../../lib/iconoplasm-manifestation-body-storage.js"
 import { registerGeneIdentity } from "./caretaker-assignment-commands.js"
 import {
@@ -30,6 +31,7 @@ import {
 } from "./manifestation-derivative-commands.js"
 import {
   createManifestationUploadIntent,
+  renewResumableManifestationUploadIntent,
   requireAdoptedManifestationUpload,
 } from "./manifestation-upload-intents.js"
 
@@ -118,8 +120,14 @@ async function uploadEncryptedBody(
   now,
   verifyPlaintext,
 ) {
+  const resumed = await renewResumableManifestationUploadIntent(authoringDb, kind, entityId, {
+    now,
+    leaseMs: 10 * 60 * 1000,
+  })
+  if (resumed) return verifyResumableUpload(env, resumed, now, verifyPlaintext)
   const objectKey = await createManifestationBodyObjectKey()
   const intentDigest = await sha256Hex(`${kind}\n${entityId}\n${encrypted.ciphertext_sha256}`)
+  const pendingDescriptor = descriptor(encrypted, objectKey, { etag: null }, now)
   await createManifestationUploadIntent(authoringDb, {
     entityKind: kind,
     entityId,
@@ -134,13 +142,37 @@ async function uploadEncryptedBody(
     // alive for that entire bounded window so the sweeper cannot delete an
     // object while this invocation is still proving it.
     leaseMs: 10 * 60 * 1000,
+    storageDescriptor: pendingDescriptor,
     now,
   })
-  const uploaded = await putEncryptedManifestationBody(env, objectKey, encrypted.ciphertext, {
+  await putEncryptedManifestationBodyOnce(env, objectKey, encrypted.ciphertext, {
     expectedSha256: encrypted.ciphertext_sha256,
-    verifyPlaintext,
   })
-  return descriptor(encrypted, objectKey, uploaded, now)
+  return verifyResumableUpload(env, pendingDescriptor, now, verifyPlaintext)
+}
+
+function pendingStorageError() {
+  const error = new Error("Encrypted manifestation object is awaiting authenticated visibility")
+  error.code = "CUTOVER_STORAGE_PENDING"
+  return error
+}
+
+async function verifyResumableUpload(env, pending, now, verifyPlaintext) {
+  const envelope = {
+    ...pending,
+    body_bytes: Number(pending.body_bytes ?? pending.planned_body_bytes),
+  }
+  const stored = await readEncryptedManifestationBody(env, envelope.object_key)
+  if (!stored) throw pendingStorageError()
+  if (
+    stored.bytes.byteLength !== Number(envelope.ciphertext_bytes) ||
+    (await sha256Hex(stored.bytes)) !== envelope.ciphertext_sha256
+  ) {
+    throw new Error("Resumable manifestation ciphertext did not match its durable envelope")
+  }
+  const verified = { ...envelope, object_etag: stored.etag, verified_at: now }
+  if (verifyPlaintext) await verifyPlaintext(verified, stored.bytes)
+  return verified
 }
 
 async function verifySeedRevision(authoringDb, env, item) {
@@ -192,20 +224,20 @@ async function ensureSeedRevision(authoringDb, env, item, source, now) {
     item.seed_revision_id,
     encrypted,
     now,
-    (stored) =>
+    (verified, stored) =>
       decryptManifestationProse(env, {
         revisionId: item.seed_revision_id,
         geneId: item.gene_id,
         ciphertext: stored,
-        ciphertextSha256: encrypted.ciphertext_sha256,
-        ciphertextBytes: encrypted.ciphertext_bytes,
-        bodySha256: encrypted.body_sha256,
-        bodyBytes: encrypted.body_bytes,
-        bodyIvBase64: encrypted.body_iv_base64,
-        wrappedDekBase64: encrypted.wrapped_dek_base64,
-        wrapIvBase64: encrypted.wrap_iv_base64,
-        keyVersion: encrypted.key_version,
-        aadVersion: encrypted.aad_version,
+        ciphertextSha256: verified.ciphertext_sha256,
+        ciphertextBytes: verified.ciphertext_bytes,
+        bodySha256: verified.body_sha256,
+        bodyBytes: verified.body_bytes,
+        bodyIvBase64: verified.body_iv_base64,
+        wrappedDekBase64: verified.wrapped_dek_base64,
+        wrapIvBase64: verified.wrap_iv_base64,
+        keyVersion: verified.key_version,
+        aadVersion: verified.aad_version,
       }),
   )
   await seedSystemManifestation(authoringDb, {
@@ -275,21 +307,21 @@ async function ensureSeedDerivative(authoringDb, env, item, source, now) {
       item.seed_tags_derivative_id,
       encrypted,
       now,
-      (stored) =>
+      (verified, stored) =>
         decryptManifestationTags(env, {
           derivativeId: item.seed_tags_derivative_id,
           revisionId: item.seed_revision_id,
           sourceBodySha256: item.source_body_sha256,
           ciphertext: stored,
-          ciphertextSha256: encrypted.ciphertext_sha256,
-          ciphertextBytes: encrypted.ciphertext_bytes,
-          bodySha256: encrypted.body_sha256,
-          bodyBytes: encrypted.body_bytes,
-          bodyIvBase64: encrypted.body_iv_base64,
-          wrappedDekBase64: encrypted.wrapped_dek_base64,
-          wrapIvBase64: encrypted.wrap_iv_base64,
-          keyVersion: encrypted.key_version,
-          aadVersion: encrypted.aad_version,
+          ciphertextSha256: verified.ciphertext_sha256,
+          ciphertextBytes: verified.ciphertext_bytes,
+          bodySha256: verified.body_sha256,
+          bodyBytes: verified.body_bytes,
+          bodyIvBase64: verified.body_iv_base64,
+          wrappedDekBase64: verified.wrapped_dek_base64,
+          wrapIvBase64: verified.wrap_iv_base64,
+          keyVersion: verified.key_version,
+          aadVersion: verified.aad_version,
         }),
     )
     const head = await first(
