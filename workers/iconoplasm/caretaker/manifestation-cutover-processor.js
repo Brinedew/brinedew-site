@@ -381,8 +381,19 @@ async function materializePage(context, run, input, now) {
     throw cutoverError("CUTOVER_NOT_IMPORTING", "Cutover is not in materialization state")
   }
   const limit = pageLimit(input.limit)
+  const shardCount = Math.trunc(Number(input.shardCount)) || 1
+  const shardIndex = Math.trunc(Number(input.shardIndex)) || 0
+  if (![1, 2, 4, 8, 16].includes(shardCount) || shardIndex < 0 || shardIndex >= shardCount) {
+    throw cutoverError("INVALID_CUTOVER_SHARD", "Cutover shard identity is invalid", 400)
+  }
   await sweepExpiredManifestationUploadIntents(context.authoringDb, context.env, { now, limit: 10 })
   const retryFailed = input.retryFailed === true
+  const shardClause =
+    shardCount === 1 ? "" : "AND (instr('0123456789abcdef', substr(gene_id, -1, 1)) - 1) % ? = ?"
+  const queryParams =
+    shardCount === 1
+      ? [run.cutover_run_id, now, limit]
+      : [run.cutover_run_id, now, shardCount, shardIndex, limit]
   const items = await all(
     context.authoringDb,
     `SELECT * FROM icono_manifestation_cutover_items
@@ -393,10 +404,9 @@ async function materializePage(context, run, input, now) {
             : "'planned', 'uploading', 'adopted', 'registered_unseeded', 'projected'"
         })
         AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+        ${shardClause}
       ORDER BY canonical_symbol COLLATE NOCASE ASC LIMIT ?`,
-    run.cutover_run_id,
-    now,
-    limit,
+    ...queryParams,
   )
   // The page query is the single deterministic claim point. Every row is a
   // different gene, so its immutable lineage, storage object, and projection

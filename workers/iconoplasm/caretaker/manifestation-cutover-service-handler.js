@@ -34,6 +34,8 @@ function inputFromBody(runId, body) {
     targetAuthorityEpoch: body.target_authority_epoch,
     limit: body.limit,
     retryFailed: body.retry_failed === true,
+    shardCount: body.shard_count,
+    shardIndex: body.shard_index,
     dryRun: body.dry_run === true,
     confirm: body.confirm,
     backupArtifactId: body.backup_artifact_id,
