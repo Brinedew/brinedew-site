@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { forwardManifestationCutoverActionToCoordinator } from "./manifestation-cutover-durable-coordinator.js"
+import {
+  forwardManifestationCutoverActionToCoordinator,
+  isManifestationCutoverRouteRequest,
+} from "./manifestation-cutover-durable-coordinator.js"
 
 function coordinatorBinding(seen) {
   return {
@@ -20,6 +23,21 @@ function coordinatorBinding(seen) {
     },
   }
 }
+
+test("cutover route classification excludes ordinary caretaker traffic", () => {
+  assert.equal(
+    isManifestationCutoverRouteRequest(
+      new Request("https://iconoplasm.test/api/iconoplasm/authority/cutover/runs/cutover_12345678"),
+    ),
+    true,
+  )
+  assert.equal(
+    isManifestationCutoverRouteRequest(
+      new Request("https://iconoplasm.test/api/iconoplasm/authority/genes/gene_12345678"),
+    ),
+    false,
+  )
+})
 
 test("materialization actions stay on the bounded ordinary Worker plane", async () => {
   const seen = { names: [], ids: [], bodies: [] }

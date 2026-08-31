@@ -78,6 +78,7 @@ import { createIconoplasmManifestationAuthorityRuntimeHandler } from "./iconopla
 import {
   forwardManifestationCutoverActionToCoordinator,
   IconoplasmManifestationCutoverCoordinator,
+  isManifestationCutoverRouteRequest,
 } from "./iconoplasm/caretaker/manifestation-cutover-durable-coordinator.js"
 export { IconoplasmManifestationCutoverCoordinator }
 import { authorityError } from "./iconoplasm/caretaker/manifestation-authority-contract.js"
@@ -32409,7 +32410,12 @@ const handleIconoplasmGenerationExecutorRoute = createIconoplasmGenerationExecut
 async function handleDeclaredManifestationAuthorityRoute({ request, env, ctx, done }) {
   const coordinated = await forwardManifestationCutoverActionToCoordinator(request, env)
   if (coordinated) return done("manifestation_authority_cutover_coordinator", coordinated)
-  scheduleIconoplasmAuthorityProjectionRecovery(ctx, env)
+  const isCutoverRoute = isManifestationCutoverRouteRequest(request)
+  // Cutover actions own their exact shadow-frozen projector. Starting the
+  // ordinary authoritative outbox drainer beside every migration request only
+  // emits guaranteed MANIFESTATION_AUTHORITY_NOT_WRITABLE failures and can
+  // multiply background work across all migration lanes.
+  if (!isCutoverRoute) scheduleIconoplasmAuthorityProjectionRecovery(ctx, env)
   const handler = createIconoplasmManifestationAuthorityRuntimeHandler({
     env,
     resolveSession: resolveActiveCaretakerAccountSession,
