@@ -17,8 +17,12 @@ param(
     [ValidateSet(2, 4, 8, 16, 32)]
     [int] $ShardCount = 4,
 
-    [ValidateRange(30, 180)]
-    [int] $RequestTimeoutSeconds = 180,
+    # The measured 32-lane production tail reached 188 seconds while the
+    # Durable Object itself remained healthy. Keep the client deadline above
+    # that wall-time tail so a successful Free-plan invocation is not
+    # mislabeled as a disconnect and needlessly retried.
+    [ValidateRange(30, 300)]
+    [int] $RequestTimeoutSeconds = 240,
 
     [ValidateRange(1, 55)]
     [int] $OverallTimeoutMinutes = 55,
