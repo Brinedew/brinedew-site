@@ -66,7 +66,7 @@ test("materialization actions stay on the bounded ordinary Worker plane", async 
   assert.deepEqual(seen, { names: [], ids: [], bodies: [] })
 })
 
-test("control actions serialize separately and non-actions stay on the edge route", async () => {
+test("normal control stays on Worker CAS and explicit recovery uses the coordinator", async () => {
   const seen = { names: [], ids: [], bodies: [] }
   const base = "https://iconoplasm.test/api/iconoplasm/authority/cutover/runs/cutover_abcdefgh"
   assert.equal(
@@ -75,10 +75,23 @@ test("control actions serialize separately and non-actions stay on the edge rout
     }),
     null,
   )
-  const response = await forwardManifestationCutoverActionToCoordinator(
+  const ordinary = await forwardManifestationCutoverActionToCoordinator(
     new Request(`${base}/actions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "verify" }),
+    }),
+    { ICONOPLASM_MANIFESTATION_CUTOVER_COORDINATORS: coordinatorBinding(seen) },
+  )
+  assert.equal(ordinary, null)
+  assert.deepEqual(seen.names, [])
+  const response = await forwardManifestationCutoverActionToCoordinator(
+    new Request(`${base}/actions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-iconoplasm-cutover-execution-plane": "durable_object",
+      },
       body: JSON.stringify({ action: "verify" }),
     }),
     { ICONOPLASM_MANIFESTATION_CUTOVER_COORDINATORS: coordinatorBinding(seen) },
@@ -93,7 +106,10 @@ test("cutover actions fail closed when the coordinator binding is absent", async
       "https://iconoplasm.test/api/iconoplasm/authority/cutover/runs/cutover_12345678/actions",
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-iconoplasm-cutover-execution-plane": "durable_object",
+        },
         body: "{}",
       },
     ),
@@ -116,6 +132,7 @@ test("a rejected Durable Object fetch stays a bounded retryable service error", 
           headers: {
             "content-type": "application/json",
             "x-iconoplasm-cutover-shard": "32:7",
+            "x-iconoplasm-cutover-execution-plane": "durable_object",
           },
           body: JSON.stringify({ action: "materialize", shard_count: 32, shard_index: 7 }),
         },
