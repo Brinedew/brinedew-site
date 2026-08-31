@@ -767,17 +767,17 @@ test("bounded operator resumes through encrypted materialization, shadow project
         "SELECT gene_id FROM icono_manifestation_cutover_items WHERE canonical_symbol = 'BRCA1'",
       )
       .get()
-      .gene_id.slice(-1),
+      .gene_id.slice(-2),
     16,
-  )
+  ) % 32
   status = await advanceManifestationAuthorityCutover({
     ...base,
     input: {
       action: "materialize",
       cutoverRunId: "cutover_run_operator",
       limit: 1,
-      shardCount: 16,
-      shardIndex: (brcaShard + 1) % 16,
+      shardCount: 32,
+      shardIndex: (brcaShard + 1) % 32,
       now,
     },
   })
@@ -791,7 +791,7 @@ test("bounded operator resumes through encrypted materialization, shadow project
         action: "materialize",
         cutoverRunId: "cutover_run_operator",
         limit: 1,
-        shardCount: 16,
+        shardCount: 32,
         shardIndex: brcaShard,
         now: phaseNow,
       },
