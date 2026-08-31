@@ -73,9 +73,10 @@ function cutoverEnv() {
   }
 }
 
-function installCutoverStorage(t) {
+function installCutoverStorage(t, { missOnSecondRead = false } = {}) {
   const original = globalThis.fetch
   const objects = new Map()
+  const reads = new Map()
   t.after(() => {
     globalThis.fetch = original
   })
@@ -91,6 +92,11 @@ function installCutoverStorage(t) {
       return new Response(null, { status: 200 })
     }
     const bytes = objects.get(key)
+    const readNumber = (reads.get(key) || 0) + 1
+    reads.set(key, readNumber)
+    if (bytes && missOnSecondRead && key.includes("/cutover-test-zone/") && readNumber === 2) {
+      return new Response(null, { status: 404 })
+    }
     return bytes
       ? new Response(bytes, { status: 200, headers: { etag: '"cutover-etag"' } })
       : new Response(null, { status: 404 })
@@ -693,7 +699,7 @@ test("bounded operator resumes through encrypted materialization, shadow project
     authority.close()
     primary.close()
   })
-  const objects = installCutoverStorage(t)
+  const objects = installCutoverStorage(t, { missOnSecondRead: true })
   const env = cutoverEnv()
   const now = new Date(Date.now() + 60_000).toISOString()
   authority.raw
@@ -808,6 +814,21 @@ test("bounded operator resumes through encrypted materialization, shadow project
     ...base,
     input: { action: "materialize", cutoverRunId: "cutover_run_operator", limit: 1, now },
   })
+  assert.equal(status.status, "importing")
+  assert.equal(status.counts.failed, 0)
+  assert.equal(status.counts.projected, 1)
+  for (const resumeDelayMs of [6_000, 12_000]) {
+    const resumedAt = new Date(Date.parse(now) + resumeDelayMs).toISOString()
+    status = await advanceManifestationAuthorityCutover({
+      ...base,
+      input: {
+        action: "materialize",
+        cutoverRunId: "cutover_run_operator",
+        limit: 1,
+        now: resumedAt,
+      },
+    })
+  }
   assert.equal(
     status.status,
     "seeded",
