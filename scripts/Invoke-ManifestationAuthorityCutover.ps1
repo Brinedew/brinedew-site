@@ -387,7 +387,7 @@ try {
     }
     if ($status.status -eq 'importing') {
         $status = Invoke-ProgressLoop -Action 'materialize' `
-            -AdditionalBody @{ limit = 10; retry_failed = $true } `
+            -AdditionalBody @{ limit = 5; retry_failed = $true } `
             -IsComplete { param($value) $value.status -ne 'importing' } `
             -Fingerprint { param($value) "$($value.status)|$($value.counts.verified)|$($value.counts.failed)|$($value.counts.uploading)|$($value.counts.adopted)|$($value.counts.projected)" }
     }
@@ -414,7 +414,7 @@ try {
     }
     if ($status.backup.status -eq 'building') {
         $status = Invoke-ProgressLoop -Action 'backup' `
-            -AdditionalBody @{ limit = 10 } `
+            -AdditionalBody @{ limit = 5 } `
             -IsComplete { param($value) $value.backup.status -eq 'verified' } `
             -Fingerprint { param($value) "$($value.backup.status)|$($value.backup.verified_entries)|$($value.backup.part_count)" }
     }
