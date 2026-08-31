@@ -1300,6 +1300,7 @@ import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   IconoplasmVoteCoordinator,
   IconoplasmCardPublicationCoordinator,
+  IconoplasmManifestationCutoverCoordinator,
   IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
   IconoplasmSyncGovernor,
   drainIconoplasmAuthorityProjectionOutboxes,
@@ -1317,6 +1318,7 @@ import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate }
 
 export { IconoplasmVoteCoordinator }
 export { IconoplasmCardPublicationCoordinator }
+export { IconoplasmManifestationCutoverCoordinator }
 export { IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate }
 export { IconoplasmSyncGovernor }
 // Import Discord bot handlers

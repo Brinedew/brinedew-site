@@ -75,6 +75,11 @@ import {
   projectCaretakerAssignmentNotification,
 } from "./iconoplasm-caretaker-notifications.js"
 import { createIconoplasmManifestationAuthorityRuntimeHandler } from "./iconoplasm-manifestation-authority-runtime.js"
+import {
+  forwardManifestationCutoverActionToCoordinator,
+  IconoplasmManifestationCutoverCoordinator,
+} from "./iconoplasm/caretaker/manifestation-cutover-durable-coordinator.js"
+export { IconoplasmManifestationCutoverCoordinator }
 import { authorityError } from "./iconoplasm/caretaker/manifestation-authority-contract.js"
 import { readBrinedewAccount } from "./lib/brinedew-account-identity.js"
 import {
@@ -32408,6 +32413,8 @@ const handleIconoplasmGenerationExecutorRoute = createIconoplasmGenerationExecut
 })
 
 async function handleDeclaredManifestationAuthorityRoute({ request, env, ctx, done }) {
+  const coordinated = await forwardManifestationCutoverActionToCoordinator(request, env)
+  if (coordinated) return done("manifestation_authority_cutover_coordinator", coordinated)
   scheduleIconoplasmAuthorityProjectionRecovery(ctx, env)
   const handler = createIconoplasmManifestationAuthorityRuntimeHandler({
     env,

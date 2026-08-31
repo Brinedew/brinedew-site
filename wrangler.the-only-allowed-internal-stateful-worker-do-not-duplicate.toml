@@ -136,6 +136,10 @@ class_name = "IconoplasmSyncGovernor"
 name = "ICONOPLASM_CARD_PUBLICATION"
 class_name = "IconoplasmCardPublicationCoordinator"
 
+[[durable_objects.bindings]]
+name = "ICONOPLASM_MANIFESTATION_CUTOVER_COORDINATORS"
+class_name = "IconoplasmManifestationCutoverCoordinator"
+
 [[queues.producers]]
 binding = "ICONOPLASM_SYNC_FINALIZATION_QUEUE"
 queue = "iconoplasm-sync-finalization"
@@ -196,6 +200,10 @@ new_sqlite_classes = ["IconoplasmSyncGovernor"]
 [[migrations]]
 tag = "v5"
 new_sqlite_classes = ["IconoplasmCardPublicationCoordinator"]
+
+[[migrations]]
+tag = "v6"
+new_sqlite_classes = ["IconoplasmManifestationCutoverCoordinator"]
 
 # Cloudflare Email Service send binding.
 # Used by the site-wide /api/contact endpoint to deliver contact-form submissions
@@ -354,6 +362,10 @@ class_name = "IconoplasmSyncGovernor"
 name = "ICONOPLASM_CARD_PUBLICATION"
 class_name = "IconoplasmCardPublicationCoordinator"
 
+[[env.staging.durable_objects.bindings]]
+name = "ICONOPLASM_MANIFESTATION_CUTOVER_COORDINATORS"
+class_name = "IconoplasmManifestationCutoverCoordinator"
+
 [[env.staging.queues.producers]]
 binding = "ICONOPLASM_SYNC_FINALIZATION_QUEUE"
 queue = "iconoplasm-sync-finalization-staging"
@@ -410,6 +422,10 @@ new_sqlite_classes = ["IconoplasmSyncGovernor"]
 [[env.staging.migrations]]
 tag = "v5"
 new_sqlite_classes = ["IconoplasmCardPublicationCoordinator"]
+
+[[env.staging.migrations]]
+tag = "v6"
+new_sqlite_classes = ["IconoplasmManifestationCutoverCoordinator"]
 
 # Same email sending binding on staging so the form works end-to-end on
 # staging.brinedew.bio before any production deploy.

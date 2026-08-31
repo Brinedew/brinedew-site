@@ -417,10 +417,12 @@ async function materializePage(context, run, input, now) {
   if (!new Set(["importing", "seeded"]).has(run.status)) {
     throw cutoverError("CUTOVER_NOT_IMPORTING", "Cutover is not in materialization state")
   }
-  // HTTP invocations on the current Workers plan have a 10 ms CPU ceiling.
-  // Shards provide cross-request concurrency; an individual invocation must
-  // never multiply crypto/projection work by accepting a larger page.
-  const limit = pageLimit(input.limit, 1)
+  // Public Free-plan HTTP invocations have a 10 ms CPU ceiling. Bulk cutover
+  // actions are therefore routed through the dedicated SQLite Durable Object,
+  // whose documented Free-plan CPU envelope is 30 seconds. Keep the old
+  // single-item ceiling fail-closed if this function is ever called directly.
+  const durableCutover = context.env?.ICONOPLASM_CUTOVER_EXECUTION_PLANE === "durable_object"
+  const limit = pageLimit(input.limit, durableCutover ? 25 : 1)
   const shardCount = Math.trunc(Number(input.shardCount)) || 1
   const shardIndex = Math.trunc(Number(input.shardIndex)) || 0
   if (![1, 2, 4, 8, 16].includes(shardCount) || shardIndex < 0 || shardIndex >= shardCount) {
