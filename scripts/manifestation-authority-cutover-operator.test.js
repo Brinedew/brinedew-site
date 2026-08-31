@@ -3,9 +3,17 @@ import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
 const scriptUrl = new URL("./Invoke-ManifestationAuthorityCutover.ps1", import.meta.url)
+const shardScriptUrl = new URL(
+  "./Invoke-ManifestationAuthorityCutoverShards.ps1",
+  import.meta.url,
+)
 
 async function source() {
   return readFile(scriptUrl, "utf8")
+}
+
+async function shardSource() {
+  return readFile(shardScriptUrl, "utf8")
 }
 
 test("cutover operator uses only the dedicated User-scope cutover credential", async () => {
@@ -47,4 +55,12 @@ test("cutover operator is resumable and bounds request, run, retry, and progress
   assert.match(text, /\.reset-\$archiveTimestamp\.json/)
   assert.match(text, /NewGuid\(\)\.ToString\('N'\).*\.tmp/)
   assert.match(text, /Move-Item -LiteralPath \$temporaryPath -Destination \$Path -Force/)
+})
+
+test("sharded operator accepts omitted and singleton shard selections without scalar unwrapping", async () => {
+  const text = await shardSource()
+  assert.match(text, /@\(\$ShardIndexes \| Where-Object \{ \$null -ne \$_ \}\)/)
+  assert.match(text, /\$resolvedShardIndexes = @\(/)
+  assert.match(text, /0\.\.\(\$ShardCount - 1\)/)
+  assert.match(text, /\$ShardIndexes \| Sort-Object -Unique/)
 })
