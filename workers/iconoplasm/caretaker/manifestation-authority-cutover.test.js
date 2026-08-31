@@ -770,15 +770,15 @@ test("bounded operator resumes through encrypted materialization, shadow project
         .get()
         .gene_id.slice(-2),
       16,
-    ) % 64
+    ) % 128
   status = await advanceManifestationAuthorityCutover({
     ...base,
     input: {
       action: "materialize",
       cutoverRunId: "cutover_run_operator",
       limit: 1,
-      shardCount: 64,
-      shardIndex: (brcaShard + 1) % 64,
+      shardCount: 128,
+      shardIndex: (brcaShard + 1) % 128,
       now,
     },
   })
@@ -792,7 +792,7 @@ test("bounded operator resumes through encrypted materialization, shadow project
         action: "materialize",
         cutoverRunId: "cutover_run_operator",
         limit: 1,
-        shardCount: 64,
+        shardCount: 128,
         shardIndex: brcaShard,
         now: phaseNow,
       },

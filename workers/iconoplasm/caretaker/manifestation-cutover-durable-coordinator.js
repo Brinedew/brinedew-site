@@ -45,7 +45,7 @@ export async function forwardManifestationCutoverActionToCoordinator(request, en
   // authority handler inside the Durable Object still validates the signed
   // JSON shard identity as the source of truth.
   const shard = String(request.headers.get("x-iconoplasm-cutover-shard") || "")
-  const match = shard.match(/^(1|2|4|8|16|32|64):(\d{1,2})$/)
+  const match = shard.match(/^(1|2|4|8|16|32|64|128):(\d{1,3})$/)
   const count = Number(match?.[1] || 0)
   const index = Number(match?.[2] || -1)
   const lane = match && index >= 0 && index < count ? `shard:${count}:${index}` : "control"
