@@ -287,23 +287,41 @@ async function recordItemFailure(authoringDb, item, error, now) {
     error_message: String(error?.message || "Cutover item failed").slice(0, 320),
   })
   const permanent = /^CUTOVER_(?:SOURCE|INVALID|FIELDS|TAGS)/.test(String(error?.code || ""))
-  const retryDelayMs = error?.code === "CUTOVER_STORAGE_PENDING" ? 5_000 : 2 * 60 * 1000
+  const storagePropagationPending =
+    error?.code === "CUTOVER_STORAGE_PENDING" ||
+    /^PUBLIC_CANONICAL_(?:REVISION|TAGS)_BODY_UNAVAILABLE$/.test(String(error?.code || ""))
+  const retryDelayMs = storagePropagationPending ? 5_000 : 2 * 60 * 1000
   const nextAttempt = new Date(Date.parse(now) + retryDelayMs).toISOString()
-  const nextStatus = permanent || item.status !== "uploading" ? "failed" : "uploading"
   const boundedFailureMessage = `${String(error?.name || "Error").slice(0, 80)}: ${String(
     error?.message || "Cutover item failed",
   ).slice(0, 320)}`
+  const failureCode = String(error?.code || "CUTOVER_ITEM_TRANSIENT_FAILURE").slice(0, 96)
+  if (permanent) {
+    await prepared(
+      authoringDb,
+      `UPDATE icono_manifestation_cutover_items
+          SET status = 'failed', attempts = attempts + 1, failure_code = ?,
+              failure_message = COALESCE(failure_message, ?),
+              next_attempt_at = NULL, updated_at = ?
+        WHERE cutover_run_id = ? AND gene_id = ?`,
+      failureCode,
+      boundedFailureMessage,
+      now,
+      item.cutover_run_id,
+      item.gene_id,
+    ).run()
+    return
+  }
   await prepared(
     authoringDb,
     `UPDATE icono_manifestation_cutover_items
-        SET status = ?, attempts = attempts + 1, failure_code = ?,
+        SET attempts = attempts + 1, failure_code = ?,
             failure_message = COALESCE(failure_message, ?),
             next_attempt_at = ?, updated_at = ?
       WHERE cutover_run_id = ? AND gene_id = ?`,
-    nextStatus,
-    String(error?.code || "CUTOVER_ITEM_TRANSIENT_FAILURE").slice(0, 96),
+    failureCode,
     boundedFailureMessage,
-    permanent ? null : nextAttempt,
+    nextAttempt,
     now,
     item.cutover_run_id,
     item.gene_id,
