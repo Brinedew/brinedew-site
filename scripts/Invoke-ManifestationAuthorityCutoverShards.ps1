@@ -25,6 +25,8 @@ param(
     [ValidateRange(1, 10)]
     [int] $PageLimit = 10,
 
+    [int[]] $ShardIndexes,
+
     [string] $StatePath = (Join-Path $PSScriptRoot '..\artifacts\caretaker-authority-cutover\cutover-state-iconoplasm.brinedew.bio.json')
 )
 
@@ -53,6 +55,21 @@ $client.Timeout = [TimeSpan]::FromSeconds($RequestTimeoutSeconds)
 $client.DefaultRequestHeaders.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $token)
 $client.DefaultRequestHeaders.Accept.ParseAdd('application/json')
 
+$requestedShardIndexes = @($ShardIndexes)
+$resolvedShardIndexes = if ($requestedShardIndexes.Count -eq 0) {
+    @(0..($ShardCount - 1))
+}
+else {
+    @($ShardIndexes | Sort-Object -Unique)
+}
+if (
+    $resolvedShardIndexes.Count -eq 0 -or
+    ($requestedShardIndexes.Count -gt 0 -and $resolvedShardIndexes.Count -ne $requestedShardIndexes.Count) -or
+    @($resolvedShardIndexes | Where-Object { $_ -lt 0 -or $_ -ge $ShardCount }).Count -gt 0
+) {
+    throw 'Shard indexes must be unique members of the configured shard count.'
+}
+
 function Get-CutoverStatus {
     $response = $client.GetAsync("$base$runPath").GetAwaiter().GetResult()
     try {
@@ -71,7 +88,7 @@ function Invoke-ShardRound {
     $requests = [Collections.Generic.List[Net.Http.HttpRequestMessage]]::new()
     $tasks = [Collections.Generic.List[Threading.Tasks.Task[Net.Http.HttpResponseMessage]]]::new()
     try {
-        foreach ($shardIndex in 0..($ShardCount - 1)) {
+        foreach ($shardIndex in $resolvedShardIndexes) {
             $payload = [ordered]@{
                 action       = 'materialize'
                 limit        = $PageLimit
