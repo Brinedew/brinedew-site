@@ -30,6 +30,7 @@ import {
 } from "./manifestation-derivative-commands.js"
 import {
   createManifestationUploadIntent,
+  recycleUnverifiedManifestationUploadIntent,
   renewResumableManifestationUploadIntent,
   requireAdoptedManifestationUpload,
 } from "./manifestation-upload-intents.js"
@@ -123,7 +124,22 @@ async function uploadEncryptedBody(
     now,
     leaseMs: 10 * 60 * 1000,
   })
-  if (resumed) return verifyResumableUpload(env, resumed, now, verifyPlaintext)
+  if (resumed) {
+    try {
+      return await verifyResumableUpload(env, resumed, now, verifyPlaintext)
+    } catch (error) {
+      const createdAt = Date.parse(String(resumed.created_at || ""))
+      const missingForMs = Date.parse(now) - createdAt
+      if (
+        error?.code === "CUTOVER_STORAGE_PENDING" &&
+        Number.isFinite(missingForMs) &&
+        missingForMs >= 60_000
+      ) {
+        await recycleUnverifiedManifestationUploadIntent(authoringDb, env, resumed, { now })
+      }
+      throw error
+    }
+  }
   const objectKey = await createManifestationBodyObjectKey()
   const intentDigest = await sha256Hex(`${kind}\n${entityId}\n${encrypted.ciphertext_sha256}`)
   const pendingDescriptor = descriptor(encrypted, objectKey, { etag: null }, now)

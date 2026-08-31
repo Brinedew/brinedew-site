@@ -418,8 +418,9 @@ async function materializePage(context, run, input, now) {
     throw cutoverError("CUTOVER_NOT_IMPORTING", "Cutover is not in materialization state")
   }
   // Public Free-plan HTTP invocations have a 10 ms CPU ceiling. The ordinary
-  // Worker plane therefore advances one durable phase per request; only short
-  // control transitions use the coordinator.
+  // Worker plane therefore advances one durable phase per request. The
+  // coordinator plane is an explicit operator recovery mode, not a normal
+  // migration or control-transition dependency.
   const durableCutover = context.env?.ICONOPLASM_CUTOVER_EXECUTION_PLANE === "durable_object"
   const limit = pageLimit(input.limit, durableCutover ? 25 : 1)
   const shardCount = Math.trunc(Number(input.shardCount)) || 1
@@ -464,9 +465,9 @@ async function materializePage(context, run, input, now) {
   let failed = 0
   for (const rawItem of items) {
     try {
-      // The edge fallback advances exactly one phase. Inside the Free-plan
-      // Durable Object, drain a small fixed number of already-durable phases
-      // so obsolete edge-era request churn does not dominate the migration.
+      // The ordinary Worker plane advances exactly one phase. In explicit
+      // coordinator recovery mode, drain a small fixed number of already-durable
+      // phases so request churn does not dominate recovery.
       // Bunny propagation still throws CUTOVER_STORAGE_PENDING immediately;
       // that preserves the resumable boundary and never sleeps in this loop.
       const phaseLimit = durableCutover ? 8 : 1
