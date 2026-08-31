@@ -34,7 +34,7 @@ function cutoverError(code, message, status = 409) {
   return new ManifestationAuthorityCutoverError(code, message, status)
 }
 
-function pageLimit(raw, maximum = 5) {
+function pageLimit(raw, maximum = 10) {
   const value = Math.trunc(Number(raw)) || maximum
   return Math.max(1, Math.min(maximum, value))
 }
@@ -287,7 +287,8 @@ async function recordItemFailure(authoringDb, item, error, now) {
     error_message: String(error?.message || "Cutover item failed").slice(0, 320),
   })
   const permanent = /^CUTOVER_(?:SOURCE|INVALID|FIELDS|TAGS)/.test(String(error?.code || ""))
-  const nextAttempt = new Date(Date.parse(now) + 2 * 60 * 1000).toISOString()
+  const retryDelayMs = error?.code === "CUTOVER_STORAGE_PENDING" ? 5_000 : 2 * 60 * 1000
+  const nextAttempt = new Date(Date.parse(now) + retryDelayMs).toISOString()
   const nextStatus = permanent || item.status !== "uploading" ? "failed" : "uploading"
   const boundedFailureMessage = `${String(error?.name || "Error").slice(0, 80)}: ${String(
     error?.message || "Cutover item failed",

@@ -148,7 +148,11 @@ async function uploadEncryptedBody(
   await putEncryptedManifestationBodyOnce(env, objectKey, encrypted.ciphertext, {
     expectedSha256: encrypted.ciphertext_sha256,
   })
-  return verifyResumableUpload(env, pendingDescriptor, now, verifyPlaintext)
+  // Bunny may acknowledge a durable PUT before an authenticated GET can see
+  // it. Do not serialize the whole migration behind that propagation window:
+  // the envelope above is the crash-safe resume contract, and a later bounded
+  // pass performs the ciphertext and plaintext proof before adoption.
+  throw pendingStorageError()
 }
 
 function pendingStorageError() {

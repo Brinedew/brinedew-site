@@ -387,7 +387,7 @@ try {
     }
     if ($status.status -eq 'importing') {
         $status = Invoke-ProgressLoop -Action 'materialize' `
-            -AdditionalBody @{ limit = 5; retry_failed = $true } `
+            -AdditionalBody @{ limit = 10; retry_failed = $true } `
             -IsComplete { param($value) $value.status -ne 'importing' } `
             -Fingerprint { param($value) "$($value.status)|$($value.counts.verified)|$($value.counts.failed)|$($value.counts.uploading)|$($value.counts.adopted)|$($value.counts.projected)" }
     }
