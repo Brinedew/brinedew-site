@@ -55,7 +55,7 @@ $client.Timeout = [TimeSpan]::FromSeconds($RequestTimeoutSeconds)
 $client.DefaultRequestHeaders.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $token)
 $client.DefaultRequestHeaders.Accept.ParseAdd('application/json')
 
-$requestedShardIndexes = @($ShardIndexes)
+$requestedShardIndexes = @($ShardIndexes | Where-Object { $null -ne $_ })
 $resolvedShardIndexes = @(
     if ($requestedShardIndexes.Count -eq 0) {
         0..($ShardCount - 1)
