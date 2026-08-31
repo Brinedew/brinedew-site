@@ -68,5 +68,8 @@ test("sharded operator accepts omitted and singleton shard selections without sc
   assert.match(text, /measured 32-lane production tail reached 188 seconds/)
   assert.match(text, /\[ValidateRange\(30, 300\)\]/)
   assert.match(text, /\[int\] \$RequestTimeoutSeconds = 240/)
+  assert.match(text, /\$failedWithoutProgress -ge 12/)
+  assert.match(text, /failure_kinds\s+= @\(\$failures \| Sort-Object -Unique\)/)
+  assert.match(text, /\[Math\]::Min\(30, \[Math\]::Pow/)
   assert.match(text, /X-Iconoplasm-Cutover-Shard/)
 })

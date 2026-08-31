@@ -39,7 +39,21 @@ export async function forwardManifestationCutoverActionToCoordinator(request, en
   const index = Number(match?.[2] || -1)
   const lane = match && index >= 0 && index < count ? `shard:${count}:${index}` : "control"
   const stub = namespace.get(namespace.idFromName(`${runId}:${lane}`))
-  return stub.fetch(request)
+  try {
+    return await stub.fetch(request)
+  } catch (error) {
+    // A rejected stub fetch otherwise escapes into the public runtime's
+    // generic 500 boundary and erases the distinction between an application
+    // error and an unavailable Durable Object. Keep diagnostics bounded and
+    // payload-free: neither source prose nor bearer credentials belong here.
+    console.error("[ICONOPLASM_CUTOVER_COORDINATOR_UNAVAILABLE]", {
+      cutover_run_id: runId,
+      lane,
+      error_name: String(error?.name || "Error").slice(0, 80),
+      error_message: String(error?.message || "Cutover coordinator unavailable").slice(0, 320),
+    })
+    return coordinatorResponse("MANIFESTATION_CUTOVER_COORDINATOR_UNAVAILABLE")
+  }
 }
 
 export class IconoplasmManifestationCutoverCoordinator {
