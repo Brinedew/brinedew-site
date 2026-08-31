@@ -78,17 +78,35 @@ if (
 }
 
 function Get-CutoverStatus {
-    $response = $client.GetAsync("$base$runPath").GetAwaiter().GetResult()
-    try {
-        $text = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-        if (-not $response.IsSuccessStatusCode) {
-            throw "Cutover status returned HTTP $([int] $response.StatusCode)."
+    $lastFailure = $null
+    for ($attempt = 1; $attempt -le 5; $attempt += 1) {
+        $response = $null
+        try {
+            $response = $client.GetAsync("$base$runPath").GetAwaiter().GetResult()
+            $text = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            if ($response.IsSuccessStatusCode) {
+                return $text | ConvertFrom-Json -Depth 30
+            }
+            $statusCode = [int]$response.StatusCode
+            $lastFailure = "HTTP $statusCode"
+            if ($statusCode -notin @(408, 429, 500, 502, 503, 504) -or $attempt -eq 5) {
+                throw "Cutover status failed after $attempt attempts: $lastFailure."
+            }
         }
-        return $text | ConvertFrom-Json -Depth 30
+        catch [System.Threading.Tasks.TaskCanceledException] {
+            $lastFailure = "request deadline of $RequestTimeoutSeconds seconds"
+            if ($attempt -eq 5) { throw "Cutover status failed after 5 attempts: $lastFailure." }
+        }
+        catch [System.Net.Http.HttpRequestException] {
+            $lastFailure = 'transient network failure'
+            if ($attempt -eq 5) { throw "Cutover status failed after 5 attempts: $lastFailure." }
+        }
+        finally {
+            if ($null -ne $response) { $response.Dispose() }
+        }
+        Start-Sleep -Seconds ([Math]::Min(8, [Math]::Pow(2, $attempt - 1)))
     }
-    finally {
-        $response.Dispose()
-    }
+    throw "Cutover status failed: $lastFailure."
 }
 
 function Invoke-ShardRound {
