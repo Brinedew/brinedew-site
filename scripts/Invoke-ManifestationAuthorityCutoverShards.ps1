@@ -39,6 +39,9 @@ param(
     [ValidateRange(1, 32)]
     [int] $MaxConcurrentRequests = 16,
 
+    [ValidateRange(1, 2500)]
+    [int] $DailyWorkerRequestBudget = 2500,
+
     [int[]] $ShardIndexes,
 
     [string] $StatePath = (Join-Path $PSScriptRoot '..\artifacts\caretaker-authority-cutover\cutover-state-iconoplasm.brinedew.bio.json')
@@ -46,6 +49,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+. (Join-Path $PSScriptRoot 'lib\CloudflareWorkerRequestBudget.ps1')
 
 $resolvedStatePath = [IO.Path]::GetFullPath($StatePath)
 if (-not (Test-Path -LiteralPath $resolvedStatePath)) {
@@ -68,6 +73,9 @@ $client = [Net.Http.HttpClient]::new()
 $client.Timeout = [TimeSpan]::FromSeconds($RequestTimeoutSeconds)
 $client.DefaultRequestHeaders.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $token)
 $client.DefaultRequestHeaders.Accept.ParseAdd('application/json')
+$workerRequestsSinceTelemetryCheck = 0
+
+Assert-CloudflareWorkerRequestHeadroom | Out-Null
 
 $requestedShardIndexes = @($ShardIndexes | Where-Object { $null -ne $_ })
 $resolvedShardIndexes = @(
@@ -91,6 +99,15 @@ function Get-CutoverStatus {
     for ($attempt = 1; $attempt -le 5; $attempt += 1) {
         $response = $null
         try {
+            if ($script:workerRequestsSinceTelemetryCheck -ge 100) {
+                Assert-CloudflareWorkerRequestHeadroom | Out-Null
+                $script:workerRequestsSinceTelemetryCheck = 0
+            }
+            Reserve-CloudflareWorkerRequests `
+                -Count 1 `
+                -DailyLimit $DailyWorkerRequestBudget `
+                -Operation "GET cutover status attempt $attempt" | Out-Null
+            $script:workerRequestsSinceTelemetryCheck += 1
             $response = $client.GetAsync("$base$runPath").GetAwaiter().GetResult()
             $text = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
             if ($response.IsSuccessStatusCode) {
@@ -126,6 +143,15 @@ function Invoke-ShardRound {
         $requests = [Collections.Generic.List[Net.Http.HttpRequestMessage]]::new()
         $tasks = [Collections.Generic.List[Threading.Tasks.Task[Net.Http.HttpResponseMessage]]]::new()
         try {
+            if ($script:workerRequestsSinceTelemetryCheck -ge 100) {
+                Assert-CloudflareWorkerRequestHeadroom | Out-Null
+                $script:workerRequestsSinceTelemetryCheck = 0
+            }
+            Reserve-CloudflareWorkerRequests `
+                -Count $batch.Count `
+                -DailyLimit $DailyWorkerRequestBudget `
+                -Operation "$Action shard batch $($batch[0])-$($batch[-1])" | Out-Null
+            $script:workerRequestsSinceTelemetryCheck += $batch.Count
             foreach ($shardIndex in $batch) {
                 $body = [ordered]@{
                     action      = $Action

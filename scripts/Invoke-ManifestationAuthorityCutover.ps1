@@ -40,6 +40,9 @@ param(
 
     [string] $StatePath,
 
+    [ValidateRange(1, 2500)]
+    [int] $DailyWorkerRequestBudget = 2500,
+
     [switch] $ResetState,
 
     [string] $ResetConfirmation
@@ -47,6 +50,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+. (Join-Path $PSScriptRoot 'lib\CloudflareWorkerRequestBudget.ps1')
 
 function New-OpaqueOperatorId {
     param([Parameter(Mandatory)][string] $Prefix)
@@ -216,6 +221,9 @@ $client = [Net.Http.HttpClient]::new($handler)
 $client.Timeout = [TimeSpan]::FromSeconds($RequestTimeoutSeconds)
 $client.DefaultRequestHeaders.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $cutoverToken)
 $client.DefaultRequestHeaders.Accept.ParseAdd('application/json')
+$workerRequestsSinceTelemetryCheck = 0
+
+Assert-CloudflareWorkerRequestHeadroom | Out-Null
 
 function Assert-BeforeDeadline {
     if ([DateTimeOffset]::UtcNow -ge $deadline) {
@@ -247,6 +255,15 @@ function Invoke-AuthorityRequest {
             }
         }
         try {
+            if ($script:workerRequestsSinceTelemetryCheck -ge 100) {
+                Assert-CloudflareWorkerRequestHeadroom | Out-Null
+                $script:workerRequestsSinceTelemetryCheck = 0
+            }
+            Reserve-CloudflareWorkerRequests `
+                -Count 1 `
+                -DailyLimit $DailyWorkerRequestBudget `
+                -Operation "$Method $Path attempt $attempt" | Out-Null
+            $script:workerRequestsSinceTelemetryCheck += 1
             $response = $client.SendAsync($request).GetAwaiter().GetResult()
             $responseText = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
             $statusCode = [int] $response.StatusCode

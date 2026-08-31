@@ -28,6 +28,33 @@ is not proof of protection against Free daily limits. Record provider hard
 limits separately from product allocations, and never reinterpret daily quotas
 as a monthly pool. No billing or subscription changes are part of this audit.
 
+### Authority cutover operator request fence
+
+On 2026-08-31, the manifestation authority migration and backup operators
+exhausted the Free plan's 100,000 Worker requests/day. Cloudflare Error 1027
+then returned HTTP 429 for the live dynamic site until the UTC-day reset. A
+concurrency limit corrected the burst but could not prevent cumulative daily
+exhaustion.
+
+Both authority cutover operators therefore reserve every outgoing request,
+including status reads and retries, in one Windows-user-wide UTC-day ledger before
+calling the Worker endpoint. The hard operator allocation is at most 2,500 requests
+per day. Reservations are atomic across concurrent processes and are not
+refunded after a crash or ambiguous timeout. A missing, malformed, or locked
+ledger fails closed before network traffic. The remaining 97,500 requests are
+reserved for the live site and unrelated account traffic; do not raise the
+operator ceiling to make a one-time job finish sooner. Let the resumable
+cutover continue after the next UTC reset instead.
+
+The local ledger is a backstop, not account truth. Before the first Worker
+request and after each further 100 reserved requests, the operators query
+Cloudflare's account-wide `workersInvocationsAdaptive` analytics directly
+through the User-scope `iconoplasm-admin` credential. Missing credentials,
+timeouts, malformed telemetry, or an observed daily count of 75,000 or more
+stop the operator before it sends more Worker traffic. Analytics can lag and
+is not billing truth, which is why the 25,000-request provider margin and the
+separate 2,500-request local ceiling are both required.
+
 ## Immutable hover metadata transport (B-711, 2026-08-27)
 
 The B-716 replacement is specified in
