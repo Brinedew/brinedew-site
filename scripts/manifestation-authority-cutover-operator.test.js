@@ -36,6 +36,8 @@ test("cutover operator is resumable and bounds request, run, retry, and progress
   assert.match(text, /OverallTimeoutMinutes/)
   assert.match(text, /MaximumStalledIterations/)
   assert.match(text, /iteration % 50/)
+  assert.match(text, /Write-Information \(\$progress \| ConvertTo-Json -Compress\)/)
+  assert.doesNotMatch(text, /Write-Output \(\$progress \| ConvertTo-Json -Compress\)/)
   assert.match(
     text,
     /'verified', 'retention_pending', 'held', 'deleting', 'delete_failed', 'deleted'/,
