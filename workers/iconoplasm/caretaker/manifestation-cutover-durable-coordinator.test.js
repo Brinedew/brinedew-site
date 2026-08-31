@@ -30,13 +30,13 @@ test("materialization actions are isolated by run and deterministic shard lane",
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test",
-        "x-iconoplasm-cutover-shard": "16:7",
+        "x-iconoplasm-cutover-shard": "32:23",
       },
       body: JSON.stringify({
         action: "materialize",
         limit: 25,
-        shard_count: 16,
-        shard_index: 7,
+        shard_count: 32,
+        shard_index: 23,
       }),
     },
   )
@@ -44,7 +44,7 @@ test("materialization actions are isolated by run and deterministic shard lane",
     ICONOPLASM_MANIFESTATION_CUTOVER_COORDINATORS: coordinatorBinding(seen),
   })
   assert.equal(response.status, 200)
-  assert.deepEqual(seen.names, ["cutover_12345678:shard:16:7"])
+  assert.deepEqual(seen.names, ["cutover_12345678:shard:32:23"])
   assert.deepEqual(seen.ids, seen.names)
   assert.equal(seen.bodies[0].limit, 25)
   assert.equal(seen.bodies[0].action, "materialize")
