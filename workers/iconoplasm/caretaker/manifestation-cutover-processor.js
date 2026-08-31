@@ -456,11 +456,18 @@ async function materializePage(context, run, input, now) {
   let failed = 0
   for (const rawItem of items) {
     try {
-      // One request advances one durable phase per gene. This is both the
-      // crash-resume boundary and the CPU boundary required by Workers Free;
-      // storage propagation is retried by the next operator request after
-      // next_attempt_at instead of sleeping and accumulating work in-place.
-      await processOneItem(context, rawItem, now)
+      // The edge fallback advances exactly one phase. Inside the Free-plan
+      // Durable Object, drain a small fixed number of already-durable phases
+      // so obsolete edge-era request churn does not dominate the migration.
+      // Bunny propagation still throws CUTOVER_STORAGE_PENDING immediately;
+      // that preserves the resumable boundary and never sleeps in this loop.
+      const phaseLimit = durableCutover ? 6 : 1
+      let current = rawItem
+      for (let phase = 0; phase < phaseLimit; phase += 1) {
+        await processOneItem(context, current, now)
+        current = await itemStatus(context.authoringDb, current.cutover_run_id, current.gene_id)
+        if (!current || current.status === "verified" || current.status === "failed") break
+      }
       processed += 1
     } catch (error) {
       await recordItemFailure(

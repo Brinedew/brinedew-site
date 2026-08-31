@@ -729,7 +729,7 @@ test("bounded operator resumes through encrypted materialization, shadow project
   const base = {
     primaryDb: primary,
     authoringDb: authority,
-    env,
+    env: { ...env, ICONOPLASM_CUTOVER_EXECUTION_PLANE: "durable_object" },
     projectShadowEvent: projectCanonicalManifestationCutoverEvent,
     actor: { actorKind: "administrator", actorAccountId: "account_cutover_operator" },
   }
@@ -816,7 +816,7 @@ test("bounded operator resumes through encrypted materialization, shadow project
         .all(),
     }),
   )
-  assert.deepEqual(brcaPhases, ["registered_unseeded", "projected", "verified"])
+  assert.deepEqual(brcaPhases, ["verified"])
   assert.equal(status.status, "importing")
   for (let phase = 0; phase < 20 && status.status !== "seeded"; phase += 1) {
     const phaseNow = new Date(Date.parse(now) + (phase + 20) * 6_000).toISOString()
