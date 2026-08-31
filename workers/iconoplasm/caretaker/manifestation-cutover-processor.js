@@ -398,22 +398,29 @@ async function materializePage(context, run, input, now) {
     now,
     limit,
   )
-  let processed = 0
-  let failed = 0
-  for (const rawItem of items) {
-    try {
-      await processOneItem(context, rawItem, now)
-      processed += 1
-    } catch (error) {
-      await recordItemFailure(
-        context.authoringDb,
-        (await itemStatus(context.authoringDb, rawItem.cutover_run_id, rawItem.gene_id)) || rawItem,
-        error,
-        now,
-      )
-      failed += 1
-    }
-  }
+  // The page query is the single deterministic claim point. Every row is a
+  // different gene, so its immutable lineage, storage object, and projection
+  // are independent; overlap the bounded page instead of serializing remote
+  // storage propagation ten times. One operator request still owns the page,
+  // and status CAS guards reject any accidental duplicate processing.
+  const outcomes = await Promise.all(
+    items.map(async (rawItem) => {
+      try {
+        await processOneItem(context, rawItem, now)
+        return true
+      } catch (error) {
+        await recordItemFailure(
+          context.authoringDb,
+          (await itemStatus(context.authoringDb, rawItem.cutover_run_id, rawItem.gene_id)) || rawItem,
+          error,
+          now,
+        )
+        return false
+      }
+    }),
+  )
+  const processed = outcomes.filter(Boolean).length
+  const failed = outcomes.length - processed
   await reconcileRunCounts(context.authoringDb, run.cutover_run_id, now)
   const remaining = await first(
     context.authoringDb,
