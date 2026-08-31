@@ -761,15 +761,16 @@ test("bounded operator resumes through encrypted materialization, shadow project
   assert.equal(status.authority.epoch, 2)
   assert.equal(status.primary.mode, "shadow_frozen")
 
-  const brcaShard = Number.parseInt(
-    authority.raw
-      .prepare(
-        "SELECT gene_id FROM icono_manifestation_cutover_items WHERE canonical_symbol = 'BRCA1'",
-      )
-      .get()
-      .gene_id.slice(-2),
-    16,
-  ) % 32
+  const brcaShard =
+    Number.parseInt(
+      authority.raw
+        .prepare(
+          "SELECT gene_id FROM icono_manifestation_cutover_items WHERE canonical_symbol = 'BRCA1'",
+        )
+        .get()
+        .gene_id.slice(-2),
+      16,
+    ) % 32
   status = await advanceManifestationAuthorityCutover({
     ...base,
     input: {
