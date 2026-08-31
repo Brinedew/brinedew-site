@@ -287,10 +287,7 @@ async function recordItemFailure(authoringDb, item, error, now) {
     error_message: String(error?.message || "Cutover item failed").slice(0, 320),
   })
   const permanent = /^CUTOVER_(?:SOURCE|INVALID|FIELDS|TAGS)/.test(String(error?.code || ""))
-  const storagePropagationPending =
-    error?.code === "CUTOVER_STORAGE_PENDING" ||
-    /^PUBLIC_CANONICAL_(?:REVISION|TAGS)_BODY_UNAVAILABLE$/.test(String(error?.code || ""))
-  const retryDelayMs = storagePropagationPending ? 5_000 : 2 * 60 * 1000
+  const retryDelayMs = isStoragePropagationPending(error) ? 5_000 : 2 * 60 * 1000
   const nextAttempt = new Date(Date.parse(now) + retryDelayMs).toISOString()
   const boundedFailureMessage = `${String(error?.name || "Error").slice(0, 80)}: ${String(
     error?.message || "Cutover item failed",
@@ -326,6 +323,13 @@ async function recordItemFailure(authoringDb, item, error, now) {
     item.cutover_run_id,
     item.gene_id,
   ).run()
+}
+
+function isStoragePropagationPending(error) {
+  return (
+    error?.code === "CUTOVER_STORAGE_PENDING" ||
+    /^PUBLIC_CANONICAL_(?:REVISION|TAGS)_BODY_UNAVAILABLE$/.test(String(error?.code || ""))
+  )
 }
 
 async function processOneItem(context, rawItem, now) {
@@ -399,12 +403,12 @@ async function processOneItemWithStorageVisibility(context, rawItem, now) {
   const waitForStorageVisibility =
     context.waitForStorageVisibility ||
     ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)))
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
       await processOneItem(context, item, now)
       return
     } catch (error) {
-      if (error?.code !== "CUTOVER_STORAGE_PENDING" || attempt === 2) throw error
+      if (!isStoragePropagationPending(error) || attempt === 4) throw error
       await waitForStorageVisibility(5_000)
       item = await itemStatus(context.authoringDb, item.cutover_run_id, item.gene_id)
       if (!item) {

@@ -814,21 +814,6 @@ test("bounded operator resumes through encrypted materialization, shadow project
     ...base,
     input: { action: "materialize", cutoverRunId: "cutover_run_operator", limit: 1, now },
   })
-  assert.equal(status.status, "importing")
-  assert.equal(status.counts.failed, 0)
-  assert.equal(status.counts.projected, 1)
-  for (const resumeDelayMs of [6_000, 12_000]) {
-    const resumedAt = new Date(Date.parse(now) + resumeDelayMs).toISOString()
-    status = await advanceManifestationAuthorityCutover({
-      ...base,
-      input: {
-        action: "materialize",
-        cutoverRunId: "cutover_run_operator",
-        limit: 1,
-        now: resumedAt,
-      },
-    })
-  }
   assert.equal(
     status.status,
     "seeded",
@@ -842,7 +827,7 @@ test("bounded operator resumes through encrypted materialization, shadow project
     }),
   )
   assert.equal(status.counts.verified, 2)
-  assert.equal(storageVisibilityWaits, 2)
+  assert.equal(storageVisibilityWaits, 4)
   assert.ok(objects.size >= 2)
   const derivative = authority.raw
     .prepare(
