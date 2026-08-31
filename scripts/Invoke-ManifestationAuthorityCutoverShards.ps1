@@ -123,7 +123,9 @@ try {
             $status | ConvertTo-Json -Depth 20 -Compress
             return
         }
-        $failures = Invoke-ShardRound
+        # PowerShell unwraps an empty function result to $null unless the call
+        # site explicitly preserves collection semantics.
+        $failures = @(Invoke-ShardRound)
         $status = Get-CutoverStatus
         $round += 1
         $fingerprint = "$($status.status)|$($status.counts.verified)|$($status.counts.uploading)|$($status.counts.adopted)|$($status.counts.projected)|$($status.counts.failed)"
@@ -136,14 +138,22 @@ try {
                 uploading      = [int] $status.counts.uploading
                 failed         = [int] $status.counts.failed
                 shard_failures = $failures.Count
-            } | ConvertTo-Json -Compress | Write-Information -InformationAction Continue
+            } | ConvertTo-Json -Compress | Write-Output
         }
         if ($stalled -ge 20) {
             throw 'Sharded cutover made no observable progress for 20 rounds.'
         }
         if ($failures.Count -gt 0) { Start-Sleep -Seconds 2 }
     }
-    throw "Sharded cutover exceeded its $OverallTimeoutMinutes minute hard deadline."
+    $status = Get-CutoverStatus
+    [ordered]@{
+        status           = $status.status
+        deadline_reached = $true
+        verified         = [int] $status.counts.verified
+        uploading        = [int] $status.counts.uploading
+        failed           = [int] $status.counts.failed
+    } | ConvertTo-Json -Compress | Write-Output
+    return
 }
 finally {
     $client.Dispose()
