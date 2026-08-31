@@ -4,9 +4,9 @@ Advances disjoint manifestation-cutover shards concurrently.
 
 .DESCRIPTION
 Each shard owns a deterministic subset of stable gene IDs, so requests cannot
-select the same cutover item. One bounded page runs per shard inside the
-Free-plan Durable Object CPU envelope; each item retains its own CAS and final
-public-material proof.
+select the same cutover item. One bounded page runs per shard through the
+ordinary Worker request plane; each item retains its own CAS and final
+public-material proof without consuming Durable Object duration.
 #>
 [CmdletBinding()]
 param(
@@ -17,15 +17,17 @@ param(
     [ValidateSet(2, 4, 8, 16, 32, 64, 128, 256)]
     [int] $ShardCount = 4,
 
-    # The measured 32-lane production tail reached 188 seconds while the
-    # Durable Object itself remained healthy. Keep the client deadline above
-    # that wall-time tail so a successful Free-plan invocation is not
-    # mislabeled as a disconnect and needlessly retried.
+    # The measured 32-lane production tail reached 188 seconds. Keep the client
+    # deadline above that wall-time tail so a successful bounded invocation is
+    # not mislabeled as a disconnect and needlessly retried.
     [ValidateRange(30, 300)]
     [int] $RequestTimeoutSeconds = 240,
 
     [ValidateRange(1, 55)]
     [int] $OverallTimeoutMinutes = 55,
+
+    [ValidateRange(1, 30)]
+    [int] $NoProgressTimeoutMinutes = 15,
 
     [ValidateRange(1, 25)]
     [int] $PageLimit = 10,
@@ -162,7 +164,7 @@ function Invoke-ShardRound {
 
 try {
     $previous = $null
-    $stalled = 0
+    $lastProgressAt = [DateTimeOffset]::UtcNow
     $failedWithoutProgress = 0
     $round = 0
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
@@ -180,15 +182,17 @@ try {
         if ($fingerprint -eq $previous) {
             if ($failures.Count -gt 0) {
                 $failedWithoutProgress += 1
-                $stalled = 0
             }
             else {
-                $stalled += 1
                 $failedWithoutProgress = 0
+                # A successful request can durably record STORAGE_PENDING while
+                # public object propagation catches up. Bound that wait by wall
+                # time, and avoid turning fast empty rounds into a retry storm.
+                Start-Sleep -Seconds 2
             }
         }
         else {
-            $stalled = 0
+            $lastProgressAt = [DateTimeOffset]::UtcNow
             $failedWithoutProgress = 0
         }
         $previous = $fingerprint
@@ -202,8 +206,11 @@ try {
                 failure_kinds  = @($failures | Sort-Object -Unique)
             } | ConvertTo-Json -Compress | Write-Output
         }
-        if ($stalled -ge 20) {
-            throw 'Sharded cutover made no observable progress for 20 rounds.'
+        if (
+            $fingerprint -eq $previous -and
+            ([DateTimeOffset]::UtcNow - $lastProgressAt).TotalMinutes -ge $NoProgressTimeoutMinutes
+        ) {
+            throw "Sharded cutover made no observable progress for $NoProgressTimeoutMinutes minutes."
         }
         if ($failedWithoutProgress -ge 12) {
             $kinds = @($failures | Sort-Object -Unique) -join ', '

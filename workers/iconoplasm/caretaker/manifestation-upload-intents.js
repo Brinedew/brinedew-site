@@ -242,6 +242,60 @@ export async function renewResumableManifestationUploadIntent(
   )
 }
 
+export async function recycleUnverifiedManifestationUploadIntent(
+  db,
+  env,
+  pending,
+  { now, idFactory = defaultIdFactory } = {},
+) {
+  requireDatabase(db)
+  const timestamp = normalizeTimestamp(now)
+  const uploadIntentId = normalizeId(pending?.upload_intent_id, "upload_intent_id")
+  const currentLeaseToken = normalizeId(pending?.lease_token, "lease_token")
+  const locator = objectKey(pending?.object_key)
+  const recycleLeaseToken = createId(null, "lease_token", "upload_recycle", idFactory)
+  const claim = await prepared(
+    db,
+    `UPDATE icono_manifestation_upload_intents
+        SET status = 'deleting', lease_token = ?, lease_expires_at = ?,
+            attempts = attempts + 1
+      WHERE upload_intent_id = ? AND status = 'uploading' AND lease_token = ?`,
+    recycleLeaseToken,
+    futureLease(timestamp, MAX_LEASE_MS),
+    uploadIntentId,
+    currentLeaseToken,
+  ).run()
+  if (Number(claim?.meta?.changes || 0) !== 1) return false
+  try {
+    // The intent was never adopted, but a late-visible object may still exist.
+    // Delete and prove absence before allowing a new random ciphertext envelope
+    // for the same immutable entity.
+    await deleteEncryptedManifestationBody(env, locator)
+    await prepared(
+      db,
+      `UPDATE icono_manifestation_upload_intents
+          SET status = 'deleted', resolved_at = ?, last_error_code = NULL
+        WHERE upload_intent_id = ? AND status = 'deleting' AND lease_token = ?`,
+      timestamp,
+      uploadIntentId,
+      recycleLeaseToken,
+    ).run()
+    return true
+  } catch (error) {
+    await prepared(
+      db,
+      `UPDATE icono_manifestation_upload_intents
+          SET status = 'uploading', lease_expires_at = ?, last_error_code = ?
+        WHERE upload_intent_id = ? AND status = 'deleting' AND lease_token = ?`,
+      futureLease(timestamp, 60_000),
+      String(error?.name || "storage_recycle_failed").slice(0, 80),
+      uploadIntentId,
+      recycleLeaseToken,
+    ).run()
+    throw error
+  }
+}
+
 export async function requireAdoptedManifestationUpload(db, entityKindInput, entityIdInput) {
   const kind = entityKind(entityKindInput)
   const entityId = normalizeId(entityIdInput, `${kind}_id`)

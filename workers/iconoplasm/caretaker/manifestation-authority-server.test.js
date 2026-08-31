@@ -12,6 +12,7 @@ import {
   registerAuthorityAccount,
   registerCaretakerTermsVersion,
   registerGeneIdentity,
+  recycleUnverifiedManifestationUploadIntent,
   requireAdoptedManifestationUpload,
   saveManifestationRevision,
   seedSystemManifestation,
@@ -377,6 +378,71 @@ test("upload intents reserve before PUT, survive termination, and atomically ado
       .body_reserved_bytes,
     0,
   )
+})
+
+test("an unadopted upload that never becomes readable is deleted before replacement", async (t) => {
+  const context = await bootstrap(t, "7011")
+  const pendingStorage = storage(91)
+  const pending = await createManifestationUploadIntent(context.db, {
+    entityKind: "revision",
+    entityId: "revision_recycle_7011",
+    assignmentId: context.assignmentId,
+    objectKey: pendingStorage.object_key,
+    ciphertextSha256: pendingStorage.ciphertext_sha256,
+    bodyBytes: pendingStorage.body_bytes,
+    actorKind: "account",
+    actorAccountId: USER,
+    uploadIntentId: "upload_intent_recycle_7011",
+    leaseToken: "upload_lease_recycle_7011",
+    now: NOW,
+    leaseMs: 600_000,
+  })
+  const originalFetch = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = originalFetch
+  })
+  const methods = []
+  globalThis.fetch = async (_url, init = {}) => {
+    methods.push(String(init.method || "GET").toUpperCase())
+    return new Response(null, { status: init.method === "DELETE" ? 200 : 404 })
+  }
+  const recycled = await recycleUnverifiedManifestationUploadIntent(
+    context.db,
+    {
+      ICONOPLASM_AUTHORING_STORAGE_ZONE: "private-zone",
+      ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "test-password",
+    },
+    pending,
+    {
+      now: "2026-08-30T00:02:00.000Z",
+      idFactory: ids(),
+    },
+  )
+  assert.equal(recycled, true)
+  assert.deepEqual(methods, ["DELETE", "GET"])
+  assert.equal(
+    row(
+      context.db,
+      "SELECT status FROM icono_manifestation_upload_intents WHERE upload_intent_id = ?",
+      pending.upload_intent_id,
+    ).status,
+    "deleted",
+  )
+  const replacement = await createManifestationUploadIntent(context.db, {
+    entityKind: "revision",
+    entityId: "revision_recycle_7011",
+    assignmentId: context.assignmentId,
+    objectKey: storage(92).object_key,
+    ciphertextSha256: storage(92).ciphertext_sha256,
+    bodyBytes: storage(92).body_bytes,
+    actorKind: "account",
+    actorAccountId: USER,
+    uploadIntentId: "upload_intent_replacement_7011",
+    leaseToken: "upload_lease_replacement_7011",
+    now: "2026-08-30T00:03:00.000Z",
+    leaseMs: 600_000,
+  })
+  assert.equal(replacement.status, "uploading")
 })
 
 test("authority epoch and mode cannot rewind", async (t) => {
