@@ -1,4 +1,8 @@
 import { sha256Hex } from "./iconoplasm-manifestation-body-crypto.js"
+import {
+  BUNNY_READ_AFTER_WRITE_DELAYS_MS,
+  putBunnyObjectUntilVerified,
+} from "./bunny-storage-consistency.js"
 
 const MAX_CIPHERTEXT_BYTES = 64 * 1024
 const RETRY_DELAYS_MS = Object.freeze([0, 125, 375, 1000])
@@ -110,10 +114,7 @@ export async function putEncryptedManifestationBody(
   if (!/^[a-f0-9]{64}$/.test(expectedHash)) throw new TypeError("Ciphertext SHA-256 is invalid")
 
   let lastError = null
-  for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt += 1) {
-    if (RETRY_DELAYS_MS[attempt] > 0) {
-      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]))
-    }
+  const putOnce = async () => {
     const response = await storageFetch(
       env,
       objectKey,
@@ -129,22 +130,26 @@ export async function putEncryptedManifestationBody(
     )
     if (!response.ok) {
       lastError = new Error(`Private manifestation storage PUT failed (${response.status})`)
-      continue
-    }
-    try {
-      const stored = await readEncryptedManifestationBody(env, objectKey)
-      if (!stored || stored.bytes.byteLength !== bytes.byteLength) {
-        throw new Error("Stored manifestation ciphertext length did not verify")
-      }
-      if ((await sha256Hex(stored.bytes)) !== expectedHash) {
-        throw new Error("Stored manifestation ciphertext hash did not verify")
-      }
-      if (verifyPlaintext) await verifyPlaintext(stored.bytes)
-      return { ok: true, etag: stored.etag, ciphertext_sha256: expectedHash }
-    } catch (error) {
-      lastError = error
+      throw lastError
     }
   }
+  const verifyAfterPut = async () => {
+    for (const delayMs of BUNNY_READ_AFTER_WRITE_DELAYS_MS) {
+      if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
+      try {
+        const stored = await readEncryptedManifestationBody(env, objectKey)
+        if (!stored || stored.bytes.byteLength !== bytes.byteLength) continue
+        if ((await sha256Hex(stored.bytes)) !== expectedHash) continue
+        if (verifyPlaintext) await verifyPlaintext(stored.bytes)
+        return { ok: true, etag: stored.etag, ciphertext_sha256: expectedHash }
+      } catch (error) {
+        lastError = error
+      }
+    }
+    return null
+  }
+  const verified = await putBunnyObjectUntilVerified({ put: putOnce, verify: verifyAfterPut })
+  if (verified) return verified
   throw lastError || new Error("Encrypted manifestation body could not be verified after PUT")
 }
 
