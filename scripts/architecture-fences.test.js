@@ -442,6 +442,8 @@ test("IPD-012 keeps one encrypted manifestation command authority", () => {
   assert.match(fence.decision, /AES-256-GCM/)
   assert.match(fence.decision, /authenticated Bunny Storage GET/)
   assert.match(fence.decision, /legacy_unbound/)
+  assert.match(fence.decision, /2,500-request ceiling/)
+  assert.match(fence.decision, /75,000 observed daily requests/)
 
   const config = readRepositoryFile(
     "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
@@ -449,6 +451,7 @@ test("IPD-012 keeps one encrypted manifestation command authority", () => {
   const deploy = readRepositoryFile(".github/workflows/deploy-quartz.yml")
   const product = readRepositoryFile("docs/ICONOPLASM_PRODUCT_OPERATING_MODEL.md")
   const storage = readRepositoryFile("workers/lib/iconoplasm-manifestation-body-storage.js")
+  const requestBudget = readRepositoryFile("scripts/lib/CloudflareWorkerRequestBudget.ps1")
   assert.match(config, /binding = "ICONOPLASM_AUTHORING_DB"/)
   assert.match(config, /database_name = "iconoplasm-authoring"/)
   assert.match(config, /ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring"/)
@@ -481,6 +484,10 @@ test("IPD-012 keeps one encrypted manifestation command authority", () => {
   assert.match(product, /workstation is a replica/)
   assert.match(storage, /AccessKey/)
   assert.doesNotMatch(storage, /b-cdn\.net|EXTERNAL_PORTRAIT/)
+  assert.match(requestBudget, /CloudflareWorkerRequestBudgetMaximum = 2500/)
+  assert.match(requestBudget, /CloudflareWorkerRequestTelemetryCeiling = 75000/)
+  assert.match(requestBudget, /workersInvocationsAdaptive/)
+  assert.match(requestBudget, /FileShare\]::None/)
 })
 
 test("IPD-012 caretaker migrations remain compatible with the remote D1 trigger splitter", () => {

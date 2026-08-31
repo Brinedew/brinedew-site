@@ -1,9 +1,14 @@
 import assert from "node:assert/strict"
-import { readFile } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { spawnSync } from "node:child_process"
 import { test } from "node:test"
+import { fileURLToPath } from "node:url"
 
 const scriptUrl = new URL("./Invoke-ManifestationAuthorityCutover.ps1", import.meta.url)
 const shardScriptUrl = new URL("./Invoke-ManifestationAuthorityCutoverShards.ps1", import.meta.url)
+const requestBudgetUrl = new URL("./lib/CloudflareWorkerRequestBudget.ps1", import.meta.url)
 
 async function source() {
   return readFile(scriptUrl, "utf8")
@@ -11,6 +16,10 @@ async function source() {
 
 async function shardSource() {
   return readFile(shardScriptUrl, "utf8")
+}
+
+async function requestBudgetSource() {
+  return readFile(requestBudgetUrl, "utf8")
 }
 
 test("cutover operator uses only the dedicated User-scope cutover credential", async () => {
@@ -55,6 +64,15 @@ test("cutover operator is resumable and bounds request, run, retry, and progress
   assert.match(text, /\.reset-\$archiveTimestamp\.json/)
   assert.match(text, /NewGuid\(\)\.ToString\('N'\).*\.tmp/)
   assert.match(text, /Move-Item -LiteralPath \$temporaryPath -Destination \$Path -Force/)
+  assert.match(text, /\[ValidateRange\(1, 2500\)\]/)
+  assert.match(text, /\[int\] \$DailyWorkerRequestBudget = 2500/)
+  assert.match(text, /Reserve-CloudflareWorkerRequests[\s\S]*\$client\.SendAsync/)
+  assert.match(
+    text,
+    /Assert-CloudflareWorkerRequestHeadroom[\s\S]*Reserve-CloudflareWorkerRequests/,
+  )
+  assert.match(text, /workerRequestsSinceTelemetryCheck -ge 100/)
+  assert.doesNotMatch(text, /WorkerRequestBudgetStatePath/)
 })
 
 test("sharded operator accepts omitted and singleton shard selections without scalar unwrapping", async () => {
@@ -82,4 +100,103 @@ test("sharded operator accepts omitted and singleton shard selections without sc
   assert.match(text, /X-Iconoplasm-Cutover-Shard/)
   assert.match(text, /X-Iconoplasm-Cutover-Action', \$Action/)
   assert.match(text, /backup\.verified_entries.*backup\.expected_entries/s)
+  assert.match(text, /\[int\] \$DailyWorkerRequestBudget = 2500/)
+  assert.match(text, /Reserve-CloudflareWorkerRequests[\s\S]*\$client\.GetAsync/)
+  assert.match(text, /Reserve-CloudflareWorkerRequests[\s\S]*-Count \$batch\.Count/)
+  assert.match(
+    text,
+    /Assert-CloudflareWorkerRequestHeadroom[\s\S]*Reserve-CloudflareWorkerRequests/,
+  )
+  assert.match(text, /workerRequestsSinceTelemetryCheck -ge 100/)
+  assert.doesNotMatch(text, /WorkerRequestBudgetStatePath/)
+})
+
+test("shared request ledger is user-wide, atomic, crash-conservative, and fail-closed", async () => {
+  const text = await requestBudgetSource()
+  assert.match(text, /LocalApplicationData/)
+  assert.match(text, /operator-worker-request-budget\.json/)
+  assert.match(text, /CloudflareWorkerRequestBudgetMaximum = 2500/)
+  assert.match(text, /FileShare\]::None/)
+  assert.match(text, /requests_reserved = \$nextReserved/)
+  assert.match(text, /reserved \+ \$Count -gt \$effectiveDailyLimit/)
+  assert.match(text, /No request was sent/)
+  assert.match(text, /remaining Free-plan allowance is reserved for the live site/i)
+  assert.doesNotMatch(text, /\[switch\]\s+\$(?:Reset|Override|Force)/i)
+  assert.match(text, /Math\]::Min\(\$DailyLimit, \[int\] \$saved\.daily_limit\)/)
+  assert.match(text, /workersInvocationsAdaptive/)
+  assert.match(text, /CloudflareWorkerRequestTelemetryCeiling = 75000/)
+  assert.match(text, /GetEnvironmentVariable\('CLOUDFLARE_API_TOKEN', 'User'\)/)
+  assert.match(text, /GetEnvironmentVariable\('CLOUDFLARE_ACCOUNT_ID', 'User'\)/)
+  assert.match(text, /requests -ge \$SafeAccountRequestCeiling/)
+  assert.match(text, /No Worker request was sent/)
+})
+
+test("request ledger blocks before overflow and resets only on a new UTC day", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "iconoplasm-request-budget-"))
+  const ledgerPath = join(directory, "ledger.json")
+  const helperPath = fileURLToPath(requestBudgetUrl)
+  const quote = (value) => `'${value.replaceAll("'", "''")}'`
+  const command = [
+    `. ${quote(helperPath)}`,
+    `$first = Reserve-CloudflareWorkerRequests -Count 2 -DailyLimit 3 -StatePath ${quote(ledgerPath)} -Operation 'first'`,
+    `$second = Reserve-CloudflareWorkerRequests -Count 1 -DailyLimit 3 -StatePath ${quote(ledgerPath)} -Operation 'second'`,
+    `$blocked = $false`,
+    `try { Reserve-CloudflareWorkerRequests -Count 1 -DailyLimit 2500 -StatePath ${quote(ledgerPath)} -Operation 'overflow' | Out-Null } catch { $blocked = $_.Exception.Message -match 'No request was sent' }`,
+    `$saved = Get-Content -LiteralPath ${quote(ledgerPath)} -Raw | ConvertFrom-Json`,
+    `[pscustomobject]@{ first = $first.requests_reserved; second = $second.requests_reserved; blocked = $blocked; saved = $saved.requests_reserved } | ConvertTo-Json -Compress`,
+  ].join("; ")
+
+  try {
+    const result = spawnSync(
+      "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", command],
+      { encoding: "utf8", timeout: 15_000 },
+    )
+    assert.equal(result.status, 0, result.stderr)
+    const payload = JSON.parse(result.stdout.trim())
+    assert.deepEqual(payload, { first: 2, second: 3, blocked: true, saved: 3 })
+
+    const previousDay = JSON.parse(await readFile(ledgerPath, "utf8"))
+    previousDay.utc_day = "2000-01-01"
+    await writeFile(ledgerPath, JSON.stringify(previousDay), "utf8")
+    const rollover = spawnSync(
+      "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `. ${quote(helperPath)}; Reserve-CloudflareWorkerRequests -Count 1 -DailyLimit 3 -StatePath ${quote(ledgerPath)} -Operation 'rollover' | ConvertTo-Json -Compress`,
+      ],
+      { encoding: "utf8", timeout: 15_000 },
+    )
+    assert.equal(rollover.status, 0, rollover.stderr)
+    assert.equal(JSON.parse(rollover.stdout).requests_reserved, 1)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("request ledger serializes concurrent reservations without losing counts", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "iconoplasm-request-budget-concurrent-"))
+  const ledgerPath = join(directory, "ledger.json")
+  const helperPath = fileURLToPath(requestBudgetUrl)
+  const quote = (value) => `'${value.replaceAll("'", "''")}'`
+  const command = [
+    `$helperPath = ${quote(helperPath)}`,
+    `$ledgerPath = ${quote(ledgerPath)}`,
+    `1..24 | ForEach-Object -Parallel { . $using:helperPath; Reserve-CloudflareWorkerRequests -Count 1 -DailyLimit 24 -StatePath $using:ledgerPath -Operation "parallel-$_" | Out-Null } -ThrottleLimit 8`,
+    `(Get-Content -LiteralPath $ledgerPath -Raw | ConvertFrom-Json).requests_reserved`,
+  ].join("; ")
+
+  try {
+    const result = spawnSync(
+      "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", command],
+      { encoding: "utf8", timeout: 20_000 },
+    )
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(Number(result.stdout.trim()), 24)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })
