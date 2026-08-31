@@ -63,7 +63,7 @@ test("sharded operator accepts omitted and singleton shard selections without sc
   assert.match(text, /\$resolvedShardIndexes = @\(/)
   assert.match(text, /0\.\.\(\$ShardCount - 1\)/)
   assert.match(text, /\$ShardIndexes \| Sort-Object -Unique/)
-  assert.match(text, /\[ValidateSet\(2, 4, 8, 16, 32, 64\)\]/)
+  assert.match(text, /\[ValidateSet\(2, 4, 8, 16, 32, 64, 128\)\]/)
   assert.match(text, /\[ValidateRange\(1, 25\)\]/)
   assert.match(text, /\[int\] \$PageLimit = 10/)
   assert.match(text, /measured 32-lane production tail reached 188 seconds/)
