@@ -24,7 +24,7 @@ param(
     [int] $OverallTimeoutMinutes = 55,
 
     [ValidateRange(1, 25)]
-    [int] $PageLimit = 10,
+    [int] $PageLimit = 5,
 
     [int[]] $ShardIndexes,
 
