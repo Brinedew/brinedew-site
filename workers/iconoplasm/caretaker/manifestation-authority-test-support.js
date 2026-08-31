@@ -5,6 +5,7 @@ const MIGRATIONS = [
   "../../../migrations-iconoplasm-authoring/0001_caretaker_manifestation_authority.sql",
   "../../../migrations-iconoplasm-authoring/0002_caretaker_server_boundary.sql",
   "../../../migrations-iconoplasm-authoring/0004_caretaker_terms_2026_08_30.sql",
+  "../../../migrations-iconoplasm-authoring/0005_d1_safe_object_key_fence.sql",
 ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
 
 class TestStatement {
