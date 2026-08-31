@@ -461,7 +461,7 @@ async function materializePage(context, run, input, now) {
       // so obsolete edge-era request churn does not dominate the migration.
       // Bunny propagation still throws CUTOVER_STORAGE_PENDING immediately;
       // that preserves the resumable boundary and never sleeps in this loop.
-      const phaseLimit = durableCutover ? 6 : 1
+      const phaseLimit = durableCutover ? 8 : 1
       let current = rawItem
       for (let phase = 0; phase < phaseLimit; phase += 1) {
         await processOneItem(context, current, now)
