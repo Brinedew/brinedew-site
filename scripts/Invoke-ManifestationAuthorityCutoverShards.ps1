@@ -18,13 +18,13 @@ param(
     [int] $ShardCount = 4,
 
     [ValidateRange(30, 180)]
-    [int] $RequestTimeoutSeconds = 120,
+    [int] $RequestTimeoutSeconds = 180,
 
     [ValidateRange(1, 55)]
     [int] $OverallTimeoutMinutes = 55,
 
     [ValidateRange(1, 25)]
-    [int] $PageLimit = 5,
+    [int] $PageLimit = 10,
 
     [int[]] $ShardIndexes,
 
