@@ -59,6 +59,30 @@ test("private body storage PUT verifies exact authenticated bytes without using 
   }
 })
 
+test("private body storage waits through Bunny's measured read-after-write window", async () => {
+  const originalFetch = globalThis.fetch
+  let reads = 0
+  const ciphertext = new Uint8Array(32).fill(17)
+  globalThis.fetch = async (_url, init = {}) => {
+    if (init.method === "PUT") return new Response(null, { status: 201 })
+    reads += 1
+    if (reads === 1) return new Response(null, { status: 404 })
+    return new Response(ciphertext, { status: 200, headers: { etag: '"eventual-etag"' } })
+  }
+  try {
+    const key = await createManifestationBodyObjectKey({
+      locatorId: "mbody_cccccccc123442348234123456789abc",
+    })
+    const result = await putEncryptedManifestationBody(env, key, ciphertext, {
+      expectedSha256: await sha256Hex(ciphertext),
+    })
+    assert.equal(result.etag, '"eventual-etag"')
+    assert.equal(reads, 2)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("private body deletion is confirmed by an authenticated missing read", async () => {
   const originalFetch = globalThis.fetch
   let exists = true
