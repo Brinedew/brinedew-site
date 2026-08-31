@@ -242,6 +242,9 @@ function Invoke-AuthorityRequest {
         if ($null -ne $Body) {
             $json = $Body | ConvertTo-Json -Depth 12 -Compress
             $request.Content = [Net.Http.StringContent]::new($json, [Text.Encoding]::UTF8, 'application/json')
+            if ([string]$Body.action -eq 'materialize') {
+                $request.Headers.Add('X-Iconoplasm-Cutover-Action', 'materialize')
+            }
         }
         try {
             $response = $client.SendAsync($request).GetAwaiter().GetResult()

@@ -26181,8 +26181,8 @@ function normalizeGalleryVersionBarrierValue(value) {
 
 async function currentGalleryVersionBarrier(env) {
   const now = Date.now()
-  // This is a speed cache, not the source of truth. The source of truth is the
-  // durable publication head (KV only before explicit storage migration).
+  // This is a speed cache, not the source of truth. The coordinator is the sole
+  // writer; KV is its immutable public read projection.
   // The five-second isolate TTL is still worth keeping:
   // mobile-card and home traffic can call the barrier repeatedly inside one
   // isolate, and reading storage on every nested call spends shared budgets.
@@ -26195,17 +26195,11 @@ async function currentGalleryVersionBarrier(env) {
   ) {
     return normalizeGalleryVersionBarrierValue(galleryVersionCache.value || "0")
   }
-  if (env.ICONOPLASM_CARD_PUBLICATION) {
-    const head = await callCardPublication(env, "/head")
-    if (head.current) {
-      galleryVersionCache.value = head
-      galleryVersionCache.loadedAt = now
-      return normalizeGalleryVersionBarrierValue(head)
-    }
-    // Explicit migration only: before the first complete Bunny catalog commits,
-    // the frozen legacy KV head remains readable. After activation there is no
-    // KV fallback, including coordinator failures, and no second live pointer.
-  }
+  // Public reads use the coordinator's immutable KV projection. Calling the
+  // Durable Object from every catalog/card read coupled the entire public site
+  // to the account-wide DO duration allowance: one migration could exhaust the
+  // allowance and take unrelated gene pages offline. The coordinator remains
+  // the only writer and projects a committed, storage-verified head to KV.
   if (!env.KV) {
     galleryVersionCache.loadedAt = now
     return normalizeGalleryVersionBarrierValue(galleryVersionCache.value || "0")
