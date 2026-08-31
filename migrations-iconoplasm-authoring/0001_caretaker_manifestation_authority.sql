@@ -859,7 +859,10 @@ end;
 CREATE TRIGGER icono_revision_storage_validate_insert
 BEFORE INSERT ON icono_manifestation_revision_storage_secrets
 BEGIN
-  SELECT case WHEN NEW.object_key LIKE '%/' || NEW.manifestation_revision_id || '.bin'
+  SELECT case WHEN substr(
+    NEW.object_key,
+    -(length(NEW.manifestation_revision_id) + 5)
+  ) = '/' || NEW.manifestation_revision_id || '.bin'
   THEN RAISE(ABORT, 'predictable_manifestation_object_key') end;
   SELECT case WHEN NOT EXISTS (
     SELECT 1 FROM icono_manifestation_revisions r
