@@ -485,7 +485,7 @@ test("IPD-012 keeps one encrypted manifestation command authority", () => {
 
 test("IPD-012 caretaker migrations remain compatible with the remote D1 trigger splitter", () => {
   const migrationGroups = [
-    ["migrations-iconoplasm-authoring", /^000[1-5]_.*\.sql$/],
+    ["migrations-iconoplasm-authoring", /^000[1-6]_.*\.sql$/],
     ["migrations-iconoplasm", /^008[4-8]_.*\.sql$/],
   ]
 

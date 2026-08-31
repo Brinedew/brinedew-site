@@ -42,6 +42,13 @@ const AUTHORING_BOUNDARY = readFileSync(
   ),
   "utf8",
 )
+const AUTHORING_RESUMABLE_UPLOADS = readFileSync(
+  new URL(
+    "../../../migrations-iconoplasm-authoring/0006_resumable_cutover_upload_envelopes.sql",
+    import.meta.url,
+  ),
+  "utf8",
+)
 const PRIMARY_CUTOVER = readFileSync(
   new URL(
     "../../../migrations-iconoplasm/0084_manifestation_authority_cutover.sql",
@@ -669,7 +676,9 @@ test("legacy plaintext retirement requires an authoritative snapshot and verifie
 })
 
 test("bounded operator resumes through encrypted materialization, shadow projection, activation, and backup-gated retirement", async (t) => {
-  const authority = new TestD1(`${AUTHORING_BASE}\n${AUTHORING_BOUNDARY}\n${AUTHORING_CUTOVER}`)
+  const authority = new TestD1(
+    `${AUTHORING_BASE}\n${AUTHORING_BOUNDARY}\n${AUTHORING_CUTOVER}\n${AUTHORING_RESUMABLE_UPLOADS}`,
+  )
   const primary = new TestD1(`CREATE TABLE icono_gene_essence (
     gene_symbol TEXT PRIMARY KEY,
     manifestation TEXT,
