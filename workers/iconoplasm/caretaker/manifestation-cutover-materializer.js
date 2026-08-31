@@ -21,7 +21,6 @@ import {
   normalizeLegacyTagsDerivativeMaterial,
   verifyPlannedLegacySource,
 } from "./manifestation-authority-cutover.js"
-import { verifyManifestationBackupEntity } from "./manifestation-authority-backup.js"
 import { seedGeneWithoutManifestation } from "./gene-authority-seed-command.js"
 import { first, requireDatabase } from "./manifestation-authority-repository.js"
 import { seedSystemManifestation } from "./manifestation-write-commands.js"
@@ -179,7 +178,7 @@ async function verifyResumableUpload(env, pending, now, verifyPlaintext) {
   return verified
 }
 
-async function verifySeedRevision(authoringDb, env, item) {
+async function verifySeedRevision(authoringDb, item) {
   const revision = await first(
     authoringDb,
     `SELECT revision.manifestation_revision_id, revision.manifestation_id,
@@ -205,16 +204,15 @@ async function verifySeedRevision(authoringDb, env, item) {
   ) {
     throw new Error("cutover_seed_revision_conflicts_with_plan")
   }
-  await verifyManifestationBackupEntity(authoringDb, env, {
-    entityKind: "revision",
-    entityId: item.seed_revision_id,
-    actorKind: "service",
-  })
+  // Adoption already proved the exact ciphertext and plaintext before this
+  // immutable row was committed. The projected-item verification gate repeats
+  // that external proof once before marking the cutover item verified; doing
+  // it here as well made crash resumption spend its Worker CPU budget twice.
   return revision
 }
 
 async function ensureSeedRevision(authoringDb, env, item, source, now) {
-  if (await verifySeedRevision(authoringDb, env, item)) return
+  if (await verifySeedRevision(authoringDb, item)) return
   const encrypted = await encryptManifestationProse(env, {
     revisionId: item.seed_revision_id,
     geneId: item.gene_id,
@@ -262,10 +260,10 @@ async function ensureSeedRevision(authoringDb, env, item, source, now) {
     actorKind: "migration",
   })
   await requireAdoptedManifestationUpload(authoringDb, "revision", item.seed_revision_id)
-  await verifySeedRevision(authoringDb, env, item)
+  await verifySeedRevision(authoringDb, item)
 }
 
-async function verifySeedDerivative(authoringDb, env, item) {
+async function verifySeedDerivative(authoringDb, item) {
   const derivative = await first(
     authoringDb,
     `SELECT * FROM icono_manifestation_derivatives
@@ -285,17 +283,15 @@ async function verifySeedDerivative(authoringDb, env, item) {
   ) {
     throw new Error("cutover_seed_derivative_conflicts_with_plan")
   }
-  await verifyManifestationBackupEntity(authoringDb, env, {
-    entityKind: "derivative",
-    entityId: item.seed_tags_derivative_id,
-    actorKind: "service",
-  })
+  // The final per-item public-material proof re-reads and decrypts this exact
+  // derivative before activation. This intermediate read validates immutable
+  // authority metadata only.
   return derivative
 }
 
 async function ensureSeedDerivative(authoringDb, env, item, source, now) {
   if (!source.tags) return
-  let derivative = await verifySeedDerivative(authoringDb, env, item)
+  let derivative = await verifySeedDerivative(authoringDb, item)
   if (!derivative) {
     const encrypted = await encryptManifestationTags(env, {
       derivativeId: item.seed_tags_derivative_id,
@@ -352,7 +348,7 @@ async function ensureSeedDerivative(authoringDb, env, item, source, now) {
       actorKind: "migration",
     })
     await requireAdoptedManifestationUpload(authoringDb, "derivative", item.seed_tags_derivative_id)
-    derivative = await verifySeedDerivative(authoringDb, env, item)
+    derivative = await verifySeedDerivative(authoringDb, item)
   }
   const derivativeHead = await first(
     authoringDb,
