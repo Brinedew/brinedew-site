@@ -32,6 +32,10 @@ export async function forwardManifestationCutoverActionToCoordinator(request, en
   // still validated by the ordinary authority handler; this header selects the
   // execution plane only and grants no authority.
   if (request.headers.get("x-iconoplasm-cutover-action") === "materialize") return null
+  // The normal operator uses D1 compare-and-swap transitions and bounded
+  // action pages. Keep the coordinator only as an explicit recovery plane; a
+  // one-time cutover must never require or exhaust the site's shared DO quota.
+  if (request.headers.get("x-iconoplasm-cutover-execution-plane") !== "durable_object") return null
   const namespace = env?.ICONOPLASM_MANIFESTATION_CUTOVER_COORDINATORS
   if (
     !namespace ||
@@ -96,7 +100,8 @@ export class IconoplasmManifestationCutoverCoordinator {
   }
 }
 
-// ARCHITECTURE FENCE [IPD-012]: serialized cutover control transitions run in
-// the SQLite Durable Object. Per-gene materialization stays on bounded ordinary
-// Worker requests so external storage propagation cannot consume shared DO
-// duration. Public caretaker commands remain bounded edge requests.
+// ARCHITECTURE FENCE [IPD-012]: this SQLite Durable Object is an explicit
+// recovery plane only. Normal cutover materialization and compare-and-swap
+// control transitions stay on bounded ordinary Worker requests so the one-time
+// migration cannot consume shared DO duration. Public caretaker commands remain
+// bounded edge requests.
