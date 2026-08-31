@@ -59,6 +59,8 @@ test("cutover operator is resumable and bounds request, run, retry, and progress
 
 test("sharded operator accepts omitted and singleton shard selections without scalar unwrapping", async () => {
   const text = await shardSource()
+  assert.match(text, /\[ValidateSet\('materialize', 'backup'\)\]/)
+  assert.match(text, /\[string\] \$Action = 'materialize'/)
   assert.match(text, /@\(\$ShardIndexes \| Where-Object \{ \$null -ne \$_ \}\)/)
   assert.match(text, /\$resolvedShardIndexes = @\(/)
   assert.match(text, /0\.\.\(\$ShardCount - 1\)/)
@@ -75,5 +77,6 @@ test("sharded operator accepts omitted and singleton shard selections without sc
   assert.match(text, /failure_kinds\s+= @\(\$failures \| Sort-Object -Unique\)/)
   assert.match(text, /\[Math\]::Min\(30, \[Math\]::Pow/)
   assert.match(text, /X-Iconoplasm-Cutover-Shard/)
-  assert.match(text, /X-Iconoplasm-Cutover-Action', 'materialize'/)
+  assert.match(text, /X-Iconoplasm-Cutover-Action', \$Action/)
+  assert.match(text, /backup\.verified_entries.*backup\.expected_entries/s)
 })

@@ -325,13 +325,36 @@ async function packageMetadata(db, run, kind, entityId) {
     : derivativePackage(db, run, entityId)
 }
 
-async function nextCandidates(db, artifact, limit) {
+function backupShard(shardCountInput, shardIndexInput) {
+  const shardCount = Math.trunc(Number(shardCountInput)) || 1
+  const shardIndex = Math.trunc(Number(shardIndexInput)) || 0
+  if (
+    ![1, 2, 4, 8, 16, 32, 64, 128, 256].includes(shardCount) ||
+    shardIndex < 0 ||
+    shardIndex >= shardCount
+  ) {
+    throw error("INVALID_CUTOVER_BACKUP_SHARD", "Cutover backup shard identity is invalid", 400)
+  }
+  const clause =
+    shardCount === 1
+      ? ""
+      : shardCount >= 32
+        ? `AND (((instr('0123456789abcdef', substr(entity_id, -2, 1)) - 1) * 16
+              + (instr('0123456789abcdef', substr(entity_id, -1, 1)) - 1)) % ? = ?)`
+        : "AND (instr('0123456789abcdef', substr(entity_id, -1, 1)) - 1) % ? = ?"
+  return Object.freeze({ shardCount, shardIndex, clause })
+}
+
+async function nextCandidates(db, artifact, limit, shard) {
+  const shardParams = shard.shardCount === 1 ? [] : [shard.shardCount, shard.shardIndex]
   const existing = await all(
     db,
     `SELECT entity_kind, entity_id FROM icono_manifestation_cutover_backup_entries
       WHERE backup_artifact_id = ? AND status IN ('uploading', 'failed')
+        ${shard.clause}
       ORDER BY entity_kind, entity_id LIMIT ?`,
     artifact.backup_artifact_id,
+    ...shardParams,
     limit,
   )
   if (existing.length >= limit) return existing
@@ -351,10 +374,12 @@ async function nextCandidates(db, artifact, limit) {
          WHERE entry.backup_artifact_id = ? AND entry.entity_kind = candidates.entity_kind
            AND entry.entity_id = candidates.entity_id
       )
+        ${shard.clause}
       ORDER BY candidates.entity_kind, candidates.entity_id LIMIT ?`,
       artifact.cutover_run_id,
       artifact.cutover_run_id,
       artifact.backup_artifact_id,
+      ...shardParams,
       limit - existing.length,
     ),
   )
@@ -639,7 +664,7 @@ async function finalizeArtifact(db, backupEnv, artifact, now) {
 export async function advanceManifestationCutoverBackupArtifact(
   db,
   env,
-  { cutoverRunId, limit = 5, now = new Date().toISOString() } = {},
+  { cutoverRunId, limit = 5, shardCount = 1, shardIndex = 0, now = new Date().toISOString() } = {},
 ) {
   requireDatabase(db)
   const backupEnv = cutoverBackupStorageEnvironment(env)
@@ -654,8 +679,9 @@ export async function advanceManifestationCutoverBackupArtifact(
   if (artifact.status === "verified") return safeArtifact(artifact)
   if (artifact.status !== "building")
     throw error("CUTOVER_BACKUP_NOT_RUNNABLE", "Cutover backup artifact is not runnable")
+  const shard = backupShard(shardCount, shardIndex)
   const pageSize = Math.max(1, Math.min(10, Math.trunc(Number(limit)) || 5))
-  const candidates = await nextCandidates(db, artifact, pageSize)
+  const candidates = await nextCandidates(db, artifact, pageSize, shard)
   for (const candidate of candidates) {
     await backupEntity(db, env, backupEnv, run, artifact, candidate, now)
   }
@@ -664,24 +690,37 @@ export async function advanceManifestationCutoverBackupArtifact(
     "SELECT count(*) AS total FROM icono_manifestation_cutover_backup_entries WHERE backup_artifact_id = ?",
     artifact.backup_artifact_id,
   )
-  const allRegistered = Number(registered?.total || 0) === Number(artifact.expected_entries)
-  await writePendingPart(db, backupEnv, artifact, now, allRegistered)
-  if (allRegistered) {
-    while (await writePendingPart(db, backupEnv, artifact, now, true)) {
-      // Each part is bounded to 250 entries. Normally one remains because the
-      // main loop emits full parts incrementally; this also repairs interruption.
+  const totals = await first(
+    db,
+    `SELECT count(*) AS count, coalesce(sum(package_bytes), 0) AS bytes
+       FROM icono_manifestation_cutover_backup_entries
+      WHERE backup_artifact_id = ? AND status = 'verified'`,
+    artifact.backup_artifact_id,
+  )
+  const allVerified = Number(totals?.count || 0) === Number(artifact.expected_entries)
+  // Sharded requests own package uploads only. A single unsharded operator
+  // serializes part numbering and the final root so multipart identity cannot
+  // race even when all 256 package lanes finish together.
+  if (shard.shardCount === 1) {
+    await writePendingPart(db, backupEnv, artifact, now, allVerified)
+    if (allVerified) {
+      const pending = await first(
+        db,
+        `SELECT
+           (SELECT count(*) FROM icono_manifestation_cutover_backup_entries
+             WHERE backup_artifact_id = ? AND part_number IS NULL) AS unassigned,
+           (SELECT count(*) FROM icono_manifestation_cutover_backup_parts
+             WHERE backup_artifact_id = ? AND status <> 'verified') AS unfinished_parts`,
+        artifact.backup_artifact_id,
+        artifact.backup_artifact_id,
+      )
+      if (Number(pending?.unassigned || 0) === 0 && Number(pending?.unfinished_parts || 0) === 0) {
+        await finalizeArtifact(db, backupEnv, artifact, now)
+      }
     }
-    await finalizeArtifact(db, backupEnv, artifact, now)
   }
   const refreshed = await readArtifact(db, cutoverRunId)
   if (refreshed.status === "building") {
-    const totals = await first(
-      db,
-      `SELECT count(*) AS count, coalesce(sum(package_bytes), 0) AS bytes
-         FROM icono_manifestation_cutover_backup_entries
-        WHERE backup_artifact_id = ? AND status = 'verified'`,
-      refreshed.backup_artifact_id,
-    )
     return safeArtifact({
       ...refreshed,
       verified_entries: Number(totals?.count || 0),
