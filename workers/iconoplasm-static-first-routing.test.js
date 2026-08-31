@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { readFileSync, statSync } from "node:fs"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
@@ -19,6 +20,23 @@ const statefulConfig = toml.parse(
     "utf8",
   ),
 )
+
+test("the first caretaker terms version is an immutable, hash-pinned public document", () => {
+  const canonical = readFileSync(
+    new URL("../quartz/static/iconoplasm/caretaker-terms-2026-08-30.txt", import.meta.url),
+  )
+  const page = readFileSync(
+    new URL("../content/apps/iconoplasm/caretaker-terms.md", import.meta.url),
+    "utf8",
+  )
+  assert.equal(
+    createHash("sha256").update(canonical).digest("hex"),
+    "06b27f697c0c9a9fcaaa3ae01014c008aa6d149eed1279afbb75f9d924ed1aa5",
+  )
+  assert.match(canonical.toString("utf8"), /Version: terms_2026_08_30_v1/)
+  assert.match(page, /terms_2026_08_30_v1/)
+  assert.match(page, /caretaker-terms-2026-08-30\.txt/)
+})
 
 // ARCHITECTURE FENCE [IPD-007]
 test("Iconoplasm route has exactly one owner and that owner is asset-first", () => {
@@ -53,6 +71,10 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
     path.join(source, "apps", "iconoplasm", "license.html"),
     "<main>Image License</main>",
   )
+  await writeFile(
+    path.join(source, "apps", "iconoplasm", "caretaker-terms.html"),
+    "<main>Caretaker Terms</main>",
+  )
   await writeFile(path.join(source, "static", "iconoplasm", "styles.css"), "body{}")
   await writeFile(path.join(source, "runtime.js"), "export {}")
   await writeFile(path.join(source, "component.css"), "body{}")
@@ -65,15 +87,18 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   const home = readFileSync(path.join(target, "index.html"), "utf8")
   const privacy = readFileSync(path.join(target, "privacy.html"), "utf8")
   const license = readFileSync(path.join(target, "license.html"), "utf8")
+  const caretakerTerms = readFileSync(path.join(target, "caretaker-terms.html"), "utf8")
   const headers = readFileSync(path.join(target, "_headers"), "utf8")
 
-  assert.equal(report.fileCount, 8)
+  assert.equal(report.fileCount, 9)
   assert.match(home, /id="iconoplasm-root"/)
   assert.match(home, /href="\/privacy"/)
   assert.match(home, /href="\/license"/)
   assert.match(privacy, /Privacy Policy/)
   assert.match(license, /Image License/)
+  assert.match(caretakerTerms, /Caretaker Terms/)
   assert.match(headers, /\/license/)
+  assert.match(headers, /\/caretaker-terms/)
   assert.match(headers, /Content-Security-Policy:/)
   assert.match(headers, /X-Frame-Options: DENY/)
   assert.match(headers, /openapi\.json>; rel="service-desc"; type="application\/json"/)

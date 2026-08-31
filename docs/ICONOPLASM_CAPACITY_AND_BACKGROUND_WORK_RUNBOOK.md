@@ -172,9 +172,9 @@ Seven daily budget rows are retained. Content-addressed PNGs live in Bunny
 Storage, where a matching existing object can be reused without launching a
 browser.
 
-`icono_gene_essence` remains the canonical manifestation source.
-`icono_admin_gene_rollup.manifestation` is deliberately kept empty during the
-rolling schema transition; bounded admin result queries join the canonical row.
+`icono_gene_essence.manifestation` is legacy cutover input, not a versioning
+authority. `icono_admin_gene_rollup.manifestation` remains empty. The separate
+IPD-012 authoring authority owns accepted manifestation state.
 
 Publish events remain hot for 30 days. Scheduled maintenance copies a bounded
 batch to `ICONOPLASM_AUDIT_DB`, verifies every event ID in the cold database,
@@ -189,6 +189,44 @@ and the atomic recognition-pair history are likewise capped at 100; do not turn
 routine policy maintenance into append-only growth. Recognition validation is
 one singleton D1 receipt for the current exact policy/scanner tuple; attempts,
 leases, scanner builds, and failures must never become an append-only ledger.
+
+## ARCHITECTURE FENCE [IPD-012]: manifestation authoring has one bounded authority
+
+Production `iconoplasm-authoring` and staging `iconoplasm-authoring-staging` are
+bound only to the loud stateful Worker as `ICONOPLASM_AUTHORING_DB`. They own
+stable gene/account references, caretaker assignment state, immutable revision
+metadata, canonical-selection history, idempotency receipts, tombstones, and the
+ordered workstation replication stream. They do not store plaintext prose.
+
+The migration baseline is 19,186 current Website manifestations containing
+66,938,816 characters. The workstation also has 21,696 active candidates that
+cannot be bound to an exact historical manifestation. Those candidates stay
+`legacy_unbound`; never attach the current revision merely because the symbol
+matches.
+
+Each prose body is normalized and bounded at 4,000 Unicode code points and
+16 KiB UTF-8, encrypted with a random AES-256-GCM data key, and written under an
+opaque immutable key in the dedicated private `iconoplasm-authoring` Bunny zone.
+That zone has no connected Pull Zone and authoring code has no fallback to the
+portrait zone or its credentials. The data key is separately
+wrapped by the versioned `ICONOPLASM_AUTHORING_BODY_KEK_V<n>` secret. Content AAD
+binds revision ID, gene ID, plaintext hash, and byte length. D1 contains the
+wrapped key, IVs, ciphertext hash, and logical byte count; Bunny contains only
+ciphertext. Authenticated Storage GET must byte/hash/decrypt
+verify every PUT before the new revision and canonical selection can commit.
+
+Creation ordering is validate and claim idempotency, encrypt, PUT, authenticated
+GET/hash/decrypt verification, then one guarded D1 transaction. The old head
+remains valid on every earlier failure. A verified object whose transaction
+loses CAS is an orphan for bounded cleanup, not a partial revision. Hard purge
+first selects a legal fallback and removes the wrapped key transactionally, then
+retries authenticated object deletion until a missing read is verified.
+
+The authoring logical-body admission ceiling is 350,000,000 bytes, below the
+400 MB operational target and 500,000,000-byte database wall. Events carry a
+complete no-prose gene snapshot. Cursor expiry requires a bounded snapshot;
+consumers must never infer skipped event IDs or reconstruct authority from the
+primary D1 projection.
 
 ## ARCHITECTURE FENCE [IPD-007]: static-first, one dynamic Worker
 

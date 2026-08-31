@@ -53,6 +53,9 @@ ${serviceDiscoveryHeaders}
 /license
   Cache-Control: public, max-age=0, must-revalidate, no-transform
 
+/caretaker-terms
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+
 /static/iconoplasm/*
   Cache-Control: public, max-age=31536000, immutable
 
@@ -114,6 +117,7 @@ export async function prepareIconoplasmEdgeAssets({
   await ensureFile(path.join(resolvedSource, "apps", "iconoplasm", "index.html"))
   await ensureFile(path.join(resolvedSource, "apps", "iconoplasm", "privacy.html"))
   await ensureFile(path.join(resolvedSource, "apps", "iconoplasm", "license.html"))
+  await ensureFile(path.join(resolvedSource, "apps", "iconoplasm", "caretaker-terms.html"))
   await ensureFile(path.join(resolvedSource, "favicon.ico"))
 
   await rm(resolvedOutput, { recursive: true, force: true })
@@ -146,6 +150,10 @@ export async function prepareIconoplasmEdgeAssets({
   await copyFile(
     path.join(resolvedSource, "apps", "iconoplasm", "license.html"),
     path.join(resolvedOutput, "license.html"),
+  )
+  await copyFile(
+    path.join(resolvedSource, "apps", "iconoplasm", "caretaker-terms.html"),
+    path.join(resolvedOutput, "caretaker-terms.html"),
   )
   await writeFile(path.join(resolvedOutput, "_headers"), headersFile, "utf8")
 

@@ -942,6 +942,87 @@ article p {
   min-height: 42px;
 }
 
+.icono-request-inbox__caretaker-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.42rem 0.1rem;
+  color: var(--secondary);
+  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+  font-size: 0.61rem;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 58%, transparent);
+}
+
+.icono-request-inbox__caretaker-summary strong {
+  color: var(--dark);
+  font-weight: 700;
+}
+
+.icono-request-inbox__caretaker-item {
+  position: relative;
+  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 58%, transparent);
+}
+
+.icono-request-inbox__caretaker-item > .icono-request-inbox__item {
+  border-bottom: 0;
+}
+
+.icono-request-inbox__item--caretaker {
+  grid-template-columns: 30px minmax(0, 1fr);
+  min-height: 56px;
+  padding-right: 4.5rem;
+}
+
+.icono-request-inbox__caretaker-mark {
+  display: grid;
+  width: 26px;
+  height: 30px;
+  place-items: center;
+  color: var(--light);
+  background: var(--dark);
+  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  clip-path: polygon(0 0, 100% 0, 100% 78%, 50% 100%, 0 78%);
+}
+
+.icono-request-inbox__caretaker-read {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  right: 0.25rem;
+  min-height: 36px;
+  padding: 0 0.35rem;
+  border: 0;
+  background: transparent;
+  color: var(--secondary);
+  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+  font-size: 0.58rem;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.icono-request-inbox__caretaker-read:hover,
+.icono-request-inbox__caretaker-read:focus-visible {
+  color: var(--accent);
+}
+
+.icono-request-inbox__caretaker-read:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.icono-request-inbox__caretaker-read:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .icono-request-inbox__group-body > :last-child {
   border-bottom: 0;
 }

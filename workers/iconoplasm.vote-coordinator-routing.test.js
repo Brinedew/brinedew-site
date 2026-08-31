@@ -348,6 +348,88 @@ test("VoteCoordinator snapshot reads do not rewrite asset summaries", async () =
   assert.equal(stored.updated_at, "2000-01-01T00:00:00Z")
 })
 
+test("caretaker supervote target validation binds candidate eligibility to this gene before mutation", async () => {
+  const eligibleAsset = "7".repeat(64)
+  const foreignAsset = "8".repeat(64)
+  const db = new RecordingDb({
+    firstResults: [
+      [
+        "FROM icono_caretaker_candidate_eligibility_projection",
+        (_sql, args) =>
+          args[0] === "TP53" && args[1] === eligibleAsset
+            ? {
+                gene_symbol: "TP53",
+                asset_sha256: eligibleAsset,
+                eligibility_version: 1,
+                eligible: 1,
+                source_status: "draft",
+                source_event_sequence: 1,
+              }
+            : null,
+      ],
+    ],
+  })
+  const { state } = fakeVoteCoordinatorState()
+  const coordinator = new IconoplasmVoteCoordinator(state, { ICONOPLASM_DB: db })
+  await state.ready
+  coordinator.setMeta("symbol", "TP53")
+  coordinator.setMeta("bootstrapped", "1")
+  await coordinator.caretakerSupervotes.projectAssignment({
+    event_id: "event_target_validation",
+    event_sequence: 1,
+    gene: { gene_id: "gene_tp53", canonical_symbol: "TP53" },
+    assignment: {
+      caretaker_assignment_id: "assignment_tp53",
+      account_id: "acct_11111111111111111111111111111111",
+      status: "active",
+      assignment_version: 1,
+    },
+  })
+
+  const rejected = await coordinator.fetch(
+    new Request("https://vote-coordinator/caretaker-supervote/set", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        symbol: "TP53",
+        account_id: "acct_11111111111111111111111111111111",
+        asset_sha256: foreignAsset,
+        command_id: "cmd_foreign_target",
+        request_sha256: "1".repeat(64),
+        expected_assignment_version: 1,
+        expected_supervote_version: 0,
+      }),
+    }),
+  )
+  assert.equal(rejected.status, 409)
+  assert.equal((await rejected.json()).code, "SUPERVOTE_TARGET_INELIGIBLE")
+  assert.equal(coordinator.caretakerSupervotes.snapshot().asset_sha256, null)
+
+  const accepted = await coordinator.fetch(
+    new Request("https://vote-coordinator/caretaker-supervote/set", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        symbol: "TP53",
+        account_id: "acct_11111111111111111111111111111111",
+        asset_sha256: eligibleAsset,
+        command_id: "cmd_eligible_target",
+        request_sha256: "2".repeat(64),
+        expected_assignment_version: 1,
+        expected_supervote_version: 0,
+      }),
+    }),
+  )
+  assert.equal(accepted.status, 200)
+  assert.equal(coordinator.caretakerSupervotes.snapshot().asset_sha256, eligibleAsset)
+  assert.equal(
+    db.calls.some(
+      (call) => call.type === "first" && call.args[0] === "TP53" && call.args[1] === foreignAsset,
+    ),
+    true,
+  )
+})
+
 test("VoteCoordinator outbox survives a partial D1 handoff and replays with one mutation identity", async (t) => {
   t.mock.method(console, "error", () => {})
   let failProjectionJob = true

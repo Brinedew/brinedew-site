@@ -4,6 +4,9 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { encryptManifestationProse, sha256Hex } from "./lib/iconoplasm-manifestation-body-crypto.js"
+import { encryptManifestationTags } from "./lib/iconoplasm-manifestation-tags-crypto.js"
+import { prepareManifestationTagsPayload } from "./iconoplasm/caretaker/manifestation-tags-payload.js"
 
 const SOURCE_SHA = "a".repeat(64)
 const EDITED_BYTES = new TextEncoder().encode("edited-webp-bytes")
@@ -13,6 +16,162 @@ const REFERENCE_SHA_2 = "c".repeat(64)
 
 function base64(bytes) {
   return Buffer.from(bytes).toString("base64")
+}
+
+const AUTHORING_BODY_KEK = new Uint8Array(32).fill(7)
+const AUTHORING_CRYPTO_ENV = Object.freeze({
+  ICONOPLASM_AUTHORING_BODY_KEY_VERSION: "1",
+  ICONOPLASM_AUTHORING_BODY_KEK_V1: base64(AUTHORING_BODY_KEK),
+})
+
+function defaultGeneContext() {
+  return {
+    gene_symbol: "A1BG",
+    full_name: "Alpha-1-B Glycoprotein",
+    manifestation: "A1BG appears as a calm archivist with pearl varnish and measured posture.",
+    manifestation_tags: "calm_archivist, pearl_varnish, measured_posture",
+    sample_label: "A1BG-7",
+    sample_number: 7,
+    sample_text_hash: "d".repeat(64),
+  }
+}
+
+class FakeAuthoringStatement {
+  constructor(authority, sql) {
+    this.authority = authority
+    this.sql = String(sql || "")
+    this.args = []
+  }
+
+  bind(...args) {
+    this.args = args
+    return this
+  }
+
+  async first() {
+    if (this.sql.includes("FROM icono_portrait_generation_provenance")) {
+      return this.db.generationReceipts.get(String(this.args[0] || "")) || null
+    }
+    const row = await this.authority.row()
+    if (this.sql.includes("WHERE g.canonical_symbol")) {
+      return String(this.args[0] || "").toUpperCase() === row.canonical_symbol ? row : null
+    }
+    return row
+  }
+}
+
+class FakeAuthoringDb {
+  constructor(sourceDb, objects) {
+    this.sourceDb = sourceDb
+    this.objects = objects
+    this.cachedRow = null
+  }
+
+  prepare(sql) {
+    return new FakeAuthoringStatement(this, sql)
+  }
+
+  async row() {
+    if (this.cachedRow) return this.cachedRow
+    const context = this.sourceDb.geneContext || defaultGeneContext()
+    const symbol = String(context.gene_symbol || "A1BG").toUpperCase()
+    const geneId = `gene_${symbol.toLowerCase()}_0001`
+    const manifestationId = `manifestation_${symbol.toLowerCase()}_0001`
+    const revisionId = `revision_${symbol.toLowerCase()}_0001`
+    const derivativeId = `derivative_${symbol.toLowerCase()}_0001`
+    const revision = await encryptManifestationProse(AUTHORING_CRYPTO_ENV, {
+      revisionId,
+      geneId,
+      prose: context.manifestation || "A manifestation body.",
+    })
+    const tags = String(context.manifestation_tags || "")
+    const preparedTags = tags
+      ? await prepareManifestationTagsPayload({
+          tagsText: tags,
+          fieldsJson: {},
+          tagsSha256: await sha256Hex(tags),
+          fieldsSha256: await sha256Hex("{}"),
+        })
+      : null
+    const derivative = tags
+      ? await encryptManifestationTags(AUTHORING_CRYPTO_ENV, {
+          derivativeId,
+          revisionId,
+          sourceBodySha256: revision.body_sha256,
+          tags: preparedTags.output_plain,
+        })
+      : null
+    const revisionObjectKey =
+      "private/manifestations/v1/aa/mbody_11111111111111111111111111111111.bin"
+    const derivativeObjectKey =
+      "private/manifestations/v1/bb/mbody_22222222222222222222222222222222.bin"
+    this.objects.set(revisionObjectKey, revision.ciphertext)
+    if (derivative) this.objects.set(derivativeObjectKey, derivative.ciphertext)
+    this.cachedRow = {
+      canonical_symbol: symbol,
+      gene_id: geneId,
+      gene_status: "active",
+      manifestation_id: manifestationId,
+      manifestation_status: "active",
+      manifestation_revision_id: revisionId,
+      body_sha256: revision.body_sha256,
+      body_bytes: revision.body_bytes,
+      sample_label: String(context.sample_label || ""),
+      sample_number:
+        context.sample_number == null ? null : Math.max(0, Number(context.sample_number || 0) || 0),
+      sample_text_sha256: String(context.sample_text_hash || ""),
+      revision_status: "active",
+      revision_object_key: revisionObjectKey,
+      revision_ciphertext_sha256: revision.ciphertext_sha256,
+      revision_ciphertext_bytes: revision.ciphertext_bytes,
+      revision_body_iv_base64: revision.body_iv_base64,
+      revision_wrapped_dek_base64: revision.wrapped_dek_base64,
+      revision_wrap_iv_base64: revision.wrap_iv_base64,
+      revision_key_version: revision.key_version,
+      revision_aad_version: revision.aad_version,
+      revision_verified_at: "2026-08-30 00:00:00",
+      canonical_selection_id: `selection_${symbol.toLowerCase()}_0001`,
+      selected_manifestation_id: manifestationId,
+      selected_revision_id: revisionId,
+      selection_head_version: 1,
+      selection_gene_revision: 1,
+      manifestation_derivative_id: derivative ? derivativeId : null,
+      derivative_status: derivative ? "complete" : null,
+      derivative_source_body_sha256: derivative ? revision.body_sha256 : null,
+      derivative_body_sha256: derivative?.body_sha256 || null,
+      derivative_body_bytes: derivative?.body_bytes || null,
+      derivative_tags_sha256: preparedTags?.tags_sha256 || null,
+      derivative_tags_bytes: preparedTags?.tags_bytes || null,
+      derivative_fields_sha256: preparedTags?.fields_sha256 || null,
+      derivative_fields_bytes: preparedTags?.fields_bytes || null,
+      derivative_recipe_id: derivative ? "taggerizer" : null,
+      derivative_recipe_version: derivative ? "1" : null,
+      derivative_provider_id: derivative ? "test-provider" : null,
+      derivative_model_id: derivative ? "test-tagger" : null,
+      derivative_tagger_config_sha256: derivative ? "e".repeat(64) : null,
+      derivative_provenance_status: derivative ? "generated" : null,
+      derivative_object_key: derivative ? derivativeObjectKey : null,
+      derivative_ciphertext_sha256: derivative?.ciphertext_sha256 || null,
+      derivative_ciphertext_bytes: derivative?.ciphertext_bytes || null,
+      derivative_body_iv_base64: derivative?.body_iv_base64 || null,
+      derivative_wrapped_dek_base64: derivative?.wrapped_dek_base64 || null,
+      derivative_wrap_iv_base64: derivative?.wrap_iv_base64 || null,
+      derivative_key_version: derivative?.key_version || null,
+      derivative_aad_version: derivative?.aad_version || null,
+      derivative_verified_at: derivative ? "2026-08-30 00:00:00" : null,
+    }
+    return this.cachedRow
+  }
+}
+
+function authoringStorageResponse(env, input, init = {}) {
+  const url = new URL(String(input))
+  if (url.hostname !== "storage.test.invalid") return null
+  assert.equal(init.method, "GET")
+  const pathParts = url.pathname.split("/").filter(Boolean)
+  assert.equal(pathParts.shift(), "authoring-test-zone")
+  const bytes = env.__authoringObjects.get(pathParts.join("/"))
+  return bytes ? new Response(bytes, { status: 200 }) : new Response(null, { status: 404 })
 }
 
 test("candidate prompt authority migration renames every stored mode without losing jobs", () => {
@@ -247,6 +406,16 @@ class FakeStatement {
     }
     if (
       this.sql.includes("FROM icono_candidate_generation_jobs") &&
+      this.sql.includes("generation_request_id = ?")
+    ) {
+      return (
+        Array.from(this.db.candidateGenerationJobs.values()).find(
+          (row) => row.user_id === this.args[0] && row.generation_request_id === this.args[1],
+        ) || null
+      )
+    }
+    if (
+      this.sql.includes("FROM icono_candidate_generation_jobs") &&
       this.sql.includes("WHERE id = ?")
     ) {
       const row = this.db.candidateGenerationJobs.get(this.args[0]) || null
@@ -295,19 +464,8 @@ class FakeStatement {
       ).length
       return { n }
     }
-    if (this.sql.includes("FROM icono_gene_catalog gc") && this.sql.includes("manifestation")) {
-      return (
-        this.db.geneContext || {
-          gene_symbol: "A1BG",
-          full_name: "Alpha-1-B Glycoprotein",
-          manifestation:
-            "A1BG appears as a calm archivist with pearl varnish and measured posture.",
-          manifestation_tags: "calm_archivist, pearl_varnish, measured_posture",
-          sample_label: "A1BG-7",
-          sample_number: 7,
-          sample_text_hash: "d".repeat(64),
-        }
-      )
+    if (this.sql.includes("FROM icono_gene_catalog gc")) {
+      return this.db.geneContext || defaultGeneContext()
     }
     return null
   }
@@ -534,11 +692,86 @@ class FakeStatement {
         prompt: this.args[17],
         factory_pipeline_code: this.args[18],
         factory_vision_revision: this.args[19],
-        status: this.args[20],
+        generation_provenance_status: "bound",
+        generation_request_id: this.args[20],
+        generation_attempt_id: this.args[21],
+        source_gene_id: this.args[22],
+        source_manifestation_id: this.args[23],
+        source_manifestation_revision_id: this.args[24],
+        source_manifestation_body_sha256: this.args[25],
+        source_manifestation_derivative_id: this.args[26],
+        source_manifestation_derivative_sha256: this.args[27],
+        source_manifestation_derivative_tags_sha256: this.args[28],
+        source_manifestation_derivative_tags_bytes: this.args[29],
+        source_manifestation_derivative_fields_sha256: this.args[30],
+        source_manifestation_derivative_fields_bytes: this.args[31],
+        source_manifestation_derivative_recipe_id: this.args[32],
+        source_manifestation_derivative_recipe_version: this.args[33],
+        source_manifestation_derivative_provider_id: this.args[34],
+        source_manifestation_derivative_model_id: this.args[35],
+        source_manifestation_derivative_tagger_config_sha256: this.args[36],
+        source_canonical_selection_id: this.args[37],
+        source_canonical_head_version: this.args[38],
+        source_gene_revision: this.args[39],
+        source_sample_label: this.args[40],
+        source_sample_number: this.args[41],
+        source_sample_text_sha256: this.args[42],
+        source_snapshot_sha256: this.args[43],
+        generation_request_contract_sha256: this.args[44],
+        provider_model_id: this.args[45],
+        prompt_sha256: this.args[46],
+        generation_config_sha256: this.args[47],
+        status: this.args[48],
         created_at: "2026-05-16T00:00:00.000Z",
         updated_at: "2026-05-16T00:00:00.000Z",
       }
+      const existing = Array.from(this.db.candidateGenerationJobs.values()).find(
+        (candidate) =>
+          candidate.user_id === row.user_id &&
+          candidate.generation_request_id === row.generation_request_id,
+      )
+      if (existing) return { meta: { changes: 0 } }
       this.db.candidateGenerationJobs.set(row.id, row)
+      return { meta: { changes: 1 } }
+    }
+    if (this.sql.includes("INSERT INTO icono_portrait_generation_provenance")) {
+      const fields = [
+        "generation_request_id",
+        "generation_attempt_id",
+        "gene_symbol",
+        "asset_sha256",
+        "source_gene_id",
+        "source_manifestation_id",
+        "source_manifestation_revision_id",
+        "source_manifestation_body_sha256",
+        "source_manifestation_derivative_id",
+        "source_manifestation_derivative_sha256",
+        "source_manifestation_derivative_tags_sha256",
+        "source_manifestation_derivative_tags_bytes",
+        "source_manifestation_derivative_fields_sha256",
+        "source_manifestation_derivative_fields_bytes",
+        "source_manifestation_derivative_recipe_id",
+        "source_manifestation_derivative_recipe_version",
+        "source_manifestation_derivative_provider_id",
+        "source_manifestation_derivative_model_id",
+        "source_manifestation_derivative_tagger_config_sha256",
+        "source_canonical_selection_id",
+        "source_canonical_head_version",
+        "source_gene_revision",
+        "source_snapshot_sha256",
+        "provider_id",
+        "model_id",
+        "prompt_sha256",
+        "generation_config_sha256",
+        "sample_label",
+        "sample_number",
+        "sample_text_sha256",
+      ]
+      const receipt = Object.fromEntries(fields.map((field, index) => [field, this.args[index]]))
+      if (this.db.generationReceipts.has(receipt.generation_request_id)) {
+        return { meta: { changes: 0 } }
+      }
+      this.db.generationReceipts.set(receipt.generation_request_id, receipt)
       return { meta: { changes: 1 } }
     }
     if (
@@ -606,7 +839,7 @@ class FakeStatement {
           : this.sql.includes("'image-gen'")
             ? (this.args[13] ?? null)
             : null,
-        created_by: this.args[this.args.length - 1],
+        created_by: isImageEdit ? this.args[this.args.length - 1] : this.args[14],
       }
       return { meta: { changes: 1 } }
     }
@@ -716,6 +949,7 @@ class FakeDb {
     this.promptTemplates = new Map()
     this.jobs = new Map()
     this.candidateGenerationJobs = new Map()
+    this.generationReceipts = new Map()
     this.users = new Map([
       [
         "user-1",
@@ -839,9 +1073,18 @@ function buildPortraitStorage() {
 }
 
 function buildEnv(db = new FakeDb(), session = { user_id: "user-1", username: "tester" }) {
-  return {
+  const authoringObjects = new Map()
+  const env = {
     DB: db,
     ICONOPLASM_DB: db,
+    ICONOPLASM_AUTHORING_DB: new FakeAuthoringDb(db, authoringObjects),
+    ICONOPLASM_AUTHORING_BODY_KEY_VERSION: "1",
+    ICONOPLASM_AUTHORING_BODY_KEK_V1: base64(AUTHORING_BODY_KEK),
+    ICONOPLASM_AUTHORING_STORAGE_HOST: "storage.test.invalid",
+    ICONOPLASM_AUTHORING_STORAGE_ZONE: "authoring-test-zone",
+    ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "authoring-test-password",
+    ICONOPLASM_AUTHORING_STORAGE_TIMEOUT_MS: "500",
+    __authoringObjects: authoringObjects,
     ICONOPLASM_PORTRAITS: buildPortraitStorage(),
     KV: {
       async get() {
@@ -857,6 +1100,7 @@ function buildEnv(db = new FakeDb(), session = { user_id: "user-1", username: "t
     // Tests override to 0 so polling doesn't block the test suite.
     ICONOPLASM_PROVIDER_POLL_INTERVAL_MS: "0",
   }
+  return env
 }
 
 function seedSucceededCandidateGenerationJob(db, id = "candidate-publish-test") {
@@ -868,6 +1112,36 @@ function seedSucceededCandidateGenerationJob(db, id = "candidate-publish-test") 
     request_mode: "novel",
     reference_assets_json: "[]",
     prompt_body_mode: "prose_prompt",
+    manifestation: "",
+    prompt: "",
+    generation_provenance_status: "bound",
+    generation_request_id: `direct-${id}`,
+    generation_attempt_id: `attempt-${id}`,
+    source_gene_id: "gene_a1bg_0001",
+    source_manifestation_id: "manifestation_a1bg_0001",
+    source_manifestation_revision_id: "revision_a1bg_0001",
+    source_manifestation_body_sha256: "d".repeat(64),
+    source_manifestation_derivative_id: "",
+    source_manifestation_derivative_sha256: "",
+    source_manifestation_derivative_tags_sha256: "",
+    source_manifestation_derivative_tags_bytes: 0,
+    source_manifestation_derivative_fields_sha256: "",
+    source_manifestation_derivative_fields_bytes: 0,
+    source_manifestation_derivative_recipe_id: "",
+    source_manifestation_derivative_recipe_version: "",
+    source_manifestation_derivative_provider_id: "",
+    source_manifestation_derivative_model_id: "",
+    source_manifestation_derivative_tagger_config_sha256: "",
+    source_canonical_selection_id: "selection_a1bg_0001",
+    source_canonical_head_version: 1,
+    source_gene_revision: 1,
+    source_sample_label: "A1BG-1",
+    source_sample_number: 1,
+    source_sample_text_sha256: "d".repeat(64),
+    source_snapshot_sha256: "9".repeat(64),
+    provider_model_id: "gpt-image-2",
+    prompt_sha256: "8".repeat(64),
+    generation_config_sha256: "7".repeat(64),
     status: "succeeded",
     result_asset_sha256: "e".repeat(64),
     result_r2_key_full: `portraits/v1/ee/${"e".repeat(64)}/full.webp`,
@@ -1398,7 +1672,7 @@ test("OpenAI is a first-class BYOK image provider with model pricing and Image A
         { waitUntil() {} },
       )
     const created = await createResponse.json()
-    assert.equal(createResponse.status, 200)
+    assert.equal(createResponse.status, 200, JSON.stringify(created))
     assert.equal(created.job.status, "succeeded")
     assert.ok(created.job.result_asset_sha256)
     assert.equal(fetchCalls[0].url, "https://api.openai.com/v1/images/edits")
@@ -1517,6 +1791,8 @@ test("candidate generation jobs use novel provider generation and publish explic
   const env = buildEnv(db)
   const fetchCalls = []
   globalThis.fetch = async (input, init = {}) => {
+    const authoringBody = authoringStorageResponse(env, input, init)
+    if (authoringBody) return authoringBody
     const url = String(input)
     fetchCalls.push({ url, init })
     if (url === "https://api.openai.com/v1/images/generations") {
@@ -1578,6 +1854,7 @@ test("candidate generation jobs use novel provider generation and publish explic
               provider_id: "openai",
               symbol: "A1BG",
               request_mode: "novel",
+              generation_request_id: "direct-idempotency-0001",
             }),
           },
         ),
@@ -1586,7 +1863,7 @@ test("candidate generation jobs use novel provider generation and publish explic
       )
     const created = await createResponse.json()
 
-    assert.equal(createResponse.status, 200)
+    assert.equal(createResponse.status, 200, JSON.stringify(created))
     assert.equal(created.job.status, "succeeded")
     assert.equal(created.job.gene_symbol, "A1BG")
     assert.equal(created.job.request_mode, "novel")
@@ -1595,20 +1872,49 @@ test("candidate generation jobs use novel provider generation and publish explic
     assert.equal(created.job.requested_vision_id, "")
     assert.equal(created.job.prompt_body_mode, "taggerizer_prompt")
     assert.equal(created.job.sample_label, "A1BG-7")
-    assert.equal(
-      "prompt" in created.job,
-      true,
-      "candidate generation job should expose the stored prompt so the caller can verify what was sent to the provider",
-    )
-    assert.ok(
-      typeof created.job.prompt === "string" && created.job.prompt.length > 0,
-      "stored prompt should be a non-empty string",
-    )
-    assert.match(created.job.prompt, /Subject gene:\s*A1BG/)
+    assert.equal(created.job.prompt, "")
+    assert.equal(created.job.manifestation, undefined)
+    assert.match(created.job.prompt_sha256, /^[a-f0-9]{64}$/)
+    assert.match(created.job.source_snapshot_sha256, /^[a-f0-9]{64}$/)
     assert.equal(created.job.reference_assets.length, 0)
     assert.ok(created.job.result_asset_sha256)
     assert.equal(env.ICONOPLASM_PORTRAITS.puts.length, 3)
     assert.equal(fetchCalls[0].url, "https://api.openai.com/v1/images/generations")
+    assert.equal(db.candidateGenerationJobs.get(created.job.id).manifestation, "")
+    assert.equal(db.candidateGenerationJobs.get(created.job.id).prompt, "")
+
+    env.ICONOPLASM_AUTHORING_DB = {
+      prepare() {
+        throw new Error("An exact idempotent retry must not resolve mutable authority again")
+      },
+    }
+    const replayResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/candidate-generation/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "openai",
+              symbol: "A1BG",
+              request_mode: "novel",
+              generation_request_id: "direct-idempotency-0001",
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const replayed = await replayResponse.json()
+    assert.equal(replayResponse.status, 200)
+    assert.equal(replayed.idempotent_replay, true)
+    assert.equal(replayed.job.id, created.job.id)
+    assert.equal(
+      fetchCalls.filter((call) => call.url === "https://api.openai.com/v1/images/generations")
+        .length,
+      1,
+    )
 
     const publishResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -1647,6 +1953,8 @@ test("candidate generation appends the signed-in user's saved emulsion and publi
   })
   const env = buildEnv(db)
   globalThis.fetch = async (input, init = {}) => {
+    const authoringBody = authoringStorageResponse(env, input, init)
+    if (authoringBody) return authoringBody
     const url = String(input)
     if (url === "https://api.openai.com/v1/images/generations") {
       const body = JSON.parse(String(init.body || "{}"))
@@ -1737,6 +2045,8 @@ test("candidate generation rejects another user's selected emulsion", async () =
   })
   const env = buildEnv(db)
   globalThis.fetch = async (input, init = {}) => {
+    const authoringBody = authoringStorageResponse(env, input, init)
+    if (authoringBody) return authoringBody
     const url = String(input)
     if (url === "https://api.openai.com/v1/images/generations") {
       return new Response(JSON.stringify({ data: [{ b64_json: base64(GENERATED_BYTES) }] }), {
@@ -1801,6 +2111,8 @@ test("candidate generation stores actual WebP dimensions when provider output ha
   const db = new FakeDb()
   const env = buildEnv(db)
   globalThis.fetch = async (input, init = {}) => {
+    const authoringBody = authoringStorageResponse(env, input, init)
+    if (authoringBody) return authoringBody
     const url = String(input)
     if (url === "https://api.openai.com/v1/images/generations") {
       return new Response(JSON.stringify({ data: [{ b64_json: base64(generatedWebp) }] }), {
@@ -1860,7 +2172,7 @@ test("candidate generation stores actual WebP dimensions when provider output ha
   }
 })
 
-test("candidate generation labels legacy current manifestations with sample zero", async () => {
+test("candidate generation preserves exact sample zero without inventing a sample-text hash", async () => {
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
   db.geneContext = {
@@ -1873,6 +2185,8 @@ test("candidate generation labels legacy current manifestations with sample zero
   }
   const env = buildEnv(db)
   globalThis.fetch = async (input, init = {}) => {
+    const authoringBody = authoringStorageResponse(env, input, init)
+    if (authoringBody) return authoringBody
     const url = String(input)
     if (url === "https://api.openai.com/v1/images/generations") {
       const body = JSON.parse(String(init.body || "{}"))
@@ -1938,7 +2252,7 @@ test("candidate generation labels legacy current manifestations with sample zero
     assert.equal(body.job.sample_label, "A1BG-0")
     assert.equal(body.job.sample_number, 0)
     assert.equal(body.job.request_mode, "novel")
-    assert.match(body.job.sample_text_hash, /^[a-f0-9]{64}$/)
+    assert.equal(body.job.sample_text_hash, "")
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -1972,6 +2286,8 @@ test("candidate generation uses the complete Taggerizer prompt with appended ess
   }
   const env = buildEnv(db)
   globalThis.fetch = async (input, init = {}) => {
+    const authoringBody = authoringStorageResponse(env, input, init)
+    if (authoringBody) return authoringBody
     const url = String(input)
     if (url === "https://api.openai.com/v1/images/generations") {
       const body = JSON.parse(String(init.body || "{}"))
@@ -2178,6 +2494,8 @@ test("candidate generation includes bounded non-hidden community comments and sn
   ]
   const env = buildEnv(db)
   globalThis.fetch = async (input, init = {}) => {
+    const authoringBody = authoringStorageResponse(env, input, init)
+    if (authoringBody) return authoringBody
     const url = String(input)
     if (url === "https://api.openai.com/v1/images/generations") {
       const body = JSON.parse(String(init.body || "{}"))
@@ -2255,6 +2573,8 @@ test("OpenAI candidate generation uses the Image API generation endpoint without
   const env = buildEnv(db)
   const fetchCalls = []
   globalThis.fetch = async (input, init = {}) => {
+    const authoringBody = authoringStorageResponse(env, input, init)
+    if (authoringBody) return authoringBody
     const url = String(input)
     fetchCalls.push({ url, init })
     if (url === "https://api.openai.com/v1/images/generations") {
@@ -2449,6 +2769,8 @@ test("Luma Uni candidate generation does not attach local emulsion references", 
   const db = new FakeDb()
   const env = buildEnv(db)
   globalThis.fetch = async (input, init = {}) => {
+    const authoringBody = authoringStorageResponse(env, input, init)
+    if (authoringBody) return authoringBody
     const url = String(input)
     if (url === "https://agents.lumalabs.ai/v1/generations") {
       assert.equal(init.headers.Authorization, "Bearer luma-agents-test-secret")
@@ -2545,6 +2867,8 @@ test("candidate generation jobs can use Krea API models and expose compute-unit 
   const env = buildEnv(db)
   const fetchCalls = []
   globalThis.fetch = async (input, init = {}) => {
+    const authoringBody = authoringStorageResponse(env, input, init)
+    if (authoringBody) return authoringBody
     const url = String(input)
     fetchCalls.push({ url, init })
     if (url === "https://api.krea.ai/generate/image/krea/krea-2/large") {

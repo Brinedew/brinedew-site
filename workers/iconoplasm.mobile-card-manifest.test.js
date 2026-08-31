@@ -42,6 +42,9 @@ class FakeStatement {
   }
 
   async first() {
+    if (this.sql.includes("icono_manifestation_projection_authority")) {
+      return { mode: "legacy_write" }
+    }
     if (this.sql.includes("ORDER BY id DESC") && this.sql.includes("icono_publish_events")) {
       return { id: 100, created_at: this.db.maxEventAt }
     }

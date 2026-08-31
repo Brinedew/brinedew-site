@@ -422,6 +422,7 @@ function iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion) {
     canonicalMeta +
     '<div aria-hidden="true"></div></section></div></section></div>' +
     "</section>" +
+    '<div class="icono-caretaker-island" data-icono-caretaker-island hidden></div>' +
     '<div data-icono-suggest-island><section class="icono-suggest" data-icono-suggest="' +
     escapeIconoplasmHtmlAttribute(symbol) +
     '"><div class="icono-suggest-lab">Suggestions<span data-icono-suggest-count></span></div><div class="icono-suggest-list" data-icono-suggest-list></div></section></div>' +
@@ -1301,6 +1302,7 @@ import {
   IconoplasmCardPublicationCoordinator,
   IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
   IconoplasmSyncGovernor,
+  drainIconoplasmAuthorityProjectionOutboxes,
   handleIconoplasmQueue,
   publishSharedGeneDiscoverySymbols,
   recoverDueIconoplasmGeneCardMaterializationsForScheduled,
@@ -1395,6 +1397,10 @@ import {
 } from "./lib/structure-utils.js"
 import { getDailyGuessAggregates, recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
+import {
+  BrinedewAccountIdentityError,
+  hydrateBrinedewSessionAccountIdentity,
+} from "./lib/brinedew-account-identity.js"
 import { getMolstarSharedSource } from "./lib/molstar-shared-bundle.js"
 import { extractAvatarUpstreamFromRequest } from "./lib/avatar-proxy.js"
 import {
@@ -3251,13 +3257,30 @@ export default {
         sharedDiscoveryPublication,
         geneCardMaterializationRecovery,
         recognitionPolicyReconciliation,
+        authorityProjectionRecovery,
       ] = await Promise.allSettled([
         runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx),
         deliverPendingRequestFulfillmentNotifications(env, { limit: 20 }),
         sharedDiscoveryPublicationPromise,
         recoverDueIconoplasmGeneCardMaterializationsForScheduled(env),
         reconcileIconoplasmRecognitionPolicies(env),
+        drainIconoplasmAuthorityProjectionOutboxes(env, { limit: 25 }),
       ])
+      if (authorityProjectionRecovery.status === "rejected") {
+        console.error(
+          "[CRON] Manifestation authority projection recovery failed:",
+          String(
+            authorityProjectionRecovery.reason?.message ||
+              authorityProjectionRecovery.reason ||
+              "unknown error",
+          ),
+        )
+      } else if (!authorityProjectionRecovery.value.ok) {
+        console.error(
+          "[CRON] Manifestation authority projection recovery remains pending:",
+          authorityProjectionRecovery.value,
+        )
+      }
       if (notificationDelivery.status === "fulfilled") {
         const notificationSettlement = await reconcileDeliveredRequestFulfillments(env)
         if (notificationDelivery.value.considered) {
@@ -3862,7 +3885,37 @@ export class GameSession {
    * Internal route only
    */
   async getData() {
-    const data = await this.state.storage.get("data")
+    let data = (await this.state.storage.get("data")) || {}
+    if (data.user_id && this.env?.DB) {
+      let hydrated
+      try {
+        hydrated = await hydrateBrinedewSessionAccountIdentity(this.env.DB, data)
+      } catch (error) {
+        if (error instanceof BrinedewAccountIdentityError && error.status < 500) {
+          await this.state.storage.deleteAll()
+          return Response.json(
+            { error: "Brinedew account identity is not active" },
+            { status: 401, headers: { "X-Brinedew-Account-Status": "identity_unlinked" } },
+          )
+        }
+        console.warn("Brinedew account status could not be verified for a stored session", {
+          error: error?.message || String(error || "unknown"),
+        })
+        return Response.json({ error: "Account status unavailable" }, { status: 503 })
+      }
+      if (!hydrated.active) {
+        await this.state.storage.deleteAll()
+        return Response.json(
+          { error: "Brinedew account is not active" },
+          {
+            status: 401,
+            headers: { "X-Brinedew-Account-Status": hydrated.session.account_status },
+          },
+        )
+      }
+      data = hydrated.session
+      if (hydrated.changed) await this.state.storage.put("data", data)
+    }
     return new Response(JSON.stringify(data || {}), {
       headers: { "Content-Type": "application/json" },
     })
@@ -3870,10 +3923,42 @@ export class GameSession {
 
   async resolveAuthSession() {
     const resolve = async () => {
-      const stored = (await this.state.storage.get("data")) || {}
+      let stored = (await this.state.storage.get("data")) || {}
+      let accountIdentityChanged = false
+      if (stored?.user_id && this.env?.DB) {
+        let hydrated
+        try {
+          hydrated = await hydrateBrinedewSessionAccountIdentity(this.env.DB, stored)
+        } catch (error) {
+          if (error instanceof BrinedewAccountIdentityError && error.status < 500) {
+            await this.state.storage.deleteAll()
+            return Response.json(
+              { error: "Brinedew account identity is not active" },
+              { status: 401, headers: { "X-Brinedew-Account-Status": "identity_unlinked" } },
+            )
+          }
+          console.warn("Brinedew account status could not be verified for an auth session", {
+            error: error?.message || String(error || "unknown"),
+          })
+          return Response.json({ error: "Account status unavailable" }, { status: 503 })
+        }
+        if (!hydrated.active) {
+          await this.state.storage.deleteAll()
+          return Response.json(
+            { error: "Brinedew account is not active" },
+            {
+              status: 401,
+              headers: { "X-Brinedew-Account-Status": hydrated.session.account_status },
+            },
+          )
+        }
+        stored = hydrated.session
+        accountIdentityChanged = hydrated.changed
+      }
       const result = await resolveDiscordSessionAuthorization(stored, this.env)
-      if (result.changed) {
-        await this.state.storage.put("data", result.session)
+      const resolvedSession = result.session
+      if (result.changed || accountIdentityChanged) {
+        await this.state.storage.put("data", resolvedSession)
         if (
           result.outcome === "reauthorization_required" &&
           stored.tier !== "registered" &&
@@ -3892,7 +3977,7 @@ export class GameSession {
           }
         }
       }
-      return new Response(JSON.stringify(result.session || {}), {
+      return new Response(JSON.stringify(resolvedSession || {}), {
         headers: {
           "Content-Type": "application/json",
           "X-Brinedew-Discord-Authorization": result.outcome,

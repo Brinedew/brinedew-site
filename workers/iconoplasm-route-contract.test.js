@@ -39,6 +39,44 @@ const PATTERN_EXAMPLES = Object.freeze({
   gene_request_state_gone: "/api/iconoplasm/requests/gene/TP53",
   emulsion_favorite_item: "/api/iconoplasm/emulsion-favorites/A1-255",
   admin_gene_request_diagnostics: "/api/iconoplasm/admin/requests/gene/TP53/diagnostics",
+  caretaker_gene_dossier: "/api/iconoplasm/caretaker/genes/TP53",
+  caretaker_revision_body: "/api/iconoplasm/caretaker/genes/TP53/revisions/revision_0001/body",
+  caretaker_derivative_body:
+    "/api/iconoplasm/caretaker/genes/TP53/derivatives/derivative_0001/body",
+  caretaker_revision_create: "/api/iconoplasm/caretaker/genes/TP53/revisions",
+  caretaker_canonical_selection: "/api/iconoplasm/caretaker/genes/TP53/canonical-selections",
+  caretaker_manifestation_withdraw:
+    "/api/iconoplasm/caretaker/genes/TP53/manifestations/manifestation_0001",
+  caretaker_manifestation_restore:
+    "/api/iconoplasm/caretaker/genes/TP53/manifestations/manifestation_0001/restore",
+  caretaker_assignment_action:
+    "/api/iconoplasm/caretaker/genes/TP53/assignments/assignment_0001/accept",
+  caretaker_supervote: "/api/iconoplasm/caretaker/genes/TP53/supervote",
+  caretaker_admin_assignment_action:
+    "/api/iconoplasm/admin/caretakers/assignments/assignment_0001/suspend",
+  authority_snapshot_status: "/api/iconoplasm/authority/snapshots/snapshot_0001",
+  authority_snapshot_parts: "/api/iconoplasm/authority/snapshots/snapshot_0001/parts",
+  authority_snapshot_complete: "/api/iconoplasm/authority/snapshots/snapshot_0001/complete",
+  authority_revision_body: "/api/iconoplasm/authority/revisions/revision_0001/body",
+  authority_derivative_body: "/api/iconoplasm/authority/derivatives/derivative_0001/body",
+  authority_tags_derivative_submit:
+    "/api/iconoplasm/authority/revisions/revision_0001/tags-derivatives",
+  authority_tags_derivative_select:
+    "/api/iconoplasm/authority/revisions/revision_0001/tags-derivative-head",
+  authority_backups: "/api/iconoplasm/authority/backups/capabilities",
+  authority_cutover_status: "/api/iconoplasm/authority/cutover/runs/cutover_0001",
+  authority_cutover_actions: "/api/iconoplasm/authority/cutover/runs/cutover_0001/actions",
+  authority_maintenance_retention:
+    "/api/iconoplasm/authority/maintenance/withdrawal-retention/sweep",
+  authority_maintenance_commands: "/api/iconoplasm/authority/maintenance/command-receipts/compact",
+  authority_event_compaction_status:
+    "/api/iconoplasm/authority/maintenance/event-compaction/checkpoints/checkpoint_0001",
+  authority_event_compaction_action:
+    "/api/iconoplasm/authority/maintenance/event-compaction/checkpoints/checkpoint_0001/build",
+  authority_generation_lease_renew:
+    "/api/iconoplasm/authority/generation-leases/generation_lease_0001/renew",
+  authority_generation_lease_fail:
+    "/api/iconoplasm/authority/generation-leases/generation_lease_0001/fail",
   clan_members: "/api/iconoplasm/clans/Kinase/members",
   gene_comments_legacy_read: "/api/iconoplasm/comments/gene/TP53",
   gene_comments: "/api/iconoplasm/genes/TP53/comments",
@@ -113,6 +151,56 @@ test("every declared API handler has exactly one executable registry entry", () 
   ).sort()
 
   assert.deepEqual(ICONOPLASM_DECLARED_API_HANDLER_NAMES, declaredHandlerNames)
+})
+
+test("authority routes declare one least-privilege bearer audience", () => {
+  const expected = {
+    "authority-generation-bearer": [
+      "authority_generation_lease_claim",
+      "authority_generation_lease_renew",
+      "authority_generation_lease_fail",
+      "authority_generation_lease_complete",
+    ],
+    "authority-replica-bearer": [
+      "authority_events",
+      "authority_events_ack",
+      "authority_snapshots_create",
+      "authority_snapshot_status",
+      "authority_snapshot_parts",
+      "authority_snapshot_complete",
+      "authority_revision_body",
+      "authority_derivative_body",
+      "authority_tags_derivative_submit",
+      "authority_tags_derivative_select",
+    ],
+    "authority-backup-bearer": ["authority_backups"],
+    "authority-cutover-bearer": ["authority_cutover_status", "authority_cutover_actions"],
+    "authority-maintenance-bearer": [
+      "authority_maintenance_retention",
+      "authority_maintenance_commands",
+      "authority_event_compaction_start",
+      "authority_event_compaction_sweep",
+      "authority_event_compaction_status",
+      "authority_event_compaction_action",
+    ],
+  }
+  const authorityRoutes = ICONOPLASM_ROUTE_CONTRACTS.filter((route) =>
+    route.id.startsWith("authority_"),
+  )
+  assert.equal(
+    authorityRoutes.some((route) => route.auth === "service-bearer"),
+    false,
+  )
+  for (const [audience, routeIds] of Object.entries(expected)) {
+    assert.deepEqual(
+      authorityRoutes
+        .filter((route) => route.auth === audience)
+        .map((route) => route.id)
+        .sort(),
+      [...routeIds].sort(),
+      audience,
+    )
+  }
 })
 
 test("every route contract resolves to an executable D1 budget classification", () => {

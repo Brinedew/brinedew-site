@@ -5,6 +5,62 @@ import test from "node:test"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const SOURCE_SHA = "a".repeat(64)
+const SOURCE_BODY_SHA = "b".repeat(64)
+const SOURCE_TAGS_SHA = "c".repeat(64)
+const SOURCE_FIELDS_SHA = "d".repeat(64)
+const SOURCE_DERIVATIVE_SHA = "e".repeat(64)
+const SOURCE_CONFIG_SHA = "f".repeat(64)
+
+const AUTHORING_SOURCE_ROW = Object.freeze({
+  gene_id: "gene_a1bg_0001",
+  gene_status: "active",
+  manifestation_id: "manifestation_a1bg_0001",
+  manifestation_status: "active",
+  manifestation_revision_id: "revision_a1bg_0001",
+  body_sha256: SOURCE_BODY_SHA,
+  body_bytes: 32,
+  sample_label: "A1BG-1",
+  sample_number: 1,
+  sample_text_sha256: "9".repeat(64),
+  revision_status: "active",
+  revision_object_key: "private/manifestations/v1/aa/a1bg.bin",
+  revision_verified_at: "2026-08-30 00:00:00",
+  canonical_selection_id: "selection_a1bg_0001",
+  selected_manifestation_id: "manifestation_a1bg_0001",
+  selected_revision_id: "revision_a1bg_0001",
+  selection_head_version: 1,
+  selection_gene_revision: 1,
+  manifestation_derivative_id: "derivative_a1bg_0001",
+  derivative_status: "complete",
+  derivative_source_body_sha256: SOURCE_BODY_SHA,
+  derivative_body_sha256: SOURCE_DERIVATIVE_SHA,
+  derivative_body_bytes: 6,
+  derivative_tags_sha256: SOURCE_TAGS_SHA,
+  derivative_tags_bytes: 2,
+  derivative_fields_sha256: SOURCE_FIELDS_SHA,
+  derivative_fields_bytes: 3,
+  derivative_recipe_id: "tagger",
+  derivative_recipe_version: "1",
+  derivative_provider_id: "provider",
+  derivative_model_id: "model",
+  derivative_tagger_config_sha256: SOURCE_CONFIG_SHA,
+  derivative_provenance_status: "generated",
+  derivative_object_key: "private/manifestations/v1/aa/a1bg-tags.bin",
+  derivative_verified_at: "2026-08-30 00:00:00",
+})
+
+const AUTHORING_DB = Object.freeze({
+  prepare() {
+    return {
+      bind() {
+        return this
+      },
+      async first() {
+        return AUTHORING_SOURCE_ROW
+      },
+    }
+  },
+})
 
 class FakeStatement {
   constructor(db, sql) {
@@ -38,11 +94,17 @@ class FakeStatement {
         (item) =>
           item.requester_user_id === this.args[0] && item.client_request_id === this.args[1],
       )
-      return existing ? { id: existing.id } : null
+      return existing
+        ? {
+            id: existing.id,
+            generation_request_contract_sha256: existing.generation_request_contract_sha256,
+          }
+        : null
     }
     if (this.sql.includes("WHERE gr.id = ?")) {
       const stored = this.db.generationRequests.find((item) => item.id === Number(this.args[0]))
       return {
+        ...stored,
         id: stored?.id || this.db.lastRequestId || 1,
         gene_symbol: stored?.gene_symbol || this.db.lastGenerationRequest?.gene_symbol || "A1BG",
         full_name: "alpha-1-B glycoprotein",
@@ -143,6 +205,34 @@ class FakeStatement {
         seed_mode: "random",
         factory_pipeline_code: this.args[14],
         factory_vision_revision: this.args[15],
+        request_origin: this.args[16],
+        diagnostic_run_id: this.args[17],
+        generation_provenance_status: "bound",
+        generation_request_id: this.args[18],
+        source_gene_id: this.args[19],
+        source_manifestation_id: this.args[20],
+        source_manifestation_revision_id: this.args[21],
+        source_manifestation_body_sha256: this.args[22],
+        source_manifestation_derivative_id: this.args[23],
+        source_manifestation_derivative_sha256: this.args[24],
+        source_manifestation_derivative_tags_sha256: this.args[25],
+        source_manifestation_derivative_tags_bytes: this.args[26],
+        source_manifestation_derivative_fields_sha256: this.args[27],
+        source_manifestation_derivative_fields_bytes: this.args[28],
+        source_manifestation_derivative_recipe_id: this.args[29],
+        source_manifestation_derivative_recipe_version: this.args[30],
+        source_manifestation_derivative_provider_id: this.args[31],
+        source_manifestation_derivative_model_id: this.args[32],
+        source_manifestation_derivative_tagger_config_sha256: this.args[33],
+        source_canonical_selection_id: this.args[34],
+        source_canonical_head_version: this.args[35],
+        source_gene_revision: this.args[36],
+        source_sample_label: this.args[37],
+        source_sample_number: this.args[38],
+        source_sample_text_sha256: this.args[39],
+        source_snapshot_sha256: this.args[40],
+        generation_request_contract_sha256: this.args[41],
+        generation_config_sha256: this.args[42],
       }
       this.db.generationRequests.push(this.db.lastGenerationRequest)
       return { meta: { last_row_id: this.db.lastRequestId, changes: 1 } }
@@ -259,6 +349,7 @@ function buildVoteCoordinatorBinding(db) {
 function buildEnv(db = new FakeDb()) {
   return {
     ICONOPLASM_DB: db,
+    ICONOPLASM_AUTHORING_DB: AUTHORING_DB,
     GAME_SESSIONS: buildSessionBinding({ user_id: "user-1", username: "tester" }),
     ICONOPLASM_VOTE_COORDINATORS: buildVoteCoordinatorBinding(db),
   }
