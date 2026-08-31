@@ -109,6 +109,30 @@ test("private body deletion is confirmed by an authenticated missing read", asyn
   }
 })
 
+test("private body deletion waits for Bunny to stop serving the deleted object", async () => {
+  const originalFetch = globalThis.fetch
+  let reads = 0
+  globalThis.fetch = async (_url, init = {}) => {
+    if (init.method === "DELETE") return new Response(null, { status: 200 })
+    reads += 1
+    return reads === 1
+      ? new Response(new Uint8Array(24), { status: 200 })
+      : new Response(null, { status: 404 })
+  }
+  try {
+    const key = await createManifestationBodyObjectKey({
+      locatorId: "mbody_dddddddd123442348234123456789abc",
+    })
+    assert.deepEqual(await deleteEncryptedManifestationBody(env, key), {
+      ok: true,
+      already_missing: false,
+    })
+    assert.equal(reads, 2)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("body object locators are random authority-only identifiers, not revision-derived paths", async () => {
   const first = await createManifestationBodyObjectKey()
   const second = await createManifestationBodyObjectKey()

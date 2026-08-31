@@ -203,7 +203,10 @@ export async function requireAdoptedManifestationUpload(db, entityKindInput, ent
 }
 
 async function claimExpiredIntent(db, row, now, leaseToken) {
-  const leaseExpiresAt = futureLease(now, 60_000)
+  // Bunny delete visibility follows the same bounded eventual-consistency
+  // window as writes. Hold the claim for the complete idempotent delete proof
+  // so another sweeper cannot reclaim the same object mid-verification.
+  const leaseExpiresAt = futureLease(now, MAX_LEASE_MS)
   const result = await prepared(
     db,
     `UPDATE icono_manifestation_upload_intents
