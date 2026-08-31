@@ -22,6 +22,9 @@ param(
     [ValidateRange(1, 55)]
     [int] $OverallTimeoutMinutes = 55,
 
+    [ValidateRange(1, 10)]
+    [int] $PageLimit = 10,
+
     [string] $StatePath = (Join-Path $PSScriptRoot '..\artifacts\caretaker-authority-cutover\cutover-state-iconoplasm.brinedew.bio.json')
 )
 
@@ -71,7 +74,7 @@ function Invoke-ShardRound {
         foreach ($shardIndex in 0..($ShardCount - 1)) {
             $payload = [ordered]@{
                 action       = 'materialize'
-                limit        = 10
+                limit        = $PageLimit
                 retry_failed = $true
                 shard_count  = $ShardCount
                 shard_index  = $shardIndex
