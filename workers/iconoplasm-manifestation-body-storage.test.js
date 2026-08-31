@@ -5,6 +5,7 @@ import {
   createManifestationBodyObjectKey,
   deleteEncryptedManifestationBody,
   putEncryptedManifestationBody,
+  putEncryptedManifestationBodyOnce,
   readEncryptedManifestationBody,
 } from "./lib/iconoplasm-manifestation-body-storage.js"
 import { sha256Hex } from "./lib/iconoplasm-manifestation-body-crypto.js"
@@ -78,6 +79,28 @@ test("private body storage waits through Bunny's measured read-after-write windo
     })
     assert.equal(result.etag, '"eventual-etag"')
     assert.equal(reads, 2)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("resumable private upload writes once without demanding immediate visibility", async () => {
+  const originalFetch = globalThis.fetch
+  const methods = []
+  globalThis.fetch = async (_url, init = {}) => {
+    methods.push(init.method)
+    return new Response(null, { status: 201 })
+  }
+  try {
+    const key = await createManifestationBodyObjectKey({
+      locatorId: "mbody_eeeeeeee123442348234123456789abc",
+    })
+    const ciphertext = new Uint8Array(32).fill(23)
+    const result = await putEncryptedManifestationBodyOnce(env, key, ciphertext, {
+      expectedSha256: await sha256Hex(ciphertext),
+    })
+    assert.equal(result.ok, true)
+    assert.deepEqual(methods, ["PUT"])
   } finally {
     globalThis.fetch = originalFetch
   }

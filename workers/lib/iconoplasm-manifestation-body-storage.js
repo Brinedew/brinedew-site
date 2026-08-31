@@ -153,6 +153,35 @@ export async function putEncryptedManifestationBody(
   throw lastError || new Error("Encrypted manifestation body could not be verified after PUT")
 }
 
+export async function putEncryptedManifestationBodyOnce(
+  env,
+  objectKey,
+  ciphertext,
+  { expectedSha256 } = {},
+) {
+  const bytes = ciphertext instanceof Uint8Array ? ciphertext : new Uint8Array(ciphertext)
+  if (bytes.byteLength < 17 || bytes.byteLength > MAX_CIPHERTEXT_BYTES) {
+    throw new TypeError("Encrypted manifestation body has an invalid byte length")
+  }
+  const expectedHash = String(expectedSha256 || (await sha256Hex(bytes))).toLowerCase()
+  if (!/^[a-f0-9]{64}$/.test(expectedHash)) throw new TypeError("Ciphertext SHA-256 is invalid")
+  const response = await storageFetch(
+    env,
+    objectKey,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Cache-Control": "private, no-store",
+      },
+      body: bytes,
+    },
+    { maxAttempts: 2 },
+  )
+  if (!response.ok) throw new Error(`Private manifestation storage PUT failed (${response.status})`)
+  return { ok: true, ciphertext_sha256: expectedHash }
+}
+
 export async function deleteEncryptedManifestationBody(env, objectKey) {
   let initiallyMissing = false
   for (let attempt = 0; attempt < 6; attempt += 1) {

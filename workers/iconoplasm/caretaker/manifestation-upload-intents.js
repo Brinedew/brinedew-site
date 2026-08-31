@@ -16,6 +16,7 @@ import {
   requireActiveAccount,
   requireDatabase,
 } from "./manifestation-authority-repository.js"
+import { storageFields } from "./manifestation-storage-contract.js"
 
 const MAX_LEASE_MS = 10 * 60 * 1000
 const DEFAULT_LEASE_MS = 2 * 60 * 1000
@@ -121,14 +122,28 @@ export async function createManifestationUploadIntent(db, input = {}) {
   const leaseToken = createId(input.leaseToken, "lease_token", "upload_lease", idFactory)
   const locator = objectKey(input.objectKey)
   const ciphertextSha256 = normalizeSha256(input.ciphertextSha256)
+  const resumableStorage = input.storageDescriptor ? storageFields(input.storageDescriptor) : null
+  if (
+    resumableStorage &&
+    (resumableStorage.object_key !== locator ||
+      resumableStorage.ciphertext_sha256 !== ciphertextSha256 ||
+      resumableStorage.body_bytes !== bodyBytes)
+  ) {
+    throw authorityError(
+      "UPLOAD_ENVELOPE_MISMATCH",
+      "Resumable upload metadata does not match the reservation",
+    )
+  }
   try {
     await prepared(
       db,
       `INSERT INTO icono_manifestation_upload_intents (
          upload_intent_id, entity_kind, entity_id, operation, caretaker_assignment_id,
          object_key, ciphertext_sha256, planned_body_bytes, status,
-         lease_token, lease_expires_at, actor_kind, actor_account_id, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?, ?, ?, ?, ?)`,
+         lease_token, lease_expires_at, actor_kind, actor_account_id, created_at,
+         body_sha256, ciphertext_bytes, body_iv_base64, wrapped_dek_base64,
+         wrap_iv_base64, key_version, aad_version
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       uploadIntentId,
       kind,
       entityId,
@@ -142,13 +157,22 @@ export async function createManifestationUploadIntent(db, input = {}) {
       actorKind,
       actorAccountId,
       timestamp,
+      resumableStorage?.body_sha256 || null,
+      resumableStorage?.ciphertext_bytes || null,
+      resumableStorage?.body_iv_base64 || null,
+      resumableStorage?.wrapped_dek_base64 || null,
+      resumableStorage?.wrap_iv_base64 || null,
+      resumableStorage?.key_version || null,
+      resumableStorage?.aad_version || null,
     ).run()
   } catch (error) {
     const existing = await first(
       db,
       `SELECT upload_intent_id, entity_kind, entity_id, operation, caretaker_assignment_id,
               object_key, ciphertext_sha256, planned_body_bytes, status,
-              lease_token, lease_expires_at, actor_kind, actor_account_id
+              lease_token, lease_expires_at, actor_kind, actor_account_id,
+              body_sha256, ciphertext_bytes, body_iv_base64, wrapped_dek_base64,
+              wrap_iv_base64, key_version, aad_version
          FROM icono_manifestation_upload_intents
         WHERE upload_intent_id = ? OR (
           entity_kind = ? AND entity_id = ? AND status IN ('uploading', 'deleting')
@@ -181,8 +205,41 @@ export async function createManifestationUploadIntent(db, input = {}) {
     status: "uploading",
     lease_token: leaseToken,
     lease_expires_at: futureLease(timestamp, input.leaseMs),
+    ...(resumableStorage || {}),
     replayed: false,
   })
+}
+
+export async function renewResumableManifestationUploadIntent(
+  db,
+  entityKindInput,
+  entityIdInput,
+  { now, leaseMs = MAX_LEASE_MS } = {},
+) {
+  requireDatabase(db)
+  const kind = entityKind(entityKindInput)
+  const entityId = normalizeId(entityIdInput, `${kind}_id`)
+  const timestamp = normalizeTimestamp(now)
+  await prepared(
+    db,
+    `UPDATE icono_manifestation_upload_intents
+        SET lease_expires_at = ?
+      WHERE entity_kind = ? AND entity_id = ? AND status = 'uploading'
+        AND lease_expires_at > ? AND body_sha256 IS NOT NULL`,
+    futureLease(timestamp, leaseMs),
+    kind,
+    entityId,
+    timestamp,
+  ).run()
+  return first(
+    db,
+    `SELECT * FROM icono_manifestation_upload_intents
+      WHERE entity_kind = ? AND entity_id = ? AND status = 'uploading'
+        AND lease_expires_at > ? AND body_sha256 IS NOT NULL`,
+    kind,
+    entityId,
+    timestamp,
+  )
 }
 
 export async function requireAdoptedManifestationUpload(db, entityKindInput, entityIdInput) {
