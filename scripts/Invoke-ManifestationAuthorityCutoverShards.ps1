@@ -144,6 +144,7 @@ function Invoke-ShardRound {
 try {
     $previous = $null
     $stalled = 0
+    $failedWithoutProgress = 0
     $round = 0
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
         $status = Get-CutoverStatus
@@ -157,7 +158,20 @@ try {
         $status = Get-CutoverStatus
         $round += 1
         $fingerprint = "$($status.status)|$($status.counts.verified)|$($status.counts.uploading)|$($status.counts.adopted)|$($status.counts.projected)|$($status.counts.failed)"
-        if ($fingerprint -eq $previous) { $stalled += 1 } else { $stalled = 0 }
+        if ($fingerprint -eq $previous) {
+            if ($failures.Count -gt 0) {
+                $failedWithoutProgress += 1
+                $stalled = 0
+            }
+            else {
+                $stalled += 1
+                $failedWithoutProgress = 0
+            }
+        }
+        else {
+            $stalled = 0
+            $failedWithoutProgress = 0
+        }
         $previous = $fingerprint
         if ($round -eq 1 -or $round % 10 -eq 0 -or $failures.Count -gt 0) {
             [ordered]@{
@@ -166,12 +180,20 @@ try {
                 uploading      = [int] $status.counts.uploading
                 failed         = [int] $status.counts.failed
                 shard_failures = $failures.Count
+                failure_kinds  = @($failures | Sort-Object -Unique)
             } | ConvertTo-Json -Compress | Write-Output
         }
         if ($stalled -ge 20) {
             throw 'Sharded cutover made no observable progress for 20 rounds.'
         }
-        if ($failures.Count -gt 0) { Start-Sleep -Seconds 2 }
+        if ($failedWithoutProgress -ge 12) {
+            $kinds = @($failures | Sort-Object -Unique) -join ', '
+            throw "Sharded cutover made no progress across 12 failed rounds: $kinds"
+        }
+        if ($failures.Count -gt 0) {
+            $backoffSeconds = [Math]::Min(30, [Math]::Pow(2, [Math]::Min(5, $failedWithoutProgress + 1)))
+            Start-Sleep -Seconds $backoffSeconds
+        }
     }
     $status = Get-CutoverStatus
     [ordered]@{
