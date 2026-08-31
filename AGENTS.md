@@ -213,7 +213,13 @@ event. Do not restore gene-symbol dirty bits, latest-by-gene generation, or the
 legacy manifestation upsert after the authority epoch changes. Read
 `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` before changing the
 binding, body crypto/storage ordering, schemas, retention, migration, projection,
-replication, or legacy-writer gate.
+replication, or legacy-writer gate. Authority cutover traffic must reserve every
+outgoing Worker request in the canonical Windows-user-wide UTC-day ledger and
+must recheck live account-wide Cloudflare analytics before the first request and
+after each 100 reservations. The operator ceiling is 2,500 requests/day and the
+live-telemetry ceiling is 75,000 observed account requests/day. Missing or
+untrustworthy telemetry fails closed before network traffic; concurrency and
+429 backoff are not substitutes for cumulative daily admission control.
 
 **ARCHITECTURE FENCE [IPD-006]** — one completed workstation publication is the
 Discord delivery and Request inbox receipt unit, partitioned by recipient and
