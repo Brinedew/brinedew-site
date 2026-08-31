@@ -212,7 +212,7 @@ async function verifySeedRevision(authoringDb, item) {
 }
 
 async function ensureSeedRevision(authoringDb, env, item, source, now) {
-  if (await verifySeedRevision(authoringDb, item)) return
+  if (await verifySeedRevision(authoringDb, item)) return false
   const encrypted = await encryptManifestationProse(env, {
     revisionId: item.seed_revision_id,
     geneId: item.gene_id,
@@ -261,6 +261,7 @@ async function ensureSeedRevision(authoringDb, env, item, source, now) {
   })
   await requireAdoptedManifestationUpload(authoringDb, "revision", item.seed_revision_id)
   await verifySeedRevision(authoringDb, item)
+  return true
 }
 
 async function verifySeedDerivative(authoringDb, item) {
@@ -290,7 +291,7 @@ async function verifySeedDerivative(authoringDb, item) {
 }
 
 async function ensureSeedDerivative(authoringDb, env, item, source, now) {
-  if (!source.tags) return
+  if (!source.tags) return false
   let derivative = await verifySeedDerivative(authoringDb, item)
   if (!derivative) {
     const encrypted = await encryptManifestationTags(env, {
@@ -348,7 +349,11 @@ async function ensureSeedDerivative(authoringDb, env, item, source, now) {
       actorKind: "migration",
     })
     await requireAdoptedManifestationUpload(authoringDb, "derivative", item.seed_tags_derivative_id)
-    derivative = await verifySeedDerivative(authoringDb, item)
+    await verifySeedDerivative(authoringDb, item)
+    // A derivative upload, adoption, and immutable authority write are one
+    // durable phase. Leave head selection to the next request so Free-plan
+    // Workers never accumulate both phases' CPU in one invocation.
+    return true
   }
   const derivativeHead = await first(
     authoringDb,
@@ -372,7 +377,9 @@ async function ensureSeedDerivative(authoringDb, env, item, source, now) {
       requestSha256: await stableHash("select_seed_tags", item),
       actorKind: "migration",
     })
+    return true
   }
+  return false
 }
 
 export async function materializeManifestationCutoverItem({
@@ -407,8 +414,22 @@ export async function materializeManifestationCutoverItem({
       },
     })
   }
-  await ensureSeedRevision(authoringDb, env, item, source, now)
-  await ensureSeedDerivative(authoringDb, env, item, source, now)
+  if (await ensureSeedRevision(authoringDb, env, item, source, now)) {
+    return Object.freeze({
+      gene_id: item.gene_id,
+      source_kind: item.source_kind,
+      complete: false,
+      event: null,
+    })
+  }
+  if (await ensureSeedDerivative(authoringDb, env, item, source, now)) {
+    return Object.freeze({
+      gene_id: item.gene_id,
+      source_kind: item.source_kind,
+      complete: false,
+      event: null,
+    })
+  }
   const latest = await first(
     authoringDb,
     `SELECT event_uuid, event_sequence, payload_json
@@ -420,6 +441,7 @@ export async function materializeManifestationCutoverItem({
   return Object.freeze({
     gene_id: item.gene_id,
     source_kind: item.source_kind,
+    complete: true,
     event: Object.freeze({
       event_id: latest.event_uuid,
       event_sequence: Number(latest.event_sequence),
