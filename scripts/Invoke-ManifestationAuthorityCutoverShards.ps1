@@ -4,8 +4,9 @@ Advances disjoint manifestation-cutover shards concurrently.
 
 .DESCRIPTION
 Each shard owns a deterministic subset of stable gene IDs, so requests cannot
-select the same cutover item. One bounded page runs per shard and each Worker
-request retains its own item-level CAS and final public-material proof.
+select the same cutover item. One bounded page runs per shard inside the
+Free-plan Durable Object CPU envelope; each item retains its own CAS and final
+public-material proof.
 #>
 [CmdletBinding()]
 param(
@@ -22,8 +23,8 @@ param(
     [ValidateRange(1, 55)]
     [int] $OverallTimeoutMinutes = 55,
 
-    [ValidateRange(1, 10)]
-    [int] $PageLimit = 10,
+    [ValidateRange(1, 25)]
+    [int] $PageLimit = 25,
 
     [int[]] $ShardIndexes,
 
@@ -107,6 +108,7 @@ function Invoke-ShardRound {
                 [Text.Encoding]::UTF8,
                 'application/json'
             )
+            $request.Headers.Add('X-Iconoplasm-Cutover-Shard', "$ShardCount`:$shardIndex")
             $requests.Add($request)
             $tasks.Add($client.SendAsync($request))
         }
