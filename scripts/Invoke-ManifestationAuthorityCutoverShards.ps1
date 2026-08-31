@@ -107,6 +107,7 @@ function Invoke-ShardRound {
                 [Net.Http.HttpMethod]::Post,
                 "$base$runPath/actions"
             )
+            $request.Headers.Add('X-Iconoplasm-Cutover-Action', 'materialize')
             $request.Content = [Net.Http.StringContent]::new(
                 $payload,
                 [Text.Encoding]::UTF8,

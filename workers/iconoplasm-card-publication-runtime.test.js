@@ -3,10 +3,50 @@ import test from "node:test"
 import { createRequire } from "node:module"
 import { fileURLToPath } from "node:url"
 import esbuild from "esbuild"
+import { projectPublicCardHead } from "./lib/iconoplasm-card-publication-coordinator.js"
 
 const require = createRequire(import.meta.url)
 const wranglerRequire = createRequire(require.resolve("wrangler/package.json"))
 const { Miniflare, convertV4MiniflareOptions } = wranglerRequire("miniflare")
+
+test("card publication projects one committed public head without repeat writes", async () => {
+  const values = new Map()
+  let writes = 0
+  const env = {
+    KV: {
+      async get(key) {
+        return values.get(key) || null
+      },
+      async put(key, value) {
+        writes += 1
+        values.set(key, value)
+      },
+    },
+  }
+  const head = {
+    current: {
+      version: "ccv2-" + "a".repeat(64),
+      key: "manifests/aa.json",
+      published_at: "2026-09-01T00:00:00.000Z",
+      manifest: { schema: "iconoplasm.cardCatalog.v2", storage: "bunny_card_catalog_v2" },
+    },
+    previous: { version: "ccv2-" + "b".repeat(64) },
+  }
+
+  await projectPublicCardHead(env, head)
+  await projectPublicCardHead(env, head)
+
+  assert.equal(writes, 1)
+  assert.deepEqual(JSON.parse(values.get("iconoplasm:gallery-version")), {
+    current: head.current.version,
+    previous: head.previous.version,
+    published_at: head.current.published_at,
+    schema: head.current.manifest.schema,
+    storage: head.current.manifest.storage,
+    manifest_key: head.current.key,
+    status: "active",
+  })
+})
 
 test(
   "real workerd SQLite coordinator preserves the head through a Bunny failure and commits verified bytes",

@@ -21,7 +21,7 @@ function coordinatorBinding(seen) {
   }
 }
 
-test("materialization actions are isolated by run and deterministic shard lane", async () => {
+test("materialization actions stay on the bounded ordinary Worker plane", async () => {
   const seen = { names: [], ids: [], bodies: [] }
   const request = new Request(
     "https://iconoplasm.test/api/iconoplasm/authority/cutover/runs/cutover_12345678/actions",
@@ -30,6 +30,7 @@ test("materialization actions are isolated by run and deterministic shard lane",
       headers: {
         "content-type": "application/json",
         authorization: "Bearer test",
+        "x-iconoplasm-cutover-action": "materialize",
         "x-iconoplasm-cutover-shard": "32:23",
       },
       body: JSON.stringify({
@@ -43,11 +44,8 @@ test("materialization actions are isolated by run and deterministic shard lane",
   const response = await forwardManifestationCutoverActionToCoordinator(request, {
     ICONOPLASM_MANIFESTATION_CUTOVER_COORDINATORS: coordinatorBinding(seen),
   })
-  assert.equal(response.status, 200)
-  assert.deepEqual(seen.names, ["cutover_12345678:shard:32:23"])
-  assert.deepEqual(seen.ids, seen.names)
-  assert.equal(seen.bodies[0].limit, 25)
-  assert.equal(seen.bodies[0].action, "materialize")
+  assert.equal(response, null)
+  assert.deepEqual(seen, { names: [], ids: [], bodies: [] })
 })
 
 test("control actions serialize separately and non-actions stay on the edge route", async () => {

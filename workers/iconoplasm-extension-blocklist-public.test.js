@@ -44,6 +44,16 @@ class ThrowingDb {
   }
 }
 
+class ThrowingDurableObjectNamespace {
+  idFromName() {
+    throw new Error("public catalog manifest must not touch Durable Objects")
+  }
+
+  get() {
+    throw new Error("public catalog manifest must not touch Durable Objects")
+  }
+}
+
 function projection(revision, version, terms) {
   return JSON.stringify({
     schema_version: 1,
@@ -108,7 +118,11 @@ test("public manifest skips a corrupt higher key, stays KV-only, and includes re
   resetIconoplasmExtensionBlocklistPublicCacheForTests()
   resetIconoplasmRecognitionPolicyPublicCacheForTests()
   const kv = publicManifestKv()
-  const env = { KV: kv, ICONOPLASM_DB: new ThrowingDb() }
+  const env = {
+    KV: kv,
+    ICONOPLASM_DB: new ThrowingDb(),
+    ICONOPLASM_CARD_PUBLICATION: new ThrowingDurableObjectNamespace(),
+  }
   const first = await getManifest(env)
   const firstPayload = await first.json()
   const firstEtag = first.headers.get("ETag")
