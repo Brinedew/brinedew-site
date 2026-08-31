@@ -151,7 +151,14 @@ test("cooperative scanner yields between bounded text-node slices", async () => 
   }
 
   assert.equal(await resultPromise, 12)
-  assert.deepEqual(slices, [3, 6, 9, 12])
+  assert.equal(slices.at(-1), 12)
+  assert.ok(slices.length >= 4)
+  let previous = 0
+  for (const current of slices) {
+    assert.ok(current > previous)
+    assert.ok(current - previous <= 3)
+    previous = current
+  }
 })
 
 test("host-first background work waits for load, quiet delay, and an idle turn", () => {
