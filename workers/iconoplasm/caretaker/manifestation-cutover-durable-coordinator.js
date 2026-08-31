@@ -21,6 +21,12 @@ export async function forwardManifestationCutoverActionToCoordinator(request, en
   if (request.method !== "POST") return null
   const runId = cutoverRunId(new URL(request.url).pathname)
   if (!runId) return null
+  // Slow Bunny PUT/GET propagation is network wait, not serialized authority
+  // work. Keeping it inside a Durable Object billed the wait as active DO
+  // duration and exhausted the account-wide Free allowance. The signed body is
+  // still validated by the ordinary authority handler; this header selects the
+  // execution plane only and grants no authority.
+  if (request.headers.get("x-iconoplasm-cutover-action") === "materialize") return null
   const namespace = env?.ICONOPLASM_MANIFESTATION_CUTOVER_COORDINATORS
   if (
     !namespace ||
@@ -85,7 +91,7 @@ export class IconoplasmManifestationCutoverCoordinator {
   }
 }
 
-// ARCHITECTURE FENCE [IPD-012]: bulk cutover crypto runs only in a
-// Free-plan SQLite Durable Object (30-second CPU envelope). Public caretaker
-// commands remain bounded edge requests; this class accepts only the dedicated
-// bearer-authenticated cutover action route.
+// ARCHITECTURE FENCE [IPD-012]: serialized cutover control transitions run in
+// the SQLite Durable Object. Per-gene materialization stays on bounded ordinary
+// Worker requests so external storage propagation cannot consume shared DO
+// duration. Public caretaker commands remain bounded edge requests.

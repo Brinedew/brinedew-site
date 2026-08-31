@@ -44,6 +44,7 @@ test("cutover operator is resumable and bounds request, run, retry, and progress
   assert.match(text, /MaximumStalledIterations/)
   assert.match(text, /iteration % 50/)
   assert.match(text, /Write-Information \(\$progress \| ConvertTo-Json -Compress\)/)
+  assert.match(text, /X-Iconoplasm-Cutover-Action', 'materialize'/)
   assert.doesNotMatch(text, /Write-Output \(\$progress \| ConvertTo-Json -Compress\)/)
   assert.match(
     text,
@@ -72,4 +73,5 @@ test("sharded operator accepts omitted and singleton shard selections without sc
   assert.match(text, /failure_kinds\s+= @\(\$failures \| Sort-Object -Unique\)/)
   assert.match(text, /\[Math\]::Min\(30, \[Math\]::Pow/)
   assert.match(text, /X-Iconoplasm-Cutover-Shard/)
+  assert.match(text, /X-Iconoplasm-Cutover-Action', 'materialize'/)
 })

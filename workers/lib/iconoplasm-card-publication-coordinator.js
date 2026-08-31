@@ -1,6 +1,38 @@
 import { CardPublicationRepository, createCardPublication } from "./iconoplasm-card-publication.js"
 import { createPublishedCardObjectStore } from "./iconoplasm-published-card-objects.js"
 
+const PUBLIC_CARD_HEAD_PROJECTION_KEY = "iconoplasm:gallery-version"
+
+function publicCardHeadProjection(head) {
+  if (!head?.current?.version) return null
+  return {
+    current: head.current.version,
+    previous: head.previous?.version || null,
+    published_at: head.current.published_at,
+    schema: head.current.manifest.schema,
+    storage: head.current.manifest.storage,
+    manifest_key: head.current.key,
+    status: "active",
+  }
+}
+
+export async function projectPublicCardHead(env, head) {
+  const projection = publicCardHeadProjection(head)
+  if (!projection || !env?.KV) return projection
+  let current = null
+  try {
+    const raw = await env.KV.get(PUBLIC_CARD_HEAD_PROJECTION_KEY)
+    current = raw ? JSON.parse(raw) : null
+  } catch {
+    current = null
+  }
+  if (JSON.stringify(current) === JSON.stringify(projection)) {
+    return projection
+  }
+  await env.KV.put(PUBLIC_CARD_HEAD_PROJECTION_KEY, JSON.stringify(projection))
+  return projection
+}
+
 export function cardPublicationStub(env) {
   const binding = env.ICONOPLASM_CARD_PUBLICATION
   return binding ? binding.get(binding.idFromName("canonical-cards-v2")) : null
@@ -28,6 +60,15 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           objects: createPublishedCardObjectStore(env),
           source: sourceForEnv(env),
         })
+        this.projectedHeadVersion = null
+        try {
+          const projection = await projectPublicCardHead(env, this.repo.get("head"))
+          this.projectedHeadVersion = projection?.current || null
+        } catch (error) {
+          // A projection outage must not take the canonical head offline. The
+          // next alarm retries before doing more publication work.
+          this.projectionDeferred = String(error.message || error).slice(0, 500)
+        }
         if (this.repo.get("job") || this.repo.get("requested") || this.repo.get("effects")) {
           const retryAt = Number(this.repo.get("failure")?.retry_at || 0)
           try {
@@ -86,7 +127,17 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
     async alarm() {
       return this.exclusive(async () => {
         try {
+          const existingHead = this.repo.get("head")
+          if (existingHead?.current?.version !== this.projectedHeadVersion) {
+            const projection = await projectPublicCardHead(this.env, existingHead)
+            this.projectedHeadVersion = projection?.current || null
+            this.projectionDeferred = null
+          }
           const result = await this.publisher.step()
+          if (result.committed) {
+            const projection = await projectPublicCardHead(this.env, this.repo.get("head"))
+            this.projectedHeadVersion = projection?.current || null
+          }
           if (this.repo.get("failure")) {
             this.repo.reserveWrites(2)
             this.repo.remove("failure")
@@ -143,6 +194,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           write_allocation: this.repo.get("write_allocation"),
           failure: this.repo.get("failure"),
           recovery_deferred: this.recoveryDeferred || null,
+          projection_deferred: this.projectionDeferred || null,
         })
       }
       if (request.method !== "POST") return reply({ error: "Not found" }, 404)
