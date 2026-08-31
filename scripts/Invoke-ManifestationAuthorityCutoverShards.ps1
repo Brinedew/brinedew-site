@@ -17,14 +17,14 @@ param(
     [ValidateSet(2, 4, 8, 16)]
     [int] $ShardCount = 4,
 
-    [ValidateRange(1, 55)]
-    [int] $RequestTimeoutSeconds = 55,
+    [ValidateRange(30, 180)]
+    [int] $RequestTimeoutSeconds = 120,
 
     [ValidateRange(1, 55)]
     [int] $OverallTimeoutMinutes = 55,
 
     [ValidateRange(1, 25)]
-    [int] $PageLimit = 25,
+    [int] $PageLimit = 10,
 
     [int[]] $ShardIndexes,
 
