@@ -14,7 +14,7 @@ param(
     [ValidatePattern('^https://')]
     [string] $BaseUri,
 
-    [ValidateSet(2, 4, 8, 16, 32)]
+    [ValidateSet(2, 4, 8, 16, 32, 64)]
     [int] $ShardCount = 4,
 
     # The measured 32-lane production tail reached 188 seconds while the
