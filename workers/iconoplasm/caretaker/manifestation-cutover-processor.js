@@ -425,13 +425,18 @@ async function materializePage(context, run, input, now) {
   const limit = pageLimit(input.limit, durableCutover ? 25 : 1)
   const shardCount = Math.trunc(Number(input.shardCount)) || 1
   const shardIndex = Math.trunc(Number(input.shardIndex)) || 0
-  if (![1, 2, 4, 8, 16].includes(shardCount) || shardIndex < 0 || shardIndex >= shardCount) {
+  if (![1, 2, 4, 8, 16, 32].includes(shardCount) || shardIndex < 0 || shardIndex >= shardCount) {
     throw cutoverError("INVALID_CUTOVER_SHARD", "Cutover shard identity is invalid", 400)
   }
   await sweepExpiredManifestationUploadIntents(context.authoringDb, context.env, { now, limit: 10 })
   const retryFailed = input.retryFailed === true
   const shardClause =
-    shardCount === 1 ? "" : "AND (instr('0123456789abcdef', substr(gene_id, -1, 1)) - 1) % ? = ?"
+    shardCount === 1
+      ? ""
+      : shardCount === 32
+        ? `AND (((instr('0123456789abcdef', substr(gene_id, -2, 1)) - 1) * 16
+              + (instr('0123456789abcdef', substr(gene_id, -1, 1)) - 1)) % ? = ?)`
+        : "AND (instr('0123456789abcdef', substr(gene_id, -1, 1)) - 1) % ? = ?"
   const queryParams =
     shardCount === 1
       ? [run.cutover_run_id, now, limit]

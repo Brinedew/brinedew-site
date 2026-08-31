@@ -14,7 +14,7 @@ param(
     [ValidatePattern('^https://')]
     [string] $BaseUri,
 
-    [ValidateSet(2, 4, 8, 16)]
+    [ValidateSet(2, 4, 8, 16, 32)]
     [int] $ShardCount = 4,
 
     [ValidateRange(30, 180)]
