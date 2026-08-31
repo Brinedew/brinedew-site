@@ -26,8 +26,8 @@ param(
     [ValidateRange(2, 2147483647)]
     [int] $TargetAuthorityEpoch = 2,
 
-    [ValidateRange(5, 55)]
-    [int] $RequestTimeoutSeconds = 45,
+    [ValidateRange(30, 300)]
+    [int] $RequestTimeoutSeconds = 120,
 
     [ValidateRange(1, 1440)]
     [int] $OverallTimeoutMinutes = 240,
