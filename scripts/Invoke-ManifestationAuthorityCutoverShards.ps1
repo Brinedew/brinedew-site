@@ -36,6 +36,9 @@ param(
     [ValidateRange(1, 25)]
     [int] $PageLimit = 10,
 
+    [ValidateRange(1, 32)]
+    [int] $MaxConcurrentRequests = 16,
+
     [int[]] $ShardIndexes,
 
     [string] $StatePath = (Join-Path $PSScriptRoot '..\artifacts\caretaker-authority-cutover\cutover-state-iconoplasm.brinedew.bio.json')
@@ -116,55 +119,58 @@ function Get-CutoverStatus {
 }
 
 function Invoke-ShardRound {
-    $requests = [Collections.Generic.List[Net.Http.HttpRequestMessage]]::new()
-    $tasks = [Collections.Generic.List[Threading.Tasks.Task[Net.Http.HttpResponseMessage]]]::new()
-    try {
-        foreach ($shardIndex in $resolvedShardIndexes) {
-            $body = [ordered]@{
-                action      = $Action
-                limit       = $PageLimit
-                shard_count = $ShardCount
-                shard_index = $shardIndex
+    $failures = [Collections.Generic.List[string]]::new()
+    for ($offset = 0; $offset -lt $resolvedShardIndexes.Count; $offset += $MaxConcurrentRequests) {
+        $last = [Math]::Min($resolvedShardIndexes.Count - 1, $offset + $MaxConcurrentRequests - 1)
+        $batch = @($resolvedShardIndexes[$offset..$last])
+        $requests = [Collections.Generic.List[Net.Http.HttpRequestMessage]]::new()
+        $tasks = [Collections.Generic.List[Threading.Tasks.Task[Net.Http.HttpResponseMessage]]]::new()
+        try {
+            foreach ($shardIndex in $batch) {
+                $body = [ordered]@{
+                    action      = $Action
+                    limit       = $PageLimit
+                    shard_count = $ShardCount
+                    shard_index = $shardIndex
+                }
+                if ($Action -eq 'materialize') { $body.retry_failed = $true }
+                $payload = $body | ConvertTo-Json -Compress
+                $request = [Net.Http.HttpRequestMessage]::new(
+                    [Net.Http.HttpMethod]::Post,
+                    "$base$runPath/actions"
+                )
+                $request.Headers.Add('X-Iconoplasm-Cutover-Action', $Action)
+                $request.Content = [Net.Http.StringContent]::new(
+                    $payload,
+                    [Text.Encoding]::UTF8,
+                    'application/json'
+                )
+                $request.Headers.Add('X-Iconoplasm-Cutover-Shard', "$ShardCount`:$shardIndex")
+                $requests.Add($request)
+                $tasks.Add($client.SendAsync($request))
             }
-            if ($Action -eq 'materialize') { $body.retry_failed = $true }
-            $payload = $body | ConvertTo-Json -Compress
-            $request = [Net.Http.HttpRequestMessage]::new(
-                [Net.Http.HttpMethod]::Post,
-                "$base$runPath/actions"
-            )
-            $request.Headers.Add('X-Iconoplasm-Cutover-Action', $Action)
-            $request.Content = [Net.Http.StringContent]::new(
-                $payload,
-                [Text.Encoding]::UTF8,
-                'application/json'
-            )
-            $request.Headers.Add('X-Iconoplasm-Cutover-Shard', "$ShardCount`:$shardIndex")
-            $requests.Add($request)
-            $tasks.Add($client.SendAsync($request))
-        }
-
-        $failures = [Collections.Generic.List[string]]::new()
-        foreach ($task in $tasks) {
-            try {
-                $response = $task.GetAwaiter().GetResult()
+            foreach ($task in $tasks) {
                 try {
-                    if (-not $response.IsSuccessStatusCode) {
-                        $failures.Add("HTTP $([int] $response.StatusCode)")
+                    $response = $task.GetAwaiter().GetResult()
+                    try {
+                        if (-not $response.IsSuccessStatusCode) {
+                            $failures.Add("HTTP $([int] $response.StatusCode)")
+                        }
+                    }
+                    finally {
+                        $response.Dispose()
                     }
                 }
-                finally {
-                    $response.Dispose()
+                catch {
+                    $failures.Add($_.Exception.GetType().Name)
                 }
             }
-            catch {
-                $failures.Add($_.Exception.GetType().Name)
-            }
         }
-        return @($failures)
+        finally {
+            foreach ($request in $requests) { $request.Dispose() }
+        }
     }
-    finally {
-        foreach ($request in $requests) { $request.Dispose() }
-    }
+    return @($failures)
 }
 
 function Test-ActionComplete {
