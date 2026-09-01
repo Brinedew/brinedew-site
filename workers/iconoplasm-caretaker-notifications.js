@@ -120,12 +120,21 @@ export async function readCaretakerCoordination(primaryDb, { accountId } = {}) {
   const stableAccountId = requiredId(accountId, "account_id")
   const row = await db
     .prepare(
-      `SELECT caretaker_assignment_id, gene_id, canonical_symbol,
-              assignment_status, assignment_version, authority_event_sequence,
-              comments_read_through_id
-         FROM icono_caretaker_assignment_notifications
-        WHERE account_id = ? AND assignment_status IN ('active', 'suspended')
-        ORDER BY authority_event_sequence DESC LIMIT 1`,
+      `SELECT assignment.caretaker_assignment_id, assignment.gene_id,
+              assignment.canonical_symbol, assignment.assignment_status,
+              assignment.assignment_version, assignment.authority_event_sequence,
+              assignment.comments_read_through_id,
+              COALESCE(supervote.active, 0) AS supervote_active,
+              supervote.direction AS supervote_direction,
+              supervote.supervote_version AS supervote_version
+         FROM icono_caretaker_assignment_notifications assignment
+         LEFT JOIN icono_caretaker_supervote_projection supervote
+           ON supervote.gene_symbol = assignment.canonical_symbol
+          AND supervote.caretaker_assignment_id = assignment.caretaker_assignment_id
+          AND supervote.caretaker_account_id = assignment.account_id
+        WHERE assignment.account_id = ?
+          AND assignment.assignment_status IN ('active', 'suspended')
+        ORDER BY assignment.authority_event_sequence DESC LIMIT 1`,
     )
     .bind(stableAccountId)
     .first()
@@ -151,6 +160,11 @@ export async function readCaretakerCoordination(primaryDb, { accountId } = {}) {
       comments_href: `${href}#gene-comments`,
       unread_comment_count: Number(commentState?.unread_count || 0),
       latest_comment_id: Number(commentState?.latest_comment_id || 0),
+      supervote_active: Number(row.supervote_active || 0) === 1,
+      supervote_direction: [-1, 1].includes(Number(row.supervote_direction))
+        ? Number(row.supervote_direction)
+        : null,
+      supervote_version: Math.max(0, Number(row.supervote_version || 0) || 0),
     }),
   })
 }

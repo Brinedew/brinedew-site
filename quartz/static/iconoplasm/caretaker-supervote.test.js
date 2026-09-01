@@ -4,7 +4,7 @@ import test from "node:test"
 import { parseHTML } from "linkedom"
 
 import {
-  caretakerSupervoteButtonMarkup,
+  LONG_PRESS_MS,
   caretakerSupervoteMutation,
   createCaretakerSupervoteControls,
   normalizeCaretakerSupervoteSnapshot,
@@ -13,14 +13,6 @@ import {
 const FIRST_ASSET = "a".repeat(64)
 const SECOND_ASSET = "b".repeat(64)
 
-function escapeHtml(value) {
-  return String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-}
-
 function activeSnapshot(overrides = {}) {
   return {
     assignment_status: "active",
@@ -28,6 +20,7 @@ function activeSnapshot(overrides = {}) {
     accepted_event_sequence: 41,
     supervote_version: 3,
     asset_sha256: FIRST_ASSET,
+    direction: 1,
     active: true,
     suspended: false,
     can_mutate: true,
@@ -47,116 +40,159 @@ function caretakerDossier(status = "active") {
   }
 }
 
-test("the rendered marker names the fixed +10 weight and exposes move/remove state", () => {
-  const selected = caretakerSupervoteButtonMarkup(
-    { assetSha256: FIRST_ASSET, snapshot: activeSnapshot() },
-    escapeHtml,
-  )
-  const movable = caretakerSupervoteButtonMarkup(
-    { assetSha256: SECOND_ASSET, snapshot: activeSnapshot() },
-    escapeHtml,
-  )
-
-  assert.match(
-    selected,
-    /Caretaker supervote <span aria-hidden="true">·<\/span> <strong>\+10<\/strong>/,
-  )
-  assert.match(selected, /aria-pressed="true"/)
-  assert.match(selected, /Remove caretaker supervote/)
-  assert.match(movable, /aria-pressed="false"/)
-  assert.match(movable, /Move caretaker supervote/)
-})
-
-test("suspension preserves the visible selection but disables its control", () => {
-  const html = caretakerSupervoteButtonMarkup(
-    {
-      assetSha256: FIRST_ASSET,
-      snapshot: activeSnapshot({
-        assignment_status: "suspended",
-        suspended: true,
-        can_mutate: false,
-      }),
-    },
-    escapeHtml,
-  )
-
-  assert.match(html, /aria-pressed="true"/)
-  assert.match(html, /is-suspended/)
-  assert.match(html, / disabled/)
-  assert.match(html, />Suspended</)
-})
-
-test("move and remove commands carry both server CAS versions", () => {
-  const move = caretakerSupervoteMutation({
-    snapshot: activeSnapshot(),
-    assetSha256: SECOND_ASSET,
-  })
-  const remove = caretakerSupervoteMutation({
-    snapshot: activeSnapshot(),
-    assetSha256: FIRST_ASSET,
-    remove: true,
-  })
-
-  assert.equal(move.method, "PUT")
-  assert.equal(move.body.asset_sha256, SECOND_ASSET)
-  assert.equal(move.body.expected_assignment_version, 7)
-  assert.equal(move.body.expected_supervote_version, 3)
-  assert.match(move.body.command_id, /^cmd_/)
-  assert.equal(remove.method, "DELETE")
-  assert.equal("asset_sha256" in remove.body, false)
-  assert.equal(remove.body.expected_assignment_version, 7)
-  assert.equal(remove.body.expected_supervote_version, 3)
-})
-
-test("the caretaker island renders beside ordinary FIT boxes and moves selection without rewriting totals", async () => {
+function fixture() {
   const { document, Event } = parseHTML(
     `<main id="root">
-      <div data-icono-gene-vote-box="${FIRST_ASSET}" data-image-score="4"></div>
-      <div data-icono-candidate-vote-box="${SECOND_ASSET}" data-image-score="1"></div>
+      <div data-icono-gene-vote-box="${FIRST_ASSET}" data-image-score="4">
+        <button data-icono-vote-down aria-label="Misfit">MISFIT</button>
+        <button data-icono-vote-up aria-label="Fit">FIT</button>
+      </div>
+      <div data-icono-candidate-vote-box="${SECOND_ASSET}" data-image-score="1">
+        <button data-icono-vote-down aria-label="Misfit">MISFIT</button>
+        <button data-icono-vote-up aria-label="Fit">FIT</button>
+      </div>
     </main>`,
   )
   globalThis.document = document
-  const calls = []
+  globalThis.window = document.defaultView
+  return { document, Event, root: document.getElementById("root") }
+}
+
+test("signed move, reverse, and recall commands bind both authority versions", () => {
+  const moveNegative = caretakerSupervoteMutation({
+    snapshot: activeSnapshot(),
+    assetSha256: SECOND_ASSET,
+    direction: -1,
+  })
+  const reverseCurrent = caretakerSupervoteMutation({
+    snapshot: activeSnapshot(),
+    assetSha256: FIRST_ASSET,
+    direction: -1,
+  })
+  const recall = caretakerSupervoteMutation({
+    snapshot: activeSnapshot(),
+    assetSha256: FIRST_ASSET,
+    direction: 1,
+  })
+
+  for (const mutation of [moveNegative, reverseCurrent]) {
+    assert.equal(mutation.method, "PUT")
+    assert.equal(mutation.body.direction, -1)
+    assert.equal(mutation.body.expected_assignment_version, 7)
+    assert.equal(mutation.body.expected_supervote_version, 3)
+  }
+  assert.equal(recall.method, "DELETE")
+  assert.equal("asset_sha256" in recall.body, false)
+  assert.equal("direction" in recall.body, false)
+})
+
+test("the selected ordinary vote button carries a non-color 10x marker and no parallel button", async () => {
+  const { root } = fixture()
   const controls = createCaretakerSupervoteControls({
-    escapeHtml,
+    fetchJSON: async () => ({ supervote: activeSnapshot() }),
+  })
+  await controls.mount(root, { symbol: "TP53", dossier: caretakerDossier() })
+
+  const selected = root.querySelector(`[data-icono-gene-vote-box] [data-icono-vote-up]`)
+  assert.equal(selected.classList.contains("is-caretaker-supervoted"), true)
+  assert.equal(selected.querySelector("[data-icono-caretaker-supervote-mark]").textContent, "+10")
+  assert.match(selected.getAttribute("aria-label"), /Long-press to recall your \+10/)
+  assert.equal(root.querySelector(".icono-caretaker-supervote"), null)
+  assert.equal(root.querySelector(`[data-icono-gene-vote-box]`).dataset.imageScore, "4")
+})
+
+test("Shift plus Space transfers a negative supervote without casting an ordinary vote", async () => {
+  const { root, Event } = fixture()
+  const calls = []
+  let ordinaryClicks = 0
+  const target = root.querySelector(`[data-icono-candidate-vote-box] [data-icono-vote-down]`)
+  root.addEventListener("click", () => ordinaryClicks++)
+  const controls = createCaretakerSupervoteControls({
     fetchJSON: async function (path, init) {
       calls.push({ path, init })
       if (init.method === "GET") return { supervote: activeSnapshot() }
       return {
-        supervote: activeSnapshot({ supervote_version: 4, asset_sha256: SECOND_ASSET }),
+        supervote: activeSnapshot({
+          supervote_version: 4,
+          asset_sha256: SECOND_ASSET,
+          direction: -1,
+        }),
       }
     },
   })
-  const root = document.getElementById("root")
-
   await controls.mount(root, { symbol: "TP53", dossier: caretakerDossier() })
-  const moveButton = root.querySelector(`[data-icono-caretaker-supervote="${SECOND_ASSET}"]`)
-  moveButton.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }))
+  const keydown = new Event("keydown", { bubbles: true, cancelable: true })
+  Object.defineProperties(keydown, {
+    key: { value: " " },
+    shiftKey: { value: true },
+    repeat: { value: false },
+  })
+  target.dispatchEvent(keydown)
   await new Promise((resolve) => setTimeout(resolve, 0))
   await new Promise((resolve) => setTimeout(resolve, 0))
 
   const mutation = calls.find((call) => call.init.method === "PUT")
   assert.ok(mutation)
-  assert.equal(mutation.path, "/api/iconoplasm/caretaker/genes/TP53/supervote")
-  assert.equal(JSON.parse(mutation.init.body).asset_sha256, SECOND_ASSET)
-  assert.equal(
-    root
-      .querySelector(`[data-icono-caretaker-supervote="${SECOND_ASSET}"]`)
-      .getAttribute("aria-pressed"),
-    "true",
+  assert.deepEqual(
+    {
+      asset_sha256: JSON.parse(mutation.init.body).asset_sha256,
+      direction: JSON.parse(mutation.init.body).direction,
+    },
+    { asset_sha256: SECOND_ASSET, direction: -1 },
   )
-  assert.equal(root.querySelector(`[data-icono-gene-vote-box]`).dataset.imageScore, "4")
-  assert.equal(root.querySelector(`[data-icono-candidate-vote-box]`).dataset.imageScore, "1")
+  assert.equal(ordinaryClicks, 0)
+  assert.equal(target.classList.contains("is-caretaker-supervoted"), true)
 })
 
-test("the main app lazy-loads the control with the caretaker dossier instead of a parallel auth read", () => {
+test("a pointer long press assigns once and suppresses the trailing ordinary click", async () => {
+  const { root, Event } = fixture()
+  const calls = []
+  let ordinaryClicks = 0
+  const target = root.querySelector(`[data-icono-candidate-vote-box] [data-icono-vote-up]`)
+  const controls = createCaretakerSupervoteControls({
+    fetchJSON: async function (_path, init) {
+      calls.push(init.method)
+      if (init.method === "GET")
+        return { supervote: activeSnapshot({ active: false, asset_sha256: "", direction: null }) }
+      return {
+        supervote: activeSnapshot({
+          asset_sha256: SECOND_ASSET,
+          direction: 1,
+          supervote_version: 4,
+        }),
+      }
+    },
+  })
+  await controls.mount(root, { symbol: "TP53", dossier: caretakerDossier() })
+  root.addEventListener("click", () => ordinaryClicks++)
+  const pointerdown = new Event("pointerdown", { bubbles: true, cancelable: true })
+  Object.defineProperties(pointerdown, {
+    button: { value: 0 },
+    pointerId: { value: 9 },
+    clientX: { value: 10 },
+    clientY: { value: 10 },
+  })
+  target.dispatchEvent(pointerdown)
+  await new Promise((resolve) => setTimeout(resolve, LONG_PRESS_MS + 25))
+  const pointerup = new Event("pointerup", { bubbles: true })
+  Object.defineProperty(pointerup, "pointerId", { value: 9 })
+  target.dispatchEvent(pointerup)
+  target.click()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  assert.deepEqual(calls, ["GET", "PUT"])
+  assert.equal(ordinaryClicks, 0)
+})
+
+test("the main app lazy-loads the signed control beside the existing voting authority", () => {
   const source = readFileSync(new URL("./app.js", import.meta.url), "utf8")
+  const css = readFileSync(new URL("./caretaker-supervote.css", import.meta.url), "utf8")
   assert.match(source, /import\("\.\/caretaker-supervote\.js\?v=/)
-  assert.match(source, /caretaker-supervote\.css\?v=/)
-  assert.match(source, /onDossierChanged: function \(detail\)/)
   assert.match(source, /supervoteControls\.mount\(geneContent/)
+  assert.match(css, /outline: 2px double currentColor/)
+  assert.match(css, /content: "CARETAKER"/)
 
   const normalized = normalizeCaretakerSupervoteSnapshot({ supervote: activeSnapshot() })
-  assert.equal(normalized.assignment_version, 7)
+  assert.equal(normalized.direction, 1)
   assert.equal(normalized.supervote_version, 3)
 })

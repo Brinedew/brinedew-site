@@ -489,6 +489,7 @@ export function createRequestInbox({
     var symbol = String(item.canonical_symbol || "Gene")
     var href = String(item.href || "/gene/" + encodeURIComponent(symbol)) + "?caretaker=open"
     var unread = Math.max(0, Number(item.unread_comment_count || 0) || 0)
+    var supervoteUnspent = item.supervote_active !== true
     return (
       '<div class="icono-request-inbox__caretaker-item">' +
       '<a class="icono-request-inbox__item icono-request-inbox__item--caretaker" href="' +
@@ -513,6 +514,11 @@ export function createRequestInbox({
           "</strong> new " +
           (unread === 1 ? "comment" : "comments") +
           "</a>"
+        : "") +
+      (supervoteUnspent && item.assignment_status === "active"
+        ? '<a class="icono-request-inbox__caretaker-supervote-alert" href="' +
+          escapeHtml("/gene/" + encodeURIComponent(symbol)) +
+          '" data-icono-caretaker-supervote-alert>long-press any vote button to assign your 10x supervote</a>'
         : "") +
       "</div>"
     )
@@ -709,6 +715,16 @@ export function createRequestInbox({
     }
   }
 
+  function updateCaretakerSupervote(snapshot) {
+    if (!state.caretaker || !snapshot || typeof snapshot !== "object") return
+    state.caretaker.supervote_active = snapshot.active === true
+    state.caretaker.supervote_direction = [-1, 1].includes(Number(snapshot.direction))
+      ? Number(snapshot.direction)
+      : null
+    state.caretaker.supervote_version = Math.max(0, Number(snapshot.supervote_version || 0) || 0)
+    renderSidebar()
+  }
+
   return {
     caretakerPanelMarkup,
     panelMarkup,
@@ -716,6 +732,7 @@ export function createRequestInbox({
     reset,
     start,
     stop,
+    updateCaretakerSupervote,
     wire,
   }
 }

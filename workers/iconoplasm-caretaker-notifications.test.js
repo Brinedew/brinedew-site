@@ -10,8 +10,10 @@ import {
 import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
 
 const MIGRATIONS = [
+  "0085_caretaker_supervotes.sql",
   "0086_caretaker_assignment_notifications.sql",
   "0090_caretaker_coordination.sql",
+  "0092_signed_caretaker_supervote.sql",
 ]
   .map((name) => readFileSync(new URL(`../migrations-iconoplasm/${name}`, import.meta.url), "utf8"))
   .join("\n")
@@ -42,6 +44,13 @@ function setup(t) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       gene_symbol TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'visible'
+    );
+    CREATE TABLE icono_publish_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      gene_symbol TEXT NOT NULL,
+      from_asset_sha256 TEXT,
+      to_asset_sha256 TEXT,
+      action TEXT NOT NULL
     );
     ${MIGRATIONS}
   `)

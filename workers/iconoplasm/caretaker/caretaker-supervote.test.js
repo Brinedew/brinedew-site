@@ -91,6 +91,7 @@ function command(overrides = {}) {
   return {
     accountId: "acct_11111111111111111111111111111111",
     assetSha256: "a".repeat(64),
+    direction: 1,
     commandId: "cmd_supervote_1",
     requestSha256: "1".repeat(64),
     expectedAssignmentVersion: 1,
@@ -310,6 +311,7 @@ test("one caretaker supervote moves atomically and exact command replay is idemp
   const moved = await ledger.setSelection(
     command({
       assetSha256: "b".repeat(64),
+      direction: -1,
       commandId: "cmd_supervote_2",
       requestSha256: "2".repeat(64),
       expectedSupervoteVersion: 1,
@@ -318,6 +320,7 @@ test("one caretaker supervote moves atomically and exact command replay is idemp
   const replay = await ledger.setSelection(
     command({
       assetSha256: "b".repeat(64),
+      direction: -1,
       commandId: "cmd_supervote_2",
       requestSha256: "2".repeat(64),
       expectedSupervoteVersion: 1,
@@ -327,6 +330,7 @@ test("one caretaker supervote moves atomically and exact command replay is idemp
   assert.equal(first.supervote.asset_sha256, "a".repeat(64))
   assert.equal(first.supervote.supervote_version, 1)
   assert.equal(moved.supervote.asset_sha256, "b".repeat(64))
+  assert.equal(moved.supervote.direction, -1)
   assert.equal(moved.supervote.supervote_version, 2)
   assert.equal(replay.replayed, true)
   assert.equal(ledger.snapshot().asset_sha256, "b".repeat(64))
@@ -355,7 +359,7 @@ test("a reused command ID with different content is rejected", async () => {
   )
 })
 
-test("suspension preserves the +10 selection but blocks mutation; ending deactivates it", async () => {
+test("suspension preserves the signed selection but blocks mutation; ending recalls it", async () => {
   const { ledger } = testLedger()
   await ledger.projectAssignment(assignmentEvent())
   await ledger.setSelection(command())
@@ -408,19 +412,32 @@ test("suspension preserves the +10 selection but blocks mutation; ending deactiv
   assert.equal(ended.supervote_version, 2)
 })
 
-test("weighted ranking is ordinary score plus 10 and caretaker wins an exact weighted tie", async () => {
+test("signed weighting adds or subtracts 10 and only a positive preference wins its weighted tie", async () => {
   const ordinaryLeader = { asset_sha256: "a".repeat(64), score: 10, upvotes: 10 }
   const caretakerPick = {
     asset_sha256: "b".repeat(64),
     score: 0,
     upvotes: 0,
     caretaker_supervote: true,
+    caretaker_supervote_direction: 1,
   }
   const ranked = [ordinaryLeader, caretakerPick].sort((left, right) =>
     compareCaretakerWeightedCandidates(left, right, (a, b) => b.upvotes - a.upvotes),
   )
   assert.equal(CARETAKER_SUPERVOTE_WEIGHT, 10)
   assert.equal(ranked[0].asset_sha256, caretakerPick.asset_sha256)
+
+  const rejectedByCaretaker = {
+    asset_sha256: "c".repeat(64),
+    score: 15,
+    upvotes: 15,
+    caretaker_supervote: true,
+    caretaker_supervote_direction: -1,
+  }
+  const negativeRanked = [ordinaryLeader, rejectedByCaretaker].sort((left, right) =>
+    compareCaretakerWeightedCandidates(left, right, (a, b) => b.upvotes - a.upvotes),
+  )
+  assert.equal(negativeRanked[0].asset_sha256, ordinaryLeader.asset_sha256)
 
   const { ledger } = testLedger()
   await ledger.projectAssignment(assignmentEvent())
@@ -435,6 +452,20 @@ test("weighted ranking is ordinary score plus 10 and caretaker wins an exact wei
   assert.equal(decorated.image_upvotes, 8)
   assert.equal(decorated.image_downvotes, 3)
   assert.equal(decorated.image_score, 5)
+  assert.equal(decorated.caretaker_supervote_weight, 10)
+
+  await ledger.setSelection(
+    command({
+      assetSha256: caretakerPick.asset_sha256,
+      direction: -1,
+      commandId: "cmd_reverse_supervote",
+      requestSha256: "9".repeat(64),
+      expectedSupervoteVersion: 1,
+    }),
+  )
+  const negative = ledger.decorateSnapshot(ordinarySnapshot)
+  assert.equal(negative.caretaker_supervote_weight, -10)
+  assert.equal(negative.weighted_score, -5)
 })
 
 test("invalidating a selected candidate clears it atomically and closes both race orderings", async () => {
@@ -584,15 +615,18 @@ test("server-derived idempotency hash binds selection and both CAS tokens", asyn
     gene_symbol: "TP53",
     caretaker_account_id: "acct_11111111111111111111111111111111",
     asset_sha256: "a".repeat(64),
+    direction: 1,
     expected_assignment_version: 3,
     expected_supervote_version: 8,
   }
   const first = await caretakerSupervoteRequestSha256(base)
   const exactReplay = await caretakerSupervoteRequestSha256({ ...base })
   const moved = await caretakerSupervoteRequestSha256({ ...base, asset_sha256: "b".repeat(64) })
+  const reversed = await caretakerSupervoteRequestSha256({ ...base, direction: -1 })
   assert.match(first, /^[a-f0-9]{64}$/)
   assert.equal(first, exactReplay)
   assert.notEqual(first, moved)
+  assert.notEqual(first, reversed)
 })
 
 test("outbox delivery is durable and does not duplicate after completion", async () => {

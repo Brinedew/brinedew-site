@@ -1983,6 +1983,7 @@ test("signed-in caretaker sees one active gene and acknowledges its comment aler
       assignment_version: 1,
       unread_comment_count: 2,
       latest_comment_id: 12,
+      supervote_active: false,
       provider_subject: "must-never-render",
       discord_username: "must-never-render-either",
     },
@@ -2007,7 +2008,13 @@ test("signed-in caretaker sees one active gene and acknowledges its comment aler
   assert.match(markup, /data-icono-caretaker-assignment-id="assignment_ui_0001"/)
   assert.match(markup, /2<\/strong> new comments/)
   assert.match(markup, /href="\/gene\/TP53#gene-comments"/)
+  assert.match(markup, /long-press any vote button to assign your 10x supervote/)
   assert.doesNotMatch(markup, /must-never-render|discord|provider_subject/i)
+  inbox.updateCaretakerSupervote({ active: true, direction: -1, supervote_version: 2 })
+  assert.doesNotMatch(
+    inbox.caretakerPanelMarkup(),
+    /long-press any vote button to assign your 10x supervote/,
+  )
 
   function fakeInteractive(attributes) {
     return {
