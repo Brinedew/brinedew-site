@@ -415,13 +415,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           '"><span>Become a ' +
           esc(symbol) +
           " caretaker</span></button>" +
-          '<sl-dialog class="icono-caretaker-claim-dialog" id="' +
+          '<sl-dialog class="icono-standard-dialog icono-caretaker-claim-dialog" id="' +
           esc(dialogId) +
           '" data-icono-caretaker-claim-dialog label="Become a ' +
           esc(symbol) +
           ' caretaker">' +
           '<form class="icono-caretaker-claim-form" data-icono-caretaker-claim-form>' +
-          '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise manifestations.</li><li>Choose the canonical version or restore an earlier one.</li><li>Show or hide manifestation prose on the gene page.</li></ul><p class="icono-caretaker-capabilities__note">Leaving options stay in caretaker settings until you need them.</p></div>' +
+          '<div class="icono-caretaker-capabilities"><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li></ul></div>' +
           '<label class="icono-caretaker-claim-terms"><input type="checkbox" data-icono-caretaker-claim-terms> I accept the <a href="' +
           esc(terms.document_url) +
           '" target="_blank" rel="noopener">' +
@@ -5484,7 +5484,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var safeSymbol = normalizedSymbol(symbol)
     var dialogId = "icono-request-dialog-" + safeSymbol
     return (
-      '<sl-dialog class="icono-request-dialog" id="' +
+      '<sl-dialog class="icono-standard-dialog icono-request-dialog" id="' +
       esc(dialogId) +
       '" data-icono-request-dialog label="New candidate for ' +
       esc(safeSymbol) +
