@@ -720,6 +720,7 @@ body:has(.icono-vote-login-dialog[open]) {
   margin: 0;
 }
 
+.icono-caretaker-capabilities p,
 .icono-caretaker-capabilities ul {
   margin: 0;
 }
@@ -734,16 +735,30 @@ body:has(.icono-vote-login-dialog[open]) {
   color: var(--secondary);
 }
 
-.icono-caretaker-claim-form label {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.55rem;
-}
-
 .icono-caretaker-claim-terms {
-  padding: 0.8rem 0;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.8rem;
   background: color-mix(in srgb, var(--light) 92%, var(--secondary) 8%);
   border-block: 1px solid color-mix(in srgb, var(--ui-border) 78%, transparent);
+  color: var(--dark);
+}
+
+.icono-caretaker-claim-terms::part(base) {
+  align-items: flex-start;
+  width: 100%;
+}
+
+.icono-caretaker-claim-terms::part(control) {
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+}
+
+.icono-caretaker-claim-terms::part(label) {
+  min-width: 0;
+  font-family: "Special Elite", Georgia, serif;
+  overflow-wrap: anywhere;
 }
 
 .icono-request-shell {
@@ -773,6 +788,8 @@ body:has(.icono-vote-login-dialog[open]) {
   --sl-color-neutral-200: color-mix(in srgb, var(--ui-border) 88%, var(--dark) 12%);
   --sl-color-neutral-700: color-mix(in srgb, var(--dark) 72%, var(--light) 28%);
   --sl-color-neutral-900: var(--dark);
+  --sl-color-primary-600: color-mix(in srgb, var(--secondary) 84%, var(--dark) 16%);
+  --sl-color-primary-700: color-mix(in srgb, var(--secondary) 70%, var(--dark) 30%);
   color: var(--dark);
 }
 
