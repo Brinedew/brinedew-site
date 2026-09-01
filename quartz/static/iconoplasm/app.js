@@ -4242,6 +4242,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function resetMobileLabelCardState(card) {
     if (!card) return
+    // Breakpoint exit must restore the canonical specimen footer before desktop
+    // geometry is measured. Leaving the mobile-relocated node in the dossier
+    // makes the portrait consume the full rail and clips every spectral readout.
+    syncMobileLabelDossierContent(card)
     card.removeAttribute("data-icono-mobile-label-wired")
     card.removeAttribute("data-icono-mobile-review-active")
     card.removeAttribute("data-icono-mobile-expanded")
@@ -4388,7 +4392,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       footerAnchor = document.createElement("span")
       footerAnchor.setAttribute("data-icono-specimen-footer-anchor", "")
       footerAnchor.hidden = true
-      portrait.insertBefore(footerAnchor, footer)
+      if (footer.parentElement === portrait) portrait.insertBefore(footerAnchor, footer)
+      else portrait.appendChild(footerAnchor)
     }
 
     if (isMobileReview && footerRow) {
@@ -9602,6 +9607,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (route.page === "gene") {
       var leadCard = document.querySelector("#icono-gene-content .icono-gene-lead-card")
       if (leadCard && nextMode) wireMobileLabelCard(leadCard)
+      if (leadCard && !nextMode) resetMobileLabelCardState(leadCard)
       if (leadCard) syncMobileLabelViewportGeometry(leadCard)
     }
   }
