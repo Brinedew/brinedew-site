@@ -256,7 +256,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: "/static/iconoplasm/caretaker-manifestations.css?v=20260901-caretaker-modal-v2",
+        href: "/static/iconoplasm/caretaker-manifestations.css?v=20260901-caretaker-modal-v3",
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -421,13 +421,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           esc(symbol) +
           ' caretaker">' +
           '<form class="icono-caretaker-claim-form" data-icono-caretaker-claim-form>' +
-          '<div class="icono-caretaker-capabilities"><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li></ul></div>' +
-          '<label class="icono-caretaker-claim-terms"><input type="checkbox" data-icono-caretaker-claim-terms> I accept the <a href="' +
+          '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li></ul></div>' +
+          '<sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms>I accept the <a href="' +
           esc(terms.document_url) +
           '" target="_blank" rel="noopener">' +
           esc(terms.display_label || "caretaker terms") +
-          '</a>.</label><p class="icono-caretaker-status" data-icono-caretaker-claim-status hidden role="status"></p>' +
-          '</form><div slot="footer"><button type="button" class="icono-button" data-icono-caretaker-claim-cancel>Cancel</button> <button type="submit" form="" class="icono-button icono-button--primary" data-icono-caretaker-claim-submit disabled>Become caretaker</button></div></sl-dialog>'
+          '</a>.</sl-checkbox><p class="icono-caretaker-status" data-icono-caretaker-claim-status hidden role="status"></p>' +
+          '</form><div class="icono-caretaker-claim-actions" slot="footer"><button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-claim-cancel>Cancel</button><button type="button" class="icono-button" data-icono-caretaker-claim-submit disabled>Become caretaker</button></div></sl-dialog>'
         var dialog = target.querySelector("[data-icono-caretaker-claim-dialog]")
         var termsCheckbox = target.querySelector("[data-icono-caretaker-claim-terms]")
         var submit = target.querySelector("[data-icono-caretaker-claim-submit]")

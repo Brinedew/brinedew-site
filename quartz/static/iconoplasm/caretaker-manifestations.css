@@ -279,7 +279,7 @@
   justify-content: flex-start;
 }
 
-.icono-caretaker-panel .icono-button {
+:is(.icono-caretaker-panel, .icono-caretaker-claim-dialog) .icono-button {
   min-height: var(--icono-action-height);
   padding: var(--icono-action-padding);
   border: 1px solid var(--icono-action-border);
@@ -290,17 +290,17 @@
   cursor: pointer;
 }
 
-.icono-caretaker-panel .icono-button:hover {
+:is(.icono-caretaker-panel, .icono-caretaker-claim-dialog) .icono-button:hover {
   background: var(--icono-action-primary-bg-hover);
 }
 
-.icono-caretaker-panel .icono-button--quiet,
-.icono-caretaker-panel .icono-button--danger-quiet {
+:is(.icono-caretaker-panel, .icono-caretaker-claim-dialog) .icono-button--quiet,
+:is(.icono-caretaker-panel, .icono-caretaker-claim-dialog) .icono-button--danger-quiet {
   background: var(--icono-action-secondary-bg);
   color: var(--dark);
 }
 
-.icono-caretaker-panel .icono-button--danger-quiet {
+:is(.icono-caretaker-panel, .icono-caretaker-claim-dialog) .icono-button--danger-quiet {
   border-color: color-mix(in srgb, var(--icono-reject) 55%, var(--ui-border) 45%);
   color: var(--icono-reject);
 }
@@ -312,6 +312,18 @@
 
 .icono-caretaker-panel[aria-busy="true"] :is(button, textarea, input):disabled {
   cursor: wait;
+}
+
+.icono-caretaker-claim-dialog .icono-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.icono-caretaker-claim-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  width: 100%;
 }
 
 .icono-caretaker-status,
