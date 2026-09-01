@@ -544,6 +544,83 @@ test("projection mode and exact replay fences fail closed", async (t) => {
   )
 })
 
+test("projection recovery prioritizes the accepted latest event and acknowledges superseded events", async (t) => {
+  const primary = primaryDatabase()
+  const authoring = projectionOutboxDatabase()
+  t.after(() => {
+    primary.database.close()
+    authoring.database.close()
+  })
+  const older = callback(1)
+  const latest = callback(2)
+  const insert = authoring.database.prepare(
+    `INSERT INTO icono_manifestation_events (
+       event_uuid, event_sequence, gene_id, payload_json,
+       projection_status, projection_attempts, projection_next_attempt_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  )
+  insert.run(
+    older.event_id,
+    older.event_sequence,
+    older.gene_id,
+    JSON.stringify(older.payload),
+    "pending",
+    0,
+    null,
+  )
+  insert.run(
+    latest.event_id,
+    latest.event_sequence,
+    latest.gene_id,
+    JSON.stringify(latest.payload),
+    "failed",
+    3,
+    "2099-01-01T00:00:00.000Z",
+  )
+
+  const drained = await drainManifestationAuthorityProjectionOutbox(
+    {
+      primaryDb: primary,
+      authoringDb: authoring,
+      limit: 1,
+      priorityEventId: latest.event_id,
+      projectPublicMaterialEvent: async () => {},
+      now: new Date("2026-09-01T00:00:00.000Z"),
+    },
+    { readCanonical: async () => exactRecord(2) },
+  )
+
+  assert.equal(drained.ok, true)
+  assert.deepEqual(
+    drained.results.map((item) => [item.event_id, item.status]),
+    [[latest.event_id, "published"]],
+  )
+  assert.deepEqual(
+    authoring.database
+      .prepare(
+        `SELECT event_uuid, projection_status, projection_attempts, projection_next_attempt_at
+           FROM icono_manifestation_events
+          ORDER BY event_sequence`,
+      )
+      .all()
+      .map((row) => ({ ...row })),
+    [
+      {
+        event_uuid: older.event_id,
+        projection_status: "published",
+        projection_attempts: 0,
+        projection_next_attempt_at: null,
+      },
+      {
+        event_uuid: latest.event_id,
+        projection_status: "published",
+        projection_attempts: 4,
+        projection_next_attempt_at: null,
+      },
+    ],
+  )
+})
+
 test("shadow-frozen cutover projection accepts only its exact deterministic seed event and plan", async (t) => {
   const primary = primaryDatabase("shadow_frozen", {
     sourceSnapshotSha256: sha("f"),
