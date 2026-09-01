@@ -50,9 +50,9 @@ function handlers(db, wakeCalls = []) {
     isAdmin: async () => true,
     json,
     resolveActiveAccount: async () => ({ account_id: ADMIN }),
-    wakeAuthorityProjection: async () => {
-      wakeCalls.push("wake")
-      return { ok: true }
+    wakeAuthorityProjection: async (_env, event) => {
+      wakeCalls.push(event.event_id)
+      return { ok: true, results: [{ event_id: event.event_id, status: "published" }] }
     },
   })
 }
