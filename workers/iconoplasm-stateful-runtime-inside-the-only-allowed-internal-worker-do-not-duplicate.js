@@ -32346,6 +32346,7 @@ async function drainIconoplasmManifestationAuthorityProjection(
       drainManifestationPublicCardPublicationWakes(env.ICONOPLASM_DB, {
         authorityEventId: event.event_id,
         limit: 10,
+        wakeCardPublication: () => callCardPublication(env, "/wake", { method: "POST" }),
       }),
     onIntegrityFailure: async (failure) => {
       console.error("[ICONOPLASM_AUTHORITY_PROJECTION_INTEGRITY]", failure)
