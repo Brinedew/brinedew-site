@@ -4613,17 +4613,41 @@ async function countOpenGenerationRequests(env, filters = {}) {
   return Math.max(0, Number.parseInt(String(row?.count || "0"), 10) || 0)
 }
 
-export async function generationRequestLeaseClaim(
-  env,
-  { limit = 10, leaseOwnerId, leaseSeconds = 900 } = {},
-) {
-  const claimLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 10)))
-  const scanLimit = Math.min(200, Math.max(20, claimLimit * 4))
+async function summarizeOpenGenerationRequests(env, filters = {}) {
+  if (!env.ICONOPLASM_DB) {
+    return {
+      count: 0,
+      diagnostic_count: 0,
+      oldest_created_at: "",
+      newest_created_at: "",
+    }
+  }
+  const { whereParts, params } = openGenerationRequestFilters(filters)
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT
+       COUNT(*) AS count,
+       SUM(CASE WHEN gr.request_origin = 'diagnostic_matrix' THEN 1 ELSE 0 END) AS diagnostic_count,
+       MIN(gr.created_at) AS oldest_created_at,
+       MAX(gr.created_at) AS newest_created_at
+     FROM icono_generation_requests gr
+     WHERE ${whereParts.join(" AND ")}`,
+  )
+    .bind(...params)
+    .first()
+  return {
+    count: Math.max(0, Number.parseInt(String(row?.count || "0"), 10) || 0),
+    diagnostic_count: Math.max(0, Number.parseInt(String(row?.diagnostic_count || "0"), 10) || 0),
+    oldest_created_at: String(row?.oldest_created_at || "").trim(),
+    newest_created_at: String(row?.newest_created_at || "").trim(),
+  }
+}
+
+function generationRequestSelectionFilters(env, { geneSymbol = "" } = {}) {
   const policy = resolveIconoplasmFulfillmentDeliveryPolicy(env)
   // The temporary Discord gate is a work-selection policy, not a later
-  // suppression.  Selecting an ineligible row would spend GPU time and publish
-  // a candidate while knowingly leaving its owner without the required DM.
-  const openFilters = { statuses: ["open"] }
+  // suppression. Keep read-only queue telemetry and atomic claims on exactly
+  // the same eligibility definition without turning telemetry into a work plan.
+  const openFilters = { statuses: ["open"], geneSymbol }
   const eligibleFilters = policy.all_requesters
     ? openFilters
     : {
@@ -4631,6 +4655,16 @@ export async function generationRequestLeaseClaim(
         requesterUserId: policy.test_recipient_id,
         includeDiagnostics: true,
       }
+  return { policy, openFilters, eligibleFilters }
+}
+
+export async function generationRequestLeaseClaim(
+  env,
+  { limit = 10, leaseOwnerId, leaseSeconds = 900 } = {},
+) {
+  const claimLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 10)))
+  const scanLimit = Math.min(200, Math.max(20, claimLimit * 4))
+  const { policy, openFilters, eligibleFilters } = generationRequestSelectionFilters(env)
   const [totalOpenCount, eligibleCount, eligibleRows] = await Promise.all([
     countOpenGenerationRequests(env, openFilters),
     countOpenGenerationRequests(env, eligibleFilters),
@@ -33963,13 +33997,26 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         Math.min(2000, Number.parseInt(url.searchParams.get("limit") || "500", 10) || 500),
       )
       const symbol = normalizeSymbol(url.searchParams.get("symbol") || "") || ""
-      const rows = await listOpenGenerationRequests(env, { limit, geneSymbol: symbol })
+      const { policy, openFilters, eligibleFilters } = generationRequestSelectionFilters(env, {
+        geneSymbol: symbol,
+      })
+      const [rows, totalOpen, eligible] = await Promise.all([
+        listOpenGenerationRequests(env, { limit, ...openFilters }),
+        summarizeOpenGenerationRequests(env, openFilters),
+        summarizeOpenGenerationRequests(env, eligibleFilters),
+      ])
       return done(
         "admin_requests_open",
         json(
           {
             ok: true,
             count: rows.length,
+            total_open_count: totalOpen.count,
+            eligible_count: eligible.count,
+            eligible_diagnostic_count: eligible.diagnostic_count,
+            oldest_eligible_created_at: eligible.oldest_created_at,
+            newest_eligible_created_at: eligible.newest_created_at,
+            delivery_mode: policy.mode,
             rows,
             lane_summary: summarizeGenerationRequestRows(rows),
           },

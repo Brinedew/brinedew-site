@@ -110,7 +110,22 @@ class FakeRequestStatement {
       this.sql.includes("COUNT(*) AS count") &&
       this.sql.includes("FROM icono_generation_requests gr")
     ) {
-      return { count: this.requestRows().length }
+      const rows = this.requestRows()
+      if (this.sql.includes("oldest_created_at")) {
+        const createdAt = rows
+          .map((row) => String(row.created_at || ""))
+          .filter(Boolean)
+          .sort()
+        return {
+          count: rows.length,
+          diagnostic_count: rows.filter(
+            (row) => String(row.request_origin || "user") === "diagnostic_matrix",
+          ).length,
+          oldest_created_at: createdAt.at(0) || "",
+          newest_created_at: createdAt.at(-1) || "",
+        }
+      }
+      return { count: rows.length }
     }
     return null
   }
@@ -419,8 +434,12 @@ class FakeRequestStatement {
 
     if (this.sql.includes("FROM icono_generation_requests gr")) {
       this.db.requestReads += 1
+      const rows = this.requestRows()
+      const limit = this.sql.includes("LIMIT ?")
+        ? Number(this.args.at(-1) || rows.length)
+        : rows.length
       return {
-        results: this.requestRows(),
+        results: rows.slice(0, limit),
       }
     }
 
@@ -671,6 +690,56 @@ test("legacy drain-plan fails loudly and points executors at the atomic claim ro
   assert.equal(payload.ok, false)
   assert.equal(payload.error.code, "EXACT_GENERATION_LEASE_REQUIRED")
   assert.equal(payload.claim_endpoint, "/api/iconoplasm/authority/generation-leases/claim")
+})
+
+test("open request telemetry is exact but never returns an executable drain plan", async () => {
+  const env = buildEnv({
+    bindGateway: false,
+    dbOptions: {
+      requestRows: [
+        {
+          id: 37,
+          gene_symbol: "DNMT3B",
+          requester_user_id: "user-1",
+          request_origin: "user",
+          status: "open",
+          created_at: "2026-04-04T10:00:00Z",
+        },
+        {
+          id: 38,
+          gene_symbol: "CASP9",
+          requester_user_id: "user-2",
+          request_origin: "diagnostic_matrix",
+          status: "open",
+          created_at: "2026-04-04T11:00:00Z",
+        },
+      ],
+    },
+  })
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/requests/open?limit=1", {
+        headers: { "X-Iconoplasm-Admin-Token": "test-admin-token" },
+      }),
+      {
+        ICONOPLASM_DB: env.gatewayDb,
+        ICONOPLASM_ADMIN_TOKEN: "test-admin-token",
+        ICONOPLASM_FULFILLMENT_DM_DELIVERY_MODE: "all_requesters",
+      },
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.count, 1)
+  assert.equal(payload.total_open_count, 2)
+  assert.equal(payload.eligible_count, 2)
+  assert.equal(payload.eligible_diagnostic_count, 1)
+  assert.equal(payload.oldest_eligible_created_at, "2026-04-04T10:00:00Z")
+  assert.equal(payload.newest_eligible_created_at, "2026-04-04T11:00:00Z")
+  assert.equal(payload.delivery_mode, "all_requesters")
+  assert.equal(payload.leases, undefined)
+  assert.equal(payload.lease_owner_id, undefined)
 })
 
 test("generation requests purge unrelated-gene reference snapshots", () => {
