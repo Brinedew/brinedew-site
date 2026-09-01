@@ -63,7 +63,10 @@ test("read misses never write or consult a relational database", async () => {
 test("namespace and byte limits fail before an unsafe storage write", async () => {
   const { store, calls } = fixture()
   await assert.rejects(store.read("private/user.json"), /namespace/)
-  await assert.rejects(store.write("portraits", { value: "x".repeat(8192) }), /byte limit/)
+  await assert.rejects(
+    store.write("portraits", { value: "x".repeat(8192) }),
+    /byte limit: kind=portraits, bytes=8204, limit=8192/,
+  )
   assert.equal(calls.length, 0)
 })
 
