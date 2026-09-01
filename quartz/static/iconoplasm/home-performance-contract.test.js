@@ -45,6 +45,24 @@ const generatedSharedCardRuntimePath = new URL(
   import.meta.url,
 )
 
+test("gene caretaking is a toolbar claim and a dedicated sidebar panel, never an inbox lane", async () => {
+  const [app, inbox, styles] = await Promise.all([
+    readFile(appPath, "utf8"),
+    readFile(requestInboxPath, "utf8"),
+    readFile(stylesPath, "utf8"),
+  ])
+  assert.match(app, /Become a ['"] \+\s*esc\(symbol\) \+\s*['"] caretaker/)
+  assert.match(app, /data-icono-caretaker-claim-action/)
+  assert.match(app, /requestInbox\.caretakerPanelMarkup\(\)/)
+  const requestPanel = inbox.slice(
+    inbox.indexOf("function panelMarkup()"),
+    inbox.indexOf("function caretakerPanelMarkup()"),
+  )
+  assert.doesNotMatch(requestPanel, /requestGroupMarkup\(\s*["']caretaking["']/)
+  assert.match(inbox, /brd-sidebar-panel-title[^\n]+Caretaking/)
+  assert.match(styles, /\.icono-canonical-toolbar-actions\s*\{[^}]*display:\s*flex/s)
+})
+
 test("Iconoplasm font paint is in-memory, bounded, and independent of preload timing", async () => {
   const head = await readFile(headPath, "utf8")
   const customCss = await readFile(customCssPath, "utf8")

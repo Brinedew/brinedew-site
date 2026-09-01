@@ -1,4 +1,5 @@
 import {
+  CARETAKER_ENTITLEMENT_POLICY_VERSION,
   endCaretakerAssignment,
   offerCaretakerAssignment,
   transitionCaretakerAssignment,
@@ -22,7 +23,7 @@ const ASSIGNMENT_STATUSES = new Set(["pending_acceptance", "active", "suspended"
 const DEFAULT_PAGE_LIMIT = 50
 const MAX_PAGE_LIMIT = 100
 
-export const CARETAKER_ENTITLEMENT_POLICY_VERSION = "caretaker_standard_v1"
+export { CARETAKER_ENTITLEMENT_POLICY_VERSION }
 
 function boundedLimit(raw, fallback = DEFAULT_PAGE_LIMIT) {
   const parsed = Math.trunc(Number(raw))

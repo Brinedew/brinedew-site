@@ -11,7 +11,11 @@ import {
   createManifestationBodyObjectKey,
   putEncryptedManifestationBody,
 } from "../../lib/iconoplasm-manifestation-body-storage.js"
-import { transitionCaretakerAssignment } from "./caretaker-assignment-commands.js"
+import {
+  CARETAKER_ENTITLEMENT_POLICY_VERSION,
+  claimCaretakerAssignment,
+  transitionCaretakerAssignment,
+} from "./caretaker-assignment-commands.js"
 import { authorityError, defaultIdFactory } from "./manifestation-authority-contract.js"
 import {
   authorityMode,
@@ -29,7 +33,12 @@ import {
   readCaretakerGeneDossier,
   resolveGene,
 } from "./manifestation-authority-read-model.js"
-import { first, resolveCommandReplay } from "./manifestation-authority-repository.js"
+import {
+  first,
+  readHead,
+  requireActiveAccount,
+  resolveCommandReplay,
+} from "./manifestation-authority-repository.js"
 import {
   createManifestationUploadIntent,
   requireAdoptedManifestationUpload,
@@ -142,6 +151,65 @@ function rejectMismatchedBodyId(body, key, routeValue) {
   }
 }
 
+async function readCaretakerClaimAvailability(db, geneLocator, accountId) {
+  const account = await requireActiveAccount(db, accountId)
+  const gene = await resolveGene(db, geneLocator)
+  const head = await readHead(db, gene.gene_id)
+  const geneAssignment = await first(
+    db,
+    `SELECT caretaker_assignment_id, account_id, status
+       FROM icono_caretaker_assignments
+      WHERE gene_id = ? AND status IN ('pending_acceptance', 'active', 'suspended')
+      LIMIT 1`,
+    gene.gene_id,
+  )
+  const accountAssignment = await first(
+    db,
+    `SELECT caretaker_assignment_id, gene_id, status
+       FROM icono_caretaker_assignments
+      WHERE account_id = ? AND status IN ('pending_acceptance', 'active', 'suspended')
+      LIMIT 1`,
+    account.account_id,
+  )
+  const terms = await first(
+    db,
+    `SELECT terms_version_id, terms_sha256, document_url, display_label, effective_at
+       FROM icono_caretaker_terms_versions
+      WHERE retired_at IS NULL AND effective_at <= CURRENT_TIMESTAMP
+      ORDER BY effective_at DESC, terms_version_id DESC
+      LIMIT 1`,
+  )
+  let reason = null
+  if (!head.canonical_manifestation_id || !head.canonical_revision_id) {
+    reason = "gene_not_ready"
+  } else if (geneAssignment) {
+    reason = geneAssignment.account_id === account.account_id ? "already_caretaking" : "gene_taken"
+  } else if (accountAssignment) {
+    reason = "account_already_caretaking"
+  } else if (!terms) {
+    reason = "terms_unavailable"
+  }
+  return {
+    enabled: true,
+    gene: { gene_id: gene.gene_id, canonical_symbol: gene.canonical_symbol },
+    claim: {
+      available: reason == null,
+      reason,
+      gene_revision: Number(head.gene_revision || 0),
+      entitlement_policy_version: CARETAKER_ENTITLEMENT_POLICY_VERSION,
+      terms: terms
+        ? {
+            terms_version_id: terms.terms_version_id,
+            terms_sha256: terms.terms_sha256,
+            document_url: terms.document_url,
+            display_label: terms.display_label,
+            effective_at: terms.effective_at,
+          }
+        : null,
+    },
+  }
+}
+
 function createCaretakerManifestationHttpHandler({
   db,
   env,
@@ -159,17 +227,23 @@ function createCaretakerManifestationHttpHandler({
       const url = new URL(request.url)
       const path = url.pathname
       const dossier = path.match(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)$/)
+      const claim = path.match(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/claim$/)
       const revisionBody = path.match(
         /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/revisions\/([^/]+)\/body$/,
       )
       const derivativeBody = path.match(
         /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/derivatives\/([^/]+)\/body$/,
       )
-      if (request.method === "GET" && (dossier || revisionBody || derivativeBody)) {
+      if (request.method === "GET" && (dossier || claim || revisionBody || derivativeBody)) {
         if ((await authorityMode(db)) !== "authoritative") {
           return jsonResponse({ enabled: false }, 200)
         }
         const session = await requireBrowserSession(request, env, resolveSession)
+        if (claim) {
+          return jsonResponse(
+            await readCaretakerClaimAvailability(db, segment(claim[1]), session.accountId),
+          )
+        }
         if (dossier) {
           try {
             const value = await readCaretakerGeneDossier(db, {
@@ -233,7 +307,8 @@ function createCaretakerManifestationHttpHandler({
       )
       const methodMatches =
         (request.method === "POST" &&
-          (save ||
+          (claim ||
+            save ||
             saveTags ||
             selectTags ||
             select ||
@@ -250,6 +325,47 @@ function createCaretakerManifestationHttpHandler({
       const body = parsed.value
       const command = await commandEnvelope(request, parsed.raw, body, "account", session.accountId)
       let result
+
+      if (claim) {
+        if (body.terms_accepted !== true) {
+          throw authorityError(
+            "TERMS_ACCEPTANCE_REQUIRED",
+            "Confirm the displayed caretaker terms before becoming a caretaker",
+            400,
+          )
+        }
+        const availability = await readCaretakerClaimAvailability(
+          db,
+          segment(claim[1]),
+          session.accountId,
+        )
+        if (!availability.claim.available) {
+          throw authorityError(
+            "CARETAKER_CLAIM_UNAVAILABLE",
+            "Caretaking is no longer available for this gene or account",
+            409,
+          )
+        }
+        if (body.entitlement_policy_version !== availability.claim.entitlement_policy_version) {
+          throw authorityError(
+            "ENTITLEMENT_POLICY_VERSION_MISMATCH",
+            "Caretaker eligibility changed; refresh the gene page",
+            409,
+          )
+        }
+        result = await claimCaretakerAssignment(db, {
+          geneId: availability.gene.gene_id,
+          accountId: session.accountId,
+          termsVersionId: body.terms_version_id,
+          relinquishPolicy: body.default_leave_policy,
+          entitlementPolicyVersion: body.entitlement_policy_version,
+          expectedGeneRevision: body.expected_gene_revision,
+          ...auditIds(body),
+          idFactory,
+          ...command,
+        })
+        return mutationResponse(db, { onAuthorityEvent, onAssignmentEvent }, result)
+      }
 
       if (assignmentAction) {
         const action = assignmentAction[3]

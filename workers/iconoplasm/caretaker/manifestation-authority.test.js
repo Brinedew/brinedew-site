@@ -4,7 +4,9 @@ import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 
 import {
+  CARETAKER_ENTITLEMENT_POLICY_VERSION,
   MANIFESTATION_AUTHORITY_EVENT_TYPE,
+  claimCaretakerAssignment,
   endCaretakerAssignment,
   mergeGeneIdentity,
   offerCaretakerAssignment,
@@ -359,6 +361,84 @@ test("registers stable identities and enforces one open gene assignment per acco
       "assignment_multi_0002",
     ).end_reason,
     "invitation_cancelled",
+  )
+})
+
+test("an account atomically claims an available seeded gene with pinned terms and leave policy", async (t) => {
+  const db = new TestD1()
+  t.after(() => db.close())
+  const geneId = "gene_claim_0001"
+  await registerAuthorityAccount(db, { accountId: ADMIN, now: NOW })
+  await registerAuthorityAccount(db, { accountId: USER, now: NOW })
+  await registerAuthorityAccount(db, { accountId: OTHER, now: NOW })
+  await registerGeneIdentity(db, { geneId, canonicalSymbol: "CLM1", now: NOW })
+  await registerCaretakerTermsVersion(db, {
+    termsVersionId: TERMS,
+    termsSha256: sha("f"),
+    documentUrl: "https://brinedew.com/iconoplasm/caretaker-terms/v1",
+    displayLabel: "Caretaker terms v1",
+    effectiveAt: NOW,
+    createdByAccountId: ADMIN,
+  })
+  await seedSystemManifestation(db, {
+    geneId,
+    storage: storage(90),
+    expectedHeadVersion: 0,
+    manifestationId: "manifestation_claim_seed_0001",
+    revisionId: "revision_claim_seed_0001",
+    selectionId: "selection_claim_seed_0001",
+    eventUuid: "event_claim_seed_0001",
+    now: NOW,
+    ...command("command_claim_seed_0001", "1", null, "migration"),
+  })
+  const claimInput = {
+    geneId,
+    accountId: USER,
+    termsVersionId: TERMS,
+    relinquishPolicy: "withdraw",
+    entitlementPolicyVersion: CARETAKER_ENTITLEMENT_POLICY_VERSION,
+    expectedGeneRevision: 1,
+    assignmentId: "assignment_claim_0001",
+    eventUuid: "event_claim_0001",
+    now: NOW,
+    ...command("command_claim_0001", "2"),
+  }
+  const claimed = await claimCaretakerAssignment(db, claimInput)
+  const replayed = await claimCaretakerAssignment(db, claimInput)
+  assert.deepEqual({ ...replayed, replayed: false }, claimed)
+  assert.equal(replayed.replayed, true)
+  assert.equal(claimed.status, "active")
+  assert.equal(claimed.assignment_version, 1)
+  assert.equal(claimed.gene_revision, 2)
+  assert.deepEqual(
+    {
+      ...row(
+        db,
+        `SELECT account_id, invited_by_account_id, status, assignment_version,
+              terms_version_id, entitlement_policy_version, relinquish_policy
+         FROM icono_caretaker_assignments WHERE caretaker_assignment_id = ?`,
+        "assignment_claim_0001",
+      ),
+    },
+    {
+      account_id: USER,
+      invited_by_account_id: USER,
+      status: "active",
+      assignment_version: 1,
+      terms_version_id: TERMS,
+      entitlement_policy_version: CARETAKER_ENTITLEMENT_POLICY_VERSION,
+      relinquish_policy: "withdraw",
+    },
+  )
+  await assert.rejects(
+    claimCaretakerAssignment(db, {
+      ...claimInput,
+      accountId: OTHER,
+      assignmentId: "assignment_claim_0002",
+      eventUuid: "event_claim_0002",
+      ...command("command_claim_0002", "3", OTHER),
+    }),
+    { code: "STALE_AUTHORITY_STATE", status: 409 },
   )
 })
 
