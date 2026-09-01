@@ -983,6 +983,40 @@ test("mobile card recomputes fit scale on same-breakpoint browser resizing", asy
   assert.doesNotMatch(app, /--icono-label-mobile-portrait-max-height/)
 })
 
+test("desktop breakpoint exit restores the spectral footer to the portrait rail", async () => {
+  const app = await sourceText(appPath)
+  const resetStart = app.indexOf("function resetMobileLabelCardState")
+  const resetEnd = app.indexOf("function syncMobileLabelViewportGeometry", resetStart)
+  assert.notEqual(resetStart, -1, "missing mobile reset helper")
+  assert.notEqual(resetEnd, -1, "missing mobile viewport geometry helper")
+  const resetBlock = app.slice(resetStart, resetEnd)
+  assert.match(
+    resetBlock,
+    /syncMobileLabelDossierContent\(card\)/,
+    "desktop reset must put the one canonical spectral footer back under the portrait",
+  )
+
+  const reconcileStart = app.indexOf("function reconcileMobileLabelBreakpoint")
+  const reconcileEnd = app.indexOf("function queueMobileLabelBreakpointRefresh", reconcileStart)
+  assert.notEqual(reconcileStart, -1, "missing mobile breakpoint reconciliation")
+  assert.notEqual(reconcileEnd, -1, "missing mobile breakpoint refresh queue")
+  const reconcileBlock = app.slice(reconcileStart, reconcileEnd)
+  assert.match(
+    reconcileBlock,
+    /if \(leadCard && !nextMode\) resetMobileLabelCardState\(leadCard\)/,
+    "gene pages must run the desktop reset when they cross out of mobile review mode",
+  )
+
+  const syncStart = app.indexOf("function syncMobileLabelDossierContent")
+  const syncEnd = app.indexOf("function setMobileLabelExpanded", syncStart)
+  const syncBlock = app.slice(syncStart, syncEnd)
+  assert.match(
+    syncBlock,
+    /footer\.parentElement === portrait[\s\S]*portrait\.appendChild\(footerAnchor\)/,
+    "footer restoration must recreate a missing anchor without referencing a node in another parent",
+  )
+})
+
 test("mobile infocard tab is part of the sheet surface and casts a shadow over the blot card", async () => {
   const css = await sourceText(cssPath)
   const litCard = await sourceText(litCardPath)
