@@ -58,7 +58,7 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   )
   assert.match(
     css,
-    /\.icono-request-dialog::part\(body\)\s*\{[\s\S]*overflow:\s*hidden;/,
+    /\.icono-standard-dialog::part\(body\)\s*\{[\s\S]*overflow:\s*hidden;/,
     "the dialog body must not become a second scroll container around the picker",
   )
   assert.match(
@@ -333,7 +333,7 @@ test("canonical blot toolbar keeps picker behind a modal trigger", () => {
   )
   assert.match(
     app,
-    /<sl-dialog class="icono-request-dialog"/,
+    /<sl-dialog class="icono-standard-dialog icono-request-dialog"/,
     "request picker should render inside a modal dialog instead of the visible toolbar rail",
   )
   assert.match(
