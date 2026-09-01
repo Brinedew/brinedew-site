@@ -1711,6 +1711,9 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.match(block, /canAdoptServerContent/)
   assert.match(block, /wireGeneContent\(contentEl, g\)/)
   assert.match(block, /data-icono-gene-snapshot/)
+  assert.match(block, /publicManifestation\.public_page_visible === true/)
+  assert.match(block, /renderedPublicManifestationBody\.textContent === publicManifestationProse/)
+  assert.match(block, /publicManifestationMatches/)
   assert.doesNotMatch(block, /renderGeneResult\(\{ data: cachedGeneCard, source: "card" \}\)/)
   assert.match(block, /hasHeadStartedGene/)
   assert.match(

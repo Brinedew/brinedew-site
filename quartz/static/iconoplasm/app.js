@@ -8791,12 +8791,33 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var renderedSnapshot = String(
         (contentEl && contentEl.getAttribute("data-icono-gene-snapshot")) || "",
       )
+      var publicManifestation = g && g.canonical_manifestation
+      var publicManifestationProse = String(
+        (publicManifestation && publicManifestation.prose) || "",
+      )
+      var shouldRenderPublicManifestation = !!(
+        publicManifestation &&
+        publicManifestation.public_page_visible === true &&
+        publicManifestationProse.trim()
+      )
+      var renderedPublicManifestation =
+        contentEl && contentEl.querySelector(".icono-public-manifestation")
+      var renderedPublicManifestationBody =
+        renderedPublicManifestation &&
+        renderedPublicManifestation.querySelector(".icono-public-manifestation__body")
+      var publicManifestationMatches = shouldRenderPublicManifestation
+        ? !!(
+            renderedPublicManifestationBody &&
+            renderedPublicManifestationBody.textContent === publicManifestationProse
+          )
+        : !renderedPublicManifestation
       var canAdoptServerContent = !!(
         contentEl &&
         contentEl.getAttribute("data-icono-server-rendered-gene") === "true" &&
         embeddedSnapshot &&
         renderedSnapshot === embeddedSnapshot &&
-        normalizedSymbol(contentEl.getAttribute("data-icono-gene-symbol")) === resolvedSymbol
+        normalizedSymbol(contentEl.getAttribute("data-icono-gene-symbol")) === resolvedSymbol &&
+        publicManifestationMatches
       )
       if (canAdoptServerContent) {
         wireGeneContent(contentEl, g)
