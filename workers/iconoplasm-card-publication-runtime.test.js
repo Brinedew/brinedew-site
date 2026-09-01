@@ -81,13 +81,18 @@ test(
               const first=this.repo.get('write_allocation');
               await this.arm(120000);
               const unchanged=this.repo.get('write_allocation');
+              await this.state.storage.setAlarm(Date.now()-1000);
+              const beforePastDueRecovery=this.repo.get('write_allocation');
+              await this.arm(1000);
+              const recoveredPastDueAlarm=await this.state.storage.getAlarm();
+              const afterPastDueRecovery=this.repo.get('write_allocation');
               await this.state.storage.deleteAlarm();
               this.repo.put('write_allocation',{day,reserved:54000,accounting_version:2});
               this.repo.put('requested',true);
               await this.alarm();
               const retryAlarm=await this.state.storage.getAlarm();
               await this.arm(1000);
-              return Response.json({first,unchanged,retryAlarm,retainedAlarm:await this.state.storage.getAlarm(),failure:this.repo.get('failure'),allocation:this.repo.get('write_allocation')});
+              return Response.json({first,unchanged,beforePastDueRecovery,recoveredPastDueAlarm,afterPastDueRecovery,retryAlarm,retainedAlarm:await this.state.storage.getAlarm(),failure:this.repo.get('failure'),allocation:this.repo.get('write_allocation')});
             }
             if(new URL(request.url).pathname === '/quota-test') {
               const day = new Date().toISOString().slice(0,10);
@@ -174,6 +179,15 @@ test(
         "alarm and its reservation are both billed writes",
       )
       assert.deepEqual(alarmBudget.unchanged, alarmBudget.first, "an already earlier alarm is free")
+      assert.ok(
+        alarmBudget.recoveredPastDueAlarm > Date.now(),
+        "a retained past-due platform alarm is replaced with executable future work",
+      )
+      assert.equal(
+        alarmBudget.afterPastDueRecovery.reserved,
+        alarmBudget.beforePastDueRecovery.reserved + 2,
+        "past-due recovery reserves the alarm row and its accounting row",
+      )
       assert.equal(
         alarmBudget.allocation.reserved,
         54004,
