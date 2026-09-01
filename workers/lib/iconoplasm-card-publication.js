@@ -1,5 +1,6 @@
 import {
   canonicalPublishedJson,
+  PUBLISHED_CARD_OBJECT_LIMITS,
   publishedCardObjectKey,
 } from "./iconoplasm-published-card-objects.js"
 
@@ -11,6 +12,8 @@ import {
 export const CARD_PUBLICATION_STORAGE = "bunny_card_catalog_v2"
 export const CARD_PUBLICATION_BATCH = 6
 const CARD_PUBLICATION_CONCURRENCY = 2
+const CARD_PUBLICATION_PACKED_SHARD_CARD_LIMIT = 750
+const UTF8 = new TextEncoder()
 export const CARD_DELIVERY_INDEX_SIZE = 128
 // This publisher's allocation, NOT an account entitlement. Leave 45k of the
 // Free plan's 100k SQLite DO writes for votes, other coordinators and recovery.
@@ -119,6 +122,29 @@ async function settlePublicationWrites(promises) {
   const failure = settled.find((result) => result.status === "rejected")
   if (failure) throw failure.reason
   return settled.map((result) => result.value)
+}
+
+function nextPackedShard(cards, start, stable) {
+  const emptyBytes = UTF8.encode(
+    canonicalPublishedJson({ schema_version: 2, cards: [] }),
+  ).byteLength
+  let byteSize = emptyBytes
+  const stableCards = []
+  const end = Math.min(cards.length, start + CARD_PUBLICATION_PACKED_SHARD_CARD_LIMIT)
+  for (let index = start; index < end; index += 1) {
+    const card = stable(cards[index])
+    const cardBytes = UTF8.encode(canonicalPublishedJson(card)).byteLength
+    const nextSize = byteSize + cardBytes + (stableCards.length ? 1 : 0)
+    if (nextSize > PUBLISHED_CARD_OBJECT_LIMITS.shards) {
+      if (!stableCards.length) {
+        throw new Error(`Published card cannot fit in a packed shard: ${cards[index].symbol}`)
+      }
+      break
+    }
+    stableCards.push(card)
+    byteSize = nextSize
+  }
+  return { stableCards, end: start + stableCards.length }
 }
 
 // The algorithm is independent of DO transport and SQL. Its repository must
@@ -290,18 +316,19 @@ export function createCardPublication({
       a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0,
     )
     if (orderedCards.length !== orderedEntries.length) throw new Error("Incomplete delivery index")
-    // Split growing shards. The migration's existing 750-card ranges stay
-    // packed for bulk/site reads; clients fetch only a 128-gene hash directory,
-    // never these packed full-card bodies.
+    // Split growing shards by both cardinality and their actual canonical UTF-8
+    // bytes. Authority materialization can make legacy prose larger without
+    // changing the number of genes; a fixed 750-card chunk can therefore cross
+    // the immutable-object read limit and wedge every later publication retry.
+    // Clients fetch only a 128-gene hash directory, never these packed bodies.
     const replacements = [...(job.sealed_refs || [])]
     const sealOffset = job.seal_offset || 0
-    for (
-      let offset = sealOffset;
-      offset < Math.min(orderedCards.length, sealOffset + 750);
-      offset += 750
-    ) {
-      const chunk = orderedCards.slice(offset, offset + 750)
-      const entryChunk = orderedEntries.slice(offset, offset + 750)
+    let nextSealOffset = sealOffset
+    if (sealOffset < orderedCards.length) {
+      const packedChunk = nextPackedShard(orderedCards, sealOffset, source.stable)
+      nextSealOffset = packedChunk.end
+      const chunk = orderedCards.slice(sealOffset, packedChunk.end)
+      const entryChunk = orderedEntries.slice(sealOffset, packedChunk.end)
       const deliveryIndexes = []
       for (let i = 0; i < entryChunk.length; i += CARD_DELIVERY_INDEX_SIZE) {
         const part = entryChunk.slice(i, i + CARD_DELIVERY_INDEX_SIZE)
@@ -324,8 +351,10 @@ export function createCardPublication({
           last_symbol: part.at(-1)[0],
         })
       }
-      const stableCards = chunk.map((card) => source.stable(card))
-      const packed = await objects.write("shards", { schema_version: 2, cards: stableCards })
+      const packed = await objects.write("shards", {
+        schema_version: 2,
+        cards: packedChunk.stableCards,
+      })
       replacements.push({
         key: packed.key,
         content_hash: packed.hash,
@@ -335,8 +364,8 @@ export function createCardPublication({
         delivery_indexes: deliveryIndexes,
       })
     }
-    if (sealOffset + 750 < orderedCards.length) {
-      repo.put("job", { ...job, sealed_refs: replacements, seal_offset: sealOffset + 750 })
+    if (nextSealOffset < orderedCards.length) {
+      repo.put("job", { ...job, sealed_refs: replacements, seal_offset: nextSealOffset })
       return
     }
     const refs = job.refs.slice()
