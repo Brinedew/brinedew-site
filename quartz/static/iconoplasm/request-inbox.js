@@ -65,9 +65,7 @@ export function createRequestInbox({
   function chooseActiveGroup() {
     if (state.active_group_touched && state.active_group) return
     if (state.ready_requests.length) state.active_group = "ready"
-    else if (state.invitation_pending_count > 0) state.active_group = "caretaking"
     else if (state.open_requests.length) state.active_group = "waiting"
-    else if (state.invitations.length) state.active_group = "caretaking"
     else state.active_group = "ready"
   }
 
@@ -335,7 +333,7 @@ export function createRequestInbox({
 
   function requestGroupSummaryMarkup(label, count, unread, groupName) {
     var safeCount = Math.max(0, Number(count || 0) || 0)
-    var unreadNoun = groupName === "caretaking" ? " invitation" : " generation"
+    var unreadNoun = " generation"
     return (
       '<span slot="summary" class="icono-request-inbox__group-summary">' +
       '<span class="icono-request-inbox__group-label">' +
@@ -530,11 +528,7 @@ export function createRequestInbox({
 
   function panelMarkup() {
     if (!getCurrentUser()) return ""
-    if (
-      !state.loaded &&
-      !state.invitations_loaded &&
-      (state.loading || state.invitations_loading)
-    ) {
+    if (!state.loaded && state.loading) {
       return (
         '<div class="icono-request-inbox" aria-busy="true">' +
         '<div class="icono-request-inbox__head"><span>Inbox</span>' +
@@ -549,9 +543,6 @@ export function createRequestInbox({
     var readyGroupCount = Math.max(readyGroups.length, Number(state.ready_group_count || 0) || 0)
     var openCount = Math.max(0, Number(state.open_count || 0) || 0)
     var cancelledCount = Math.max(0, Number(state.cancelled_count || 0) || 0)
-    var invitations = Array.isArray(state.invitations) ? state.invitations : []
-    var invitationPendingCount = Math.max(0, Number(state.invitation_pending_count || 0) || 0)
-    var invitationUnreadCount = Math.max(0, Number(state.invitation_unread_count || 0) || 0)
     var html =
       '<div class="icono-request-inbox">' +
       '<div class="icono-request-inbox__head"><span>Inbox</span></div>' +
@@ -566,7 +557,7 @@ export function createRequestInbox({
     if (state.request_error && !readyRequests.length) {
       readyContent +=
         '<div class="icono-request-inbox__empty"><strong>Requests unavailable.</strong>' +
-        "Caretaker invitations are still checked separately.</div>"
+        "Try again when this panel refreshes.</div>"
     } else if (state.loading && !state.loaded) {
       readyContent += '<div class="icono-request-inbox__empty">Checking requests.</div>'
     } else if (!readyRequests.length) {
@@ -604,35 +595,7 @@ export function createRequestInbox({
         escapeHtml(String(openCount)) +
         " shown.</div>"
     }
-    var caretakerContent =
-      '<div class="icono-request-inbox__caretaker-summary"><strong>' +
-      escapeHtml(String(invitationPendingCount)) +
-      " pending</strong><span>" +
-      escapeHtml(String(invitationUnreadCount)) +
-      " unread</span></div>"
-    for (var k = 0; k < invitations.length; k++) {
-      caretakerContent += caretakerInvitationMarkup(invitations[k] || {})
-    }
-    if (state.invitations_error && !invitations.length) {
-      caretakerContent +=
-        '<div class="icono-request-inbox__empty"><strong>Invitations unavailable.</strong>' +
-        "Generation requests are still available.</div>"
-    } else if (state.invitations_loading && !state.invitations_loaded) {
-      caretakerContent += '<div class="icono-request-inbox__empty">Checking invitations.</div>'
-    } else if (!invitations.length) {
-      caretakerContent +=
-        '<div class="icono-request-inbox__empty"><strong>No caretaker invitations.</strong>' +
-        "New offers will appear here.</div>"
-    }
-
     html += requestGroupMarkup("ready", "Ready", readyGroupCount, unreadGroupCount, readyContent)
-    html += requestGroupMarkup(
-      "caretaking",
-      "Caretaking",
-      invitationPendingCount,
-      invitationUnreadCount,
-      caretakerContent,
-    )
     html += requestGroupMarkup("waiting", "Waiting", openCount, 0, waitingContent)
     html += "</div>"
     if (cancelledCount) {
@@ -642,6 +605,40 @@ export function createRequestInbox({
         "</span></div>"
     }
     return html + "</div>"
+  }
+
+  function caretakerPanelMarkup() {
+    if (!getCurrentUser()) return ""
+    var invitations = Array.isArray(state.invitations) ? state.invitations : []
+    var pending = Math.max(0, Number(state.invitation_pending_count || 0) || 0)
+    var unread = Math.max(0, Number(state.invitation_unread_count || 0) || 0)
+    var content =
+      '<div class="icono-request-inbox__caretaker-summary"><strong>' +
+      escapeHtml(String(pending)) +
+      " pending</strong><span>" +
+      escapeHtml(String(unread)) +
+      " unread</span></div>"
+    for (var index = 0; index < invitations.length; index++) {
+      content += caretakerInvitationMarkup(invitations[index] || {})
+    }
+    if (state.invitations_error && !invitations.length) {
+      content +=
+        '<div class="icono-request-inbox__empty"><strong>Invitations unavailable.</strong>' +
+        "Try again when this panel refreshes.</div>"
+    } else if (state.invitations_loading && !state.invitations_loaded) {
+      content += '<div class="icono-request-inbox__empty">Checking invitations.</div>'
+    } else if (!invitations.length) {
+      content +=
+        '<div class="icono-request-inbox__empty"><strong>No caretaker invitations.</strong>' +
+        "You can claim an available gene from its toolbar.</div>"
+    }
+    return (
+      '<div class="brd-sidebar-section icono-caretaker-launcher">' +
+      '<div class="brd-sidebar-panel-title">Caretaking</div>' +
+      '<div class="icono-request-inbox__caretaker-panel">' +
+      content +
+      "</div></div>"
+    )
   }
 
   function wire(stack) {
@@ -742,5 +739,13 @@ export function createRequestInbox({
     }
   }
 
-  return { panelMarkup, refresh: refreshForLifecycle, reset, start, stop, wire }
+  return {
+    caretakerPanelMarkup,
+    panelMarkup,
+    refresh: refreshForLifecycle,
+    reset,
+    start,
+    stop,
+    wire,
+  }
 }

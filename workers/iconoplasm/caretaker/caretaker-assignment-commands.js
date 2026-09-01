@@ -30,6 +30,8 @@ import {
   runCommand,
 } from "./manifestation-authority-repository.js"
 
+export const CARETAKER_ENTITLEMENT_POLICY_VERSION = "caretaker_standard_v1"
+
 export async function registerAuthorityAccount(
   db,
   { accountId, publicCreditLabel = null, status = "active", now } = {},
@@ -319,6 +321,168 @@ export async function offerCaretakerAssignment(
         assignmentId: assignmentIdNorm,
         payloadJson: eventPayload({
           cause: "caretaker.assignment_offered",
+          gene,
+          head: nextHead,
+          assignment: nextAssignment,
+        }),
+      }),
+    ],
+  })
+}
+
+export async function claimCaretakerAssignment(
+  db,
+  {
+    geneId,
+    accountId,
+    termsVersionId,
+    relinquishPolicy,
+    entitlementPolicyVersion = CARETAKER_ENTITLEMENT_POLICY_VERSION,
+    expectedGeneRevision,
+    assignmentId,
+    eventUuid,
+    idFactory = defaultIdFactory,
+    now,
+    ...command
+  } = {},
+) {
+  requireDatabase(db)
+  const replay = await resolveCommandReplay(db, command, {
+    actorKind: "account",
+    actorAccountId: command.actorAccountId,
+  })
+  if (replay) return replay
+  const gene = await requireActiveGene(db, geneId)
+  const account = await requireActiveAccount(db, accountId)
+  if (command.actorAccountId !== account.account_id) {
+    throw authorityError(
+      "ASSIGNMENT_NOT_OWNED",
+      "An account may only claim caretaking for itself",
+      403,
+    )
+  }
+  const head = await readHead(db, gene.gene_id)
+  if (!head.canonical_manifestation_id || !head.canonical_revision_id) {
+    throw authorityError(
+      "GENE_NOT_CARETAKER_READY",
+      "This gene does not yet have a provable system manifestation seed",
+      409,
+    )
+  }
+  const expectedRevision = normalizeVersion(expectedGeneRevision, "expected_gene_revision")
+  const termsId = normalizeId(termsVersionId, "terms_version_id")
+  const policyVersion = String(entitlementPolicyVersion || "").trim()
+  if (policyVersion !== CARETAKER_ENTITLEMENT_POLICY_VERSION) {
+    throw authorityError(
+      "ENTITLEMENT_POLICY_VERSION_MISMATCH",
+      "Caretaker eligibility changed; refresh the gene page",
+      409,
+    )
+  }
+  const leavePolicy = normalizePolicy(relinquishPolicy)
+  const assignmentIdNorm = createId(
+    assignmentId,
+    "caretaker_assignment_id",
+    "assignment",
+    idFactory,
+  )
+  const eventUuidNorm = createId(eventUuid, "event_uuid", "event", idFactory)
+  const timestamp = normalizeTimestamp(now)
+  const terms = await first(
+    db,
+    `SELECT terms_version_id FROM icono_caretaker_terms_versions
+      WHERE terms_version_id = ? AND retired_at IS NULL AND effective_at <= ?`,
+    termsId,
+    timestamp,
+  )
+  if (!terms) {
+    throw authorityError("TERMS_VERSION_NOT_ACTIVE", "Caretaker terms version is not active", 409)
+  }
+  const cmd = commandInputs({
+    ...command,
+    actorKind: "account",
+    actorAccountId: account.account_id,
+  })
+  const nextHead = { ...head, gene_revision: Number(head.gene_revision) + 1 }
+  const nextAssignment = {
+    caretaker_assignment_id: assignmentIdNorm,
+    gene_id: gene.gene_id,
+    account_id: account.account_id,
+    account_public_credit_label: account.public_credit_label,
+    account_status: account.status,
+    status: "active",
+    assignment_version: 1,
+    terms_version_id: termsId,
+    terms_accepted_at: timestamp,
+    entitlement_policy_version: policyVersion,
+    entitlement_grace_ends_at: null,
+    relinquish_policy: leavePolicy,
+    started_at: timestamp,
+    suspended_at: null,
+    ended_at: null,
+  }
+  const response = {
+    ok: true,
+    caretaker_assignment_id: assignmentIdNorm,
+    status: "active",
+    assignment_version: 1,
+    gene_revision: nextHead.gene_revision,
+  }
+  return runCommand({
+    db,
+    ...cmd,
+    commandType: "caretaker.assignment_claim",
+    geneId: gene.gene_id,
+    response,
+    guardSql: `INSERT INTO icono_authority_command_guards (command_id, guard_value)
+      SELECT ?, CASE WHEN EXISTS (
+        SELECT 1 FROM icono_manifestation_heads h
+        WHERE h.gene_id = ? AND h.gene_revision = ?
+          AND h.canonical_manifestation_id IS NOT NULL
+          AND h.canonical_revision_id IS NOT NULL
+      ) AND NOT EXISTS (
+        SELECT 1 FROM icono_caretaker_assignments a
+        WHERE (a.gene_id = ? OR a.account_id = ?)
+          AND a.status IN ('pending_acceptance', 'active', 'suspended')
+      ) THEN 1 ELSE 0 END`,
+    guardParams: [cmd.commandId, gene.gene_id, expectedRevision, gene.gene_id, account.account_id],
+    statements: [
+      prepared(
+        db,
+        `INSERT INTO icono_caretaker_assignments (
+           caretaker_assignment_id, gene_id, account_id, status, assignment_version,
+           terms_version_id, terms_accepted_at, entitlement_policy_version,
+           relinquish_policy, invited_by_account_id, started_at, created_at, updated_at
+         ) VALUES (?, ?, ?, 'active', 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        assignmentIdNorm,
+        gene.gene_id,
+        account.account_id,
+        termsId,
+        timestamp,
+        policyVersion,
+        leavePolicy,
+        account.account_id,
+        timestamp,
+        timestamp,
+        timestamp,
+      ),
+      prepared(
+        db,
+        `UPDATE icono_manifestation_heads
+            SET gene_revision = gene_revision + 1, updated_at = ?
+          WHERE gene_id = ? AND gene_revision = ?`,
+        timestamp,
+        gene.gene_id,
+        expectedRevision,
+      ),
+      eventStatement(db, {
+        eventUuid: eventUuidNorm,
+        commandId: cmd.commandId,
+        geneId: gene.gene_id,
+        geneRevision: nextHead.gene_revision,
+        assignmentId: assignmentIdNorm,
+        payloadJson: eventPayload({
+          cause: "caretaker.assignment_claimed",
           gene,
           head: nextHead,
           assignment: nextAssignment,
