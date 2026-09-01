@@ -15938,7 +15938,7 @@ async function fetchAdminAssetRepairScope(env, { requestedSymbols = null, limit 
   }
 }
 
-async function fetchCatalogRow(env, symbol) {
+async function fetchCatalogRow(env, symbol, { throwOnUnavailable = false } = {}) {
   if (!env.ICONOPLASM_DB || !symbol) return null
   try {
     const row = await env.ICONOPLASM_DB.prepare(
@@ -15961,7 +15961,8 @@ async function fetchCatalogRow(env, symbol) {
       aliases: normalizeCatalogAliases(row.aliases_json || []),
       updated_at: row?.updated_at ? String(row.updated_at) : null,
     }
-  } catch {
+  } catch (error) {
+    if (throwOnUnavailable) throw error
     return null
   }
 }
@@ -16046,17 +16047,21 @@ export async function resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllo
   return resolveIconoplasmPublishedGeneDiscoveryRecord(env, rawIdentifier)
 }
 
-async function resolveGene(env, rawId, { includeProtein = true } = {}) {
+async function resolveGene(
+  env,
+  rawId,
+  { includeProtein = true, throwOnUnavailable = false } = {},
+) {
   const requestedSymbol = normalizeSymbol(rawId)
   if (!requestedSymbol) return null
   let symbol = requestedSymbol
-  let catalog = await fetchCatalogRow(env, symbol)
+  let catalog = await fetchCatalogRow(env, symbol, { throwOnUnavailable })
   if (!catalog) {
     const resolved = await resolvePublicIdentifier(env, rawId)
     const canonicalSymbol = normalizeSymbol(resolved?.canonical_symbol || "")
     if (!resolved?.found || !canonicalSymbol || canonicalSymbol === requestedSymbol) return null
     symbol = canonicalSymbol
-    catalog = await fetchCatalogRow(env, symbol)
+    catalog = await fetchCatalogRow(env, symbol, { throwOnUnavailable })
   }
   if (!catalog) return null
 
@@ -31436,8 +31441,14 @@ async function handleSiteGeneDetail(request, env, path) {
   const requestedPublishedCard = requestedSymbol
     ? await readPublishedGeneCardPortraitProjection(env, requestedSymbol)
     : { kind: "missing", version: "", payload: null }
-  const resolved = await resolveGene(env, rawId)
-  if (!resolved) {
+  let resolved = null
+  let liveReadUnavailable = false
+  try {
+    resolved = await resolveGene(env, rawId, { throwOnUnavailable: true })
+  } catch {
+    liveReadUnavailable = true
+  }
+  if (!resolved && liveReadUnavailable) {
     // A published immutable card proves that this canonical gene exists even
     // when D1 refuses live reads (including a Free-plan daily quota outage).
     // Keep the profile and its canonical portrait available from that exact
@@ -31458,8 +31469,8 @@ async function handleSiteGeneDetail(request, env, path) {
         "X-Iconoplasm-Portrait-Source": "artifact-unavailable",
       })
     }
-    return json({ error: "Gene not found" }, 404)
   }
+  if (!resolved) return json({ error: "Gene not found" }, 404)
   const canonicalPath = `${SITE_GENE_API_PREFIX}/${encodeURIComponent(resolved.symbol)}`
   if (path !== canonicalPath) {
     return Response.redirect(`${url.origin}${canonicalPath}`, 302)
