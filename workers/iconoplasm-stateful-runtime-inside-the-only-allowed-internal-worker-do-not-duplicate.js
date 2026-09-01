@@ -32325,7 +32325,11 @@ async function publishCatalogArtifact(env) {
   }
 }
 
-async function drainIconoplasmManifestationAuthorityProjection(env, limit = 10) {
+async function drainIconoplasmManifestationAuthorityProjection(
+  env,
+  limit = 10,
+  { priorityEventId = null } = {},
+) {
   if (!env?.ICONOPLASM_DB || !env?.ICONOPLASM_AUTHORING_DB) {
     throw new Error("Manifestation authority projection bindings are missing")
   }
@@ -32333,6 +32337,7 @@ async function drainIconoplasmManifestationAuthorityProjection(env, limit = 10) 
     primaryDb: env.ICONOPLASM_DB,
     authoringDb: env.ICONOPLASM_AUTHORING_DB,
     limit,
+    priorityEventId,
     projectAssignmentEvent: async (event) => {
       await projectCaretakerAssignmentNotification(env.ICONOPLASM_DB, event)
       return projectCaretakerAssignmentEventToVoteCoordinator(env, event)
@@ -32419,9 +32424,14 @@ async function handleDeclaredManifestationAuthorityRoute({ request, env, ctx, do
   const handler = createIconoplasmManifestationAuthorityRuntimeHandler({
     env,
     resolveSession: resolveActiveCaretakerAccountSession,
-    onAuthorityEvent: async () => {
-      const result = await drainIconoplasmManifestationAuthorityProjection(env, 50)
-      if (!result.ok) throw new Error("Manifestation authority projection remains pending")
+    onAuthorityEvent: async (event) => {
+      const result = await drainIconoplasmManifestationAuthorityProjection(env, 50, {
+        priorityEventId: event.event_id,
+      })
+      const accepted = result.results.find((item) => item.event_id === event.event_id)
+      if (accepted?.status !== "published") {
+        throw new Error("Accepted manifestation authority event remains pending")
+      }
     },
     onIntegrityFailure: async (failure) => {
       console.error("[ICONOPLASM_AUTHORITY_BODY_INTEGRITY]", failure)
@@ -32545,7 +32555,10 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     isAdmin: isIconoplasmAdmin,
     json,
     resolveActiveAccount: resolveActiveCaretakerAccountSession,
-    wakeAuthorityProjection: (env) => drainIconoplasmManifestationAuthorityProjection(env, 50),
+    wakeAuthorityProjection: (env, event) =>
+      drainIconoplasmManifestationAuthorityProjection(env, 50, {
+        priorityEventId: event?.event_id || null,
+      }),
   }),
   ...createIconoplasmCaretakerNotificationHandlers({
     json,

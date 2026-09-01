@@ -285,10 +285,11 @@ async function deliverMutation(db, wakeAuthorityProjection, env, result) {
   const delivery = await deliverAcceptedAuthorityEvent(
     db,
     {
-      onAuthorityEvent: async () => {
-        const wake = await wakeAuthorityProjection(env)
-        if (wake?.ok === false)
-          throw new Error("Manifestation authority projection remains pending")
+      onAuthorityEvent: async (event) => {
+        const wake = await wakeAuthorityProjection(env, event)
+        const accepted = wake?.results?.find((item) => item.event_id === event.event_id)
+        if (accepted?.status !== "published")
+          throw new Error("Accepted manifestation authority event remains pending")
       },
     },
     result,
