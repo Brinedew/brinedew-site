@@ -151,7 +151,7 @@ function rejectMismatchedBodyId(body, key, routeValue) {
   }
 }
 
-async function readCaretakerClaimAvailability(db, geneLocator, accountId) {
+async function readCaretakerClaimAvailability(db, geneLocator, accountId, currentTimestamp) {
   const account = await requireActiveAccount(db, accountId)
   const gene = await resolveGene(db, geneLocator)
   const head = await readHead(db, gene.gene_id)
@@ -175,9 +175,10 @@ async function readCaretakerClaimAvailability(db, geneLocator, accountId) {
     db,
     `SELECT terms_version_id, terms_sha256, document_url, display_label, effective_at
        FROM icono_caretaker_terms_versions
-      WHERE retired_at IS NULL AND effective_at <= CURRENT_TIMESTAMP
+      WHERE retired_at IS NULL AND effective_at <= ?
       ORDER BY effective_at DESC, terms_version_id DESC
       LIMIT 1`,
+    currentTimestamp,
   )
   let reason = null
   if (!head.canonical_manifestation_id || !head.canonical_revision_id) {
@@ -219,6 +220,7 @@ function createCaretakerManifestationHttpHandler({
   onAssignmentEvent,
   onIntegrityFailure,
   idFactory = defaultIdFactory,
+  now = () => new Date().toISOString(),
 } = {}) {
   if (!db || !env) throw new TypeError("Caretaker HTTP handler requires db and env")
 
@@ -241,7 +243,12 @@ function createCaretakerManifestationHttpHandler({
         const session = await requireBrowserSession(request, env, resolveSession)
         if (claim) {
           return jsonResponse(
-            await readCaretakerClaimAvailability(db, segment(claim[1]), session.accountId),
+            await readCaretakerClaimAvailability(
+              db,
+              segment(claim[1]),
+              session.accountId,
+              now(),
+            ),
           )
         }
         if (dossier) {
@@ -338,6 +345,7 @@ function createCaretakerManifestationHttpHandler({
           db,
           segment(claim[1]),
           session.accountId,
+          now(),
         )
         if (!availability.claim.available) {
           throw authorityError(

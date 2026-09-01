@@ -609,6 +609,15 @@ test("browser routes hide unauthorized dossiers, reject CSRF and body-ID smuggli
 
 test("browser claim route exposes exact terms and atomically activates an available gene", async (t) => {
   const context = await bootstrap(t, "7014")
+  const currentTerms = "terms_server_2026_09_01_v2"
+  await registerCaretakerTermsVersion(context.db, {
+    termsVersionId: currentTerms,
+    termsSha256: sha("e"),
+    documentUrl: "https://iconoplasm.brinedew.bio/caretaker-terms",
+    displayLabel: "Caretaker terms - 1 September 2026",
+    effectiveAt: "2026-09-01T00:00:00.000Z",
+    createdByActorKind: "migration",
+  })
   await registerAuthorityAccount(context.db, {
     accountId: OTHER,
     publicCreditLabel: "Self-claiming caretaker",
@@ -638,6 +647,7 @@ test("browser claim route exposes exact terms and atomically activates an availa
     env: {},
     resolveSession: async () => ({ account_id: OTHER }),
     idFactory: ids(),
+    now: () => "2026-09-01T00:00:01.000Z",
   })
   const path = "/api/iconoplasm/caretaker/genes/CLAIM14/claim"
   const availabilityResponse = await handler(new Request(`https://iconoplasm.test${path}`))
@@ -645,7 +655,7 @@ test("browser claim route exposes exact terms and atomically activates an availa
   const availability = await availabilityResponse.json()
   assert.equal(availability.claim.available, true)
   assert.equal(availability.claim.gene_revision, 1)
-  assert.equal(availability.claim.terms.terms_version_id, TERMS)
+  assert.equal(availability.claim.terms.terms_version_id, currentTerms)
   assert.equal(availability.claim.entitlement_policy_version, CARETAKER_ENTITLEMENT_POLICY_VERSION)
   const claimedResponse = await handler(
     browserRequest(path, {
