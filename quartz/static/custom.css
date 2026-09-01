@@ -1023,6 +1023,19 @@ article p {
   opacity: 0.55;
 }
 
+.icono-request-inbox__caretaker-comments {
+  display: block;
+  margin: 0 0 0.65rem 2.75rem;
+  color: var(--accent);
+  font-size: 0.76rem;
+  text-decoration: none;
+}
+
+.icono-request-inbox__caretaker-comments:hover,
+.icono-request-inbox__caretaker-comments:focus-visible {
+  text-decoration: underline;
+}
+
 .icono-request-inbox__group-body > :last-child {
   border-bottom: 0;
 }

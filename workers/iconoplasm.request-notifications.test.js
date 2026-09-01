@@ -1710,8 +1710,8 @@ test("request inbox UI uses server read state and bounded live refresh", () => {
   assert.match(app, /import \{ createRequestInbox \} from "\.\/request-inbox\.js\?v=[^"]+"/)
   assert.match(inbox, /\/api\/iconoplasm\/notifications\?limit=50/)
   assert.match(inbox, /\/api\/iconoplasm\/notifications\/read/)
-  assert.match(inbox, /\/api\/iconoplasm\/caretaker\/invitations\?limit=20/)
-  assert.match(inbox, /\/api\/iconoplasm\/caretaker\/invitations\/read/)
+  assert.match(inbox, /\/api\/iconoplasm\/caretaker\/me\?fresh=/)
+  assert.match(inbox, /\/api\/iconoplasm\/caretaker\/me\/comments\/read/)
   assert.match(inbox, /refreshTimer = window\.setTimeout/)
   assert.match(inbox, /state\.open_count <= 0/)
   assert.match(inbox, /document\.visibilityState !== "visible"/)
@@ -1954,7 +1954,7 @@ test("request inbox receipt click acknowledges the durable group instead of one 
   })
 })
 
-test("signed-in caretaker invitation is identity-free and marks read from link or explicit control", async () => {
+test("signed-in caretaker sees one active gene and acknowledges its comment alert", async () => {
   const calls = []
   const navigations = []
   const requestPayload = {
@@ -1969,30 +1969,27 @@ test("signed-in caretaker invitation is identity-free and marks read from link o
     ready_requests: [],
     open_requests: [],
   }
-  const invitationPayload = {
+  const caretakerPayload = {
     ok: true,
-    pending_count: 1,
-    unread_count: 1,
-    invitations: [
-      {
-        caretaker_assignment_id: "assignment_ui_0001",
-        gene_id: "gene_ui_0001",
-        canonical_symbol: "TP53",
-        href: "/gene/TP53",
-        assignment_status: "pending_acceptance",
-        assignment_version: 1,
-        notification_state: "pending",
-        read_at: null,
-        provider_subject: "must-never-render",
-        discord_username: "must-never-render-either",
-      },
-    ],
+    caretaker: {
+      caretaker_assignment_id: "assignment_ui_0001",
+      gene_id: "gene_ui_0001",
+      canonical_symbol: "TP53",
+      href: "/gene/TP53",
+      comments_href: "/gene/TP53#gene-comments",
+      assignment_status: "active",
+      assignment_version: 1,
+      unread_comment_count: 2,
+      latest_comment_id: 12,
+      provider_subject: "must-never-render",
+      discord_username: "must-never-render-either",
+    },
   }
   const inbox = createRequestInbox({
     fetchJSON: async (url, options) => {
       calls.push({ url, options })
-      if (url.startsWith("/api/iconoplasm/caretaker/invitations/read")) return { ok: true }
-      if (url.startsWith("/api/iconoplasm/caretaker/invitations?")) return invitationPayload
+      if (url.startsWith("/api/iconoplasm/caretaker/me/comments/read")) return caretakerPayload
+      if (url.startsWith("/api/iconoplasm/caretaker/me?")) return caretakerPayload
       return requestPayload
     },
     getCurrentUser: () => ({ account_id: "account_ui_0001" }),
@@ -2004,11 +2001,10 @@ test("signed-in caretaker invitation is identity-free and marks read from link o
   const markup = inbox.caretakerPanelMarkup()
   assert.match(markup, /class="brd-sidebar-section icono-caretaker-launcher"/)
   assert.doesNotMatch(markup, /<sl-details/)
-  assert.match(markup, /<strong>1 pending<\/strong><span>1 unread<\/span>/)
-  assert.match(markup, /href="\/gene\/TP53"/)
+  assert.match(markup, /href="\/gene\/TP53\?caretaker=open"/)
   assert.match(markup, /data-icono-caretaker-assignment-id="assignment_ui_0001"/)
-  assert.match(markup, /data-icono-caretaker-gene-id="gene_ui_0001"/)
-  assert.match(markup, /Invitation awaiting your response/)
+  assert.match(markup, /2<\/strong> new comments/)
+  assert.match(markup, /href="\/gene\/TP53#gene-comments"/)
   assert.doesNotMatch(markup, /must-never-render|discord|provider_subject/i)
 
   function fakeInteractive(attributes) {
@@ -2024,40 +2020,41 @@ test("signed-in caretaker invitation is identity-free and marks read from link o
       },
     }
   }
-  const link = fakeInteractive({
-    "data-icono-caretaker-assignment-id": "assignment_ui_0001",
-    href: "/gene/TP53",
+  const assignmentLink = fakeInteractive({
+    href: "/gene/TP53?caretaker=open",
   })
-  const button = fakeInteractive({
-    "data-icono-caretaker-mark-read": "assignment_ui_0001",
+  const commentLink = fakeInteractive({
+    "data-icono-caretaker-assignment-id": "assignment_ui_0001",
+    href: "/gene/TP53#gene-comments",
   })
   inbox.wire({
     querySelector() {
       return null
     },
     querySelectorAll(selector) {
-      if (selector === "[data-icono-caretaker-invitation]") return [link]
-      if (selector === "[data-icono-caretaker-mark-read]") return [button]
+      if (selector === "[data-icono-caretaker-assignment]") return [assignmentLink]
+      if (selector === "[data-icono-caretaker-comments]") return [commentLink]
       return []
     },
   })
   var prevented = false
-  link.handlers.click({
+  commentLink.handlers.click({
     preventDefault() {
       prevented = true
     },
   })
-  button.handlers.click()
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(prevented, true)
-  assert.deepEqual(navigations, ["/gene/TP53"])
+  assert.deepEqual(navigations, ["/gene/TP53#gene-comments"])
   const readCalls = calls.filter((call) =>
-    call.url.startsWith("/api/iconoplasm/caretaker/invitations/read"),
+    call.url.startsWith("/api/iconoplasm/caretaker/me/comments/read"),
   )
-  assert.equal(readCalls.length, 2)
+  assert.equal(readCalls.length, 1)
   assert.ok(
     readCalls.every(
-      (call) => JSON.parse(call.options.body).caretaker_assignment_id === "assignment_ui_0001",
+      (call) =>
+        JSON.parse(call.options.body).caretaker_assignment_id === "assignment_ui_0001" &&
+        JSON.parse(call.options.body).through_comment_id === 12,
     ),
   )
 })
@@ -2101,27 +2098,22 @@ test("caretaker and generation feeds fail independently without erasing the surv
     ],
     open_requests: [],
   }
-  const invitationsPayload = {
+  const caretakerPayload = {
     ok: true,
-    pending_count: 1,
-    unread_count: 1,
-    invitations: [
-      {
-        caretaker_assignment_id: "assignment_survives",
-        gene_id: "gene_survives",
-        canonical_symbol: "BRCA1",
-        href: "/gene/BRCA1",
-        assignment_status: "pending_acceptance",
-        assignment_version: 1,
-        notification_state: "pending",
-        read_at: null,
-      },
-    ],
+    caretaker: {
+      caretaker_assignment_id: "assignment_survives",
+      gene_id: "gene_survives",
+      canonical_symbol: "BRCA1",
+      href: "/gene/BRCA1",
+      assignment_status: "active",
+      assignment_version: 1,
+      unread_comment_count: 1,
+    },
   }
-  const invitationFailure = createRequestInbox({
+  const caretakerFailure = createRequestInbox({
     fetchJSON: async (url) => {
-      if (url.startsWith("/api/iconoplasm/caretaker/invitations?")) {
-        throw new Error("invitation feed failed")
+      if (url.startsWith("/api/iconoplasm/caretaker/me?")) {
+        throw new Error("caretaker feed failed")
       }
       return readyPayload
     },
@@ -2129,16 +2121,16 @@ test("caretaker and generation feeds fail independently without erasing the surv
     renderSidebar() {},
     escapeHtml: (value) => String(value ?? ""),
   })
-  await invitationFailure.refresh()
-  assert.match(invitationFailure.panelMarkup(), /publication_survives/)
-  assert.match(invitationFailure.caretakerPanelMarkup(), /Invitations unavailable/)
+  await caretakerFailure.refresh()
+  assert.match(caretakerFailure.panelMarkup(), /publication_survives/)
+  assert.equal(caretakerFailure.caretakerPanelMarkup(), "")
 
   const requestFailure = createRequestInbox({
     fetchJSON: async (url) => {
       if (url.startsWith("/api/iconoplasm/notifications?")) {
         throw new Error("generation feed failed")
       }
-      return invitationsPayload
+      return caretakerPayload
     },
     getCurrentUser: () => ({ account_id: "account_failure_0002" }),
     renderSidebar() {},
@@ -2181,23 +2173,18 @@ test("account switch and remount discard stale responses from both inbox feeds",
       open_requests: [],
     }
   }
-  function invitationPayload(symbol) {
+  function caretakerPayload(symbol) {
     return {
       ok: true,
-      pending_count: 1,
-      unread_count: 1,
-      invitations: [
-        {
-          caretaker_assignment_id: `assignment_${symbol}`,
-          gene_id: `gene_${symbol}`,
-          canonical_symbol: symbol,
-          href: `/gene/${symbol}`,
-          assignment_status: "pending_acceptance",
-          assignment_version: 1,
-          notification_state: "pending",
-          read_at: null,
-        },
-      ],
+      caretaker: {
+        caretaker_assignment_id: `assignment_${symbol}`,
+        gene_id: `gene_${symbol}`,
+        canonical_symbol: symbol,
+        href: `/gene/${symbol}`,
+        assignment_status: "active",
+        assignment_version: 1,
+        unread_comment_count: 1,
+      },
     }
   }
   var user = { account_id: "account_stale_A" }
@@ -2219,14 +2206,14 @@ test("account switch and remount discard stale responses from both inbox feeds",
   const secondCalls = pending.filter((item) => item.account === "account_stale_B")
   secondCalls.forEach((item) =>
     item.deferred.resolve(
-      item.url.includes("caretaker/invitations") ? invitationPayload("NEW") : requestPayload("NEW"),
+      item.url.includes("caretaker/me") ? caretakerPayload("NEW") : requestPayload("NEW"),
     ),
   )
   await second
   const firstCalls = pending.filter((item) => item.account === "account_stale_A")
   firstCalls.forEach((item) =>
     item.deferred.resolve(
-      item.url.includes("caretaker/invitations") ? invitationPayload("OLD") : requestPayload("OLD"),
+      item.url.includes("caretaker/me") ? caretakerPayload("OLD") : requestPayload("OLD"),
     ),
   )
   await first
@@ -2242,16 +2229,16 @@ test("account switch and remount discard stale responses from both inbox feeds",
   const remountNewCalls = pending.slice(-2)
   remountNewCalls.forEach((item) =>
     item.deferred.resolve(
-      item.url.includes("caretaker/invitations")
-        ? invitationPayload("REMOUNT_NEW")
+      item.url.includes("caretaker/me")
+        ? caretakerPayload("REMOUNT_NEW")
         : requestPayload("REMOUNT_NEW"),
     ),
   )
   await remountSecond
   remountOldCalls.forEach((item) =>
     item.deferred.resolve(
-      item.url.includes("caretaker/invitations")
-        ? invitationPayload("REMOUNT_OLD")
+      item.url.includes("caretaker/me")
+        ? caretakerPayload("REMOUNT_OLD")
         : requestPayload("REMOUNT_OLD"),
     ),
   )

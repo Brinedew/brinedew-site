@@ -59,8 +59,11 @@ export async function projectCaretakerAssignmentNotification(primaryDb, event) {
       `INSERT INTO icono_caretaker_assignment_notifications (
          caretaker_assignment_id, account_id, gene_id, canonical_symbol,
          assignment_status, assignment_version, notification_state,
-         authority_event_id, authority_event_sequence, resolved_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? THEN NULL ELSE CURRENT_TIMESTAMP END)
+         authority_event_id, authority_event_sequence, resolved_at,
+         comments_read_through_id
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? THEN NULL ELSE CURRENT_TIMESTAMP END,
+         CASE WHEN ? THEN 0 ELSE COALESCE((SELECT MAX(id) FROM icono_gene_comments
+                                           WHERE gene_symbol = ? AND status = 'visible'), 0) END)
        ON CONFLICT(caretaker_assignment_id) DO UPDATE SET
          canonical_symbol = excluded.canonical_symbol,
          assignment_status = excluded.assignment_status,
@@ -87,6 +90,8 @@ export async function projectCaretakerAssignmentNotification(primaryDb, event) {
       eventId,
       eventSequence,
       pending ? 1 : 0,
+      pending ? 1 : 0,
+      canonicalSymbol,
     )
     .run()
 
@@ -110,87 +115,79 @@ export async function projectCaretakerAssignmentNotification(primaryDb, event) {
   })
 }
 
-export async function readCaretakerAssignmentNotifications(
-  primaryDb,
-  { accountId, limit = 20 } = {},
-) {
+export async function readCaretakerCoordination(primaryDb, { accountId } = {}) {
   const db = requirePrimaryDb(primaryDb)
   const stableAccountId = requiredId(accountId, "account_id")
-  const boundedLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 20)))
-  const response = await db
+  const row = await db
     .prepare(
       `SELECT caretaker_assignment_id, gene_id, canonical_symbol,
-              assignment_status, assignment_version, notification_state,
-              authority_event_id, authority_event_sequence,
-              read_at, created_at, updated_at, resolved_at
+              assignment_status, assignment_version, authority_event_sequence,
+              comments_read_through_id
          FROM icono_caretaker_assignment_notifications
-        WHERE account_id = ?
-        ORDER BY CASE notification_state WHEN 'pending' THEN 0 ELSE 1 END,
-                 authority_event_sequence DESC
-        LIMIT ?`,
+        WHERE account_id = ? AND assignment_status IN ('active', 'suspended')
+        ORDER BY authority_event_sequence DESC LIMIT 1`,
     )
-    .bind(stableAccountId, boundedLimit)
-    .all()
-  const rows = Array.isArray(response?.results) ? response.results : []
-  const invitations = rows.map((row) =>
-    Object.freeze({
+    .bind(stableAccountId)
+    .first()
+  if (!row) return Object.freeze({ ok: true, caretaker: null })
+  const commentState = await db
+    .prepare(
+      `SELECT COUNT(*) AS unread_count, COALESCE(MAX(id), 0) AS latest_comment_id
+         FROM icono_gene_comments
+        WHERE gene_symbol = ? AND status = 'visible' AND id > ?`,
+    )
+    .bind(row.canonical_symbol, Number(row.comments_read_through_id || 0))
+    .first()
+  const href = `/gene/${encodeURIComponent(row.canonical_symbol)}`
+  return Object.freeze({
+    ok: true,
+    caretaker: Object.freeze({
       caretaker_assignment_id: row.caretaker_assignment_id,
       gene_id: row.gene_id,
       canonical_symbol: row.canonical_symbol,
-      href: `/gene/${encodeURIComponent(row.canonical_symbol)}`,
       assignment_status: row.assignment_status,
       assignment_version: Number(row.assignment_version),
-      notification_state: row.notification_state,
-      authority_event_id: row.authority_event_id,
-      authority_event_sequence: Number(row.authority_event_sequence),
-      read_at: row.read_at || null,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      resolved_at: row.resolved_at || null,
+      href,
+      comments_href: `${href}#gene-comments`,
+      unread_comment_count: Number(commentState?.unread_count || 0),
+      latest_comment_id: Number(commentState?.latest_comment_id || 0),
     }),
-  )
-  return Object.freeze({
-    ok: true,
-    pending_count: invitations.filter((item) => item.notification_state === "pending").length,
-    unread_count: invitations.filter((item) => item.read_at == null).length,
-    invitations: Object.freeze(invitations),
   })
 }
 
-export async function markCaretakerAssignmentNotificationRead(
+export async function markCaretakerCommentsRead(
   primaryDb,
-  { accountId, assignmentId } = {},
+  { accountId, assignmentId, throughCommentId } = {},
 ) {
   const db = requirePrimaryDb(primaryDb)
   const stableAccountId = requiredId(accountId, "account_id")
   const stableAssignmentId = requiredId(assignmentId, "caretaker_assignment_id")
-  await db
+  const stableThroughCommentId = Math.trunc(Number(throughCommentId))
+  if (!Number.isSafeInteger(stableThroughCommentId) || stableThroughCommentId < 0) {
+    throw authorityError("INVALID_COMMENT_HIGH_WATER", "through_comment_id is invalid", 400)
+  }
+  const result = await db
     .prepare(
       `UPDATE icono_caretaker_assignment_notifications
-          SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
-        WHERE caretaker_assignment_id = ? AND account_id = ?`,
+          SET comments_read_through_id = MAX(
+                comments_read_through_id,
+                MIN(?, COALESCE((SELECT MAX(id) FROM icono_gene_comments
+                                  WHERE gene_symbol = canonical_symbol AND status = 'visible'), 0))
+              ),
+              updated_at = CURRENT_TIMESTAMP
+        WHERE caretaker_assignment_id = ? AND account_id = ?
+          AND assignment_status IN ('active', 'suspended')`,
     )
-    .bind(stableAssignmentId, stableAccountId)
+    .bind(stableThroughCommentId, stableAssignmentId, stableAccountId)
     .run()
-  const row = await db
-    .prepare(
-      `SELECT read_at FROM icono_caretaker_assignment_notifications
-        WHERE caretaker_assignment_id = ? AND account_id = ?`,
-    )
-    .bind(stableAssignmentId, stableAccountId)
-    .first()
-  if (!row) {
+  if (Number(result?.meta?.changes || 0) !== 1) {
     throw authorityError(
-      "CARETAKER_NOTIFICATION_NOT_FOUND",
-      "Caretaker invitation was not found",
+      "CARETAKER_ASSIGNMENT_NOT_FOUND",
+      "Current caretaker assignment was not found",
       404,
     )
   }
-  return Object.freeze({
-    ok: true,
-    caretaker_assignment_id: stableAssignmentId,
-    read_at: row.read_at,
-  })
+  return readCaretakerCoordination(db, { accountId: stableAccountId })
 }
 
 function errorResponse(error, json) {
@@ -208,22 +205,20 @@ export function createIconoplasmCaretakerNotificationHandlers({ json, resolveAct
       const session = await resolveActiveAccount(request, env)
       const accountId = requiredId(session?.account_id, "account_id")
       if (request.method === "GET" || request.method === "HEAD") {
-        const value = await readCaretakerAssignmentNotifications(env.ICONOPLASM_DB, {
-          accountId,
-          limit: new URL(request.url).searchParams.get("limit"),
-        })
-        return done("caretaker_invitations", json(value, 200, NO_STORE))
+        const value = await readCaretakerCoordination(env.ICONOPLASM_DB, { accountId })
+        return done("caretaker_coordination", json(value, 200, NO_STORE))
       }
       requireStrictSameOriginMutation(request)
       const { value: body } = await readBoundedJson(request, 8 * 1024)
-      const value = await markCaretakerAssignmentNotificationRead(env.ICONOPLASM_DB, {
+      const value = await markCaretakerCommentsRead(env.ICONOPLASM_DB, {
         accountId,
         assignmentId: body.caretaker_assignment_id,
+        throughCommentId: body.through_comment_id,
       })
-      return done("caretaker_invitations_read", json(value, 200, NO_STORE))
+      return done("caretaker_coordination_comments_read", json(value, 200, NO_STORE))
     } catch (error) {
       const response = errorResponse(error, json)
-      return done(`caretaker_invitations_${response.status}`, response)
+      return done(`caretaker_coordination_${response.status}`, response)
     }
   }
   return Object.freeze({ caretaker_notifications: handle })

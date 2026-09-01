@@ -1312,6 +1312,7 @@ import {
   deliverPendingRequestFulfillmentNotifications,
   reconcileDeliveredRequestFulfillments,
 } from "./iconoplasm-request-notifications.js"
+import { deliverPendingCaretakerCommentNotifications } from "./iconoplasm-caretaker-comment-notifications.js"
 import { reconcileIconoplasmRecognitionPolicies } from "./iconoplasm-recognition-policy-reconciliation.js"
 import { archiveColdIconoplasmPublishEvents } from "./iconoplasm-publish-event-archive.js"
 import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate } from "./benchmark/the-only-allowed-benchmark-stateful-runtime-do-not-duplicate.js"
@@ -3260,6 +3261,7 @@ export default {
         geneCardMaterializationRecovery,
         recognitionPolicyReconciliation,
         authorityProjectionRecovery,
+        caretakerCommentNotificationDelivery,
       ] = await Promise.allSettled([
         runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx),
         deliverPendingRequestFulfillmentNotifications(env, { limit: 20 }),
@@ -3267,7 +3269,14 @@ export default {
         recoverDueIconoplasmGeneCardMaterializationsForScheduled(env),
         reconcileIconoplasmRecognitionPolicies(env),
         drainIconoplasmAuthorityProjectionOutboxes(env, { limit: 25 }),
+        deliverPendingCaretakerCommentNotifications(env, { limit: 20 }),
       ])
+      if (caretakerCommentNotificationDelivery.status === "rejected") {
+        console.error(
+          "[CRON] Caretaker comment notification delivery failed:",
+          String(caretakerCommentNotificationDelivery.reason?.message || "unknown error"),
+        )
+      }
       if (authorityProjectionRecovery.status === "rejected") {
         console.error(
           "[CRON] Manifestation authority projection recovery failed:",

@@ -62,45 +62,17 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <div>
             <p class="caretaker-admin__eyebrow">Manifestation authority</p>
             <h2>Gene caretakers</h2>
-            <p class="small">Offer one accountable gene role, inspect every open or ended tenure, and make lifecycle changes without editing a caretaker's prose.</p>
+            <p class="small">Inspect every active or ended tenure and make lifecycle changes without editing a caretaker's prose. Users claim available genes from the gene page.</p>
           </div>
           <button type="button" class="secondary" data-caretaker-refresh>Reload registry</button>
         </header>
         <p class="caretaker-admin__status" data-caretaker-status role="status"></p>
 
-        <section class="caretaker-admin__offer" aria-labelledby="caretaker-offer-heading">
-          <div class="section-head">
-            <div>
-              <h3 id="caretaker-offer-heading">Offer a caretaker role</h3>
-              <p class="small">Both the gene and account must be active and free of another open caretaker assignment. The invitation pins the server's current entitlement policy; the caretaker accepts an exact terms version separately.</p>
-            </div>
-            <div class="caretaker-admin__policy" data-caretaker-policy>Loading policy.</div>
-          </div>
-          <div class="caretaker-admin__offer-grid">
-            <div class="caretaker-admin__search">
-              <label for="caretaker-gene-query">Gene</label>
-              <input id="caretaker-gene-query" type="search" autocomplete="off" spellcheck="false" placeholder="Symbol, for example TP53" data-caretaker-gene-query />
-              <div class="caretaker-admin__results" data-caretaker-gene-results aria-live="polite"></div>
-              <div class="caretaker-admin__selection" data-caretaker-gene-selection>No gene selected.</div>
-            </div>
-            <div class="caretaker-admin__search">
-              <label for="caretaker-account-query">Account</label>
-              <input id="caretaker-account-query" type="search" autocomplete="off" spellcheck="false" placeholder="Public credit label" data-caretaker-account-query />
-              <div class="caretaker-admin__results" data-caretaker-account-results aria-live="polite"></div>
-              <div class="caretaker-admin__selection" data-caretaker-account-selection>No account selected.</div>
-            </div>
-          </div>
-          <div class="caretaker-admin__offer-actions">
-            <button type="button" data-caretaker-offer disabled>Send caretaker invitation</button>
-            <span class="small">The user receives an inbox link to the exact gene and must accept the displayed terms.</span>
-          </div>
-        </section>
-
         <section class="caretaker-admin__registry" aria-labelledby="caretaker-registry-heading">
           <div class="section-head">
             <div>
               <h3 id="caretaker-registry-heading">Assignment registry</h3>
-              <p class="small">The registry includes pending, active, suspended, and ended tenures. Select a row to use state-specific controls.</p>
+              <p class="small">The registry includes active, suspended, ended, and any legacy pending tenures. Select a row to use state-specific controls.</p>
             </div>
             <div class="caretaker-admin__filters">
               <label>Find <input type="search" placeholder="Gene or credit label" data-caretaker-registry-query /></label>
