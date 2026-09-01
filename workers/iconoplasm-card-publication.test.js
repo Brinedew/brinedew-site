@@ -5,6 +5,7 @@ import { createCardPublication, CARD_PUBLICATION_BATCH } from "./lib/iconoplasm-
 import { PUBLIC_CANONICAL_MATERIALIZATION_BATCH_LIMIT } from "./iconoplasm-public-canonical-runtime.js"
 import {
   canonicalPublishedJson,
+  PUBLISHED_CARD_OBJECT_LIMITS,
   publishedCardObjectKey,
   publishedObjectHash,
 } from "./lib/iconoplasm-published-card-objects.js"
@@ -188,6 +189,27 @@ test("a 750-card post-cutover repair resumes through bounded materialization pag
   assert.equal(largestPage, CARD_PUBLICATION_BATCH)
   assert.equal(calls, Math.ceil(750 / CARD_PUBLICATION_BATCH))
   assert.equal(p.status().job, null)
+})
+
+test("packed shards split on canonical UTF-8 bytes before immutable storage rejects them", async () => {
+  const f = fixture(750)
+  for (const card of f.cards) card.payload.name = `Gene ${card.symbol} ${"x".repeat(7000)}`
+  const p = f.create()
+
+  await p.bootstrap()
+  await drain(p)
+
+  const shards = p.status().head.current.manifest.shards
+  assert.equal(shards.length > 1, true)
+  assert.equal(
+    shards.reduce((sum, shard) => sum + shard.card_count, 0),
+    750,
+  )
+  for (const shard of shards) {
+    const value = (await f.objects.read(shard.key)).value
+    const bytes = new TextEncoder().encode(canonicalPublishedJson(value)).byteLength
+    assert.equal(bytes <= PUBLISHED_CARD_OBJECT_LIMITS.shards, true)
+  }
 })
 
 test("storage bootstrap cannot silently acknowledge a mapping migration", async () => {
