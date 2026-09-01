@@ -253,7 +253,13 @@ test("range rows pair one gene identity with a caretaker and leave unclaimed row
 
   assert.match(
     html,
-    /<span class="gene-identity"><span class="gene-symbol">TP53<\/span><span class="gene-name">tumor protein p53<\/span><\/span>/,
+    /<span class="gene-symbol">TP53<\/span><span class="gene-name">tumor protein p53<\/span><span class="gene-caretaker"/,
+  )
+  assert.doesNotMatch(html, /class="gene-identity"/)
+  assert.match(html, /\.gene-list\{display:grid;grid-template-columns:1fr/)
+  assert.match(
+    html,
+    /\.gene-link\{display:grid;grid-template-columns:minmax\(9ch,\.45fr\) minmax\(0,1fr\) minmax\(0,auto\)/,
   )
   assert.match(html, /aria-label="Caretaker Caretaker &lt;one&gt;"/)
   assert.match(html, /class="gene-caretaker-avatar"/)
