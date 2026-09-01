@@ -1084,6 +1084,13 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "admin_votes",
   }),
   iconoplasmApiContract({
+    id: "admin_votes_projection_refresh_reconcile",
+    match: exact("/api/iconoplasm/admin/votes/projection-refresh/reconcile"),
+    methods: POST,
+    auth: "administrator",
+    budgetFamily: "admin_votes",
+  }),
+  iconoplasmApiContract({
     id: "admin_votes_projection_refresh_pending",
     match: exact("/api/iconoplasm/admin/votes/projection-refresh/pending"),
     methods: GET,
