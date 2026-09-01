@@ -243,12 +243,7 @@ function createCaretakerManifestationHttpHandler({
         const session = await requireBrowserSession(request, env, resolveSession)
         if (claim) {
           return jsonResponse(
-            await readCaretakerClaimAvailability(
-              db,
-              segment(claim[1]),
-              session.accountId,
-              now(),
-            ),
+            await readCaretakerClaimAvailability(db, segment(claim[1]), session.accountId, now()),
           )
         }
         if (dossier) {
