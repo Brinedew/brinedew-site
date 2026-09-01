@@ -812,6 +812,31 @@ test("site gene payload includes published portrait dimensions for first-party b
   assert.equal("description" in payload, false)
 })
 
+test("site gene detail survives a D1 read outage from the exact published card", async () => {
+  const unavailableDb = {
+    prepare() {
+      throw new Error("D1 free tier daily row read limit exceeded")
+    },
+  }
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+        headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
+      }),
+      buildEnv({ ICONOPLASM_DB: unavailableDb, KV: buildPublishedCardReadKv() }),
+      {},
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("X-Iconoplasm-Detail-Source"), "published-card-fallback")
+  assert.equal(payload?.symbol, "A1BG")
+  assert.equal(payload?.portrait?.status, "published")
+  assert.deepEqual(payload?.portrait_candidates, [])
+  assert.equal(payload?.detail_availability?.live_candidates, "temporarily_unavailable")
+  assert.equal(payload?.canonical_manifestation?.prose, "The exact public A1BG manifestation.")
+})
+
 test("site gene detail exposes an exact ready blot without republishing the card artifact", async () => {
   const kv = buildPublishedCardReadKv({ version: "test-card-zero-kv-blot" })
   const shardKey = "iconoplasm:card-catalog-shard:test-card-zero-kv-blot:0"

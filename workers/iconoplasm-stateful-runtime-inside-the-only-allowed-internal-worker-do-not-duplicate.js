@@ -31391,11 +31391,75 @@ async function readPublishedGeneCardPortraitProjection(env, symbol) {
     : { kind: "missing", version, payload: null }
 }
 
+async function publishedCardOnlySiteGeneDetailResponse(request, url, symbol, publishedCard) {
+  const payload = {
+    ...publishedCard.payload,
+    symbol,
+    canonical_symbol: symbol,
+    portrait_candidates: [],
+    caretaker: null,
+    card_snapshot_version: publishedCard.version,
+    detail_availability: {
+      source: "published_card_catalog",
+      live_candidates: "temporarily_unavailable",
+      caretaker_identity: "temporarily_unavailable",
+    },
+  }
+  if (publishedCard.payload?.blot?.status === "ready") {
+    payload.blot = {
+      ...publishedCard.payload.blot,
+      semantic_url: `${url.origin}/blot/${encodeURIComponent(symbol)}.webp`,
+    }
+  }
+  const etag = await etagFor({
+    card_snapshot_version: publishedCard.version,
+    availability: "published-card-only",
+    payload,
+  })
+  const headers = {
+    ETag: etag,
+    "Cache-Control": "public, max-age=30, s-maxage=60, stale-while-revalidate=300",
+    "X-Iconoplasm-Card-Version": publishedCard.version,
+    "X-Iconoplasm-Portrait-Source": "published-card-catalog",
+    "X-Iconoplasm-Detail-Source": "published-card-fallback",
+  }
+  if (etagMatches(request.headers.get("If-None-Match"), etag)) {
+    return new Response(null, { status: 304, headers: { ...corsHeaders(), ...headers } })
+  }
+  return json(payload, 200, headers)
+}
+
 async function handleSiteGeneDetail(request, env, path) {
   const url = new URL(request.url)
   const rawId = path.slice(`${SITE_GENE_API_PREFIX}/`.length)
+  const requestedSymbol = normalizeSymbol(rawId)
+  const requestedPublishedCard = requestedSymbol
+    ? await readPublishedGeneCardPortraitProjection(env, requestedSymbol)
+    : { kind: "missing", version: "", payload: null }
   const resolved = await resolveGene(env, rawId)
-  if (!resolved) return json({ error: "Gene not found" }, 404)
+  if (!resolved) {
+    // A published immutable card proves that this canonical gene exists even
+    // when D1 refuses live reads (including a Free-plan daily quota outage).
+    // Keep the profile and its canonical portrait available from that exact
+    // artifact; candidate voting and caretaker identity remain explicitly
+    // unavailable until the live projection recovers.
+    if (requestedPublishedCard.kind === "available") {
+      return publishedCardOnlySiteGeneDetailResponse(
+        request,
+        url,
+        requestedSymbol,
+        requestedPublishedCard,
+      )
+    }
+    if (requestedPublishedCard.kind === "unavailable") {
+      return json(cardArtifactUnavailablePayload(requestedPublishedCard.version), 503, {
+        "Cache-Control": "no-store",
+        "X-Iconoplasm-Card-Version": requestedPublishedCard.version,
+        "X-Iconoplasm-Portrait-Source": "artifact-unavailable",
+      })
+    }
+    return json({ error: "Gene not found" }, 404)
+  }
   const canonicalPath = `${SITE_GENE_API_PREFIX}/${encodeURIComponent(resolved.symbol)}`
   if (path !== canonicalPath) {
     return Response.redirect(`${url.origin}${canonicalPath}`, 302)
@@ -31404,7 +31468,10 @@ async function handleSiteGeneDetail(request, env, path) {
   // for rich detail and candidates, but the exact versioned published card is
   // the sole public portrait authority. This bounded one-symbol artifact read
   // keeps the visible page, metadata, archive, and sitemap on one image epoch.
-  const publishedCard = await readPublishedGeneCardPortraitProjection(env, resolved.symbol)
+  const publishedCard =
+    requestedSymbol === resolved.symbol && requestedPublishedCard.kind === "available"
+      ? requestedPublishedCard
+      : await readPublishedGeneCardPortraitProjection(env, resolved.symbol)
   if (publishedCard.kind !== "available") {
     return json(cardArtifactUnavailablePayload(publishedCard.version), 503, {
       "Cache-Control": "no-store",
