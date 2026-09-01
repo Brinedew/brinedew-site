@@ -2130,7 +2130,7 @@ test("caretaker and generation feeds fail independently without erasing the surv
   })
   await invitationFailure.refresh()
   assert.match(invitationFailure.panelMarkup(), /publication_survives/)
-  assert.match(invitationFailure.panelMarkup(), /Invitations unavailable/)
+  assert.match(invitationFailure.caretakerPanelMarkup(), /Invitations unavailable/)
 
   const requestFailure = createRequestInbox({
     fetchJSON: async (url) => {
@@ -2144,7 +2144,7 @@ test("caretaker and generation feeds fail independently without erasing the surv
     escapeHtml: (value) => String(value ?? ""),
   })
   await requestFailure.refresh()
-  assert.match(requestFailure.panelMarkup(), /assignment_survives/)
+  assert.match(requestFailure.caretakerPanelMarkup(), /assignment_survives/)
   assert.match(requestFailure.panelMarkup(), /Requests unavailable/)
 })
 
@@ -2230,8 +2230,9 @@ test("account switch and remount discard stale responses from both inbox feeds",
   )
   await first
   assert.match(inbox.panelMarkup(), /publication_NEW/)
-  assert.match(inbox.panelMarkup(), /assignment_NEW/)
-  assert.doesNotMatch(inbox.panelMarkup(), /publication_OLD|assignment_OLD/)
+  assert.match(inbox.caretakerPanelMarkup(), /assignment_NEW/)
+  assert.doesNotMatch(inbox.panelMarkup(), /publication_OLD/)
+  assert.doesNotMatch(inbox.caretakerPanelMarkup(), /assignment_OLD/)
 
   const remountFirst = inbox.refresh()
   const remountOldCalls = pending.slice(-2)
@@ -2255,7 +2256,9 @@ test("account switch and remount discard stale responses from both inbox feeds",
   )
   await remountFirst
   assert.match(inbox.panelMarkup(), /REMOUNT_NEW/)
+  assert.match(inbox.caretakerPanelMarkup(), /REMOUNT_NEW/)
   assert.doesNotMatch(inbox.panelMarkup(), /REMOUNT_OLD/)
+  assert.doesNotMatch(inbox.caretakerPanelMarkup(), /REMOUNT_OLD/)
 })
 
 test("every Shoelace component used by the request inbox has a deployable public entry", () => {
