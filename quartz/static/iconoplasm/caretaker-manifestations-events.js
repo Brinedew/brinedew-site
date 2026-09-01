@@ -1,8 +1,8 @@
 import {
   ownManifestation,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=20260901-caretaker-modal-v2"
-import { diffMarkup } from "./caretaker-manifestations-view.js?v=20260901-caretaker-modal-v2"
+} from "./caretaker-manifestations-model.js?v=20260901-caretaker-modal-v3"
+import { diffMarkup } from "./caretaker-manifestations-view.js?v=20260901-caretaker-modal-v3"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -11,6 +11,7 @@ export function createCaretakerManifestationEventWiring({
   loadOlderHistory,
   mounted,
   mutate,
+  retryTags,
   scheduleAutosave,
   saveDraft,
   setStatus,
@@ -58,6 +59,10 @@ export function createCaretakerManifestationEventWiring({
       if (!target) return
       if (target.hasAttribute("data-icono-caretaker-close")) {
         target.closest("dialog")?.close()
+        return
+      }
+      if (target.hasAttribute("data-icono-caretaker-retry-tags")) {
+        void retryTags(state)
         return
       }
       const tab = target.getAttribute("data-icono-caretaker-tab")
