@@ -3,7 +3,39 @@
 }
 
 .icono-caretaker-island {
-  margin: 1rem 0 1.25rem;
+  margin: 0;
+  display: contents;
+}
+
+.icono-caretaker-dialog {
+  box-sizing: border-box;
+  width: min(58rem, calc(100vw - 2rem));
+  max-height: min(50rem, calc(100dvh - 2rem));
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--icono-radius-lg);
+  background: transparent;
+  color: var(--dark);
+  overflow: auto;
+}
+
+.icono-caretaker-dialog::backdrop {
+  background: color-mix(in srgb, var(--dark) 62%, transparent);
+  backdrop-filter: blur(3px);
+}
+
+.icono-caretaker-dialog__close {
+  flex: 0 0 auto;
+  width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  background: var(--ui-bg);
+  color: var(--dark);
+  font: 400 1.5rem/1 var(--icono-action-font);
+  cursor: pointer;
 }
 
 .icono-caretaker-panel {
@@ -26,6 +58,35 @@
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1rem;
+}
+
+.icono-caretaker-tabs {
+  display: flex;
+  gap: 0.2rem;
+  margin: 0 -0.15rem 1rem;
+  padding: 0.15rem;
+  border-bottom: 1px solid var(--ui-border);
+  overflow-x: auto;
+}
+
+.icono-caretaker-tabs button {
+  min-height: 2.6rem;
+  padding-inline: 0.85rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--darkgray);
+  font: 700 0.78rem/1 var(--icono-action-font);
+  cursor: pointer;
+}
+
+.icono-caretaker-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--dark);
+}
+
+.icono-caretaker-tabpanel {
+  min-width: 0;
 }
 
 .icono-caretaker-panel__header h2 {
@@ -153,6 +214,11 @@
   font-weight: 700;
 }
 
+.icono-caretaker-editor > label {
+  font-family: "League Spartan", "Bahnschrift", sans-serif;
+  font-weight: 700;
+}
+
 .icono-caretaker-editor textarea {
   box-sizing: border-box;
   width: 100%;
@@ -193,6 +259,20 @@
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--darkgray);
   font: 0.78rem/1.4 var(--icono-action-font);
+}
+
+.icono-caretaker-editor__hint {
+  margin: 0;
+  color: var(--darkgray);
+  font: 0.76rem/1.45 var(--icono-action-font);
+}
+
+[data-icono-caretaker-autosave-state][data-tone="pending"] {
+  color: var(--secondary);
+}
+
+[data-icono-caretaker-autosave-state][data-tone="error"] {
+  color: var(--icono-reject);
 }
 
 .icono-caretaker-editor__actions {
@@ -404,6 +484,105 @@
   margin-top: 1rem;
 }
 
+.icono-caretaker-visibility {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding-block: 0.8rem;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.icono-caretaker-visibility h3,
+.icono-caretaker-visibility p {
+  margin: 0;
+}
+
+.icono-caretaker-visibility p {
+  max-width: 58ch;
+  margin-top: 0.25rem;
+  color: var(--darkgray);
+  line-height: 1.45;
+}
+
+.icono-caretaker-switch {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.icono-caretaker-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.icono-caretaker-switch span {
+  position: relative;
+  width: 2.75rem;
+  height: 1.5rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--darkgray) 18%, var(--ui-bg));
+}
+
+.icono-caretaker-switch span::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 0.18rem;
+  inset-inline-start: 0.2rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: var(--ui-bg);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--dark) 25%, transparent);
+  transition: transform 160ms ease-out;
+}
+
+.icono-caretaker-switch input:checked + span {
+  background: var(--accent);
+}
+
+.icono-caretaker-switch input:checked + span::after {
+  transform: translateX(1.22rem);
+}
+
+.icono-caretaker-switch input:focus-visible + span {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
+}
+
+.icono-caretaker-launcher__button {
+  display: grid;
+  width: 100%;
+  gap: 0.18rem;
+  padding: 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 72%, var(--accent) 28%);
+  border-radius: var(--icono-radius-md);
+  background: color-mix(in srgb, var(--ui-bg) 92%, var(--accent) 8%);
+  color: var(--dark);
+  text-align: start;
+  cursor: pointer;
+}
+
+.icono-caretaker-launcher__button span {
+  color: var(--secondary);
+  font: 700 0.7rem/1.2 var(--icono-action-font);
+  letter-spacing: 0.06em;
+}
+
+.icono-caretaker-launcher__button strong {
+  font: 700 0.9rem/1.25 var(--icono-action-font);
+}
+
+.icono-caretaker-launcher__button small {
+  color: var(--darkgray);
+  text-transform: capitalize;
+}
+
 .icono-caretaker-leave summary {
   cursor: pointer;
   font-family: var(--icono-action-font);
@@ -425,6 +604,16 @@
 
   .icono-caretaker-lineage {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .icono-caretaker-dialog {
+    width: calc(100vw - 0.75rem);
+    max-height: calc(100dvh - 0.75rem);
+  }
+
+  .icono-caretaker-visibility {
+    align-items: flex-start;
     flex-direction: column;
   }
 }

@@ -313,7 +313,7 @@ async function readManifestation(db, manifestationId) {
     db,
     `SELECT manifestation_id, gene_id, author_account_id, caretaker_assignment_id,
             origin, status, manifestation_head_revision_id, source_manifestation_id,
-            row_version, non_withdrawable, withdrawn_at, purge_eligible_at
+            row_version, non_withdrawable, public_page_visible, withdrawn_at, purge_eligible_at
        FROM icono_manifestations
       WHERE manifestation_id = ?`,
     manifestationId,
@@ -325,7 +325,7 @@ async function readAssignmentManifestation(db, assignmentId) {
     db,
     `SELECT manifestation_id, gene_id, author_account_id, caretaker_assignment_id,
             origin, status, manifestation_head_revision_id, source_manifestation_id,
-            row_version, non_withdrawable, withdrawn_at, purge_eligible_at
+            row_version, non_withdrawable, public_page_visible, withdrawn_at, purge_eligible_at
        FROM icono_manifestations
       WHERE caretaker_assignment_id = ?
         AND origin IN ('caretaker', 'fork')
@@ -442,6 +442,7 @@ function manifestationSnapshot(manifestation) {
         source_manifestation_id: manifestation.source_manifestation_id || null,
         row_version: Number(manifestation.row_version),
         non_withdrawable: Boolean(manifestation.non_withdrawable),
+        public_page_visible: Boolean(manifestation.public_page_visible),
       }
     : null
 }

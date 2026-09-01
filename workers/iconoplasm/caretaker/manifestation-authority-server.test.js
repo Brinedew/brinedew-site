@@ -606,6 +606,72 @@ test("browser routes hide unauthorized dossiers, reject CSRF and body-ID smuggli
   )
 })
 
+test("caretaker browser routes persist manual Tags on the exact autosaved revision", async (t) => {
+  installMemoryBodyStorage(t)
+  const context = await bootstrap(t, "7011")
+  context.db.raw
+    .prepare(
+      "UPDATE icono_authority_state SET authority_mode = 'authoritative' WHERE singleton = 1",
+    )
+    .run()
+  const handler = createCaretakerManifestationHttpHandler({
+    db: context.db,
+    env: serviceEnvironment(),
+    resolveSession: async () => ({ account_id: USER }),
+    idFactory: ids(),
+  })
+  const base = "/api/iconoplasm/caretaker/genes/S7011"
+  const savedResponse = await handler(
+    browserRequest(`${base}/revisions`, {
+      command_id: "browser_revision_tags_7011",
+      prose: "A caretaker-authored manifestation with manual Tags.",
+      expected_assignment_version: 2,
+      expected_manifestation_version: 0,
+    }),
+  )
+  assert.ok(new Set([200, 202]).has(savedResponse.status))
+  const saved = await savedResponse.json()
+  const revisionId = saved.manifestation_revision_id
+  assert.match(revisionId, /^revision_/)
+
+  const submittedResponse = await handler(
+    browserRequest(`${base}/revisions/${revisionId}/tags-derivatives`, {
+      command_id: "browser_tags_submit_7011",
+      tags_text: "red coat, careful gaze",
+      expected_gene_revision: row(
+        context.db,
+        "SELECT gene_revision FROM icono_manifestation_heads WHERE gene_id = ?",
+        context.geneId,
+      ).gene_revision,
+    }),
+  )
+  assert.ok(new Set([200, 202]).has(submittedResponse.status))
+  const submitted = await submittedResponse.json()
+  assert.match(submitted.manifestation_derivative_id, /^derivative_/)
+
+  const selectedResponse = await handler(
+    browserRequest(`${base}/revisions/${revisionId}/tags-derivative-head`, {
+      command_id: "browser_tags_select_7011",
+      manifestation_derivative_id: submitted.manifestation_derivative_id,
+      expected_derivative_head_version: submitted.derivative_head_version,
+      expected_gene_revision: row(
+        context.db,
+        "SELECT gene_revision FROM icono_manifestation_heads WHERE gene_id = ?",
+        context.geneId,
+      ).gene_revision,
+    }),
+  )
+  assert.ok(new Set([200, 202]).has(selectedResponse.status))
+
+  const bodyResponse = await handler(
+    new Request(
+      `https://iconoplasm.test${base}/derivatives/${submitted.manifestation_derivative_id}/body`,
+    ),
+  )
+  assert.equal(bodyResponse.status, 200)
+  assert.equal((await bodyResponse.json()).tags.tags_text, "red coat, careful gaze")
+})
+
 test("shadow mode keeps browser dossier hidden and mutations fail closed", async (t) => {
   const context = await bootstrap(t, "7004")
   const handler = createCaretakerManifestationHttpHandler({
@@ -656,6 +722,28 @@ test("withdraw and restore require the browser's exact manifestation CAS version
     idFactory: ids(),
   })
   const path = `/api/iconoplasm/caretaker/genes/S7007/manifestations/${manifestationId}`
+  const visibility = await handler(
+    browserRequest(`${path}/page-visibility`, {
+      command_id: "browser_visibility_7007",
+      visible: true,
+      expected_assignment_version: 2,
+      expected_manifestation_version: 1,
+      expected_gene_revision: row(
+        context.db,
+        "SELECT gene_revision FROM icono_manifestation_heads WHERE gene_id = ?",
+        context.geneId,
+      ).gene_revision,
+    }),
+  )
+  assert.equal(visibility.status, 200)
+  assert.equal(
+    row(
+      context.db,
+      "SELECT public_page_visible FROM icono_manifestations WHERE manifestation_id = ?",
+      manifestationId,
+    ).public_page_visible,
+    1,
+  )
   const base = {
     expected_head_version: 1,
     expected_canonical_revision_id: context.seedRevisionId,
@@ -676,7 +764,7 @@ test("withdraw and restore require the browser's exact manifestation CAS version
       {
         ...base,
         command_id: "browser_withdraw_stale_cas_7007",
-        expected_manifestation_version: 0,
+        expected_manifestation_version: 1,
       },
       { method: "DELETE" },
     ),
@@ -689,7 +777,7 @@ test("withdraw and restore require the browser's exact manifestation CAS version
       {
         ...base,
         command_id: "browser_withdraw_exact_cas_7007",
-        expected_manifestation_version: 1,
+        expected_manifestation_version: 2,
       },
       { method: "DELETE" },
     ),

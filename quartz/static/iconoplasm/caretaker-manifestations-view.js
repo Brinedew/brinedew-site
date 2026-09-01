@@ -190,11 +190,13 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
   const editable = dossier.viewer.can_edit && assignmentState === "active"
   const canWrite = editable && own?.status !== "withdrawn"
   let body =
-    '<section class="icono-caretaker-panel" aria-labelledby="icono-caretaker-title">' +
+    '<dialog class="icono-caretaker-dialog" data-icono-caretaker-dialog aria-labelledby="icono-caretaker-title">' +
+    '<section class="icono-caretaker-panel">' +
     '<header class="icono-caretaker-panel__header"><div>' +
-    '<p class="icono-caretaker-panel__eyebrow">Caretaker record</p>' +
-    '<h2 id="icono-caretaker-title">Manifestation versions</h2>' +
-    "<p>Every save creates a version you can return to while it remains retained. Choose exactly which retained version is canonical.</p>" +
+    '<p class="icono-caretaker-panel__eyebrow">Caretaking ' +
+    esc(dossier.gene.symbol) +
+    "</p>" +
+    '<h2 id="icono-caretaker-title">Caretaker record</h2>' +
     "</div>" +
     (assignmentState
       ? '<span class="icono-caretaker-panel__state" data-state="' +
@@ -203,6 +205,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
         esc(assignmentState.replaceAll("_", " ")) +
         "</span>"
       : "") +
+    '<button type="button" class="icono-caretaker-dialog__close" data-icono-caretaker-close aria-label="Close caretaker record">×</button>' +
     "</header>"
 
   if (dossier.gene.status === "merged") {
@@ -266,8 +269,17 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
         : '<p class="icono-caretaker-callout" data-tone="warn">This manifestation can no longer be restored because its retained body is unavailable.</p>')
   }
 
+  body +=
+    '<div class="icono-caretaker-tabs" role="tablist" aria-label="Caretaker record sections">' +
+    '<button type="button" role="tab" aria-selected="true" aria-controls="icono-caretaker-tab-manifestation" id="icono-caretaker-tab-button-manifestation" data-icono-caretaker-tab="manifestation">Manifestation</button>' +
+    '<button type="button" role="tab" aria-selected="false" aria-controls="icono-caretaker-tab-history" id="icono-caretaker-tab-button-history" data-icono-caretaker-tab="history" tabindex="-1">History</button>' +
+    '<button type="button" role="tab" aria-selected="false" aria-controls="icono-caretaker-tab-settings" id="icono-caretaker-tab-button-settings" data-icono-caretaker-tab="settings" tabindex="-1">Settings</button>' +
+    "</div>" +
+    '<div class="icono-caretaker-tabpanel" role="tabpanel" id="icono-caretaker-tab-manifestation" aria-labelledby="icono-caretaker-tab-button-manifestation" data-icono-caretaker-tabpanel="manifestation">'
+
   if (canWrite) {
     const currentBody = String(own?.head_body || "")
+    const currentTags = String(own?.head_tags || "")
     body +=
       '<form class="icono-caretaker-editor" data-icono-caretaker-editor>' +
       '<label for="icono-caretaker-prose">Your manifestation</label>' +
@@ -276,17 +288,25 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
       '" data-icono-caretaker-prose>' +
       esc(currentBody) +
       "</textarea>" +
+      '<label for="icono-caretaker-tags">Tags</label>' +
+      '<textarea id="icono-caretaker-tags" rows="5" maxlength="32767" data-icono-caretaker-tags aria-describedby="icono-caretaker-tags-hint">' +
+      esc(currentTags) +
+      "</textarea>" +
+      '<p id="icono-caretaker-tags-hint" class="icono-caretaker-editor__hint">Private generation Tags. They never appear on the gene page.</p>' +
       '<p class="icono-caretaker-editor__basis" data-icono-caretaker-basis hidden></p>' +
       '<div class="icono-caretaker-editor__meta"><span data-icono-caretaker-count>' +
       codePointLength(currentBody).toLocaleString() +
       " / " +
       MAX_PROSE_CODE_POINTS.toLocaleString() +
-      "</span><span>Saving adds a version. Use “Use this version” to make it canonical.</span></div>" +
-      '<div class="icono-caretaker-editor__actions"><button type="submit" class="icono-button">Save new version</button>' +
-      "</div></form>"
+      "</span><span data-icono-caretaker-autosave-state>Saved</span></div>" +
+      '<p class="icono-caretaker-editor__hint">Changes autosave as a new version after you pause. Choose a version in History to make it canonical.</p>' +
+      "</form>"
   }
 
   body += statusMarkup("", "", esc)
+  body += "</div>"
+  body +=
+    '<div class="icono-caretaker-tabpanel" role="tabpanel" id="icono-caretaker-tab-history" aria-labelledby="icono-caretaker-tab-button-history" data-icono-caretaker-tabpanel="history" hidden>'
   body += ownLineageManagementMarkup(dossier, esc)
   body += '<div class="icono-caretaker-versions" aria-label="Manifestation version history">'
   body += revisions.length
@@ -302,6 +322,24 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
     body +=
       '<button type="button" class="icono-button icono-button--quiet icono-caretaker-history-more" data-icono-caretaker-history-more>Load older versions</button>'
   }
+  body += "</div>"
+
+  body +=
+    '<div class="icono-caretaker-tabpanel" role="tabpanel" id="icono-caretaker-tab-settings" aria-labelledby="icono-caretaker-tab-button-settings" data-icono-caretaker-tabpanel="settings" hidden>'
+
+  if (editable) {
+    const visible = own?.public_page_visible === true
+    body +=
+      '<section class="icono-caretaker-visibility" aria-labelledby="icono-caretaker-visibility-title">' +
+      '<div><h3 id="icono-caretaker-visibility-title">Gene-page manifestation</h3>' +
+      "<p>Show the canonical manifestation text on this gene page. Tags always remain private.</p></div>" +
+      '<label class="icono-caretaker-switch"><input type="checkbox" data-icono-caretaker-visibility' +
+      (visible ? " checked" : "") +
+      (own ? "" : " disabled") +
+      '><span aria-hidden="true"></span><strong>' +
+      (visible ? "Visible" : "Hidden") +
+      "</strong></label></section>"
+  }
 
   if (editable && assignment) {
     const leavePolicy = assignment.leave_policy
@@ -316,5 +354,6 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
       "> Withdraw it, fall back, and make it eligible for hard purge after 30 days unless legally held</label>" +
       '<button type="button" class="icono-button icono-button--danger-quiet" data-icono-caretaker-end>Confirm and stop</button></details>'
   }
-  return body + "</section>"
+  body += "</div>"
+  return body + "</section></dialog>"
 }

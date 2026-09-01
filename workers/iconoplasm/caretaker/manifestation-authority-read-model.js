@@ -14,6 +14,7 @@ import { decodeCursor, encodeCursor } from "./manifestation-authority-sync.js"
 import { resolveGene } from "./manifestation-gene-resolver.js"
 import { hydrateManifestationRevisionBodies } from "./manifestation-body-hydration.js"
 import { readPinnedManifestationRevisions } from "./manifestation-dossier-pinned.js"
+import { splitManifestationTagsPayload } from "./manifestation-tags-payload.js"
 
 const DEFAULT_HISTORY_LIMIT = 20
 const MAX_HISTORY_LIMIT = 50
@@ -72,6 +73,7 @@ function browserManifestation(row, authority) {
     source_manifestation_id: row.source_manifestation_id || null,
     row_version: Number(row.row_version),
     non_withdrawable: Boolean(row.non_withdrawable),
+    public_page_visible: Boolean(row.public_page_visible),
     author_is_viewer: own,
     belongs_to_current_assignment: Boolean(currentAssignment),
     author_label: authorCredit(row, authority.actor.account_id),
@@ -320,7 +322,8 @@ export async function readCaretakerGeneDossier(db, input = {}) {
               manifestation.origin, manifestation.status,
               manifestation.manifestation_head_revision_id,
               manifestation.source_manifestation_id, manifestation.row_version,
-               manifestation.non_withdrawable, manifestation.created_at,
+               manifestation.non_withdrawable, manifestation.public_page_visible,
+               manifestation.created_at,
                author.public_credit_label AS author_public_credit_label,
                author.status AS author_account_status,
                EXISTS (
@@ -622,6 +625,8 @@ export async function readAuthorizedManifestationDerivativeBody(db, env, input =
     `SELECT derivative.manifestation_derivative_id,
             derivative.manifestation_revision_id, derivative.source_body_sha256,
             derivative.body_sha256, derivative.body_bytes, derivative.status,
+            derivative.tags_sha256, derivative.tags_bytes,
+            derivative.fields_sha256, derivative.fields_bytes,
             storage.object_key, storage.ciphertext_sha256, storage.ciphertext_bytes,
             storage.body_iv_base64, storage.wrapped_dek_base64,
             storage.wrap_iv_base64, storage.key_version, storage.aad_version
@@ -646,7 +651,7 @@ export async function readAuthorizedManifestationDerivativeBody(db, env, input =
   const encrypted = await readEncryptedManifestationBody(env, secret.object_key)
   if (!encrypted)
     throw authorityError("DERIVATIVE_BODY_UNAVAILABLE", "Derivative body is unavailable", 503)
-  const tags = await decryptManifestationTags(env, {
+  const outputPlain = await decryptManifestationTags(env, {
     derivativeId,
     revisionId: secret.manifestation_revision_id,
     sourceBodySha256: secret.source_body_sha256,
@@ -660,6 +665,12 @@ export async function readAuthorizedManifestationDerivativeBody(db, env, input =
     wrapIvBase64: secret.wrap_iv_base64,
     keyVersion: Number(secret.key_version),
     aadVersion: Number(secret.aad_version),
+  })
+  const tags = await splitManifestationTagsPayload(outputPlain, {
+    tagsSha256: secret.tags_sha256,
+    tagsBytes: secret.tags_bytes,
+    fieldsSha256: secret.fields_sha256,
+    fieldsBytes: secret.fields_bytes,
   })
   return Object.freeze({
     manifestation_derivative_id: derivativeId,

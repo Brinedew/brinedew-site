@@ -21,13 +21,12 @@ import {
   retireNextLegacyManifestationPlaintextPage,
 } from "./manifestation-authority-plaintext-retirement.js"
 
-const AUTHORING_BASE = readFileSync(
-  new URL(
-    "../../../migrations-iconoplasm-authoring/0001_caretaker_manifestation_authority.sql",
-    import.meta.url,
-  ),
-  "utf8",
-)
+const AUTHORING_BASE = [
+  "../../../migrations-iconoplasm-authoring/0001_caretaker_manifestation_authority.sql",
+  "../../../migrations-iconoplasm-authoring/0007_manifestation_page_visibility.sql",
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
+  .join("\n")
 const AUTHORING_CUTOVER = readFileSync(
   new URL(
     "../../../migrations-iconoplasm-authoring/0003_manifestation_authority_cutover.sql",
@@ -49,13 +48,12 @@ const AUTHORING_RESUMABLE_UPLOADS = readFileSync(
   ),
   "utf8",
 )
-const PRIMARY_CUTOVER = readFileSync(
-  new URL(
-    "../../../migrations-iconoplasm/0084_manifestation_authority_cutover.sql",
-    import.meta.url,
-  ),
-  "utf8",
-)
+const PRIMARY_CUTOVER = [
+  "../../../migrations-iconoplasm/0084_manifestation_authority_cutover.sql",
+  "../../../migrations-iconoplasm/0089_manifestation_page_visibility.sql",
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
+  .join("\n")
 
 function sha(character) {
   return character.repeat(64)

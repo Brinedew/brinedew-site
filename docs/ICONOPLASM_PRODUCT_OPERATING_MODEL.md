@@ -248,6 +248,13 @@ certify runtime behavior.
 4. **Distribution plane:** the Website repo owns public cards, APIs, immutable
    assets, releases, change feeds, extension packaging, and reader interaction.
 
+Caretaker editing is progressive disclosure, not part of the gene document flow.
+An active or invited caretaker gets a gene-sidebar launcher for a modal record
+with Manifestation, History, and Settings tabs. Paused edits autosave as immutable
+revisions; manual Tags are bound to the exact new revision and remain private.
+Page visibility is an authoring-authority setting on the caretaker's manifestation:
+only canonical prose may be rendered publicly, never Tags.
+
 <!-- ARCHITECTURE FENCE [IPD-012] -->
 
 Readers consume publisher-owned immutable card/portrait metadata. D1 may

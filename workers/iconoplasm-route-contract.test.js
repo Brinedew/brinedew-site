@@ -44,11 +44,17 @@ const PATTERN_EXAMPLES = Object.freeze({
   caretaker_derivative_body:
     "/api/iconoplasm/caretaker/genes/TP53/derivatives/derivative_0001/body",
   caretaker_revision_create: "/api/iconoplasm/caretaker/genes/TP53/revisions",
+  caretaker_manifestation_tags_save:
+    "/api/iconoplasm/caretaker/genes/TP53/revisions/revision_0001/tags-derivatives",
+  caretaker_manifestation_tags_select:
+    "/api/iconoplasm/caretaker/genes/TP53/revisions/revision_0001/tags-derivative-head",
   caretaker_canonical_selection: "/api/iconoplasm/caretaker/genes/TP53/canonical-selections",
   caretaker_manifestation_withdraw:
     "/api/iconoplasm/caretaker/genes/TP53/manifestations/manifestation_0001",
   caretaker_manifestation_restore:
     "/api/iconoplasm/caretaker/genes/TP53/manifestations/manifestation_0001/restore",
+  caretaker_manifestation_page_visibility:
+    "/api/iconoplasm/caretaker/genes/TP53/manifestations/manifestation_0001/page-visibility",
   caretaker_assignment_action:
     "/api/iconoplasm/caretaker/genes/TP53/assignments/assignment_0001/accept",
   caretaker_supervote: "/api/iconoplasm/caretaker/genes/TP53/supervote",

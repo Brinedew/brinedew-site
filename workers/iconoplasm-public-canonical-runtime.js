@@ -49,7 +49,8 @@ function publicProjection(material) {
     authority_event_sequence: Number(material.authority_event_sequence),
     body_sha256: material.canonical.body_sha256,
     body_bytes: Number(material.canonical.body_bytes),
-    prose: material.canonical.prose,
+    public_page_visible: material.canonical.public_page_visible === true,
+    prose: material.canonical.public_page_visible === true ? material.canonical.prose : null,
     accepted_tags_derivative: derivative
       ? Object.freeze({
           manifestation_derivative_id: derivative.manifestation_derivative_id,

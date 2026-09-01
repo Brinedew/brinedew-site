@@ -701,6 +701,28 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   }),
   iconoplasmApiContract({
     apiHandler: "caretaker_manifestations",
+    id: "caretaker_manifestation_tags_save",
+    match: pattern(
+      /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/revisions\/([^/]+)\/tags-derivatives$/,
+      ["gene", "revision_id"],
+    ),
+    methods: POST,
+    auth: "authenticated-caretaker",
+    budgetFamily: "caretaker_manifestations_write",
+  }),
+  iconoplasmApiContract({
+    apiHandler: "caretaker_manifestations",
+    id: "caretaker_manifestation_tags_select",
+    match: pattern(
+      /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/revisions\/([^/]+)\/tags-derivative-head$/,
+      ["gene", "revision_id"],
+    ),
+    methods: POST,
+    auth: "authenticated-caretaker",
+    budgetFamily: "caretaker_manifestations_write",
+  }),
+  iconoplasmApiContract({
+    apiHandler: "caretaker_manifestations",
     id: "caretaker_canonical_selection",
     match: pattern(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/canonical-selections$/, [
       "gene",
@@ -725,6 +747,17 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     id: "caretaker_manifestation_restore",
     match: pattern(
       /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/manifestations\/([^/]+)\/restore$/,
+      ["gene", "manifestation_id"],
+    ),
+    methods: POST,
+    auth: "authenticated-caretaker",
+    budgetFamily: "caretaker_manifestations_write",
+  }),
+  iconoplasmApiContract({
+    apiHandler: "caretaker_manifestations",
+    id: "caretaker_manifestation_page_visibility",
+    match: pattern(
+      /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/manifestations\/([^/]+)\/page-visibility$/,
       ["gene", "manifestation_id"],
     ),
     methods: POST,

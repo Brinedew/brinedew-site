@@ -1,8 +1,4 @@
-import {
-  ownManifestation,
-  proseValidationError,
-  revisionById,
-} from "./caretaker-manifestations-model.js"
+import { ownManifestation, revisionById } from "./caretaker-manifestations-model.js"
 import { diffMarkup } from "./caretaker-manifestations-view.js"
 
 export function createCaretakerManifestationEventWiring({
@@ -12,8 +8,10 @@ export function createCaretakerManifestationEventWiring({
   loadOlderHistory,
   mounted,
   mutate,
+  scheduleAutosave,
   saveDraft,
   setStatus,
+  showBasis,
   updateCount,
   wiredHosts,
 } = {}) {
@@ -37,51 +35,41 @@ export function createCaretakerManifestationEventWiring({
         }
         return
       }
-      const textarea = event.target.closest?.("[data-icono-caretaker-prose]")
-      if (!textarea) return
-      updateCount(textarea)
-      saveDraft(state, textarea.value)
-    })
-    host.addEventListener("submit", function (event) {
-      const state = mounted.get(host)
-      if (!state) return
-      const form = event.target.closest?.("[data-icono-caretaker-editor]")
-      if (!form) return
-      event.preventDefault()
-      const textarea = form.querySelector("[data-icono-caretaker-prose]")
-      const prose = String(textarea?.value || "")
-        .normalize("NFC")
-        .replace(/\r\n?/g, "\n")
-      const validation = proseValidationError(prose)
-      if (validation) return setStatus(state, validation, "error")
-      saveDraft(state, prose)
-      const own = ownManifestation(state.dossier)
-      void mutate(
-        state,
-        "/revisions",
-        {
-          prose,
-          expected_assignment_version: Number(state.dossier.assignment?.assignment_version || 0),
-          expected_manifestation_version: Number(own?.row_version || 0),
-          based_on_revision_id: state.basedOnRevisionId || null,
-        },
-        {
-          success:
-            "New manifestation version saved. Choose “Use this version” to make it canonical.",
-        },
-      )
-        .then(function (result) {
-          if (!result) return
-          clearDraft(state)
-          state.basedOnRevisionId = null
-        })
-        .catch(function () {})
+      const prose = event.target.closest?.("[data-icono-caretaker-prose]")
+      const tags = event.target.closest?.("[data-icono-caretaker-tags]")
+      if (!prose && !tags) return
+      const form = event.target.closest("[data-icono-caretaker-editor]")
+      const proseControl = form?.querySelector("[data-icono-caretaker-prose]")
+      const tagsControl = form?.querySelector("[data-icono-caretaker-tags]")
+      if (proseControl) updateCount(proseControl)
+      saveDraft(state, {
+        prose: String(proseControl?.value || ""),
+        tags: String(tagsControl?.value || ""),
+      })
+      scheduleAutosave(state)
     })
     host.addEventListener("click", function (event) {
       const state = mounted.get(host)
       if (!state) return
       const target = event.target.closest?.("button")
       if (!target) return
+      if (target.hasAttribute("data-icono-caretaker-close")) {
+        target.closest("dialog")?.close()
+        return
+      }
+      const tab = target.getAttribute("data-icono-caretaker-tab")
+      if (tab) {
+        state.activeTab = tab
+        state.host.querySelectorAll("[data-icono-caretaker-tab]").forEach(function (button) {
+          const selected = button.getAttribute("data-icono-caretaker-tab") === tab
+          button.setAttribute("aria-selected", selected ? "true" : "false")
+          button.tabIndex = selected ? 0 : -1
+        })
+        state.host.querySelectorAll("[data-icono-caretaker-tabpanel]").forEach(function (panel) {
+          panel.hidden = panel.getAttribute("data-icono-caretaker-tabpanel") !== tab
+        })
+        return
+      }
       const compareRevisionId = target.getAttribute("data-icono-caretaker-compare")
       if (compareRevisionId) {
         const comparison = Array.from(
@@ -110,10 +98,14 @@ export function createCaretakerManifestationEventWiring({
         if (!selected || !textarea) return
         state.basedOnRevisionId = forkRevisionId
         textarea.value = String(selected.revision.body || "")
-        saveDraft(state, textarea.value)
+        saveDraft(state, {
+          prose: textarea.value,
+          tags: String(state.host.querySelector("[data-icono-caretaker-tags]")?.value || ""),
+        })
         updateCount(textarea)
         showBasis(state)
         textarea.focus()
+        scheduleAutosave(state)
         return
       }
       if (target.hasAttribute("data-icono-caretaker-history-more")) {
@@ -266,6 +258,29 @@ export function createCaretakerManifestationEventWiring({
           },
         ).catch(function () {})
       }
+    })
+    host.addEventListener("change", function (event) {
+      const state = mounted.get(host)
+      const control = event.target.closest?.("[data-icono-caretaker-visibility]")
+      if (!state || !control) return
+      const own = ownManifestation(state.dossier)
+      if (!own) return
+      void mutate(
+        state,
+        `/manifestations/${encodeURIComponent(own.manifestation_id)}/page-visibility`,
+        {
+          visible: control.checked,
+          expected_assignment_version: Number(state.dossier.assignment?.assignment_version || 0),
+          expected_manifestation_version: Number(own.row_version || 0),
+          expected_gene_revision: Number(state.dossier.head.gene_revision || 0),
+        },
+        {
+          success: control.checked
+            ? "Manifestation text is visible on the gene page."
+            : "Manifestation text is hidden from the gene page.",
+          refreshPublic: true,
+        },
+      ).catch(function () {})
     })
   }
   return wire

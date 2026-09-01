@@ -70,10 +70,14 @@ function dossier() {
   }
 }
 
-test("the dossier renders a direct editor, exact version choices, and own-only deletion", () => {
+test("the dossier renders a tabbed autosave dialog, exact version choices, and own-only deletion", () => {
   const html = renderCaretakerManifestationPanel(dossier(), escapeHtml)
   assert.match(html, /Your manifestation/)
-  assert.match(html, /Save new version/)
+  assert.match(html, /Changes autosave as a new version/)
+  assert.match(html, /data-icono-caretaker-tab="manifestation"/)
+  assert.match(html, /data-icono-caretaker-tab="history"/)
+  assert.match(html, /data-icono-caretaker-tab="settings"/)
+  assert.match(html, /Tags always remain private/)
   assert.match(html, /Use this version/)
   assert.match(html, /Compare with canonical/)
   assert.match(html, /Start from this version/)
@@ -83,7 +87,6 @@ test("the dossier renders a direct editor, exact version choices, and own-only d
     html,
     /eligible for hard purge after 30 days unless (?:a legal hold applies|legally held)/,
   )
-  assert.match(html, /return to while it remains retained/)
   assert.doesNotMatch(html, /curator/i)
   assert.equal((html.match(/data-icono-caretaker-withdraw=/g) || []).length, 1)
 })
@@ -289,7 +292,7 @@ test("a suspension keeps an unsent local draft readable and explicitly removable
   assert.equal(host.querySelector(".icono-caretaker-draft-recovery"), null)
 })
 
-test("saving appends an immutable version without silently changing canonical", async () => {
+test("autosaving appends an immutable version without silently changing canonical", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
   const calls = []
@@ -311,9 +314,10 @@ test("saving appends an immutable version without silently changing canonical", 
   })
   const form = host.querySelector("[data-icono-caretaker-editor]")
   form.querySelector("[data-icono-caretaker-prose]").value = "Third body"
-  form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  await new Promise((resolve) => setTimeout(resolve, 0))
+  form
+    .querySelector("[data-icono-caretaker-prose]")
+    .dispatchEvent(new Event("input", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 1200))
   const mutation = calls.find(function (call) {
     return call.path.endsWith("/revisions")
   })
@@ -326,7 +330,85 @@ test("saving appends an immutable version without silently changing canonical", 
   assert.equal("expected_canonical_revision_id" in body, false)
   assert.match(body.command_id, /^cmd_/)
   assert.deepEqual(publicRefreshes, [])
-  assert.match(host.textContent, /Use “Use this version” to make it canonical/)
+  assert.match(host.textContent, /Manifestation autosaved as a new version/)
+})
+
+test("autosave persists Tags against the exact new revision and selects that derivative", async () => {
+  const { document, Event } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
+  const calls = []
+  const panel = createCaretakerManifestationPanel({
+    fetchJSON: async function (path, init) {
+      calls.push({ path, init })
+      if ((init?.method || "GET") === "GET") return dossier()
+      if (path.endsWith("/revisions")) {
+        return { ok: true, manifestation_revision_id: "revision_3" }
+      }
+      if (path.endsWith("/tags-derivatives")) {
+        return {
+          ok: true,
+          manifestation_derivative_id: "derivative_3",
+          derivative_head_version: 0,
+        }
+      }
+      return { ok: true }
+    },
+    escapeHtml,
+    storage: null,
+  })
+  const host = document.getElementById("host")
+  await panel.mount(host, {
+    symbol: "TP53",
+    currentUser: { account_id: "acct_1" },
+    authResolved: true,
+  })
+  const prose = host.querySelector("[data-icono-caretaker-prose]")
+  const tags = host.querySelector("[data-icono-caretaker-tags]")
+  prose.value = "Third body"
+  tags.value = "red coat, careful gaze"
+  tags.dispatchEvent(new Event("input", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 1200))
+
+  const tagSave = calls.find((call) => call.path.endsWith("/tags-derivatives"))
+  const tagSelect = calls.find((call) => call.path.endsWith("/tags-derivative-head"))
+  assert.ok(tagSave)
+  assert.equal(JSON.parse(tagSave.init.body).tags_text, "red coat, careful gaze")
+  assert.ok(tagSelect)
+  assert.equal(JSON.parse(tagSelect.init.body).manifestation_derivative_id, "derivative_3")
+})
+
+test("the Settings visibility switch uses manifestation and gene CAS versions", async () => {
+  const { document, Event } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
+  const calls = []
+  const refreshes = []
+  const panel = createCaretakerManifestationPanel({
+    fetchJSON: async function (path, init) {
+      calls.push({ path, init })
+      return (init?.method || "GET") === "GET" ? dossier() : { ok: true }
+    },
+    escapeHtml,
+    storage: null,
+    onCanonicalChanged: (symbol) => refreshes.push(symbol),
+  })
+  const host = document.getElementById("host")
+  await panel.mount(host, {
+    symbol: "TP53",
+    currentUser: { account_id: "acct_1" },
+    authResolved: true,
+  })
+  const toggle = host.querySelector("[data-icono-caretaker-visibility]")
+  toggle.checked = true
+  toggle.dispatchEvent(new Event("change", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const mutation = calls.find((call) => call.path.endsWith("/page-visibility"))
+  assert.ok(mutation)
+  const body = JSON.parse(mutation.init.body)
+  assert.equal(body.visible, true)
+  assert.equal(body.expected_manifestation_version, 2)
+  assert.equal(body.expected_gene_revision, 9)
+  assert.deepEqual(refreshes, ["TP53"])
 })
 
 test("an uncertain save retry reuses the same command ID", async () => {
@@ -352,19 +434,18 @@ test("an uncertain save retry reuses the same command ID", async () => {
     authResolved: true,
   })
 
-  function submitSameBody() {
+  function editSameBody() {
     const form = host.querySelector("[data-icono-caretaker-editor]")
     form.querySelector("[data-icono-caretaker-prose]").value = "Third body"
-    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    form
+      .querySelector("[data-icono-caretaker-prose]")
+      .dispatchEvent(new Event("input", { bubbles: true }))
   }
 
-  submitSameBody()
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  await new Promise((resolve) => setTimeout(resolve, 0))
+  editSameBody()
+  await new Promise((resolve) => setTimeout(resolve, 1200))
   assert.match(host.querySelector("[data-icono-caretaker-status]").textContent, /uncertain/i)
-  submitSameBody()
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  await new Promise((resolve) => setTimeout(resolve, 0))
+  await new Promise((resolve) => setTimeout(resolve, 1200))
 
   assert.equal(mutations.length, 2)
   const first = JSON.parse(mutations[0].init.body)
@@ -456,9 +537,10 @@ test("remounting for another signed-in account does not duplicate or retain stal
   })
   const form = host.querySelector("[data-icono-caretaker-editor]")
   form.querySelector("[data-icono-caretaker-prose]").value = "One current-account save"
-  form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  await new Promise((resolve) => setTimeout(resolve, 0))
+  form
+    .querySelector("[data-icono-caretaker-prose]")
+    .dispatchEvent(new Event("input", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 1200))
   assert.equal(
     calls.filter(function (call) {
       return call.path.endsWith("/revisions")

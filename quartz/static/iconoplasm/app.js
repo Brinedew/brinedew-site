@@ -177,6 +177,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     total: 0,
     publishedTotal: 0,
     gene: null,
+    caretaker: null,
   }
   var iconoInstallState = {
     panelOpen: false,
@@ -255,7 +256,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: "/static/iconoplasm/caretaker-manifestations.css?v=20260830-authority-v1",
+        href: "/static/iconoplasm/caretaker-manifestations.css?v=20260901-caretaker-modal-v1",
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -271,7 +272,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=20260830-authority-v1"),
+      import("./caretaker-manifestations.js?v=20260901-caretaker-modal-v1"),
       import("./caretaker-supervote.js?v=20260830-supervote-v1"),
     ]).then(function (modules) {
       var supervoteControls = modules[1].createCaretakerSupervoteControls({
@@ -285,6 +286,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           rerenderCurrentGeneRoute({ forceFresh: true })
         },
         onDossierChanged: function (detail) {
+          iconoSidebarState.caretaker = detail.dossier?.viewer?.is_caretaker
+            ? {
+                symbol: detail.symbol,
+                status: String(detail.dossier.assignment?.status || ""),
+              }
+            : null
+          renderIconoplasmSidebar()
           var geneContent = detail.host && detail.host.closest("#icono-gene-content")
           if (!geneContent) return
           return supervoteControls.mount(geneContent, {
@@ -295,6 +303,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       })
       return Object.freeze({
         mount: manifestationPanel.mount,
+        open: manifestationPanel.open,
         unmountSupervote: supervoteControls.unmount,
       })
     })
@@ -2460,6 +2469,22 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="brd-sidebar-rowlist">'
     if (page === "gene") {
       var gene = (iconoSidebarState && iconoSidebarState.gene) || null
+      var caretaker = (iconoSidebarState && iconoSidebarState.caretaker) || null
+      if (caretaker && caretaker.symbol === gene?.symbol) {
+        html =
+          '<div class="brd-sidebar-section icono-caretaker-launcher">' +
+          '<div class="brd-sidebar-panel-title">Caretaking</div>' +
+          '<button type="button" class="icono-caretaker-launcher__button" data-icono-caretaker-open>' +
+          "<span>" +
+          esc(caretaker.symbol) +
+          "</span>" +
+          "<strong>Open caretaker record</strong>" +
+          "<small>" +
+          esc(caretaker.status.replaceAll("_", " ")) +
+          "</small>" +
+          "</button></div>"
+        return html
+      }
       if (!gene) {
         html += iconoRowMarkup("Gene", "Loading")
       } else if (gene.error) {
@@ -2524,6 +2549,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       },
     })
     requestInbox.wire(stack)
+    var caretakerOpen = stack && stack.querySelector("[data-icono-caretaker-open]")
+    if (caretakerOpen) {
+      caretakerOpen.addEventListener("click", function () {
+        var host = document.querySelector("[data-icono-caretaker-island]")
+        if (!host) return
+        void loadCaretakerPanel().then(function (panel) {
+          panel.open(host)
+        })
+      })
+    }
     renderHomeInstallCta()
   }
 
@@ -8692,6 +8727,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       candidateCount: 0,
       aliasCount: 0,
     }
+    iconoSidebarState.caretaker = null
     renderIconoplasmSidebar()
     if (!hasHeadStartedGene) {
       root.innerHTML = genePageShellMarkup(true)
@@ -9229,6 +9265,21 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
     html += "<div data-icono-canonical-toolbar-island>" + renderCanonicalToolbarMarkup(g) + "</div>"
     html += "</section>"
+
+    var publicManifestation = g && g.canonical_manifestation
+    if (
+      publicManifestation &&
+      publicManifestation.public_page_visible === true &&
+      String(publicManifestation.prose || "").trim()
+    ) {
+      html +=
+        '<section class="icono-public-manifestation" aria-labelledby="icono-public-manifestation-title">' +
+        '<p class="icono-public-manifestation__eyebrow">Caretaker manifestation</p>' +
+        '<h2 id="icono-public-manifestation-title">How this gene manifests</h2>' +
+        '<p class="icono-public-manifestation__body">' +
+        esc(String(publicManifestation.prose)) +
+        "</p></section>"
+    }
 
     html += '<div class="icono-caretaker-island" data-icono-caretaker-island hidden></div>'
 
