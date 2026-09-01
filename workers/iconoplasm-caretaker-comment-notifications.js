@@ -6,6 +6,12 @@ function bounded(value, limit = 2000) {
     .slice(0, limit)
 }
 
+function boundedCodePoints(value, limit = 2000) {
+  return Array.from(String(value || ""))
+    .slice(0, limit)
+    .join("")
+}
+
 function retryAt(attempt) {
   const seconds = Math.min(6 * 60 * 60, 30 * 2 ** Math.min(9, Math.max(0, attempt - 1)))
   return new Date(Date.now() + seconds * 1000).toISOString()
@@ -165,11 +171,10 @@ export async function deliverPendingCaretakerCommentNotifications(env, { limit =
         method: "POST",
         headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          content:
-            `New comment on **${row.gene_symbol}**\n${geneUrl}\n\n**${row.comment_author_name}:** ${row.comment_body}`.slice(
-              0,
-              2000,
-            ),
+          content: boundedCodePoints(
+            `New comment on **${row.gene_symbol}**\n${geneUrl}\n\n**${row.comment_author_name}:** ${row.comment_body}`,
+            2000,
+          ),
           allowed_mentions: { parse: [] },
         }),
       })

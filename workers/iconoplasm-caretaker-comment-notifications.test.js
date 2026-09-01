@@ -67,7 +67,7 @@ test("durable outbox sends one DM and records Discord receipt", async (t) => {
     gene_symbol: "TP53",
     comment_author_account_id: AUTHOR,
     comment_author_name: "Reader",
-    comment_body: "The lysosome motif needs clarification.",
+    comment_body: "🧬".repeat(2000),
   }
   await caretakerCommentOutboxStatement(primary, row).run()
   const originalFetch = globalThis.fetch
@@ -80,13 +80,24 @@ test("durable outbox sends one DM and records Discord receipt", async (t) => {
     return new Response(JSON.stringify({ id: "dm-message" }), { status: 200 })
   }
   try {
-    const result = await deliverPendingCaretakerCommentNotifications(
-      { ...env, DISCORD_BOT_TOKEN: "test-token" },
-      { limit: 1 },
+    const results = await Promise.all([
+      deliverPendingCaretakerCommentNotifications(
+        { ...env, DISCORD_BOT_TOKEN: "test-token" },
+        { limit: 1 },
+      ),
+      deliverPendingCaretakerCommentNotifications(
+        { ...env, DISCORD_BOT_TOKEN: "test-token" },
+        { limit: 1 },
+      ),
+    ])
+    assert.equal(
+      results.reduce((total, result) => total + result.delivered, 0),
+      1,
     )
-    assert.equal(result.delivered, 1)
     assert.equal(requests.length, 2)
     assert.match(requests[1].body.content, /TP53[\s\S]*#gene-comments[\s\S]*Reader/)
+    assert.equal(Array.from(requests[1].body.content).length, 2000)
+    assert.doesNotMatch(requests[1].body.content, /\uFFFD/)
     assert.deepEqual(requests[1].body.allowed_mentions, { parse: [] })
     const delivered = primary.raw
       .prepare(
