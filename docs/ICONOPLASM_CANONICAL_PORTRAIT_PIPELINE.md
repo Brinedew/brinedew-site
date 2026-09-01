@@ -59,6 +59,7 @@ Normal public voting goes through this path:
 2. `IconoplasmVoteCoordinator` Durable Object records the settled per-user vote for one gene.
 3. The worker projects the settled vote into D1 compatibility/event tables.
 4. The worker enqueues `icono_vote_projection_refresh_jobs` and sends an `ICONOPLASM_VOTE_PROJECTION_QUEUE` message.
+   Each enqueue increments `job_version`. A worker may clear or back off only the exact version it read; if a newer vote arrives while that worker is rebuilding projections, the older worker reports itself superseded and leaves the newer job intact. This generation check is the lost-wakeup fence for rapid vote changes.
 5. The Cloudflare Queue consumer drains the queued symbol and calls `processVoteProjectionRefreshForSymbol(...)`.
 6. `processVoteProjectionRefreshForSymbol(...)` reads coordinator summaries for that gene.
 7. `autoPromoteTopVotedPortraitFromCoordinatorState(...)` may update `icono_publish_state`.

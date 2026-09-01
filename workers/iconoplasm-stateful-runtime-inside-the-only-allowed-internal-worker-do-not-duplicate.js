@@ -21390,8 +21390,11 @@ function voteProjectionRefreshJobReason(rawReason, fallback = "vote_projection_r
   return sanitizeText(rawReason || "", 2000) || fallback
 }
 
+const voteProjectionRefreshJobSchemas = new WeakSet()
+
 async function ensureVoteProjectionRefreshJobsTable(env) {
   if (!env?.ICONOPLASM_DB) return false
+  if (voteProjectionRefreshJobSchemas.has(env.ICONOPLASM_DB)) return true
   await env.ICONOPLASM_DB.prepare(
     `CREATE TABLE IF NOT EXISTS icono_vote_projection_refresh_jobs (
        gene_symbol TEXT PRIMARY KEY,
@@ -21401,13 +21404,28 @@ async function ensureVoteProjectionRefreshJobsTable(env) {
        last_attempt_at TEXT,
        next_attempt_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
        attempts INTEGER NOT NULL DEFAULT 0,
-       last_error TEXT NOT NULL DEFAULT ''
+       last_error TEXT NOT NULL DEFAULT '',
+       job_version INTEGER NOT NULL DEFAULT 1
      )`,
   ).run()
+  const columns = await env.ICONOPLASM_DB.prepare(
+    `PRAGMA table_info(icono_vote_projection_refresh_jobs)`,
+  ).all()
+  if (
+    !(Array.isArray(columns?.results) ? columns.results : []).some(
+      (column) => String(column?.name || "") === "job_version",
+    )
+  ) {
+    await env.ICONOPLASM_DB.prepare(
+      `ALTER TABLE icono_vote_projection_refresh_jobs
+       ADD COLUMN job_version INTEGER NOT NULL DEFAULT 1`,
+    ).run()
+  }
   await env.ICONOPLASM_DB.prepare(
     `CREATE INDEX IF NOT EXISTS idx_icono_vote_projection_refresh_jobs_next_attempt
      ON icono_vote_projection_refresh_jobs (next_attempt_at, requested_at)`,
   ).run()
+  voteProjectionRefreshJobSchemas.add(env.ICONOPLASM_DB)
   return true
 }
 
@@ -21426,15 +21444,17 @@ async function enqueueVoteProjectionRefreshJob(env, { symbol, actorId, reason } 
        last_attempt_at,
        next_attempt_at,
        attempts,
-       last_error
-     ) VALUES (?, ?, ?, ?, NULL, ?, 0, '')
+       last_error,
+       job_version
+     ) VALUES (?, ?, ?, ?, NULL, ?, 0, '', 1)
      ON CONFLICT(gene_symbol) DO UPDATE SET
        actor_id = excluded.actor_id,
        reason = excluded.reason,
        requested_at = excluded.requested_at,
        next_attempt_at = excluded.next_attempt_at,
        attempts = 0,
-       last_error = ''`,
+       last_error = '',
+       job_version = icono_vote_projection_refresh_jobs.job_version + 1`,
   )
     .bind(
       safeSymbol,
@@ -21444,25 +21464,35 @@ async function enqueueVoteProjectionRefreshJob(env, { symbol, actorId, reason } 
       nowIso,
     )
     .run()
-  return { ok: true, symbol: safeSymbol }
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT job_version
+     FROM icono_vote_projection_refresh_jobs
+     WHERE gene_symbol = ?
+     LIMIT 1`,
+  )
+    .bind(safeSymbol)
+    .first()
+  return { ok: true, symbol: safeSymbol, job_version: Number(row?.job_version || 0) }
 }
 
-async function clearVoteProjectionRefreshJob(env, symbol) {
+async function clearVoteProjectionRefreshJob(env, symbol, jobVersion) {
   if (!env?.ICONOPLASM_DB) return false
   const safeSymbol = normalizeSymbol(symbol)
   if (!safeSymbol) return false
-  await env.ICONOPLASM_DB.prepare(
+  const safeJobVersion = Math.max(1, Number.parseInt(String(jobVersion || 0), 10) || 0)
+  if (!safeJobVersion) return false
+  const result = await env.ICONOPLASM_DB.prepare(
     `DELETE FROM icono_vote_projection_refresh_jobs
-     WHERE gene_symbol = ?`,
+     WHERE gene_symbol = ? AND job_version = ?`,
   )
-    .bind(safeSymbol)
+    .bind(safeSymbol, safeJobVersion)
     .run()
-  return true
+  return Number(result?.meta?.changes ?? result?.changes ?? 0) > 0
 }
 
 async function recordVoteProjectionRefreshFailure(
   env,
-  { symbol, actorId, reason, error, attemptCount = 0 } = {},
+  { symbol, actorId, reason, error, attemptCount = 0, jobVersion } = {},
 ) {
   if (!env?.ICONOPLASM_DB) return false
   const safeSymbol = normalizeSymbol(symbol)
@@ -21473,35 +21503,32 @@ async function recordVoteProjectionRefreshFailure(
     Math.min(60, Math.pow(2, Math.max(0, Number(attemptCount || 0)))),
   )
   const nextAttemptAt = new Date(Date.now() + delayMinutes * 60 * 1000).toISOString()
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_vote_projection_refresh_jobs (
-       gene_symbol,
-       actor_id,
-       reason,
-       requested_at,
-       last_attempt_at,
-       next_attempt_at,
-       attempts,
-       last_error
-     ) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, 1, ?)
-     ON CONFLICT(gene_symbol) DO UPDATE SET
-       actor_id = excluded.actor_id,
-       reason = excluded.reason,
-       last_attempt_at = CURRENT_TIMESTAMP,
-       next_attempt_at = excluded.next_attempt_at,
-       attempts = icono_vote_projection_refresh_jobs.attempts + 1,
-       last_error = excluded.last_error`,
+  const safeJobVersion = Math.max(1, Number.parseInt(String(jobVersion || 0), 10) || 0)
+  if (!safeJobVersion) return false
+  const result = await env.ICONOPLASM_DB.prepare(
+    `UPDATE icono_vote_projection_refresh_jobs
+        SET actor_id = ?,
+            reason = ?,
+            last_attempt_at = CURRENT_TIMESTAMP,
+            next_attempt_at = ?,
+            attempts = attempts + 1,
+            last_error = ?
+      WHERE gene_symbol = ? AND job_version = ?`,
   )
     .bind(
-      safeSymbol,
       normalizeUserId(actorId || "vote_projection"),
       voteProjectionRefreshJobReason(reason),
       nextAttemptAt,
       sanitizeText(String(error?.message || error || "vote projection refresh failed"), 2000) ||
         "vote projection refresh failed",
+      safeSymbol,
+      safeJobVersion,
     )
     .run()
-  return { ok: true, next_attempt_at: nextAttemptAt }
+  const changed = Number(result?.meta?.changes ?? result?.changes ?? 0) > 0
+  return changed
+    ? { ok: true, next_attempt_at: nextAttemptAt }
+    : { ok: true, superseded: true, next_attempt_at: "" }
 }
 
 function iconoplasmVoteProjectionQueueDisabled(env) {
@@ -21651,6 +21678,10 @@ function normalizeVoteProjectionRefreshJobRow(rawRow, fallback = {}) {
       0,
       Number.parseInt(String(rawRow?.attempts ?? fallback.attempts ?? 0), 10) || 0,
     ),
+    job_version: Math.max(
+      1,
+      Number.parseInt(String(rawRow?.job_version ?? fallback.job_version ?? 0), 10) || 0,
+    ),
     next_attempt_at: sanitizeText(rawRow?.next_attempt_at || fallback.next_attempt_at || "", 64),
   }
 }
@@ -21669,6 +21700,7 @@ function voteProjectionRefreshFailureResult(job, error, extra = {}) {
     actor_id: normalizeUserId(job?.actor_id || "vote_projection"),
     reason: voteProjectionRefreshJobReason(job?.reason),
     attempts: Math.max(0, Number.parseInt(String(job?.attempts || 0), 10) || 0),
+    job_version: Math.max(1, Number.parseInt(String(job?.job_version || 0), 10) || 0),
     error: voteProjectionRefreshErrorMessage(error),
     ...extra,
   }
@@ -21701,6 +21733,7 @@ async function applyVoteProjectionRefreshWithoutPublicArtifact(env, job) {
       actor_id: actorNorm,
       reason: reasonNorm,
       attempts: Math.max(0, Number.parseInt(String(job?.attempts || 0), 10) || 0),
+      job_version: Math.max(1, Number.parseInt(String(job?.job_version || 0), 10) || 0),
       asset_count: assetSummaries.length,
       auto_promote: autoPromote,
       read_models: {
@@ -21810,7 +21843,11 @@ async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
       // per vote; one vote cannot pay for shard preparation and release writes.
       adminReadModelState.ready = true
       for (const result of applied) {
-        await clearVoteProjectionRefreshJob(env, result.symbol)
+        result.superseded = !(await clearVoteProjectionRefreshJob(
+          env,
+          result.symbol,
+          result.job_version,
+        ))
         delete result.vision_ids
       }
     } catch (error) {
@@ -21865,7 +21902,7 @@ async function processPendingVoteProjectionRefreshJobs(env, { limit = 100 } = {}
   const safeLimit = Math.max(1, Math.min(500, Number.parseInt(String(limit || 100), 10) || 100))
   const nowIso = new Date().toISOString()
   const queued = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol, actor_id, reason, attempts
+    `SELECT gene_symbol, actor_id, reason, attempts, job_version
      FROM icono_vote_projection_refresh_jobs
      WHERE next_attempt_at <= ?
      ORDER BY requested_at ASC
@@ -21890,6 +21927,7 @@ async function processPendingVoteProjectionRefreshJobs(env, { limit = 100 } = {}
         reason: result.reason || "vote_projection_refresh",
         error: new Error(result.error || "vote projection refresh failed"),
         attemptCount: Number(result.attempts || 0),
+        jobVersion: result.job_version,
       })
     }
   }
@@ -21960,7 +21998,7 @@ async function processVoteProjectionRefreshQueueMessage(env, rawMessage) {
   }
   await ensureVoteProjectionRefreshJobsTable(env)
   const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol, actor_id, reason, attempts, next_attempt_at
+    `SELECT gene_symbol, actor_id, reason, attempts, next_attempt_at, job_version
      FROM icono_vote_projection_refresh_jobs
      WHERE gene_symbol = ?
      LIMIT 1`,
@@ -21994,6 +22032,7 @@ async function processVoteProjectionRefreshQueueMessage(env, rawMessage) {
       reason: row?.reason || message.reason,
       error,
       attemptCount: Number(row?.attempts || 0),
+      jobVersion: row?.job_version,
     })
     throw error
   }
@@ -22042,7 +22081,7 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
       }
       if (!rowBySymbol.has(queueMessage.symbol)) {
         const row = await env.ICONOPLASM_DB.prepare(
-          `SELECT gene_symbol, actor_id, reason, attempts, next_attempt_at
+          `SELECT gene_symbol, actor_id, reason, attempts, next_attempt_at, job_version
            FROM icono_vote_projection_refresh_jobs
            WHERE gene_symbol = ?
            LIMIT 1`,
@@ -22133,6 +22172,7 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
         reason: result.reason || entry.queueMessage.reason,
         error: new Error(result.error || "vote projection refresh failed"),
         attemptCount: Number(result.attempts || entry.job.attempts || 0),
+        jobVersion: result.job_version || entry.job.job_version,
       })
       retryAtBySymbol.set(result.symbol, recordedFailure?.next_attempt_at || "")
     }
@@ -22164,7 +22204,7 @@ async function listPendingVoteProjectionRefreshJobs(env, { limit = 200 } = {}) {
     Math.min(1000, Number.parseInt(String(limit || "200"), 10) || 200),
   )
   const resp = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol, actor_id, reason, requested_at, last_attempt_at, next_attempt_at, attempts, last_error
+    `SELECT gene_symbol, actor_id, reason, requested_at, last_attempt_at, next_attempt_at, attempts, last_error, job_version
      FROM icono_vote_projection_refresh_jobs
      ORDER BY next_attempt_at ASC, requested_at ASC, gene_symbol ASC
      LIMIT ?`,
@@ -22183,6 +22223,7 @@ async function listPendingVoteProjectionRefreshJobs(env, { limit = 200 } = {}) {
     last_attempt_at: sanitizeText(row?.last_attempt_at || "", 64) || "",
     next_attempt_at: sanitizeText(row?.next_attempt_at || "", 64) || "",
     attempts: Math.max(0, Number.parseInt(String(row?.attempts || 0), 10) || 0),
+    job_version: Math.max(1, Number.parseInt(String(row?.job_version || 0), 10) || 0),
     last_error: sanitizeText(row?.last_error || "", 2000) || "",
     retrying: Math.max(0, Number.parseInt(String(row?.attempts || 0), 10) || 0) > 0,
   }))
@@ -36322,6 +36363,63 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           200,
           { "Cache-Control": "no-store" },
         ),
+      )
+    }
+
+    if (
+      path === "/api/iconoplasm/admin/votes/projection-refresh/reconcile" &&
+      request.method === "POST"
+    ) {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done(
+          "admin_votes_projection_refresh_reconcile_403",
+          json({ error: "Unauthorized" }, 403),
+        )
+      let payload
+      try {
+        payload = await parseJsonBody(request)
+      } catch {
+        return done(
+          "admin_votes_projection_refresh_reconcile_400",
+          json({ error: "Invalid JSON" }, 400),
+        )
+      }
+      const symbols = Array.from(
+        new Set(
+          (Array.isArray(payload?.symbols) ? payload.symbols : [])
+            .map((symbol) => normalizeSymbol(symbol || ""))
+            .filter(Boolean),
+        ),
+      )
+      if (!symbols.length || symbols.length > 100) {
+        return done(
+          "admin_votes_projection_refresh_reconcile_400",
+          json({ error: "Provide 1 to 100 valid gene symbols" }, 400),
+        )
+      }
+      const results = []
+      for (const symbol of symbols) {
+        const job = await enqueueVoteProjectionRefreshJob(env, {
+          symbol,
+          actorId: "admin_reconciliation",
+          reason: voteProjectionRefreshJobReason(
+            payload?.reason,
+            "admin_vote_projection_reconciliation",
+          ),
+        })
+        const wake = await sendVoteProjectionRefreshQueueMessage(env, {
+          symbol,
+          actorId: "admin_reconciliation",
+          reason: voteProjectionRefreshJobReason(
+            payload?.reason,
+            "admin_vote_projection_reconciliation",
+          ),
+        })
+        results.push({ symbol, job_version: job?.job_version || 0, queued: wake?.ok === true })
+      }
+      return done(
+        "admin_votes_projection_refresh_reconcile",
+        json({ ok: true, count: results.length, results }, 200, { "Cache-Control": "no-store" }),
       )
     }
 

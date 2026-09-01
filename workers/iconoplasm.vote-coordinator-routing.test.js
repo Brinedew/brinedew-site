@@ -1992,9 +1992,83 @@ test("admin pending vote projection refresh endpoint exposes durable queue rows"
     last_attempt_at: "2026-04-15 10:01:00",
     next_attempt_at: "2026-04-15 10:05:00",
     attempts: 2,
+    job_version: 1,
     last_error: "timed out",
     retrying: true,
   })
+})
+
+test("admin reconciliation durably requeues an explicit bounded gene set", async () => {
+  const db = new RecordingDb()
+  const queue = fakeQueue()
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/votes/projection-refresh/reconcile",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Iconoplasm-Admin-Token": "secret",
+          },
+          body: JSON.stringify({
+            symbols: ["casp9", "TP53", "CASP9"],
+            reason: "fleet_vote_projection_audit",
+          }),
+        },
+      ),
+      {
+        ICONOPLASM_DB: db,
+        ICONOPLASM_ADMIN_TOKEN: "secret",
+        ICONOPLASM_VOTE_PROJECTION_QUEUE: queue,
+        KV: fakeKv(),
+      },
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+  assert.equal(response.status, 200)
+  assert.equal(payload.ok, true)
+  assert.deepEqual(
+    payload.results.map((item) => item.symbol),
+    ["CASP9", "TP53"],
+  )
+  assert.deepEqual(
+    queue.messages.map((item) => item.symbol),
+    ["CASP9", "TP53"],
+  )
+  assert.equal(
+    db.calls.filter(
+      (call) =>
+        call.type === "run" && /INSERT INTO icono_vote_projection_refresh_jobs/i.test(call.sql),
+    ).length,
+    2,
+  )
+})
+
+test("vote projection completion is generation-checked so stale workers cannot erase newer work", () => {
+  const source = readFileSync(
+    new URL(
+      "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+      import.meta.url,
+    ),
+    "utf8",
+  )
+  const enqueueStart = source.indexOf("async function enqueueVoteProjectionRefreshJob")
+  const clearStart = source.indexOf("async function clearVoteProjectionRefreshJob")
+  const failureStart = source.indexOf("async function recordVoteProjectionRefreshFailure")
+  assert.notEqual(enqueueStart, -1)
+  assert.notEqual(clearStart, -1)
+  assert.notEqual(failureStart, -1)
+  const enqueue = source.slice(enqueueStart, clearStart)
+  const clear = source.slice(clearStart, failureStart)
+  const failure = source.slice(
+    failureStart,
+    source.indexOf("function iconoplasmVoteProjectionQueueDisabled"),
+  )
+  assert.match(enqueue, /job_version = icono_vote_projection_refresh_jobs\.job_version \+ 1/)
+  assert.match(clear, /WHERE gene_symbol = \? AND job_version = \?/)
+  assert.match(failure, /WHERE gene_symbol = \? AND job_version = \?/)
+  assert.doesNotMatch(clear, /WHERE gene_symbol = \?`/)
 })
 
 test("admin vote projection process endpoint drains due durable jobs", async () => {

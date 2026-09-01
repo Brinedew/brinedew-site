@@ -8,7 +8,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=20260730-module-cache"
-import { createRequestInbox } from "./request-inbox.js?v=20260830-caretaker-inbox-v1"
+import { createRequestInbox } from "./request-inbox.js?v=20260901-caretaker-sidebar-v2"
 import { portraitDelivery } from "./portrait-delivery.js?v=0d14e5a87d1914bf"
 import {
   createEmulsionFavoriteStore,
@@ -344,6 +344,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       return
     }
     var symbol = normalizedSymbol(genePayload && genePayload.symbol)
+    hydrateCaretakerClaimAction(container, genePayload)
     var accountId = String(currentUser.account_id || currentUser.id || currentUser.user_id || "")
     var signature = accountId + ":" + symbol
     if (host.getAttribute("data-icono-caretaker-signature") === signature) return
@@ -361,6 +362,120 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         host.hidden = false
         host.innerHTML =
           '<section class="icono-caretaker-panel"><p class="icono-caretaker-status" data-tone="error">Caretaker record could not be loaded.</p></section>'
+      })
+  }
+
+  function caretakerCommandId() {
+    if (!globalThis.crypto?.randomUUID) {
+      throw new Error("This browser cannot create a secure caretaker command ID.")
+    }
+    return "cmd_" + globalThis.crypto.randomUUID().replaceAll("-", "").toLowerCase()
+  }
+
+  function hydrateCaretakerClaimAction(container, genePayload) {
+    var target = container && container.querySelector("[data-icono-caretaker-claim-action]")
+    var symbol = normalizedSymbol(genePayload && genePayload.symbol)
+    if (!target || !symbol || !currentUser) return
+    var signature =
+      String(currentUser.account_id || currentUser.id || currentUser.user_id || "") + ":" + symbol
+    if (target.getAttribute("data-icono-caretaker-claim-signature") === signature) return
+    target.setAttribute("data-icono-caretaker-claim-signature", signature)
+    fetchAuthedJSON(
+      "/api/iconoplasm/caretaker/genes/" +
+        encodeURIComponent(symbol) +
+        "/claim?fresh=" +
+        Date.now(),
+      { cache: "no-store" },
+    )
+      .then(function (payload) {
+        if (!payload?.enabled || !payload.claim?.available || !payload.claim?.terms) {
+          target.replaceChildren()
+          return
+        }
+        var claim = payload.claim
+        var terms = claim.terms
+        var dialogId = "icono-caretaker-claim-dialog-" + symbol
+        target.innerHTML =
+          '<button type="button" class="icono-canonical-new-candidate-btn icono-caretaker-claim-btn" data-icono-caretaker-claim-open aria-haspopup="dialog" aria-controls="' +
+          esc(dialogId) +
+          '"><span>Become a ' +
+          esc(symbol) +
+          " caretaker</span></button>" +
+          '<sl-dialog class="icono-caretaker-claim-dialog" id="' +
+          esc(dialogId) +
+          '" data-icono-caretaker-claim-dialog label="Become a ' +
+          esc(symbol) +
+          ' caretaker">' +
+          '<form class="icono-caretaker-claim-form" data-icono-caretaker-claim-form>' +
+          "<p>Caretakers can write manifestations, keep version history, choose the canonical version, and control whether their manifestation appears on the gene page.</p>" +
+          "<fieldset><legend>If you stop caretaking " +
+          esc(symbol) +
+          '</legend><label><input type="radio" name="leave_policy" value="retain" checked> Keep my manifestation</label><label><input type="radio" name="leave_policy" value="withdraw"> Automatically remove my manifestation from the page</label></fieldset>' +
+          '<label class="icono-caretaker-claim-terms"><input type="checkbox" data-icono-caretaker-claim-terms> I accept the <a href="' +
+          esc(terms.document_url) +
+          '" target="_blank" rel="noopener">' +
+          esc(terms.display_label || "caretaker terms") +
+          '</a>.</label><p class="icono-caretaker-status" data-icono-caretaker-claim-status hidden role="status"></p>' +
+          '</form><div slot="footer"><button type="button" class="icono-button" data-icono-caretaker-claim-cancel>Cancel</button> <button type="submit" form="" class="icono-button icono-button--primary" data-icono-caretaker-claim-submit disabled>Become caretaker</button></div></sl-dialog>'
+        var dialog = target.querySelector("[data-icono-caretaker-claim-dialog]")
+        var form = target.querySelector("[data-icono-caretaker-claim-form]")
+        var termsCheckbox = target.querySelector("[data-icono-caretaker-claim-terms]")
+        var submit = target.querySelector("[data-icono-caretaker-claim-submit]")
+        var status = target.querySelector("[data-icono-caretaker-claim-status]")
+        target
+          .querySelector("[data-icono-caretaker-claim-open]")
+          ?.addEventListener("click", function () {
+            if (!dialog.open) dialog.show()
+          })
+        target
+          .querySelector("[data-icono-caretaker-claim-cancel]")
+          ?.addEventListener("click", function () {
+            dialog.hide()
+          })
+        termsCheckbox?.addEventListener("change", function () {
+          submit.disabled = !termsCheckbox.checked
+        })
+        submit?.addEventListener("click", function () {
+          if (!termsCheckbox?.checked || submit.disabled) return
+          var leavePolicy =
+            form.querySelector('input[name="leave_policy"]:checked')?.value || "retain"
+          submit.disabled = true
+          status.hidden = false
+          status.textContent = "Claiming caretaking…"
+          fetchAuthedJSON(
+            "/api/iconoplasm/caretaker/genes/" + encodeURIComponent(symbol) + "/claim",
+            {
+              method: "POST",
+              cache: "no-store",
+              headers: { "Content-Type": "application/json; charset=utf-8" },
+              body: JSON.stringify({
+                command_id: caretakerCommandId(),
+                expected_gene_revision: claim.gene_revision,
+                terms_version_id: terms.terms_version_id,
+                terms_accepted: true,
+                entitlement_policy_version: claim.entitlement_policy_version,
+                default_leave_policy: leavePolicy,
+              }),
+            },
+          )
+            .then(function () {
+              dialog.hide()
+              target.replaceChildren()
+              var host = container.querySelector("[data-icono-caretaker-island]")
+              if (host) host.removeAttribute("data-icono-caretaker-signature")
+              hydrateCaretakerManifestationIsland(container, genePayload)
+              void requestInbox.refresh()
+            })
+            .catch(function (error) {
+              status.hidden = false
+              status.dataset.tone = "error"
+              status.textContent = String(error?.message || "Caretaking could not be claimed.")
+              submit.disabled = !termsCheckbox.checked
+            })
+        })
+      })
+      .catch(function () {
+        target.replaceChildren()
       })
   }
 
@@ -2482,15 +2597,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function iconoSidebarPanelMarkup() {
     var page = String((iconoSidebarState && iconoSidebarState.page) || "home")
     if (page === "home") return ""
-    var html =
-      '<div class="brd-sidebar-section">' +
-      '<div class="brd-sidebar-panel-title">Iconoplasm</div>' +
-      '<div class="brd-sidebar-rowlist">'
     if (page === "gene") {
       var gene = (iconoSidebarState && iconoSidebarState.gene) || null
       var caretaker = (iconoSidebarState && iconoSidebarState.caretaker) || null
       if (caretaker && caretaker.symbol === gene?.symbol) {
-        html =
+        var html =
           '<div class="brd-sidebar-section icono-caretaker-launcher">' +
           '<div class="brd-sidebar-panel-title">Caretaking</div>' +
           '<button type="button" class="icono-caretaker-launcher__button" data-icono-caretaker-open>' +
@@ -2504,27 +2615,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           "</button></div>"
         return html
       }
-      if (!gene) {
-        html += iconoRowMarkup("Gene", "Loading")
-      } else if (gene.error) {
-        html += iconoRowMarkup("Gene", gene.symbol || "Unknown")
-        html += iconoRowMarkup("Status", "Not found")
-      } else {
-        html += iconoRowMarkup("Gene", gene.symbol || "Unknown")
-        html += iconoRowMarkup("Blot", gene.hasPortrait ? "Published" : "Pending")
-        html += iconoRowMarkup("Candidates", String(gene.candidateCount || 0))
-        html += iconoRowMarkup("Aliases", String(gene.aliasCount || 0))
-      }
-      html +=
-        "</div>" +
-        '<div class="brd-user-links"><a href="/" data-icono-nav>All genes</a></div>' +
-        "</div>"
-      return html
+      return requestInbox.caretakerPanelMarkup()
     }
     if (page === "404") {
-      html += iconoRowMarkup("Page", "Not found")
-      html += "</div></div>"
-      return html
+      return (
+        '<div class="brd-sidebar-section"><div class="brd-sidebar-panel-title">Iconoplasm</div>' +
+        '<div class="brd-sidebar-rowlist">' +
+        iconoRowMarkup("Page", "Not found") +
+        "</div></div>"
+      )
     }
     return ""
   }
@@ -2541,6 +2640,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         }),
       },
     ]
+    if (iconoSidebarMarkup) {
+      panels.push({
+        id: "icono-sidebar-panel",
+        className: "brd-sidebar-panel--iconoplasm",
+        markup: iconoSidebarMarkup,
+      })
+    }
     var requestInboxMarkup = requestInbox.panelMarkup()
     if (requestInboxMarkup) {
       panels.push({
@@ -2548,13 +2654,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         className: "brd-sidebar-panel--request-inbox",
         markup: requestInboxMarkup,
         preserveScrollSelector: ".icono-request-inbox__group-body",
-      })
-    }
-    if (iconoSidebarMarkup) {
-      panels.push({
-        id: "icono-sidebar-panel",
-        className: "brd-sidebar-panel--iconoplasm",
-        markup: iconoSidebarMarkup,
       })
     }
     var stack = mountSidebarStack({
@@ -5375,7 +5474,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       renderEditImageActionMarkup("canonical", g, (g && g.portrait) || {}) +
       '<section class="icono-gene-request-surface icono-gene-request-panel">' +
       renderCanonicalToolbarMetaMarkup(g) +
+      '<div class="icono-canonical-toolbar-actions"><span data-icono-caretaker-claim-action></span>' +
       renderRequestDialogTriggerMarkup(g.symbol) +
+      "</div>" +
       "</section>" +
       "</div>" +
       renderRequestDialogMarkup(g.symbol) +

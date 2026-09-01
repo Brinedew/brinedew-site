@@ -5,6 +5,8 @@ export {
 export { readManifestationAuthorityGeneState } from "./manifestation-authority-repository.js"
 export { seedGeneWithoutManifestation } from "./gene-authority-seed-command.js"
 export {
+  CARETAKER_ENTITLEMENT_POLICY_VERSION,
+  claimCaretakerAssignment,
   offerCaretakerAssignment,
   registerAuthorityAccount,
   registerCaretakerTermsVersion,

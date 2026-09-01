@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  CARETAKER_ENTITLEMENT_POLICY_VERSION,
   createManifestationUploadIntent,
   createManifestationAuthorityRouteHandler,
   createManifestationAuthorityServiceHandler,
@@ -604,6 +605,72 @@ test("browser routes hide unauthorized dossiers, reject CSRF and body-ID smuggli
     ).total,
     1,
   )
+})
+
+test("browser claim route exposes exact terms and atomically activates an available gene", async (t) => {
+  const context = await bootstrap(t, "7014")
+  await registerAuthorityAccount(context.db, {
+    accountId: OTHER,
+    publicCreditLabel: "Self-claiming caretaker",
+    now: NOW,
+  })
+  const geneId = "gene_server_claim_7014"
+  await registerGeneIdentity(context.db, { geneId, canonicalSymbol: "CLAIM14", now: NOW })
+  await seedSystemManifestation(context.db, {
+    geneId,
+    storage: storage(14),
+    expectedHeadVersion: 0,
+    expectedCanonicalRevisionId: null,
+    manifestationId: "manifestation_claim_seed_7014",
+    revisionId: "revision_claim_seed_7014",
+    selectionId: "selection_claim_seed_7014",
+    eventUuid: "event_claim_seed_7014",
+    now: NOW,
+    ...command("command_claim_seed_7014", "4", null, "migration"),
+  })
+  context.db.raw
+    .prepare(
+      "UPDATE icono_authority_state SET authority_mode = 'authoritative' WHERE singleton = 1",
+    )
+    .run()
+  const handler = createCaretakerManifestationHttpHandler({
+    db: context.db,
+    env: {},
+    resolveSession: async () => ({ account_id: OTHER }),
+    idFactory: ids(),
+  })
+  const path = "/api/iconoplasm/caretaker/genes/CLAIM14/claim"
+  const availabilityResponse = await handler(new Request(`https://iconoplasm.test${path}`))
+  assert.equal(availabilityResponse.status, 200)
+  const availability = await availabilityResponse.json()
+  assert.equal(availability.claim.available, true)
+  assert.equal(availability.claim.gene_revision, 1)
+  assert.equal(availability.claim.terms.terms_version_id, TERMS)
+  assert.equal(availability.claim.entitlement_policy_version, CARETAKER_ENTITLEMENT_POLICY_VERSION)
+  const claimedResponse = await handler(
+    browserRequest(path, {
+      command_id: "browser_claim_7014",
+      expected_gene_revision: availability.claim.gene_revision,
+      terms_version_id: availability.claim.terms.terms_version_id,
+      terms_accepted: true,
+      entitlement_policy_version: availability.claim.entitlement_policy_version,
+      default_leave_policy: "retain",
+    }),
+  )
+  assert.ok(new Set([200, 202]).has(claimedResponse.status))
+  const claimed = await claimedResponse.json()
+  assert.equal(claimed.status, "active")
+  assert.equal(
+    row(
+      context.db,
+      "SELECT status FROM icono_caretaker_assignments WHERE gene_id = ? AND account_id = ?",
+      geneId,
+      OTHER,
+    ).status,
+    "active",
+  )
+  const noLongerAvailable = await handler(new Request(`https://iconoplasm.test${path}`))
+  assert.equal((await noLongerAvailable.json()).claim.reason, "already_caretaking")
 })
 
 test("caretaker browser routes persist manual Tags on the exact autosaved revision", async (t) => {
