@@ -1644,6 +1644,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (family.startsWith("candidate_generation_")) return "first_party_write"
   if (family === "candidate_copy") return "first_party_write"
   if (family === "caretaker_supervote") return "first_party_write"
+  if (family === "caretaker_assignment_claim") return "first_party_write"
   if (family === "caretaker_manifestations_read") return "first_party_read"
   if (family === "caretaker_manifestations_write") return "first_party_write"
   if (family === "caretaker_invitations_read") return "first_party_read"

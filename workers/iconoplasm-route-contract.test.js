@@ -40,6 +40,7 @@ const PATTERN_EXAMPLES = Object.freeze({
   emulsion_favorite_item: "/api/iconoplasm/emulsion-favorites/A1-255",
   admin_gene_request_diagnostics: "/api/iconoplasm/admin/requests/gene/TP53/diagnostics",
   caretaker_gene_dossier: "/api/iconoplasm/caretaker/genes/TP53",
+  caretaker_gene_claim: "/api/iconoplasm/caretaker/genes/TP53/claim",
   caretaker_revision_body: "/api/iconoplasm/caretaker/genes/TP53/revisions/revision_0001/body",
   caretaker_derivative_body:
     "/api/iconoplasm/caretaker/genes/TP53/derivatives/derivative_0001/body",
