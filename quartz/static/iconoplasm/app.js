@@ -305,7 +305,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           })
         },
         onDossierChanged: function (detail) {
-          iconoSidebarState.caretaker = detail.dossier?.viewer?.is_caretaker
+          var viewerIsCaretaker = detail.dossier?.viewer?.is_caretaker === true
+          iconoSidebarState.caretaker = viewerIsCaretaker
             ? {
                 symbol: detail.symbol,
                 status: String(detail.dossier.assignment?.status || ""),
@@ -315,6 +316,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           void requestInbox.refresh()
           var geneContent = detail.host && detail.host.closest("#icono-gene-content")
           if (!geneContent) return
+          syncViewerCaretakerToolbarIdentity(geneContent, viewerIsCaretaker)
           return supervoteControls.mount(geneContent, {
             symbol: detail.symbol,
             dossier: detail.dossier,
@@ -1005,6 +1007,54 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       ) +
       "</div>"
     )
+  }
+
+  function renderCaretakerIdentityMarkup(caretaker, className) {
+    var profile = caretaker && typeof caretaker === "object" ? caretaker : {}
+    var username = String(profile.username || "").trim()
+    var avatarUrl = String(profile.avatar_url || "").trim()
+    if (!username || avatarUrl.indexOf("/api/avatar?src=") !== 0) return ""
+    return (
+      '<div class="icono-caretaker-identity ' +
+      esc(className || "") +
+      '" aria-label="Caretaker ' +
+      esc(username) +
+      '"><img class="icono-caretaker-identity__avatar" src="' +
+      esc(avatarUrl) +
+      '" alt="" loading="lazy" decoding="async"><span class="icono-caretaker-identity__name">' +
+      esc(username) +
+      "</span></div>"
+    )
+  }
+
+  function syncViewerCaretakerToolbarIdentity(container, isCaretaker) {
+    var actions = container && container.querySelector(".icono-canonical-toolbar-actions")
+    if (!actions || !currentUser) return
+    var existing = actions.querySelector(".icono-caretaker-identity--toolbar")
+    if (!isCaretaker) {
+      if (existing && existing.getAttribute("data-icono-viewer-caretaker") === "true") {
+        existing.remove()
+      }
+      return
+    }
+    if (existing) {
+      existing.setAttribute("data-icono-viewer-caretaker", "true")
+      return
+    }
+    var markup = renderCaretakerIdentityMarkup(
+      {
+        username: currentUser.username,
+        avatar_url: currentUser.avatar_url,
+      },
+      "icono-caretaker-identity--toolbar",
+    )
+    if (!markup) return
+    var claimHost = actions.querySelector("[data-icono-caretaker-claim-action]")
+    if (!claimHost) return
+    claimHost.insertAdjacentHTML("beforebegin", markup)
+    actions
+      .querySelector(".icono-caretaker-identity--toolbar")
+      ?.setAttribute("data-icono-viewer-caretaker", "true")
   }
 
   function portraitDimensions(genePayload) {
@@ -5471,7 +5521,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       renderEditImageActionMarkup("canonical", g, (g && g.portrait) || {}) +
       '<section class="icono-gene-request-surface icono-gene-request-panel">' +
       renderCanonicalToolbarMetaMarkup(g) +
-      '<div class="icono-canonical-toolbar-actions"><span data-icono-caretaker-claim-action></span>' +
+      '<div class="icono-canonical-toolbar-actions">' +
+      renderCaretakerIdentityMarkup(g.caretaker, "icono-caretaker-identity--toolbar") +
+      "<span data-icono-caretaker-claim-action></span>" +
       renderRequestDialogTriggerMarkup(g.symbol) +
       "</div>" +
       "</section>" +
@@ -9034,7 +9086,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (!container || !genePayload) return
     var authSignature = currentUser ? "signed-in" : "guest"
     var adminSignature = currentUserIsIconoAdmin ? "admin" : "public"
-    var toolbarSignature = authSignature + ":" + adminSignature
+    var caretakerSignature = JSON.stringify((genePayload && genePayload.caretaker) || null)
+    var toolbarSignature = authSignature + ":" + adminSignature + ":" + caretakerSignature
     var toolbarHost = container.querySelector("[data-icono-canonical-toolbar-island]")
     if (
       toolbarHost &&

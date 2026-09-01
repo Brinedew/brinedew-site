@@ -206,7 +206,7 @@ test("ready canonical blots stay out of range HTML and remain in the matching im
   const html = renderIconoplasmGeneRangeHtml(snapshot, range, readyProjection)
   const sitemap = buildIconoplasmGeneRangeSitemapXml(snapshot, range, readyProjection)
 
-  assert.doesNotMatch(html, /<img\b/i)
+  assert.doesNotMatch(html, /<img[^>]+class="gene-card-thumb/i)
   assert.doesNotMatch(html, /gene-card-thumb-delivery\.js/)
   assert.match(html, /href="\/gene\/TP53"/)
   assert.match(sitemap, /xmlns:image="http:\/\/www\.google\.com\/schemas\/sitemap-image\/1\.1"/)
@@ -227,6 +227,38 @@ test("ready canonical blots stay out of range HTML and remain in the matching im
   assert.match(textOnlyHtml, /1 published genes/)
   assert.equal((textOnlySitemap.match(/<image:image>/g) || []).length, 0)
   assert.match(textOnlySitemap, /\/gene\/TP53/)
+})
+
+test("range rows pair one gene identity with a caretaker and leave unclaimed rows empty", () => {
+  const snapshot = buildIconoplasmGeneDiscoverySnapshot({
+    version: "fixture-caretakers-v1",
+    catalogHash: "fixturehash",
+    generatedAt: "2026-09-01T00:00:00.000Z",
+    genes: [
+      publishedGene("TP53", "tumor protein p53"),
+      publishedGene("TRIM1", "tripartite motif containing 1"),
+    ],
+  })
+  const range = iconoplasmGeneRangeForSymbol("TP53")
+  const projection = publishedCardProjection([
+    publishedGene("TP53", "tumor protein p53"),
+    publishedGene("TRIM1", "tripartite motif containing 1"),
+  ])
+  const html = renderIconoplasmGeneRangeHtml(snapshot, range, projection, {
+    TP53: {
+      username: "Caretaker <one>",
+      avatar_url: "/api/avatar?src=https%3A%2F%2Fcdn.discordapp.com%2Favatars%2F1%2Fa.png",
+    },
+  })
+
+  assert.match(
+    html,
+    /<span class="gene-identity"><span class="gene-symbol">TP53<\/span><span class="gene-name">tumor protein p53<\/span><\/span>/,
+  )
+  assert.match(html, /aria-label="Caretaker Caretaker &lt;one&gt;"/)
+  assert.match(html, /class="gene-caretaker-avatar"/)
+  assert.match(html, /TRIM1[\s\S]*?<span class="gene-caretaker"><\/span><\/a><\/li>/)
+  assert.doesNotMatch(html, /No caretaker|Unclaimed|Become caretaker/)
 })
 
 test("llms.txt documents discovery and every card mapping", () => {

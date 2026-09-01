@@ -633,6 +633,34 @@ body:has(.icono-vote-login-dialog[open]) {
   display: none;
 }
 
+.icono-caretaker-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  min-width: 0;
+  color: var(--dark);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.icono-caretaker-identity__avatar {
+  display: block;
+  width: 1.8rem;
+  height: 1.8rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.icono-caretaker-identity__name {
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .icono-canonical-new-candidate-btn {
   appearance: none;
   display: inline-flex;
