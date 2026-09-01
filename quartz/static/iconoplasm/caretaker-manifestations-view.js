@@ -292,7 +292,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
       '<textarea id="icono-caretaker-tags" rows="5" maxlength="32767" data-icono-caretaker-tags aria-describedby="icono-caretaker-tags-hint">' +
       esc(currentTags) +
       "</textarea>" +
-      '<p id="icono-caretaker-tags-hint" class="icono-caretaker-editor__hint">Private generation Tags. They never appear on the gene page.</p>' +
+      '<p id="icono-caretaker-tags-hint" class="icono-caretaker-editor__hint">Generation Tags. They never appear on the gene page.</p>' +
       '<p class="icono-caretaker-editor__basis" data-icono-caretaker-basis hidden></p>' +
       '<div class="icono-caretaker-editor__meta"><span data-icono-caretaker-count>' +
       codePointLength(currentBody).toLocaleString() +
@@ -332,7 +332,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
     body +=
       '<section class="icono-caretaker-visibility" aria-labelledby="icono-caretaker-visibility-title">' +
       '<div><h3 id="icono-caretaker-visibility-title">Gene-page manifestation</h3>' +
-      "<p>Show the canonical manifestation text on this gene page. Tags always remain private.</p></div>" +
+      "<p>Show the canonical manifestation text on this gene page. Tags always stay off the gene page.</p></div>" +
       '<label class="icono-caretaker-switch"><input type="checkbox" data-icono-caretaker-visibility' +
       (visible ? " checked" : "") +
       (own ? "" : " disabled") +
