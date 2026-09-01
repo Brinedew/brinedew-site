@@ -832,6 +832,38 @@ body:has(.icono-vote-login-dialog[open]) {
   background: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
 }
 
+.icono-standard-dialog .icono-button {
+  min-height: var(--icono-action-height);
+  padding: var(--icono-action-padding);
+  border: 1px solid var(--icono-action-border);
+  border-radius: var(--icono-radius-sm);
+  background: var(--icono-action-primary-bg);
+  color: var(--icono-action-primary-text);
+  font: 700 var(--icono-action-font-size) / 1 var(--icono-action-font);
+  cursor: pointer;
+}
+
+.icono-standard-dialog .icono-button:hover {
+  background: var(--icono-action-primary-bg-hover);
+}
+
+.icono-standard-dialog .icono-button--quiet {
+  background: var(--icono-action-secondary-bg);
+  color: var(--dark);
+}
+
+.icono-standard-dialog .icono-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.icono-caretaker-claim-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  width: 100%;
+}
+
 .icono-request-footer,
 .icono-request-direct-actions,
 .icono-request-free-actions {
