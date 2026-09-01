@@ -102,7 +102,7 @@ async function drain(publisher) {
   throw new Error("publication failed to drain")
 }
 
-test("publication starts at most six storage pipelines and preserves the seven-card write budget", async () => {
+test("publication starts at most six storage pipelines and preserves bounded subrequest headroom", async () => {
   const f = fixture()
   const write = f.objects.write
   let active = 0
@@ -183,7 +183,7 @@ test("a 750-card post-cutover repair resumes through bounded materialization pag
   p.wake()
   await drain(p)
 
-  assert.equal(CARD_PUBLICATION_BATCH, PUBLIC_CANONICAL_MATERIALIZATION_BATCH_LIMIT)
+  assert.equal(CARD_PUBLICATION_BATCH <= PUBLIC_CANONICAL_MATERIALIZATION_BATCH_LIMIT, true)
   assert.equal(p.status().head.current.manifest.card_count, 750)
   assert.equal(largestPage, CARD_PUBLICATION_BATCH)
   assert.equal(calls, Math.ceil(750 / CARD_PUBLICATION_BATCH))

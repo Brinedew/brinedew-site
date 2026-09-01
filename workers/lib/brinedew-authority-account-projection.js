@@ -10,6 +10,18 @@ import {
 
 const PROJECTION_BATCH_LIMIT = 25
 
+function authorityTimestampFromEpoch(raw) {
+  const epochMilliseconds = Number(raw)
+  if (!Number.isFinite(epochMilliseconds) || epochMilliseconds < 0) {
+    throw new TypeError("Invalid Brinedew account event timestamp")
+  }
+  const timestamp = new Date(Math.trunc(epochMilliseconds))
+  if (Number.isNaN(timestamp.getTime())) {
+    throw new TypeError("Invalid Brinedew account event timestamp")
+  }
+  return timestamp.toISOString()
+}
+
 function requireDb(db, name) {
   if (!db?.prepare) throw new TypeError(`${name} binding missing`)
 }
@@ -86,7 +98,7 @@ function projectionInput(row) {
     finalLeavePolicy: row.final_leave_policy || undefined,
     sourceEventId: row.source_event_id,
     sourceEventSequence: Number(row.source_event_sequence),
-    occurredAt: Number(row.occurred_at),
+    occurredAt: authorityTimestampFromEpoch(row.occurred_at),
   }
 }
 
@@ -105,7 +117,7 @@ async function applyProjection(
     accountId: row.account_id,
     publicCreditLabel: row.public_credit_label || undefined,
     status: row.authority_status,
-    now: Number(row.occurred_at),
+    now: input.occurredAt,
   })
   return projectAccount(authoringDb, input)
 }

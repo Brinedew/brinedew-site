@@ -9,7 +9,7 @@ import {
 // Do not replace the head with a mutable Bunny PUT: a timed-out old PUT can
 // complete after a newer PUT. HTTP caching of the ordered head has no such race.
 export const CARD_PUBLICATION_STORAGE = "bunny_card_catalog_v2"
-export const CARD_PUBLICATION_BATCH = 7
+export const CARD_PUBLICATION_BATCH = 6
 const CARD_PUBLICATION_CONCURRENCY = 2
 export const CARD_DELIVERY_INDEX_SIZE = 128
 // This publisher's allocation, NOT an account entitlement. Leave 45k of the
@@ -226,14 +226,17 @@ export function createCardPublication({
       ? oldCards.filter((card) => slice.includes(card.symbol))
       : await source.materialize(slice)
     const bySymbol = new Map(cards.map((card) => [card.symbol, card]))
-    // 7 cards * 3 independent objects * (PUT + verified GET) = 42 fetches.
-    // Index/packed-shard/root publication is a separate invocation, never an
-    // accidental 50-subrequest overflow on Cloudflare Free.
+    // 6 cards * 3 independent objects * (PUT + verified GET) = 36 fetches.
+    // Leave fourteen of Cloudflare Free's fifty subrequests for the old-shard
+    // read, source materialization, redirects, and storage-provider variance.
+    // Seven cards left only eight requests of headroom and failed live when a
+    // later materialization page needed more than that. Index/packed-shard/root
+    // publication is a separate invocation.
     // Cloudflare's April 2026 limit is six requests WAITING FOR HEADERS,
     // not six full response bodies. Starting 21 PUTs at once can consume the
     // 8-second request deadline while most waited in the platform queue.
     // Two cards x three independent PUT/GET pipelines stay within six.
-    // Keep seven cards per durable phase: reducing that batch instead would
+    // Keep six cards per durable phase: reducing that batch further would
     // increase SQLite checkpoint writes. Settle even failed groups completely
     // before retrying so an earlier phase cannot retain invisible in-flight work.
     // https://developers.cloudflare.com/changelog/post/2026-04-09-relaxed-connection-limiting/
