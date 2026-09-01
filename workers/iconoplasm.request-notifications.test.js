@@ -1773,7 +1773,7 @@ test("request inbox uses one-open Shoelace groups and an accessible unread dot",
   await inbox.refresh()
 
   const initialMarkup = inbox.panelMarkup()
-  assert.equal((initialMarkup.match(/<sl-details/g) || []).length, 3)
+  assert.equal((initialMarkup.match(/<sl-details/g) || []).length, 2)
   assert.match(initialMarkup, /data-icono-request-group="ready" open/)
   assert.doesNotMatch(initialMarkup, /data-icono-request-group="waiting" open/)
   assert.match(initialMarkup, /data-icono-request-id="42"/)
@@ -2001,8 +2001,9 @@ test("signed-in caretaker invitation is identity-free and marks read from link o
     navigate: (href) => navigations.push(href),
   })
   await inbox.refresh()
-  const markup = inbox.panelMarkup()
-  assert.match(markup, /data-icono-request-group="caretaking" open/)
+  const markup = inbox.caretakerPanelMarkup()
+  assert.match(markup, /class="brd-sidebar-section icono-caretaker-launcher"/)
+  assert.doesNotMatch(markup, /<sl-details/)
   assert.match(markup, /<strong>1 pending<\/strong><span>1 unread<\/span>/)
   assert.match(markup, /href="\/gene\/TP53"/)
   assert.match(markup, /data-icono-caretaker-assignment-id="assignment_ui_0001"/)
