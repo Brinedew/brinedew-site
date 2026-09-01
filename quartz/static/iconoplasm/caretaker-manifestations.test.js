@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
 import test from "node:test"
 import { parseHTML } from "linkedom"
 
@@ -9,6 +10,27 @@ import {
   proseValidationError,
   renderCaretakerManifestationPanel,
 } from "./caretaker-manifestations.js"
+
+test("the caretaker modal versions its complete immutable module graph", async () => {
+  const modules = [
+    "caretaker-manifestations.js",
+    "caretaker-manifestations-controller.js",
+    "caretaker-manifestations-events.js",
+    "caretaker-manifestations-view.js",
+  ]
+  for (const moduleName of modules) {
+    const source = await readFile(new URL(moduleName, import.meta.url), "utf8")
+    const localImports = Array.from(
+      source.matchAll(/(?:from\s+|import\s*)["'](\.\.?\/[^"']+\.js(?:\?[^"']*)?)["']/g),
+      (match) => match[1],
+    )
+    assert.deepEqual(
+      localImports.filter((specifier) => !specifier.includes("?v=")),
+      [],
+      `${moduleName} must version every static submodule import`,
+    )
+  }
+})
 
 function escapeHtml(value) {
   return String(value || "")

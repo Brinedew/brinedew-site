@@ -1,4 +1,4 @@
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=20260901-caretaker-modal-v2"
 import {
   MAX_PROSE_CODE_POINTS,
   codePointLength,
@@ -9,8 +9,8 @@ import {
   ownManifestation,
   proseValidationError,
   revisionById,
-} from "./caretaker-manifestations-model.js"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js"
+} from "./caretaker-manifestations-model.js?v=20260901-caretaker-modal-v2"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=20260901-caretaker-modal-v2"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
