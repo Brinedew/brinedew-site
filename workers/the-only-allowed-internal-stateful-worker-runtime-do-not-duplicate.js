@@ -16,6 +16,7 @@ import {
   enforceIconoplasmRateLimit,
   withIconoplasmRateLimitHeaders,
 } from "./iconoplasm-rate-limit.js"
+import { isD1DailyRowReadLimitError } from "./lib/cloudflare-d1-availability.js"
 
 // CORS headers for frontend access - supports both main domain and subdomain
 function getCorsHeaders(origin, requestHost = "") {
@@ -4951,7 +4952,9 @@ async function validateDailyBootstrapCache(env, date, origin, cached) {
   }
 
   const cacheKey = buildDailyBootstrapCacheKey(date, origin)
-  const currentProtein = await fetchProteinByUniprot(env.DB, cached.targetProtein.uniprot)
+  const currentProtein = await fetchProteinByUniprot(env.DB, cached.targetProtein.uniprot, {
+    throwOnUnavailable: true,
+  })
   const sourceWasExplicitOverride = cached?.audit?.source === "override"
   const currentMeta = currentProtein ? await getCanonicalStructureMeta(currentProtein, env) : null
   const canonicalStillMatches = sameStructureMeta(currentMeta, cached.structureMeta)
@@ -4976,6 +4979,28 @@ async function validateDailyBootstrapCache(env, date, origin, cached) {
   }
   await putDailyBootstrapCachePayload(env, date, cacheKey, refreshed)
   return refreshed
+}
+
+export async function validateDailyBootstrapCacheWithAvailabilityFallback(
+  env,
+  date,
+  origin,
+  cached,
+) {
+  try {
+    return await validateDailyBootstrapCache(env, date, origin, cached)
+  } catch (error) {
+    if (!isD1DailyRowReadLimitError(error)) throw error
+    // The cache is scoped to this exact UTC day and contains a previously
+    // verified immutable target plus structure identity. D1 is the freshness
+    // validator, not the source of a second target. During the provider's
+    // account-wide daily read lockout, retaining that same known-good target is
+    // safer than taking the whole daily game offline or electing a fallback.
+    console.warn(
+      `[BOOTSTRAP] D1 daily row-read allowance exhausted; retaining verified ${date} target`,
+    )
+    return cached
+  }
 }
 
 function buildDailyBootstrapCacheKey(date, origin) {
@@ -5051,7 +5076,12 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     if (!practiceMode) {
       cachedDaily = await getDailyBootstrapCache(env, today, url.origin)
       if (cachedDaily) {
-        cachedDaily = await validateDailyBootstrapCache(env, today, url.origin, cachedDaily)
+        cachedDaily = await validateDailyBootstrapCacheWithAvailabilityFallback(
+          env,
+          today,
+          url.origin,
+          cachedDaily,
+        )
       }
     }
 

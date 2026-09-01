@@ -7,6 +7,10 @@ import {
   resolveBrinedewAccountIdentity,
 } from "./lib/brinedew-account-identity.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
+import {
+  isD1DailyRowReadLimitError,
+  secondsUntilD1DailyReset,
+} from "./lib/cloudflare-d1-availability.js"
 
 const DISCORD_API = "https://discord.com/api/v10"
 const DISCORD_OAUTH = "https://discord.com/oauth2/authorize"
@@ -18,6 +22,22 @@ export const SHARED_SESSION_PRESENCE_COOKIE = "brinedew_session_present"
 export const PERSISTENT_SESSION_MAX_AGE_SECONDS = 400 * 24 * 60 * 60
 const SHARED_SESSION_MAX_AGE_SECONDS = PERSISTENT_SESSION_MAX_AGE_SECONDS
 const ACCESS_TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000
+
+function oauthAuthorityUnavailableResponse({ oauthCookieName, cookieDomainAttr }) {
+  const retryAfter = secondsUntilD1DailyReset()
+  const headers = new Headers({
+    "Retry-After": String(retryAfter),
+    "Set-Cookie": `${oauthCookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0${cookieDomainAttr}`,
+  })
+  return Response.json(
+    {
+      error: "Sign-in is temporarily unavailable while account storage resets.",
+      code: "AUTHORITY_STORAGE_DAILY_LIMIT",
+      retry_after_seconds: retryAfter,
+    },
+    { status: 503, headers },
+  )
+}
 
 export function sharedSessionPresenceCookie({
   present,
@@ -549,6 +569,10 @@ export async function handleCallback(request, env) {
       now,
     })
   } catch (error) {
+    if (isD1DailyRowReadLimitError(error)) {
+      console.error("Discord OAuth account resolution deferred until the D1 daily reset")
+      return oauthAuthorityUnavailableResponse({ oauthCookieName, cookieDomainAttr })
+    }
     if (!(error instanceof BrinedewAccountIdentityError)) throw error
     const headers = new Headers({
       "Set-Cookie": `${oauthCookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0${cookieDomainAttr}`,
@@ -574,8 +598,9 @@ export async function handleCallback(request, env) {
       { status: 403, headers },
     )
   }
-  await env.DB.prepare(
-    `
+  try {
+    await env.DB.prepare(
+      `
     INSERT INTO users (
       discord_id,
       username,
@@ -595,18 +620,23 @@ export async function handleCallback(request, env) {
       updated_at = excluded.updated_at,
       account_id = excluded.account_id
   `,
-  )
-    .bind(
-      user.id,
-      user.username,
-      avatarUrl,
-      tier,
-      leaderboardOptIn,
-      now,
-      now,
-      accountIdentity.account_id,
     )
-    .run()
+      .bind(
+        user.id,
+        user.username,
+        avatarUrl,
+        tier,
+        leaderboardOptIn,
+        now,
+        now,
+        accountIdentity.account_id,
+      )
+      .run()
+  } catch (error) {
+    if (!isD1DailyRowReadLimitError(error)) throw error
+    console.error("Discord OAuth profile projection deferred until the D1 daily reset")
+    return oauthAuthorityUnavailableResponse({ oauthCookieName, cookieDomainAttr })
+  }
 
   // Create persistent session
   const sessionId = crypto.randomUUID()
