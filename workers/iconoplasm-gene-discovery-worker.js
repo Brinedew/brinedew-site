@@ -17,6 +17,7 @@ import {
   resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { appendIconoplasmServiceDiscoveryLinks } from "./iconoplasm-service-discovery.js"
+import { readPublicCaretakers } from "./iconoplasm-public-caretakers.js"
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 
@@ -105,11 +106,12 @@ function discoveryDocumentResponse(
   body,
   contentType,
   snapshot,
-  { cardVersion = "" } = {},
+  { cardVersion = "", cacheControl = "" } = {},
 ) {
   const headers = appendIconoplasmServiceDiscoveryLinks({
     "Content-Type": contentType,
-    "Cache-Control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
+    "Cache-Control":
+      cacheControl || "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
     "X-Iconoplasm-Catalog-Version": snapshot.version,
     "X-Iconoplasm-Portrait-Discovery-Version": ICONOPLASM_PORTRAIT_DISCOVERY_CONTRACT_VERSION,
     "X-Iconoplasm-Range-Contract": ICONOPLASM_GENE_RANGE_CONTRACT_VERSION,
@@ -191,12 +193,20 @@ export async function handleIconoplasmGeneDiscoveryDocument(request, env, path) 
     if (!iconoplasmGeneDiscoveryProjectionIsUsable(genes, projection)) {
       return iconoplasmGeneUnavailableResponse(request.method)
     }
+    const caretakers = await readPublicCaretakers(
+      env.ICONOPLASM_DB,
+      env.DB,
+      genes.map((gene) => gene.symbol),
+    )
     return discoveryDocumentResponse(
       request,
-      renderIconoplasmGeneRangeHtml(snapshot, range, projection),
+      renderIconoplasmGeneRangeHtml(snapshot, range, projection, caretakers),
       "text/html; charset=utf-8",
       snapshot,
-      { cardVersion: projection.version },
+      {
+        cardVersion: projection.version,
+        cacheControl: "public, max-age=30, s-maxage=60, stale-while-revalidate=300",
+      },
     )
   }
 
