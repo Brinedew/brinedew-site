@@ -74,6 +74,11 @@ import {
   createIconoplasmCaretakerNotificationHandlers,
   projectCaretakerAssignmentNotification,
 } from "./iconoplasm-caretaker-notifications.js"
+import {
+  caretakerCommentOutboxStatement,
+  deliverPendingCaretakerCommentNotifications,
+  resolveCaretakerCommentRecipient,
+} from "./iconoplasm-caretaker-comment-notifications.js"
 import { createIconoplasmManifestationAuthorityRuntimeHandler } from "./iconoplasm-manifestation-authority-runtime.js"
 import {
   forwardManifestationCutoverActionToCoordinator,
@@ -1647,8 +1652,8 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (family === "caretaker_assignment_claim") return "first_party_write"
   if (family === "caretaker_manifestations_read") return "first_party_read"
   if (family === "caretaker_manifestations_write") return "first_party_write"
-  if (family === "caretaker_invitations_read") return "first_party_read"
-  if (family === "caretaker_invitations_write") return "first_party_write"
+  if (family === "caretaker_coordination_read") return "first_party_read"
+  if (family === "caretaker_coordination_write") return "first_party_write"
   if (family === "authority_workstation_sync" || family === "authority_workstation_material")
     return "workstation_sync_read"
   if (
@@ -34506,12 +34511,31 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         const username = sanitizeText(sessionUser.username || "", 80) || "Anonymous"
         const avatarUrl =
           sanitizeText(sessionUser.avatar_url || sessionUser.avatar || "", 500) || ""
-        const insertRes = await env.ICONOPLASM_DB.prepare(
+        const commentStatement = env.ICONOPLASM_DB.prepare(
           `INSERT INTO icono_gene_comments (gene_symbol, user_id, username, avatar_url, body)
              VALUES (?, ?, ?, ?, ?)`,
-        )
-          .bind(commentSymbol, userId, username, avatarUrl, body)
-          .run()
+        ).bind(commentSymbol, userId, username, avatarUrl, body)
+        const authorAccountId = sanitizeText(sessionUser.account_id || "", 192) || ""
+        const recipient = authorAccountId
+          ? await resolveCaretakerCommentRecipient(env, {
+              symbol: commentSymbol,
+              authorAccountId,
+            })
+          : null
+        const outboxStatement = recipient
+          ? caretakerCommentOutboxStatement(env.ICONOPLASM_DB, {
+              notification_key: `caretaker_comment_${crypto.randomUUID()}`,
+              ...recipient,
+              gene_symbol: commentSymbol,
+              comment_author_account_id: authorAccountId,
+              comment_author_name: username,
+              comment_body: body,
+            })
+          : null
+        const writes = outboxStatement
+          ? await env.ICONOPLASM_DB.batch([commentStatement, outboxStatement])
+          : [await commentStatement.run()]
+        const insertRes = writes[0]
         // Mirror the new comment into the #Iconoplasm Discord channel, attaching a
         // fresh render of the gene card. Best-effort and out-of-band: never block
         // or fail the comment write.
@@ -34522,6 +34546,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             body,
           }),
         )
+        if (outboxStatement) {
+          ctx.waitUntil(
+            deliverPendingCaretakerCommentNotifications(env, { limit: 1 }).catch((error) =>
+              console.warn("[iconoplasm-caretaker-comment-dm] inline delivery failed", error),
+            ),
+          )
+        }
         // Write-through: recompute the cache from D1 now that the new comment exists.
         await refreshGeneCommentsCache(env, commentSymbol)
         const comment = {

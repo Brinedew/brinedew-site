@@ -25,12 +25,10 @@ export function createRequestInbox({
     cancelled_count: 0,
     ready_requests: [],
     open_requests: [],
-    invitations_loaded: false,
-    invitations_loading: false,
-    invitations_error: false,
-    invitation_pending_count: 0,
-    invitation_unread_count: 0,
-    invitations: [],
+    caretaker_loaded: false,
+    caretaker_loading: false,
+    caretaker_error: false,
+    caretaker: null,
     last_seen_notification_id: 0,
     active_group: "",
     active_group_touched: false,
@@ -39,7 +37,7 @@ export function createRequestInbox({
   var refreshTimer = 0
   var lifecycleWired = false
   var requestRefreshVersion = 0
-  var invitationRefreshVersion = 0
+  var caretakerRefreshVersion = 0
 
   function currentAccountKey() {
     var user = getCurrentUser()
@@ -49,9 +47,9 @@ export function createRequestInbox({
 
   function invalidateInflight() {
     requestRefreshVersion += 1
-    invitationRefreshVersion += 1
+    caretakerRefreshVersion += 1
     state.loading = false
-    state.invitations_loading = false
+    state.caretaker_loading = false
   }
 
   function ensureAccountContext() {
@@ -125,12 +123,10 @@ export function createRequestInbox({
     state.cancelled_count = 0
     state.ready_requests = []
     state.open_requests = []
-    state.invitations_loaded = false
-    state.invitations_loading = false
-    state.invitations_error = false
-    state.invitation_pending_count = 0
-    state.invitation_unread_count = 0
-    state.invitations = []
+    state.caretaker_loaded = false
+    state.caretaker_loading = false
+    state.caretaker_error = false
+    state.caretaker = null
     state.last_seen_notification_id = 0
     state.active_group = ""
     state.active_group_touched = false
@@ -206,37 +202,35 @@ export function createRequestInbox({
       })
   }
 
-  function refreshInvitations(accountKey) {
-    if (!accountKey || state.invitations_loading) return Promise.resolve(null)
-    state.invitations_loading = true
-    state.invitations_error = false
-    var version = ++invitationRefreshVersion
-    return fetchJSON("/api/iconoplasm/caretaker/invitations?limit=20&fresh=" + Date.now(), {
+  function refreshCaretaker(accountKey) {
+    if (!accountKey || state.caretaker_loading) return Promise.resolve(null)
+    state.caretaker_loading = true
+    state.caretaker_error = false
+    var version = ++caretakerRefreshVersion
+    return fetchJSON("/api/iconoplasm/caretaker/me?fresh=" + Date.now(), {
       credentials: "include",
       cache: "no-store",
     })
       .then(function (payload) {
-        if (version !== invitationRefreshVersion || currentAccountKey() !== accountKey) return null
+        if (version !== caretakerRefreshVersion || currentAccountKey() !== accountKey) return null
         if (!payload || !payload.ok) return null
-        state.invitations_loaded = true
-        state.invitation_pending_count = Math.max(0, Number(payload.pending_count || 0) || 0)
-        state.invitation_unread_count = Math.max(0, Number(payload.unread_count || 0) || 0)
-        state.invitations = Array.isArray(payload.invitations) ? payload.invitations : []
+        state.caretaker_loaded = true
+        state.caretaker = payload.caretaker || null
         chooseActiveGroup()
         renderSidebar()
         return payload
       })
       .catch(function () {
-        if (version === invitationRefreshVersion && currentAccountKey() === accountKey) {
-          state.invitations_loaded = true
-          state.invitations_error = true
+        if (version === caretakerRefreshVersion && currentAccountKey() === accountKey) {
+          state.caretaker_loaded = true
+          state.caretaker_error = true
           renderSidebar()
         }
         return null
       })
       .finally(function () {
-        if (version === invitationRefreshVersion && currentAccountKey() === accountKey) {
-          state.invitations_loading = false
+        if (version === caretakerRefreshVersion && currentAccountKey() === accountKey) {
+          state.caretaker_loading = false
         }
       })
   }
@@ -246,14 +240,11 @@ export function createRequestInbox({
     if (!accountKey) return Promise.resolve(null)
     if (
       (!state.loaded && !state.loading) ||
-      (!state.invitations_loaded && !state.invitations_loading)
+      (!state.caretaker_loaded && !state.caretaker_loading)
     ) {
       renderSidebar()
     }
-    return Promise.allSettled([
-      refreshRequests(options, accountKey),
-      refreshInvitations(accountKey),
-    ])
+    return Promise.allSettled([refreshRequests(options, accountKey), refreshCaretaker(accountKey)])
   }
 
   function markRead(notificationIds, markAll, receipt) {
@@ -274,13 +265,16 @@ export function createRequestInbox({
     })
   }
 
-  function markCaretakerRead(assignmentId) {
-    return fetchJSON("/api/iconoplasm/caretaker/invitations/read", {
+  function markCaretakerCommentsRead(assignmentId) {
+    return fetchJSON("/api/iconoplasm/caretaker/me/comments/read", {
       method: "POST",
       credentials: "include",
       cache: "no-store",
       headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify({ caretaker_assignment_id: assignmentId }),
+      body: JSON.stringify({
+        caretaker_assignment_id: assignmentId,
+        through_comment_id: Number((state.caretaker && state.caretaker.latest_comment_id) || 0),
+      }),
     }).then(function () {
       return refresh()
     })
@@ -296,7 +290,7 @@ export function createRequestInbox({
     stop()
     if (
       !getCurrentUser() ||
-      (state.open_count <= 0 && state.invitation_pending_count <= 0) ||
+      state.open_count <= 0 ||
       typeof document === "undefined" ||
       document.visibilityState !== "visible"
     ) {
@@ -490,37 +484,35 @@ export function createRequestInbox({
     )
   }
 
-  function caretakerInvitationStatus(item) {
-    if (item.notification_state === "pending") return "Invitation awaiting your response"
-    if (item.assignment_status === "active") return "Caretaking active"
-    if (item.assignment_status === "suspended") return "Caretaking suspended"
-    return "Invitation resolved"
-  }
-
-  function caretakerInvitationMarkup(item) {
+  function caretakerAssignmentMarkup(item) {
     var assignmentId = String(item.caretaker_assignment_id || "")
     var symbol = String(item.canonical_symbol || "Gene")
-    var href = String(item.href || "/gene/" + encodeURIComponent(symbol))
-    var unread = !item.read_at
+    var href = String(item.href || "/gene/" + encodeURIComponent(symbol)) + "?caretaker=open"
+    var unread = Math.max(0, Number(item.unread_comment_count || 0) || 0)
     return (
-      '<div class="icono-request-inbox__caretaker-item' +
-      (unread ? " icono-request-inbox__item--unread" : "") +
-      '"><a class="icono-request-inbox__item icono-request-inbox__item--caretaker" href="' +
+      '<div class="icono-request-inbox__caretaker-item">' +
+      '<a class="icono-request-inbox__item icono-request-inbox__item--caretaker" href="' +
       escapeHtml(href) +
-      '" data-icono-caretaker-invitation data-icono-caretaker-assignment-id="' +
-      escapeHtml(assignmentId) +
-      '" data-icono-caretaker-gene-id="' +
-      escapeHtml(String(item.gene_id || "")) +
+      '" data-icono-caretaker-assignment data-icono-caretaker-gene="' +
+      escapeHtml(symbol) +
       '"><span class="icono-request-inbox__caretaker-mark" aria-hidden="true">C</span>' +
       '<span class="icono-request-inbox__copy"><strong>' +
       escapeHtml(symbol) +
       "</strong><small>" +
-      escapeHtml(caretakerInvitationStatus(item)) +
+      escapeHtml(item.assignment_status === "suspended" ? "Caretaking suspended" : "Your gene") +
       "</small></span></a>" +
       (unread
-        ? '<button type="button" class="icono-request-inbox__caretaker-read" data-icono-caretaker-mark-read="' +
+        ? '<a class="icono-request-inbox__caretaker-comments" href="' +
+          escapeHtml(
+            item.comments_href || "/gene/" + encodeURIComponent(symbol) + "#gene-comments",
+          ) +
+          '" data-icono-caretaker-comments data-icono-caretaker-assignment-id="' +
           escapeHtml(assignmentId) +
-          '">Mark read</button>'
+          '"><strong>' +
+          escapeHtml(String(unread)) +
+          "</strong> new " +
+          (unread === 1 ? "comment" : "comments") +
+          "</a>"
         : "") +
       "</div>"
     )
@@ -609,29 +601,9 @@ export function createRequestInbox({
 
   function caretakerPanelMarkup() {
     if (!getCurrentUser()) return ""
-    var invitations = Array.isArray(state.invitations) ? state.invitations : []
-    var pending = Math.max(0, Number(state.invitation_pending_count || 0) || 0)
-    var unread = Math.max(0, Number(state.invitation_unread_count || 0) || 0)
-    var content =
-      '<div class="icono-request-inbox__caretaker-summary"><strong>' +
-      escapeHtml(String(pending)) +
-      " pending</strong><span>" +
-      escapeHtml(String(unread)) +
-      " unread</span></div>"
-    for (var index = 0; index < invitations.length; index++) {
-      content += caretakerInvitationMarkup(invitations[index] || {})
-    }
-    if (state.invitations_error && !invitations.length) {
-      content +=
-        '<div class="icono-request-inbox__empty"><strong>Invitations unavailable.</strong>' +
-        "Try again when this panel refreshes.</div>"
-    } else if (state.invitations_loading && !state.invitations_loaded) {
-      content += '<div class="icono-request-inbox__empty">Checking invitations.</div>'
-    } else if (!invitations.length) {
-      content +=
-        '<div class="icono-request-inbox__empty"><strong>No caretaker invitations.</strong>' +
-        "You can claim an available gene from its toolbar.</div>"
-    }
+    if (!state.caretaker_loaded && !state.caretaker_error) return ""
+    if (!state.caretaker) return ""
+    var content = caretakerAssignmentMarkup(state.caretaker)
     return (
       '<div class="brd-sidebar-section icono-caretaker-launcher">' +
       '<div class="brd-sidebar-panel-title">Caretaking</div>' +
@@ -706,11 +678,24 @@ export function createRequestInbox({
         })
       })(links[i])
     }
-    var caretakerLinks = stack.querySelectorAll("[data-icono-caretaker-invitation]")
+    var caretakerLinks = stack.querySelectorAll("[data-icono-caretaker-assignment]")
     for (var caretakerIndex = 0; caretakerIndex < caretakerLinks.length; caretakerIndex++) {
       ;(function (link) {
-        if (link._iconoCaretakerInvitationWired) return
-        link._iconoCaretakerInvitationWired = true
+        if (link._iconoCaretakerAssignmentWired) return
+        link._iconoCaretakerAssignmentWired = true
+        link.addEventListener("click", function (event) {
+          event.preventDefault()
+          var href = link.getAttribute("href") || "/"
+          if (typeof navigate === "function") navigate(href, link)
+          else window.location.assign(href)
+        })
+      })(caretakerLinks[caretakerIndex])
+    }
+    var commentLinks = stack.querySelectorAll("[data-icono-caretaker-comments]")
+    for (var readIndex = 0; readIndex < commentLinks.length; readIndex++) {
+      ;(function (link) {
+        if (link._iconoCaretakerCommentsWired) return
+        link._iconoCaretakerCommentsWired = true
         link.addEventListener("click", function (event) {
           var assignmentId = link.getAttribute("data-icono-caretaker-assignment-id") || ""
           if (!assignmentId) return
@@ -718,24 +703,9 @@ export function createRequestInbox({
           var href = link.getAttribute("href") || "/"
           if (typeof navigate === "function") navigate(href, link)
           else window.location.assign(href)
-          void markCaretakerRead(assignmentId).catch(function () {})
+          void markCaretakerCommentsRead(assignmentId).catch(function () {})
         })
-      })(caretakerLinks[caretakerIndex])
-    }
-    var caretakerReadButtons = stack.querySelectorAll("[data-icono-caretaker-mark-read]")
-    for (var readIndex = 0; readIndex < caretakerReadButtons.length; readIndex++) {
-      ;(function (button) {
-        if (button._iconoCaretakerReadWired) return
-        button._iconoCaretakerReadWired = true
-        button.addEventListener("click", function () {
-          var assignmentId = button.getAttribute("data-icono-caretaker-mark-read") || ""
-          if (!assignmentId) return
-          button.disabled = true
-          void markCaretakerRead(assignmentId).finally(function () {
-            button.disabled = false
-          })
-        })
-      })(caretakerReadButtons[readIndex])
+      })(commentLinks[readIndex])
     }
   }
 
