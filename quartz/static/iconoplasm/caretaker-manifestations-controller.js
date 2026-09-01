@@ -1,4 +1,4 @@
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=20260901-caretaker-modal-v3"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=20260901-caretaker-modal-v4"
 import {
   MAX_PROSE_CODE_POINTS,
   codePointLength,
@@ -9,8 +9,8 @@ import {
   ownManifestation,
   proseValidationError,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=20260901-caretaker-modal-v3"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=20260901-caretaker-modal-v3"
+} from "./caretaker-manifestations-model.js?v=20260901-caretaker-modal-v4"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=20260901-caretaker-modal-v4"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -278,23 +278,39 @@ export function createCaretakerManifestationPanel({
   }
 
   function refreshPublicManifestation(state, result) {
+    const canonicalRevisionId = String(state.dossier?.head?.canonical_revision_id || "")
+    const canonicalManifestation = state.dossier?.manifestations?.find(function (manifestation) {
+      return manifestation?.revisions?.some(function (revision) {
+        return revision.manifestation_revision_id === canonicalRevisionId
+      })
+    })
+    const expectation = Object.freeze({
+      canonicalRevisionId,
+      publicPageVisible: canonicalManifestation?.public_page_visible === true,
+    })
     function refreshIfStillMounted() {
       const current = mounted.get(state.host)
       if (!current || current.symbol !== state.symbol) return null
-      return onCanonicalChanged(state.symbol)
+      return onCanonicalChanged(state.symbol, expectation)
     }
-    void Promise.resolve()
-      .then(refreshIfStillMounted)
-      .catch(function () {})
-    if (result?.projection_pending) {
-      ;[1_000, 3_000].forEach(function scheduleProjectionRead(delay) {
-        globalThis.setTimeout(function refreshAfterProjectionWake() {
-          void Promise.resolve()
-            .then(refreshIfStillMounted)
-            .catch(function () {})
-        }, delay)
-      })
+    const retryDelays = [0, 1_000, 3_000, 7_000, 15_000]
+    function attempt(index) {
+      const run = function () {
+        void Promise.resolve()
+          .then(refreshIfStillMounted)
+          .then(function (matchesPublishedState) {
+            if (matchesPublishedState !== false || index + 1 >= retryDelays.length) return
+            attempt(index + 1)
+          })
+          .catch(function () {
+            if (index + 1 < retryDelays.length) attempt(index + 1)
+          })
+      }
+      const delay = retryDelays[index]
+      if (delay > 0) globalThis.setTimeout(run, delay)
+      else run()
     }
+    attempt(0)
   }
 
   async function mutate(
