@@ -188,6 +188,10 @@ test("the main app lazy-loads the signed control beside the existing voting auth
   const source = readFileSync(new URL("./app.js", import.meta.url), "utf8")
   const css = readFileSync(new URL("./caretaker-supervote.css", import.meta.url), "utf8")
   assert.match(source, /import\("\.\/caretaker-supervote\.js\?v=/)
+  assert.match(
+    source,
+    /import \{ createRequestInbox \} from "\.\/request-inbox\.js\?v=20260901-signed-supervote-v2"/,
+  )
   assert.match(source, /supervoteControls\.mount\(geneContent/)
   assert.match(css, /outline: 2px double currentColor/)
   assert.match(css, /content: "CARETAKER"/)
