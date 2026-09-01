@@ -10,6 +10,7 @@ const appPath = new URL("./app.js", import.meta.url)
 const requestInboxPath = new URL("./request-inbox.js", import.meta.url)
 const homeOrdersPath = new URL("./home-orders.js", import.meta.url)
 const stylesPath = new URL("./styles.css", import.meta.url)
+const caretakerStylesPath = new URL("./caretaker-manifestations.css", import.meta.url)
 const headPath = new URL("../../components/Head.tsx", import.meta.url)
 const renderPagePath = new URL("../../components/renderPage.tsx", import.meta.url)
 const resourcesPath = new URL("../../util/resources.tsx", import.meta.url)
@@ -46,10 +47,11 @@ const generatedSharedCardRuntimePath = new URL(
 )
 
 test("gene caretaking is a toolbar claim and a dedicated sidebar panel, never an inbox lane", async () => {
-  const [app, inbox, styles] = await Promise.all([
+  const [app, inbox, styles, caretakerStyles] = await Promise.all([
     readFile(appPath, "utf8"),
     readFile(requestInboxPath, "utf8"),
     readFile(stylesPath, "utf8"),
+    readFile(caretakerStylesPath, "utf8"),
   ])
   assert.match(app, /Become a ['"] \+\s*esc\(symbol\) \+\s*['"] caretaker/)
   assert.match(app, /icono-standard-dialog icono-caretaker-claim-dialog/)
@@ -64,9 +66,12 @@ test("gene caretaking is a toolbar claim and a dedicated sidebar panel, never an
     app,
     /Long-press the vote button to assign a 10x supervote to a single candidate image\./,
   )
-  assert.doesNotMatch(app, /For their chosen gene, caretakers can:/)
+  assert.match(app, /For their chosen gene, caretakers can:/)
   assert.doesNotMatch(app, /Leaving options stay in caretaker settings until you need them\./)
-  assert.match(app, /<\/ul><\/div>' \+\s*'<label class="icono-caretaker-claim-terms">/)
+  assert.match(app, /<\/ul><\/div>' \+\s*'<sl-checkbox class="icono-caretaker-claim-terms"/)
+  assert.doesNotMatch(app, /<input type="checkbox" data-icono-caretaker-claim-terms>/)
+  assert.match(app, /class="icono-button icono-button--quiet" data-icono-caretaker-claim-cancel/)
+  assert.match(app, /class="icono-button" data-icono-caretaker-claim-submit disabled/)
   assert.doesNotMatch(app, /name="leave_policy"/)
   assert.match(app, /default_leave_policy: "retain"/)
   assert.match(app, /data-icono-caretaker-claim-action/)
@@ -86,6 +91,10 @@ test("gene caretaking is a toolbar claim and a dedicated sidebar panel, never an
     /\.icono-standard-dialog\s*\{[^}]*--sl-panel-background-color:\s*var\(--light\)/s,
   )
   assert.match(styles, /\.icono-standard-dialog::part\(panel\)\s*\{[^}]*background:/s)
+  assert.match(
+    caretakerStyles,
+    /:is\(\.icono-caretaker-panel, \.icono-caretaker-claim-dialog\) \.icono-button\s*\{/,
+  )
 })
 
 test("Iconoplasm font paint is in-memory, bounded, and independent of preload timing", async () => {
