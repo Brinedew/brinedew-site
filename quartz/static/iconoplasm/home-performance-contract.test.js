@@ -52,8 +52,21 @@ test("gene caretaking is a toolbar claim and a dedicated sidebar panel, never an
     readFile(stylesPath, "utf8"),
   ])
   assert.match(app, /Become a ['"] \+\s*esc\(symbol\) \+\s*['"] caretaker/)
-  assert.match(app, /For their chosen gene, caretakers can:/)
-  assert.match(app, /Leaving options stay in caretaker settings until you need them\./)
+  assert.match(app, /icono-standard-dialog icono-caretaker-claim-dialog/)
+  assert.match(app, /icono-standard-dialog icono-request-dialog/)
+  assert.match(
+    app,
+    /Write and revise gene character design \(&quot;manifestation&quot;\) as prose and tags/,
+  )
+  assert.match(app, /Rollback to an earlier manifestation version/)
+  assert.match(app, /Show or hide manifestation prose on the gene page\./)
+  assert.match(
+    app,
+    /Long-press the vote button to assign a 10x supervote to a single candidate image\./,
+  )
+  assert.doesNotMatch(app, /For their chosen gene, caretakers can:/)
+  assert.doesNotMatch(app, /Leaving options stay in caretaker settings until you need them\./)
+  assert.match(app, /<\/ul><\/div>' \+\s*'<label class="icono-caretaker-claim-terms">/)
   assert.doesNotMatch(app, /name="leave_policy"/)
   assert.match(app, /default_leave_policy: "retain"/)
   assert.match(app, /data-icono-caretaker-claim-action/)
@@ -68,6 +81,11 @@ test("gene caretaking is a toolbar claim and a dedicated sidebar panel, never an
   assert.doesNotMatch(requestPanel, /requestGroupMarkup\(\s*["']caretaking["']/)
   assert.match(inbox, /brd-sidebar-panel-title[^\n]+Caretaking/)
   assert.match(styles, /\.icono-canonical-toolbar-actions\s*\{[^}]*display:\s*flex/s)
+  assert.match(
+    styles,
+    /\.icono-standard-dialog\s*\{[^}]*--sl-panel-background-color:\s*var\(--light\)/s,
+  )
+  assert.match(styles, /\.icono-standard-dialog::part\(panel\)\s*\{[^}]*background:/s)
 })
 
 test("Iconoplasm font paint is in-memory, bounded, and independent of preload timing", async () => {

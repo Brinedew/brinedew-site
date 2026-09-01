@@ -720,7 +720,6 @@ body:has(.icono-vote-login-dialog[open]) {
   margin: 0;
 }
 
-.icono-caretaker-capabilities p,
 .icono-caretaker-capabilities ul {
   margin: 0;
 }
@@ -733,11 +732,6 @@ body:has(.icono-vote-login-dialog[open]) {
 
 .icono-caretaker-capabilities li::marker {
   color: var(--secondary);
-}
-
-.icono-caretaker-capabilities__note {
-  color: color-mix(in srgb, var(--dark) 68%, var(--light) 32%);
-  font-size: 0.82rem;
 }
 
 .icono-caretaker-claim-form label {
@@ -758,8 +752,7 @@ body:has(.icono-vote-login-dialog[open]) {
   width: 100%;
 }
 
-.icono-request-dialog {
-  --width: min(68rem, calc(100vw - 2rem));
+.icono-standard-dialog {
   --sl-font-sans: "IBM Plex Mono", monospace;
   --sl-focus-ring-color: color-mix(in srgb, var(--secondary) 42%, transparent);
   --sl-input-height-small: 2.5rem;
@@ -783,12 +776,16 @@ body:has(.icono-vote-login-dialog[open]) {
   color: var(--dark);
 }
 
-.icono-request-dialog::part(overlay) {
+.icono-request-dialog {
+  --width: min(68rem, calc(100vw - 2rem));
+}
+
+.icono-standard-dialog::part(overlay) {
   background: color-mix(in srgb, rgba(27, 18, 11, 0.5) 88%, transparent 12%);
   backdrop-filter: blur(8px);
 }
 
-.icono-request-dialog::part(panel) {
+.icono-standard-dialog::part(panel) {
   max-height: min(48rem, calc(100vh - 2rem));
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
@@ -797,22 +794,22 @@ body:has(.icono-vote-login-dialog[open]) {
   box-shadow: 0 24px 48px rgba(27, 18, 11, 0.18);
 }
 
-.icono-request-dialog::part(header) {
+.icono-standard-dialog::part(header) {
   border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 74%, transparent);
 }
 
-.icono-request-dialog::part(title) {
+.icono-standard-dialog::part(title) {
   font-family: "Special Elite", Georgia, serif;
   font-size: 1.15rem;
   color: var(--dark);
 }
 
-.icono-request-dialog::part(body) {
+.icono-standard-dialog::part(body) {
   overflow: hidden;
   padding: 1rem 1.2rem 1.2rem;
 }
 
-.icono-request-dialog::part(footer) {
+.icono-standard-dialog::part(footer) {
   padding: 0.8rem 1.1rem 1rem;
   border-top: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent 28%);
   background: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
