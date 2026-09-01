@@ -381,13 +381,22 @@ function isStoragePropagationPending(error) {
   )
 }
 
-async function acknowledgeCutoverProjectionEvents(authoringDb, event) {
+async function acknowledgeCutoverProjectionEvents(primaryDb, authoringDb, event) {
   await prepared(
     authoringDb,
     `UPDATE icono_manifestation_events
         SET projection_status = 'published', projection_next_attempt_at = NULL
       WHERE gene_id = ? AND event_sequence <= ?
         AND projection_status IN ('pending', 'failed')`,
+    String(event.gene_id || ""),
+    Number(event.event_sequence),
+  ).run()
+  await prepared(
+    primaryDb,
+    `UPDATE icono_manifestation_publication_wakes
+        SET status = 'published',
+            published_at = COALESCE(published_at, CURRENT_TIMESTAMP)
+      WHERE gene_id = ? AND authority_event_sequence <= ? AND status = 'pending'`,
     String(event.gene_id || ""),
     Number(event.event_sequence),
   ).run()
@@ -418,7 +427,7 @@ async function processOneItem(context, rawItem, now) {
         cutoverRunId: item.cutover_run_id,
         event,
       })
-      await acknowledgeCutoverProjectionEvents(context.authoringDb, event)
+      await acknowledgeCutoverProjectionEvents(context.primaryDb, context.authoringDb, event)
       await markItem(context.authoringDb, item, ["registered_unseeded"], "projected", now)
       return
     }
@@ -452,7 +461,7 @@ async function processOneItem(context, rawItem, now) {
       cutoverRunId: item.cutover_run_id,
       event,
     })
-    await acknowledgeCutoverProjectionEvents(context.authoringDb, event)
+    await acknowledgeCutoverProjectionEvents(context.primaryDb, context.authoringDb, event)
     await markItem(context.authoringDb, item, ["adopted"], "projected", now)
     return
   }
