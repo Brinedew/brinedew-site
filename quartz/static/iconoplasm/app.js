@@ -206,6 +206,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   var API = apiBase()
 
+  function apiErrorMessage(payload, status) {
+    var error = payload && payload.error
+    if (typeof error === "string" && error.trim()) return error
+    if (error && typeof error === "object") {
+      if (typeof error.message === "string" && error.message.trim()) return error.message
+      if (typeof error.code === "string" && error.code.trim())
+        return error.code.replaceAll("_", " ")
+    }
+    if (payload && typeof payload.message === "string" && payload.message.trim()) {
+      return payload.message
+    }
+    return "HTTP " + status
+  }
+
   function fetchJSON(path, init) {
     var requestInit = init || {}
     return fetch(API + path, requestInit).then(function (r) {
@@ -219,7 +233,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           }
         }
         if (!r.ok) {
-          var err = new Error((payload && payload.error) || "HTTP " + r.status)
+          var err = new Error(apiErrorMessage(payload, r.status))
           err.status = r.status
           err.payload = payload
           throw err
