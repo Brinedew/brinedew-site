@@ -4,7 +4,7 @@ import {
   codePointLength,
   manifestationWordDiff,
   ownManifestation,
-} from "./caretaker-manifestations-model.js?v=20260901-caretaker-modal-v2"
+} from "./caretaker-manifestations-model.js?v=20260901-caretaker-modal-v3"
 
 export function diffMarkup(before, after, escapeHtml) {
   if (String(before || "") === String(after || "")) {
@@ -280,16 +280,24 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
   if (canWrite) {
     const currentBody = String(own?.head_body || "")
     const currentTags = String(own?.head_tags || "")
+    const tagsUnavailable = own?.tags_body_unavailable === true
     body +=
+      (tagsUnavailable
+        ? '<div class="icono-caretaker-callout" data-tone="error"><p>Saved Tags could not be loaded. Editing is paused so they cannot be replaced by blank text. Any unsent draft on this device remains preserved.</p><button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-retry-tags>Retry loading saved Tags</button></div>'
+        : "") +
       '<form class="icono-caretaker-editor" data-icono-caretaker-editor>' +
       '<label for="icono-caretaker-prose">Your manifestation</label>' +
       '<textarea id="icono-caretaker-prose" rows="8" maxlength="' +
       MAX_PROSE_CODE_POINTS +
-      '" data-icono-caretaker-prose>' +
+      '" data-icono-caretaker-prose' +
+      (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
+      ">" +
       esc(currentBody) +
       "</textarea>" +
       '<label for="icono-caretaker-tags">Tags</label>' +
-      '<textarea id="icono-caretaker-tags" rows="5" maxlength="32767" data-icono-caretaker-tags aria-describedby="icono-caretaker-tags-hint">' +
+      '<textarea id="icono-caretaker-tags" rows="5" maxlength="32767" data-icono-caretaker-tags aria-describedby="icono-caretaker-tags-hint"' +
+      (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
+      ">" +
       esc(currentTags) +
       "</textarea>" +
       '<p id="icono-caretaker-tags-hint" class="icono-caretaker-editor__hint">Generation Tags. They never appear on the gene page.</p>' +

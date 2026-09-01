@@ -1,4 +1,4 @@
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=20260901-caretaker-modal-v2"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=20260901-caretaker-modal-v3"
 import {
   MAX_PROSE_CODE_POINTS,
   codePointLength,
@@ -9,8 +9,8 @@ import {
   ownManifestation,
   proseValidationError,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=20260901-caretaker-modal-v2"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=20260901-caretaker-modal-v2"
+} from "./caretaker-manifestations-model.js?v=20260901-caretaker-modal-v3"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=20260901-caretaker-modal-v3"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -81,7 +81,7 @@ export function createCaretakerManifestationPanel({
     state.busy = busy
     state.host.setAttribute("aria-busy", busy ? "true" : "false")
     state.host.querySelectorAll("button, textarea, input").forEach(function (control) {
-      control.disabled = busy
+      control.disabled = busy || control.hasAttribute("data-icono-caretaker-disabled")
     })
   }
 
@@ -197,6 +197,7 @@ export function createCaretakerManifestationPanel({
         own.head_tags = String(material?.tags?.tags_text || "")
       } catch (_error) {
         own.head_tags = ""
+        own.tags_body_unavailable = true
       }
     }
     render(state, options)
@@ -246,6 +247,31 @@ export function createCaretakerManifestationPanel({
       render(state, { preserveDraft: true })
     } catch (error) {
       setStatus(state, String(error?.message || "Older versions could not be loaded."), "error")
+    } finally {
+      setBusy(state, false)
+    }
+  }
+
+  async function retryTags(state) {
+    if (state.busy) return
+    setBusy(state, true)
+    try {
+      await reload(state)
+      if (ownManifestation(state.dossier)?.tags_body_unavailable) {
+        setStatus(
+          state,
+          "Saved Tags are still temporarily unavailable. Editing remains paused so they cannot be replaced by blank text.",
+          "error",
+        )
+        return
+      }
+      setStatus(state, "Saved Tags loaded. Editing is available again.", "success")
+    } catch (error) {
+      setStatus(
+        state,
+        String(error?.message || "Saved Tags could not be loaded. Editing remains paused."),
+        "error",
+      )
     } finally {
       setBusy(state, false)
     }
@@ -455,6 +481,7 @@ export function createCaretakerManifestationPanel({
     loadOlderHistory,
     mounted,
     mutate,
+    retryTags,
     scheduleAutosave,
     saveDraft,
     setStatus,

@@ -266,6 +266,52 @@ test("signed-out mounting performs zero caretaker requests", async () => {
   assert.equal(host.hidden, true)
 })
 
+test("a failed Tags body read pauses editing until an explicit retry restores the exact Tags", async () => {
+  const { document, Event } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
+  let bodyReads = 0
+  const panel = createCaretakerManifestationPanel({
+    fetchJSON: async function (path) {
+      if (!path.endsWith("/body")) {
+        const current = dossier()
+        current.manifestations[0].manifestation_head_revision_id = "revision_2"
+        current.manifestations[0].revisions[0].derivative = {
+          manifestation_derivative_id: "derivative_revision_2",
+          body_available: true,
+        }
+        return current
+      }
+      bodyReads += 1
+      if (bodyReads === 1) {
+        const error = new Error("Tags storage is temporarily unavailable")
+        error.status = 500
+        throw error
+      }
+      return { tags: { tags_text: "rose seal, archive plate" } }
+    },
+    escapeHtml,
+    storage: null,
+  })
+  const host = document.getElementById("host")
+
+  await panel.mount(host, { symbol: "TP53", currentUser: { id: "account_1" }, authResolved: true })
+
+  assert.equal(host.querySelector("[data-icono-caretaker-prose]").disabled, true)
+  assert.equal(host.querySelector("[data-icono-caretaker-tags]").disabled, true)
+  assert.match(host.textContent, /Editing is paused so they cannot be replaced by blank text/)
+
+  host
+    .querySelector("[data-icono-caretaker-retry-tags]")
+    .dispatchEvent(new Event("click", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 10))
+
+  assert.equal(bodyReads, 2)
+  assert.equal(host.querySelector("[data-icono-caretaker-prose]").disabled, false)
+  assert.equal(host.querySelector("[data-icono-caretaker-tags]").disabled, false)
+  assert.equal(host.querySelector("[data-icono-caretaker-tags]").value, "rose seal, archive plate")
+  assert.equal(host.querySelector("[data-icono-caretaker-retry-tags]"), null)
+})
+
 test("a suspension keeps an unsent local draft readable and explicitly removable", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
