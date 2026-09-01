@@ -16047,11 +16047,7 @@ export async function resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllo
   return resolveIconoplasmPublishedGeneDiscoveryRecord(env, rawIdentifier)
 }
 
-async function resolveGene(
-  env,
-  rawId,
-  { includeProtein = true, throwOnUnavailable = false } = {},
-) {
+async function resolveGene(env, rawId, { includeProtein = true, throwOnUnavailable = false } = {}) {
   const requestedSymbol = normalizeSymbol(rawId)
   if (!requestedSymbol) return null
   let symbol = requestedSymbol
