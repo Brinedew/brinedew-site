@@ -448,7 +448,29 @@ export class CaretakerSupervoteLedger {
         }
         if (
           event.caretaker_assignment_id === current.caretaker_assignment_id &&
-          event.assignment_version <= Number(current.assignment_version)
+          event.assignment_version === Number(current.assignment_version)
+        ) {
+          if (
+            event.caretaker_account_id !== current.caretaker_account_id ||
+            event.status !== current.status ||
+            event.gene_symbol !== current.gene_symbol
+          ) {
+            fail(
+              "ASSIGNMENT_SNAPSHOT_CONFLICT",
+              "Assignment version already represents different authority state",
+              409,
+            )
+          }
+          return {
+            ok: true,
+            changed: false,
+            replayed: true,
+            snapshot: this.snapshot(),
+          }
+        }
+        if (
+          event.caretaker_assignment_id === current.caretaker_assignment_id &&
+          event.assignment_version < Number(current.assignment_version)
         ) {
           fail("STALE_ASSIGNMENT_EVENT", "Assignment version cannot move backward", 409)
         }
