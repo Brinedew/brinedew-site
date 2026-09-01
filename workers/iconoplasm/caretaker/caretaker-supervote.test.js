@@ -99,6 +99,57 @@ function command(overrides = {}) {
   }
 }
 
+test("a later authority snapshot of the exact assignment version is an idempotent no-op", async () => {
+  const { ledger, db } = testLedger()
+  const first = await ledger.projectAssignment(assignmentEvent())
+  const replay = await ledger.projectAssignment(
+    assignmentEvent({
+      event_id: "event_manifestation_saved",
+      event_sequence: 101,
+    }),
+  )
+
+  assert.equal(first.changed, true)
+  assert.equal(replay.changed, false)
+  assert.equal(replay.replayed, true)
+  assert.deepEqual(
+    {
+      ...db
+        .prepare(
+          `SELECT assignment_version, authority_event_id, authority_event_sequence
+             FROM caretaker_assignment_projection WHERE singleton = 1`,
+        )
+        .get(),
+    },
+    {
+      assignment_version: 1,
+      authority_event_id: "event_assignment_1",
+      authority_event_sequence: 100,
+    },
+  )
+})
+
+test("an equal assignment version with different authority state is rejected", async () => {
+  const { ledger } = testLedger()
+  await ledger.projectAssignment(assignmentEvent())
+
+  await assert.rejects(
+    ledger.projectAssignment(
+      assignmentEvent({
+        event_id: "event_conflicting_snapshot",
+        event_sequence: 101,
+        assignment: {
+          caretaker_assignment_id: "assignment_tp53",
+          account_id: "acct_11111111111111111111111111111111",
+          status: "suspended",
+          assignment_version: 1,
+        },
+      }),
+    ),
+    (error) => error.code === "ASSIGNMENT_SNAPSHOT_CONFLICT" && error.status === 409,
+  )
+})
+
 test("caretaker supervote migration keeps assignment, selection, audit, and receipts separate from FIT votes", () => {
   const db = new DatabaseSync(":memory:")
   db.exec(
