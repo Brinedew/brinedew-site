@@ -97,12 +97,15 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
       return next
     }
     async arm(delay, { control = false, at = null } = {}) {
-      const due = Math.max(
-        at ?? Date.now() + delay,
-        Number(this.repo.get("failure")?.retry_at || 0),
-      )
+      const now = Date.now()
+      const due = Math.max(at ?? now + delay, Number(this.repo.get("failure")?.retry_at || 0))
       const existing = await this.state.storage.getAlarm()
-      if (!existing || existing > due) {
+      // Cloudflare can retain a past-due alarm after the account-wide daily
+      // write allowance blocked its invocation. That timestamp no longer owns
+      // future execution: explicitly replace it after the UTC reset. Keeping
+      // it made every later wake look "already scheduled" and stranded an
+      // otherwise durable publication job indefinitely.
+      if (!existing || existing <= now || existing > due) {
         // setAlarm is a billed SQLite row write, not free scheduling. Reserve
         // that row and the reservation itself; merely checking an existing
         // earlier alarm does not write. Keep quota-day recovery durable.
