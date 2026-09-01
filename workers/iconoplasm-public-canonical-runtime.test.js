@@ -35,6 +35,7 @@ function material(symbol = "TP53") {
       canonical_selection_id: `selection_${symbol.toLowerCase()}`,
       body_sha256: "a".repeat(64),
       body_bytes: 36,
+      public_page_visible: true,
       prose: `${symbol} exact canonical prose`,
     },
     accepted_tags_derivative: {
@@ -91,6 +92,21 @@ test("authoritative publication carries exact public body identity and compound 
   assert.equal(output.canonical_manifestation.accepted_tags_derivative.tags_text, "exact tags")
   assert.equal(output.canonical_manifestation.manifestation_revision_id, "revision_tp53")
   assert.equal(output.canonical_manifestation.body_sha256, "a".repeat(64))
+})
+
+test("hidden canonical manifestations expose no prose to the public gene payload", async () => {
+  const hidden = material()
+  hidden.canonical.public_page_visible = false
+  const output = await hydratePublicCanonicalGeneRecord(
+    {
+      ICONOPLASM_DB: database("authoritative"),
+      ICONOPLASM_AUTHORING_DB: {},
+    },
+    { symbol: "TP53" },
+    { readMaterial: async () => hidden },
+  )
+  assert.equal(output.canonical_manifestation.public_page_visible, false)
+  assert.equal(output.canonical_manifestation.prose, null)
 })
 
 test("shadow-frozen publication pauses instead of exposing shadow material", async () => {

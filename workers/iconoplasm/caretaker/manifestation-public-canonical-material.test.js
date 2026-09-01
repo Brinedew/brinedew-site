@@ -24,11 +24,22 @@ const AUTHORING_MIGRATION = readFileSync(
   ),
   "utf8",
 )
+const AUTHORING_VISIBILITY_MIGRATION = readFileSync(
+  new URL(
+    "../../../migrations-iconoplasm-authoring/0007_manifestation_page_visibility.sql",
+    import.meta.url,
+  ),
+  "utf8",
+)
 const PRIMARY_MIGRATION = readFileSync(
   new URL(
     "../../../migrations-iconoplasm/0084_manifestation_authority_cutover.sql",
     import.meta.url,
   ),
+  "utf8",
+)
+const PRIMARY_VISIBILITY_MIGRATION = readFileSync(
+  new URL("../../../migrations-iconoplasm/0089_manifestation_page_visibility.sql", import.meta.url),
   "utf8",
 )
 const ENV = Object.freeze({
@@ -106,6 +117,7 @@ function installStorageFetch(objects) {
 async function fixture({ mode = "authoritative" } = {}) {
   const authoringRaw = new DatabaseSync(":memory:")
   authoringRaw.exec(AUTHORING_MIGRATION)
+  authoringRaw.exec(AUTHORING_VISIBILITY_MIGRATION)
   const primaryRaw = new DatabaseSync(":memory:")
   primaryRaw.exec(`
     CREATE TABLE icono_gene_essence (
@@ -116,6 +128,7 @@ async function fixture({ mode = "authoritative" } = {}) {
     );
   `)
   primaryRaw.exec(PRIMARY_MIGRATION)
+  primaryRaw.exec(PRIMARY_VISIBILITY_MIGRATION)
   primaryRaw
     .prepare(
       `INSERT INTO icono_gene_essence (

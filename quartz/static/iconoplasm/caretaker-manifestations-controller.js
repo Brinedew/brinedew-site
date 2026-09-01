@@ -6,6 +6,7 @@ import {
   defaultDraftStorage,
   normalizedDossier,
   normalizedSymbol,
+  ownManifestation,
   proseValidationError,
   revisionById,
 } from "./caretaker-manifestations-model.js"
@@ -36,7 +37,11 @@ export function createCaretakerManifestationPanel({
 
   function saveDraft(state, prose) {
     try {
-      storage?.setItem(draftKey(state), String(prose || ""))
+      const value =
+        prose && typeof prose === "object"
+          ? { prose: String(prose.prose || ""), tags: String(prose.tags || "") }
+          : { prose: String(prose || ""), tags: "" }
+      storage?.setItem(draftKey(state), JSON.stringify(value))
     } catch (_error) {
       // A storage-disabled browser still keeps the mounted textarea intact.
     }
@@ -50,9 +55,17 @@ export function createCaretakerManifestationPanel({
 
   function restoreDraft(state) {
     try {
-      return String(storage?.getItem(draftKey(state)) || "")
+      const raw = String(storage?.getItem(draftKey(state)) || "")
+      if (!raw) return null
+      try {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === "object") {
+          return { prose: String(parsed.prose || ""), tags: String(parsed.tags || "") }
+        }
+      } catch (_error) {}
+      return { prose: raw, tags: "" }
     } catch (_error) {
-      return ""
+      return null
     }
   }
 
@@ -73,16 +86,41 @@ export function createCaretakerManifestationPanel({
   }
 
   function render(state, { preserveDraft = false } = {}) {
+    const existingDialog = state.host.querySelector("[data-icono-caretaker-dialog]")
+    const wasOpen = existingDialog?.open === true
     const draft = preserveDraft
-      ? state.host.querySelector("[data-icono-caretaker-prose]")?.value
-      : ""
+      ? {
+          prose: String(state.host.querySelector("[data-icono-caretaker-prose]")?.value || ""),
+          tags: String(state.host.querySelector("[data-icono-caretaker-tags]")?.value || ""),
+        }
+      : null
     state.host.innerHTML = renderCaretakerManifestationPanel(state.dossier, escapeHtml)
     const textarea = state.host.querySelector("[data-icono-caretaker-prose]")
+    const tags = state.host.querySelector("[data-icono-caretaker-tags]")
     const restored = draft || restoreDraft(state)
-    if (textarea && restored) textarea.value = restored
-    if (!textarea && restored) mountLocalDraftRecovery(state, restored)
+    if (textarea && restored) textarea.value = restored.prose
+    if (tags && restored) tags.value = restored.tags
+    if (!textarea && restored?.prose) mountLocalDraftRecovery(state, restored.prose)
     if (textarea) updateCount(textarea)
     if (state.basedOnRevisionId) showBasis(state)
+    activateTab(state, state.activeTab || "manifestation")
+    const dialog = state.host.querySelector("[data-icono-caretaker-dialog]")
+    if (wasOpen && dialog && !dialog.open) dialog.showModal()
+  }
+
+  function activateTab(state, tab) {
+    const selectedTab = new Set(["manifestation", "history", "settings"]).has(tab)
+      ? tab
+      : "manifestation"
+    state.activeTab = selectedTab
+    state.host.querySelectorAll("[data-icono-caretaker-tab]").forEach(function (button) {
+      const selected = button.getAttribute("data-icono-caretaker-tab") === selectedTab
+      button.setAttribute("aria-selected", selected ? "true" : "false")
+      button.tabIndex = selected ? 0 : -1
+    })
+    state.host.querySelectorAll("[data-icono-caretaker-tabpanel]").forEach(function (panel) {
+      panel.hidden = panel.getAttribute("data-icono-caretaker-tabpanel") !== selectedTab
+    })
   }
 
   function mountLocalDraftRecovery(state, prose) {
@@ -144,6 +182,23 @@ export function createCaretakerManifestationPanel({
   async function reload(state, options) {
     const payload = await request(state, "", { method: "GET" })
     state.dossier = normalizedDossier(payload, state.symbol)
+    const own = ownManifestation(state.dossier)
+    const headRevision = own?.revisions?.find(function (revision) {
+      return revision.manifestation_revision_id === own.manifestation_head_revision_id
+    })
+    const derivative = headRevision?.derivative
+    if (derivative?.manifestation_derivative_id && derivative.body_available !== false) {
+      try {
+        const material = await request(
+          state,
+          `/derivatives/${encodeURIComponent(derivative.manifestation_derivative_id)}/body`,
+          { method: "GET" },
+        )
+        own.head_tags = String(material?.tags?.tags_text || "")
+      } catch (_error) {
+        own.head_tags = ""
+      }
+    }
     render(state, options)
     void Promise.resolve().then(function () {
       return onDossierChanged({
@@ -299,6 +354,100 @@ export function createCaretakerManifestationPanel({
     }
   }
 
+  function autosaveIndicator(state, message, tone = "") {
+    const target = state.host.querySelector("[data-icono-caretaker-autosave-state]")
+    if (!target) return
+    target.textContent = message
+    target.dataset.tone = tone
+  }
+
+  function scheduleAutosave(state) {
+    globalThis.clearTimeout(state.autosaveTimer)
+    autosaveIndicator(state, "Unsaved changes", "pending")
+    state.autosaveTimer = globalThis.setTimeout(function () {
+      void autosave(state)
+    }, 1100)
+  }
+
+  async function autosave(state) {
+    if (state.busy) return scheduleAutosave(state)
+    const proseControl = state.host.querySelector("[data-icono-caretaker-prose]")
+    const tagsControl = state.host.querySelector("[data-icono-caretaker-tags]")
+    if (!proseControl || !tagsControl) return
+    const snapshot = {
+      prose: String(proseControl.value || "")
+        .normalize("NFC")
+        .replace(/\r\n?/g, "\n"),
+      tags: String(tagsControl.value || "")
+        .normalize("NFC")
+        .replace(/\r\n?/g, "\n"),
+    }
+    const validation = proseValidationError(snapshot.prose)
+    if (validation) {
+      autosaveIndicator(state, "Not saved", "error")
+      return setStatus(state, validation, "error")
+    }
+    if (new TextEncoder().encode(snapshot.tags).byteLength > 32 * 1024 - 3) {
+      autosaveIndicator(state, "Not saved", "error")
+      return setStatus(state, "Keep Tags below 32 KiB.", "error")
+    }
+    const fingerprint = JSON.stringify(snapshot)
+    if (fingerprint === state.lastSavedFingerprint) {
+      autosaveIndicator(state, "Saved", "success")
+      return
+    }
+    autosaveIndicator(state, "Saving…", "pending")
+    saveDraft(state, snapshot)
+    try {
+      const own = ownManifestation(state.dossier)
+      const revision = await mutate(
+        state,
+        "/revisions",
+        {
+          prose: snapshot.prose,
+          expected_assignment_version: Number(state.dossier.assignment?.assignment_version || 0),
+          expected_manifestation_version: Number(own?.row_version || 0),
+          based_on_revision_id: state.basedOnRevisionId || null,
+        },
+        { success: "Manifestation autosaved as a new version.", preserveDraft: true },
+      )
+      if (!revision) return
+      if (snapshot.tags.trim()) {
+        const submitted = await mutate(
+          state,
+          `/revisions/${encodeURIComponent(revision.manifestation_revision_id)}/tags-derivatives`,
+          {
+            tags_text: snapshot.tags,
+            expected_gene_revision: Number(state.dossier.head.gene_revision || 0),
+          },
+          { success: "Tags autosaved.", preserveDraft: true },
+        )
+        if (!submitted) return
+        await mutate(
+          state,
+          `/revisions/${encodeURIComponent(revision.manifestation_revision_id)}/tags-derivative-head`,
+          {
+            manifestation_derivative_id: submitted.manifestation_derivative_id,
+            expected_derivative_head_version: Number(submitted.derivative_head_version || 0),
+            expected_gene_revision: Number(state.dossier.head.gene_revision || 0),
+          },
+          { success: "Manifestation and Tags autosaved.", preserveDraft: true },
+        )
+      }
+      state.lastSavedFingerprint = fingerprint
+      state.basedOnRevisionId = null
+      const current = {
+        prose: String(state.host.querySelector("[data-icono-caretaker-prose]")?.value || ""),
+        tags: String(state.host.querySelector("[data-icono-caretaker-tags]")?.value || ""),
+      }
+      if (JSON.stringify(current) === fingerprint) clearDraft(state)
+      autosaveIndicator(state, "Saved", "success")
+    } catch (_error) {
+      autosaveIndicator(state, "Not saved — retrying", "error")
+      scheduleAutosave(state)
+    }
+  }
+
   const wire = createCaretakerManifestationEventWiring({
     clearDraft,
     confirmAction,
@@ -306,8 +455,10 @@ export function createCaretakerManifestationPanel({
     loadOlderHistory,
     mounted,
     mutate,
+    scheduleAutosave,
     saveDraft,
     setStatus,
+    showBasis,
     updateCount,
     wiredHosts,
   })
@@ -327,6 +478,9 @@ export function createCaretakerManifestationPanel({
       busy: false,
       basedOnRevisionId: null,
       pendingMutation: null,
+      activeTab: "manifestation",
+      autosaveTimer: null,
+      lastSavedFingerprint: null,
     }
     mounted.set(host, state)
     host.hidden = false
@@ -350,7 +504,14 @@ export function createCaretakerManifestationPanel({
     }
   }
 
-  return Object.freeze({ mount })
+  function open(host) {
+    const dialog = host?.querySelector?.("[data-icono-caretaker-dialog]")
+    if (!dialog) return false
+    if (!dialog.open) dialog.showModal()
+    return true
+  }
+
+  return Object.freeze({ mount, open })
 }
 
 export { normalizedDossier, proseValidationError }

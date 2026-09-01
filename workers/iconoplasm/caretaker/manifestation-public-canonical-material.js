@@ -145,6 +145,7 @@ async function projectionRow(primaryDb, { geneId, canonicalSymbol }) {
 function assertProjectionMatchesAuthority(projection, exactRecord, authority) {
   const numericFields = new Set([
     "canonical_body_bytes",
+    "canonical_public_page_visible",
     "accepted_tags_derivative_head_version",
     "accepted_tags_body_bytes",
     "accepted_tags_text_bytes",
@@ -163,6 +164,7 @@ function assertProjectionMatchesAuthority(projection, exactRecord, authority) {
     canonical_body_sha256: exactRecord.canonical?.body_sha256 || null,
     canonical_body_bytes: exactRecord.canonical?.body_bytes || null,
     canonical_revision_lifecycle: exactRecord.canonical?.lifecycle || null,
+    canonical_public_page_visible: exactRecord.canonical?.public_page_visible ? 1 : 0,
     accepted_tags_derivative_id:
       exactRecord.accepted_tags_derivative?.manifestation_derivative_id || null,
     accepted_tags_derivative_head_version:
@@ -396,6 +398,7 @@ export async function readPublicCanonicalMaterial({
       canonical_selection_id: canonical.canonical_selection_id,
       body_sha256: canonical.body_sha256,
       body_bytes: Number(canonical.body_bytes),
+      public_page_visible: canonical.public_page_visible === true,
       prose,
     }),
     accepted_tags_derivative: tagsMaterial ? publicDerivative(record, tagsMaterial) : null,

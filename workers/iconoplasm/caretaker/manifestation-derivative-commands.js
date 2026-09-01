@@ -27,7 +27,7 @@ import {
 
 async function derivativeActor(db, command) {
   const actorKind = normalizeActorKind(command.actorKind || "service")
-  if (!new Set(["administrator", "service", "migration"]).has(actorKind)) {
+  if (!new Set(["account", "administrator", "service", "migration"]).has(actorKind)) {
     throw authorityError(
       "DERIVATIVE_SERVICE_REQUIRED",
       "Derivative service authority is required",
@@ -165,6 +165,23 @@ export async function submitTagsDerivative(
   const gene = await requireActiveGene(db, revision.gene_id)
   const head = await readHead(db, gene.gene_id)
   const manifestation = await readManifestation(db, revision.manifestation_id)
+  if (actor.actorKind === "account") {
+    const assignment = await first(
+      db,
+      `SELECT caretaker_assignment_id FROM icono_caretaker_assignments
+        WHERE caretaker_assignment_id = ? AND account_id = ? AND gene_id = ? AND status = 'active'`,
+      revision.caretaker_assignment_id,
+      actor.actorAccountId,
+      gene.gene_id,
+    )
+    if (!assignment || manifestation.author_account_id !== actor.actorAccountId) {
+      throw authorityError(
+        "DERIVATIVE_MANIFESTATION_NOT_OWNED",
+        "Caretakers may edit Tags only for their current manifestation",
+        403,
+      )
+    }
+  }
   const sourceHash = normalizeSha256(sourceBodySha256, "source_body_sha256")
   if (sourceHash !== revision.body_sha256) {
     throw authorityError(
@@ -427,6 +444,23 @@ export async function selectTagsDerivativeHead(
   const gene = await requireActiveGene(db, derivative.gene_id)
   const head = await readHead(db, gene.gene_id)
   const manifestation = await readManifestation(db, derivative.manifestation_id)
+  if (actor.actorKind === "account") {
+    const assignment = await first(
+      db,
+      `SELECT caretaker_assignment_id FROM icono_caretaker_assignments
+        WHERE caretaker_assignment_id = ? AND account_id = ? AND gene_id = ? AND status = 'active'`,
+      derivative.caretaker_assignment_id,
+      actor.actorAccountId,
+      gene.gene_id,
+    )
+    if (!assignment || manifestation.author_account_id !== actor.actorAccountId) {
+      throw authorityError(
+        "DERIVATIVE_MANIFESTATION_NOT_OWNED",
+        "Caretakers may select Tags only for their current manifestation",
+        403,
+      )
+    }
+  }
   const revision = await readRevision(db, derivative.manifestation_revision_id)
   const derivativeHead = await first(
     db,
