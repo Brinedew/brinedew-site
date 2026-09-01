@@ -394,6 +394,7 @@ test("caretaker supervote target validation binds candidate eligibility to this 
         symbol: "TP53",
         account_id: "acct_11111111111111111111111111111111",
         asset_sha256: foreignAsset,
+        direction: 1,
         command_id: "cmd_foreign_target",
         request_sha256: "1".repeat(64),
         expected_assignment_version: 1,
@@ -413,6 +414,7 @@ test("caretaker supervote target validation binds candidate eligibility to this 
         symbol: "TP53",
         account_id: "acct_11111111111111111111111111111111",
         asset_sha256: eligibleAsset,
+        direction: -1,
         command_id: "cmd_eligible_target",
         request_sha256: "2".repeat(64),
         expected_assignment_version: 1,
@@ -422,6 +424,7 @@ test("caretaker supervote target validation binds candidate eligibility to this 
   )
   assert.equal(accepted.status, 200)
   assert.equal(coordinator.caretakerSupervotes.snapshot().asset_sha256, eligibleAsset)
+  assert.equal(coordinator.caretakerSupervotes.snapshot().direction, -1)
   assert.equal(
     db.calls.some(
       (call) => call.type === "first" && call.args[0] === "TP53" && call.args[1] === foreignAsset,

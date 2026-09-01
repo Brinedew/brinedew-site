@@ -5,6 +5,7 @@ import test from "node:test"
 import {
   caretakerCommentOutboxStatement,
   deliverPendingCaretakerCommentNotifications,
+  deliverPendingCaretakerSupervoteNotifications,
   resolveCaretakerCommentRecipient,
 } from "./iconoplasm-caretaker-comment-notifications.js"
 import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
@@ -18,8 +19,22 @@ function setup(t) {
   const accounts = new TestD1()
   primary.raw.exec(`
     CREATE TABLE icono_gene_comments (id INTEGER PRIMARY KEY, gene_symbol TEXT, status TEXT);
+    CREATE TABLE icono_publish_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      gene_symbol TEXT NOT NULL,
+      from_asset_sha256 TEXT,
+      to_asset_sha256 TEXT,
+      action TEXT NOT NULL
+    );
+    CREATE TABLE icono_publish_state (
+      gene_symbol TEXT PRIMARY KEY,
+      current_asset_sha256 TEXT
+    );
+    INSERT INTO icono_publish_state VALUES ('TP53', '${"b".repeat(64)}');
+    ${readFileSync(new URL("../migrations-iconoplasm/0085_caretaker_supervotes.sql", import.meta.url), "utf8")}
     ${readFileSync(new URL("../migrations-iconoplasm/0086_caretaker_assignment_notifications.sql", import.meta.url), "utf8")}
     ${readFileSync(new URL("../migrations-iconoplasm/0090_caretaker_coordination.sql", import.meta.url), "utf8")}
+    ${readFileSync(new URL("../migrations-iconoplasm/0092_signed_caretaker_supervote.sql", import.meta.url), "utf8")}
     INSERT INTO icono_caretaker_assignment_notifications (
       caretaker_assignment_id, account_id, gene_id, canonical_symbol,
       assignment_status, assignment_version, notification_state,
@@ -28,6 +43,16 @@ function setup(t) {
       '${ASSIGNMENT}', '${ACCOUNT}', 'gene_caretaker_comment_0001', 'TP53',
       'active', 1, 'resolved', 'event_caretaker_comment_0001', 1, CURRENT_TIMESTAMP
     );
+    INSERT INTO icono_caretaker_vote_assignment_projection (
+      gene_symbol, gene_id, caretaker_assignment_id, caretaker_account_id,
+      status, assignment_version, authority_event_id, authority_event_sequence
+    ) VALUES ('TP53', 'gene_caretaker_comment_0001', '${ASSIGNMENT}', '${ACCOUNT}',
+              'active', 1, 'event_caretaker_comment_0001', 1);
+    INSERT INTO icono_caretaker_supervote_projection (
+      gene_symbol, gene_id, caretaker_assignment_id, caretaker_account_id,
+      asset_sha256, direction, active, weight, supervote_version, last_mutation_id
+    ) VALUES ('TP53', 'gene_caretaker_comment_0001', '${ASSIGNMENT}', '${ACCOUNT}',
+              '${"a".repeat(64)}', 1, 1, 10, 3, 'mutation_supervote_0001');
   `)
   accounts.raw.exec(`
     CREATE TABLE brinedew_account_identities (
@@ -142,6 +167,103 @@ test("delivery revalidates tenure and suppresses a DM after caretaker departure"
     assert.equal(
       primary.raw.prepare("SELECT discord_status FROM icono_caretaker_comment_notifications").get()
         .discord_status,
+      "suppressed",
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("a positive preferred canonical loss enqueues and delivers one deduplicated bot DM", async (t) => {
+  const { primary, env } = setup(t)
+  primary.raw
+    .prepare(
+      `INSERT INTO icono_publish_events (
+         id, gene_symbol, from_asset_sha256, to_asset_sha256, action
+       ) VALUES (42, 'TP53', ?, ?, 'publish')`,
+    )
+    .run("a".repeat(64), "b".repeat(64))
+  assert.equal(
+    primary.raw
+      .prepare("SELECT COUNT(*) AS count FROM icono_caretaker_supervote_notifications")
+      .get().count,
+    1,
+  )
+
+  const originalFetch = globalThis.fetch
+  const messages = []
+  globalThis.fetch = async (url, options) => {
+    if (String(url).endsWith("/users/@me/channels")) {
+      return new Response(JSON.stringify({ id: "supervote-dm" }), { status: 200 })
+    }
+    messages.push(JSON.parse(options.body))
+    return new Response(JSON.stringify({ id: "supervote-message" }), { status: 200 })
+  }
+  try {
+    const delivered = await deliverPendingCaretakerSupervoteNotifications({
+      ...env,
+      DISCORD_BOT_TOKEN: "test-token",
+    })
+    assert.equal(delivered.delivered, 1)
+    assert.equal(messages.length, 1)
+    assert.match(messages[0].content, /10x preferred blot for \*\*TP53\*\* is no longer canonical/)
+    assert.deepEqual(messages[0].allowed_mentions, { parse: [] })
+    assert.equal(
+      primary.raw
+        .prepare("SELECT discord_status FROM icono_caretaker_supervote_notifications")
+        .get().discord_status,
+      "sent",
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("negative, transferred, or ended supervotes cannot send a stale canonical-loss DM", async (t) => {
+  const { primary, env } = setup(t)
+  primary.raw.prepare("UPDATE icono_caretaker_supervote_projection SET direction = -1").run()
+  primary.raw
+    .prepare(
+      `INSERT INTO icono_publish_events (
+         id, gene_symbol, from_asset_sha256, to_asset_sha256, action
+       ) VALUES (43, 'TP53', ?, ?, 'publish')`,
+    )
+    .run("a".repeat(64), "b".repeat(64))
+  assert.equal(
+    primary.raw
+      .prepare("SELECT COUNT(*) AS count FROM icono_caretaker_supervote_notifications")
+      .get().count,
+    0,
+  )
+
+  primary.raw.prepare("UPDATE icono_caretaker_supervote_projection SET direction = 1").run()
+  primary.raw
+    .prepare(
+      `INSERT INTO icono_publish_events (
+         id, gene_symbol, from_asset_sha256, to_asset_sha256, action
+       ) VALUES (44, 'TP53', ?, ?, 'publish')`,
+    )
+    .run("a".repeat(64), "b".repeat(64))
+  primary.raw
+    .prepare(
+      `UPDATE icono_caretaker_supervote_projection
+          SET asset_sha256 = '${"c".repeat(64)}', supervote_version = 4`,
+    )
+    .run()
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => {
+    throw new Error("Discord must not be called for a stale preference")
+  }
+  try {
+    const result = await deliverPendingCaretakerSupervoteNotifications({
+      ...env,
+      DISCORD_BOT_TOKEN: "test-token",
+    })
+    assert.equal(result.delivered, 0)
+    assert.equal(
+      primary.raw
+        .prepare("SELECT discord_status FROM icono_caretaker_supervote_notifications")
+        .get().discord_status,
       "suppressed",
     )
   } finally {

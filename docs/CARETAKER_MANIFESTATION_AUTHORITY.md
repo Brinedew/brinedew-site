@@ -195,65 +195,67 @@ authority state proves the original command cannot apply again.
 Each item needs a behavior test at the owning layer and an end-to-end certification
 case where it crosses Website/workstation boundaries.
 
-| Case                                                | Required result                                                                      |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Duplicate save/select/withdraw delivery             | Same receipt and one event; no duplicate revision or selection                       |
-| Same command ID arrives with different bytes        | Refused as replay tampering; original receipt remains authoritative                  |
-| Concurrent saves from two tabs                      | One wins CAS; loser keeps text and gets a refreshable conflict                       |
-| Two accounts simultaneously claim one gene          | One active assignment is committed; the loser gets a conflict                        |
-| One account simultaneously claims two genes         | One active assignment is committed; the loser gets a conflict                        |
-| Self-claim targets a gene without a verified seed   | Refused; claim never invents source prose                                            |
-| Comment arrives while caretaker assignment ends     | Comment persists; queued DM revalidates tenure and is suppressed if no longer active |
-| Caretaker comments on their own gene                | Comment persists and appears unread nowhere; no self-DM is queued                    |
-| Discord is unavailable after a comment              | Comment succeeds; durable outbox retries without duplicate ambiguous POSTs           |
-| Canonical changes after generation enqueue          | Job uses the captured revision and hashes                                            |
-| Queued source is withdrawn or purged                | Fulfilment fails closed; cache/current-canon text is never substituted               |
-| Author withdraws the canonical lineage              | Atomic withdrawal plus deterministic fallback                                        |
-| Author attempts to withdraw another user's lineage  | `403`; no state, event, or object change                                             |
-| Author attempts to withdraw the system seed         | Refused; seed stays eligible                                                         |
-| Author restores an own withdrawn lineage            | New lifecycle and selection events restore it without rewriting history              |
-| Retention expires after withdrawal                  | Legal-hold-aware purge destroys keys/bodies but keeps bounded tombstones             |
-| Leave with `retain`                                 | Tenure ends; lineage remains eligible and readable                                   |
-| Leave with `withdraw`                               | Tenure and lineage change atomically; fallback is recorded                           |
-| Repeated leave request with a different policy      | Original receipt wins; policy cannot flip                                            |
-| Command receipt source event is checkpointed/pruned | Hash tombstone keeps replay fail-closed; leave/delete policy cannot reinterpret      |
-| Suspension during an open editor                    | New save is refused; local draft survives                                            |
-| Assignment ends between save and select             | Select is refused without changing the head                                          |
-| Gene symbol renamed                                 | Stable gene ID retains assignment, history, and queued sources                       |
-| Gene merge                                          | Explicit merge event and deterministic head policy; no orphan assignment             |
-| Old alias is opened after merge                     | Read-only dossier resolves the stable gene and names the surviving record            |
-| Browser sends another account ID                    | Session actor wins; body identity is never authority                                 |
-| Cross-origin or ambiguous browser mutation          | Refused before parsing a command; no permissive missing-Origin path                  |
-| Disabled/erased account presents an old session     | Session is invalidated and every caretaker mutation is refused                       |
-| Provider identity is unlinked then relinked         | Stable account ownership survives; link history prevents identity theft              |
-| Erased former author is displayed                   | Stable anonymous attribution appears; provider subject never leaks                   |
-| Missing/corrupt encrypted object                    | Revision is ineligible and an integrity alert is emitted                             |
-| D1 fails after object upload                        | No revision commits; orphan is recoverable and later deleted                         |
-| Object delete fails after key erasure               | Plaintext stays unrecoverable; purge retry remains durable                           |
-| Legal hold plus purge                               | Purge is refused before key erasure                                                  |
-| Key rotation races a read or backup                 | Versioned wrapped key decrypts exactly; body and AAD hashes still verify             |
-| Backup restore targets merged/retired history       | Exact immutable ID/hash returns at a fresh locator without changing canon            |
-| Backup capability is replayed or expires            | One-shot token is unusable; storage credentials/object locators stay secret          |
-| Cutover backup reaches 30 days without legal hold   | Bounded retry deletes and GET-verifies every package, part, and root object          |
-| Cutover backup reaches 30 days under legal hold     | No object is deleted; release resumes the same verified deletion inventory           |
-| Event delivered twice/out of order                  | Replica converges once without rewinding a gene                                      |
-| Cursor expired or event gap                         | Replica replaces state from a validated watermarked snapshot                         |
-| Malformed/foreign snapshot or cursor                | Replica rejects it and preserves its last verified local state                       |
-| Offline save conflicts on reconnect                 | Draft remains readable; no silent overwrite or auto-merge                            |
-| Legacy candidate lacks a revision                   | Mark `legacy_unbound`; never bind it to current canonical                            |
-| Accepted Tags arrive for an old revision            | Attach to that revision only; do not move canonical                                  |
-| Account provider rename/token expiry                | Ownership remains on the same stable account                                         |
-| Account erasure request                             | Tenure ends by explicit policy; audit tombstones remain bounded                      |
-| Quota exhausted                                     | Command refuses before metadata commit and preserves the draft                       |
-| Very long history is paged                          | Opaque cursor yields stable event order with no duplicate or missing rows            |
-| HTML/script text in prose                           | Rendered as text under CSP; never interpreted as markup                              |
-| 4,001 code points or more than 16 KiB               | Validation refuses consistently in browser and authority                             |
-| Public/anonymous gene view                          | Zero caretaker-authority requests and no private metadata                            |
-| Workstation admin credential                        | Can replicate/service commands; cannot forge caretaker actor                         |
-| Legacy writer runs after freeze                     | Primary trigger and route both refuse it; authority mode never rewinds               |
-| Staging authoring or backup storage is compromised  | Distinct staging zones and environment secrets grant no production-zone access       |
-| Recovery mode is entered                            | Reads/repair continue while all authority mutations remain disabled                  |
-| Caretaker +10 vote is replayed or tenure ends       | Separate receipt/outbox stays idempotent; ranking recomputes without FIT mutation    |
+| Case                                                 | Required result                                                                           |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Duplicate save/select/withdraw delivery              | Same receipt and one event; no duplicate revision or selection                            |
+| Same command ID arrives with different bytes         | Refused as replay tampering; original receipt remains authoritative                       |
+| Concurrent saves from two tabs                       | One wins CAS; loser keeps text and gets a refreshable conflict                            |
+| Two accounts simultaneously claim one gene           | One active assignment is committed; the loser gets a conflict                             |
+| One account simultaneously claims two genes          | One active assignment is committed; the loser gets a conflict                             |
+| Self-claim targets a gene without a verified seed    | Refused; claim never invents source prose                                                 |
+| Comment arrives while caretaker assignment ends      | Comment persists; queued DM revalidates tenure and is suppressed if no longer active      |
+| Caretaker comments on their own gene                 | Comment persists and appears unread nowhere; no self-DM is queued                         |
+| Discord is unavailable after a comment               | Comment succeeds; durable outbox retries without duplicate ambiguous POSTs                |
+| Canonical changes after generation enqueue           | Job uses the captured revision and hashes                                                 |
+| Queued source is withdrawn or purged                 | Fulfilment fails closed; cache/current-canon text is never substituted                    |
+| Author withdraws the canonical lineage               | Atomic withdrawal plus deterministic fallback                                             |
+| Author attempts to withdraw another user's lineage   | `403`; no state, event, or object change                                                  |
+| Author attempts to withdraw the system seed          | Refused; seed stays eligible                                                              |
+| Author restores an own withdrawn lineage             | New lifecycle and selection events restore it without rewriting history                   |
+| Retention expires after withdrawal                   | Legal-hold-aware purge destroys keys/bodies but keeps bounded tombstones                  |
+| Leave with `retain`                                  | Tenure ends; lineage remains eligible and readable                                        |
+| Leave with `withdraw`                                | Tenure and lineage change atomically; fallback is recorded                                |
+| Repeated leave request with a different policy       | Original receipt wins; policy cannot flip                                                 |
+| Command receipt source event is checkpointed/pruned  | Hash tombstone keeps replay fail-closed; leave/delete policy cannot reinterpret           |
+| Suspension during an open editor                     | New save is refused; local draft survives                                                 |
+| Assignment ends between save and select              | Select is refused without changing the head                                               |
+| Gene symbol renamed                                  | Stable gene ID retains assignment, history, and queued sources                            |
+| Gene merge                                           | Explicit merge event and deterministic head policy; no orphan assignment                  |
+| Old alias is opened after merge                      | Read-only dossier resolves the stable gene and names the surviving record                 |
+| Browser sends another account ID                     | Session actor wins; body identity is never authority                                      |
+| Cross-origin or ambiguous browser mutation           | Refused before parsing a command; no permissive missing-Origin path                       |
+| Disabled/erased account presents an old session      | Session is invalidated and every caretaker mutation is refused                            |
+| Provider identity is unlinked then relinked          | Stable account ownership survives; link history prevents identity theft                   |
+| Erased former author is displayed                    | Stable anonymous attribution appears; provider subject never leaks                        |
+| Missing/corrupt encrypted object                     | Revision is ineligible and an integrity alert is emitted                                  |
+| D1 fails after object upload                         | No revision commits; orphan is recoverable and later deleted                              |
+| Object delete fails after key erasure                | Plaintext stays unrecoverable; purge retry remains durable                                |
+| Legal hold plus purge                                | Purge is refused before key erasure                                                       |
+| Key rotation races a read or backup                  | Versioned wrapped key decrypts exactly; body and AAD hashes still verify                  |
+| Backup restore targets merged/retired history        | Exact immutable ID/hash returns at a fresh locator without changing canon                 |
+| Backup capability is replayed or expires             | One-shot token is unusable; storage credentials/object locators stay secret               |
+| Cutover backup reaches 30 days without legal hold    | Bounded retry deletes and GET-verifies every package, part, and root object               |
+| Cutover backup reaches 30 days under legal hold      | No object is deleted; release resumes the same verified deletion inventory                |
+| Event delivered twice/out of order                   | Replica converges once without rewinding a gene                                           |
+| Cursor expired or event gap                          | Replica replaces state from a validated watermarked snapshot                              |
+| Malformed/foreign snapshot or cursor                 | Replica rejects it and preserves its last verified local state                            |
+| Offline save conflicts on reconnect                  | Draft remains readable; no silent overwrite or auto-merge                                 |
+| Legacy candidate lacks a revision                    | Mark `legacy_unbound`; never bind it to current canonical                                 |
+| Accepted Tags arrive for an old revision             | Attach to that revision only; do not move canonical                                       |
+| Account provider rename/token expiry                 | Ownership remains on the same stable account                                              |
+| Account erasure request                              | Tenure ends by explicit policy; audit tombstones remain bounded                           |
+| Quota exhausted                                      | Command refuses before metadata commit and preserves the draft                            |
+| Very long history is paged                           | Opaque cursor yields stable event order with no duplicate or missing rows                 |
+| HTML/script text in prose                            | Rendered as text under CSP; never interpreted as markup                                   |
+| 4,001 code points or more than 16 KiB                | Validation refuses consistently in browser and authority                                  |
+| Public/anonymous gene view                           | Zero caretaker-authority requests and no private metadata                                 |
+| Workstation admin credential                         | Can replicate/service commands; cannot forge caretaker actor                              |
+| Legacy writer runs after freeze                      | Primary trigger and route both refuse it; authority mode never rewinds                    |
+| Staging authoring or backup storage is compromised   | Distinct staging zones and environment secrets grant no production-zone access            |
+| Recovery mode is entered                             | Reads/repair continue while all authority mutations remain disabled                       |
+| Signed caretaker 10x vote is replayed or tenure ends | Separate receipt/outbox stays idempotent; ranking recomputes without FIT mutation         |
+| Caretaker moves +10 to -10 or another candidate      | One CAS head transfers atomically; no ordinary FIT/MISFIT row is rewritten                |
+| Preferred +10 candidate loses canon                  | One transition-keyed Discord DM is queued; stale preference or ended tenure suppresses it |
 
 ## Release gate
 
@@ -263,5 +265,8 @@ seed hash, the workstation completes a full snapshot plus incremental replay, an
 shadow comparison reports no unexplained difference. Deployment is not proof:
 fresh logged-in browser tests must cover edit, version rollback, own-only deletion,
 both leave policies, exact generation, and one conflict/retry path on two gene
-pages. The old mutable publication and destructive schema-rebuild paths are then
+pages. The signed 10x authority also requires short-click isolation, pointer and
+keyboard long-press assignment, positive/negative ranking, transfer/recall,
+sidebar unspent guidance, tenure cleanup, and deduplicated Discord delivery. The
+old mutable publication and destructive schema-rebuild paths are then
 deleted, not retained as fallback behavior.

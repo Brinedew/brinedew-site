@@ -1312,7 +1312,10 @@ import {
   deliverPendingRequestFulfillmentNotifications,
   reconcileDeliveredRequestFulfillments,
 } from "./iconoplasm-request-notifications.js"
-import { deliverPendingCaretakerCommentNotifications } from "./iconoplasm-caretaker-comment-notifications.js"
+import {
+  deliverPendingCaretakerCommentNotifications,
+  deliverPendingCaretakerSupervoteNotifications,
+} from "./iconoplasm-caretaker-comment-notifications.js"
 import { reconcileIconoplasmRecognitionPolicies } from "./iconoplasm-recognition-policy-reconciliation.js"
 import { archiveColdIconoplasmPublishEvents } from "./iconoplasm-publish-event-archive.js"
 import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate } from "./benchmark/the-only-allowed-benchmark-stateful-runtime-do-not-duplicate.js"
@@ -3262,6 +3265,7 @@ export default {
         recognitionPolicyReconciliation,
         authorityProjectionRecovery,
         caretakerCommentNotificationDelivery,
+        caretakerSupervoteNotificationDelivery,
       ] = await Promise.allSettled([
         runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx),
         deliverPendingRequestFulfillmentNotifications(env, { limit: 20 }),
@@ -3270,7 +3274,14 @@ export default {
         reconcileIconoplasmRecognitionPolicies(env),
         drainIconoplasmAuthorityProjectionOutboxes(env, { limit: 25 }),
         deliverPendingCaretakerCommentNotifications(env, { limit: 20 }),
+        deliverPendingCaretakerSupervoteNotifications(env, { limit: 20 }),
       ])
+      if (caretakerSupervoteNotificationDelivery.status === "rejected") {
+        console.error(
+          "[CRON] Caretaker supervote notification delivery failed:",
+          String(caretakerSupervoteNotificationDelivery.reason?.message || "unknown error"),
+        )
+      }
       if (caretakerCommentNotificationDelivery.status === "rejected") {
         console.error(
           "[CRON] Caretaker comment notification delivery failed:",

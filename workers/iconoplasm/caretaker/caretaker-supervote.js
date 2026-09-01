@@ -1,5 +1,6 @@
 export const CARETAKER_SUPERVOTE_WEIGHT = 10
 export const CARETAKER_SUPERVOTE_HISTORY_LIMIT = 100
+export const CARETAKER_SUPERVOTE_DIRECTIONS = Object.freeze([-1, 1])
 
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$/
 const SYMBOL_PATTERN = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
@@ -66,6 +67,15 @@ function normalizeReason(value, fallback) {
   return String(value || fallback || "")
     .trim()
     .slice(0, 2000)
+}
+
+function normalizeDirection(value, { optional = false } = {}) {
+  if (optional && (value == null || value === "")) return null
+  const normalized = Number(value)
+  if (!CARETAKER_SUPERVOTE_DIRECTIONS.includes(normalized)) {
+    fail("INVALID_SUPERVOTE_INPUT", "direction must be -1 or 1")
+  }
+  return normalized
 }
 
 function first(sql, query, ...bindings) {
@@ -150,6 +160,7 @@ function assignmentEventType(previousStatus, nextStatus) {
 function activeSelection(assignment, head) {
   return Boolean(
     head?.asset_sha256 &&
+    CARETAKER_SUPERVOTE_DIRECTIONS.includes(Number(head?.direction)) &&
     assignment &&
     ["active", "suspended"].includes(String(assignment.status || "")),
   )
@@ -173,13 +184,14 @@ function supervoteSnapshot(assignment, head, viewerAccountId = "") {
   const selected = activeSelection(assignment, head)
   const accountId = String(viewerAccountId || "").trim()
   return {
-    schema_version: 1,
+    schema_version: 2,
     assignment: assignmentSnapshot(assignment),
     assignment_status: assignment ? String(assignment.status) : null,
     assignment_version: Number(assignment?.assignment_version || 0),
     accepted_event_sequence: Number(assignment?.authority_event_sequence || 0),
     supervote_version: Number(head?.supervote_version || 0),
     asset_sha256: selected ? String(head.asset_sha256) : null,
+    direction: selected ? Number(head.direction) : null,
     active: selected,
     suspended: String(assignment?.status || "") === "suspended",
     weight: CARETAKER_SUPERVOTE_WEIGHT,
@@ -198,11 +210,13 @@ function outboxPayload({
   head,
   fromAssetSha256 = null,
   toAssetSha256 = null,
+  fromDirection = null,
+  toDirection = null,
   response = null,
   recomputeRequired = true,
 }) {
   return JSON.stringify({
-    schema_version: 1,
+    schema_version: 2,
     mutation_id: mutationId,
     event_type: eventType,
     command_id: commandId,
@@ -211,6 +225,8 @@ function outboxPayload({
     supervote: supervoteSnapshot(assignment, head),
     from_asset_sha256: fromAssetSha256,
     to_asset_sha256: toAssetSha256,
+    from_direction: fromDirection,
+    to_direction: toDirection,
     response,
     recompute_required: recomputeRequired,
   })
@@ -223,6 +239,9 @@ export async function caretakerSupervoteRequestSha256(fields) {
     gene_symbol: normalizeSymbol(source.gene_symbol),
     caretaker_account_id: normalizeId(source.caretaker_account_id, "caretaker_account_id"),
     asset_sha256: normalizeSha256(source.asset_sha256, { optional: true }),
+    direction: normalizeDirection(source.direction, {
+      optional: !normalizeSha256(source.asset_sha256, { optional: true }),
+    }),
     expected_assignment_version: normalizeVersion(
       source.expected_assignment_version,
       "expected_assignment_version",
@@ -241,13 +260,21 @@ export async function caretakerSupervoteRequestSha256(fields) {
 
 export function caretakerWeightedScore(row) {
   const ordinaryScore = Number(row?.score ?? row?.image_score ?? 0) || 0
-  return ordinaryScore + (row?.caretaker_supervote ? CARETAKER_SUPERVOTE_WEIGHT : 0)
+  const direction = row?.caretaker_supervote
+    ? normalizeDirection(row?.caretaker_supervote_direction ?? 1)
+    : 0
+  return ordinaryScore + direction * CARETAKER_SUPERVOTE_WEIGHT
 }
 
 export function compareCaretakerWeightedCandidates(left, right, fallback = () => 0) {
   return (
     caretakerWeightedScore(right) - caretakerWeightedScore(left) ||
-    Number(Boolean(right?.caretaker_supervote)) - Number(Boolean(left?.caretaker_supervote)) ||
+    Number(
+      (right?.caretaker_supervote_direction ?? (right?.caretaker_supervote ? 1 : null)) === 1,
+    ) -
+      Number(
+        (left?.caretaker_supervote_direction ?? (left?.caretaker_supervote ? 1 : null)) === 1,
+      ) ||
     fallback(left, right)
   )
 }
@@ -285,6 +312,7 @@ export class CaretakerSupervoteLedger {
         caretaker_assignment_id TEXT,
         caretaker_account_id TEXT,
         asset_sha256 TEXT,
+        direction INTEGER CHECK (direction IN (-1, 1) OR direction IS NULL),
         supervote_version INTEGER NOT NULL DEFAULT 0 CHECK (supervote_version >= 0),
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
@@ -307,6 +335,8 @@ export class CaretakerSupervoteLedger {
         assignment_version INTEGER NOT NULL,
         from_asset_sha256 TEXT,
         to_asset_sha256 TEXT,
+        from_direction INTEGER CHECK (from_direction IN (-1, 1) OR from_direction IS NULL),
+        to_direction INTEGER CHECK (to_direction IN (-1, 1) OR to_direction IS NULL),
         supervote_version INTEGER NOT NULL,
         authority_event_id TEXT,
         authority_event_sequence INTEGER,
@@ -333,6 +363,36 @@ export class CaretakerSupervoteLedger {
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `)
+    const headColumns = new Set(
+      this.sql
+        .exec(`PRAGMA table_info(caretaker_supervote_head)`)
+        .toArray()
+        .map((row) => row.name),
+    )
+    if (!headColumns.has("direction")) {
+      this.sql.exec(
+        `ALTER TABLE caretaker_supervote_head ADD COLUMN direction INTEGER CHECK (direction IN (-1, 1) OR direction IS NULL)`,
+      )
+      this.sql.exec(
+        `UPDATE caretaker_supervote_head SET direction = 1 WHERE asset_sha256 IS NOT NULL`,
+      )
+    }
+    const auditColumns = new Set(
+      this.sql
+        .exec(`PRAGMA table_info(caretaker_supervote_audit)`)
+        .toArray()
+        .map((row) => row.name),
+    )
+    if (!auditColumns.has("from_direction")) {
+      this.sql.exec(
+        `ALTER TABLE caretaker_supervote_audit ADD COLUMN from_direction INTEGER CHECK (from_direction IN (-1, 1) OR from_direction IS NULL)`,
+      )
+    }
+    if (!auditColumns.has("to_direction")) {
+      this.sql.exec(
+        `ALTER TABLE caretaker_supervote_audit ADD COLUMN to_direction INTEGER CHECK (to_direction IN (-1, 1) OR to_direction IS NULL)`,
+      )
+    }
   }
 
   readAssignment() {
@@ -349,7 +409,7 @@ export class CaretakerSupervoteLedger {
     return (
       first(
         this.sql,
-        `SELECT caretaker_assignment_id, caretaker_account_id, asset_sha256,
+        `SELECT caretaker_assignment_id, caretaker_account_id, asset_sha256, direction,
                 supervote_version, updated_at
            FROM caretaker_supervote_head
           WHERE singleton = 1`,
@@ -396,28 +456,35 @@ export class CaretakerSupervoteLedger {
 
   decorateSnapshot(snapshot) {
     const source = snapshot && typeof snapshot === "object" ? snapshot : {}
-    const selectedAsset = this.snapshot().asset_sha256
+    const supervote = this.snapshot()
+    const selectedAsset = supervote.asset_sha256
     const isSelected = Boolean(
       selectedAsset && normalizeSha256(source.asset_sha256, { optional: true }) === selectedAsset,
     )
     return {
       ...source,
       caretaker_supervote: isSelected,
-      caretaker_supervote_weight: isSelected ? CARETAKER_SUPERVOTE_WEIGHT : 0,
+      caretaker_supervote_direction: isSelected ? supervote.direction : null,
+      caretaker_supervote_weight: isSelected ? supervote.direction * CARETAKER_SUPERVOTE_WEIGHT : 0,
       weighted_score:
-        Number(source.image_score || 0) + (isSelected ? CARETAKER_SUPERVOTE_WEIGHT : 0),
+        Number(source.image_score || 0) +
+        (isSelected ? supervote.direction * CARETAKER_SUPERVOTE_WEIGHT : 0),
     }
   }
 
   decorateAssetSummaries(rows) {
-    const selectedAsset = this.snapshot().asset_sha256
+    const supervote = this.snapshot()
+    const selectedAsset = supervote.asset_sha256
     return (Array.isArray(rows) ? rows : []).map((row) => {
       const selected = Boolean(selectedAsset && row?.asset_sha256 === selectedAsset)
       return {
         ...row,
         caretaker_supervote: selected,
-        caretaker_supervote_weight: selected ? CARETAKER_SUPERVOTE_WEIGHT : 0,
-        weighted_score: Number(row?.score || 0) + (selected ? CARETAKER_SUPERVOTE_WEIGHT : 0),
+        caretaker_supervote_direction: selected ? supervote.direction : null,
+        caretaker_supervote_weight: selected ? supervote.direction * CARETAKER_SUPERVOTE_WEIGHT : 0,
+        weighted_score:
+          Number(row?.score || 0) +
+          (selected ? supervote.direction * CARETAKER_SUPERVOTE_WEIGHT : 0),
       }
     })
   }
@@ -488,10 +555,12 @@ export class CaretakerSupervoteLedger {
 
       const previousStatus = String(current?.status || "")
       const previousAsset = normalizeSha256(head?.asset_sha256, { optional: true })
+      const previousDirection = previousAsset ? normalizeDirection(head?.direction ?? 1) : null
       const assignmentChanged =
         current && event.caretaker_assignment_id !== current.caretaker_assignment_id
       const mustDeactivate = event.status === "ended" || assignmentChanged
       const nextAsset = mustDeactivate ? null : previousAsset
+      const nextDirection = mustDeactivate ? null : previousDirection
       const nextVersion =
         Number(head?.supervote_version || 0) + Number(Boolean(previousAsset && mustDeactivate))
       const mutationId = `caretaker-assignment:${event.event_id}`
@@ -525,11 +594,12 @@ export class CaretakerSupervoteLedger {
       this.sql.exec(
         `UPDATE caretaker_supervote_head
             SET caretaker_assignment_id = ?, caretaker_account_id = ?,
-                asset_sha256 = ?, supervote_version = ?, updated_at = CURRENT_TIMESTAMP
+                asset_sha256 = ?, direction = ?, supervote_version = ?, updated_at = CURRENT_TIMESTAMP
           WHERE singleton = 1`,
         event.caretaker_assignment_id,
         event.caretaker_account_id,
         nextAsset,
+        nextDirection,
         nextVersion,
       )
       const assignment = this.readAssignment()
@@ -538,8 +608,9 @@ export class CaretakerSupervoteLedger {
         `INSERT INTO caretaker_supervote_audit (
            mutation_id, event_type, caretaker_assignment_id, caretaker_account_id,
            assignment_status, assignment_version, from_asset_sha256, to_asset_sha256,
-           supervote_version, authority_event_id, authority_event_sequence
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           from_direction, to_direction, supervote_version,
+           authority_event_id, authority_event_sequence
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         mutationId,
         eventType,
         event.caretaker_assignment_id,
@@ -548,6 +619,8 @@ export class CaretakerSupervoteLedger {
         event.assignment_version,
         previousAsset,
         nextAsset,
+        previousDirection,
+        nextDirection,
         nextVersion,
         event.event_id,
         event.event_sequence,
@@ -563,6 +636,8 @@ export class CaretakerSupervoteLedger {
           head: nextHead,
           fromAssetSha256: previousAsset,
           toAssetSha256: nextAsset,
+          fromDirection: previousDirection,
+          toDirection: nextDirection,
           recomputeRequired: previousAsset !== nextAsset,
         }),
       )
@@ -574,6 +649,7 @@ export class CaretakerSupervoteLedger {
   async setSelection({
     accountId,
     assetSha256 = null,
+    direction = null,
     commandId,
     requestSha256,
     expectedAssignmentVersion,
@@ -581,6 +657,7 @@ export class CaretakerSupervoteLedger {
   } = {}) {
     const account = normalizeId(accountId, "caretaker_account_id")
     const targetAsset = normalizeSha256(assetSha256, { optional: true })
+    const targetDirection = targetAsset ? normalizeDirection(direction) : null
     const command = normalizeId(commandId, "command_id")
     const requestHash = normalizeRequestSha256(requestSha256)
     const expectedAssignment = normalizeVersion(
@@ -652,7 +729,8 @@ export class CaretakerSupervoteLedger {
       }
 
       const previousAsset = normalizeSha256(head.asset_sha256, { optional: true })
-      const changed = previousAsset !== targetAsset
+      const previousDirection = previousAsset ? normalizeDirection(head.direction ?? 1) : null
+      const changed = previousAsset !== targetAsset || previousDirection !== targetDirection
       // Every accepted command advances the CAS token. Once its bounded receipt
       // leaves the replay horizon, the original token is therefore guaranteed
       // stale instead of accidentally executing the command a second time.
@@ -668,9 +746,10 @@ export class CaretakerSupervoteLedger {
 
       this.sql.exec(
         `UPDATE caretaker_supervote_head
-            SET asset_sha256 = ?, supervote_version = ?, updated_at = CURRENT_TIMESTAMP
+            SET asset_sha256 = ?, direction = ?, supervote_version = ?, updated_at = CURRENT_TIMESTAMP
           WHERE singleton = 1`,
         targetAsset,
+        targetDirection,
         nextVersion,
       )
       const nextHead = this.readHead()
@@ -687,8 +766,9 @@ export class CaretakerSupervoteLedger {
            mutation_id, event_type, command_id, request_sha256,
            caretaker_assignment_id, caretaker_account_id, assignment_status,
            assignment_version, from_asset_sha256, to_asset_sha256,
-           supervote_version, authority_event_id, authority_event_sequence
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           from_direction, to_direction, supervote_version,
+           authority_event_id, authority_event_sequence
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         mutationId,
         eventType,
         command,
@@ -699,6 +779,8 @@ export class CaretakerSupervoteLedger {
         assignment.assignment_version,
         previousAsset,
         targetAsset,
+        previousDirection,
+        targetDirection,
         nextVersion,
         assignment.authority_event_id,
         assignment.authority_event_sequence,
@@ -716,6 +798,8 @@ export class CaretakerSupervoteLedger {
           head: nextHead,
           fromAssetSha256: previousAsset,
           toAssetSha256: targetAsset,
+          fromDirection: previousDirection,
+          toDirection: targetDirection,
           response,
           recomputeRequired: changed,
         }),
@@ -802,13 +886,15 @@ export class CaretakerSupervoteLedger {
     const assignment = this.readAssignment()
     const head = this.readHead()
     const selectedAsset = normalizeSha256(head?.asset_sha256, { optional: true })
+    const selectedDirection = selectedAsset ? normalizeDirection(head?.direction ?? 1) : null
     const selectionCleared = !event.eligible && selectedAsset === event.asset_sha256
     const mutationId = `caretaker-supervote-eligibility:${event.event_id}`
     if (selectionCleared) {
       const nextVersion = Number(head.supervote_version || 0) + 1
       this.sql.exec(
         `UPDATE caretaker_supervote_head
-            SET asset_sha256 = NULL, supervote_version = ?, updated_at = CURRENT_TIMESTAMP
+            SET asset_sha256 = NULL, direction = NULL,
+                supervote_version = ?, updated_at = CURRENT_TIMESTAMP
           WHERE singleton = 1`,
         nextVersion,
       )
@@ -817,14 +903,16 @@ export class CaretakerSupervoteLedger {
         `INSERT INTO caretaker_supervote_audit (
            mutation_id, event_type, caretaker_assignment_id, caretaker_account_id,
            assignment_status, assignment_version, from_asset_sha256, to_asset_sha256,
-           supervote_version, authority_event_id, authority_event_sequence
-         ) VALUES (?, 'supervote_asset_invalidated', ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+           from_direction, to_direction, supervote_version,
+           authority_event_id, authority_event_sequence
+         ) VALUES (?, 'supervote_asset_invalidated', ?, ?, ?, ?, ?, NULL, ?, NULL, ?, ?, ?)`,
         mutationId,
         assignment.caretaker_assignment_id,
         assignment.caretaker_account_id,
         assignment.status,
         assignment.assignment_version,
         event.asset_sha256,
+        selectedDirection,
         nextVersion,
         assignment.authority_event_id,
         assignment.authority_event_sequence,
@@ -840,6 +928,8 @@ export class CaretakerSupervoteLedger {
           head: nextHead,
           fromAssetSha256: event.asset_sha256,
           toAssetSha256: null,
+          fromDirection: selectedDirection,
+          toDirection: null,
           recomputeRequired: true,
         }),
       )

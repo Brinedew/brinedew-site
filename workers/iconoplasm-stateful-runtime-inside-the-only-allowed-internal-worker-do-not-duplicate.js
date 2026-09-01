@@ -16706,6 +16706,7 @@ async function iconoplasmCaretakerSupervoteSet(
     symbol,
     accountId,
     assetSha256 = null,
+    direction = null,
     commandId,
     requestSha256,
     expectedAssignmentVersion,
@@ -16720,6 +16721,7 @@ async function iconoplasmCaretakerSupervoteSet(
     symbol: safeSymbol,
     account_id: sanitizeText(accountId || "", 192) || "",
     asset_sha256: normalizeSha256(assetSha256 || "") || null,
+    direction: assetSha256 ? Number(direction) : null,
     command_id: sanitizeText(commandId || "", 192) || "",
     request_sha256: normalizeSha256(requestSha256 || "") || "",
     expected_assignment_version: Number(expectedAssignmentVersion),
@@ -16944,10 +16946,18 @@ async function projectCaretakerSupervoteOutboxToD1(env, rawPayload) {
   const commandId = sanitizeText(payload?.command_id || "", 192) || null
   const requestSha256 = normalizeSha256(payload?.request_sha256 || "") || null
   const selectedAssetSha = normalizeSha256(supervote?.asset_sha256 || "") || null
-  const active = Boolean(supervote?.active && selectedAssetSha)
+  const explicitDirection = Number(supervote?.direction)
+  const direction = [-1, 1].includes(explicitDirection)
+    ? explicitDirection
+    : supervote?.active && selectedAssetSha
+      ? 1
+      : null
+  const active = Boolean(supervote?.active && selectedAssetSha && [-1, 1].includes(direction))
   const supervoteVersion = Number(supervote?.supervote_version || 0)
   const fromAssetSha = normalizeSha256(payload?.from_asset_sha256 || "") || null
   const toAssetSha = normalizeSha256(payload?.to_asset_sha256 || "") || null
+  const fromDirection = fromAssetSha ? Number(payload?.from_direction ?? 1) : null
+  const toDirection = toAssetSha ? Number(payload?.to_direction ?? direction) : null
   if (
     !symbol ||
     !geneId ||
@@ -16962,7 +16972,10 @@ async function projectCaretakerSupervoteOutboxToD1(env, rawPayload) {
     !mutationId ||
     !eventType ||
     !Number.isSafeInteger(supervoteVersion) ||
-    supervoteVersion < 0
+    supervoteVersion < 0 ||
+    (active && ![-1, 1].includes(direction)) ||
+    (fromDirection != null && ![-1, 1].includes(fromDirection)) ||
+    (toDirection != null && ![-1, 1].includes(toDirection))
   ) {
     throw new Error("Invalid caretaker supervote projection payload")
   }
@@ -16998,15 +17011,16 @@ async function projectCaretakerSupervoteOutboxToD1(env, rawPayload) {
     env.ICONOPLASM_DB.prepare(
       `INSERT INTO icono_caretaker_supervote_projection (
          gene_symbol, gene_id, caretaker_assignment_id, caretaker_account_id,
-         asset_sha256, active, weight, supervote_version,
+         asset_sha256, direction, active, weight, supervote_version,
          last_mutation_id, updated_at, deactivated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, 10, ?, ?, CURRENT_TIMESTAMP,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, 10, ?, ?, CURRENT_TIMESTAMP,
                  CASE WHEN ? = 1 THEN NULL ELSE CURRENT_TIMESTAMP END)
        ON CONFLICT(gene_symbol) DO UPDATE SET
          gene_id = excluded.gene_id,
          caretaker_assignment_id = excluded.caretaker_assignment_id,
          caretaker_account_id = excluded.caretaker_account_id,
          asset_sha256 = excluded.asset_sha256,
+         direction = excluded.direction,
          active = excluded.active,
          weight = 10,
          supervote_version = excluded.supervote_version,
@@ -17020,6 +17034,7 @@ async function projectCaretakerSupervoteOutboxToD1(env, rawPayload) {
       assignmentId,
       accountId,
       active ? selectedAssetSha : null,
+      active ? direction : null,
       active ? 1 : 0,
       supervoteVersion,
       mutationId,
@@ -17030,9 +17045,10 @@ async function projectCaretakerSupervoteOutboxToD1(env, rawPayload) {
          mutation_id, event_type, command_id, request_sha256,
          gene_id, gene_symbol, caretaker_assignment_id, caretaker_account_id,
          assignment_status, assignment_version, from_asset_sha256,
-         to_asset_sha256, supervote_version, authority_event_id,
+         to_asset_sha256, from_direction, to_direction,
+         supervote_version, authority_event_id,
          authority_event_sequence, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
        ON CONFLICT(mutation_id) DO NOTHING`,
     ).bind(
       mutationId,
@@ -17047,6 +17063,8 @@ async function projectCaretakerSupervoteOutboxToD1(env, rawPayload) {
       assignmentVersion,
       fromAssetSha,
       toAssetSha,
+      fromDirection,
+      toDirection,
       supervoteVersion,
       authorityEventId,
       authorityEventSequence,
@@ -17902,6 +17920,7 @@ export class IconoplasmVoteCoordinator {
         const result = await this.caretakerSupervotes.setSelection({
           accountId: payload?.account_id,
           assetSha256: targetAsset,
+          direction: targetAsset ? Number(payload?.direction) : null,
           commandId: payload?.command_id,
           requestSha256: payload?.request_sha256,
           expectedAssignmentVersion: payload?.expected_assignment_version,
@@ -19060,9 +19079,16 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
           AND caretaker.asset_sha256 = pa.asset_sha256 THEN 1
          ELSE 0
        END AS caretaker_supervote,
+       CASE
+         WHEN COALESCE(caretaker.active, 0) = 1
+          AND caretaker.asset_sha256 = pa.asset_sha256
+         THEN COALESCE(caretaker.direction, 1)
+         ELSE NULL
+       END AS caretaker_supervote_direction,
        COALESCE(vs.score, 0) + CASE
          WHEN COALESCE(caretaker.active, 0) = 1
-          AND caretaker.asset_sha256 = pa.asset_sha256 THEN 10
+          AND caretaker.asset_sha256 = pa.asset_sha256
+         THEN 10 * COALESCE(caretaker.direction, 1)
          ELSE 0
        END AS weighted_score,
        pa.created_at,
@@ -19083,7 +19109,7 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
        AND COALESCE(pa.asset_sha256, '') <> ''
      ORDER BY
        weighted_score DESC,
-       caretaker_supervote DESC,
+       CASE WHEN caretaker_supervote_direction = 1 THEN 1 ELSE 0 END DESC,
        COALESCE(vs.score, 0) DESC,
        CASE
          WHEN COALESCE(pa.is_legacy, 0) = 0 THEN 1
@@ -19158,6 +19184,9 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
     image_score: topScore,
     weighted_score: topWeightedScore,
     caretaker_supervote: Number(topRow?.caretaker_supervote || 0) > 0,
+    caretaker_supervote_direction: [-1, 1].includes(Number(topRow?.caretaker_supervote_direction))
+      ? Number(topRow.caretaker_supervote_direction)
+      : null,
     image_upvotes: topUpvotes,
     image_downvotes: topDownvotes,
   }
@@ -19690,9 +19719,16 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
             AND caretaker.asset_sha256 = pa.asset_sha256 THEN 1
            ELSE 0
          END AS caretaker_supervote,
+         CASE
+           WHEN COALESCE(caretaker.active, 0) = 1
+            AND caretaker.asset_sha256 = pa.asset_sha256
+           THEN COALESCE(caretaker.direction, 1)
+           ELSE NULL
+         END AS caretaker_supervote_direction,
          COALESCE(vs.score, 0) + CASE
            WHEN COALESCE(caretaker.active, 0) = 1
-            AND caretaker.asset_sha256 = pa.asset_sha256 THEN 10
+            AND caretaker.asset_sha256 = pa.asset_sha256
+           THEN 10 * COALESCE(caretaker.direction, 1)
            ELSE 0
          END AS weighted_score
        FROM icono_portrait_assets pa
@@ -19761,7 +19797,7 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
            PARTITION BY ab.gene_symbol
            ORDER BY
              COALESCE(ab.weighted_score, ab.score, 0) DESC,
-             COALESCE(ab.caretaker_supervote, 0) DESC,
+             CASE WHEN ab.caretaker_supervote_direction = 1 THEN 1 ELSE 0 END DESC,
              COALESCE(ab.score, 0) DESC,
              CASE WHEN COALESCE(ab.is_legacy, 0) = 0 THEN 1 ELSE 0 END DESC,
              COALESCE(ab.upvotes, 0) DESC,
@@ -20135,6 +20171,12 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
           AND caretaker.asset_sha256 = pa.asset_sha256 THEN 1
          ELSE 0
        END AS caretaker_supervote
+       ,CASE
+         WHEN COALESCE(caretaker.active, 0) = 1
+          AND caretaker.asset_sha256 = pa.asset_sha256
+         THEN COALESCE(caretaker.direction, 1)
+         ELSE NULL
+       END AS caretaker_supervote_direction
      FROM icono_portrait_assets pa
      LEFT JOIN icono_vote_asset_summary vs
        ON vs.gene_symbol = pa.gene_symbol
@@ -20161,6 +20203,9 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
     downvotes: Number(row?.downvotes || 0),
     score: Number(row?.score || 0),
     caretaker_supervote: Number(row?.caretaker_supervote || 0) > 0,
+    caretaker_supervote_direction: [-1, 1].includes(Number(row?.caretaker_supervote_direction))
+      ? Number(row.caretaker_supervote_direction)
+      : null,
   }))
 
   const currentAssetSha = normalizeSha256(info?.current_asset_sha256 || "") || null
@@ -20779,9 +20824,16 @@ async function bulkRebuildAdminReadModels(env) {
             AND caretaker.asset_sha256 = pa.asset_sha256 THEN 1
            ELSE 0
          END AS caretaker_supervote,
+         CASE
+           WHEN COALESCE(caretaker.active, 0) = 1
+            AND caretaker.asset_sha256 = pa.asset_sha256
+           THEN COALESCE(caretaker.direction, 1)
+           ELSE NULL
+         END AS caretaker_supervote_direction,
          COALESCE(vs.score, 0) + CASE
            WHEN COALESCE(caretaker.active, 0) = 1
-            AND caretaker.asset_sha256 = pa.asset_sha256 THEN 10
+            AND caretaker.asset_sha256 = pa.asset_sha256
+           THEN 10 * COALESCE(caretaker.direction, 1)
            ELSE 0
          END AS weighted_score
        FROM icono_portrait_assets pa
@@ -20848,7 +20900,7 @@ async function bulkRebuildAdminReadModels(env) {
            PARTITION BY ab.gene_symbol
            ORDER BY
              COALESCE(ab.weighted_score, ab.score, 0) DESC,
-             COALESCE(ab.caretaker_supervote, 0) DESC,
+             CASE WHEN ab.caretaker_supervote_direction = 1 THEN 1 ELSE 0 END DESC,
              COALESCE(ab.score, 0) DESC,
              CASE WHEN COALESCE(ab.is_legacy, 0) = 0 THEN 1 ELSE 0 END DESC,
              COALESCE(ab.upvotes, 0) DESC,
@@ -23989,6 +24041,7 @@ async function listAutopromoteCandidateAssetsForSymbol(env, rawSymbol) {
     downvotes: 0,
     score: 0,
     caretaker_supervote: false,
+    caretaker_supervote_direction: null,
   }))
 }
 
@@ -24036,6 +24089,9 @@ async function autoPromoteTopVotedPortraitFromCoordinatorState(
       downvotes: Math.max(0, Number(rawRow?.downvotes || 0) || 0),
       score: Number(rawRow?.score || 0) || 0,
       caretaker_supervote: Boolean(rawRow?.caretaker_supervote),
+      caretaker_supervote_direction: [-1, 1].includes(Number(rawRow?.caretaker_supervote_direction))
+        ? Number(rawRow.caretaker_supervote_direction)
+        : null,
       vision_id: sanitizeVoteVisionId(rawRow?.vision_id || "") || "",
       candidate_image_id: optionalInt(rawRow?.candidate_image_id),
     })
@@ -24053,6 +24109,7 @@ async function autoPromoteTopVotedPortraitFromCoordinatorState(
         downvotes: Number(vote?.downvotes || 0),
         score: Number(vote?.score || 0),
         caretaker_supervote: Boolean(vote?.caretaker_supervote),
+        caretaker_supervote_direction: vote?.caretaker_supervote_direction ?? null,
       }
     })
     .filter((row) => row.asset_sha256)
@@ -24109,6 +24166,7 @@ async function autoPromoteTopVotedPortraitFromCoordinatorState(
     image_score: Number(topAsset.score || 0),
     weighted_score: caretakerWeightedScore(topAsset),
     caretaker_supervote: Boolean(topAsset.caretaker_supervote),
+    caretaker_supervote_direction: topAsset.caretaker_supervote_direction ?? null,
     image_upvotes: Number(topAsset.upvotes || 0),
     image_downvotes: Number(topAsset.downvotes || 0),
   }
@@ -28858,9 +28916,16 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
           AND caretaker.asset_sha256 = pa.asset_sha256 THEN 1
          ELSE 0
        END AS caretaker_supervote,
+       CASE
+         WHEN COALESCE(caretaker.active, 0) = 1
+          AND caretaker.asset_sha256 = pa.asset_sha256
+         THEN COALESCE(caretaker.direction, 1)
+         ELSE NULL
+       END AS caretaker_supervote_direction,
        COALESCE(vs.score, 0) + CASE
          WHEN COALESCE(caretaker.active, 0) = 1
-          AND caretaker.asset_sha256 = pa.asset_sha256 THEN 10
+          AND caretaker.asset_sha256 = pa.asset_sha256
+         THEN 10 * COALESCE(caretaker.direction, 1)
          ELSE 0
        END AS weighted_score
      FROM icono_portrait_assets pa
@@ -28900,7 +28965,12 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
       image_downvotes: Number(row?.image_downvotes || 0),
       image_score: Number(row?.image_score || 0),
       caretaker_supervote: Number(row?.caretaker_supervote || 0) > 0,
-      caretaker_supervote_weight: Number(row?.caretaker_supervote || 0) > 0 ? 10 : 0,
+      caretaker_supervote_direction: [-1, 1].includes(Number(row?.caretaker_supervote_direction))
+        ? Number(row.caretaker_supervote_direction)
+        : null,
+      caretaker_supervote_weight: [-1, 1].includes(Number(row?.caretaker_supervote_direction))
+        ? Number(row.caretaker_supervote_direction) * 10
+        : 0,
       weighted_score: Number(row?.weighted_score || row?.image_score || 0),
       created_at: row?.created_at ? String(row.created_at) : null,
       full_url: adminPortraitUrl(base, assetSha, "full"),
@@ -28915,7 +28985,8 @@ async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = 
     return (
       Number(right.is_current) - Number(left.is_current) ||
       Number(right.weighted_score || 0) - Number(left.weighted_score || 0) ||
-      Number(right.caretaker_supervote) - Number(left.caretaker_supervote) ||
+      Number(right.caretaker_supervote_direction === 1) -
+        Number(left.caretaker_supervote_direction === 1) ||
       Number(right.image_score || 0) - Number(left.image_score || 0) ||
       Number(right.image_upvotes || 0) - Number(left.image_upvotes || 0) ||
       compareNullableTextDesc(left.created_at, right.created_at) ||
@@ -35549,17 +35620,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         }
         const assetSha =
           request.method === "DELETE" ? null : normalizeSha256(payload?.asset_sha256 || "")
+        const direction = request.method === "DELETE" ? null : Number(payload?.direction)
         const commandId = sanitizeText(payload?.command_id || "", 192) || ""
         const expectedAssignmentVersion = Number(payload?.expected_assignment_version)
         const expectedSupervoteVersion = Number(payload?.expected_supervote_version)
-        if (request.method === "PUT" && !assetSha) {
+        if (request.method === "PUT" && (!assetSha || ![-1, 1].includes(direction))) {
           return done(
             "caretaker_supervote_400",
             json(
               {
                 ok: false,
                 code: "INVALID_SUPERVOTE_TARGET",
-                error: "asset_sha256 is required.",
+                error: "asset_sha256 and direction (-1 or 1) are required.",
               },
               400,
             ),
@@ -35589,6 +35661,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           gene_symbol: symbol,
           caretaker_account_id: accountId,
           asset_sha256: assetSha,
+          direction,
           expected_assignment_version: expectedAssignmentVersion,
           expected_supervote_version: expectedSupervoteVersion,
         })
@@ -35596,6 +35669,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           symbol,
           accountId,
           assetSha256: assetSha,
+          direction,
           commandId,
           requestSha256,
           expectedAssignmentVersion,
