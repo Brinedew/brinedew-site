@@ -210,3 +210,193 @@ export async function deliverPendingCaretakerCommentNotifications(env, { limit =
   }
   return { ok: true, delivered }
 }
+
+async function finishSupervote(db, key, status, fields = {}) {
+  await db
+    .prepare(
+      `UPDATE icono_caretaker_supervote_notifications
+          SET discord_status = ?, discord_channel_id = ?, discord_message_id = ?,
+              discord_error = ?, discord_next_attempt_at = ?, updated_at = CURRENT_TIMESTAMP,
+              sent_at = CASE WHEN ? = 'sent' THEN CURRENT_TIMESTAMP ELSE sent_at END
+        WHERE notification_key = ?`,
+    )
+    .bind(
+      status,
+      bounded(fields.channelId, 64) || null,
+      bounded(fields.messageId, 64) || null,
+      bounded(fields.error, 500),
+      fields.nextAttemptAt || null,
+      status,
+      key,
+    )
+    .run()
+}
+
+export async function deliverPendingCaretakerSupervoteNotifications(env, { limit = 20 } = {}) {
+  const db = env?.ICONOPLASM_DB
+  const accounts = env?.DB
+  const token = bounded(env?.DISCORD_BOT_TOKEN, 512)
+  if (!db?.prepare || !accounts?.prepare || !token) {
+    return { ok: false, delivered: 0, skipped: "unavailable" }
+  }
+  const safeLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 20)))
+  const due = await db
+    .prepare(
+      `SELECT * FROM icono_caretaker_supervote_notifications
+        WHERE discord_status IN ('pending', 'retry')
+          AND (discord_next_attempt_at IS NULL OR discord_next_attempt_at <= CURRENT_TIMESTAMP)
+        ORDER BY created_at, notification_key LIMIT ?`,
+    )
+    .bind(safeLimit)
+    .all()
+  let delivered = 0
+  for (const row of due?.results || []) {
+    const claim = await db
+      .prepare(
+        `UPDATE icono_caretaker_supervote_notifications
+            SET discord_status = 'sending', discord_attempt_count = discord_attempt_count + 1,
+                updated_at = CURRENT_TIMESTAMP, discord_error = ''
+          WHERE notification_key = ? AND discord_status IN ('pending', 'retry')`,
+      )
+      .bind(row.notification_key)
+      .run()
+    if (Number(claim?.meta?.changes || 0) !== 1) continue
+    const current = await db
+      .prepare(
+        `SELECT 1 AS current_preference
+           FROM icono_caretaker_supervote_projection supervote
+           JOIN icono_caretaker_assignment_notifications assignment
+             ON assignment.caretaker_assignment_id = supervote.caretaker_assignment_id
+            AND assignment.account_id = supervote.caretaker_account_id
+          WHERE supervote.caretaker_assignment_id = ?
+            AND supervote.caretaker_account_id = ?
+            AND supervote.gene_symbol = ?
+            AND supervote.active = 1 AND supervote.direction = 1
+            AND supervote.asset_sha256 = ?
+            AND supervote.supervote_version = ?
+            AND assignment.assignment_status IN ('active', 'suspended')
+            AND EXISTS (
+              SELECT 1 FROM icono_publish_state publish
+               WHERE publish.gene_symbol = supervote.gene_symbol
+                 AND publish.current_asset_sha256 IS NOT supervote.asset_sha256
+            )`,
+      )
+      .bind(
+        row.caretaker_assignment_id,
+        row.caretaker_account_id,
+        row.gene_symbol,
+        row.preferred_asset_sha256,
+        Number(row.supervote_version),
+      )
+      .first()
+    if (!current) {
+      await finishSupervote(db, row.notification_key, "suppressed", {
+        error: "preference_no_longer_current",
+      })
+      continue
+    }
+    let identity
+    try {
+      identity = await accounts
+        .prepare(
+          `SELECT provider_subject
+             FROM brinedew_account_identities
+            WHERE account_id = ? AND provider = 'discord' AND unlinked_at IS NULL
+            ORDER BY link_version DESC LIMIT 1`,
+        )
+        .bind(row.caretaker_account_id)
+        .first()
+    } catch (error) {
+      await finishSupervote(db, row.notification_key, "retry", {
+        error: bounded(error?.message || "account_identity_read_failed", 300),
+        nextAttemptAt: retryAt(Number(row.discord_attempt_count || 0) + 1),
+      })
+      continue
+    }
+    const discordUserId = bounded(identity?.provider_subject, 64)
+    if (!discordUserId) {
+      await finishSupervote(db, row.notification_key, "suppressed", {
+        error: "discord_identity_missing",
+      })
+      continue
+    }
+    let channelResponse
+    try {
+      channelResponse = await fetch("https://discord.com/api/v10/users/@me/channels", {
+        method: "POST",
+        headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ recipient_id: discordUserId }),
+      })
+    } catch (error) {
+      await finishSupervote(db, row.notification_key, "retry", {
+        error: bounded(error?.message || "network_error", 300),
+        nextAttemptAt: retryAt(Number(row.discord_attempt_count || 0) + 1),
+      })
+      continue
+    }
+    const channelBody = await channelResponse.text()
+    if (!channelResponse.ok) {
+      const retryable = channelResponse.status === 429 || channelResponse.status >= 500
+      await finishSupervote(db, row.notification_key, retryable ? "retry" : "failed", {
+        error: deliveryError(channelResponse, channelBody),
+        nextAttemptAt: retryable ? retryAt(Number(row.discord_attempt_count || 0) + 1) : null,
+      })
+      continue
+    }
+    let channel
+    try {
+      channel = JSON.parse(channelBody)
+    } catch {
+      channel = null
+    }
+    if (!channel?.id) {
+      await finishSupervote(db, row.notification_key, "failed", {
+        error: "discord_dm_channel_missing",
+      })
+      continue
+    }
+    const geneUrl = `https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(row.gene_symbol)}`
+    let messageResponse
+    try {
+      messageResponse = await fetch(`https://discord.com/api/v10/channels/${channel.id}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: boundedCodePoints(
+            `Your 10x preferred blot for **${row.gene_symbol}** is no longer canonical.\n${geneUrl}`,
+            2000,
+          ),
+          allowed_mentions: { parse: [] },
+        }),
+      })
+    } catch (error) {
+      await finishSupervote(db, row.notification_key, "unknown", {
+        channelId: channel.id,
+        error: bounded(error?.message || "ambiguous_message_post", 300),
+      })
+      continue
+    }
+    const messageBody = await messageResponse.text()
+    if (!messageResponse.ok) {
+      const retryable = messageResponse.status === 429 || messageResponse.status >= 500
+      await finishSupervote(db, row.notification_key, retryable ? "retry" : "failed", {
+        channelId: channel.id,
+        error: deliveryError(messageResponse, messageBody),
+        nextAttemptAt: retryable ? retryAt(Number(row.discord_attempt_count || 0) + 1) : null,
+      })
+      continue
+    }
+    let message
+    try {
+      message = JSON.parse(messageBody)
+    } catch {
+      message = null
+    }
+    await finishSupervote(db, row.notification_key, "sent", {
+      channelId: channel.id,
+      messageId: message?.id || "",
+    })
+    delivered += 1
+  }
+  return { ok: true, delivered }
+}

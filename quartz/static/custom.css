@@ -1036,6 +1036,23 @@ article p {
   text-decoration: underline;
 }
 
+.icono-request-inbox__caretaker-supervote-alert {
+  display: block;
+  margin: -0.15rem 0 0.75rem 2.75rem;
+  padding-left: 0.65rem;
+  border-left: 2px solid var(--accent);
+  color: var(--darkgray);
+  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  text-decoration: none;
+}
+
+.icono-request-inbox__caretaker-supervote-alert:hover,
+.icono-request-inbox__caretaker-supervote-alert:focus-visible {
+  color: var(--accent);
+}
+
 .icono-request-inbox__group-body > :last-child {
   border-bottom: 0;
 }
