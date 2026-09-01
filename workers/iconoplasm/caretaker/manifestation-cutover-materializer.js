@@ -36,12 +36,14 @@ import {
 } from "./manifestation-upload-intents.js"
 
 async function sourceRow(primaryDb, symbol) {
+  // Cutover item symbols are canonical uppercase keys. Do not add a collation
+  // here; D1 otherwise cannot use icono_gene_essence's primary-key index.
   return first(
     primaryDb,
     `SELECT gene_symbol, manifestation, manifestation_tags, manifestation_fields_json,
             sample_label, sample_number, sample_text_hash, updated_at
        FROM icono_gene_essence
-      WHERE gene_symbol = ? COLLATE NOCASE LIMIT 1`,
+      WHERE gene_symbol = ? LIMIT 1`,
     symbol,
   )
 }
