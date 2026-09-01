@@ -8,7 +8,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=20260730-module-cache"
-import { createRequestInbox } from "./request-inbox.js?v=20260901-caretaker-sidebar-v2"
+import { createRequestInbox } from "./request-inbox.js?v=20260901-caretaker-coordination-v1"
 import { portraitDelivery } from "./portrait-delivery.js?v=0d14e5a87d1914bf"
 import {
   createEmulsionFavoriteStore,
@@ -350,12 +350,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (host.getAttribute("data-icono-caretaker-signature") === signature) return
     host.setAttribute("data-icono-caretaker-signature", signature)
     void loadCaretakerPanel()
-      .then(function (panel) {
-        return panel.mount(host, {
+      .then(async function (panel) {
+        await panel.mount(host, {
           symbol: symbol,
           currentUser: currentUser,
           authResolved: hasResolvedAuthState,
         })
+        if (new URL(window.location.href).searchParams.get("caretaker") === "open") panel.open(host)
       })
       .catch(function () {
         host.removeAttribute("data-icono-caretaker-signature")
@@ -2598,23 +2599,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var page = String((iconoSidebarState && iconoSidebarState.page) || "home")
     if (page === "home") return ""
     if (page === "gene") {
-      var gene = (iconoSidebarState && iconoSidebarState.gene) || null
-      var caretaker = (iconoSidebarState && iconoSidebarState.caretaker) || null
-      if (caretaker && caretaker.symbol === gene?.symbol) {
-        var html =
-          '<div class="brd-sidebar-section icono-caretaker-launcher">' +
-          '<div class="brd-sidebar-panel-title">Caretaking</div>' +
-          '<button type="button" class="icono-caretaker-launcher__button" data-icono-caretaker-open>' +
-          "<span>" +
-          esc(caretaker.symbol) +
-          "</span>" +
-          "<strong>Open caretaker record</strong>" +
-          "<small>" +
-          esc(caretaker.status.replaceAll("_", " ")) +
-          "</small>" +
-          "</button></div>"
-        return html
-      }
       return requestInbox.caretakerPanelMarkup()
     }
     if (page === "404") {
@@ -9313,7 +9297,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '<p class="icono-suggest-err" data-icono-suggest-err hidden></p>'
       : '<p class="icono-suggest-signin">Sign in with Discord to suggest a resample.</p>'
     return (
-      '<section class="icono-suggest" data-icono-suggest="' +
+      '<section id="gene-comments" class="icono-suggest" data-icono-suggest="' +
       safe +
       '">' +
       '<div class="icono-suggest-lab">Suggestions<span data-icono-suggest-count></span></div>' +
