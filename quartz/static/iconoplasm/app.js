@@ -312,6 +312,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               }
             : null
           renderIconoplasmSidebar()
+          void requestInbox.refresh()
           var geneContent = detail.host && detail.host.closest("#icono-gene-content")
           if (!geneContent) return
           return supervoteControls.mount(geneContent, {
@@ -347,7 +348,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     hydrateCaretakerClaimAction(container, genePayload)
     var accountId = String(currentUser.account_id || currentUser.id || currentUser.user_id || "")
     var signature = accountId + ":" + symbol
-    if (host.getAttribute("data-icono-caretaker-signature") === signature) return
+    if (host.getAttribute("data-icono-caretaker-signature") === signature) {
+      if (new URL(window.location.href).searchParams.get("caretaker") === "open") {
+        void loadCaretakerPanel().then(function (panel) {
+          panel.open(host)
+        })
+      }
+      return
+    }
     host.setAttribute("data-icono-caretaker-signature", signature)
     void loadCaretakerPanel()
       .then(async function (panel) {
