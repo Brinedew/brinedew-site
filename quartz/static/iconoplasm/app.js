@@ -272,7 +272,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=20260901-caretaker-modal-v3"),
+      import("./caretaker-manifestations.js?v=20260901-caretaker-modal-v4"),
       import("./caretaker-supervote.js?v=20260830-supervote-v1"),
     ]).then(function (modules) {
       var supervoteControls = modules[1].createCaretakerSupervoteControls({
@@ -282,7 +282,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var manifestationPanel = modules[0].createCaretakerManifestationPanel({
         fetchJSON: fetchAuthedJSON,
         escapeHtml: esc,
-        onCanonicalChanged: function (symbol) {
+        onCanonicalChanged: function (symbol, expectation) {
           invalidateGeneDetail(symbol)
           return fetchGeneDetail(symbol, { forceFresh: true }).then(function (gene) {
             var route = getRoute()
@@ -295,6 +295,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               return
             }
             reconcilePublicManifestationSection(content, gene)
+            var canonical = gene && gene.canonical_manifestation
+            return !!(
+              expectation &&
+              String((canonical && canonical.manifestation_revision_id) || "") ===
+                expectation.canonicalRevisionId &&
+              (canonical?.public_page_visible === true) === expectation.publicPageVisible
+            )
           })
         },
         onDossierChanged: function (detail) {

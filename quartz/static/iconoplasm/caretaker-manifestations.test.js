@@ -30,6 +30,12 @@ test("the caretaker modal versions its complete immutable module graph", async (
       `${moduleName} must version every static submodule import`,
     )
   }
+  const controller = await readFile(
+    new URL("caretaker-manifestations-controller.js", import.meta.url),
+    "utf8",
+  )
+  assert.match(controller, /const retryDelays = \[0, 1_000, 3_000, 7_000, 15_000\]/)
+  assert.match(controller, /matchesPublishedState !== false/)
 })
 
 function escapeHtml(value) {

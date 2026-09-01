@@ -4,7 +4,7 @@ import {
   codePointLength,
   manifestationWordDiff,
   ownManifestation,
-} from "./caretaker-manifestations-model.js?v=20260901-caretaker-modal-v3"
+} from "./caretaker-manifestations-model.js?v=20260901-caretaker-modal-v4"
 
 export function diffMarkup(before, after, escapeHtml) {
   if (String(before || "") === String(after || "")) {
