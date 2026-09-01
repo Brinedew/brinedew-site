@@ -121,3 +121,54 @@ test("publication wake emits one ordinary dirty-card event and replays idempoten
     db.raw.close()
   }
 })
+
+test("publication wake re-notifies the card publisher after a committed wake replay", async () => {
+  const db = new D1()
+  const calls = []
+  try {
+    db.raw
+      .prepare(
+        `INSERT INTO icono_manifestation_publication_wakes (
+         authority_event_id, authority_event_sequence, gene_id, canonical_symbol
+       ) VALUES ('event_0002', 2, 'gene_brca1', 'BRCA1')`,
+      )
+      .run()
+
+    await assert.rejects(
+      drainManifestationPublicCardPublicationWakes(db, {
+        authorityEventId: "event_0002",
+        wakeCardPublication: async (payload) => {
+          calls.push(payload.authority_event_id)
+          throw new Error("publisher temporarily unavailable")
+        },
+      }),
+      /publisher temporarily unavailable/,
+    )
+    const replay = await drainManifestationPublicCardPublicationWakes(db, {
+      authorityEventId: "event_0002",
+      wakeCardPublication: async (payload) => calls.push(payload.authority_event_id),
+    })
+
+    assert.equal(replay.published_count, 0)
+    assert.deepEqual(calls, ["event_0002", "event_0002"])
+    assert.deepEqual(
+      {
+        ...db.raw
+          .prepare(
+            `SELECT status, attempts FROM icono_manifestation_publication_wakes
+              WHERE authority_event_id = 'event_0002'`,
+          )
+          .get(),
+      },
+      { status: "published", attempts: 1 },
+    )
+    assert.equal(
+      db.raw
+        .prepare("SELECT COUNT(*) AS count FROM icono_publish_events WHERE reason = 'event_0002'")
+        .get().count,
+      1,
+    )
+  } finally {
+    db.raw.close()
+  }
+})
