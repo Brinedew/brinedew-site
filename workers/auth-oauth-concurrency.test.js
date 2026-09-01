@@ -321,6 +321,61 @@ test("callback state without its matching browser cookie is rejected before toke
   assert.deepEqual(await response.json(), { error: "Missing OAuth session" })
 })
 
+test("D1 daily read exhaustion returns retryable auth downtime instead of throwing 1101", async (t) => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url === "https://discord.com/api/v10/oauth2/token") {
+      return Response.json({
+        access_token: "quota-access",
+        refresh_token: "quota-refresh",
+        expires_in: 3600,
+      })
+    }
+    if (url === "https://discord.com/api/v10/users/@me") {
+      return Response.json({ id: "quota-discord", username: "quota-user", avatar: null })
+    }
+    throw new Error(`Unexpected fetch: ${url}`)
+  }
+  t.after(() => {
+    globalThis.fetch = originalFetch
+  })
+
+  const env = createEnv()
+  const login = oauthAttempt(
+    await handleLogin(new Request("https://geneguessr.brinedew.bio/api/auth/login"), env),
+  )
+  env.DB = {
+    prepare() {
+      throw new Error("D1_ERROR: Your account has exceeded D1's free tier daily row read limit.")
+    },
+    batch() {
+      throw new Error("D1_ERROR: Your account has exceeded D1's free tier daily row read limit.")
+    },
+  }
+
+  const response = await handleCallback(
+    new Request(
+      `https://geneguessr.brinedew.bio/api/auth/callback?code=quota&state=${encodeURIComponent(login.state)}`,
+      { headers: { Cookie: login.browserCookie } },
+    ),
+    env,
+  )
+
+  assert.equal(response.status, 503)
+  assert.ok(Number(response.headers.get("retry-after")) > 0)
+  assert.match(response.headers.get("set-cookie"), new RegExp(`^${login.cookieName}=;`))
+  assert.deepEqual(await response.json(), {
+    error: "Sign-in is temporarily unavailable while account storage resets.",
+    code: "AUTHORITY_STORAGE_DAILY_LIMIT",
+    retry_after_seconds: Number(response.headers.get("retry-after")),
+  })
+  assert.equal(
+    [...env.GAME_SESSIONS.records.keys()].filter((key) => key.startsWith("session:")).length,
+    0,
+  )
+})
+
 test("OAuth refuses a disabled account before creating a persistent session", async (t) => {
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (input) => {
