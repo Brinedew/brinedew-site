@@ -178,6 +178,9 @@ export async function retireNextLegacyManifestationPlaintextPage(
     )
   }
 
+  // The source catalog stores canonical uppercase symbols. Raw comparison and
+  // ordering let D1 resume directly from the primary-key cursor instead of
+  // sorting/scanning the complete essence table for every retirement page.
   const rows = await all(
     db,
     `SELECT gene_symbol,
@@ -190,8 +193,8 @@ export async function retireNextLegacyManifestationPlaintextPage(
                    OR manifestation_fields_json IS NOT NULL
               THEN 1 ELSE 0 END AS needs_retirement
        FROM icono_gene_essence
-      WHERE gene_symbol > ? COLLATE NOCASE
-      ORDER BY gene_symbol COLLATE NOCASE ASC
+      WHERE gene_symbol > ?
+      ORDER BY gene_symbol ASC
       LIMIT ?`,
     String(retirement.scan_after_symbol || ""),
     pageSize,
@@ -209,7 +212,7 @@ export async function retireNextLegacyManifestationPlaintextPage(
         `UPDATE icono_gene_essence
             SET manifestation = NULL, manifestation_tags = NULL,
                 manifestation_fields_json = NULL
-          WHERE gene_symbol = ? COLLATE NOCASE
+          WHERE gene_symbol = ?
             AND (manifestation IS NOT NULL OR manifestation_tags IS NOT NULL
               OR manifestation_fields_json IS NOT NULL)`,
       )

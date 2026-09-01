@@ -397,8 +397,8 @@ export async function planNextManifestationCutoverPage(
     `SELECT gene_symbol, manifestation, manifestation_tags, manifestation_fields_json,
             sample_label, sample_number, sample_text_hash, updated_at
        FROM icono_gene_essence
-      WHERE gene_symbol > ? COLLATE NOCASE
-      ORDER BY gene_symbol COLLATE NOCASE ASC
+      WHERE gene_symbol > ?
+      ORDER BY gene_symbol ASC
       LIMIT ?`,
     String(cutover.scan_after_symbol || ""),
     pageSize,
@@ -498,12 +498,15 @@ export async function planNextManifestationCutoverPage(
 export async function verifyPlannedLegacySource(primaryDb, plannedItem) {
   const db = requireDb(primaryDb, "primaryDb")
   const itemSymbol = symbol(plannedItem?.canonical_symbol)
+  // symbol() has already canonicalized case. Keep this raw equality on the
+  // gene_symbol primary key: an explicit NOCASE collation turns a one-row
+  // verification into a full icono_gene_essence scan in remote D1.
   const row = await first(
     db,
     `SELECT gene_symbol, manifestation, manifestation_tags, manifestation_fields_json,
             sample_label, sample_number, sample_text_hash, updated_at
        FROM icono_gene_essence
-      WHERE gene_symbol = ? COLLATE NOCASE
+      WHERE gene_symbol = ?
       LIMIT 1`,
     itemSymbol,
   )
