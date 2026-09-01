@@ -1724,7 +1724,7 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.match(app, /function reconcilePublicManifestationSection\(container, g\)/)
   assert.match(
     app,
-    /onCanonicalChanged: function \(symbol\) \{[\s\S]*fetchGeneDetail\(symbol, \{ forceFresh: true \}\)[\s\S]*reconcilePublicManifestationSection\(content, gene\)/,
+    /onCanonicalChanged: function \(symbol, expectation\) \{[\s\S]*fetchGeneDetail\(symbol, \{ forceFresh: true \}\)[\s\S]*reconcilePublicManifestationSection\(content, gene\)/,
     "caretaker visibility changes must update only the published manifestation section instead of replacing the open caretaker modal",
   )
   const shellStart = app.indexOf("function genePageShellMarkup(includeSkeleton)")
