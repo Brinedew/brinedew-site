@@ -744,18 +744,31 @@ function projectionRetryAt(attempts, now) {
   return new Date(now.getTime() + delayMs).toISOString()
 }
 
-async function pendingProjectionEvents(authoringDb, { limit, now }) {
+async function pendingProjectionEvents(authoringDb, { limit, now, priorityEventId = null }) {
+  const priority = String(priorityEventId || "").trim()
   const response = await authoringDb
     .prepare(
       `SELECT event_uuid, event_sequence, gene_id, payload_json,
               projection_status, projection_attempts
-         FROM icono_manifestation_events
-        WHERE projection_status IN ('pending', 'failed')
-          AND (projection_next_attempt_at IS NULL OR projection_next_attempt_at <= ?)
-        ORDER BY event_sequence ASC
+         FROM icono_manifestation_events AS candidate
+        WHERE candidate.projection_status IN ('pending', 'failed')
+          AND (
+            candidate.event_uuid = ?
+            OR candidate.projection_next_attempt_at IS NULL
+            OR candidate.projection_next_attempt_at <= ?
+          )
+          AND NOT EXISTS (
+            SELECT 1
+              FROM icono_manifestation_events AS newer
+             WHERE newer.gene_id = candidate.gene_id
+               AND newer.projection_status IN ('pending', 'failed')
+               AND newer.event_sequence > candidate.event_sequence
+          )
+        ORDER BY CASE WHEN candidate.event_uuid = ? THEN 0 ELSE 1 END,
+                 candidate.event_sequence ASC
         LIMIT ?`,
     )
-    .bind(now.toISOString(), limit)
+    .bind(priority, now.toISOString(), priority, limit)
     .all()
   return Array.isArray(response?.results) ? response.results : []
 }
@@ -780,12 +793,12 @@ async function markProjectionPublished(authoringDb, envelope) {
     .prepare(
       `UPDATE icono_manifestation_events
           SET projection_status = 'published',
-              projection_attempts = projection_attempts + 1,
+              projection_attempts = projection_attempts + CASE WHEN event_uuid = ? THEN 1 ELSE 0 END,
               projection_next_attempt_at = NULL
-        WHERE event_uuid = ? AND event_sequence = ?
+        WHERE gene_id = ? AND event_sequence <= ?
           AND projection_status IN ('pending', 'failed')`,
     )
-    .bind(envelope.event_id, envelope.event_sequence)
+    .bind(envelope.event_id, envelope.gene_id, envelope.event_sequence)
     .run()
 }
 
@@ -816,6 +829,7 @@ export async function drainManifestationAuthorityProjectionOutbox(
     projectPublicMaterialEvent,
     limit = 10,
     now = new Date(),
+    priorityEventId = null,
     onIntegrityFailure = null,
   } = {},
   { readCanonical = readCanonicalProjectionRecord } = {},
@@ -826,7 +840,11 @@ export async function drainManifestationAuthorityProjectionOutbox(
   const boundedLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 10)))
   const clock = now instanceof Date ? now : new Date(now)
   if (!Number.isFinite(clock.getTime())) throw new TypeError("Invalid projection drain timestamp")
-  const rows = await pendingProjectionEvents(authoringDb, { limit: boundedLimit, now: clock })
+  const rows = await pendingProjectionEvents(authoringDb, {
+    limit: boundedLimit,
+    now: clock,
+    priorityEventId,
+  })
   const results = []
   for (const row of rows) {
     let envelope = null
