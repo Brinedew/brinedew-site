@@ -421,10 +421,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           esc(symbol) +
           ' caretaker">' +
           '<form class="icono-caretaker-claim-form" data-icono-caretaker-claim-form>' +
-          "<p>Caretakers can write manifestations, keep version history, choose the canonical version, and control whether their manifestation appears on the gene page.</p>" +
-          "<fieldset><legend>If you stop caretaking " +
-          esc(symbol) +
-          '</legend><label><input type="radio" name="leave_policy" value="retain" checked> Keep my manifestation</label><label><input type="radio" name="leave_policy" value="withdraw"> Automatically remove my manifestation from the page</label></fieldset>' +
+          '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise manifestations.</li><li>Choose the canonical version or restore an earlier one.</li><li>Show or hide manifestation prose on the gene page.</li></ul><p class="icono-caretaker-capabilities__note">Leaving options stay in caretaker settings until you need them.</p></div>' +
           '<label class="icono-caretaker-claim-terms"><input type="checkbox" data-icono-caretaker-claim-terms> I accept the <a href="' +
           esc(terms.document_url) +
           '" target="_blank" rel="noopener">' +
@@ -432,7 +429,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           '</a>.</label><p class="icono-caretaker-status" data-icono-caretaker-claim-status hidden role="status"></p>' +
           '</form><div slot="footer"><button type="button" class="icono-button" data-icono-caretaker-claim-cancel>Cancel</button> <button type="submit" form="" class="icono-button icono-button--primary" data-icono-caretaker-claim-submit disabled>Become caretaker</button></div></sl-dialog>'
         var dialog = target.querySelector("[data-icono-caretaker-claim-dialog]")
-        var form = target.querySelector("[data-icono-caretaker-claim-form]")
         var termsCheckbox = target.querySelector("[data-icono-caretaker-claim-terms]")
         var submit = target.querySelector("[data-icono-caretaker-claim-submit]")
         var status = target.querySelector("[data-icono-caretaker-claim-status]")
@@ -451,8 +447,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         })
         submit?.addEventListener("click", function () {
           if (!termsCheckbox?.checked || submit.disabled) return
-          var leavePolicy =
-            form.querySelector('input[name="leave_policy"]:checked')?.value || "retain"
           submit.disabled = true
           status.hidden = false
           status.textContent = "Claiming caretaking…"
@@ -468,7 +462,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                 terms_version_id: terms.terms_version_id,
                 terms_accepted: true,
                 entitlement_policy_version: claim.entitlement_policy_version,
-                default_leave_policy: leavePolicy,
+                default_leave_policy: "retain",
               }),
             },
           )

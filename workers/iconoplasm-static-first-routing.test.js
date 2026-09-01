@@ -25,17 +25,38 @@ test("the first caretaker terms version is an immutable, hash-pinned public docu
   const canonical = readFileSync(
     new URL("../quartz/static/iconoplasm/caretaker-terms-2026-08-30.txt", import.meta.url),
   )
-  const page = readFileSync(
-    new URL("../content/apps/iconoplasm/caretaker-terms.md", import.meta.url),
-    "utf8",
-  )
   assert.equal(
     createHash("sha256").update(canonical).digest("hex"),
     "06b27f697c0c9a9fcaaa3ae01014c008aa6d149eed1279afbb75f9d924ed1aa5",
   )
   assert.match(canonical.toString("utf8"), /Version: terms_2026_08_30_v1/)
-  assert.match(page, /terms_2026_08_30_v1/)
-  assert.match(page, /caretaker-terms-2026-08-30\.txt/)
+})
+
+test("the active caretaker terms are an immutable, hash-pinned CC0 document", () => {
+  const canonical = readFileSync(
+    new URL("../quartz/static/iconoplasm/caretaker-terms-2026-09-01.txt", import.meta.url),
+  )
+  const page = readFileSync(
+    new URL("../content/apps/iconoplasm/caretaker-terms.md", import.meta.url),
+    "utf8",
+  )
+  const migration = readFileSync(
+    new URL(
+      "../migrations-iconoplasm-authoring/0008_caretaker_terms_cc0_2026_09_01.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  )
+  assert.equal(
+    createHash("sha256").update(canonical).digest("hex"),
+    "c018e15debeddad5b4ea88805e291a249fc7048ccc3d5c56fa09e990edf0d1ed",
+  )
+  assert.match(canonical.toString("utf8"), /Version: terms_2026_09_01_v2/)
+  assert.match(canonical.toString("utf8"), /dedicate it under CC0 1\.0 Universal/)
+  assert.match(page, /terms_2026_09_01_v2/)
+  assert.match(page, /caretaker-terms-2026-09-01\.txt/)
+  assert.match(migration, /terms_2026_09_01_v2/)
+  assert.match(migration, /c018e15debeddad5b4ea88805e291a249fc7048ccc3d5c56fa09e990edf0d1ed/)
 })
 
 // ARCHITECTURE FENCE [IPD-007]
