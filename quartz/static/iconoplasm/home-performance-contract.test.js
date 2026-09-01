@@ -91,10 +91,10 @@ test("gene caretaking is a toolbar claim and a dedicated sidebar panel, never an
     /\.icono-standard-dialog\s*\{[^}]*--sl-panel-background-color:\s*var\(--light\)/s,
   )
   assert.match(styles, /\.icono-standard-dialog::part\(panel\)\s*\{[^}]*background:/s)
-  assert.match(
-    caretakerStyles,
-    /:is\(\.icono-caretaker-panel, \.icono-caretaker-claim-dialog\) \.icono-button\s*\{/,
-  )
+  assert.match(styles, /\.icono-standard-dialog \.icono-button\s*\{[^}]*font:/s)
+  assert.match(styles, /\.icono-standard-dialog \.icono-button--quiet\s*\{/)
+  assert.match(styles, /\.icono-caretaker-claim-actions\s*\{[^}]*justify-content:\s*flex-end/s)
+  assert.doesNotMatch(caretakerStyles, /icono-caretaker-claim-dialog/)
 })
 
 test("Iconoplasm font paint is in-memory, bounded, and independent of preload timing", async () => {
