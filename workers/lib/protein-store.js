@@ -277,7 +277,7 @@ function toProteinObject(row) {
   }
 }
 
-export async function fetchProteinByUniprot(db, uniprot) {
+export async function fetchProteinByUniprot(db, uniprot, { throwOnUnavailable = false } = {}) {
   const key = normalizeKey(uniprot)
   if (!key) {
     return null
@@ -294,6 +294,7 @@ export async function fetchProteinByUniprot(db, uniprot) {
     protein = toProteinObject(row)
   } catch (err) {
     console.warn("GeneGuessr: D1 fetchProteinByUniprot failed", err)
+    if (throwOnUnavailable) throw err
   }
   if (protein) {
     rememberProtein(key, protein)
