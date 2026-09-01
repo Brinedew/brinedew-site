@@ -855,6 +855,17 @@ test("bounded operator resumes through encrypted materialization, shadow project
       .map((row) => ({ ...row })),
     [{ projection_status: "published", event_count: 4 }],
   )
+  assert.deepEqual(
+    primary.raw
+      .prepare(
+        `SELECT status, COUNT(*) AS wake_count
+           FROM icono_manifestation_publication_wakes
+          GROUP BY status`,
+      )
+      .all()
+      .map((row) => ({ ...row })),
+    [{ status: "published", wake_count: 2 }],
+  )
   assert.ok(objects.size >= 2)
   const derivative = authority.raw
     .prepare(
