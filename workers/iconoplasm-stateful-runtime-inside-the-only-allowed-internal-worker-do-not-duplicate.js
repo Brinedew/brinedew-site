@@ -74,6 +74,7 @@ import {
   createIconoplasmCaretakerNotificationHandlers,
   projectCaretakerAssignmentNotification,
 } from "./iconoplasm-caretaker-notifications.js"
+import { readPublicCaretakers } from "./iconoplasm-public-caretakers.js"
 import {
   caretakerCommentOutboxStatement,
   deliverPendingCaretakerCommentNotifications,
@@ -4305,7 +4306,7 @@ function mapGeneDiscoveryRow(row) {
 // source here. If a compact response needs new fields, project them from
 // publishedCard/publishedCard.payload and keep the account-window regression
 // test adversarially stale in every noncanonical source.
-function accountGalleryImageOnlyCard(row, env, publishedCard = null) {
+function accountGalleryImageOnlyCard(row, env, publishedCard = null, caretaker = null) {
   const symbol = normalizeSymbol(row?.gene_symbol || "")
   if (!symbol) return null
   const publishedPayload =
@@ -4383,6 +4384,7 @@ function accountGalleryImageOnlyCard(row, env, publishedCard = null) {
         : { status: "missing", width, height },
     width,
     height,
+    caretaker,
   }
 }
 
@@ -30297,12 +30299,20 @@ async function handleMobileCardManifest(request, env) {
       "X-Iconoplasm-Snapshot-State": "card-artifact-unavailable",
     })
   }
+  const caretakers = await readPublicCaretakers(env.ICONOPLASM_DB, env.DB, symbols)
   const cards = []
   const missing = []
   for (const symbol of symbols) {
     const card = artifact.bySymbol.get(symbol)
-    if (card) cards.push(card)
-    else missing.push(symbol)
+    if (card) {
+      cards.push({
+        ...card,
+        payload: {
+          ...card.payload,
+          caretaker: caretakers[symbol] || null,
+        },
+      })
+    } else missing.push(symbol)
   }
 
   return json(
@@ -31313,6 +31323,8 @@ async function handleSiteGeneDetail(request, env, path) {
   // artifact selected by the public barrier. The live primary essence row is
   // never a fallback after plaintext retirement.
   payload.canonical_manifestation = publishedCard.payload.canonical_manifestation ?? null
+  const caretakers = await readPublicCaretakers(env.ICONOPLASM_DB, env.DB, [resolved.symbol])
+  payload.caretaker = caretakers[resolved.symbol] || null
   // ARCHITECTURE FENCE [IPD-003]: corpus blot uploads intentionally perform
   // zero KV writes. The exact published card still chooses the fingerprint and
   // object key; this one-row D1 read only proves that those exact bytes are
@@ -33098,6 +33110,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const symbols = windowData.rows
         .map((row) => normalizeSymbol(row.gene_symbol || ""))
         .filter(Boolean)
+      const caretakersPromise = accountWindowStage("acct_caretakers", () =>
+        readPublicCaretakers(env.ICONOPLASM_DB, env.DB, symbols),
+      )
       // ARCHITECTURE FENCE [IPD-011]
       // Rich and image-only account windows intentionally converge here. One
       // KV_GALLERY_VERSION selects one published artifact; only the projection
@@ -33119,6 +33134,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           }),
         )
       }
+      const caretakers = await caretakersPromise
       const vmBySymbol = new Map()
       const missing = []
       for (const symbol of symbols) {
@@ -33134,7 +33150,14 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       for (const row of windowData.rows) {
         const symbol = normalizeSymbol(row.gene_symbol || "")
         const vm = vmBySymbol.get(symbol)
-        if (vm) cards.push(imageOnlyView ? accountGalleryImageOnlyCard(row, env, vm) : vm)
+        if (vm) {
+          const caretaker = caretakers[symbol] || null
+          cards.push(
+            imageOnlyView
+              ? accountGalleryImageOnlyCard(row, env, vm, caretaker)
+              : { ...vm, payload: { ...vm.payload, caretaker } },
+          )
+        }
         items.push({
           symbol,
           discovery: row,

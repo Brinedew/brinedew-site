@@ -54,6 +54,9 @@ test("gene caretaking is a toolbar claim and a dedicated sidebar panel, never an
   assert.match(app, /Become a ['"] \+\s*esc\(symbol\) \+\s*['"] caretaker/)
   assert.match(app, /data-icono-caretaker-claim-action/)
   assert.match(app, /requestInbox\.caretakerPanelMarkup\(\)/)
+  assert.match(app, /renderCaretakerIdentityMarkup\(g\.caretaker/)
+  assert.match(app, /syncViewerCaretakerToolbarIdentity\(geneContent, viewerIsCaretaker\)/)
+  assert.match(app, /icono-caretaker-identity__avatar/)
   const requestPanel = inbox.slice(
     inbox.indexOf("function panelMarkup()"),
     inbox.indexOf("function caretakerPanelMarkup()"),
