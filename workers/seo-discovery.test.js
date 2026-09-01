@@ -303,6 +303,16 @@ async function buildPublishedCatalogEnv(
       : {
           prepare(sql) {
             const text = String(sql || "")
+            if (text.includes("FROM icono_gene_catalog")) {
+              return {
+                bind() {
+                  return this
+                },
+                async first() {
+                  return null
+                },
+              }
+            }
             if (!text.includes("FROM icono_gene_blot_materializations")) {
               throw new Error(`Discovery documents may query only exact blot rows: ${sql}`)
             }
