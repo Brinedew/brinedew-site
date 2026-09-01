@@ -286,7 +286,10 @@
   border-radius: var(--icono-radius-sm);
   background: var(--icono-action-primary-bg);
   color: var(--icono-action-primary-text);
-  font: 700 var(--icono-action-font-size) / 1 var(--icono-action-font);
+  font-family: var(--icono-action-font) !important;
+  font-size: var(--icono-action-font-size);
+  font-weight: 700;
+  line-height: 1;
   cursor: pointer;
 }
 
