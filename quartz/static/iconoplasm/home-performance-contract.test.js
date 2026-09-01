@@ -1721,6 +1721,12 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
     /\(bootstrap\.geneDetailPromise \|\| bootstrap\.geneCardData \|\| bootstrap\.geneCardPromise\)[\s\S]*if \(!hasHeadStartedGene\) \{\s*root\.innerHTML = genePageShellMarkup\(true\)/,
     "direct gene loads with head-started detail/card data must not wipe to a fake card or skeleton before real-card hydration",
   )
+  assert.match(app, /function reconcilePublicManifestationSection\(container, g\)/)
+  assert.match(
+    app,
+    /onCanonicalChanged: function \(symbol\) \{[\s\S]*fetchGeneDetail\(symbol, \{ forceFresh: true \}\)[\s\S]*reconcilePublicManifestationSection\(content, gene\)/,
+    "caretaker visibility changes must update only the published manifestation section instead of replacing the open caretaker modal",
+  )
   const shellStart = app.indexOf("function genePageShellMarkup(includeSkeleton)")
   const shellEnd = app.indexOf("function ensureGenePageLandmarks(root)", shellStart)
   assert.notEqual(shellStart, -1, "missing semantic gene-page shell")

@@ -282,8 +282,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var manifestationPanel = modules[0].createCaretakerManifestationPanel({
         fetchJSON: fetchAuthedJSON,
         escapeHtml: esc,
-        onCanonicalChanged: function () {
-          rerenderCurrentGeneRoute({ forceFresh: true })
+        onCanonicalChanged: function (symbol) {
+          invalidateGeneDetail(symbol)
+          return fetchGeneDetail(symbol, { forceFresh: true }).then(function (gene) {
+            var route = getRoute()
+            var content = document.getElementById("icono-gene-content")
+            if (
+              route.page !== "gene" ||
+              normalizedSymbol(route.symbol) !== normalizedSymbol(symbol) ||
+              !content
+            ) {
+              return
+            }
+            reconcilePublicManifestationSection(content, gene)
+          })
         },
         onDossierChanged: function (detail) {
           iconoSidebarState.caretaker = detail.dossier?.viewer?.is_caretaker
@@ -9280,6 +9292,45 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
   }
 
+  function publicManifestationMarkup(g) {
+    var publicManifestation = g && g.canonical_manifestation
+    if (
+      !publicManifestation ||
+      publicManifestation.public_page_visible !== true ||
+      !String(publicManifestation.prose || "").trim()
+    ) {
+      return ""
+    }
+    return (
+      '<section class="icono-public-manifestation" aria-labelledby="icono-public-manifestation-title">' +
+      '<p class="icono-public-manifestation__eyebrow">Caretaker manifestation</p>' +
+      '<h2 id="icono-public-manifestation-title">How this gene manifests</h2>' +
+      '<p class="icono-public-manifestation__body">' +
+      esc(String(publicManifestation.prose)) +
+      "</p></section>"
+    )
+  }
+
+  function reconcilePublicManifestationSection(container, g) {
+    if (!container) return
+    var current = container.querySelector(".icono-public-manifestation")
+    var markup = publicManifestationMarkup(g)
+    if (!markup) {
+      if (current) current.remove()
+      return
+    }
+    var template = document.createElement("template")
+    template.innerHTML = markup
+    var replacement = template.content.firstElementChild
+    if (!replacement) return
+    if (current) {
+      current.replaceWith(replacement)
+      return
+    }
+    var lead = container.querySelector(".icono-gene-lead")
+    if (lead) lead.insertAdjacentElement("afterend", replacement)
+  }
+
   function renderGeneContent(container, g) {
     var html =
       '<section class="icono-gene-lead">' + buildGeneLeadCardMarkup(g) + canonicalGeneBlotMarkup(g)
@@ -9287,20 +9338,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     html += "<div data-icono-canonical-toolbar-island>" + renderCanonicalToolbarMarkup(g) + "</div>"
     html += "</section>"
 
-    var publicManifestation = g && g.canonical_manifestation
-    if (
-      publicManifestation &&
-      publicManifestation.public_page_visible === true &&
-      String(publicManifestation.prose || "").trim()
-    ) {
-      html +=
-        '<section class="icono-public-manifestation" aria-labelledby="icono-public-manifestation-title">' +
-        '<p class="icono-public-manifestation__eyebrow">Caretaker manifestation</p>' +
-        '<h2 id="icono-public-manifestation-title">How this gene manifests</h2>' +
-        '<p class="icono-public-manifestation__body">' +
-        esc(String(publicManifestation.prose)) +
-        "</p></section>"
-    }
+    html += publicManifestationMarkup(g)
 
     html += '<div class="icono-caretaker-island" data-icono-caretaker-island hidden></div>'
 
