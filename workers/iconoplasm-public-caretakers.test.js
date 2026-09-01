@@ -105,3 +105,20 @@ test("suspended remains visible while ended and missing profiles fail closed", a
   assert.equal(result.STK11, undefined)
   assert.equal(result.BRCA1, undefined)
 })
+
+test("range-sized caretaker reads stay inside D1 bind limits", async (t) => {
+  const { iconoplasm, accounts } = buildDatabases(t)
+  iconoplasm.raw.exec(assignmentSql({ symbol: "GENE120", accountId: "acct_large_range" }))
+  accounts.raw.exec(`
+    INSERT INTO users VALUES ('123456789012345678', 'Range caretaker', NULL, 'acct_large_range');
+    INSERT INTO brinedew_account_identities VALUES (
+      'discord', '123456789012345678', 'acct_large_range', 1, 1
+    );
+  `)
+  const symbols = Array.from({ length: 401 }, (_, index) => `GENE${index}`)
+
+  const result = await readPublicCaretakers(iconoplasm, accounts, symbols)
+
+  assert.equal(result.GENE120.username, "Range caretaker")
+  assert.equal(Object.keys(result).length, 1)
+})
