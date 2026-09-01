@@ -137,8 +137,11 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
       if (!Object.hasOwn(PUBLISHED_CARD_OBJECT_LIMITS, kind))
         throw new Error("Unknown published object kind")
       const bytes = encoder.encode(canonicalPublishedJson(value))
-      if (bytes.byteLength > PUBLISHED_CARD_OBJECT_LIMITS[kind])
-        throw new Error("Published object exceeds its byte limit")
+      if (bytes.byteLength > PUBLISHED_CARD_OBJECT_LIMITS[kind]) {
+        throw new Error(
+          `Published object exceeds its byte limit: kind=${kind}, bytes=${bytes.byteLength}, limit=${PUBLISHED_CARD_OBJECT_LIMITS[kind]}`,
+        )
+      }
       const hash = await publishedObjectHash(bytes)
       const key = publishedCardObjectKey(kind, hash)
       const url = externalPortraitStorageUrl(env, key)
