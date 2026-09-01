@@ -111,6 +111,13 @@ test("stable account projection registers once, delivers idempotently, and wakes
     ["project", "register", "project"],
   )
   assert.equal(calls[2].input.sourceEventSequence > 0, true)
+  const sourceOccurredAt = primary.database
+    .prepare(
+      "SELECT occurred_at FROM brinedew_authority_account_projection_outbox WHERE account_id = ?",
+    )
+    .get(accountId).occurred_at
+  assert.equal(Date.parse(calls[0].input.occurredAt), sourceOccurredAt)
+  assert.equal(calls[1].input.now, calls[0].input.occurredAt)
   assert.equal(wakes, 1)
   assert.deepEqual(
     {
