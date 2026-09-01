@@ -714,13 +714,30 @@ body:has(.icono-vote-login-dialog[open]) {
   gap: 1rem;
 }
 
-.icono-caretaker-claim-form fieldset {
+.icono-caretaker-capabilities {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.7rem;
   margin: 0;
-  padding: 0.85rem;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--icono-radius-md);
+}
+
+.icono-caretaker-capabilities p,
+.icono-caretaker-capabilities ul {
+  margin: 0;
+}
+
+.icono-caretaker-capabilities ul {
+  display: grid;
+  gap: 0.5rem;
+  padding-inline-start: 1.35rem;
+}
+
+.icono-caretaker-capabilities li::marker {
+  color: var(--secondary);
+}
+
+.icono-caretaker-capabilities__note {
+  color: color-mix(in srgb, var(--dark) 68%, var(--light) 32%);
+  font-size: 0.82rem;
 }
 
 .icono-caretaker-claim-form label {
@@ -730,9 +747,9 @@ body:has(.icono-vote-login-dialog[open]) {
 }
 
 .icono-caretaker-claim-terms {
-  padding: 0.75rem;
+  padding: 0.8rem 0;
   background: color-mix(in srgb, var(--light) 92%, var(--secondary) 8%);
-  border-radius: var(--icono-radius-md);
+  border-block: 1px solid color-mix(in srgb, var(--ui-border) 78%, transparent);
 }
 
 .icono-request-shell {

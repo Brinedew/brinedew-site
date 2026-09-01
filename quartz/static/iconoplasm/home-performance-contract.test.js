@@ -52,6 +52,10 @@ test("gene caretaking is a toolbar claim and a dedicated sidebar panel, never an
     readFile(stylesPath, "utf8"),
   ])
   assert.match(app, /Become a ['"] \+\s*esc\(symbol\) \+\s*['"] caretaker/)
+  assert.match(app, /For their chosen gene, caretakers can:/)
+  assert.match(app, /Leaving options stay in caretaker settings until you need them\./)
+  assert.doesNotMatch(app, /name="leave_policy"/)
+  assert.match(app, /default_leave_policy: "retain"/)
   assert.match(app, /data-icono-caretaker-claim-action/)
   assert.match(app, /requestInbox\.caretakerPanelMarkup\(\)/)
   assert.match(app, /renderCaretakerIdentityMarkup\(g\.caretaker/)

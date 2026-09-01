@@ -1,0 +1,67 @@
+ICONOPLASM CARETAKER TERMS
+Version: terms_2026_09_01_v2
+Effective: 1 September 2026
+
+These terms apply when you choose to become the caretaker of an Iconoplasm gene.
+
+1. What a caretaker can do
+
+For the one gene you caretake, you may:
+
+- Write and revise manifestations.
+- Keep immutable version history.
+- Choose an eligible version as canonical or restore an earlier eligible version.
+- Show or hide your canonical manifestation prose on the gene page.
+- Withdraw manifestation records you wrote.
+
+You cannot edit or withdraw a system manifestation or another person's manifestation.
+
+2. Your manifestation prose is CC0
+
+Submit only prose you have the right to dedicate to the public domain.
+
+When you submit manifestation prose, you dedicate it under CC0 1.0 Universal to the fullest extent allowed by law. Anyone may copy, modify, distribute, perform, and use it, including commercially, without asking permission or giving attribution.
+
+CC0 does not grant trademark, privacy, publicity, patent, or endorsement rights. You remain responsible for rights that CC0 cannot waive.
+
+3. What you promise
+
+Do not submit:
+
+- Unlawful material.
+- Private, confidential, or personal information about someone else.
+- Malicious code or harassment.
+- Content intended to mislead readers about the gene.
+
+Manifestations are creative character descriptions, not medical advice or scientific evidence.
+
+4. Versions and canonical selection
+
+Every save creates a new immutable version. Older versions remain identifiable and may be selected again while eligible. Canonical selection is explicit; the system does not silently replace it with the newest save. Concurrent changes may require you to review the current version and submit again.
+
+5. Attribution
+
+Iconoplasm may display your current public credit label with manifestations you wrote. CC0 means attribution is not required for reuse. If your account is erased, retained history uses an anonymous stable label rather than exposing the former provider identity.
+
+6. Leaving, withdrawing, and deletion
+
+You do not need to decide what happens after caretaking during enrollment. You can set a preference later, and the final consequence is shown again when you leave.
+
+When you stop being caretaker, you may:
+
+- Keep your manifestation in gene history; or
+- Withdraw your manifestation and fall back to another eligible version.
+
+The interface may call withdrawal "Delete my manifestation." Withdrawal immediately makes the lineage ineligible for canonical use and withdraws every version in that lineage. It does not rewrite the immutable record or immediately erase encrypted history. Hard purge becomes eligible 30 days after withdrawal, unless a legal hold requires preservation. Hard purge destroys the decryption key before object deletion and keeps only bounded tombstone and audit metadata. The one-time encrypted migration backup contains only the original system material moved during cutover, never manifestations users write afterward. It is deleted 30 days after verified retirement of the old plaintext, unless an active legal hold requires longer preservation; deletion resumes after the final hold is released.
+
+7. Moderation and availability
+
+Brinedew may suspend a caretaker role or quarantine, withdraw, or purge content to protect people, scientific integrity, security, or the service. Moderation does not silently transfer authorship or rewrite an old version. Iconoplasm may be changed or discontinued and cannot promise uninterrupted availability.
+
+8. Privacy and support
+
+The Iconoplasm privacy policy explains account and service data handling: https://iconoplasm.brinedew.bio/privacy
+
+Questions, rights requests, and takedown requests: support@brinedew.bio
+
+Your acceptance is recorded against this exact version identifier and document hash. A later terms version does not replace the version you accepted in an existing assignment.

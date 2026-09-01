@@ -1,31 +1,49 @@
 ---
 title: "Caretaker Terms - Iconoplasm"
 description: "The versioned rules for writing, selecting, retaining, and withdrawing Iconoplasm gene manifestations"
-date: 2026-08-30
+date: 2026-09-01
 draft: false
 schemaType: WebPage
 ---
 
 # Caretaker Terms - Iconoplasm
 
-**Version:** `terms_2026_08_30_v1`
-**Effective:** August 30, 2026
+**Version:** `terms_2026_09_01_v2`
 
-These terms apply when you accept an invitation to become the caretaker of an Iconoplasm gene.
+**Effective:** September 1, 2026
+
+These terms apply when you choose to become the caretaker of an Iconoplasm gene.
 
 ## What a caretaker can do
 
-While your caretaker role is active, you may write manifestations for the assigned gene, save immutable versions, choose an eligible version as canonical, restore an eligible version, and withdraw manifestation records you wrote. You cannot edit or withdraw a system manifestation or another person's manifestation.
+For the one gene you caretake, you may:
 
-## Your content and the permission Iconoplasm needs
+- Write and revise manifestations.
+- Keep immutable version history.
+- Choose an eligible version as canonical or restore an earlier eligible version.
+- Show or hide your canonical manifestation prose on the gene page.
+- Withdraw manifestation records you wrote.
 
-You keep any copyright you hold in manifestation prose you write. You grant Brinedew a non-exclusive, worldwide, royalty-free licence to store, reproduce, display, transmit, format, and technically adapt that prose only as needed to operate, secure, back up, moderate, and provide Iconoplasm. This includes public gene pages and APIs, version and attribution displays, search and discovery, and gene-character generation that is explicitly bound to an eligible manifestation version. It does not permit selling your prose as standalone content or using it in unrelated advertising.
+You cannot edit or withdraw a system manifestation or another person's manifestation.
 
-The licence continues for a manifestation you choose to retain after leaving the caretaker role. For a withdrawn manifestation, it continues only as needed to preserve the private version record, security and audit evidence, backups, legal obligations, and the stated retention and deletion process.
+## Your manifestation prose is CC0
+
+Submit only prose you have the right to dedicate to the public domain.
+
+When you submit manifestation prose, you dedicate it under [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/) to the fullest extent allowed by law. Anyone may copy, modify, distribute, perform, and use it, including commercially, without asking permission or giving attribution.
+
+CC0 does not grant trademark, privacy, publicity, patent, or endorsement rights. You remain responsible for rights that CC0 cannot waive.
 
 ## What you promise
 
-Submit only prose you have the right to provide. Do not submit unlawful material, private or confidential information, personal data about someone else, malicious code, harassment, or content intended to mislead readers about the gene. Manifestations are creative character descriptions, not medical advice or scientific evidence.
+Do not submit:
+
+- Unlawful material.
+- Private, confidential, or personal information about someone else.
+- Malicious code or harassment.
+- Content intended to mislead readers about the gene.
+
+Manifestations are creative character descriptions, not medical advice or scientific evidence.
 
 ## Versions and canonical selection
 
@@ -33,11 +51,16 @@ Every save creates a new immutable version. Older versions remain identifiable a
 
 ## Attribution
 
-Iconoplasm may display your current public credit label with manifestations you wrote. Provider usernames and account identifiers are not authorship. If your account is erased, retained history uses an anonymous stable label rather than exposing the former provider identity.
+Iconoplasm may display your current public credit label with manifestations you wrote. CC0 means attribution is not required for reuse. If your account is erased, retained history uses an anonymous stable label rather than exposing the former provider identity.
 
 ## Leaving, withdrawing, and deletion
 
-When you stop being caretaker, you choose either to retain your manifestation in the gene history or withdraw it and fall back to another eligible version. The choice shown when accepting an invitation is a default; the final consequence is shown and confirmed again when you leave.
+You do not need to decide what happens after caretaking during enrollment. You can set a preference later, and the final consequence is shown again when you leave.
+
+When you stop being caretaker, you may:
+
+- Keep your manifestation in gene history; or
+- Withdraw your manifestation and fall back to another eligible version.
 
 The interface may call withdrawal "Delete my manifestation." Withdrawal immediately makes the lineage ineligible for canonical use and withdraws every version in that lineage. It does not rewrite the immutable record or immediately erase encrypted history. Hard purge becomes eligible **30 days after withdrawal**, unless a legal hold requires preservation. Hard purge destroys the decryption key before object deletion and keeps only bounded tombstone and audit metadata. The one-time encrypted migration backup contains only the original system material moved during cutover, never manifestations users write afterward. It is deleted **30 days after verified retirement of the old plaintext**, unless an active legal hold requires longer preservation; deletion resumes after the final hold is released.
 
@@ -53,4 +76,4 @@ Questions, rights requests, and takedown requests: **support@brinedew.bio**
 
 Your acceptance is recorded against this exact version identifier and document hash. A later terms version does not replace the version you accepted in an existing assignment.
 
-The [immutable plain-text copy](/static/iconoplasm/caretaker-terms-2026-08-30.txt) is the canonical document whose SHA-256 is recorded with the assignment.
+The [immutable plain-text copy](/static/iconoplasm/caretaker-terms-2026-09-01.txt) is the canonical document whose SHA-256 is recorded with the assignment.
