@@ -647,6 +647,14 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   }),
   iconoplasmApiContract({
     apiHandler: "caretaker_manifestations",
+    id: "caretaker_gene_claim",
+    match: pattern(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/claim$/, ["gene"]),
+    methods: GET_POST,
+    auth: "authenticated-user",
+    budgetFamily: "caretaker_assignment_claim",
+  }),
+  iconoplasmApiContract({
+    apiHandler: "caretaker_manifestations",
     id: "caretaker_gene_dossier",
     match: pattern(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)$/, ["gene"]),
     methods: GET,
