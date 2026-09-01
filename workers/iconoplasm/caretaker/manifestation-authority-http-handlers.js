@@ -2,6 +2,11 @@ import {
   decryptManifestationProse,
   encryptManifestationProse,
 } from "../../lib/iconoplasm-manifestation-body-crypto.js"
+import { sha256Hex } from "../../lib/iconoplasm-envelope-crypto.js"
+import {
+  decryptManifestationTags,
+  encryptManifestationTags,
+} from "../../lib/iconoplasm-manifestation-tags-crypto.js"
 import {
   createManifestationBodyObjectKey,
   putEncryptedManifestationBody,
@@ -36,6 +41,12 @@ import {
 } from "./manifestation-lifecycle-commands.js"
 import { endCaretakerAssignment } from "./caretaker-assignment-end-command.js"
 import { saveManifestationRevision } from "./manifestation-write-commands.js"
+import { setManifestationPageVisibility } from "./manifestation-visibility-commands.js"
+import {
+  selectTagsDerivativeHead,
+  submitTagsDerivative,
+} from "./manifestation-derivative-commands.js"
+import { prepareManifestationTagsPayload } from "./manifestation-tags-payload.js"
 import { deliverAcceptedAuthorityEvent } from "./manifestation-authority-projection-delivery.js"
 
 function segment(raw) {
@@ -199,6 +210,12 @@ function createCaretakerManifestationHttpHandler({
       }
 
       const save = path.match(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/revisions$/)
+      const saveTags = path.match(
+        /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/revisions\/([^/]+)\/tags-derivatives$/,
+      )
+      const selectTags = path.match(
+        /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/revisions\/([^/]+)\/tags-derivative-head$/,
+      )
       const select = path.match(
         /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/canonical-selections$/,
       )
@@ -208,11 +225,21 @@ function createCaretakerManifestationHttpHandler({
       const restore = path.match(
         /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/manifestations\/([^/]+)\/restore$/,
       )
+      const visibility = path.match(
+        /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/manifestations\/([^/]+)\/page-visibility$/,
+      )
       const assignmentAction = path.match(
         /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/assignments\/([^/]+)\/(accept|decline|end)$/,
       )
       const methodMatches =
-        (request.method === "POST" && (save || select || restore || assignmentAction)) ||
+        (request.method === "POST" &&
+          (save ||
+            saveTags ||
+            selectTags ||
+            select ||
+            restore ||
+            visibility ||
+            assignmentAction)) ||
         (request.method === "DELETE" && withdraw)
       if (!methodMatches) return null
 
@@ -342,6 +369,122 @@ function createCaretakerManifestationHttpHandler({
         return mutationResponse(db, { onAuthorityEvent, onAssignmentEvent }, result)
       }
 
+      if (saveTags || selectTags) {
+        const match = saveTags || selectTags
+        const revisionId = segment(match[2])
+        const { gene, assignment } = await requireRouteCurrentAssignment(
+          db,
+          segment(match[1]),
+          session.accountId,
+        )
+        if (assignment.status !== "active") {
+          throw authorityError("ASSIGNMENT_NOT_ACTIVE", "Caretaker assignment is not active", 409)
+        }
+        const revision = await first(
+          db,
+          `SELECT revision.manifestation_revision_id, revision.body_sha256,
+                  revision.caretaker_assignment_id, manifestation.author_account_id,
+                  manifestation.gene_id
+             FROM icono_manifestation_revisions revision
+             JOIN icono_manifestations manifestation
+               ON manifestation.manifestation_id = revision.manifestation_id
+            WHERE revision.manifestation_revision_id = ?`,
+          revisionId,
+        )
+        if (
+          !revision ||
+          revision.gene_id !== gene.gene_id ||
+          revision.author_account_id !== session.accountId ||
+          revision.caretaker_assignment_id !== assignment.caretaker_assignment_id
+        ) {
+          throw authorityError("REVISION_NOT_FOUND", "Manifestation revision was not found", 404)
+        }
+        if (selectTags) {
+          result = await selectTagsDerivativeHead(db, {
+            derivativeId: body.manifestation_derivative_id,
+            expectedDerivativeHeadVersion: body.expected_derivative_head_version,
+            expectedGeneRevision: body.expected_gene_revision,
+            idFactory,
+            ...auditIds(body),
+            ...command,
+          })
+          return mutationResponse(db, { onAuthorityEvent, onAssignmentEvent }, result)
+        }
+        const tagsText = String(body.tags_text || "")
+        const fieldsJson = {}
+        const encoder = new TextEncoder()
+        const output = await prepareManifestationTagsPayload({
+          tagsText,
+          tagsSha256: await sha256Hex(
+            encoder.encode(tagsText.normalize("NFC").replace(/\r\n?/g, "\n")),
+          ),
+          fieldsJson,
+          fieldsSha256: await sha256Hex(encoder.encode("{}")),
+        })
+        const replay = await resolveCommandReplay(db, command, command)
+        if (replay) return jsonResponse(replay)
+        const derivativeId = idFactory("derivative")
+        const encrypted = await encryptManifestationTags(env, {
+          derivativeId,
+          revisionId,
+          sourceBodySha256: revision.body_sha256,
+          tags: output.output_plain,
+        })
+        const objectKey = await createManifestationBodyObjectKey()
+        await createManifestationUploadIntent(db, {
+          entityKind: "derivative",
+          entityId: derivativeId,
+          assignmentId: assignment.caretaker_assignment_id,
+          objectKey,
+          ciphertextSha256: encrypted.ciphertext_sha256,
+          bodyBytes: encrypted.body_bytes,
+          actorKind: "account",
+          actorAccountId: session.accountId,
+          idFactory,
+        })
+        const upload = await putEncryptedManifestationBody(env, objectKey, encrypted.ciphertext, {
+          expectedSha256: encrypted.ciphertext_sha256,
+          verifyPlaintext: (stored) =>
+            decryptManifestationTags(env, {
+              derivativeId,
+              revisionId,
+              sourceBodySha256: revision.body_sha256,
+              ciphertext: stored,
+              ciphertextSha256: encrypted.ciphertext_sha256,
+              ciphertextBytes: encrypted.ciphertext_bytes,
+              bodySha256: encrypted.body_sha256,
+              bodyBytes: encrypted.body_bytes,
+              bodyIvBase64: encrypted.body_iv_base64,
+              wrappedDekBase64: encrypted.wrapped_dek_base64,
+              wrapIvBase64: encrypted.wrap_iv_base64,
+              keyVersion: encrypted.key_version,
+              aadVersion: encrypted.aad_version,
+            }),
+        })
+        result = await submitTagsDerivative(db, {
+          revisionId,
+          derivativeId,
+          status: "complete",
+          sourceBodySha256: revision.body_sha256,
+          tagsSha256: output.tags_sha256,
+          tagsBytes: output.tags_bytes,
+          fieldsSha256: output.fields_sha256,
+          fieldsBytes: output.fields_bytes,
+          storage: storageDescriptor(encrypted, objectKey, upload),
+          recipeId: "caretaker-manual-tags",
+          recipeVersion: "1",
+          providerId: "caretaker",
+          modelId: "manual",
+          taggerConfigSha256: await sha256Hex("iconoplasm.caretaker.manual-tags.v1"),
+          expectedGeneRevision: body.expected_gene_revision,
+          idFactory,
+          ...auditIds(body),
+          ...command,
+        })
+        await requireAdoptedManifestationUpload(db, "derivative", derivativeId)
+        return mutationResponse(db, { onAuthorityEvent, onAssignmentEvent }, result)
+      }
+
       if (select) {
         const { assignment } = await requireRouteCurrentAssignment(
           db,
@@ -371,6 +514,28 @@ function createCaretakerManifestationHttpHandler({
           expectedHeadVersion: body.expected_head_version,
           expectedCanonicalRevisionId: body.expected_canonical_revision_id,
           reason: body.reason || "select",
+          ...auditIds(body),
+          idFactory,
+          ...command,
+        })
+        return mutationResponse(db, { onAuthorityEvent, onAssignmentEvent }, result)
+      }
+
+      if (visibility) {
+        const manifestationId = segment(visibility[2])
+        rejectMismatchedBodyId(body, "manifestation_id", manifestationId)
+        const current = await requireRouteCurrentAssignment(
+          db,
+          segment(visibility[1]),
+          session.accountId,
+        )
+        result = await setManifestationPageVisibility(db, {
+          assignmentId: current.assignment.caretaker_assignment_id,
+          manifestationId,
+          visible: body.visible,
+          expectedAssignmentVersion: body.expected_assignment_version,
+          expectedManifestationVersion: body.expected_manifestation_version,
+          expectedGeneRevision: body.expected_gene_revision,
           ...auditIds(body),
           idFactory,
           ...command,

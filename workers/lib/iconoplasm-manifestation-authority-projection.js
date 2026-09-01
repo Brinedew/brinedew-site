@@ -18,6 +18,7 @@ const PUBLIC_MATERIAL_CHANGED_SQL = Object.freeze([
   "canonical_body_sha256",
   "canonical_body_bytes",
   "canonical_revision_lifecycle",
+  "canonical_public_page_visible",
   "accepted_tags_derivative_id",
   "accepted_tags_derivative_head_version",
   "accepted_tags_status",
@@ -115,6 +116,7 @@ function optionalCanonical(rawCanonical) {
     body_sha256: sha256(rawCanonical.body_sha256, "canonical.body_sha256"),
     body_bytes: positiveVersion(rawCanonical.body_bytes, "canonical.body_bytes"),
     lifecycle: requiredText(rawCanonical.lifecycle, "canonical.lifecycle"),
+    public_page_visible: rawCanonical.public_page_visible === true,
   }
   if (canonical.body_bytes > 16_384) {
     projectionError("INVALID_AUTHORITY_PROJECTION", "canonical.body_bytes exceeds 16 KiB")
@@ -342,7 +344,7 @@ async function persistCanonicalManifestationProjection({ primaryDb, authority, e
          gene_id, canonical_symbol,
          canonical_manifestation_id, canonical_revision_id,
          canonical_selection_id, canonical_body_sha256, canonical_body_bytes,
-         canonical_revision_lifecycle,
+         canonical_revision_lifecycle, canonical_public_page_visible,
          accepted_tags_derivative_id, accepted_tags_derivative_head_version,
          accepted_tags_status, accepted_tags_source_body_sha256,
          accepted_tags_body_sha256, accepted_tags_body_bytes,
@@ -356,7 +358,7 @@ async function persistCanonicalManifestationProjection({ primaryDb, authority, e
           public_material_version, projection_version,
           projected_at
        ) VALUES (
-         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1,
+         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1,
          CURRENT_TIMESTAMP
        )
        ON CONFLICT(gene_id) DO UPDATE SET
@@ -367,6 +369,7 @@ async function persistCanonicalManifestationProjection({ primaryDb, authority, e
          canonical_body_sha256 = excluded.canonical_body_sha256,
          canonical_body_bytes = excluded.canonical_body_bytes,
          canonical_revision_lifecycle = excluded.canonical_revision_lifecycle,
+         canonical_public_page_visible = excluded.canonical_public_page_visible,
          accepted_tags_derivative_id = excluded.accepted_tags_derivative_id,
          accepted_tags_derivative_head_version = excluded.accepted_tags_derivative_head_version,
          accepted_tags_status = excluded.accepted_tags_status,
@@ -419,6 +422,7 @@ async function persistCanonicalManifestationProjection({ primaryDb, authority, e
       canonical?.body_sha256 || null,
       canonical?.body_bytes || null,
       canonical?.lifecycle || null,
+      canonical?.public_page_visible ? 1 : 0,
       derivative?.manifestation_derivative_id || null,
       derivative?.derivative_head_version || null,
       derivative?.status || null,

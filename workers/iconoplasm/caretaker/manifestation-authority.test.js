@@ -24,6 +24,7 @@ import {
 const MIGRATIONS = [
   "../../../migrations-iconoplasm-authoring/0001_caretaker_manifestation_authority.sql",
   "../../../migrations-iconoplasm-authoring/0002_caretaker_server_boundary.sql",
+  "../../../migrations-iconoplasm-authoring/0007_manifestation_page_visibility.sql",
 ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
 const NOW = "2026-08-30T00:00:00.000Z"
 const ADMIN = "account_admin_0001"

@@ -13,6 +13,7 @@ export async function readCanonicalProjectionRecord(db, rawGeneId) {
             head.canonical_selection_id, head.head_version, head.gene_revision,
             head.last_event_sequence, latest.event_uuid AS last_event_id,
             revision.body_sha256, revision.body_bytes,
+            manifestation.public_page_visible AS canonical_public_page_visible,
             lifecycle.status AS revision_lifecycle,
             derivative_head.accepted_derivative_id,
             derivative_head.derivative_head_version,
@@ -31,6 +32,8 @@ export async function readCanonicalProjectionRecord(db, rawGeneId) {
          ON latest.event_sequence = head.last_event_sequence
        LEFT JOIN icono_manifestation_revisions revision
          ON revision.manifestation_revision_id = head.canonical_revision_id
+       LEFT JOIN icono_manifestations manifestation
+         ON manifestation.manifestation_id = head.canonical_manifestation_id
        LEFT JOIN icono_manifestation_revision_lifecycle lifecycle
          ON lifecycle.manifestation_revision_id = revision.manifestation_revision_id
        LEFT JOIN icono_manifestation_derivative_heads derivative_head
@@ -49,6 +52,7 @@ export async function readCanonicalProjectionRecord(db, rawGeneId) {
         body_sha256: row.body_sha256,
         body_bytes: Number(row.body_bytes),
         lifecycle: row.revision_lifecycle,
+        public_page_visible: Boolean(row.canonical_public_page_visible),
       }
     : null
   const derivative = row.accepted_derivative_id

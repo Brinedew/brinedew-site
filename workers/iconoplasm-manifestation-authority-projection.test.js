@@ -10,10 +10,12 @@ import {
   projectCanonicalManifestationCutoverEvent,
 } from "./lib/iconoplasm-manifestation-authority-projection.js"
 
-const PRIMARY_CUTOVER = readFileSync(
-  new URL("../migrations-iconoplasm/0084_manifestation_authority_cutover.sql", import.meta.url),
-  "utf8",
-)
+const PRIMARY_CUTOVER = [
+  "../migrations-iconoplasm/0084_manifestation_authority_cutover.sql",
+  "../migrations-iconoplasm/0089_manifestation_page_visibility.sql",
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
+  .join("\n")
 
 class Statement {
   constructor(database, sql, bindings = []) {
