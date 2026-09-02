@@ -12,10 +12,3 @@ aliases:
 
 **What if I want to swap genes with another caretaker?**
 
-You can use !swap command at the Iconoplasm Discord server.
-
-It works like this:
-User1: !swap @User2
-User2: !swap @User1
-
-I'm 
