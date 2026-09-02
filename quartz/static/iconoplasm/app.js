@@ -421,7 +421,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           esc(symbol) +
           ' caretaker">' +
           '<form class="icono-caretaker-claim-form" data-icono-caretaker-claim-form>' +
-          '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li></ul></div>' +
+          '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li><li>Get contacted on Discord by other caretakers</li></ul></div>' +
           '<sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms>I accept the <a href="' +
           esc(terms.document_url) +
           '" target="_blank" rel="noopener">' +
@@ -436,14 +436,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           .querySelector("[data-icono-caretaker-claim-open]")
           ?.addEventListener("click", function () {
             if (!dialog.open) dialog.show()
+            if (termsCheckbox && submit) submit.disabled = !termsCheckbox.checked
           })
         target
           .querySelector("[data-icono-caretaker-claim-cancel]")
           ?.addEventListener("click", function () {
             dialog.hide()
           })
-        termsCheckbox?.addEventListener("change", function () {
-          submit.disabled = !termsCheckbox.checked
+        // The vendored sl-checkbox emits only sl-change; listen for both so a
+        // native change event can never be the reason the button stays dead.
+        function syncClaimSubmitState() {
+          if (termsCheckbox && submit) submit.disabled = !termsCheckbox.checked
+        }
+        ;["change", "sl-change"].forEach(function (eventName) {
+          termsCheckbox?.addEventListener(eventName, syncClaimSubmitState)
         })
         submit?.addEventListener("click", function () {
           if (!termsCheckbox?.checked || submit.disabled) return
