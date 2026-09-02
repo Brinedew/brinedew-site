@@ -1678,11 +1678,9 @@ test("authority workstation lane routes through the daily budget ledger while re
   const budgetNamespace = env.ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE
   const db = env.ICONOPLASM_DB
   const run = (request) =>
-    handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      request,
-      env,
-      { waitUntil() {} },
-    )
+    handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(request, env, {
+      waitUntil() {},
+    })
 
   const authorityResponse = await run(authorityLaneRequest())
   assert.ok(
