@@ -1277,7 +1277,6 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     var safeGeneDetail = asObject(geneDetail)
     var safeEssence = asObject(safeGeneDetail.essence)
     var safePortrait = asObject(safeGeneDetail.portrait)
-    var safeCaretaker = asObject(safeGeneDetail.caretaker)
     var opts = options || {}
     var symbol = normalizedSymbol(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol)
     var fullName = labLabelDisplayName(safeGeneDetail)
@@ -1347,10 +1346,6 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       displayedFamilyFeature: normalizeHandwrittenText(displayedFamilyFeature),
       firstNoted: firstNoted,
       fullName: fullName,
-      caretaker: {
-        username: String(safeCaretaker.username || "").trim(),
-        avatarUrl: String(safeCaretaker.avatar_url || "").trim(),
-      },
       handwrittenWeight: normalizeHandwrittenText(handwrittenWeight),
       layoutVariant: layoutVariant,
       mobileReview: !!opts.mobileReview,
@@ -1736,28 +1731,11 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
           ">"
         : '<div class="icono-image-only-fallback" aria-hidden="true"></div>') +
       "</div>"
-    var caretaker = asObject(model.caretaker)
-    var caretakerUsername = String(caretaker.username || "").trim()
-    var caretakerAvatarUrl = String(caretaker.avatarUrl || "").trim()
-    var hasCaretaker =
-      caretakerUsername && caretakerAvatarUrl.indexOf("/api/avatar?src=") === 0
-    var caretakerHtml = ""
-    if (hasCaretaker) {
-      // The caretaker identity sits on its own row above the caption so it can
-      // never displace the gene symbol: the symbol bottom-right is part of the
-      // card identity contract (IPD-003) and its removal was a regression.
-      caretakerHtml =
-        '<div class="icono-image-only-caretaker-row"><div class="icono-image-only-caretaker" aria-label="Caretaker ' +
-        escapeHtml(caretakerUsername) +
-        '"><img class="icono-image-only-caretaker-avatar" src="' +
-        escapeHtml(caretakerAvatarUrl) +
-        '" alt="" loading="lazy" decoding="async"><span class="icono-image-only-caretaker-name">' +
-        escapeHtml(caretakerUsername) +
-        "</span></div></div>"
-    }
+    // Owner direction (2026-09-02): caretaker identity lives on the gene page
+    // toolbar, never on the card. The card caption is exactly the IPD-003
+    // composition: full name bottom-left, gene symbol bottom-right.
     var overlayHtml =
       '<div class="icono-image-only-overlay">' +
-      caretakerHtml +
       '<div class="icono-image-only-caption-row">' +
       '<div class="icono-label-name icono-image-only-name">' +
       escapeHtml(model.fullName || model.symbol) +

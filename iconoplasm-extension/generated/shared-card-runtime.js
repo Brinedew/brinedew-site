@@ -10176,7 +10176,6 @@
       var safeGeneDetail = asObject(geneDetail);
       var safeEssence = asObject(safeGeneDetail.essence);
       var safePortrait = asObject(safeGeneDetail.portrait);
-      var safeCaretaker = asObject(safeGeneDetail.caretaker);
       var opts = options || {};
       var symbol = normalizedSymbol(safeGeneDetail.symbol || safeGeneDetail.canonical_symbol);
       var fullName = labLabelDisplayName(safeGeneDetail);
@@ -10229,10 +10228,6 @@
         displayedFamilyFeature: normalizeHandwrittenText(displayedFamilyFeature),
         firstNoted,
         fullName,
-        caretaker: {
-          username: String(safeCaretaker.username || "").trim(),
-          avatarUrl: String(safeCaretaker.avatar_url || "").trim()
-        },
         handwrittenWeight: normalizeHandwrittenText(handwrittenWeight),
         layoutVariant,
         mobileReview: !!opts.mobileReview,
@@ -10418,15 +10413,7 @@
       var widthAttr = width > 0 ? ' width="' + escapeHtml(String(Math.round(width))) + '"' : "";
       var heightAttr = height > 0 ? ' height="' + escapeHtml(String(Math.round(height))) + '"' : "";
       var mediaHtml = '<div class="icono-image-only-media-stage">' + renderCardReverseFaceHtml() + (portraitSrc ? '<img class="icono-image-only-photo" src="' + escapeHtml(portraitSrc) + '" alt="' + escapeHtml(portraitAlt) + '" loading="eager" decoding="async" fetchpriority="high"' + widthAttr + heightAttr + ">" : '<div class="icono-image-only-fallback" aria-hidden="true"></div>') + "</div>";
-      var caretaker = asObject(model.caretaker);
-      var caretakerUsername = String(caretaker.username || "").trim();
-      var caretakerAvatarUrl = String(caretaker.avatarUrl || "").trim();
-      var hasCaretaker = caretakerUsername && caretakerAvatarUrl.indexOf("/api/avatar?src=") === 0;
-      var caretakerHtml = "";
-      if (hasCaretaker) {
-        caretakerHtml = '<div class="icono-image-only-caretaker-row"><div class="icono-image-only-caretaker" aria-label="Caretaker ' + escapeHtml(caretakerUsername) + '"><img class="icono-image-only-caretaker-avatar" src="' + escapeHtml(caretakerAvatarUrl) + '" alt="" loading="lazy" decoding="async"><span class="icono-image-only-caretaker-name">' + escapeHtml(caretakerUsername) + "</span></div></div>";
-      }
-      var overlayHtml = '<div class="icono-image-only-overlay">' + caretakerHtml + '<div class="icono-image-only-caption-row"><div class="icono-label-name icono-image-only-name">' + escapeHtml(model.fullName || model.symbol) + '</div><div class="icono-label-symbol icono-image-only-symbol">' + escapeHtml(model.symbol) + "</div></div></div>";
+      var overlayHtml = '<div class="icono-image-only-overlay"><div class="icono-image-only-caption-row"><div class="icono-label-name icono-image-only-name">' + escapeHtml(model.fullName || model.symbol) + '</div><div class="icono-label-symbol icono-image-only-symbol">' + escapeHtml(model.symbol) + "</div></div></div>";
       if (href) {
         return '<a class="icono-image-only-link" href="' + escapeHtml(href) + '"' + (modelOpensInNewTab(model) ? ' target="_blank" rel="noopener noreferrer"' : "") + ">" + mediaHtml + overlayHtml + "</a>";
       }

@@ -978,26 +978,7 @@ function imageOnlyTemplate(model) {
   }}
         />` : b2`<div class="icono-image-only-fallback" aria-hidden="true"></div>`}
   </div>`;
-  var caretaker = asObject(model.caretaker);
-  var caretakerUsername = String(caretaker.username || "").trim();
-  var caretakerAvatarUrl = String(caretaker.avatarUrl || "").trim();
-  var hasCaretaker = caretakerUsername && caretakerAvatarUrl.indexOf("/api/avatar?src=") === 0;
-  var caretakerRow = hasCaretaker ? b2`<div class="icono-image-only-caretaker-row">
-        <div
-          class="icono-image-only-caretaker"
-          aria-label="Caretaker ${caretakerUsername}"
-        >
-          <img
-            class="icono-image-only-caretaker-avatar"
-            src=${caretakerAvatarUrl}
-            alt=""
-            loading="lazy"
-            decoding="async"
-          /><span class="icono-image-only-caretaker-name">${caretakerUsername}</span>
-        </div>
-      </div>` : A;
   var overlay = b2`<div class="icono-image-only-overlay">
-    ${caretakerRow}
     <div class="icono-image-only-caption-row">
       <div class="icono-label-name icono-image-only-name">${model.fullName || model.symbol}</div>
       <div class="icono-label-symbol icono-image-only-symbol">${model.symbol}</div>
