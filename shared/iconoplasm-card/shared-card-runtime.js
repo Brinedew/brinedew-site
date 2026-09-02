@@ -1739,24 +1739,32 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     var caretaker = asObject(model.caretaker)
     var caretakerUsername = String(caretaker.username || "").trim()
     var caretakerAvatarUrl = String(caretaker.avatarUrl || "").trim()
-    var caretakerHtml = '<div class="icono-image-only-caretaker"></div>'
-    if (caretakerUsername && caretakerAvatarUrl.indexOf("/api/avatar?src=") === 0) {
+    var hasCaretaker =
+      caretakerUsername && caretakerAvatarUrl.indexOf("/api/avatar?src=") === 0
+    var caretakerHtml = ""
+    if (hasCaretaker) {
+      // The caretaker identity sits on its own row above the caption so it can
+      // never displace the gene symbol: the symbol bottom-right is part of the
+      // card identity contract (IPD-003) and its removal was a regression.
       caretakerHtml =
-        '<div class="icono-image-only-caretaker" aria-label="Caretaker ' +
+        '<div class="icono-image-only-caretaker-row"><div class="icono-image-only-caretaker" aria-label="Caretaker ' +
         escapeHtml(caretakerUsername) +
         '"><img class="icono-image-only-caretaker-avatar" src="' +
         escapeHtml(caretakerAvatarUrl) +
         '" alt="" loading="lazy" decoding="async"><span class="icono-image-only-caretaker-name">' +
         escapeHtml(caretakerUsername) +
-        "</span></div>"
+        "</span></div></div>"
     }
     var overlayHtml =
       '<div class="icono-image-only-overlay">' +
+      caretakerHtml +
       '<div class="icono-image-only-caption-row">' +
       '<div class="icono-label-name icono-image-only-name">' +
       escapeHtml(model.fullName || model.symbol) +
       "</div>" +
-      caretakerHtml +
+      '<div class="icono-label-symbol icono-image-only-symbol">' +
+      escapeHtml(model.symbol) +
+      "</div>" +
       "</div>" +
       "</div>"
     if (href) {

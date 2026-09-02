@@ -468,23 +468,27 @@ function imageOnlyTemplate(model) {
   var caretakerAvatarUrl = String(caretaker.avatarUrl || "").trim()
   var hasCaretaker =
     caretakerUsername && caretakerAvatarUrl.indexOf("/api/avatar?src=") === 0
+  var caretakerRow = hasCaretaker
+    ? html`<div class="icono-image-only-caretaker-row">
+        <div
+          class="icono-image-only-caretaker"
+          aria-label="Caretaker ${caretakerUsername}"
+        >
+          <img
+            class="icono-image-only-caretaker-avatar"
+            src=${caretakerAvatarUrl}
+            alt=""
+            loading="lazy"
+            decoding="async"
+          /><span class="icono-image-only-caretaker-name">${caretakerUsername}</span>
+        </div>
+      </div>`
+    : nothing
   var overlay = html`<div class="icono-image-only-overlay">
+    ${caretakerRow}
     <div class="icono-image-only-caption-row">
       <div class="icono-label-name icono-image-only-name">${model.fullName || model.symbol}</div>
-      <div
-        class="icono-image-only-caretaker"
-        aria-label=${hasCaretaker ? "Caretaker " + caretakerUsername : nothing}
-      >
-        ${hasCaretaker
-          ? html`<img
-                class="icono-image-only-caretaker-avatar"
-                src=${caretakerAvatarUrl}
-                alt=""
-                loading="lazy"
-                decoding="async"
-              /><span class="icono-image-only-caretaker-name">${caretakerUsername}</span>`
-          : nothing}
-      </div>
+      <div class="icono-label-symbol icono-image-only-symbol">${model.symbol}</div>
     </div>
   </div>`
   if (href) {
