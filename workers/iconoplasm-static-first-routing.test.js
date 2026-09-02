@@ -107,11 +107,50 @@ test("the corrected caretaker terms allow AI-assisted writing and are hash-pinne
     /dedicate it to the public domain under CC0 1\.0 Universal/,
   )
   assert.match(canonical.toString("utf8"), /real medical, health, or treatment advice/)
-  assert.match(page, /terms_2026_09_02_v2/)
-  assert.match(page, /caretaker-terms-2026-09-02-v2\.txt/)
-  assert.doesNotMatch(page, /caretaker-terms-2026-09-02\.txt/)
   assert.match(migration, /terms_2026_09_02_v2/)
   assert.match(migration, /ee68c8a63efa3f4e31d6fbf310903def19db5bbbf8d2e9716c534b3e48019521/)
+})
+
+test("caretaker terms v3 is assembled from established boilerplate and hash-pinned", () => {
+  const canonical = readFileSync(
+    new URL("../quartz/static/iconoplasm/caretaker-terms-2026-09-02-v3.txt", import.meta.url),
+  )
+  const page = readFileSync(
+    new URL("../content/apps/iconoplasm/caretaker-terms.md", import.meta.url),
+    "utf8",
+  )
+  const migration = readFileSync(
+    new URL(
+      "../migrations-iconoplasm-authoring/0011_caretaker_terms_cc0_2026_09_02_v3.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  )
+  assert.equal(
+    createHash("sha256").update(canonical).digest("hex"),
+    "0f87f17b93b0103e92f0503ab4ecfc000ed76280eb9197eaa09d977c2cbb1f76",
+  )
+  assert.match(canonical.toString("utf8"), /Version: terms_2026_09_02_v3/)
+  assert.match(
+    canonical.toString("utf8"),
+    /dedicate it to the public domain under CC0 1\.0 Universal/,
+  )
+  assert.match(
+    canonical.toString("utf8"),
+    /represent and warrant that you have all rights, power, and authority/,
+  )
+  assert.match(
+    canonical.toString("utf8"),
+    /not intended to be a substitute for professional medical advice, diagnosis, or treatment/,
+  )
+  assert.match(canonical.toString("utf8"), /PROVIDED "AS IS" AND "AS AVAILABLE"/)
+  assert.match(canonical.toString("utf8"), /at any time and for any reason or no reason/)
+  assert.match(canonical.toString("utf8"), /free of harassment, bullying, and threats of violence/)
+  assert.match(page, /terms_2026_09_02_v3/)
+  assert.match(page, /caretaker-terms-2026-09-02-v3\.txt/)
+  assert.doesNotMatch(page, /caretaker-terms-2026-09-02-v2\.txt/)
+  assert.match(migration, /terms_2026_09_02_v3/)
+  assert.match(migration, /0f87f17b93b0103e92f0503ab4ecfc000ed76280eb9197eaa09d977c2cbb1f76/)
 })
 
 // ARCHITECTURE FENCE [IPD-007]
