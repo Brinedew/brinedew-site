@@ -1,20 +1,10 @@
----
-title: "Caretaker Terms - Iconoplasm"
-description: "The plain-language rules for writing, keeping, and removing Iconoplasm gene manifestations"
-date: 2026-09-02
-draft: false
-schemaType: WebPage
----
+ICONOPLASM CARETAKER TERMS
+Version: terms_2026_09_02_v1
+Effective: 2 September 2026
 
-# Caretaker Terms - Iconoplasm
+These terms apply when you choose to become the caretaker of an Iconoplasm gene. If anything here ever conflicts with the short summary, this full text wins.
 
-**Version:** `terms_2026_09_02_v1`
-
-**Effective:** September 2, 2026
-
-These terms apply when you choose to become the caretaker of an Iconoplasm gene. If anything ever conflicts with the short summary, the full text below wins.
-
-## The short version
+THE SHORT VERSION
 
 - You write and look after the character description for one gene.
 - Everything you submit becomes public domain (CC0). Anyone may use it, forever, with or without credit.
@@ -23,7 +13,7 @@ These terms apply when you choose to become the caretaker of an Iconoplasm gene.
 - Brinedew can remove content or a caretaker role to keep the site safe and honest.
 - This is a voluntary creative role, not paid employment.
 
-## What a caretaker does
+1. What a caretaker does
 
 A caretaker looks after one gene. You write its "manifestation" — the short creative character description readers see on the gene page — and you keep its versions in order.
 
@@ -36,13 +26,13 @@ For your one gene, you may:
 
 You cannot edit or delete the built-in system description or another person's work.
 
-## Your writing becomes public domain (CC0)
+2. Your writing becomes public domain (CC0)
 
-Only submit prose you have the right to give away. When you submit a manifestation, you dedicate it to the public domain under [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/), to the fullest extent the law allows. Anyone may copy, change, share, and use it — including commercially — without asking permission or giving credit.
+Only submit prose you have the right to give away. When you submit a manifestation, you dedicate it to the public domain under CC0 1.0 Universal, to the fullest extent the law allows. Anyone may copy, change, share, and use it — including commercially — without asking permission or giving credit.
 
 CC0 does not waive trademark, privacy, publicity, or patent rights, and it never implies endorsement. You remain responsible for the rights CC0 cannot waive.
 
-## The rules
+3. The rules
 
 Do not submit:
 
@@ -53,15 +43,15 @@ Do not submit:
 
 Manifestations are creative character descriptions. They are not medical advice and not scientific evidence.
 
-## How versions work
+4. How versions work
 
 Every save creates a new, permanent version — edits never overwrite history. You explicitly choose which eligible version is canonical; saving never silently replaces your choice. If the page changed while you were working, you may be asked to review the current version and submit again.
 
-## Credit
+5. Credit
 
 Iconoplasm may show your public credit label next to the manifestations you wrote. Because your writing is CC0, credit is optional for anyone reusing it. If your account is erased, old history keeps only an anonymous stable label instead of your provider identity.
 
-## Leaving and deletion
+6. Leaving and deletion
 
 You can leave at any time, and you never have to decide what happens to your work until you do. When you stop being a caretaker, you choose one of two things:
 
@@ -70,18 +60,18 @@ You can leave at any time, and you never have to decide what happens to your wor
 
 Withdrawal takes your text out of use immediately — every version in its lineage stops being eligible as canonical, and the gene falls back to another eligible version. Nothing in history is rewritten. After 30 days, withdrawn content becomes eligible for permanent purging: we destroy the keys that could decrypt it, delete it, and keep only the minimum audit records needed to run the service — unless the law requires us to keep it longer. Until purged, withdrawn content stays encrypted and out of public view.
 
-## Moderation and availability
+7. Moderation and availability
 
 Brinedew may suspend a caretaker role or remove content to protect people, scientific integrity, security, or the service. Removing content never rewrites history or hands your authorship to someone else. Iconoplasm may change or discontinue the service at any time, and we cannot promise it will always be available.
 
-## The legal record
+8. The legal record
 
 Your acceptance is recorded against this exact version identifier and its document hash. If we publish a later version, it applies only to new assignments — it never changes the terms you accepted for an existing assignment.
 
-The [canonical plain-text copy](/static/iconoplasm/caretaker-terms-2026-09-02.txt) of these terms lives at its permanent address.
+The canonical plain-text copy of these terms lives at https://iconoplasm.brinedew.bio/static/iconoplasm/caretaker-terms-2026-09-02.txt
 
-## Privacy and support
+9. Privacy and support
 
-The [Iconoplasm privacy policy](/privacy) explains how account and service data are handled.
+The Iconoplasm privacy policy explains how account and service data are handled: https://iconoplasm.brinedew.bio/privacy
 
-Questions, data requests, and takedowns: **support@brinedew.bio**
+Questions, data requests, and takedowns: support@brinedew.bio
