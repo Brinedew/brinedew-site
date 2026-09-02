@@ -61,10 +61,6 @@ test("the plain-language caretaker terms rewrite is an immutable, hash-pinned CC
   const canonical = readFileSync(
     new URL("../quartz/static/iconoplasm/caretaker-terms-2026-09-02.txt", import.meta.url),
   )
-  const page = readFileSync(
-    new URL("../content/apps/iconoplasm/caretaker-terms.md", import.meta.url),
-    "utf8",
-  )
   const migration = readFileSync(
     new URL(
       "../migrations-iconoplasm-authoring/0009_caretaker_terms_cc0_2026_09_02.sql",
@@ -77,16 +73,39 @@ test("the plain-language caretaker terms rewrite is an immutable, hash-pinned CC
     "b02d297f1f745a27328a3a273a63c31c7427393577812d255ce8cdbd0b1021c5",
   )
   assert.match(canonical.toString("utf8"), /Version: terms_2026_09_02_v1/)
-  assert.match(
-    canonical.toString("utf8"),
-    /dedicate it to the public domain under CC0 1\.0 Universal/,
-  )
-  assert.match(canonical.toString("utf8"), /THE SHORT VERSION/)
-  assert.match(page, /terms_2026_09_02_v1/)
-  assert.match(page, /caretaker-terms-2026-09-02\.txt/)
-  assert.doesNotMatch(page, /caretaker-terms-2026-09-01\.txt/)
+  assert.match(canonical.toString("utf8"), /dedicate it to the public domain under CC0 1\.0 Universal/)
   assert.match(migration, /terms_2026_09_02_v1/)
   assert.match(migration, /b02d297f1f745a27328a3a273a63c31c7427393577812d255ce8cdbd0b1021c5/)
+})
+
+test("the corrected caretaker terms allow AI-assisted writing and are hash-pinned", () => {
+  const canonical = readFileSync(
+    new URL("../quartz/static/iconoplasm/caretaker-terms-2026-09-02-v2.txt", import.meta.url),
+  )
+  const page = readFileSync(
+    new URL("../content/apps/iconoplasm/caretaker-terms.md", import.meta.url),
+    "utf8",
+  )
+  const migration = readFileSync(
+    new URL(
+      "../migrations-iconoplasm-authoring/0010_caretaker_terms_cc0_2026_09_02_v2.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  )
+  assert.equal(
+    createHash("sha256").update(canonical).digest("hex"),
+    "ee68c8a63efa3f4e31d6fbf310903def19db5bbbf8d2e9716c534b3e48019521",
+  )
+  assert.match(canonical.toString("utf8"), /Version: terms_2026_09_02_v2/)
+  assert.match(canonical.toString("utf8"), /by yourself or with the help of AI tools/)
+  assert.match(canonical.toString("utf8"), /dedicate it to the public domain under CC0 1\.0 Universal/)
+  assert.match(canonical.toString("utf8"), /real medical, health, or treatment advice/)
+  assert.match(page, /terms_2026_09_02_v2/)
+  assert.match(page, /caretaker-terms-2026-09-02-v2\.txt/)
+  assert.doesNotMatch(page, /caretaker-terms-2026-09-02\.txt/)
+  assert.match(migration, /terms_2026_09_02_v2/)
+  assert.match(migration, /ee68c8a63efa3f4e31d6fbf310903def19db5bbbf8d2e9716c534b3e48019521/)
 })
 
 // ARCHITECTURE FENCE [IPD-007]
