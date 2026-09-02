@@ -718,6 +718,7 @@ body:has(.icono-vote-login-dialog[open]) {
   display: grid;
   gap: 0.7rem;
   margin: 0;
+  font-family: "IBM Plex Mono", monospace;
 }
 
 .icono-caretaker-capabilities p,
@@ -757,7 +758,7 @@ body:has(.icono-vote-login-dialog[open]) {
 
 .icono-caretaker-claim-terms::part(label) {
   min-width: 0;
-  font-family: "Special Elite", Georgia, serif;
+  font-family: "IBM Plex Mono", monospace;
   overflow-wrap: anywhere;
 }
 
