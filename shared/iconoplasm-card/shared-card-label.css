@@ -397,6 +397,12 @@
     0 8px 18px rgba(8, 5, 4, 0.38);
 }
 
+.icono-image-only-caretaker-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: clamp(0.45rem, 2.2cqw, 0.8rem);
+}
+
 .icono-image-only-caretaker {
   display: inline-flex;
   align-items: center;
