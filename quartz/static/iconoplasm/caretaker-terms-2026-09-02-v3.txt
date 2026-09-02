@@ -1,49 +1,39 @@
----
-title: "Caretaker Terms - Iconoplasm"
-description: "The terms for writing, keeping, and removing Iconoplasm gene manifestations"
-date: 2026-09-02
-draft: false
-schemaType: WebPage
----
-
-# Caretaker Terms - Iconoplasm
-
-**Version:** `terms_2026_09_02_v3`
-
-**Effective:** September 2, 2026
+ICONOPLASM CARETAKER TERMS
+Version: terms_2026_09_02_v3
+Effective: 2 September 2026
 
 These terms govern your participation as a caretaker on Iconoplasm.
 
-## Your content and its license
+1. Your content and its license
 
-When you submit a manifestation, you dedicate it to the public domain under [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/) by waiving all copyright and related rights to the work worldwide, to the extent allowed by law. You can copy, modify, distribute and perform the work, even for commercial purposes, all without asking permission.
+When you submit a manifestation, you dedicate it to the public domain under CC0 1.0 Universal by waiving all copyright and related rights to the work worldwide, to the extent allowed by law. You can copy, modify, distribute and perform the work, even for commercial purposes, all without asking permission.
 
 No trademark or patent rights held by you are waived, abandoned, surrendered, licensed or otherwise affected by this document. You offer the work as-is and make no representations or warranties of any kind concerning the work.
 
 By submitting your content, you represent and warrant that you have all rights, power, and authority necessary to grant the rights to your content contained within these Terms.
 
-## The rules
+2. The rules
 
 Everyone has a right to use Iconoplasm free of harassment, bullying, and threats of violence. Respect the privacy of others: revealing someone's personal or confidential information is not allowed. Do not spam or engage in disruptive behaviors.
 
 Content on Iconoplasm is for informational and entertainment purposes only and is not intended to be a substitute for professional medical advice, diagnosis, or treatment.
 
-## Moderation and availability
+3. Moderation and availability
 
 We reserve the right to revoke or limit a caretaker's role at any time and for any reason or no reason, including for a breach of these Terms. We may modify, suspend, or discontinue, temporarily or permanently, the service (or any part thereof) with or without notice.
 
 THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT REPRESENTATIONS, WARRANTIES, OR CONDITIONS OF ANY KIND, WHETHER EXPRESS, IMPLIED, LEGAL, OR STATUTORY, INCLUDING IMPLIED WARRANTIES OF MERCHANTABILITY, TITLE, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. WE DO NOT WARRANT THAT THE SERVICE IS ACCURATE, COMPLETE, RELIABLE, CURRENT, OR ERROR FREE.
 
-## Leaving
+4. Leaving
 
 You can remove your content and stop using the service at any time. Content already published may continue to be found and displayed by others.
 
-## Changes to these terms
+5. Changes to these terms
 
 We may make changes to these terms from time to time. If we make changes, we will post the revised terms and update the Effective Date above. Your acceptance is recorded against the version identifier and document hash in force when you accepted.
 
-## Contact
+6. Contact
 
-Questions, data requests, and takedowns: **support@brinedew.bio**
+Questions, data requests, and takedowns: support@brinedew.bio
 
-Canonical plain-text copy: [/static/iconoplasm/caretaker-terms-2026-09-02-v3.txt](/static/iconoplasm/caretaker-terms-2026-09-02-v3.txt)
+Canonical plain-text copy: https://iconoplasm.brinedew.bio/static/iconoplasm/caretaker-terms-2026-09-02-v3.txt
