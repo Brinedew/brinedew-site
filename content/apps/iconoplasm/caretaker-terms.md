@@ -1,6 +1,6 @@
 ---
 title: "Caretaker Terms - Iconoplasm"
-description: "The plain-language rules for writing, keeping, and removing Iconoplasm gene manifestations"
+description: "The terms for writing, keeping, and removing Iconoplasm gene manifestations"
 date: 2026-09-02
 draft: false
 schemaType: WebPage
@@ -8,78 +8,42 @@ schemaType: WebPage
 
 # Caretaker Terms - Iconoplasm
 
-**Version:** `terms_2026_09_02_v2`
+**Version:** `terms_2026_09_02_v3`
 
 **Effective:** September 2, 2026
 
-These terms apply when you choose to become the caretaker of an Iconoplasm gene. If anything ever conflicts with the short summary, the full text below wins.
+These terms govern your participation as a caretaker on Iconoplasm.
 
-## The short version
+## Your content and its license
 
-- You write and look after the character description for one gene. You may write it yourself or with the help of AI tools — the card images on Iconoplasm are AI-generated too.
-- Everything you submit becomes public domain (CC0). Anyone may use it, forever, with or without credit.
-- Saved versions are kept as permanent history. You choose which version readers see.
-- You can leave at any time.
-- Brinedew may remove content or a caretaker role where reasonably necessary to keep the site safe and honest.
-- This is a voluntary creative role, not paid employment.
+When you submit a manifestation, you dedicate it to the public domain under [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/) by waiving all copyright and related rights to the work worldwide, to the extent allowed by law. You can copy, modify, distribute and perform the work, even for commercial purposes, all without asking permission.
 
-## What a caretaker does
+No trademark or patent rights held by you are waived, abandoned, surrendered, licensed or otherwise affected by this document. You offer the work as-is and make no representations or warranties of any kind concerning the work.
 
-A caretaker looks after one gene. You write its "manifestation" — the short creative character description readers see on the gene page — and you keep its versions in order.
-
-For your one gene, you may:
-
-- Write new versions of your manifestation, by yourself or with the help of AI tools. Every save is kept as its own permanent version.
-- Choose which eligible version is the canonical (shown) one, or restore an earlier eligible version.
-- Show or hide your canonical manifestation on the gene page.
-
-You cannot edit or delete the built-in system description or another person's work.
-
-## Your writing becomes public domain (CC0)
-
-When you submit a manifestation, you dedicate it to the public domain under [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/) by waiving all copyright and related rights to the fullest extent allowed by law. As Creative Commons puts it: you can copy, modify, distribute and perform the work, even for commercial purposes, all without asking permission.
-
-In no way are the patent or trademark rights of any person affected by CC0, nor are the rights that other persons may have in the work or in how the work is used, such as publicity or privacy rights. Only submit prose you have the right to dedicate under CC0.
+By submitting your content, you represent and warrant that you have all rights, power, and authority necessary to grant the rights to your content contained within these Terms.
 
 ## The rules
 
-Do not submit content that:
+Everyone has a right to use Iconoplasm free of harassment, bullying, and threats of violence. Respect the privacy of others: revealing someone's personal or confidential information is not allowed. Do not spam or engage in disruptive behaviors.
 
-- is unlawful or infringes someone else's rights;
-- exposes private or confidential information about another person;
-- contains malicious code;
-- harasses, bullies, or spreads hate;
-- presents itself as real medical, health, or treatment advice for humans;
-- is spam or advertising.
-
-Manifestations are creative character descriptions of genes portrayed as characters. They are fiction, not medical advice and not scientific evidence.
-
-## How versions work
-
-Every save is kept as its own permanent version, and you choose which eligible version readers see. The interface may save and update versions for you as you work.
-
-## Credit
-
-Iconoplasm may show your public credit label next to the manifestations you wrote. Because your writing is CC0, credit is optional for anyone reusing it. If your account is erased, old history keeps only an anonymous stable label instead of your provider identity.
-
-## Leaving and deletion
-
-You can leave at any time, and you never have to decide what happens to your work until you do.
-
-Because your contributions are public domain, copies of them that already exist — including the gene page itself — may continue to be displayed or used after you leave. You can also delete your manifestation ("Delete my manifestation" in the interface): deletion takes your text out of use for future display immediately, and it becomes eligible for permanent deletion after 30 days, when we destroy the keys that could decrypt it and keep only the minimum records needed to run the service and comply with the law.
+Content on Iconoplasm is for informational and entertainment purposes only and is not intended to be a substitute for professional medical advice, diagnosis, or treatment.
 
 ## Moderation and availability
 
-Brinedew may remove content, or suspend or end a caretaker role, at its discretion where reasonably necessary — for example to protect people, security, or the integrity of the site. Iconoplasm may change or discontinue the service at any time, and we cannot promise it will always be available.
+We reserve the right to revoke or limit a caretaker's role at any time and for any reason or no reason, including for a breach of these Terms. We may modify, suspend, or discontinue, temporarily or permanently, the service (or any part thereof) with or without notice.
 
-## The legal record
+THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT REPRESENTATIONS, WARRANTIES, OR CONDITIONS OF ANY KIND, WHETHER EXPRESS, IMPLIED, LEGAL, OR STATUTORY, INCLUDING IMPLIED WARRANTIES OF MERCHANTABILITY, TITLE, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. WE DO NOT WARRANT THAT THE SERVICE IS ACCURATE, COMPLETE, RELIABLE, CURRENT, OR ERROR FREE.
 
-Your acceptance is recorded against this exact version identifier and its document hash. If we publish a later version, it applies only to new assignments — it never changes the terms you accepted for an existing assignment.
+## Leaving
 
-The [canonical plain-text copy](/static/iconoplasm/caretaker-terms-2026-09-02-v2.txt) of these terms lives at its permanent address.
+You can remove your content and stop using the service at any time. Content already published may continue to be found and displayed by others.
 
-## Privacy and support
+## Changes to these terms
 
-The [Iconoplasm privacy policy](/privacy) explains how account and service data are handled.
+We may make changes to these terms from time to time. If we make changes, we will post the revised terms and update the Effective Date above. Your acceptance is recorded against the version identifier and document hash in force when you accepted.
+
+## Contact
 
 Questions, data requests, and takedowns: **support@brinedew.bio**
+
+Canonical plain-text copy: [/static/iconoplasm/caretaker-terms-2026-09-02-v3.txt](/static/iconoplasm/caretaker-terms-2026-09-02-v3.txt)
