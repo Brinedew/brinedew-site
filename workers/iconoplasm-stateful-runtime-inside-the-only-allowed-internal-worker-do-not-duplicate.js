@@ -1825,6 +1825,24 @@ function isIconoplasmHighRiskAdminMutationRouteFamily(routeFamily) {
   ]).has(String(routeFamily || "").trim())
 }
 
+// ARCHITECTURE FENCE [IPD-012]: the authority/cutover lane is the read-heavy
+// path with a cumulative daily admission ceiling. Its D1 usage must be metered
+// into the shared kill-switch ledger and must fail closed when the shared day
+// is exhausted: on 2026-08-31 this lane burned 13.6 billion read rows through
+// collation-mismatched scans with no admission control (Linear B-734). The
+// route contract names these families authority_workstation_{sync,material,write}.
+function isIconoplasmAuthorityBudgetedRouteFamily(routeFamily) {
+  const value = String(routeFamily || "").trim()
+  return value.startsWith("authority_workstation_")
+}
+
+function isIconoplasmBudgetedRouteFamily(routeFamily) {
+  return (
+    isIconoplasmHighRiskAdminMutationRouteFamily(routeFamily) ||
+    isIconoplasmAuthorityBudgetedRouteFamily(routeFamily)
+  )
+}
+
 function iconoplasmMutationLimiterChunkSlowZoneRows(snapshot) {
   const smartLimit = Math.max(0, Number(snapshot?.rows_written_daily_smart_limit || 0) || 0)
   if (smartLimit <= 0) return 0
@@ -2709,7 +2727,7 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request) {
   const budgets = iconoplasmD1BudgetConfigFromEnv(env)
   if (!budgets) return env
   const attribution = request ? iconoplasmD1BudgetAttributionFromRequest(request) : null
-  if (!isIconoplasmHighRiskAdminMutationRouteFamily(attribution?.route_family)) {
+  if (!isIconoplasmBudgetedRouteFamily(attribution?.route_family)) {
     return env
   }
   const stub = iconoplasmD1DailyBudgetKillSwitchStub(env)
@@ -2733,9 +2751,10 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request) {
     // Public serving has to stay up even when the shared DO ledger is already at
     // Cloudflare's daily write wall. In that state the telemetry barrier is gone,
     // so let non-mutation traffic keep flowing instead of turning every catalog
-    // read into a fake outage. The one place we still fail closed is the exact
-    // write-heavy admin mutation family that could make the day more expensive.
-    if (!isIconoplasmHighRiskAdminMutationRouteFamily(attribution?.route_family)) {
+    // read into a fake outage. The places we still fail closed are the exact
+    // write-heavy admin mutation family and the authority/cutover lane that
+    // could make the day more expensive.
+    if (!isIconoplasmBudgetedRouteFamily(attribution?.route_family)) {
       return env
     }
     throw new IconoplasmAdminMutationLimiterActiveError(

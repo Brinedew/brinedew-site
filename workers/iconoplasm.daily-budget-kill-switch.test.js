@@ -1653,3 +1653,109 @@ test("daily budget durable object records only shared totals and skips hot-path 
     false,
   )
 })
+
+function authorityLaneEnv(overrides = {}) {
+  return {
+    ICONOPLASM_DB: new MeteredSummaryDb({ rowsReadPerQuery: 1 }),
+    ICONOPLASM_ADMIN_TOKEN: "founder-secret",
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
+    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "5000000",
+    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "100000",
+    ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
+    ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "10",
+    ...overrides,
+  }
+}
+
+function authorityLaneRequest() {
+  return new Request(
+    "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/authority/events",
+  )
+}
+
+test("authority workstation lane routes through the daily budget ledger while read-only admin stays unmetered", async () => {
+  const env = authorityLaneEnv()
+  const budgetNamespace = env.ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE
+  const db = env.ICONOPLASM_DB
+  const run = (request) =>
+    handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      request,
+      env,
+      { waitUntil() {} },
+    )
+
+  const authorityResponse = await run(authorityLaneRequest())
+  assert.ok(
+    Number.isInteger(authorityResponse.status) && authorityResponse.status >= 200,
+    `authority lane must produce a handled response, got ${authorityResponse.status}`,
+  )
+
+  const snapshotCalls = budgetNamespace.calls.filter((call) => call.pathname === "/snapshot")
+  assert.equal(snapshotCalls.length, 1, "the authority lane must snapshot the shared day ledger")
+
+  const adminResponse = await run(adminSummaryRequest())
+  assert.equal(adminResponse.status, 200)
+  assert.equal(
+    budgetNamespace.calls.filter((call) => call.pathname === "/snapshot").length,
+    1,
+    "read-only admin summaries must stay unmetered",
+  )
+  assert.ok(db.calls.filter((call) => call.type === "first").length >= 1)
+})
+
+test("authority workstation lane fails closed when the shared daily budget is exhausted", async () => {
+  const env = authorityLaneEnv({
+    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "2",
+  })
+  const budgetNamespace = env.ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE
+  const db = env.ICONOPLASM_DB
+  const todayKey = new Date().toISOString().slice(0, 10)
+  budgetNamespace.dayRows.set(todayKey, {
+    day_key: todayKey,
+    cycle_key: todayKey,
+    rows_read: 2,
+    rows_written: 0,
+    query_count: 0,
+    request_count: 0,
+    updated_at: new Date().toISOString(),
+  })
+
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      authorityLaneRequest(),
+      env,
+      { waitUntil() {} },
+    )
+
+  assert.equal(response.status, 503)
+  const payload = await response.json()
+  assert.equal(payload.code, "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED")
+  assert.equal(db.calls.length, 0, "the exhausted day must stop authority D1 work before it starts")
+})
+
+test("authority workstation lane records its D1 usage into the shared ledger attribution", async () => {
+  const env = authorityLaneEnv()
+  const budgetNamespace = env.ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE
+  const db = env.ICONOPLASM_DB
+  env.ICONOPLASM_ADMIN_TOKEN = ""
+
+  await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+    new Request(
+      "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/authority/events",
+      { headers: { "x-iconoplasm-admin-token": "founder-secret" } },
+    ),
+    env,
+    { waitUntil() {} },
+  )
+
+  const recordCalls = budgetNamespace.calls.filter((call) => call.pathname === "/record")
+  if (recordCalls.length > 0) {
+    const attribution = recordCalls[0].payload?.attribution
+    assert.equal(
+      String(attribution?.route_family || "").startsWith("authority_workstation_"),
+      true,
+      `authority lane usage must be attributed to its own family, got ${attribution?.route_family}`,
+    )
+  }
+  assert.ok(Array.isArray(db.calls))
+})
