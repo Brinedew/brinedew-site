@@ -10,5 +10,8 @@ aliases:
 # Iconoplasm - Caretaker's Handbook
 
 
+**Who can become a caretaker?**
+At the moment, anyone with a Discord account can become a caretaker.
+
 **What if I want to swap genes with another caretaker?**
 
