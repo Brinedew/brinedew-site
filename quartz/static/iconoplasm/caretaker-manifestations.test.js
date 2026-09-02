@@ -100,7 +100,7 @@ function dossier() {
 
 test("the dossier renders a tabbed autosave dialog, exact version choices, and own-only deletion", () => {
   const html = renderCaretakerManifestationPanel(dossier(), escapeHtml)
-  assert.match(html, /Your manifestation/)
+  assert.match(html, /Manifestation</)
   assert.match(html, /Changes autosave as a new version/)
   assert.match(html, /data-icono-caretaker-tab="manifestation"/)
   assert.match(html, /data-icono-caretaker-tab="history"/)

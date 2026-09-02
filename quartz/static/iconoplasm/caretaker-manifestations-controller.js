@@ -1,6 +1,7 @@
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=20260901-caretaker-modal-v4"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=20260902-caretaker-editor-v5"
 import {
   MAX_PROSE_CODE_POINTS,
+  allRevisions,
   codePointLength,
   commandId,
   defaultDraftStorage,
@@ -9,8 +10,8 @@ import {
   ownManifestation,
   proseValidationError,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=20260901-caretaker-modal-v4"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=20260901-caretaker-modal-v4"
+} from "./caretaker-manifestations-model.js?v=20260902-caretaker-editor-v5"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=20260902-caretaker-editor-v5"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -98,10 +99,17 @@ export function createCaretakerManifestationPanel({
     const textarea = state.host.querySelector("[data-icono-caretaker-prose]")
     const tags = state.host.querySelector("[data-icono-caretaker-tags]")
     const restored = draft || restoreDraft(state)
-    if (textarea && restored) textarea.value = restored.prose
-    if (tags && restored) tags.value = restored.tags
+    if (textarea && restored) {
+      textarea.value = restored.prose
+      textarea.dispatchEvent(new Event("input", { bubbles: true }))
+    }
+    if (tags && restored) {
+      tags.value = restored.tags
+      tags.dispatchEvent(new Event("input", { bubbles: true }))
+    }
     if (!textarea && restored?.prose) mountLocalDraftRecovery(state, restored.prose)
     if (textarea) updateCount(textarea)
+    initTagPills(state)
     if (state.basedOnRevisionId) showBasis(state)
     activateTab(state, state.activeTab || "manifestation")
     const dialog = state.host.querySelector("[data-icono-caretaker-dialog]")
@@ -167,6 +175,162 @@ export function createCaretakerManifestationPanel({
       count.textContent = `${codePointLength(textarea.value).toLocaleString()} / ${MAX_PROSE_CODE_POINTS.toLocaleString()}`
   }
 
+  function parseTagList(value) {
+    return String(value || "")
+      .split(/\r?\n|,/)
+      .map(function (line) {
+        return line.trim()
+      })
+      .filter(function (line) {
+        return line.length > 0
+      })
+  }
+
+  function dispatchInput(control) {
+    // Tests run the panel inside linkedom documents whose Event implementation
+    // differs from the Node global, so construct the event from the control's
+    // own document.
+    const EventCtor = control.ownerDocument?.defaultView?.Event || Event
+    control.dispatchEvent(new EventCtor("input", { bubbles: true }))
+  }
+
+  function writeTagList(source, tags) {
+    source.value = tags.join(", ")
+    dispatchInput(source)
+  }
+
+  // The tags source stays a hidden textarea so the autosave, draft, and
+  // authority flows keep reading the same control; the pills are its editor.
+  function initTagPills(state) {
+    const form = state.host.querySelector("[data-icono-caretaker-editor]")
+    const source = form?.querySelector("[data-icono-caretaker-tags]")
+    const pills = form?.querySelector("[data-icono-caretaker-pills]")
+    const input = form?.querySelector("[data-icono-caretaker-tags-input]")
+    const box = form?.querySelector("[data-icono-caretaker-tags-editor]")
+    const count = form?.querySelector("[data-icono-caretaker-tags-count]")
+    if (!source || !pills || !input) return
+    const suggestions = parseTagList(source.dataset.caretakerTagsSuggestions || "")
+    if (source.disabled) {
+      const tags = parseTagList(source.value)
+      count.textContent = `${tags.length.toLocaleString()} tag${tags.length === 1 ? "" : "s"}`
+      return
+    }
+
+    function syncCount(tags) {
+      if (count)
+        count.textContent = `${tags.length.toLocaleString()} tag${tags.length === 1 ? "" : "s"}`
+    }
+
+    function renderPills() {
+      const tags = parseTagList(source.value)
+      pills.replaceChildren()
+      tags.forEach(function (tag, index) {
+        const item = document.createElement("li")
+        item.className = "icono-caretaker-pill"
+        const label = document.createElement("span")
+        label.className = "icono-caretaker-pill__label"
+        label.textContent = tag
+        const remove = document.createElement("button")
+        remove.type = "button"
+        remove.className = "icono-caretaker-pill__remove"
+        remove.setAttribute("aria-label", `Remove tag ${tag}`)
+        remove.textContent = "×"
+        remove.addEventListener("click", function () {
+          const remaining = parseTagList(source.value)
+          remaining.splice(index, 1)
+          writeTagList(source, remaining)
+          renderPills()
+        })
+        item.appendChild(label)
+        item.appendChild(remove)
+        pills.appendChild(item)
+      })
+      if (!tags.length) {
+        const empty = document.createElement("li")
+        empty.className = "icono-caretaker-pills__empty"
+        empty.textContent = "No tags yet."
+        pills.appendChild(empty)
+      }
+      syncCount(tags)
+    }
+
+    function addTags(candidates) {
+      const existing = parseTagList(source.value)
+      let added = false
+      candidates.forEach(function (candidate) {
+        const tag = String(candidate || "").trim()
+        if (!tag || existing.indexOf(tag) !== -1) return
+        existing.push(tag)
+        added = true
+      })
+      if (added) writeTagList(source, existing)
+      input.value = ""
+      renderPills()
+    }
+
+    function addSuggestions() {
+      const pending = suggestions.filter(function (tag) {
+        return parseTagList(source.value).indexOf(tag) === -1
+      })
+      if (!pending.length) return
+      addTags(pending)
+    }
+
+    function renderSuggestions() {
+      const used = parseTagList(source.value)
+      const pending = suggestions.filter(function (tag) {
+        return used.indexOf(tag) === -1
+      })
+      const existingRow = box?.querySelector(".icono-caretaker-tags-suggestions")
+      if (existingRow) existingRow.remove()
+      if (!pending.length) return
+      const row = document.createElement("div")
+      row.className = "icono-caretaker-tags-suggestions"
+      pending.forEach(function (tag) {
+        const chip = document.createElement("button")
+        chip.type = "button"
+        chip.className = "icono-caretaker-tags-suggestion"
+        chip.textContent = tag
+        chip.addEventListener("click", function () {
+          addTags([tag])
+        })
+        row.appendChild(chip)
+      })
+      box?.appendChild(row)
+    }
+
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" || event.key === ",") {
+        event.preventDefault()
+        addTags(input.value.split(/\r?\n|,/))
+        renderSuggestions()
+      } else if (event.key === "Backspace" && !input.value) {
+        const tags = parseTagList(source.value)
+        if (!tags.length) return
+        tags.pop()
+        writeTagList(source, tags)
+        renderPills()
+        renderSuggestions()
+      }
+    })
+    input.addEventListener("blur", function () {
+      if (input.value.trim()) {
+        addTags(input.value.split(/\r?\n|,/))
+        renderSuggestions()
+      }
+    })
+    input.addEventListener("paste", function (event) {
+      const text = String(event.clipboardData?.getData("text") || "")
+      if (!/[\r\n,]/.test(text)) return
+      event.preventDefault()
+      addTags(text.split(/\r?\n|,/))
+      renderSuggestions()
+    })
+    source.addEventListener("input", renderPills)
+    renderPills()
+    renderSuggestions()
+  }
+
   function request(state, suffix, init) {
     return fetchJSON(apiPath(state.symbol, suffix), {
       credentials: "include",
@@ -198,6 +362,32 @@ export function createCaretakerManifestationPanel({
       } catch (_error) {
         own.head_tags = ""
         own.tags_body_unavailable = true
+      }
+    } else if (!own) {
+      // Fresh caretaker: prefill from the canonical manifestation this gene
+      // already shows, so the editor never opens on a misleading blank page.
+      const canonical = allRevisions(state.dossier).find(function (item) {
+        return (
+          item.revision?.manifestation_revision_id ===
+          String(state.dossier.head?.canonical_revision_id || "")
+        )
+      })
+      const canonicalDerivative = canonical?.revision?.derivative
+      if (
+        canonical &&
+        canonicalDerivative?.manifestation_derivative_id &&
+        canonicalDerivative.body_available !== false
+      ) {
+        try {
+          const material = await request(
+            state,
+            `/derivatives/${encodeURIComponent(canonicalDerivative.manifestation_derivative_id)}/body`,
+            { method: "GET" },
+          )
+          state.dossier.prefill_tags_text = String(material?.tags?.tags_text || "")
+        } catch (_error) {
+          state.dossier.prefill_tags_text = ""
+        }
       }
     }
     render(state, options)

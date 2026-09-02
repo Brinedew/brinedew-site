@@ -4,7 +4,7 @@ import {
   codePointLength,
   manifestationWordDiff,
   ownManifestation,
-} from "./caretaker-manifestations-model.js?v=20260901-caretaker-modal-v4"
+} from "./caretaker-manifestations-model.js?v=20260902-caretaker-editor-v5"
 
 export function diffMarkup(before, after, escapeHtml) {
   if (String(before || "") === String(after || "")) {
@@ -181,6 +181,15 @@ function versionMarkup(item, dossier, escapeHtml) {
   )
 }
 
+function canonicalRevisionBody(dossier) {
+  const canonicalId = String(dossier?.head?.canonical_revision_id || "")
+  if (!canonicalId) return ""
+  const found = allRevisions(dossier).find(function (item) {
+    return item.revision?.manifestation_revision_id === canonicalId
+  })
+  return String(found?.revision?.body || "")
+}
+
 export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
   const esc = escapeHtml
   const assignment = dossier.assignment
@@ -278,15 +287,18 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
     '<div class="icono-caretaker-tabpanel" role="tabpanel" id="icono-caretaker-tab-manifestation" aria-labelledby="icono-caretaker-tab-button-manifestation" data-icono-caretaker-tabpanel="manifestation">'
 
   if (canWrite) {
-    const currentBody = String(own?.head_body || "")
-    const currentTags = String(own?.head_tags || "")
+    const currentBody = String(
+      own?.head_body || canonicalRevisionBody(dossier) || "",
+    )
+    const currentTags = String(dossier?.prefill_tags_text ?? own?.head_tags ?? "")
     const tagsUnavailable = own?.tags_body_unavailable === true
     body +=
       (tagsUnavailable
         ? '<div class="icono-caretaker-callout" data-tone="error"><p>Saved Tags could not be loaded. Editing is paused so they cannot be replaced by blank text. Any unsent draft on this device remains preserved.</p><button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-retry-tags>Retry loading saved Tags</button></div>'
         : "") +
       '<form class="icono-caretaker-editor" data-icono-caretaker-editor>' +
-      '<label for="icono-caretaker-prose">Your manifestation</label>' +
+      '<section class="icono-caretaker-pane icono-caretaker-pane--prose">' +
+      '<label for="icono-caretaker-prose">Manifestation</label>' +
       '<textarea id="icono-caretaker-prose" rows="8" maxlength="' +
       MAX_PROSE_CODE_POINTS +
       '" data-icono-caretaker-prose' +
@@ -294,20 +306,33 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
       ">" +
       esc(currentBody) +
       "</textarea>" +
-      '<label for="icono-caretaker-tags">Tags</label>' +
-      '<textarea id="icono-caretaker-tags" rows="5" maxlength="32767" data-icono-caretaker-tags aria-describedby="icono-caretaker-tags-hint"' +
-      (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
-      ">" +
-      esc(currentTags) +
-      "</textarea>" +
-      '<p id="icono-caretaker-tags-hint" class="icono-caretaker-editor__hint">Generation Tags. They never appear on the gene page.</p>' +
-      '<p class="icono-caretaker-editor__basis" data-icono-caretaker-basis hidden></p>' +
       '<div class="icono-caretaker-editor__meta"><span data-icono-caretaker-count>' +
       codePointLength(currentBody).toLocaleString() +
       " / " +
       MAX_PROSE_CODE_POINTS.toLocaleString() +
-      "</span><span data-icono-caretaker-autosave-state>Saved</span></div>" +
+      '</span><span data-icono-caretaker-autosave-state>Saved</span></div>' +
       '<p class="icono-caretaker-editor__hint">Changes autosave as a new version after you pause. Choose a version in History to make it canonical.</p>' +
+      "</section>" +
+      '<section class="icono-caretaker-pane icono-caretaker-pane--tags">' +
+      '<label for="icono-caretaker-tags-input">Tags</label>' +
+      '<div class="icono-caretaker-tags" data-icono-caretaker-tags-editor' +
+      (tagsUnavailable ? " data-icono-caretaker-disabled" : "") +
+      "><ul class=\"icono-caretaker-pills\" data-icono-caretaker-pills></ul>" +
+      '<input class="icono-caretaker-tags-input" type="text" data-icono-caretaker-tags-input aria-describedby="icono-caretaker-tags-hint" placeholder="Add a tag and press Enter"' +
+      (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
+      "></div>" +
+      '<textarea id="icono-caretaker-tags" class="icono-caretaker-tags-source" data-icono-caretaker-tags aria-hidden="true" tabindex="-1"' +
+      (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
+      (dossier?.prefill_tags_text != null
+        ? ' data-caretaker-tags-suggestions="' + esc(currentTags) + '"'
+        : "") +
+      ">" +
+      esc(currentTags) +
+      "</textarea>" +
+      '<p id="icono-caretaker-tags-hint" class="icono-caretaker-editor__hint">Generation Tags. They never appear on the gene page. Press Enter to add each tag.</p>' +
+      '<p class="icono-caretaker-editor__basis" data-icono-caretaker-basis hidden></p>' +
+      '<div class="icono-caretaker-editor__meta"><span data-icono-caretaker-tags-count></span></div>' +
+      "</section>" +
       "</form>"
   }
 

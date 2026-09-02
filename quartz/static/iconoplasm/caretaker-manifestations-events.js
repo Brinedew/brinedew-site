@@ -1,8 +1,8 @@
 import {
   ownManifestation,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=20260901-caretaker-modal-v4"
-import { diffMarkup } from "./caretaker-manifestations-view.js?v=20260901-caretaker-modal-v4"
+} from "./caretaker-manifestations-model.js?v=20260902-caretaker-editor-v5"
+import { diffMarkup } from "./caretaker-manifestations-view.js?v=20260902-caretaker-editor-v5"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
