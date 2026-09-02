@@ -77,7 +77,10 @@ test("the plain-language caretaker terms rewrite is an immutable, hash-pinned CC
     "b02d297f1f745a27328a3a273a63c31c7427393577812d255ce8cdbd0b1021c5",
   )
   assert.match(canonical.toString("utf8"), /Version: terms_2026_09_02_v1/)
-  assert.match(canonical.toString("utf8"), /dedicate it to the public domain under CC0 1\.0 Universal/)
+  assert.match(
+    canonical.toString("utf8"),
+    /dedicate it to the public domain under CC0 1\.0 Universal/,
+  )
   assert.match(canonical.toString("utf8"), /THE SHORT VERSION/)
   assert.match(page, /terms_2026_09_02_v1/)
   assert.match(page, /caretaker-terms-2026-09-02\.txt/)
