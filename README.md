@@ -52,6 +52,29 @@ It accepts a detached checkout or unrelated uncommitted work because the
 workflow consumes remote source, never local files. Push the intended commit
 first; the helper refuses a local-only or mismatched commit.
 
+## Bounded live Worker diagnostics
+
+Use the account-owned `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`
+environment variables, then run:
+
+```powershell
+node scripts/capture-worker-tail.mjs --worker geneguessr-api --seconds 15 --max-events 20
+```
+
+The helper uses Cloudflare's supported tail API and the existing WebSocket
+dependency. It streams compact JSON containing route path, outcome, CPU/wall
+time, status, and exception names. Query strings, headers, console logs, and
+exception messages are excluded. Missing timings remain null. Output is capped
+at 16 KiB, incoming frames at 1 MiB, and captures at 60 seconds. An optional
+`--sampling-rate 0.99` applies the server-side sampling filter.
+
+A planned deadline is successful only after connection and remote tail deletion;
+an empty connected capture is explicitly reported as zero events. Early
+disconnects, malformed data, and cleanup failures return nonzero. Setup and
+cleanup each have their own deadlines; allow 90 seconds when using the shared
+outer command deadline. This avoids Wrangler's Windows streaming lifecycle
+without changing the Worker, account limits, or authentication source.
+
 ## Upstream framework
 
 The site is built on Quartz v5.
