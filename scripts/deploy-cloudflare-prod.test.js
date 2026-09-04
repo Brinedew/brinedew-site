@@ -63,8 +63,11 @@ try { & $Helper } catch { $failure = $_.Exception.Message }
       const result = spawnSync(
         process.platform === "win32" ? "C:\\Program Files\\PowerShell\\7\\pwsh.exe" : "pwsh",
         ["-NoProfile", "-NonInteractive", "-File", driver, helper, scenario],
-        { encoding: "utf8", timeout: 10000, maxBuffer: 128000 },
+        // Cold PowerShell startup competes with the full CI suite. Keep a
+        // deadline without treating a ten-second scheduling delay as a defect.
+        { encoding: "utf8", timeout: 30000, maxBuffer: 128000, windowsHide: true },
       )
+      assert.ifError(result.error)
       assert.equal(result.status, 0, result.stderr)
       const evidence = JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1))
       const dispatched = evidence.calls.some((call) => call.startsWith("gh workflow run"))
