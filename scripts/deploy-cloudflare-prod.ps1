@@ -15,29 +15,27 @@ Set-Location $repoRoot
 # This script intentionally does not call `wrangler pages deploy` or `wrangler deploy`
 # directly anymore. Production deploys must go through the single GitHub Actions path so
 # local machine auth, local config drift, and partial deploys cannot create split-brain.
-$branch = (git rev-parse --abbrev-ref HEAD).Trim()
-if ($branch -ne "main") {
-  throw "[deploy] Production workflow dispatch is only supported from main. Current branch: $branch"
-}
-
-$status = git status --porcelain
-if ($LASTEXITCODE -ne 0) {
-  throw "[deploy] Could not read git status."
-}
-if ($status) {
-  throw "[deploy] Working tree is dirty. Commit or stash changes before deploying."
-}
-
 # Deploy the exact commit that is already on origin/main. This keeps the release source
 # explicit and avoids the old failure mode where a local-only state or a failed push and
 # a production deploy could drift apart.
+# Local files and branch names are irrelevant: the workflow checks out remote
+# source and uploads no working-tree content. A detached checkout at the same
+# commit is therefore valid, as is unrelated uncommitted work.
 git fetch origin main --quiet
 if ($LASTEXITCODE -ne 0) {
   throw "[deploy] Failed to fetch origin/main."
 }
 
-$headSha = (git rev-parse HEAD).Trim()
-$originSha = (git rev-parse origin/main).Trim()
+$headSha = git rev-parse --verify HEAD
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($headSha)) {
+  throw "[deploy] Could not resolve HEAD."
+}
+$headSha = $headSha.Trim()
+$originSha = git rev-parse --verify origin/main
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($originSha)) {
+  throw "[deploy] Could not resolve origin/main."
+}
+$originSha = $originSha.Trim()
 if ($headSha -ne $originSha) {
   throw "[deploy] HEAD is not origin/main. Push main first so the deploy source is explicit."
 }
