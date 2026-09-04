@@ -16,7 +16,7 @@ import {
   enforceIconoplasmRateLimit,
   withIconoplasmRateLimitHeaders,
 } from "./iconoplasm-rate-limit.js"
-import { isD1DailyRowReadLimitError } from "./lib/cloudflare-d1-availability.js"
+import { isD1DailyRowReadLimitError } from "./lib/cloudflare-availability.js"
 
 // CORS headers for frontend access - supports both main domain and subdomain
 function getCorsHeaders(origin, requestHost = "") {

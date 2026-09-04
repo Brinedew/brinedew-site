@@ -9,8 +9,9 @@ import {
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 import {
   isD1DailyRowReadLimitError,
-  secondsUntilD1DailyReset,
-} from "./lib/cloudflare-d1-availability.js"
+  isDurableObjectDailyDurationLimitError,
+  secondsUntilCloudflareDailyReset,
+} from "./lib/cloudflare-availability.js"
 
 const DISCORD_API = "https://discord.com/api/v10"
 const DISCORD_OAUTH = "https://discord.com/oauth2/authorize"
@@ -24,7 +25,7 @@ const SHARED_SESSION_MAX_AGE_SECONDS = PERSISTENT_SESSION_MAX_AGE_SECONDS
 const ACCESS_TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000
 
 function oauthAuthorityUnavailableResponse({ oauthCookieName, cookieDomainAttr }) {
-  const retryAfter = secondsUntilD1DailyReset()
+  const retryAfter = secondsUntilCloudflareDailyReset()
   const headers = new Headers({
     "Retry-After": String(retryAfter),
     "Set-Cookie": `${oauthCookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0${cookieDomainAttr}`,
@@ -701,6 +702,28 @@ export async function handleCallback(request, env) {
  */
 const ROLE_VERIFY_TTL = 5 * 60 * 1000
 
+function sessionAuthorityUnavailableResponse({ dailyLimit = false, retryAfter = null } = {}) {
+  let retrySeconds = 60
+  if (dailyLimit) {
+    retrySeconds = secondsUntilCloudflareDailyReset()
+  } else if (retryAfter) {
+    const supplied = /^\d+$/.test(retryAfter)
+      ? Number(retryAfter)
+      : Math.ceil((Date.parse(retryAfter) - Date.now()) / 1000)
+    if (Number.isFinite(supplied)) retrySeconds = Math.max(1, Math.min(86405, supplied))
+  }
+  return Response.json(
+    {
+      error: dailyLimit
+        ? "Session verification is unavailable until the daily storage allowance resets."
+        : "Session verification is temporarily unavailable. Try again later.",
+      code: dailyLimit ? "SESSION_AUTHORITY_DAILY_LIMIT" : "SESSION_AUTHORITY_UNAVAILABLE",
+      retry_after_seconds: retrySeconds,
+    },
+    { status: 503, headers: { "Retry-After": String(retrySeconds), "Cache-Control": "no-store" } },
+  )
+}
+
 export async function handleMe(request, env) {
   const cookies = parseCookies(request.headers.get("Cookie") || "")
   const sessionId = cookies.session
@@ -711,8 +734,18 @@ export async function handleMe(request, env) {
 
   const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
   const stub = env.GAME_SESSIONS.get(id)
-  let resp = await stub.fetch(new Request("http://internal/auth/resolve", { method: "POST" }))
-  if (resp.status === 404) resp = await stub.fetch("http://internal/get")
+  let resp
+  try {
+    resp = await stub.fetch(new Request("http://internal/auth/resolve", { method: "POST" }))
+    if (resp.status === 404) resp = await stub.fetch("http://internal/get")
+  } catch (error) {
+    return sessionAuthorityUnavailableResponse({
+      dailyLimit: isDurableObjectDailyDurationLimitError(error),
+    })
+  }
+  if (resp.status >= 500 || resp.status === 429) {
+    return sessionAuthorityUnavailableResponse({ retryAfter: resp.headers.get("Retry-After") })
+  }
   const discordAuthorizationOutcome = String(
     resp.headers.get("X-Brinedew-Discord-Authorization") || "",
   ).trim()
