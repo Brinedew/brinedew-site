@@ -32,6 +32,12 @@ The formatting wrapper calls the pinned local Prettier directly, preserves
 spaces in changed filenames, honors `.prettierignore`, and skips unsupported
 file types such as SQL migrations.
 
+`scripts/deploy-cloudflare-prod.ps1` dispatches the GitHub Actions production
+workflow only after fetching and verifying that `HEAD` equals `origin/main`.
+It accepts a detached checkout or unrelated uncommitted work because the
+workflow consumes remote source, never local files. Push the intended commit
+first; the helper refuses a local-only or mismatched commit.
+
 ## Upstream framework
 
 The site is built on Quartz v5.
