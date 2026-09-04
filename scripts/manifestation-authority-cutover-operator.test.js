@@ -2,9 +2,12 @@ import assert from "node:assert/strict"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { spawnSync } from "node:child_process"
+import { execFile, spawnSync } from "node:child_process"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
+import { promisify } from "node:util"
+
+const execute = promisify(execFile)
 
 const powershellExecutable =
   process.platform === "win32" ? "C:\\Program Files\\PowerShell\\7\\pwsh.exe" : "pwsh"
@@ -184,21 +187,40 @@ test("request ledger serializes concurrent reservations without losing counts", 
   const ledgerPath = join(directory, "ledger.json")
   const helperPath = fileURLToPath(requestBudgetUrl)
   const quote = (value) => `'${value.replaceAll("'", "''")}'`
-  const command = [
-    `$helperPath = ${quote(helperPath)}`,
-    `$ledgerPath = ${quote(ledgerPath)}`,
-    `1..24 | ForEach-Object -Parallel { . $using:helperPath; Reserve-CloudflareWorkerRequests -Count 1 -DailyLimit 24 -StatePath $using:ledgerPath -Operation "parallel-$_" | Out-Null } -ThrottleLimit 8`,
-    `(Get-Content -LiteralPath $ledgerPath -Raw | ConvertFrom-Json).requests_reserved`,
-  ].join("; ")
-
   try {
-    const result = spawnSync(
-      powershellExecutable,
-      ["-NoProfile", "-NonInteractive", "-Command", command],
-      { encoding: "utf8", timeout: 20_000 },
+    // Real operators are independent processes. Runspaces share PowerShell
+    // metadata caches and can fail before exercising the ledger (PS #25594).
+    const results = await Promise.allSettled(
+      Array.from({ length: 8 }, (_, worker) => {
+        const command = [
+          `$ErrorActionPreference = 'Stop'`,
+          `. ${quote(helperPath)}`,
+          `$receipts = @(1..3 | ForEach-Object { Reserve-CloudflareWorkerRequests -Count 1 -DailyLimit 24 -StatePath ${quote(ledgerPath)} -Operation "worker-${worker}-$_" })`,
+          `ConvertTo-Json -Compress -InputObject @($receipts.requests_reserved)`,
+        ].join("; ")
+        return execute(
+          powershellExecutable,
+          ["-NoProfile", "-NonInteractive", "-Command", command],
+          {
+            encoding: "utf8",
+            timeout: 20_000,
+            maxBuffer: 64 * 1024,
+            windowsHide: true,
+          },
+        )
+      }),
     )
-    assert.equal(result.status, 0, result.stderr)
-    assert.equal(Number(result.stdout.trim()), 24)
+    // Await every child before deleting its shared fixture, even on failure.
+    const receipts = results.flatMap((result) => {
+      if (result.status === "rejected") throw result.reason
+      assert.equal(result.value.stderr.trim(), "")
+      return JSON.parse(result.value.stdout)
+    })
+    assert.deepEqual(
+      receipts.sort((left, right) => left - right),
+      Array.from({ length: 24 }, (_, index) => index + 1),
+    )
+    assert.equal(JSON.parse(await readFile(ledgerPath, "utf8")).requests_reserved, 24)
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
