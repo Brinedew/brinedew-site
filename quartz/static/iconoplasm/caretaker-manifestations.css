@@ -210,7 +210,9 @@
 
 .icono-caretaker-pills__empty {
   color: var(--darkgray);
-  font: 0.82rem/1.4 "IBM Plex Mono", monospace;
+  font:
+    0.82rem/1.4 "IBM Plex Mono",
+    monospace;
 }
 
 .icono-caretaker-pill {
@@ -221,7 +223,9 @@
   border: 1px solid color-mix(in srgb, var(--ui-border) 70%, var(--accent) 30%);
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 10%, var(--light) 90%);
-  font: 0.82rem/1.3 "IBM Plex Mono", monospace;
+  font:
+    0.82rem/1.3 "IBM Plex Mono",
+    monospace;
   color: var(--dark);
 }
 
@@ -254,7 +258,9 @@
   outline: none;
   background: transparent;
   color: var(--dark);
-  font: 0.9rem/1.4 "IBM Plex Mono", monospace;
+  font:
+    0.9rem/1.4 "IBM Plex Mono",
+    monospace;
 }
 
 .icono-caretaker-tags-suggestions {
@@ -272,7 +278,9 @@
   border-radius: 999px;
   background: transparent;
   color: var(--darkgray);
-  font: 0.76rem/1.3 "IBM Plex Mono", monospace;
+  font:
+    0.76rem/1.3 "IBM Plex Mono",
+    monospace;
   cursor: pointer;
 }
 
