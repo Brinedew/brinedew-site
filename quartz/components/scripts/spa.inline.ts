@@ -11,6 +11,7 @@ const isElement = (target: EventTarget | null): target is Element =>
 const isLocalUrl = (href: string) => {
   try {
     const url = new URL(href)
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false
     if (window.location.origin === url.origin) {
       return true
     }
@@ -28,6 +29,7 @@ const getOpts = ({ target }: Event): { url: URL; scroll?: boolean } | undefined 
   if (!isElement(target)) return
   const a = target.closest("a")
   if (!a) return
+  if (a.hasAttribute("download")) return
   // Clicks usually land on an image or text node inside the link. The navigation contract
   // belongs to the enclosing anchor, so its target must be checked instead of event.target.
   if (a.target === "_blank") return

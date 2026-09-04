@@ -23,6 +23,11 @@ so a preview rebuild cannot delete the deployment output. For direct Quartz CLI
 previews, always pass a separate `-o` output directory. Confirm the expected page
 identity before treating a listening port as a ready preview.
 
+`pnpm run sync:iconoplasm-shared` updates Studio import URLs from dependency
+content hashes, from the X6 runtime and document model through Studio to the app.
+Run it after editing these modules; the normal dev/build commands already do so.
+The graph regression checks published source bytes, not matching manual dates.
+
 When adding a dependency to this workspace root, use `pnpm add -w <package>`
 (or `pnpm add -Dw <package>` for a development dependency).
 

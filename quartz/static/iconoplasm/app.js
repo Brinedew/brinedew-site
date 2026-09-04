@@ -43,7 +43,7 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=20260826-scientific-studio-1"
+} from "./diagram-studio.js?v=bf8285189184406b"
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
 // appearance settings. Loading the cross-subdomain bridge during anonymous

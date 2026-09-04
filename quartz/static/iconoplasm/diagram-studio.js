@@ -9,11 +9,8 @@ import {
   normalizeGeneSymbol,
   removeDiagramItem,
   updateDiagramItem,
-} from "./diagram-document.js?v=20260826-scientific-studio-1"
-import {
-  createDiagramEditor,
-  exportDiagramWithX6,
-} from "./diagram-x6-editor.js?v=20260826-scientific-studio-1"
+} from "./diagram-document.js?v=20385023f660f19c"
+import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=994290448fb10093"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
 // document, and both obtain characters through the bounded canonical resolver.
