@@ -287,9 +287,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
     '<div class="icono-caretaker-tabpanel" role="tabpanel" id="icono-caretaker-tab-manifestation" aria-labelledby="icono-caretaker-tab-button-manifestation" data-icono-caretaker-tabpanel="manifestation">'
 
   if (canWrite) {
-    const currentBody = String(
-      own?.head_body || canonicalRevisionBody(dossier) || "",
-    )
+    const currentBody = String(own?.head_body || canonicalRevisionBody(dossier) || "")
     const currentTags = String(dossier?.prefill_tags_text ?? own?.head_tags ?? "")
     const tagsUnavailable = own?.tags_body_unavailable === true
     body +=
@@ -310,14 +308,14 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
       codePointLength(currentBody).toLocaleString() +
       " / " +
       MAX_PROSE_CODE_POINTS.toLocaleString() +
-      '</span><span data-icono-caretaker-autosave-state>Saved</span></div>' +
+      "</span><span data-icono-caretaker-autosave-state>Saved</span></div>" +
       '<p class="icono-caretaker-editor__hint">Changes autosave as a new version after you pause. Choose a version in History to make it canonical.</p>' +
       "</section>" +
       '<section class="icono-caretaker-pane icono-caretaker-pane--tags">' +
       '<label for="icono-caretaker-tags-input">Tags</label>' +
       '<div class="icono-caretaker-tags" data-icono-caretaker-tags-editor' +
       (tagsUnavailable ? " data-icono-caretaker-disabled" : "") +
-      "><ul class=\"icono-caretaker-pills\" data-icono-caretaker-pills></ul>" +
+      '><ul class="icono-caretaker-pills" data-icono-caretaker-pills></ul>' +
       '<input class="icono-caretaker-tags-input" type="text" data-icono-caretaker-tags-input aria-describedby="icono-caretaker-tags-hint" placeholder="Add a tag and press Enter"' +
       (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
       "></div>" +
