@@ -1,6 +1,8 @@
 .DS_Store
 node_modules
 public
+public-preview
+public-docs-preview
 public-iconoplasm-edge
 public_v5test
 prof
