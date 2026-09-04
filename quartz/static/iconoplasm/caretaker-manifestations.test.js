@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
-import test from "node:test"
-import { parseHTML } from "linkedom"
+import test, { afterEach, beforeEach } from "node:test"
+import { Event as DOMEvent, parseHTML } from "linkedom"
 
 import {
   createCaretakerManifestationPanel,
@@ -10,6 +10,22 @@ import {
   proseValidationError,
   renderCaretakerManifestationPanel,
 } from "./caretaker-manifestations.js"
+
+let originalGlobals
+beforeEach(() => {
+  originalGlobals = Object.fromEntries(
+    ["document", "Event"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+  )
+  // The controller dispatches browser Events. Use the same DOM implementation
+  // as the document instead of Node's native, read-only Event objects.
+  globalThis.Event = DOMEvent
+})
+afterEach(() => {
+  for (const key of ["document", "Event"]) {
+    if (originalGlobals[key]) Object.defineProperty(globalThis, key, originalGlobals[key])
+    else delete globalThis[key]
+  }
+})
 
 test("the caretaker modal versions its complete immutable module graph", async () => {
   const modules = [
@@ -691,6 +707,7 @@ test("accepting sends the exact displayed terms and chosen departure default", a
 
 test("an explicitly disabled dossier mounts no authority surface", async () => {
   const { document } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
   const panel = createCaretakerManifestationPanel({
     fetchJSON: async function () {
       return { ...dossier(), enabled: false }
