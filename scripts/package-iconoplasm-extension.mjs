@@ -16,6 +16,7 @@ import { join, resolve, relative } from "node:path"
 import { fileURLToPath } from "node:url"
 import { assertIconoplasmPublisherAuthority } from "./lib/iconoplasm-publisher-authority.mjs"
 import { createBuildIdentity } from "./lib/iconoplasm-build-identity.mjs"
+import { syncIconoplasmPdfJs } from "./sync-iconoplasm-pdfjs.mjs"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = resolve(__filename, "..", "..")
@@ -266,10 +267,15 @@ function copyRuntimePayload() {
   for (const dir of runtimeDirs) {
     const src = resolve(extensionRoot, dir)
     ensureExists(src, "runtime directory")
-    cpSync(src, resolve(wxtPublicRoot, dir), { recursive: true })
+    cpSync(src, resolve(wxtPublicRoot, dir), {
+      recursive: true,
+      // PDF.js belongs to this build's private staging tree. Never read the
+      // shared generated copy while a standalone sync may be replacing it.
+      filter: (source) => source !== resolve(extensionRoot, "generated", "pdfjs"),
+    })
   }
-  if (!supportsPdfReader) {
-    rmSync(resolve(wxtPublicRoot, "generated", "pdfjs"), { recursive: true, force: true })
+  if (supportsPdfReader) {
+    syncIconoplasmPdfJs(resolve(wxtPublicRoot, "generated", "pdfjs"))
   }
   // Git may check out text as CRLF on Windows. Package the same UTF-8/LF payload
   // on the workstation, Linux CI and AMO's standalone reviewer environment.
@@ -437,10 +443,6 @@ function validatePackagedPdfSurface() {
 }
 
 async function main() {
-  if (supportsPdfReader) {
-    const { syncIconoplasmPdfJs } = await import("./sync-iconoplasm-pdfjs.mjs")
-    syncIconoplasmPdfJs()
-  }
   ensureExists(extensionRoot, "extension root")
   ensureExists(manifestPath, "manifest")
   checkForbiddenRootEntries()

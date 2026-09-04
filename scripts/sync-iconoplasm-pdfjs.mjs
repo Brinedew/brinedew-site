@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 
 const repoRoot = resolve(fileURLToPath(import.meta.url), "..", "..")
 const packageRoot = resolve(repoRoot, "node_modules", "pdfjs-dist")
-const targetRoot = resolve(repoRoot, "iconoplasm-extension", "generated", "pdfjs")
+const defaultTargetRoot = resolve(repoRoot, "iconoplasm-extension", "generated", "pdfjs")
 
 const files = [
   ["legacy/build/pdf.mjs", "pdf.mjs"],
@@ -33,7 +33,10 @@ function pdfJsVersion(path) {
   return match[1]
 }
 
-export function syncIconoplasmPdfJs() {
+export function syncIconoplasmPdfJs(targetRoot) {
+  if (typeof targetRoot !== "string" || !targetRoot) {
+    throw new Error("PDF.js synchronization requires an explicit output directory")
+  }
   requirePath(packageRoot)
   const runtimeVersion = pdfJsVersion(resolve(packageRoot, "legacy", "build", "pdf.mjs"))
   const viewerVersion = pdfJsVersion(resolve(packageRoot, "legacy", "web", "pdf_viewer.mjs"))
@@ -55,6 +58,6 @@ export function syncIconoplasmPdfJs() {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || "").href) {
-  syncIconoplasmPdfJs()
+  syncIconoplasmPdfJs(defaultTargetRoot)
   console.log("[sync-iconoplasm-pdfjs] Synced unmodified pinned pdfjs-dist runtime")
 }

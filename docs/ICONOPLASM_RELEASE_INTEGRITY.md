@@ -18,6 +18,11 @@ the project's locked dependencies; the directory is removed on completion or
 failure. Tests put sentinel ZIPs only in disposable output roots. No test backs
 up, replaces or restores a real release ZIP.
 
+Each PDF-capable package copies the pinned PDF.js inputs directly into its own
+temporary staging tree before normalization and fingerprinting. Packaging never
+reads or rewrites the shared `generated/pdfjs` copy. Concurrent builds still
+need distinct output directories when they target the same browser.
+
 ## One source identity and one immutable archive
 
 1. The GUI checks source/build inputs are committed, advances the explicitly
