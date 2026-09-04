@@ -25,9 +25,9 @@
     "@codemirror/view": "6.43.9",
     "@types/node": "24.13.3",
     "obsidian": "1.13.1",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "tsx": "4.23.12",
-    "vite": "6.4.1",
+    "vite": "8.2.2",
     "vitest": "4.1.10"
   },
   "peerDependencies": {
