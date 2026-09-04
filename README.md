@@ -17,6 +17,15 @@ dossier → vote → coherent publication loop.
 
 ## Local verification
 
+`pnpm run dev` serves content from `public-preview`; `pnpm run docs` uses
+`public-docs-preview`. Production builds own `public` and `public-iconoplasm-edge`,
+so a preview rebuild cannot delete the deployment output. For direct Quartz CLI
+previews, always pass a separate `-o` output directory. Confirm the expected page
+identity before treating a listening port as a ready preview.
+
+When adding a dependency to this workspace root, use `pnpm add -w <package>`
+(or `pnpm add -Dw <package>` for a development dependency).
+
 Use the repository commands below instead of guessing test paths or invoking a
 package-manager shim from a custom PowerShell pipeline:
 
