@@ -1,4 +1,4 @@
-const X6_RUNTIME_URL = "./generated/x6-runtime.js?v=20260826-scientific-studio-1"
+const X6_RUNTIME_URL = "./generated/x6-runtime.js?v=c9928004bc8e7440"
 const GENE_SHAPE = "iconoplasm-gene"
 const TEXT_SHAPE = "iconoplasm-text"
 const PORT_IDS = ["top", "right", "bottom", "left"]
