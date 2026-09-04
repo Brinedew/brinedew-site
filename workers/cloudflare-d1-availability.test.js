@@ -3,8 +3,8 @@ import test from "node:test"
 
 import {
   isD1DailyRowReadLimitError,
-  secondsUntilD1DailyReset,
-} from "./lib/cloudflare-d1-availability.js"
+  secondsUntilCloudflareDailyReset,
+} from "./lib/cloudflare-availability.js"
 import { validateDailyBootstrapCacheWithAvailabilityFallback } from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 
 test("recognizes Cloudflare's daily D1 row-read exhaustion through wrapped errors", () => {
@@ -17,7 +17,7 @@ test("recognizes Cloudflare's daily D1 row-read exhaustion through wrapped error
 
 test("retry-after targets five seconds after the next midnight UTC reset", () => {
   const now = Date.parse("2026-09-01T18:04:31.000Z")
-  assert.equal(secondsUntilD1DailyReset(now), 21_334)
+  assert.equal(secondsUntilCloudflareDailyReset(now), 21_334)
 })
 
 test("daily gameplay retains its exact verified target during the D1 daily lockout", async () => {
