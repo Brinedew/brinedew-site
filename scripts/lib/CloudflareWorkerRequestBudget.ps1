@@ -159,7 +159,7 @@ function Reserve-CloudflareWorkerRequests {
     $resolvedPath = Resolve-CloudflareWorkerRequestBudgetPath -RequestedPath $StatePath
     $directory = Split-Path -Parent $resolvedPath
     if (-not (Test-Path -LiteralPath $directory)) {
-        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        New-Item -ItemType Directory -Path $directory -Force -ErrorAction Stop | Out-Null
     }
 
     $lockPath = "$resolvedPath.lock"
@@ -190,7 +190,7 @@ function Reserve-CloudflareWorkerRequests {
         $effectiveDailyLimit = $DailyLimit
         if (Test-Path -LiteralPath $resolvedPath) {
             try {
-                $saved = Get-Content -LiteralPath $resolvedPath -Raw | ConvertFrom-Json -Depth 8
+                $saved = Get-Content -LiteralPath $resolvedPath -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 8 -ErrorAction Stop
             }
             catch {
                 throw "The Cloudflare request-budget ledger is unreadable; refusing to send any request: $resolvedPath"
@@ -235,8 +235,8 @@ function Reserve-CloudflareWorkerRequests {
         }
         $temporaryPath = "$resolvedPath.$([Guid]::NewGuid().ToString('N')).tmp"
         try {
-            $payload | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $temporaryPath -Encoding utf8NoBOM
-            Move-Item -LiteralPath $temporaryPath -Destination $resolvedPath -Force
+            $payload | ConvertTo-Json -Depth 6 -ErrorAction Stop | Set-Content -LiteralPath $temporaryPath -Encoding utf8NoBOM -ErrorAction Stop
+            Move-Item -LiteralPath $temporaryPath -Destination $resolvedPath -Force -ErrorAction Stop
         }
         finally {
             if (Test-Path -LiteralPath $temporaryPath) {
