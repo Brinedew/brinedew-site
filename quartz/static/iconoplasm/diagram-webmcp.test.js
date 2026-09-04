@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
@@ -50,14 +51,22 @@ test("WebMCP keeps direct bitmap retrieval and visible diagram editing together"
   assert.equal(getCurrentDiagramDocument().width / getCurrentDiagramDocument().height, 1.5)
 })
 
-test("the app and Studio load the same versioned diagram module graph", () => {
-  const appSource = readFileSync(new URL("./app.js", import.meta.url), "utf8")
+test("every Studio dependency URL matches its published module bytes", () => {
   const studioSource = readFileSync(new URL("./diagram-studio.js", import.meta.url), "utf8")
-  const appVersion = appSource.match(/diagram-studio\.js\?v=([^"']+)/)?.[1]
-  const documentVersion = studioSource.match(/diagram-document\.js\?v=([^"']+)/)?.[1]
-
-  assert.ok(appVersion)
-  assert.equal(documentVersion, appVersion)
+  for (const [consumer, dependency] of [
+    ["app.js", "diagram-studio.js"],
+    ["diagram-studio.js", "diagram-document.js"],
+    ["diagram-studio.js", "diagram-x6-editor.js"],
+    ["diagram-x6-editor.js", "generated/x6-runtime.js"],
+  ]) {
+    const bytes = readFileSync(new URL(`./${dependency}`, import.meta.url))
+    const expected = createHash("sha256").update(bytes).digest("hex").slice(0, 16)
+    const source = readFileSync(new URL(`./${consumer}`, import.meta.url), "utf8")
+    assert.ok(
+      source.includes(`./${dependency}?v=${expected}`),
+      `${consumer} must refresh ${dependency}`,
+    )
+  }
   assert.match(studioSource, /createDiagramEditor/)
   assert.match(studioSource, /addTextNode/)
 })

@@ -328,7 +328,7 @@ test("Firefox reviewer source package reproduces the pnpm/WXT build", () => {
   assert.match(sharedSyncText, /process\.argv\.includes\("--extension-only"\)/)
   assert.match(
     sharedSyncText,
-    /if \(!extensionOnly\) \{\s*await syncStaticImportVersions\("shared\/sidebar-shell\.js"/,
+    /if \(!extensionOnly\) \{\s*const \{ syncStaticImportVersions, syncStudioImportVersions \} =\s*await import\("\.\/lib\/static-import-versions\.mjs"\)/,
   )
   assert.doesNotMatch(amoSourceReadmeText, /npm ci/)
 })
