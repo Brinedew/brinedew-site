@@ -22,6 +22,10 @@ import { createPublishedCardDeliveryHandlers } from "./lib/iconoplasm-card-deliv
 import { createHoverDeliveryHandlers } from "./iconoplasm-hover-delivery-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
+import {
+  iconoplasmSessionUser,
+  IconoplasmSessionUnavailableError,
+} from "./iconoplasm/session-user.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
 import { readFactoryBelts } from "./iconoplasm-factory-belts.js"
 import {
@@ -16474,32 +16478,6 @@ async function actor(request, env) {
   }
 }
 
-async function iconoplasmSessionUser(request, env) {
-  if (!env.GAME_SESSIONS) return null
-  try {
-    const cookies = parseCookies(request.headers.get("Cookie") || "")
-    const sessionId = String(cookies.session || "").trim()
-    if (!sessionId) return null
-    const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
-    const stub = env.GAME_SESSIONS.get(id)
-    const resp = await stub.fetch("http://internal/get")
-    if (!resp.ok) return null
-    const session = await resp.json()
-    const userId = String(session?.user_id || "").trim()
-    if (!userId) return null
-    return {
-      user_id: userId,
-      account_id: String(session?.account_id || "").trim() || null,
-      username: String(session?.username || "").trim() || null,
-      // Proxied Discord avatar URL (set at login); surfaced so gene comments can
-      // store + show a real avatar instead of only the initial-letter fallback.
-      avatar_url: String(session?.avatar_url || "").trim() || null,
-    }
-  } catch {
-    return null
-  }
-}
-
 function iconoplasmVoteCoordinatorKey(symbol) {
   const safeSymbol = normalizeSymbol(symbol)
   if (!safeSymbol) return ""
@@ -32528,8 +32506,15 @@ export async function drainIconoplasmAuthorityProjectionOutboxes(env, { limit = 
 async function resolveActiveCaretakerAccountSession(request, env) {
   const session = await iconoplasmSessionUser(request, env)
   const accountId = String(session?.account_id || "").trim()
-  if (!accountId || !env?.DB || !env?.ICONOPLASM_DB || !env?.ICONOPLASM_AUTHORING_DB) {
+  if (!accountId) {
     throw authorityError("AUTHENTICATION_REQUIRED", "Active Brinedew account session required", 401)
+  }
+  if (!env?.DB || !env?.ICONOPLASM_DB || !env?.ICONOPLASM_AUTHORING_DB) {
+    throw authorityError(
+      "AUTHORITY_UNAVAILABLE",
+      "Caretaker tools are temporarily unavailable",
+      503,
+    )
   }
   const account = await readBrinedewAccount(env.DB, accountId)
   if (!account || account.status !== "active") {
@@ -39176,6 +39161,15 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       e instanceof IconoplasmUnclassifiedHandledRouteError
     ) {
       throw e
+    }
+    if (e instanceof IconoplasmSessionUnavailableError) {
+      return asHead(
+        request,
+        json({ error: e.message, code: e.code }, 503, {
+          "Cache-Control": "private, no-store",
+          "Retry-After": String(e.retryAfter),
+        }),
+      )
     }
     console.error("[Iconoplasm] Unhandled request error:", e)
     const adminToken = String(env?.ICONOPLASM_ADMIN_TOKEN || "").trim()

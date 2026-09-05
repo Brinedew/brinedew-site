@@ -3977,6 +3977,61 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   text-wrap: balance;
 }
 
+.icono-candidate-count {
+  margin-left: 0.35rem;
+  color: var(--gray);
+  font-size: 0.9em;
+  font-weight: normal;
+}
+
+.icono-candidate-gallery--status {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
+}
+
+.icono-candidate-availability,
+.icono-caretaker-unavailable {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--lightgray);
+  border-radius: 8px;
+}
+
+.icono-candidate-availability p,
+.icono-caretaker-unavailable p {
+  margin: 0;
+}
+
+.icono-caretaker-unavailable {
+  margin-top: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.icono-candidates-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  box-sizing: border-box;
+  text-decoration: none;
+  font: inherit;
+  color: var(--dark);
+  background: transparent;
+  border: 1px solid var(--gray);
+  border-radius: 999px;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+}
+
+.icono-candidates-retry:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 .icono-candidate-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
