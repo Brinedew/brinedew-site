@@ -299,12 +299,17 @@ export async function recycleUnverifiedManifestationUploadIntent(
 export async function requireAdoptedManifestationUpload(db, entityKindInput, entityIdInput) {
   const kind = entityKind(entityKindInput)
   const entityId = normalizeId(entityIdInput, `${kind}_id`)
+  // Verify the currently installed object by two unique keys. A historical
+  // adopted intent neither proves this upload nor justifies sorting all past
+  // uploads for the entity. `kind` is the validated revision/derivative enum.
   const row = await first(
     db,
-    `SELECT upload_intent_id, status, resolved_at
-       FROM icono_manifestation_upload_intents
-      WHERE entity_kind = ? AND entity_id = ? AND status = 'adopted'
-      ORDER BY resolved_at DESC, upload_intent_id DESC LIMIT 1`,
+    `SELECT intent.upload_intent_id, intent.status, intent.resolved_at
+       FROM icono_manifestation_${kind}_storage_secrets storage
+       JOIN icono_manifestation_upload_intents intent ON intent.object_key = storage.object_key
+      WHERE storage.manifestation_${kind}_id = ?
+        AND intent.entity_kind = ? AND intent.entity_id = ? AND intent.status = 'adopted'`,
+    entityId,
     kind,
     entityId,
   )

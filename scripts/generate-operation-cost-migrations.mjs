@@ -1,0 +1,57 @@
+import { readFileSync, writeFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import path from "node:path"
+
+const root = fileURLToPath(new URL("../", import.meta.url))
+const filename = "0094_finalization_summary.sql"
+const authoringFilename = "0012_streamed_replica_snapshots.sql"
+const target = path.join(root, "workers/generated/operation-cost-migrations.js")
+
+// Deliberately handles this one reviewed migration's line-oriented SQL. This
+// is not a general SQL parser. A changed statement shape must fail generation.
+function reviewedMigrationStatements(directory, name, expectedTriggers) {
+  const source = readFileSync(path.join(root, directory, name), "utf8")
+  const statements = []
+  let current = []
+  let trigger = false
+  for (const line of source.split(/\r?\n/)) {
+    if (!line.trim() || line.trimStart().startsWith("--")) continue
+    if (!current.length) trigger = /^CREATE TRIGGER\b/.test(line)
+    current.push(line)
+    if ((trigger && /^END;\s*$/.test(line)) || (!trigger && /;\s*$/.test(line))) {
+      statements.push(current.join("\n"))
+      current = []
+    }
+  }
+  if (
+    current.length ||
+    statements.length !== 7 ||
+    statements.filter((sql) => sql.startsWith("CREATE TRIGGER")).length !== expectedTriggers
+  ) {
+    throw new Error(`Migration ${name} statement structure changed; review its cost adapter`)
+  }
+  return statements
+}
+
+export function finalizationMigrationStatements() {
+  return reviewedMigrationStatements("migrations-iconoplasm", filename, 3)
+}
+
+export function authoringStreamMigrationStatements() {
+  return reviewedMigrationStatements("migrations-iconoplasm-authoring", authoringFilename, 4)
+}
+
+function output() {
+  return `// Generated from reviewed migrations; never accept caller SQL.\nexport const FINALIZATION_MIGRATION_NAME = ${JSON.stringify(filename)}\nexport const FINALIZATION_MIGRATION_STATEMENTS = Object.freeze(${JSON.stringify(finalizationMigrationStatements(), null, 2)})\nexport const AUTHORING_STREAM_MIGRATION_NAME = ${JSON.stringify(authoringFilename)}\nexport const AUTHORING_STREAM_MIGRATION_STATEMENTS = Object.freeze(${JSON.stringify(authoringStreamMigrationStatements(), null, 2)})\n`
+}
+
+export function assertOperationCostMigrationsCurrent() {
+  if (readFileSync(target, "utf8").replace(/\r\n/g, "\n") !== output()) {
+    throw new Error("Operation cost migration SQL is stale; regenerate before release")
+  }
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (process.argv.includes("--check")) assertOperationCostMigrationsCurrent()
+  else writeFileSync(target, output(), "utf8")
+}

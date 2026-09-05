@@ -354,8 +354,22 @@ test("DO NOT DELETE: production deploy wiring must use the internal stateful wor
 
   assert.match(
     workflow,
-    /wrangler d1 migrations apply iconoplasm --remote --config wrangler\.the-only-allowed-internal-stateful-worker-do-not-duplicate\.toml/,
-    "production migrations must run through the internal stateful worker config because the public edge worker no longer has the D1 binding",
+    /Stage migration admission[\s\S]*?ICONOPLASM_SCHEMA_TRANSITION:1[\s\S]*?node scripts\/run-admitted-d1-migrations\.mjs[\s\S]*?Deploy the only allowed internal stateful worker/,
+    "admission must be staged in the existing state owner, then schema receipts must succeed before application activation",
+  )
+  assert.doesNotMatch(
+    workflow,
+    /wrangler d1 (?:execute|migrations apply)/,
+    "deployment D1 work must not bypass prediction admission",
+  )
+  const statefulConfig =
+    DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
+      "../wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+    )
+  assert.match(
+    statefulConfig,
+    /ICONOPLASM_SCHEMA_TRANSITION = "0"/,
+    "normal backend activation must clear the transition gate",
   )
   assert.match(
     workflow,

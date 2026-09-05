@@ -68,6 +68,8 @@ test("finalization counts stay exact through writes without scanning completed h
     assert.equal((await readSyncFinalizationSummary(db)).completed_at, "2026-09-01")
     for (const { detail } of plans) assert.doesNotMatch(detail, /SCAN icono_sync_finalization_jobs/)
     assert.ok(plans.some(({ detail }) => detail.includes("idx_icono_finalization_completed_at")))
+    raw.exec("DROP INDEX idx_icono_finalization_completed_at")
+    await assert.rejects(readSyncFinalizationSummary(db), /no such index/)
   } finally {
     raw.close()
   }

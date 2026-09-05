@@ -197,7 +197,7 @@ test("admin discovery returns stable IDs, exact current head state, and server-o
   assert.equal(registry.next_cursor, null)
 })
 
-test("offer rejects browser-invented policy and replays one atomic authority command", async (t) => {
+test("offer rejects browser-invented policy and replays without repeating completed projection", async (t) => {
   const context = await bootstrap(t, "8102")
   const wakeCalls = []
   const api = handlers(context.db, wakeCalls)
@@ -240,6 +240,8 @@ test("offer rejects browser-invented policy and replays one atomic authority com
     db: context.db,
   })
   const replay = await replayResponse.json()
+  assert.equal(replayResponse.status, 200)
+  assert.equal(replay.projection_pending, undefined)
   assert.equal(replay.replayed, true)
   assert.equal(replay.caretaker_assignment_id, accepted.caretaker_assignment_id)
   assert.equal(
@@ -248,7 +250,7 @@ test("offer rejects browser-invented policy and replays one atomic authority com
       .get(context.geneId).total,
     1,
   )
-  assert.equal(wakeCalls.length, 2)
+  assert.equal(wakeCalls.length, 1)
 })
 
 test("administrator suspend, resume, and end preserve independent CAS tokens", async (t) => {

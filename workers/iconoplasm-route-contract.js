@@ -1476,6 +1476,30 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   ),
   adminApiContract("admin_cost_usage", "/cost/usage", GET),
   adminApiContract("admin_cost_snapshot", "/cost/snapshot", GET, "admin_cost_usage"),
+  adminApiContract(
+    "admin_cost_operations",
+    "/cost/operations",
+    GET,
+    "admin_cost_operation_admission",
+  ),
+  adminApiContract(
+    "admin_cost_operations_register",
+    "/cost/operations/register",
+    POST,
+    "admin_cost_operation_admission",
+  ),
+  adminApiContract(
+    "admin_cost_operations_execute",
+    "/cost/operations/execute",
+    POST,
+    "admin_cost_operation_admission",
+  ),
+  adminApiContract(
+    "admin_cost_operations_receipt",
+    "/cost/operations/receipt",
+    POST,
+    "admin_cost_operation_admission",
+  ),
   iconoplasmApiContract({
     id: "internal_repair",
     match: exact("/__internal/iconoplasm/repair-canon-invariants"),

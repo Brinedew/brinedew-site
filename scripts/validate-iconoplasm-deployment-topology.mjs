@@ -3,10 +3,14 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import toml from "toml"
 import { assertIconoplasmStaticFirstCacheConfig } from "./lib/iconoplasm-static-first-config.mjs"
+import { assertOperationCostIdentitiesCurrent } from "./generate-operation-cost-identities.mjs"
+import { assertOperationCostMigrationsCurrent } from "./generate-operation-cost-migrations.mjs"
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const topologyPath = path.join(repositoryRoot, "cloudflare", "deployment-topology.json")
 const topology = JSON.parse(readFileSync(topologyPath, "utf8"))
+assertOperationCostIdentitiesCurrent()
+assertOperationCostMigrationsCurrent()
 
 function read(relativePath) {
   return readFileSync(path.join(repositoryRoot, relativePath), "utf8")

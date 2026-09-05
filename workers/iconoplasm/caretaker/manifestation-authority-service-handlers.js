@@ -265,66 +265,6 @@ async function exactDerivativeMaterial(db, env, row, onIntegrityFailure) {
   }
 }
 
-function publicRevision(row) {
-  if (!row) throw authorityError("REVISION_NOT_FOUND", "Revision was not found", 404)
-  return {
-    schema_version: 1,
-    entity_kind: "revision",
-    entity_id: row.manifestation_revision_id,
-    gene_id: row.gene_id,
-    manifestation_id: row.manifestation_id,
-    revision_number: Number(row.revision_number),
-    parent_revision_id: row.parent_revision_id || null,
-    source_revision_id: row.source_revision_id || null,
-    body_sha256: row.body_sha256,
-    body_bytes: Number(row.body_bytes),
-    sample_label: row.sample_label || null,
-    sample_number: row.sample_number == null ? null : Number(row.sample_number),
-    sample_text_sha256: row.sample_text_sha256 || null,
-    lifecycle: row.lifecycle,
-    lifecycle_version: Number(row.lifecycle_version),
-    body_available:
-      Boolean(row.body_available) && !new Set(["purged", "quarantined"]).has(row.lifecycle),
-    gene_revision: Number(row.gene_revision),
-    created_at: row.created_at,
-  }
-}
-
-function publicDerivative(row) {
-  if (!row) throw authorityError("DERIVATIVE_NOT_FOUND", "Tags derivative was not found", 404)
-  return {
-    schema_version: 1,
-    entity_kind: "derivative",
-    entity_id: row.manifestation_derivative_id,
-    manifestation_revision_id: row.manifestation_revision_id,
-    gene_id: row.gene_id,
-    status: row.status,
-    source_body_sha256: row.source_body_sha256,
-    body_sha256: row.body_sha256 || null,
-    body_bytes: row.body_bytes == null ? null : Number(row.body_bytes),
-    tags_sha256: row.tags_sha256 || null,
-    tags_bytes: row.tags_bytes == null ? null : Number(row.tags_bytes),
-    fields_sha256: row.fields_sha256 || null,
-    fields_bytes: row.fields_bytes == null ? null : Number(row.fields_bytes),
-    recipe_id: row.recipe_id || null,
-    recipe_version: row.recipe_version || null,
-    provider_id: row.provider_id || null,
-    model_id: row.model_id || null,
-    tagger_config_sha256: row.tagger_config_sha256 || null,
-    provenance_status: row.provenance_status,
-    failure_code: row.failure_code || null,
-    accepted: row.accepted_derivative_id === row.manifestation_derivative_id,
-    derivative_head_version: Number(row.derivative_head_version),
-    body_available:
-      Boolean(row.body_available) &&
-      row.status === "complete" &&
-      row.revision_lifecycle !== "purged",
-    gene_revision: Number(row.gene_revision),
-    created_at: row.created_at,
-    completed_at: row.completed_at || null,
-  }
-}
-
 async function mutationResponse(db, callback, result) {
   const projection = await deliverAcceptedAuthorityEvent(db, { onAuthorityEvent: callback }, result)
   return jsonResponse(

@@ -78,9 +78,11 @@ jobs:
           pnpm config get minimumReleaseAge
 
       - name: Validate Cloudflare secrets
+        env:
+          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
         run: |
-          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
-            echo "Missing CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN or CLOUDFLARE_ACCOUNT_ID repository secret." >&2
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ] || [ -z "${ICONOPLASM_ADMIN_TOKEN:-}" ]; then
+            echo "Missing Cloudflare deployment credentials or the cost-operation admin secret." >&2
             exit 1
           fi
 
@@ -202,16 +204,23 @@ jobs:
           . ./scripts/lib/CloudflareWorkerRequestBudget.ps1
           Assert-CloudflareWorkerRequestHeadroom | ConvertTo-Json
 
-      - name: Apply Geneguessr D1 migrations (production)
-        run: pnpm exec wrangler d1 migrations apply geneguessr --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+      - name: Verify operation cost implementation and migration identities
+        run: |
+          node scripts/generate-operation-cost-migrations.mjs --check
+          node scripts/generate-operation-cost-identities.mjs --check
 
-      - name: Apply Iconoplasm D1 migrations (production)
-        run: pnpm exec wrangler d1 migrations apply iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+      - name: Check account capacity before release mutations
+        timeout-minutes: 1
+        env:
+          CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/preflight-operation-cost-release.mjs
 
-      # ARCHITECTURE FENCE [IPD-012]: authoring authority migrations must land
-      # before the Worker version that can accept caretaker commands.
-      - name: Apply Iconoplasm authoring D1 migrations (production)
-        run: pnpm exec wrangler d1 migrations apply iconoplasm-authoring --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+      - name: Require analytics secrets before staging the schema transition
+        timeout-minutes: 1
+        run: |
+          pnpm exec wrangler secret list --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml > /tmp/iconoplasm-secret-names.json
+          node --input-type=module -e 'import {readFileSync} from "node:fs"; const names=new Set(JSON.parse(readFileSync("/tmp/iconoplasm-secret-names.json","utf8")).map(item=>item.name)); for(const name of ["CLOUDFLARE_ACCOUNT_ID","CLOUDFLARE_BUDGET_ANALYTICS_TOKEN"]) if(!names.has(name)) throw new Error("Missing required Worker secret: "+name);'
 
       # ARCHITECTURE FENCE [IPD-009]: validate the machine-readable topology
       # before uploading any Worker or reconciling a route. A CSS-only release
@@ -252,6 +261,27 @@ jobs:
             pnpm exec wrangler queues create "$queue"
             pnpm exec wrangler queues info "$queue" >/dev/null
           done
+
+      # ARCHITECTURE FENCE [IPD-012]: admission must exist before DDL, while
+      # application HTTP, queue consumers and periodic projection work wait
+      # for schema readiness. These three steps must remain adjacent.
+      - name: Refresh account capacity immediately before pausing application work
+        timeout-minutes: 1
+        env:
+          CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/preflight-operation-cost-release.mjs
+
+      - name: Stage migration admission in the existing state owner
+        timeout-minutes: 5
+        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend"
+
+      - name: Apply reviewed D1 migrations through prediction admission
+        timeout-minutes: 3
+        env:
+          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/run-admitted-d1-migrations.mjs
 
       - name: Deploy the only allowed internal stateful worker (production)
         run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend"
