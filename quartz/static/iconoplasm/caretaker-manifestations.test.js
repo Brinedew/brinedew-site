@@ -121,7 +121,7 @@ test("the dossier renders a tabbed autosave dialog, exact version choices, and o
   assert.match(html, /data-icono-caretaker-tab="manifestation"/)
   assert.match(html, /data-icono-caretaker-tab="history"/)
   assert.match(html, /data-icono-caretaker-tab="settings"/)
-  assert.match(html, /Generation Tags\. They never appear on the gene page\./)
+  assert.match(html, /Tags stay private and affect new images only/)
   assert.match(html, /Tags always stay off the gene page/)
   assert.match(html, /Use this version/)
   assert.match(html, /Compare with canonical/)
@@ -381,6 +381,37 @@ test("a suspension keeps an unsent local draft readable and explicitly removable
     .dispatchEvent(new Event("click", { bubbles: true }))
   assert.equal(values.size, 0)
   assert.equal(host.querySelector(".icono-caretaker-draft-recovery"), null)
+})
+
+test("tag menu and explicit add action update the private autosave source without syntax", async () => {
+  const { document, Event } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
+  const panel = createCaretakerManifestationPanel({
+    fetchJSON: async () => dossier(),
+    escapeHtml,
+    storage: null,
+  })
+  const host = document.getElementById("host")
+  await panel.mount(host, {
+    symbol: "TP53",
+    currentUser: { account_id: "acct_1" },
+    authResolved: true,
+  })
+  const menu = host.querySelector("[data-icono-caretaker-tag-menu]")
+  assert.ok(menu.hasAttribute("multiple"))
+  assert.ok(Array.from(menu.children).some((option) => option.textContent === "standing"))
+  const source = host.querySelector("[data-icono-caretaker-tags]")
+  const initial = source.value
+  const input = host.querySelector("[data-icono-caretaker-tags-input]")
+  input.value = "embroidered coat"
+  host.querySelector("[data-icono-caretaker-add-tag]").click()
+  assert.equal(source.value, initial ? initial + ", embroidered coat" : "embroidered coat")
+  assert.equal(input.value, "")
+  menu.value = [encodeURIComponent("standing")]
+  menu.dispatchEvent(new Event("sl-change", { bubbles: true }))
+  assert.equal(source.value, "standing")
+  assert.equal(host.querySelector("[data-icono-caretaker-prose]").value, "Second body")
+  await new Promise((resolve) => setTimeout(resolve, 1200))
 })
 
 test("autosaving appends an immutable version without silently changing canonical", async () => {

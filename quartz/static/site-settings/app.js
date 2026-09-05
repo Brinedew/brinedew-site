@@ -10,7 +10,7 @@ import {
   fetchAuthenticatedUser,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=d8bcfb8f19d3a065"
+} from "../shared/sidebar-shell.js?v=99d8a08f87cc8a9d"
 ;(function () {
   "use strict"
 
@@ -850,7 +850,7 @@ import {
     render()
     void Promise.all([
       fetchAuthenticatedUser().catch(function () {
-        return null
+        return currentUser
       }),
       fetchIconoplasmAdminState(),
     ])
@@ -860,8 +860,7 @@ import {
         return Promise.all([loadImageProviders(), loadUserEmulsion()]).then(render)
       })
       .catch(function () {
-        currentUser = null
-        currentUserIsIconoAdmin = false
+        render()
       })
   }
 

@@ -4,7 +4,7 @@ import {
   codePointLength,
   manifestationWordDiff,
   ownManifestation,
-} from "./caretaker-manifestations-model.js?v=20260902-caretaker-editor-v5"
+} from "./caretaker-manifestations-model.js?v=20260905-caretaker-editor-v6"
 
 export function diffMarkup(before, after, escapeHtml) {
   if (String(before || "") === String(after || "")) {
@@ -312,13 +312,14 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
       '<p class="icono-caretaker-editor__hint">Changes autosave as a new version after you pause. Choose a version in History to make it canonical.</p>' +
       "</section>" +
       '<section class="icono-caretaker-pane icono-caretaker-pane--tags">' +
-      '<label for="icono-caretaker-tags-input">Tags</label>' +
-      '<div class="icono-caretaker-tags" data-icono-caretaker-tags-editor' +
-      (tagsUnavailable ? " data-icono-caretaker-disabled" : "") +
-      '><ul class="icono-caretaker-pills" data-icono-caretaker-pills></ul>' +
-      '<input class="icono-caretaker-tags-input" type="text" data-icono-caretaker-tags-input aria-describedby="icono-caretaker-tags-hint" placeholder="Add a tag and press Enter"' +
+      '<sl-select label="Generation tags" placeholder="Choose pose, expression or clothing" multiple clearable max-options-visible="12" data-icono-caretaker-tag-menu' +
       (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
-      "></div>" +
+      "></sl-select>" +
+      '<label for="icono-caretaker-tags-input">Add your own</label>' +
+      '<div class="icono-caretaker-tag-add">' +
+      '<input id="icono-caretaker-tags-input" class="icono-caretaker-tags-input" type="text" data-icono-caretaker-tags-input aria-describedby="icono-caretaker-tags-hint" placeholder="For example, embroidered coat"' +
+      (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
+      '><button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-add-tag>Add tag</button></div>' +
       '<textarea id="icono-caretaker-tags" class="icono-caretaker-tags-source" data-icono-caretaker-tags aria-hidden="true" tabindex="-1"' +
       (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
       (dossier?.prefill_tags_text != null
@@ -327,7 +328,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
       ">" +
       esc(currentTags) +
       "</textarea>" +
-      '<p id="icono-caretaker-tags-hint" class="icono-caretaker-editor__hint">Generation Tags. They never appear on the gene page. Press Enter to add each tag.</p>' +
+      '<p id="icono-caretaker-tags-hint" class="icono-caretaker-editor__hint">Choose from the menu or describe a detail in plain words. Remove a selection with its × button. Tags stay private and affect new images only.</p>' +
       '<p class="icono-caretaker-editor__basis" data-icono-caretaker-basis hidden></p>' +
       '<div class="icono-caretaker-editor__meta"><span data-icono-caretaker-tags-count></span></div>' +
       "</section>" +

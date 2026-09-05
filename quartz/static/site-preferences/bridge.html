@@ -10,7 +10,6 @@
         "use strict"
 
         var CHANNEL = "brinedew-site-preferences-bridge"
-        var AUTH_CHANNEL = "brinedew-shared-auth-bridge"
         var STORAGE_KEY = "brinedew.iconoplasm.settings.v1"
         var DEFAULTS = {
           homeLayout: "bricks",
@@ -121,82 +120,11 @@
           )
         }
 
-        function respondAuth(target, origin, id, ok, payload) {
-          if (!target || typeof target.postMessage !== "function" || !id) return
-          target.postMessage(
-            {
-              channel: AUTH_CHANNEL,
-              id: id,
-              ok: ok,
-              payload: payload || null,
-            },
-            origin,
-          )
-        }
-
-        function readAuthState() {
-          return fetch("/api/auth/me", {
-            credentials: "include",
-          })
-            .then(function (response) {
-              if (!response.ok) return null
-              return response.json().catch(function () {
-                return null
-              })
-            })
-            .then(function (payload) {
-              if (!payload || !payload.authenticated || !payload.user) return null
-              return payload.user
-            })
-        }
-
-        function logoutAuthState() {
-          return fetch("/api/auth/logout", {
-            method: "POST",
-            credentials: "include",
-          }).then(function (response) {
-            if (!response.ok && response.status !== 204) {
-              throw new Error("Logout failed")
-            }
-            return true
-          })
-        }
-
         window.addEventListener("message", function (event) {
           var data = event && event.data ? event.data : null
           if (!data || !allowedOrigin(event.origin)) return
 
           try {
-            if (data.channel === AUTH_CHANNEL) {
-              if (data.type === "fetchAuthenticatedUser") {
-                readAuthState()
-                  .then(function (user) {
-                    respondAuth(event.source, event.origin, data.id, true, user)
-                  })
-                  .catch(function (error) {
-                    respondAuth(event.source, event.origin, data.id, false, {
-                      error: error && error.message ? error.message : "Unknown auth bridge error",
-                    })
-                  })
-                return
-              }
-              if (data.type === "logoutAuthenticatedUser") {
-                logoutAuthState()
-                  .then(function () {
-                    respondAuth(event.source, event.origin, data.id, true, true)
-                  })
-                  .catch(function (error) {
-                    respondAuth(event.source, event.origin, data.id, false, {
-                      error: error && error.message ? error.message : "Unknown auth bridge error",
-                    })
-                  })
-                return
-              }
-              respondAuth(event.source, event.origin, data.id, false, {
-                error: "Unsupported auth bridge request",
-              })
-              return
-            }
             if (data.channel !== CHANNEL) return
 
             if (data.type === "readIconoplasmSettings") {

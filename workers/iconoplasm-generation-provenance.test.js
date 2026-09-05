@@ -178,13 +178,13 @@ async function insertRevision(
   }
 }
 
-async function insertAcceptedTags(database, env, objects, { revision, tags }) {
+async function insertAcceptedTags(database, env, objects, { revision, tags, imported = false }) {
   const derivativeId = "derivative_0001"
-  const recipeId = "tagger-v1"
-  const recipeVersion = "1"
-  const providerId = "tagger-provider"
-  const modelId = "tagger-model"
-  const taggerConfigSha256 = "d".repeat(64)
+  const recipeId = imported ? null : "tagger-v1"
+  const recipeVersion = imported ? null : "1"
+  const providerId = imported ? null : "tagger-provider"
+  const modelId = imported ? null : "tagger-model"
+  const taggerConfigSha256 = imported ? null : "d".repeat(64)
   const fieldsJson = { posture: "guarded", texture: ["dense", "quiet"] }
   const tagsSha256 = await sha256Hex(tags)
   const fieldsCanonicalJson = JSON.stringify(fieldsJson)
@@ -209,8 +209,8 @@ async function insertAcceptedTags(database, env, objects, { revision, tags }) {
          status, source_body_sha256, body_sha256, body_bytes,
          tags_sha256, tags_bytes, fields_sha256, fields_bytes,
          recipe_id, recipe_version, provider_id, model_id, tagger_config_sha256,
-         completed_at
-       ) VALUES (?, ?, 'tags', 'complete', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+         provenance_status, completed_at
+       ) VALUES (?, ?, 'tags', 'complete', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     )
     .run(
       derivativeId,
@@ -227,6 +227,7 @@ async function insertAcceptedTags(database, env, objects, { revision, tags }) {
       providerId,
       modelId,
       taggerConfigSha256,
+      imported ? "legacy_unknown" : "generated",
     )
   database
     .prepare(
@@ -357,6 +358,51 @@ test("accepted encrypted Tags are read with derivative identity and Tags AAD", a
     )
     assert.equal(exact.prose, fixture.first.prose)
     assert.equal(exact.tags, derivative.tags)
+  } finally {
+    restoreFetch()
+    fixture.database.close()
+  }
+})
+
+test("imported Tags bind new generation to verified bytes without inventing authoring history", async () => {
+  const fixture = await authorityFixture()
+  const derivative = await insertAcceptedTags(fixture.database, fixture.env, fixture.objects, {
+    revision: fixture.first,
+    tags: "guarded checkpoint, quiet nuclear tension",
+    imported: true,
+  })
+  const restoreFetch = installStorageFetch(fixture.objects)
+  try {
+    const queued = await resolveCanonicalGenerationSource(fixture.env, {
+      geneSymbol: "TP53",
+      promptBodyMode: "taggerizer_prompt",
+    })
+    assert.equal(queued.source_manifestation_derivative_recipe_id, "")
+    assert.equal(queued.source_manifestation_derivative_tagger_config_sha256, "")
+    assert.equal(
+      requireExactGenerationProvenance(queued).source_snapshot_sha256,
+      queued.source_snapshot_sha256,
+    )
+    assert.equal((await readExactGenerationSource(fixture.env, queued)).tags, derivative.tags)
+    assert.equal(
+      (await validateExactGenerationSource(fixture.env, queued)).source_snapshot_sha256,
+      queued.source_snapshot_sha256,
+    )
+    await assert.rejects(
+      readExactGenerationSource(fixture.env, {
+        ...queued,
+        source_snapshot_sha256: "0".repeat(64),
+      }),
+      (error) => error.code === "GENERATION_SOURCE_SNAPSHOT_MISMATCH",
+    )
+    assert.throws(
+      () =>
+        requireExactGenerationProvenance({
+          ...queued,
+          source_manifestation_derivative_tags_sha256: "",
+        }),
+      (error) => error.code === "GENERATION_SOURCE_INVALID",
+    )
   } finally {
     restoreFetch()
     fixture.database.close()

@@ -311,10 +311,11 @@ export default (() => {
       })
     bootstrap.authPromise = hasSharedSessionPresence
       ? fetch(origin + "/api/auth/me", {
-          credentials: "include",
+          credentials: "include", cache: "no-store", signal: AbortSignal.timeout(10000),
         })
           .then(function (response) {
-            if (!response.ok) return null
+            if (response.status === 401) return null
+              if (!response.ok) throw new Error("Session verification unavailable")
             return response.json().catch(function () {
               return null
             })

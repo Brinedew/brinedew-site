@@ -272,7 +272,6 @@ if (!extensionOnly) {
     await import("./lib/static-import-versions.mjs")
   const staticRoot = path.join(repoRoot, "quartz", "static")
   await syncStaticImportVersions(staticRoot, "shared/sidebar-shell.js", [
-    "shared/auth-sidebar.mjs",
     "iconoplasm/app.js",
     "geneguessr/app.js",
     "site-settings/app.js",
