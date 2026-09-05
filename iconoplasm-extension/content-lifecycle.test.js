@@ -34,7 +34,26 @@ function createRuntime(html, options = {}) {
     BRCA1: { c: "#654321" },
     EGFR: { c: "#abcdef" },
   }
+  const records = new Map()
+  document.getAnnotations = () =>
+    [...records]
+      .filter(([node]) => node.isConnected)
+      .flatMap(([node, matches]) =>
+        matches.map((match) => ({
+          dataset: { geneLabel: node.data.slice(match.index, match.index + match.length) },
+        })),
+      )
   const scanner = globalThis.IconoplasmContentScanner.createPageScanner({
+    annotations: {
+      update(node, matches) {
+        if (JSON.stringify(records.get(node)) === JSON.stringify(matches)) return 0
+        records.set(node, matches)
+        return matches.length
+      },
+      remove(node) {
+        records.delete(node)
+      },
+    },
     documentRef: document,
     windowRef: options.windowRef || window,
     nodeFilter,
@@ -63,8 +82,33 @@ test("scanner accepts a text node as a dirty root", () => {
   const textNode = document.querySelector("#row").firstChild
 
   assert.equal(scanner.scanPage(textNode), 1)
-  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 1)
-  assert.equal(document.querySelector(".iconoplasm-gene").dataset.geneLabel, "TP53")
+  assert.equal(document.getAnnotations().length, 1)
+  assert.equal(document.getAnnotations()[0].dataset.geneLabel, "TP53")
+})
+
+test("highlighting preserves a framework's retained Text object through streaming and removal", () => {
+  const { document, scanner } = createRuntime("<html><body><p>TP53</p></body></html>")
+  const parent = document.querySelector("p")
+  const original = parent.firstChild
+  scanner.processTextNode(original)
+  assert.equal(parent.firstChild, original)
+  assert.equal(original.parentNode, parent)
+  original.data += " BRCA1"
+  scanner.processTextNode(original)
+  assert.equal(parent.textContent, "TP53 BRCA1")
+  assert.deepEqual(
+    document.getAnnotations().map((item) => item.dataset.geneLabel),
+    ["TP53", "BRCA1"],
+  )
+  original.data = "EGFR"
+  scanner.processTextNode(original)
+  assert.equal(parent.textContent, "EGFR")
+  assert.deepEqual(
+    document.getAnnotations().map((item) => item.dataset.geneLabel),
+    ["EGFR"],
+  )
+  parent.removeChild(original)
+  assert.equal(parent.textContent, "")
 })
 
 test("pagination-style textContent replacement is re-highlighted", async () => {
@@ -78,8 +122,8 @@ test("pagination-style textContent replacement is re-highlighted", async () => {
   document.querySelector("#row").textContent = "BRCA1"
   await settleMutations(window)
 
-  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 1)
-  assert.equal(document.querySelector(".iconoplasm-gene").dataset.geneLabel, "BRCA1")
+  assert.equal(document.getAnnotations().length, 1)
+  assert.equal(document.getAnnotations()[0].dataset.geneLabel, "BRCA1")
   controller.stop()
 })
 
@@ -106,8 +150,8 @@ test("virtualized-row character data changes are re-highlighted", async () => {
   await settleMutations(window)
 
   assert.equal(observedOptions.characterData, true)
-  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 1)
-  assert.equal(document.querySelector(".iconoplasm-gene").dataset.geneLabel, "EGFR")
+  assert.equal(document.getAnnotations().length, 1)
+  assert.equal(document.getAnnotations()[0].dataset.geneLabel, "EGFR")
   controller.stop()
 })
 
@@ -189,7 +233,7 @@ test("cooperative scanner yields between bounded text-node slices", async () => 
   while (callbacks.length) {
     const callback = callbacks.shift()
     callback({ timeRemaining: () => 50 })
-    slices.push(document.querySelectorAll(".iconoplasm-gene").length)
+    slices.push(document.getAnnotations().length)
     await Promise.resolve()
   }
 
@@ -327,9 +371,9 @@ test("pre-load text-node mutations also wait for idle and cannot force a timeout
       callbacks.push(cb)
     },
   })
-  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 0)
+  assert.equal(document.getAnnotations().length, 0)
   callbacks.shift()({ timeRemaining: () => 0 })
-  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 0)
+  assert.equal(document.getAnnotations().length, 0)
   callbacks.shift()({ timeRemaining: () => 20 })
   assert.equal(await pending, 1)
 })
@@ -391,7 +435,7 @@ test("busy loaded pages use bounded 4 ms tasks without depending on idle time", 
     },
   })
   callbacks.shift()()
-  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 3)
+  assert.equal(document.getAnnotations().length, 3)
   callbacks.shift()()
   assert.equal(await pending, 6)
 })
@@ -401,7 +445,7 @@ test("article-first scanning still covers navigation, and rescanning never nests
     "<html><body><nav>TP53</nav><article><main>BRCA1</main></article><footer>EGFR</footer></body></html>",
   )
   assert.equal(await scanner.scanDocumentCooperatively(), 3)
-  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 3)
+  assert.equal(document.getAnnotations().length, 3)
   assert.equal(await scanner.scanDocumentCooperatively(), 0)
   assert.equal(document.querySelectorAll(".iconoplasm-gene .iconoplasm-gene").length, 0)
 })

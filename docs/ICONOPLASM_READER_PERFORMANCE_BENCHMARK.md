@@ -93,6 +93,20 @@ timings must remain separate from both.
 3. HTML dynamic text and PDF new-page/zoom replacement. PDF anchors intentionally
    sit under selectable text: move the real pointer to their observed geometry;
    do not force-hover the invisible hit anchor or invoke its bridge directly.
+   HTML uses native ranges and background decorations. The benchmark reads a bounded source
+   address from the existing diagnostics hook, scrolls the original text into view,
+   and moves the pointer to a hit-tested native range. The fixed lead time still
+   begins at visibility, never at portrait readiness. Use
+   `measureStreamingHighlights` from `scripts/lib/iconoplasm-streaming-highlight-benchmark.mjs`
+   in the existing packaged-extension browser to verify retained Text identity,
+   split tokens, 50 streamed matches, append/insert/delete/replace operations,
+   removal, selection, editables, and unchanged host geometry. Pair it with
+   `measureBlockedHostStartup` to check early recognition and zero pre-load card traffic.
+   `measureRangePaint` from `scripts/lib/iconoplasm-range-paint-benchmark.mjs` checks
+   all four styles, native glyphs and line geometry, nested/document scrolling,
+   restrictive host CSP, responsive backgrounds, and ownership-safe style cleanup.
+   Inspect its screenshots as well as its structural assertions; a registered range
+   or a parsed background URL alone does not prove that pixels were painted.
 4. Working Bunny, bounded delayed/failed Bunny, slow detail with working portrait,
    CPU contention, Data Saver and low bandwidth. Controlled fault tests must label
    the injected fault and restore interception in `finally`. Faults in a page
