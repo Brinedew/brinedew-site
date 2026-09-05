@@ -800,3 +800,14 @@ root-cause analysis, release evidence, and any future migration.
 Never “fix” a capacity incident by deleting history without a verified archive,
 changing the dashboard denominator, disabling the Queue, or adding a faster
 poll. Those actions hide or amplify the failure.
+
+### B-738: bounded generation material
+
+A claimed image request does not depend on a global workstation replica snapshot.
+The generation-only service credential may exchange its active owner/version-fenced
+lease at `POST /api/iconoplasm/authority/generation-leases/{token}/material` for the
+one persisted exact source. This uses the existing source validator and encrypted
+material reader, including active lifecycle and immutable hash checks. Private
+material is never cached at the edge or persisted by the workstation. Replica and
+backup credentials cannot use the generation endpoint. Catalog synchronization
+continues independently; it is not an admission requirement for a single render.

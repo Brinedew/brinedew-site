@@ -430,6 +430,7 @@ test("DO NOT DELETE: cost attribution should name request-picker and admin dashb
   }
   for (const routeId of [
     "authority_generation_lease_claim",
+    "authority_generation_lease_material",
     "authority_generation_lease_renew",
     "authority_generation_lease_fail",
     "authority_generation_lease_complete",
