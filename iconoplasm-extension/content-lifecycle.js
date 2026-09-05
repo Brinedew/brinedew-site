@@ -88,7 +88,10 @@
     }
 
     function schedule() {
-      if (scanScheduled || !dirtyRoots.size) return
+      // The active flush owns the next wakeup. A timer fired while it awaits
+      // an idle scan would return early with scanScheduled still latched,
+      // permanently stranding subsequent streaming/SPA updates.
+      if (flushInProgress || scanScheduled || !dirtyRoots.size) return
       scanScheduled = true
       windowRef.setTimeout(flush, 0)
     }
@@ -196,6 +199,47 @@
     return run
   }
 
+  // ARCHITECTURE FENCE [IPD-008]: required local recognition may make bounded
+  // progress after load even when no idle time remains. Speculative card work
+  // deliberately does not use this scheduler. Before load, genuine idle only.
+  function scheduleRecognitionWork(task, options = {}) {
+    const windowRef = options.windowRef || root
+    const documentRef = options.documentRef || windowRef.document
+    const requestIdle =
+      options.requestIdleCallback || windowRef.requestIdleCallback?.bind(windowRef)
+    const setTimeoutFn =
+      options.setTimeoutFn || windowRef.setTimeout?.bind(windowRef) || root.setTimeout
+    const timeoutMs = Math.max(1, Number(options.idleTimeoutMs || 100))
+    let generation = 0
+    let idleId
+    let finished = false
+    const queue = () => {
+      const current = ++generation
+      const run = (deadline) => {
+        if (finished || current !== generation) return
+        finished = true
+        windowRef.removeEventListener?.("load", afterLoad)
+        task(deadline)
+      }
+      if (requestIdle) {
+        idleId = requestIdle(
+          run,
+          documentRef?.readyState === "complete" ? { timeout: timeoutMs } : undefined,
+        )
+      } else setTimeoutFn(() => run(null), 16)
+    }
+    const afterLoad = () => {
+      if (finished) return
+      if (idleId !== undefined) windowRef.cancelIdleCallback?.(idleId)
+      // A callback queued before load had no deadline. Re-arm it now rather
+      // than leaving startup or an in-flight scan stranded indefinitely.
+      queue()
+    }
+    if (requestIdle && documentRef?.readyState !== "complete")
+      windowRef.addEventListener?.("load", afterLoad, { once: true })
+    queue()
+  }
+
   // ARCHITECTURE FENCE [IPD-008]: a cached scanner is local recognition, not
   // speculative downloading. Let the host paint first, then use genuine idle
   // time even if an unrelated image/analytics request keeps load outstanding.
@@ -209,7 +253,9 @@
     }
     const queue = () =>
       windowRef.requestAnimationFrame(() =>
-        windowRef.requestAnimationFrame(() => windowRef.requestIdleCallback(task)),
+        windowRef.requestAnimationFrame(() =>
+          scheduleRecognitionWork(task, { documentRef, windowRef }),
+        ),
       )
     if (documentRef.readyState === "loading")
       documentRef.addEventListener("DOMContentLoaded", queue, { once: true })
@@ -222,5 +268,6 @@
     scheduleHostFirstBackgroundWork,
     runAfterHostLoad,
     runAfterHostPaint,
+    scheduleRecognitionWork,
   }
 })(typeof globalThis !== "undefined" ? globalThis : this)

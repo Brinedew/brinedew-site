@@ -110,6 +110,48 @@ test("virtualized-row character data changes are re-highlighted", async () => {
   controller.stop()
 })
 
+test("mutations arriving during a cooperative scan cannot strand later chat messages", async () => {
+  const { document } = parseHTML("<html><body><p>first</p><p>second</p><p>third</p></body></html>")
+  const timers = []
+  const scanned = []
+  let finishFirst
+  const [first, second, third] = document.querySelectorAll("p")
+  // A mutation delivery starts a second flush while the first is yielding.
+  // Use the actual observer callback to exercise scheduling, not just flush().
+  let deliver
+  const live = globalThis.IconoplasmContentLifecycle.createMutationScanController({
+    documentRef: document,
+    windowRef: { setTimeout: (callback) => timers.push(callback) },
+    MutationObserverCtor: class {
+      constructor(callback) {
+        deliver = callback
+      }
+      observe() {}
+      disconnect() {}
+    },
+    scanPage: async (node) => {
+      scanned.push(node.textContent)
+      if (node === first)
+        await new Promise((resolve) => {
+          finishFirst = resolve
+        })
+      return 0
+    },
+  })
+  live.start()
+  deliver([{ addedNodes: [first] }])
+  const livePending = timers.shift()()
+  deliver([{ type: "characterData", target: second.firstChild }])
+  while (timers.length) await timers.shift()()
+  finishFirst()
+  await livePending
+  while (timers.length) await timers.shift()()
+  deliver([{ addedNodes: [third] }])
+  while (timers.length) await timers.shift()()
+  assert.deepEqual(scanned, ["first", "second", "third"])
+  live.stop()
+})
+
 test("gene-data messaging times out and ignores a late callback", async () => {
   let callback
   const chromeApi = {
@@ -261,9 +303,7 @@ test("cached recognition waits for DOM, a paint boundary, then genuine idle, not
         assert.equal(options, undefined)
         idle.push(cb)
       },
-      addEventListener() {
-        throw new Error("cached recognition must not wait for unrelated resource load")
-      },
+      addEventListener() {},
     },
     task: () => calls.push("recognize"),
   })
@@ -291,6 +331,55 @@ test("pre-load text-node mutations also wait for idle and cannot force a timeout
   assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 0)
   callbacks.shift()({ timeRemaining: () => 20 })
   assert.equal(await pending, 1)
+})
+
+test("pending pre-load recognition gains a deadline at load without duplicate execution", () => {
+  const documentRef = { readyState: "interactive" }
+  const callbacks = []
+  const canceled = []
+  let onLoad
+  let calls = 0
+  globalThis.IconoplasmContentLifecycle.scheduleRecognitionWork(() => calls++, {
+    documentRef,
+    windowRef: {
+      addEventListener(_event, callback) {
+        onLoad = callback
+      },
+      removeEventListener() {},
+      cancelIdleCallback(id) {
+        canceled.push(id)
+      },
+      requestIdleCallback(callback, options) {
+        callbacks.push({ callback, options })
+        return callbacks.length
+      },
+    },
+  })
+  assert.equal(callbacks[0].options, undefined)
+  documentRef.readyState = "complete"
+  onLoad()
+  assert.deepEqual(canceled, [1])
+  assert.equal(callbacks[1].options.timeout, 100)
+  callbacks[0].callback({ timeRemaining: () => 10 })
+  assert.equal(calls, 0)
+  callbacks[1].callback({ didTimeout: true, timeRemaining: () => 0 })
+  assert.equal(calls, 1)
+})
+
+test("busy loaded pages advance only one text node per 100 ms timeout", async () => {
+  const { document, scanner } = createRuntime("<html><body><p>TP53</p><p>BRCA1</p></body></html>")
+  Object.defineProperty(document, "readyState", { value: "complete" })
+  const callbacks = []
+  const pending = scanner.scanPageCooperatively(document.body, {
+    requestIdleCallback(callback, options) {
+      assert.equal(options.timeout, 100)
+      callbacks.push(callback)
+    },
+  })
+  callbacks.shift()({ didTimeout: true, timeRemaining: () => 0 })
+  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 1)
+  callbacks.shift()({ didTimeout: true, timeRemaining: () => 0 })
+  assert.equal(await pending, 2)
 })
 
 test("article-first scanning still covers navigation, and rescanning never nests highlights", async () => {

@@ -286,7 +286,12 @@ scanner may initialize before host `load`; cache-only means no network, refresh,
 legacy migration, renderer boot, or persistent portrait hydration. Cold scanner
 downloads still wait for `load`. Recognition slices have a 4 ms wall-time budget
 between nodes and no forced idle timeout before load. Matcher construction uses
-genuine idle slices targeting 8 ms, with clock checks every 32 tokens. Semantic
+genuine idle slices targeting 8 ms, with clock checks every 32 tokens. After load,
+required local recognition uses a 100 ms idle deadline; a timed-out scan advances
+one text node and matcher construction advances one 32-token chunk. Pending
+pre-load callbacks acquire that deadline at load. Speculative card work retains
+its genuine-idle gate. Mutation arrivals during an active scan remain queued
+for that scan's completion to schedule. Semantic
 article/main roots precede navigation without changing matching. Each article selects its
 last-known published card epoch locally once after load (or explicit early
 hover), before either card lane or disk cache is used. Revalidate the tiny head
