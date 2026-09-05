@@ -52,13 +52,17 @@ export async function measureBlockedHostStartup(page, { holdMs = 20000, timeoutM
   const started = Date.now()
   try {
     await page.goto(`${base}/article`, { waitUntil: "domcontentloaded", timeout: timeoutMs })
-    await page.locator('.iconoplasm-gene[data-gene="EZH2"]').first().waitFor({ timeout: timeoutMs })
+    await page.waitForFunction(
+      () => CSS.highlights.get("iconoplasm-gene-ranges")?.size === 3,
+      null,
+      { timeout: timeoutMs },
+    )
     const first = await page.evaluate(() => ({
       at: performance.now(),
       fcp: performance.getEntriesByName("first-contentful-paint")[0]?.startTime ?? null,
       state: document.readyState,
       load: performance.getEntriesByType("navigation")[0]?.loadEventEnd,
-      highlights: document.querySelectorAll(".iconoplasm-gene").length,
+      highlights: CSS.highlights.get("iconoplasm-gene-ranges")?.size || 0,
       nested: document.querySelectorAll(".iconoplasm-gene .iconoplasm-gene").length,
     }))
     await page.waitForTimeout(Math.max(0, holdMs - (Date.now() - started)))

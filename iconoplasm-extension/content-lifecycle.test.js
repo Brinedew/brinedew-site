@@ -34,8 +34,28 @@ function createRuntime(html, options = {}) {
     BRCA1: { c: "#654321" },
     EGFR: { c: "#abcdef" },
   }
+  const records = new Map()
+  document.getAnnotations = () =>
+    [...records]
+      .filter(([node]) => node.isConnected)
+      .flatMap(([node, matches]) =>
+        matches.map((match) => ({
+          dataset: { geneLabel: node.data.slice(match.index, match.index + match.length) },
+        })),
+      )
   const scanner = globalThis.IconoplasmContentScanner.createPageScanner({
+    annotations: {
+      update(node, matches) {
+        if (JSON.stringify(records.get(node)) === JSON.stringify(matches)) return 0
+        records.set(node, matches)
+        return matches.length
+      },
+      remove(node) {
+        records.delete(node)
+      },
+    },
     documentRef: document,
+    windowRef: options.windowRef || window,
     nodeFilter,
     getGeneMap: () => geneMap,
     getMatcher: () => exactGeneMatcher(Object.keys(geneMap)),
@@ -62,8 +82,33 @@ test("scanner accepts a text node as a dirty root", () => {
   const textNode = document.querySelector("#row").firstChild
 
   assert.equal(scanner.scanPage(textNode), 1)
-  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 1)
-  assert.equal(document.querySelector(".iconoplasm-gene").dataset.geneLabel, "TP53")
+  assert.equal(document.getAnnotations().length, 1)
+  assert.equal(document.getAnnotations()[0].dataset.geneLabel, "TP53")
+})
+
+test("highlighting preserves a framework's retained Text object through streaming and removal", () => {
+  const { document, scanner } = createRuntime("<html><body><p>TP53</p></body></html>")
+  const parent = document.querySelector("p")
+  const original = parent.firstChild
+  scanner.processTextNode(original)
+  assert.equal(parent.firstChild, original)
+  assert.equal(original.parentNode, parent)
+  original.data += " BRCA1"
+  scanner.processTextNode(original)
+  assert.equal(parent.textContent, "TP53 BRCA1")
+  assert.deepEqual(
+    document.getAnnotations().map((item) => item.dataset.geneLabel),
+    ["TP53", "BRCA1"],
+  )
+  original.data = "EGFR"
+  scanner.processTextNode(original)
+  assert.equal(parent.textContent, "EGFR")
+  assert.deepEqual(
+    document.getAnnotations().map((item) => item.dataset.geneLabel),
+    ["EGFR"],
+  )
+  parent.removeChild(original)
+  assert.equal(parent.textContent, "")
 })
 
 test("pagination-style textContent replacement is re-highlighted", async () => {
@@ -77,8 +122,8 @@ test("pagination-style textContent replacement is re-highlighted", async () => {
   document.querySelector("#row").textContent = "BRCA1"
   await settleMutations(window)
 
-  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 1)
-  assert.equal(document.querySelector(".iconoplasm-gene").dataset.geneLabel, "BRCA1")
+  assert.equal(document.getAnnotations().length, 1)
+  assert.equal(document.getAnnotations()[0].dataset.geneLabel, "BRCA1")
   controller.stop()
 })
 
@@ -105,9 +150,51 @@ test("virtualized-row character data changes are re-highlighted", async () => {
   await settleMutations(window)
 
   assert.equal(observedOptions.characterData, true)
-  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 1)
-  assert.equal(document.querySelector(".iconoplasm-gene").dataset.geneLabel, "EGFR")
+  assert.equal(document.getAnnotations().length, 1)
+  assert.equal(document.getAnnotations()[0].dataset.geneLabel, "EGFR")
   controller.stop()
+})
+
+test("mutations arriving during a cooperative scan cannot strand later chat messages", async () => {
+  const { document } = parseHTML("<html><body><p>first</p><p>second</p><p>third</p></body></html>")
+  const timers = []
+  const scanned = []
+  let finishFirst
+  const [first, second, third] = document.querySelectorAll("p")
+  // A mutation delivery starts a second flush while the first is yielding.
+  // Use the actual observer callback to exercise scheduling, not just flush().
+  let deliver
+  const live = globalThis.IconoplasmContentLifecycle.createMutationScanController({
+    documentRef: document,
+    windowRef: { setTimeout: (callback) => timers.push(callback) },
+    MutationObserverCtor: class {
+      constructor(callback) {
+        deliver = callback
+      }
+      observe() {}
+      disconnect() {}
+    },
+    scanPage: async (node) => {
+      scanned.push(node.textContent)
+      if (node === first)
+        await new Promise((resolve) => {
+          finishFirst = resolve
+        })
+      return 0
+    },
+  })
+  live.start()
+  deliver([{ addedNodes: [first] }])
+  const livePending = timers.shift()()
+  deliver([{ type: "characterData", target: second.firstChild }])
+  while (timers.length) await timers.shift()()
+  finishFirst()
+  await livePending
+  while (timers.length) await timers.shift()()
+  deliver([{ addedNodes: [third] }])
+  while (timers.length) await timers.shift()()
+  assert.deepEqual(scanned, ["first", "second", "third"])
+  live.stop()
 })
 
 test("gene-data messaging times out and ignores a late callback", async () => {
@@ -146,7 +233,7 @@ test("cooperative scanner yields between bounded text-node slices", async () => 
   while (callbacks.length) {
     const callback = callbacks.shift()
     callback({ timeRemaining: () => 50 })
-    slices.push(document.querySelectorAll(".iconoplasm-gene").length)
+    slices.push(document.getAnnotations().length)
     await Promise.resolve()
   }
 
@@ -261,9 +348,7 @@ test("cached recognition waits for DOM, a paint boundary, then genuine idle, not
         assert.equal(options, undefined)
         idle.push(cb)
       },
-      addEventListener() {
-        throw new Error("cached recognition must not wait for unrelated resource load")
-      },
+      addEventListener() {},
     },
     task: () => calls.push("recognize"),
   })
@@ -286,11 +371,73 @@ test("pre-load text-node mutations also wait for idle and cannot force a timeout
       callbacks.push(cb)
     },
   })
-  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 0)
+  assert.equal(document.getAnnotations().length, 0)
   callbacks.shift()({ timeRemaining: () => 0 })
-  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 0)
+  assert.equal(document.getAnnotations().length, 0)
   callbacks.shift()({ timeRemaining: () => 20 })
   assert.equal(await pending, 1)
+})
+
+test("pending pre-load recognition becomes a yielding task at load without duplicate execution", () => {
+  const documentRef = { readyState: "interactive" }
+  const callbacks = []
+  const tasks = []
+  const canceled = []
+  let onLoad
+  let calls = 0
+  globalThis.IconoplasmContentLifecycle.scheduleRecognitionWork(() => calls++, {
+    documentRef,
+    windowRef: {
+      addEventListener(_event, callback) {
+        onLoad = callback
+      },
+      removeEventListener() {},
+      cancelIdleCallback(id) {
+        canceled.push(id)
+      },
+      setTimeout(callback, delay) {
+        assert.equal(delay, 0)
+        tasks.push(callback)
+      },
+      requestIdleCallback(callback, options) {
+        callbacks.push({ callback, options })
+        return callbacks.length
+      },
+    },
+  })
+  assert.equal(callbacks[0].options, undefined)
+  documentRef.readyState = "complete"
+  onLoad()
+  assert.deepEqual(canceled, [1])
+  assert.equal(callbacks.length, 1)
+  assert.equal(tasks.length, 1)
+  callbacks[0].callback({ timeRemaining: () => 10 })
+  assert.equal(calls, 0)
+  tasks.shift()()
+  assert.equal(calls, 1)
+})
+
+test("busy loaded pages use bounded 4 ms tasks without depending on idle time", async () => {
+  let clock = 0
+  const { document, scanner } = createRuntime(
+    `<html><body>${"<p>TP53</p>".repeat(6)}</body></html>`,
+    { windowRef: { performance: { now: () => clock++ } } },
+  )
+  Object.defineProperty(document, "readyState", { value: "complete" })
+  const callbacks = []
+  const pending = scanner.scanPageCooperatively(document.body, {
+    requestIdleCallback() {
+      throw new Error("loaded-page recognition must not wait for idle")
+    },
+    setTimeoutFn(callback, delay) {
+      assert.equal(delay, 0)
+      callbacks.push(callback)
+    },
+  })
+  callbacks.shift()()
+  assert.equal(document.getAnnotations().length, 3)
+  callbacks.shift()()
+  assert.equal(await pending, 6)
 })
 
 test("article-first scanning still covers navigation, and rescanning never nests highlights", async () => {
@@ -298,7 +445,7 @@ test("article-first scanning still covers navigation, and rescanning never nests
     "<html><body><nav>TP53</nav><article><main>BRCA1</main></article><footer>EGFR</footer></body></html>",
   )
   assert.equal(await scanner.scanDocumentCooperatively(), 3)
-  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 3)
+  assert.equal(document.getAnnotations().length, 3)
   assert.equal(await scanner.scanDocumentCooperatively(), 0)
   assert.equal(document.querySelectorAll(".iconoplasm-gene .iconoplasm-gene").length, 0)
 })
