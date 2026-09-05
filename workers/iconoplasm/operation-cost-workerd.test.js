@@ -5,11 +5,13 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import { createFinalizationMigrationCostAdapter } from "./operation-cost-migration-adapter.js"
 import { createAuthoringStreamMigrationCostAdapter } from "./operation-cost-authoring-migration-adapter.js"
+import { createUploadReservationMigrationCostAdapter } from "./operation-cost-upload-migration-adapter.js"
 import { createOperationCostD1Adapter } from "./operation-cost-d1-adapter.js"
 import { createOperationCostQueryRegistry } from "./operation-cost-query-registry.js"
 import { createReplicaOperationCostAdapter } from "./operation-cost-replica-adapter.js"
 import {
   registerGeneIdentity,
+  createManifestationUploadIntent,
   seedSystemManifestation,
   submitTagsDerivative,
 } from "./caretaker/manifestation-authority.js"
@@ -157,6 +159,21 @@ test(
           actual: receipt.actual,
         }),
       )
+      const strictUploads = createUploadReservationMigrationCostAdapter({
+        db: authoring,
+        ...identities,
+      })
+      const strictPrepared = await strictUploads.prepare({})
+      const strictReceipt = await strictUploads.dispatch(strictPrepared)
+      for (const meter of ["rows_read", "rows_written"])
+        assert.ok(strictReceipt.actual[meter] <= strictPrepared.bound[meter], meter)
+      t.diagnostic(
+        JSON.stringify({
+          operation: "authoring-migration-0013",
+          bound: strictPrepared.bound,
+          actual: strictReceipt.actual,
+        }),
+      )
       await authoring
         .prepare(
           "INSERT INTO icono_authority_state(singleton,schema_version,authority_epoch,authority_mode) VALUES(1,1,1,'authoritative')",
@@ -287,6 +304,21 @@ test(
           sourceBodySha256: revisionStorage.body_sha256,
           tags: "tagged!\n{}",
         })),
+      }
+      for (const [entityKind, entityId, envelope] of [
+        ["revision", "revision_cost_select", revisionStorage],
+        ["derivative", "derivative_cost_select", derivativeStorage],
+      ]) {
+        await createManifestationUploadIntent(authoring, {
+          entityKind,
+          entityId,
+          objectKey: envelope.object_key,
+          ciphertextSha256: envelope.ciphertext_sha256,
+          bodyBytes: envelope.body_bytes,
+          actorKind: "migration",
+          uploadIntentId: `intent_${entityKind}`,
+          leaseToken: `lease_${entityKind}`,
+        })
       }
       await seedSystemManifestation(authoring, {
         geneId: "gene_cost_select",
