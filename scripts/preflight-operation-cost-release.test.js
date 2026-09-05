@@ -18,7 +18,7 @@ const check = (observed, plan = manifest) =>
 
 test("release reserves headroom for all reviewed migrations and three inventories", async () => {
   const result = await check(sample)
-  assert.deepEqual(result.required, { rows_read: 206200, rows_written: 20048, requests: 40 })
+  assert.deepEqual(result.required, { rows_read: 210552, rows_written: 20080, requests: 40 })
   for (const meter of Object.keys(ACCOUNT_CEILINGS)) {
     const boundary = { ...sample, [meter]: ACCOUNT_CEILINGS[meter] - result.required[meter] }
     await check(boundary)

@@ -5,11 +5,12 @@ import path from "node:path"
 const root = fileURLToPath(new URL("../", import.meta.url))
 const filename = "0094_finalization_summary.sql"
 const authoringFilename = "0012_streamed_replica_snapshots.sql"
+const uploadFilename = "0013_strict_upload_reservations.sql"
 const target = path.join(root, "workers/generated/operation-cost-migrations.js")
 
 // Deliberately handles this one reviewed migration's line-oriented SQL. This
 // is not a general SQL parser. A changed statement shape must fail generation.
-function reviewedMigrationStatements(directory, name, expectedTriggers) {
+function reviewedMigrationStatements(directory, name, expectedTriggers, expectedStatements = 7) {
   const source = readFileSync(path.join(root, directory, name), "utf8")
   const statements = []
   let current = []
@@ -25,7 +26,7 @@ function reviewedMigrationStatements(directory, name, expectedTriggers) {
   }
   if (
     current.length ||
-    statements.length !== 7 ||
+    statements.length !== expectedStatements ||
     statements.filter((sql) => sql.startsWith("CREATE TRIGGER")).length !== expectedTriggers
   ) {
     throw new Error(`Migration ${name} statement structure changed; review its cost adapter`)
@@ -41,8 +42,25 @@ export function authoringStreamMigrationStatements() {
   return reviewedMigrationStatements("migrations-iconoplasm-authoring", authoringFilename, 4)
 }
 
+export function uploadReservationMigrationStatements() {
+  return reviewedMigrationStatements("migrations-iconoplasm-authoring", uploadFilename, 2, 4)
+}
+
 function output() {
-  return `// Generated from reviewed migrations; never accept caller SQL.\nexport const FINALIZATION_MIGRATION_NAME = ${JSON.stringify(filename)}\nexport const FINALIZATION_MIGRATION_STATEMENTS = Object.freeze(${JSON.stringify(finalizationMigrationStatements(), null, 2)})\nexport const AUTHORING_STREAM_MIGRATION_NAME = ${JSON.stringify(authoringFilename)}\nexport const AUTHORING_STREAM_MIGRATION_STATEMENTS = Object.freeze(${JSON.stringify(authoringStreamMigrationStatements(), null, 2)})\n`
+  const migrations = [
+    ["FINALIZATION", filename, finalizationMigrationStatements()],
+    ["AUTHORING_STREAM", authoringFilename, authoringStreamMigrationStatements()],
+    ["UPLOAD_RESERVATION", uploadFilename, uploadReservationMigrationStatements()],
+  ]
+  return (
+    "// Generated from reviewed migrations; never accept caller SQL.\n" +
+    migrations
+      .map(
+        ([prefix, name, statements]) =>
+          `export const ${prefix}_MIGRATION_NAME = ${JSON.stringify(name)}\nexport const ${prefix}_MIGRATION_STATEMENTS = Object.freeze(${JSON.stringify(statements, null, 2)})\n`,
+      )
+      .join("")
+  )
 }
 
 export function assertOperationCostMigrationsCurrent() {
