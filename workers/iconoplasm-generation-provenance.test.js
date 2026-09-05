@@ -647,6 +647,7 @@ test("the primary migration leaves history unbound and accepts an exact receipt"
       CREATE TABLE icono_generation_requests (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         gene_symbol TEXT NOT NULL,
+        prompt_body_mode TEXT NOT NULL DEFAULT 'taggerizer_prompt',
         status TEXT NOT NULL DEFAULT 'open',
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
@@ -754,6 +755,112 @@ test("the primary migration leaves history unbound and accepts an exact receipt"
         .get().source_manifestation_revision_id,
       "revision_0001",
     )
+    database.exec(
+      readFileSync(
+        new URL(
+          "../migrations-iconoplasm/0093_imported_generation_source_history.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    )
+    const exact = {
+      generation_provenance_status: "bound",
+      generation_request_id: "request_imported_0001",
+      generation_attempt_id: "attempt_imported_0001",
+      gene_symbol: "TP53",
+      asset_sha256: "f".repeat(64),
+      source_gene_id: "gene_tp53",
+      source_manifestation_id: "manifestation_0001",
+      source_manifestation_revision_id: "revision_0001",
+      source_manifestation_body_sha256: "b".repeat(64),
+      source_manifestation_derivative_id: "derivative_imported",
+      source_manifestation_derivative_sha256: "c".repeat(64),
+      source_manifestation_derivative_tags_sha256: "d".repeat(64),
+      source_manifestation_derivative_tags_bytes: 20,
+      source_manifestation_derivative_fields_sha256: "e".repeat(64),
+      source_manifestation_derivative_fields_bytes: 2,
+      source_canonical_selection_id: "selection_0001",
+      source_canonical_head_version: 1,
+      source_gene_revision: 1,
+      source_snapshot_sha256: "a".repeat(64),
+      generation_request_contract_sha256: "a".repeat(64),
+      generation_config_sha256: "a".repeat(64),
+      provider_id: "actual-renderer",
+      provider_model_id: "actual-model",
+      model_id: "actual-model",
+      generation_provider_id: "actual-renderer",
+      generation_model_id: "actual-model",
+      generation_prompt_sha256: "a".repeat(64),
+      prompt_sha256: "a".repeat(64),
+      id: "imported_job",
+      user_id: "account_1",
+    }
+    for (const table of [
+      "icono_generation_requests",
+      "icono_candidate_generation_jobs",
+      "icono_portrait_assets",
+      "icono_portrait_generation_provenance",
+    ]) {
+      const columns = new Set(
+        database
+          .prepare(`PRAGMA table_info(${table})`)
+          .all()
+          .map((row) => row.name),
+      )
+      const values = Object.fromEntries(
+        Object.entries(exact).filter(
+          ([name]) =>
+            columns.has(name) && !(table === "icono_generation_requests" && name === "id"),
+        ),
+      )
+      const insert = (patch) => {
+        const row = { ...values, ...patch }
+        database
+          .prepare(
+            `INSERT INTO ${table} (${Object.keys(row).join(",")}) VALUES (${Object.keys(row)
+              .map(() => "?")
+              .join(",")})`,
+          )
+          .run(...Object.values(row))
+      }
+      // Test the storage boundary itself, including malformed input and invented partial history.
+      assert.throws(
+        () => insert({ source_manifestation_derivative_tags_sha256: "" }),
+        /provenance_incomplete/,
+      )
+      assert.throws(
+        () => insert({ source_manifestation_derivative_model_id: "guessed" }),
+        /provenance_incomplete/,
+      )
+      insert({})
+      if (table !== "icono_portrait_generation_provenance") {
+        assert.doesNotThrow(() =>
+          database
+            .prepare(
+              `UPDATE ${table} SET generation_config_sha256 = generation_config_sha256 WHERE generation_request_id = ?`,
+            )
+            .run(exact.generation_request_id),
+        )
+        assert.throws(
+          () =>
+            database
+              .prepare(
+                `UPDATE ${table} SET source_manifestation_derivative_tags_sha256 = '' WHERE generation_request_id = ?`,
+              )
+              .run(exact.generation_request_id),
+          /provenance_incomplete|identity_is_immutable/,
+        )
+      }
+      assert.equal(
+        database
+          .prepare(
+            `SELECT source_manifestation_derivative_model_id FROM ${table} WHERE generation_request_id = ?`,
+          )
+          .get(exact.generation_request_id).source_manifestation_derivative_model_id,
+        "",
+      )
+    }
   } finally {
     database.close()
   }
