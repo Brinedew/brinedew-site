@@ -70,29 +70,39 @@ test("cooperative matcher yields on busy turns and remains lexically identical t
   }
 })
 
-test("post-load matcher completes in bounded chunks even when every idle callback times out", async () => {
+test("post-load matcher completes in bounded tasks even when the browser never offers idle time", async () => {
   const callbacks = []
   let clock = 0
   const api = globalThis.IconoplasmContentMatcher
-  const genes = { TP53: { a: ["p53"] }, BRCA1: {} }
+  const genes = {
+    ...Object.fromEntries(
+      Array.from({ length: 1000 }, (_, i) => [`GENE${i}`, { a: [`Alias-${i}`] }]),
+    ),
+    TP53: { a: ["p53"] },
+    BRCA1: {},
+  }
   const pending = api.createGeneMatcherCooperatively(
     genes,
     {},
     {
       document: { readyState: "complete" },
       performance: { now: () => clock++ },
-      requestIdleCallback(callback, options) {
-        assert.equal(options.timeout, 100)
+      requestIdleCallback() {
+        throw new Error("loaded-page matcher must not wait for idle")
+      },
+      setTimeout(callback, delay) {
+        assert.equal(delay, 0)
         callbacks.push(callback)
       },
     },
   )
   let turns = 0
   while (callbacks.length) {
-    callbacks.shift()({ didTimeout: true, timeRemaining: () => 0 })
-    assert.ok(++turns < 100)
+    callbacks.shift()()
+    assert.ok(++turns <= 40, "a task must process a bounded time slice, not just 32 tokens")
   }
   const matcher = await pending
+  assert.ok(turns > 1, "the matcher must still yield between slices")
   assert.deepEqual(
     matcher.findMatches("TP53 p53 BRCA1"),
     api.createGeneMatcher(genes).findMatches("TP53 p53 BRCA1"),

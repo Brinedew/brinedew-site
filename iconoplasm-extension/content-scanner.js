@@ -105,7 +105,6 @@
 
       const maxNodesPerSlice = Math.max(1, Number(cooperativeOptions.maxNodesPerSlice || 64))
       const minTimeRemainingMs = Math.max(0, Number(cooperativeOptions.minTimeRemainingMs ?? 2))
-      const idleTimeoutMs = Math.max(1, Number(cooperativeOptions.idleTimeoutMs || 100))
       const requestIdle =
         cooperativeOptions.requestIdleCallback ||
         (typeof windowRef?.requestIdleCallback === "function"
@@ -134,7 +133,6 @@
             windowRef,
             requestIdleCallback: requestIdle,
             setTimeoutFn,
-            idleTimeoutMs,
           })
         }
         const runSlice = (deadline) => {
@@ -152,7 +150,8 @@
             nextNode &&
             processed < maxNodesPerSlice &&
             now() - startedAt < 4 &&
-            (processed === 0 ||
+            (documentRef.readyState === "complete" ||
+              processed === 0 ||
               !deadline ||
               typeof deadline.timeRemaining !== "function" ||
               deadline.timeRemaining() > minTimeRemainingMs)
