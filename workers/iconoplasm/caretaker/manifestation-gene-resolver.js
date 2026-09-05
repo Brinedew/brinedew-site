@@ -14,15 +14,23 @@ export async function resolveGene(db, rawLocator) {
   const locator = normalizeGeneLocator(rawLocator)
   const gene = await first(
     db,
-    `SELECT DISTINCT gene.gene_id, gene.canonical_symbol, gene.status,
+    // The three locator indexes protect the account-wide D1 read allowance.
+    // An OR across the alias join scans the entire identity catalogue even
+    // with LIMIT 1. Resolve the bounded ID set first, then read its metadata.
+    `WITH matched_genes AS (
+       SELECT gene_id FROM icono_gene_identities WHERE gene_id = ?
+       UNION
+       SELECT gene_id FROM icono_gene_identities WHERE canonical_symbol = ? COLLATE NOCASE
+       UNION
+       SELECT gene_id FROM icono_gene_aliases WHERE alias_symbol = ? COLLATE NOCASE
+     )
+     SELECT gene.gene_id, gene.canonical_symbol, gene.status,
             gene.merged_into_gene_id, merged.canonical_symbol AS merged_into_symbol,
             gene.identity_version,
             gene.created_at, gene.updated_at
-       FROM icono_gene_identities gene
-       LEFT JOIN icono_gene_aliases alias ON alias.gene_id = gene.gene_id
+       FROM matched_genes match
+       JOIN icono_gene_identities gene ON gene.gene_id = match.gene_id
        LEFT JOIN icono_gene_identities merged ON merged.gene_id = gene.merged_into_gene_id
-      WHERE gene.gene_id = ? OR gene.canonical_symbol = ? COLLATE NOCASE
-         OR alias.alias_symbol = ? COLLATE NOCASE
       LIMIT 1`,
     locator,
     locator,
