@@ -279,17 +279,17 @@ cache readiness before fixed-deadline hovers. A completed preparation attempt
 must not remain "ready" after image eviction or partial failure. No wait-until-warm
 timing, silently skipped browser failures, or hidden replacement browser.
 Initial and mutation-driven
-recognition scans must run in bounded idle slices; extension DOM work must not
+recognition scans must run in bounded cooperative slices; extension DOM work must not
 monopolize the host page's rendering turn. The content entrypoint uses `document_end`,
-then yields through a paint boundary and genuine idle time. Only a validated local
+then yields through a paint boundary and, before load, genuine idle time. Only a validated local
 scanner may initialize before host `load`; cache-only means no network, refresh,
 legacy migration, renderer boot, or persistent portrait hydration. Cold scanner
 downloads still wait for `load`. Recognition slices have a 4 ms wall-time budget
 between nodes and no forced idle timeout before load. Matcher construction uses
 genuine idle slices targeting 8 ms, with clock checks every 32 tokens. After load,
-required local recognition uses a 100 ms idle deadline; a timed-out scan advances
-one text node and matcher construction advances one 32-token chunk. Pending
-pre-load callbacks acquire that deadline at load. Speculative card work retains
+required local recognition uses bounded 4 ms tasks and yields to the event loop
+between slices; matcher clock checks remain every 32 tokens. Pending pre-load
+idle callbacks are canceled and requeued as tasks at load. Speculative card work retains
 its genuine-idle gate. Mutation arrivals during an active scan remain queued
 for that scan's completion to schedule. Semantic
 article/main roots precede navigation without changing matching. Each article selects its

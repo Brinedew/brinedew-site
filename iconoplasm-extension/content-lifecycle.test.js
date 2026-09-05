@@ -36,6 +36,7 @@ function createRuntime(html, options = {}) {
   }
   const scanner = globalThis.IconoplasmContentScanner.createPageScanner({
     documentRef: document,
+    windowRef: options.windowRef || window,
     nodeFilter,
     getGeneMap: () => geneMap,
     getMatcher: () => exactGeneMatcher(Object.keys(geneMap)),
@@ -333,9 +334,10 @@ test("pre-load text-node mutations also wait for idle and cannot force a timeout
   assert.equal(await pending, 1)
 })
 
-test("pending pre-load recognition gains a deadline at load without duplicate execution", () => {
+test("pending pre-load recognition becomes a yielding task at load without duplicate execution", () => {
   const documentRef = { readyState: "interactive" }
   const callbacks = []
+  const tasks = []
   const canceled = []
   let onLoad
   let calls = 0
@@ -349,6 +351,10 @@ test("pending pre-load recognition gains a deadline at load without duplicate ex
       cancelIdleCallback(id) {
         canceled.push(id)
       },
+      setTimeout(callback, delay) {
+        assert.equal(delay, 0)
+        tasks.push(callback)
+      },
       requestIdleCallback(callback, options) {
         callbacks.push({ callback, options })
         return callbacks.length
@@ -359,27 +365,35 @@ test("pending pre-load recognition gains a deadline at load without duplicate ex
   documentRef.readyState = "complete"
   onLoad()
   assert.deepEqual(canceled, [1])
-  assert.equal(callbacks[1].options.timeout, 100)
+  assert.equal(callbacks.length, 1)
+  assert.equal(tasks.length, 1)
   callbacks[0].callback({ timeRemaining: () => 10 })
   assert.equal(calls, 0)
-  callbacks[1].callback({ didTimeout: true, timeRemaining: () => 0 })
+  tasks.shift()()
   assert.equal(calls, 1)
 })
 
-test("busy loaded pages advance only one text node per 100 ms timeout", async () => {
-  const { document, scanner } = createRuntime("<html><body><p>TP53</p><p>BRCA1</p></body></html>")
+test("busy loaded pages use bounded 4 ms tasks without depending on idle time", async () => {
+  let clock = 0
+  const { document, scanner } = createRuntime(
+    `<html><body>${"<p>TP53</p>".repeat(6)}</body></html>`,
+    { windowRef: { performance: { now: () => clock++ } } },
+  )
   Object.defineProperty(document, "readyState", { value: "complete" })
   const callbacks = []
   const pending = scanner.scanPageCooperatively(document.body, {
-    requestIdleCallback(callback, options) {
-      assert.equal(options.timeout, 100)
+    requestIdleCallback() {
+      throw new Error("loaded-page recognition must not wait for idle")
+    },
+    setTimeoutFn(callback, delay) {
+      assert.equal(delay, 0)
       callbacks.push(callback)
     },
   })
-  callbacks.shift()({ didTimeout: true, timeRemaining: () => 0 })
-  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 1)
-  callbacks.shift()({ didTimeout: true, timeRemaining: () => 0 })
-  assert.equal(await pending, 2)
+  callbacks.shift()()
+  assert.equal(document.querySelectorAll(".iconoplasm-gene").length, 3)
+  callbacks.shift()()
+  assert.equal(await pending, 6)
 })
 
 test("article-first scanning still covers navigation, and rescanning never nests highlights", async () => {
