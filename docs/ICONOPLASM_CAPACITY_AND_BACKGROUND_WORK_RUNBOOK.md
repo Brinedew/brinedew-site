@@ -477,7 +477,13 @@ Extension hover detail is immutable within a published card snapshot:
   Initial and mutation-driven recognition run in bounded idle slices, with a
   4 ms wall-time budget between nodes and no forced idle timeout before load.
   Matcher construction also yields in genuine idle time, targeting 8 ms
-  per turn with clock checks every 32 tokens. Article/main roots precede navigation;
+  per turn with clock checks every 32 tokens. After load, required recognition
+  callbacks have a 100 ms idle deadline; a timed-out scan advances one text node
+  and matcher construction advances one 32-token chunk. Pending pre-load callbacks
+  are re-armed at load. This deadline does not apply to speculative card work.
+  Mutation arrivals during an active cooperative scan stay queued until its
+  completion schedules the next flush; an overlapping timer must not latch the
+  queue permanently. Article/main roots precede navigation;
   a full-body pass still covers the remainder without nesting existing highlights.
   Current-card selection is separate: once after load, or on explicit early hover,
   before either card lane or disk cache is used. Slow unrelated page resources

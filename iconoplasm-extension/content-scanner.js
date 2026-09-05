@@ -105,7 +105,7 @@
 
       const maxNodesPerSlice = Math.max(1, Number(cooperativeOptions.maxNodesPerSlice || 64))
       const minTimeRemainingMs = Math.max(0, Number(cooperativeOptions.minTimeRemainingMs ?? 2))
-      const idleTimeoutMs = Math.max(250, Number(cooperativeOptions.idleTimeoutMs || 2000))
+      const idleTimeoutMs = Math.max(1, Number(cooperativeOptions.idleTimeoutMs || 100))
       const requestIdle =
         cooperativeOptions.requestIdleCallback ||
         (typeof windowRef?.requestIdleCallback === "function"
@@ -129,18 +129,13 @@
 
       return new Promise((resolve) => {
         const scheduleSlice = () => {
-          if (requestIdle) {
-            // The timeout guarantees eventual recognition on continuously busy
-            // pages. A timed-out callback reports no idle budget, so runSlice
-            // deliberately advances only one text node before yielding again.
-            // Before host load there is no forced progress: genuine idle only.
-            requestIdle(
-              runSlice,
-              documentRef.readyState === "complete" ? { timeout: idleTimeoutMs } : undefined,
-            )
-            return
-          }
-          setTimeoutFn(() => runSlice(null), 16)
+          root.IconoplasmContentLifecycle.scheduleRecognitionWork(runSlice, {
+            documentRef,
+            windowRef,
+            requestIdleCallback: requestIdle,
+            setTimeoutFn,
+            idleTimeoutMs,
+          })
         }
         const runSlice = (deadline) => {
           let processed = 0
