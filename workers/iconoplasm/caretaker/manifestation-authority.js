@@ -52,10 +52,7 @@ export {
   advanceManifestationAuthorityCutover,
   readManifestationCutoverStatus,
 } from "./manifestation-cutover-processor.js"
-export {
-  buildManifestationSnapshotBounded,
-  createManifestationAuthoritySyncHandler,
-} from "./manifestation-authority-sync-handlers.js"
+export { createManifestationAuthoritySyncHandler } from "./manifestation-authority-sync-handlers.js"
 export { createManifestationAuthorityRouteHandler } from "./manifestation-authority-routes.js"
 
 // ARCHITECTURE FENCE [IPD-012]

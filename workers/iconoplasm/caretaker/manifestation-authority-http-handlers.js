@@ -55,7 +55,10 @@ import {
   selectTagsDerivativeHead,
   submitTagsDerivative,
 } from "./manifestation-derivative-commands.js"
-import { prepareManifestationTagsPayload } from "./manifestation-tags-payload.js"
+import {
+  canonicalManifestationFieldsJson,
+  prepareManifestationTagsPayload,
+} from "./manifestation-tags-payload.js"
 import { deliverAcceptedAuthorityEvent } from "./manifestation-authority-projection-delivery.js"
 
 function segment(raw) {
@@ -323,7 +326,8 @@ function createCaretakerManifestationHttpHandler({
       requireStrictSameOriginMutation(request)
       await requireAuthoritativeMode(db)
       const session = await requireBrowserSession(request, env, resolveSession)
-      const parsed = await readBoundedJson(request)
+      // The verified Tags payload allows 32 KiB; its JSON command envelope is larger.
+      const parsed = await readBoundedJson(request, saveTags ? 72 * 1024 : undefined)
       const body = parsed.value
       const command = await commandEnvelope(request, parsed.raw, body, "account", session.accountId)
       let result
@@ -530,7 +534,7 @@ function createCaretakerManifestationHttpHandler({
           return mutationResponse(db, { onAuthorityEvent, onAssignmentEvent }, result)
         }
         const tagsText = String(body.tags_text || "")
-        const fieldsJson = {}
+        const fieldsJson = body.fields_json ?? {}
         const encoder = new TextEncoder()
         const output = await prepareManifestationTagsPayload({
           tagsText,
@@ -538,7 +542,9 @@ function createCaretakerManifestationHttpHandler({
             encoder.encode(tagsText.normalize("NFC").replace(/\r\n?/g, "\n")),
           ),
           fieldsJson,
-          fieldsSha256: await sha256Hex(encoder.encode("{}")),
+          fieldsSha256: await sha256Hex(
+            encoder.encode(canonicalManifestationFieldsJson(fieldsJson)),
+          ),
         })
         const replay = await resolveCommandReplay(db, command, command)
         if (replay) return jsonResponse(replay)

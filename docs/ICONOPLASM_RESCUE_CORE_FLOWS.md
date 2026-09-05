@@ -33,7 +33,7 @@ Code length is an outcome metric, not evidence of correctness or AI authorship.
 | Generate/edit through Image API      | Keep configured provider/model and exact source; no paid test call without need.                  |
 | Favorite an emulsion                 | Retain favorites and user-selected styles across requests.                                        |
 | Vote on a candidate                  | Keep durable signed vote and single published winner.                                             |
-| Caretaker edits prose/tags           | Menu selection, explicit Add tag, removal and private autosave; no syntax prerequisite.           |
+| Caretaker edits prose/tags           | Category rows with inline add/edit/remove and private autosave; no syntax prerequisite.           |
 | Caretaker selects history/visibility | Saving appends a revision; explicit selection changes canon.                                      |
 | Explore Clans                        | Live personal clan progress and gene links render.                                                |
 | Build a Studio diagram               | Live five-gene/four-connection document opens with editing and export controls.                   |
@@ -56,8 +56,17 @@ end-to-end live test has passed. The issue records final verification and gaps.
 - One direct session transport replaces hidden auth iframe/retry machinery.
   Unavailable verification is distinct from Guest. Guest startup remains static.
 - Remove the unused generic account-sidebar implementation and its dead guards.
-- Replace custom tag-pill rendering and key handling with the existing Shoelace
-  multi-select. Preset options are suggestions only; saved tag order is preserved.
+- The owner-approved September 5 follow-up replaces the dropdown with category
+  rows, including empty and custom categories. Enter accepts an inline tag and
+  keeps the add input focused; Escape cancels; clicking tag text edits it. The
+  original structured fields and surviving flat-tag order travel together through
+  encrypted persistence. At least one tag is required by the generation contract.
+- Autosave keeps the open editor attached while history/settings refresh. Retry
+  resumes the failed save stage with the same command ID instead of creating a
+  duplicate revision; failures preserve the local draft and wait for explicit Retry.
+- Signed caretaker supervotes use the approved distressed red raster seal across
+  the label grid. The overlay changes no card dimensions and intercepts no clicks;
+  normal FIT/MISFIT votes and their long-press/keyboard transfer controls remain.
 
 ## Regional delivery decision
 

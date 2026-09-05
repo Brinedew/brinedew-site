@@ -4,7 +4,7 @@ import {
   codePointLength,
   manifestationWordDiff,
   ownManifestation,
-} from "./caretaker-manifestations-model.js?v=20260905-caretaker-editor-v6"
+} from "./caretaker-manifestations-model.js?v=20260905-caretaker-categories-v7"
 
 export function diffMarkup(before, after, escapeHtml) {
   if (String(before || "") === String(after || "")) {
@@ -289,12 +289,14 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
   if (canWrite) {
     const currentBody = String(own?.head_body || canonicalRevisionBody(dossier) || "")
     const currentTags = String(dossier?.prefill_tags_text ?? own?.head_tags ?? "")
-    const tagsUnavailable = own?.tags_body_unavailable === true
+    const tagsUnavailable =
+      own?.tags_body_unavailable === true || dossier.tags_body_unavailable === true
     body +=
       (tagsUnavailable
         ? '<div class="icono-caretaker-callout" data-tone="error"><p>Saved Tags could not be loaded. Editing is paused so they cannot be replaced by blank text. Any unsent draft on this device remains preserved.</p><button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-retry-tags>Retry loading saved Tags</button></div>'
         : "") +
       '<form class="icono-caretaker-editor" data-icono-caretaker-editor>' +
+      '<div class="icono-caretaker-save-state"><span data-icono-caretaker-autosave-state role="status">Saved</span><button type="button" data-icono-caretaker-retry-save hidden>Retry</button></div>' +
       '<section class="icono-caretaker-pane icono-caretaker-pane--prose">' +
       '<label for="icono-caretaker-prose">Manifestation</label>' +
       '<textarea id="icono-caretaker-prose" rows="8" maxlength="' +
@@ -308,29 +310,19 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
       codePointLength(currentBody).toLocaleString() +
       " / " +
       MAX_PROSE_CODE_POINTS.toLocaleString() +
-      "</span><span data-icono-caretaker-autosave-state>Saved</span></div>" +
-      '<p class="icono-caretaker-editor__hint">Changes autosave as a new version after you pause. Choose a version in History to make it canonical.</p>' +
+      "</span></div>" +
       "</section>" +
       '<section class="icono-caretaker-pane icono-caretaker-pane--tags">' +
-      '<sl-select label="Generation tags" placeholder="Choose pose, expression or clothing" multiple clearable max-options-visible="12" data-icono-caretaker-tag-menu' +
-      (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
-      "></sl-select>" +
-      '<label for="icono-caretaker-tags-input">Add your own</label>' +
-      '<div class="icono-caretaker-tag-add">' +
-      '<input id="icono-caretaker-tags-input" class="icono-caretaker-tags-input" type="text" data-icono-caretaker-tags-input aria-describedby="icono-caretaker-tags-hint" placeholder="For example, embroidered coat"' +
-      (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
-      '><button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-add-tag>Add tag</button></div>' +
+      '<div class="icono-caretaker-tags-heading">Generation tags</div><div data-icono-caretaker-tag-categories></div>' +
       '<textarea id="icono-caretaker-tags" class="icono-caretaker-tags-source" data-icono-caretaker-tags aria-hidden="true" tabindex="-1"' +
       (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
-      (dossier?.prefill_tags_text != null
-        ? ' data-caretaker-tags-suggestions="' + esc(currentTags) + '"'
-        : "") +
+      ' data-fields-json="' +
+      esc(JSON.stringify(dossier.prefill_fields || own?.head_fields || {})) +
+      '"' +
       ">" +
       esc(currentTags) +
       "</textarea>" +
-      '<p id="icono-caretaker-tags-hint" class="icono-caretaker-editor__hint">Choose from the menu or describe a detail in plain words. Remove a selection with its × button. Tags stay private and affect new images only.</p>' +
       '<p class="icono-caretaker-editor__basis" data-icono-caretaker-basis hidden></p>' +
-      '<div class="icono-caretaker-editor__meta"><span data-icono-caretaker-tags-count></span></div>' +
       "</section>" +
       "</form>"
   }

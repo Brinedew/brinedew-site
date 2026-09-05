@@ -545,7 +545,7 @@ export async function activateManifestationEventCheckpoint(db, input = {}) {
     db,
     `SELECT snapshot_id FROM icono_manifestation_snapshot_leases
       WHERE status IN ('building', 'open') AND expires_at > ?
-        AND watermark_event_sequence <= ? LIMIT 1`,
+        AND source_checkpoint_watermark_sequence < ? LIMIT 1`,
     timestamp,
     target,
   )
@@ -638,7 +638,27 @@ export async function activateManifestationEventCheckpoint(db, input = {}) {
       Number(checkpoint.base_watermark_event_sequence),
     ),
   )
-  await db.batch(statements)
+  try {
+    await db.batch(statements)
+  } catch (error) {
+    if (/checkpoint_snapshot_open/.test(String(error?.message || ""))) {
+      throw authorityError(
+        "EVENT_COMPACTION_SNAPSHOT_OPEN",
+        "A snapshot still depends on the compacted event prefix",
+        409,
+        error,
+      )
+    }
+    if (/checkpoint_source_changed/.test(String(error?.message || ""))) {
+      throw authorityError(
+        "STALE_EVENT_CHECKPOINT",
+        "Authority retention state changed during checkpoint activation",
+        409,
+        error,
+      )
+    }
+    throw error
+  }
   const activated = await readCheckpoint(db, checkpointId)
   if (activated.status !== "active") {
     throw authorityError(

@@ -8,7 +8,6 @@ import {
 } from "./manifestation-authority-http-security.js"
 import {
   acknowledgeManifestationEvents,
-  buildManifestationSnapshotPage,
   completeManifestationSnapshot,
   createManifestationSnapshot,
   readManifestationEventPage,
@@ -34,29 +33,11 @@ function requireJson(request) {
   }
 }
 
-export async function buildManifestationSnapshotBounded(
-  db,
-  snapshotId,
-  { maxPages = 25, pageSize = 50 } = {},
-) {
-  const pages = Math.max(1, Math.min(100, Math.trunc(Number(maxPages)) || 25))
-  let result = null
-  for (let page = 0; page < pages; page += 1) {
-    result = await buildManifestationSnapshotPage(db, {
-      snapshotId,
-      limit: Math.max(1, Math.min(50, Math.trunc(Number(pageSize)) || 50)),
-    })
-    if (result.status === "ready") break
-  }
-  return result
-}
-
 export function createManifestationAuthoritySyncHandler({
   db,
   env,
   authorizeReplicaBearer,
   cursorSecret = env?.ICONOPLASM_AUTHORING_CURSOR_SECRET,
-  scheduleBackground,
   idFactory = defaultIdFactory,
 } = {}) {
   if (!db || !env) throw new TypeError("Authority sync handler requires db and env")
@@ -112,21 +93,20 @@ export function createManifestationAuthoritySyncHandler({
       const { value: body } = await readBoundedJson(request, 16 * 1024)
       if (snapshotRoot) {
         const result = await createManifestationSnapshot(db, {
+          cursorSecret,
           consumerId: body.consumer_id,
           snapshotId: body.snapshot_id,
           ttlSeconds: body.ttl_seconds,
           idFactory,
         })
-        if (result.status === "building" && typeof scheduleBackground === "function") {
-          scheduleBackground(buildManifestationSnapshotBounded(db, result.snapshot_id))
-        }
-        return jsonResponse(result, result.status === "building" ? 202 : 200)
+        return jsonResponse(result)
       }
       if (snapshotComplete) {
         return jsonResponse(
           await completeManifestationSnapshot(db, {
             snapshotId: routeId(snapshotComplete[1]),
             cursorSecret,
+            completionCursor: body.completion_cursor,
             totalParts: body.total_parts,
             manifestSha256: body.manifest_sha256,
           }),

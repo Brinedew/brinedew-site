@@ -150,6 +150,12 @@ export function createCaretakerSupervoteControls({ fetchJSON, onChanged } = {}) 
   }
 
   function render(state) {
+    state.root
+      .querySelectorAll("[data-icono-caretaker-supervote-mark]")
+      .forEach((mark) => mark.remove())
+    state.root
+      .querySelectorAll(".icono-caretaker-seal-host")
+      .forEach((host) => host.classList.remove("icono-caretaker-seal-host"))
     voteTargets(state.root).forEach(function ({ button, assetSha, direction }) {
       const selected =
         state.snapshot.active &&
@@ -170,15 +176,17 @@ export function createCaretakerSupervoteControls({ fetchJSON, onChanged } = {}) 
         `${button.dataset.iconoCaretakerBaseLabel}. ${action}. Shift plus Enter or Space also assigns it.`,
       )
       button.setAttribute("title", `${action} · Shift+Enter/Space`)
-      let mark = button.querySelector("[data-icono-caretaker-supervote-mark]")
-      if (selected && !mark) {
-        mark = document.createElement("span")
+      if (selected) {
+        const host = button.closest(".icono-label-qc-block") || button.parentElement
+        host.classList.add("icono-caretaker-seal-host")
+        const mark = document.createElement("span")
         mark.className = "icono-caretaker-supervote-mark"
         mark.setAttribute("data-icono-caretaker-supervote-mark", "")
+        mark.setAttribute("data-direction", String(direction))
         mark.setAttribute("aria-hidden", "true")
-        button.appendChild(mark)
+        mark.textContent = `${direction > 0 ? "+" : "-"}${SUPERVOTE_WEIGHT}`
+        host.appendChild(mark)
       }
-      if (mark) mark.textContent = `${direction > 0 ? "+" : "-"}${SUPERVOTE_WEIGHT}`
     })
   }
 
@@ -370,6 +378,10 @@ export function createCaretakerSupervoteControls({ fetchJSON, onChanged } = {}) 
       clearTimer(state)
     }
     voteTargets(root).forEach(({ button }) => restoreButton(button))
+    root.querySelectorAll("[data-icono-caretaker-supervote-mark]").forEach((mark) => mark.remove())
+    root
+      .querySelectorAll(".icono-caretaker-seal-host")
+      .forEach((host) => host.classList.remove("icono-caretaker-seal-host"))
     root.querySelector("[data-icono-caretaker-supervote-status]")?.remove()
     mounted.delete(root)
   }
