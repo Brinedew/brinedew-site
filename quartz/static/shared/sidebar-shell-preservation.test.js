@@ -2,7 +2,66 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { parseHTML } from "linkedom"
 
-import { mountSidebarStack } from "./sidebar-shell.js"
+import {
+  mountSidebarStack,
+  fetchAuthenticatedUser,
+  buildSharedUserPanelMarkup,
+  logoutAuthenticatedUser,
+  wireSharedUserPanel,
+} from "./sidebar-shell.js"
+
+test("temporary auth failure preserves the marker and offers retry instead of Guest", async () => {
+  const previous = { document: globalThis.document, fetch: globalThis.fetch }
+  const document = createSidebarDocument()
+  document.cookie = "brinedew_session_present=1"
+  globalThis.document = document
+  globalThis.fetch = async () => new Response("Unavailable", { status: 503 })
+  try {
+    await assert.rejects(
+      fetchAuthenticatedUser({ authBase: "https://example.test" }),
+      /unavailable/,
+    )
+    assert.equal(document.cookie, "brinedew_session_present=1")
+    const host = document.createElement("div")
+    host.innerHTML = buildSharedUserPanelMarkup()
+    assert.doesNotMatch(host.textContent, /Guest|Discord Login/)
+    let retries = 0
+    wireSharedUserPanel(host, { onAuthRetry: () => retries++ })
+    host.querySelector("[data-brd-user-retry]").click()
+    assert.equal(retries, 1)
+    globalThis.fetch = async () =>
+      Response.json({ authenticated: true, user: { id: "test-user", username: "Reader" } })
+    const user = await fetchAuthenticatedUser({ authBase: "https://example.test" })
+    assert.match(buildSharedUserPanelMarkup({ user }), /Reader/)
+    assert.equal(document.querySelectorAll("iframe").length, 0)
+    globalThis.fetch = async () => new Response(null, { status: 401 })
+    assert.equal(await fetchAuthenticatedUser({ authBase: "https://example.test" }), null)
+    assert.match(document.cookie, /Max-Age=0/)
+    assert.match(buildSharedUserPanelMarkup(), /Guest/)
+  } finally {
+    Object.assign(globalThis, previous)
+  }
+})
+
+test("bootstrap, malformed JSON and failed logout cannot silently erase authentication", async () => {
+  const previous = { document: globalThis.document, fetch: globalThis.fetch }
+  const document = createSidebarDocument()
+  document.cookie = "brinedew_session_present=1"
+  globalThis.document = document
+  try {
+    await assert.rejects(
+      fetchAuthenticatedUser({ payloadPromise: Promise.reject(new Error("offline")) }),
+      /offline/,
+    )
+    globalThis.fetch = async () => Response.json({})
+    await assert.rejects(fetchAuthenticatedUser(), /Invalid session/)
+    globalThis.fetch = async () => new Response(null, { status: 503 })
+    await assert.rejects(logoutAuthenticatedUser(), /Logout failed/)
+    assert.equal(document.cookie, "brinedew_session_present=1")
+  } finally {
+    Object.assign(globalThis, previous)
+  }
+})
 
 function createSidebarDocument() {
   const { document } = parseHTML(`

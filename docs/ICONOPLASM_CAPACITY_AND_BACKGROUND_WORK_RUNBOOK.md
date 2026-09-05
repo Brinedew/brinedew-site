@@ -219,6 +219,23 @@ leases, scanner builds, and failures must never become an append-only ledger.
 
 ## ARCHITECTURE FENCE [IPD-012]: manifestation authoring has one bounded authority
 
+### Exact generation from imported Tags (B-738)
+
+New image requests may use a migration-imported `legacy_unknown` Tags derivative
+when its exact revision, accepted derivative ID, verified encrypted object, and
+compound/component hashes are complete. Unknown historical tagger identity stays
+unknown; it is never filled with a guessed model. The image generation provider,
+model, recipe, and final prompt remain recorded for the new image. Generated Tags
+still require their complete authoring history. This distinction restores image
+requests after cutover without changing source bytes or selecting newer prose.
+Existing `legacy_unbound` image requests remain non-replayable.
+
+Website source admission, exact-source validation, and workstation lease and
+fulfillment validation share this contract. Hash drift, missing storage, withdrawn
+sources, partial generated history, and duplicate execution still fail closed.
+
+### Storage ownership
+
 Production `iconoplasm-authoring` and staging `iconoplasm-authoring-staging` are
 bound only to the loud stateful Worker as `ICONOPLASM_AUTHORING_DB`. They own
 stable gene/account references, caretaker assignment state, immutable revision

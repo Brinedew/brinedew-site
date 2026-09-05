@@ -152,13 +152,30 @@ function validateAuthorityRow(row, { promptBodyMode, requireStorageSecrets }) {
         503,
       )
     }
+    // Imported Tags retain unknown authoring history. Their immutable revision,
+    // verified bytes and compound hashes still bind every new image exactly.
+    const imported = stringValue(row.derivative_provenance_status) === "legacy_unknown"
+    const historyFields = [
+      "recipe_id",
+      "recipe_version",
+      "provider_id",
+      "model_id",
+      "tagger_config_sha256",
+    ]
+    if (imported && historyFields.some((field) => stringValue(row[`derivative_${field}`]))) {
+      throw sourceError(
+        "GENERATION_SOURCE_DERIVATIVE_PROVENANCE_INCOMPLETE",
+        "Imported Tags must retain unknown authoring history without guessed metadata.",
+      )
+    }
     if (
-      stringValue(row.derivative_provenance_status) !== "generated" ||
-      !stringValue(row.derivative_recipe_id) ||
-      !stringValue(row.derivative_recipe_version) ||
-      !stringValue(row.derivative_provider_id) ||
-      !stringValue(row.derivative_model_id) ||
-      !SHA256.test(stringValue(row.derivative_tagger_config_sha256).toLowerCase())
+      !imported &&
+      (stringValue(row.derivative_provenance_status) !== "generated" ||
+        !stringValue(row.derivative_recipe_id) ||
+        !stringValue(row.derivative_recipe_version) ||
+        !stringValue(row.derivative_provider_id) ||
+        !stringValue(row.derivative_model_id) ||
+        !SHA256.test(stringValue(row.derivative_tagger_config_sha256).toLowerCase()))
     ) {
       throw sourceError(
         "GENERATION_SOURCE_DERIVATIVE_PROVENANCE_INCOMPLETE",
@@ -199,70 +216,38 @@ async function provenanceFromAuthorityRow(row, promptBodyMode) {
       "The canonical selection does not identify the selected manifestation revision.",
     )
   }
-  const source = {
+  const source = normalizeGenerationSource({
     generation_provenance_status: "bound",
-    source_gene_id: opaqueId(row.gene_id, "source_gene_id"),
+    source_gene_id: row.gene_id,
     source_manifestation_id: manifestationId,
     source_manifestation_revision_id: revisionId,
-    source_manifestation_body_sha256: sha256(row.body_sha256, "source_manifestation_body_sha256"),
-    source_manifestation_derivative_id:
-      mode === "taggerizer_prompt"
-        ? opaqueId(row.manifestation_derivative_id, "source_manifestation_derivative_id")
-        : "",
-    source_manifestation_derivative_sha256:
-      mode === "taggerizer_prompt"
-        ? sha256(row.derivative_body_sha256, "source_manifestation_derivative_sha256")
-        : "",
-    source_manifestation_derivative_tags_sha256:
-      mode === "taggerizer_prompt"
-        ? sha256(row.derivative_tags_sha256, "source_manifestation_derivative_tags_sha256")
-        : "",
-    source_manifestation_derivative_tags_bytes:
-      mode === "taggerizer_prompt"
-        ? positiveInteger(row.derivative_tags_bytes, "source_manifestation_derivative_tags_bytes")
-        : 0,
-    source_manifestation_derivative_fields_sha256:
-      mode === "taggerizer_prompt"
-        ? sha256(row.derivative_fields_sha256, "source_manifestation_derivative_fields_sha256")
-        : "",
-    source_manifestation_derivative_fields_bytes:
-      mode === "taggerizer_prompt"
-        ? positiveInteger(
-            row.derivative_fields_bytes,
-            "source_manifestation_derivative_fields_bytes",
-          )
-        : 0,
-    source_manifestation_derivative_recipe_id:
-      mode === "taggerizer_prompt" ? stringValue(row.derivative_recipe_id) : "",
-    source_manifestation_derivative_recipe_version:
-      mode === "taggerizer_prompt" ? stringValue(row.derivative_recipe_version) : "",
-    source_manifestation_derivative_provider_id:
-      mode === "taggerizer_prompt" ? stringValue(row.derivative_provider_id) : "",
-    source_manifestation_derivative_model_id:
-      mode === "taggerizer_prompt" ? stringValue(row.derivative_model_id) : "",
-    source_manifestation_derivative_tagger_config_sha256:
-      mode === "taggerizer_prompt"
-        ? sha256(
-            row.derivative_tagger_config_sha256,
-            "source_manifestation_derivative_tagger_config_sha256",
-          )
-        : "",
-    source_canonical_selection_id: opaqueId(
-      row.canonical_selection_id,
-      "source_canonical_selection_id",
+    source_manifestation_body_sha256: row.body_sha256,
+    source_manifestation_derivative_id: row.manifestation_derivative_id,
+    ...Object.fromEntries(
+      [
+        "sha256",
+        "tags_sha256",
+        "tags_bytes",
+        "fields_sha256",
+        "fields_bytes",
+        "recipe_id",
+        "recipe_version",
+        "provider_id",
+        "model_id",
+        "tagger_config_sha256",
+      ].map((field) => [
+        `source_manifestation_derivative_${field}`,
+        row[field === "sha256" ? "derivative_body_sha256" : `derivative_${field}`],
+      ]),
     ),
-    source_canonical_head_version: positiveInteger(
-      row.selection_head_version,
-      "source_canonical_head_version",
-    ),
-    source_gene_revision: positiveInteger(row.selection_gene_revision, "source_gene_revision"),
-    source_sample_label: stringValue(row.sample_label),
-    source_sample_number: optionalNonNegativeInteger(row.sample_number, "source_sample_number"),
-    source_sample_text_sha256: sha256(row.sample_text_sha256, "source_sample_text_sha256", {
-      required: false,
-    }),
+    source_canonical_selection_id: row.canonical_selection_id,
+    source_canonical_head_version: row.selection_head_version,
+    source_gene_revision: row.selection_gene_revision,
+    source_sample_label: row.sample_label,
+    source_sample_number: row.sample_number,
+    source_sample_text_sha256: row.sample_text_sha256,
     prompt_body_mode: mode,
-  }
+  })
   source.source_snapshot_sha256 = await iconoplasmGenerationFingerprint(
     "iconoplasm.generation-source.v1",
     source,
@@ -374,7 +359,7 @@ export async function resolveCanonicalGenerationSource(
   return provenanceFromAuthorityRow(row, promptBodyMode)
 }
 
-export function requireExactGenerationProvenance(raw, { promptBodyMode } = {}) {
+function normalizeGenerationSource(raw, { promptBodyMode } = {}) {
   if (stringValue(raw?.generation_provenance_status) !== "bound") {
     throw sourceError(
       "LEGACY_GENERATION_SOURCE_UNBOUND",
@@ -454,6 +439,7 @@ export function requireExactGenerationProvenance(raw, { promptBodyMode } = {}) {
         ? sha256(
             raw?.source_manifestation_derivative_tagger_config_sha256,
             "source_manifestation_derivative_tagger_config_sha256",
+            { required: false },
           )
         : "",
     source_canonical_selection_id: opaqueId(
@@ -477,8 +463,14 @@ export function requireExactGenerationProvenance(raw, { promptBodyMode } = {}) {
     ),
     prompt_body_mode: mode,
   }
-  const snapshotHash = sha256(raw?.source_snapshot_sha256, "source_snapshot_sha256")
-  return { ...source, source_snapshot_sha256: snapshotHash }
+  return source
+}
+
+export function requireExactGenerationProvenance(raw, options) {
+  return {
+    ...normalizeGenerationSource(raw, options),
+    source_snapshot_sha256: sha256(raw?.source_snapshot_sha256, "source_snapshot_sha256"),
+  }
 }
 
 export function exactGenerationProvenanceValidationKey(raw, options) {

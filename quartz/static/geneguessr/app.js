@@ -4,7 +4,7 @@ import {
   fetchAuthenticatedUser,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=d8bcfb8f19d3a065"
+} from "../shared/sidebar-shell.js?v=99d8a08f87cc8a9d"
 // ⚡ PERFORMANCE: Mark navigation start for pre-zero timing measurement
 var NAVIGATION_START = performance.now()
 console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
@@ -5566,7 +5566,13 @@ https://geneguessr.brinedew.bio/`
    * Check auth status
    */
   async function checkAuth() {
-    const user = await fetchAuthenticatedUser({ authBase: API_BASE })
+    let user
+    try {
+      user = await fetchAuthenticatedUser({ authBase: API_BASE })
+    } catch {
+      // Keep the reading/game state and surface the shared retry control.
+      return Boolean(currentUser)
+    }
     if (user) {
       currentUser = user
       setLeaderboardConsentEnabled(Boolean(user.leaderboard_opt_in))

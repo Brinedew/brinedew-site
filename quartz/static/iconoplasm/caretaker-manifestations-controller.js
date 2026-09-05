@@ -1,4 +1,4 @@
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=20260902-caretaker-editor-v5"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=20260905-caretaker-editor-v6"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -10,8 +10,8 @@ import {
   ownManifestation,
   proseValidationError,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=20260902-caretaker-editor-v5"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=20260902-caretaker-editor-v5"
+} from "./caretaker-manifestations-model.js?v=20260905-caretaker-editor-v6"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=20260905-caretaker-editor-v6"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -199,136 +199,86 @@ export function createCaretakerManifestationPanel({
     dispatchInput(source)
   }
 
-  // The tags source stays a hidden textarea so the autosave, draft, and
-  // authority flows keep reading the same control; the pills are its editor.
+  // Shoelace owns selection, removable tags, focus and keyboard navigation.
+  // The hidden source remains the single autosave/draft value.
   function initTagPills(state) {
     const form = state.host.querySelector("[data-icono-caretaker-editor]")
     const source = form?.querySelector("[data-icono-caretaker-tags]")
-    const pills = form?.querySelector("[data-icono-caretaker-pills]")
+    const menu = form?.querySelector("[data-icono-caretaker-tag-menu]")
     const input = form?.querySelector("[data-icono-caretaker-tags-input]")
-    const box = form?.querySelector("[data-icono-caretaker-tags-editor]")
+    const add = form?.querySelector("[data-icono-caretaker-add-tag]")
     const count = form?.querySelector("[data-icono-caretaker-tags-count]")
-    if (!source || !pills || !input) return
-    const suggestions = parseTagList(source.dataset.caretakerTagsSuggestions || "")
-    if (source.disabled) {
+    if (!source || !menu || !input || !add) return
+    const choices = new Set([
+      ...parseTagList(source.value),
+      ...parseTagList(source.dataset.caretakerTagsSuggestions),
+      "standing",
+      "sitting",
+      "walking",
+      "running",
+      "kneeling",
+      "looking at viewer",
+      "looking away",
+      "smile",
+      "serious",
+      "closed eyes",
+      "crossed arms",
+      "hands on hips",
+      "dress",
+      "coat",
+      "jacket",
+      "gloves",
+      "boots",
+      "hat",
+      "ribbon",
+      "jewelry",
+    ])
+    function renderMenu() {
       const tags = parseTagList(source.value)
-      count.textContent = `${tags.length.toLocaleString()} tag${tags.length === 1 ? "" : "s"}`
-      return
+      tags.forEach((tag) => choices.add(tag))
+      menu.replaceChildren(
+        ...Array.from(choices, (tag) => {
+          const option = document.createElement("sl-option")
+          option.value = encodeURIComponent(tag)
+          option.textContent = tag.replaceAll("_", " ")
+          return option
+        }),
+      )
+      menu.value = tags.map(encodeURIComponent)
+      if (count) count.textContent = `${tags.length} selected · changes autosave`
     }
-
-    function syncCount(tags) {
-      if (count)
-        count.textContent = `${tags.length.toLocaleString()} tag${tags.length === 1 ? "" : "s"}`
-    }
-
-    function renderPills() {
-      const tags = parseTagList(source.value)
-      pills.replaceChildren()
-      tags.forEach(function (tag, index) {
-        const item = document.createElement("li")
-        item.className = "icono-caretaker-pill"
-        const label = document.createElement("span")
-        label.className = "icono-caretaker-pill__label"
-        label.textContent = tag
-        const remove = document.createElement("button")
-        remove.type = "button"
-        remove.className = "icono-caretaker-pill__remove"
-        remove.setAttribute("aria-label", `Remove tag ${tag}`)
-        remove.textContent = "×"
-        remove.addEventListener("click", function () {
-          const remaining = parseTagList(source.value)
-          remaining.splice(index, 1)
-          writeTagList(source, remaining)
-          renderPills()
-        })
-        item.appendChild(label)
-        item.appendChild(remove)
-        pills.appendChild(item)
-      })
-      if (!tags.length) {
-        const empty = document.createElement("li")
-        empty.className = "icono-caretaker-pills__empty"
-        empty.textContent = "No tags yet."
-        pills.appendChild(empty)
-      }
-      syncCount(tags)
-    }
-
-    function addTags(candidates) {
-      const existing = parseTagList(source.value)
-      let added = false
-      candidates.forEach(function (candidate) {
-        const tag = String(candidate || "").trim()
-        if (!tag || existing.indexOf(tag) !== -1) return
-        existing.push(tag)
-        added = true
-      })
-      if (added) writeTagList(source, existing)
+    function addTags() {
+      const tags = Array.from(
+        new Set([...parseTagList(source.value), ...parseTagList(input.value)]),
+      )
       input.value = ""
-      renderPills()
+      if (tags.join(", ") !== source.value) writeTagList(source, tags)
+      input.focus()
     }
-
-    function addSuggestions() {
-      const pending = suggestions.filter(function (tag) {
-        return parseTagList(source.value).indexOf(tag) === -1
-      })
-      if (!pending.length) return
-      addTags(pending)
-    }
-
-    function renderSuggestions() {
-      const used = parseTagList(source.value)
-      const pending = suggestions.filter(function (tag) {
-        return used.indexOf(tag) === -1
-      })
-      const existingRow = box?.querySelector(".icono-caretaker-tags-suggestions")
-      if (existingRow) existingRow.remove()
-      if (!pending.length) return
-      const row = document.createElement("div")
-      row.className = "icono-caretaker-tags-suggestions"
-      pending.forEach(function (tag) {
-        const chip = document.createElement("button")
-        chip.type = "button"
-        chip.className = "icono-caretaker-tags-suggestion"
-        chip.textContent = tag
-        chip.addEventListener("click", function () {
-          addTags([tag])
+    menu.disabled = source.disabled
+    add.disabled = source.disabled
+    if (!source.disabled) {
+      menu.addEventListener("sl-change", () => {
+        const selected = new Set(
+          (Array.isArray(menu.value) ? menu.value : []).map(decodeURIComponent),
+        )
+        // Keep prompt order stable: append new choices after surviving tags.
+        const tags = parseTagList(source.value).filter((tag) => selected.has(tag))
+        selected.forEach((tag) => {
+          if (!tags.includes(tag)) tags.push(tag)
         })
-        row.appendChild(chip)
-      })
-      box?.appendChild(row)
-    }
-
-    input.addEventListener("keydown", function (event) {
-      if (event.key === "Enter" || event.key === ",") {
-        event.preventDefault()
-        addTags(input.value.split(/\r?\n|,/))
-        renderSuggestions()
-      } else if (event.key === "Backspace" && !input.value) {
-        const tags = parseTagList(source.value)
-        if (!tags.length) return
-        tags.pop()
         writeTagList(source, tags)
-        renderPills()
-        renderSuggestions()
-      }
-    })
-    input.addEventListener("blur", function () {
-      if (input.value.trim()) {
-        addTags(input.value.split(/\r?\n|,/))
-        renderSuggestions()
-      }
-    })
-    input.addEventListener("paste", function (event) {
-      const text = String(event.clipboardData?.getData("text") || "")
-      if (!/[\r\n,]/.test(text)) return
-      event.preventDefault()
-      addTags(text.split(/\r?\n|,/))
-      renderSuggestions()
-    })
-    source.addEventListener("input", renderPills)
-    renderPills()
-    renderSuggestions()
+      })
+      add.addEventListener("click", addTags)
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.isComposing) {
+          event.preventDefault()
+          addTags()
+        }
+      })
+      source.addEventListener("input", renderMenu)
+    }
+    renderMenu()
   }
 
   function request(state, suffix, init) {

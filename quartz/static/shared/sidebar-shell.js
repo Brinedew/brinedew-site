@@ -1,26 +1,14 @@
 import { siteSettingsUrl } from "../site-preferences.js?v=20260520stylecookie"
 
 export var COMMUNITY_URL = "https://discord.com/invite/kx8FVzUrpf"
-var AUTH_BRIDGE_CHANNEL = "brinedew-shared-auth-bridge"
-var AUTH_BRIDGE_PATH = "/static/site-preferences/bridge.html?v=20260309e"
-var AUTH_BRIDGE_TIMEOUT_MS = 4000
 var SHARED_SESSION_PRESENCE_COOKIE = "brinedew_session_present"
-var authBridgePromise = null
-var authBridgeIframe = null
-var authBridgeRequestId = 0
-var authBridgePending = Object.create(null)
+var sharedAuthStatus = hasSharedSessionPresenceHint() ? "checking" : "guest"
 var SETTINGS_GEAR_ICON =
   '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">' +
   '<path d="M10 2.5v2.2M10 15.3v2.2M17.5 10h-2.2M4.7 10H2.5M15.3 4.7l-1.55 1.55M6.25 13.75 4.7 15.3M15.3 15.3l-1.55-1.55M6.25 6.25 4.7 4.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
   '<circle cx="10" cy="10" r="4.15" stroke="currentColor" stroke-width="1.5"/>' +
   '<circle cx="10" cy="10" r="1.65" fill="currentColor"/>' +
   "</svg>"
-
-function wait(ms) {
-  return new Promise(function (resolve) {
-    window.setTimeout(resolve, ms)
-  })
-}
 
 export function escapeHtml(value) {
   var node = document.createElement("div")
@@ -62,29 +50,6 @@ function clearSharedSessionPresenceHint() {
   }
 }
 
-function isCanonicalAuthHost(host) {
-  var value = String(host || "").toLowerCase()
-  if (!value) return false
-  return (
-    value === "brinedew.bio" ||
-    value === "www.brinedew.bio" ||
-    value === "localhost" ||
-    value === "127.0.0.1"
-  )
-}
-
-function canonicalAuthOrigin() {
-  var host = currentHost()
-  if (!host || host === "localhost" || host === "127.0.0.1") return currentOrigin()
-  return "https://brinedew.bio"
-}
-
-function shouldUseSharedAuthBridge() {
-  var host = currentHost()
-  if (!host) return false
-  return !isCanonicalAuthHost(host)
-}
-
 function currentReturnTo() {
   if (typeof window === "undefined" || !window.location) return ""
   return (
@@ -98,7 +63,14 @@ function currentReturnTo() {
 function resolveAuthBase(authBase) {
   var value = String(authBase || "").trim()
   if (value) return value.replace(/\/+$/, "")
-  return shouldUseSharedAuthBridge() ? canonicalAuthOrigin() : currentOrigin()
+  var host = currentHost()
+  return !host ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "brinedew.bio" ||
+    host.endsWith(".brinedew.bio")
+    ? currentOrigin()
+    : "https://brinedew.bio"
 }
 
 export function formatTierLabel(tier) {
@@ -137,58 +109,55 @@ export function buildLoginUrl(options) {
 
 export async function fetchAuthenticatedUser(options) {
   var source = options || {}
-  var authBase = resolveAuthBase(source.authBase)
+  sharedAuthStatus = "checking"
   try {
-    var response = await fetch(authBase + "/api/auth/me", {
-      credentials: "include",
-    })
-    if (!response.ok) {
-      if (response.status === 401) clearSharedSessionPresenceHint()
-      return null
-    }
-    var payload = await response.json().catch(function () {
-      return null
-    })
-    if (!payload || !payload.authenticated || !payload.user) return null
-    return payload.user
-  } catch (_err) {
-    if (!source.authBase && shouldUseSharedAuthBridge()) {
-      for (var attempt = 0; attempt < 6; attempt++) {
-        var bridgedUser = await requestSharedAuth("fetchAuthenticatedUser").catch(function () {
-          return null
-        })
-        if (bridgedUser) return bridgedUser
-        if (attempt < 5) await wait(400)
+    var payload
+    if (source.payloadPromise) {
+      payload = await source.payloadPromise
+    } else {
+      var response = await fetch(resolveAuthBase(source.authBase) + "/api/auth/me", {
+        credentials: "include",
+        cache: "no-store",
+        signal: AbortSignal.timeout(10000),
+      })
+      if (response.status === 401) payload = null
+      else {
+        if (!response.ok)
+          throw new Error("Session verification unavailable (" + response.status + ")")
+        payload = await response.json()
       }
     }
-    return null
+    if (payload === null || payload?.authenticated === false) {
+      clearSharedSessionPresenceHint()
+      sharedAuthStatus = "guest"
+      return null
+    }
+    if (!payload?.authenticated || !payload.user) throw new Error("Invalid session response")
+    sharedAuthStatus = "signed_in"
+    return payload.user
+  } catch (error) {
+    sharedAuthStatus = "unavailable"
+    throw error
   }
 }
 
 export async function logoutAuthenticatedUser(options) {
-  var source = options || {}
-  var authBase = resolveAuthBase(source.authBase)
-  try {
-    var response = await fetch(authBase + "/api/auth/logout", {
-      method: "POST",
-      credentials: "include",
-    })
-    if (!response.ok && response.status !== 204) {
-      throw new Error("Logout failed (" + response.status + ")")
-    }
-    return true
-  } catch (error) {
-    if (!source.authBase && shouldUseSharedAuthBridge()) {
-      return requestSharedAuth("logoutAuthenticatedUser")
-    }
-    throw error
-  }
+  var response = await fetch(resolveAuthBase(options?.authBase) + "/api/auth/logout", {
+    method: "POST",
+    credentials: "include",
+    signal: AbortSignal.timeout(10000),
+  })
+  if (!response.ok) throw new Error("Logout failed (" + response.status + ")")
+  clearSharedSessionPresenceHint()
+  sharedAuthStatus = "guest"
+  return true
 }
 
 export function buildSharedUserPanelMarkup(options) {
   var source = options || {}
   var user = source.user || null
-  var username = user ? String(user.username || "").trim() : "Guest"
+  var pending = sharedAuthStatus === "checking" || sharedAuthStatus === "unavailable"
+  var username = user ? String(user.username || "").trim() : pending ? "Checking account" : "Guest"
   var tierLabel = user ? formatTierLabel(user.tier) : ""
   var avatarUrl = user ? String(user.avatar_url || "").trim() : ""
   var avatarMarkup = avatarUrl
@@ -215,13 +184,15 @@ export function buildSharedUserPanelMarkup(options) {
         escapeHtml(communityHref) +
         '" target="_blank" rel="noopener noreferrer">Discord</a>'
       : ""
-  var primaryAction = user
-    ? '<button type="button" class="brd-sidebar-btn brd-sidebar-btn--quiet" data-brd-user-logout>Sign Out</button>'
-    : '<a class="brd-sidebar-btn" href="' +
-      escapeHtml(loginHref) +
-      '">' +
-      escapeHtml(loginLabel) +
-      "</a>"
+  var primaryAction = pending
+    ? '<button type="button" class="brd-sidebar-btn" data-brd-user-retry>Retry connection</button>'
+    : user
+      ? '<button type="button" class="brd-sidebar-btn brd-sidebar-btn--quiet" data-brd-user-logout>Sign Out</button>'
+      : '<a class="brd-sidebar-btn" href="' +
+        escapeHtml(loginHref) +
+        '">' +
+        escapeHtml(loginLabel) +
+        "</a>"
   return (
     '<div class="brd-sidebar-section">' +
     '<div class="brd-sidebar-panel-title">' +
@@ -241,185 +212,13 @@ export function buildSharedUserPanelMarkup(options) {
     "</div>" +
     '<div class="brd-user-actions">' +
     communityAction +
+    (sharedAuthStatus === "unavailable"
+      ? '<p role="status">Account connection interrupted. Your session has not been cleared.</p>'
+      : "") +
     primaryAction +
     "</div>" +
     "</div>"
   )
-}
-
-function canUseDocument() {
-  try {
-    return typeof document !== "undefined" && !!document.createElement
-  } catch (_err) {
-    return false
-  }
-}
-
-function sharedAuthBridgeUrl() {
-  return canonicalAuthOrigin() + AUTH_BRIDGE_PATH
-}
-
-function authBridgeFrameLoaded(iframe) {
-  if (!iframe || iframe.getAttribute("src") !== sharedAuthBridgeUrl()) return false
-  if (!iframe.contentWindow) return false
-  try {
-    var loadedOrigin = String(
-      (iframe.contentWindow.location && iframe.contentWindow.location.origin) || "",
-    )
-    if (!loadedOrigin || loadedOrigin !== canonicalAuthOrigin()) return false
-  } catch (_err) {
-    return true
-  }
-  return true
-}
-
-function authBridgeWindowReady(iframe) {
-  if (iframe.getAttribute("data-ready") !== "true") return false
-  return authBridgeFrameLoaded(iframe)
-}
-
-function ensureAuthBridgeIframe() {
-  if (!canUseDocument()) return null
-  if (authBridgeIframe && authBridgeIframe.isConnected) return authBridgeIframe
-  authBridgeIframe = document.getElementById("brinedew-auth-bridge")
-  if (authBridgeIframe) return authBridgeIframe
-  var iframe = document.createElement("iframe")
-  iframe.id = "brinedew-auth-bridge"
-  iframe.setAttribute("title", "Brinedew auth bridge")
-  iframe.setAttribute("aria-hidden", "true")
-  iframe.tabIndex = -1
-  iframe.style.display = "none"
-  iframe.setAttribute("data-ready", "false")
-  authBridgeIframe = iframe
-  return iframe
-}
-
-function navigateAuthBridgeIframe(iframe) {
-  if (!iframe) return
-  iframe.setAttribute("data-ready", "false")
-  iframe.setAttribute("src", sharedAuthBridgeUrl())
-}
-
-function attachAuthBridgeIframe(iframe) {
-  if (!iframe || iframe.isConnected || !canUseDocument()) return
-  var parent = document.body || document.documentElement
-  if (parent) {
-    parent.appendChild(iframe)
-    return
-  }
-  document.addEventListener(
-    "DOMContentLoaded",
-    function () {
-      var nextParent = document.body || document.documentElement
-      if (nextParent && !iframe.isConnected) nextParent.appendChild(iframe)
-    },
-    { once: true },
-  )
-}
-
-function resolveAuthBridge() {
-  if (!shouldUseSharedAuthBridge()) return Promise.resolve(null)
-  var existing = ensureAuthBridgeIframe()
-  if (existing && existing.isConnected && authBridgeWindowReady(existing)) {
-    return Promise.resolve(existing)
-  }
-  if (authBridgePromise) return authBridgePromise
-  authBridgePromise = new Promise(function (resolve, reject) {
-    var iframe = existing || ensureAuthBridgeIframe()
-    if (!iframe) {
-      authBridgePromise = null
-      reject(new Error("Auth bridge iframe unavailable"))
-      return
-    }
-
-    function cleanup() {
-      iframe.removeEventListener("load", onLoad)
-      iframe.removeEventListener("error", onError)
-    }
-
-    function onLoad() {
-      // Same trap as the settings bridge: the load handler is responsible for
-      // setting data-ready, so checking that flag before resolving deadlocks
-      // the iframe handshake on the first successful load.
-      if (!authBridgeFrameLoaded(iframe)) {
-        if (iframe.getAttribute("src") !== sharedAuthBridgeUrl()) {
-          navigateAuthBridgeIframe(iframe)
-        }
-        return
-      }
-      cleanup()
-      iframe.setAttribute("data-ready", "true")
-      authBridgePromise = null
-      resolve(iframe)
-    }
-
-    function onError() {
-      cleanup()
-      iframe.setAttribute("data-ready", "false")
-      authBridgePromise = null
-      reject(new Error("Failed to load auth bridge iframe"))
-    }
-
-    iframe.addEventListener("load", onLoad)
-    iframe.addEventListener("error", onError)
-    if (iframe.getAttribute("src") !== sharedAuthBridgeUrl()) {
-      navigateAuthBridgeIframe(iframe)
-    }
-    attachAuthBridgeIframe(iframe)
-
-    if (authBridgeFrameLoaded(iframe)) {
-      cleanup()
-      iframe.setAttribute("data-ready", "true")
-      authBridgePromise = null
-      resolve(iframe)
-    }
-  })
-  return authBridgePromise
-}
-
-function requestSharedAuth(type) {
-  return resolveAuthBridge().then(function (iframe) {
-    if (!iframe || !iframe.contentWindow) return null
-    return new Promise(function (resolve, reject) {
-      var id = "auth-" + String(++authBridgeRequestId)
-      var timer = window.setTimeout(function () {
-        delete authBridgePending[id]
-        reject(new Error("Auth bridge request timed out"))
-      }, AUTH_BRIDGE_TIMEOUT_MS)
-
-      authBridgePending[id] = {
-        resolve: resolve,
-        reject: reject,
-        timer: timer,
-      }
-
-      iframe.contentWindow.postMessage(
-        {
-          channel: AUTH_BRIDGE_CHANNEL,
-          id: id,
-          type: type,
-        },
-        canonicalAuthOrigin(),
-      )
-    })
-  })
-}
-
-if (typeof window !== "undefined") {
-  window.addEventListener("message", function (event) {
-    var data = event && event.data ? event.data : null
-    if (!data || data.channel !== AUTH_BRIDGE_CHANNEL || event.origin !== canonicalAuthOrigin())
-      return
-    var pending = authBridgePending[data.id]
-    if (!pending) return
-    window.clearTimeout(pending.timer)
-    delete authBridgePending[data.id]
-    if (data.ok) {
-      pending.resolve(data.payload || null)
-      return
-    }
-    pending.reject(new Error((data.payload && data.payload.error) || "Auth bridge request failed"))
-  })
 }
 
 export function mountSidebarStack(options) {
@@ -518,6 +317,13 @@ export function mountSidebarStack(options) {
 }
 
 export function wireSharedUserPanel(root, options) {
+  var retry = root?.querySelector("[data-brd-user-retry]")
+  if (retry)
+    retry.onclick = function () {
+      if (options?.onAuthRetry) void options.onAuthRetry()
+      else window.location.reload()
+    }
+
   if (!root) return
   var source = options || {}
   var logoutButtons = root.querySelectorAll("[data-brd-user-logout]")
