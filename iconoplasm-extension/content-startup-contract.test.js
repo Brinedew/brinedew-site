@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 await import("./content-matcher.js")
+await import("./content-lifecycle.js")
 
 const content = readFileSync(new URL("./content.js", import.meta.url), "utf8")
 const manifest = JSON.parse(readFileSync(new URL("./manifest.json", import.meta.url), "utf8"))
@@ -67,4 +68,33 @@ test("cooperative matcher yields on busy turns and remains lexically identical t
   ]) {
     assert.deepEqual(matcher.findMatches(text), synchronous.findMatches(text))
   }
+})
+
+test("post-load matcher completes in bounded chunks even when every idle callback times out", async () => {
+  const callbacks = []
+  let clock = 0
+  const api = globalThis.IconoplasmContentMatcher
+  const genes = { TP53: { a: ["p53"] }, BRCA1: {} }
+  const pending = api.createGeneMatcherCooperatively(
+    genes,
+    {},
+    {
+      document: { readyState: "complete" },
+      performance: { now: () => clock++ },
+      requestIdleCallback(callback, options) {
+        assert.equal(options.timeout, 100)
+        callbacks.push(callback)
+      },
+    },
+  )
+  let turns = 0
+  while (callbacks.length) {
+    callbacks.shift()({ didTimeout: true, timeRemaining: () => 0 })
+    assert.ok(++turns < 100)
+  }
+  const matcher = await pending
+  assert.deepEqual(
+    matcher.findMatches("TP53 p53 BRCA1"),
+    api.createGeneMatcher(genes).findMatches("TP53 p53 BRCA1"),
+  )
 })
