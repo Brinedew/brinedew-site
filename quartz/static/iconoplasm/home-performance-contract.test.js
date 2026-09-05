@@ -15,7 +15,6 @@ const headPath = new URL("../../components/Head.tsx", import.meta.url)
 const renderPagePath = new URL("../../components/renderPage.tsx", import.meta.url)
 const resourcesPath = new URL("../../util/resources.tsx", import.meta.url)
 const sidebarShellPath = new URL("../shared/sidebar-shell.js", import.meta.url)
-const authSidebarPath = new URL("../shared/auth-sidebar.mjs", import.meta.url)
 const geneguessrAppPath = new URL("../geneguessr/app.js", import.meta.url)
 const settingsAppPath = new URL("../site-settings/app.js", import.meta.url)
 const customCssPath = new URL("../custom.css", import.meta.url)
@@ -218,9 +217,8 @@ test("anonymous homepage bootstrap skips session and settings traffic", async ()
 })
 
 test("shared sidebar imports use the module content hash as their immutable cache key", async () => {
-  const [app, authSidebar, geneguessrApp, settingsApp, sidebarShell] = await Promise.all([
+  const [app, geneguessrApp, settingsApp, sidebarShell] = await Promise.all([
     readFile(appPath, "utf8"),
-    readFile(authSidebarPath, "utf8"),
     readFile(geneguessrAppPath, "utf8"),
     readFile(settingsAppPath, "utf8"),
     readFile(sidebarShellPath),
@@ -231,7 +229,6 @@ test("shared sidebar imports use the module content hash as their immutable cach
     ["Iconoplasm", app],
     ["GeneGuessr", geneguessrApp],
     ["Settings", settingsApp],
-    ["generic auth sidebar", authSidebar],
   ]) {
     assert.match(
       source,
@@ -243,7 +240,6 @@ test("shared sidebar imports use the module content hash as their immutable cach
 
 test("each app page has exactly one account UI owner", async () => {
   const head = await readFile(headPath, "utf8")
-  const authSidebar = await readFile(authSidebarPath, "utf8")
 
   assert.match(head, /const isGeneguessr =/)
   assert.match(head, /const isSettings =/)
@@ -253,16 +249,6 @@ test("each app page has exactly one account UI owner", async () => {
     head,
     /auth-sidebar\.mjs/,
     "Head must not inject the generic auth sidebar on any page",
-  )
-  assert.match(
-    authSidebar,
-    /isAccountChromePath/,
-    "auth-sidebar keeps an explicit account-chrome gate for defense in depth",
-  )
-  assert.match(
-    authSidebar,
-    /return false/,
-    "auth-sidebar account chrome stays off reading surfaces",
   )
 })
 

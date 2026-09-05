@@ -29,7 +29,7 @@ import {
   hasSharedSessionPresenceHint,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=d8bcfb8f19d3a065"
+} from "../shared/sidebar-shell.js?v=99d8a08f87cc8a9d"
 import "./vendor/img-comparison-slider.js?v=20260516b517"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=20260829-favorite-action"
 import { installIconoplasmLightbox } from "./lightbox.js?v=20260820-admin-matrix"
@@ -256,7 +256,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: "/static/iconoplasm/caretaker-manifestations.css?v=20260902-caretaker-editor-v5",
+        href: "/static/iconoplasm/caretaker-manifestations.css?v=20260905-caretaker-editor-v6",
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -272,7 +272,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=20260902-caretaker-editor-v5"),
+      import("./caretaker-manifestations.js?v=20260905-caretaker-editor-v6"),
       import("./caretaker-supervote.js?v=20260901-signed-v2"),
     ]).then(function (modules) {
       var supervoteControls = modules[1].createCaretakerSupervoteControls({
@@ -2707,6 +2707,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       panels: panels,
     })
     wireSharedUserPanel(stack, {
+      onAuthRetry: refreshSharedUserState,
       onAuthChanged: function (user) {
         void updateSharedUserState(user)
       },
@@ -2797,26 +2798,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function refreshSharedUserState() {
     var bootstrap = window.__iconoplasmBootstrap || null
-    if (bootstrap && !bootstrap.authUsed && bootstrap.authPromise) {
-      bootstrap.authUsed = true
-      return bootstrap.authPromise
-        .then(function (payload) {
-          if (!payload || !payload.authenticated || !payload.user)
-            return updateSharedUserState(null)
-          return updateSharedUserState(payload.user)
-        })
-        .catch(function () {
-          return fetchAuthenticatedUser({ authBase: API }).then(function (user) {
-            return updateSharedUserState(user)
-          })
-        })
-    }
-    return fetchAuthenticatedUser({ authBase: API })
-      .then(function (user) {
-        return updateSharedUserState(user)
-      })
+    var payloadPromise = bootstrap && !bootstrap.authUsed ? bootstrap.authPromise : null
+    if (payloadPromise) bootstrap.authUsed = true
+    return fetchAuthenticatedUser({ authBase: API, payloadPromise: payloadPromise })
+      .then(updateSharedUserState)
       .catch(function () {
-        return updateSharedUserState(null)
+        // An unavailable authority is not a logout. Keep the current identity;
+        // protected actions still require server authorization.
+        renderIconoplasmSidebar()
+        return currentUser
       })
   }
 
