@@ -1,9 +1,17 @@
 import { createFinalizationMigrationCostAdapter } from "./operation-cost-migration-adapter.js"
 import { createAuthoringStreamMigrationCostAdapter } from "./operation-cost-authoring-migration-adapter.js"
 import { createMigrationInventoryCostAdapter } from "./operation-cost-migration-inventory.js"
+import { createUploadReservationMigrationCostAdapter } from "./operation-cost-upload-migration-adapter.js"
 
 export function createMigrationOperationCostAdapters(env, identities) {
   return new Map([
+    [
+      "iconoplasm-authoring-migration-0013",
+      createUploadReservationMigrationCostAdapter({
+        db: env.ICONOPLASM_AUTHORING_DB,
+        ...identities,
+      }),
+    ],
     ...[
       ["geneguessr", env.DB],
       ["iconoplasm", env.ICONOPLASM_DB],

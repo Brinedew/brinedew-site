@@ -127,6 +127,18 @@ event schema before execution. Upload verification now follows the currently
 installed storage object's unique key to its adopted intent; a historical
 adopted upload cannot prove the current object or cause an unbounded history sort.
 
+Authoring migration `0013` removes the old first-upload exception from both
+storage-insert guards. It existed to permit imports without reservations; every
+current production writer, including cutover imports and restores, already
+reserves before uploading. New inserts always require a matching, unexpired
+upload reservation through the unique object-key index. Existing stored content
+is unchanged, as are adoption and restore protections. The migration replaces
+two triggers without scanning content or building indexes; its admitted batch
+caps schema size before DDL and records the migration atomically.
+Local workerd measured this migration at 640 reads and 5 writes within its
+4,352-read/32-write reservation. Separate upgrade tests preserve existing content
+and reject missing, mismatched, expired and failed reservations for both body kinds.
+
 Local workerd verification uses the production compatibility date and full
 primary schema: 20,000 genes, a 300-event pending history and 256 aliases.
 Selection plus projection used 2,438 reads and 531 writes within a 4,096/2,048
