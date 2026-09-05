@@ -128,6 +128,8 @@ const commonRuntimeFiles = [
   "content-api.js",
   "content-settings.js",
   "content-matcher.js",
+  "content-range-paint.js",
+  "content-range-highlights.js",
   "content-scanner.js",
   "content-lifecycle.js",
   "content-tooltip.js",
@@ -458,6 +460,7 @@ async function main() {
     `[package-iconoplasm-extension] Purpose: ${buildPurpose.release ? "human-authorized release" : "replaceable validation"}`,
   )
   console.log(`[package-iconoplasm-extension] Target: ${packageTarget}`)
+  console.log(`[package-iconoplasm-extension] Unpacked directory: ${stageRoot}`)
   console.log(`[package-iconoplasm-extension] WXT browser: ${targetConfig.browser}`)
   console.log("[package-iconoplasm-extension] Packaged runtime files:")
   for (const file of stagedFiles) {

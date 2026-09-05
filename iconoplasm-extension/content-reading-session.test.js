@@ -10,14 +10,21 @@ function loadApi() {
   let intersectionCallback
   const listeners = new Map()
   const frames = new Map()
+  const observed = new Set()
   let serial = 0
   class IntersectionObserverStub {
     constructor(callback) {
       intersectionCallback = callback
     }
-    observe() {}
-    unobserve() {}
-    disconnect() {}
+    observe(element) {
+      observed.add(element)
+    }
+    unobserve(element) {
+      observed.delete(element)
+    }
+    disconnect() {
+      observed.clear()
+    }
   }
   const sandbox = {
     document: {
@@ -38,6 +45,7 @@ function loadApi() {
   vm.runInNewContext(source, sandbox)
   return {
     api: sandbox.IconoplasmReadingSession,
+    observed,
     intersect: (entries) => intersectionCallback(entries),
     document: sandbox.document,
     emit: (name) => listeners.get(name)?.(),
@@ -53,6 +61,25 @@ function loadApi() {
 function anchor(symbol) {
   return { dataset: { gene: symbol } }
 }
+
+test("native ranges share their source observer without losing remaining anchors on removal", async () => {
+  const { api, intersect, observed } = loadApi()
+  const parent = {}
+  const session = api.createReadingSession({ prepareSymbol: async (symbol) => ({ symbol }) })
+  const first = { ...anchor("TP53"), observationElement: parent }
+  const second = { ...anchor("BRCA1"), observationElement: parent }
+  session.registerAnchor(first)
+  session.registerAnchor(second)
+  assert.deepEqual([...observed], [parent])
+  intersect([{ target: parent, isIntersecting: true }])
+  session.unregisterAnchor(first)
+  assert.deepEqual([...observed], [parent])
+  session.unregisterAnchor(second)
+  assert.equal(observed.size, 0)
+  session.registerAnchor(first)
+  session.dispose()
+  assert.equal(observed.size, 0)
+})
 
 test("diagnostic inspection neither warms a symbol nor changes queue order", async () => {
   const { api } = loadApi()

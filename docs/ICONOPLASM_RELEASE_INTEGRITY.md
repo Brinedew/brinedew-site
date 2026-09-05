@@ -13,6 +13,14 @@ The numeric manifest version remains the catalog compatibility version; it is
 never evidence that development bytes equal a published package.
 
 The packagers accept `--out-dir=<directory>` for disposable test/build outputs.
+This is the distribution root: validation appends `validation/<target>/package`.
+For the existing generic DEV install, the default unpacked directory is
+`iconoplasm-extension/dist/validation/generic/package`; passing `dist/validation`
+as the root creates an additional nested `validation` directory. Use the unpacked
+directory printed by the packager. After rebuilding, click **Reload** on that
+extension's browser management card; toggling enablement alone can retain the old
+manifest. Compare the displayed DEV fingerprint with that directory's `build-info.json`
+before testing new runtime files or manifest entries.
 WXT inputs use a unique temporary directory inside the project so Vite resolves
 the project's locked dependencies; the directory is removed on completion or
 failure. Tests put sentinel ZIPs only in disposable output roots. No test backs

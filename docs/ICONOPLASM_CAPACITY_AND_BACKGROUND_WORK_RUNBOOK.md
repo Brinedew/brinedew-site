@@ -470,23 +470,52 @@ Extension hover detail is immutable within a published card snapshot:
   coalesced idle writer reads, merges, stringifies, or writes the persistent
   cache; an old queued write cannot roll a newer snapshot backward;
 - HTML and PDF register recognized anchors with one tab-scoped reading session.
-  The `document_end` entrypoint yields through a paint boundary and genuine idle
-  time before using a validated local scanner. This cache-only path performs no
+  The `document_end` entrypoint yields through a paint boundary and, before load,
+  genuine idle time before using a validated local scanner. This cache-only path performs no
   network, refresh, legacy migration, renderer boot, or persistent portrait hydration.
   A missing/incompatible scanner still waits for host `load` before downloading.
-  Initial and mutation-driven recognition run in bounded idle slices, with a
+  Initial and mutation-driven recognition run in bounded cooperative slices, with a
   4 ms wall-time budget between nodes and no forced idle timeout before load.
   Matcher construction also yields in genuine idle time, targeting 8 ms
-  per turn with clock checks every 32 tokens. Article/main roots precede navigation;
+  per turn with clock checks every 32 tokens. After load, required recognition
+  callbacks use bounded 4 ms tasks, with matcher clock checks every 32 tokens,
+  and yield to the event loop between slices. Advancing just one node or token
+  chunk per idle timeout can stretch startup into minutes on a busy chat page;
+  a bounded task preserves rendering opportunities while completing required
+  local work. Pending pre-load idle callbacks are canceled and requeued as tasks
+  at load. Speculative card work retains its separate genuine-idle gate.
+  Mutation arrivals during an active cooperative scan stay queued until its
+  completion schedules the next flush; an overlapping timer must not latch the
+  queue permanently. Article/main roots precede navigation;
   a full-body pass still covers the remainder without nesting existing highlights.
+  HTML recognition retains the original Text objects, their parents, and their data.
+  The former inline spans existed to provide selectable text, four paint styles, and
+  hover anchors without changing line metrics. Replacing the source Text object,
+  however, detached references retained by streaming frameworks: `appendData` then
+  updated an invisible node, and subsequent host removal could fail. The replacement
+  uses native ranges and small SVG background layers on existing page surfaces for
+  the same four styles. A viewport overlay with copied glyphs was rejected: compositor
+  scrolling can move the page before JavaScript moves the copies. Original glyphs
+  must remain visible and native; CSS Custom Highlights supplies only the filled
+  pill's foreground color. Decorations use the browser's local background attachment,
+  so scrolling needs no JavaScript geometry updates. Original background layers are
+  preserved, responsive styles are reread, and cleanup restores only owned properties.
+  Body-to-document background propagation uses the document painting origin.
+  Host selection and editables remain native. Changed or removed source text invalidates
+  its decoration, layout/font changes remeasure, and painting checks the 4 ms budget
+  between matches, including matches inside one long Text node. The same
+  pre-load genuine-idle gate covers painting. Recognized symbols enter the existing
+  reading-session inventory even when their ranges are outside the viewport. Range
+  anchors expose native geometry; source parents share a ref-counted visibility observer.
+  This native-range path requires Chromium 105+ / Firefox 140+ (Android remains 142+).
   Current-card selection is separate: once after load, or on explicit early hover,
   before either card lane or disk cache is used. Slow unrelated page resources
   must not delay cached recognition. The session
-  inventories anchors immediately, but speculative immutable rich detail plus
+  inventories recognized symbols immediately, but speculative immutable rich detail plus
   independently deliverable portrait locators, bytes, decode, and frame acknowledgement
-  wait for host `load`, a one-second quiet delay, and a genuine idle callback. The
-  first ten symbols use one worker on constrained connections and two otherwise;
-- the one/two workers above are browser-side preparation slots per tab, not
+  wait for host `load` and a genuine idle callback. The first ten symbols use up to
+  ten browser preparation tasks, reduced to two on low-memory devices;
+- the preparation tasks above are browser-side slots per tab, not
   Cloudflare Worker instances. Each prepared symbol starts one rich-detail GET
   and one portrait-locator GET. Ten cold tabs therefore start 100 requests in
   each projection lane. The lanes have separate 120/minute per-IP rate-limit
