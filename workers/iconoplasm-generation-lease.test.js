@@ -11,6 +11,7 @@ import {
   exactGenerationLeaseFromRow,
   failExactGenerationLease,
   renewExactGenerationLease,
+  readExactGenerationLeaseMaterial,
 } from "./iconoplasm-generation-lease.js"
 
 const sha = (character) => String(character).repeat(64)
@@ -390,5 +391,61 @@ test("an expired lease is redelivered with a new attempt and token", async () =>
     assert.equal(second.generation_lease_version, 2)
   } finally {
     fixture.database.close()
+  }
+})
+
+test("material access is fenced to the active owner and persisted request source", async () => {
+  const { database, db } = leaseDatabase()
+  try {
+    const row = boundRow()
+    database.exec(
+      `CREATE TABLE icono_generation_requests (id INTEGER PRIMARY KEY, generation_request_id TEXT, status TEXT, source_snapshot_sha256 TEXT)`,
+    )
+    database
+      .prepare("INSERT INTO icono_generation_requests VALUES (?, ?, 'open', ?)")
+      .run(row.id, row.generation_request_id, row.source_snapshot_sha256)
+    const now = new Date("2026-09-05T00:00:00Z")
+    const claimed = await claimExactGenerationLeases({
+      db,
+      rows: [row],
+      leaseOwnerId: "workstation_0001",
+      leaseSeconds: 600,
+      now,
+      idFactory: deterministicIds(),
+    })
+    const lease = claimed.leases[0]
+    let reads = 0
+    const input = {
+      env: { ICONOPLASM_DB: db },
+      leaseToken: lease.generation_lease_token,
+      leaseOwnerId: lease.generation_lease_owner_id,
+      expectedLeaseVersion: lease.generation_lease_version,
+      now,
+      readSource: async (_env, stored) => {
+        reads++
+        assert.equal(stored.source_snapshot_sha256, row.source_snapshot_sha256)
+        return { prose: "verified private material" }
+      },
+    }
+    for (const patch of [
+      { leaseOwnerId: "wrong_owner_0001" },
+      { expectedLeaseVersion: 99 },
+      { leaseToken: "wrong_token_0001" },
+      { now: new Date("2026-09-05T01:00:00Z") },
+    ]) {
+      await assert.rejects(
+        readExactGenerationLeaseMaterial({ ...input, ...patch }),
+        /lease expired or changed/,
+      )
+    }
+    assert.equal(reads, 0)
+    assert.deepEqual(await readExactGenerationLeaseMaterial(input), {
+      prose: "verified private material",
+    })
+    database.exec("UPDATE icono_generation_requests SET status = 'cancelled'")
+    await assert.rejects(readExactGenerationLeaseMaterial(input), /lease expired or changed/)
+    assert.equal(reads, 1)
+  } finally {
+    database.close()
   }
 })

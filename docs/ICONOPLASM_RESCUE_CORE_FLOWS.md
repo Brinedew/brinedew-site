@@ -47,6 +47,10 @@ end-to-end live test has passed. The issue records final verification and gaps.
 
 - Separate exact saved input from historical knowledge of the tag author. Imported
   tags keep unknown history; new generation still binds verified content hashes.
+- Generation exchanges its active lease for exactly one freshly validated source;
+  rendering no longer requires a full-catalog replica bootstrap. The private
+  material endpoint verifies ownership, version, expiry, current source lifecycle,
+  immutable selection, and every byte hash before returning process-only material.
 - One workstation source model validates both claims and completion receipts;
   one Website normalizer validates both newly selected and queued source fields.
 - One direct session transport replaces hidden auth iframe/retry machinery.

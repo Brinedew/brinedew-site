@@ -184,3 +184,28 @@ test("invalid JSON and missing primary binding fail closed before generation wor
   assert.equal(missingDb.status, 500)
   assert.equal(calls.length, 0)
 })
+
+test("private lease material requires the generation capability and is never cached", async () => {
+  let reads = 0
+  const { handler } = fixture({
+    readGenerationMaterial: async (input) => {
+      reads++
+      assert.equal(input.leaseOwnerId, "owner_0001")
+      assert.equal(input.expectedLeaseVersion, 2)
+      return { prose: "private" }
+    },
+  })
+  const path = "/api/iconoplasm/authority/generation-leases/lease_token_0001/material"
+  const match = route("authority_generation_lease_material", { lease_token: "lease_token_0001" })
+  const body = { lease_owner_id: "owner_0001", expected_lease_version: 2 }
+  assert.equal(
+    (await handler({ match, request: request(path, body, ADMIN_TOKEN), env })).status,
+    401,
+  )
+  assert.equal(reads, 0)
+  const response = await handler({ match, request: request(path, body), env })
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("Cache-Control"), "private, no-store")
+  assert.deepEqual(await response.json(), { prose: "private" })
+  assert.equal(reads, 1)
+})

@@ -609,6 +609,16 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   }),
   iconoplasmApiContract({
     apiHandler: "manifestation_generation_executor",
+    id: "authority_generation_lease_material",
+    match: pattern(/^\/api\/iconoplasm\/authority\/generation-leases\/([^/]+)\/material$/, [
+      "lease_token",
+    ]),
+    methods: POST,
+    auth: "authority-generation-bearer",
+    budgetFamily: "authority_generation_executor",
+  }),
+  iconoplasmApiContract({
+    apiHandler: "manifestation_generation_executor",
     id: "authority_generation_lease_renew",
     match: pattern(/^\/api\/iconoplasm\/authority\/generation-leases\/([^/]+)\/renew$/, [
       "lease_token",

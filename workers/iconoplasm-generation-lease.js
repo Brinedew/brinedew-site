@@ -1,5 +1,6 @@
 import {
   IconoplasmGenerationSourceError,
+  readExactGenerationSource,
   requireExactGenerationProvenance,
 } from "./lib/iconoplasm-generation-provenance.js"
 
@@ -241,6 +242,36 @@ export async function claimExactGenerationLeases({
     lease_seconds: leaseDurationSeconds(leaseSeconds),
     leases: Object.freeze(leases),
   })
+}
+
+export async function readExactGenerationLeaseMaterial({
+  env,
+  leaseToken,
+  leaseOwnerId,
+  expectedLeaseVersion,
+  now = new Date(),
+  readSource = readExactGenerationSource,
+} = {}) {
+  const db = env?.ICONOPLASM_DB
+  requireDatabase(db)
+  const token = requiredId(leaseToken, "generation_lease_token")
+  const owner = requiredId(leaseOwnerId, "lease_owner_id")
+  const version = positiveInteger(expectedLeaseVersion, "expected_lease_version")
+  const row = await db
+    .prepare(
+      `SELECT request.* FROM icono_generation_execution_leases lease
+     JOIN icono_generation_requests request ON request.id = lease.request_row_id
+       AND request.generation_request_id = lease.generation_request_id
+     WHERE lease.lease_token = ? AND lease.lease_owner_id = ? AND lease.lease_version = ?
+       AND lease.status = 'active' AND lease.expires_at > ? AND request.status = 'open'`,
+    )
+    .bind(token, owner, version, clock(now).toISOString())
+    .first()
+  if (!row)
+    leaseError("GENERATION_LEASE_CAS_MISMATCH", "The generation lease expired or changed", 409)
+  // Resolve only persisted lease inputs. This rechecks active Website lineage,
+  // immutable selection and encrypted byte hashes without a full replica bootstrap.
+  return readSource(env, row)
 }
 
 export async function renewExactGenerationLease({
