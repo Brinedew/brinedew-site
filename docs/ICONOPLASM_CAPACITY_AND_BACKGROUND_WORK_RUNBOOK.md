@@ -470,17 +470,20 @@ Extension hover detail is immutable within a published card snapshot:
   coalesced idle writer reads, merges, stringifies, or writes the persistent
   cache; an old queued write cannot roll a newer snapshot backward;
 - HTML and PDF register recognized anchors with one tab-scoped reading session.
-  The `document_end` entrypoint yields through a paint boundary and genuine idle
-  time before using a validated local scanner. This cache-only path performs no
+  The `document_end` entrypoint yields through a paint boundary and, before load,
+  genuine idle time before using a validated local scanner. This cache-only path performs no
   network, refresh, legacy migration, renderer boot, or persistent portrait hydration.
   A missing/incompatible scanner still waits for host `load` before downloading.
-  Initial and mutation-driven recognition run in bounded idle slices, with a
+  Initial and mutation-driven recognition run in bounded cooperative slices, with a
   4 ms wall-time budget between nodes and no forced idle timeout before load.
   Matcher construction also yields in genuine idle time, targeting 8 ms
   per turn with clock checks every 32 tokens. After load, required recognition
-  callbacks have a 100 ms idle deadline; a timed-out scan advances one text node
-  and matcher construction advances one 32-token chunk. Pending pre-load callbacks
-  are re-armed at load. This deadline does not apply to speculative card work.
+  callbacks use bounded 4 ms tasks, with matcher clock checks every 32 tokens,
+  and yield to the event loop between slices. Advancing just one node or token
+  chunk per idle timeout can stretch startup into minutes on a busy chat page;
+  a bounded task preserves rendering opportunities while completing required
+  local work. Pending pre-load idle callbacks are canceled and requeued as tasks
+  at load. Speculative card work retains its separate genuine-idle gate.
   Mutation arrivals during an active cooperative scan stay queued until its
   completion schedules the next flush; an overlapping timer must not latch the
   queue permanently. Article/main roots precede navigation;

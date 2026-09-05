@@ -209,7 +209,6 @@
       options.requestIdleCallback || windowRef.requestIdleCallback?.bind(windowRef)
     const setTimeoutFn =
       options.setTimeoutFn || windowRef.setTimeout?.bind(windowRef) || root.setTimeout
-    const timeoutMs = Math.max(1, Number(options.idleTimeoutMs || 100))
     let generation = 0
     let idleId
     let finished = false
@@ -221,18 +220,16 @@
         windowRef.removeEventListener?.("load", afterLoad)
         task(deadline)
       }
-      if (requestIdle) {
-        idleId = requestIdle(
-          run,
-          documentRef?.readyState === "complete" ? { timeout: timeoutMs } : undefined,
-        )
-      } else setTimeoutFn(() => run(null), 16)
+      if (documentRef?.readyState === "complete") setTimeoutFn(() => run(null), 0)
+      else if (requestIdle) idleId = requestIdle(run)
+      else setTimeoutFn(() => run(null), 16)
     }
     const afterLoad = () => {
       if (finished) return
       if (idleId !== undefined) windowRef.cancelIdleCallback?.(idleId)
-      // A callback queued before load had no deadline. Re-arm it now rather
-      // than leaving startup or an in-flight scan stranded indefinitely.
+      // Once load completes this is required, bounded local work. Yield a task
+      // between slices, rather than waiting for idle time that busy chat pages
+      // may never offer. Speculative downloads retain their separate idle gate.
       queue()
     }
     if (requestIdle && documentRef?.readyState !== "complete")
