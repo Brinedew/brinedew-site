@@ -130,6 +130,14 @@ export function installReaderProbe() {
   document.addEventListener("pointerover", pointer, true)
   function frame(now) {
     if (!active) return
+    let inspected = 0
+    for (const range of globalThis.CSS?.highlights?.get("iconoplasm-gene-ranges") || []) {
+      if (++inspected > 1024) break
+      const symbol = range.toString().trim().toUpperCase()
+      if (!symbol || symbol.length > 64 || Object.keys(highlights).length >= 256) continue
+      if (!(symbol in highlights)) highlights[symbol] = epoch()
+      firstHighlightAt ??= epoch()
+    }
     if (lastFrame && document.visibilityState === "visible")
       maxFrameGap = Math.max(maxFrameGap, now - lastFrame)
     lastFrame = now
@@ -245,13 +253,13 @@ async function openDiagnostics(page) {
       })
       probeScriptId = installed.identifier
     },
-    async inspect(symbol) {
+    async inspect(symbol, occurrence = 0) {
       for (const context of contexts.values()) {
         // Reading the hook in each world does not execute extension work.
         try {
           const response = await session.send("Runtime.evaluate", {
             contextId: context.id,
-            expression: `globalThis.IconoplasmReaderDiagnostics?.inspect(${JSON.stringify(symbol)}) ?? null`,
+            expression: `globalThis.IconoplasmReaderDiagnostics?.inspect(${JSON.stringify(symbol)}, ${JSON.stringify(occurrence)}) ?? null`,
             returnByValue: true,
           })
           if (response.result?.value) return response.result.value
@@ -322,6 +330,53 @@ export function locateReaderPointerTarget(element) {
   return { error: "target-obscured-or-outside-viewport", obstructions }
 }
 
+// Diagnostics provide only a bounded source address. Actual scrolling and
+// pointer movement remain normal browser actions, not extension activation.
+export function locateReaderRangeTarget(reference) {
+  let node = document.documentElement
+  for (const index of reference.path) node = node?.childNodes[index]
+  if (node?.nodeType !== 3 || node.data.slice(reference.start, reference.end) !== reference.label)
+    return { error: "recognized-source-changed", obstructions: [] }
+  const range = document.createRange()
+  range.setStart(node, reference.start)
+  range.setEnd(node, reference.end)
+  if (reference.reveal) {
+    for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent)
+      if (!/(auto|scroll)/.test(style.overflowX + style.overflowY)) continue
+      const box = parent.getBoundingClientRect()
+      const target = range.getBoundingClientRect()
+      if (
+        parent.scrollHeight > parent.clientHeight &&
+        (target.top < box.top || target.bottom > box.bottom)
+      )
+        parent.scrollTop += target.top + target.height / 2 - (box.top + parent.clientHeight / 2)
+      if (
+        parent.scrollWidth > parent.clientWidth &&
+        (target.left < box.left || target.right > box.right)
+      )
+        parent.scrollLeft += target.left + target.width / 2 - (box.left + parent.clientWidth / 2)
+    }
+    const rect = range.getBoundingClientRect()
+    if (rect.top < 0 || rect.bottom > innerHeight)
+      scrollBy(0, rect.top + rect.height / 2 - innerHeight / 2)
+    if (rect.left < 0 || rect.right > innerWidth)
+      scrollBy(rect.left + rect.width / 2 - innerWidth / 2, 0)
+    return { revealed: true }
+  }
+  const obstructions = []
+  for (const rect of [...range.getClientRects()].sort((a, b) => b.width - a.width)) {
+    const x = rect.left + rect.width / 2
+    const y = rect.top + rect.height / 2
+    if (!rect.width || !rect.height || x < 0 || y < 0 || x >= innerWidth || y >= innerHeight)
+      continue
+    const hit = document.elementFromPoint(x, y)
+    if (hit === node.parentElement || node.parentElement.contains(hit)) return { x, y }
+    obstructions.push(hit?.tagName || "outside-viewport")
+  }
+  return { error: "target-obscured-or-outside-viewport", obstructions }
+}
+
 export async function measureHover(page, diagnostics, sample) {
   const selector = `.iconoplasm-gene[data-gene="${sample.symbol}"], .iconoplasm-pdf-hit-anchor[data-gene="${sample.symbol}"]`
   if (!/^[A-Z0-9-]{1,64}$/.test(sample.symbol)) throw new Error("Invalid benchmark symbol")
@@ -331,17 +386,49 @@ export async function measureHover(page, diagnostics, sample) {
     await page.mouse.move(2, 2)
     await page.waitForTimeout(180)
     const target = page.locator(selector).nth(sample.occurrence || 0)
-    await target.waitFor({ state: "attached", timeout: READER_BUDGETS.highlightTimeoutMs })
-    await target.scrollIntoViewIfNeeded({ timeout: timeoutMs })
+    const highlightDeadline = Date.now() + READER_BUDGETS.highlightTimeoutMs
+    let initial = await diagnostics.inspect(sample.symbol, sample.occurrence || 0)
+    while (!initial && Date.now() < highlightDeadline) {
+      await page.waitForTimeout(20)
+      initial = await diagnostics.inspect(sample.symbol, sample.occurrence || 0)
+    }
+    if (!initial) throw new Error("Installed extension lacks reader diagnostics")
+    let rangeReference = null
+    if (initial?.highlightTransport === "range") {
+      while (!initial?.highlight && Date.now() < highlightDeadline) {
+        await page.waitForTimeout(20)
+        initial = await diagnostics.inspect(sample.symbol, sample.occurrence || 0)
+      }
+      rangeReference = initial?.highlight
+      if (!rangeReference) throw new Error("Recognized source range did not appear")
+      const revealed = await page.evaluate(locateReaderRangeTarget, {
+        ...rangeReference,
+        reveal: true,
+      })
+      if (revealed.error) throw new Error(revealed.error)
+      // Wait only for the highlight, exactly as the legacy anchor wait above.
+      // Never use portrait readiness as the start of the fixed prediction lead.
+      while (
+        !(await diagnostics.inspect(sample.symbol, sample.occurrence || 0))?.highlight?.rendered
+      ) {
+        if (Date.now() > highlightDeadline) throw new Error("Recognized range was not painted")
+        await page.waitForTimeout(20)
+      }
+    } else {
+      await target.waitFor({ state: "attached", timeout: READER_BUDGETS.highlightTimeoutMs })
+      await target.scrollIntoViewIfNeeded({ timeout: timeoutMs })
+    }
     const visibleAt = await page.evaluate(() => performance.timeOrigin + performance.now())
     // Fixed lead time, NEVER waitFor(isReady): failures must remain measurable.
     await page.waitForTimeout(sample.leadMs ?? 0)
-    record.before = await diagnostics.inspect(sample.symbol)
+    record.before = await diagnostics.inspect(sample.symbol, sample.occurrence || 0)
     if (!record.before)
       throw new Error(
         "Installed extension lacks reader diagnostics; rebuild/reload its validation package",
       )
-    const point = await target.evaluate(locateReaderPointerTarget)
+    const point = rangeReference
+      ? await page.evaluate(locateReaderRangeTarget, record.before.highlight || rangeReference)
+      : await target.evaluate(locateReaderPointerTarget)
     if (point.error) throw new Error(`${point.error}: ${point.obstructions.join(", ")}`)
     const before = await page.evaluate(() => globalThis.__iconoplasmReaderProbe.snapshot())
     record.highlightAfterLoadMs =

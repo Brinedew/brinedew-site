@@ -1,21 +1,16 @@
 ;(function (root) {
   "use strict"
 
-  // ARCHITECTURE FENCE [IPD-008]: recognition mutates host DOM only in
-  // bounded cooperative slices so extension work cannot monopolize rendering.
+  // ARCHITECTURE FENCE [IPD-008]: bounded recognition leaves host Text objects
+  // intact. Range decorations paint without replacing framework content.
 
   function createPageScanner(options = {}) {
     const documentRef = options.documentRef || root.document
     const windowRef = options.windowRef || documentRef?.defaultView || root
     const nodeFilter = options.nodeFilter || root.NodeFilter
     const skipTags = options.skipTags || new Set()
-    const placeholderColor = options.placeholderColor || "#6B6B78"
     const getMatcher = typeof options.getMatcher === "function" ? options.getMatcher : () => null
-    const getGeneMap = typeof options.getGeneMap === "function" ? options.getGeneMap : () => null
-    const applyHighlightStyle =
-      typeof options.applyHighlightStyle === "function" ? options.applyHighlightStyle : () => {}
-    const registerGeneAnchor =
-      typeof options.registerGeneAnchor === "function" ? options.registerGeneAnchor : () => {}
+    const annotations = options.annotations
 
     function isEditableTextSurface(element) {
       if (!element || typeof element.closest !== "function") return false
@@ -39,48 +34,16 @@
 
     function processTextNode(textNode) {
       // A queued node can move into an extension/editable surface between slices.
-      if (acceptScanNode(textNode) !== nodeFilter.FILTER_ACCEPT) return 0
+      if (acceptScanNode(textNode) !== nodeFilter.FILTER_ACCEPT) {
+        annotations.remove(textNode)
+        return 0
+      }
       const text = String((textNode && textNode.textContent) || "")
       const matcher = getMatcher()
       if (!text || !matcher || typeof matcher.findMatches !== "function") return 0
 
       const matches = matcher.findMatches(text)
-      if (!matches.length) return 0
-
-      const geneMap = getGeneMap() || {}
-      const fragment = documentRef.createDocumentFragment()
-      let cursor = 0
-      for (const match of matches) {
-        const index = Number(match && match.index) || 0
-        const length = Number(match && match.length) || 0
-        const symbol = String((match && match.symbol) || "").trim()
-        if (!symbol || length <= 0) continue
-        if (index > cursor) {
-          fragment.appendChild(documentRef.createTextNode(text.slice(cursor, index)))
-        }
-        const span = documentRef.createElement("span")
-        span.className = "iconoplasm-gene"
-        span.dataset.geneLabel = text.slice(index, index + length)
-
-        const copy = documentRef.createElement("span")
-        copy.className = "iconoplasm-gene-copy"
-        copy.setAttribute("data-icono-rough-copy", "true")
-        copy.textContent = span.dataset.geneLabel
-        span.appendChild(copy)
-
-        const gene = geneMap[symbol] || {}
-        applyHighlightStyle(span, symbol, gene.c || placeholderColor)
-        registerGeneAnchor(span)
-        fragment.appendChild(span)
-        cursor = index + length
-      }
-
-      if (cursor < text.length) {
-        fragment.appendChild(documentRef.createTextNode(text.slice(cursor)))
-      }
-      if (!textNode.parentNode) return 0
-      textNode.parentNode.replaceChild(fragment, textNode)
-      return matches.length
+      return annotations.update(textNode, matches)
     }
 
     function scanPage(rootNode) {
@@ -105,7 +68,6 @@
 
       const maxNodesPerSlice = Math.max(1, Number(cooperativeOptions.maxNodesPerSlice || 64))
       const minTimeRemainingMs = Math.max(0, Number(cooperativeOptions.minTimeRemainingMs ?? 2))
-      const idleTimeoutMs = Math.max(250, Number(cooperativeOptions.idleTimeoutMs || 2000))
       const requestIdle =
         cooperativeOptions.requestIdleCallback ||
         (typeof windowRef?.requestIdleCallback === "function"
@@ -129,18 +91,12 @@
 
       return new Promise((resolve) => {
         const scheduleSlice = () => {
-          if (requestIdle) {
-            // The timeout guarantees eventual recognition on continuously busy
-            // pages. A timed-out callback reports no idle budget, so runSlice
-            // deliberately advances only one text node before yielding again.
-            // Before host load there is no forced progress: genuine idle only.
-            requestIdle(
-              runSlice,
-              documentRef.readyState === "complete" ? { timeout: idleTimeoutMs } : undefined,
-            )
-            return
-          }
-          setTimeoutFn(() => runSlice(null), 16)
+          root.IconoplasmContentLifecycle.scheduleRecognitionWork(runSlice, {
+            documentRef,
+            windowRef,
+            requestIdleCallback: requestIdle,
+            setTimeoutFn,
+          })
         }
         const runSlice = (deadline) => {
           let processed = 0
@@ -157,14 +113,14 @@
             nextNode &&
             processed < maxNodesPerSlice &&
             now() - startedAt < 4 &&
-            (processed === 0 ||
+            (documentRef.readyState === "complete" ||
+              processed === 0 ||
               !deadline ||
               typeof deadline.timeRemaining !== "function" ||
               deadline.timeRemaining() > minTimeRemainingMs)
           ) {
             const textNode = nextNode
-            // Advance before replacing the current text node so TreeWalker never
-            // has to resume from a node that the extension removed.
+            // Keep traversal state local to this slice; painting is separately queued.
             nextNode = walker.nextNode()
             wrappedCount += processTextNode(textNode)
             processed += 1

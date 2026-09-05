@@ -436,17 +436,24 @@
     const steps = createGeneMatcherSteps(geneMap, options)
     return new Promise((resolve, reject) => {
       const schedule = () => {
-        if (windowRef.requestIdleCallback) windowRef.requestIdleCallback(run)
-        else windowRef.setTimeout(() => run(null), 16)
+        root.IconoplasmContentLifecycle.scheduleRecognitionWork(run, { windowRef })
       }
       const run = (deadline) => {
         try {
           const now = () => windowRef.performance?.now?.() ?? Date.now()
           const start = now()
           let count = 0
+          const loaded = windowRef.document?.readyState === "complete"
+          const sliceBudgetMs = loaded ? 4 : 8
+          // Required startup cannot pay a scheduling delay for each 32-token
+          // chunk: on busy chat pages that stretches a small build into minutes.
+          // Use at most 4 ms per yielding task after load, without an idle gate.
           // Stay below half a 60-Hz frame and stop earlier if idle time runs out.
           // Smaller quanta pay Chrome's idle rescheduling gap for every chunk.
-          while (now() - start < 8 && (!deadline || deadline.timeRemaining() > 2)) {
+          while (
+            now() - start < sliceBudgetMs &&
+            (loaded || !deadline || deadline.timeRemaining() > 2)
+          ) {
             // Checking the clock for each trie character/token costs more than
             // inserting it. Amortize checks over a bounded 32-token chunk.
             do {
