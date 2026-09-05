@@ -750,9 +750,24 @@ function projectionRetryAt(attempts, now) {
 
 async function pendingProjectionEvents(authoringDb, { limit, now, priorityEventId = null }) {
   const priority = String(priorityEventId || "").trim()
+  if (priority) {
+    // Accepted-event delivery owns this exact event. The projector independently
+    // reads the authoritative current head and cannot rewind it. Do not sort
+    // or drain the unrelated backlog while handling a single accepted command.
+    const row = await authoringDb
+      .prepare(
+        `SELECT event_uuid, event_sequence, gene_id, gene_revision, payload_json,
+              projection_status, projection_attempts
+         FROM icono_manifestation_events
+        WHERE event_uuid = ? AND projection_status IN ('pending', 'failed')`,
+      )
+      .bind(priority)
+      .first()
+    return row ? [row] : []
+  }
   const response = await authoringDb
     .prepare(
-      `SELECT event_uuid, event_sequence, gene_id, payload_json,
+      `SELECT event_uuid, event_sequence, gene_id, gene_revision, payload_json,
               projection_status, projection_attempts
          FROM icono_manifestation_events AS candidate
         WHERE candidate.projection_status IN ('pending', 'failed')
@@ -787,22 +802,28 @@ function projectionEnvelope(row) {
   return {
     event_id: requiredText(row?.event_uuid, "event.event_id"),
     event_sequence: positiveVersion(row?.event_sequence, "event.event_sequence"),
+    gene_revision: positiveVersion(row?.gene_revision, "event.gene_revision"),
     gene_id: requiredText(row?.gene_id, "event.gene_id"),
     payload,
   }
 }
 
 async function markProjectionPublished(authoringDb, envelope) {
+  // UNIQUE(gene_id, gene_revision) bounds this numeric interval to 250 rows,
+  // regardless of event history length or gaps in global event sequences.
+  // Older pending records remain durable for the scheduled recovery pass.
+  const revision = positiveVersion(envelope.gene_revision, "event.gene_revision")
   await authoringDb
     .prepare(
       `UPDATE icono_manifestation_events
+          INDEXED BY sqlite_autoindex_icono_manifestation_events_3
           SET projection_status = 'published',
               projection_attempts = projection_attempts + CASE WHEN event_uuid = ? THEN 1 ELSE 0 END,
               projection_next_attempt_at = NULL
-        WHERE gene_id = ? AND event_sequence <= ?
+        WHERE gene_id = ? AND gene_revision BETWEEN ? AND ?
           AND projection_status IN ('pending', 'failed')`,
     )
-    .bind(envelope.event_id, envelope.gene_id, envelope.event_sequence)
+    .bind(envelope.event_id, envelope.gene_id, Math.max(1, revision - 249), revision)
     .run()
 }
 

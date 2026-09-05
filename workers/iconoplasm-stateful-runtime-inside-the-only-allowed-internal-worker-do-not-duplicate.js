@@ -1,5 +1,11 @@
 import puppeteer from "@cloudflare/puppeteer"
 import { readSyncFinalizationSummary } from "./iconoplasm/sync-finalization-summary.js"
+import {
+  createOperationCostAuthority,
+  OPERATION_COST_ROUTE_PREFIX,
+} from "./iconoplasm/operation-cost-http.js"
+import { isReplicaCostRoute } from "./iconoplasm/operation-cost-replica-adapter.js"
+import { forwardReplicaCostRequest } from "./iconoplasm/operation-cost-replica-gateway.js"
 import { prepareGeneEssenceUpsertStatement } from "./lib/iconoplasm-essence-write.js"
 import { d1OperationalAllowance } from "../shared/iconoplasm-d1-budget-policy.js"
 import {
@@ -49,7 +55,10 @@ import {
   assertExactGenerationLeaseExecution,
   completeExactGenerationLease,
 } from "./iconoplasm-generation-lease.js"
-import { authorizeIconoplasmAuthorityGenerationBearer } from "./iconoplasm-authority-service-auth.js"
+import {
+  authorizeIconoplasmAuthorityGenerationBearer,
+  authorizeIconoplasmAuthorityReplicaBearer,
+} from "./iconoplasm-authority-service-auth.js"
 import { createIconoplasmGenerationExecutorHandler } from "./iconoplasm-generation-executor-routes.js"
 import { claimValidatedGenerationRequests } from "./iconoplasm-generation-claim.js"
 import { hydratePublicCanonicalGeneRecords } from "./iconoplasm-public-canonical-runtime.js"
@@ -86,7 +95,6 @@ import { createIconoplasmManifestationAuthorityRuntimeHandler } from "./iconopla
 import {
   forwardManifestationCutoverActionToCoordinator,
   IconoplasmManifestationCutoverCoordinator,
-  isManifestationCutoverRouteRequest,
 } from "./iconoplasm/caretaker/manifestation-cutover-durable-coordinator.js"
 export { IconoplasmManifestationCutoverCoordinator }
 import { authorityError } from "./iconoplasm/caretaker/manifestation-authority-contract.js"
@@ -1702,6 +1710,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   }
   if (
     family === "admin_votes" ||
+    family === "admin_cost_operation_admission" ||
     family === "admin_blots_backlog" ||
     family === "admin_gallery" ||
     family === "admin_gallery_mutation" ||
@@ -18112,10 +18121,23 @@ function isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error) {
 }
 
 export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
-  constructor(state) {
+  constructor(state, env = {}) {
     this.state = state
+    this.operationCosts = createOperationCostAuthority(state.storage, env, {
+      onAuthorityEvent: (event, scopedEnv) =>
+        projectAcceptedManifestationAuthorityEvent(scopedEnv, event),
+      readOtherUsage: (day) => {
+        const usage = this.usageRow(day)
+        return {
+          rows_read: usage?.rows_read ?? 0,
+          rows_written: usage?.rows_written ?? 0,
+          requests: usage?.request_count ?? 0,
+        }
+      },
+    })
     this.state.blockConcurrencyWhile(async () => {
       try {
+        this.operationCosts.initialize()
         // The budget ledger lives in a single durable object so all isolates spend
         // from one shared counter. Module-memory counters were exactly the kind of
         // fake safety that let the old model explode financially.
@@ -18623,6 +18645,12 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
 
   async fetch(request) {
     const url = new URL(request.url)
+    if (
+      url.pathname === OPERATION_COST_ROUTE_PREFIX ||
+      url.pathname.startsWith(OPERATION_COST_ROUTE_PREFIX + "/")
+    ) {
+      return this.operationCosts.fetch(request)
+    }
     if (request.method !== "POST") {
       return Response.json({ error: "Method not allowed" }, { status: 405 })
     }
@@ -31985,6 +32013,53 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
     }
     handledRouteForAttribution = true
 
+    if (
+      path === OPERATION_COST_ROUTE_PREFIX ||
+      path.startsWith(OPERATION_COST_ROUTE_PREFIX + "/")
+    ) {
+      // Token authentication costs no D1 query. Missing predictions must reach
+      // the authority before any application database work can occur.
+      const costPrincipal = hasAdminToken(request, env)
+        ? "admin"
+        : (await authorizeIconoplasmAuthorityReplicaBearer(request, env)).authorized
+          ? "replica"
+          : null
+      if (!costPrincipal) {
+        responseStatus = 403
+        return json({ error: "Unauthorized" }, 403, { "Cache-Control": "no-store" })
+      }
+      const costAuthority = iconoplasmD1DailyBudgetKillSwitchStub(env)
+      if (!costAuthority) {
+        responseStatus = 503
+        return json({ code: "COST_AUTHORITY_UNAVAILABLE" }, 503, { "Cache-Control": "no-store" })
+      }
+      const costRequest = new Request(request)
+      costRequest.headers.set("x-iconoplasm-cost-principal", costPrincipal)
+      const response = await costAuthority.fetch(costRequest)
+      responseStatus = response.status
+      return response
+    }
+
+    // ARCHITECTURE FENCE [IPD-012]: the admission code can be activated before
+    // its reviewed schema changes, but application requests cannot race them.
+    if (env.ICONOPLASM_SCHEMA_TRANSITION === "1") {
+      responseStatus = 503
+      return json({ code: "ICONOPLASM_SCHEMA_TRANSITION" }, 503, {
+        "Cache-Control": "no-store",
+        "Retry-After": "60",
+      })
+    }
+
+    if (isReplicaCostRoute(request.method, path)) {
+      const response = await forwardReplicaCostRequest(
+        request,
+        env,
+        iconoplasmD1DailyBudgetKillSwitchStub(env),
+      )
+      responseStatus = response.status
+      return response
+    }
+
     meteredEnv = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request)
 
     if (
@@ -32545,15 +32620,6 @@ async function resolveActiveCaretakerAccountSession(request, env) {
   return Object.freeze({ account_id: accountId })
 }
 
-function scheduleIconoplasmAuthorityProjectionRecovery(ctx, env) {
-  if (typeof ctx?.waitUntil !== "function") return
-  ctx.waitUntil(
-    drainIconoplasmAuthorityProjectionOutboxes(env, { limit: 10 }).catch((error) => {
-      console.error("[ICONOPLASM_AUTHORITY_PROJECTION_RETRY]", error)
-    }),
-  )
-}
-
 const handleIconoplasmGenerationExecutorRoute = createIconoplasmGenerationExecutorHandler({
   authorizeGenerationBearer: authorizeIconoplasmAuthorityGenerationBearer,
   claimGenerationLeases: generationRequestLeaseClaim,
@@ -32566,24 +32632,13 @@ const handleIconoplasmGenerationExecutorRoute = createIconoplasmGenerationExecut
 async function handleDeclaredManifestationAuthorityRoute({ request, env, ctx, done }) {
   const coordinated = await forwardManifestationCutoverActionToCoordinator(request, env)
   if (coordinated) return done("manifestation_authority_cutover_coordinator", coordinated)
-  const isCutoverRoute = isManifestationCutoverRouteRequest(request)
-  // Cutover actions own their exact shadow-frozen projector. Starting the
-  // ordinary authoritative outbox drainer beside every migration request only
-  // emits guaranteed MANIFESTATION_AUTHORITY_NOT_WRITABLE failures and can
-  // multiply background work across all migration lanes.
-  if (!isCutoverRoute) scheduleIconoplasmAuthorityProjectionRecovery(ctx, env)
+  // Accepted writes wake their exact event below; the scheduled outbox retry
+  // preserves recovery after failure. Reads and unauthenticated requests must
+  // not start an unrelated database repair pass outside their admission.
   const handler = createIconoplasmManifestationAuthorityRuntimeHandler({
     env,
     resolveSession: resolveActiveCaretakerAccountSession,
-    onAuthorityEvent: async (event) => {
-      const result = await drainIconoplasmManifestationAuthorityProjection(env, 50, {
-        priorityEventId: event.event_id,
-      })
-      const accepted = result.results.find((item) => item.event_id === event.event_id)
-      if (accepted?.status !== "published") {
-        throw new Error("Accepted manifestation authority event remains pending")
-      }
-    },
+    onAuthorityEvent: (event) => projectAcceptedManifestationAuthorityEvent(env, event),
     onIntegrityFailure: async (failure) => {
       console.error("[ICONOPLASM_AUTHORITY_BODY_INTEGRITY]", failure)
     },
@@ -32594,12 +32649,21 @@ async function handleDeclaredManifestationAuthorityRoute({ request, env, ctx, do
   return done("manifestation_authority", response)
 }
 
+async function projectAcceptedManifestationAuthorityEvent(env, event) {
+  const result = await drainIconoplasmManifestationAuthorityProjection(env, 1, {
+    priorityEventId: event.event_id,
+  })
+  const accepted = result.results.find((item) => item.event_id === event.event_id)
+  if (accepted?.status !== "published") {
+    throw new Error("Accepted manifestation authority event remains pending")
+  }
+}
+
 const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
   caretaker_manifestations: handleDeclaredManifestationAuthorityRoute,
   manifestation_authority_sync: handleDeclaredManifestationAuthorityRoute,
   manifestation_authority_service: handleDeclaredManifestationAuthorityRoute,
   manifestation_generation_executor: async ({ match, request, env, ctx, done }) => {
-    scheduleIconoplasmAuthorityProjectionRecovery(ctx, env)
     const response = await handleIconoplasmGenerationExecutorRoute({ match, request, env, ctx })
     return done("manifestation_generation_executor", response)
   },
@@ -32707,7 +32771,7 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     json,
     resolveActiveAccount: resolveActiveCaretakerAccountSession,
     wakeAuthorityProjection: (env, event) =>
-      drainIconoplasmManifestationAuthorityProjection(env, 50, {
+      drainIconoplasmManifestationAuthorityProjection(env, event?.event_id ? 1 : 50, {
         priorityEventId: event?.event_id || null,
       }),
   }),

@@ -1673,7 +1673,7 @@ function authorityLaneRequest() {
   )
 }
 
-test("authority workstation lane routes through the daily budget ledger while read-only admin stays unmetered", async () => {
+test("unauthenticated replica reads stop before budget or database work", async () => {
   const env = authorityLaneEnv()
   const budgetNamespace = env.ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE
   const db = env.ICONOPLASM_DB
@@ -1683,30 +1683,29 @@ test("authority workstation lane routes through the daily budget ledger while re
     })
 
   const authorityResponse = await run(authorityLaneRequest())
-  assert.ok(
-    Number.isInteger(authorityResponse.status) && authorityResponse.status >= 200,
-    `authority lane must produce a handled response, got ${authorityResponse.status}`,
-  )
+  assert.equal(authorityResponse.status, 401)
+  assert.equal(db.calls.length, 0)
 
   const snapshotCalls = budgetNamespace.calls.filter((call) => call.pathname === "/snapshot")
-  assert.equal(snapshotCalls.length, 1, "the authority lane must snapshot the shared day ledger")
+  assert.equal(snapshotCalls.length, 0, "authentication must precede budget work")
 
   const adminResponse = await run(adminSummaryRequest())
   assert.equal(adminResponse.status, 200)
   assert.equal(
     budgetNamespace.calls.filter((call) => call.pathname === "/snapshot").length,
-    1,
+    0,
     "read-only admin summaries must stay unmetered",
   )
   assert.ok(db.calls.filter((call) => call.type === "first").length >= 1)
 })
 
-test("authority workstation lane fails closed when the shared daily budget is exhausted", async () => {
+test("replica reads without a prediction stop before D1 even on an exhausted day", async () => {
   const env = authorityLaneEnv({
     ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "2",
   })
   const budgetNamespace = env.ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE
   const db = env.ICONOPLASM_DB
+  env.ICONOPLASM_AUTHORITY_REPLICA_TOKEN = "replica-secret"
   const todayKey = new Date().toISOString().slice(0, 10)
   budgetNamespace.dayRows.set(todayKey, {
     day_key: todayKey,
@@ -1718,16 +1717,18 @@ test("authority workstation lane fails closed when the shared daily budget is ex
     updated_at: new Date().toISOString(),
   })
 
+  const request = authorityLaneRequest()
+  request.headers.set("Authorization", "Bearer replica-secret")
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      authorityLaneRequest(),
+      request,
       env,
       { waitUntil() {} },
     )
 
-  assert.equal(response.status, 503)
+  assert.equal(response.status, 428)
   const payload = await response.json()
-  assert.equal(payload.code, "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED")
+  assert.equal(payload.error.code, "COST_PREDICTION_NOT_REGISTERED")
   assert.equal(db.calls.length, 0, "the exhausted day must stop authority D1 work before it starts")
 })
 

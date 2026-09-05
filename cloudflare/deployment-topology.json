@@ -32,6 +32,15 @@
     "serviceBindingHopForNormalPublicReads": false
   },
   "extractionRoot": "workers/iconoplasm",
+  "operationCostAuthority": {
+    "architectureFence": "IPD-012",
+    "routePrefix": "/api/iconoplasm/admin/cost/operations",
+    "owner": "geneguessr-api",
+    "durableObjectClass": "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate",
+    "durableObjectId": "global",
+    "addsWorkerOrNamespace": false,
+    "publicReaderCoordination": false
+  },
   "naming": {
     "protectedPrefix": "the-only-allowed-",
     "protectedSuffix": "-do-not-duplicate",

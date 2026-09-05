@@ -1,0 +1,16 @@
+{
+  "schema": "iconoplasm.migrationCostPlan.v1",
+  "inventory_prediction": { "rows_read": 600, "rows_written": 0, "requests": 1 },
+  "migrations": {
+    "iconoplasm/0094_finalization_summary.sql": {
+      "adapter_id": "iconoplasm-migration-0094",
+      "arguments": { "max_rows": 19024, "max_unfinished": 0 },
+      "prediction": { "rows_read": 100000, "rows_written": 10000, "requests": 1 }
+    },
+    "iconoplasm-authoring/0012_streamed_replica_snapshots.sql": {
+      "adapter_id": "iconoplasm-authoring-migration-0012",
+      "arguments": { "max_leases": 16, "max_schema_rows": 256 },
+      "prediction": { "rows_read": 1300, "rows_written": 24, "requests": 1 }
+    }
+  }
+}

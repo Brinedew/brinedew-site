@@ -479,7 +479,8 @@ test("IPD-012 keeps one encrypted manifestation command authority", () => {
     /Production and staging use four different authoring and backup zones/,
   )
   assert.match(fence.decision, /verifiably deleted 30 days after plaintext retirement/)
-  assert.match(deploy, /d1 migrations apply iconoplasm-authoring --remote/)
+  assert.match(deploy, /node scripts\/run-admitted-d1-migrations\.mjs/)
+  assert.doesNotMatch(deploy, /wrangler d1 migrations apply/)
   assert.match(product, /Website authoring authority owns/)
   assert.match(product, /workstation is a replica/)
   assert.match(storage, /AccessKey/)

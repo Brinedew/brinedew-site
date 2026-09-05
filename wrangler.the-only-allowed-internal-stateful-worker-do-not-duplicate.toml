@@ -216,6 +216,7 @@ destination_address = "brinedew@proton.me"
 allowed_sender_addresses = ["noreply@brinedew.bio", "contact@brinedew.bio"]
 
 [vars]
+ICONOPLASM_SCHEMA_TRANSITION = "0"
 # Billing guardrail model:
 # 1) hard monthly stop near the included PAYGO allowance, and
 # 2) smart daily allowance derived from monthly remaining budget and days left in
