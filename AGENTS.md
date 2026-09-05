@@ -280,7 +280,17 @@ must not remain "ready" after image eviction or partial failure. No wait-until-w
 timing, silently skipped browser failures, or hidden replacement browser.
 Initial and mutation-driven
 recognition scans must run in bounded cooperative slices; extension DOM work must not
-monopolize the host page's rendering turn. The content entrypoint uses `document_end`,
+monopolize the host page's rendering turn.
+HTML highlighting must retain each host Text object's identity, parent, and contents.
+Streaming frameworks can keep and update those objects after a scan. Use native ranges
+and paint-only backgrounds on the page's existing surfaces; never split, move, replace,
+hide, or redraw the host glyphs. Decorations and source text must share browser scrolling.
+Range painting yields between matches under the same 4 ms/pre-load-idle contract,
+preserves the four highlight modes and native selection, and removes stale ranges on
+text changes, removal, or movement into an editable surface. Inventory recognized symbols
+independently of painting; HTML and PDF still use one session. HTML range anchors observe
+their actual source parents, with shared observer ownership for multiple ranges.
+The content entrypoint uses `document_end`,
 then yields through a paint boundary and, before load, genuine idle time. Only a validated local
 scanner may initialize before host `load`; cache-only means no network, refresh,
 legacy migration, renderer boot, or persistent portrait hydration. Cold scanner
