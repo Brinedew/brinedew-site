@@ -30,6 +30,11 @@ identity when a file is moved back to a shared workers root, and put an
 explicit version on serialized contracts. Responsibility names supplement the
 protective prefix/suffix; they never replace it.
 
+Caretaker snapshot transport is explicitly v2: stream immutable metadata under a
+signed prefix cursor, never recreate per-consumer snapshot payload copies or a
+background build poller. Completion requires the terminal signed chain proof.
+Keep migration, workstation client, protocol tests and authority runbook coherent.
+
 ## Required checks
 
 Run `pnpm run validate:iconoplasm-topology` and the focused cold-path tests

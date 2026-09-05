@@ -7,7 +7,6 @@ import {
   createManifestationAuthorityRouteHandler,
   createManifestationAuthorityServiceHandler,
   createCaretakerManifestationHttpHandler,
-  computeManifestationSnapshotChainHash,
   offerCaretakerAssignment,
   projectAuthorityAccountStatus,
   registerAuthorityAccount,
@@ -21,6 +20,7 @@ import {
   transitionCaretakerAssignment,
 } from "./manifestation-authority.js"
 import { prepareManifestationTagsPayload } from "./manifestation-tags-payload.js"
+import { advanceManifestationSnapshotChain as computeManifestationSnapshotChainHash } from "./manifestation-snapshot-hash.js"
 import { encryptManifestationProse } from "../../lib/iconoplasm-manifestation-body-crypto.js"
 import {
   createManifestationBodyObjectKey,
@@ -715,6 +715,7 @@ test("caretaker browser routes persist manual Tags on the exact autosaved revisi
     browserRequest(`${base}/revisions/${revisionId}/tags-derivatives`, {
       command_id: "browser_tags_submit_7011",
       tags_text: "red coat, careful gaze",
+      fields_json: { outfit: ["red coat"], face: ["careful gaze"], custom_category: [] },
       expected_gene_revision: row(
         context.db,
         "SELECT gene_revision FROM icono_manifestation_heads WHERE gene_id = ?",
@@ -746,7 +747,30 @@ test("caretaker browser routes persist manual Tags on the exact autosaved revisi
     ),
   )
   assert.equal(bodyResponse.status, 200)
-  assert.equal((await bodyResponse.json()).tags.tags_text, "red coat, careful gaze")
+  const savedTags = (await bodyResponse.json()).tags
+  assert.equal(savedTags.tags_text, "red coat, careful gaze")
+  assert.deepEqual(savedTags.fields_json, {
+    outfit: ["red coat"],
+    face: ["careful gaze"],
+    custom_category: [],
+  })
+  const longTag = "embroidered ".repeat(1200).trim()
+  const largeResponse = await handler(
+    browserRequest(`${base}/revisions/${revisionId}/tags-derivatives`, {
+      command_id: "browser_large_tags_7011",
+      tags_text: longTag,
+      fields_json: { outfit: [longTag] },
+      expected_gene_revision: row(
+        context.db,
+        "SELECT gene_revision FROM icono_manifestation_heads WHERE gene_id = ?",
+        context.geneId,
+      ).gene_revision,
+    }),
+  )
+  assert.ok(
+    new Set([200, 202]).has(largeResponse.status),
+    "a valid 28 KiB Tags payload must fit the browser request envelope",
+  )
 })
 
 test("shadow mode keeps browser dossier hidden and mutations fail closed", async (t) => {

@@ -117,11 +117,11 @@ function dossier() {
 test("the dossier renders a tabbed autosave dialog, exact version choices, and own-only deletion", () => {
   const html = renderCaretakerManifestationPanel(dossier(), escapeHtml)
   assert.match(html, /Manifestation</)
-  assert.match(html, /Changes autosave as a new version/)
+  assert.match(html, /data-icono-caretaker-autosave-state role="status">Saved/)
   assert.match(html, /data-icono-caretaker-tab="manifestation"/)
   assert.match(html, /data-icono-caretaker-tab="history"/)
   assert.match(html, /data-icono-caretaker-tab="settings"/)
-  assert.match(html, /Tags stay private and affect new images only/)
+  assert.match(html, /data-icono-caretaker-tag-categories/)
   assert.match(html, /Tags always stay off the gene page/)
   assert.match(html, /Use this version/)
   assert.match(html, /Compare with canonical/)
@@ -383,7 +383,7 @@ test("a suspension keeps an unsent local draft readable and explicitly removable
   assert.equal(host.querySelector(".icono-caretaker-draft-recovery"), null)
 })
 
-test("tag menu and explicit add action update the private autosave source without syntax", async () => {
+test("category rows add, edit and remove tags without flattening their fields", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
   const panel = createCaretakerManifestationPanel({
@@ -397,23 +397,31 @@ test("tag menu and explicit add action update the private autosave source withou
     currentUser: { account_id: "acct_1" },
     authResolved: true,
   })
-  const menu = host.querySelector("[data-icono-caretaker-tag-menu]")
-  assert.ok(menu.hasAttribute("multiple"))
-  assert.ok(Array.from(menu.children).some((option) => option.textContent === "standing"))
   const source = host.querySelector("[data-icono-caretaker-tags]")
-  const initial = source.value
-  const input = host.querySelector("[data-icono-caretaker-tags-input]")
+  function key(input, value) {
+    const event = new Event("keydown", { bubbles: true })
+    event.key = value
+    input.dispatchEvent(event)
+  }
+  host.querySelector('[data-tag-category="outfit"] [data-add-tag]').click()
+  let input = host.querySelector('input[aria-label="Add outfit tag"]')
   input.value = "embroidered coat"
-  host.querySelector("[data-icono-caretaker-add-tag]").click()
-  assert.equal(source.value, initial ? initial + ", embroidered coat" : "embroidered coat")
-  assert.equal(input.value, "")
-  menu.value = [encodeURIComponent("standing")]
-  menu.dispatchEvent(new Event("sl-change", { bubbles: true }))
-  assert.equal(source.value, "standing")
+  key(input, "Enter")
+  assert.deepEqual(JSON.parse(source.dataset.fieldsJson).outfit, ["embroidered coat"])
+  assert.ok(host.querySelector('input[aria-label="Add outfit tag"]'))
+  key(host.querySelector('input[aria-label="Add outfit tag"]'), "Escape")
+  host.querySelector('[aria-label="Edit embroidered coat"]').click()
+  input = host.querySelector('[aria-label="Edit outfit tag"]')
+  input.value = "linen coat"
+  key(input, "Enter")
+  assert.deepEqual(JSON.parse(source.dataset.fieldsJson).outfit, ["linen coat"])
+  host.querySelector('[aria-label="Remove linen coat"]').click()
+  assert.deepEqual(JSON.parse(source.dataset.fieldsJson).outfit, [])
+  assert.equal(source.value, "")
+  assert.ok(host.querySelector('[data-tag-category="hair"]'))
   assert.equal(host.querySelector("[data-icono-caretaker-prose]").value, "Second body")
   await new Promise((resolve) => setTimeout(resolve, 1200))
 })
-
 test("autosaving appends an immutable version without silently changing canonical", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
@@ -452,7 +460,7 @@ test("autosaving appends an immutable version without silently changing canonica
   assert.equal("expected_canonical_revision_id" in body, false)
   assert.match(body.command_id, /^cmd_/)
   assert.deepEqual(publicRefreshes, [])
-  assert.match(host.textContent, /Manifestation autosaved as a new version/)
+  assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Saved")
 })
 
 test("autosave persists Tags against the exact new revision and selects that derivative", async () => {
@@ -488,6 +496,11 @@ test("autosave persists Tags against the exact new revision and selects that der
   const tags = host.querySelector("[data-icono-caretaker-tags]")
   prose.value = "Third body"
   tags.value = "red coat, careful gaze"
+  tags.dataset.fieldsJson = JSON.stringify({
+    outfit: ["red coat"],
+    face: ["careful gaze"],
+    bespoke: [],
+  })
   tags.dispatchEvent(new Event("input", { bubbles: true }))
   await new Promise((resolve) => setTimeout(resolve, 1200))
 
@@ -495,8 +508,57 @@ test("autosave persists Tags against the exact new revision and selects that der
   const tagSelect = calls.find((call) => call.path.endsWith("/tags-derivative-head"))
   assert.ok(tagSave)
   assert.equal(JSON.parse(tagSave.init.body).tags_text, "red coat, careful gaze")
+  assert.deepEqual(JSON.parse(tagSave.init.body).fields_json, {
+    outfit: ["red coat"],
+    face: ["careful gaze"],
+    bespoke: [],
+  })
   assert.ok(tagSelect)
   assert.equal(JSON.parse(tagSelect.init.body).manifestation_derivative_id, "derivative_3")
+})
+
+test("Retry resumes a failed Tags upload without creating another revision", async () => {
+  const { document, Event } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
+  const calls = []
+  let uploads = 0
+  const panel = createCaretakerManifestationPanel({
+    fetchJSON: async (path, init) => {
+      if ((init?.method || "GET") === "GET") return dossier()
+      calls.push({ path, body: JSON.parse(init.body) })
+      if (path.endsWith("/revisions")) return { manifestation_revision_id: "revision_retry" }
+      if (path.endsWith("/tags-derivatives")) {
+        if (++uploads === 1) throw new TypeError("connection reset")
+        return { manifestation_derivative_id: "derivative_retry", derivative_head_version: 0 }
+      }
+      return { ok: true }
+    },
+    escapeHtml,
+    storage: null,
+  })
+  const host = document.getElementById("host")
+  await panel.mount(host, {
+    symbol: "TP53",
+    currentUser: { account_id: "acct_1" },
+    authResolved: true,
+  })
+  const form = host.querySelector("[data-icono-caretaker-editor]")
+  const tags = form.querySelector("[data-icono-caretaker-tags]")
+  tags.value = "linen coat"
+  tags.dataset.fieldsJson = JSON.stringify({ outfit: ["linen coat"] })
+  tags.dispatchEvent(new Event("input", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 1250))
+  assert.equal(host.querySelector("[data-icono-caretaker-editor]"), form)
+  assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Not saved")
+  await new Promise((resolve) => setTimeout(resolve, 1200))
+  assert.equal(uploads, 1, "failed saves wait for explicit Retry")
+  host.querySelector("[data-icono-caretaker-retry-save]").click()
+  await new Promise((resolve) => setTimeout(resolve, 25))
+  assert.equal(calls.filter((c) => c.path.endsWith("/revisions")).length, 1)
+  const retries = calls.filter((c) => c.path.endsWith("/tags-derivatives"))
+  assert.equal(retries.length, 2)
+  assert.deepEqual(retries[0].body, retries[1].body)
+  assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Saved")
 })
 
 test("the Settings visibility switch uses manifestation and gene CAS versions", async () => {
@@ -567,6 +629,7 @@ test("an uncertain save retry reuses the same command ID", async () => {
   editSameBody()
   await new Promise((resolve) => setTimeout(resolve, 1200))
   assert.match(host.querySelector("[data-icono-caretaker-status]").textContent, /uncertain/i)
+  host.querySelector("[data-icono-caretaker-retry-save]").click()
   await new Promise((resolve) => setTimeout(resolve, 1200))
 
   assert.equal(mutations.length, 2)

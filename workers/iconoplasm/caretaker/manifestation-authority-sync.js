@@ -132,9 +132,10 @@ async function readSnapshotLease(db, snapshotId) {
     db,
     `SELECT snapshot_id, consumer_id, authority_epoch, watermark_event_sequence, status,
             source_checkpoint_id, source_checkpoint_watermark_sequence,
-            build_phase, build_after_key, next_part_ordinal, build_chain_sha256,
+            stream_version, source_baseline_rowid, build_phase, build_after_key, next_part_ordinal, build_chain_sha256,
             total_parts, manifest_sha256,
-            expires_at, ready_at, created_at, completed_at
+            expires_at, ready_at, created_at, completed_at,
+            (SELECT authority_epoch FROM icono_authority_state WHERE singleton=1) AS current_authority_epoch
        FROM icono_manifestation_snapshot_leases WHERE snapshot_id = ?`,
     snapshotId,
   )
@@ -147,7 +148,9 @@ export async function createManifestationSnapshot(db, input = {}) {
   await prepared(
     db,
     `UPDATE icono_manifestation_snapshot_leases SET status = 'expired'
-      WHERE consumer_id = ? AND status IN ('building', 'open') AND expires_at <= ?`,
+      WHERE consumer_id = ? AND status IN ('building', 'open')
+        AND (expires_at <= ? OR stream_version <> 2 OR authority_epoch <>
+          (SELECT authority_epoch FROM icono_authority_state WHERE singleton=1))`,
     consumerId,
     timestamp,
   ).run()
@@ -160,9 +163,10 @@ export async function createManifestationSnapshot(db, input = {}) {
   if (existing) {
     const lease = await readSnapshotLease(db, existing.snapshot_id)
     return Object.freeze({
-      schema_version: 1,
+      schema_version: 2,
       snapshot_id: lease.snapshot_id,
-      status: lease.status,
+      status: "streaming",
+      resume_cursor: await snapshotEventCursor(input.cursorSecret, lease),
       authority_epoch: Number(lease.authority_epoch),
       snapshot_watermark_sequence: Number(lease.watermark_event_sequence),
       expires_at: lease.expires_at,
@@ -172,6 +176,7 @@ export async function createManifestationSnapshot(db, input = {}) {
   const state = await first(
     db,
     `SELECT event_retention_floor, authority_epoch,
+            (SELECT COALESCE(MAX(rowid), 0) FROM icono_gene_identity_baselines) AS baseline_rowid,
             MAX(event_retention_floor,
               (SELECT COALESCE(MAX(event_sequence), 0) FROM icono_manifestation_events)
             ) AS watermark
@@ -197,7 +202,7 @@ export async function createManifestationSnapshot(db, input = {}) {
     "snapshot",
     input.idFactory || defaultIdFactory,
   )
-  const ttl = Math.max(60, Math.min(3600, Math.trunc(Number(input.ttlSeconds)) || 900))
+  const ttl = Math.max(60, Math.min(3600, Math.trunc(Number(input.ttlSeconds)) || 3600))
   const expiresAt = new Date(new Date(timestamp).getTime() + ttl * 1000).toISOString()
   try {
     await prepared(
@@ -205,9 +210,9 @@ export async function createManifestationSnapshot(db, input = {}) {
       `INSERT INTO icono_manifestation_snapshot_leases (
          snapshot_id, consumer_id, authority_epoch, watermark_event_sequence,
          source_checkpoint_id, source_checkpoint_watermark_sequence, status,
-         build_phase, build_after_key, next_part_ordinal,
+         build_phase, build_after_key, next_part_ordinal, stream_version, source_baseline_rowid,
          expires_at, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, 'building', ?, NULL, 1, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, 'building', ?, NULL, 1, 2, ?, ?, ?)`,
       snapshotId,
       consumerId,
       Number(state.authority_epoch),
@@ -215,10 +220,19 @@ export async function createManifestationSnapshot(db, input = {}) {
       checkpoint?.checkpoint_id || null,
       floor,
       checkpoint ? "checkpoint_entities" : "baselines",
+      Number(state.baseline_rowid),
       expiresAt,
       timestamp,
     ).run()
   } catch (error) {
+    if (/snapshot_source_changed/.test(String(error?.message || ""))) {
+      throw authorityError(
+        "SNAPSHOT_SOURCE_CHANGED",
+        "History was compacted while opening the snapshot; retry",
+        409,
+        error,
+      )
+    }
     if (
       /uq_icono_open_snapshot_consumer|unique constraint failed/i.test(String(error?.message || ""))
     ) {
@@ -227,9 +241,13 @@ export async function createManifestationSnapshot(db, input = {}) {
     throw error
   }
   return Object.freeze({
-    schema_version: 1,
+    schema_version: 2,
     snapshot_id: snapshotId,
-    status: "building",
+    status: "streaming",
+    resume_cursor: await snapshotEventCursor(input.cursorSecret, {
+      authority_epoch: state.authority_epoch,
+      watermark_event_sequence: state.watermark,
+    }),
     authority_epoch: Number(state.authority_epoch),
     snapshot_watermark_sequence: Number(state?.watermark || 0),
     expires_at: expiresAt,
@@ -237,381 +255,227 @@ export async function createManifestationSnapshot(db, input = {}) {
   })
 }
 
-function insertPart(db, snapshotId, ordinal, kind, sourceKey, geneId, payloadJson, payloadSha256) {
-  return prepared(
-    db,
-    `INSERT INTO icono_manifestation_snapshot_parts (
-       snapshot_id, ordinal, part_kind, source_key, gene_id, part_json, payload_sha256
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    snapshotId,
-    ordinal,
-    kind,
-    sourceKey,
-    geneId,
-    payloadJson,
-    payloadSha256,
-  )
-}
-
-export async function computeManifestationSnapshotChainHash(previous, ordinal, payloadSha256) {
-  return advanceManifestationSnapshotChain(previous, ordinal, payloadSha256)
-}
-
-export async function buildManifestationSnapshotPage(db, input = {}) {
-  requireDatabase(db)
-  const snapshotId = normalizeId(input.snapshotId, "snapshot_id")
-  const timestamp = normalizeTimestamp(input.now)
-  const lease = await readSnapshotLease(db, snapshotId)
-  if (!lease) throw authorityError("SNAPSHOT_NOT_FOUND", "Snapshot was not found", 404)
-  if (lease.status === "open") {
-    return Object.freeze({
-      schema_version: 1,
-      snapshot_id: snapshotId,
-      status: "ready",
-      authority_epoch: Number(lease.authority_epoch),
-      inserted: 0,
-      snapshot_watermark_sequence: Number(lease.watermark_event_sequence),
-      total_parts: Number(lease.total_parts),
-      manifest_sha256: lease.manifest_sha256,
-    })
-  }
-  if (lease.status !== "building" || lease.expires_at <= timestamp) {
-    if (lease.status === "building") {
-      await prepared(
-        db,
-        "UPDATE icono_manifestation_snapshot_leases SET status = 'expired' WHERE snapshot_id = ? AND status = 'building'",
-        snapshotId,
-      ).run()
-    }
-    throw authorityError("SNAPSHOT_EXPIRED", "Snapshot build is no longer available", 410)
-  }
-  const limit = Math.max(1, Math.min(50, Math.trunc(Number(input.limit)) || 25))
-  const after = String(lease.build_after_key || "")
-  const sourceRows =
-    lease.build_phase === "baselines"
-      ? await all(
-          db,
-          `SELECT gene_id, canonical_symbol, registered_at
-           FROM icono_gene_identity_baselines WHERE gene_id > ?
-          ORDER BY gene_id LIMIT ?`,
-          after,
-          limit,
-        )
-      : lease.build_phase === "checkpoint_entities"
-        ? await all(
-            db,
-            `SELECT entity.entity_ordinal, entity.entity_kind, entity.entity_key,
-                  entity.gene_id, entity.source_event_sequence,
-                  entity.entity_json, entity.payload_sha256,
-                  checkpoint.checkpoint_id, checkpoint.authority_epoch,
-                  checkpoint.target_watermark_event_sequence,
-                  checkpoint.manifest_sha256
-             FROM icono_manifestation_event_checkpoint_entities entity
-             JOIN icono_manifestation_event_checkpoints checkpoint
-               ON checkpoint.checkpoint_id = entity.checkpoint_id
-            WHERE entity.checkpoint_id = ? AND checkpoint.status = 'active'
-              AND entity.entity_ordinal > ?
-            ORDER BY entity.entity_ordinal LIMIT ?`,
-            lease.source_checkpoint_id,
-            Number(after || 0),
-            limit,
-          )
-        : await all(
-            db,
-            `SELECT event_sequence, event_uuid, event_type, gene_id, gene_revision,
-                manifestation_id, manifestation_revision_id, canonical_selection_id,
-                caretaker_assignment_id, payload_json, created_at
-           FROM icono_manifestation_events
-          WHERE event_sequence > ? AND event_sequence <= ?
-          ORDER BY event_sequence LIMIT ?`,
-            Number(after || 0),
-            Number(lease.watermark_event_sequence),
-            limit,
-          )
-  if (!sourceRows.length) {
-    if (lease.build_phase === "baselines" || lease.build_phase === "checkpoint_entities") {
-      await prepared(
-        db,
-        `UPDATE icono_manifestation_snapshot_leases
-            SET build_phase = 'events', build_after_key = ?
-          WHERE snapshot_id = ? AND status = 'building' AND build_phase = ?
-            AND build_after_key IS ?`,
-        lease.build_phase === "checkpoint_entities"
-          ? String(lease.source_checkpoint_watermark_sequence)
-          : "0",
-        snapshotId,
-        lease.build_phase,
-        lease.build_after_key,
-      ).run()
-      return Object.freeze({
-        schema_version: 1,
-        snapshot_id: snapshotId,
-        status: "building",
-        authority_epoch: Number(lease.authority_epoch),
-        inserted: 0,
-      })
-    }
-    await prepared(
-      db,
-      `UPDATE icono_manifestation_snapshot_leases
-          SET status = 'open', build_phase = 'ready', ready_at = ?,
-              total_parts = next_part_ordinal - 1,
-              manifest_sha256 = build_chain_sha256
-        WHERE snapshot_id = ? AND status = 'building' AND build_phase = 'events'
-          AND build_after_key IS ?`,
-      timestamp,
-      snapshotId,
-      lease.build_after_key,
-    ).run()
-    const ready = await readSnapshotLease(db, snapshotId)
-    return Object.freeze({
-      schema_version: 1,
-      snapshot_id: snapshotId,
-      status: "ready",
-      authority_epoch: Number(ready.authority_epoch),
-      inserted: 0,
-      snapshot_watermark_sequence: Number(ready.watermark_event_sequence),
-      total_parts: Number(ready.total_parts),
-      manifest_sha256: ready.manifest_sha256,
-    })
-  }
-
-  const startOrdinal = Number(lease.next_part_ordinal)
-  let chain = lease.build_chain_sha256
-  const encodedParts = []
-  for (const [index, row] of sourceRows.entries()) {
-    const baseline = lease.build_phase === "baselines"
-    const checkpointEntity = lease.build_phase === "checkpoint_entities"
-    const ordinal = startOrdinal + index
-    const payloadJson = JSON.stringify(
-      baseline
-        ? baselinePart(row)
-        : checkpointEntity
-          ? checkpointEntityPart(row, row)
-          : eventPart(row),
-    )
-    const payloadSha256 = await sha256Hex(utf8Bytes(payloadJson))
-    chain = await computeManifestationSnapshotChainHash(chain, ordinal, payloadSha256)
-    encodedParts.push({ row, baseline, checkpointEntity, ordinal, payloadJson, payloadSha256 })
-  }
-  const statements = encodedParts.map(
-    ({ row, baseline, checkpointEntity, ordinal, payloadJson, payloadSha256 }) =>
-      insertPart(
-        db,
-        snapshotId,
-        ordinal,
-        baseline
-          ? "gene_baseline"
-          : checkpointEntity
-            ? "authority_checkpoint_entity"
-            : "authority_event",
-        baseline
-          ? row.gene_id
-          : checkpointEntity
-            ? `${row.entity_kind}:${row.entity_key}`
-            : String(row.event_sequence),
-        row.gene_id,
-        payloadJson,
-        payloadSha256,
-      ),
-  )
-  const lastKey =
-    lease.build_phase === "baselines"
-      ? sourceRows.at(-1).gene_id
-      : lease.build_phase === "checkpoint_entities"
-        ? String(sourceRows.at(-1).entity_ordinal)
-        : String(sourceRows.at(-1).event_sequence)
-  statements.push(
-    prepared(
-      db,
-      `UPDATE icono_manifestation_snapshot_leases
-          SET build_after_key = ?, next_part_ordinal = next_part_ordinal + ?,
-              build_chain_sha256 = ?
-        WHERE snapshot_id = ? AND status = 'building' AND build_phase = ?
-          AND build_after_key IS ? AND next_part_ordinal = ?
-          AND build_chain_sha256 = ?`,
-      lastKey,
-      sourceRows.length,
-      chain,
-      snapshotId,
-      lease.build_phase,
-      lease.build_after_key,
-      startOrdinal,
-      lease.build_chain_sha256,
-    ),
-  )
-  try {
-    await db.batch(statements)
-  } catch (error) {
-    if (/unique constraint failed|snapshot/i.test(String(error?.message || ""))) {
-      throw authorityError(
-        "STALE_SNAPSHOT_BUILD",
-        "Snapshot build page must be retried",
-        409,
-        error,
-      )
-    }
-    throw error
-  }
-  return Object.freeze({
-    schema_version: 1,
-    snapshot_id: snapshotId,
-    status: "building",
+// ARCHITECTURE FENCE [IPD-012]: immutable source pages, no per-consumer D1 copy.
+function snapshotEventCursor(secret, lease) {
+  return encodeCursor(secret, {
+    version: 1,
+    kind: "events",
     authority_epoch: Number(lease.authority_epoch),
-    phase: lease.build_phase,
-    inserted: sourceRows.length,
-    next_part_ordinal: startOrdinal + sourceRows.length,
+    after_sequence: Number(lease.watermark_event_sequence),
   })
+}
+
+function requireStreamingLease(lease, now, { completed = false } = {}) {
+  if (!lease) throw authorityError("SNAPSHOT_NOT_FOUND", "Snapshot was not found", 404)
+  if (
+    Number(lease.stream_version) !== 2 ||
+    Number(lease.authority_epoch) !== Number(lease.current_authority_epoch) ||
+    !(lease.status === "building" || (completed && lease.status === "completed")) ||
+    (lease.status !== "completed" && lease.expires_at <= now)
+  ) {
+    throw authorityError("SNAPSHOT_EXPIRED", "Snapshot is no longer available", 410)
+  }
+}
+
+function requireSnapshotCursor(cursor, lease) {
+  if (
+    cursor &&
+    (cursor.snapshot_id !== lease.snapshot_id ||
+      Number(cursor.authority_epoch) !== Number(lease.authority_epoch) ||
+      Number(cursor.watermark_sequence) !== Number(lease.watermark_event_sequence))
+  ) {
+    throw authorityError("INVALID_CURSOR", "Cursor belongs to another snapshot")
+  }
+}
+
+async function sourcePage(db, lease, phase, after, limit) {
+  if (phase === "baselines")
+    return all(
+      db,
+      `SELECT rowid AS source_ordinal, gene_id, canonical_symbol, registered_at
+       FROM icono_gene_identity_baselines WHERE rowid > ? AND rowid <= ?
+       ORDER BY rowid LIMIT ?`,
+      Number(after),
+      Number(lease.source_baseline_rowid),
+      limit,
+    )
+  if (phase === "checkpoint_entities")
+    return all(
+      db,
+      `SELECT entity.entity_ordinal AS source_ordinal, entity.entity_kind, entity.entity_key,
+            entity.gene_id, entity.source_event_sequence, entity.entity_json, entity.payload_sha256,
+            checkpoint.checkpoint_id, checkpoint.authority_epoch,
+            checkpoint.target_watermark_event_sequence, checkpoint.manifest_sha256
+       FROM icono_manifestation_event_checkpoint_entities entity
+       JOIN icono_manifestation_event_checkpoints checkpoint ON checkpoint.checkpoint_id=entity.checkpoint_id
+      WHERE entity.checkpoint_id=? AND checkpoint.status='active' AND entity.entity_ordinal>?
+      ORDER BY entity.entity_ordinal LIMIT ?`,
+      lease.source_checkpoint_id,
+      Number(after),
+      limit,
+    )
+  return all(
+    db,
+    `SELECT event_sequence AS source_ordinal, event_sequence, event_uuid, event_type, gene_id,
+            gene_revision, manifestation_id, manifestation_revision_id, canonical_selection_id,
+            caretaker_assignment_id, payload_json, created_at
+       FROM icono_manifestation_events WHERE event_sequence > ? AND event_sequence <= ?
+       ORDER BY event_sequence LIMIT ?`,
+    Number(after),
+    Number(lease.watermark_event_sequence),
+    limit,
+  )
 }
 
 export async function readManifestationSnapshotPage(db, input = {}) {
   requireDatabase(db)
-  const snapshotId = normalizeId(input.snapshotId, "snapshot_id")
-  const timestamp = normalizeTimestamp(input.now)
-  const lease = await readSnapshotLease(db, snapshotId)
-  if (!lease) throw authorityError("SNAPSHOT_NOT_FOUND", "Snapshot was not found", 404)
-  if (lease.status === "building") {
-    throw authorityError("SNAPSHOT_NOT_READY", "Snapshot is still building", 409)
-  }
-  if (lease.status !== "open" || lease.expires_at <= timestamp) {
-    if (lease.status === "open") {
-      await prepared(
-        db,
-        "UPDATE icono_manifestation_snapshot_leases SET status = 'expired' WHERE snapshot_id = ? AND status = 'open'",
-        snapshotId,
-      ).run()
+  const lease = await readSnapshotLease(db, normalizeId(input.snapshotId, "snapshot_id"))
+  requireStreamingLease(lease, normalizeTimestamp(input.now))
+  if (lease.source_checkpoint_id) {
+    const checkpoint = await readActiveManifestationEventCheckpoint(db)
+    if (
+      checkpoint?.checkpoint_id !== lease.source_checkpoint_id ||
+      Number(checkpoint.authority_epoch) !== Number(lease.authority_epoch) ||
+      Number(checkpoint.target_watermark_event_sequence) !==
+        Number(lease.source_checkpoint_watermark_sequence)
+    ) {
+      throw authorityError(
+        "SNAPSHOT_SOURCE_HISTORY_UNAVAILABLE",
+        "Pinned checkpoint is no longer available",
+        410,
+      )
     }
-    throw authorityError("SNAPSHOT_EXPIRED", "Snapshot is no longer available", 410)
   }
-  const decoded = await decodeCursor(input.cursorSecret, input.cursor, "snapshot_parts")
-  if (
-    decoded &&
-    (decoded.snapshot_id !== snapshotId ||
-      Number(decoded.authority_epoch) !== Number(lease.authority_epoch) ||
-      Number(decoded.watermark_sequence) !== Number(lease.watermark_event_sequence))
-  ) {
-    throw authorityError("INVALID_CURSOR", "Cursor belongs to another snapshot")
+  const cursor = await decodeCursor(input.cursorSecret, input.cursor, "snapshot_stream")
+  requireSnapshotCursor(cursor, lease)
+  const limit = Math.max(1, Math.min(250, Math.trunc(Number(input.limit)) || 100))
+  let phase = cursor?.phase || (lease.source_checkpoint_id ? "checkpoint_entities" : "baselines")
+  let after = Number(cursor?.after_key || 0)
+  let ordinal = Number(cursor?.after_ordinal || 0)
+  let chain = cursor?.chain_sha256 || "0".repeat(64)
+  let done = Boolean(cursor?.done)
+  const parts = []
+  while (!done && parts.length < limit) {
+    const rows = await sourcePage(db, lease, phase, after, limit - parts.length + 1)
+    const selected = rows.slice(0, limit - parts.length)
+    for (const row of selected) {
+      const payload =
+        phase === "baselines"
+          ? baselinePart(row)
+          : phase === "checkpoint_entities"
+            ? checkpointEntityPart(row, row)
+            : eventPart(row)
+      const bytes = utf8Bytes(JSON.stringify(payload))
+      const digest = await sha256Hex(bytes)
+      ordinal += 1
+      chain = await advanceManifestationSnapshotChain(chain, ordinal, digest)
+      parts.push({
+        ordinal,
+        part_kind: payload.part_kind,
+        source_key:
+          phase === "baselines"
+            ? row.gene_id
+            : phase === "checkpoint_entities"
+              ? `${row.entity_kind}:${row.entity_key}`
+              : String(row.event_sequence),
+        gene_id: row.gene_id,
+        payload_sha256: digest,
+        payload_base64url: bytesToBase64Url(bytes),
+      })
+      after = Number(row.source_ordinal)
+    }
+    if (rows.length > selected.length) break
+    if (phase === "events") done = true
+    else {
+      phase = "events"
+      after = Number(lease.source_checkpoint_watermark_sequence)
+    }
   }
-  const afterOrdinal = Number(decoded?.after_ordinal || 0)
-  const limit = Math.max(1, Math.min(50, Math.trunc(Number(input.limit)) || 25))
-  const rows = await all(
-    db,
-    `SELECT ordinal, part_kind, source_key, gene_id, part_json, payload_sha256
-       FROM icono_manifestation_snapshot_parts
-      WHERE snapshot_id = ? AND ordinal > ? ORDER BY ordinal LIMIT ?`,
-    snapshotId,
-    afterOrdinal,
-    limit + 1,
-  )
-  const page = rows.slice(0, limit)
-  const lastOrdinal = Number(page.at(-1)?.ordinal || afterOrdinal)
   return Object.freeze({
-    schema_version: 1,
-    snapshot_id: snapshotId,
+    schema_version: 2,
+    snapshot_id: lease.snapshot_id,
     authority_epoch: Number(lease.authority_epoch),
     snapshot_watermark_sequence: Number(lease.watermark_event_sequence),
-    total_parts: Number(lease.total_parts),
-    manifest_sha256: lease.manifest_sha256,
-    resume_cursor: await encodeCursor(input.cursorSecret, {
-      version: 1,
-      kind: "events",
-      authority_epoch: Number(lease.authority_epoch),
-      after_sequence: Number(lease.watermark_event_sequence),
-    }),
+    total_parts: ordinal,
+    manifest_sha256: chain,
+    resume_cursor: await snapshotEventCursor(input.cursorSecret, lease),
     payload_encoding: "base64url+utf8-json",
-    parts: page.map((row) => ({
-      ordinal: Number(row.ordinal),
-      part_kind: row.part_kind,
-      source_key: row.source_key,
-      gene_id: row.gene_id,
-      payload_sha256: row.payload_sha256,
-      payload_base64url: bytesToBase64Url(utf8Bytes(row.part_json)),
-    })),
-    has_more: rows.length > limit,
+    parts,
+    has_more: !done,
     parts_resume_cursor: await encodeCursor(input.cursorSecret, {
       version: 1,
-      kind: "snapshot_parts",
-      snapshot_id: snapshotId,
+      kind: "snapshot_stream",
+      snapshot_id: lease.snapshot_id,
       authority_epoch: Number(lease.authority_epoch),
       watermark_sequence: Number(lease.watermark_event_sequence),
-      after_ordinal: lastOrdinal,
+      phase,
+      after_key: after,
+      after_ordinal: ordinal,
+      chain_sha256: chain,
+      done,
     }),
   })
 }
 
 export async function completeManifestationSnapshot(db, input = {}) {
   requireDatabase(db)
-  const snapshotId = normalizeId(input.snapshotId, "snapshot_id")
-  const lease = await readSnapshotLease(db, snapshotId)
-  if (!lease) throw authorityError("SNAPSHOT_NOT_FOUND", "Snapshot was not found", 404)
-  const timestamp = normalizeTimestamp(input.now)
-  const totalParts = Number(input.totalParts)
-  const manifestSha256 = String(input.manifestSha256 || "")
-    .trim()
-    .toLowerCase()
+  const lease = await readSnapshotLease(db, normalizeId(input.snapshotId, "snapshot_id"))
+  const now = normalizeTimestamp(input.now)
+  requireStreamingLease(lease, now, { completed: true })
+  const proof = await decodeCursor(input.cursorSecret, input.completionCursor, "snapshot_stream")
+  requireSnapshotCursor(proof, lease)
   if (
-    !Number.isSafeInteger(totalParts) ||
-    totalParts < 0 ||
-    !/^[a-f0-9]{64}$/.test(manifestSha256)
+    !proof?.done ||
+    proof.after_ordinal !== input.totalParts ||
+    proof.chain_sha256 !== input.manifestSha256
   ) {
-    throw authorityError("INVALID_SNAPSHOT_COMPLETION", "Snapshot completion proof is invalid")
+    throw authorityError("INVALID_SNAPSHOT_COMPLETION", "Complete signed stream proof is required")
   }
-  const result = await prepared(
-    db,
-    `UPDATE icono_manifestation_snapshot_leases
-        SET status = 'completed', completed_at = ?
-      WHERE snapshot_id = ? AND status = 'open' AND expires_at > ?
-        AND total_parts = ? AND manifest_sha256 = ?`,
-    timestamp,
-    snapshotId,
-    timestamp,
-    totalParts,
-    manifestSha256,
-  ).run()
-  if (Number(result?.meta?.changes || 0) !== 1) {
-    throw authorityError("SNAPSHOT_NOT_OPEN", "Snapshot is not open", 409)
+  if (lease.status === "completed") {
+    if (
+      Number(lease.total_parts) !== proof.after_ordinal ||
+      lease.manifest_sha256 !== proof.chain_sha256
+    )
+      throw authorityError("INVALID_SNAPSHOT_COMPLETION", "Snapshot receipt does not match")
+  } else {
+    const result = await prepared(
+      db,
+      `UPDATE icono_manifestation_snapshot_leases SET status='completed', completed_at=?,
+              total_parts=?, manifest_sha256=? WHERE snapshot_id=? AND status='building' AND expires_at>?`,
+      now,
+      proof.after_ordinal,
+      proof.chain_sha256,
+      lease.snapshot_id,
+      now,
+    ).run()
+    if (Number(result?.meta?.changes || 0) !== 1)
+      throw authorityError("SNAPSHOT_NOT_OPEN", "Snapshot is not open", 409)
   }
   return Object.freeze({
-    schema_version: 1,
+    schema_version: 2,
     ok: true,
-    snapshot_id: snapshotId,
+    snapshot_id: lease.snapshot_id,
     status: "completed",
     authority_epoch: Number(lease.authority_epoch),
-    total_parts: totalParts,
-    manifest_sha256: manifestSha256,
-    resume_cursor: await encodeCursor(input.cursorSecret, {
-      version: 1,
-      kind: "events",
-      authority_epoch: Number(lease.authority_epoch),
-      after_sequence: Number(lease.watermark_event_sequence),
-    }),
+    total_parts: proof.after_ordinal,
+    manifest_sha256: proof.chain_sha256,
+    resume_cursor: await snapshotEventCursor(input.cursorSecret, lease),
   })
 }
 
 export async function readManifestationSnapshotStatus(db, input = {}) {
-  requireDatabase(db)
-  const snapshotId = normalizeId(input.snapshotId, "snapshot_id")
-  const lease = await readSnapshotLease(db, snapshotId)
-  if (!lease) throw authorityError("SNAPSHOT_NOT_FOUND", "Snapshot was not found", 404)
+  const lease = await readSnapshotLease(db, normalizeId(input.snapshotId, "snapshot_id"))
+  requireStreamingLease(lease, normalizeTimestamp(input.now), { completed: true })
   return Object.freeze({
-    schema_version: 1,
-    snapshot_id: snapshotId,
-    status: lease.status === "open" ? "ready" : lease.status,
+    schema_version: 2,
+    snapshot_id: lease.snapshot_id,
+    status: lease.status === "completed" ? "completed" : "streaming",
     authority_epoch: Number(lease.authority_epoch),
     snapshot_watermark_sequence: Number(lease.watermark_event_sequence),
     expires_at: lease.expires_at,
-    total_parts: lease.total_parts == null ? null : Number(lease.total_parts),
-    manifest_sha256: lease.manifest_sha256 || null,
-    resume_cursor:
-      lease.status === "open" || lease.status === "completed"
-        ? await encodeCursor(input.cursorSecret, {
-            version: 1,
-            kind: "events",
-            authority_epoch: Number(lease.authority_epoch),
-            after_sequence: Number(lease.watermark_event_sequence),
-          })
-        : null,
-    next_poll_after_seconds: lease.status === "building" ? 2 : null,
+    total_parts: lease.total_parts,
+    manifest_sha256: lease.manifest_sha256,
+    resume_cursor: await snapshotEventCursor(input.cursorSecret, lease),
   })
 }
 
@@ -705,24 +569,36 @@ export async function sweepManifestationSnapshots(
     boundedLimit,
   )
   if (!leases.length) return Object.freeze({ purged: 0 })
-  const statements = []
+  const statements = [
+    prepared(
+      db,
+      `DELETE FROM icono_manifestation_snapshot_parts WHERE rowid IN (
+      SELECT part.rowid FROM icono_manifestation_snapshot_parts part
+      JOIN icono_manifestation_snapshot_leases lease ON lease.snapshot_id=part.snapshot_id
+      WHERE lease.status IN ('completed','expired') AND COALESCE(lease.completed_at,lease.expires_at)<=?
+      ORDER BY lease.snapshot_id,part.ordinal LIMIT 250)`,
+      cutoff,
+    ),
+  ]
   for (const lease of leases) {
     statements.push(
       prepared(
         db,
-        "DELETE FROM icono_manifestation_snapshot_parts WHERE snapshot_id = ?",
-        lease.snapshot_id,
-      ),
-      prepared(
-        db,
         `DELETE FROM icono_manifestation_snapshot_leases
-          WHERE snapshot_id = ? AND status IN ('completed', 'expired')`,
+          WHERE snapshot_id = ? AND status IN ('completed', 'expired')
+          AND NOT EXISTS (SELECT 1 FROM icono_manifestation_snapshot_parts part
+                          WHERE part.snapshot_id=icono_manifestation_snapshot_leases.snapshot_id)`,
         lease.snapshot_id,
       ),
     )
   }
-  await db.batch(statements)
-  return Object.freeze({ purged: leases.length })
+  const results = await db.batch(statements)
+  return Object.freeze({
+    purged: results
+      .slice(1)
+      .reduce((total, result) => total + Number(result.meta?.changes || 0), 0),
+    parts_purged: Number(results[0].meta?.changes || 0),
+  })
 }
 
 export { decodeCursor, encodeCursor } from "./manifestation-sync-cursor.js"

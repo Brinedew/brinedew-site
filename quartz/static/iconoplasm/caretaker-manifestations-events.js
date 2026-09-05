@@ -1,8 +1,8 @@
 import {
   ownManifestation,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=20260905-caretaker-editor-v6"
-import { diffMarkup } from "./caretaker-manifestations-view.js?v=20260905-caretaker-editor-v6"
+} from "./caretaker-manifestations-model.js?v=20260905-caretaker-categories-v7"
+import { diffMarkup } from "./caretaker-manifestations-view.js?v=20260905-caretaker-categories-v7"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -12,6 +12,7 @@ export function createCaretakerManifestationEventWiring({
   mounted,
   mutate,
   retryTags,
+  retrySave,
   scheduleAutosave,
   saveDraft,
   setStatus,
@@ -57,6 +58,10 @@ export function createCaretakerManifestationEventWiring({
       if (!state) return
       const target = event.target.closest?.("button")
       if (!target) return
+      if (target.hasAttribute("data-icono-caretaker-retry-save")) {
+        void retrySave(state)
+        return
+      }
       if (target.hasAttribute("data-icono-caretaker-close")) {
         target.closest("dialog")?.close()
         return

@@ -4,7 +4,6 @@ import test from "node:test"
 import {
   activateManifestationEventCheckpoint,
   buildManifestationEventCheckpointPage,
-  buildManifestationSnapshotPage,
   compactManifestationCommandReceipts,
   completeManifestationSnapshot,
   createManifestationSnapshot,
@@ -204,15 +203,8 @@ test("verified normalized checkpoint prunes a long prefix and bootstraps a fresh
     cursorSecret: CURSOR_SECRET,
     now: "2026-09-30T00:04:00.000Z",
   })
-  let build = snapshot
-  for (let page = 0; page < 500 && build.status !== "ready"; page += 1) {
-    build = await buildManifestationSnapshotPage(db, {
-      snapshotId: snapshot.snapshot_id,
-      limit: 4,
-      now: "2026-09-30T00:04:01.000Z",
-    })
-  }
-  assert.equal(build.status, "ready")
+  assert.equal(snapshot.status, "streaming")
+  let proof
   const parts = []
   let partsCursor = null
   let resumeCursor = null
@@ -225,6 +217,7 @@ test("verified normalized checkpoint prunes a long prefix and bootstraps a fresh
       now: "2026-09-30T00:04:02.000Z",
     })
     parts.push(...page.parts.map(decodePart))
+    proof = page
     partsCursor = page.has_more ? page.parts_resume_cursor : null
     resumeCursor = page.resume_cursor
   } while (partsCursor)
@@ -244,8 +237,9 @@ test("verified normalized checkpoint prunes a long prefix and bootstraps a fresh
 
   await completeManifestationSnapshot(db, {
     snapshotId: snapshot.snapshot_id,
-    totalParts: build.total_parts,
-    manifestSha256: build.manifest_sha256,
+    totalParts: proof.total_parts,
+    manifestSha256: proof.manifest_sha256,
+    completionCursor: proof.parts_resume_cursor,
     cursorSecret: CURSOR_SECRET,
     now: "2026-09-30T00:04:03.000Z",
   })
@@ -292,6 +286,68 @@ test("checkpoint activation refuses lagging active consumers", async (t) => {
       now: "2026-09-30T00:02:00.000Z",
     }),
     { code: "EVENT_COMPACTION_CONSUMER_LAGGING" },
+  )
+})
+
+test("a newer open snapshot and a concurrent snapshot both fence checkpoint activation", async (t) => {
+  const db = await bootstrap(t)
+  db.raw.prepare("UPDATE icono_manifestation_events SET projection_status = 'not_required'").run()
+  const target = row(db, "SELECT max(event_sequence) AS n FROM icono_manifestation_events").n
+  let checkpoint = await startManifestationEventCheckpoint(db, {
+    checkpointId: "checkpoint_stream_race",
+    watermarkSequence: target,
+    auditRetentionSeconds: 3600,
+    now: "2030-01-01T00:00:00.000Z",
+  })
+  for (let i = 0; i < 100 && checkpoint.status === "building"; i++) {
+    checkpoint = await buildManifestationEventCheckpointPage(db, {
+      checkpointId: checkpoint.checkpoint_id,
+      limit: 25,
+      now: "2030-01-01T00:01:00.000Z",
+    })
+  }
+  await saveManifestationRevision(db, {
+    assignmentId: ASSIGNMENT,
+    expectedAssignmentVersion: 2,
+    expectedManifestationVersion: 0,
+    storage: storage(777),
+    manifestationId: "manifestation_newer_stream",
+    revisionId: "revision_newer_stream",
+    eventUuid: "event_newer_stream",
+    ...command("command_newer_stream", "a", USER, "account"),
+  })
+  const options = {
+    consumerId: "reader_newer_checkpoint",
+    cursorSecret: CURSOR_SECRET,
+    now: "2030-01-01T00:02:00.000Z",
+  }
+  const lease = await createManifestationSnapshot(db, options)
+  assert.ok(lease.snapshot_watermark_sequence > target)
+  const activation = {
+    checkpointId: checkpoint.checkpoint_id,
+    totalEntities: checkpoint.total_entities,
+    manifestSha256: checkpoint.manifest_sha256,
+    now: "2030-01-01T00:03:00.000Z",
+  }
+  await assert.rejects(activateManifestationEventCheckpoint(db, activation), {
+    code: "EVENT_COMPACTION_SNAPSHOT_OPEN",
+  })
+  db.raw.prepare("UPDATE icono_manifestation_snapshot_leases SET status='expired'").run()
+  const batch = db.batch.bind(db)
+  db.batch = async (statements) => {
+    await createManifestationSnapshot(db, { ...options, consumerId: "reader_activation_race" })
+    return batch(statements)
+  }
+  await assert.rejects(activateManifestationEventCheckpoint(db, activation), {
+    code: "EVENT_COMPACTION_SNAPSHOT_OPEN",
+  })
+  assert.equal(row(db, "SELECT event_retention_floor AS n FROM icono_authority_state").n, 0)
+  assert.equal(
+    row(
+      db,
+      "SELECT status FROM icono_manifestation_event_checkpoints WHERE checkpoint_id='checkpoint_stream_race'",
+    ).status,
+    "verified",
   )
 })
 

@@ -166,6 +166,37 @@ the Website. A gap, expired cursor, or authority epoch change forces an immutabl
 watermarked snapshot; it never edits local rows until the snapshot validates and
 swaps atomically.
 
+Snapshot transport v2 (migration `0012`) streams directly from a pinned authority
+epoch, event watermark, baseline rowid ceiling and checkpoint. GET pages are
+read-only and contain at most 250 parts; no per-consumer D1 payload copy or build
+poller exists. Each signed continuation binds the cumulative part count and SHA-256
+chain. `total_parts` and `manifest_sha256` describe the prefix through that page;
+only a terminal signed `completion_cursor` can complete the lease. The event
+`resume_cursor` always names the original watermark. Leases expire within one hour.
+Database triggers forbid baseline updates and deletion. VACUUM and table rebuilds
+are unsupported while any lease is open: maintenance must first expire all leases
+and prevent new leases until it finishes. There is no automatic VACUUM path.
+Database triggers also arbitrate snapshot creation against checkpoint activation;
+every open lease whose source floor precedes a checkpoint blocks activation,
+including a lease with a newer event watermark than the checkpoint.
+
+The workstation durably caches validated metadata pages and revalidates them after
+restart, downloading only the missing suffix. It verifies the completion receipt
+before atomically replacing the replica, then deletes its download cache. An empty
+replica reports `initializing`, and an unfinished download reports `snapshot_staging`.
+The first sync always downloads the complete baseline before reading incremental
+events. An invalidated lease clears only its download cache so the next attempt
+can obtain a fresh lease; it never advances the last verified replica.
+Private prose and Tags are fetched only when opening the selected gene, with at
+most 128 revisions and 128 derivatives held in process memory. Sync never fetches
+the catalogue's private bodies. Legacy snapshot cleanup deletes at most 250 copied
+parts per maintenance call and retains each lease until its copied parts are gone.
+
+Deploy order: apply authoring migration `0012` and publish the v2 Worker through the
+normal Website pipeline, then restart the workstation with local schema v9 and the
+v2 client. Old clients reject the explicit version change; their last verified state
+remains intact. Generation continues through its independent exact-lease endpoint.
+
 Offline edits remain drafts. Reconnection submits each durable command with its
 original command ID and expected entity version. Conflict preserves the draft,
 shows the remote head, and requires a human rebase/retry. Local candidates without
