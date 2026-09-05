@@ -1376,6 +1376,7 @@ test("DO NOT DELETE: a newly protected phrase removes only overlapping live high
     Set,
     document,
     geneMatcher,
+    rangeHighlights: null,
     activeSymbol: null,
     hideTooltip() {},
     scheduleHighlightGeometryRefresh() {},
