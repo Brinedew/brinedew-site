@@ -380,6 +380,7 @@
       normalizeHighlightMode,
       setMode,
       getMode,
+      getTextColors: resolveTextColors,
       getCanvasShape(mode = highlightMode) {
         return CANVAS_SHAPE_CONTRACTS[normalizeHighlightMode(mode)]
       },

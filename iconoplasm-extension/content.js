@@ -256,8 +256,14 @@
   const HIGHLIGHT_RENDERERS = highlightRuntime.renderers
   const normalizeHighlightMode = highlightRuntime.normalizeHighlightMode
   const applyHighlightStyle = highlightRuntime.applyHighlightStyle
-  const refreshHighlightStyles = highlightRuntime.refreshHighlightStyles
-  const scheduleHighlightGeometryRefresh = highlightRuntime.scheduleHighlightGeometryRefresh
+  const refreshHighlightStyles = () => {
+    if (rangeHighlights) rangeHighlights.refresh()
+    else highlightRuntime.refreshHighlightStyles()
+  }
+  const scheduleHighlightGeometryRefresh = () => {
+    if (rangeHighlights) rangeHighlights.refresh()
+    else highlightRuntime.scheduleHighlightGeometryRefresh()
+  }
 
   const normalizeCardVariant = (raw) =>
     IconoContentSettings.normalizeCardVariant(raw, IconoCardShared)
@@ -276,6 +282,7 @@
 
   function applyHighlightVisibility() {
     document.body.classList.toggle("iconoplasm-highlight-on-hover", highlightVisibility === "hover")
+    rangeHighlights?.refresh()
   }
 
   async function loadHighlightVisibility() {
@@ -541,6 +548,7 @@
   let portraitLoadToken = 0
   let mutationScanController = null
   let pageScanner = null
+  let rangeHighlights = null
   let initializationPromise = null
   let initializationRetryTimer = 0
   let initialized = false
@@ -800,6 +808,10 @@
   }
 
   function unwrapBlockedGeneHighlights(blocklist) {
+    if (rangeHighlights) {
+      for (const node of rangeHighlights.groups.keys()) rangeHighlights.remove(node)
+      return 0
+    }
     if (!(blocklist instanceof Set) || blocklist.size === 0) return 0
     const genes = Array.from(document.querySelectorAll(".iconoplasm-gene"))
     const acceptedMatchesByParent = new Map()
@@ -1437,7 +1449,7 @@
         portraitUrl && source && portraitCache.dataUrlCache.get(portraitUrl) === source,
       )
     },
-    inspect(rawSymbol) {
+    inspect(rawSymbol, occurrence = 0) {
       const symbol = String(rawSymbol || "")
         .trim()
         .toUpperCase()
@@ -1448,6 +1460,8 @@
         at: performance.timeOrigin + performance.now(),
         initialized,
         startup: { ...startupTiming },
+        highlight: rangeHighlights?.inspectOccurrence(symbol, occurrence) || null,
+        highlightTransport: isPdfReaderDocument ? "pdf" : "range",
         disconnected: runtimeDisconnected,
         revision: activeCardSnapshotRevision,
         variant: cardVariant,
@@ -1736,7 +1750,38 @@
       window.dispatchEvent(new CustomEvent("iconoplasm-reader-bridge-ready"))
       return
     }
+    let rangeHoverAnchor = null
+    rangeHighlights = IconoplasmRangeHighlights.createRangeHighlights({
+      documentRef: document,
+      highlightRuntime,
+      getGeneMap: () => geneMap,
+      getVisibility: () => highlightVisibility,
+      isEligibleNode: (node) => !shouldIgnoreMutationNode(node),
+      placeholderColor: PLACEHOLDER_COLOR,
+      registerGeneAnchor,
+      unregisterGeneAnchor: (anchor) => {
+        readingSession.unregisterAnchor(anchor)
+        if (rangeHoverAnchor === anchor) {
+          rangeHoverAnchor = null
+          hideTooltip()
+        }
+      },
+      registerGeneSymbol: (symbol) => readingSession.registerSymbol(symbol),
+    })
+    document.addEventListener(
+      "mousemove",
+      (event) => {
+        const next = rangeHighlights.hitTest(event)
+        if (next === rangeHoverAnchor) return
+        rangeHoverAnchor = next
+        rangeHighlights.hover(next)
+        if (next) activateTooltipForAnchor(next, event.relatedTarget)
+        else leaveTooltipAnchor(event.target)
+      },
+      { passive: true },
+    )
     pageScanner = IconoContentScanner.createPageScanner({
+      annotations: rangeHighlights,
       documentRef: document,
       nodeFilter: NodeFilter,
       skipTags: SKIP_TAGS,
