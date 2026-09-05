@@ -1,5 +1,6 @@
 {
   "manifest_version": 3,
+  "minimum_chrome_version": "105",
   "name": "Iconoplasm",
   "version": "0.5.5",
   "description": "Highlights gene symbols on any page with hover cards, portraits, and gene colors. Track your discoveries as you browse.",
@@ -11,6 +12,7 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "iconoplasm@brinedew.bio",
+      "strict_min_version": "140.0",
       "data_collection_permissions": {
         "required": ["none"]
       }
@@ -50,6 +52,8 @@
         "content-api.js",
         "content-settings.js",
         "content-matcher.js",
+        "content-range-paint.js",
+        "content-range-highlights.js",
         "content-scanner.js",
         "content-lifecycle.js",
         "content-tooltip.js",
