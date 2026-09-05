@@ -136,7 +136,8 @@ async function readSnapshotLease(db, snapshotId) {
             total_parts, manifest_sha256,
             expires_at, ready_at, created_at, completed_at,
             (SELECT authority_epoch FROM icono_authority_state WHERE singleton=1) AS current_authority_epoch
-       FROM icono_manifestation_snapshot_leases WHERE snapshot_id = ?`,
+       FROM icono_manifestation_snapshot_leases INDEXED BY sqlite_autoindex_icono_manifestation_snapshot_leases_1
+      WHERE snapshot_id = ?`,
     snapshotId,
   )
 }
@@ -147,7 +148,7 @@ export async function createManifestationSnapshot(db, input = {}) {
   const timestamp = normalizeTimestamp(input.now)
   await prepared(
     db,
-    `UPDATE icono_manifestation_snapshot_leases SET status = 'expired'
+    `UPDATE icono_manifestation_snapshot_leases INDEXED BY uq_icono_open_snapshot_consumer SET status = 'expired'
       WHERE consumer_id = ? AND status IN ('building', 'open')
         AND (expires_at <= ? OR stream_version <> 2 OR authority_epoch <>
           (SELECT authority_epoch FROM icono_authority_state WHERE singleton=1))`,
@@ -157,6 +158,7 @@ export async function createManifestationSnapshot(db, input = {}) {
   const existing = await first(
     db,
     `SELECT snapshot_id FROM icono_manifestation_snapshot_leases
+      INDEXED BY uq_icono_open_snapshot_consumer
       WHERE consumer_id = ? AND status IN ('building', 'open') LIMIT 1`,
     consumerId,
   )
@@ -307,6 +309,7 @@ async function sourcePage(db, lease, phase, after, limit) {
             checkpoint.checkpoint_id, checkpoint.authority_epoch,
             checkpoint.target_watermark_event_sequence, checkpoint.manifest_sha256
        FROM icono_manifestation_event_checkpoint_entities entity
+       INDEXED BY sqlite_autoindex_icono_manifestation_event_checkpoint_entities_2
        JOIN icono_manifestation_event_checkpoints checkpoint ON checkpoint.checkpoint_id=entity.checkpoint_id
       WHERE entity.checkpoint_id=? AND checkpoint.status='active' AND entity.entity_ordinal>?
       ORDER BY entity.entity_ordinal LIMIT ?`,

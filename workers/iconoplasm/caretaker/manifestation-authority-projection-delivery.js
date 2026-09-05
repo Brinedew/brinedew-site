@@ -9,11 +9,12 @@ export async function deliverAcceptedAuthorityEvent(db, callbacks, result) {
   }
   const event = await first(
     db,
-    `SELECT event_uuid, event_sequence, gene_id, payload_json
+    `SELECT event_uuid, event_sequence, gene_id, payload_json, projection_status
        FROM icono_manifestation_events WHERE event_sequence = ?`,
     result.accepted_event_sequence,
   )
   if (!event) throw authorityError("AUTHORITY_EVENT_MISSING", "Authority event is missing", 500)
+  if (event.projection_status === "published") return { pending: false }
   const payload = JSON.parse(event.payload_json)
   try {
     const fullEvent = {

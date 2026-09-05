@@ -169,7 +169,9 @@ function projectionOutboxDatabase() {
       payload_json TEXT NOT NULL,
       projection_status TEXT NOT NULL DEFAULT 'pending',
       projection_attempts INTEGER NOT NULL DEFAULT 0,
-      projection_next_attempt_at TEXT
+      projection_next_attempt_at TEXT,
+      gene_revision INTEGER GENERATED ALWAYS AS (event_sequence) STORED,
+      UNIQUE(gene_id, gene_revision)
     );
   `)
   return {
@@ -620,6 +622,60 @@ test("projection recovery prioritizes the accepted latest event and acknowledges
         projection_next_attempt_at: null,
       },
     ],
+  )
+})
+
+test("one accepted projection ignores unrelated backlog and acknowledges at most 250 revisions", async (t) => {
+  const primary = primaryDatabase()
+  const authoring = projectionOutboxDatabase()
+  t.after(() => {
+    primary.database.close()
+    authoring.database.close()
+  })
+  const insert = authoring.database.prepare(
+    "INSERT INTO icono_manifestation_events(event_uuid,event_sequence,gene_id,payload_json) VALUES (?,?,?,?)",
+  )
+  authoring.database.exec("BEGIN")
+  for (let sequence = 1; sequence <= 1000; sequence++) {
+    const event = callback(sequence)
+    insert.run(event.event_id, sequence, event.gene_id, JSON.stringify(event.payload))
+  }
+  for (let sequence = 1001; sequence <= 4000; sequence++) {
+    insert.run(`other_${sequence}`, sequence, `other_gene_${sequence}`, "{}")
+  }
+  authoring.database.exec("COMMIT")
+  const latest = callback(1000)
+  const drained = await drainManifestationAuthorityProjectionOutbox(
+    {
+      primaryDb: primary,
+      authoringDb: authoring,
+      priorityEventId: latest.event_id,
+      limit: 50,
+      projectPublicMaterialEvent: async () => {},
+    },
+    { readCanonical: async () => exactRecord(1000) },
+  )
+  assert.deepEqual(
+    drained.results.map((item) => item.event_id),
+    [latest.event_id],
+  )
+  assert.equal(drained.ok, true)
+  assert.equal(
+    authoring.database
+      .prepare(
+        "SELECT COUNT(*) AS n FROM icono_manifestation_events WHERE projection_status='published'",
+      )
+      .get().n,
+    250,
+  )
+  assert.equal(
+    authoring.database
+      .prepare(
+        "SELECT COUNT(*) AS n FROM icono_manifestation_events WHERE projection_status='pending'",
+      )
+      .get().n,
+    3750,
+    "older and unrelated work must remain durable",
   )
 })
 

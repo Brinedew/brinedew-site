@@ -59,7 +59,8 @@ export async function readActiveManifestationEventCheckpoint(db) {
     `SELECT checkpoint_id, authority_epoch, base_checkpoint_id,
             base_watermark_event_sequence, target_watermark_event_sequence,
             status, total_entities, manifest_sha256, activated_at, prune_completed_at
-       FROM icono_manifestation_event_checkpoints WHERE status = 'active' LIMIT 1`,
+       FROM icono_manifestation_event_checkpoints INDEXED BY uq_icono_active_event_checkpoint
+      WHERE status = 'active' LIMIT 1`,
   )
 }
 

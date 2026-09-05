@@ -235,14 +235,28 @@ async function readGene(db, geneId) {
 }
 
 async function readGeneAliases(db, geneId) {
-  return all(
+  // Alias history is part of each authority event, so never truncate it.
+  // Stop the indexed read before sorting; LIMIT after ORDER BY still scans
+  // the complete history. The extra row detects an unsupported envelope.
+  const aliases = await all(
     db,
     `SELECT alias_symbol, alias_kind, valid_from, retired_at
-       FROM icono_gene_aliases
-      WHERE gene_id = ?
+       FROM (
+         SELECT alias_symbol, alias_kind, valid_from, retired_at
+           FROM icono_gene_aliases INDEXED BY idx_icono_gene_aliases_gene
+          WHERE gene_id = ? LIMIT 257 OFFSET 0
+       )
       ORDER BY valid_from, alias_symbol COLLATE NOCASE`,
     geneId,
   )
+  if (aliases.length > 256) {
+    throw authorityError(
+      "COST_GENE_ALIAS_ENVELOPE_EXCEEDED",
+      "Gene alias history exceeds the 256-row command envelope; implement a bounded paged event schema before retrying",
+      409,
+    )
+  }
+  return aliases
 }
 
 async function requireActiveGene(db, rawGeneId) {

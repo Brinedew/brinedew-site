@@ -3221,6 +3221,10 @@ export default {
   },
 
   async queue(batch, env, ctx) {
+    if (env.ICONOPLASM_SCHEMA_TRANSITION === "1") {
+      batch.retryAll({ delaySeconds: 60 })
+      return
+    }
     return handleIconoplasmQueue(batch, env, ctx)
   },
 
@@ -3245,11 +3249,15 @@ export default {
       `[CRON] Triggered at ${new Date().toISOString()} via "${cronExprRaw}" -> "${cronExpr}"`,
     )
 
-    if (ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS.has(cronExpr)) {
+    if (
+      env.ICONOPLASM_SCHEMA_TRANSITION !== "1" &&
+      ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS.has(cronExpr)
+    ) {
       await runScheduledIconoplasmMaintenance(env, ctx)
     }
 
     if (cronExpr === "*/15 * * * *") {
+      if (env.ICONOPLASM_SCHEMA_TRANSITION === "1") return
       // These jobs share a clock, not a failure domain. Drain the durable outbox
       // even when the unrelated gallery dirty-shard publication fails, while
       // preserving the publication job's existing fail-loud behavior.
