@@ -1,8 +1,11 @@
 import {
   IconoplasmGenerationLeaseError,
   failExactGenerationLease,
+  readExactGenerationLeaseMaterial,
   renewExactGenerationLease,
 } from "./iconoplasm-generation-lease.js"
+
+import { IconoplasmGenerationSourceError } from "./lib/iconoplasm-generation-provenance.js"
 
 const CACHE_CONTROL = "private, no-store"
 
@@ -34,7 +37,9 @@ async function parseJson(request) {
 }
 
 function rejected(error, fallbackCode, fallbackMessage) {
-  const expected = error instanceof IconoplasmGenerationLeaseError
+  const expected =
+    error instanceof IconoplasmGenerationLeaseError ||
+    error instanceof IconoplasmGenerationSourceError
   const status = expected ? Number(error.status || 409) : 500
   return json(
     {
@@ -140,6 +145,7 @@ export function createIconoplasmGenerationExecutorHandler(dependencies = {}) {
     deliverPendingNotifications,
     reconcileDeliveredFulfillments,
     renewGenerationLease = renewExactGenerationLease,
+    readGenerationMaterial = readExactGenerationLeaseMaterial,
     failGenerationLease = failExactGenerationLease,
     inlineDeliveryLimit = 25,
     logger = console,
@@ -175,6 +181,25 @@ export function createIconoplasmGenerationExecutorHandler(dependencies = {}) {
         return json({ ok: true, ...result })
       } catch (error) {
         return rejected(error, "GENERATION_LEASE_CLAIM_FAILED", "Generation lease claim failed")
+      }
+    }
+
+    if (routeId === "authority_generation_lease_material") {
+      try {
+        return json(
+          await readGenerationMaterial({
+            env,
+            leaseToken: match?.params?.lease_token,
+            leaseOwnerId: body?.lease_owner_id,
+            expectedLeaseVersion: body?.expected_lease_version,
+          }),
+        )
+      } catch (error) {
+        return rejected(
+          error,
+          "GENERATION_MATERIAL_UNAVAILABLE",
+          "Exact generation material is unavailable",
+        )
       }
     }
 

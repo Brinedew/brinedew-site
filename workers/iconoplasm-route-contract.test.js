@@ -80,6 +80,8 @@ const PATTERN_EXAMPLES = Object.freeze({
     "/api/iconoplasm/authority/maintenance/event-compaction/checkpoints/checkpoint_0001",
   authority_event_compaction_action:
     "/api/iconoplasm/authority/maintenance/event-compaction/checkpoints/checkpoint_0001/build",
+  authority_generation_lease_material:
+    "/api/iconoplasm/authority/generation-leases/generation_lease_0001/material",
   authority_generation_lease_renew:
     "/api/iconoplasm/authority/generation-leases/generation_lease_0001/renew",
   authority_generation_lease_fail:
@@ -164,6 +166,7 @@ test("authority routes declare one least-privilege bearer audience", () => {
   const expected = {
     "authority-generation-bearer": [
       "authority_generation_lease_claim",
+      "authority_generation_lease_material",
       "authority_generation_lease_renew",
       "authority_generation_lease_fail",
       "authority_generation_lease_complete",
