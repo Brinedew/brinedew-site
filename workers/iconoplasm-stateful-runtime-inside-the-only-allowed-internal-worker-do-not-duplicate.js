@@ -1,6 +1,7 @@
 import puppeteer from "@cloudflare/puppeteer"
+import { readSyncFinalizationSummary } from "./iconoplasm/sync-finalization-summary.js"
 import { prepareGeneEssenceUpsertStatement } from "./lib/iconoplasm-essence-write.js"
-import { d1DailyAllowance } from "../shared/iconoplasm-d1-budget-policy.js"
+import { d1OperationalAllowance } from "../shared/iconoplasm-d1-budget-policy.js"
 import {
   parseDiscoveryMembershipSymbols,
   readDiscoveryMembership,
@@ -4610,7 +4611,8 @@ async function countGenerationRequestInboxStates(env, requesterUserId) {
        SUM(CASE WHEN status IN ('open', 'delivery_pending') THEN 1 ELSE 0 END) AS open_count,
        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled_count
      FROM icono_generation_requests
-     WHERE requester_user_id = ?`,
+     WHERE requester_user_id = ?
+       AND status IN ('open', 'delivery_pending', 'cancelled')`,
   )
     .bind(requesterNorm)
     .first()
@@ -18409,14 +18411,14 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
           : 1
       const rowsRead = Math.max(0, Number(row?.rows_read || 0) || 0)
       const rowsWritten = Math.max(0, Number(row?.rows_written || 0) || 0)
-      const rowsReadDailySmartLimit = d1DailyAllowance({
+      const rowsReadDailySmartLimit = d1OperationalAllowance({
         resource: "reads",
         monthlyLimit: rowsReadMonthlyLimit,
         usedBeforeDay: cycleRowsReadBeforeDay,
         daysRemaining: daysRemainingInCycle,
         burstMultiplier,
       })
-      const rowsWrittenDailySmartLimit = d1DailyAllowance({
+      const rowsWrittenDailySmartLimit = d1OperationalAllowance({
         resource: "writes",
         monthlyLimit: rowsWrittenMonthlyLimit,
         usedBeforeDay: cycleRowsWrittenBeforeDay,
@@ -18554,14 +18556,14 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       rowsReadMonthlyLimit > 0 ? Math.max(0, rowsReadMonthlyLimit - cycleRowsRead) : null
     const rowsWrittenMonthlyRemaining =
       rowsWrittenMonthlyLimit > 0 ? Math.max(0, rowsWrittenMonthlyLimit - cycleRowsWritten) : null
-    const rowsReadDailySmartLimit = d1DailyAllowance({
+    const rowsReadDailySmartLimit = d1OperationalAllowance({
       resource: "reads",
       monthlyLimit: rowsReadMonthlyLimit,
       usedBeforeDay: cycleRowsReadBeforeToday,
       daysRemaining: daysRemainingInCycle,
       burstMultiplier,
     })
-    const rowsWrittenDailySmartLimit = d1DailyAllowance({
+    const rowsWrittenDailySmartLimit = d1OperationalAllowance({
       resource: "writes",
       monthlyLimit: rowsWrittenMonthlyLimit,
       usedBeforeDay: cycleRowsWrittenBeforeToday,
@@ -37107,76 +37109,15 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         })(),
         { maxItems: 5000 },
       )
-      const scopedSymbolsJson = JSON.stringify(scopedSymbols)
-      const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
       const jobs = await listPendingSyncFinalizationJobs(env, { limit, symbols: scopedSymbols })
-      const [
-        queuedCount,
-        runningCount,
-        retryingCount,
-        pendingFinalizeCount,
-        unfinishedCount,
-        completedCount,
-        latestCompletedRow,
-      ] = await Promise.all([
-        countSyncFinalizationJobs(env, {
-          whereSql: `status = ?
-              AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-          bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED, scopedEnabled, scopedSymbolsJson],
-        }),
-        countSyncFinalizationJobs(env, {
-          whereSql: `status = ?
-              AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-          bindArgs: [ICONOPLASM_SYNC_FINALIZATION_STATUS_RUNNING, scopedEnabled, scopedSymbolsJson],
-        }),
-        countSyncFinalizationJobs(env, {
-          whereSql: `status = ?
-              AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-          bindArgs: [
-            ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
-            scopedEnabled,
-            scopedSymbolsJson,
-          ],
-        }),
-        countSyncFinalizationJobs(env, {
-          whereSql: `phase = ? AND status <> ?
-              AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-          bindArgs: [
-            ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-            ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-            scopedEnabled,
-            scopedSymbolsJson,
-          ],
-        }),
-        countSyncFinalizationJobs(env, {
-          whereSql: `status <> ?
-              AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-          bindArgs: [
-            ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-            scopedEnabled,
-            scopedSymbolsJson,
-          ],
-        }),
-        countSyncFinalizationJobs(env, {
-          whereSql: `status = ?
-              AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-          bindArgs: [
-            ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-            scopedEnabled,
-            scopedSymbolsJson,
-          ],
-        }),
-        env.ICONOPLASM_DB.prepare(
-          `SELECT MAX(completed_at) AS completed_at
-             FROM icono_sync_finalization_jobs
-             WHERE status = ?
-               AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))
-               AND completed_at <> ''`,
-        )
-          .bind(ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED, scopedEnabled, scopedSymbolsJson)
-          .first(),
-      ])
-      const latestCompletedAt = sanitizeText(latestCompletedRow?.completed_at || "", 64) || ""
+      const summary = await readSyncFinalizationSummary(env.ICONOPLASM_DB, scopedSymbols)
+      const queuedCount = summary.queued_count
+      const runningCount = summary.running_count
+      const retryingCount = summary.retrying_count
+      const pendingFinalizeCount = summary.pending_finalize_count
+      const unfinishedCount = summary.unfinished_count
+      const completedCount = summary.completed_count
+      const latestCompletedAt = sanitizeText(summary.completed_at || "", 64) || ""
       const governorStatus = await iconoplasmSyncGovernorJson(env, "/status", {})
 
       return done(
