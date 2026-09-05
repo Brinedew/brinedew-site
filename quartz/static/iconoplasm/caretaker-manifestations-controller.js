@@ -1,4 +1,8 @@
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=20260905-caretaker-editor-v6"
+import {
+  mountCaretakerTagEditor,
+  readTagFields,
+} from "./caretaker-tag-editor.js?v=20260905-categories-v1"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=20260905-caretaker-categories-v7"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -10,8 +14,8 @@ import {
   ownManifestation,
   proseValidationError,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=20260905-caretaker-editor-v6"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=20260905-caretaker-editor-v6"
+} from "./caretaker-manifestations-model.js?v=20260905-caretaker-categories-v7"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=20260905-caretaker-categories-v7"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -40,7 +44,13 @@ export function createCaretakerManifestationPanel({
     try {
       const value =
         prose && typeof prose === "object"
-          ? { prose: String(prose.prose || ""), tags: String(prose.tags || "") }
+          ? {
+              prose: String(prose.prose || ""),
+              tags: String(prose.tags || ""),
+              fieldsJson:
+                prose.fieldsJson ||
+                readTagFields(state.host.querySelector("[data-icono-caretaker-tags]")),
+            }
           : { prose: String(prose || ""), tags: "" }
       storage?.setItem(draftKey(state), JSON.stringify(value))
     } catch (_error) {
@@ -61,7 +71,11 @@ export function createCaretakerManifestationPanel({
       try {
         const parsed = JSON.parse(raw)
         if (parsed && typeof parsed === "object") {
-          return { prose: String(parsed.prose || ""), tags: String(parsed.tags || "") }
+          return {
+            prose: String(parsed.prose || ""),
+            tags: String(parsed.tags || ""),
+            fieldsJson: parsed.fieldsJson,
+          }
         }
       } catch (_error) {}
       return { prose: raw, tags: "" }
@@ -82,20 +96,42 @@ export function createCaretakerManifestationPanel({
     state.busy = busy
     state.host.setAttribute("aria-busy", busy ? "true" : "false")
     state.host.querySelectorAll("button, textarea, input").forEach(function (control) {
-      control.disabled = busy || control.hasAttribute("data-icono-caretaker-disabled")
+      const editing = state.autosaving && control.closest("[data-icono-caretaker-editor]")
+      control.disabled = (busy && !editing) || control.hasAttribute("data-icono-caretaker-disabled")
     })
   }
 
   function render(state, { preserveDraft = false } = {}) {
+    const existingForm = preserveDraft && state.host.querySelector("[data-icono-caretaker-editor]")
     const existingDialog = state.host.querySelector("[data-icono-caretaker-dialog]")
     const wasOpen = existingDialog?.open === true
+    const markup = renderCaretakerManifestationPanel(state.dossier, escapeHtml)
+    if (existingForm) {
+      const next = state.host.ownerDocument.createElement("div")
+      next.innerHTML = markup
+      const nextProse = next.querySelector("[data-icono-caretaker-prose]")
+      if (nextProse && !nextProse.disabled) {
+        // Detaching an open dialog steals focus and fires blur on a half-written tag.
+        // Keep the complete editing subtree attached while refreshing other sections.
+        for (const tab of ["history", "settings"]) {
+          const selector = `[data-icono-caretaker-tabpanel="${tab}"]`
+          const replacement = next.querySelector(selector)
+          if (replacement) state.host.querySelector(selector)?.replaceWith(replacement)
+        }
+        updateCount(existingForm.querySelector("[data-icono-caretaker-prose]"))
+        if (state.basedOnRevisionId) showBasis(state)
+        activateTab(state, state.activeTab || "manifestation")
+        return
+      }
+    }
     const draft = preserveDraft
       ? {
           prose: String(state.host.querySelector("[data-icono-caretaker-prose]")?.value || ""),
           tags: String(state.host.querySelector("[data-icono-caretaker-tags]")?.value || ""),
+          fieldsJson: readTagFields(state.host.querySelector("[data-icono-caretaker-tags]")),
         }
       : null
-    state.host.innerHTML = renderCaretakerManifestationPanel(state.dossier, escapeHtml)
+    state.host.innerHTML = markup
     const textarea = state.host.querySelector("[data-icono-caretaker-prose]")
     const tags = state.host.querySelector("[data-icono-caretaker-tags]")
     const restored = draft || restoreDraft(state)
@@ -105,11 +141,12 @@ export function createCaretakerManifestationPanel({
     }
     if (tags && restored) {
       tags.value = restored.tags
+      if (restored.fieldsJson) tags.dataset.fieldsJson = JSON.stringify(restored.fieldsJson)
       tags.dispatchEvent(new Event("input", { bubbles: true }))
     }
     if (!textarea && restored?.prose) mountLocalDraftRecovery(state, restored.prose)
     if (textarea) updateCount(textarea)
-    initTagPills(state)
+    mountCaretakerTagEditor(state.host.querySelector("[data-icono-caretaker-editor]"))
     if (state.basedOnRevisionId) showBasis(state)
     activateTab(state, state.activeTab || "manifestation")
     const dialog = state.host.querySelector("[data-icono-caretaker-dialog]")
@@ -175,112 +212,6 @@ export function createCaretakerManifestationPanel({
       count.textContent = `${codePointLength(textarea.value).toLocaleString()} / ${MAX_PROSE_CODE_POINTS.toLocaleString()}`
   }
 
-  function parseTagList(value) {
-    return String(value || "")
-      .split(/\r?\n|,/)
-      .map(function (line) {
-        return line.trim()
-      })
-      .filter(function (line) {
-        return line.length > 0
-      })
-  }
-
-  function dispatchInput(control) {
-    // Tests run the panel inside linkedom documents whose Event implementation
-    // differs from the Node global, so construct the event from the control's
-    // own document.
-    const EventCtor = control.ownerDocument?.defaultView?.Event || Event
-    control.dispatchEvent(new EventCtor("input", { bubbles: true }))
-  }
-
-  function writeTagList(source, tags) {
-    source.value = tags.join(", ")
-    dispatchInput(source)
-  }
-
-  // Shoelace owns selection, removable tags, focus and keyboard navigation.
-  // The hidden source remains the single autosave/draft value.
-  function initTagPills(state) {
-    const form = state.host.querySelector("[data-icono-caretaker-editor]")
-    const source = form?.querySelector("[data-icono-caretaker-tags]")
-    const menu = form?.querySelector("[data-icono-caretaker-tag-menu]")
-    const input = form?.querySelector("[data-icono-caretaker-tags-input]")
-    const add = form?.querySelector("[data-icono-caretaker-add-tag]")
-    const count = form?.querySelector("[data-icono-caretaker-tags-count]")
-    if (!source || !menu || !input || !add) return
-    const choices = new Set([
-      ...parseTagList(source.value),
-      ...parseTagList(source.dataset.caretakerTagsSuggestions),
-      "standing",
-      "sitting",
-      "walking",
-      "running",
-      "kneeling",
-      "looking at viewer",
-      "looking away",
-      "smile",
-      "serious",
-      "closed eyes",
-      "crossed arms",
-      "hands on hips",
-      "dress",
-      "coat",
-      "jacket",
-      "gloves",
-      "boots",
-      "hat",
-      "ribbon",
-      "jewelry",
-    ])
-    function renderMenu() {
-      const tags = parseTagList(source.value)
-      tags.forEach((tag) => choices.add(tag))
-      menu.replaceChildren(
-        ...Array.from(choices, (tag) => {
-          const option = document.createElement("sl-option")
-          option.value = encodeURIComponent(tag)
-          option.textContent = tag.replaceAll("_", " ")
-          return option
-        }),
-      )
-      menu.value = tags.map(encodeURIComponent)
-      if (count) count.textContent = `${tags.length} selected · changes autosave`
-    }
-    function addTags() {
-      const tags = Array.from(
-        new Set([...parseTagList(source.value), ...parseTagList(input.value)]),
-      )
-      input.value = ""
-      if (tags.join(", ") !== source.value) writeTagList(source, tags)
-      input.focus()
-    }
-    menu.disabled = source.disabled
-    add.disabled = source.disabled
-    if (!source.disabled) {
-      menu.addEventListener("sl-change", () => {
-        const selected = new Set(
-          (Array.isArray(menu.value) ? menu.value : []).map(decodeURIComponent),
-        )
-        // Keep prompt order stable: append new choices after surviving tags.
-        const tags = parseTagList(source.value).filter((tag) => selected.has(tag))
-        selected.forEach((tag) => {
-          if (!tags.includes(tag)) tags.push(tag)
-        })
-        writeTagList(source, tags)
-      })
-      add.addEventListener("click", addTags)
-      input.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" && !event.isComposing) {
-          event.preventDefault()
-          addTags()
-        }
-      })
-      source.addEventListener("input", renderMenu)
-    }
-    renderMenu()
-  }
-
   function request(state, suffix, init) {
     return fetchJSON(apiPath(state.symbol, suffix), {
       credentials: "include",
@@ -309,6 +240,7 @@ export function createCaretakerManifestationPanel({
           { method: "GET" },
         )
         own.head_tags = String(material?.tags?.tags_text || "")
+        own.head_fields = material?.tags?.fields_json || {}
       } catch (_error) {
         own.head_tags = ""
         own.tags_body_unavailable = true
@@ -335,8 +267,10 @@ export function createCaretakerManifestationPanel({
             { method: "GET" },
           )
           state.dossier.prefill_tags_text = String(material?.tags?.tags_text || "")
+          state.dossier.prefill_fields = material?.tags?.fields_json || {}
         } catch (_error) {
           state.dossier.prefill_tags_text = ""
+          state.dossier.tags_body_unavailable = true
         }
       }
     }
@@ -501,14 +435,15 @@ export function createCaretakerManifestationPanel({
         )
         return result
       }
-      setStatus(
-        state,
-        success +
-          (result?.projection_pending
-            ? " The public gene view is catching up to the accepted authority event."
-            : ""),
-        result?.projection_pending ? "warn" : "success",
-      )
+      if (success)
+        setStatus(
+          state,
+          success +
+            (result?.projection_pending
+              ? " The public gene view is catching up to the accepted authority event."
+              : ""),
+          result?.projection_pending ? "warn" : "success",
+        )
       return result
     } catch (error) {
       const status = Number(error?.status || 0)
@@ -541,10 +476,13 @@ export function createCaretakerManifestationPanel({
     if (!target) return
     target.textContent = message
     target.dataset.tone = tone
+    const retry = state.host.querySelector("[data-icono-caretaker-retry-save]")
+    if (retry) retry.hidden = tone !== "error"
   }
 
   function scheduleAutosave(state) {
     globalThis.clearTimeout(state.autosaveTimer)
+    if (state.autosaveFailed) return autosaveIndicator(state, "Not saved", "error")
     autosaveIndicator(state, "Unsaved changes", "pending")
     state.autosaveTimer = globalThis.setTimeout(function () {
       void autosave(state)
@@ -552,11 +490,13 @@ export function createCaretakerManifestationPanel({
   }
 
   async function autosave(state) {
+    if (state.autosaving) return
     if (state.busy) return scheduleAutosave(state)
     const proseControl = state.host.querySelector("[data-icono-caretaker-prose]")
     const tagsControl = state.host.querySelector("[data-icono-caretaker-tags]")
     if (!proseControl || !tagsControl) return
-    const snapshot = {
+    const snapshot = state.autosaveJob?.snapshot || {
+      fieldsJson: readTagFields(tagsControl),
       prose: String(proseControl.value || "")
         .normalize("NFC")
         .replace(/\r\n?/g, "\n"),
@@ -569,20 +509,36 @@ export function createCaretakerManifestationPanel({
       autosaveIndicator(state, "Not saved", "error")
       return setStatus(state, validation, "error")
     }
-    if (new TextEncoder().encode(snapshot.tags).byteLength > 32 * 1024 - 3) {
+    if (
+      new TextEncoder().encode(snapshot.tags + JSON.stringify(snapshot.fieldsJson)).byteLength >
+      32 * 1024 - 1
+    ) {
       autosaveIndicator(state, "Not saved", "error")
       return setStatus(state, "Keep Tags below 32 KiB.", "error")
     }
-    const fingerprint = JSON.stringify(snapshot)
+    if (
+      !snapshot.tags.trim() &&
+      JSON.stringify(snapshot.fieldsJson) !== tagsControl.dataset.initialFieldsJson
+    ) {
+      autosaveIndicator(state, "Not saved", "error")
+      return setStatus(
+        state,
+        "At least one generation tag is required to save tag changes.",
+        "error",
+      )
+    }
+    const fingerprint = JSON.stringify([snapshot.prose, snapshot.tags, snapshot.fieldsJson])
     if (fingerprint === state.lastSavedFingerprint) {
       autosaveIndicator(state, "Saved", "success")
       return
     }
     autosaveIndicator(state, "Saving…", "pending")
-    saveDraft(state, snapshot)
+    setStatus(state, "")
+    state.autosaving = true
+    const job = (state.autosaveJob ||= { snapshot })
     try {
       const own = ownManifestation(state.dossier)
-      const revision = await mutate(
+      const revision = (job.revision ||= await mutate(
         state,
         "/revisions",
         {
@@ -591,21 +547,22 @@ export function createCaretakerManifestationPanel({
           expected_manifestation_version: Number(own?.row_version || 0),
           based_on_revision_id: state.basedOnRevisionId || null,
         },
-        { success: "Manifestation autosaved as a new version.", preserveDraft: true },
-      )
-      if (!revision) return
+        { preserveDraft: true },
+      ))
+      if (!revision) throw new Error("Revision save needs an explicit retry")
       if (snapshot.tags.trim()) {
-        const submitted = await mutate(
+        const submitted = (job.submitted ||= await mutate(
           state,
           `/revisions/${encodeURIComponent(revision.manifestation_revision_id)}/tags-derivatives`,
           {
             tags_text: snapshot.tags,
+            fields_json: snapshot.fieldsJson,
             expected_gene_revision: Number(state.dossier.head.gene_revision || 0),
           },
-          { success: "Tags autosaved.", preserveDraft: true },
-        )
-        if (!submitted) return
-        await mutate(
+          { preserveDraft: true },
+        ))
+        if (!submitted) throw new Error("Tags save needs an explicit retry")
+        const selected = await mutate(
           state,
           `/revisions/${encodeURIComponent(revision.manifestation_revision_id)}/tags-derivative-head`,
           {
@@ -613,20 +570,29 @@ export function createCaretakerManifestationPanel({
             expected_derivative_head_version: Number(submitted.derivative_head_version || 0),
             expected_gene_revision: Number(state.dossier.head.gene_revision || 0),
           },
-          { success: "Manifestation and Tags autosaved.", preserveDraft: true },
+          { preserveDraft: true },
         )
+        if (!selected) throw new Error("Tags selection needs an explicit retry")
       }
       state.lastSavedFingerprint = fingerprint
+      state.autosaveJob = null
       state.basedOnRevisionId = null
       const current = {
         prose: String(state.host.querySelector("[data-icono-caretaker-prose]")?.value || ""),
         tags: String(state.host.querySelector("[data-icono-caretaker-tags]")?.value || ""),
+        fieldsJson: readTagFields(state.host.querySelector("[data-icono-caretaker-tags]")),
       }
-      if (JSON.stringify(current) === fingerprint) clearDraft(state)
-      autosaveIndicator(state, "Saved", "success")
-    } catch (_error) {
-      autosaveIndicator(state, "Not saved — retrying", "error")
-      scheduleAutosave(state)
+      if (JSON.stringify([current.prose, current.tags, current.fieldsJson]) === fingerprint) {
+        clearDraft(state)
+        autosaveIndicator(state, "Saved", "success")
+      } else scheduleAutosave(state)
+    } catch (error) {
+      globalThis.clearTimeout(state.autosaveTimer)
+      state.autosaveFailed = true
+      if (Number(error?.status) >= 400 && Number(error?.status) < 500) state.autosaveJob = null
+      autosaveIndicator(state, "Not saved", "error")
+    } finally {
+      state.autosaving = false
     }
   }
 
@@ -638,6 +604,10 @@ export function createCaretakerManifestationPanel({
     mounted,
     mutate,
     retryTags,
+    retrySave: (state) => {
+      state.autosaveFailed = false
+      return autosave(state)
+    },
     scheduleAutosave,
     saveDraft,
     setStatus,

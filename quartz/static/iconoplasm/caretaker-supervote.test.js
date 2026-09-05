@@ -95,7 +95,11 @@ test("the selected ordinary vote button carries a non-color 10x marker and no pa
 
   const selected = root.querySelector(`[data-icono-gene-vote-box] [data-icono-vote-up]`)
   assert.equal(selected.classList.contains("is-caretaker-supervoted"), true)
-  assert.equal(selected.querySelector("[data-icono-caretaker-supervote-mark]").textContent, "+10")
+  assert.equal(
+    selected.parentElement.querySelector("[data-icono-caretaker-supervote-mark]").textContent,
+    "+10",
+  )
+  assert.equal(selected.querySelector("[data-icono-caretaker-supervote-mark]"), null)
   assert.match(selected.getAttribute("aria-label"), /Long-press to recall your \+10/)
   assert.equal(root.querySelector(".icono-caretaker-supervote"), null)
   assert.equal(root.querySelector(`[data-icono-gene-vote-box]`).dataset.imageScore, "4")
@@ -193,8 +197,9 @@ test("the main app lazy-loads the signed control beside the existing voting auth
     /import \{ createRequestInbox \} from "\.\/request-inbox\.js\?v=20260901-signed-supervote-v2"/,
   )
   assert.match(source, /supervoteControls\.mount\(geneContent/)
-  assert.match(css, /outline: 2px double currentColor/)
-  assert.match(css, /content: "CARETAKER"/)
+  assert.match(css, /caretaker-seal-positive\.png/)
+  assert.match(css, /caretaker-seal-negative\.png/)
+  assert.match(css, /pointer-events: none/)
 
   const normalized = normalizeCaretakerSupervoteSnapshot({ supervote: activeSnapshot() })
   assert.equal(normalized.direction, 1)
