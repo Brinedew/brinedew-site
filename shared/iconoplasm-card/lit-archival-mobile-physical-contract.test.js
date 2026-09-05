@@ -1878,7 +1878,7 @@ test("server-rendered gene hero reserves its measured closed mobile geometry", a
   )
 })
 
-test("gene suggestions render before the initial candidate gallery and are fetched once per gene page", async () => {
+test("gene candidates precede suggestions, which are fetched once per gene page", async () => {
   const app = await sourceText(appPath)
   assert.match(
     app,
@@ -1887,8 +1887,8 @@ test("gene suggestions render before the initial candidate gallery and are fetch
   )
   assert.match(
     app,
-    /html \+= "<div data-icono-suggest-island>" \+ buildSuggestSectionMarkup\(g\.symbol\) \+ "<\/div>"[\s\S]*?html \+= renderCandidateGallery\(g\)/,
-    "the suggestions section must render above the complete candidate gallery",
+    /html \+= renderCandidateGallery\(g\)[\s\S]*?html \+= "<div data-icono-suggest-island>" \+ buildSuggestSectionMarkup\(g\.symbol\) \+ "<\/div>"/,
+    "candidate images must be discoverable before the suggestions form",
   )
   assert.match(
     app,
