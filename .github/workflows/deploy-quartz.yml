@@ -193,6 +193,15 @@ jobs:
           mkdir -p .wrangler-pages
           cp wrangler.pages.toml .wrangler-pages/wrangler.toml
 
+      # ARCHITECTURE FENCE [IPD-012]: inspect the account allowance through
+      # analytics before any migration reads; exhausted D1 is not a retry loop.
+      - name: Require account-wide D1 and Worker headroom before migrations
+        shell: pwsh
+        timeout-minutes: 1
+        run: |
+          . ./scripts/lib/CloudflareWorkerRequestBudget.ps1
+          Assert-CloudflareWorkerRequestHeadroom | ConvertTo-Json
+
       - name: Apply Geneguessr D1 migrations (production)
         run: pnpm exec wrangler d1 migrations apply geneguessr --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 

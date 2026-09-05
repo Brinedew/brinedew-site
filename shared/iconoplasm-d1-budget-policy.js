@@ -7,6 +7,16 @@
 // https://developers.cloudflare.com/d1/platform/pricing/
 export const FREE_D1_DAILY_LIMITS = Object.freeze({ reads: 5_000_000, writes: 100_000 })
 
+// ARCHITECTURE FENCE [IPD-012]: the administrative/authoring ledger covers
+// only its own traffic. Giving it the entire account allowance starves login,
+// readers, migrations and other databases. This allocation is deliberately
+// separate from provider entitlement; historical monthly settings cannot lift it.
+export const D1_OPERATOR_DAILY_LIMITS = Object.freeze({ reads: 1_000_000, writes: 20_000 })
+
+export function d1OperationalAllowance(options) {
+  return Math.min(d1DailyAllowance(options), D1_OPERATOR_DAILY_LIMITS[options.resource])
+}
+
 export function d1DailyAllowance({
   resource,
   monthlyLimit = 0,

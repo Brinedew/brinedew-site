@@ -8,6 +8,41 @@ $script:CloudflareWorkerRequestBudgetMaximum = 2500
 $script:CloudflareWorkerRequestBudgetLockTimeoutSeconds = 10
 $script:CloudflareWorkerRequestTelemetryCeiling = 75000
 
+function Assert-CloudflareD1AccountHeadroom {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] $Account,
+        [Parameter(Mandatory)][string] $UtcDay
+    )
+    # The allowance is shared by every database, including login storage.
+    # Request counts alone do not bound SQL scans. Reserve 30% for live traffic,
+    # analytics lag and recovery; never query D1 itself to check its allowance.
+    $property = $Account.PSObject.Properties['d1AnalyticsAdaptiveGroups']
+    if ($null -eq $property -or $null -eq $property.Value) {
+        throw 'Account-wide D1 telemetry is missing; no operator request was sent.'
+    }
+    $reads = [int64] 0
+    $writes = [int64] 0
+    foreach ($row in @($property.Value)) {
+        if ($row.dimensions.date -ne $UtcDay) {
+            throw 'Account-wide D1 telemetry has the wrong UTC day; no operator request was sent.'
+        }
+        foreach ($field in @('rowsRead', 'rowsWritten')) {
+            $value = $row.sum.PSObject.Properties[$field]
+            if ($null -eq $value -or $null -eq $value.Value -or
+                [string] $value.Value -notmatch '^\d+$') {
+                throw 'Account-wide D1 telemetry has invalid row counts; no operator request was sent.'
+            }
+        }
+        $reads += [int64] $row.sum.rowsRead
+        $writes += [int64] $row.sum.rowsWritten
+    }
+    if ($reads -ge 3500000 -or $writes -ge 70000) {
+        throw "D1 admission refused: account has $reads reads and $writes writes on $UtcDay UTC; operator ceilings are 3500000 reads and 70000 writes. No operator request was sent. Investigate consumption before resuming."
+    }
+    return [pscustomobject]@{ observed_d1_reads = $reads; observed_d1_writes = $writes }
+}
+
 function Assert-CloudflareWorkerRequestHeadroom {
     [CmdletBinding()]
     param(
@@ -17,6 +52,8 @@ function Assert-CloudflareWorkerRequestHeadroom {
 
     $apiToken = [Environment]::GetEnvironmentVariable('CLOUDFLARE_API_TOKEN', 'User')
     $accountId = [Environment]::GetEnvironmentVariable('CLOUDFLARE_ACCOUNT_ID', 'User')
+    if ([string]::IsNullOrWhiteSpace($apiToken)) { $apiToken = $env:CLOUDFLARE_API_TOKEN }
+    if ([string]::IsNullOrWhiteSpace($accountId)) { $accountId = $env:CLOUDFLARE_ACCOUNT_ID }
     if ([string]::IsNullOrWhiteSpace($apiToken) -or [string]::IsNullOrWhiteSpace($accountId)) {
         throw 'Live Cloudflare request telemetry is unavailable. The User-scope CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required; no Worker request was sent.'
     }
@@ -31,6 +68,13 @@ query IconoplasmWorkerRequestPreflight($accountTag: string, $day: Date) {
         filter: { date_geq: $day, date_leq: $day }
       ) {
         sum { requests }
+      }
+      d1AnalyticsAdaptiveGroups(
+        limit: 1000
+        filter: { date_geq: $day, date_leq: $day }
+      ) {
+        dimensions { date databaseId }
+        sum { rowsRead rowsWritten }
       }
     }
   }
@@ -94,6 +138,7 @@ query IconoplasmWorkerRequestPreflight($accountTag: string, $day: Date) {
         if ($accounts.Count -ne 1) {
             throw 'Live Cloudflare request telemetry did not return exactly one account; no Worker request was sent.'
         }
+        $d1Usage = Assert-CloudflareD1AccountHeadroom -Account $accounts[0] -UtcDay $utcDay
         $requests = [int64] 0
         foreach ($row in @($accounts[0].workersInvocationsAdaptive)) {
             $requests += [int64] ($row.sum.requests ?? 0)
@@ -115,6 +160,8 @@ query IconoplasmWorkerRequestPreflight($accountTag: string, $day: Date) {
             safety_ceiling          = $SafeAccountRequestCeiling
             requests_below_ceiling  = $SafeAccountRequestCeiling - $requests
             checked_at              = [DateTimeOffset]::UtcNow.ToString('o')
+            observed_d1_reads       = $d1Usage.observed_d1_reads
+            observed_d1_writes      = $d1Usage.observed_d1_writes
         }
     }
     catch [System.Threading.Tasks.TaskCanceledException] {

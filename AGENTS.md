@@ -13,6 +13,13 @@ This `AGENTS.md` is loaded automatically when work happens inside `D:\Coding\Web
 
 ## Architecture fence registry
 
+**ARCHITECTURE FENCE [IPD-012]** — Treat D1 exhaustion as a consumption defect,
+not routine downtime. Before changing authoring/admin budgets, gene lookup or
+finalization status, read `docs/D1_READ_EXHAUSTION_PREVENTION.md`. Preserve
+transactional job counters, indexed locator probes and the separate operator
+allocation; request limits alone do not bound scanned rows. Do not substitute
+waiting for reset for a tested root fix and deployed verification.
+
 Before changing reader freshness, read `docs/ICONOPLASM_PRODUCT_OPERATING_MODEL.md`.
 The owner permits stale images while an article stays open. New page loads and
 ordinary reloads check current published canon in the background; the extension

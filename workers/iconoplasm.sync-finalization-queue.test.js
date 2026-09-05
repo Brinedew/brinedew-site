@@ -243,6 +243,31 @@ class FakeStatement {
   }
 
   async first() {
+    if (
+      this.sql.includes("FROM icono_sync_finalization_summary") ||
+      this.sql.includes("AS unfinished_count")
+    ) {
+      const scope = this.sql.includes("FROM icono_sync_finalization_summary")
+        ? null
+        : new Set(JSON.parse(this.args[0]))
+      const jobs = [...this.db.jobs.values()].filter((row) => !scope || scope.has(row.gene_symbol))
+      return {
+        queued_count: jobs.filter((row) => row.status === "queued").length,
+        running_count: jobs.filter((row) => row.status === "running").length,
+        retrying_count: jobs.filter((row) => row.status === "retrying").length,
+        pending_finalize_count: jobs.filter(
+          (row) => row.status !== "completed" && row.phase === "completed_pending_finalize",
+        ).length,
+        unfinished_count: jobs.filter((row) => row.status !== "completed").length,
+        completed_count: jobs.filter((row) => row.status === "completed").length,
+        completed_at:
+          jobs
+            .filter((row) => row.status === "completed")
+            .map((row) => row.completed_at || "")
+            .sort()
+            .at(-1) || null,
+      }
+    }
     this.db.calls.push({ method: "first", sql: this.sql, args: this.args })
     if (
       this.sql.includes("COUNT(*) AS remaining") &&
