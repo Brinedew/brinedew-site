@@ -423,11 +423,11 @@ function iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion) {
     canonicalMeta +
     '<div aria-hidden="true"></div></section></div></section></div>' +
     "</section>" +
+    candidateGallery +
     '<div class="icono-caretaker-island" data-icono-caretaker-island hidden></div>' +
     '<div data-icono-suggest-island><section class="icono-suggest" data-icono-suggest="' +
     escapeIconoplasmHtmlAttribute(symbol) +
     '"><div class="icono-suggest-lab">Suggestions<span data-icono-suggest-count></span></div><div class="icono-suggest-list" data-icono-suggest-list></div></section></div>' +
-    candidateGallery +
     '<section class="icono-gene-discord-card" data-icono-discord-island></section>' +
     "</div>" +
     "<!-- iconoplasm-static-gene-shell:end -->"

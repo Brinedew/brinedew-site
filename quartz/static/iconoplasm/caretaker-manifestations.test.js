@@ -54,6 +54,57 @@ test("the caretaker modal versions its complete immutable module graph", async (
   assert.match(controller, /matchesPublishedState !== false/)
 })
 
+test("caretaker load failures name the affected tools and allow one explicit retry", async () => {
+  const { document } = parseHTML('<html><body><div id="host"></div></body></html>')
+  globalThis.document = document
+  const host = document.getElementById("host")
+  let calls = 0
+  const panel = createCaretakerManifestationPanel({
+    escapeHtml,
+    fetchJSON: async () => {
+      calls++
+      throw Object.assign(new Error("SESSION_AUTHORITY_UNAVAILABLE"), { status: 503 })
+    },
+  })
+  await panel.mount(host, {
+    symbol: "TRIM28",
+    currentUser: { account_id: "account_test" },
+    authResolved: true,
+  })
+  assert.match(host.textContent, /Caretaker tools are temporarily unavailable/)
+  assert.doesNotMatch(host.textContent, /SESSION_AUTHORITY|AUTHENTICATION|Sign in/)
+  assert.equal(calls, 1)
+  host.querySelector("[data-icono-caretaker-retry-load]").click()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(calls, 2)
+  assert.ok(host.querySelector("[data-icono-caretaker-retry-load]"))
+})
+
+test("an expired caretaker session gives a contextual sign-in action", async () => {
+  const { document } = parseHTML('<html><body><div id="host"></div></body></html>')
+  globalThis.document = document
+  const host = document.getElementById("host")
+  const panel = createCaretakerManifestationPanel({
+    escapeHtml,
+    loginUrl: "/api/auth/login?return_to=%2Fgene%2FTRIM28",
+    fetchJSON: async () => {
+      throw Object.assign(new Error("AUTHENTICATION_REQUIRED"), { status: 401 })
+    },
+  })
+  await panel.mount(host, {
+    symbol: "TRIM28",
+    currentUser: { account_id: "account_test" },
+    authResolved: true,
+  })
+  assert.match(host.textContent, /Your session expired.*caretaker tools/)
+  assert.equal(host.querySelector("a").textContent, "Sign in")
+  assert.equal(
+    host.querySelector("a").getAttribute("href"),
+    "/api/auth/login?return_to=%2Fgene%2FTRIM28",
+  )
+  assert.doesNotMatch(host.textContent, /AUTHENTICATION_REQUIRED/)
+})
+
 function escapeHtml(value) {
   return String(value || "")
     .replaceAll("&", "&amp;")
