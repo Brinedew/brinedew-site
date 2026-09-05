@@ -272,7 +272,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=20260905-caretaker-categories-v7"),
+      import("./caretaker-manifestations.js?v=20260906-caretaker-availability-v1"),
       import("./caretaker-supervote.js?v=20260905-caretaker-seal-v3"),
     ]).then(function (modules) {
       var supervoteControls = modules[1].createCaretakerSupervoteControls({
@@ -285,6 +285,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var manifestationPanel = modules[0].createCaretakerManifestationPanel({
         fetchJSON: fetchAuthedJSON,
         escapeHtml: esc,
+        loginUrl: voteLoginUrl(),
         onCanonicalChanged: function (symbol, expectation) {
           invalidateGeneDetail(symbol)
           return fetchGeneDetail(symbol, { forceFresh: true }).then(function (gene) {
@@ -375,7 +376,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         host.removeAttribute("data-icono-caretaker-signature")
         host.hidden = false
         host.innerHTML =
-          '<section class="icono-caretaker-panel"><p class="icono-caretaker-status" data-tone="error">Caretaker record could not be loaded.</p></section>'
+          '<section class="icono-caretaker-unavailable" aria-label="Caretaker tools"><p role="status">Caretaker tools could not be loaded. Reload the page to try again.</p></section>'
       })
   }
 
@@ -8632,7 +8633,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (!candidatePortraitUrl(item, "medium")) continue
       visibleCandidates.push(item)
     }
-    if (!visibleCandidates.length) return ""
+    if (!visibleCandidates.length)
+      return IconoCardShared.renderCandidateGalleryStatusHtml(genePayload)
     var gridClass =
       visibleCandidates.length === 1
         ? "icono-candidate-grid icono-candidate-grid--single"
@@ -8640,7 +8642,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var html =
       '<section class="icono-candidate-gallery">' +
       '<div class="icono-candidate-gallery-heading">' +
-      "<h2>Candidate blots</h2>" +
+      '<h2>Other candidate images <span class="icono-candidate-count">' +
+      visibleCandidates.length +
+      "</span></h2>" +
       "</div>" +
       '<div class="' +
       gridClass +
@@ -8976,6 +8980,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var canAdoptServerContent = !!(
         contentEl &&
         contentEl.getAttribute("data-icono-server-rendered-gene") === "true" &&
+        contentEl.querySelector(".icono-candidate-gallery") &&
         embeddedSnapshot &&
         renderedSnapshot === embeddedSnapshot &&
         normalizedSymbol(contentEl.getAttribute("data-icono-gene-symbol")) === resolvedSymbol &&
@@ -9105,6 +9110,59 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function wireGeneContent(container, genePayload) {
     if (!container || !genePayload) return
+    var candidateRetry = container.querySelector("[data-icono-candidates-retry]")
+    if (candidateRetry && !candidateRetry.hasAttribute("data-icono-wired")) {
+      candidateRetry.setAttribute("data-icono-wired", "true")
+      candidateRetry.addEventListener("click", async function () {
+        candidateRetry.disabled = true
+        candidateRetry.textContent = "Checking…"
+        var status = container.querySelector("[data-icono-candidates-status]")
+        var retryRenderId = activeGeneRenderId
+        try {
+          var refreshed = await fetchGeneDetail(genePayload.symbol, { forceFresh: true })
+          if (!container.isConnected || retryRenderId !== activeGeneRenderId) return
+          if (
+            !refreshed ||
+            refreshed.detail_availability?.live_candidates === "temporarily_unavailable"
+          ) {
+            if (status)
+              status.textContent = "Candidate images are still unavailable. Please try again later."
+            return
+          }
+          await ensurePortraitDelivery(refreshed)
+          if (!container.isConnected || retryRenderId !== activeGeneRenderId) return
+          // Refresh only this collection. Keep the open page's published card,
+          // caretaker editor, and any unsent form text intact.
+          var displayedSha = String(genePayload.portrait?.asset_sha256 || "").toLowerCase()
+          var updated = Object.assign({}, genePayload, {
+            portrait_candidates: refreshed.portrait_candidates.map(function (candidate) {
+              if (!candidate) return candidate
+              return Object.assign({}, candidate, {
+                is_current:
+                  !!displayedSha &&
+                  String(candidate.asset_sha256 || "").toLowerCase() === displayedSha,
+              })
+            }),
+            detail_availability: Object.assign({}, genePayload.detail_availability, {
+              live_candidates: "available",
+            }),
+          })
+          var template = document.createElement("template")
+          template.innerHTML = renderCandidateGallery(updated)
+          var gallery = container.querySelector(".icono-candidate-gallery")
+          if (!gallery || !template.content.firstElementChild) return
+          gallery.replaceWith(template.content.firstElementChild)
+          wireGeneContent(container, updated)
+          iconoSidebarState.gene.candidateCount = refreshed.portrait_candidates.length
+          renderIconoplasmSidebar()
+        } catch (_error) {
+          if (status) status.textContent = "Candidate images could not be loaded. Please try again."
+        } finally {
+          candidateRetry.disabled = false
+          candidateRetry.textContent = "Try again"
+        }
+      })
+    }
     container._iconoGenePayload = genePayload
     var blot = publishedGeneBlot(genePayload)
     var blotImage = container.querySelector(
@@ -9489,13 +9547,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     html += "<div data-icono-canonical-toolbar-island>" + renderCanonicalToolbarMarkup(g) + "</div>"
     html += "</section>"
 
+    html += renderCandidateGallery(g)
+
     html += publicManifestationMarkup(g)
 
     html += '<div class="icono-caretaker-island" data-icono-caretaker-island hidden></div>'
 
-    // Resampling suggestions sit above the candidate blots.
     html += "<div data-icono-suggest-island>" + buildSuggestSectionMarkup(g.symbol) + "</div>"
-    html += renderCandidateGallery(g)
     html +=
       '<section class="icono-gene-discord-card" data-icono-discord-island>' +
       buildDiscordActionCardMarkup() +
