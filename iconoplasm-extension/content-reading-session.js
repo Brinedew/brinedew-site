@@ -69,6 +69,8 @@
     const visibleAnchors = new Set()
     const anchorGroups = new Map()
     const anchorSymbols = new WeakMap()
+    const observationAnchors = new Map()
+    const visibleObservationElements = new Set()
     const queuedBySymbol = new Map()
     const inFlightSymbols = new Set()
     const readySymbols = new Set()
@@ -88,13 +90,12 @@
               if (disposed) return
               let changed = false
               for (const entry of entries || []) {
-                const anchor = entry?.target
-                if (!anchorSymbols.has(anchor)) continue
-                if (entry.isIntersecting) {
-                  visibleAnchors.add(anchor)
-                  changed = true
-                } else {
-                  visibleAnchors.delete(anchor)
+                if (!observationAnchors.has(entry?.target)) continue
+                if (entry.isIntersecting) visibleObservationElements.add(entry.target)
+                else visibleObservationElements.delete(entry.target)
+                for (const anchor of observationAnchors.get(entry?.target) || []) {
+                  if (entry.isIntersecting) visibleAnchors.add(anchor)
+                  else visibleAnchors.delete(anchor)
                   changed = true
                 }
               }
@@ -278,7 +279,15 @@
       if (anchorSymbols.has(anchor)) return true
       anchorSymbols.set(anchor, symbol)
       documentSymbols.add(symbol)
-      observer?.observe(anchor)
+      const element = anchor.observationElement || anchor
+      let siblings = observationAnchors.get(element)
+      if (!siblings) {
+        siblings = new Set()
+        observationAnchors.set(element, siblings)
+        observer?.observe(element)
+      }
+      if (visibleObservationElements.has(element)) visibleAnchors.add(anchor)
+      siblings.add(anchor)
       scheduleDocumentInventory()
       return true
     }
@@ -287,7 +296,14 @@
       if (!anchor || !anchorSymbols.has(anchor)) return
       visibleAnchors.delete(anchor)
       anchorSymbols.delete(anchor)
-      observer?.unobserve(anchor)
+      const element = anchor.observationElement || anchor
+      const siblings = observationAnchors.get(element)
+      siblings?.delete(anchor)
+      if (!siblings?.size) {
+        observer?.unobserve(element)
+        observationAnchors.delete(element)
+        visibleObservationElements.delete(element)
+      }
     }
 
     function replaceAnchorGroup(groupId, anchors) {
@@ -323,12 +339,20 @@
         observer?.disconnect()
         queuedBySymbol.clear()
         visibleAnchors.clear()
+        observationAnchors.clear()
+        visibleObservationElements.clear()
         documentSymbols.clear()
         anchorGroups.clear()
         readySymbols.clear()
         retryAfter.clear()
       },
       registerAnchor,
+      registerSymbol(rawSymbol) {
+        const symbol = normalizeSymbol(rawSymbol)
+        if (disposed || !symbol || documentSymbols.has(symbol)) return
+        documentSymbols.add(symbol)
+        scheduleDocumentInventory()
+      },
       unregisterAnchor,
       replaceAnchorGroup,
       prioritize(symbol) {

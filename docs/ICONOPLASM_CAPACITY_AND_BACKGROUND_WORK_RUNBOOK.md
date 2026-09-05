@@ -488,14 +488,34 @@ Extension hover detail is immutable within a published card snapshot:
   completion schedules the next flush; an overlapping timer must not latch the
   queue permanently. Article/main roots precede navigation;
   a full-body pass still covers the remainder without nesting existing highlights.
+  HTML recognition retains the original Text objects, their parents, and their data.
+  The former inline spans existed to provide selectable text, four paint styles, and
+  hover anchors without changing line metrics. Replacing the source Text object,
+  however, detached references retained by streaming frameworks: `appendData` then
+  updated an invisible node, and subsequent host removal could fail. The replacement
+  uses native ranges and small SVG background layers on existing page surfaces for
+  the same four styles. A viewport overlay with copied glyphs was rejected: compositor
+  scrolling can move the page before JavaScript moves the copies. Original glyphs
+  must remain visible and native; CSS Custom Highlights supplies only the filled
+  pill's foreground color. Decorations use the browser's local background attachment,
+  so scrolling needs no JavaScript geometry updates. Original background layers are
+  preserved, responsive styles are reread, and cleanup restores only owned properties.
+  Body-to-document background propagation uses the document painting origin.
+  Host selection and editables remain native. Changed or removed source text invalidates
+  its decoration, layout/font changes remeasure, and painting checks the 4 ms budget
+  between matches, including matches inside one long Text node. The same
+  pre-load genuine-idle gate covers painting. Recognized symbols enter the existing
+  reading-session inventory even when their ranges are outside the viewport. Range
+  anchors expose native geometry; source parents share a ref-counted visibility observer.
+  This native-range path requires Chromium 105+ / Firefox 140+ (Android remains 142+).
   Current-card selection is separate: once after load, or on explicit early hover,
   before either card lane or disk cache is used. Slow unrelated page resources
   must not delay cached recognition. The session
-  inventories anchors immediately, but speculative immutable rich detail plus
+  inventories recognized symbols immediately, but speculative immutable rich detail plus
   independently deliverable portrait locators, bytes, decode, and frame acknowledgement
-  wait for host `load`, a one-second quiet delay, and a genuine idle callback. The
-  first ten symbols use one worker on constrained connections and two otherwise;
-- the one/two workers above are browser-side preparation slots per tab, not
+  wait for host `load` and a genuine idle callback. The first ten symbols use up to
+  ten browser preparation tasks, reduced to two on low-memory devices;
+- the preparation tasks above are browser-side slots per tab, not
   Cloudflare Worker instances. Each prepared symbol starts one rich-detail GET
   and one portrait-locator GET. Ten cold tabs therefore start 100 requests in
   each projection lane. The lanes have separate 120/minute per-IP rate-limit
