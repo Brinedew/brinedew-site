@@ -10497,6 +10497,14 @@
     function displayEmulsionCode(rawEmulsionId) {
       return String(rawEmulsionId || "").trim();
     }
+    function renderCandidateGalleryStatusHtml(geneDetail) {
+      var gene = geneDetail || {};
+      var candidates = Array.isArray(gene.portrait_candidates) ? gene.portrait_candidates : [];
+      var unavailable = gene.detail_availability?.live_candidates === "temporarily_unavailable" || candidates.some(function(candidate) {
+        return candidate && !candidate.is_current;
+      });
+      return '<section class="icono-candidate-gallery icono-candidate-gallery--status" data-icono-public-candidates><div class="icono-candidate-gallery-heading"><h2>Other candidate images</h2></div><div class="icono-candidate-availability"><p data-icono-candidates-status role="status">' + (unavailable ? "Candidate images are temporarily unavailable." : "No other candidate images yet.") + "</p>" + (unavailable ? '<button type="button" class="icono-candidates-retry" data-icono-candidates-retry>Try again</button>' : "") + "</div></section>";
+    }
     function renderCandidateGalleryHtml(geneDetail, options) {
       var gene = geneDetail || {};
       var opts = options || {};
@@ -10508,10 +10516,10 @@
         if (!candidatePortraitUrl(candidate, "medium", opts.resolvePortraitUrl)) continue;
         visibleCandidates.push(candidate);
       }
-      if (!visibleCandidates.length) return "";
+      if (!visibleCandidates.length) return renderCandidateGalleryStatusHtml(gene);
       var symbol = normalizedSymbol(gene.symbol || gene.canonical_symbol);
       var gridClass = visibleCandidates.length === 1 ? "icono-candidate-grid icono-candidate-grid--single" : "icono-candidate-grid";
-      var html = '<section class="icono-candidate-gallery" data-icono-public-candidates><div class="icono-candidate-gallery-heading"><h2>Candidate blots</h2></div><div class="' + gridClass + '" data-icono-lightbox>';
+      var html = '<section class="icono-candidate-gallery" data-icono-public-candidates><div class="icono-candidate-gallery-heading"><h2>Other candidate images <span class="icono-candidate-count">' + visibleCandidates.length + '</span></h2></div><div class="' + gridClass + '" data-icono-lightbox>';
       for (var j = 0; j < visibleCandidates.length; j += 1) {
         var item = visibleCandidates[j];
         var mediumUrl = candidatePortraitUrl(item, "medium", opts.resolvePortraitUrl);
@@ -10896,6 +10904,7 @@
       renderTooltipMobileRowGridHtml,
       renderTooltipMobileSkeletonHtml,
       renderCandidateGalleryHtml,
+      renderCandidateGalleryStatusHtml,
       voteBoxMarkup,
       setVoteBoxState,
       wireVoteBox,
