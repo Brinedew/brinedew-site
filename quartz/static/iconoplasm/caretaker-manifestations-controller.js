@@ -26,6 +26,7 @@ export function createCaretakerManifestationPanel({
   storage = defaultDraftStorage(),
   onCanonicalChanged = function () {},
   onDossierChanged = function () {},
+  loginUrl = "",
 } = {}) {
   if (typeof fetchJSON !== "function") throw new TypeError("fetchJSON is required")
   if (typeof escapeHtml !== "function") throw new TypeError("escapeHtml is required")
@@ -649,10 +650,30 @@ export function createCaretakerManifestationPanel({
       }
       return state.dossier
     } catch (error) {
+      const needsSignIn = Number(error?.status) === 401
+      const forbidden = Number(error?.status) === 403
+      const message = needsSignIn
+        ? "Your session expired. Sign in again to use caretaker tools."
+        : forbidden
+          ? "This account cannot use caretaker tools for this gene."
+          : "Caretaker tools are temporarily unavailable."
       host.innerHTML =
-        '<section class="icono-caretaker-panel"><p class="icono-caretaker-status" data-tone="error">' +
-        escapeHtml(String(error?.message || "Caretaker record could not be loaded.")) +
-        "</p></section>"
+        '<section class="icono-caretaker-unavailable" aria-label="Caretaker tools"><p role="status">' +
+        message +
+        "</p>" +
+        (needsSignIn && loginUrl
+          ? '<a class="icono-candidates-retry" href="' + escapeHtml(loginUrl) + '">Sign in</a>'
+          : !forbidden
+            ? '<button type="button" class="icono-candidates-retry" data-icono-caretaker-retry-load>Try again</button>'
+            : "") +
+        "</section>"
+      host.querySelector("[data-icono-caretaker-retry-load]")?.addEventListener(
+        "click",
+        function () {
+          void mount(host, { symbol, currentUser, authResolved })
+        },
+        { once: true },
+      )
       return null
     }
   }

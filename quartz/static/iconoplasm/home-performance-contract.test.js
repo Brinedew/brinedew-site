@@ -1893,6 +1893,33 @@ test("shared candidate renderer emits a complete, escaped public snapshot", asyn
   assert.doesNotMatch(html, /current\.webp|missing-media/)
 })
 
+test("candidate galleries distinguish unavailable data from a genuinely empty collection", async () => {
+  const vm = await import("node:vm")
+  const runtime = await readFile(generatedSharedCardRuntimePath, "utf8")
+  const sandbox = { console }
+  sandbox.globalThis = sandbox
+  vm.runInNewContext(runtime, sandbox)
+  const render = sandbox.IconoplasmCardShared.renderCandidateGalleryHtml
+  const unavailable = render({
+    symbol: "TRIM28",
+    portrait_candidates: [],
+    detail_availability: { live_candidates: "temporarily_unavailable" },
+  })
+  assert.match(unavailable, /Other candidate images/)
+  assert.match(unavailable, /temporarily unavailable/)
+  assert.match(unavailable, /data-icono-candidates-retry/)
+  assert.doesNotMatch(unavailable, /No other candidate images yet|AUTHENTICATION|Sign in/)
+  const empty = render({ symbol: "TRIM28", portrait_candidates: [] })
+  assert.match(empty, /No other candidate images yet/)
+  assert.doesNotMatch(empty, /data-icono-candidates-retry|unavailable/)
+  const missingMedia = render({
+    symbol: "TRIM28",
+    portrait_candidates: [{ asset_sha256: "missing" }],
+  })
+  assert.match(missingMedia, /temporarily unavailable/)
+  assert.doesNotMatch(missingMedia, /No other candidate images yet/)
+})
+
 test("gene route does not warm full-size portraits during first paint", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function renderGeneContent(container, g)")

@@ -1,6 +1,7 @@
 import { sha256Hex } from "../../lib/iconoplasm-manifestation-body-crypto.js"
 import { ManifestationAuthorityError, authorityError } from "./manifestation-authority-contract.js"
 import { first, requireDatabase } from "./manifestation-authority-repository.js"
+import { IconoplasmSessionUnavailableError } from "../session-user.js"
 
 const DEFAULT_JSON_LIMIT = 24 * 1024
 
@@ -17,6 +18,11 @@ function jsonResponse(value, status = 200, extraHeaders = {}) {
 }
 
 function safeErrorResponse(error) {
+  if (error instanceof IconoplasmSessionUnavailableError) {
+    return jsonResponse({ error: { code: error.code } }, 503, {
+      "Retry-After": String(error.retryAfter),
+    })
+  }
   if (error instanceof ManifestationAuthorityError) {
     const status =
       Number.isInteger(error.status) && error.status >= 400 && error.status < 600
