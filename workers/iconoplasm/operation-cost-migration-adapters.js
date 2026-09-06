@@ -7,10 +7,15 @@ import { createSnapshotRetirementMigrationCostAdapter } from "./operation-cost-s
 import {
   createAdminCountsMigrationCostAdapter,
   createInboxCountersMigrationCostAdapter,
+  createDeliveryCursorMigrationCostAdapter,
 } from "./operation-cost-counter-migration-adapters.js"
 
 export function createMigrationOperationCostAdapters(env, identities) {
   return new Map([
+    [
+      "iconoplasm-migration-0097",
+      createDeliveryCursorMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
+    ],
     [
       "iconoplasm-authoring-migration-0015",
       createSnapshotRetirementMigrationCostAdapter({

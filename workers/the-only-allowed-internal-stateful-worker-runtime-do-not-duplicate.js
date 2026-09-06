@@ -3313,11 +3313,19 @@ export default {
         )
       }
       if (notificationDelivery.status === "fulfilled") {
+        const deliveredRequestIds = notificationDelivery.value.delivered_request_ids || []
+        let freshlyFinalized = 0
+        for (let offset = 0; offset < deliveredRequestIds.length; offset += 50) {
+          const settled = await reconcileDeliveredRequestFulfillments(env, {
+            requestIds: deliveredRequestIds.slice(offset, offset + 50),
+          })
+          freshlyFinalized += settled.finalized
+        }
         const notificationSettlement = await reconcileDeliveredRequestFulfillments(env)
         if (notificationDelivery.value.considered) {
           console.log("[CRON] Iconoplasm fulfillment notifications:", {
             ...notificationDelivery.value,
-            finalized: notificationSettlement.finalized,
+            finalized: freshlyFinalized + notificationSettlement.finalized,
           })
         }
       } else {

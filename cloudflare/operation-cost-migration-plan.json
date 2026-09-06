@@ -11,6 +11,11 @@
     "kv_lists": 0
   },
   "migrations": {
+    "iconoplasm/0097_delivery_reconciliation_cursor.sql": {
+      "adapter_id": "iconoplasm-migration-0097",
+      "arguments": { "max_schema_rows": 512 },
+      "prediction": { "rows_read": 16512, "rows_written": 16, "requests": 1 }
+    },
     "iconoplasm-authoring/0015_retire_materialized_snapshot_parts.sql": {
       "adapter_id": "iconoplasm-authoring-migration-0015",
       "arguments": { "max_leases": 1024, "max_schema_rows": 512 },
