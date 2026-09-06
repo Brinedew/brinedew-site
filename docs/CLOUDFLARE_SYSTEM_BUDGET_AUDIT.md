@@ -436,3 +436,14 @@ atomic trigger migration costs 837 reads and six writes locally, within its
 985,814 reads and 19,896 writes; historical migrations must still be verified
 applied before that release can be admitted. Canonical fallback selection itself
 still requires the separate history-index redesign.
+
+The refreshed query compilation audit found a malformed full vision rebuild:
+its insert named 20 columns but supplied only 15 values. The corrected statement
+supplies all 19 bound fields plus the timestamp, preserving workflow, emulsion,
+vote and blacklist data on both insert and conflict update. A new normal-suite
+check compiles 471 direct static Worker SQL calls against the migrated D1 schemas
+without executing their mutations. It reports 71 missing-table calls separately
+(including Durable Object storage and migration journals); those are not passes.
+Dynamic SQL and fragments remain in the wider audit. This is a syntax/schema
+regression check, not a cost certificate: full rebuild admission and bounded
+history work remain open.

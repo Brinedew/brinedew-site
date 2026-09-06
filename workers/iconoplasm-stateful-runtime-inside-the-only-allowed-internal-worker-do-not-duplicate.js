@@ -20434,7 +20434,7 @@ async function rebuildVisionRollups(env, rawVisionIds, { full = false } = {}) {
          blacklist_reason,
          blacklist_updated_at,
          updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
        ON CONFLICT(vision_id) DO UPDATE SET
          emulsion_id = excluded.emulsion_id,
          workflow_id = excluded.workflow_id,
