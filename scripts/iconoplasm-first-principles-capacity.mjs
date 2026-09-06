@@ -135,7 +135,9 @@ export function websiteGuestDiscoveryMergeCost({
   )
   return cost({
     workerRequests: safeDiscoveries > 0 ? 1 : 0,
-    d1RowsRead: safeDiscoveries * 2,
+    // Two bounded JSON-set statements, including exact membership probes.
+    // Full-schema workerd: 600 reads for 200 new, 601 for a 200-symbol replay.
+    d1RowsRead: safeDiscoveries > 0 ? 1 + safeDiscoveries * 6 : 0,
     // Same conservative schema-derived envelope as a new signed-in discovery:
     // personal row/indexes plus the constant-time shared rollup/indexes.
     d1RowsWritten: safeDiscoveries * 8,
@@ -195,8 +197,9 @@ export function extensionReaderCost({
     // Public request paths must use exact-key reads. KV list operations are a
     // 1,000/day discovery budget, not a read primitive.
     kvLists: 0,
-    // Two indexed point reads: existence before mutation and the returned row.
-    d1RowsRead: encounters * 2,
+    // Personal UPSERT and shared increment commit together. Include every
+    // indexed probe inside the statements, not only explicit SELECT calls.
+    d1RowsRead: encounters * 5,
     // Conservative schema-derived write units. A new personal discovery touches
     // its table plus four indexes; the shared rollup touches its table plus two
     // indexes. Existing encounters do not add the personal primary-key entry.

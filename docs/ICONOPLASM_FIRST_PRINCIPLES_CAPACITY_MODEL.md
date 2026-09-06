@@ -250,6 +250,23 @@ A signed-in encounter performs indexed point reads and constant-time writes:
 - personal discovery insert/update;
 - one atomic shared-rollup increment.
 
+Both now commit in one D1 batch. Full-schema workerd checks at 20,000 personal
+rows preserve exact counts under 20 simultaneous encounters and roll back the
+personal save if the shared write fails. The read forecast includes all five
+possible row reads inside these statements, not just standalone SELECTs.
+
+Guest login merges are membership unions, not additional encounter events.
+Two SQL statements merge at most 200 symbols atomically and return their exact
+acknowledgement, without loading the whole shelf or seeding onboarding records.
+The model reserves six reads per symbol plus one fixed read and eight writes per
+new symbol. Local measurements: 600 reads / 1,600 writes for 200 new symbols;
+601 reads / zero writes for a full replay. These figures exclude authentication
+and other user journeys. Shelf/bootstrap endpoints still own starter seeding.
+Each page retains its 200-symbol allowance after an uncertain response; both
+clients remove local entries only after validating the exact acknowledgement.
+Oversized requests fail before database work instead of silently truncating a
+batch that an older extension would then discard locally.
+
 The model conservatively counts eight D1 write units for a new discovery and
 seven for a repeat because D1 also counts affected index rows. Discovery does
 **not** use a Durable Object.

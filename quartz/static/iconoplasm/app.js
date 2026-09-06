@@ -1647,6 +1647,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (websiteGuestDiscoveryMergeRemaining <= 0) return Promise.resolve(null)
     var pendingSymbols = websiteGuestDiscoveries.pendingSymbols(websiteGuestDiscoveryMergeRemaining)
     if (!pendingSymbols.length) return Promise.resolve(null)
+    websiteGuestDiscoveryMergeRemaining -= pendingSymbols.length
     websiteGuestDiscoveryMergePromise = fetchAuthedJSON("/api/iconoplasm/discoveries/merge", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1654,12 +1655,21 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       cache: "no-store",
     })
       .then(function (payload) {
-        if (!payload || payload.ok !== true || payload.authenticated !== true) return null
-        websiteGuestDiscoveries.remove(pendingSymbols)
-        websiteGuestDiscoveryMergeRemaining = Math.max(
-          0,
-          websiteGuestDiscoveryMergeRemaining - pendingSymbols.length,
+        if (
+          !payload ||
+          payload.ok !== true ||
+          payload.authenticated !== true ||
+          payload.schema !== "iconoplasm.discoveryMerge.v2" ||
+          !Array.isArray(payload.merged_symbols) ||
+          payload.merged_count !== pendingSymbols.length ||
+          payload.merged_symbols.length !== pendingSymbols.length ||
+          new Set(payload.merged_symbols).size !== pendingSymbols.length ||
+          !payload.merged_symbols.every(function (symbol) {
+            return pendingSymbols.includes(symbol)
+          })
         )
+          return null
+        websiteGuestDiscoveries.remove(payload.merged_symbols)
         return payload
       })
       .catch(function (error) {

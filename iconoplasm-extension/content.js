@@ -139,6 +139,7 @@
   const DISCOVERY_SYMBOL_COOLDOWN_MS = 30 * 1000
   const DISCOVERY_AUTH_CACHE_TTL_MS = 5 * 60 * 1000
   const GUEST_DISCOVERY_SYMBOL_MAX = 2000
+  const GUEST_DISCOVERY_MERGE_BATCH_SIZE = 200
   const GENE_DATA_REQUEST_TIMEOUT_MS = 5000
   const GENE_DATA_RETRY_DELAY_MS = 750
   // Fence: the hover card needs identity, accent color, synced essence, and the
@@ -539,6 +540,7 @@
   const discoveredPageSymbols = new Set()
   const guestDiscoverySymbols = new Set()
   let guestDiscoveryMergePromise = null
+  let guestDiscoveryMergeRemaining = GUEST_DISCOVERY_MERGE_BATCH_SIZE
   let discoveryBufferFlushScheduled = false
   let discoveryAuthState = {
     checkedAt: 0,
@@ -1131,13 +1133,17 @@
   async function mergeGuestDiscoveriesIfSignedIn() {
     if (runtimeDisconnected) return null
     if (guestDiscoveryMergePromise) return guestDiscoveryMergePromise
-    const pendingSymbols = Array.from(guestDiscoverySymbols)
+    if (guestDiscoveryMergeRemaining <= 0) return null
+    const pendingSymbols = Array.from(guestDiscoverySymbols).slice(0, guestDiscoveryMergeRemaining)
     if (!pendingSymbols.length) return null
     guestDiscoveryMergePromise = (async () => {
       const state = await ensureDiscoveryStateFresh()
       if (!state || !state.authenticated) return null
       const knownSymbols = normalizeDiscoverySymbolList(state.discovered_symbols)
       for (const symbol of knownSymbols) discoveredPageSymbols.add(symbol)
+      // Unknown outcomes retain this page's allowance. The durable local buffer
+      // survives failure and can be merged idempotently on a later page.
+      guestDiscoveryMergeRemaining -= pendingSymbols.length
       const mergeResponse = await extensionApiFetch(ICONOPLASM_DISCOVERY_MERGE_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1149,17 +1155,25 @@
         return null
       }
       const payload = await mergeResponse.json().catch(() => null)
-      if (payload && typeof payload === "object") {
-        rememberDiscoveryAuthState({
-          authenticated: true,
-          discovered_symbols: payload.discovered_symbols,
-        })
-      }
-      const mergedSymbols = normalizeDiscoverySymbolList(
-        (payload && payload.discovered_symbols) || pendingSymbols,
+      const mergedSymbols = normalizeDiscoverySymbolList(payload?.merged_symbols)
+      if (
+        payload?.ok !== true ||
+        payload?.authenticated !== true ||
+        payload?.schema !== "iconoplasm.discoveryMerge.v2" ||
+        !Array.isArray(payload.merged_symbols) ||
+        payload.merged_count !== pendingSymbols.length ||
+        payload.merged_symbols.length !== pendingSymbols.length ||
+        mergedSymbols.length !== pendingSymbols.length ||
+        !mergedSymbols.every((symbol) => pendingSymbols.includes(symbol))
       )
+        return null
+      rememberDiscoveryAuthState({
+        authenticated: true,
+        checked_symbols: mergedSymbols,
+        discovered_symbols: mergedSymbols,
+      })
       for (const symbol of mergedSymbols) discoveredPageSymbols.add(symbol)
-      await removeMergedGuestDiscoveries(pendingSymbols)
+      await removeMergedGuestDiscoveries(mergedSymbols)
       return payload
     })()
       .catch((err) => {

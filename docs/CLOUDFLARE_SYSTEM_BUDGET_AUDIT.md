@@ -191,6 +191,34 @@ receipts. A real workerd test initializes 20,000 genes (18,480,071 bytes) with
 five reads and one write, then repeats with no write. Production initialization
 and dedicated CI analytics-token permission for the KV dataset remain unverified.
 
+The discovery save audit found a separate correctness defect: personal and shared
+state could commit separately, and two concurrent first encounters could race.
+The local replacement commits both through one D1 batch; a 20,000-row full-schema
+workerd fixture verifies 20 concurrent encounters, one discoverer, admin exclusion,
+idempotent starter seeding and rollback after an injected shared failure.
+
+Guest merge previously sent up to 2,000 extension symbols to a server that silently
+kept only 200, after which the extension deleted its entire submitted buffer.
+It also repeated encounter writes after lost responses and loaded the full shelf
+after every merge. The new server rejects oversized requests before D1; a maximum
+200-symbol union uses two statements in one transaction and returns exact accepted
+symbols. Both clients retain unacknowledged local data and spend at most one
+200-symbol attempt per page. Replay costs zero writes. Full-schema measurements:
+600 reads / 1,600 writes for 200 new symbols; 601 reads / zero writes on replay.
+This fixes retry amplification and loss, not the remaining eight-write insert
+envelope. No extension release identity or published bundle was changed.
+
+The authority's own SQLite storage is another shared allowance. A real Durable
+Object experiment (stubbed D1 receipts, actual authority storage) measured 59 row
+writes for capability lookup, registration, ten executions and one receipt. The
+experiment refreshed telemetry on every execution: the first cost six DO writes
+and later executions five. Cached identical D1 samples avoid one of these writes.
+Even four control writes per each of 20,000 discovery saves would consume 80,000
+DO writes before registration, authentication and other DO owners. Therefore
+putting all public traffic behind the current per-step operator protocol is not
+an accepted capacity fix. Its own bounded overhead and every other DO owner must
+be included before extending admission to public user journeys.
+
 - Complete attribution and cost proofs for all execution paths; preserve unknowns
   as unknown rather than declaring them free.
 - Fix recurring aggregates, read-triggered rebuilds and write amplification in
