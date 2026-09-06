@@ -6,7 +6,9 @@ import test from "node:test"
 import { createFinalizationMigrationCostAdapter } from "./operation-cost-migration-adapter.js"
 import { createAuthoringStreamMigrationCostAdapter } from "./operation-cost-authoring-migration-adapter.js"
 import { createUploadReservationMigrationCostAdapter } from "./operation-cost-upload-migration-adapter.js"
+import { createLineageAdmissionMigrationCostAdapter } from "./operation-cost-lineage-migration-adapter.js"
 import { createOperationCostD1Adapter } from "./operation-cost-d1-adapter.js"
+import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
 import { createOperationCostQueryRegistry } from "./operation-cost-query-registry.js"
 import { createReplicaOperationCostAdapter } from "./operation-cost-replica-adapter.js"
 import {
@@ -476,6 +478,32 @@ test(
       assert.equal(replayed.result.status, 200)
       assert.equal(replayed.result.body.replayed, true)
       assert.equal(publicationWakes, 1)
+      const candidateMeter = createOperationCostD1Meter(authoring)
+      const scheduled = await drainManifestationAuthorityProjectionOutbox({
+        authoringDb: {
+          batch: (statements) => authoring.batch(statements),
+          prepare(sql) {
+            return sql.includes("INDEXED BY idx_icono_events_projection_due")
+              ? candidateMeter.db.prepare(sql)
+              : authoring.prepare(sql)
+          },
+        },
+        primaryDb: primary,
+        limit: 50,
+        projectPublicMaterialEvent: async () => {},
+      })
+      assert.equal(scheduled.ok, true, JSON.stringify(scheduled))
+      assert.equal(scheduled.published, 1)
+      const candidateActual = candidateMeter.finish()
+      assert.ok(candidateActual.rows_read <= 416)
+      assert.equal(candidateActual.rows_written, 0)
+      t.diagnostic(
+        JSON.stringify({
+          operation: "scheduled-projection-candidate-ranges",
+          bound: { rows_read: 416, rows_written: 0 },
+          actual: candidateActual,
+        }),
+      )
       const nativeFetch = globalThis.fetch
       globalThis.fetch = async (input, init) => {
         const url = new URL(typeof input === "string" ? input : input.url)
