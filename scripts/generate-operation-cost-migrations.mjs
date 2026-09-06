@@ -64,8 +64,8 @@ export function inboxCountersMigrationStatements() {
   return reviewedMigrationStatements(
     "migrations-iconoplasm",
     "0096_request_inbox_counters.sql",
-    15,
-    21,
+    18,
+    32,
   )
 }
 

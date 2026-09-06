@@ -266,6 +266,14 @@ entry never substitutes for either repair. Unknown names and duplicate records
 still stop all DDL. Read-only admitted inventories on September 6 confirmed
 these three historical entries using 141 D1 rows read and zero rows written.
 
+Delivery selection uses the transactionally maintained readiness queue in
+unreleased migration 0096, not a filtered scan of all notifications. Keep the
+bounded publication-member index and complete-group atomic claim; reverting to
+`LIMIT 1` after correlated leader/count filters restores a measured 120,000-read
+query at 20,000 ready groups. Migration 0097 separately checkpoints historical
+delivery reconciliation. Both require the compatible schema before runtime
+activation. See the system audit for measured costs and remaining coverage gaps.
+
 **Cutover status:** these changes are under local verification. Legacy admin
 operations, Tags creation, generation and maintenance still require migration
 to reviewed adapters; workstation/provider credentials still require their

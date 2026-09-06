@@ -205,3 +205,129 @@ INSERT INTO icono_request_inbox_members SELECT n.id, n.requester_user_id,
   CROSS JOIN icono_portrait_assets pa ON pa.gene_symbol=n.gene_symbol
     AND pa.asset_sha256=n.fulfilled_asset_sha256
   WHERE n.discord_status='sent' AND (1);
+-- Materialized, indexed delivery readiness replaces recurring scans of
+-- every pending receipt. Empty and terminal groups leave this derived queue.
+CREATE TABLE icono_request_delivery_ready_groups (
+  requester_user_id TEXT NOT NULL, fulfillment_publication_id TEXT NOT NULL, gene_symbol TEXT NOT NULL,
+  leader_id INTEGER NOT NULL, expected_count INTEGER NOT NULL,
+  due_at TEXT NOT NULL, created_at TEXT NOT NULL,
+  member_count INTEGER NOT NULL CHECK(member_count>=0),
+  eligible_test INTEGER NOT NULL CHECK(eligible_test>=0),
+  eligible_all INTEGER NOT NULL CHECK(eligible_all>=0),
+  overflowed INTEGER NOT NULL CHECK(overflowed IN (0,1)),
+  ready_mode INTEGER GENERATED ALWAYS AS (CASE
+    WHEN overflowed=0 AND member_count BETWEEN 1 AND 500 AND member_count=expected_count
+    THEN CASE WHEN eligible_test=member_count THEN 2 WHEN eligible_all=member_count THEN 1 ELSE 0 END
+    ELSE 0 END) STORED,
+  PRIMARY KEY(requester_user_id,fulfillment_publication_id,gene_symbol)
+) WITHOUT ROWID;
+CREATE INDEX idx_icono_request_delivery_ready_due ON icono_request_delivery_ready_groups
+  (ready_mode,due_at,created_at,leader_id);
+-- Remove discord_status from this index's middle so capped member/leader
+-- lookups really stop after their ID range, including malformed large groups.
+DROP INDEX idx_icono_request_notifications_fulfillment_publication;
+CREATE INDEX idx_icono_request_notifications_fulfillment_publication ON icono_request_notifications
+  (requester_user_id,fulfillment_publication_id,gene_symbol,id);
+-- Those three indexes served the retired global status/batch selectors. The
+-- exact request, user inbox and publication member indexes remain in place.
+DROP INDEX idx_icono_request_notifications_delivery;
+DROP INDEX idx_icono_request_notifications_delivery_due;
+DROP INDEX idx_icono_request_notifications_delivery_batch;
+CREATE TRIGGER icono_request_delivery_ready_insert AFTER INSERT ON icono_request_notifications
+WHEN NEW.fulfillment_publication_id<>''
+BEGIN
+  UPDATE icono_request_delivery_ready_groups SET member_count=member_count+1,
+    eligible_test=eligible_test+(NEW.discord_status IN ('pending','retry')),
+    eligible_all=eligible_all+(NEW.discord_status IN ('pending','retry','suppressed_not_test_recipient')),
+    overflowed=(overflowed OR member_count+1>500),
+    leader_id=MIN(leader_id,NEW.id),
+    expected_count=CASE WHEN NEW.id<=leader_id THEN NEW.fulfillment_group_size ELSE expected_count END,
+    due_at=CASE WHEN NEW.id<=leader_id THEN COALESCE(NULLIF(NEW.discord_next_attempt_at,''),NEW.created_at) ELSE due_at END,
+    created_at=CASE WHEN NEW.id<=leader_id THEN NEW.created_at ELSE created_at END
+    WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol;
+  -- Only a newly eligible group needs reconstruction. Each scalar visits at
+  -- most 501 members. Existing groups update their exact counters above.
+  INSERT INTO icono_request_delivery_ready_groups (requester_user_id,fulfillment_publication_id,gene_symbol,leader_id,expected_count,due_at,created_at,
+    member_count,eligible_test,eligible_all,overflowed)
+  SELECT NEW.requester_user_id,NEW.fulfillment_publication_id,NEW.gene_symbol,n.id,n.fulfillment_group_size,
+    COALESCE(NULLIF(n.discord_next_attempt_at,''),n.created_at),n.created_at,
+    (SELECT COUNT(*) FROM (SELECT id,discord_status FROM icono_request_notifications INDEXED BY idx_icono_request_notifications_fulfillment_publication
+    WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol ORDER BY id LIMIT 501)),(SELECT COALESCE(SUM(m.discord_status IN ('pending','retry')),0) FROM (SELECT id,discord_status FROM icono_request_notifications INDEXED BY idx_icono_request_notifications_fulfillment_publication
+    WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol ORDER BY id LIMIT 501) m),(SELECT COALESCE(SUM(m.discord_status IN ('pending','retry','suppressed_not_test_recipient')),0) FROM (SELECT id,discord_status FROM icono_request_notifications INDEXED BY idx_icono_request_notifications_fulfillment_publication
+    WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol ORDER BY id LIMIT 501) m),(SELECT COUNT(*) FROM (SELECT id,discord_status FROM icono_request_notifications INDEXED BY idx_icono_request_notifications_fulfillment_publication
+    WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol ORDER BY id LIMIT 501))>500
+  FROM icono_request_notifications n NOT INDEXED
+  WHERE n.id=(SELECT id FROM icono_request_notifications INDEXED BY idx_icono_request_notifications_fulfillment_publication
+    WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol ORDER BY id LIMIT 1) AND NEW.fulfillment_publication_id<>''
+    AND (NEW.discord_status IN ('pending','retry','suppressed_not_test_recipient'))
+    AND NOT EXISTS (SELECT 1 FROM icono_request_delivery_ready_groups WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol);
+  DELETE FROM icono_request_delivery_ready_groups WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol AND (member_count=0 OR eligible_all=0);
+END;
+CREATE TRIGGER icono_request_delivery_ready_delete AFTER DELETE ON icono_request_notifications
+WHEN OLD.fulfillment_publication_id<>''
+BEGIN
+  UPDATE icono_request_delivery_ready_groups SET member_count=member_count-1,
+    eligible_test=eligible_test-(OLD.discord_status IN ('pending','retry')),
+    eligible_all=eligible_all-(OLD.discord_status IN ('pending','retry','suppressed_not_test_recipient')) WHERE requester_user_id=OLD.requester_user_id AND fulfillment_publication_id=OLD.fulfillment_publication_id AND gene_symbol=OLD.gene_symbol;
+  UPDATE icono_request_delivery_ready_groups SET (leader_id,expected_count,due_at,created_at) =
+    (SELECT id,fulfillment_group_size,COALESCE(NULLIF(discord_next_attempt_at,''),created_at),created_at
+      FROM icono_request_notifications NOT INDEXED WHERE id=(SELECT id FROM icono_request_notifications INDEXED BY idx_icono_request_notifications_fulfillment_publication
+    WHERE requester_user_id=OLD.requester_user_id AND fulfillment_publication_id=OLD.fulfillment_publication_id AND gene_symbol=OLD.gene_symbol ORDER BY id LIMIT 1))
+    WHERE requester_user_id=OLD.requester_user_id AND fulfillment_publication_id=OLD.fulfillment_publication_id AND gene_symbol=OLD.gene_symbol AND leader_id=OLD.id AND member_count>0;
+  DELETE FROM icono_request_delivery_ready_groups WHERE requester_user_id=OLD.requester_user_id AND fulfillment_publication_id=OLD.fulfillment_publication_id AND gene_symbol=OLD.gene_symbol AND member_count=0;
+  DELETE FROM icono_request_delivery_ready_groups WHERE requester_user_id=OLD.requester_user_id AND fulfillment_publication_id=OLD.fulfillment_publication_id AND gene_symbol=OLD.gene_symbol AND (member_count=0 OR eligible_all=0);
+END;
+CREATE TRIGGER icono_request_delivery_ready_update AFTER UPDATE OF requester_user_id,fulfillment_publication_id,gene_symbol,id,discord_status,discord_next_attempt_at,created_at,fulfillment_group_size ON icono_request_notifications
+WHEN OLD.requester_user_id IS NOT NEW.requester_user_id OR OLD.fulfillment_publication_id IS NOT NEW.fulfillment_publication_id OR OLD.gene_symbol IS NOT NEW.gene_symbol OR OLD.id IS NOT NEW.id OR OLD.discord_status IS NOT NEW.discord_status OR OLD.discord_next_attempt_at IS NOT NEW.discord_next_attempt_at OR OLD.created_at IS NOT NEW.created_at OR OLD.fulfillment_group_size IS NOT NEW.fulfillment_group_size
+BEGIN
+  UPDATE icono_request_delivery_ready_groups SET member_count=member_count-1,
+    eligible_test=eligible_test-(OLD.discord_status IN ('pending','retry')),
+    eligible_all=eligible_all-(OLD.discord_status IN ('pending','retry','suppressed_not_test_recipient')) WHERE requester_user_id=OLD.requester_user_id AND fulfillment_publication_id=OLD.fulfillment_publication_id AND gene_symbol=OLD.gene_symbol;
+  UPDATE icono_request_delivery_ready_groups SET (leader_id,expected_count,due_at,created_at) =
+    (SELECT id,fulfillment_group_size,COALESCE(NULLIF(discord_next_attempt_at,''),created_at),created_at
+      FROM icono_request_notifications NOT INDEXED WHERE id=(SELECT id FROM icono_request_notifications INDEXED BY idx_icono_request_notifications_fulfillment_publication
+    WHERE requester_user_id=OLD.requester_user_id AND fulfillment_publication_id=OLD.fulfillment_publication_id AND gene_symbol=OLD.gene_symbol ORDER BY id LIMIT 1))
+    WHERE requester_user_id=OLD.requester_user_id AND fulfillment_publication_id=OLD.fulfillment_publication_id AND gene_symbol=OLD.gene_symbol AND leader_id=OLD.id AND member_count>0;
+  DELETE FROM icono_request_delivery_ready_groups WHERE requester_user_id=OLD.requester_user_id AND fulfillment_publication_id=OLD.fulfillment_publication_id AND gene_symbol=OLD.gene_symbol AND member_count=0;
+  UPDATE icono_request_delivery_ready_groups SET member_count=member_count+1,
+    eligible_test=eligible_test+(NEW.discord_status IN ('pending','retry')),
+    eligible_all=eligible_all+(NEW.discord_status IN ('pending','retry','suppressed_not_test_recipient')),
+    overflowed=(overflowed OR member_count+1>500),
+    leader_id=MIN(leader_id,NEW.id),
+    expected_count=CASE WHEN NEW.id<=leader_id THEN NEW.fulfillment_group_size ELSE expected_count END,
+    due_at=CASE WHEN NEW.id<=leader_id THEN COALESCE(NULLIF(NEW.discord_next_attempt_at,''),NEW.created_at) ELSE due_at END,
+    created_at=CASE WHEN NEW.id<=leader_id THEN NEW.created_at ELSE created_at END
+    WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol;
+  -- Only a newly eligible group needs reconstruction. Each scalar visits at
+  -- most 501 members. Existing groups update their exact counters above.
+  INSERT INTO icono_request_delivery_ready_groups (requester_user_id,fulfillment_publication_id,gene_symbol,leader_id,expected_count,due_at,created_at,
+    member_count,eligible_test,eligible_all,overflowed)
+  SELECT NEW.requester_user_id,NEW.fulfillment_publication_id,NEW.gene_symbol,n.id,n.fulfillment_group_size,
+    COALESCE(NULLIF(n.discord_next_attempt_at,''),n.created_at),n.created_at,
+    (SELECT COUNT(*) FROM (SELECT id,discord_status FROM icono_request_notifications INDEXED BY idx_icono_request_notifications_fulfillment_publication
+    WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol ORDER BY id LIMIT 501)),(SELECT COALESCE(SUM(m.discord_status IN ('pending','retry')),0) FROM (SELECT id,discord_status FROM icono_request_notifications INDEXED BY idx_icono_request_notifications_fulfillment_publication
+    WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol ORDER BY id LIMIT 501) m),(SELECT COALESCE(SUM(m.discord_status IN ('pending','retry','suppressed_not_test_recipient')),0) FROM (SELECT id,discord_status FROM icono_request_notifications INDEXED BY idx_icono_request_notifications_fulfillment_publication
+    WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol ORDER BY id LIMIT 501) m),(SELECT COUNT(*) FROM (SELECT id,discord_status FROM icono_request_notifications INDEXED BY idx_icono_request_notifications_fulfillment_publication
+    WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol ORDER BY id LIMIT 501))>500
+  FROM icono_request_notifications n NOT INDEXED
+  WHERE n.id=(SELECT id FROM icono_request_notifications INDEXED BY idx_icono_request_notifications_fulfillment_publication
+    WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol ORDER BY id LIMIT 1) AND NEW.fulfillment_publication_id<>''
+    AND (NEW.discord_status IN ('pending','retry','suppressed_not_test_recipient'))
+    AND NOT EXISTS (SELECT 1 FROM icono_request_delivery_ready_groups WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol);
+  DELETE FROM icono_request_delivery_ready_groups WHERE requester_user_id=OLD.requester_user_id AND fulfillment_publication_id=OLD.fulfillment_publication_id AND gene_symbol=OLD.gene_symbol AND (member_count=0 OR eligible_all=0);
+  DELETE FROM icono_request_delivery_ready_groups WHERE requester_user_id=NEW.requester_user_id AND fulfillment_publication_id=NEW.fulfillment_publication_id AND gene_symbol=NEW.gene_symbol AND (member_count=0 OR eligible_all=0);
+END;
+-- The existing admitted notification-cardinality guard covers this whole seed.
+-- A retained delivery group has an eligible (not sent) member, so its two row
+-- writes cannot overlap that member's four inbox-membership seed writes.
+INSERT INTO icono_request_delivery_ready_groups (requester_user_id,fulfillment_publication_id,gene_symbol,leader_id,expected_count,due_at,created_at,
+  member_count,eligible_test,eligible_all,overflowed)
+SELECT g.requester_user_id,g.fulfillment_publication_id,g.gene_symbol,g.leader_id,n.fulfillment_group_size,
+  COALESCE(NULLIF(n.discord_next_attempt_at,''),n.created_at),n.created_at,g.member_count,g.eligible_test,g.eligible_all,g.member_count>500
+FROM (SELECT requester_user_id,fulfillment_publication_id,gene_symbol,MIN(id) AS leader_id,COUNT(*) AS member_count,
+  SUM(discord_status IN ('pending','retry')) AS eligible_test,
+  SUM(discord_status IN ('pending','retry','suppressed_not_test_recipient')) AS eligible_all
+  FROM icono_request_notifications INDEXED BY idx_icono_request_notifications_fulfillment_publication
+  WHERE fulfillment_publication_id<>'' GROUP BY requester_user_id,fulfillment_publication_id,gene_symbol
+  HAVING SUM(discord_status IN ('pending','retry','suppressed_not_test_recipient'))>0) g
+CROSS JOIN icono_request_notifications n ON n.id=g.leader_id;

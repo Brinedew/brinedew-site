@@ -156,13 +156,12 @@ class NotificationStatement {
   }
 
   async all() {
-    if (
-      this.sql.includes("FROM icono_request_notifications n") &&
-      this.sql.includes("SELECT MIN(leader.id)")
-    ) {
-      const deliverableStatuses = this.args.filter((value) =>
-        ["pending", "retry", "suppressed_not_test_recipient"].includes(String(value || "")),
-      )
+    if (this.sql.includes("RETURNING id") && this.sql.includes("discord_last_attempt_at"))
+      return this.run()
+    if (this.sql.includes("icono_request_delivery_ready_groups")) {
+      const scoped = this.sql.includes("WITH scoped")
+      const ids = scoped ? JSON.parse(this.args[0]) : []
+      const mode = Number(this.args[scoped ? 1 : 0])
       const groups = new Map()
       for (const row of this.db.notifications) {
         const key = [row.requester_user_id, row.fulfillment_publication_id, row.gene_symbol].join(
@@ -177,7 +176,18 @@ class NotificationStatement {
           .filter(
             (rows) =>
               rows.length === Number(rows[0].fulfillment_group_size || 1) &&
-              deliverableStatuses.includes(rows[0].discord_status),
+              rows.every((row) =>
+                (mode === 2
+                  ? ["pending", "retry"]
+                  : ["pending", "retry", "suppressed_not_test_recipient"]
+                ).includes(row.discord_status),
+              ) &&
+              (scoped ||
+                mode === 2 ||
+                rows.some((row) => row.discord_status === "suppressed_not_test_recipient")) &&
+              (!ids.length || rows.some((row) => ids.includes(row.request_id))) &&
+              (!rows[0].discord_next_attempt_at ||
+                Date.parse(rows[0].discord_next_attempt_at) <= Date.now()),
           )
           .map((rows) => rows.sort((a, b) => Number(a.id) - Number(b.id))[0])
           .slice(0, limit),
@@ -251,11 +261,17 @@ class NotificationStatement {
       }
       return { meta: { changes } }
     }
-    if (this.sql.includes("discord_attempt_count = discord_attempt_count + 1")) {
-      const ids = this.args
-        .filter((value) => !["pending", "retry", "suppressed_not_test_recipient"].includes(value))
-        .map(Number)
+    if (this.sql.includes("RETURNING id") && this.sql.includes("discord_last_attempt_at")) {
+      const ids = JSON.parse(this.args[0])
+      const statuses = JSON.parse(this.args[1])
+      if (
+        this.db.notifications.filter(
+          (row) => ids.includes(Number(row.id)) && statuses.includes(row.discord_status),
+        ).length !== ids.length
+      )
+        return { meta: { changes: 0 }, results: [] }
       let changes = 0
+      const results = []
       for (const row of this.db.notifications) {
         if (
           !ids.includes(Number(row.id)) ||
@@ -265,11 +281,12 @@ class NotificationStatement {
         row.discord_status = "sending"
         row.discord_attempt_count = Number(row.discord_attempt_count || 0) + 1
         changes += 1
+        results.push({ id: row.id })
       }
-      return { meta: { changes } }
+      return { meta: { changes }, results }
     }
     if (this.sql.includes("SET discord_status = ?")) {
-      const ids = this.args.slice(6).map(Number)
+      const ids = JSON.parse(this.args[6])
       let changes = 0
       for (const row of this.db.notifications) {
         if (!ids.includes(Number(row.id))) continue
@@ -1264,6 +1281,18 @@ test("non-Brinedew fulfillment is suppressed before any Discord fetch", async ()
   } finally {
     globalThis.fetch = originalFetch
   }
+})
+
+test("a missing Discord token leaves a retriable outbox record without throwing", async () => {
+  const row = notificationRow()
+  const db = new NotificationDb([row])
+  const result = await deliverPendingRequestFulfillmentNotifications(
+    { ICONOPLASM_DB: db },
+    { requestIds: [42] },
+  )
+  assert.equal(result.failed, 1)
+  assert.equal(result.delivered, 0)
+  assert.equal(row.discord_status, "retry")
 })
 
 test("Brinedew fulfillment sends one nonce-enforced DM and is retry-idempotent", async () => {
@@ -2335,6 +2364,10 @@ test("delivery completion is an explicit state transition, not an optimistic sta
   assert.match(notifications, /reconcileDeliveredRequestFulfillments/)
   assert.match(notifications, /WHERE status = 'delivery_pending'/)
   assert.match(notifications, /n\.discord_status = 'sent'/)
-  assert.match(notifications, /discord_next_attempt_at <= CURRENT_TIMESTAMP/)
+  const selection = readFileSync(
+    new URL("./iconoplasm/request-delivery-selection.js", import.meta.url),
+    "utf8",
+  )
+  assert.match(selection, /due_at<=CURRENT_TIMESTAMP/)
   assert.doesNotMatch(notifications, /DISCORD_MAX_ATTEMPTS/)
 })

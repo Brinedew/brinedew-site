@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
+import { requestDeliveryReadinessMigration } from "./generate-request-delivery-readiness.mjs"
 
 const target = new URL("../migrations-iconoplasm/0096_request_inbox_counters.sql", import.meta.url)
 const validMembers = (where = "1") => `SELECT n.id, n.requester_user_id,
@@ -129,7 +130,8 @@ END;
   return (
     schema +
     triggers.join("\n") +
-    `\n-- One-time admitted seed; no request-time repair.\nINSERT INTO icono_request_inbox_members ${validMembers()};\n`
+    `\n-- One-time admitted seed; no request-time repair.\nINSERT INTO icono_request_inbox_members ${validMembers()};\n` +
+    requestDeliveryReadinessMigration()
   )
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
