@@ -296,7 +296,7 @@ tenure/preference atomically and reject a stale attempt count, preventing an
 overlapping selection from reclaiming a freshly deferred retry. A successful
 comment uses two D1 queries after selection; a supervote uses three, including
 its separate fresh account identity lookup. No live Discord messages were sent.
-The scheduler now assigns one job to each recurring invocation. Seven recovery
+The scheduler now assigns one job to each recurring invocation. Five background
 jobs keep a 15-minute cadence; five 16-message supervote batches/hour preserve
 the previous intended 80-message hourly throughput below the per-invocation D1
 query limit (49 queries, 32 Discord requests). Comment batches remain 20
@@ -304,15 +304,38 @@ query limit (49 queries, 32 Discord requests). Comment batches remain 20
 repair and gallery are split into four invocations; GeneGuessr remains separate.
 The configuration uses exactly five cron expressions. A complete-day dispatch
 test checks isolation, cadence, delayed delivery and configuration agreement.
-The capacity model now counts 823 daily activations instead of 99.
+The capacity model now counts 871 daily activations instead of 99.
 
 Account recovery previously woke a complete manifestation drain for every
 account plus one final drain: a 25-account batch could trigger 650 manifestation
 attempts. Account and manifestation recovery now have separate adjacent-minute
 invocations, and the batch API cannot request per-account wakes. Interactive
 single-account synchronization retains its immediate wake and durable outbox.
-Individual heavy-job costs and cumulative daily admission remain open; this
-local isolation fix does not certify scheduler capacity or deployment.
+
+The account batch itself formerly used 301 statements for 25 new accounts.
+Its two database bindings now share a mandatory 50-statement invocation ceiling;
+calls, including whole transaction batches, are charged before sending, and
+failed sends stay charged. A new account starts only while at least 32 statements
+remain. Branch tests measure 18 authoring statements for suspension/reactivation,
+20 for canonical withdrawal and 17 for tombstoning. The reserve also covers
+primary bookkeeping, registration races and replay failures. Remaining intents
+stay pending; a test completes all 25 accounts across 13 bounded invocations.
+This per-invocation count is not a second daily budget or a replacement for the
+existing operation-cost authority.
+
+Account selection now reads two limited index ranges instead of sorting its
+pending history. Full-schema workerd measurements with 20,000 accounts: 77 reads
+for 25 pending candidates, 76 for 25 due retries, four for an entirely future
+backlog and eight for two mixed candidates. Account and manifestation recovery
+run every 12 minutes, one minute apart. Background account capacity is up to
+240 new accounts/day or 120 complex transitions/day, with no change to immediate
+interactive synchronization. A backlog drains incrementally instead of attempting
+an impossible 301-statement invocation.
+
+Individual heavy-job row/write costs and cumulative daily admission remain open;
+account withdrawal still changes a lineage's revision lifecycle rows, and fallback
+selection still needs a bounded-history proof. This local isolation and statement
+admission fix does not certify scheduler capacity or deployment.
 
 - Complete attribution and cost proofs for all execution paths; preserve unknowns
   as unknown rather than declaring them free.

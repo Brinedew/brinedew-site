@@ -5,14 +5,14 @@ const quarterHours = (minute) => Object.freeze([minute, minute + 15, minute + 30
 
 export const ICONOPLASM_BACKGROUND_MINUTES = Object.freeze({
   sharedDiscovery: Object.freeze([0]),
-  caretakerComments: quarterHours(1),
-  fulfillment: quarterHours(2),
+  caretakerComments: quarterHours(2),
+  fulfillment: quarterHours(5),
   caretakerSupervotes: Object.freeze([3, 15, 27, 39, 51]),
-  gallery: quarterHours(4),
-  materialization: quarterHours(5),
-  recognition: quarterHours(7),
-  accounts: quarterHours(10),
-  manifestations: quarterHours(11),
+  gallery: quarterHours(8),
+  materialization: quarterHours(11),
+  recognition: quarterHours(14),
+  accounts: Object.freeze([6, 18, 30, 42, 54]),
+  manifestations: Object.freeze([7, 19, 31, 43, 55]),
 })
 
 export const ICONOPLASM_NIGHTLY_MINUTES = Object.freeze({
