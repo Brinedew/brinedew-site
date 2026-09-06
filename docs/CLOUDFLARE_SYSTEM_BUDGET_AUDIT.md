@@ -219,6 +219,32 @@ putting all public traffic behind the current per-step operator protocol is not
 an accepted capacity fix. Its own bounded overhead and every other DO owner must
 be included before extending admission to public user journeys.
 
+The scheduled delivery reconciliation previously updated every pending request
+every 15 minutes. Its fence protects confirmed delivery: a generated asset is
+insufficient, and permanently unsent requests must remain pending without blocking
+later sent receipts. The local replacement scans at most two indexed 50-row ranges,
+checks at most 50 requests, and atomically advances one durable checkpoint with
+their completions. It wraps after the last range. Migration 0097 only creates and
+seeds that checkpoint; it does not scan or copy request history. Freshly delivered
+groups return their exact request IDs and finish in immediate chunks of 50, up to
+the existing 500-request delivery-group limit.
+
+Real workerd tests with 20,000 pending requests exposed two misleading bounds:
+SQLite chose the status index for an `id IN (...)` update and read the entire
+backlog; a tuple comparison also revisited equal-timestamp prefixes. The replacement
+pins completion to integer-primary-key lookup (`NOT INDEXED` still allows rowid)
+and splits equal-time and later-time candidates into separately limited ranges.
+Two unsent 50-request batches each used 260 reads and one checkpoint write;
+50 confirmed completions used 1,058 reads and 501 writes including inbox triggers;
+the final 25-request range used 136 reads and one write. `RETURNING id` counts actual
+completions, because D1's changes receipt also counted trigger changes (200 for
+50 requests). Tests cover rollback of completions when the checkpoint fails,
+overlapping runs, scoped replay, and progress beyond unsent rows. The cursor
+migration used 312 reads and five writes under its reviewed release envelope.
+These are local measurements, not deployed prevention. Delivery's leader selection,
+group acknowledgement fanout and cumulative scheduled-work admission still require
+their own repairs; bounded reconciliation alone does not certify the daily budget.
+
 - Complete attribution and cost proofs for all execution paths; preserve unknowns
   as unknown rather than declaring them free.
 - Fix recurring aggregates, read-triggered rebuilds and write amplification in

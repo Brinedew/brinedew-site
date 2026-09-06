@@ -5,11 +5,20 @@ import {
   ADMIN_COUNTS_MIGRATION_STATEMENTS,
   INBOX_COUNTERS_MIGRATION_NAME,
   INBOX_COUNTERS_MIGRATION_STATEMENTS,
+  DELIVERY_CURSOR_MIGRATION_NAME,
+  DELIVERY_CURSOR_MIGRATION_STATEMENTS,
 } from "../generated/operation-cost-migrations.js"
 
 // Fixed server-owned SQL only. Each size guard stops at its envelope plus one;
 // guards, DDL, seed and journal insertion execute in one atomic D1 batch.
 const specifications = {
+  deliveryCursor: {
+    name: DELIVERY_CURSOR_MIGRATION_NAME,
+    sql: DELIVERY_CURSOR_MIGRATION_STATEMENTS,
+    tables: {},
+    writes: () => 32,
+    readPasses: 0,
+  },
   admin: {
     name: ADMIN_COUNTS_MIGRATION_NAME,
     sql: ADMIN_COUNTS_MIGRATION_STATEMENTS,
@@ -109,3 +118,5 @@ export const createAdminCountsMigrationCostAdapter = (options) =>
   createCounterMigrationAdapter("admin", options)
 export const createInboxCountersMigrationCostAdapter = (options) =>
   createCounterMigrationAdapter("inbox", options)
+export const createDeliveryCursorMigrationCostAdapter = (options) =>
+  createCounterMigrationAdapter("deliveryCursor", options)

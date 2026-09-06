@@ -337,6 +337,7 @@ class DeliveryReconciliationStatement {
     }
     const ids = this.args.map(Number)
     let changes = 0
+    const results = []
     for (const request of this.db.requests) {
       if (ids.length && !ids.includes(Number(request.id))) continue
       const notification = this.db.notifications.find(
@@ -345,11 +346,13 @@ class DeliveryReconciliationStatement {
       if (request.status !== "delivery_pending" || notification?.discord_status !== "sent") continue
       request.status = "fulfilled"
       changes += 1
+      results.push({ id: request.id })
     }
-    return { meta: { changes } }
+    return { meta: { changes }, results }
   }
 
   async all() {
+    if (this.sql.includes("UPDATE icono_generation_requests")) return this.run()
     if (!this.sql.includes("FROM icono_generation_requests")) {
       throw new Error(`Unexpected reconciliation SQL: ${this.sql}`)
     }
@@ -1291,6 +1294,8 @@ test("Brinedew fulfillment sends one nonce-enforced DM and is retry-idempotent",
 
     assert.equal(first.delivered, 1)
     assert.equal(second.considered, 0)
+    assert.deepEqual(first.delivered_request_ids, [42])
+    assert.deepEqual(second.delivered_request_ids, [])
     assert.equal(calls.length, 3)
     assert.match(
       calls[0].url,
@@ -1362,8 +1367,10 @@ test("one ten-candidate publication spanning two genes sends exactly two Discord
 
     assert.equal(first.delivered, 1)
     assert.equal(first.delivered_requests, 5)
+    assert.deepEqual(first.delivered_request_ids, [100, 101, 102, 103, 104])
     assert.equal(second.delivered, 1)
     assert.equal(second.delivered_requests, 5)
+    assert.deepEqual(second.delivered_request_ids, [105, 106, 107, 108, 109])
     assert.equal(messages.length, 2)
     assert.deepEqual(
       messages.map((message) => message.attachments.length),

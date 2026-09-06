@@ -78,6 +78,15 @@ export function snapshotRetirementMigrationStatements() {
   )
 }
 
+export function deliveryCursorMigrationStatements() {
+  return reviewedMigrationStatements(
+    "migrations-iconoplasm",
+    "0097_delivery_reconciliation_cursor.sql",
+    0,
+    2,
+  )
+}
+
 function output() {
   const migrations = [
     ["FINALIZATION", filename, finalizationMigrationStatements()],
@@ -86,6 +95,11 @@ function output() {
     ["LINEAGE_ADMISSION", lineageFilename, lineageAdmissionMigrationStatements()],
     ["ADMIN_COUNTS", "0095_transactional_admin_counts.sql", adminCountsMigrationStatements()],
     ["INBOX_COUNTERS", "0096_request_inbox_counters.sql", inboxCountersMigrationStatements()],
+    [
+      "DELIVERY_CURSOR",
+      "0097_delivery_reconciliation_cursor.sql",
+      deliveryCursorMigrationStatements(),
+    ],
     [
       "SNAPSHOT_RETIREMENT",
       "0015_retire_materialized_snapshot_parts.sql",
