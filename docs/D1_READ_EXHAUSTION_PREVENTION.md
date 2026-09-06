@@ -198,6 +198,18 @@ runner has a 40-request cap, included in release preflight, with no implicit
 network retry. A lost continuation response is recovered by following the
 server's recorded successor.
 
+Migration history is checked against every schema owner of a database. The
+GeneGuessr journal includes `workers/benchmark/migrations` as well as the root
+`migrations` directory; the benchmark migration-only Wrangler configuration
+explicitly targets that same database. Iconoplasm also retains the historical
+`0045_add_gene_comments.sql` journal entry. The committed 0045 and 0046 files
+document this earlier minimal table. That entry is accepted only when both
+`0045_gene_comments_and_clans_backend.sql` and `0046_gene_comment_columns.sql`
+are recorded as applied. No journal rows are removed or rewritten, and the old
+entry never substitutes for either repair. Unknown names and duplicate records
+still stop all DDL. Read-only admitted inventories on September 6 confirmed
+these three historical entries using 141 D1 rows read and zero rows written.
+
 **Cutover status:** these changes are under local verification. Legacy admin
 operations, Tags creation, generation and maintenance still require migration
 to reviewed adapters; workstation/provider credentials still require their
