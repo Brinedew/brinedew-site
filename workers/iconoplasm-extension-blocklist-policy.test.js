@@ -856,14 +856,7 @@ test("scheduled reconciliation repairs stale projection and clears an expired in
     ),
     "utf8",
   )
-  assert.match(
-    cronSource,
-    /cronExpr === "\*\/15 \* \* \* \*"[\s\S]*reconcileIconoplasmRecognitionPolicies\(env\)/,
-  )
-  assert.match(
-    cronSource,
-    /recognitionPairReconciliation[\s\S]*Iconoplasm recognition policy pair:[\s\S]*Iconoplasm recognition policy pair failed:/,
-  )
+  assert.match(cronSource, /recognition: \(\) => reconcileIconoplasmRecognitionPolicies\(env\)/)
 })
 
 test("scheduled reconciliation bounds immutable KV history while retaining the current revision", async () => {

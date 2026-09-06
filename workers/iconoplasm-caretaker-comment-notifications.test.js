@@ -5,6 +5,8 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import {
+  CARETAKER_COMMENT_DELIVERY_LIMIT,
+  CARETAKER_SUPERVOTE_DELIVERY_LIMIT,
   caretakerCommentOutboxStatement,
   deliverPendingCaretakerCommentNotifications,
   deliverPendingCaretakerSupervoteNotifications,
@@ -15,6 +17,68 @@ import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-supp
 const ACCOUNT = "account_caretaker_comment_0001"
 const AUTHOR = "account_caretaker_comment_0002"
 const ASSIGNMENT = "assignment_caretaker_comment_0001"
+
+for (const [kind, deliver, maximum] of [
+  ["comment", deliverPendingCaretakerCommentNotifications, CARETAKER_COMMENT_DELIVERY_LIMIT],
+  ["supervote", deliverPendingCaretakerSupervoteNotifications, CARETAKER_SUPERVOTE_DELIVERY_LIMIT],
+]) {
+  test(`${kind} delivery caps caller input below D1 and Discord invocation limits`, async (t) => {
+    const { primary, accounts, env } = setup(t)
+    const table = `icono_caretaker_${kind}_notifications`
+    for (let i = 0; i < maximum + 5; i++) {
+      if (kind === "comment") {
+        await caretakerCommentOutboxStatement(primary, {
+          notification_key: `budget-${i}`,
+          caretaker_assignment_id: ASSIGNMENT,
+          caretaker_account_id: ACCOUNT,
+          caretaker_discord_user_id: "123456789",
+          gene_symbol: "TP53",
+          comment_author_account_id: AUTHOR,
+          comment_author_name: "Reader",
+          comment_body: "comment",
+        }).run()
+      } else {
+        primary.raw
+          .prepare(
+            `INSERT INTO ${table}(notification_key,caretaker_assignment_id,caretaker_account_id,gene_symbol,preferred_asset_sha256,canonical_asset_sha256,supervote_version)
+          VALUES (?,?,?,'TP53',?,?,3)`,
+          )
+          .run(`budget-${i}`, ASSIGNMENT, ACCOUNT, "a".repeat(64), "b".repeat(64))
+      }
+    }
+    let queries = 0
+    for (const db of [primary, accounts]) {
+      const prepare = db.prepare.bind(db)
+      db.prepare = (sql) => {
+        queries++
+        return prepare(sql)
+      }
+    }
+    let requests = 0
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async () => {
+      requests++
+      return Response.json({ id: `discord-${requests}` })
+    }
+    try {
+      const result = await deliver({ ...env, DISCORD_BOT_TOKEN: "local-test" }, { limit: 50000 })
+      assert.equal(result.delivered, maximum)
+      assert.ok(queries <= 50, `${queries} D1 queries exceed the Free invocation limit`)
+      assert.ok(requests <= 50, `${requests} external requests exceed the Free invocation limit`)
+      assert.equal(
+        primary.raw
+          .prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE discord_status='pending'`)
+          .get().n,
+        5,
+      )
+      t.diagnostic(
+        `${kind}: ${result.delivered} messages, ${queries} D1 queries, ${requests} external requests`,
+      )
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+}
 
 test(
   "real D1 bounds both caretaker selectors across tied backlogs and legacy retry formats",
@@ -52,6 +116,7 @@ test(
         ["supervote", deliverPendingCaretakerSupervoteNotifications],
       ]) {
         const table = `icono_caretaker_${kind}_notifications`
+        const selectionLimit = kind === "comment" ? 20 : 16
         const extraColumns =
           kind === "comment"
             ? "caretaker_discord_user_id,comment_author_account_id,comment_author_name,comment_body"
@@ -96,7 +161,7 @@ test(
           t.diagnostic(`${kind}: ${expected} candidates, ${result.meta.rows_read} reads`)
           return result.results
         }
-        await read(20, 120)
+        await read(selectionLimit, 120)
         await db
           .prepare(
             `UPDATE ${table} SET discord_status='retry',discord_next_attempt_at='2099-01-01T00:00:00.000Z'`,
@@ -115,7 +180,7 @@ test(
           ELSE strftime('%Y-%m-%dT%H:%M:%fZ',date('now'),'+1 second') END`,
           )
           .run()
-        await read(20, 750)
+        await read(selectionLimit, 750)
         await db
           .prepare(
             `UPDATE ${table} SET discord_status='retry',discord_next_attempt_at='2099-01-01 00:00:00'`,

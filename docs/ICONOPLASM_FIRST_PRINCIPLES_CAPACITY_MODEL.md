@@ -383,10 +383,14 @@ infrastructure repair job.
 
 ### R-1 — nightly maintenance has one declared owner
 
-The 23:55 UTC trigger is the sole full Iconoplasm maintenance owner. The 00:03
-trigger remains configured because it owns GeneGuessr recap/catch-up delivery,
-but it no longer runs Iconoplasm maintenance. The runtime set, Wrangler comment,
-and test all enforce that separation.
+Nightly Iconoplasm archive, vote projection, canon repair and gallery publication
+run once each at 23:56-59 UTC, with one job per invocation. The 23:55 pre-warm,
+00:03 recap/catch-up and 12:06 feed triggers belong to GeneGuessr. They never
+repeat Iconoplasm maintenance. The canonical minute schedule and Wrangler
+agreement test enforce that separation. Recurring jobs also use independent
+invocations; their combined minimum is 823 Worker requests/day including the
+three GeneGuessr triggers. This counts activations, not a proof of each job's
+CPU, subrequest or daily storage cost.
 
 ### R-2 — website guest discovery is browser-local until login
 
