@@ -87,8 +87,22 @@ export function deliveryCursorMigrationStatements() {
   )
 }
 
+export function assignmentLookupMigrationStatements() {
+  return reviewedMigrationStatements(
+    "migrations-iconoplasm-authoring",
+    "0016_account_assignment_lookup.sql",
+    0,
+    1,
+  )
+}
+
 function output() {
   const migrations = [
+    [
+      "ASSIGNMENT_LOOKUP",
+      "0016_account_assignment_lookup.sql",
+      assignmentLookupMigrationStatements(),
+    ],
     ["FINALIZATION", filename, finalizationMigrationStatements()],
     ["AUTHORING_STREAM", authoringFilename, authoringStreamMigrationStatements()],
     ["UPLOAD_RESERVATION", uploadFilename, uploadReservationMigrationStatements()],
