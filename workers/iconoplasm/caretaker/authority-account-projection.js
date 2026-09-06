@@ -129,6 +129,7 @@ async function latestAssignment(db, accountId) {
     `SELECT assignment.*, account.public_credit_label AS account_public_credit_label,
             account.status AS account_status
        FROM icono_caretaker_assignments assignment
+       INDEXED BY idx_icono_account_assignment_projection
        JOIN icono_authority_accounts account ON account.account_id = assignment.account_id
       WHERE assignment.account_id = ?
       ORDER BY CASE WHEN assignment.status IN ('pending_acceptance','active','suspended')
