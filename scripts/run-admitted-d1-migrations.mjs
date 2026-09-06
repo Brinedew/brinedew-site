@@ -45,6 +45,7 @@ export async function runAdmittedMigrations({
   send,
   files,
   now = Date.now(),
+  inventoryOnly = false,
 }) {
   if (manifest?.schema !== "iconoplasm.migrationCostPlan.v1" || !manifest.migrations)
     throw new Error("COST_MIGRATION_PLAN_REQUIRED")
@@ -57,9 +58,22 @@ export async function runAdmittedMigrations({
   const evidence = []
   async function execute(adapterId, prediction, args) {
     const adapter = adapters.get(adapterId)
+    // Before deploying a new implementation, only the installed, read-only
+    // inventory adapter can run. Pin its own identities in the immutable plan;
+    // DDL below still requires the exact new release identities.
+    const identities = inventoryOnly
+      ? Object.fromEntries(
+          Object.keys(OPERATION_COST_IDENTITIES).map((key) => [key, adapter?.[key]]),
+        )
+      : OPERATION_COST_IDENTITIES
     if (
       !adapter ||
-      Object.entries(OPERATION_COST_IDENTITIES).some(([key, value]) => adapter[key] !== value)
+      Object.entries(identities).some(
+        ([key, value]) => !/^[a-f0-9]{64}$/.test(value || "") || adapter[key] !== value,
+      ) ||
+      (inventoryOnly &&
+        (!adapterId.endsWith("-migration-inventory") ||
+          adapter.id !== `${adapter.resource}-migration-inventory`))
     )
       throw new Error("COST_DEPLOYED_IMPLEMENTATION_MISMATCH")
     const { plan, stepId } = await acquireReleasePlan({
@@ -69,6 +83,7 @@ export async function runAdmittedMigrations({
       send,
       features: capabilities.features,
       now,
+      identities,
     })
     const receipt = await send("/execute", "POST", {
       operation_id: plan.id,
@@ -80,6 +95,7 @@ export async function runAdmittedMigrations({
     return receipt.result
   }
   const pending = []
+  const pendingKeys = []
   for (const [resource, directories] of Object.entries(DATABASES)) {
     const results = await execute(
       `${resource}-migration-inventory`,
@@ -105,33 +121,26 @@ export async function runAdmittedMigrations({
       if (applied.has(name)) continue
       const reviewed = manifest.migrations[`${resource}/${name}`]
       if (!reviewed) throw new Error(`COST_MIGRATION_NOT_REVIEWED: ${resource}/${name}`)
-      if (adapters.get(reviewed.adapter_id)?.resource !== resource)
+      if (!inventoryOnly && adapters.get(reviewed.adapter_id)?.resource !== resource)
         throw new Error("COST_MIGRATION_RESOURCE_MISMATCH")
       pending.push(reviewed)
+      pendingKeys.push(`${resource}/${name}`)
     }
   }
   // Check every database's pending set before performing the first DDL.
+  if (inventoryOnly) return { pending_migrations: pendingKeys, evidence }
   for (const item of pending) await execute(item.adapter_id, item.prediction, item.arguments)
   return { migrations_applied: pending.length, evidence }
 }
 
-async function main() {
-  const origin = await readReleaseOrigin({
-    repository: process.env.GITHUB_REPOSITORY,
-    runId: process.env.GITHUB_RUN_ID,
-    token: process.env.GITHUB_TOKEN,
-  })
-  const manifest = JSON.parse(
-    readFileSync(new URL("cloudflare/operation-cost-migration-plan.json", ROOT), "utf8"),
-  )
-  const token = process.env.ICONOPLASM_ADMIN_TOKEN
+export function createReleaseSender(token, fetcher = fetch) {
   if (!token) throw new Error("COST_OPERATOR_TOKEN_REQUIRED")
   // Fixed origin, bounded traffic, timeouts and no implicit retries. D1 and
   // account-wide admission are owned by the existing server ledger.
   let requests = 0
-  const send = async (suffix, method, body) => {
+  return async (suffix, method, body) => {
     if (++requests > RELEASE_REQUEST_LIMIT) throw new Error("COST_DEPLOYMENT_REQUEST_LIMIT")
-    const response = await fetch(ENDPOINT + suffix, {
+    const response = await fetcher(ENDPOINT + suffix, {
       method,
       redirect: "error",
       signal: AbortSignal.timeout(20_000),
@@ -150,6 +159,18 @@ async function main() {
       throw new Error(/^COST_[A-Z_]+$/.test(value.code) ? value.code : "COST_OPERATION_REFUSED")
     return value
   }
+}
+
+async function main() {
+  const origin = await readReleaseOrigin({
+    repository: process.env.GITHUB_REPOSITORY,
+    runId: process.env.GITHUB_RUN_ID,
+    token: process.env.GITHUB_TOKEN,
+  })
+  const manifest = JSON.parse(
+    readFileSync(new URL("cloudflare/operation-cost-migration-plan.json", ROOT), "utf8"),
+  )
+  const send = createReleaseSender(process.env.ICONOPLASM_ADMIN_TOKEN)
   const result = await runAdmittedMigrations({
     manifest,
     releaseId: origin.releaseId,

@@ -78,6 +78,9 @@ class FakeStatement {
 
   async first() {
     this.db.calls.push({ method: "first", sql: this.sql, args: this.args })
+    if (this.sql.includes("FROM icono_admin_dashboard_summary")) {
+      return { summary_key: this.args[0], genes: 1, no_live: 0 }
+    }
     if (this.sql.includes("FROM icono_gene_catalog")) {
       return {
         gene_symbol: "TP53",
@@ -312,7 +315,7 @@ test("batched vision sync atomically refreshes the request-picker projection", a
   assert.equal(pickerWrite.args[14], 3)
 })
 
-test("admin overview summary is scoped to canonical catalog rows", async () => {
+test("admin sync reads transactional counts without rebuilding catalogue history", async () => {
   const env = buildEnv()
 
   // The sync-complete proof depends on this behavior. Non-catalog asset/rollup
@@ -342,28 +345,21 @@ test("admin overview summary is scoped to canonical catalog rows", async () => {
   assert.equal(syncResponse.status, 200)
 
   const dashboardSummarySql = env.gatewayDb.calls.find(
-    (call) =>
-      call.method === "first" &&
-      call.sql.includes("COUNT(gc.gene_symbol) AS genes") &&
-      call.sql.includes("AS no_live"),
+    (call) => call.method === "first" && call.sql.includes("FROM icono_admin_dashboard_summary"),
   )?.sql
 
-  assert.match(
-    dashboardSummarySql || "",
-    /FROM icono_gene_catalog gc\s+LEFT JOIN icono_admin_gene_rollup gr\s+ON gr\.gene_symbol = gc\.gene_symbol/,
+  assert.match(dashboardSummarySql || "", /WHERE summary_key = \?/)
+  // The real SQLite counter tests cover canonical catalogue membership and
+  // orphan assets. This route must never rebuild that aggregate on reads.
+  assert.equal(
+    env.gatewayDb.calls.some((call) => /COUNT\(gc\.gene_symbol\)/.test(call.sql)),
+    false,
   )
 
   const countCacheSql = env.gatewayDb.calls
     .filter((call) => call.method === "run" && call.sql.includes("icono_admin_gallery_count_cache"))
     .map((call) => call.sql)
-  // D1 rejected the old one-shot UNION ALL count-cache insert in production.
-  // Keeping these as separate INSERT statements is intentional budget hygiene,
-  // not verbose test machinery.
-  assert.equal(
-    countCacheSql.some((sql) => sql.includes("UNION ALL")),
-    false,
-  )
-  assert.equal(countCacheSql.filter((sql) => sql.includes("INSERT INTO")).length, 10)
+  assert.deepEqual(countCacheSql, [])
 
   await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/overview?event_limit=0", {

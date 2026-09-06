@@ -63,6 +63,28 @@ const env = {
   ICONOPLASM_ADMIN_TOKEN: ADMIN_TOKEN,
 }
 
+test("an exhausted provider allowance survives lease error handling without leaking internal details", async () => {
+  const internal = new Error(
+    "D1_ERROR: Your account has exceeded D1's free tier daily row read limit. private query detail",
+  )
+  const { handler } = fixture({
+    renewGenerationLease: async () => {
+      throw new Error("query failed", { cause: internal })
+    },
+  })
+  const response = await handler({
+    match: route("authority_generation_lease_renew", { lease_token: "opaque_lease" }),
+    request: request("/api/iconoplasm/authority/generation-leases/opaque_lease/renew", {}),
+    env,
+  })
+  assert.equal(response.status, 503)
+  assert.equal(response.headers.get("Cache-Control"), "private, no-store")
+  assert.ok(Number(response.headers.get("Retry-After")) > 0)
+  const payload = await response.json()
+  assert.equal(payload.error.code, "D1_ACCOUNT_READ_LIMIT")
+  assert.doesNotMatch(JSON.stringify(payload), /private query|opaque_lease/)
+})
+
 test("claim is service-token-only and forwards one atomic owner-bound claim", async () => {
   const { calls, handler } = fixture()
   const path = "/api/iconoplasm/authority/generation-leases/claim"

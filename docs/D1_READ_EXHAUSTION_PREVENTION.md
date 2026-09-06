@@ -71,6 +71,23 @@ scale before running production work.
 
 ## Release and acceptance
 
+### Retired snapshot storage
+
+Migration 0015 removes only `icono_manifestation_snapshot_parts`, the old copied
+v1 transport. Migration 0012 already moved current snapshots to immutable source
+pages. Those baselines, events, checkpoint parts and their rowids remain intact;
+lease audit records also remain. The uncalled legacy sweeper is retired with its
+table. Cleanup refuses an active v1 lease and executes bounded lease/schema
+guards, the drop and its migration journal entry in one admitted transaction.
+A full-schema workerd regression preserves an active v2 snapshot's exact pages
+and source rowids while reclaiming the obsolete copies' pages. Do not run VACUUM
+or rebuild source tables while streaming leases exist.
+
+The local 10,000-part cleanup used 1,292 reads and three writes within its
+12,548-read/16-write envelope. These measured row costs do not establish the
+live table's storage share. Verify the provider's database size after release
+before reporting how much production capacity was recovered.
+
 ### Mandatory operation admission (B-741)
 
 The existing global budget Durable Object also owns immutable cost plans.

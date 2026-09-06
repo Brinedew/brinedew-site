@@ -777,6 +777,35 @@ test("shared discovery search is public and reads the shared symbol cache", asyn
   assert.equal(response.headers.get("Cache-Control"), "public, max-age=30")
 })
 
+test("unavailable shared publications never perform reader-triggered database repair or KV writes", async () => {
+  for (const value of [null, "invalid-json", JSON.stringify({ symbols: [] })]) {
+    const env = buildEnv({
+      kvEntries: value === null ? {} : { "iconoplasm:shared-gene-discovery-symbols:v1": value },
+    })
+    const before = new Map(env.KV.entries)
+    const queries = []
+    const prepare = env.gatewayDb.prepare.bind(env.gatewayDb)
+    env.gatewayDb.prepare = (sql) => {
+      queries.push(sql)
+      return prepare(sql)
+    }
+    const response =
+      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        buildRequest("/api/public/v1/genes/search?q=tp53&scope=shared"),
+        env,
+        {},
+      )
+    assert.equal(response.status, 503)
+    assert.equal(response.headers.get("Cache-Control"), "no-store")
+    assert.equal((await response.json()).code, "SHARED_DISCOVERY_PUBLICATION_UNAVAILABLE")
+    assert.deepEqual(env.KV.entries, before)
+    assert.equal(
+      queries.some((sql) => /icono_shared_gene_discoveries/.test(sql)),
+      false,
+    )
+  }
+})
+
 test("catalog search uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when bound", async () => {
   const gateway = new FakeOnlyAllowedGateway(async () =>
     Response.json({

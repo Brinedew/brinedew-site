@@ -28,3 +28,36 @@ export async function readSyncFinalizationSummary(db, symbols = []) {
   if (!row) throw new Error("Finalization summary is missing; migration 0094 is required")
   return row
 }
+
+// Finalization uses the same counters as status. A nonterminal row whose phase
+// is already 'completed' is excluded by the historical drain contract; retain
+// that case with a narrow partial-index probe rather than scanning job history.
+export async function readSyncFinalizationDrainCounts(db, symbols = []) {
+  if (symbols.length > 5000) throw new RangeError("At most 5000 job symbols may be summarized")
+  if (symbols.length) {
+    return db
+      .prepare(
+        `SELECT
+      COALESCE(SUM(status <> 'completed' AND phase NOT IN ('completed_pending_finalize', 'completed')), 0) AS remaining_count,
+      COALESCE(SUM(status <> 'completed' AND phase = 'completed_pending_finalize'), 0) AS pending_finalize_count
+      FROM icono_sync_finalization_jobs
+      INDEXED BY sqlite_autoindex_icono_sync_finalization_jobs_1
+      WHERE gene_symbol IN (SELECT value FROM json_each(?))`,
+      )
+      .bind(JSON.stringify(symbols))
+      .first()
+  }
+  const row = await db
+    .prepare(
+      `SELECT pending_finalize_count,
+    unfinished_count - pending_finalize_count - (
+      SELECT COUNT(*) FROM icono_sync_finalization_jobs
+      INDEXED BY idx_icono_finalization_unfinished
+      WHERE status <> 'completed' AND phase = 'completed'
+    ) AS remaining_count
+    FROM icono_sync_finalization_summary WHERE singleton = 1`,
+    )
+    .first()
+  if (!row) throw new Error("Finalization summary is missing; migration 0094 is required")
+  return row
+}

@@ -344,14 +344,13 @@ export async function failExactGenerationLease({
   return Object.freeze({ ok: true, ...leaseEnvelope(row) })
 }
 
-export async function assertExactGenerationLeaseExecution({
+export async function assertExactGenerationLeaseCompletion({
   db,
   generationRequestId,
   generationAttemptId,
   leaseToken,
   leaseOwnerId,
   expectedLeaseVersion,
-  now = new Date(),
 } = {}) {
   requireDatabase(db)
   const requestId = requiredId(generationRequestId, "generation_request_id")
@@ -359,7 +358,6 @@ export async function assertExactGenerationLeaseExecution({
   const token = requiredId(leaseToken, "generation_lease_token")
   const ownerId = requiredId(leaseOwnerId, "lease_owner_id")
   const version = positiveInteger(expectedLeaseVersion, "expected_lease_version")
-  const checkedAt = clock(now)
   const row = await readLease(db, requestId)
   const exactIdentity =
     text(row?.generation_attempt_id) === attemptId &&
@@ -367,12 +365,11 @@ export async function assertExactGenerationLeaseExecution({
     text(row?.lease_owner_id) === ownerId &&
     Number(row?.lease_version) === version
   const status = text(row?.status)
-  const executable =
-    exactIdentity &&
-    (status === "completed" ||
-      (status === "active" && Date.parse(row?.expires_at) > checkedAt.getTime()))
-  if (!executable) {
-    leaseError("GENERATION_LEASE_CAS_MISMATCH", "The generation lease expired or changed", 409)
+  // Expiry prevents material access and further drawing, and allows a new claim.
+  // Completion instead fences on the exact attempt/token/version: a saved image
+  // may arrive after an outage, but can never beat a newer claimed attempt.
+  if (!exactIdentity || !["completed", "active"].includes(status)) {
+    leaseError("GENERATION_LEASE_CAS_MISMATCH", "The generation lease changed", 409)
   }
   return leaseEnvelope(row)
 }
@@ -409,9 +406,9 @@ export async function completeExactGenerationLease({
           SET status = 'completed', completed_at = ?, updated_at = ?
         WHERE generation_request_id = ? AND generation_attempt_id = ?
           AND lease_token = ? AND lease_owner_id = ? AND lease_version = ?
-          AND status = 'active' AND expires_at > ?`,
+          AND status = 'active'`,
     )
-    .bind(completedAt, completedAt, requestId, attemptId, token, ownerId, version, completedAt)
+    .bind(completedAt, completedAt, requestId, attemptId, token, ownerId, version)
     .run()
   if (Number(result?.meta?.changes || 0) !== 1) {
     leaseError("GENERATION_LEASE_CAS_MISMATCH", "The generation lease expired or changed", 409)

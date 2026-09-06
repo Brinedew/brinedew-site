@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import { ACCOUNT_CEILINGS } from "../workers/lib/operation-cost-ledger.js"
 import { createOperationCostAccountUsageReader } from "../workers/iconoplasm/operation-cost-account-usage.js"
@@ -6,6 +6,7 @@ import { readReleaseOrigin, RELEASE_REQUEST_LIMIT } from "./operation-cost-relea
 import { createMigrationOperationCostAdapters } from "../workers/iconoplasm/operation-cost-migration-adapters.js"
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
 import { D1_OPERATOR_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
+import { runAdmittedMigrations, createReleaseSender } from "./run-admitted-d1-migrations.mjs"
 
 export async function verifyReleaseAuthentication({ token, fetcher = fetch }) {
   if (!token) throw new Error("COST_OPERATOR_TOKEN_REQUIRED")
@@ -25,13 +26,27 @@ export async function verifyReleaseAuthentication({ token, fetcher = fetch }) {
 
 // This read-only check prevents a known refusal from pausing production. The
 // server still reserves every operation atomically; telemetry is not a permit.
-export async function preflightOperationCostRelease({ manifest, reader, now = Date.now }) {
+export async function preflightOperationCostRelease({
+  manifest,
+  reader,
+  now = Date.now,
+  pendingMigrations = Object.keys(manifest?.migrations || {}),
+}) {
   if (manifest?.schema !== "iconoplasm.migrationCostPlan.v1" || !manifest.migrations)
     throw new Error("COST_MIGRATION_PLAN_REQUIRED")
+  if (
+    !Array.isArray(pendingMigrations) ||
+    new Set(pendingMigrations).size !== pendingMigrations.length ||
+    pendingMigrations.some((key) => !Object.hasOwn(manifest.migrations, key))
+  )
+    throw new Error("COST_MIGRATION_NOT_REVIEWED")
+  const pending = Object.fromEntries(
+    pendingMigrations.map((key) => [key, manifest.migrations[key]]),
+  )
   const required = { rows_read: 0, rows_written: 0, requests: 1 }
   const predictions = [
     ...Array(3).fill(manifest.inventory_prediction),
-    ...Object.values(manifest.migrations).map((item) => item.prediction),
+    ...Object.values(pending).map((item) => item.prediction),
   ]
   for (const prediction of predictions) {
     if (
@@ -43,8 +58,8 @@ export async function preflightOperationCostRelease({ manifest, reader, now = Da
     for (const meter of Object.keys(required)) {
       if (!Number.isSafeInteger(prediction[meter]) || prediction[meter] < 0)
         throw new Error("COST_PREDICTION_REQUIRED")
-      // Entire reviewed release, including already-applied migrations, at its
-      // maximum two-times forecast. Include registration control requests.
+      // Only inventory-confirmed pending work, at its maximum two-times
+      // forecast. Applied migrations retain their journal and old receipts.
       required[meter] += 2 * prediction[meter] + (meter === "requests" ? 1 : 0)
       if (!Number.isSafeInteger(required[meter])) throw new Error("COST_PREDICTION_REQUIRED")
     }
@@ -60,7 +75,7 @@ export async function preflightOperationCostRelease({ manifest, reader, now = Da
       prediction: manifest.inventory_prediction,
       arguments: { statements: [{ query_id: "applied-migrations", arguments: {} }] },
     })),
-    ...Object.entries(manifest.migrations).map(([key, item]) => ({
+    ...Object.entries(pending).map(([key, item]) => ({
       ...item,
       resource: key.split("/")[0],
     })),
@@ -100,12 +115,11 @@ export async function preflightOperationCostRelease({ manifest, reader, now = Da
 }
 
 async function main() {
-  if (process.env.GITHUB_ACTIONS === "true")
-    await readReleaseOrigin({
-      repository: process.env.GITHUB_REPOSITORY,
-      runId: process.env.GITHUB_RUN_ID,
-      token: process.env.GITHUB_TOKEN,
-    })
+  const origin = await readReleaseOrigin({
+    repository: process.env.GITHUB_REPOSITORY,
+    runId: process.env.GITHUB_RUN_ID,
+    token: process.env.GITHUB_TOKEN,
+  })
   const manifest = JSON.parse(
     readFileSync(
       new URL("../cloudflare/operation-cost-migration-plan.json", import.meta.url),
@@ -116,12 +130,30 @@ async function main() {
     accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
     token: process.env.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN,
   })
-  process.stdout.write(
-    JSON.stringify(await preflightOperationCostRelease({ manifest, reader })) + "\n",
-  )
+  // Admit the small inventory first, without charging the plan for historical
+  // DDL. The actual inventory still reserves through the server authority.
+  await preflightOperationCostRelease({ manifest, reader, pendingMigrations: [] })
   // Verify the credential against the current authority before a deployment
   // can pause application traffic. This HEAD performs no application D1 work.
   await verifyReleaseAuthentication({ token: process.env.ICONOPLASM_ADMIN_TOKEN })
+  const inventory = await runAdmittedMigrations({
+    manifest,
+    releaseId: `${origin.releaseId}-preflight`,
+    inventoryOnly: true,
+    send: createReleaseSender(process.env.ICONOPLASM_ADMIN_TOKEN),
+    files: (directory) =>
+      readdirSync(new URL(`../${directory}/`, import.meta.url))
+        .filter((name) => name.endsWith(".sql"))
+        .sort(),
+  })
+  const result = await preflightOperationCostRelease({
+    manifest,
+    reader,
+    pendingMigrations: inventory.pending_migrations,
+  })
+  process.stdout.write(
+    JSON.stringify({ ...result, pending_migrations: inventory.pending_migrations }) + "\n",
+  )
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

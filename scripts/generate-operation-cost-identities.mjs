@@ -25,7 +25,12 @@ function runtimeSources(sourceRoot, directory) {
 
 // Cover imported domain handlers as well as the gate itself. A hand-maintained
 // short list allowed a changed transitive SQL helper to keep old plans valid.
-const schemaDirectories = ["migrations", "migrations-iconoplasm", "migrations-iconoplasm-authoring"]
+const schemaDirectories = [
+  "migrations",
+  "workers/benchmark/migrations",
+  "migrations-iconoplasm",
+  "migrations-iconoplasm-authoring",
+]
 
 function digest(sourceRoot, files) {
   const hash = createHash("sha256")
